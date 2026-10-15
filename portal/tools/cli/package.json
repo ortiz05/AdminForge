@@ -10,10 +10,12 @@
     "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
+    "@adminforge/config": "workspace:*",
     "@adminforge/connectors": "workspace:*",
     "@adminforge/expressions": "workspace:*",
     "@adminforge/schemas": "workspace:*",
     "commander": "^15.0.0",
+    "croner": "^10.0.1",
     "yaml": "^2.9.1",
     "zod": "^4.6.7"
   }

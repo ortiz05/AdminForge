@@ -42,9 +42,17 @@ export interface MonitoringSearch {
 const TONE_TEXT = { ok: 'text-ok', warn: 'text-warn', crit: 'text-crit', info: 'text-info', neutral: 'text-fg-3' } as const;
 const DAY_MS = 86_400_000;
 
-export function formatMetric(value: number | null | undefined, unit: string | null): string {
+/** KQL checks report a column name as their unit (`nonCompliantResources`); show it as words. */
+export function humanUnit(unit: string | null | undefined): string | null {
+  if (!unit) return null;
+  if (/^(%|ms|s|days|rows|failures|GB|MB)$/.test(unit)) return unit;
+  return unit.replace(/([a-z0-9])([A-Z])/g, '$1 $2').replace(/[_-]+/g, ' ').toLowerCase();
+}
+
+export function formatMetric(value: number | null | undefined, rawUnit: string | null): string {
   if (value === null || value === undefined) return '—';
   const n = Math.abs(value) >= 100 ? formatNumber(Math.round(value)) : formatNumber(Math.round(value * 10) / 10);
+  const unit = humanUnit(rawUnit);
   if (!unit) return n;
   if (unit === '%') return `${n}%`;
   if (unit === 'days') return `${n} day${value === 1 ? '' : 's'}`;
@@ -68,6 +76,18 @@ function passRate(p: ProbeItem): string | null {
   if (known.length < 2) return null;
   const ok = known.filter((x) => x.status === 'ok').length;
   return `${ok} of ${known.length} checks healthy`;
+}
+
+/** Big number, small unit — long units (KQL column names) never dominate the tile. */
+function MetricValue({ value, unit }: { value: number | null | undefined; unit: string | null }) {
+  const number = formatMetric(value, null);
+  const rest = formatMetric(value, unit).slice(number.length).trim();
+  return (
+    <span className="min-w-0 af-kpi-value text-2xl text-fg tabular-nums">
+      {number}
+      {rest && value !== null && value !== undefined && <span className="ml-1.5 text-sm font-medium text-fg-3">{rest}</span>}
+    </span>
+  );
 }
 
 function ProbeTile({ p, now, onOpen }: { p: ProbeItem; now: number; onOpen: () => void }) {
@@ -94,7 +114,7 @@ function ProbeTile({ p, now, onOpen }: { p: ProbeItem; now: number; onOpen: () =
         </StatusPill>
       </span>
       <span className="flex items-end justify-between gap-3">
-        <span className="af-kpi-value text-2xl text-fg tabular-nums">{formatMetric(p.latest?.metric, unit)}</span>
+        <MetricValue value={p.latest?.metric} unit={unit} />
         {metrics.length > 1 && (
           <Sparkline data={metrics} label={`${p.title}: last ${metrics.length} results`} width={112} height={30} className="mb-0.5" />
         )}

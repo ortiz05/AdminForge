@@ -5,14 +5,18 @@ import { auditActor, type AppContext } from '../context';
 import { PAGE_KINDS, type LoadedPage } from '../datasources/executor';
 import { parseBody } from '../errors';
 import { outboundAppError } from '../execution/outbound';
+import { advancedParamOf, describeAdvanced, type AdvancedGroup } from '../datasources/advanced';
 import { contentType, exportPages, exportStream, planExport } from '../reports/export';
 import { userScope } from './datasources';
 
 const EXPORT_KINDS = ['report', ...PAGE_KINDS.filter((k) => k !== 'report')] as const;
 
-/** Params as audited: `redact: true` params are masked. */
+/** Params as audited: `redact: true` params are masked; the query builder's filter in its wire form. */
 function auditParams(page: LoadedPage, params: Record<string, unknown>) {
-  return Object.fromEntries(Object.entries(params).map(([k, v]) => [k, page.def.params?.[k]?.redact ? '[redacted]' : v]));
+  const adv = advancedParamOf(page.def.filters);
+  return Object.fromEntries(
+    Object.entries(params).map(([k, v]) => [k, k === adv && v ? describeAdvanced(v as AdvancedGroup) : page.def.params?.[k]?.redact ? '[redacted]' : v]),
+  );
 }
 
 export function reportRoutes(api: FastifyInstance, ctx: AppContext) {
@@ -25,7 +29,7 @@ export function reportRoutes(api: FastifyInstance, ctx: AppContext) {
     runner.assertAccess(session.roles, page.def.requires, `Exporting ${page.key}`);
     const user = userScope(session);
     const params = await runner.prepareParams(page, body.params, user);
-    const plan = await planExport(page, params, body.format, { columns: body.columns, maxRows: ctx.config.EXPORT_MAX_ROWS });
+    const plan = await planExport(page, runner.publicParams(page, params), body.format, { columns: body.columns, maxRows: ctx.config.EXPORT_MAX_ROWS });
     const audit = (result: 'success' | 'failure', details: Record<string, unknown>) =>
       ctx.audit
         .append({

@@ -5,6 +5,7 @@ import { hasRole } from '../auth/guards';
 import type { SessionRecord } from '../auth/session-store';
 import type { DefinitionRecord, DefinitionRegistry } from '../definitions/types';
 import type { OutboundExecutor } from '../execution/types';
+import { kqlString } from '../datasources/advanced';
 import { definitionHref } from '../routes/nav';
 
 export const SEARCH_TYPES = ['page', 'dashboard', 'report', 'playbook', 'runbook', 'user', 'group', 'device', 'app', 'resource'] as const;
@@ -49,11 +50,8 @@ const PORTAL_LINKS = {
   resource: (id: string) => `https://portal.azure.com/#@/resource${id.split('/').map(encodeURIComponent).join('/')}`,
 };
 
-/** A KQL single-quoted string literal (backslash and quote escaped, control characters dropped). */
-export function kqlString(value: string): string {
-  // eslint-disable-next-line no-control-regex
-  return `'${value.replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'`;
-}
+/** KQL string literal quoting (shared with the query builder compiler). */
+export { kqlString };
 
 function score(def: Definition, q: string): number {
   const title = def.title.toLowerCase();

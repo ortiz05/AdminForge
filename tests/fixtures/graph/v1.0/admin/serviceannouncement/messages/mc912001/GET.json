@@ -1,0 +1,44 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#admin/serviceAnnouncement/messages/$entity",
+  "id": "MC912001",
+  "title": "Microsoft Teams: New meeting chat experience for external participants",
+  "services": [
+    "Microsoft Teams"
+  ],
+  "category": "planForChange",
+  "severity": "normal",
+  "isMajorChange": false,
+  "actionRequiredByDateTime": "2026-11-12T09:00:00Z",
+  "startDateTime": "2026-10-14T09:00:00Z",
+  "endDateTime": "2027-01-13T09:00:00Z",
+  "lastModifiedDateTime": "2026-10-15T04:12:00Z",
+  "tags": [
+    "Feature update",
+    "User impact"
+  ],
+  "hasAttachments": false,
+  "attachmentsArchive": null,
+  "viewPoint": {
+    "isRead": false,
+    "isArchived": false,
+    "isFavorited": false
+  },
+  "details": [
+    {
+      "name": "Summary",
+      "value": "Microsoft Teams: New meeting chat experience for external participants"
+    },
+    {
+      "name": "RoadmapIds",
+      "value": "402092"
+    },
+    {
+      "name": "Platforms",
+      "value": "Web, Desktop, Mac"
+    }
+  ],
+  "body": {
+    "contentType": "html",
+    "content": "<p>We are updating the meeting chat experience for external participants.</p><p><b>When this will happen:</b></p><ul><li>Targeted release: early November 2026</li><li>General availability: late November 2026</li></ul><p><b>How this will affect your organization:</b> External participants will see chat history from the time they join.</p><p><b>What you need to do to prepare:</b> Review your external access policies and update your training.</p>"
+  }
+}

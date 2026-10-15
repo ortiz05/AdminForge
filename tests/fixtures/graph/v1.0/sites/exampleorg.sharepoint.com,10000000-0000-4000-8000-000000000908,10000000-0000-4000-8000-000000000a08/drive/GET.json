@@ -1,0 +1,21 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#drives/$entity",
+  "id": "b!exampleDrive0008",
+  "name": "Documents",
+  "driveType": "documentLibrary",
+  "webUrl": "https://exampleorg.sharepoint.com/sites/LegalReview/Shared%20Documents",
+  "createdDateTime": "2025-12-19T09:00:00Z",
+  "lastModifiedDateTime": "2026-09-04T09:00:00Z",
+  "owner": {
+    "group": {
+      "displayName": "Legal Review Owners"
+    }
+  },
+  "quota": {
+    "deleted": 109951163,
+    "remaining": 1088516511498,
+    "state": "normal",
+    "total": 1099511627776,
+    "used": 10995116278
+  }
+}

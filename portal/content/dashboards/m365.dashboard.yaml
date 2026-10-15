@@ -1,0 +1,244 @@
+$schema: ../../packages/schemas/generated/dashboard.schema.json
+kind: dashboard
+id: m365.overview
+version: 1.0.0
+title: Microsoft 365 overview
+summary: Service health, changes that need action, licence headroom, adoption and team ownership at a glance.
+owner: m365-team
+tags: [m365, overview]
+template: dashboard
+nav: { section: m365, label: Overview, icon: squares-four, order: 5 }
+refresh: 300
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    graph: [ServiceHealth.Read.All, ServiceMessage.Read.All, Organization.Read.All, Reports.Read.All, Group.Read.All, GroupMember.Read.All]
+  entraRoles: [Global Reader]
+
+datasources:
+  health:
+    source: graph
+    request:
+      path: /admin/serviceAnnouncement/healthOverviews
+      query:
+        $select: id,service,status
+    cache: { ttl: 120 }
+    transform: >-
+      ${ (
+        $healthy := ['serviceOperational', 'serviceRestored', 'falsePositive', 'postIncidentReviewPublished', 'resolved', 'resolvedExternal', 'mitigated', 'mitigatedExternal'];
+        $rows := [$sort(value.value, function($a, $b) { $a.service > $b.service })];
+        { "value": $rows, "affected": $count($rows[$not(status in $healthy)]) }
+      ) }
+  issues:
+    source: graph
+    request:
+      path: /admin/serviceAnnouncement/issues
+      query:
+        $filter: isResolved eq false
+        $orderby: lastModifiedDateTime desc
+        $top: 100
+    paging: all
+    maxItems: 500
+    cache: { ttl: 120 }
+    transform: >-
+      ${ (
+        $rows := [$sort(value.value[isResolved = false], function($a, $b) {
+          ($a.classification = 'incident' ? 0 : 1) > ($b.classification = 'incident' ? 0 : 1)
+          or (($a.classification = 'incident') = ($b.classification = 'incident') and $a.lastModifiedDateTime < $b.lastModifiedDateTime)
+        }).{ "id": id, "title": title, "service": service, "classification": classification, "lastModifiedDateTime": lastModifiedDateTime }];
+        { "rows": $rows, "incidents": $count($rows[classification = 'incident']), "advisories": $count($rows[classification = 'advisory']) }
+      ) }
+  messages:
+    source: graph
+    request:
+      path: /admin/serviceAnnouncement/messages
+      query:
+        $orderby: lastModifiedDateTime desc
+        $top: 100
+    paging: all
+    maxItems: 1000
+    cache: { ttl: 300 }
+    # Messages with an act-by date that hasn't passed by more than a week, soonest first.
+    transform: >-
+      ${ (
+        $act := [value.value[$exists(actionRequiredByDateTime) and actionRequiredByDateTime != null and $daysUntil(actionRequiredByDateTime) >= -7].{
+          "id": id,
+          "title": title,
+          "actBy": actionRequiredByDateTime,
+          "daysToAct": $daysUntil(actionRequiredByDateTime),
+          "urgency": $daysUntil(actionRequiredByDateTime) < 0 ? 'overdue' : $daysUntil(actionRequiredByDateTime) <= 30 ? 'soon' : 'later'
+        }];
+        { "actionRequired": [$sort($act, function($a, $b) { $a.actBy > $b.actBy })], "count": $count($act), "dueSoon": $count($act[daysToAct <= 30]) }
+      ) }
+  skus:
+    source: graph
+    request:
+      path: /subscribedSkus
+      query:
+        $select: skuId,skuPartNumber,capabilityStatus,appliesTo,consumedUnits,prepaidUnits,servicePlans
+    cache: { ttl: 300 }
+    transform: >-
+      ${ (
+        $free := ['FLOW_FREE', 'POWER_BI_STANDARD', 'TEAMS_EXPLORATORY', 'POWERAPPS_DEV', 'POWERAPPS_VIRAL', 'WINDOWS_STORE', 'STREAM',
+                  'MICROSOFT_BUSINESS_CENTER', 'CCIBOTS_PRIVPREV_VIRAL', 'RMSBASIC'];
+        $paid := [value.value[capabilityStatus != 'Deleted' and $not(skuPartNumber in $free)].(
+          $enabled := prepaidUnits.enabled ? prepaidUnits.enabled : 0;
+          {
+            "sku": skuPartNumber,
+            "assigned": consumedUnits,
+            "available": $max([0, $enabled - consumedUnits]),
+            "utilization": $enabled > 0 ? consumedUnits / $enabled : 0
+          }
+        )];
+        {
+          "chart": [$sort($paid, function($a, $b) { $a.assigned < $b.assigned })[[0..7]]],
+          "unassigned": $sum($paid.available),
+          "nearlyFull": $count($paid[utilization >= 0.9])
+        }
+      ) }
+  activeUsers:
+    source: graph
+    request:
+      beta: true
+      path: /reports/getOffice365ActiveUserCounts(period='D30')
+      query: { $format: application/json }
+    cache: { ttl: 3600 }
+    transform: "${ [$sort(value.value, function($a, $b) { $a.reportDate > $b.reportDate })] }"
+  teams:
+    source: graph
+    # Same request as the Teams page, so the cached result is shared.
+    request:
+      path: /groups
+      query:
+        $filter: "resourceProvisioningOptions/Any(x:x eq 'Team')"
+        $select: id,displayName,description,mail,visibility,createdDateTime,renewedDateTime,expirationDateTime
+        $expand: owners($select=id,displayName,userPrincipalName)
+        $top: 100
+    paging: all
+    maxItems: 10000
+    cache: { ttl: 300 }
+    transform: >-
+      ${ {
+        "total": $count(value.value),
+        "noOwner": $count(value.value[$count(owners) = 0]),
+        "singleOwner": $count(value.value[$count(owners) = 1])
+      } }
+
+layout:
+  - widget: kpi
+    id: affected
+    span: 2
+    data: health.affected
+    label: Services with issues
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+    href: /p/m365.service-health
+  - widget: kpi
+    id: incidents
+    span: 2
+    data: issues.incidents
+    label: Active incidents
+    format: number
+    status: "${ value > 0 ? 'crit' : 'ok' }"
+    href: /p/m365.service-health?state=Active&classification=incident
+  - widget: kpi
+    id: actionRequired
+    span: 2
+    data: messages.count
+    label: Changes needing action
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+    href: /p/m365.message-center?actionRequired=Yes
+  - widget: kpi
+    id: unassignedSeats
+    span: 2
+    data: skus.unassigned
+    label: Unassigned paid seats
+    format: number
+    href: /p/m365.licences?usage=unassigned
+  - widget: kpi
+    id: nearlyFull
+    span: 2
+    data: skus.nearlyFull
+    label: SKUs 90%+ assigned
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+    href: /p/m365.licences?usage=high
+  - widget: kpi
+    id: teamsNoOwner
+    span: 2
+    data: teams.noOwner
+    label: Teams without owners
+    format: number
+    status: "${ value > 0 ? 'crit' : 'ok' }"
+    href: /p/m365.teams?ownership=none
+  - widget: statusGrid
+    id: services
+    title: Service health
+    span: 7
+    rows: 3
+    data: health.value
+    label: service
+    status: status
+    map:
+      serviceOperational: [ok, Healthy]
+      serviceRestored: [ok, Restored]
+      postIncidentReviewPublished: [ok, Post-incident report published]
+      falsePositive: [ok, False positive]
+      resolved: [ok, Resolved]
+      mitigated: [ok, Mitigated]
+      investigating: [warn, Investigating]
+      restoringService: [warn, Restoring service]
+      extendedRecovery: [warn, Extended recovery]
+      serviceDegradation: [warn, Degraded]
+      verifyingService: [info, Verifying]
+      serviceInterruption: [crit, Interrupted]
+    default: [info, Advisory]
+  - widget: list
+    id: activeIssues
+    title: Active incidents and advisories
+    span: 5
+    rows: 3
+    data: issues.rows
+    primary: title
+    secondary: lastModifiedDateTime
+    secondaryFormat: relativeTime
+    status: { field: classification, map: { incident: [crit, Incident], advisory: [info, Advisory] } }
+    href: ${ '/p/m365.service-issue?id=' & $encode(row.id) }
+    limit: 8
+    empty:
+      title: No active issues
+      body: Microsoft isn't tracking any incident or advisory for this tenant.
+  - widget: chart
+    id: activeUsers
+    title: Daily active users (30 days)
+    span: 7
+    type: line
+    data: activeUsers
+    x: reportDate
+    y: [office365, exchange, teams, oneDrive, sharePoint]
+    format: number
+  - widget: list
+    id: actionRequired
+    title: Changes needing action
+    span: 5
+    data: messages.actionRequired
+    primary: title
+    secondary: actBy
+    secondaryFormat: date
+    status: { field: urgency, map: { overdue: [crit, Overdue], soon: [warn, Due within 30 days], later: [info, Planned] } }
+    href: ${ '/p/m365.message?id=' & $encode(row.id) }
+    limit: 8
+    empty:
+      title: Nothing needs action
+      body: No Message center post has an act-by date coming up.
+  - widget: chart
+    id: seats
+    title: Seats by product (top 8 paid)
+    span: 12
+    type: stackedBar
+    data: skus.chart
+    x: sku
+    y: [assigned, available]
+    format: number
+    stack: true

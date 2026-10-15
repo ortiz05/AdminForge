@@ -1,0 +1,32 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#teams('10000000-0000-4000-8000-000000000201')/channels",
+  "value": [
+    {
+      "id": "19:0002010general@thread.tacv2",
+      "displayName": "General",
+      "description": null,
+      "membershipType": "standard",
+      "createdDateTime": "2026-03-19T09:00:00Z",
+      "email": "General.project-atlas@example.com",
+      "webUrl": "https://teams.microsoft.com/l/channel/19%3a0002010%40thread.tacv2/General?groupId=10000000-0000-4000-8000-000000000201"
+    },
+    {
+      "id": "19:0002011design@thread.tacv2",
+      "displayName": "Design",
+      "description": "Design channel",
+      "membershipType": "standard",
+      "createdDateTime": "2026-03-22T09:00:00Z",
+      "email": "Design.project-atlas@example.com",
+      "webUrl": "https://teams.microsoft.com/l/channel/19%3a0002011%40thread.tacv2/Design?groupId=10000000-0000-4000-8000-000000000201"
+    },
+    {
+      "id": "19:0002012steering@thread.tacv2",
+      "displayName": "Steering",
+      "description": "Steering channel",
+      "membershipType": "private",
+      "createdDateTime": "2026-03-25T09:00:00Z",
+      "email": "",
+      "webUrl": "https://teams.microsoft.com/l/channel/19%3a0002012%40thread.tacv2/Steering?groupId=10000000-0000-4000-8000-000000000201"
+    }
+  ]
+}

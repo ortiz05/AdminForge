@@ -1,0 +1,79 @@
+$schema: ../../../packages/schemas/generated/playbook.schema.json
+kind: playbook
+id: azure.sync-function-triggers
+version: 1.0.0
+title: Sync Function App triggers
+summary: Re-registers a Function App's triggers with the scale controller — use after a deployment when timer, queue or event triggers stop firing.
+owner: azure-team
+tags: [azure, functions]
+risk: low
+mode: write
+requires:
+  portalRoles: [Portal.Operator]
+  scopes:
+    arm: [user_impersonation]
+  azureRoles: [Website Contributor]
+confirm:
+  type: click
+  message: Sync triggers for this Function App?
+approval:
+  required: false
+
+inputs:
+  subscriptionId: { type: string, format: guid, label: Subscription, picker: subscription }
+  resourceGroup: { type: string, label: Resource group, pattern: "^[-\\w._()]{1,90}$" }
+  name: { type: string, label: Function App, pattern: "^[A-Za-z0-9][A-Za-z0-9-]{0,58}$" }
+  reason: { type: string, label: Reason, required: false, multiline: true, description: Recorded in the audit log. }
+
+steps:
+  - id: lookup
+    type: arm
+    mode: read
+    describe: Read the app
+    request:
+      method: GET
+      path: /subscriptions/${ $encode($guid(inputs.subscriptionId)) }/resourceGroups/${ $encode(inputs.resourceGroup) }/providers/Microsoft.Web/sites/${ $encode(inputs.name) }
+      apiVersion: "2023-12-01"
+
+  - id: isFunctionApp
+    type: assert
+    that: ${ $contains($lowercase(steps.lookup.output.kind), 'functionapp') }
+    message: ${ inputs.name & ' is not a Function App (kind ' & steps.lookup.output.kind & ').' }
+
+  - id: isRunning
+    type: assert
+    that: ${ steps.lookup.output.properties.state = 'Running' }
+    message: ${ inputs.name & ' is stopped. Start it first; triggers are synced on start.' }
+
+  - id: sync
+    type: arm
+    mode: write
+    describe: ${ 'Sync triggers of ' & inputs.name }
+    retry: { max: 3, backoff: exponential, delay: 10s }
+    request:
+      method: POST
+      path: /subscriptions/${ $encode($guid(inputs.subscriptionId)) }/resourceGroups/${ $encode(inputs.resourceGroup) }/providers/Microsoft.Web/sites/${ $encode(inputs.name) }/syncfunctiontriggers
+      apiVersion: "2023-12-01"
+
+outputs:
+  summary: ${ 'Triggers synced for ' & inputs.name & '.' }
+
+tests:
+  - name: refuses a web app that is not a Function App
+    inputs: { subscriptionId: 00000000-0000-4000-8000-0000000000a1, resourceGroup: rg-example-web, name: app-example-portal }
+    mocks:
+      lookup: { name: app-example-portal, kind: app, properties: { state: Running } }
+    expect: { status: failed, failedStep: isFunctionApp }
+  - name: refuses a stopped Function App
+    inputs: { subscriptionId: 00000000-0000-4000-8000-0000000000a1, resourceGroup: rg-example-functions, name: func-example-orders }
+    mocks:
+      lookup: { name: func-example-orders, kind: "functionapp,linux", properties: { state: Stopped } }
+    expect: { status: failed, failedStep: isRunning }
+  - name: plans a trigger sync
+    inputs: { subscriptionId: 00000000-0000-4000-8000-0000000000a1, resourceGroup: rg-example-functions, name: func-example }
+    mocks:
+      lookup: { name: func-example, kind: functionapp, properties: { state: Running } }
+    expect:
+      status: succeeded
+      plan: [sync]
+      outputs: { summary: Triggers synced for func-example. }

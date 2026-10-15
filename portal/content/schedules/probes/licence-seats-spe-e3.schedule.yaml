@@ -1,0 +1,20 @@
+$schema: ../../../packages/schemas/generated/schedule.schema.json
+kind: schedule
+id: sweep.licence-seats-spe-e3
+version: 1.0.0
+title: "Hourly probe: Licence seats — Microsoft 365 E3"
+summary: Runs the probes.licence-seats-spe-e3 probe every hour (minute 23, staggered across the sweep) as the automation identity.
+owner: portal-admins
+tags: [synthetic, probe-sweep]
+cron: "23 * * * *"
+timezone: UTC
+enabled: true
+identity: automation
+job:
+  kind: probe
+  ref: probes.licence-seats-spe-e3
+timeoutSeconds: 120
+overlap: skip
+requires:
+  scopes:
+    graph: [Organization.Read.All]

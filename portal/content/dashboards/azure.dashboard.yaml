@@ -1,0 +1,164 @@
+$schema: ../../packages/schemas/generated/dashboard.schema.json
+kind: dashboard
+id: azure.overview
+version: 1.0.0
+title: Azure overview
+summary: Inventory, tagging hygiene, Azure Arc connectivity, Function App state and Azure Monitor alerts across every subscription you can read.
+owner: azure-team
+tags: [azure, dashboard]
+nav: { section: azure, label: Overview, icon: gauge, order: 5 }
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    arm: [user_impersonation]
+  azureRoles: [Reader, Monitoring Reader]
+
+refresh: 300
+
+datasources:
+  counts:
+    source: resourceGraph
+    query: |
+      // af:azure.overview#counts
+      resources
+      | summarize resources = count(),
+          untagged = countif(isnull(tags) or array_length(bag_keys(tags)) == 0),
+          arcDisconnected = countif(type =~ 'microsoft.hybridcompute/machines' and tostring(properties.status) != 'Connected'),
+          functionApps = countif(type =~ 'microsoft.web/sites' and kind contains 'functionapp'),
+          stoppedFunctionApps = countif(type =~ 'microsoft.web/sites' and kind contains 'functionapp' and tostring(properties.state) =~ 'Stopped')
+      | extend joinKey = 1
+      | join kind=leftouter (resourcecontainers | summarize subscriptions = countif(type =~ 'microsoft.resources/subscriptions'), resourceGroups = countif(type =~ 'microsoft.resources/subscriptions/resourcegroups') | extend joinKey = 1) on joinKey
+      | project resources, untagged, arcDisconnected, functionApps, stoppedFunctionApps, subscriptions, resourceGroups
+    transform: "${ $merge([{ 'resources': 0, 'untagged': 0, 'arcDisconnected': 0, 'functionApps': 0, 'stoppedFunctionApps': 0, 'subscriptions': 0, 'resourceGroups': 0 }, value.value[0]]) }"
+    cache: { ttl: 300 }
+  alerts:
+    source: resourceGraph
+    query: |
+      // af:azure.overview#alerts
+      alertsmanagementresources
+      | where type =~ 'microsoft.alertsmanagement/alerts'
+      | extend e = properties.essentials
+      | where tostring(e.monitorCondition) == 'Fired' and tostring(e.alertState) != 'Closed'
+      | project id, name, severity = tostring(e.severity), alertState = tostring(e.alertState), targetResource = tostring(e.targetResource), targetResourceName = tostring(e.targetResourceName), targetResourceType = tostring(e.targetResourceType), startDateTime = todatetime(e.startDateTime), monitorService = tostring(e.monitorService)
+      | order by severity asc, startDateTime desc
+    paging: all
+    maxItems: 5000
+    transform: >-
+      ${ (
+        $rows := [value.value];
+        {
+          'rows': $rows,
+          'firing': $count($rows),
+          'critical': $count($rows[severity in ['Sev0', 'Sev1']])
+        }
+      ) }
+    cache: { ttl: 60 }
+  byType:
+    source: resourceGraph
+    query: |
+      // af:azure.overview#bytype
+      resources
+      | summarize resources = count() by type
+      | top 10 by resources desc
+    transform: "${ [value.value] }"
+    cache: { ttl: 600 }
+  byLocation:
+    source: resourceGraph
+    query: |
+      // af:azure.overview#bylocation
+      resources
+      | summarize resources = count() by location
+      | order by resources desc
+    transform: >-
+      ${ (
+        $rows := [value.value];
+        $rest := $sum($rows[[5..1000]].resources);
+        [$append($rows[[0..4]], $rest > 0 ? [{ 'location': 'Other', 'resources': $rest }] : [])]
+      ) }
+    cache: { ttl: 600 }
+
+layout:
+  - widget: kpi
+    span: 2
+    data: counts.subscriptions
+    label: Subscriptions
+    format: number
+    href: /p/azure.subscriptions
+  - widget: kpi
+    span: 2
+    data: counts.resources
+    label: Resources
+    format: number
+    href: /p/azure.resources
+  - widget: kpi
+    span: 2
+    data: counts.untagged
+    label: Untagged resources
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+    href: /p/azure.resources?tagState=Untagged
+  - widget: kpi
+    span: 2
+    data: counts.arcDisconnected
+    label: Arc servers not connected
+    format: number
+    status: "${ value > 0 ? 'crit' : 'ok' }"
+    href: /p/azure.arc-servers?status=Disconnected
+  - widget: kpi
+    span: 2
+    data: alerts.critical
+    label: Sev 0/1 alerts firing
+    format: number
+    status: "${ value > 0 ? 'crit' : 'ok' }"
+    href: /p/azure.alerts?severity=Sev0&condition=Fired
+  - widget: kpi
+    span: 2
+    data: counts.stoppedFunctionApps
+    label: Function Apps stopped
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+    href: /p/azure.function-apps?state=Stopped
+  - widget: chart
+    id: resourcesByType
+    title: Top resource types
+    span: 8
+    rows: 3
+    type: bar
+    data: byType
+    x: type
+    y: resources
+    format: number
+  - widget: chart
+    id: resourcesByLocation
+    title: Resources by location
+    span: 4
+    rows: 3
+    type: donut
+    data: byLocation
+    x: location
+    y: resources
+    format: number
+  - widget: list
+    id: firingAlerts
+    title: Alerts firing now
+    span: 6
+    data: alerts.rows
+    primary: name
+    secondary: startDateTime
+    secondaryFormat: relativeTime
+    status: { field: severity, map: { Sev0: [crit, Sev 0], Sev1: [crit, Sev 1], Sev2: [warn, Sev 2], Sev3: [info, Sev 3], Sev4: [neutral, Sev 4] } }
+    href: ${ '/p/azure.resource?id=' & $encode(row.targetResource) }
+    limit: 8
+    empty:
+      title: No alerts firing
+      body: Azure Monitor has no open alerts in a fired state.
+  - widget: markdown
+    span: 6
+    text: |
+      **Where to next**
+
+      - [Resources](/p/azure.resources) — inventory with type, location, resource group and tag filters
+      - [Role assignments](/p/azure.role-assignments) — who holds Owner and other privileged roles
+      - [Arc servers](/p/azure.arc-servers) and [Arc Kubernetes](/p/azure.arc-kubernetes) — hybrid connectivity
+      - [Function Apps](/p/azure.function-apps) — restart, start, stop and sync triggers
+      - Reports: [Untagged resources](/p/azure.untagged-resources), [Function Apps without authentication](/p/azure.function-apps-without-auth), [Disconnected Arc servers](/p/azure.arc-disconnected)

@@ -1,0 +1,17 @@
+$schema: ../../../packages/schemas/generated/schedule.schema.json
+kind: schedule
+id: sweep.token-sharepoint-admin
+version: 1.0.0
+title: "Hourly probe: Token acquisition — SharePoint admin"
+summary: Runs the probes.token-sharepoint-admin probe every hour (minute 45, staggered across the sweep) as the automation identity.
+owner: portal-admins
+tags: [synthetic, probe-sweep]
+cron: "45 * * * *"
+timezone: UTC
+enabled: true
+identity: automation
+job:
+  kind: probe
+  ref: probes.token-sharepoint-admin
+timeoutSeconds: 120
+overlap: skip

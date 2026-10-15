@@ -1,0 +1,45 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#admin/serviceAnnouncement/messages/$entity",
+  "id": "MC909876",
+  "title": "Microsoft 365 apps: Copilot in Outlook will summarize long threads automatically",
+  "services": [
+    "Microsoft 365 apps",
+    "Microsoft Copilot (Microsoft 365)"
+  ],
+  "category": "stayInformed",
+  "severity": "normal",
+  "isMajorChange": false,
+  "actionRequiredByDateTime": null,
+  "startDateTime": "2026-10-06T09:00:00Z",
+  "endDateTime": "2027-01-13T09:00:00Z",
+  "lastModifiedDateTime": "2026-10-10T09:00:00Z",
+  "tags": [
+    "New feature",
+    "User impact"
+  ],
+  "hasAttachments": false,
+  "attachmentsArchive": null,
+  "viewPoint": {
+    "isRead": true,
+    "isArchived": false,
+    "isFavorited": false
+  },
+  "details": [
+    {
+      "name": "Summary",
+      "value": "Microsoft 365 apps: Copilot in Outlook will summarize long threads automatically"
+    },
+    {
+      "name": "RoadmapIds",
+      "value": "409966"
+    },
+    {
+      "name": "Platforms",
+      "value": "Web, Desktop, Mac"
+    }
+  ],
+  "body": {
+    "contentType": "html",
+    "content": "<p>Copilot in Outlook will show a summary card at the top of long email threads for licensed users.</p>"
+  }
+}

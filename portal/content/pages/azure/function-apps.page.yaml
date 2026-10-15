@@ -1,0 +1,248 @@
+$schema: ../../../packages/schemas/generated/page.schema.json
+kind: page
+id: azure.function-apps
+version: 1.0.0
+title: Function Apps
+summary: Azure Function Apps across subscriptions — state, hosting plan, OS, HTTPS and identity settings — with restart, start, stop and trigger sync.
+owner: azure-team
+tags: [azure, functions, app-service]
+template: list-detail
+nav: { section: azure, label: Function Apps, icon: function, order: 80 }
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    arm: [user_impersonation]
+  azureRoles: [Reader]
+
+params:
+  q: { type: string, default: "", label: Search, placeholder: App name contains… }
+  state:
+    type: enum
+    label: State
+    facet: true
+    default: All
+    values: [All, Running, Stopped]
+  plan:
+    type: enum
+    label: Hosting plan
+    facet: true
+    default: All
+    values: [All, Consumption, Flex Consumption, Premium, Dedicated]
+  os:
+    type: enum
+    label: OS
+    facet: true
+    default: All
+    values: [All, Linux, Windows]
+  subscriptionId: { type: string, format: guid, label: Subscription, picker: subscription, facet: true }
+  resourceGroup: { type: string, label: Resource group, facet: true }
+
+filters:
+  search: q
+  facets: [state, plan, os, subscriptionId, resourceGroup]
+
+savedViews:
+  enabled: true
+  shared: true
+  presets:
+    - { name: Stopped apps, params: { state: Stopped } }
+    - { name: Consumption plan, params: { plan: Consumption } }
+    - { name: Linux apps, params: { os: Linux } }
+
+datasources:
+  apps:
+    source: resourceGraph
+    query: |
+      // af:azure.function-apps#apps
+      resources
+      | where type =~ 'microsoft.web/sites' and kind contains 'functionapp'
+      ${ params.subscriptionId ? "| where subscriptionId == '" & $guid(params.subscriptionId) & "'" }
+      ${ params.resourceGroup ? "| where resourceGroup =~ '" & $replace(params.resourceGroup, /[^A-Za-z0-9._()-]/, '') & "'" }
+      ${ params.q ? "| where name contains '" & $replace(params.q, /[^A-Za-z0-9 ._()-]/, '') & "'" }
+      | extend state = tostring(properties.state), defaultHostName = tostring(properties.defaultHostName), httpsOnly = tobool(properties.httpsOnly), skuName = tostring(properties.sku), os = iff(kind contains 'linux', 'Linux', 'Windows'), publicNetworkAccess = tostring(properties.publicNetworkAccess), clientCertEnabled = tobool(properties.clientCertEnabled), vnetIntegrated = isnotempty(tostring(properties.virtualNetworkSubnetId)), identityType = tostring(identity.type), lastModified = todatetime(properties.lastModifiedTimeUtc), linuxFxVersion = tostring(properties.siteConfig.linuxFxVersion), planName = tostring(split(tostring(properties.serverFarmId), '/')[-1])
+      | extend plan = case(skuName =~ 'Dynamic', 'Consumption', skuName =~ 'FlexConsumption', 'Flex Consumption', skuName =~ 'ElasticPremium', 'Premium', 'Dedicated')
+      ${ params.state in ['Running', 'Stopped'] ? "| where state == '" & params.state & "'" }
+      ${ params.plan in ['Consumption', 'Flex Consumption', 'Premium', 'Dedicated'] ? "| where plan == '" & params.plan & "'" }
+      ${ params.os in ['Linux', 'Windows'] ? "| where os == '" & params.os & "'" }
+      | join kind=leftouter (resourcecontainers | where type =~ 'microsoft.resources/subscriptions' | project subscriptionId, subscriptionName = name) on subscriptionId
+      | project id, name, kind, state, defaultHostName, plan, planName, skuName, os, linuxFxVersion, httpsOnly, publicNetworkAccess, clientCertEnabled, vnetIntegrated, identityType, lastModified, location, resourceGroup, subscriptionId, subscriptionName, tags
+      | order by name asc
+    paging: all
+    maxItems: 10000
+    transform: >-
+      ${ (
+        $rows := [value.value.$merge([$, {
+          'identityType': identityType ? identityType : 'None',
+          'publicNetworkAccess': publicNetworkAccess ? publicNetworkAccess : 'Enabled'
+        }])];
+        {
+          'rows': $rows,
+          'total': $count($rows),
+          'running': $count($rows[state = 'Running']),
+          'stopped': $count($rows[state = 'Stopped']),
+          'httpAllowed': $count($rows[httpsOnly != true]),
+          'noIdentity': $count($rows[identityType = 'None'])
+        }
+      ) }
+    cache: { ttl: 120 }
+
+layout:
+  - widget: kpi
+    data: apps.total
+    label: Function Apps
+    format: number
+  - widget: kpi
+    data: apps.running
+    label: Running
+    format: number
+    status: ok
+  - widget: kpi
+    data: apps.stopped
+    label: Stopped
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+    href: /p/azure.function-apps?state=Stopped
+  - widget: kpi
+    data: apps.httpAllowed
+    label: Plain HTTP allowed
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+  - widget: kpi
+    data: apps.noIdentity
+    label: No managed identity
+    format: number
+    status: "${ value > 0 ? 'info' : 'ok' }"
+  - widget: table
+    id: apps
+    span: 12
+    data: apps.rows
+    rowKey: id
+    selection: multi
+    columns:
+      - { field: name, label: Function App, kind: identity, secondary: defaultHostName, sortable: true }
+      - field: state
+        label: State
+        kind: status
+        map: { Running: [ok, Running], Stopped: [warn, Stopped] }
+        filter: { type: facet, param: state }
+      - { field: plan, label: Plan, filter: { type: facet, param: plan } }
+      - { field: os, label: OS, filter: { type: facet, param: os } }
+      - { field: linuxFxVersion, label: Runtime stack, hidden: true }
+      - field: httpsOnly
+        label: HTTPS
+        kind: status
+        map: { "true": [ok, HTTPS only], "false": [warn, HTTP allowed] }
+        filter: facet
+      - { field: publicNetworkAccess, label: Public access, filter: facet }
+      - { field: identityType, label: Managed identity, filter: facet }
+      - { field: vnetIntegrated, label: VNet integrated, kind: boolean, filter: facet, hidden: true }
+      - { field: clientCertEnabled, label: Client certificates, kind: boolean, hidden: true }
+      - { field: planName, label: App Service plan, hidden: true }
+      - { field: resourceGroup, label: Resource group, filter: { type: text, param: resourceGroup } }
+      - { field: subscriptionName, label: Subscription, filter: facet, hidden: true }
+      - { field: location, label: Location, filter: facet, hidden: true }
+      - { field: lastModified, label: Last modified, kind: relativeTime, sortable: true }
+      - { field: tags, label: Tags, kind: tags, hidden: true }
+      - { field: id, label: Resource id, kind: code, hidden: true }
+    inspect:
+      page: azure.function-app
+      params:
+        subscriptionId: ${ row.subscriptionId }
+        resourceGroup: ${ row.resourceGroup }
+        name: ${ row.name }
+    rowActions:
+      - playbook: azure.restart-app
+        label: Restart
+        icon: arrow-clockwise
+        inputs:
+          subscriptionId: ${ row.subscriptionId }
+          resourceGroup: ${ row.resourceGroup }
+          name: ${ row.name }
+        when: ${ row.state = 'Running' }
+      - playbook: azure.start-app
+        label: Start
+        icon: play
+        inputs:
+          subscriptionId: ${ row.subscriptionId }
+          resourceGroup: ${ row.resourceGroup }
+          name: ${ row.name }
+        when: ${ row.state = 'Stopped' }
+      - playbook: azure.stop-app
+        label: Stop
+        icon: stop
+        inputs:
+          subscriptionId: ${ row.subscriptionId }
+          resourceGroup: ${ row.resourceGroup }
+          name: ${ row.name }
+        when: ${ row.state = 'Running' }
+      - playbook: azure.sync-function-triggers
+        label: Sync triggers
+        icon: arrows-clockwise
+        inputs:
+          subscriptionId: ${ row.subscriptionId }
+          resourceGroup: ${ row.resourceGroup }
+          name: ${ row.name }
+      - label: Open in Azure portal
+        icon: arrow-square-out
+        href: https://portal.azure.com/#resource${ row.id }/overview
+    bulkActions:
+      - playbook: azure.restart-app
+        label: Restart
+        icon: arrow-clockwise
+        forEach:
+          inputs:
+            subscriptionId: ${ row.subscriptionId }
+            resourceGroup: ${ row.resourceGroup }
+            name: ${ row.name }
+          concurrency: 3
+        maxItems: 50
+        when: ${ $count(rows[state = 'Running']) = $count(rows) }
+      - playbook: azure.start-app
+        label: Start
+        icon: play
+        forEach:
+          inputs:
+            subscriptionId: ${ row.subscriptionId }
+            resourceGroup: ${ row.resourceGroup }
+            name: ${ row.name }
+          concurrency: 5
+        maxItems: 50
+        when: ${ $count(rows[state = 'Stopped']) = $count(rows) }
+      - playbook: azure.stop-app
+        label: Stop
+        icon: stop
+        forEach:
+          inputs:
+            subscriptionId: ${ row.subscriptionId }
+            resourceGroup: ${ row.resourceGroup }
+            name: ${ row.name }
+          concurrency: 3
+        maxItems: 20
+        when: ${ $count(rows[state = 'Running']) = $count(rows) }
+      - playbook: azure.sync-function-triggers
+        label: Sync triggers
+        icon: arrows-clockwise
+        forEach:
+          inputs:
+            subscriptionId: ${ row.subscriptionId }
+            resourceGroup: ${ row.resourceGroup }
+            name: ${ row.name }
+          concurrency: 5
+        maxItems: 100
+      - playbook: azure.add-tags
+        label: Add or update a tag
+        icon: tag
+        forEach:
+          inputs:
+            resourceId: ${ row.id }
+          concurrency: 5
+        maxItems: 200
+    empty:
+      title: No Function Apps match
+      body: Clear a filter, or check that your account has Reader on the subscriptions that host your Function Apps.
+
+export:
+  formats: [csv, xlsx]
+  fileName: azure-function-apps
+  data: apps.rows
+  columns: visible

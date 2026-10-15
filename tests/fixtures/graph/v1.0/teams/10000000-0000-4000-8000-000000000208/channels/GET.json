@@ -1,0 +1,41 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#teams('10000000-0000-4000-8000-000000000208')/channels",
+  "value": [
+    {
+      "id": "19:0002080general@thread.tacv2",
+      "displayName": "General",
+      "description": null,
+      "membershipType": "standard",
+      "createdDateTime": "2024-04-28T09:00:00Z",
+      "email": "General.allcompany@example.com",
+      "webUrl": "https://teams.microsoft.com/l/channel/19%3a0002080%40thread.tacv2/General?groupId=10000000-0000-4000-8000-000000000208"
+    },
+    {
+      "id": "19:0002081announcements@thread.tacv2",
+      "displayName": "Announcements",
+      "description": "Announcements channel",
+      "membershipType": "standard",
+      "createdDateTime": "2024-05-01T09:00:00Z",
+      "email": "Announcements.allcompany@example.com",
+      "webUrl": "https://teams.microsoft.com/l/channel/19%3a0002081%40thread.tacv2/Announcements?groupId=10000000-0000-4000-8000-000000000208"
+    },
+    {
+      "id": "19:0002082social@thread.tacv2",
+      "displayName": "Social",
+      "description": "Social channel",
+      "membershipType": "standard",
+      "createdDateTime": "2024-05-04T09:00:00Z",
+      "email": "Social.allcompany@example.com",
+      "webUrl": "https://teams.microsoft.com/l/channel/19%3a0002082%40thread.tacv2/Social?groupId=10000000-0000-4000-8000-000000000208"
+    },
+    {
+      "id": "19:0002083ithelp@thread.tacv2",
+      "displayName": "IT Help",
+      "description": "IT Help channel",
+      "membershipType": "standard",
+      "createdDateTime": "2024-05-07T09:00:00Z",
+      "email": "ITHelp.allcompany@example.com",
+      "webUrl": "https://teams.microsoft.com/l/channel/19%3a0002083%40thread.tacv2/IT%20Help?groupId=10000000-0000-4000-8000-000000000208"
+    }
+  ]
+}

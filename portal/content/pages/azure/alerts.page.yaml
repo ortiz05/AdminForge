@@ -1,0 +1,230 @@
+$schema: ../../../packages/schemas/generated/page.schema.json
+kind: page
+id: azure.alerts
+version: 1.0.0
+title: Azure Monitor alerts
+summary: Alerts fired by Azure Monitor across subscriptions (last 30 days at most), with severity, state and the affected resource.
+owner: azure-team
+tags: [azure, monitoring, alerts]
+template: list-detail
+nav: { section: azure, label: Alerts, icon: bell-ringing, order: 60 }
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    arm: [user_impersonation]
+  azureRoles: [Monitoring Reader]
+
+params:
+  q: { type: string, default: "", label: Search, placeholder: Alert or resource name contains… }
+  range:
+    type: enum
+    label: Fired in
+    facet: true
+    default: 1d
+    values:
+      - { value: 1d, label: Last 24 hours }
+      - { value: 7d, label: Last 7 days }
+      - { value: 30d, label: Last 30 days }
+  severity:
+    type: enum
+    label: Severity
+    facet: true
+    default: All
+    values:
+      - { value: All, label: Any }
+      - { value: Sev0, label: Sev 0 – Critical }
+      - { value: Sev1, label: Sev 1 – Error }
+      - { value: Sev2, label: Sev 2 – Warning }
+      - { value: Sev3, label: Sev 3 – Informational }
+      - { value: Sev4, label: Sev 4 – Verbose }
+  alertState:
+    type: enum
+    label: State
+    facet: true
+    default: Open
+    values:
+      - { value: Open, label: Open (new or acknowledged) }
+      - { value: New, label: New }
+      - { value: Acknowledged, label: Acknowledged }
+      - { value: Closed, label: Closed }
+      - { value: All, label: Any }
+  condition:
+    type: enum
+    label: Condition
+    facet: true
+    default: All
+    values:
+      - { value: All, label: Any }
+      - { value: Fired, label: Fired }
+      - { value: Resolved, label: Resolved }
+  monitorService: { type: string, label: Monitor service, placeholder: Platform, facet: true }
+  subscriptionId: { type: string, format: guid, label: Subscription, picker: subscription, facet: true }
+
+filters:
+  search: q
+  facets: [range, severity, alertState, condition, monitorService, subscriptionId]
+
+savedViews:
+  enabled: true
+  shared: true
+  presets:
+    - { name: Critical and error, params: { severity: Sev0, alertState: Open } }
+    - { name: Still firing, params: { condition: Fired, alertState: Open } }
+    - { name: Last 7 days, params: { range: 7d, alertState: All } }
+
+datasources:
+  alerts:
+    source: resourceGraph
+    query: |
+      // af:azure.alerts#alerts
+      alertsmanagementresources
+      | where type =~ 'microsoft.alertsmanagement/alerts'
+      | extend e = properties.essentials
+      | extend severity = tostring(e.severity), alertState = tostring(e.alertState), monitorCondition = tostring(e.monitorCondition), monitorService = tostring(e.monitorService), signalType = tostring(e.signalType), targetResource = tostring(e.targetResource), targetResourceName = tostring(e.targetResourceName), targetResourceType = tostring(e.targetResourceType), targetResourceGroup = tostring(e.targetResourceGroup), alertRule = tostring(e.alertRule), description = tostring(e.description), startDateTime = todatetime(e.startDateTime), lastModifiedDateTime = todatetime(e.lastModifiedDateTime), monitorConditionResolvedDateTime = todatetime(e.monitorConditionResolvedDateTime)
+      | where startDateTime > ago(${ params.range in ['1d', '7d', '30d'] ? params.range : '1d' })
+      ${ params.severity in ['Sev0', 'Sev1', 'Sev2', 'Sev3', 'Sev4'] ? "| where severity == '" & params.severity & "'" }
+      ${ params.alertState = 'Open' ? "| where alertState != 'Closed'" : params.alertState in ['New', 'Acknowledged', 'Closed'] ? "| where alertState == '" & params.alertState & "'" }
+      ${ params.condition in ['Fired', 'Resolved'] ? "| where monitorCondition == '" & params.condition & "'" }
+      ${ params.monitorService ? "| where monitorService =~ '" & $replace(params.monitorService, /[^A-Za-z0-9 ._-]/, '') & "'" }
+      ${ params.subscriptionId ? "| where subscriptionId == '" & $guid(params.subscriptionId) & "'" }
+      ${ params.q ? "| where name contains '" & $replace(params.q, /[^A-Za-z0-9 ._()-]/, '') & "' or targetResourceName contains '" & $replace(params.q, /[^A-Za-z0-9 ._()-]/, '') & "'" }
+      | join kind=leftouter (resourcecontainers | where type =~ 'microsoft.resources/subscriptions' | project subscriptionId, subscriptionName = name) on subscriptionId
+      | project id, name, severity, alertState, monitorCondition, monitorService, signalType, targetResource, targetResourceName, targetResourceType, targetResourceGroup, alertRule, description, startDateTime, lastModifiedDateTime, monitorConditionResolvedDateTime, subscriptionId, subscriptionName
+      | order by startDateTime desc
+    paging: all
+    maxItems: 10000
+    transform: >-
+      ${ (
+        $rows := [value.value];
+        $days := $distinct($rows.$substring(startDateTime, 0, 10))^($);
+        {
+          'rows': $rows,
+          'total': $count($rows),
+          'critical': $count($rows[severity in ['Sev0', 'Sev1'] and monitorCondition = 'Fired']),
+          'firing': $count($rows[monitorCondition = 'Fired']),
+          'new': $count($rows[alertState = 'New']),
+          'acknowledged': $count($rows[alertState = 'Acknowledged']),
+          'perDay': [$days.(
+            $d := $;
+            $day := $rows[$substring(startDateTime, 0, 10) = $d];
+            {
+              'day': $d,
+              'Sev0': $count($day[severity = 'Sev0']),
+              'Sev1': $count($day[severity = 'Sev1']),
+              'Sev2': $count($day[severity = 'Sev2']),
+              'Sev3': $count($day[severity = 'Sev3']),
+              'Sev4': $count($day[severity = 'Sev4'])
+            }
+          )]
+        }
+      ) }
+    cache: { ttl: 60 }
+
+refresh: 120
+
+layout:
+  - widget: kpi
+    data: alerts.critical
+    label: Sev 0/1 still firing
+    format: number
+    status: "${ value > 0 ? 'crit' : 'ok' }"
+    href: /p/azure.alerts?severity=Sev0&condition=Fired
+  - widget: kpi
+    data: alerts.firing
+    label: Firing
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+  - widget: kpi
+    data: alerts.new
+    label: New (unacknowledged)
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+  - widget: kpi
+    data: alerts.acknowledged
+    label: Acknowledged
+    format: number
+  - widget: chart
+    id: alertsPerDay
+    title: Alerts per day by severity
+    span: 12
+    type: stackedBar
+    stack: true
+    data: alerts.perDay
+    x: day
+    y: [Sev0, Sev1, Sev2, Sev3, Sev4]
+    format: number
+  - widget: table
+    id: alerts
+    span: 12
+    data: alerts.rows
+    rowKey: id
+    selection: multi
+    columns:
+      - { field: name, label: Alert, kind: identity, secondary: targetResourceName, sortable: true }
+      - field: severity
+        label: Severity
+        kind: status
+        map: { Sev0: [crit, Sev 0 Critical], Sev1: [crit, Sev 1 Error], Sev2: [warn, Sev 2 Warning], Sev3: [info, Sev 3 Informational], Sev4: [neutral, Sev 4 Verbose] }
+        filter: { type: facet, param: severity }
+      - field: monitorCondition
+        label: Condition
+        kind: status
+        map: { Fired: [crit, Fired], Resolved: [ok, Resolved] }
+        filter: { type: facet, param: condition }
+      - field: alertState
+        label: State
+        kind: status
+        map: { New: [warn, New], Acknowledged: [info, Acknowledged], Closed: [ok, Closed] }
+        filter: facet
+      - { field: startDateTime, label: Fired, kind: relativeTime, sortable: true, filter: date }
+      - { field: targetResourceType, label: Resource type, filter: facet }
+      - { field: targetResourceGroup, label: Resource group, filter: facet }
+      - { field: monitorService, label: Monitor service, filter: facet }
+      - { field: signalType, label: Signal, filter: facet, hidden: true }
+      - { field: subscriptionName, label: Subscription, filter: facet, hidden: true }
+      - { field: description, label: Description, hidden: true }
+      - { field: monitorConditionResolvedDateTime, label: Resolved, kind: datetime, hidden: true }
+      - { field: lastModifiedDateTime, label: Last changed, kind: datetime, hidden: true }
+      - { field: alertRule, label: Alert rule, kind: code, hidden: true }
+      - { field: id, label: Alert id, kind: code, hidden: true }
+    inspect:
+      page: azure.resource
+      params:
+        id: ${ row.targetResource }
+    rowActions:
+      - playbook: azure.change-alert-state
+        label: Acknowledge
+        icon: check
+        inputs:
+          alertId: ${ row.id }
+          state: Acknowledged
+        when: ${ row.alertState = 'New' }
+      - playbook: azure.change-alert-state
+        label: Close
+        icon: check-circle
+        inputs:
+          alertId: ${ row.id }
+          state: Closed
+        when: ${ row.alertState != 'Closed' }
+      - label: Open in Azure portal
+        icon: arrow-square-out
+        href: https://portal.azure.com/#view/Microsoft_Azure_Monitoring_Alerts/AlertDetails.ReactView/alertId~/${ $encode(row.id) }
+    bulkActions:
+      - playbook: azure.change-alert-state
+        label: Change state
+        icon: check-square
+        forEach:
+          inputs:
+            alertId: ${ row.id }
+          concurrency: 5
+        maxItems: 200
+        when: ${ $count(rows[alertState != 'Closed']) > 0 }
+    empty:
+      title: No alerts in this window
+      body: Nothing fired that matches these filters. Widen the time range or set State to Any.
+
+export:
+  formats: [csv, xlsx]
+  fileName: azure-monitor-alerts
+  data: alerts.rows
+  columns: visible

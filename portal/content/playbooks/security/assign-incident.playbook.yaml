@@ -1,0 +1,87 @@
+$schema: ../../../packages/schemas/generated/playbook.schema.json
+kind: playbook
+id: security.assign-incident
+version: 1.0.0
+title: Assign incident
+summary: Assigns a Microsoft Defender XDR incident to an analyst. Already-assigned incidents are left as they are.
+owner: security-team
+tags: [security, defender, incidents, triage]
+risk: low
+mode: write
+requires:
+  portalRoles: [Portal.Operator]
+  scopes:
+    graph: [SecurityIncident.ReadWrite.All]
+  entraRoles: [Security Operator]
+  licences: [defender]
+approval:
+  required: false
+
+inputs:
+  incidentId: { type: string, label: Incident id, pattern: '^[0-9]+$', placeholder: '4224' }
+  assignee: { type: string, format: upn, label: Assign to, placeholder: analyst@example.com, description: Sign-in name (UPN) of the analyst }
+
+steps:
+  - id: lookup
+    type: graph
+    mode: read
+    describe: Read the incident
+    request:
+      method: GET
+      path: /security/incidents/${ $encode(inputs.incidentId) }
+
+  - id: not_redirected
+    type: assert
+    that: ${ steps.lookup.output.status != 'redirected' }
+    message: "${ 'Incident ' & inputs.incidentId & ' was merged into incident ' & steps.lookup.output.redirectIncidentId & '. Assign that incident instead.' }"
+
+  - id: assign
+    type: graph
+    mode: write
+    describe: ${ 'Assign incident ' & inputs.incidentId & ' to ' & inputs.assignee }
+    when: "${ $lowercase(steps.lookup.output.assignedTo ? steps.lookup.output.assignedTo : '') != $lowercase(inputs.assignee) }"
+    request:
+      method: PATCH
+      path: /security/incidents/${ $encode(inputs.incidentId) }
+      body:
+        assignedTo: ${ inputs.assignee }
+    compensate:
+      type: graph
+      describe: Restore the previous assignee
+      request:
+        method: PATCH
+        path: /security/incidents/${ $encode(inputs.incidentId) }
+        body:
+          assignedTo: "${ steps.lookup.output.assignedTo ? steps.lookup.output.assignedTo : null }"
+    dryRunOutput: "${ $merge([steps.lookup.output, { 'assignedTo': inputs.assignee }]) }"
+
+outputs:
+  summary: >-
+    ${ steps.assign.output
+       ? 'Incident ' & inputs.incidentId & ' assigned to ' & inputs.assignee
+       : 'Incident ' & inputs.incidentId & ' was already assigned to ' & inputs.assignee }
+  incidentUrl: ${ steps.lookup.output.incidentWebUrl }
+
+tests:
+  - name: assigns an unassigned incident
+    inputs: { incidentId: '4224', assignee: alex.admin@example.com }
+    mocks:
+      lookup: { id: '4224', status: active, assignedTo: null, incidentWebUrl: 'https://security.microsoft.com/incidents/4224' }
+    expect:
+      status: succeeded
+      plan: [assign]
+      outputs: { summary: Incident 4224 assigned to alex.admin@example.com }
+  - name: leaves an incident already assigned to the same analyst untouched
+    inputs: { incidentId: '4223', assignee: Alex.Admin@example.com }
+    mocks:
+      lookup: { id: '4223', status: inProgress, assignedTo: alex.admin@example.com }
+    expect:
+      status: succeeded
+      plan: []
+      steps: { assign: skipped }
+      outputs: { summary: Incident 4223 was already assigned to Alex.Admin@example.com }
+  - name: refuses a merged (redirected) incident
+    inputs: { incidentId: '4214', assignee: alex.admin@example.com }
+    mocks:
+      lookup: { id: '4214', status: redirected, redirectIncidentId: '4219', assignedTo: null }
+    expect: { status: failed, failedStep: not_redirected }

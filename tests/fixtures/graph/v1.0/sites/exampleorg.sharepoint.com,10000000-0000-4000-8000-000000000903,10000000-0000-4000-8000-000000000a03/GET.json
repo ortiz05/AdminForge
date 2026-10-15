@@ -1,0 +1,13 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#sites/$entity",
+  "id": "exampleorg.sharepoint.com,10000000-0000-4000-8000-000000000903,10000000-0000-4000-8000-000000000a03",
+  "name": "PartnerCollaborationFabrikam",
+  "displayName": "Partner Collaboration – Fabrikam",
+  "description": "Partner Collaboration – Fabrikam site",
+  "webUrl": "https://exampleorg.sharepoint.com/sites/PartnerCollaborationFabrikam",
+  "createdDateTime": "2026-05-28T09:00:00Z",
+  "lastModifiedDateTime": "2026-10-13T09:00:00Z",
+  "siteCollection": {
+    "hostname": "exampleorg.sharepoint.com"
+  }
+}

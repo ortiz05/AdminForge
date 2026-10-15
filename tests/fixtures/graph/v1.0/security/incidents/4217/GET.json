@@ -1,0 +1,91 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#security/incidents(alerts())/$entity",
+  "id": "4217",
+  "tenantId": "00000000-0000-4000-8000-0000000000f0",
+  "status": "resolved",
+  "incidentWebUrl": "https://security.microsoft.com/incidents/4217?tid=00000000-0000-4000-8000-0000000000f0",
+  "redirectIncidentId": null,
+  "displayName": "Password spray attack against multiple accounts",
+  "createdDateTime": "2026-10-10T09:00:00Z",
+  "lastUpdateDateTime": "2026-10-11T09:00:00Z",
+  "assignedTo": "alex.admin@example.com",
+  "classification": "truePositive",
+  "determination": "compromisedAccount",
+  "severity": "high",
+  "customTags": [],
+  "systemTags": [],
+  "description": null,
+  "summary": null,
+  "lastModifiedBy": "alex.admin@example.com",
+  "resolvingComment": "Passwords reset for 2 accounts, sessions revoked, source IP blocked.",
+  "comments": [],
+  "alerts": [
+    {
+      "id": "da638647315200000015_-1194836015",
+      "providerAlertId": "00000015-0000-4000-8000-00000000c0de",
+      "incidentId": "4217",
+      "status": "resolved",
+      "severity": "high",
+      "classification": "truePositive",
+      "determination": "compromisedAccount",
+      "serviceSource": "microsoftDefenderForIdentity",
+      "detectionSource": "microsoftDefenderForIdentity",
+      "productName": "Microsoft Defender for Identity",
+      "detectorId": "0000000f-1111-4000-8000-000000000000",
+      "tenantId": "00000000-0000-4000-8000-0000000000f0",
+      "title": "Password spray",
+      "description": "",
+      "recommendedActions": "",
+      "category": "CredentialAccess",
+      "assignedTo": "alex.admin@example.com",
+      "alertWebUrl": "https://security.microsoft.com/alerts/da638647315200000015_-1194836015?tid=00000000-0000-4000-8000-0000000000f0",
+      "incidentWebUrl": "https://security.microsoft.com/incidents/4217?tid=00000000-0000-4000-8000-0000000000f0",
+      "actorDisplayName": null,
+      "threatDisplayName": null,
+      "threatFamilyName": null,
+      "mitreTechniques": [
+        "T1110.003"
+      ],
+      "createdDateTime": "2026-10-10T09:00:00Z",
+      "lastUpdateDateTime": "2026-10-10T10:00:00Z",
+      "resolvedDateTime": "2026-10-11T09:00:00Z",
+      "firstActivityDateTime": "2026-10-10T08:00:00Z",
+      "lastActivityDateTime": "2026-10-10T09:00:00Z",
+      "comments": [],
+      "evidence": [
+        {
+          "@odata.type": "#microsoft.graph.security.userEvidence",
+          "createdDateTime": "2026-10-15T06:00:00Z",
+          "verdict": "suspicious",
+          "remediationStatus": "none",
+          "remediationStatusDetails": null,
+          "roles": [
+            "compromised"
+          ],
+          "tags": [],
+          "userAccount": {
+            "accountName": "eli.obrien",
+            "domainName": "example.com",
+            "userSid": null,
+            "azureAdUserId": "30000000-0000-4000-8000-000000000005",
+            "userPrincipalName": "eli.obrien@example.com",
+            "displayName": "Eli O'Brien"
+          }
+        },
+        {
+          "@odata.type": "#microsoft.graph.security.ipEvidence",
+          "createdDateTime": "2026-10-15T06:00:00Z",
+          "verdict": "malicious",
+          "remediationStatus": "none",
+          "roles": [
+            "attacker"
+          ],
+          "tags": [],
+          "ipAddress": "203.0.113.9",
+          "countryLetterCode": "RU"
+        }
+      ],
+      "systemTags": []
+    }
+  ]
+}

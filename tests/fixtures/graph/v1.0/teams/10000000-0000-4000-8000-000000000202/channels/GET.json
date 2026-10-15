@@ -1,0 +1,23 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#teams('10000000-0000-4000-8000-000000000202')/channels",
+  "value": [
+    {
+      "id": "19:0002020general@thread.tacv2",
+      "displayName": "General",
+      "description": null,
+      "membershipType": "standard",
+      "createdDateTime": "2024-09-15T09:00:00Z",
+      "email": "General.sales-emea@example.com",
+      "webUrl": "https://teams.microsoft.com/l/channel/19%3a0002020%40thread.tacv2/General?groupId=10000000-0000-4000-8000-000000000202"
+    },
+    {
+      "id": "19:0002021deals@thread.tacv2",
+      "displayName": "Deals",
+      "description": "Deals channel",
+      "membershipType": "standard",
+      "createdDateTime": "2024-09-18T09:00:00Z",
+      "email": "Deals.sales-emea@example.com",
+      "webUrl": "https://teams.microsoft.com/l/channel/19%3a0002021%40thread.tacv2/Deals?groupId=10000000-0000-4000-8000-000000000202"
+    }
+  ]
+}

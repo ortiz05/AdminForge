@@ -1,0 +1,163 @@
+$schema: ../../../packages/schemas/generated/page.schema.json
+kind: page
+id: azure.resource-groups
+version: 1.0.0
+title: Resource groups
+summary: Resource groups across subscriptions with resource counts and tags, from Azure Resource Graph.
+owner: azure-team
+tags: [azure, inventory, resource-graph]
+template: list-detail
+nav: { section: azure, label: Resource groups, icon: folders, order: 20 }
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    arm: [user_impersonation]
+  azureRoles: [Reader]
+
+params:
+  q: { type: string, default: "", label: Search, placeholder: Resource group name contains… }
+  subscriptionId: { type: string, format: guid, label: Subscription, picker: subscription, facet: true }
+  location: { type: string, label: Location, placeholder: westeurope, facet: true }
+  tagState:
+    type: enum
+    label: Tags
+    facet: true
+    default: All
+    values:
+      - { value: All, label: Any }
+      - { value: Tagged, label: Tagged }
+      - { value: Untagged, label: Untagged }
+  emptyOnly: { type: boolean, label: Empty groups only, default: false, facet: true }
+
+filters:
+  search: q
+  facets: [subscriptionId, location, tagState, emptyOnly]
+
+savedViews:
+  enabled: true
+  shared: true
+  presets:
+    - { name: Untagged resource groups, params: { tagState: Untagged } }
+    - { name: Empty resource groups, params: { emptyOnly: true } }
+
+datasources:
+  groups:
+    source: resourceGraph
+    query: |
+      // af:azure.resource-groups#groups
+      resourcecontainers
+      | where type =~ 'microsoft.resources/subscriptions/resourcegroups'
+      ${ params.subscriptionId ? "| where subscriptionId == '" & $guid(params.subscriptionId) & "'" }
+      ${ params.location ? "| where location =~ '" & $lowercase($replace(params.location, /[^A-Za-z0-9]/, '')) & "'" }
+      ${ params.q ? "| where name contains '" & $replace(params.q, /[^A-Za-z0-9 ._()-]/, '') & "'" }
+      | extend lid = tolower(id), tagCount = iff(isnull(tags), 0, array_length(bag_keys(tags)))
+      ${ params.tagState = 'Untagged' ? '| where tagCount == 0' : params.tagState = 'Tagged' ? '| where tagCount > 0' }
+      | join kind=leftouter (resources | extend rgId = tolower(strcat('/subscriptions/', subscriptionId, '/resourcegroups/', resourceGroup)) | summarize resourceCount = count() by rgId) on $left.lid == $right.rgId
+      | join kind=leftouter (resourcecontainers | where type =~ 'microsoft.resources/subscriptions' | project subscriptionId, subscriptionName = name) on subscriptionId
+      | extend resourceCount = coalesce(resourceCount, 0), provisioningState = tostring(properties.provisioningState)
+      ${ params.emptyOnly = true ? '| where resourceCount == 0' }
+      | project id, name, subscriptionId, subscriptionName, location, tags, tagCount, resourceCount, provisioningState, managedBy
+      | order by name asc
+    paging: all
+    maxItems: 20000
+    transform: >-
+      ${ (
+        $rows := [value.value];
+        {
+          'rows': $rows,
+          'total': $count($rows),
+          'untagged': $count($rows[tagCount = 0]),
+          'empty': $count($rows[resourceCount = 0]),
+          'resources': $sum($rows.resourceCount)
+        }
+      ) }
+    cache: { ttl: 120 }
+
+actions:
+  - playbook: azure.create-resource-group
+    label: Create resource group
+    icon: folder-plus
+    inputs:
+      subscriptionId: ${ params.subscriptionId }
+
+layout:
+  - widget: kpi
+    data: groups.total
+    label: Resource groups
+    format: number
+  - widget: kpi
+    data: groups.untagged
+    label: Untagged
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+    href: /p/azure.resource-groups?tagState=Untagged
+  - widget: kpi
+    data: groups.empty
+    label: Empty
+    format: number
+    status: "${ value > 0 ? 'info' : 'ok' }"
+    href: /p/azure.resource-groups?emptyOnly=true
+  - widget: kpi
+    data: groups.resources
+    label: Resources inside
+    format: number
+  - widget: table
+    id: groups
+    span: 12
+    data: groups.rows
+    rowKey: id
+    selection: multi
+    columns:
+      - { field: name, label: Resource group, kind: identity, secondary: subscriptionName, sortable: true }
+      - { field: location, label: Location, filter: { type: facet, param: location } }
+      - { field: resourceCount, label: Resources, kind: number, sortable: true, filter: range }
+      - { field: tags, label: Tags, kind: tags }
+      - { field: tagCount, label: Tag count, kind: number, filter: range, hidden: true }
+      - { field: subscriptionName, label: Subscription, filter: facet, hidden: true }
+      - field: provisioningState
+        label: State
+        kind: status
+        map: { Succeeded: [ok, Succeeded], Deleting: [warn, Deleting], Failed: [crit, Failed] }
+        filter: facet
+        hidden: true
+      - { field: managedBy, label: Managed by, kind: code, hidden: true }
+      - { field: subscriptionId, label: Subscription id, kind: guid, hidden: true }
+      - { field: id, label: Resource id, kind: code, hidden: true }
+    inspect:
+      page: azure.resource
+      params:
+        id: ${ row.id }
+    rowActions:
+      - label: Show resources
+        icon: cube
+        href: /p/azure.resources?resourceGroup=${ $encode(row.name) }&subscriptionId=${ $encode(row.subscriptionId) }
+      - label: Open in Azure portal
+        icon: arrow-square-out
+        href: https://portal.azure.com/#resource${ row.id }/overview
+    bulkActions:
+      - playbook: azure.add-tags
+        label: Add or update a tag
+        icon: tag
+        forEach:
+          inputs:
+            resourceId: ${ row.id }
+          concurrency: 5
+        maxItems: 200
+      - playbook: azure.remove-tags
+        label: Remove a tag
+        icon: tag-simple
+        forEach:
+          inputs:
+            resourceId: ${ row.id }
+          concurrency: 5
+        maxItems: 200
+        when: ${ $count(rows[tagCount > 0]) > 0 }
+    empty:
+      title: No resource groups match these filters
+      body: Clear a filter, or create one with Create resource group.
+
+export:
+  formats: [csv, xlsx]
+  fileName: azure-resource-groups
+  data: groups.rows
+  columns: visible

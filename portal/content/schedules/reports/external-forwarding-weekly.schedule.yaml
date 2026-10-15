@@ -1,0 +1,28 @@
+$schema: ../../../packages/schemas/generated/schedule.schema.json
+kind: schedule
+id: reports.external-forwarding-weekly
+version: 1.0.0
+title: Weekly mailbox external forwarding report
+summary: >-
+  Every Monday at 06:50 UTC, writes mailboxes and inbox rules that forward mail outside the organisation, as XLSX. Disabled until the automation identity is set up for app-only Exchange Online (Exchange.ManageAsApp, a certificate credential, and an Exchange role such as View-Only Recipients plus View-Only Configuration).
+owner: m365-team
+tags: [m365, exchange, security, report]
+cron: "50 6 * * 1"
+timezone: UTC
+enabled: false
+identity: automation
+job:
+  kind: report
+  ref: m365.external-forwarding
+  delivery:
+    - type: file
+      format: xlsx
+      path: m365/external-forwarding/{date}.xlsx
+      retain: 26
+retry: { max: 2, backoff: exponential, delay: 5m }
+timeoutSeconds: 1800
+overlap: skip
+requires:
+  scopes:
+    exchange: [Exchange.ManageAsApp]
+  licences: [exchange]

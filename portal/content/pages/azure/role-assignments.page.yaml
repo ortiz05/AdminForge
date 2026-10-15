@@ -1,0 +1,177 @@
+$schema: ../../../packages/schemas/generated/page.schema.json
+kind: page
+id: azure.role-assignments
+version: 1.0.0
+title: Role assignments
+summary: Azure RBAC role assignments across management groups, subscriptions, resource groups and resources — filter by scope, role and principal; remove or add assignments with approval.
+owner: azure-team
+tags: [azure, rbac, access]
+template: list-detail
+nav: { section: azure, label: Role assignments, icon: identification-badge, order: 40 }
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    arm: [user_impersonation]
+  azureRoles: [Reader]
+
+params:
+  scope: { type: string, label: Scope, placeholder: /subscriptions/<id>/resourceGroups/<name>, description: "A management group, subscription, resource group or resource id. Leave empty for everything you can read." }
+  include:
+    type: enum
+    label: Assignments
+    facet: true
+    default: below
+    values:
+      - { value: below, label: At this scope and below }
+      - { value: exact, label: Exactly at this scope }
+      - { value: above, label: That apply to this scope (at or above) }
+  roleName: { type: string, label: Role, placeholder: Owner, facet: true }
+  principalType:
+    type: enum
+    label: Principal type
+    facet: true
+    default: All
+    values: [All, User, Group, ServicePrincipal, ForeignGroup, Device]
+  principalId: { type: string, format: guid, label: Principal object id }
+  subscriptionId: { type: string, format: guid, label: Subscription, picker: subscription, facet: true }
+  privileged: { type: boolean, label: Privileged roles only, default: false, facet: true, description: "Owner, User Access Administrator and Role Based Access Control Administrator." }
+
+filters:
+  search: roleName
+  facets: [include, principalType, subscriptionId, privileged]
+
+savedViews:
+  enabled: true
+  shared: true
+  presets:
+    - { name: Privileged roles, params: { privileged: true } }
+    - { name: Service principals, params: { principalType: ServicePrincipal } }
+    - { name: Owners, params: { roleName: Owner } }
+
+datasources:
+  assignments:
+    source: resourceGraph
+    query: |
+      // af:azure.role-assignments#assignments
+      authorizationresources
+      | where type =~ 'microsoft.authorization/roleassignments'
+      | extend scope = tolower(tostring(properties.scope)), principalId = tostring(properties.principalId), principalType = tostring(properties.principalType), roleDefinitionGuid = tolower(extract('([0-9a-fA-F-]{36})$', 1, tostring(properties.roleDefinitionId))), createdOn = todatetime(properties.createdOn), createdBy = tostring(properties.createdBy), updatedOn = todatetime(properties.updatedOn), condition = tostring(properties.condition), description = tostring(properties.description)
+      ${ params.scope and params.include = 'exact' ? "| where scope == '" & $lowercase($replace(params.scope, /[^A-Za-z0-9._()\/-]/, '')) & "'" }
+      ${ params.scope and params.include = 'above' ? "| where '" & $lowercase($replace(params.scope, /[^A-Za-z0-9._()\/-]/, '')) & "' == scope or '" & $lowercase($replace(params.scope, /[^A-Za-z0-9._()\/-]/, '')) & "' startswith strcat(scope, '/')" }
+      ${ params.scope and params.include != 'exact' and params.include != 'above' ? "| where scope == '" & $lowercase($replace(params.scope, /[^A-Za-z0-9._()\/-]/, '')) & "' or scope startswith '" & $lowercase($replace(params.scope, /[^A-Za-z0-9._()\/-]/, '')) & "/'" }
+      ${ params.principalType in ['User', 'Group', 'ServicePrincipal', 'ForeignGroup', 'Device'] ? "| where principalType == '" & params.principalType & "'" }
+      ${ params.principalId ? "| where principalId == '" & $guid(params.principalId) & "'" }
+      ${ params.subscriptionId ? "| where subscriptionId == '" & $guid(params.subscriptionId) & "'" }
+      | join kind=leftouter (authorizationresources | where type =~ 'microsoft.authorization/roledefinitions' | extend roleDefinitionGuid = tolower(name), roleName = tostring(properties.roleName), roleType = tostring(properties.type) | summarize roleName = any(roleName), roleType = any(roleType) by roleDefinitionGuid) on roleDefinitionGuid
+      ${ params.roleName ? "| where roleName contains '" & $replace(params.roleName, /[^A-Za-z0-9 ._()-]/, '') & "'" }
+      | extend privileged = roleName in~ ('Owner', 'User Access Administrator', 'Role Based Access Control Administrator')
+      ${ params.privileged = true ? '| where privileged' }
+      | extend depth = array_length(split(scope, '/'))
+      | extend scopeLevel = case(scope == '/', 'Root', scope contains '/managementgroups/', 'Management group', depth == 3, 'Subscription', depth == 5, 'Resource group', 'Resource')
+      | project id, roleName, roleType, privileged, principalId, principalType, scope, scopeLevel, subscriptionId, createdOn, createdBy, updatedOn, hasCondition = isnotempty(condition), description
+      | order by privileged desc, createdOn desc
+    paging: all
+    maxItems: 50000
+    transform: >-
+      ${ (
+        $rows := [value.value];
+        {
+          'rows': $rows,
+          'total': $count($rows),
+          'privileged': $count($rows[privileged = true]),
+          'servicePrincipals': $count($rows[principalType = 'ServicePrincipal']),
+          'broad': $count($rows[scopeLevel in ['Root', 'Management group', 'Subscription']])
+        }
+      ) }
+    cache: { ttl: 120 }
+
+actions:
+  - playbook: azure.assign-role
+    label: Assign role
+    icon: user-plus
+    inputs:
+      scope: ${ params.scope }
+
+layout:
+  - widget: kpi
+    data: assignments.total
+    label: Assignments
+    format: number
+  - widget: kpi
+    data: assignments.privileged
+    label: Privileged
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+    href: /p/azure.role-assignments?privileged=true
+  - widget: kpi
+    data: assignments.broad
+    label: At subscription or above
+    format: number
+  - widget: kpi
+    data: assignments.servicePrincipals
+    label: To service principals
+    format: number
+    href: /p/azure.role-assignments?principalType=ServicePrincipal
+  - widget: table
+    id: assignments
+    span: 12
+    data: assignments.rows
+    rowKey: id
+    selection: multi
+    columns:
+      - { field: roleName, label: Role, kind: identity, secondary: roleType, sortable: true, filter: { type: text, param: roleName } }
+      - field: privileged
+        label: Privileged
+        kind: status
+        map: { "true": [warn, Privileged], "false": [neutral, Standard] }
+        filter: { type: facet, param: privileged }
+      - { field: principalId, label: Principal, kind: guid }
+      - { field: principalType, label: Principal type, filter: { type: facet, param: principalType } }
+      - { field: scopeLevel, label: Scope level, filter: facet }
+      - { field: scope, label: Scope, kind: code }
+      - { field: createdOn, label: Assigned, kind: date, sortable: true, filter: date }
+      - { field: hasCondition, label: Condition, kind: boolean, filter: facet, hidden: true }
+      - { field: createdBy, label: Assigned by, kind: guid, hidden: true }
+      - { field: updatedOn, label: Updated, kind: date, hidden: true }
+      - { field: description, label: Description, hidden: true }
+      - { field: subscriptionId, label: Subscription id, kind: guid, hidden: true }
+      - { field: id, label: Assignment id, kind: code, hidden: true }
+    rowActions:
+      - playbook: azure.remove-role-assignment
+        label: Remove assignment
+        icon: user-minus
+        inputs:
+          assignmentId: ${ row.id }
+      - label: Open user in Entra
+        icon: arrow-square-out
+        href: https://entra.microsoft.com/#view/Microsoft_AAD_UsersAndTenants/UserProfileMenuBlade/~/overview/userId/${ $encode(row.principalId) }
+        when: ${ row.principalType = 'User' }
+      - label: Open group in Entra
+        icon: arrow-square-out
+        href: https://entra.microsoft.com/#view/Microsoft_AAD_IAM/GroupDetailsMenuBlade/~/Overview/groupId/${ $encode(row.principalId) }
+        when: ${ row.principalType = 'Group' }
+      - label: Open enterprise app in Entra
+        icon: arrow-square-out
+        href: https://entra.microsoft.com/#view/Microsoft_AAD_IAM/ManagedAppMenuBlade/~/Overview/objectId/${ $encode(row.principalId) }
+        when: ${ row.principalType = 'ServicePrincipal' }
+      - label: Assignments at this scope
+        icon: funnel
+        href: /p/azure.role-assignments?scope=${ $encode(row.scope) }&include=exact
+    bulkActions:
+      - playbook: azure.remove-role-assignment
+        label: Remove assignments
+        icon: user-minus
+        forEach:
+          inputs:
+            assignmentId: ${ row.id }
+          concurrency: 3
+        maxItems: 50
+    empty:
+      title: No role assignments match
+      body: Clear a filter or widen the scope. Resource Graph only lists assignments on scopes your account can read.
+
+export:
+  formats: [csv, xlsx]
+  fileName: azure-role-assignments
+  data: assignments.rows
+  columns: all

@@ -1,0 +1,17 @@
+{
+  "value": [
+    {
+      "id": "active-1",
+      "principalId": "00000000-0000-4000-8000-0000000000a1",
+      "roleDefinitionId": "f2ef992c-3afb-46b9-b7cf-a126ee74c451",
+      "directoryScopeId": "/",
+      "memberType": "Direct",
+      "assignmentType": "Assigned",
+      "startDateTime": "2026-01-05T09:00:00Z",
+      "endDateTime": null,
+      "roleDefinition": {
+        "displayName": "Global Reader"
+      }
+    }
+  ]
+}

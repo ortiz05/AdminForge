@@ -1,0 +1,43 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#admin/serviceAnnouncement/messages/$entity",
+  "id": "MC909522",
+  "title": "Microsoft Purview: Updates to the audit log retention defaults",
+  "services": [
+    "Microsoft Purview"
+  ],
+  "category": "stayInformed",
+  "severity": "normal",
+  "isMajorChange": false,
+  "actionRequiredByDateTime": null,
+  "startDateTime": "2026-10-01T09:00:00Z",
+  "endDateTime": "2027-01-13T09:00:00Z",
+  "lastModifiedDateTime": "2026-10-09T09:00:00Z",
+  "tags": [
+    "Admin impact"
+  ],
+  "hasAttachments": false,
+  "attachmentsArchive": null,
+  "viewPoint": {
+    "isRead": false,
+    "isArchived": false,
+    "isFavorited": false
+  },
+  "details": [
+    {
+      "name": "Summary",
+      "value": "Microsoft Purview: Updates to the audit log retention defaults"
+    },
+    {
+      "name": "RoadmapIds",
+      "value": "409612"
+    },
+    {
+      "name": "Platforms",
+      "value": "Web, Desktop, Mac"
+    }
+  ],
+  "body": {
+    "contentType": "html",
+    "content": "<p>Audit log records for Microsoft 365 E3 will be kept for 180 days by default.</p>"
+  }
+}

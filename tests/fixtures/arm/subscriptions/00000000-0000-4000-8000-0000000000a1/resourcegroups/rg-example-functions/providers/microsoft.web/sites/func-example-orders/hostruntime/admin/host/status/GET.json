@@ -1,0 +1,23 @@
+{
+  "$fixture": {
+    "status": 200,
+    "body": {
+      "id": "func-example-orders",
+      "state": "Offline",
+      "version": "4.1036.1.23224",
+      "versionDetails": "4.1036.1+0a1b2c3",
+      "platformVersion": "105.0.7.123",
+      "instanceId": "a1b2c3d4e5f60718293a4b5c6d7e8f90",
+      "computerName": "pd1sdwk000ABC",
+      "processUptime": 3268000,
+      "functionAppContentEditingState": "NotAllowed",
+      "extensionBundle": {
+        "id": "Microsoft.Azure.Functions.ExtensionBundle",
+        "version": "4.17.0"
+      },
+      "errors": [
+        "The function runtime is unable to start: the app is stopped."
+      ]
+    }
+  }
+}

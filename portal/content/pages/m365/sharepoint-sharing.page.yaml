@@ -1,0 +1,199 @@
+$schema: ../../../packages/schemas/generated/page.schema.json
+kind: page
+id: m365.sharepoint-sharing
+version: 1.0.0
+title: SharePoint sharing
+summary: Tenant-wide SharePoint and OneDrive sharing settings and each site's sharing level — find sites that allow Anyone links.
+owner: m365-team
+tags: [m365, sharepoint, sharing, security]
+template: list-detail
+nav: { section: m365, label: SharePoint sharing, icon: share-network, order: 85 }
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    sharepointAdmin: [AllSites.FullControl]
+  entraRoles: [SharePoint Administrator]
+  licences: [sharepoint]
+
+params:
+  q: { type: string, default: "", label: Search, placeholder: "Site title, URL or owner" }
+  sharing:
+    type: enum
+    label: Sharing level
+    facet: true
+    default: All
+    values:
+      - { value: All, label: Any sharing level }
+      - { value: ExternalUserAndGuestSharing, label: Anyone }
+      - { value: ExternalUserSharingOnly, label: New and existing guests }
+      - { value: ExistingExternalUserSharingOnly, label: Existing guests only }
+      - { value: Disabled, label: Only people in the organization }
+  template:
+    type: enum
+    label: Template
+    facet: true
+    default: All
+    values:
+      - { value: All, label: All templates }
+      - { value: GROUP#0, label: Team site (Microsoft 365 group) }
+      - { value: STS#3, label: Team site (no group) }
+      - { value: SITEPAGEPUBLISHING#0, label: Communication site }
+      - { value: TEAMCHANNEL#1, label: Channel site }
+  includeOneDrive: { type: boolean, label: Include OneDrive sites, default: false, facet: true }
+
+filters:
+  search: q
+  facets: [sharing, template, includeOneDrive]
+
+savedViews:
+  enabled: true
+  shared: true
+  presets:
+    - { name: Sites allowing Anyone links, params: { sharing: ExternalUserAndGuestSharing } }
+    - { name: Guest sharing enabled, params: { sharing: ExternalUserSharingOnly } }
+
+datasources:
+  sharing:
+    source: runner
+    label: Sharing settings (PowerShell)
+    script: sharepoint/Get-SiteSharing.ps1
+    sha256: d444a361a681d44bcc1808177b0f071a040e12791097c3c7bda0d84b16ed1cc9
+    services: [sharepointAdmin]
+    timeoutSeconds: 900
+    parameters:
+      includeOneDrive: ${ params.includeOneDrive = true }
+      template: "${ params.template != 'All' ? params.template }"
+      includeSites: true
+    cache: { ttl: 900 }
+    # value = [script output] — one object { tenant, summary, sites }. Labels the sharing levels and converts MB to bytes.
+    transform: >-
+      ${ (
+        $v := value[0];  /* runner result = [output data]; one summary object */
+        $p := params;
+        $labels := {
+          "ExternalUserAndGuestSharing": "Anyone",
+          "ExternalUserSharingOnly": "New and existing guests",
+          "ExistingExternalUserSharingOnly": "Existing guests only",
+          "Disabled": "Only people in the organization"
+        };
+        $q := $lowercase($trim($p.q ? $p.q : ''));
+        $all := [$v.sites.$merge([$, {
+          "storageUsedInBytes": storageUsedMB ? storageUsedMB * 1048576 : 0,
+          "sharingLabel": $lookup($labels, sharingCapability)
+        }])];
+        $rows := [$all[
+            ($q = '' or $contains($lowercase(title & ' ' & url & ' ' & owner), $q))
+            and ($p.sharing = 'All' or $not($exists($p.sharing)) or sharingCapability = $p.sharing)
+          ]];
+        {
+          "tenant": $merge([$v.tenant, {
+            "sharingLabel": $lookup($labels, $v.tenant.sharingCapability),
+            "oneDriveSharingLabel": $lookup($labels, $v.tenant.oneDriveSharingCapability)
+          }]),
+          "rows": $rows,
+          "total": $v.summary.total,
+          "anyone": $v.summary.anyoneLinks,
+          "guests": $count($all[sharingCapability = 'ExternalUserSharingOnly']),
+          "internal": $count($all[sharingCapability = 'Disabled']),
+          "byLevel": [$v.summary.bySharingCapability.{ "level": $lookup($labels, sharingCapability), "count": count }]
+        }
+      ) }
+
+layout:
+  - widget: kpi
+    id: total
+    data: sharing.total
+    label: Sites
+    format: number
+  - widget: kpi
+    id: anyone
+    data: sharing.anyone
+    label: Allow Anyone links
+    format: number
+    status: "${ value > 0 ? 'crit' : 'ok' }"
+    href: /p/m365.sharepoint-sharing?sharing=ExternalUserAndGuestSharing
+  - widget: kpi
+    id: guests
+    data: sharing.guests
+    label: Allow new guests
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+  - widget: kpi
+    id: internal
+    data: sharing.internal
+    label: Internal only
+    format: number
+  - widget: keyValue
+    id: tenant
+    title: Organization-level settings
+    span: 7
+    data: sharing.tenant
+    fields:
+      - field: sharingCapability
+        label: SharePoint sharing
+        kind: status
+        map:
+          ExternalUserAndGuestSharing: [crit, Anyone]
+          ExternalUserSharingOnly: [warn, New and existing guests]
+          ExistingExternalUserSharingOnly: [info, Existing guests only]
+          Disabled: [ok, Only people in the organization]
+      - field: oneDriveSharingCapability
+        label: OneDrive sharing
+        kind: status
+        map:
+          ExternalUserAndGuestSharing: [crit, Anyone]
+          ExternalUserSharingOnly: [warn, New and existing guests]
+          ExistingExternalUserSharingOnly: [info, Existing guests only]
+          Disabled: [ok, Only people in the organization]
+      - { field: defaultSharingLinkType, label: Default link type }
+      - { field: defaultLinkPermission, label: Default link permission }
+      - { field: requireAnonymousLinksExpireInDays, label: Anyone links expire after (days) }
+      - { field: sharingDomainRestrictionMode, label: Domain restriction }
+      - { field: preventExternalUsersFromResharing, label: Guests can't reshare, kind: boolean }
+  - widget: chart
+    id: byLevel
+    title: Sites by sharing level
+    span: 5
+    type: donut
+    data: sharing.byLevel
+    x: level
+    y: count
+    format: number
+  - widget: table
+    id: sites
+    span: 12
+    data: sharing.rows
+    rowKey: url
+    columns:
+      - { field: title, label: Site, kind: identity, secondary: url }
+      - field: sharingCapability
+        label: Sharing
+        kind: status
+        map:
+          ExternalUserAndGuestSharing: [crit, Anyone]
+          ExternalUserSharingOnly: [warn, New and existing guests]
+          ExistingExternalUserSharingOnly: [info, Existing guests only]
+          Disabled: [ok, Only people in the organization]
+        filter: { type: facet, param: sharing }
+      - { field: template, label: Template, filter: { type: facet, param: template } }
+      - { field: owner, label: Owner }
+      - { field: storageUsedInBytes, label: Storage, kind: bytes, align: end, filter: range, sortable: true }
+      - { field: lastContentModified, label: Last content change, kind: relativeTime, filter: date, sortable: true }
+      - { field: lockState, label: Lock state, filter: facet, hidden: true }
+    rowActions:
+      - label: Open site
+        icon: arrow-square-out
+        href: ${ row.url }
+      - label: Open in SharePoint admin center
+        icon: arrow-square-out
+        href: "${ 'https://' & env.AF_SPO_TENANT_NAME & '-admin.sharepoint.com/_layouts/15/online/AdminHome.aspx#/siteManagement' }"
+        when: ${ $boolean(env.AF_SPO_TENANT_NAME) }
+    empty:
+      title: No sites match
+      body: Clear the filters. Reading sharing settings needs the SharePoint Administrator role.
+
+export:
+  formats: [csv, xlsx]
+  fileName: sharepoint-sharing
+  data: sharing.rows
+  columns: all

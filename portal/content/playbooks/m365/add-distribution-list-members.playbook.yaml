@@ -1,0 +1,140 @@
+$schema: ../../../packages/schemas/generated/playbook.schema.json
+kind: playbook
+id: m365.add-distribution-list-members
+version: 1.0.0
+title: Add members to a distribution list
+summary: Adds people (and any other mail recipients by address) to a distribution list or mail-enabled security group. People who are already members are skipped.
+owner: m365-team
+tags: [m365, exchange, distribution-lists]
+risk: medium
+mode: write
+requires:
+  portalRoles: [Portal.Operator]
+  scopes:
+    graph: [User.ReadBasic.All]
+    exchange: [Exchange.Manage]
+  entraRoles: [Exchange Recipient Administrator]
+  licences: [exchange]
+confirm:
+  type: click
+  message: Add these members? They start receiving mail sent to the list right away.
+
+inputs:
+  identity: { type: string, format: email, label: Distribution list, description: Primary email address of the list }
+  members:
+    type: user
+    multiple: true
+    maxItems: 100
+    required: false
+    label: People
+    description: People in your organization; their primary email address is added.
+  addresses:
+    type: string
+    multiline: true
+    required: false
+    label: Other addresses
+    description: One email address per line — guests, mail contacts or other recipients that already exist in Exchange Online.
+    maxLength: 20000
+
+steps:
+  - id: resolve
+    type: graph
+    mode: read
+    describe: Look up the email addresses of the selected people
+    when: ${ $count(inputs.members) > 0 }
+    request:
+      method: POST
+      path: /directoryObjects/getByIds
+      body:
+        ids: ${ inputs.members }
+        types: [user]
+
+  - id: collect
+    type: transform
+    describe: Combine and validate the addresses
+    expression: >-
+      ${ (
+        $users := steps.resolve.output.value;
+        $typed := [$split(inputs.addresses ? inputs.addresses : '', /[\s,;]+/)[$ != '']];
+        {
+          "addresses": [$distinct([$append([$users[mail != null].mail], $typed)].$lowercase($))],
+          "noMailbox": [$users[$not($exists(mail)) or mail = null].userPrincipalName],
+          "invalid": [$typed[$not($contains($, /^[^\s@]+@[^\s@]+\.[^\s@]+$/))]]
+        }
+      ) }
+
+  - id: everyoneHasMail
+    type: assert
+    that: ${ $count(steps.collect.output.noMailbox) = 0 }
+    message: >-
+      ${ "These people have no mailbox, so they can't be list members: " & $join(steps.collect.output.noMailbox, ', ') }
+
+  - id: validAddresses
+    type: assert
+    that: ${ $count(steps.collect.output.invalid) = 0 }
+    message: >-
+      ${ 'These are not valid email addresses: ' & $join(steps.collect.output.invalid, ', ') }
+
+  - id: somethingToAdd
+    type: assert
+    that: ${ $count(steps.collect.output.addresses) > 0 }
+    message: Pick at least one person or type an address.
+
+  - id: update
+    type: runner
+    mode: write
+    describe: ${ 'Add ' & $count(steps.collect.output.addresses) & ' member(s) to ' & inputs.identity }
+    script: exchange/Set-DistributionListMembers.ps1
+    sha256: c81ec602a6f63e4bd0c0965a90fb9912f336c42ab2778885051fac7a161685f4
+    services: [exchange]
+    timeoutSeconds: 600
+    parameters:
+      identity: ${ inputs.identity }
+      add: ${ steps.collect.output.addresses }
+    idempotent: true
+    # The runner returns one element per output event; this script emits one result object.
+    dryRunOutput:
+      - group: ${ inputs.identity }
+        added: ${ steps.collect.output.addresses }
+        removed: []
+        skipped: []
+        failed: []
+
+outputs:
+  summary: >-
+    ${ 'Added ' & $count(steps.update.output[0].added) & ' member(s) to ' & inputs.identity
+       & ($count(steps.update.output[0].skipped) > 0 ? '; ' & $count(steps.update.output[0].skipped) & ' were already members' : '') & '.' }
+  added: ${ steps.update.output[0].added }
+
+tests:
+  - name: adds people and typed addresses
+    inputs:
+      identity: sales-team@example.com
+      members: [10000000-0000-4000-8000-000000000002, 10000000-0000-4000-8000-000000000005]
+      addresses: "Kim.Lee@partner.example\n"
+    mocks:
+      resolve:
+        value:
+          - { id: 10000000-0000-4000-8000-000000000002, userPrincipalName: alex.wilber@example.com, mail: alex.wilber@example.com }
+          - { id: 10000000-0000-4000-8000-000000000005, userPrincipalName: isaiah.langer@example.com, mail: isaiah.langer@example.com }
+    expect:
+      status: succeeded
+      plan: [update]
+      outputs:
+        summary: Added 3 member(s) to sales-team@example.com.
+        added: [alex.wilber@example.com, isaiah.langer@example.com, kim.lee@partner.example]
+  - name: refuses people without a mailbox
+    inputs:
+      identity: sales-team@example.com
+      members: [10000000-0000-4000-8000-000000000014]
+    mocks:
+      resolve:
+        value:
+          - { id: 10000000-0000-4000-8000-000000000014, userPrincipalName: svc.scanner@example.com }
+    expect: { status: failed, failedStep: everyoneHasMail }
+  - name: refuses malformed addresses
+    inputs: { identity: sales-team@example.com, addresses: "not-an-address" }
+    expect: { status: failed, failedStep: validAddresses, steps: { resolve: skipped } }
+  - name: refuses an empty request
+    inputs: { identity: sales-team@example.com }
+    expect: { status: failed, failedStep: somethingToAdd }

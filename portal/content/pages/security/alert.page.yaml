@@ -1,0 +1,170 @@
+$schema: ../../../packages/schemas/generated/page.schema.json
+kind: page
+id: security.alert
+version: 1.0.0
+title: Alert
+summary: One Microsoft Defender alert — what happened, recommended actions, evidence and comments.
+owner: security-team
+tags: [security, defender, alerts]
+template: entity
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    graph: [SecurityAlert.Read.All]
+  entraRoles: [Security Reader]
+  licences: [defender]
+
+params:
+  id: { type: string, label: Alert, required: true, hidden: true, pattern: '^[A-Za-z0-9_-]+$' }
+
+datasources:
+  alert:
+    source: graph
+    request:
+      path: /security/alerts_v2/${ $encode(params.id) }
+    cache: { ttl: 30 }
+    # Adds `evidenceRows`: one readable row per evidence entity.
+    transform: >-
+      ${ $merge([value, {
+        "evidenceRows": [$map([value.evidence], function($e, $i) { (
+          $t := $substringAfter($e.`@odata.type`, 'microsoft.graph.security.');
+          {
+            "key": $string($i),
+            "type": $t = 'userEvidence' ? 'User' : $t = 'deviceEvidence' ? 'Device' : $t = 'ipEvidence' ? 'IP address'
+              : $t = 'urlEvidence' ? 'URL' : $t = 'fileEvidence' ? 'File' : $t = 'processEvidence' ? 'Process'
+              : $t = 'mailboxEvidence' ? 'Mailbox' : $t = 'analyzedMessageEvidence' ? 'Email message'
+              : $t = 'cloudApplicationEvidence' ? 'Cloud app' : $t,
+            "name": $t = 'userEvidence' ? $e.userAccount.userPrincipalName
+              : $t = 'deviceEvidence' ? $e.deviceDnsName
+              : $t = 'ipEvidence' ? $e.ipAddress & ($e.countryLetterCode ? ' (' & $e.countryLetterCode & ')' : '')
+              : $t = 'urlEvidence' ? $e.url
+              : $t = 'fileEvidence' ? $e.fileDetails.fileName
+              : $t = 'processEvidence' ? $e.imageFile.fileName
+              : $t = 'mailboxEvidence' ? $e.primaryAddress
+              : $t = 'analyzedMessageEvidence' ? $e.subject
+              : $t = 'cloudApplicationEvidence' ? $e.displayName
+              : '—',
+            "detail": $t = 'deviceEvidence' ? 'Risk ' & $e.riskScore & ' · ' & $e.osPlatform
+              : $t = 'fileEvidence' ? $e.fileDetails.filePath
+              : $t = 'userEvidence' ? $e.userAccount.displayName
+              : $t = 'analyzedMessageEvidence' ? 'To ' & $e.recipientEmailAddress
+              : null,
+            "verdict": $e.verdict,
+            "remediationStatus": $e.remediationStatus,
+            "roles": $e.roles
+          }
+        ) })]
+      }]) }
+
+header:
+  title: ${ alert.title }
+  subtitle: "${ alert.productName & ' · ' & (alert.category ? alert.category : 'Uncategorised') & ' · created ' & $substring(alert.createdDateTime, 0, 10) }"
+  status: "${ alert.status = 'resolved' ? 'ok' : alert.severity = 'high' ? 'crit' : alert.severity = 'medium' ? 'warn' : alert.severity = 'low' ? 'info' : 'neutral' }"
+  statusLabel: >-
+    ${ ($sev := {'high': 'High', 'medium': 'Medium', 'low': 'Low', 'informational': 'Informational'};
+        $st := {'new': 'New', 'inProgress': 'In progress', 'resolved': 'Resolved'};
+        $lookup($sev, alert.severity) & ' severity · ' & $lookup($st, alert.status)) }
+  ids:
+    Alert id: ${ alert.id }
+    Incident: ${ alert.incidentId }
+
+actions:
+  - label: Open incident
+    icon: stack
+    href: ${ '/p/security.incident?id=' & $encode(alert.incidentId) }
+    when: ${ $exists(alert.incidentId) and alert.incidentId != null }
+  - playbook: security.assign-incident
+    label: Assign incident to me
+    icon: user-check
+    inputs:
+      incidentId: ${ alert.incidentId }
+      assignee: ${ user.upn }
+    when: ${ $exists(alert.incidentId) and alert.incidentId != null }
+  - label: Open in Microsoft Defender
+    icon: arrow-square-out
+    href: ${ alert.alertWebUrl }
+
+tabs:
+  - id: overview
+    label: Overview
+    layout:
+      - widget: markdown
+        span: 12
+        text: |
+          ### What happened
+          ${ alert.description ? alert.description : 'Microsoft Defender did not include a description for this alert.' }
+
+          ### Recommended actions
+          ${ alert.recommendedActions ? alert.recommendedActions : 'Follow the investigation steps in Microsoft Defender for this alert type.' }
+      - widget: keyValue
+        span: 12
+        data: alert
+        fields:
+          - field: severity
+            label: Severity
+            kind: status
+            map: { high: [crit, High], medium: [warn, Medium], low: [info, Low], informational: [neutral, Informational] }
+          - field: status
+            label: Status
+            kind: status
+            map: { new: [warn, New], inProgress: [info, In progress], resolved: [ok, Resolved] }
+          - { field: productName, label: Product }
+          - { field: detectionSource, label: Detection source }
+          - { field: category, label: Category }
+          - { field: mitreTechniques, label: MITRE techniques, kind: tags }
+          - { field: threatDisplayName, label: Threat }
+          - { field: threatFamilyName, label: Threat family }
+          - { field: actorDisplayName, label: Actor }
+          - { field: assignedTo, label: Assigned to }
+          - field: classification
+            label: Classification
+            kind: status
+            map:
+              unknown: [neutral, Not set]
+              truePositive: [crit, True positive]
+              falsePositive: [ok, False positive]
+              informationalExpectedActivity: [info, "Informational, expected activity"]
+          - { field: determination, label: Determination }
+          - { field: firstActivityDateTime, label: First activity, kind: datetime }
+          - { field: lastActivityDateTime, label: Last activity, kind: datetime }
+          - { field: createdDateTime, label: Created, kind: datetime }
+          - { field: resolvedDateTime, label: Resolved, kind: datetime }
+          - { field: incidentId, label: Incident, kind: id }
+  - id: evidence
+    label: Evidence
+    layout:
+      - widget: table
+        id: evidence
+        span: 12
+        data: alert.evidenceRows
+        rowKey: key
+        search: true
+        empty:
+          title: No evidence on this alert
+          body: Some detections (for example custom detections without entity mapping) carry no evidence.
+        columns:
+          - { field: name, label: Entity, kind: identity, secondary: detail }
+          - { field: type, label: Type, filter: facet }
+          - field: verdict
+            label: Verdict
+            kind: status
+            filter: facet
+            map: { malicious: [crit, Malicious], suspicious: [warn, Suspicious], noThreatsFound: [ok, No threats found], unknown: [neutral, Unknown] }
+          - field: remediationStatus
+            label: Remediation
+            kind: status
+            filter: facet
+            map: { none: [neutral, None], remediated: [ok, Remediated], prevented: [ok, Prevented], blocked: [ok, Blocked], notFound: [neutral, Not found] }
+          - { field: roles, label: Roles, kind: tags }
+  - id: comments
+    label: Comments
+    layout:
+      - widget: timeline
+        span: 12
+        data: alert.comments
+        ts: createdDateTime
+        title: createdByDisplayName
+        detail: ${ comment }
+        empty:
+          title: No comments on this alert
+          body: Comments added in Microsoft Defender appear here.

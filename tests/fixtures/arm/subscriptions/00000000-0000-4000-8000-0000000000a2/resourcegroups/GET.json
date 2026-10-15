@@ -1,0 +1,34 @@
+{
+  "value": [
+    {
+      "id": "/subscriptions/00000000-0000-4000-8000-0000000000a2/resourceGroups/rg-example-dev",
+      "name": "rg-example-dev",
+      "type": "Microsoft.Resources/resourceGroups",
+      "location": "westeurope",
+      "tags": {
+        "env": "dev"
+      },
+      "properties": {
+        "provisioningState": "Succeeded"
+      }
+    },
+    {
+      "id": "/subscriptions/00000000-0000-4000-8000-0000000000a2/resourceGroups/rg-example-old",
+      "name": "rg-example-old",
+      "type": "Microsoft.Resources/resourceGroups",
+      "location": "eastus",
+      "properties": {
+        "provisioningState": "Succeeded"
+      }
+    },
+    {
+      "id": "/subscriptions/00000000-0000-4000-8000-0000000000a2/resourceGroups/rg-example-sandbox",
+      "name": "rg-example-sandbox",
+      "type": "Microsoft.Resources/resourceGroups",
+      "location": "eastus",
+      "properties": {
+        "provisioningState": "Succeeded"
+      }
+    }
+  ]
+}

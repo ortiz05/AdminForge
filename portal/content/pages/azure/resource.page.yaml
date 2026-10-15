@@ -1,0 +1,234 @@
+$schema: ../../../packages/schemas/generated/page.schema.json
+kind: page
+id: azure.resource
+version: 1.0.0
+title: Azure resource
+summary: One Azure resource or resource group — properties, tags, who has access and recent activity.
+owner: azure-team
+tags: [azure, inventory, rbac, activity-log]
+template: entity
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    arm: [user_impersonation]
+  azureRoles: [Reader]
+
+params:
+  id: { type: string, label: Resource id, required: true, hidden: true, pattern: "^/subscriptions/[0-9a-fA-F-]{36}/.+" }
+  days:
+    type: enum
+    label: Activity window
+    default: 7
+    values:
+      - { value: 1, label: Last 24 hours }
+      - { value: 7, label: Last 7 days }
+      - { value: 30, label: Last 30 days }
+      - { value: 90, label: Last 90 days }
+
+datasources:
+  # Resource Graph instead of an ARM GET: a generic GET-by-id needs the provider's api-version, which content can't vary.
+  resource:
+    source: resourceGraph
+    query: |
+      // af:azure.resource#resource
+      union resources, resourcecontainers
+      | where tolower(id) == '${ $lowercase($replace(params.id, /[^A-Za-z0-9._()\/-]/, '')) }'
+      | project id, name, type, kind, location, resourceGroup, subscriptionId, tags, sku, identity, managedBy, plan, zones, properties
+      | take 1
+    transform: >-
+      ${ (
+        $r := value.value[0];
+        $r ? $merge([$r, {
+          'provisioningState': $r.properties.provisioningState,
+          'skuName': $r.sku.name,
+          'skuTier': $r.sku.tier,
+          'identityType': $r.identity.type,
+          'zoneList': $r.zones ? $join($r.zones, ', '),
+          'tagRows': $r.tags ? [$each($r.tags, function($v, $k) { { 'key': $k, 'value': $v } })] : [],
+          'propertiesJson': $string($r.properties, true),
+          'isWebSite': $lowercase($r.type) = 'microsoft.web/sites'
+        }])
+      ) }
+    cache: { ttl: 60 }
+  access:
+    source: resourceGraph
+    # Assignments at this scope or inherited from its resource group / subscription.
+    query: |
+      // af:azure.resource#access
+      authorizationresources
+      | where type =~ 'microsoft.authorization/roleassignments'
+      | extend scope = tolower(tostring(properties.scope)), principalId = tostring(properties.principalId), principalType = tostring(properties.principalType), roleDefinitionGuid = tolower(extract('([0-9a-fA-F-]{36})$', 1, tostring(properties.roleDefinitionId))), createdOn = todatetime(properties.createdOn), hasCondition = isnotempty(tostring(properties.condition))
+      | where scope == '${ $lowercase($replace(params.id, /[^A-Za-z0-9._()\/-]/, '')) }' or '${ $lowercase($replace(params.id, /[^A-Za-z0-9._()\/-]/, '')) }' startswith strcat(scope, '/')
+      | join kind=leftouter (authorizationresources | where type =~ 'microsoft.authorization/roledefinitions' | extend roleDefinitionGuid = tolower(name), roleName = tostring(properties.roleName), roleType = tostring(properties.type) | summarize roleName = any(roleName), roleType = any(roleType) by roleDefinitionGuid) on roleDefinitionGuid
+      | extend inherited = scope != '${ $lowercase($replace(params.id, /[^A-Za-z0-9._()\/-]/, '')) }'
+      | project id, roleName, roleType, principalId, principalType, scope, inherited, hasCondition, createdOn
+      | order by roleName asc
+    cache: { ttl: 120 }
+  activity:
+    source: arm
+    request:
+      path: /subscriptions/${ $encode($guid($split(params.id, '/')[2])) }/providers/Microsoft.Insights/eventtypes/management/values
+      apiVersion: "2015-04-01"
+      query:
+        $filter: ${ "eventTimestamp ge '" & $daysAgo($number(params.days)) & "' and resourceUri eq " & $odata(params.id) }
+        $select: eventDataId,eventTimestamp,operationName,status,subStatus,caller,level,correlationId,category
+    paging: all
+    maxItems: 1000
+    transform: >-
+      ${ [value.value.{
+        'eventId': eventDataId,
+        'ts': eventTimestamp,
+        'operation': operationName.localizedValue,
+        'status': status.value,
+        'subStatus': subStatus.localizedValue,
+        'caller': caller,
+        'level': level,
+        'category': category.value,
+        'correlationId': correlationId
+      }] }
+    cache: { ttl: 60 }
+
+header:
+  title: ${ resource.name }
+  subtitle: ${ resource.type & ' · ' & resource.resourceGroup }
+  status: "${ resource.provisioningState in ['Failed', 'Canceled'] ? 'crit' : resource.provisioningState = 'Succeeded' or $not($exists(resource.provisioningState)) ? 'ok' : 'warn' }"
+  statusLabel: "${ $exists(resource.provisioningState) ? 'Provisioning ' & $lowercase(resource.provisioningState) : 'Available' }"
+  ids:
+    Resource id: ${ params.id }
+    Subscription id: ${ resource.subscriptionId }
+
+actions:
+  - playbook: azure.add-tags
+    label: Add or update a tag
+    icon: tag
+    inputs:
+      resourceId: ${ params.id }
+  - label: Open Function App view
+    icon: function
+    href: /p/azure.function-app?subscriptionId=${ $encode(resource.subscriptionId) }&resourceGroup=${ $encode(resource.resourceGroup) }&name=${ $encode(resource.name) }
+    when: ${ resource.isWebSite = true }
+  - label: Metrics
+    icon: chart-line
+    href: /p/azure.metrics?resourceId=${ $encode(params.id) }
+  - label: Open in Azure portal
+    icon: arrow-square-out
+    href: https://portal.azure.com/#resource${ params.id }/overview
+
+tabs:
+  - id: overview
+    label: Overview
+    layout:
+      - widget: keyValue
+        span: 12
+        data: resource
+        fields:
+          - { field: name, label: Name }
+          - { field: type, label: Type, kind: code }
+          - { field: kind, label: Kind }
+          - { field: location, label: Location }
+          - { field: resourceGroup, label: Resource group }
+          - { field: subscriptionId, label: Subscription id, kind: id }
+          - { field: skuName, label: SKU }
+          - { field: skuTier, label: SKU tier }
+          - { field: identityType, label: Managed identity }
+          - { field: zoneList, label: Availability zones }
+          - { field: managedBy, label: Managed by, kind: id }
+          - field: provisioningState
+            label: Provisioning state
+            kind: status
+            map: { Succeeded: [ok, Succeeded], Failed: [crit, Failed], Canceled: [warn, Canceled], Updating: [info, Updating], Creating: [info, Creating], Deleting: [warn, Deleting] }
+  - id: tags
+    label: Tags
+    layout:
+      - widget: table
+        span: 12
+        data: resource.tagRows
+        rowKey: key
+        search: true
+        columns:
+          - { field: key, label: Tag, sortable: true }
+          - { field: value, label: Value }
+        rowActions:
+          - playbook: azure.add-tags
+            label: Change value
+            icon: pencil-simple
+            inputs:
+              resourceId: ${ params.id }
+              tagName: ${ row.key }
+          - playbook: azure.remove-tags
+            label: Remove tag
+            icon: trash
+            inputs:
+              resourceId: ${ params.id }
+              tagName: ${ row.key }
+        empty:
+          title: This resource has no tags
+          body: Add an owner and environment tag so cost and incident reports can route to the right team.
+  - id: properties
+    label: Properties
+    layout:
+      - widget: markdown
+        span: 12
+        text: |
+          Resource properties as returned by Azure Resource Graph (read-only snapshot, refreshed every few minutes).
+
+          ```json
+          ${ resource.propertiesJson }
+          ```
+  - id: access
+    label: Access
+    layout:
+      - widget: markdown
+        span: 12
+        text: Role assignments at this scope and inherited from its resource group and subscription. Assignments inherited from management groups aren't listed — open **Access control (IAM)** in the Azure portal for the complete picture. Principal names are shown as object ids.
+      - widget: table
+        span: 12
+        data: access.value
+        rowKey: id
+        search: true
+        columns:
+          - { field: roleName, label: Role, kind: identity, secondary: roleType, filter: facet }
+          - { field: principalId, label: Principal, kind: guid }
+          - { field: principalType, label: Principal type, filter: facet }
+          - field: inherited
+            label: Assigned at
+            kind: status
+            map: { "true": [neutral, Inherited], "false": [info, This resource] }
+            filter: facet
+          - { field: scope, label: Scope, kind: code, hidden: true }
+          - { field: hasCondition, label: Condition, kind: boolean, hidden: true }
+          - { field: createdOn, label: Assigned, kind: date }
+        rowActions:
+          - playbook: azure.remove-role-assignment
+            label: Remove assignment
+            icon: user-minus
+            inputs:
+              assignmentId: ${ row.id }
+            when: ${ row.inherited = false }
+        empty:
+          title: No role assignments found
+          body: Nobody has a role assigned at this scope or its parents (management groups aside), or your account can't read role assignments here.
+  - id: activity
+    label: Activity log
+    layout:
+      - widget: table
+        span: 12
+        data: activity
+        rowKey: eventId
+        search: true
+        columns:
+          - { field: ts, label: Time, kind: datetime, sortable: true, filter: date }
+          - { field: operation, label: Operation }
+          - field: status
+            label: Status
+            kind: status
+            map: { Succeeded: [ok, Succeeded], Failed: [crit, Failed], Started: [info, Started], Accepted: [info, Accepted], Canceled: [warn, Canceled] }
+            filter: facet
+          - { field: caller, label: Caller, filter: text }
+          - { field: level, label: Level, filter: facet }
+          - { field: category, label: Category, hidden: true }
+          - { field: subStatus, label: Sub-status, hidden: true }
+          - { field: correlationId, label: Correlation id, kind: guid, hidden: true }
+        empty:
+          title: No activity in this window
+          body: Choose a longer activity window. The Azure activity log keeps 90 days of control-plane operations.

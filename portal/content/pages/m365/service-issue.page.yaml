@@ -1,0 +1,80 @@
+$schema: ../../../packages/schemas/generated/page.schema.json
+kind: page
+id: m365.service-issue
+version: 1.0.0
+title: Service issue
+summary: One Microsoft 365 incident or advisory — impact, status and every update Microsoft has posted.
+owner: m365-team
+tags: [m365, service-health]
+template: entity
+refresh: 300
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    graph: [ServiceHealth.Read.All]
+  entraRoles: [Service Support Administrator, Global Reader]
+
+params:
+  id: { type: string, label: Issue id, required: true, hidden: true, pattern: "^[A-Za-z]{2,5}[0-9]{3,}$" }
+
+datasources:
+  issue:
+    source: graph
+    request:
+      path: /admin/serviceAnnouncement/issues/${ $encode(params.id) }
+    cache: { ttl: 120 }
+    # Adds `posts` newest first with the HTML update text flattened to plain text for the timeline.
+    transform: >-
+      ${ $merge([value, {
+        "posts": [$sort(value.posts, function($a, $b) { $a.createdDateTime < $b.createdDateTime }).{
+          "createdDateTime": createdDateTime,
+          "postType": postType,
+          "kind": postType = 'strategic' ? 'Strategic update' : postType = 'quick' ? 'Quick update' : 'Update',
+          "text": $trim($replace($replace($replace(description.content, /<(br|\/p|\/li|\/div)[^>]*>/i, ' '), /<[^>]+>/, ''), /\s+/, ' '))
+        }]
+      }]) }
+
+header:
+  title: ${ issue.title }
+  subtitle: ${ issue.service & ' · ' & issue.id }
+  status: "${ issue.isResolved ? 'ok' : issue.classification = 'incident' ? 'crit' : 'warn' }"
+  statusLabel: "${ issue.isResolved ? 'Resolved' : issue.classification = 'incident' ? 'Active incident' : 'Active advisory' }"
+  ids:
+    Issue id: ${ issue.id }
+
+actions:
+  - label: Open in Microsoft 365 admin center
+    icon: arrow-square-out
+    href: "https://admin.microsoft.com/Adminportal/Home#/servicehealth/:/alerts/${ $encode(params.id) }"
+
+tabs:
+  - id: overview
+    label: Overview
+    layout:
+      - widget: keyValue
+        span: 12
+        data: issue
+        fields:
+          - { field: service, label: Service }
+          - { field: feature, label: Feature }
+          - { field: featureGroup, label: Feature group }
+          - { field: classification, label: Type, kind: status, map: { incident: [crit, Incident], advisory: [info, Advisory] } }
+          - { field: status, label: Status }
+          - { field: impactDescription, label: User impact }
+          - { field: origin, label: Origin }
+          - { field: startDateTime, label: Started, kind: datetime }
+          - { field: endDateTime, label: Ended, kind: datetime }
+          - { field: lastModifiedDateTime, label: Last update, kind: datetime }
+          - { field: isResolved, label: Resolved, kind: status, map: { "true": [ok, "Yes"], "false": [warn, "No"] } }
+  - id: updates
+    label: Updates
+    layout:
+      - widget: timeline
+        span: 12
+        data: issue.posts
+        ts: createdDateTime
+        title: kind
+        detail: ${ text }
+        empty:
+          title: No updates yet
+          body: Microsoft hasn't posted an update for this issue. Updates usually follow within an hour of an incident being opened.

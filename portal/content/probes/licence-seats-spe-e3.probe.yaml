@@ -1,0 +1,20 @@
+$schema: ../../packages/schemas/generated/probe.schema.json
+kind: probe
+id: probes.licence-seats-spe-e3
+version: 1.0.0
+title: Licence seats — Microsoft 365 E3
+summary: >-
+  Share of Microsoft 365 E3 (SPE_E3) seats in use. Warns at 90 % and turns critical at 98 % so there is time to buy seats before
+  onboarding stalls. Change sku to the part number your tenant uses (see Microsoft 365 > Licences).
+owner: m365-team
+tags: [synthetic, m365, licences]
+check:
+  kind: licenseThreshold
+  sku: SPE_E3
+  maxPercent: 90
+  critPercent: 98
+intervalHint: PT6H
+timeoutMs: 15000
+requires:
+  scopes:
+    graph: [Organization.Read.All]

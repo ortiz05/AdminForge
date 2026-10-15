@@ -1,0 +1,43 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#admin/serviceAnnouncement/messages/$entity",
+  "id": "MC908001",
+  "title": "Planner: The new Planner replaces Planner for the web",
+  "services": [
+    "Planner"
+  ],
+  "category": "stayInformed",
+  "severity": "normal",
+  "isMajorChange": false,
+  "actionRequiredByDateTime": null,
+  "startDateTime": "2026-09-29T09:00:00Z",
+  "endDateTime": "2027-01-13T09:00:00Z",
+  "lastModifiedDateTime": "2026-10-05T09:00:00Z",
+  "tags": [
+    "Feature update"
+  ],
+  "hasAttachments": false,
+  "attachmentsArchive": null,
+  "viewPoint": {
+    "isRead": true,
+    "isArchived": false,
+    "isFavorited": false
+  },
+  "details": [
+    {
+      "name": "Summary",
+      "value": "Planner: The new Planner replaces Planner for the web"
+    },
+    {
+      "name": "RoadmapIds",
+      "value": "408091"
+    },
+    {
+      "name": "Platforms",
+      "value": "Web, Desktop, Mac"
+    }
+  ],
+  "body": {
+    "contentType": "html",
+    "content": "<p>Planner for the web will redirect to the new Planner experience.</p>"
+  }
+}

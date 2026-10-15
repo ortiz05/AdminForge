@@ -1,0 +1,45 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#admin/serviceAnnouncement/messages/$entity",
+  "id": "MC910333",
+  "title": "SharePoint Online: Anyone links will expire by default after 30 days",
+  "services": [
+    "SharePoint Online",
+    "OneDrive for Business"
+  ],
+  "category": "planForChange",
+  "severity": "normal",
+  "isMajorChange": true,
+  "actionRequiredByDateTime": "2026-10-24T09:00:00Z",
+  "startDateTime": "2026-09-20T09:00:00Z",
+  "endDateTime": "2027-01-13T09:00:00Z",
+  "lastModifiedDateTime": "2026-10-12T09:00:00Z",
+  "tags": [
+    "Admin impact",
+    "Feature update"
+  ],
+  "hasAttachments": false,
+  "attachmentsArchive": null,
+  "viewPoint": {
+    "isRead": false,
+    "isArchived": false,
+    "isFavorited": false
+  },
+  "details": [
+    {
+      "name": "Summary",
+      "value": "SharePoint Online: Anyone links will expire by default after 30 days"
+    },
+    {
+      "name": "RoadmapIds",
+      "value": "400424"
+    },
+    {
+      "name": "Platforms",
+      "value": "Web, Desktop, Mac"
+    }
+  ],
+  "body": {
+    "contentType": "html",
+    "content": "<p>New Anyone links will expire after 30 days unless you set a different default.</p><p><b>What you need to do to prepare:</b> Review the link expiration setting in the SharePoint admin center.</p>"
+  }
+}

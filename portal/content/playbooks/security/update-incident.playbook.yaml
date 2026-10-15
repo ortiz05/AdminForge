@@ -1,0 +1,190 @@
+$schema: ../../../packages/schemas/generated/playbook.schema.json
+kind: playbook
+id: security.update-incident
+version: 1.0.0
+title: Update incident status
+summary: Sets the status, classification and determination of a Microsoft Defender XDR incident and adds an analyst comment.
+owner: security-team
+tags: [security, defender, incidents, triage]
+risk: medium
+mode: write
+requires:
+  portalRoles: [Portal.Operator]
+  scopes:
+    graph: [SecurityIncident.ReadWrite.All]
+  entraRoles: [Security Operator]
+  licences: [defender]
+confirm:
+  type: click
+  message: "${ 'Incident ' & inputs.incidentId & ' will be set to ' & inputs.status & (inputs.classification ? ' (' & inputs.classification & ')' : '') & ' in Microsoft Defender.' }"
+approval:
+  required: false
+
+inputs:
+  incidentId: { type: string, label: Incident id, pattern: '^[0-9]+$', placeholder: '4224' }
+  status:
+    type: enum
+    label: Status
+    values:
+      - { value: active, label: Active }
+      - { value: inProgress, label: In progress }
+      - { value: awaitingAction, label: Awaiting action }
+      - { value: resolved, label: Resolved }
+  classification:
+    type: enum
+    label: Classification
+    required: false
+    description: Required when resolving.
+    values:
+      - { value: truePositive, label: True positive }
+      - { value: informationalExpectedActivity, label: "Informational, expected activity" }
+      - { value: falsePositive, label: False positive }
+  determination:
+    type: enum
+    label: Determination
+    required: false
+    description: Must match the classification (for example Phishing is a true-positive determination).
+    values:
+      - { value: multiStagedAttack, label: Multi-staged attack (true positive) }
+      - { value: maliciousUserActivity, label: Malicious user activity (true positive) }
+      - { value: compromisedAccount, label: Compromised account (true positive) }
+      - { value: malware, label: Malware (true positive) }
+      - { value: phishing, label: Phishing (true positive) }
+      - { value: unwantedSoftware, label: Unwanted software (true positive) }
+      - { value: securityTesting, label: Security testing (expected activity) }
+      - { value: lineOfBusinessApplication, label: Line-of-business application (expected activity) }
+      - { value: confirmedUserActivity, label: Confirmed activity (expected activity) }
+      - { value: notMalicious, label: Not malicious (false positive) }
+      - { value: notEnoughDataToValidate, label: Not enough data to validate (false positive) }
+      - { value: other, label: Other }
+  comment: { type: string, label: Comment, required: false, multiline: true, maxLength: 1000, placeholder: What you found and what you did }
+
+steps:
+  - id: lookup
+    type: graph
+    mode: read
+    describe: Read the incident
+    request:
+      method: GET
+      path: /security/incidents/${ $encode(inputs.incidentId) }
+
+  - id: not_redirected
+    type: assert
+    that: ${ steps.lookup.output.status != 'redirected' }
+    message: "${ 'Incident ' & inputs.incidentId & ' was merged into incident ' & steps.lookup.output.redirectIncidentId & '. Update that incident instead.' }"
+
+  - id: classified_when_resolving
+    type: assert
+    that: ${ inputs.status != 'resolved' or $exists(inputs.classification) }
+    message: Choose a classification (true positive, expected activity or false positive) when you resolve an incident.
+
+  - id: determination_matches
+    type: assert
+    that: >-
+      ${ $not($exists(inputs.determination)) or inputs.determination = 'other' or (
+           $allowed := {
+             "truePositive": ["multiStagedAttack", "maliciousUserActivity", "compromisedAccount", "malware", "phishing", "unwantedSoftware"],
+             "informationalExpectedActivity": ["securityTesting", "lineOfBusinessApplication", "confirmedUserActivity"],
+             "falsePositive": ["notMalicious", "notEnoughDataToValidate"]
+           };
+           $exists(inputs.classification) and inputs.determination in $lookup($allowed, inputs.classification)
+         ) }
+    message: "${ 'Determination ' & inputs.determination & ' does not fit classification ' & (inputs.classification ? inputs.classification : '(none)') & '.' }"
+
+  - id: changes
+    type: transform
+    expression: >-
+      ${ $merge([
+           inputs.status != steps.lookup.output.status ? { "status": inputs.status } : {},
+           $exists(inputs.classification) and inputs.classification != steps.lookup.output.classification ? { "classification": inputs.classification } : {},
+           $exists(inputs.determination) and inputs.determination != steps.lookup.output.determination ? { "determination": inputs.determination } : {}
+         ]) }
+
+  - id: something_to_do
+    type: assert
+    that: ${ $count($keys(steps.changes.output)) > 0 or $exists(inputs.comment) }
+    message: "${ 'Incident ' & inputs.incidentId & ' already has these values. Add a comment or choose a different status.' }"
+
+  - id: update
+    type: graph
+    mode: write
+    describe: "${ 'Set ' & $join($keys(steps.changes.output), ', ') & ' on incident ' & inputs.incidentId }"
+    when: ${ $count($keys(steps.changes.output)) > 0 }
+    request:
+      method: PATCH
+      path: /security/incidents/${ $encode(inputs.incidentId) }
+      body: ${ steps.changes.output }
+    compensate:
+      type: graph
+      describe: Restore the previous status, classification and determination
+      request:
+        method: PATCH
+        path: /security/incidents/${ $encode(inputs.incidentId) }
+        body: >-
+          ${ {
+               "status": steps.lookup.output.status,
+               "classification": steps.lookup.output.classification,
+               "determination": steps.lookup.output.determination
+             } }
+    dryRunOutput: ${ $merge([steps.lookup.output, steps.changes.output]) }
+
+  - id: comment
+    type: graph
+    mode: write
+    describe: Add the comment to the incident
+    when: ${ $exists(inputs.comment) and inputs.comment != '' }
+    request:
+      method: POST
+      path: /security/incidents/${ $encode(inputs.incidentId) }/comments
+      body:
+        "@odata.type": microsoft.graph.security.alertComment
+        comment: ${ inputs.comment }
+    dryRunOutput: { value: [] }
+
+outputs:
+  summary: >-
+    ${ (
+      $c := steps.changes.output;
+      $k := $keys($c);
+      'Incident ' & inputs.incidentId
+        & ($count($k) > 0 ? ' updated: ' & $join($k.($ & ' = ' & $lookup($c, $)), ', ') : ' unchanged')
+        & ($exists(inputs.comment) ? '; comment added' : '')
+    ) }
+
+tests:
+  - name: resolves a true positive with a determination and a comment
+    inputs: { incidentId: '4224', status: resolved, classification: truePositive, determination: compromisedAccount, comment: Password reset and sessions revoked. }
+    mocks:
+      lookup: { id: '4224', status: active, classification: unknown, determination: unknown }
+    expect:
+      status: succeeded
+      plan: [update, comment]
+      outputs: { summary: "Incident 4224 updated: status = resolved, classification = truePositive, determination = compromisedAccount; comment added" }
+  - name: refuses to resolve without a classification
+    inputs: { incidentId: '4224', status: resolved }
+    mocks:
+      lookup: { id: '4224', status: active, classification: unknown, determination: unknown }
+    expect: { status: failed, failedStep: classified_when_resolving }
+  - name: refuses a determination that does not fit the classification
+    inputs: { incidentId: '4224', status: resolved, classification: falsePositive, determination: phishing }
+    mocks:
+      lookup: { id: '4224', status: active, classification: unknown, determination: unknown }
+    expect: { status: failed, failedStep: determination_matches }
+  - name: only adds a comment when nothing else changes
+    inputs: { incidentId: '4223', status: inProgress, comment: Waiting for the user to call back. }
+    mocks:
+      lookup: { id: '4223', status: inProgress, classification: unknown, determination: unknown }
+    expect:
+      status: succeeded
+      plan: [comment]
+      steps: { update: skipped }
+  - name: refuses a no-op
+    inputs: { incidentId: '4223', status: inProgress }
+    mocks:
+      lookup: { id: '4223', status: inProgress, classification: unknown, determination: unknown }
+    expect: { status: failed, failedStep: something_to_do }
+  - name: refuses a merged incident
+    inputs: { incidentId: '4214', status: resolved, classification: falsePositive }
+    mocks:
+      lookup: { id: '4214', status: redirected, redirectIncidentId: '4219' }
+    expect: { status: failed, failedStep: not_redirected }

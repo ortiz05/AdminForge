@@ -1,0 +1,282 @@
+{
+  "$fixture": {
+    "variants": [
+      {
+        "match": {
+          "bodyIncludes": [
+            "\"includeInboxRules\":true",
+            "\"externalOnly\":true"
+          ]
+        },
+        "body": [
+          {
+            "acceptedDomains": [
+              "example.com",
+              "exampleorg.onmicrosoft.com",
+              "mail.example.com"
+            ],
+            "summary": {
+              "mailboxForwarding": 4,
+              "inboxRuleForwarding": 4,
+              "external": 5,
+              "mailboxesScannedForRules": 19
+            },
+            "findings": [
+              {
+                "mailbox": "dana@example.com",
+                "userPrincipalName": "dana@example.com",
+                "source": "mailbox",
+                "ruleName": null,
+                "ruleEnabled": null,
+                "target": "dana.former@outlook.example",
+                "external": true,
+                "deliverToMailboxAndForward": false
+              },
+              {
+                "mailbox": "gabriel.nunes@example.com",
+                "userPrincipalName": "gabriel.nunes@example.com",
+                "source": "mailbox",
+                "ruleName": null,
+                "ruleEnabled": null,
+                "target": "gabriel.nunes@gmail.example",
+                "external": true,
+                "deliverToMailboxAndForward": true
+              },
+              {
+                "mailbox": "isaac.mensah@example.com",
+                "userPrincipalName": "isaac.mensah@example.com",
+                "source": "inboxRule",
+                "ruleName": "Archive copies",
+                "ruleEnabled": true,
+                "target": "isaac.m.backup@proton.example",
+                "external": true,
+                "deliverToMailboxAndForward": null
+              },
+              {
+                "mailbox": "blake@example.com",
+                "userPrincipalName": "blake@example.com",
+                "source": "inboxRule",
+                "ruleName": ".",
+                "ruleEnabled": true,
+                "target": "invoices@fabrikam.example",
+                "external": true,
+                "deliverToMailboxAndForward": null
+              },
+              {
+                "mailbox": "hana.kim@example.com",
+                "userPrincipalName": "hana.kim@example.com",
+                "source": "inboxRule",
+                "ruleName": "Notes to self",
+                "ruleEnabled": false,
+                "target": "hk-notes@outlook.example",
+                "external": true,
+                "deliverToMailboxAndForward": null
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "match": {
+          "bodyIncludes": "\"externalOnly\":true"
+        },
+        "body": [
+          {
+            "acceptedDomains": [
+              "example.com",
+              "exampleorg.onmicrosoft.com",
+              "mail.example.com"
+            ],
+            "summary": {
+              "mailboxForwarding": 4,
+              "inboxRuleForwarding": 0,
+              "external": 2,
+              "mailboxesScannedForRules": 0
+            },
+            "findings": [
+              {
+                "mailbox": "dana@example.com",
+                "userPrincipalName": "dana@example.com",
+                "source": "mailbox",
+                "ruleName": null,
+                "ruleEnabled": null,
+                "target": "dana.former@outlook.example",
+                "external": true,
+                "deliverToMailboxAndForward": false
+              },
+              {
+                "mailbox": "gabriel.nunes@example.com",
+                "userPrincipalName": "gabriel.nunes@example.com",
+                "source": "mailbox",
+                "ruleName": null,
+                "ruleEnabled": null,
+                "target": "gabriel.nunes@gmail.example",
+                "external": true,
+                "deliverToMailboxAndForward": true
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "match": {
+          "bodyIncludes": "\"includeInboxRules\":true"
+        },
+        "body": [
+          {
+            "acceptedDomains": [
+              "example.com",
+              "exampleorg.onmicrosoft.com",
+              "mail.example.com"
+            ],
+            "summary": {
+              "mailboxForwarding": 4,
+              "inboxRuleForwarding": 4,
+              "external": 5,
+              "mailboxesScannedForRules": 19
+            },
+            "findings": [
+              {
+                "mailbox": "dana@example.com",
+                "userPrincipalName": "dana@example.com",
+                "source": "mailbox",
+                "ruleName": null,
+                "ruleEnabled": null,
+                "target": "dana.former@outlook.example",
+                "external": true,
+                "deliverToMailboxAndForward": false
+              },
+              {
+                "mailbox": "gabriel.nunes@example.com",
+                "userPrincipalName": "gabriel.nunes@example.com",
+                "source": "mailbox",
+                "ruleName": null,
+                "ruleEnabled": null,
+                "target": "gabriel.nunes@gmail.example",
+                "external": true,
+                "deliverToMailboxAndForward": true
+              },
+              {
+                "mailbox": "nora.fischer@example.com",
+                "userPrincipalName": "nora.fischer@example.com",
+                "source": "mailbox",
+                "ruleName": null,
+                "ruleEnabled": null,
+                "target": "invoices@example.com",
+                "external": false,
+                "deliverToMailboxAndForward": true
+              },
+              {
+                "mailbox": "leah.moreau@example.com",
+                "userPrincipalName": "leah.moreau@example.com",
+                "source": "mailbox",
+                "ruleName": null,
+                "ruleEnabled": null,
+                "target": "hr-confidential@example.com",
+                "external": false,
+                "deliverToMailboxAndForward": true
+              },
+              {
+                "mailbox": "isaac.mensah@example.com",
+                "userPrincipalName": "isaac.mensah@example.com",
+                "source": "inboxRule",
+                "ruleName": "Archive copies",
+                "ruleEnabled": true,
+                "target": "isaac.m.backup@proton.example",
+                "external": true,
+                "deliverToMailboxAndForward": null
+              },
+              {
+                "mailbox": "blake@example.com",
+                "userPrincipalName": "blake@example.com",
+                "source": "inboxRule",
+                "ruleName": ".",
+                "ruleEnabled": true,
+                "target": "invoices@fabrikam.example",
+                "external": true,
+                "deliverToMailboxAndForward": null
+              },
+              {
+                "mailbox": "farah.haddad@example.com",
+                "userPrincipalName": "farah.haddad@example.com",
+                "source": "inboxRule",
+                "ruleName": "Mobile copy",
+                "ruleEnabled": false,
+                "target": "farah.haddad@example.com",
+                "external": false,
+                "deliverToMailboxAndForward": null
+              },
+              {
+                "mailbox": "hana.kim@example.com",
+                "userPrincipalName": "hana.kim@example.com",
+                "source": "inboxRule",
+                "ruleName": "Notes to self",
+                "ruleEnabled": false,
+                "target": "hk-notes@outlook.example",
+                "external": true,
+                "deliverToMailboxAndForward": null
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "body": [
+      {
+        "acceptedDomains": [
+          "example.com",
+          "exampleorg.onmicrosoft.com",
+          "mail.example.com"
+        ],
+        "summary": {
+          "mailboxForwarding": 4,
+          "inboxRuleForwarding": 0,
+          "external": 2,
+          "mailboxesScannedForRules": 0
+        },
+        "findings": [
+          {
+            "mailbox": "dana@example.com",
+            "userPrincipalName": "dana@example.com",
+            "source": "mailbox",
+            "ruleName": null,
+            "ruleEnabled": null,
+            "target": "dana.former@outlook.example",
+            "external": true,
+            "deliverToMailboxAndForward": false
+          },
+          {
+            "mailbox": "gabriel.nunes@example.com",
+            "userPrincipalName": "gabriel.nunes@example.com",
+            "source": "mailbox",
+            "ruleName": null,
+            "ruleEnabled": null,
+            "target": "gabriel.nunes@gmail.example",
+            "external": true,
+            "deliverToMailboxAndForward": true
+          },
+          {
+            "mailbox": "nora.fischer@example.com",
+            "userPrincipalName": "nora.fischer@example.com",
+            "source": "mailbox",
+            "ruleName": null,
+            "ruleEnabled": null,
+            "target": "invoices@example.com",
+            "external": false,
+            "deliverToMailboxAndForward": true
+          },
+          {
+            "mailbox": "leah.moreau@example.com",
+            "userPrincipalName": "leah.moreau@example.com",
+            "source": "mailbox",
+            "ruleName": null,
+            "ruleEnabled": null,
+            "target": "hr-confidential@example.com",
+            "external": false,
+            "deliverToMailboxAndForward": true
+          }
+        ]
+      }
+    ]
+  }
+}

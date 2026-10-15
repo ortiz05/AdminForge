@@ -1,0 +1,163 @@
+$schema: ../../../packages/schemas/generated/page.schema.json
+kind: page
+id: m365.teams
+version: 1.0.0
+title: Teams
+summary: Every team in the tenant with its owners, visibility and lifecycle dates — find ownerless and single-owner teams before they become orphaned.
+owner: m365-team
+tags: [m365, teams, collaboration, governance]
+template: list-detail
+nav: { section: m365, label: Teams, icon: microsoft-teams-logo, order: 75 }
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    graph: [Group.Read.All, GroupMember.Read.All]
+  entraRoles: [Teams Administrator, Global Reader]
+  licences: [teams]
+
+params:
+  q: { type: string, default: "", label: Search, placeholder: Team name or email }
+  ownership:
+    type: enum
+    label: Owners
+    facet: true
+    default: All
+    values:
+      - { value: All, label: Any number of owners }
+      - { value: none, label: No owners }
+      - { value: single, label: One owner }
+      - { value: healthy, label: Two or more owners }
+  visibility:
+    type: enum
+    label: Visibility
+    facet: true
+    default: All
+    values: [All, Public, Private]
+
+filters:
+  search: q
+  facets: [ownership, visibility]
+
+savedViews:
+  enabled: true
+  shared: true
+  presets:
+    - { name: Teams without owners, params: { ownership: none } }
+    - { name: Single-owner teams, params: { ownership: single } }
+    - { name: Public teams, params: { visibility: Public } }
+
+datasources:
+  teams:
+    source: graph
+    request:
+      path: /groups
+      query:
+        $filter: "resourceProvisioningOptions/Any(x:x eq 'Team')"
+        $select: id,displayName,description,mail,visibility,createdDateTime,renewedDateTime,expirationDateTime
+        # Graph returns at most 20 expanded owners per group; teams with more show 20.
+        $expand: owners($select=id,displayName,userPrincipalName)
+        $top: 100
+    paging: all
+    maxItems: 10000
+    cache: { ttl: 300 }
+    # value = { value: [group + owners] }. Owner counts, ownership state, then search/facet filters.
+    transform: >-
+      ${ (
+        $p := params;
+        $q := $lowercase($trim($p.q ? $p.q : ''));
+        $all := [value.value.(
+          $n := $count(owners);
+          {
+            "id": id,
+            "displayName": displayName,
+            "description": description,
+            "mail": mail,
+            "visibility": visibility,
+            "createdDateTime": createdDateTime,
+            "renewedDateTime": renewedDateTime,
+            "expirationDateTime": expirationDateTime,
+            "ownerCount": $n,
+            "owners": $join(owners.displayName, ', '),
+            "ownership": $n = 0 ? 'none' : $n = 1 ? 'single' : 'healthy'
+          }
+        )];
+        $rows := [$all[
+            ($q = '' or $contains($lowercase(displayName & ' ' & mail), $q))
+            and ($p.ownership = 'All' or $not($exists($p.ownership)) or ownership = $p.ownership)
+            and ($p.visibility = 'All' or $not($exists($p.visibility)) or visibility = $p.visibility)
+          ]];
+        {
+          "rows": $rows,
+          "total": $count($all),
+          "noOwner": $count($all[ownership = 'none']),
+          "singleOwner": $count($all[ownership = 'single']),
+          "public": $count($all[visibility = 'Public'])
+        }
+      ) }
+
+layout:
+  - widget: kpi
+    id: total
+    data: teams.total
+    label: Teams
+    format: number
+  - widget: kpi
+    id: noOwner
+    data: teams.noOwner
+    label: Without owners
+    format: number
+    status: "${ value > 0 ? 'crit' : 'ok' }"
+    href: /p/m365.teams?ownership=none
+  - widget: kpi
+    id: singleOwner
+    data: teams.singleOwner
+    label: With a single owner
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+    href: /p/m365.teams?ownership=single
+  - widget: kpi
+    id: public
+    data: teams.public
+    label: Public
+    format: number
+    href: /p/m365.teams?visibility=Public
+  - widget: table
+    id: teams
+    span: 12
+    data: teams.rows
+    rowKey: id
+    columns:
+      - { field: displayName, label: Team, kind: identity, secondary: mail }
+      - field: ownership
+        label: Ownership
+        kind: status
+        map: { none: [crit, No owners], single: [warn, One owner], healthy: [ok, Two or more] }
+        filter: { type: facet, param: ownership }
+      - { field: ownerCount, label: Owners, kind: number, align: end, filter: range, sortable: true }
+      - { field: owners, label: Owner names }
+      - { field: visibility, label: Visibility, filter: { type: facet, param: visibility } }
+      - { field: createdDateTime, label: Created, kind: date, filter: date, sortable: true }
+      - { field: renewedDateTime, label: Renewed, kind: relativeTime, hidden: true }
+      - { field: expirationDateTime, label: Expires, kind: date, hidden: true }
+      - { field: description, label: Description, hidden: true }
+      - { field: id, label: Group id, kind: guid, hidden: true }
+    inspect:
+      page: m365.team
+      params:
+        id: ${ row.id }
+    rowActions:
+      - label: Open in Teams admin center
+        icon: arrow-square-out
+        href: "https://admin.teams.microsoft.com/teams/manage/${ $encode(row.id) }"
+      - label: Open in Entra admin center
+        icon: arrow-square-out
+        href: "https://entra.microsoft.com/#view/Microsoft_AAD_IAM/GroupDetailsMenuBlade/~/Owners/groupId/${ $encode(row.id) }"
+    empty:
+      title: No teams match
+      body: Clear the owner and visibility filters. A tenant where nobody has created a team yet shows nothing here.
+
+export:
+  formats: [csv, xlsx]
+  fileName: teams
+  data: teams.rows
+  columns: all

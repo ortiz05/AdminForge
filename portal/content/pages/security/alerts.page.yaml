@@ -1,0 +1,231 @@
+$schema: ../../../packages/schemas/generated/page.schema.json
+kind: page
+id: security.alerts
+version: 1.0.0
+title: Alerts
+summary: Alerts from every Microsoft Defender product and Entra ID Protection (alerts_v2), with the incident each one belongs to.
+owner: security-team
+tags: [security, defender, alerts]
+template: list-detail
+nav: { section: security, label: Alerts, icon: warning, order: 20 }
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    graph: [SecurityAlert.Read.All]
+  entraRoles: [Security Reader]
+  licences: [defender]
+
+params:
+  status:
+    type: enum
+    label: Status
+    facet: true
+    default: open
+    values:
+      - { value: open, label: New or in progress }
+      - { value: new, label: New }
+      - { value: inProgress, label: In progress }
+      - { value: resolved, label: Resolved }
+      - { value: any, label: Any status }
+  severity:
+    type: enum
+    label: Severity
+    facet: true
+    default: any
+    values:
+      - { value: any, label: Any severity }
+      - { value: high, label: High }
+      - { value: medium, label: Medium }
+      - { value: low, label: Low }
+      - { value: informational, label: Informational }
+  serviceSource:
+    type: enum
+    label: Detected by
+    facet: true
+    default: any
+    values:
+      - { value: any, label: Any product }
+      - { value: microsoftDefenderForEndpoint, label: Defender for Endpoint }
+      - { value: microsoftDefenderForIdentity, label: Defender for Identity }
+      - { value: microsoftDefenderForOffice365, label: Defender for Office 365 }
+      - { value: microsoftDefenderForCloudApps, label: Defender for Cloud Apps }
+      - { value: microsoftDefenderForCloud, label: Defender for Cloud }
+      - { value: microsoft365Defender, label: Defender XDR }
+      - { value: azureAdIdentityProtection, label: Entra ID Protection }
+      - { value: dataLossPrevention, label: Data loss prevention }
+  since: { type: date, label: Created since, default: -7d, facet: true }
+
+filters:
+  facets: [status, severity, serviceSource, since]
+
+savedViews:
+  enabled: true
+  shared: true
+  presets:
+    - { name: New high severity, params: { status: new, severity: high } }
+    - { name: Endpoint alerts, params: { serviceSource: microsoftDefenderForEndpoint } }
+    - { name: Identity risk alerts, params: { serviceSource: azureAdIdentityProtection } }
+    - { name: Email alerts, params: { serviceSource: microsoftDefenderForOffice365 } }
+
+datasources:
+  alerts:
+    source: graph
+    request:
+      path: /security/alerts_v2
+      query:
+        $top: 100
+        $filter: >-
+          ${ $join([
+               params.status = 'open' ? "(status eq 'new' or status eq 'inProgress')",
+               params.status in ['new', 'inProgress', 'resolved'] ? "status eq " & $odata(params.status),
+               params.severity in ['high', 'medium', 'low', 'informational'] ? "severity eq " & $odata(params.severity),
+               params.serviceSource and params.serviceSource != 'any' ? "serviceSource eq " & $odata(params.serviceSource),
+               params.since ? "createdDateTime ge " & $iso(params.since)
+             ][$], ' and ') }
+    paging: cursor
+    cache: { ttl: 60 }
+  summary:
+    label: New and in-progress alerts
+    source: graph
+    request:
+      path: /security/alerts_v2
+      query:
+        $top: 100
+        $filter: "status eq 'new' or status eq 'inProgress'"
+    paging: all
+    maxItems: 5000
+    cache: { ttl: 120 }
+    transform: >-
+      ${ (
+        $open := [value.value[status in ['new', 'inProgress']]];
+        $labels := {
+          "microsoftDefenderForEndpoint": "Defender for Endpoint",
+          "microsoftDefenderForIdentity": "Defender for Identity",
+          "microsoftDefenderForOffice365": "Defender for Office 365",
+          "microsoftDefenderForCloudApps": "Defender for Cloud Apps",
+          "microsoftDefenderForCloud": "Defender for Cloud",
+          "microsoft365Defender": "Defender XDR",
+          "azureAdIdentityProtection": "Entra ID Protection",
+          "dataLossPrevention": "Data loss prevention"
+        };
+        {
+          "open": $count($open),
+          "high": $count($open[severity = 'high']),
+          "new": $count($open[status = 'new']),
+          "unassigned": $count($open[$not($exists(assignedTo)) or assignedTo = null or assignedTo = '']),
+          "byProduct": [$distinct($open.serviceSource).(
+            $s := $;
+            {
+              "product": $lookup($labels, $s) ? $lookup($labels, $s) : $s,
+              "high": $count($open[serviceSource = $s and severity = 'high']),
+              "medium": $count($open[serviceSource = $s and severity = 'medium']),
+              "low": $count($open[serviceSource = $s and severity in ['low', 'informational']])
+            }
+          )]
+        }
+      ) }
+
+layout:
+  - widget: kpi
+    data: summary.open
+    label: New or in progress
+    format: number
+  - widget: kpi
+    data: summary.high
+    label: High severity
+    format: number
+    status: "${ value > 0 ? 'crit' : 'ok' }"
+    href: /p/security.alerts?status=open&severity=high
+  - widget: kpi
+    data: summary.new
+    label: Not triaged (new)
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+    href: /p/security.alerts?status=new
+  - widget: kpi
+    data: summary.unassigned
+    label: Unassigned
+    format: number
+  - widget: chart
+    id: by_product
+    title: Open alerts by product
+    span: 12
+    rows: 2
+    type: stackedBar
+    data: summary.byProduct
+    x: product
+    y: [high, medium, low]
+    stack: true
+    format: number
+  - widget: table
+    id: alerts
+    span: 12
+    data: alerts.value
+    rowKey: id
+    search: true
+    pageSize: 100
+    empty:
+      title: No alerts match these filters
+      body: Widen the status, product or date filters.
+    columns:
+      - { field: title, label: Alert, kind: identity, secondary: category, sortable: true }
+      - field: severity
+        label: Severity
+        kind: status
+        sortable: true
+        map: { high: [crit, High], medium: [warn, Medium], low: [info, Low], informational: [neutral, Informational] }
+        filter: { type: facet, param: severity }
+      - field: status
+        label: Status
+        kind: status
+        map: { new: [warn, New], inProgress: [info, In progress], resolved: [ok, Resolved] }
+        filter: { type: facet, param: status }
+      - field: serviceSource
+        label: Detected by
+        kind: status
+        filter: { type: facet, param: serviceSource }
+        map:
+          microsoftDefenderForEndpoint: [neutral, Defender for Endpoint]
+          microsoftDefenderForIdentity: [neutral, Defender for Identity]
+          microsoftDefenderForCloudApps: [neutral, Defender for Cloud Apps]
+          microsoftDefenderForOffice365: [neutral, Defender for Office 365]
+          microsoft365Defender: [neutral, Defender XDR]
+          azureAdIdentityProtection: [neutral, Entra ID Protection]
+          microsoftDefenderForCloud: [neutral, Defender for Cloud]
+          dataLossPrevention: [neutral, Data loss prevention]
+          microsoftInsiderRiskManagement: [neutral, Insider risk management]
+          microsoftSentinel: [neutral, Microsoft Sentinel]
+      - field: incidentId
+        label: Incident
+        kind: code
+        link:
+          page: security.incident
+          params:
+            id: ${ row.incidentId }
+      - { field: assignedTo, label: Assigned to, filter: text }
+      - { field: mitreTechniques, label: MITRE techniques, kind: tags, filter: facet }
+      - { field: threatDisplayName, label: Threat, hidden: true }
+      - { field: detectionSource, label: Detection source, hidden: true, filter: facet }
+      - { field: classification, label: Classification, hidden: true, filter: facet }
+      - { field: determination, label: Determination, hidden: true }
+      - { field: createdDateTime, label: Created, kind: relativeTime, sortable: true, filter: { type: date, param: since } }
+      - { field: lastUpdateDateTime, label: Last updated, kind: relativeTime, hidden: true }
+      - { field: id, label: Alert id, kind: code, hidden: true }
+    inspect:
+      page: security.alert
+      params:
+        id: ${ row.id }
+    rowActions:
+      - label: Open incident
+        icon: stack
+        href: ${ '/p/security.incident?id=' & $encode(row.incidentId) }
+        when: ${ $exists(row.incidentId) and row.incidentId != null }
+      - label: Open in Microsoft Defender
+        icon: arrow-square-out
+        href: ${ row.alertWebUrl }
+
+export:
+  formats: [csv, xlsx]
+  fileName: defender-alerts
+  data: alerts.value
+  columns: visible

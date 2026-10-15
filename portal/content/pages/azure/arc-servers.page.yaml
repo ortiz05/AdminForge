@@ -1,0 +1,190 @@
+$schema: ../../../packages/schemas/generated/page.schema.json
+kind: page
+id: azure.arc-servers
+version: 1.0.0
+title: Azure Arc servers
+summary: Servers outside Azure connected through Azure Arc — connectivity, agent version, operating system and extension health.
+owner: azure-team
+tags: [azure, arc, hybrid, servers]
+template: list-detail
+nav: { section: azure, label: Arc servers, icon: hard-drives, order: 50 }
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    arm: [user_impersonation]
+  azureRoles: [Reader]
+
+params:
+  q: { type: string, default: "", label: Search, placeholder: Machine name contains… }
+  status:
+    type: enum
+    label: Status
+    facet: true
+    default: All
+    values: [All, Connected, Disconnected, Error, Expired]
+  osType:
+    type: enum
+    label: OS
+    facet: true
+    default: All
+    values:
+      - { value: All, label: Any }
+      - { value: windows, label: Windows }
+      - { value: linux, label: Linux }
+  subscriptionId: { type: string, format: guid, label: Subscription, picker: subscription, facet: true }
+  resourceGroup: { type: string, label: Resource group, facet: true }
+  location: { type: string, label: Location, facet: true }
+
+filters:
+  search: q
+  facets: [status, osType, subscriptionId, resourceGroup, location]
+
+savedViews:
+  enabled: true
+  shared: true
+  presets:
+    - { name: Not connected, params: { status: Disconnected } }
+    - { name: Expired (re-onboard), params: { status: Expired } }
+    - { name: Windows servers, params: { osType: windows } }
+    - { name: Linux servers, params: { osType: linux } }
+
+datasources:
+  machines:
+    source: resourceGraph
+    query: |
+      // af:azure.arc-servers#machines
+      resources
+      | where type =~ 'microsoft.hybridcompute/machines'
+      ${ params.subscriptionId ? "| where subscriptionId == '" & $guid(params.subscriptionId) & "'" }
+      ${ params.resourceGroup ? "| where resourceGroup =~ '" & $replace(params.resourceGroup, /[^A-Za-z0-9._()-]/, '') & "'" }
+      ${ params.location ? "| where location =~ '" & $lowercase($replace(params.location, /[^A-Za-z0-9]/, '')) & "'" }
+      ${ params.q ? "| where name contains '" & $replace(params.q, /[^A-Za-z0-9 ._()-]/, '') & "'" }
+      | extend status = tostring(properties.status), agentVersion = tostring(properties.agentVersion), osType = tolower(tostring(properties.osType)), osName = tostring(properties.osName), osSku = tostring(properties.osSku), osVersion = tostring(properties.osVersion), lastStatusChange = todatetime(properties.lastStatusChange), machineFqdn = tostring(properties.machineFqdn), domainName = tostring(properties.domainName), manufacturer = tostring(properties.detectedProperties.manufacturer), model = tostring(properties.detectedProperties.model), cloudProvider = tostring(properties.cloudMetadata.provider), esuState = tostring(properties.licenseProfile.esuProfile.licenseAssignmentState), errorCount = array_length(properties.errorDetails)
+      ${ params.status in ['Connected', 'Disconnected', 'Error', 'Expired'] ? "| where status == '" & params.status & "'" }
+      ${ params.osType in ['windows', 'linux'] ? "| where osType == '" & params.osType & "'" }
+      | extend lid = tolower(id)
+      | join kind=leftouter (resources | where type =~ 'microsoft.hybridcompute/machines/extensions' | extend machineId = tolower(tostring(split(id, '/extensions/')[0])), extFailed = tostring(properties.provisioningState) != 'Succeeded' | summarize extensions = count(), failedExtensions = countif(extFailed) by machineId) on $left.lid == $right.machineId
+      | join kind=leftouter (resourcecontainers | where type =~ 'microsoft.resources/subscriptions' | project subscriptionId, subscriptionName = name) on subscriptionId
+      | extend extensions = coalesce(extensions, 0), failedExtensions = coalesce(failedExtensions, 0), hoursSinceChange = datetime_diff('hour', now(), lastStatusChange)
+      | project id, name, status, agentVersion, osType, osName, osSku, osVersion, lastStatusChange, hoursSinceChange, machineFqdn, domainName, manufacturer, model, cloudProvider, esuState, errorCount, extensions, failedExtensions, location, resourceGroup, subscriptionId, subscriptionName, tags
+      | order by name asc
+    paging: all
+    maxItems: 20000
+    # Agent currency is relative to the newest agent in the fleet (major.minor), which tracks the monthly agent release.
+    transform: >-
+      ${ (
+        $rows := [value.value];
+        $ver := function($v) { $v ? $number($split($v, '.')[0]) * 1000 + $number($split($v, '.')[1]) : 0 };
+        $newest := $max($rows.$ver(agentVersion));
+        $out := [$rows.$merge([$, {
+          'agentCurrency': $ver(agentVersion) >= $newest ? 'current' : $ver(agentVersion) >= $newest - 2 ? 'behind' : 'outdated'
+        }])];
+        {
+          'rows': $out,
+          'total': $count($out),
+          'connected': $count($out[status = 'Connected']),
+          'disconnected': $count($out[status = 'Disconnected']),
+          'expiredOrError': $count($out[status in ['Expired', 'Error']]),
+          'outdatedAgents': $count($out[agentCurrency = 'outdated']),
+          'failedExtensions': $sum($out.failedExtensions)
+        }
+      ) }
+    cache: { ttl: 120 }
+
+layout:
+  - widget: kpi
+    data: machines.total
+    label: Arc servers
+    format: number
+  - widget: kpi
+    data: machines.connected
+    label: Connected
+    format: number
+    status: ok
+    href: /p/azure.arc-servers?status=Connected
+  - widget: kpi
+    data: machines.disconnected
+    label: Disconnected
+    format: number
+    status: "${ value > 0 ? 'crit' : 'ok' }"
+    href: /p/azure.arc-servers?status=Disconnected
+  - widget: kpi
+    data: machines.expiredOrError
+    label: Expired or in error
+    format: number
+    status: "${ value > 0 ? 'crit' : 'ok' }"
+  - widget: kpi
+    data: machines.outdatedAgents
+    label: Agents 3+ releases behind
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+  - widget: kpi
+    data: machines.failedExtensions
+    label: Failed extensions
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+  - widget: table
+    id: machines
+    span: 12
+    data: machines.rows
+    rowKey: id
+    selection: multi
+    columns:
+      - { field: name, label: Machine, kind: identity, secondary: machineFqdn, sortable: true }
+      - field: status
+        label: Status
+        kind: status
+        map: { Connected: [ok, Connected], Disconnected: [crit, Disconnected], Error: [crit, Error], Expired: [crit, Expired] }
+        filter: { type: facet, param: status }
+      - { field: lastStatusChange, label: Status since, kind: relativeTime, sortable: true, filter: date }
+      - { field: osName, label: Operating system, filter: facet }
+      - { field: osSku, label: OS edition, hidden: true }
+      - { field: osVersion, label: OS version, hidden: true }
+      - { field: agentVersion, label: Agent version, sortable: true, filter: facet }
+      - field: agentCurrency
+        label: Agent
+        kind: status
+        map: { current: [ok, Current], behind: [info, 1–2 releases behind], outdated: [warn, Outdated] }
+        filter: facet
+      - { field: extensions, label: Extensions, kind: number }
+      - { field: failedExtensions, label: Failed extensions, kind: number, filter: range }
+      - { field: location, label: Location, filter: facet, hidden: true }
+      - { field: resourceGroup, label: Resource group, filter: facet }
+      - { field: subscriptionName, label: Subscription, filter: facet, hidden: true }
+      - { field: domainName, label: Domain, filter: facet, hidden: true }
+      - { field: manufacturer, label: Manufacturer, filter: facet, hidden: true }
+      - { field: model, label: Model, hidden: true }
+      - { field: cloudProvider, label: Hosted in, filter: facet, hidden: true }
+      - { field: esuState, label: ESU licence, filter: facet, hidden: true }
+      - { field: tags, label: Tags, kind: tags, hidden: true }
+      - { field: id, label: Resource id, kind: code, hidden: true }
+    inspect:
+      page: azure.arc-server
+      params:
+        id: ${ row.id }
+    rowActions:
+      - label: Open in Azure portal
+        icon: arrow-square-out
+        href: https://portal.azure.com/#resource${ row.id }/overview
+      - label: Troubleshooting guide
+        icon: book-open
+        href: https://learn.microsoft.com/azure/azure-arc/servers/troubleshoot-agent-onboard
+        when: ${ row.status != 'Connected' }
+    bulkActions:
+      - playbook: azure.add-tags
+        label: Add or update a tag
+        icon: tag
+        forEach:
+          inputs:
+            resourceId: ${ row.id }
+          concurrency: 5
+        maxItems: 500
+    empty:
+      title: No Arc-enabled servers match
+      body: Clear a filter, or onboard servers with the Azure Connected Machine agent (Azure Arc → Machines → Add).
+
+export:
+  formats: [csv, xlsx]
+  fileName: azure-arc-servers
+  data: machines.rows
+  columns: visible

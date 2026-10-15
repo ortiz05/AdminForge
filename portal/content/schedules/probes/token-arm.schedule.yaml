@@ -1,0 +1,17 @@
+$schema: ../../../packages/schemas/generated/schedule.schema.json
+kind: schedule
+id: sweep.token-arm
+version: 1.0.0
+title: "Hourly probe: Token acquisition — Azure Resource Manager"
+summary: Runs the probes.token-arm probe every hour (minute 37, staggered across the sweep) as the automation identity.
+owner: portal-admins
+tags: [synthetic, probe-sweep]
+cron: "37 * * * *"
+timezone: UTC
+enabled: true
+identity: automation
+job:
+  kind: probe
+  ref: probes.token-arm
+timeoutSeconds: 120
+overlap: skip

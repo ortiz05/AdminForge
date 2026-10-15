@@ -1,0 +1,73 @@
+{
+  "value": [
+    {
+      "eventDataId": "30000000-0000-4000-8000-000000000940",
+      "correlationId": "30000000-0000-4000-8000-000000000a40",
+      "eventTimestamp": "2026-10-14T16:05:12Z",
+      "operationName": {
+        "value": "Microsoft.Web/sites/write",
+        "localizedValue": "Create or update web app"
+      },
+      "status": {
+        "value": "Succeeded",
+        "localizedValue": "Succeeded"
+      },
+      "subStatus": {
+        "value": "OK",
+        "localizedValue": "OK"
+      },
+      "caller": "30000000-0000-4000-8000-000000000103",
+      "level": "Informational",
+      "category": {
+        "value": "Administrative",
+        "localizedValue": "Administrative"
+      }
+    },
+    {
+      "eventDataId": "30000000-0000-4000-8000-000000000941",
+      "correlationId": "30000000-0000-4000-8000-000000000a40",
+      "eventTimestamp": "2026-10-14T16:04:30Z",
+      "operationName": {
+        "value": "Microsoft.Web/sites/write",
+        "localizedValue": "Create or update web app"
+      },
+      "status": {
+        "value": "Started",
+        "localizedValue": "Started"
+      },
+      "subStatus": {
+        "value": "",
+        "localizedValue": ""
+      },
+      "caller": "30000000-0000-4000-8000-000000000103",
+      "level": "Informational",
+      "category": {
+        "value": "Administrative",
+        "localizedValue": "Administrative"
+      }
+    },
+    {
+      "eventDataId": "30000000-0000-4000-8000-000000000942",
+      "correlationId": "30000000-0000-4000-8000-000000000a41",
+      "eventTimestamp": "2026-10-11T07:15:00Z",
+      "operationName": {
+        "value": "Microsoft.Compute/virtualMachines/deallocate/action",
+        "localizedValue": "Deallocate Virtual Machine"
+      },
+      "status": {
+        "value": "Succeeded",
+        "localizedValue": "Succeeded"
+      },
+      "subStatus": {
+        "value": "OK",
+        "localizedValue": "OK"
+      },
+      "caller": "jo.dev@example.com",
+      "level": "Informational",
+      "category": {
+        "value": "Administrative",
+        "localizedValue": "Administrative"
+      }
+    }
+  ]
+}

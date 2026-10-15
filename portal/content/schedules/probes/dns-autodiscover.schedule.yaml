@@ -1,0 +1,17 @@
+$schema: ../../../packages/schemas/generated/schedule.schema.json
+kind: schedule
+id: sweep.dns-autodiscover
+version: 1.0.0
+title: "Hourly probe: Autodiscover record for the primary domain"
+summary: Runs the probes.dns-autodiscover probe every hour (minute 09, staggered across the sweep) as the automation identity.
+owner: portal-admins
+tags: [synthetic, probe-sweep]
+cron: "9 * * * *"
+timezone: UTC
+enabled: true
+identity: automation
+job:
+  kind: probe
+  ref: probes.dns-autodiscover
+timeoutSeconds: 120
+overlap: skip

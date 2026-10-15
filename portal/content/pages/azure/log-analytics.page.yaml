@@ -1,0 +1,276 @@
+$schema: ../../../packages/schemas/generated/page.schema.json
+kind: page
+id: azure.log-analytics
+version: 1.0.0
+title: Log Analytics
+summary: Log Analytics workspaces (retention, daily cap, network access) and a gallery of tested KQL queries to run against the selected workspace.
+owner: azure-team
+tags: [azure, monitoring, log-analytics, kql]
+template: dashboard
+nav: { section: azure, label: Log Analytics, icon: terminal-window, order: 70 }
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    arm: [user_impersonation]
+    logAnalytics: [Data.Read]
+  azureRoles: [Reader, Log Analytics Reader]
+
+params:
+  workspace: { type: guid, label: Workspace id, description: The workspace (customer) id. Pick a workspace from the table. }
+  query:
+    type: enum
+    label: Query
+    facet: true
+    default: ingestion
+    values:
+      - { value: ingestion, label: Billable ingestion by table }
+      - { value: heartbeat, label: Machines not sending heartbeats }
+      - { value: activity, label: Failed Azure operations }
+      - { value: functionErrors, label: Function App errors }
+      - { value: signInFailures, label: Sign-in failures by reason }
+  range: { type: dateRange, label: Time range, default: P1D, presets: [PT1H, PT6H, P1D, P7D, P30D], max: P30D }
+
+filters:
+  facets: [query]
+
+datasources:
+  workspaces:
+    source: resourceGraph
+    query: |
+      // af:azure.log-analytics#workspaces
+      resources
+      | where type =~ 'microsoft.operationalinsights/workspaces'
+      | extend customerId = tostring(properties.customerId), sku = tostring(properties.sku.name), retentionInDays = toint(properties.retentionInDays), dailyQuotaGb = todouble(properties.workspaceCapping.dailyQuotaGb), quotaReached = tostring(properties.workspaceCapping.dataIngestionStatus), publicQuery = tostring(properties.publicNetworkAccessForQuery), publicIngestion = tostring(properties.publicNetworkAccessForIngestion), createdDate = todatetime(properties.createdDate), localAuthDisabled = tobool(properties.features.disableLocalAuth)
+      | join kind=leftouter (resourcecontainers | where type =~ 'microsoft.resources/subscriptions' | project subscriptionId, subscriptionName = name) on subscriptionId
+      | project id, name, customerId, sku, retentionInDays, dailyQuotaGb, quotaReached, publicQuery, publicIngestion, localAuthDisabled, createdDate, location, resourceGroup, subscriptionId, subscriptionName, tags
+      | order by name asc
+    cache: { ttl: 300 }
+  ingestion:
+    source: logAnalytics
+    when: ${ $boolean(params.workspace) and params.query = 'ingestion' }
+    workspace: ${ $guid(params.workspace) }
+    timespan: ${ params.range.timespan }
+    query: |
+      // af:azure.log-analytics#ingestion
+      Usage
+      | where IsBillable == true
+      | summarize BillableGB = round(sum(Quantity) / 1000, 3), Solutions = make_set(Solution) by DataType
+      | top 25 by BillableGB desc
+    cache: { ttl: 300 }
+  usageTrend:
+    source: logAnalytics
+    when: ${ $boolean(params.workspace) and params.query = 'ingestion' }
+    workspace: ${ $guid(params.workspace) }
+    timespan: ${ params.range.timespan }
+    query: |
+      // af:azure.log-analytics#usagetrend
+      Usage
+      | where IsBillable == true
+      | summarize BillableGB = round(sum(Quantity) / 1000, 3) by bin(TimeGenerated, 1h)
+      | order by TimeGenerated asc
+    cache: { ttl: 300 }
+  heartbeat:
+    source: logAnalytics
+    when: ${ $boolean(params.workspace) and params.query = 'heartbeat' }
+    workspace: ${ $guid(params.workspace) }
+    timespan: P7D
+    query: |
+      // af:azure.log-analytics#heartbeat
+      Heartbeat
+      | summarize LastHeartbeat = max(TimeGenerated) by Computer, OSType, Version, ComputerEnvironment, Category, ResourceId = _ResourceId
+      | extend MinutesSince = datetime_diff('minute', now(), LastHeartbeat)
+      | extend State = case(MinutesSince > 1440, 'Silent', MinutesSince > 15, 'Late', 'Reporting'), Key = strcat(Computer, '|', ResourceId)
+      | order by MinutesSince desc
+    cache: { ttl: 120 }
+  activity:
+    source: logAnalytics
+    when: ${ $boolean(params.workspace) and params.query = 'activity' }
+    workspace: ${ $guid(params.workspace) }
+    timespan: ${ params.range.timespan }
+    query: |
+      // af:azure.log-analytics#activity
+      AzureActivity
+      | where ActivityStatusValue == 'Failure'
+      | project TimeGenerated, OperationNameValue, ResourceGroup, ResourceId = _ResourceId, Caller, ActivitySubstatusValue, CorrelationId, Key = strcat(CorrelationId, '|', OperationNameValue, '|', TimeGenerated)
+      | top 200 by TimeGenerated desc
+    cache: { ttl: 120 }
+  functionErrors:
+    source: logAnalytics
+    when: ${ $boolean(params.workspace) and params.query = 'functionErrors' }
+    workspace: ${ $guid(params.workspace) }
+    timespan: ${ params.range.timespan }
+    query: |
+      // af:azure.log-analytics#functionerrors
+      FunctionAppLogs
+      | where Level in ('Error', 'Critical')
+      | summarize Errors = count(), LastSeen = max(TimeGenerated), Sample = take_any(Message) by AppName, FunctionName, ExceptionType
+      | extend Key = strcat(AppName, '|', FunctionName, '|', ExceptionType)
+      | top 50 by Errors desc
+    cache: { ttl: 120 }
+  signInFailures:
+    source: logAnalytics
+    when: ${ $boolean(params.workspace) and params.query = 'signInFailures' }
+    workspace: ${ $guid(params.workspace) }
+    timespan: ${ params.range.timespan }
+    query: |
+      // af:azure.log-analytics#signinfailures
+      SigninLogs
+      | where ResultType != '0'
+      | summarize Failures = count(), Users = dcount(UserPrincipalName), LastSeen = max(TimeGenerated) by ResultType, ResultDescription, AppDisplayName
+      | extend Key = strcat(ResultType, '|', AppDisplayName)
+      | top 25 by Failures desc
+    cache: { ttl: 120 }
+
+layout:
+  - widget: kpi
+    data: workspaces.totalRecords
+    label: Workspaces
+    format: number
+  - widget: table
+    id: workspaces
+    title: Workspaces
+    span: 12
+    data: workspaces.value
+    rowKey: id
+    search: true
+    columns:
+      - field: name
+        label: Workspace
+        kind: identity
+        secondary: customerId
+        link:
+          page: azure.log-analytics
+          params:
+            workspace: ${ row.customerId }
+            query: ingestion
+      - { field: sku, label: Pricing tier, filter: facet }
+      - { field: retentionInDays, label: Retention (days), kind: number, filter: range }
+      - { field: dailyQuotaGb, label: Daily cap (GB, -1 = none), kind: number }
+      - field: quotaReached
+        label: Ingestion
+        kind: status
+        map: { RespectQuota: [ok, Within cap], OverQuota: [crit, Daily cap reached], SubscriptionSuspended: [crit, Subscription suspended], ApproachingQuota: [warn, Approaching cap] }
+        filter: facet
+      - { field: publicQuery, label: Public query access, filter: facet }
+      - { field: publicIngestion, label: Public ingestion, filter: facet, hidden: true }
+      - { field: localAuthDisabled, label: Local auth disabled, kind: boolean, hidden: true }
+      - { field: location, label: Location, filter: facet }
+      - { field: resourceGroup, label: Resource group, filter: facet, hidden: true }
+      - { field: subscriptionName, label: Subscription, filter: facet }
+      - { field: createdDate, label: Created, kind: date, hidden: true }
+      - { field: id, label: Resource id, kind: code, hidden: true }
+    inspect:
+      page: azure.resource
+      params:
+        id: ${ row.id }
+    rowActions:
+      - label: Open Logs in Azure portal
+        icon: arrow-square-out
+        href: https://portal.azure.com/#resource${ row.id }/logs
+    empty:
+      title: No Log Analytics workspaces visible
+      body: Your account needs Reader on the subscriptions that hold the workspaces.
+  - widget: markdown
+    span: 12
+    when: ${ $not($boolean(params.workspace)) }
+    text: Select a workspace name above to run the query gallery against it. Queries run with your own access (*Log Analytics Reader* or table-level RBAC) and are read-only.
+  # ── Billable ingestion ────────────────────────────────────────────────
+  - widget: chart
+    title: Billable ingestion per hour (GB)
+    span: 12
+    when: ${ $boolean(params.workspace) and params.query = 'ingestion' }
+    type: area
+    data: usageTrend.value
+    x: TimeGenerated
+    y: BillableGB
+    format: number
+  - widget: table
+    title: Billable ingestion by table
+    span: 12
+    when: ${ $boolean(params.workspace) and params.query = 'ingestion' }
+    data: ingestion.value
+    rowKey: DataType
+    columns:
+      - { field: DataType, label: Table, sortable: true }
+      - { field: BillableGB, label: Billable GB, kind: number, sortable: true }
+      - { field: Solutions, label: Solutions, kind: tags }
+    empty:
+      title: No billable data in this range
+      body: The workspace ingested no billable data in the selected time range.
+  # ── Heartbeat ─────────────────────────────────────────────────────────
+  - widget: table
+    title: Machines by last heartbeat (7 days)
+    span: 12
+    when: ${ $boolean(params.workspace) and params.query = 'heartbeat' }
+    data: heartbeat.value
+    rowKey: Key
+    search: true
+    columns:
+      - { field: Computer, label: Computer, kind: identity, secondary: Category }
+      - field: State
+        label: State
+        kind: status
+        map: { Reporting: [ok, Reporting], Late: [warn, Late], Silent: [crit, Silent over 24h] }
+        filter: facet
+      - { field: LastHeartbeat, label: Last heartbeat, kind: relativeTime, sortable: true }
+      - { field: MinutesSince, label: Minutes since, kind: number, filter: range, hidden: true }
+      - { field: OSType, label: OS, filter: facet }
+      - { field: ComputerEnvironment, label: Environment, filter: facet }
+      - { field: Version, label: Agent version, filter: facet }
+      - { field: ResourceId, label: Resource id, kind: code, hidden: true }
+    empty:
+      title: No heartbeats in the last 7 days
+      body: No agents send heartbeats to this workspace. Check the data collection rules that target it.
+  # ── Failed Azure operations ───────────────────────────────────────────
+  - widget: table
+    title: Failed Azure operations (AzureActivity)
+    span: 12
+    when: ${ $boolean(params.workspace) and params.query = 'activity' }
+    data: activity.value
+    rowKey: Key
+    search: true
+    columns:
+      - { field: TimeGenerated, label: Time, kind: datetime, sortable: true }
+      - { field: OperationNameValue, label: Operation, kind: code, filter: facet }
+      - { field: ActivitySubstatusValue, label: Reason, filter: facet }
+      - { field: Caller, label: Caller, filter: text }
+      - { field: ResourceGroup, label: Resource group, filter: facet }
+      - { field: ResourceId, label: Resource id, kind: code, hidden: true }
+      - { field: CorrelationId, label: Correlation id, kind: guid, hidden: true }
+    empty:
+      title: No failed operations
+      body: Nothing failed in this range, or the activity log isn't exported to this workspace (Diagnostic settings on the subscription).
+  # ── Function App errors ───────────────────────────────────────────────
+  - widget: table
+    title: Function App errors (FunctionAppLogs)
+    span: 12
+    when: ${ $boolean(params.workspace) and params.query = 'functionErrors' }
+    data: functionErrors.value
+    rowKey: Key
+    search: true
+    columns:
+      - { field: AppName, label: Function App, kind: identity, secondary: FunctionName, filter: facet }
+      - { field: ExceptionType, label: Exception, kind: code, filter: facet }
+      - { field: Errors, label: Errors, kind: number, sortable: true }
+      - { field: LastSeen, label: Last seen, kind: relativeTime, sortable: true }
+      - { field: Sample, label: Sample message }
+    empty:
+      title: No Function App errors
+      body: No errors were logged, or Function Apps don't send FunctionAppLogs to this workspace.
+  # ── Sign-in failures ──────────────────────────────────────────────────
+  - widget: table
+    title: Sign-in failures by reason (SigninLogs)
+    span: 12
+    when: ${ $boolean(params.workspace) and params.query = 'signInFailures' }
+    data: signInFailures.value
+    rowKey: Key
+    columns:
+      - { field: ResultType, label: Error code, kind: code }
+      - { field: ResultDescription, label: Reason }
+      - { field: AppDisplayName, label: Application, filter: facet }
+      - { field: Failures, label: Failures, kind: number, sortable: true }
+      - { field: Users, label: Users, kind: number }
+      - { field: LastSeen, label: Last seen, kind: relativeTime }
+    empty:
+      title: No sign-in failures
+      body: No failures in this range, or Entra sign-in logs aren't sent to this workspace.

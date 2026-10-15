@@ -1,0 +1,44 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#admin/serviceAnnouncement/messages/$entity",
+  "id": "MC905321",
+  "title": "Exchange Online: Throttling of external recipients per day for large senders",
+  "services": [
+    "Exchange Online"
+  ],
+  "category": "planForChange",
+  "severity": "normal",
+  "isMajorChange": true,
+  "actionRequiredByDateTime": "2026-12-29T09:00:00Z",
+  "startDateTime": "2026-09-17T09:00:00Z",
+  "endDateTime": "2027-01-13T09:00:00Z",
+  "lastModifiedDateTime": "2026-09-24T09:00:00Z",
+  "tags": [
+    "Admin impact",
+    "User impact"
+  ],
+  "hasAttachments": false,
+  "attachmentsArchive": null,
+  "viewPoint": {
+    "isRead": false,
+    "isArchived": false,
+    "isFavorited": false
+  },
+  "details": [
+    {
+      "name": "Summary",
+      "value": "Exchange Online: Throttling of external recipients per day for large senders"
+    },
+    {
+      "name": "RoadmapIds",
+      "value": "405411"
+    },
+    {
+      "name": "Platforms",
+      "value": "Web, Desktop, Mac"
+    }
+  ],
+  "body": {
+    "contentType": "html",
+    "content": "<p>Exchange Online will enforce an external recipient rate limit per mailbox per day.</p><p>Use connector-based solutions for bulk email.</p>"
+  }
+}

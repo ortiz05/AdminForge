@@ -1,0 +1,165 @@
+{
+  "value": [
+    {
+      "eventDataId": "30000000-0000-4000-8000-000000000900",
+      "correlationId": "30000000-0000-4000-8000-000000000a00",
+      "eventTimestamp": "2026-10-15T08:12:31Z",
+      "operationName": {
+        "value": "Microsoft.Web/sites/restart/action",
+        "localizedValue": "Restart Web App"
+      },
+      "status": {
+        "value": "Succeeded",
+        "localizedValue": "Succeeded"
+      },
+      "subStatus": {
+        "value": "OK",
+        "localizedValue": "OK"
+      },
+      "caller": "alex.admin@example.com",
+      "level": "Informational",
+      "category": {
+        "value": "Administrative",
+        "localizedValue": "Administrative"
+      }
+    },
+    {
+      "eventDataId": "30000000-0000-4000-8000-000000000901",
+      "correlationId": "30000000-0000-4000-8000-000000000a00",
+      "eventTimestamp": "2026-10-15T08:12:02Z",
+      "operationName": {
+        "value": "Microsoft.Web/sites/restart/action",
+        "localizedValue": "Restart Web App"
+      },
+      "status": {
+        "value": "Started",
+        "localizedValue": "Started"
+      },
+      "subStatus": {
+        "value": "",
+        "localizedValue": ""
+      },
+      "caller": "alex.admin@example.com",
+      "level": "Informational",
+      "category": {
+        "value": "Administrative",
+        "localizedValue": "Administrative"
+      }
+    },
+    {
+      "eventDataId": "30000000-0000-4000-8000-000000000902",
+      "correlationId": "30000000-0000-4000-8000-000000000a01",
+      "eventTimestamp": "2026-10-14T18:04:44Z",
+      "operationName": {
+        "value": "Microsoft.Web/sites/stop/action",
+        "localizedValue": "Stop Web App"
+      },
+      "status": {
+        "value": "Succeeded",
+        "localizedValue": "Succeeded"
+      },
+      "subStatus": {
+        "value": "OK",
+        "localizedValue": "OK"
+      },
+      "caller": "sam.ops@example.com",
+      "level": "Informational",
+      "category": {
+        "value": "Administrative",
+        "localizedValue": "Administrative"
+      }
+    },
+    {
+      "eventDataId": "30000000-0000-4000-8000-000000000903",
+      "correlationId": "30000000-0000-4000-8000-000000000a01",
+      "eventTimestamp": "2026-10-14T18:04:20Z",
+      "operationName": {
+        "value": "Microsoft.Web/sites/stop/action",
+        "localizedValue": "Stop Web App"
+      },
+      "status": {
+        "value": "Started",
+        "localizedValue": "Started"
+      },
+      "subStatus": {
+        "value": "",
+        "localizedValue": ""
+      },
+      "caller": "sam.ops@example.com",
+      "level": "Informational",
+      "category": {
+        "value": "Administrative",
+        "localizedValue": "Administrative"
+      }
+    },
+    {
+      "eventDataId": "30000000-0000-4000-8000-000000000904",
+      "correlationId": "30000000-0000-4000-8000-000000000a02",
+      "eventTimestamp": "2026-10-13T09:40:10Z",
+      "operationName": {
+        "value": "Microsoft.Resources/tags/write",
+        "localizedValue": "Update resource tags"
+      },
+      "status": {
+        "value": "Failed",
+        "localizedValue": "Failed"
+      },
+      "subStatus": {
+        "value": "Forbidden",
+        "localizedValue": "Forbidden"
+      },
+      "caller": "jo.dev@example.com",
+      "level": "Error",
+      "category": {
+        "value": "Administrative",
+        "localizedValue": "Administrative"
+      }
+    },
+    {
+      "eventDataId": "30000000-0000-4000-8000-000000000905",
+      "correlationId": "30000000-0000-4000-8000-000000000a02",
+      "eventTimestamp": "2026-10-09T14:22:05Z",
+      "operationName": {
+        "value": "Microsoft.Web/sites/config/write",
+        "localizedValue": "Update web app configuration"
+      },
+      "status": {
+        "value": "Succeeded",
+        "localizedValue": "Succeeded"
+      },
+      "subStatus": {
+        "value": "OK",
+        "localizedValue": "OK"
+      },
+      "caller": "30000000-0000-4000-8000-000000000103",
+      "level": "Informational",
+      "category": {
+        "value": "Administrative",
+        "localizedValue": "Administrative"
+      }
+    },
+    {
+      "eventDataId": "30000000-0000-4000-8000-000000000906",
+      "correlationId": "30000000-0000-4000-8000-000000000a03",
+      "eventTimestamp": "2026-10-09T14:21:40Z",
+      "operationName": {
+        "value": "Microsoft.Web/sites/config/write",
+        "localizedValue": "Update web app configuration"
+      },
+      "status": {
+        "value": "Started",
+        "localizedValue": "Started"
+      },
+      "subStatus": {
+        "value": "",
+        "localizedValue": ""
+      },
+      "caller": "30000000-0000-4000-8000-000000000103",
+      "level": "Informational",
+      "category": {
+        "value": "Administrative",
+        "localizedValue": "Administrative"
+      }
+    }
+  ]
+}

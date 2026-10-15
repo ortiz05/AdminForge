@@ -1,0 +1,87 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#security/incidents(alerts())/$entity",
+  "id": "4219",
+  "tenantId": "00000000-0000-4000-8000-0000000000f0",
+  "status": "inProgress",
+  "incidentWebUrl": "https://security.microsoft.com/incidents/4219?tid=00000000-0000-4000-8000-0000000000f0",
+  "redirectIncidentId": null,
+  "displayName": "Email messages containing phish URLs removed after delivery",
+  "createdDateTime": "2026-10-12T11:00:00Z",
+  "lastUpdateDateTime": "2026-10-12T13:00:00Z",
+  "assignedTo": "jordan.lee@example.com",
+  "classification": "unknown",
+  "determination": "unknown",
+  "severity": "informational",
+  "customTags": [],
+  "systemTags": [],
+  "description": null,
+  "summary": null,
+  "lastModifiedBy": "alex.admin@example.com",
+  "resolvingComment": null,
+  "comments": [],
+  "alerts": [
+    {
+      "id": "da638647315200000010_-1194836010",
+      "providerAlertId": "00000010-0000-4000-8000-00000000c0de",
+      "incidentId": "4219",
+      "status": "inProgress",
+      "severity": "informational",
+      "classification": null,
+      "determination": null,
+      "serviceSource": "microsoftDefenderForOffice365",
+      "detectionSource": "microsoftDefenderForOffice365",
+      "productName": "Microsoft Defender for Office 365",
+      "detectorId": "0000000a-1111-4000-8000-000000000000",
+      "tenantId": "00000000-0000-4000-8000-0000000000f0",
+      "title": "Email messages containing phish URLs removed after delivery",
+      "description": "",
+      "recommendedActions": "",
+      "category": "InitialAccess",
+      "assignedTo": "jordan.lee@example.com",
+      "alertWebUrl": "https://security.microsoft.com/alerts/da638647315200000010_-1194836010?tid=00000000-0000-4000-8000-0000000000f0",
+      "incidentWebUrl": "https://security.microsoft.com/incidents/4219?tid=00000000-0000-4000-8000-0000000000f0",
+      "actorDisplayName": null,
+      "threatDisplayName": null,
+      "threatFamilyName": null,
+      "mitreTechniques": [
+        "T1566.002"
+      ],
+      "createdDateTime": "2026-10-12T11:00:00Z",
+      "lastUpdateDateTime": "2026-10-12T12:00:00Z",
+      "resolvedDateTime": null,
+      "firstActivityDateTime": "2026-10-12T10:00:00Z",
+      "lastActivityDateTime": "2026-10-12T11:00:00Z",
+      "comments": [],
+      "evidence": [
+        {
+          "@odata.type": "#microsoft.graph.security.analyzedMessageEvidence",
+          "createdDateTime": "2026-10-12T09:00:00Z",
+          "verdict": "malicious",
+          "remediationStatus": "remediated",
+          "roles": [],
+          "tags": [],
+          "subject": "Action required: invoice overdue",
+          "recipientEmailAddress": "isaac.mensah@example.com",
+          "senderIp": "198.51.100.23",
+          "p1Sender": {
+            "emailAddress": "billing@invoices-example.net",
+            "displayName": "Billing"
+          },
+          "deliveryAction": "delivered",
+          "deliveryLocation": "inbox",
+          "internetMessageId": "<msg-0914@invoices-example.net>"
+        },
+        {
+          "@odata.type": "#microsoft.graph.security.urlEvidence",
+          "createdDateTime": "2026-10-12T09:00:00Z",
+          "verdict": "malicious",
+          "remediationStatus": "remediated",
+          "roles": [],
+          "tags": [],
+          "url": "https://invoices-example.net/view?id=0914"
+        }
+      ],
+      "systemTags": []
+    }
+  ]
+}

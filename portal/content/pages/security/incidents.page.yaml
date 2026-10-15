@@ -1,0 +1,228 @@
+$schema: ../../../packages/schemas/generated/page.schema.json
+kind: page
+id: security.incidents
+version: 1.0.0
+title: Incidents
+summary: Microsoft Defender XDR incidents — correlated alerts across endpoints, identities, email and cloud apps — with triage actions.
+owner: security-team
+tags: [security, defender, incidents]
+template: list-detail
+nav: { section: security, label: Incidents, icon: siren, order: 10 }
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    graph: [SecurityIncident.Read.All]
+  entraRoles: [Security Reader]
+  licences: [defender]
+
+params:
+  status:
+    type: enum
+    label: Status
+    facet: true
+    default: open
+    values:
+      - { value: open, label: "Open (active, in progress, awaiting action)" }
+      - { value: active, label: Active }
+      - { value: inProgress, label: In progress }
+      - { value: awaitingAction, label: Awaiting action }
+      - { value: resolved, label: Resolved }
+      - { value: redirected, label: Redirected }
+      - { value: any, label: Any status }
+  severity:
+    type: enum
+    label: Severity
+    facet: true
+    default: any
+    values:
+      - { value: any, label: Any severity }
+      - { value: high, label: High }
+      - { value: medium, label: Medium }
+      - { value: low, label: Low }
+      - { value: informational, label: Informational }
+  assignment:
+    type: enum
+    label: Assigned to
+    facet: true
+    default: any
+    values:
+      - { value: any, label: Anyone }
+      - { value: me, label: Me }
+  since: { type: date, label: Created since, default: -30d, facet: true }
+
+filters:
+  facets: [status, severity, assignment, since]
+
+savedViews:
+  enabled: true
+  shared: true
+  presets:
+    - { name: Open high severity, params: { status: open, severity: high } }
+    - { name: My open incidents, params: { status: open, assignment: me } }
+    - { name: Awaiting action, params: { status: awaitingAction } }
+    - { name: Resolved in the last 30 days, params: { status: resolved } }
+
+datasources:
+  incidents:
+    source: graph
+    request:
+      path: /security/incidents
+      query:
+        $top: 50
+        # Enum values are matched against fixed lists; the signed-in UPN goes through $odata().
+        $filter: >-
+          ${ $join([
+               params.status = 'open' ? "(status eq 'active' or status eq 'inProgress' or status eq 'awaitingAction')",
+               params.status in ['active', 'inProgress', 'awaitingAction', 'resolved', 'redirected'] ? "status eq " & $odata(params.status),
+               params.severity in ['high', 'medium', 'low', 'informational'] ? "severity eq " & $odata(params.severity),
+               params.assignment = 'me' ? "assignedTo eq " & $odata(user.upn),
+               params.since ? "createdDateTime ge " & $iso(params.since)
+             ][$], ' and ') }
+    paging: cursor
+    cache: { ttl: 60 }
+  summary:
+    label: Open incidents (all severities)
+    source: graph
+    request:
+      path: /security/incidents
+      query:
+        $top: 50
+        $filter: "status eq 'active' or status eq 'inProgress' or status eq 'awaitingAction'"
+    paging: all
+    maxItems: 2000
+    cache: { ttl: 120 }
+    transform: >-
+      ${ (
+        $open := [value.value[status in ['active', 'inProgress', 'awaitingAction']]];
+        {
+          "open": $count($open),
+          "high": $count($open[severity = 'high']),
+          "unassigned": $count($open[$not($exists(assignedTo)) or assignedTo = null or assignedTo = '']),
+          "mine": $count($open[assignedTo = $$.user.upn]),
+          "bySeverity": [
+            { "severity": "High", "count": $count($open[severity = 'high']) },
+            { "severity": "Medium", "count": $count($open[severity = 'medium']) },
+            { "severity": "Low", "count": $count($open[severity = 'low']) },
+            { "severity": "Informational", "count": $count($open[severity = 'informational']) }
+          ]
+        }
+      ) }
+
+layout:
+  - widget: kpi
+    id: open_high
+    data: summary.high
+    label: Open high severity
+    format: number
+    status: "${ value > 0 ? 'crit' : 'ok' }"
+    href: /p/security.incidents?status=open&severity=high
+  - widget: kpi
+    id: open_unassigned
+    data: summary.unassigned
+    label: Open and unassigned
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+  - widget: kpi
+    id: open_mine
+    data: summary.mine
+    label: Assigned to me
+    format: number
+    href: /p/security.incidents?status=open&assignment=me
+  - widget: kpi
+    id: open_total
+    data: summary.open
+    label: Open incidents
+    format: number
+  - widget: table
+    id: incidents
+    span: 12
+    data: incidents.value
+    rowKey: id
+    selection: multi
+    search: true
+    pageSize: 50
+    empty:
+      title: No incidents match these filters
+      body: Widen the status or date filters. Incidents appear here as Microsoft Defender XDR correlates alerts.
+    columns:
+      - { field: displayName, label: Incident, kind: identity, secondary: id, sortable: true }
+      - field: severity
+        label: Severity
+        kind: status
+        sortable: true
+        map: { high: [crit, High], medium: [warn, Medium], low: [info, Low], informational: [neutral, Informational] }
+        filter: { type: facet, param: severity }
+      - field: status
+        label: Status
+        kind: status
+        map:
+          active: [warn, Active]
+          inProgress: [info, In progress]
+          awaitingAction: [warn, Awaiting action]
+          resolved: [ok, Resolved]
+          redirected: [neutral, Redirected]
+        filter: { type: facet, param: status }
+      - { field: assignedTo, label: Assigned to, filter: text }
+      - field: classification
+        label: Classification
+        kind: status
+        map:
+          unknown: [neutral, Not set]
+          truePositive: [crit, True positive]
+          falsePositive: [ok, False positive]
+          informationalExpectedActivity: [info, "Informational, expected activity"]
+        filter: facet
+        hidden: true
+      - { field: determination, label: Determination, hidden: true, filter: facet }
+      - { field: customTags, label: Tags, kind: tags, filter: facet }
+      - { field: systemTags, label: System tags, kind: tags, hidden: true }
+      - { field: createdDateTime, label: Created, kind: relativeTime, sortable: true, filter: { type: date, param: since } }
+      - { field: lastUpdateDateTime, label: Last activity, kind: relativeTime, sortable: true }
+      - { field: redirectIncidentId, label: Merged into, kind: code, hidden: true }
+    inspect:
+      page: security.incident
+      params:
+        id: ${ row.id }
+    rowActions:
+      - playbook: security.assign-incident
+        label: Assign to me
+        icon: user-check
+        inputs:
+          incidentId: ${ row.id }
+          assignee: ${ user.upn }
+        when: ${ $not(row.assignedTo = user.upn) and $not(row.status = 'redirected') }
+      - playbook: security.update-incident
+        label: Update status
+        icon: pencil-simple
+        inputs:
+          incidentId: ${ row.id }
+        when: ${ $not(row.status = 'redirected') }
+      - label: Open in Microsoft Defender
+        icon: arrow-square-out
+        href: ${ row.incidentWebUrl }
+    bulkActions:
+      - playbook: security.assign-incident
+        label: Assign to me
+        icon: user-check
+        forEach:
+          inputs:
+            incidentId: ${ row.id }
+            assignee: ${ user.upn }
+          concurrency: 5
+        maxItems: 100
+        when: ${ $count(rows[$not(status = 'redirected')]) > 0 }
+      - playbook: security.update-incident
+        label: Update status
+        icon: pencil-simple
+        forEach:
+          inputs:
+            incidentId: ${ row.id }
+          concurrency: 5
+        maxItems: 100
+        when: ${ $count(rows[$not(status = 'redirected')]) > 0 }
+
+export:
+  formats: [csv, xlsx]
+  fileName: defender-incidents
+  data: incidents.value
+  columns: visible

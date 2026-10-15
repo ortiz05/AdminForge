@@ -1,0 +1,35 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#admin/serviceAnnouncement/issues/$entity",
+  "id": "EX910442",
+  "title": "Users may be unable to open shared mailboxes in Outlook on the web",
+  "service": "Exchange Online",
+  "feature": "Outlook on the web",
+  "featureGroup": "Exchange Online",
+  "classification": "incident",
+  "status": "serviceRestored",
+  "origin": "microsoft",
+  "isResolved": true,
+  "startDateTime": "2026-10-12T03:00:00Z",
+  "endDateTime": "2026-10-12T08:00:00Z",
+  "lastModifiedDateTime": "2026-10-12T09:00:00Z",
+  "impactDescription": "Users received an error when opening a shared mailbox they have Full Access to.",
+  "posts": [
+    {
+      "createdDateTime": "2026-10-12T03:30:00Z",
+      "postType": "regular",
+      "description": {
+        "contentType": "html",
+        "content": "<p><b>Current status:</b> We are investigating.</p>"
+      }
+    },
+    {
+      "createdDateTime": "2026-10-12T09:00:00Z",
+      "postType": "regular",
+      "description": {
+        "contentType": "html",
+        "content": "<p><b>Final status:</b> We deployed a fix and confirmed that impact is remediated.</p><p><b>Root cause:</b> A code regression in a recent update.</p>"
+      }
+    }
+  ],
+  "details": []
+}

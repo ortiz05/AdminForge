@@ -1,0 +1,17 @@
+$schema: ../../../packages/schemas/generated/schedule.schema.json
+kind: schedule
+id: sweep.dns-mx
+version: 1.0.0
+title: "Hourly probe: Mail exchanger (MX) for the primary domain"
+summary: Runs the probes.dns-mx probe every hour (minute 13, staggered across the sweep) as the automation identity.
+owner: portal-admins
+tags: [synthetic, probe-sweep]
+cron: "13 * * * *"
+timezone: UTC
+enabled: true
+identity: automation
+job:
+  kind: probe
+  ref: probes.dns-mx
+timeoutSeconds: 120
+overlap: skip

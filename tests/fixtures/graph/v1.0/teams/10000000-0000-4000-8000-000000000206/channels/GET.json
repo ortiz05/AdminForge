@@ -1,0 +1,23 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#teams('10000000-0000-4000-8000-000000000206')/channels",
+  "value": [
+    {
+      "id": "19:0002060general@thread.tacv2",
+      "displayName": "General",
+      "description": null,
+      "membershipType": "standard",
+      "createdDateTime": "2025-01-03T09:00:00Z",
+      "email": "General.exec-leadership@example.com",
+      "webUrl": "https://teams.microsoft.com/l/channel/19%3a0002060%40thread.tacv2/General?groupId=10000000-0000-4000-8000-000000000206"
+    },
+    {
+      "id": "19:0002061boardprep@thread.tacv2",
+      "displayName": "Board prep",
+      "description": "Board prep channel",
+      "membershipType": "private",
+      "createdDateTime": "2025-01-06T09:00:00Z",
+      "email": "",
+      "webUrl": "https://teams.microsoft.com/l/channel/19%3a0002061%40thread.tacv2/Board%20prep?groupId=10000000-0000-4000-8000-000000000206"
+    }
+  ]
+}

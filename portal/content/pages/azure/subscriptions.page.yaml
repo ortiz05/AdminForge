@@ -1,0 +1,112 @@
+$schema: ../../../packages/schemas/generated/page.schema.json
+kind: page
+id: azure.subscriptions
+version: 1.0.0
+title: Subscriptions
+summary: Azure subscriptions your account can read, with their state and how many resources each holds.
+owner: azure-team
+tags: [azure, subscriptions]
+template: list-detail
+nav: { section: azure, label: Subscriptions, icon: credit-card, order: 10 }
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    arm: [user_impersonation]
+  azureRoles: [Reader]
+
+datasources:
+  subscriptions:
+    source: arm
+    request:
+      path: /subscriptions
+      apiVersion: "2022-12-01"
+    paging: cursor
+    cache: { ttl: 300 }
+  usage:
+    source: resourceGraph
+    query: |
+      // af:azure.subscriptions#usage
+      resourcecontainers
+      | where type =~ 'microsoft.resources/subscriptions'
+      | project subscriptionId, subscription = name, state = tostring(properties.state)
+      | join kind=leftouter (resources | summarize resources = count() by subscriptionId) on subscriptionId
+      | extend resources = coalesce(resources, 0)
+      | project subscription, subscriptionId, state, resources
+      | order by resources desc
+    transform: >-
+      ${ (
+        $rows := [value.value];
+        {
+          'rows': [$rows[[0..9]]],
+          'total': $count($rows),
+          'notEnabled': $count($rows[state != 'Enabled'])
+        }
+      ) }
+    cache: { ttl: 300 }
+
+layout:
+  - widget: kpi
+    data: usage.total
+    label: Subscriptions
+    format: number
+  - widget: kpi
+    data: usage.notEnabled
+    label: Not enabled
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+  - widget: chart
+    id: resourcesPerSubscription
+    title: Resources per subscription (top 10)
+    span: 6
+    type: bar
+    data: usage.rows
+    x: subscription
+    y: resources
+    format: number
+  - widget: table
+    id: subscriptions
+    span: 12
+    data: subscriptions.value
+    rowKey: subscriptionId
+    search: true
+    columns:
+      - { field: displayName, label: Subscription, kind: identity, secondary: subscriptionId, sortable: true }
+      - field: state
+        label: State
+        kind: status
+        map: { Enabled: [ok, Enabled], Warned: [warn, Warned], PastDue: [warn, Past due], Disabled: [crit, Disabled], Deleted: [crit, Deleted] }
+        filter: facet
+      - { field: authorizationSource, label: Access via, filter: facet, hidden: true }
+      - { field: subscriptionPolicies.quotaId, label: Offer, filter: facet, hidden: true }
+      - { field: subscriptionPolicies.spendingLimit, label: Spending limit, hidden: true }
+      - { field: tenantId, label: Tenant id, kind: guid, hidden: true }
+      - { field: subscriptionId, label: Subscription id, kind: guid, hidden: true }
+    inspect:
+      page: azure.subscription
+      params:
+        id: ${ row.subscriptionId }
+    rowActions:
+      - label: Show resources
+        icon: cube
+        href: /p/azure.resources?subscriptionId=${ $encode(row.subscriptionId) }
+      - label: Role assignments
+        icon: identification-badge
+        href: /p/azure.role-assignments?subscriptionId=${ $encode(row.subscriptionId) }
+      - playbook: azure.create-resource-group
+        label: Create resource group
+        icon: folder-plus
+        inputs:
+          subscriptionId: ${ row.subscriptionId }
+        when: ${ row.state = 'Enabled' }
+      - label: Open in Azure portal
+        icon: arrow-square-out
+        href: https://portal.azure.com/#resource/subscriptions/${ $encode(row.subscriptionId) }/overview
+    empty:
+      title: No subscriptions visible
+      body: Your account has no Azure RBAC role on any subscription in this tenant. Ask a subscription Owner for Reader, or activate an eligible role in PIM.
+
+export:
+  formats: [csv, xlsx]
+  fileName: azure-subscriptions
+  data: subscriptions.value
+  columns: all

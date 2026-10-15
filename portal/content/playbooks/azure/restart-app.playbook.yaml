@@ -1,0 +1,69 @@
+$schema: ../../../packages/schemas/generated/playbook.schema.json
+kind: playbook
+id: azure.restart-app
+version: 1.0.0
+title: Restart Function App or web app
+summary: Restarts a running Function App or App Service web app. In-flight executions are interrupted; the app is unavailable for a short time.
+owner: azure-team
+tags: [azure, functions, app-service]
+risk: medium
+mode: write
+requires:
+  portalRoles: [Portal.Operator]
+  scopes:
+    arm: [user_impersonation]
+  azureRoles: [Website Contributor]
+confirm:
+  type: click
+  message: Restart the app? Running executions and open connections are dropped.
+approval:
+  required: false
+
+inputs:
+  subscriptionId: { type: string, format: guid, label: Subscription, picker: subscription }
+  resourceGroup: { type: string, label: Resource group, pattern: "^[-\\w._()]{1,90}$" }
+  name: { type: string, label: App name, pattern: "^[A-Za-z0-9][A-Za-z0-9-]{0,58}$" }
+  reason: { type: string, label: Reason, minLength: 5, multiline: true, description: Recorded in the audit log. }
+
+steps:
+  - id: lookup
+    type: arm
+    mode: read
+    describe: Read the app and its current state
+    request:
+      method: GET
+      path: /subscriptions/${ $encode($guid(inputs.subscriptionId)) }/resourceGroups/${ $encode(inputs.resourceGroup) }/providers/Microsoft.Web/sites/${ $encode(inputs.name) }
+      apiVersion: "2023-12-01"
+
+  - id: guard
+    type: assert
+    that: ${ steps.lookup.output.properties.state = 'Running' }
+    message: ${ inputs.name & ' is ' & $lowercase(steps.lookup.output.properties.state) & '; start it instead of restarting.' }
+
+  - id: restart
+    type: arm
+    mode: write
+    describe: ${ 'Restart ' & inputs.name }
+    retry: { max: 2, backoff: exponential, delay: 5s }
+    request:
+      method: POST
+      path: /subscriptions/${ $encode($guid(inputs.subscriptionId)) }/resourceGroups/${ $encode(inputs.resourceGroup) }/providers/Microsoft.Web/sites/${ $encode(inputs.name) }/restart
+      apiVersion: "2023-12-01"
+
+outputs:
+  summary: ${ inputs.name & ' restarted.' }
+
+tests:
+  - name: refuses a stopped app
+    inputs: { subscriptionId: 00000000-0000-4000-8000-0000000000a1, resourceGroup: rg-example-functions, name: func-example-orders, reason: incident 5120 }
+    mocks:
+      lookup: { name: func-example-orders, properties: { state: Stopped } }
+    expect: { status: failed, failedStep: guard }
+  - name: plans a restart for a running app
+    inputs: { subscriptionId: 00000000-0000-4000-8000-0000000000a1, resourceGroup: rg-example-functions, name: func-example, reason: incident 5121 }
+    mocks:
+      lookup: { name: func-example, properties: { state: Running } }
+    expect:
+      status: succeeded
+      plan: [restart]
+      outputs: { summary: func-example restarted. }

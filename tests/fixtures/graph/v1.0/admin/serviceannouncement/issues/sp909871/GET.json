@@ -1,0 +1,27 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#admin/serviceAnnouncement/issues/$entity",
+  "id": "SP909871",
+  "title": "Some users may see slow page loads for SharePoint Online sites",
+  "service": "SharePoint Online",
+  "feature": "SharePoint Features",
+  "featureGroup": "SharePoint Features",
+  "classification": "advisory",
+  "status": "postIncidentReviewPublished",
+  "origin": "microsoft",
+  "isResolved": true,
+  "startDateTime": "2026-10-08T05:00:00Z",
+  "endDateTime": "2026-10-08T13:00:00Z",
+  "lastModifiedDateTime": "2026-10-10T09:00:00Z",
+  "impactDescription": "Pages took up to 20 seconds to load for some users in Europe.",
+  "posts": [
+    {
+      "createdDateTime": "2026-10-08T09:00:00Z",
+      "postType": "regular",
+      "description": {
+        "contentType": "html",
+        "content": "<p><b>Final status:</b> Performance returned to normal after rebalancing traffic.</p>"
+      }
+    }
+  ],
+  "details": []
+}

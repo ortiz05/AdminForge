@@ -1,0 +1,44 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#admin/serviceAnnouncement/messages/$entity",
+  "id": "MC911455",
+  "title": "Microsoft Entra: Mandatory multifactor authentication for admin portals — phase 2",
+  "services": [
+    "Microsoft Entra"
+  ],
+  "category": "preventOrFixIssue",
+  "severity": "high",
+  "isMajorChange": true,
+  "actionRequiredByDateTime": "2026-11-29T09:00:00Z",
+  "startDateTime": "2026-09-15T09:00:00Z",
+  "endDateTime": "2027-01-13T09:00:00Z",
+  "lastModifiedDateTime": "2026-10-13T09:00:00Z",
+  "tags": [
+    "Admin impact",
+    "Change to user experience"
+  ],
+  "hasAttachments": false,
+  "attachmentsArchive": null,
+  "viewPoint": {
+    "isRead": false,
+    "isArchived": false,
+    "isFavorited": false
+  },
+  "details": [
+    {
+      "name": "Summary",
+      "value": "Microsoft Entra: Mandatory multifactor authentication for admin portals — phase 2"
+    },
+    {
+      "name": "RoadmapIds",
+      "value": "401546"
+    },
+    {
+      "name": "Platforms",
+      "value": "Web, Desktop, Mac"
+    }
+  ],
+  "body": {
+    "contentType": "html",
+    "content": "<p>Phase 2 of mandatory MFA extends to Azure CLI, PowerShell and infrastructure-as-code tools.</p><p><b>What you need to do to prepare:</b> Make sure break-glass accounts and automation use workload identities or certificate-based authentication.</p>"
+  }
+}

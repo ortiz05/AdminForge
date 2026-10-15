@@ -1,0 +1,150 @@
+$schema: ../../../packages/schemas/generated/page.schema.json
+kind: page
+id: azure.arc-kubernetes
+version: 1.0.0
+title: Azure Arc Kubernetes
+summary: Kubernetes clusters connected through Azure Arc — connectivity, Kubernetes and agent versions, size, and cluster extensions.
+owner: azure-team
+tags: [azure, arc, hybrid, kubernetes]
+template: list-detail
+nav: { section: azure, label: Arc Kubernetes, icon: steering-wheel, order: 55 }
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    arm: [user_impersonation]
+  azureRoles: [Reader]
+
+params:
+  q: { type: string, default: "", label: Search, placeholder: Cluster name contains… }
+  connectivity:
+    type: enum
+    label: Connectivity
+    facet: true
+    default: All
+    values: [All, Connected, Connecting, Offline, Expired]
+  subscriptionId: { type: string, format: guid, label: Subscription, picker: subscription, facet: true }
+  resourceGroup: { type: string, label: Resource group, facet: true }
+
+filters:
+  search: q
+  facets: [connectivity, subscriptionId, resourceGroup]
+
+savedViews:
+  enabled: true
+  shared: true
+  presets:
+    - { name: Offline clusters, params: { connectivity: Offline } }
+    - { name: Expired clusters, params: { connectivity: Expired } }
+
+datasources:
+  clusters:
+    source: resourceGraph
+    query: |
+      // af:azure.arc-kubernetes#clusters
+      resources
+      | where type =~ 'microsoft.kubernetes/connectedclusters'
+      ${ params.subscriptionId ? "| where subscriptionId == '" & $guid(params.subscriptionId) & "'" }
+      ${ params.resourceGroup ? "| where resourceGroup =~ '" & $replace(params.resourceGroup, /[^A-Za-z0-9._()-]/, '') & "'" }
+      ${ params.q ? "| where name contains '" & $replace(params.q, /[^A-Za-z0-9 ._()-]/, '') & "'" }
+      | extend connectivityStatus = tostring(properties.connectivityStatus), kubernetesVersion = tostring(properties.kubernetesVersion), agentVersion = tostring(properties.agentVersion), distribution = tostring(properties.distribution), infrastructure = tostring(properties.infrastructure), totalNodeCount = toint(properties.totalNodeCount), totalCoreCount = toint(properties.totalCoreCount), lastConnectivityTime = todatetime(properties.lastConnectivityTime), certificateExpiry = todatetime(properties.managedIdentityCertificateExpirationTime), provisioningState = tostring(properties.provisioningState)
+      ${ params.connectivity in ['Connected', 'Connecting', 'Offline', 'Expired'] ? "| where connectivityStatus == '" & params.connectivity & "'" }
+      | extend lid = tolower(id)
+      | join kind=leftouter (kubernetesconfigurationresources | where type =~ 'microsoft.kubernetesconfiguration/extensions' | extend clusterId = tostring(split(tolower(id), '/providers/microsoft.kubernetesconfiguration/')[0]), extFailed = tostring(properties.provisioningState) != 'Succeeded' | summarize extensions = count(), failedExtensions = countif(extFailed), extensionTypes = make_set(tostring(properties.extensionType)) by clusterId) on $left.lid == $right.clusterId
+      | join kind=leftouter (resourcecontainers | where type =~ 'microsoft.resources/subscriptions' | project subscriptionId, subscriptionName = name) on subscriptionId
+      | extend extensions = coalesce(extensions, 0), failedExtensions = coalesce(failedExtensions, 0)
+      | project id, name, connectivityStatus, kubernetesVersion, agentVersion, distribution, infrastructure, totalNodeCount, totalCoreCount, lastConnectivityTime, certificateExpiry, provisioningState, extensions, failedExtensions, extensionTypes, location, resourceGroup, subscriptionId, subscriptionName, tags
+      | order by name asc
+    paging: all
+    maxItems: 5000
+    transform: >-
+      ${ (
+        $rows := [value.value];
+        {
+          'rows': $rows,
+          'total': $count($rows),
+          'connected': $count($rows[connectivityStatus = 'Connected']),
+          'notConnected': $count($rows[connectivityStatus in ['Offline', 'Expired']]),
+          'nodes': $sum($rows.totalNodeCount),
+          'cores': $sum($rows.totalCoreCount)
+        }
+      ) }
+    cache: { ttl: 120 }
+
+layout:
+  - widget: kpi
+    data: clusters.total
+    label: Clusters
+    format: number
+  - widget: kpi
+    data: clusters.connected
+    label: Connected
+    format: number
+    status: ok
+  - widget: kpi
+    data: clusters.notConnected
+    label: Offline or expired
+    format: number
+    status: "${ value > 0 ? 'crit' : 'ok' }"
+    href: /p/azure.arc-kubernetes?connectivity=Offline
+  - widget: kpi
+    data: clusters.nodes
+    label: Nodes
+    format: number
+  - widget: table
+    id: clusters
+    span: 12
+    data: clusters.rows
+    rowKey: id
+    selection: multi
+    columns:
+      - { field: name, label: Cluster, kind: identity, secondary: distribution, sortable: true }
+      - field: connectivityStatus
+        label: Connectivity
+        kind: status
+        map: { Connected: [ok, Connected], Connecting: [info, Connecting], Offline: [crit, Offline], Expired: [crit, Expired] }
+        filter: { type: facet, param: connectivity }
+      - { field: lastConnectivityTime, label: Last connected, kind: relativeTime, sortable: true, filter: date }
+      - { field: kubernetesVersion, label: Kubernetes, filter: facet }
+      - { field: agentVersion, label: Arc agent, filter: facet }
+      - { field: infrastructure, label: Infrastructure, filter: facet }
+      - { field: totalNodeCount, label: Nodes, kind: number, filter: range }
+      - { field: totalCoreCount, label: Cores, kind: number, hidden: true }
+      - { field: extensions, label: Extensions, kind: number }
+      - { field: failedExtensions, label: Failed extensions, kind: number, filter: range }
+      - { field: extensionTypes, label: Extension types, kind: tags, hidden: true }
+      - { field: certificateExpiry, label: Identity certificate expires, kind: date, hidden: true }
+      - { field: resourceGroup, label: Resource group, filter: facet }
+      - { field: subscriptionName, label: Subscription, filter: facet, hidden: true }
+      - { field: location, label: Location, filter: facet, hidden: true }
+      - { field: tags, label: Tags, kind: tags, hidden: true }
+      - { field: id, label: Resource id, kind: code, hidden: true }
+    inspect:
+      page: azure.resource
+      params:
+        id: ${ row.id }
+    rowActions:
+      - label: Open in Azure portal
+        icon: arrow-square-out
+        href: https://portal.azure.com/#resource${ row.id }/overview
+      - label: Troubleshooting guide
+        icon: book-open
+        href: https://learn.microsoft.com/azure/azure-arc/kubernetes/troubleshooting
+        when: ${ row.connectivityStatus != 'Connected' }
+    bulkActions:
+      - playbook: azure.add-tags
+        label: Add or update a tag
+        icon: tag
+        forEach:
+          inputs:
+            resourceId: ${ row.id }
+          concurrency: 5
+        maxItems: 200
+    empty:
+      title: No Arc-enabled Kubernetes clusters
+      body: Connect a cluster with az connectedk8s connect, or clear the filters.
+
+export:
+  formats: [csv, xlsx]
+  fileName: azure-arc-kubernetes
+  data: clusters.rows
+  columns: visible

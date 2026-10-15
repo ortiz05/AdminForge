@@ -2,6 +2,3840 @@
   "$fixture": {
     "variants": [
       {
+        "match": {
+          "bodyIncludes": "af:azure.overview#counts"
+        },
+        "body": {
+          "totalRecords": 1,
+          "count": 1,
+          "resultTruncated": "false",
+          "data": [
+            {
+              "resources": 27,
+              "untagged": 10,
+              "arcDisconnected": 3,
+              "functionApps": 4,
+              "stoppedFunctionApps": 1,
+              "subscriptions": 2,
+              "resourceGroups": 9
+            }
+          ]
+        }
+      },
+      {
+        "match": {
+          "bodyIncludes": "af:azure.overview#alerts"
+        },
+        "body": {
+          "totalRecords": 5,
+          "count": 5,
+          "resultTruncated": "false",
+          "data": [
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/providers/Microsoft.AlertsManagement/alerts/30000000-0000-4000-8000-000000000302",
+              "name": "Arc server heartbeat missing",
+              "severity": "Sev0",
+              "alertState": "New",
+              "targetResource": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-arc/providers/Microsoft.HybridCompute/machines/srv-example-02",
+              "targetResourceName": "srv-example-02",
+              "targetResourceType": "microsoft.hybridcompute/machines",
+              "startDateTime": "2026-10-12T08:20:00Z",
+              "monitorService": "Log Alerts V2"
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/providers/Microsoft.AlertsManagement/alerts/30000000-0000-4000-8000-000000000301",
+              "name": "Function App HTTP 5xx above 5%",
+              "severity": "Sev1",
+              "alertState": "New",
+              "targetResource": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-functions/providers/Microsoft.Web/sites/func-example",
+              "targetResourceName": "func-example",
+              "targetResourceType": "microsoft.web/sites",
+              "startDateTime": "2026-10-15T08:10:00Z",
+              "monitorService": "Platform"
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/providers/Microsoft.AlertsManagement/alerts/30000000-0000-4000-8000-000000000304",
+              "name": "SQL server DTU above 90%",
+              "severity": "Sev2",
+              "alertState": "Acknowledged",
+              "targetResource": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-data/providers/Microsoft.Sql/servers/sql-example-prod",
+              "targetResourceName": "sql-example-prod",
+              "targetResourceType": "microsoft.sql/servers",
+              "startDateTime": "2026-10-15T07:30:00Z",
+              "monitorService": "Platform"
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/providers/Microsoft.AlertsManagement/alerts/30000000-0000-4000-8000-000000000305",
+              "name": "Key Vault saturation above 75%",
+              "severity": "Sev3",
+              "alertState": "Acknowledged",
+              "targetResource": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-data/providers/Microsoft.KeyVault/vaults/kv-example-prod",
+              "targetResourceName": "kv-example-prod",
+              "targetResourceType": "microsoft.keyvault/vaults",
+              "startDateTime": "2026-10-14T11:00:00Z",
+              "monitorService": "Platform"
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/providers/Microsoft.AlertsManagement/alerts/30000000-0000-4000-8000-000000000303",
+              "name": "Function App Orders stopped",
+              "severity": "Sev4",
+              "alertState": "New",
+              "targetResource": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-functions/providers/Microsoft.Web/sites/func-example-orders",
+              "targetResourceName": "func-example-orders",
+              "targetResourceType": "microsoft.web/sites",
+              "startDateTime": "2026-10-14T18:05:00Z",
+              "monitorService": "ActivityLog Administrative"
+            }
+          ]
+        }
+      },
+      {
+        "match": {
+          "bodyIncludes": "af:azure.overview#bytype"
+        },
+        "body": {
+          "totalRecords": 10,
+          "count": 10,
+          "resultTruncated": "false",
+          "data": [
+            {
+              "type": "microsoft.hybridcompute/machines",
+              "resources": 6
+            },
+            {
+              "type": "microsoft.web/sites",
+              "resources": 5
+            },
+            {
+              "type": "microsoft.kubernetes/connectedclusters",
+              "resources": 3
+            },
+            {
+              "type": "microsoft.operationalinsights/workspaces",
+              "resources": 2
+            },
+            {
+              "type": "microsoft.storage/storageaccounts",
+              "resources": 2
+            },
+            {
+              "type": "microsoft.insights/components",
+              "resources": 1
+            },
+            {
+              "type": "microsoft.compute/disks",
+              "resources": 1
+            },
+            {
+              "type": "microsoft.keyvault/vaults",
+              "resources": 1
+            },
+            {
+              "type": "microsoft.network/networksecuritygroups",
+              "resources": 1
+            },
+            {
+              "type": "microsoft.network/publicipaddresses",
+              "resources": 1
+            }
+          ]
+        }
+      },
+      {
+        "match": {
+          "bodyIncludes": "af:azure.overview#bylocation"
+        },
+        "body": {
+          "totalRecords": 3,
+          "count": 3,
+          "resultTruncated": "false",
+          "data": [
+            {
+              "location": "westeurope",
+              "resources": 19
+            },
+            {
+              "location": "northeurope",
+              "resources": 6
+            },
+            {
+              "location": "eastus",
+              "resources": 2
+            }
+          ]
+        }
+      },
+      {
+        "match": {
+          "bodyIncludes": "af:azure.subscriptions#usage"
+        },
+        "body": {
+          "totalRecords": 2,
+          "count": 2,
+          "resultTruncated": "false",
+          "data": [
+            {
+              "subscription": "Example Org Production",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "state": "Enabled",
+              "resources": 23
+            },
+            {
+              "subscription": "Example Org Development",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a2",
+              "state": "Enabled",
+              "resources": 4
+            }
+          ]
+        }
+      },
+      {
+        "match": {
+          "bodyIncludes": "af:azure.subscription#types"
+        },
+        "body": {
+          "totalRecords": 12,
+          "count": 12,
+          "resultTruncated": "false",
+          "data": [
+            {
+              "type": "microsoft.hybridcompute/machines",
+              "resources": 6
+            },
+            {
+              "type": "microsoft.web/sites",
+              "resources": 4
+            },
+            {
+              "type": "microsoft.kubernetes/connectedclusters",
+              "resources": 3
+            },
+            {
+              "type": "microsoft.storage/storageaccounts",
+              "resources": 2
+            },
+            {
+              "type": "microsoft.insights/components",
+              "resources": 1
+            },
+            {
+              "type": "microsoft.keyvault/vaults",
+              "resources": 1
+            },
+            {
+              "type": "microsoft.operationalinsights/workspaces",
+              "resources": 1
+            },
+            {
+              "type": "microsoft.network/networksecuritygroups",
+              "resources": 1
+            },
+            {
+              "type": "microsoft.network/publicipaddresses",
+              "resources": 1
+            },
+            {
+              "type": "microsoft.web/serverfarms",
+              "resources": 1
+            },
+            {
+              "type": "microsoft.sql/servers",
+              "resources": 1
+            },
+            {
+              "type": "microsoft.network/virtualnetworks",
+              "resources": 1
+            }
+          ]
+        }
+      },
+      {
+        "match": {
+          "bodyIncludes": "af:azure.subscription#access"
+        },
+        "body": {
+          "totalRecords": 5,
+          "count": 5,
+          "resultTruncated": "false",
+          "data": [
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/providers/Microsoft.Authorization/roleAssignments/30000000-0000-4000-8000-000000000201",
+              "roleName": "Owner",
+              "roleType": "BuiltInRole",
+              "principalId": "30000000-0000-4000-8000-000000000102",
+              "principalType": "User",
+              "privileged": true,
+              "hasCondition": false,
+              "createdOn": "2025-03-01T10:15:00Z"
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/providers/Microsoft.Authorization/roleAssignments/30000000-0000-4000-8000-000000000204",
+              "roleName": "Role Based Access Control Administrator",
+              "roleType": "BuiltInRole",
+              "principalId": "30000000-0000-4000-8000-000000000109",
+              "principalType": "User",
+              "privileged": true,
+              "hasCondition": true,
+              "createdOn": "2026-02-02T13:00:00Z"
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/providers/Microsoft.Authorization/roleAssignments/30000000-0000-4000-8000-00000000020c",
+              "roleName": "Example Function App Operator",
+              "roleType": "CustomRole",
+              "principalId": "30000000-0000-4000-8000-000000000101",
+              "principalType": "Group",
+              "privileged": false,
+              "hasCondition": false,
+              "createdOn": "2026-05-14T09:10:00Z"
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/providers/Microsoft.Authorization/roleAssignments/30000000-0000-4000-8000-00000000020b",
+              "roleName": "Monitoring Contributor",
+              "roleType": "BuiltInRole",
+              "principalId": "30000000-0000-4000-8000-000000000108",
+              "principalType": "User",
+              "privileged": false,
+              "hasCondition": false,
+              "createdOn": "2026-09-22T07:45:00Z"
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/providers/Microsoft.Authorization/roleAssignments/30000000-0000-4000-8000-000000000207",
+              "roleName": "Reader",
+              "roleType": "BuiltInRole",
+              "principalId": "30000000-0000-4000-8000-000000000105",
+              "principalType": "Group",
+              "privileged": false,
+              "hasCondition": false,
+              "createdOn": "2024-09-01T08:00:00Z"
+            }
+          ]
+        }
+      },
+      {
+        "match": {
+          "bodyIncludes": "af:azure.subscription#defender"
+        },
+        "body": {
+          "totalRecords": 9,
+          "count": 9,
+          "resultTruncated": "false",
+          "data": [
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/providers/Microsoft.Security/pricings/Api",
+              "plan": "Api",
+              "pricingTier": "Free",
+              "subPlan": "",
+              "enablementTime": null,
+              "deprecated": false
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/providers/Microsoft.Security/pricings/AppServices",
+              "plan": "AppServices",
+              "pricingTier": "Standard",
+              "subPlan": "",
+              "enablementTime": "2025-02-01T09:00:00Z",
+              "deprecated": false
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/providers/Microsoft.Security/pricings/Arm",
+              "plan": "Arm",
+              "pricingTier": "Standard",
+              "subPlan": "PerSubscription",
+              "enablementTime": "2025-02-01T09:00:00Z",
+              "deprecated": false
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/providers/Microsoft.Security/pricings/CloudPosture",
+              "plan": "CloudPosture",
+              "pricingTier": "Standard",
+              "subPlan": "",
+              "enablementTime": "2025-02-01T09:00:00Z",
+              "deprecated": false
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/providers/Microsoft.Security/pricings/Containers",
+              "plan": "Containers",
+              "pricingTier": "Free",
+              "subPlan": "",
+              "enablementTime": null,
+              "deprecated": false
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/providers/Microsoft.Security/pricings/KeyVaults",
+              "plan": "KeyVaults",
+              "pricingTier": "Standard",
+              "subPlan": "PerKeyVault",
+              "enablementTime": "2025-02-01T09:00:00Z",
+              "deprecated": false
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/providers/Microsoft.Security/pricings/SqlServers",
+              "plan": "SqlServers",
+              "pricingTier": "Free",
+              "subPlan": "",
+              "enablementTime": null,
+              "deprecated": false
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/providers/Microsoft.Security/pricings/StorageAccounts",
+              "plan": "StorageAccounts",
+              "pricingTier": "Standard",
+              "subPlan": "DefenderForStorageV2",
+              "enablementTime": "2025-02-01T09:00:00Z",
+              "deprecated": false
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/providers/Microsoft.Security/pricings/VirtualMachines",
+              "plan": "VirtualMachines",
+              "pricingTier": "Standard",
+              "subPlan": "P2",
+              "enablementTime": "2025-02-01T09:00:00Z",
+              "deprecated": false
+            }
+          ]
+        }
+      },
+      {
+        "match": {
+          "bodyIncludes": "af:azure.resource-groups#groups"
+        },
+        "body": {
+          "totalRecords": 9,
+          "count": 9,
+          "resultTruncated": "false",
+          "data": [
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-arc",
+              "name": "rg-example-arc",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "subscriptionName": "Example Org Production",
+              "location": "westeurope",
+              "tags": {
+                "env": "prod",
+                "owner": "infra-team"
+              },
+              "tagCount": 2,
+              "resourceCount": 9,
+              "provisioningState": "Succeeded",
+              "managedBy": ""
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-data",
+              "name": "rg-example-data",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "subscriptionName": "Example Org Production",
+              "location": "northeurope",
+              "tags": {
+                "env": "prod",
+                "owner": "data-team",
+                "costCenter": "CC-1001"
+              },
+              "tagCount": 3,
+              "resourceCount": 3,
+              "provisioningState": "Succeeded",
+              "managedBy": ""
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-functions",
+              "name": "rg-example-functions",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "subscriptionName": "Example Org Production",
+              "location": "westeurope",
+              "tags": {
+                "env": "prod",
+                "owner": "platform-team"
+              },
+              "tagCount": 2,
+              "resourceCount": 6,
+              "provisioningState": "Succeeded",
+              "managedBy": ""
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-monitoring",
+              "name": "rg-example-monitoring",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "subscriptionName": "Example Org Production",
+              "location": "westeurope",
+              "tags": {
+                "env": "prod"
+              },
+              "tagCount": 1,
+              "resourceCount": 1,
+              "provisioningState": "Succeeded",
+              "managedBy": ""
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-network",
+              "name": "rg-example-network",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "subscriptionName": "Example Org Production",
+              "location": "westeurope",
+              "tags": null,
+              "tagCount": 0,
+              "resourceCount": 3,
+              "provisioningState": "Succeeded",
+              "managedBy": ""
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-web",
+              "name": "rg-example-web",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "subscriptionName": "Example Org Production",
+              "location": "westeurope",
+              "tags": null,
+              "tagCount": 0,
+              "resourceCount": 1,
+              "provisioningState": "Succeeded",
+              "managedBy": ""
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a2/resourceGroups/rg-example-dev",
+              "name": "rg-example-dev",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a2",
+              "subscriptionName": "Example Org Development",
+              "location": "westeurope",
+              "tags": {
+                "env": "dev"
+              },
+              "tagCount": 1,
+              "resourceCount": 2,
+              "provisioningState": "Succeeded",
+              "managedBy": ""
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a2/resourceGroups/rg-example-old",
+              "name": "rg-example-old",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a2",
+              "subscriptionName": "Example Org Development",
+              "location": "eastus",
+              "tags": null,
+              "tagCount": 0,
+              "resourceCount": 0,
+              "provisioningState": "Succeeded",
+              "managedBy": ""
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a2/resourceGroups/rg-example-sandbox",
+              "name": "rg-example-sandbox",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a2",
+              "subscriptionName": "Example Org Development",
+              "location": "eastus",
+              "tags": null,
+              "tagCount": 0,
+              "resourceCount": 2,
+              "provisioningState": "Succeeded",
+              "managedBy": ""
+            }
+          ]
+        }
+      },
+      {
+        "match": {
+          "bodyIncludes": "af:azure.resources#inventory"
+        },
+        "body": {
+          "totalRecords": 27,
+          "count": 27,
+          "resultTruncated": "false",
+          "data": [
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-arc/providers/Microsoft.Kubernetes/connectedClusters/aks-arc-example-01",
+              "name": "aks-arc-example-01",
+              "type": "microsoft.kubernetes/connectedclusters",
+              "kind": "",
+              "location": "westeurope",
+              "resourceGroup": "rg-example-arc",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "subscriptionName": "Example Org Production",
+              "sku": "",
+              "tags": {
+                "env": "prod",
+                "owner": "infra-team"
+              },
+              "tagCount": 2,
+              "provisioningState": "Succeeded",
+              "managedBy": ""
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-arc/providers/Microsoft.Kubernetes/connectedClusters/aks-arc-example-02",
+              "name": "aks-arc-example-02",
+              "type": "microsoft.kubernetes/connectedclusters",
+              "kind": "",
+              "location": "northeurope",
+              "resourceGroup": "rg-example-arc",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "subscriptionName": "Example Org Production",
+              "sku": "",
+              "tags": null,
+              "tagCount": 0,
+              "provisioningState": "Succeeded",
+              "managedBy": ""
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-arc/providers/Microsoft.Kubernetes/connectedClusters/aks-arc-example-03",
+              "name": "aks-arc-example-03",
+              "type": "microsoft.kubernetes/connectedclusters",
+              "kind": "",
+              "location": "westeurope",
+              "resourceGroup": "rg-example-arc",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "subscriptionName": "Example Org Production",
+              "sku": "",
+              "tags": {
+                "env": "test"
+              },
+              "tagCount": 1,
+              "provisioningState": "Succeeded",
+              "managedBy": ""
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-web/providers/Microsoft.Web/sites/app-example-portal",
+              "name": "app-example-portal",
+              "type": "microsoft.web/sites",
+              "kind": "app",
+              "location": "westeurope",
+              "resourceGroup": "rg-example-web",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "subscriptionName": "Example Org Production",
+              "sku": "",
+              "tags": null,
+              "tagCount": 0,
+              "provisioningState": "Succeeded",
+              "managedBy": ""
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-functions/providers/Microsoft.Insights/components/appi-example-func",
+              "name": "appi-example-func",
+              "type": "microsoft.insights/components",
+              "kind": "web",
+              "location": "westeurope",
+              "resourceGroup": "rg-example-functions",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "subscriptionName": "Example Org Production",
+              "sku": "",
+              "tags": {
+                "env": "prod",
+                "owner": "platform-team"
+              },
+              "tagCount": 2,
+              "provisioningState": "Succeeded",
+              "managedBy": ""
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a2/resourceGroups/rg-example-sandbox/providers/Microsoft.Compute/disks/disk-example-jump01-os",
+              "name": "disk-example-jump01-os",
+              "type": "microsoft.compute/disks",
+              "kind": "",
+              "location": "eastus",
+              "resourceGroup": "rg-example-sandbox",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a2",
+              "subscriptionName": "Example Org Development",
+              "sku": "Premium_LRS",
+              "tags": null,
+              "tagCount": 0,
+              "provisioningState": "Succeeded",
+              "managedBy": "/subscriptions/00000000-0000-4000-8000-0000000000a2/resourceGroups/rg-example-sandbox/providers/Microsoft.Compute/virtualMachines/vm-example-jump01"
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-functions/providers/Microsoft.Web/sites/func-example",
+              "name": "func-example",
+              "type": "microsoft.web/sites",
+              "kind": "functionapp",
+              "location": "westeurope",
+              "resourceGroup": "rg-example-functions",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "subscriptionName": "Example Org Production",
+              "sku": "",
+              "tags": {
+                "env": "prod",
+                "owner": "platform-team"
+              },
+              "tagCount": 2,
+              "provisioningState": "Succeeded",
+              "managedBy": ""
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a2/resourceGroups/rg-example-dev/providers/Microsoft.Web/sites/func-example-dev",
+              "name": "func-example-dev",
+              "type": "microsoft.web/sites",
+              "kind": "functionapp,linux",
+              "location": "westeurope",
+              "resourceGroup": "rg-example-dev",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a2",
+              "subscriptionName": "Example Org Development",
+              "sku": "",
+              "tags": null,
+              "tagCount": 0,
+              "provisioningState": "Succeeded",
+              "managedBy": ""
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-functions/providers/Microsoft.Web/sites/func-example-hr-sync",
+              "name": "func-example-hr-sync",
+              "type": "microsoft.web/sites",
+              "kind": "functionapp",
+              "location": "westeurope",
+              "resourceGroup": "rg-example-functions",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "subscriptionName": "Example Org Production",
+              "sku": "",
+              "tags": {
+                "env": "prod",
+                "owner": "hr-it"
+              },
+              "tagCount": 2,
+              "provisioningState": "Succeeded",
+              "managedBy": ""
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-functions/providers/Microsoft.Web/sites/func-example-orders",
+              "name": "func-example-orders",
+              "type": "microsoft.web/sites",
+              "kind": "functionapp,linux",
+              "location": "westeurope",
+              "resourceGroup": "rg-example-functions",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "subscriptionName": "Example Org Production",
+              "sku": "",
+              "tags": {
+                "env": "prod",
+                "owner": "orders-team"
+              },
+              "tagCount": 2,
+              "provisioningState": "Succeeded",
+              "managedBy": ""
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-data/providers/Microsoft.KeyVault/vaults/kv-example-prod",
+              "name": "kv-example-prod",
+              "type": "microsoft.keyvault/vaults",
+              "kind": "",
+              "location": "northeurope",
+              "resourceGroup": "rg-example-data",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "subscriptionName": "Example Org Production",
+              "sku": "standard",
+              "tags": {
+                "env": "prod",
+                "owner": "data-team",
+                "costCenter": "CC-1001"
+              },
+              "tagCount": 3,
+              "provisioningState": "Succeeded",
+              "managedBy": ""
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-monitoring/providers/Microsoft.OperationalInsights/workspaces/log-example-platform",
+              "name": "log-example-platform",
+              "type": "microsoft.operationalinsights/workspaces",
+              "kind": "",
+              "location": "westeurope",
+              "resourceGroup": "rg-example-monitoring",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "subscriptionName": "Example Org Production",
+              "sku": "PerGB2018",
+              "tags": {
+                "env": "prod",
+                "owner": "platform-team"
+              },
+              "tagCount": 2,
+              "provisioningState": "Succeeded",
+              "managedBy": ""
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a2/resourceGroups/rg-example-dev/providers/Microsoft.OperationalInsights/workspaces/log-example-sandbox",
+              "name": "log-example-sandbox",
+              "type": "microsoft.operationalinsights/workspaces",
+              "kind": "",
+              "location": "westeurope",
+              "resourceGroup": "rg-example-dev",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a2",
+              "subscriptionName": "Example Org Development",
+              "sku": "PerGB2018",
+              "tags": null,
+              "tagCount": 0,
+              "provisioningState": "Succeeded",
+              "managedBy": ""
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-network/providers/Microsoft.Network/networkSecurityGroups/nsg-example-web",
+              "name": "nsg-example-web",
+              "type": "microsoft.network/networksecuritygroups",
+              "kind": "",
+              "location": "westeurope",
+              "resourceGroup": "rg-example-network",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "subscriptionName": "Example Org Production",
+              "sku": "",
+              "tags": null,
+              "tagCount": 0,
+              "provisioningState": "Succeeded",
+              "managedBy": ""
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-network/providers/Microsoft.Network/publicIPAddresses/pip-example-gw",
+              "name": "pip-example-gw",
+              "type": "microsoft.network/publicipaddresses",
+              "kind": "",
+              "location": "westeurope",
+              "resourceGroup": "rg-example-network",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "subscriptionName": "Example Org Production",
+              "sku": "Standard",
+              "tags": {
+                "env": "prod"
+              },
+              "tagCount": 1,
+              "provisioningState": "Succeeded",
+              "managedBy": ""
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-functions/providers/Microsoft.Web/serverFarms/plan-example-functions",
+              "name": "plan-example-functions",
+              "type": "microsoft.web/serverfarms",
+              "kind": "elastic",
+              "location": "westeurope",
+              "resourceGroup": "rg-example-functions",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "subscriptionName": "Example Org Production",
+              "sku": "EP1",
+              "tags": {
+                "env": "prod",
+                "owner": "platform-team"
+              },
+              "tagCount": 2,
+              "provisioningState": "Succeeded",
+              "managedBy": ""
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-data/providers/Microsoft.Sql/servers/sql-example-prod",
+              "name": "sql-example-prod",
+              "type": "microsoft.sql/servers",
+              "kind": "v12.0",
+              "location": "northeurope",
+              "resourceGroup": "rg-example-data",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "subscriptionName": "Example Org Production",
+              "sku": "",
+              "tags": {
+                "env": "prod",
+                "owner": "data-team"
+              },
+              "tagCount": 2,
+              "provisioningState": "Succeeded",
+              "managedBy": ""
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-arc/providers/Microsoft.HybridCompute/machines/srv-example-01",
+              "name": "srv-example-01",
+              "type": "microsoft.hybridcompute/machines",
+              "kind": "",
+              "location": "westeurope",
+              "resourceGroup": "rg-example-arc",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "subscriptionName": "Example Org Production",
+              "sku": "",
+              "tags": {
+                "env": "prod",
+                "owner": "infra-team"
+              },
+              "tagCount": 2,
+              "provisioningState": "Succeeded",
+              "managedBy": ""
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-arc/providers/Microsoft.HybridCompute/machines/srv-example-02",
+              "name": "srv-example-02",
+              "type": "microsoft.hybridcompute/machines",
+              "kind": "",
+              "location": "westeurope",
+              "resourceGroup": "rg-example-arc",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "subscriptionName": "Example Org Production",
+              "sku": "",
+              "tags": null,
+              "tagCount": 0,
+              "provisioningState": "Succeeded",
+              "managedBy": ""
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-arc/providers/Microsoft.HybridCompute/machines/srv-example-03",
+              "name": "srv-example-03",
+              "type": "microsoft.hybridcompute/machines",
+              "kind": "",
+              "location": "westeurope",
+              "resourceGroup": "rg-example-arc",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "subscriptionName": "Example Org Production",
+              "sku": "",
+              "tags": {
+                "env": "prod",
+                "owner": "infra-team"
+              },
+              "tagCount": 2,
+              "provisioningState": "Succeeded",
+              "managedBy": ""
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-arc/providers/Microsoft.HybridCompute/machines/srv-example-04",
+              "name": "srv-example-04",
+              "type": "microsoft.hybridcompute/machines",
+              "kind": "",
+              "location": "northeurope",
+              "resourceGroup": "rg-example-arc",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "subscriptionName": "Example Org Production",
+              "sku": "",
+              "tags": {
+                "env": "prod"
+              },
+              "tagCount": 1,
+              "provisioningState": "Succeeded",
+              "managedBy": ""
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-arc/providers/Microsoft.HybridCompute/machines/srv-example-05",
+              "name": "srv-example-05",
+              "type": "microsoft.hybridcompute/machines",
+              "kind": "",
+              "location": "westeurope",
+              "resourceGroup": "rg-example-arc",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "subscriptionName": "Example Org Production",
+              "sku": "",
+              "tags": {
+                "env": "prod",
+                "owner": "infra-team"
+              },
+              "tagCount": 2,
+              "provisioningState": "Succeeded",
+              "managedBy": ""
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-arc/providers/Microsoft.HybridCompute/machines/srv-example-06",
+              "name": "srv-example-06",
+              "type": "microsoft.hybridcompute/machines",
+              "kind": "",
+              "location": "northeurope",
+              "resourceGroup": "rg-example-arc",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "subscriptionName": "Example Org Production",
+              "sku": "",
+              "tags": null,
+              "tagCount": 0,
+              "provisioningState": "Succeeded",
+              "managedBy": ""
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-functions/providers/Microsoft.Storage/storageAccounts/stexample001",
+              "name": "stexample001",
+              "type": "microsoft.storage/storageaccounts",
+              "kind": "StorageV2",
+              "location": "westeurope",
+              "resourceGroup": "rg-example-functions",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "subscriptionName": "Example Org Production",
+              "sku": "Standard_LRS",
+              "tags": {
+                "env": "prod",
+                "owner": "platform-team"
+              },
+              "tagCount": 2,
+              "provisioningState": "Succeeded",
+              "managedBy": ""
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-data/providers/Microsoft.Storage/storageAccounts/stexampledata01",
+              "name": "stexampledata01",
+              "type": "microsoft.storage/storageaccounts",
+              "kind": "StorageV2",
+              "location": "northeurope",
+              "resourceGroup": "rg-example-data",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "subscriptionName": "Example Org Production",
+              "sku": "Standard_GRS",
+              "tags": {
+                "env": "prod",
+                "owner": "data-team",
+                "costCenter": "CC-1001"
+              },
+              "tagCount": 3,
+              "provisioningState": "Succeeded",
+              "managedBy": ""
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a2/resourceGroups/rg-example-sandbox/providers/Microsoft.Compute/virtualMachines/vm-example-jump01",
+              "name": "vm-example-jump01",
+              "type": "microsoft.compute/virtualmachines",
+              "kind": "",
+              "location": "eastus",
+              "resourceGroup": "rg-example-sandbox",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a2",
+              "subscriptionName": "Example Org Development",
+              "sku": "",
+              "tags": null,
+              "tagCount": 0,
+              "provisioningState": "Succeeded",
+              "managedBy": ""
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-network/providers/Microsoft.Network/virtualNetworks/vnet-example-hub",
+              "name": "vnet-example-hub",
+              "type": "microsoft.network/virtualnetworks",
+              "kind": "",
+              "location": "westeurope",
+              "resourceGroup": "rg-example-network",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "subscriptionName": "Example Org Production",
+              "sku": "",
+              "tags": null,
+              "tagCount": 0,
+              "provisioningState": "Succeeded",
+              "managedBy": ""
+            }
+          ]
+        }
+      },
+      {
+        "match": {
+          "bodyIncludes": "af:azure.resources#summary"
+        },
+        "body": {
+          "totalRecords": 1,
+          "count": 1,
+          "resultTruncated": "false",
+          "data": [
+            {
+              "total": 27,
+              "untagged": 10,
+              "types": 14,
+              "locations": 3,
+              "resourceGroups": 8
+            }
+          ]
+        }
+      },
+      {
+        "match": {
+          "bodyIncludes": "af:azure.resources#bytype"
+        },
+        "body": {
+          "totalRecords": 10,
+          "count": 10,
+          "resultTruncated": "false",
+          "data": [
+            {
+              "type": "microsoft.hybridcompute/machines",
+              "resources": 6
+            },
+            {
+              "type": "microsoft.web/sites",
+              "resources": 5
+            },
+            {
+              "type": "microsoft.kubernetes/connectedclusters",
+              "resources": 3
+            },
+            {
+              "type": "microsoft.operationalinsights/workspaces",
+              "resources": 2
+            },
+            {
+              "type": "microsoft.storage/storageaccounts",
+              "resources": 2
+            },
+            {
+              "type": "microsoft.insights/components",
+              "resources": 1
+            },
+            {
+              "type": "microsoft.compute/disks",
+              "resources": 1
+            },
+            {
+              "type": "microsoft.keyvault/vaults",
+              "resources": 1
+            },
+            {
+              "type": "microsoft.network/networksecuritygroups",
+              "resources": 1
+            },
+            {
+              "type": "microsoft.network/publicipaddresses",
+              "resources": 1
+            }
+          ]
+        }
+      },
+      {
+        "match": {
+          "bodyIncludes": "af:azure.resources#bylocation"
+        },
+        "body": {
+          "totalRecords": 3,
+          "count": 3,
+          "resultTruncated": "false",
+          "data": [
+            {
+              "location": "westeurope",
+              "resources": 19
+            },
+            {
+              "location": "northeurope",
+              "resources": 6
+            },
+            {
+              "location": "eastus",
+              "resources": 2
+            }
+          ]
+        }
+      },
+      {
+        "match": {
+          "bodyIncludes": [
+            "af:azure.resource#resource",
+            "/sites/func-example'"
+          ]
+        },
+        "body": {
+          "totalRecords": 1,
+          "count": 1,
+          "resultTruncated": "false",
+          "data": [
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-functions/providers/Microsoft.Web/sites/func-example",
+              "name": "func-example",
+              "type": "microsoft.web/sites",
+              "kind": "functionapp",
+              "location": "westeurope",
+              "resourceGroup": "rg-example-functions",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "tags": {
+                "env": "prod",
+                "owner": "platform-team"
+              },
+              "sku": null,
+              "identity": {
+                "type": "SystemAssigned",
+                "principalId": "30000000-0000-4000-8000-000000000106"
+              },
+              "managedBy": "",
+              "plan": null,
+              "zones": null,
+              "properties": {
+                "state": "Running",
+                "defaultHostName": "func-example.azurewebsites.net",
+                "httpsOnly": true,
+                "sku": "ElasticPremium",
+                "provisioningState": "Succeeded",
+                "serverFarmId": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-functions/providers/Microsoft.Web/serverFarms/plan-example-functions",
+                "publicNetworkAccess": "Enabled",
+                "virtualNetworkSubnetId": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-network/providers/Microsoft.Network/virtualNetworks/vnet-example-hub/subnets/snet-functions"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "match": {
+          "bodyIncludes": [
+            "af:azure.resource#resource",
+            "/resourcegroups/rg-example-functions'"
+          ]
+        },
+        "body": {
+          "totalRecords": 1,
+          "count": 1,
+          "resultTruncated": "false",
+          "data": [
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-functions",
+              "name": "rg-example-functions",
+              "type": "microsoft.resources/subscriptions/resourcegroups",
+              "kind": null,
+              "location": "westeurope",
+              "resourceGroup": "rg-example-functions",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "tags": {
+                "env": "prod",
+                "owner": "platform-team"
+              },
+              "sku": null,
+              "identity": null,
+              "managedBy": "",
+              "plan": null,
+              "zones": null,
+              "properties": {
+                "provisioningState": "Succeeded"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "match": {
+          "bodyIncludes": [
+            "af:azure.resource#resource",
+            "/connectedclusters/aks-arc-example-01'"
+          ]
+        },
+        "body": {
+          "totalRecords": 1,
+          "count": 1,
+          "resultTruncated": "false",
+          "data": [
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-arc/providers/Microsoft.Kubernetes/connectedClusters/aks-arc-example-01",
+              "name": "aks-arc-example-01",
+              "type": "microsoft.kubernetes/connectedclusters",
+              "kind": null,
+              "location": "westeurope",
+              "resourceGroup": "rg-example-arc",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "tags": {
+                "env": "prod",
+                "owner": "infra-team"
+              },
+              "sku": null,
+              "identity": {
+                "type": "SystemAssigned",
+                "principalId": "30000000-0000-4000-8000-000000000701"
+              },
+              "managedBy": "",
+              "plan": null,
+              "zones": null,
+              "properties": {
+                "connectivityStatus": "Connected",
+                "kubernetesVersion": "1.30.4",
+                "agentVersion": "1.21.10",
+                "distribution": "aks_edge_essentials",
+                "infrastructure": "azure_stack_hci",
+                "totalNodeCount": 3,
+                "totalCoreCount": 24,
+                "lastConnectivityTime": "2026-10-15T08:58:00Z",
+                "provisioningState": "Succeeded",
+                "privateLinkState": "Disabled",
+                "azureHybridBenefit": "NotApplicable"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "match": {
+          "bodyIncludes": "af:azure.resource#resource"
+        },
+        "body": {
+          "totalRecords": 1,
+          "count": 1,
+          "resultTruncated": "false",
+          "data": [
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-functions/providers/Microsoft.Storage/storageAccounts/stexample001",
+              "name": "stexample001",
+              "type": "microsoft.storage/storageaccounts",
+              "kind": "StorageV2",
+              "location": "westeurope",
+              "resourceGroup": "rg-example-functions",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "tags": {
+                "env": "prod",
+                "owner": "platform-team"
+              },
+              "sku": {
+                "name": "Standard_LRS",
+                "tier": "Standard"
+              },
+              "identity": null,
+              "managedBy": "",
+              "plan": null,
+              "zones": null,
+              "properties": {
+                "provisioningState": "Succeeded",
+                "minimumTlsVersion": "TLS1_2",
+                "allowBlobPublicAccess": false,
+                "supportsHttpsTrafficOnly": true,
+                "publicNetworkAccess": "Enabled",
+                "accessTier": "Hot",
+                "primaryLocation": "westeurope",
+                "statusOfPrimary": "available",
+                "encryption": {
+                  "keySource": "Microsoft.Storage",
+                  "services": {
+                    "blob": {
+                      "enabled": true
+                    },
+                    "file": {
+                      "enabled": true
+                    }
+                  }
+                },
+                "networkAcls": {
+                  "defaultAction": "Deny",
+                  "bypass": "AzureServices"
+                }
+              }
+            }
+          ]
+        }
+      },
+      {
+        "match": {
+          "bodyIncludes": "af:azure.resource#access"
+        },
+        "body": {
+          "totalRecords": 8,
+          "count": 8,
+          "resultTruncated": "false",
+          "data": [
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourcegroups/rg-example-functions/providers/Microsoft.Authorization/roleAssignments/30000000-0000-4000-8000-000000000205",
+              "roleName": "Contributor",
+              "roleType": "BuiltInRole",
+              "principalId": "30000000-0000-4000-8000-000000000101",
+              "principalType": "Group",
+              "scope": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourcegroups/rg-example-functions",
+              "inherited": true,
+              "hasCondition": false,
+              "createdOn": "2025-01-08T12:00:00Z"
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/providers/Microsoft.Authorization/roleAssignments/30000000-0000-4000-8000-00000000020c",
+              "roleName": "Example Function App Operator",
+              "roleType": "CustomRole",
+              "principalId": "30000000-0000-4000-8000-000000000101",
+              "principalType": "Group",
+              "scope": "/subscriptions/00000000-0000-4000-8000-0000000000a1",
+              "inherited": true,
+              "hasCondition": false,
+              "createdOn": "2026-05-14T09:10:00Z"
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/providers/Microsoft.Authorization/roleAssignments/30000000-0000-4000-8000-00000000020b",
+              "roleName": "Monitoring Contributor",
+              "roleType": "BuiltInRole",
+              "principalId": "30000000-0000-4000-8000-000000000108",
+              "principalType": "User",
+              "scope": "/subscriptions/00000000-0000-4000-8000-0000000000a1",
+              "inherited": true,
+              "hasCondition": false,
+              "createdOn": "2026-09-22T07:45:00Z"
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/providers/Microsoft.Authorization/roleAssignments/30000000-0000-4000-8000-000000000201",
+              "roleName": "Owner",
+              "roleType": "BuiltInRole",
+              "principalId": "30000000-0000-4000-8000-000000000102",
+              "principalType": "User",
+              "scope": "/subscriptions/00000000-0000-4000-8000-0000000000a1",
+              "inherited": true,
+              "hasCondition": false,
+              "createdOn": "2025-03-01T10:15:00Z"
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/providers/Microsoft.Authorization/roleAssignments/30000000-0000-4000-8000-000000000207",
+              "roleName": "Reader",
+              "roleType": "BuiltInRole",
+              "principalId": "30000000-0000-4000-8000-000000000105",
+              "principalType": "Group",
+              "scope": "/subscriptions/00000000-0000-4000-8000-0000000000a1",
+              "inherited": true,
+              "hasCondition": false,
+              "createdOn": "2024-09-01T08:00:00Z"
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/providers/Microsoft.Authorization/roleAssignments/30000000-0000-4000-8000-000000000204",
+              "roleName": "Role Based Access Control Administrator",
+              "roleType": "BuiltInRole",
+              "principalId": "30000000-0000-4000-8000-000000000109",
+              "principalType": "User",
+              "scope": "/subscriptions/00000000-0000-4000-8000-0000000000a1",
+              "inherited": true,
+              "hasCondition": true,
+              "createdOn": "2026-02-02T13:00:00Z"
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourcegroups/rg-example-functions/providers/microsoft.storage/storageaccounts/stexample001/providers/Microsoft.Authorization/roleAssignments/30000000-0000-4000-8000-000000000209",
+              "roleName": "Storage Blob Data Contributor",
+              "roleType": "BuiltInRole",
+              "principalId": "30000000-0000-4000-8000-000000000106",
+              "principalType": "ServicePrincipal",
+              "scope": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourcegroups/rg-example-functions/providers/microsoft.storage/storageaccounts/stexample001",
+              "inherited": false,
+              "hasCondition": false,
+              "createdOn": "2025-04-17T15:41:00Z"
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourcegroups/rg-example-functions/providers/Microsoft.Authorization/roleAssignments/30000000-0000-4000-8000-000000000206",
+              "roleName": "Website Contributor",
+              "roleType": "BuiltInRole",
+              "principalId": "30000000-0000-4000-8000-000000000101",
+              "principalType": "Group",
+              "scope": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourcegroups/rg-example-functions",
+              "inherited": true,
+              "hasCondition": false,
+              "createdOn": "2025-01-08T12:01:00Z"
+            }
+          ]
+        }
+      },
+      {
+        "match": {
+          "bodyIncludes": "af:azure.arc-servers#machines"
+        },
+        "body": {
+          "totalRecords": 6,
+          "count": 6,
+          "resultTruncated": "false",
+          "data": [
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-arc/providers/Microsoft.HybridCompute/machines/srv-example-01",
+              "name": "srv-example-01",
+              "status": "Connected",
+              "agentVersion": "1.48.02881.1941",
+              "osType": "windows",
+              "osName": "Windows Server 2022 Datacenter",
+              "osSku": "Windows Server 2022 Datacenter",
+              "osVersion": "10.0.20348.2762",
+              "lastStatusChange": "2026-10-15T06:12:00Z",
+              "hoursSinceChange": 2,
+              "machineFqdn": "srv-example-01.corp.example.com",
+              "domainName": "corp.example.com",
+              "manufacturer": "Dell Inc.",
+              "model": "PowerEdge R650",
+              "cloudProvider": "N/A",
+              "esuState": "",
+              "errorCount": 0,
+              "extensions": 3,
+              "failedExtensions": 0,
+              "location": "westeurope",
+              "resourceGroup": "rg-example-arc",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "subscriptionName": "Example Org Production",
+              "tags": {
+                "env": "prod",
+                "owner": "infra-team"
+              }
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-arc/providers/Microsoft.HybridCompute/machines/srv-example-02",
+              "name": "srv-example-02",
+              "status": "Disconnected",
+              "agentVersion": "1.45.02800.1101",
+              "osType": "linux",
+              "osName": "Ubuntu 22.04.4 LTS",
+              "osSku": "Ubuntu",
+              "osVersion": "22.04",
+              "lastStatusChange": "2026-10-12T08:00:00Z",
+              "hoursSinceChange": 73,
+              "machineFqdn": "srv-example-02",
+              "domainName": "",
+              "manufacturer": "VMware, Inc.",
+              "model": "VMware7,1",
+              "cloudProvider": "N/A",
+              "esuState": "",
+              "errorCount": 1,
+              "extensions": 2,
+              "failedExtensions": 1,
+              "location": "westeurope",
+              "resourceGroup": "rg-example-arc",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "subscriptionName": "Example Org Production",
+              "tags": null
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-arc/providers/Microsoft.HybridCompute/machines/srv-example-03",
+              "name": "srv-example-03",
+              "status": "Connected",
+              "agentVersion": "1.47.02866.1847",
+              "osType": "windows",
+              "osName": "Windows Server 2012 R2 Datacenter",
+              "osSku": "Windows Server 2012 R2 Datacenter",
+              "osVersion": "6.3.9600.21620",
+              "lastStatusChange": "2026-10-14T21:03:00Z",
+              "hoursSinceChange": 11,
+              "machineFqdn": "srv-example-03.corp.example.com",
+              "domainName": "corp.example.com",
+              "manufacturer": "HPE",
+              "model": "ProLiant DL380 Gen10",
+              "cloudProvider": "N/A",
+              "esuState": "Assigned",
+              "errorCount": 0,
+              "extensions": 2,
+              "failedExtensions": 0,
+              "location": "westeurope",
+              "resourceGroup": "rg-example-arc",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "subscriptionName": "Example Org Production",
+              "tags": {
+                "env": "prod",
+                "owner": "infra-team"
+              }
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-arc/providers/Microsoft.HybridCompute/machines/srv-example-04",
+              "name": "srv-example-04",
+              "status": "Expired",
+              "agentVersion": "1.39.02628.1214",
+              "osType": "linux",
+              "osName": "Red Hat Enterprise Linux 9.4",
+              "osSku": "rhel",
+              "osVersion": "9.4",
+              "lastStatusChange": "2026-08-20T10:00:00Z",
+              "hoursSinceChange": 1343,
+              "machineFqdn": "srv-example-04",
+              "domainName": "",
+              "manufacturer": "Amazon EC2",
+              "model": "m5.large",
+              "cloudProvider": "AWS",
+              "esuState": "",
+              "errorCount": 1,
+              "extensions": 1,
+              "failedExtensions": 0,
+              "location": "northeurope",
+              "resourceGroup": "rg-example-arc",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "subscriptionName": "Example Org Production",
+              "tags": {
+                "env": "prod"
+              }
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-arc/providers/Microsoft.HybridCompute/machines/srv-example-05",
+              "name": "srv-example-05",
+              "status": "Error",
+              "agentVersion": "1.48.02881.1941",
+              "osType": "windows",
+              "osName": "Windows Server 2019 Standard",
+              "osSku": "Windows Server 2019 Standard",
+              "osVersion": "10.0.17763.6414",
+              "lastStatusChange": "2026-10-14T22:40:00Z",
+              "hoursSinceChange": 10,
+              "machineFqdn": "srv-example-05.corp.example.com",
+              "domainName": "corp.example.com",
+              "manufacturer": "Microsoft Corporation",
+              "model": "Virtual Machine",
+              "cloudProvider": "N/A",
+              "esuState": "",
+              "errorCount": 1,
+              "extensions": 2,
+              "failedExtensions": 0,
+              "location": "westeurope",
+              "resourceGroup": "rg-example-arc",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "subscriptionName": "Example Org Production",
+              "tags": {
+                "env": "prod",
+                "owner": "infra-team"
+              }
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-arc/providers/Microsoft.HybridCompute/machines/srv-example-06",
+              "name": "srv-example-06",
+              "status": "Connected",
+              "agentVersion": "1.46.02840.1673",
+              "osType": "linux",
+              "osName": "Rocky Linux 9.3",
+              "osSku": "rocky",
+              "osVersion": "9.3",
+              "lastStatusChange": "2026-10-15T05:55:00Z",
+              "hoursSinceChange": 3,
+              "machineFqdn": "srv-example-06",
+              "domainName": "",
+              "manufacturer": "Nutanix",
+              "model": "AHV",
+              "cloudProvider": "N/A",
+              "esuState": "",
+              "errorCount": 0,
+              "extensions": 1,
+              "failedExtensions": 0,
+              "location": "northeurope",
+              "resourceGroup": "rg-example-arc",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "subscriptionName": "Example Org Production",
+              "tags": null
+            }
+          ]
+        }
+      },
+      {
+        "match": {
+          "bodyIncludes": [
+            "af:azure.arc-server#machine",
+            "/machines/srv-example-02'"
+          ]
+        },
+        "body": {
+          "totalRecords": 1,
+          "count": 1,
+          "resultTruncated": "false",
+          "data": [
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-arc/providers/Microsoft.HybridCompute/machines/srv-example-02",
+              "name": "srv-example-02",
+              "location": "westeurope",
+              "resourceGroup": "rg-example-arc",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "tags": null,
+              "identity": {
+                "type": "SystemAssigned",
+                "principalId": "30000000-0000-4000-8000-000000000502"
+              },
+              "properties": {
+                "status": "Disconnected",
+                "lastStatusChange": "2026-10-12T08:00:00Z",
+                "agentVersion": "1.45.02800.1101",
+                "osName": "Ubuntu 22.04.4 LTS",
+                "osSku": "Ubuntu",
+                "osVersion": "22.04",
+                "osType": "linux",
+                "machineFqdn": "srv-example-02",
+                "domainName": "",
+                "detectedProperties": {
+                  "manufacturer": "VMware, Inc.",
+                  "model": "VMware7,1"
+                },
+                "cloudMetadata": {
+                  "provider": "N/A"
+                },
+                "vmUuid": "30000000-0000-4000-8000-000000000602",
+                "licenseProfile": {
+                  "esuProfile": {
+                    "licenseAssignmentState": "NotAssigned"
+                  }
+                },
+                "privateLinkScopeResourceId": "",
+                "errorDetails": [
+                  {
+                    "code": "AZCM0026",
+                    "message": "Network error: the agent could not reach gbl.his.arc.azure.com (proxy refused the connection)."
+                  }
+                ],
+                "provisioningState": "Succeeded"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "match": {
+          "bodyIncludes": "af:azure.arc-server#machine"
+        },
+        "body": {
+          "totalRecords": 1,
+          "count": 1,
+          "resultTruncated": "false",
+          "data": [
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-arc/providers/Microsoft.HybridCompute/machines/srv-example-01",
+              "name": "srv-example-01",
+              "location": "westeurope",
+              "resourceGroup": "rg-example-arc",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "tags": {
+                "env": "prod",
+                "owner": "infra-team"
+              },
+              "identity": {
+                "type": "SystemAssigned",
+                "principalId": "30000000-0000-4000-8000-000000000501"
+              },
+              "properties": {
+                "status": "Connected",
+                "lastStatusChange": "2026-10-15T06:12:00Z",
+                "agentVersion": "1.48.02881.1941",
+                "osName": "Windows Server 2022 Datacenter",
+                "osSku": "Windows Server 2022 Datacenter",
+                "osVersion": "10.0.20348.2762",
+                "osType": "windows",
+                "machineFqdn": "srv-example-01.corp.example.com",
+                "domainName": "corp.example.com",
+                "detectedProperties": {
+                  "manufacturer": "Dell Inc.",
+                  "model": "PowerEdge R650"
+                },
+                "cloudMetadata": {
+                  "provider": "N/A"
+                },
+                "vmUuid": "30000000-0000-4000-8000-000000000601",
+                "licenseProfile": {
+                  "esuProfile": {
+                    "licenseAssignmentState": "NotAssigned"
+                  }
+                },
+                "privateLinkScopeResourceId": "",
+                "errorDetails": [],
+                "provisioningState": "Succeeded"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "match": {
+          "bodyIncludes": [
+            "af:azure.arc-server#extensions",
+            "/machines/srv-example-02'"
+          ]
+        },
+        "body": {
+          "totalRecords": 2,
+          "count": 2,
+          "resultTruncated": "false",
+          "data": [
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-arc/providers/Microsoft.HybridCompute/machines/srv-example-02/extensions/AzureMonitorLinuxAgent",
+              "name": "AzureMonitorLinuxAgent",
+              "publisher": "Microsoft.Azure.Monitor",
+              "extensionType": "AzureMonitorLinuxAgent",
+              "version": "1.31.1",
+              "provisioningState": "Failed",
+              "autoUpgrade": true,
+              "statusCode": "failed",
+              "statusLevel": "Error",
+              "statusMessage": "Enable failed: unable to reach the data collection endpoint (timeout)."
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-arc/providers/Microsoft.HybridCompute/machines/srv-example-02/extensions/MDE.Linux",
+              "name": "MDE.Linux",
+              "publisher": "Microsoft.Azure.AzureDefenderForServers",
+              "extensionType": "MDE.Linux",
+              "version": "1.0.5.4",
+              "provisioningState": "Succeeded",
+              "autoUpgrade": true,
+              "statusCode": "success",
+              "statusLevel": "Information",
+              "statusMessage": "Onboarded to Microsoft Defender for Endpoint"
+            }
+          ]
+        }
+      },
+      {
+        "match": {
+          "bodyIncludes": "af:azure.arc-server#extensions"
+        },
+        "body": {
+          "totalRecords": 3,
+          "count": 3,
+          "resultTruncated": "false",
+          "data": [
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-arc/providers/Microsoft.HybridCompute/machines/srv-example-01/extensions/AzureMonitorWindowsAgent",
+              "name": "AzureMonitorWindowsAgent",
+              "publisher": "Microsoft.Azure.Monitor",
+              "extensionType": "AzureMonitorWindowsAgent",
+              "version": "1.30.0.0",
+              "provisioningState": "Succeeded",
+              "autoUpgrade": true,
+              "statusCode": "success",
+              "statusLevel": "Information",
+              "statusMessage": "ExtensionOperation:enable. Status:Success"
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-arc/providers/Microsoft.HybridCompute/machines/srv-example-01/extensions/MDE.Windows",
+              "name": "MDE.Windows",
+              "publisher": "Microsoft.Azure.AzureDefenderForServers",
+              "extensionType": "MDE.Windows",
+              "version": "1.0.10.4",
+              "provisioningState": "Succeeded",
+              "autoUpgrade": true,
+              "statusCode": "success",
+              "statusLevel": "Information",
+              "statusMessage": "Onboarded to Microsoft Defender for Endpoint"
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-arc/providers/Microsoft.HybridCompute/machines/srv-example-01/extensions/WindowsPatchExtension",
+              "name": "WindowsPatchExtension",
+              "publisher": "Microsoft.CPlat.Core",
+              "extensionType": "WindowsPatchExtension",
+              "version": "1.5.68",
+              "provisioningState": "Succeeded",
+              "autoUpgrade": false,
+              "statusCode": "success",
+              "statusLevel": "Information",
+              "statusMessage": "Assessment completed"
+            }
+          ]
+        }
+      },
+      {
+        "match": {
+          "bodyIncludes": "af:azure.arc-kubernetes#clusters"
+        },
+        "body": {
+          "totalRecords": 3,
+          "count": 3,
+          "resultTruncated": "false",
+          "data": [
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-arc/providers/Microsoft.Kubernetes/connectedClusters/aks-arc-example-01",
+              "name": "aks-arc-example-01",
+              "connectivityStatus": "Connected",
+              "kubernetesVersion": "1.30.4",
+              "agentVersion": "1.21.10",
+              "distribution": "aks_edge_essentials",
+              "infrastructure": "azure_stack_hci",
+              "totalNodeCount": 3,
+              "totalCoreCount": 24,
+              "lastConnectivityTime": "2026-10-15T08:58:00Z",
+              "certificateExpiry": "2027-01-10T00:00:00Z",
+              "provisioningState": "Succeeded",
+              "extensions": 3,
+              "failedExtensions": 0,
+              "extensionTypes": [
+                "microsoft.azuremonitor.containers",
+                "microsoft.azuredefender.kubernetes",
+                "microsoft.flux"
+              ],
+              "location": "westeurope",
+              "resourceGroup": "rg-example-arc",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "subscriptionName": "Example Org Production",
+              "tags": {
+                "env": "prod",
+                "owner": "infra-team"
+              }
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-arc/providers/Microsoft.Kubernetes/connectedClusters/aks-arc-example-02",
+              "name": "aks-arc-example-02",
+              "connectivityStatus": "Offline",
+              "kubernetesVersion": "1.28.9",
+              "agentVersion": "1.18.3",
+              "distribution": "openshift",
+              "infrastructure": "vsphere",
+              "totalNodeCount": 5,
+              "totalCoreCount": 40,
+              "lastConnectivityTime": "2026-10-10T17:20:00Z",
+              "certificateExpiry": "2026-11-02T00:00:00Z",
+              "provisioningState": "Succeeded",
+              "extensions": 2,
+              "failedExtensions": 1,
+              "extensionTypes": [
+                "microsoft.azuremonitor.containers",
+                "microsoft.policyinsights"
+              ],
+              "location": "northeurope",
+              "resourceGroup": "rg-example-arc",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "subscriptionName": "Example Org Production",
+              "tags": null
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-arc/providers/Microsoft.Kubernetes/connectedClusters/aks-arc-example-03",
+              "name": "aks-arc-example-03",
+              "connectivityStatus": "Expired",
+              "kubernetesVersion": "1.27.3",
+              "agentVersion": "1.13.4",
+              "distribution": "k3s",
+              "infrastructure": "bare_metal",
+              "totalNodeCount": 1,
+              "totalCoreCount": 4,
+              "lastConnectivityTime": "2026-07-01T12:00:00Z",
+              "certificateExpiry": "2026-09-29T00:00:00Z",
+              "provisioningState": "Succeeded",
+              "extensions": 0,
+              "failedExtensions": 0,
+              "extensionTypes": [],
+              "location": "westeurope",
+              "resourceGroup": "rg-example-arc",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "subscriptionName": "Example Org Production",
+              "tags": {
+                "env": "test"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "match": {
+          "bodyIncludes": "af:azure.alerts#alerts"
+        },
+        "body": {
+          "totalRecords": 8,
+          "count": 8,
+          "resultTruncated": "false",
+          "data": [
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/providers/Microsoft.AlertsManagement/alerts/30000000-0000-4000-8000-000000000301",
+              "name": "Function App HTTP 5xx above 5%",
+              "severity": "Sev1",
+              "alertState": "New",
+              "monitorCondition": "Fired",
+              "monitorService": "Platform",
+              "signalType": "Metric",
+              "targetResource": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-functions/providers/Microsoft.Web/sites/func-example",
+              "targetResourceName": "func-example",
+              "targetResourceType": "microsoft.web/sites",
+              "targetResourceGroup": "rg-example-functions",
+              "alertRule": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-monitoring/providers/Microsoft.Insights/metricAlerts/function-app-http-5xx-above-5pct",
+              "description": "HTTP 5xx responses exceeded 5% of requests over 15 minutes.",
+              "startDateTime": "2026-10-15T08:10:00Z",
+              "lastModifiedDateTime": "2026-10-15T08:10:00Z",
+              "monitorConditionResolvedDateTime": null,
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "subscriptionName": "Example Org Production"
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/providers/Microsoft.AlertsManagement/alerts/30000000-0000-4000-8000-000000000304",
+              "name": "SQL server DTU above 90%",
+              "severity": "Sev2",
+              "alertState": "Acknowledged",
+              "monitorCondition": "Fired",
+              "monitorService": "Platform",
+              "signalType": "Metric",
+              "targetResource": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-data/providers/Microsoft.Sql/servers/sql-example-prod",
+              "targetResourceName": "sql-example-prod",
+              "targetResourceType": "microsoft.sql/servers",
+              "targetResourceGroup": "rg-example-data",
+              "alertRule": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-monitoring/providers/Microsoft.Insights/metricAlerts/sql-server-dtu-above-90pct",
+              "description": "Average DTU consumption above 90% for 30 minutes.",
+              "startDateTime": "2026-10-15T07:30:00Z",
+              "lastModifiedDateTime": "2026-10-15T07:30:00Z",
+              "monitorConditionResolvedDateTime": null,
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "subscriptionName": "Example Org Production"
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/providers/Microsoft.AlertsManagement/alerts/30000000-0000-4000-8000-000000000303",
+              "name": "Function App Orders stopped",
+              "severity": "Sev4",
+              "alertState": "New",
+              "monitorCondition": "Fired",
+              "monitorService": "ActivityLog Administrative",
+              "signalType": "Activity Log",
+              "targetResource": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-functions/providers/Microsoft.Web/sites/func-example-orders",
+              "targetResourceName": "func-example-orders",
+              "targetResourceType": "microsoft.web/sites",
+              "targetResourceGroup": "rg-example-functions",
+              "alertRule": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-monitoring/providers/Microsoft.Insights/metricAlerts/function-app-orders-stopped",
+              "description": "Microsoft.Web/sites/stop/action succeeded.",
+              "startDateTime": "2026-10-14T18:05:00Z",
+              "lastModifiedDateTime": "2026-10-14T18:05:00Z",
+              "monitorConditionResolvedDateTime": null,
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "subscriptionName": "Example Org Production"
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/providers/Microsoft.AlertsManagement/alerts/30000000-0000-4000-8000-000000000305",
+              "name": "Key Vault saturation above 75%",
+              "severity": "Sev3",
+              "alertState": "Acknowledged",
+              "monitorCondition": "Fired",
+              "monitorService": "Platform",
+              "signalType": "Metric",
+              "targetResource": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-data/providers/Microsoft.KeyVault/vaults/kv-example-prod",
+              "targetResourceName": "kv-example-prod",
+              "targetResourceType": "microsoft.keyvault/vaults",
+              "targetResourceGroup": "rg-example-data",
+              "alertRule": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-monitoring/providers/Microsoft.Insights/metricAlerts/key-vault-saturation-above-75pct",
+              "description": "Overall vault saturation above 75%.",
+              "startDateTime": "2026-10-14T11:00:00Z",
+              "lastModifiedDateTime": "2026-10-14T11:00:00Z",
+              "monitorConditionResolvedDateTime": null,
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "subscriptionName": "Example Org Production"
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/providers/Microsoft.AlertsManagement/alerts/30000000-0000-4000-8000-000000000306",
+              "name": "Storage account availability below 99.9%",
+              "severity": "Sev2",
+              "alertState": "Closed",
+              "monitorCondition": "Resolved",
+              "monitorService": "Platform",
+              "signalType": "Metric",
+              "targetResource": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-functions/providers/Microsoft.Storage/storageAccounts/stexample001",
+              "targetResourceName": "stexample001",
+              "targetResourceType": "microsoft.storage/storageaccounts",
+              "targetResourceGroup": "rg-example-functions",
+              "alertRule": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-monitoring/providers/Microsoft.Insights/metricAlerts/storage-account-availability-below-99.9pct",
+              "description": "Availability dropped below 99.9%.",
+              "startDateTime": "2026-10-14T03:00:00Z",
+              "lastModifiedDateTime": "2026-10-14T03:25:00Z",
+              "monitorConditionResolvedDateTime": "2026-10-14T03:25:00Z",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "subscriptionName": "Example Org Production"
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/providers/Microsoft.AlertsManagement/alerts/30000000-0000-4000-8000-000000000307",
+              "name": "Azure Functions service issue in West Europe",
+              "severity": "Sev1",
+              "alertState": "New",
+              "monitorCondition": "Resolved",
+              "monitorService": "ServiceHealth",
+              "signalType": "Activity Log",
+              "targetResource": "/subscriptions/00000000-0000-4000-8000-0000000000a1",
+              "targetResourceName": "Example Org Production",
+              "targetResourceType": "microsoft.resources/subscriptions",
+              "targetResourceGroup": "",
+              "alertRule": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-monitoring/providers/Microsoft.Insights/metricAlerts/azure-functions-service-issue-in-west-europe",
+              "description": "Service Health: incident affecting Azure Functions in West Europe.",
+              "startDateTime": "2026-10-13T14:00:00Z",
+              "lastModifiedDateTime": "2026-10-13T16:40:00Z",
+              "monitorConditionResolvedDateTime": "2026-10-13T16:40:00Z",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "subscriptionName": "Example Org Production"
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a2/providers/Microsoft.AlertsManagement/alerts/30000000-0000-4000-8000-000000000308",
+              "name": "VM CPU above 95%",
+              "severity": "Sev3",
+              "alertState": "Closed",
+              "monitorCondition": "Resolved",
+              "monitorService": "Platform",
+              "signalType": "Metric",
+              "targetResource": "/subscriptions/00000000-0000-4000-8000-0000000000a2/resourceGroups/rg-example-sandbox/providers/Microsoft.Compute/virtualMachines/vm-example-jump01",
+              "targetResourceName": "vm-example-jump01",
+              "targetResourceType": "microsoft.compute/virtualmachines",
+              "targetResourceGroup": "rg-example-sandbox",
+              "alertRule": "/subscriptions/00000000-0000-4000-8000-0000000000a2/resourceGroups/rg-example-monitoring/providers/Microsoft.Insights/metricAlerts/vm-cpu-above-95pct",
+              "description": "Percentage CPU above 95% for 10 minutes.",
+              "startDateTime": "2026-10-13T02:00:00Z",
+              "lastModifiedDateTime": "2026-10-13T02:45:00Z",
+              "monitorConditionResolvedDateTime": "2026-10-13T02:45:00Z",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a2",
+              "subscriptionName": "Example Org Development"
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/providers/Microsoft.AlertsManagement/alerts/30000000-0000-4000-8000-000000000302",
+              "name": "Arc server heartbeat missing",
+              "severity": "Sev0",
+              "alertState": "New",
+              "monitorCondition": "Fired",
+              "monitorService": "Log Alerts V2",
+              "signalType": "Log",
+              "targetResource": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-arc/providers/Microsoft.HybridCompute/machines/srv-example-02",
+              "targetResourceName": "srv-example-02",
+              "targetResourceType": "microsoft.hybridcompute/machines",
+              "targetResourceGroup": "rg-example-arc",
+              "alertRule": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-monitoring/providers/Microsoft.Insights/metricAlerts/arc-server-heartbeat-missing",
+              "description": "No Heartbeat records for 15 minutes.",
+              "startDateTime": "2026-10-12T08:20:00Z",
+              "lastModifiedDateTime": "2026-10-12T08:20:00Z",
+              "monitorConditionResolvedDateTime": null,
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "subscriptionName": "Example Org Production"
+            }
+          ]
+        }
+      },
+      {
+        "match": {
+          "bodyIncludes": "af:azure.log-analytics#workspaces"
+        },
+        "body": {
+          "totalRecords": 2,
+          "count": 2,
+          "resultTruncated": "false",
+          "data": [
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-monitoring/providers/Microsoft.OperationalInsights/workspaces/log-example-platform",
+              "name": "log-example-platform",
+              "customerId": "30000000-0000-4000-8000-0000000000c2",
+              "sku": "PerGB2018",
+              "retentionInDays": 90,
+              "dailyQuotaGb": -1,
+              "quotaReached": "RespectQuota",
+              "publicQuery": "Enabled",
+              "publicIngestion": "Enabled",
+              "localAuthDisabled": true,
+              "createdDate": "2024-06-03T10:12:00Z",
+              "location": "westeurope",
+              "resourceGroup": "rg-example-monitoring",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "subscriptionName": "Example Org Production",
+              "tags": {
+                "env": "prod",
+                "owner": "platform-team"
+              }
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a2/resourceGroups/rg-example-dev/providers/Microsoft.OperationalInsights/workspaces/log-example-sandbox",
+              "name": "log-example-sandbox",
+              "customerId": "30000000-0000-4000-8000-0000000000c3",
+              "sku": "PerGB2018",
+              "retentionInDays": 30,
+              "dailyQuotaGb": 5,
+              "quotaReached": "OverQuota",
+              "publicQuery": "Disabled",
+              "publicIngestion": "Enabled",
+              "localAuthDisabled": false,
+              "createdDate": "2025-11-19T13:40:00Z",
+              "location": "westeurope",
+              "resourceGroup": "rg-example-dev",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a2",
+              "subscriptionName": "Example Org Development",
+              "tags": null
+            }
+          ]
+        }
+      },
+      {
+        "match": {
+          "bodyIncludes": "af:azure.function-apps#apps"
+        },
+        "body": {
+          "totalRecords": 4,
+          "count": 4,
+          "resultTruncated": "false",
+          "data": [
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-functions/providers/Microsoft.Web/sites/func-example",
+              "name": "func-example",
+              "kind": "functionapp",
+              "state": "Running",
+              "defaultHostName": "func-example.azurewebsites.net",
+              "plan": "Premium",
+              "planName": "plan-example-functions",
+              "skuName": "ElasticPremium",
+              "os": "Windows",
+              "linuxFxVersion": "",
+              "httpsOnly": true,
+              "publicNetworkAccess": "Enabled",
+              "clientCertEnabled": false,
+              "vnetIntegrated": true,
+              "identityType": "SystemAssigned",
+              "lastModified": "2026-10-09T14:22:00Z",
+              "location": "westeurope",
+              "resourceGroup": "rg-example-functions",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "subscriptionName": "Example Org Production",
+              "tags": {
+                "env": "prod",
+                "owner": "platform-team"
+              }
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a2/resourceGroups/rg-example-dev/providers/Microsoft.Web/sites/func-example-dev",
+              "name": "func-example-dev",
+              "kind": "functionapp,linux",
+              "state": "Running",
+              "defaultHostName": "func-example-dev.azurewebsites.net",
+              "plan": "Consumption",
+              "planName": "ASP-func-example-dev",
+              "skuName": "Dynamic",
+              "os": "Linux",
+              "linuxFxVersion": "Python|3.11",
+              "httpsOnly": false,
+              "publicNetworkAccess": "Enabled",
+              "clientCertEnabled": false,
+              "vnetIntegrated": false,
+              "identityType": "",
+              "lastModified": "2026-10-14T16:05:00Z",
+              "location": "westeurope",
+              "resourceGroup": "rg-example-dev",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a2",
+              "subscriptionName": "Example Org Development",
+              "tags": null
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-functions/providers/Microsoft.Web/sites/func-example-hr-sync",
+              "name": "func-example-hr-sync",
+              "kind": "functionapp",
+              "state": "Running",
+              "defaultHostName": "func-example-hr-sync.azurewebsites.net",
+              "plan": "Dedicated",
+              "planName": "plan-example-functions",
+              "skuName": "Standard",
+              "os": "Windows",
+              "linuxFxVersion": "",
+              "httpsOnly": true,
+              "publicNetworkAccess": "Disabled",
+              "clientCertEnabled": false,
+              "vnetIntegrated": true,
+              "identityType": "SystemAssigned, UserAssigned",
+              "lastModified": "2026-09-30T08:41:00Z",
+              "location": "westeurope",
+              "resourceGroup": "rg-example-functions",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "subscriptionName": "Example Org Production",
+              "tags": {
+                "env": "prod",
+                "owner": "hr-it"
+              }
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-functions/providers/Microsoft.Web/sites/func-example-orders",
+              "name": "func-example-orders",
+              "kind": "functionapp,linux",
+              "state": "Stopped",
+              "defaultHostName": "func-example-orders.azurewebsites.net",
+              "plan": "Flex Consumption",
+              "planName": "plan-example-functions",
+              "skuName": "FlexConsumption",
+              "os": "Linux",
+              "linuxFxVersion": "",
+              "httpsOnly": true,
+              "publicNetworkAccess": "Enabled",
+              "clientCertEnabled": false,
+              "vnetIntegrated": false,
+              "identityType": "UserAssigned",
+              "lastModified": "2026-10-14T18:04:00Z",
+              "location": "westeurope",
+              "resourceGroup": "rg-example-functions",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "subscriptionName": "Example Org Production",
+              "tags": {
+                "env": "prod",
+                "owner": "orders-team"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "match": {
+          "bodyIncludes": "af:azure.function-app#access"
+        },
+        "body": {
+          "totalRecords": 8,
+          "count": 8,
+          "resultTruncated": "false",
+          "data": [
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourcegroups/rg-example-functions/providers/Microsoft.Authorization/roleAssignments/30000000-0000-4000-8000-000000000205",
+              "roleName": "Contributor",
+              "roleType": "BuiltInRole",
+              "principalId": "30000000-0000-4000-8000-000000000101",
+              "principalType": "Group",
+              "scope": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourcegroups/rg-example-functions",
+              "inherited": true,
+              "hasCondition": false,
+              "createdOn": "2025-01-08T12:00:00Z"
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/providers/Microsoft.Authorization/roleAssignments/30000000-0000-4000-8000-00000000020c",
+              "roleName": "Example Function App Operator",
+              "roleType": "CustomRole",
+              "principalId": "30000000-0000-4000-8000-000000000101",
+              "principalType": "Group",
+              "scope": "/subscriptions/00000000-0000-4000-8000-0000000000a1",
+              "inherited": true,
+              "hasCondition": false,
+              "createdOn": "2026-05-14T09:10:00Z"
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/providers/Microsoft.Authorization/roleAssignments/30000000-0000-4000-8000-00000000020b",
+              "roleName": "Monitoring Contributor",
+              "roleType": "BuiltInRole",
+              "principalId": "30000000-0000-4000-8000-000000000108",
+              "principalType": "User",
+              "scope": "/subscriptions/00000000-0000-4000-8000-0000000000a1",
+              "inherited": true,
+              "hasCondition": false,
+              "createdOn": "2026-09-22T07:45:00Z"
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/providers/Microsoft.Authorization/roleAssignments/30000000-0000-4000-8000-000000000201",
+              "roleName": "Owner",
+              "roleType": "BuiltInRole",
+              "principalId": "30000000-0000-4000-8000-000000000102",
+              "principalType": "User",
+              "scope": "/subscriptions/00000000-0000-4000-8000-0000000000a1",
+              "inherited": true,
+              "hasCondition": false,
+              "createdOn": "2025-03-01T10:15:00Z"
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/providers/Microsoft.Authorization/roleAssignments/30000000-0000-4000-8000-000000000207",
+              "roleName": "Reader",
+              "roleType": "BuiltInRole",
+              "principalId": "30000000-0000-4000-8000-000000000105",
+              "principalType": "Group",
+              "scope": "/subscriptions/00000000-0000-4000-8000-0000000000a1",
+              "inherited": true,
+              "hasCondition": false,
+              "createdOn": "2024-09-01T08:00:00Z"
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/providers/Microsoft.Authorization/roleAssignments/30000000-0000-4000-8000-000000000204",
+              "roleName": "Role Based Access Control Administrator",
+              "roleType": "BuiltInRole",
+              "principalId": "30000000-0000-4000-8000-000000000109",
+              "principalType": "User",
+              "scope": "/subscriptions/00000000-0000-4000-8000-0000000000a1",
+              "inherited": true,
+              "hasCondition": true,
+              "createdOn": "2026-02-02T13:00:00Z"
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourcegroups/rg-example-functions/providers/Microsoft.Authorization/roleAssignments/30000000-0000-4000-8000-000000000206",
+              "roleName": "Website Contributor",
+              "roleType": "BuiltInRole",
+              "principalId": "30000000-0000-4000-8000-000000000101",
+              "principalType": "Group",
+              "scope": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourcegroups/rg-example-functions",
+              "inherited": true,
+              "hasCondition": false,
+              "createdOn": "2025-01-08T12:01:00Z"
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourcegroups/rg-example-functions/providers/microsoft.web/sites/func-example/providers/Microsoft.Authorization/roleAssignments/30000000-0000-4000-8000-00000000020d",
+              "roleName": "Website Contributor",
+              "roleType": "BuiltInRole",
+              "principalId": "30000000-0000-4000-8000-00000000010a",
+              "principalType": "User",
+              "scope": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourcegroups/rg-example-functions/providers/microsoft.web/sites/func-example",
+              "inherited": false,
+              "hasCondition": false,
+              "createdOn": "2026-10-01T11:20:00Z"
+            }
+          ]
+        }
+      },
+      {
+        "match": {
+          "bodyIncludes": "af:azure.role-assignments#assignments"
+        },
+        "body": {
+          "totalRecords": 13,
+          "count": 13,
+          "resultTruncated": "false",
+          "data": [
+            {
+              "id": "/providers/microsoft.management/managementgroups/mg-example-platform/providers/Microsoft.Authorization/roleAssignments/30000000-0000-4000-8000-000000000203",
+              "roleName": "User Access Administrator",
+              "roleType": "BuiltInRole",
+              "privileged": true,
+              "principalId": "30000000-0000-4000-8000-000000000104",
+              "principalType": "Group",
+              "scope": "/providers/microsoft.management/managementgroups/mg-example-platform",
+              "scopeLevel": "Management group",
+              "subscriptionId": "",
+              "createdOn": "2024-11-20T09:30:00Z",
+              "createdBy": "30000000-0000-4000-8000-000000000102",
+              "updatedOn": "2024-11-20T09:30:00Z",
+              "hasCondition": false,
+              "description": ""
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/providers/Microsoft.Authorization/roleAssignments/30000000-0000-4000-8000-000000000201",
+              "roleName": "Owner",
+              "roleType": "BuiltInRole",
+              "privileged": true,
+              "principalId": "30000000-0000-4000-8000-000000000102",
+              "principalType": "User",
+              "scope": "/subscriptions/00000000-0000-4000-8000-0000000000a1",
+              "scopeLevel": "Subscription",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "createdOn": "2025-03-01T10:15:00Z",
+              "createdBy": "30000000-0000-4000-8000-000000000102",
+              "updatedOn": "2025-03-01T10:15:00Z",
+              "hasCondition": false,
+              "description": "Subscription owner (break-glass reviewed quarterly)"
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a2/providers/Microsoft.Authorization/roleAssignments/30000000-0000-4000-8000-000000000202",
+              "roleName": "Owner",
+              "roleType": "BuiltInRole",
+              "privileged": true,
+              "principalId": "30000000-0000-4000-8000-000000000103",
+              "principalType": "ServicePrincipal",
+              "scope": "/subscriptions/00000000-0000-4000-8000-0000000000a2",
+              "scopeLevel": "Subscription",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a2",
+              "createdOn": "2025-06-12T08:00:00Z",
+              "createdBy": "30000000-0000-4000-8000-000000000102",
+              "updatedOn": "2025-06-12T08:00:00Z",
+              "hasCondition": false,
+              "description": "CI/CD deployment pipeline"
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/providers/Microsoft.Authorization/roleAssignments/30000000-0000-4000-8000-000000000204",
+              "roleName": "Role Based Access Control Administrator",
+              "roleType": "BuiltInRole",
+              "privileged": true,
+              "principalId": "30000000-0000-4000-8000-000000000109",
+              "principalType": "User",
+              "scope": "/subscriptions/00000000-0000-4000-8000-0000000000a1",
+              "scopeLevel": "Subscription",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "createdOn": "2026-02-02T13:00:00Z",
+              "createdBy": "30000000-0000-4000-8000-000000000102",
+              "updatedOn": "2026-02-02T13:00:00Z",
+              "hasCondition": true,
+              "description": "Can assign Reader and Website Contributor only (ABAC condition)"
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/providers/Microsoft.Authorization/roleAssignments/30000000-0000-4000-8000-000000000207",
+              "roleName": "Reader",
+              "roleType": "BuiltInRole",
+              "privileged": false,
+              "principalId": "30000000-0000-4000-8000-000000000105",
+              "principalType": "Group",
+              "scope": "/subscriptions/00000000-0000-4000-8000-0000000000a1",
+              "scopeLevel": "Subscription",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "createdOn": "2024-09-01T08:00:00Z",
+              "createdBy": "30000000-0000-4000-8000-000000000102",
+              "updatedOn": "2024-09-01T08:00:00Z",
+              "hasCondition": false,
+              "description": "All engineers"
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourcegroups/rg-example-functions/providers/Microsoft.Authorization/roleAssignments/30000000-0000-4000-8000-000000000205",
+              "roleName": "Contributor",
+              "roleType": "BuiltInRole",
+              "privileged": false,
+              "principalId": "30000000-0000-4000-8000-000000000101",
+              "principalType": "Group",
+              "scope": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourcegroups/rg-example-functions",
+              "scopeLevel": "Resource group",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "createdOn": "2025-01-08T12:00:00Z",
+              "createdBy": "30000000-0000-4000-8000-000000000102",
+              "updatedOn": "2025-01-08T12:00:00Z",
+              "hasCondition": false,
+              "description": "AF Platform Engineers"
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourcegroups/rg-example-functions/providers/Microsoft.Authorization/roleAssignments/30000000-0000-4000-8000-000000000206",
+              "roleName": "Website Contributor",
+              "roleType": "BuiltInRole",
+              "privileged": false,
+              "principalId": "30000000-0000-4000-8000-000000000101",
+              "principalType": "Group",
+              "scope": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourcegroups/rg-example-functions",
+              "scopeLevel": "Resource group",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "createdOn": "2025-01-08T12:01:00Z",
+              "createdBy": "30000000-0000-4000-8000-000000000102",
+              "updatedOn": "2025-01-08T12:01:00Z",
+              "hasCondition": false,
+              "description": ""
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourcegroups/rg-example-data/providers/microsoft.keyvault/vaults/kv-example-prod/providers/Microsoft.Authorization/roleAssignments/30000000-0000-4000-8000-000000000208",
+              "roleName": "Key Vault Secrets User",
+              "roleType": "BuiltInRole",
+              "privileged": false,
+              "principalId": "30000000-0000-4000-8000-000000000106",
+              "principalType": "ServicePrincipal",
+              "scope": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourcegroups/rg-example-data/providers/microsoft.keyvault/vaults/kv-example-prod",
+              "scopeLevel": "Resource",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "createdOn": "2025-04-17T15:40:00Z",
+              "createdBy": "30000000-0000-4000-8000-000000000102",
+              "updatedOn": "2025-04-17T15:40:00Z",
+              "hasCondition": false,
+              "description": "func-example managed identity"
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourcegroups/rg-example-functions/providers/microsoft.storage/storageaccounts/stexample001/providers/Microsoft.Authorization/roleAssignments/30000000-0000-4000-8000-000000000209",
+              "roleName": "Storage Blob Data Contributor",
+              "roleType": "BuiltInRole",
+              "privileged": false,
+              "principalId": "30000000-0000-4000-8000-000000000106",
+              "principalType": "ServicePrincipal",
+              "scope": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourcegroups/rg-example-functions/providers/microsoft.storage/storageaccounts/stexample001",
+              "scopeLevel": "Resource",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "createdOn": "2025-04-17T15:41:00Z",
+              "createdBy": "30000000-0000-4000-8000-000000000102",
+              "updatedOn": "2025-04-17T15:41:00Z",
+              "hasCondition": false,
+              "description": "func-example managed identity"
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourcegroups/rg-example-monitoring/providers/microsoft.operationalinsights/workspaces/log-example-platform/providers/Microsoft.Authorization/roleAssignments/30000000-0000-4000-8000-00000000020a",
+              "roleName": "Log Analytics Reader",
+              "roleType": "BuiltInRole",
+              "privileged": false,
+              "principalId": "30000000-0000-4000-8000-000000000107",
+              "principalType": "Group",
+              "scope": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourcegroups/rg-example-monitoring/providers/microsoft.operationalinsights/workspaces/log-example-platform",
+              "scopeLevel": "Resource",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "createdOn": "2025-08-05T10:00:00Z",
+              "createdBy": "30000000-0000-4000-8000-000000000102",
+              "updatedOn": "2025-08-05T10:00:00Z",
+              "hasCondition": false,
+              "description": "Service desk"
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/providers/Microsoft.Authorization/roleAssignments/30000000-0000-4000-8000-00000000020c",
+              "roleName": "Example Function App Operator",
+              "roleType": "CustomRole",
+              "privileged": false,
+              "principalId": "30000000-0000-4000-8000-000000000101",
+              "principalType": "Group",
+              "scope": "/subscriptions/00000000-0000-4000-8000-0000000000a1",
+              "scopeLevel": "Subscription",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "createdOn": "2026-05-14T09:10:00Z",
+              "createdBy": "30000000-0000-4000-8000-000000000102",
+              "updatedOn": "2026-05-14T09:10:00Z",
+              "hasCondition": false,
+              "description": "Restart and sync triggers only"
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/providers/Microsoft.Authorization/roleAssignments/30000000-0000-4000-8000-00000000020b",
+              "roleName": "Monitoring Contributor",
+              "roleType": "BuiltInRole",
+              "privileged": false,
+              "principalId": "30000000-0000-4000-8000-000000000108",
+              "principalType": "User",
+              "scope": "/subscriptions/00000000-0000-4000-8000-0000000000a1",
+              "scopeLevel": "Subscription",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "createdOn": "2026-09-22T07:45:00Z",
+              "createdBy": "30000000-0000-4000-8000-000000000102",
+              "updatedOn": "2026-09-22T07:45:00Z",
+              "hasCondition": false,
+              "description": ""
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourcegroups/rg-example-functions/providers/microsoft.web/sites/func-example/providers/Microsoft.Authorization/roleAssignments/30000000-0000-4000-8000-00000000020d",
+              "roleName": "Website Contributor",
+              "roleType": "BuiltInRole",
+              "privileged": false,
+              "principalId": "30000000-0000-4000-8000-00000000010a",
+              "principalType": "User",
+              "scope": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourcegroups/rg-example-functions/providers/microsoft.web/sites/func-example",
+              "scopeLevel": "Resource",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "createdOn": "2026-10-01T11:20:00Z",
+              "createdBy": "30000000-0000-4000-8000-000000000102",
+              "updatedOn": "2026-10-01T11:20:00Z",
+              "hasCondition": false,
+              "description": "Temporary — INC-5098"
+            }
+          ]
+        }
+      },
+      {
+        "match": {
+          "bodyIncludes": "af:azure.untagged-resources#rows"
+        },
+        "body": {
+          "totalRecords": 10,
+          "count": 10,
+          "resultTruncated": "false",
+          "data": [
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a2/resourceGroups/rg-example-dev/providers/Microsoft.Web/sites/func-example-dev",
+              "name": "func-example-dev",
+              "type": "microsoft.web/sites",
+              "location": "westeurope",
+              "resourceGroup": "rg-example-dev",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a2",
+              "subscriptionName": "Example Org Development",
+              "tags": null,
+              "tagCount": 0
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a2/resourceGroups/rg-example-dev/providers/Microsoft.OperationalInsights/workspaces/log-example-sandbox",
+              "name": "log-example-sandbox",
+              "type": "microsoft.operationalinsights/workspaces",
+              "location": "westeurope",
+              "resourceGroup": "rg-example-dev",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a2",
+              "subscriptionName": "Example Org Development",
+              "tags": null,
+              "tagCount": 0
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a2/resourceGroups/rg-example-sandbox/providers/Microsoft.Compute/disks/disk-example-jump01-os",
+              "name": "disk-example-jump01-os",
+              "type": "microsoft.compute/disks",
+              "location": "eastus",
+              "resourceGroup": "rg-example-sandbox",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a2",
+              "subscriptionName": "Example Org Development",
+              "tags": null,
+              "tagCount": 0
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a2/resourceGroups/rg-example-sandbox/providers/Microsoft.Compute/virtualMachines/vm-example-jump01",
+              "name": "vm-example-jump01",
+              "type": "microsoft.compute/virtualmachines",
+              "location": "eastus",
+              "resourceGroup": "rg-example-sandbox",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a2",
+              "subscriptionName": "Example Org Development",
+              "tags": null,
+              "tagCount": 0
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-arc/providers/Microsoft.Kubernetes/connectedClusters/aks-arc-example-02",
+              "name": "aks-arc-example-02",
+              "type": "microsoft.kubernetes/connectedclusters",
+              "location": "northeurope",
+              "resourceGroup": "rg-example-arc",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "subscriptionName": "Example Org Production",
+              "tags": null,
+              "tagCount": 0
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-arc/providers/Microsoft.HybridCompute/machines/srv-example-02",
+              "name": "srv-example-02",
+              "type": "microsoft.hybridcompute/machines",
+              "location": "westeurope",
+              "resourceGroup": "rg-example-arc",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "subscriptionName": "Example Org Production",
+              "tags": null,
+              "tagCount": 0
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-arc/providers/Microsoft.HybridCompute/machines/srv-example-06",
+              "name": "srv-example-06",
+              "type": "microsoft.hybridcompute/machines",
+              "location": "northeurope",
+              "resourceGroup": "rg-example-arc",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "subscriptionName": "Example Org Production",
+              "tags": null,
+              "tagCount": 0
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-network/providers/Microsoft.Network/networkSecurityGroups/nsg-example-web",
+              "name": "nsg-example-web",
+              "type": "microsoft.network/networksecuritygroups",
+              "location": "westeurope",
+              "resourceGroup": "rg-example-network",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "subscriptionName": "Example Org Production",
+              "tags": null,
+              "tagCount": 0
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-network/providers/Microsoft.Network/virtualNetworks/vnet-example-hub",
+              "name": "vnet-example-hub",
+              "type": "microsoft.network/virtualnetworks",
+              "location": "westeurope",
+              "resourceGroup": "rg-example-network",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "subscriptionName": "Example Org Production",
+              "tags": null,
+              "tagCount": 0
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-web/providers/Microsoft.Web/sites/app-example-portal",
+              "name": "app-example-portal",
+              "type": "microsoft.web/sites",
+              "location": "westeurope",
+              "resourceGroup": "rg-example-web",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "subscriptionName": "Example Org Production",
+              "tags": null,
+              "tagCount": 0
+            }
+          ]
+        }
+      },
+      {
+        "match": {
+          "bodyIncludes": "af:azure.function-apps-without-auth#rows"
+        },
+        "body": {
+          "totalRecords": 3,
+          "count": 3,
+          "resultTruncated": "false",
+          "data": [
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a2/resourceGroups/rg-example-dev/providers/Microsoft.Web/sites/func-example-dev",
+              "name": "func-example-dev",
+              "defaultHostName": "func-example-dev.azurewebsites.net",
+              "state": "Running",
+              "plan": "Consumption",
+              "httpsOnly": false,
+              "publicNetworkAccess": "Enabled",
+              "minTlsVersion": "1.2",
+              "ftpsState": "AllAllowed",
+              "resourceGroup": "rg-example-dev",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a2",
+              "subscriptionName": "Example Org Development",
+              "location": "westeurope"
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-functions/providers/Microsoft.Web/sites/func-example-hr-sync",
+              "name": "func-example-hr-sync",
+              "defaultHostName": "func-example-hr-sync.azurewebsites.net",
+              "state": "Running",
+              "plan": "Dedicated",
+              "httpsOnly": true,
+              "publicNetworkAccess": "Disabled",
+              "minTlsVersion": "1.2",
+              "ftpsState": "FtpsOnly",
+              "resourceGroup": "rg-example-functions",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "subscriptionName": "Example Org Production",
+              "location": "westeurope"
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-functions/providers/Microsoft.Web/sites/func-example-orders",
+              "name": "func-example-orders",
+              "defaultHostName": "func-example-orders.azurewebsites.net",
+              "state": "Stopped",
+              "plan": "Flex Consumption",
+              "httpsOnly": true,
+              "publicNetworkAccess": "Enabled",
+              "minTlsVersion": "1.0",
+              "ftpsState": "Disabled",
+              "resourceGroup": "rg-example-functions",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "subscriptionName": "Example Org Production",
+              "location": "westeurope"
+            }
+          ]
+        }
+      },
+      {
+        "match": {
+          "bodyIncludes": "af:azure.arc-disconnected#rows"
+        },
+        "body": {
+          "totalRecords": 3,
+          "count": 3,
+          "resultTruncated": "false",
+          "data": [
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-arc/providers/Microsoft.HybridCompute/machines/srv-example-04",
+              "name": "srv-example-04",
+              "machineFqdn": "srv-example-04",
+              "status": "Expired",
+              "lastStatusChange": "2026-08-20T10:00:00Z",
+              "hoursNotConnected": 1343,
+              "daysToExpiry": 0,
+              "agentVersion": "1.39.02628.1214",
+              "osName": "Red Hat Enterprise Linux 9.4",
+              "resourceGroup": "rg-example-arc",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "subscriptionName": "Example Org Production",
+              "location": "northeurope",
+              "tags": {
+                "env": "prod"
+              }
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-arc/providers/Microsoft.HybridCompute/machines/srv-example-02",
+              "name": "srv-example-02",
+              "machineFqdn": "srv-example-02",
+              "status": "Disconnected",
+              "lastStatusChange": "2026-10-12T08:00:00Z",
+              "hoursNotConnected": 73,
+              "daysToExpiry": 42,
+              "agentVersion": "1.45.02800.1101",
+              "osName": "Ubuntu 22.04.4 LTS",
+              "resourceGroup": "rg-example-arc",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "subscriptionName": "Example Org Production",
+              "location": "westeurope",
+              "tags": null
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-arc/providers/Microsoft.HybridCompute/machines/srv-example-05",
+              "name": "srv-example-05",
+              "machineFqdn": "srv-example-05.corp.example.com",
+              "status": "Error",
+              "lastStatusChange": "2026-10-14T22:40:00Z",
+              "hoursNotConnected": 10,
+              "daysToExpiry": 45,
+              "agentVersion": "1.48.02881.1941",
+              "osName": "Windows Server 2019 Standard",
+              "resourceGroup": "rg-example-arc",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "subscriptionName": "Example Org Production",
+              "location": "westeurope",
+              "tags": {
+                "env": "prod",
+                "owner": "infra-team"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "match": {
+          "bodyIncludes": "af:azure.create-resource-group#existing"
+        },
+        "body": {
+          "totalRecords": 0,
+          "count": 0,
+          "resultTruncated": "false",
+          "data": []
+        }
+      },
+      {
+        "match": {
+          "bodyIncludes": "af:azure.function-app-incident-triage#serviceissues"
+        },
+        "body": {
+          "totalRecords": 0,
+          "count": 0,
+          "resultTruncated": "false",
+          "data": []
+        }
+      },
+      {
+        "match": {
+          "bodyIncludes": "af:azure.function-app-incident-triage#resourcehealth"
+        },
+        "body": {
+          "totalRecords": 1,
+          "count": 1,
+          "resultTruncated": "false",
+          "data": [
+            {
+              "availabilityState": "Degraded",
+              "summary": "We are sorry, your app is experiencing elevated HTTP 5xx errors.",
+              "reasonType": "Customer Initiated",
+              "occurredTime": "2026-10-15T08:05:00Z"
+            }
+          ]
+        }
+      },
+      {
+        "match": {
+          "bodyIncludes": "af:security.defender-for-cloud#scores"
+        },
+        "body": {
+          "totalRecords": 2,
+          "count": 2,
+          "resultTruncated": "false",
+          "data": [
+            {
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "subscriptionName": "Example Org Production",
+              "current": 37.2,
+              "max": 60,
+              "percentage": 0.62,
+              "weight": 42,
+              "healthy": 118,
+              "unhealthy": 47
+            },
+            {
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a2",
+              "subscriptionName": "Example Org Development",
+              "current": 24.6,
+              "max": 60,
+              "percentage": 0.41,
+              "weight": 18,
+              "healthy": 39,
+              "unhealthy": 52
+            }
+          ]
+        }
+      },
+      {
+        "match": {
+          "bodyIncludes": "af:security.defender-for-cloud#plans"
+        },
+        "body": {
+          "totalRecords": 26,
+          "count": 26,
+          "resultTruncated": "false",
+          "data": [
+            {
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "subscriptionName": "Example Org Production",
+              "plan": "CloudPosture",
+              "tier": "Standard",
+              "subPlan": "",
+              "enabledSince": "2025-12-19T09:00:00Z"
+            },
+            {
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "subscriptionName": "Example Org Production",
+              "plan": "VirtualMachines",
+              "tier": "Standard",
+              "subPlan": "P2",
+              "enabledSince": "2025-12-19T09:00:00Z"
+            },
+            {
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "subscriptionName": "Example Org Production",
+              "plan": "AppServices",
+              "tier": "Standard",
+              "subPlan": "",
+              "enabledSince": "2025-12-19T09:00:00Z"
+            },
+            {
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "subscriptionName": "Example Org Production",
+              "plan": "SqlServers",
+              "tier": "Standard",
+              "subPlan": "",
+              "enabledSince": "2025-12-19T09:00:00Z"
+            },
+            {
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "subscriptionName": "Example Org Production",
+              "plan": "SqlServerVirtualMachines",
+              "tier": "Free",
+              "subPlan": "",
+              "enabledSince": null
+            },
+            {
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "subscriptionName": "Example Org Production",
+              "plan": "OpenSourceRelationalDatabases",
+              "tier": "Free",
+              "subPlan": "",
+              "enabledSince": null
+            },
+            {
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "subscriptionName": "Example Org Production",
+              "plan": "CosmosDbs",
+              "tier": "Free",
+              "subPlan": "",
+              "enabledSince": null
+            },
+            {
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "subscriptionName": "Example Org Production",
+              "plan": "StorageAccounts",
+              "tier": "Standard",
+              "subPlan": "DefenderForStorageV2",
+              "enabledSince": "2025-12-19T09:00:00Z"
+            },
+            {
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "subscriptionName": "Example Org Production",
+              "plan": "Containers",
+              "tier": "Standard",
+              "subPlan": "",
+              "enabledSince": "2025-12-19T09:00:00Z"
+            },
+            {
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "subscriptionName": "Example Org Production",
+              "plan": "KeyVaults",
+              "tier": "Standard",
+              "subPlan": "PerKeyVault",
+              "enabledSince": "2025-12-19T09:00:00Z"
+            },
+            {
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "subscriptionName": "Example Org Production",
+              "plan": "Arm",
+              "tier": "Standard",
+              "subPlan": "",
+              "enabledSince": "2025-12-19T09:00:00Z"
+            },
+            {
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "subscriptionName": "Example Org Production",
+              "plan": "Api",
+              "tier": "Free",
+              "subPlan": "",
+              "enabledSince": null
+            },
+            {
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "subscriptionName": "Example Org Production",
+              "plan": "AI",
+              "tier": "Free",
+              "subPlan": "",
+              "enabledSince": null
+            },
+            {
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a2",
+              "subscriptionName": "Example Org Development",
+              "plan": "CloudPosture",
+              "tier": "Free",
+              "subPlan": "",
+              "enabledSince": null
+            },
+            {
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a2",
+              "subscriptionName": "Example Org Development",
+              "plan": "VirtualMachines",
+              "tier": "Standard",
+              "subPlan": "P2",
+              "enabledSince": "2026-09-05T09:00:00Z"
+            },
+            {
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a2",
+              "subscriptionName": "Example Org Development",
+              "plan": "AppServices",
+              "tier": "Free",
+              "subPlan": "",
+              "enabledSince": null
+            },
+            {
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a2",
+              "subscriptionName": "Example Org Development",
+              "plan": "SqlServers",
+              "tier": "Free",
+              "subPlan": "",
+              "enabledSince": null
+            },
+            {
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a2",
+              "subscriptionName": "Example Org Development",
+              "plan": "SqlServerVirtualMachines",
+              "tier": "Free",
+              "subPlan": "",
+              "enabledSince": null
+            },
+            {
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a2",
+              "subscriptionName": "Example Org Development",
+              "plan": "OpenSourceRelationalDatabases",
+              "tier": "Free",
+              "subPlan": "",
+              "enabledSince": null
+            },
+            {
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a2",
+              "subscriptionName": "Example Org Development",
+              "plan": "CosmosDbs",
+              "tier": "Free",
+              "subPlan": "",
+              "enabledSince": null
+            },
+            {
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a2",
+              "subscriptionName": "Example Org Development",
+              "plan": "StorageAccounts",
+              "tier": "Standard",
+              "subPlan": "DefenderForStorageV2",
+              "enabledSince": "2026-09-05T09:00:00Z"
+            },
+            {
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a2",
+              "subscriptionName": "Example Org Development",
+              "plan": "Containers",
+              "tier": "Free",
+              "subPlan": "",
+              "enabledSince": null
+            },
+            {
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a2",
+              "subscriptionName": "Example Org Development",
+              "plan": "KeyVaults",
+              "tier": "Free",
+              "subPlan": "",
+              "enabledSince": null
+            },
+            {
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a2",
+              "subscriptionName": "Example Org Development",
+              "plan": "Arm",
+              "tier": "Free",
+              "subPlan": "",
+              "enabledSince": null
+            },
+            {
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a2",
+              "subscriptionName": "Example Org Development",
+              "plan": "Api",
+              "tier": "Free",
+              "subPlan": "",
+              "enabledSince": null
+            },
+            {
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a2",
+              "subscriptionName": "Example Org Development",
+              "plan": "AI",
+              "tier": "Free",
+              "subPlan": "",
+              "enabledSince": null
+            }
+          ]
+        }
+      },
+      {
+        "match": {
+          "bodyIncludes": "af:security.defender-for-cloud#toprecs"
+        },
+        "body": {
+          "totalRecords": 10,
+          "count": 10,
+          "resultTruncated": "false",
+          "data": [
+            {
+              "assessmentKey": "20000000-0000-4000-8000-000000000301",
+              "recommendation": "Machines should have vulnerability findings resolved",
+              "severity": "High",
+              "unhealthy": 14,
+              "category": "Compute"
+            },
+            {
+              "assessmentKey": "20000000-0000-4000-8000-000000000302",
+              "recommendation": "Storage accounts should restrict network access using virtual network rules",
+              "severity": "Medium",
+              "unhealthy": 11,
+              "category": "Data"
+            },
+            {
+              "assessmentKey": "20000000-0000-4000-8000-000000000303",
+              "recommendation": "System updates should be installed on your machines (powered by Azure Update Manager)",
+              "severity": "High",
+              "unhealthy": 9,
+              "category": "Compute"
+            },
+            {
+              "assessmentKey": "20000000-0000-4000-8000-000000000304",
+              "recommendation": "Function apps should only be accessible over HTTPS",
+              "severity": "Medium",
+              "unhealthy": 6,
+              "category": "AppServices"
+            },
+            {
+              "assessmentKey": "20000000-0000-4000-8000-000000000305",
+              "recommendation": "Key vaults should have deletion protection enabled",
+              "severity": "Medium",
+              "unhealthy": 5,
+              "category": "Data"
+            },
+            {
+              "assessmentKey": "20000000-0000-4000-8000-000000000306",
+              "recommendation": "Management ports of virtual machines should be protected with just-in-time network access control",
+              "severity": "High",
+              "unhealthy": 4,
+              "category": "Networking"
+            },
+            {
+              "assessmentKey": "20000000-0000-4000-8000-000000000307",
+              "recommendation": "Azure Arc-enabled servers should have the Log Analytics agent replaced by Azure Monitor agent",
+              "severity": "Low",
+              "unhealthy": 4,
+              "category": "Compute"
+            },
+            {
+              "assessmentKey": "20000000-0000-4000-8000-000000000308",
+              "recommendation": "Diagnostic logs in App Service should be enabled",
+              "severity": "Low",
+              "unhealthy": 3,
+              "category": "AppServices"
+            },
+            {
+              "assessmentKey": "20000000-0000-4000-8000-000000000309",
+              "recommendation": "Accounts with owner permissions on Azure resources should be MFA enabled",
+              "severity": "High",
+              "unhealthy": 1,
+              "category": "IdentityAndAccess"
+            },
+            {
+              "assessmentKey": "20000000-0000-4000-8000-00000000030a",
+              "recommendation": "Subscriptions should have a contact email address for security issues",
+              "severity": "Low",
+              "unhealthy": 1,
+              "category": "IdentityAndAccess"
+            }
+          ]
+        }
+      },
+      {
+        "match": {
+          "bodyIncludes": "af:security.defender-for-cloud#alertcounts"
+        },
+        "body": {
+          "totalRecords": 4,
+          "count": 4,
+          "resultTruncated": "false",
+          "data": [
+            {
+              "severity": "High",
+              "count_": 2
+            },
+            {
+              "severity": "Medium",
+              "count_": 3
+            },
+            {
+              "severity": "Low",
+              "count_": 1
+            },
+            {
+              "severity": "Informational",
+              "count_": 1
+            }
+          ]
+        }
+      },
+      {
+        "match": {
+          "bodyIncludes": "af:security.cloud-recommendations#rows"
+        },
+        "body": {
+          "totalRecords": 16,
+          "count": 16,
+          "resultTruncated": "false",
+          "data": [
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-arc/providers/Microsoft.HybridCompute/machines/srv-example-01/providers/Microsoft.Security/assessments/20000000-0000-4000-8000-000000000301",
+              "assessmentKey": "20000000-0000-4000-8000-000000000301",
+              "recommendation": "Machines should have vulnerability findings resolved",
+              "severity": "High",
+              "status": "Unhealthy",
+              "statusCause": "",
+              "statusDescription": "3 high-severity vulnerabilities found",
+              "category": "Compute",
+              "resourceId": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourcegroups/rg-example-arc/providers/microsoft.hybridcompute/machines/srv-example-01",
+              "resourceName": "srv-example-01",
+              "resourceType": "microsoft.hybridcompute/machines",
+              "resourceGroup": "rg-example-arc",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "subscriptionName": "Example Org Production",
+              "source": "Azure",
+              "firstEvaluated": "2026-08-16T09:00:00Z",
+              "statusChanged": "2026-10-03T09:00:00Z",
+              "portalLink": "portal.azure.com/#blade/Microsoft_Azure_Security/RecommendationsBlade/assessmentKey/20000000-0000-4000-8000-000000000301"
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a2/resourceGroups/rg-example-dev/providers/Microsoft.Compute/virtualMachines/vm-dev-build-01/providers/Microsoft.Security/assessments/20000000-0000-4000-8000-000000000301",
+              "assessmentKey": "20000000-0000-4000-8000-000000000301",
+              "recommendation": "Machines should have vulnerability findings resolved",
+              "severity": "High",
+              "status": "Unhealthy",
+              "statusCause": "",
+              "statusDescription": "11 vulnerabilities found (2 critical)",
+              "category": "Compute",
+              "resourceId": "/subscriptions/00000000-0000-4000-8000-0000000000a2/resourcegroups/rg-example-dev/providers/microsoft.compute/virtualmachines/vm-dev-build-01",
+              "resourceName": "vm-dev-build-01",
+              "resourceType": "microsoft.compute/virtualmachines",
+              "resourceGroup": "rg-example-dev",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a2",
+              "subscriptionName": "Example Org Development",
+              "source": "Azure",
+              "firstEvaluated": "2026-09-05T09:00:00Z",
+              "statusChanged": "2026-10-12T09:00:00Z",
+              "portalLink": "portal.azure.com/#blade/Microsoft_Azure_Security/RecommendationsBlade/assessmentKey/20000000-0000-4000-8000-000000000301"
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-arc/providers/Microsoft.HybridCompute/machines/srv-example-02/providers/Microsoft.Security/assessments/20000000-0000-4000-8000-000000000303",
+              "assessmentKey": "20000000-0000-4000-8000-000000000303",
+              "recommendation": "System updates should be installed on your machines (powered by Azure Update Manager)",
+              "severity": "High",
+              "status": "Unhealthy",
+              "statusCause": "",
+              "statusDescription": "Machine has 7 missing updates",
+              "category": "Compute",
+              "resourceId": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourcegroups/rg-example-arc/providers/microsoft.hybridcompute/machines/srv-example-02",
+              "resourceName": "srv-example-02",
+              "resourceType": "microsoft.hybridcompute/machines",
+              "resourceGroup": "rg-example-arc",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "subscriptionName": "Example Org Production",
+              "source": "Azure",
+              "firstEvaluated": "2026-09-15T09:00:00Z",
+              "statusChanged": "2026-10-13T09:00:00Z",
+              "portalLink": "portal.azure.com/#blade/Microsoft_Azure_Security/RecommendationsBlade/assessmentKey/20000000-0000-4000-8000-000000000303"
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a2/resourceGroups/rg-example-dev/providers/Microsoft.Compute/virtualMachines/vm-dev-build-01/providers/Microsoft.Security/assessments/20000000-0000-4000-8000-000000000306",
+              "assessmentKey": "20000000-0000-4000-8000-000000000306",
+              "recommendation": "Management ports of virtual machines should be protected with just-in-time network access control",
+              "severity": "High",
+              "status": "Unhealthy",
+              "statusCause": "",
+              "statusDescription": "Ports 22, 3389 are open to the internet",
+              "category": "Networking",
+              "resourceId": "/subscriptions/00000000-0000-4000-8000-0000000000a2/resourcegroups/rg-example-dev/providers/microsoft.compute/virtualmachines/vm-dev-build-01",
+              "resourceName": "vm-dev-build-01",
+              "resourceType": "microsoft.compute/virtualmachines",
+              "resourceGroup": "rg-example-dev",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a2",
+              "subscriptionName": "Example Org Development",
+              "source": "Azure",
+              "firstEvaluated": "2026-09-15T09:00:00Z",
+              "statusChanged": "2026-10-10T09:00:00Z",
+              "portalLink": "portal.azure.com/#blade/Microsoft_Azure_Security/RecommendationsBlade/assessmentKey/20000000-0000-4000-8000-000000000306"
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a2/providers/Microsoft.Security/assessments/20000000-0000-4000-8000-000000000309",
+              "assessmentKey": "20000000-0000-4000-8000-000000000309",
+              "recommendation": "Accounts with owner permissions on Azure resources should be MFA enabled",
+              "severity": "High",
+              "status": "Unhealthy",
+              "statusCause": "",
+              "statusDescription": "2 owner accounts without MFA",
+              "category": "IdentityAndAccess",
+              "resourceId": "/subscriptions/00000000-0000-4000-8000-0000000000a2",
+              "resourceName": "00000000-0000-4000-8000-0000000000a2",
+              "resourceType": "microsoft.resources/subscriptions",
+              "resourceGroup": "",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a2",
+              "subscriptionName": "Example Org Development",
+              "source": "Azure",
+              "firstEvaluated": "2026-09-15T09:00:00Z",
+              "statusChanged": "2026-10-10T09:00:00Z",
+              "portalLink": "portal.azure.com/#blade/Microsoft_Azure_Security/RecommendationsBlade/assessmentKey/20000000-0000-4000-8000-000000000309"
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-functions/providers/Microsoft.Storage/storageAccounts/stexample001/providers/Microsoft.Security/assessments/20000000-0000-4000-8000-000000000302",
+              "assessmentKey": "20000000-0000-4000-8000-000000000302",
+              "recommendation": "Storage accounts should restrict network access using virtual network rules",
+              "severity": "Medium",
+              "status": "Unhealthy",
+              "statusCause": "",
+              "statusDescription": "Public network access is enabled for all networks",
+              "category": "Data",
+              "resourceId": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourcegroups/rg-example-functions/providers/microsoft.storage/storageaccounts/stexample001",
+              "resourceName": "stexample001",
+              "resourceType": "microsoft.storage/storageaccounts",
+              "resourceGroup": "rg-example-functions",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "subscriptionName": "Example Org Production",
+              "source": "Azure",
+              "firstEvaluated": "2026-09-15T09:00:00Z",
+              "statusChanged": "2026-10-10T09:00:00Z",
+              "portalLink": "portal.azure.com/#blade/Microsoft_Azure_Security/RecommendationsBlade/assessmentKey/20000000-0000-4000-8000-000000000302"
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a2/resourceGroups/rg-example-dev/providers/Microsoft.Storage/storageAccounts/stexampledev01/providers/Microsoft.Security/assessments/20000000-0000-4000-8000-000000000302",
+              "assessmentKey": "20000000-0000-4000-8000-000000000302",
+              "recommendation": "Storage accounts should restrict network access using virtual network rules",
+              "severity": "Medium",
+              "status": "Unhealthy",
+              "statusCause": "",
+              "statusDescription": "Public network access is enabled for all networks",
+              "category": "Data",
+              "resourceId": "/subscriptions/00000000-0000-4000-8000-0000000000a2/resourcegroups/rg-example-dev/providers/microsoft.storage/storageaccounts/stexampledev01",
+              "resourceName": "stexampledev01",
+              "resourceType": "microsoft.storage/storageaccounts",
+              "resourceGroup": "rg-example-dev",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a2",
+              "subscriptionName": "Example Org Development",
+              "source": "Azure",
+              "firstEvaluated": "2026-09-15T09:00:00Z",
+              "statusChanged": "2026-10-14T09:00:00Z",
+              "portalLink": "portal.azure.com/#blade/Microsoft_Azure_Security/RecommendationsBlade/assessmentKey/20000000-0000-4000-8000-000000000302"
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a2/resourceGroups/rg-example-dev/providers/Microsoft.Web/sites/func-example-dev/providers/Microsoft.Security/assessments/20000000-0000-4000-8000-000000000304",
+              "assessmentKey": "20000000-0000-4000-8000-000000000304",
+              "recommendation": "Function apps should only be accessible over HTTPS",
+              "severity": "Medium",
+              "status": "Unhealthy",
+              "statusCause": "",
+              "statusDescription": "HTTPS only is turned off",
+              "category": "AppServices",
+              "resourceId": "/subscriptions/00000000-0000-4000-8000-0000000000a2/resourcegroups/rg-example-dev/providers/microsoft.web/sites/func-example-dev",
+              "resourceName": "func-example-dev",
+              "resourceType": "microsoft.web/sites",
+              "resourceGroup": "rg-example-dev",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a2",
+              "subscriptionName": "Example Org Development",
+              "source": "Azure",
+              "firstEvaluated": "2026-09-15T09:00:00Z",
+              "statusChanged": "2026-10-10T09:00:00Z",
+              "portalLink": "portal.azure.com/#blade/Microsoft_Azure_Security/RecommendationsBlade/assessmentKey/20000000-0000-4000-8000-000000000304"
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-data/providers/Microsoft.KeyVault/vaults/kv-example-prod/providers/Microsoft.Security/assessments/20000000-0000-4000-8000-000000000305",
+              "assessmentKey": "20000000-0000-4000-8000-000000000305",
+              "recommendation": "Key vaults should have deletion protection enabled",
+              "severity": "Medium",
+              "status": "Unhealthy",
+              "statusCause": "",
+              "statusDescription": "Purge protection is disabled",
+              "category": "Data",
+              "resourceId": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourcegroups/rg-example-data/providers/microsoft.keyvault/vaults/kv-example-prod",
+              "resourceName": "kv-example-prod",
+              "resourceType": "microsoft.keyvault/vaults",
+              "resourceGroup": "rg-example-data",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "subscriptionName": "Example Org Production",
+              "source": "Azure",
+              "firstEvaluated": "2026-09-15T09:00:00Z",
+              "statusChanged": "2026-10-10T09:00:00Z",
+              "portalLink": "portal.azure.com/#blade/Microsoft_Azure_Security/RecommendationsBlade/assessmentKey/20000000-0000-4000-8000-000000000305"
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-arc/providers/Microsoft.HybridCompute/machines/srv-example-02/providers/Microsoft.Security/assessments/20000000-0000-4000-8000-000000000307",
+              "assessmentKey": "20000000-0000-4000-8000-000000000307",
+              "recommendation": "Azure Arc-enabled servers should have the Log Analytics agent replaced by Azure Monitor agent",
+              "severity": "Low",
+              "status": "Unhealthy",
+              "statusCause": "",
+              "statusDescription": "Log Analytics agent still installed",
+              "category": "Compute",
+              "resourceId": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourcegroups/rg-example-arc/providers/microsoft.hybridcompute/machines/srv-example-02",
+              "resourceName": "srv-example-02",
+              "resourceType": "microsoft.hybridcompute/machines",
+              "resourceGroup": "rg-example-arc",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "subscriptionName": "Example Org Production",
+              "source": "Azure",
+              "firstEvaluated": "2026-09-15T09:00:00Z",
+              "statusChanged": "2026-10-10T09:00:00Z",
+              "portalLink": "portal.azure.com/#blade/Microsoft_Azure_Security/RecommendationsBlade/assessmentKey/20000000-0000-4000-8000-000000000307"
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-functions/providers/Microsoft.Web/sites/func-example/providers/Microsoft.Security/assessments/20000000-0000-4000-8000-000000000308",
+              "assessmentKey": "20000000-0000-4000-8000-000000000308",
+              "recommendation": "Diagnostic logs in App Service should be enabled",
+              "severity": "Low",
+              "status": "Unhealthy",
+              "statusCause": "",
+              "statusDescription": "Diagnostic settings not configured",
+              "category": "AppServices",
+              "resourceId": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourcegroups/rg-example-functions/providers/microsoft.web/sites/func-example",
+              "resourceName": "func-example",
+              "resourceType": "microsoft.web/sites",
+              "resourceGroup": "rg-example-functions",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "subscriptionName": "Example Org Production",
+              "source": "Azure",
+              "firstEvaluated": "2026-09-15T09:00:00Z",
+              "statusChanged": "2026-10-10T09:00:00Z",
+              "portalLink": "portal.azure.com/#blade/Microsoft_Azure_Security/RecommendationsBlade/assessmentKey/20000000-0000-4000-8000-000000000308"
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a2/providers/Microsoft.Security/assessments/20000000-0000-4000-8000-00000000030a",
+              "assessmentKey": "20000000-0000-4000-8000-00000000030a",
+              "recommendation": "Subscriptions should have a contact email address for security issues",
+              "severity": "Low",
+              "status": "Unhealthy",
+              "statusCause": "",
+              "statusDescription": "No security contact configured",
+              "category": "IdentityAndAccess",
+              "resourceId": "/subscriptions/00000000-0000-4000-8000-0000000000a2",
+              "resourceName": "00000000-0000-4000-8000-0000000000a2",
+              "resourceType": "microsoft.resources/subscriptions",
+              "resourceGroup": "",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a2",
+              "subscriptionName": "Example Org Development",
+              "source": "Azure",
+              "firstEvaluated": "2026-09-15T09:00:00Z",
+              "statusChanged": "2026-10-10T09:00:00Z",
+              "portalLink": "portal.azure.com/#blade/Microsoft_Azure_Security/RecommendationsBlade/assessmentKey/20000000-0000-4000-8000-00000000030a"
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-functions/providers/Microsoft.Web/sites/func-example/providers/Microsoft.Security/assessments/20000000-0000-4000-8000-000000000304",
+              "assessmentKey": "20000000-0000-4000-8000-000000000304",
+              "recommendation": "Function apps should only be accessible over HTTPS",
+              "severity": "Medium",
+              "status": "Healthy",
+              "statusCause": "",
+              "statusDescription": "",
+              "category": "AppServices",
+              "resourceId": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourcegroups/rg-example-functions/providers/microsoft.web/sites/func-example",
+              "resourceName": "func-example",
+              "resourceType": "microsoft.web/sites",
+              "resourceGroup": "rg-example-functions",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "subscriptionName": "Example Org Production",
+              "source": "Azure",
+              "firstEvaluated": "2026-09-15T09:00:00Z",
+              "statusChanged": "2026-10-10T09:00:00Z",
+              "portalLink": "portal.azure.com/#blade/Microsoft_Azure_Security/RecommendationsBlade/assessmentKey/20000000-0000-4000-8000-000000000304"
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-arc/providers/Microsoft.HybridCompute/machines/srv-example-01/providers/Microsoft.Security/assessments/20000000-0000-4000-8000-000000000303",
+              "assessmentKey": "20000000-0000-4000-8000-000000000303",
+              "recommendation": "System updates should be installed on your machines (powered by Azure Update Manager)",
+              "severity": "High",
+              "status": "Healthy",
+              "statusCause": "",
+              "statusDescription": "",
+              "category": "Compute",
+              "resourceId": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourcegroups/rg-example-arc/providers/microsoft.hybridcompute/machines/srv-example-01",
+              "resourceName": "srv-example-01",
+              "resourceType": "microsoft.hybridcompute/machines",
+              "resourceGroup": "rg-example-arc",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "subscriptionName": "Example Org Production",
+              "source": "Azure",
+              "firstEvaluated": "2026-09-15T09:00:00Z",
+              "statusChanged": "2026-10-10T09:00:00Z",
+              "portalLink": "portal.azure.com/#blade/Microsoft_Azure_Security/RecommendationsBlade/assessmentKey/20000000-0000-4000-8000-000000000303"
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-arc/providers/Microsoft.HybridCompute/machines/srv-example-01/providers/Microsoft.Security/assessments/20000000-0000-4000-8000-000000000307",
+              "assessmentKey": "20000000-0000-4000-8000-000000000307",
+              "recommendation": "Azure Arc-enabled servers should have the Log Analytics agent replaced by Azure Monitor agent",
+              "severity": "Low",
+              "status": "NotApplicable",
+              "statusCause": "OffByPolicy",
+              "statusDescription": "Exempted by policy: lab machine",
+              "category": "Compute",
+              "resourceId": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourcegroups/rg-example-arc/providers/microsoft.hybridcompute/machines/srv-example-01",
+              "resourceName": "srv-example-01",
+              "resourceType": "microsoft.hybridcompute/machines",
+              "resourceGroup": "rg-example-arc",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "subscriptionName": "Example Org Production",
+              "source": "Azure",
+              "firstEvaluated": "2026-09-15T09:00:00Z",
+              "statusChanged": "2026-10-10T09:00:00Z",
+              "portalLink": "portal.azure.com/#blade/Microsoft_Azure_Security/RecommendationsBlade/assessmentKey/20000000-0000-4000-8000-000000000307"
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a2/resourceGroups/rg-example-dev/providers/Microsoft.Web/sites/func-example-dev/providers/Microsoft.Security/assessments/20000000-0000-4000-8000-000000000308",
+              "assessmentKey": "20000000-0000-4000-8000-000000000308",
+              "recommendation": "Diagnostic logs in App Service should be enabled",
+              "severity": "Low",
+              "status": "Healthy",
+              "statusCause": "",
+              "statusDescription": "",
+              "category": "AppServices",
+              "resourceId": "/subscriptions/00000000-0000-4000-8000-0000000000a2/resourcegroups/rg-example-dev/providers/microsoft.web/sites/func-example-dev",
+              "resourceName": "func-example-dev",
+              "resourceType": "microsoft.web/sites",
+              "resourceGroup": "rg-example-dev",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a2",
+              "subscriptionName": "Example Org Development",
+              "source": "Azure",
+              "firstEvaluated": "2026-09-15T09:00:00Z",
+              "statusChanged": "2026-10-10T09:00:00Z",
+              "portalLink": "portal.azure.com/#blade/Microsoft_Azure_Security/RecommendationsBlade/assessmentKey/20000000-0000-4000-8000-000000000308"
+            }
+          ]
+        }
+      },
+      {
+        "match": {
+          "bodyIncludes": "af:security.cloud-recommendations#summary"
+        },
+        "body": {
+          "totalRecords": 13,
+          "count": 13,
+          "resultTruncated": "false",
+          "data": [
+            {
+              "status": "Healthy",
+              "severity": "High",
+              "resourceType": "microsoft.hybridcompute/machines",
+              "count_": 1
+            },
+            {
+              "status": "Healthy",
+              "severity": "Low",
+              "resourceType": "microsoft.web/sites",
+              "count_": 1
+            },
+            {
+              "status": "Healthy",
+              "severity": "Medium",
+              "resourceType": "microsoft.web/sites",
+              "count_": 1
+            },
+            {
+              "status": "NotApplicable",
+              "severity": "Low",
+              "resourceType": "microsoft.hybridcompute/machines",
+              "count_": 1
+            },
+            {
+              "status": "Unhealthy",
+              "severity": "High",
+              "resourceType": "microsoft.compute/virtualmachines",
+              "count_": 2
+            },
+            {
+              "status": "Unhealthy",
+              "severity": "High",
+              "resourceType": "microsoft.hybridcompute/machines",
+              "count_": 2
+            },
+            {
+              "status": "Unhealthy",
+              "severity": "High",
+              "resourceType": "microsoft.resources/subscriptions",
+              "count_": 1
+            },
+            {
+              "status": "Unhealthy",
+              "severity": "Low",
+              "resourceType": "microsoft.hybridcompute/machines",
+              "count_": 1
+            },
+            {
+              "status": "Unhealthy",
+              "severity": "Low",
+              "resourceType": "microsoft.resources/subscriptions",
+              "count_": 1
+            },
+            {
+              "status": "Unhealthy",
+              "severity": "Low",
+              "resourceType": "microsoft.web/sites",
+              "count_": 1
+            },
+            {
+              "status": "Unhealthy",
+              "severity": "Medium",
+              "resourceType": "microsoft.keyvault/vaults",
+              "count_": 1
+            },
+            {
+              "status": "Unhealthy",
+              "severity": "Medium",
+              "resourceType": "microsoft.storage/storageaccounts",
+              "count_": 2
+            },
+            {
+              "status": "Unhealthy",
+              "severity": "Medium",
+              "resourceType": "microsoft.web/sites",
+              "count_": 1
+            }
+          ]
+        }
+      },
+      {
+        "match": {
+          "bodyIncludes": "af:security.cloud-alerts#rows"
+        },
+        "body": {
+          "totalRecords": 9,
+          "count": 9,
+          "resultTruncated": "false",
+          "data": [
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a2/resourceGroups/rg-example-dev/providers/Microsoft.Security/locations/westeurope/alerts/251700010000000000_00000001-4444-4000-8000-000000000000",
+              "alertName": "Suspicious authentication activity",
+              "severity": "Medium",
+              "status": "Active",
+              "compromisedEntity": "vm-dev-build-01",
+              "intent": "PreAttack, CredentialAccess",
+              "productName": "Microsoft Defender for Servers",
+              "alertType": "VM_SuspiciousAuthActivity",
+              "timeGenerated": "2026-10-15T04:00:00Z",
+              "startTime": "2026-10-15T03:00:00Z",
+              "resourceId": "/subscriptions/00000000-0000-4000-8000-0000000000a2/resourcegroups/rg-example-dev/providers/microsoft.compute/virtualmachines/vm-dev-build-01",
+              "resourceType": "microsoft.compute/virtualmachines",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a2",
+              "subscriptionName": "Example Org Development",
+              "description": "Suspicious authentication activity was detected on vm-dev-build-01.",
+              "alertUri": "https://portal.azure.com/#blade/Microsoft_Azure_Security_AzureDefenderForData/AlertBlade/alertId/251700010000000000_00000001-4444-4000-8000-000000000000/subscriptionId/00000000-0000-4000-8000-0000000000a2/resourceGroup/rg-example-dev/referencedFrom/alertDeepLink/location/westeurope",
+              "isIncident": false
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a2/resourceGroups/rg-example-dev/providers/Microsoft.Security/locations/westeurope/alerts/251700020000000000_00000002-4444-4000-8000-000000000000",
+              "alertName": "Successful RDP brute force attack",
+              "severity": "High",
+              "status": "Active",
+              "compromisedEntity": "vm-dev-build-01",
+              "intent": "CredentialAccess",
+              "productName": "Microsoft Defender for Servers",
+              "alertType": "VM_RDPBruteForce",
+              "timeGenerated": "2026-10-15T02:00:00Z",
+              "startTime": "2026-10-15T01:00:00Z",
+              "resourceId": "/subscriptions/00000000-0000-4000-8000-0000000000a2/resourcegroups/rg-example-dev/providers/microsoft.compute/virtualmachines/vm-dev-build-01",
+              "resourceType": "microsoft.compute/virtualmachines",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a2",
+              "subscriptionName": "Example Org Development",
+              "description": "Successful RDP brute force attack was detected on vm-dev-build-01.",
+              "alertUri": "https://portal.azure.com/#blade/Microsoft_Azure_Security_AzureDefenderForData/AlertBlade/alertId/251700020000000000_00000002-4444-4000-8000-000000000000/subscriptionId/00000000-0000-4000-8000-0000000000a2/resourceGroup/rg-example-dev/referencedFrom/alertDeepLink/location/westeurope",
+              "isIncident": false
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-functions/providers/Microsoft.Security/locations/westeurope/alerts/251700030000000000_00000003-4444-4000-8000-000000000000",
+              "alertName": "Access from a Tor exit node to a storage account",
+              "severity": "High",
+              "status": "InProgress",
+              "compromisedEntity": "stexample001",
+              "intent": "Probing, Exploitation",
+              "productName": "Microsoft Defender for Storage",
+              "alertType": "Storage.Blob_TorAnomaly",
+              "timeGenerated": "2026-10-14T23:00:00Z",
+              "startTime": "2026-10-14T22:00:00Z",
+              "resourceId": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourcegroups/rg-example-functions/providers/microsoft.storage/storageaccounts/stexample001",
+              "resourceType": "microsoft.storage/storageaccounts",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "subscriptionName": "Example Org Production",
+              "description": "Access from a Tor exit node to a storage account was detected on stexample001.",
+              "alertUri": "https://portal.azure.com/#blade/Microsoft_Azure_Security_AzureDefenderForData/AlertBlade/alertId/251700030000000000_00000003-4444-4000-8000-000000000000/subscriptionId/00000000-0000-4000-8000-0000000000a1/resourceGroup/rg-example-functions/referencedFrom/alertDeepLink/location/westeurope",
+              "isIncident": false
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-functions/providers/Microsoft.Security/locations/westeurope/alerts/251700040000000000_00000004-4444-4000-8000-000000000000",
+              "alertName": "Unusual amount of data extracted from a storage account",
+              "severity": "Medium",
+              "status": "Active",
+              "compromisedEntity": "stexample001",
+              "intent": "Exfiltration",
+              "productName": "Microsoft Defender for Storage",
+              "alertType": "Storage.Blob_DataExfiltration.AmountOfDataAnomaly",
+              "timeGenerated": "2026-10-14T03:00:00Z",
+              "startTime": "2026-10-14T02:00:00Z",
+              "resourceId": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourcegroups/rg-example-functions/providers/microsoft.storage/storageaccounts/stexample001",
+              "resourceType": "microsoft.storage/storageaccounts",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "subscriptionName": "Example Org Production",
+              "description": "Unusual amount of data extracted from a storage account was detected on stexample001.",
+              "alertUri": "https://portal.azure.com/#blade/Microsoft_Azure_Security_AzureDefenderForData/AlertBlade/alertId/251700040000000000_00000004-4444-4000-8000-000000000000/subscriptionId/00000000-0000-4000-8000-0000000000a1/resourceGroup/rg-example-functions/referencedFrom/alertDeepLink/location/westeurope",
+              "isIncident": false
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-arc/providers/Microsoft.Security/locations/westeurope/alerts/251700050000000000_00000005-4444-4000-8000-000000000000",
+              "alertName": "Suspicious process executed",
+              "severity": "Medium",
+              "status": "Active",
+              "compromisedEntity": "srv-example-01",
+              "intent": "Execution",
+              "productName": "Microsoft Defender for Servers",
+              "alertType": "SuspiciousProcess",
+              "timeGenerated": "2026-10-13T05:00:00Z",
+              "startTime": "2026-10-13T04:00:00Z",
+              "resourceId": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourcegroups/rg-example-arc/providers/microsoft.hybridcompute/machines/srv-example-01",
+              "resourceType": "microsoft.hybridcompute/machines",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "subscriptionName": "Example Org Production",
+              "description": "Suspicious process executed was detected on srv-example-01.",
+              "alertUri": "https://portal.azure.com/#blade/Microsoft_Azure_Security_AzureDefenderForData/AlertBlade/alertId/251700050000000000_00000005-4444-4000-8000-000000000000/subscriptionId/00000000-0000-4000-8000-0000000000a1/resourceGroup/rg-example-arc/referencedFrom/alertDeepLink/location/westeurope",
+              "isIncident": false
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-data/providers/Microsoft.Security/locations/westeurope/alerts/251700060000000000_00000006-4444-4000-8000-000000000000",
+              "alertName": "Access from an unusual location to a key vault",
+              "severity": "Low",
+              "status": "Active",
+              "compromisedEntity": "kv-example-prod",
+              "intent": "CredentialAccess",
+              "productName": "Microsoft Defender for Key Vault",
+              "alertType": "KV_GeoAnomaly",
+              "timeGenerated": "2026-10-12T11:00:00Z",
+              "startTime": "2026-10-12T10:00:00Z",
+              "resourceId": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourcegroups/rg-example-data/providers/microsoft.keyvault/vaults/kv-example-prod",
+              "resourceType": "microsoft.keyvault/vaults",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "subscriptionName": "Example Org Production",
+              "description": "Access from an unusual location to a key vault was detected on kv-example-prod.",
+              "alertUri": "https://portal.azure.com/#blade/Microsoft_Azure_Security_AzureDefenderForData/AlertBlade/alertId/251700060000000000_00000006-4444-4000-8000-000000000000/subscriptionId/00000000-0000-4000-8000-0000000000a1/resourceGroup/rg-example-data/referencedFrom/alertDeepLink/location/westeurope",
+              "isIncident": false
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-functions/providers/Microsoft.Security/locations/westeurope/alerts/251700070000000000_00000007-4444-4000-8000-000000000000",
+              "alertName": "Communication with suspicious domain identified by threat intelligence",
+              "severity": "Informational",
+              "status": "Active",
+              "compromisedEntity": "func-example",
+              "intent": "CommandAndControl",
+              "productName": "Microsoft Defender for App Service",
+              "alertType": "AppServices_CommandAndControl",
+              "timeGenerated": "2026-10-11T15:00:00Z",
+              "startTime": "2026-10-11T14:00:00Z",
+              "resourceId": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourcegroups/rg-example-functions/providers/microsoft.web/sites/func-example",
+              "resourceType": "microsoft.web/sites",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "subscriptionName": "Example Org Production",
+              "description": "Communication with suspicious domain identified by threat intelligence was detected on func-example.",
+              "alertUri": "https://portal.azure.com/#blade/Microsoft_Azure_Security_AzureDefenderForData/AlertBlade/alertId/251700070000000000_00000007-4444-4000-8000-000000000000/subscriptionId/00000000-0000-4000-8000-0000000000a1/resourceGroup/rg-example-functions/referencedFrom/alertDeepLink/location/westeurope",
+              "isIncident": false
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-arc/providers/Microsoft.Security/locations/westeurope/alerts/251700080000000000_00000008-4444-4000-8000-000000000000",
+              "alertName": "Suspicious WMI execution",
+              "severity": "Medium",
+              "status": "Resolved",
+              "compromisedEntity": "srv-example-02",
+              "intent": "Execution",
+              "productName": "Microsoft Defender for Servers",
+              "alertType": "VM_SuspiciousWMIExecution",
+              "timeGenerated": "2026-10-09T13:00:00Z",
+              "startTime": "2026-10-09T12:00:00Z",
+              "resourceId": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourcegroups/rg-example-arc/providers/microsoft.hybridcompute/machines/srv-example-02",
+              "resourceType": "microsoft.hybridcompute/machines",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "subscriptionName": "Example Org Production",
+              "description": "Suspicious WMI execution was detected on srv-example-02.",
+              "alertUri": "https://portal.azure.com/#blade/Microsoft_Azure_Security_AzureDefenderForData/AlertBlade/alertId/251700080000000000_00000008-4444-4000-8000-000000000000/subscriptionId/00000000-0000-4000-8000-0000000000a1/resourceGroup/rg-example-arc/referencedFrom/alertDeepLink/location/westeurope",
+              "isIncident": false
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-arc/providers/Microsoft.Security/locations/westeurope/alerts/251700090000000000_00000009-4444-4000-8000-000000000000",
+              "alertName": "Antimalware action failed",
+              "severity": "High",
+              "status": "Dismissed",
+              "compromisedEntity": "srv-example-02",
+              "intent": "Execution",
+              "productName": "Microsoft Defender for Servers",
+              "alertType": "VM_AmMalwareActionFailed",
+              "timeGenerated": "2026-10-07T01:00:00Z",
+              "startTime": "2026-10-07T00:00:00Z",
+              "resourceId": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourcegroups/rg-example-arc/providers/microsoft.hybridcompute/machines/srv-example-02",
+              "resourceType": "microsoft.hybridcompute/machines",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "subscriptionName": "Example Org Production",
+              "description": "Antimalware action failed was detected on srv-example-02.",
+              "alertUri": "https://portal.azure.com/#blade/Microsoft_Azure_Security_AzureDefenderForData/AlertBlade/alertId/251700090000000000_00000009-4444-4000-8000-000000000000/subscriptionId/00000000-0000-4000-8000-0000000000a1/resourceGroup/rg-example-arc/referencedFrom/alertDeepLink/location/westeurope",
+              "isIncident": false
+            }
+          ]
+        }
+      },
+      {
+        "match": {
+          "bodyIncludes": "af:security.cloud-alerts#summary"
+        },
+        "body": {
+          "totalRecords": 7,
+          "count": 7,
+          "resultTruncated": "false",
+          "data": [
+            {
+              "status": "Active",
+              "severity": "High",
+              "count_": 1
+            },
+            {
+              "status": "Active",
+              "severity": "Informational",
+              "count_": 1
+            },
+            {
+              "status": "Active",
+              "severity": "Low",
+              "count_": 1
+            },
+            {
+              "status": "Active",
+              "severity": "Medium",
+              "count_": 3
+            },
+            {
+              "status": "Dismissed",
+              "severity": "High",
+              "count_": 1
+            },
+            {
+              "status": "InProgress",
+              "severity": "High",
+              "count_": 1
+            },
+            {
+              "status": "Resolved",
+              "severity": "Medium",
+              "count_": 1
+            }
+          ]
+        }
+      },
+      {
+        "match": {
+          "bodyIncludes": "af:security.overview#mdcscores"
+        },
+        "body": {
+          "totalRecords": 2,
+          "count": 2,
+          "resultTruncated": "false",
+          "data": [
+            {
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "subscriptionName": "Example Org Production",
+              "current": 37.2,
+              "max": 60,
+              "percentage": 0.62,
+              "weight": 42,
+              "healthy": 118,
+              "unhealthy": 47
+            },
+            {
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a2",
+              "subscriptionName": "Example Org Development",
+              "current": 24.6,
+              "max": 60,
+              "percentage": 0.41,
+              "weight": 18,
+              "healthy": 39,
+              "unhealthy": 52
+            }
+          ]
+        }
+      },
+      {
         "match": { "bodyIncludes": "microsoft.hybridcompute/machines" },
         "body": {
           "totalRecords": 2,

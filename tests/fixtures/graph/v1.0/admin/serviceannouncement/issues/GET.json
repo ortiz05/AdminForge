@@ -1,0 +1,271 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#admin/serviceAnnouncement/issues",
+  "value": [
+    {
+      "id": "TM912345",
+      "title": "Some users may experience delays receiving chat messages in Microsoft Teams",
+      "service": "Microsoft Teams",
+      "feature": "Teams Components",
+      "featureGroup": "Teams Components",
+      "classification": "incident",
+      "status": "serviceDegradation",
+      "origin": "microsoft",
+      "isResolved": false,
+      "startDateTime": "2026-10-15T06:30:00Z",
+      "endDateTime": null,
+      "lastModifiedDateTime": "2026-10-15T08:30:00Z",
+      "impactDescription": "Users may see chat messages arrive several minutes late in the desktop and web clients.",
+      "details": [],
+      "posts": [
+        {
+          "createdDateTime": "2026-10-15T06:48:00Z",
+          "postType": "quick",
+          "description": {
+            "contentType": "html",
+            "content": "<p><b>Title:</b> Some users may experience delays receiving chat messages</p><p><b>User impact:</b> Users may see chat messages arrive several minutes late.</p><p><b>Current status:</b> We are reviewing service telemetry to identify the cause.</p>"
+          }
+        },
+        {
+          "createdDateTime": "2026-10-15T07:48:00Z",
+          "postType": "regular",
+          "description": {
+            "contentType": "html",
+            "content": "<p><b>Current status:</b> We identified a recent configuration change in a messaging component and are reverting it.</p><p><b>Next update by:</b> Wednesday, October 15, 2026, at 10:00 AM UTC</p>"
+          }
+        },
+        {
+          "createdDateTime": "2026-10-15T08:30:00Z",
+          "postType": "regular",
+          "description": {
+            "contentType": "html",
+            "content": "<p><b>Current status:</b> The revert is 60% complete and delays are decreasing in monitored regions.</p><ul><li>Affected: North America, Europe</li><li>Workaround: refresh the client</li></ul>"
+          }
+        }
+      ]
+    },
+    {
+      "id": "IT911876",
+      "title": "Admins may see delays in device compliance status updates",
+      "service": "Microsoft Intune",
+      "feature": "Device compliance",
+      "featureGroup": "Device management",
+      "classification": "advisory",
+      "status": "investigating",
+      "origin": "microsoft",
+      "isResolved": false,
+      "startDateTime": "2026-10-14T22:00:00Z",
+      "endDateTime": null,
+      "lastModifiedDateTime": "2026-10-15T07:30:00Z",
+      "impactDescription": "Compliance state changes can take up to four hours to appear in the Intune admin center.",
+      "details": [],
+      "posts": [
+        {
+          "createdDateTime": "2026-10-14T22:30:00Z",
+          "postType": "regular",
+          "description": {
+            "contentType": "html",
+            "content": "<p><b>Title:</b> Delays in device compliance status updates</p><p><b>Current status:</b> We are investigating increased processing times.</p>"
+          }
+        },
+        {
+          "createdDateTime": "2026-10-15T07:30:00Z",
+          "postType": "regular",
+          "description": {
+            "contentType": "html",
+            "content": "<p><b>Current status:</b> We are scaling out the processing service.</p>"
+          }
+        }
+      ]
+    },
+    {
+      "id": "TM913002",
+      "title": "Meeting recordings may take longer than usual to appear in chat",
+      "service": "Microsoft Teams",
+      "feature": "Meetings",
+      "featureGroup": "Teams Components",
+      "classification": "advisory",
+      "status": "investigating",
+      "origin": "microsoft",
+      "isResolved": false,
+      "startDateTime": "2026-10-15T03:00:00Z",
+      "endDateTime": null,
+      "lastModifiedDateTime": "2026-10-15T07:00:00Z",
+      "impactDescription": "Recordings are saved but can take up to an hour to show in the meeting chat.",
+      "details": [],
+      "posts": [
+        {
+          "createdDateTime": "2026-10-15T03:12:00Z",
+          "postType": "regular",
+          "description": {
+            "contentType": "html",
+            "content": "<p><b>Current status:</b> We are investigating a backlog in recording processing.</p>"
+          }
+        }
+      ]
+    },
+    {
+      "id": "EX910442",
+      "title": "Users may be unable to open shared mailboxes in Outlook on the web",
+      "service": "Exchange Online",
+      "feature": "Outlook on the web",
+      "featureGroup": "Exchange Online",
+      "classification": "incident",
+      "status": "serviceRestored",
+      "origin": "microsoft",
+      "isResolved": true,
+      "startDateTime": "2026-10-12T03:00:00Z",
+      "endDateTime": "2026-10-12T08:00:00Z",
+      "lastModifiedDateTime": "2026-10-12T09:00:00Z",
+      "impactDescription": "Users received an error when opening a shared mailbox they have Full Access to.",
+      "details": [],
+      "posts": [
+        {
+          "createdDateTime": "2026-10-12T03:30:00Z",
+          "postType": "regular",
+          "description": {
+            "contentType": "html",
+            "content": "<p><b>Current status:</b> We are investigating.</p>"
+          }
+        },
+        {
+          "createdDateTime": "2026-10-12T09:00:00Z",
+          "postType": "regular",
+          "description": {
+            "contentType": "html",
+            "content": "<p><b>Final status:</b> We deployed a fix and confirmed that impact is remediated.</p><p><b>Root cause:</b> A code regression in a recent update.</p>"
+          }
+        }
+      ]
+    },
+    {
+      "id": "SP909871",
+      "title": "Some users may see slow page loads for SharePoint Online sites",
+      "service": "SharePoint Online",
+      "feature": "SharePoint Features",
+      "featureGroup": "SharePoint Features",
+      "classification": "advisory",
+      "status": "postIncidentReviewPublished",
+      "origin": "microsoft",
+      "isResolved": true,
+      "startDateTime": "2026-10-08T05:00:00Z",
+      "endDateTime": "2026-10-08T13:00:00Z",
+      "lastModifiedDateTime": "2026-10-10T09:00:00Z",
+      "impactDescription": "Pages took up to 20 seconds to load for some users in Europe.",
+      "details": [],
+      "posts": [
+        {
+          "createdDateTime": "2026-10-08T09:00:00Z",
+          "postType": "regular",
+          "description": {
+            "contentType": "html",
+            "content": "<p><b>Final status:</b> Performance returned to normal after rebalancing traffic.</p>"
+          }
+        }
+      ]
+    },
+    {
+      "id": "MO908765",
+      "title": "Users may be unable to sign in to Microsoft 365 apps",
+      "service": "Microsoft 365 suite",
+      "feature": "Portal",
+      "featureGroup": "Portal",
+      "classification": "incident",
+      "status": "serviceRestored",
+      "origin": "microsoft",
+      "isResolved": true,
+      "startDateTime": "2026-10-03T06:00:00Z",
+      "endDateTime": "2026-10-03T08:00:00Z",
+      "lastModifiedDateTime": "2026-10-04T09:00:00Z",
+      "impactDescription": "Sign-in attempts to Microsoft 365 apps failed intermittently.",
+      "details": [],
+      "posts": [
+        {
+          "createdDateTime": "2026-10-03T07:00:00Z",
+          "postType": "regular",
+          "description": {
+            "contentType": "html",
+            "content": "<p><b>Final status:</b> We rolled back the affected update and sign-ins succeed.</p>"
+          }
+        }
+      ]
+    },
+    {
+      "id": "EX907001",
+      "title": "Mail flow delays to some external recipients",
+      "service": "Exchange Online",
+      "feature": "E-Mail and calendar access",
+      "featureGroup": "Exchange Online",
+      "classification": "advisory",
+      "status": "falsePositive",
+      "origin": "customer",
+      "isResolved": true,
+      "startDateTime": "2026-09-28T09:00:00Z",
+      "endDateTime": "2026-09-28T09:00:00Z",
+      "lastModifiedDateTime": "2026-09-28T09:00:00Z",
+      "impactDescription": "Reported delays were caused by a recipient-side issue.",
+      "details": [],
+      "posts": [
+        {
+          "createdDateTime": "2026-09-28T09:00:00Z",
+          "postType": "regular",
+          "description": {
+            "contentType": "html",
+            "content": "<p><b>Final status:</b> Our investigation determined the issue was outside Microsoft 365.</p>"
+          }
+        }
+      ]
+    },
+    {
+      "id": "DZ906543",
+      "title": "Delays in alert generation for Microsoft Defender XDR",
+      "service": "Microsoft Defender XDR",
+      "feature": "Alerts",
+      "featureGroup": "Microsoft Defender XDR",
+      "classification": "advisory",
+      "status": "serviceRestored",
+      "origin": "microsoft",
+      "isResolved": true,
+      "startDateTime": "2026-09-21T09:00:00Z",
+      "endDateTime": "2026-09-22T09:00:00Z",
+      "lastModifiedDateTime": "2026-09-22T09:00:00Z",
+      "impactDescription": "New alerts appeared up to 45 minutes late.",
+      "details": [],
+      "posts": [
+        {
+          "createdDateTime": "2026-09-22T09:00:00Z",
+          "postType": "regular",
+          "description": {
+            "contentType": "html",
+            "content": "<p><b>Final status:</b> Processing caught up and no alerts were lost.</p>"
+          }
+        }
+      ]
+    },
+    {
+      "id": "PL905211",
+      "title": "Users may be unable to create tasks in Planner",
+      "service": "Planner",
+      "feature": "Planner",
+      "featureGroup": "Planner",
+      "classification": "incident",
+      "status": "serviceRestored",
+      "origin": "microsoft",
+      "isResolved": true,
+      "startDateTime": "2026-09-18T04:00:00Z",
+      "endDateTime": "2026-09-18T07:00:00Z",
+      "lastModifiedDateTime": "2026-09-18T09:00:00Z",
+      "impactDescription": "Creating a task returned an error.",
+      "details": [],
+      "posts": [
+        {
+          "createdDateTime": "2026-09-18T09:00:00Z",
+          "postType": "regular",
+          "description": {
+            "contentType": "html",
+            "content": "<p><b>Final status:</b> A fix was deployed.</p>"
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,108 @@
+$schema: ../../../packages/schemas/generated/playbook.schema.json
+kind: playbook
+id: azure.create-resource-group
+version: 1.0.0
+title: Create resource group
+summary: Creates an empty resource group in a subscription, with tags. Refuses names that already exist and locations the subscription can't use.
+owner: azure-team
+tags: [azure, resource-groups, provisioning]
+risk: medium
+mode: write
+requires:
+  portalRoles: [Portal.Operator]
+  scopes:
+    arm: [user_impersonation]
+  azureRoles: [Contributor]
+confirm:
+  type: click
+  message: Create this resource group?
+approval:
+  required: false
+
+inputs:
+  subscriptionId: { type: string, format: guid, label: Subscription, picker: subscription }
+  name: { type: string, label: Name, maxLength: 90, pattern: "^[-\\w._()]{0,89}[-\\w_()]$", placeholder: rg-app-prod-weu, description: "Letters, digits, underscores, hyphens, periods and parentheses; can't end with a period." }
+  location: { type: string, label: Region (lower-case name), pattern: "^[a-z0-9]+$", placeholder: westeurope, description: "Region name in lower case without spaces, as az account list-locations shows it (westeurope, not West Europe). Checked against the regions this subscription can use." }
+  tags: { type: string, label: Tags, required: false, placeholder: "owner=platform-team; env=prod; costCenter=CC-1001", description: Semicolon-separated name=value pairs. }
+  reason: { type: string, label: Reason, required: false, multiline: true, description: Recorded in the audit log. }
+
+steps:
+  - id: existing
+    type: resourceGraph
+    mode: read
+    describe: Check whether the name is already taken in this subscription
+    query: |
+      // af:azure.create-resource-group#existing
+      resourcecontainers
+      | where type =~ 'microsoft.resources/subscriptions/resourcegroups'
+      | where subscriptionId == '${ $guid(inputs.subscriptionId) }' and name =~ '${ $replace(inputs.name, /[^A-Za-z0-9._()-]/, '') }'
+      | project id, name, location
+
+  - id: nameFree
+    type: assert
+    that: ${ $count(steps.existing.output.value) = 0 }
+    message: ${ 'A resource group named ' & inputs.name & ' already exists in this subscription.' }
+
+  - id: locations
+    type: arm
+    mode: read
+    describe: List the locations this subscription can use
+    request:
+      method: GET
+      path: /subscriptions/${ $encode($guid(inputs.subscriptionId)) }/locations
+      apiVersion: "2022-12-01"
+
+  - id: locationValid
+    type: assert
+    that: ${ $lowercase(inputs.location) in steps.locations.output.value.name }
+    message: ${ inputs.location & ' is not a location this subscription can use.' }
+
+  - id: parseTags
+    type: transform
+    expression: >-
+      ${ inputs.tags ? $merge($split(inputs.tags, ';')[$trim($) != ''].(
+           $kv := $split($, '=');
+           { $trim($kv[0]): $trim($join($kv[[1..100]], '=')) }
+         )) : {} }
+
+  - id: create
+    type: arm
+    mode: write
+    describe: ${ 'Create resource group ' & inputs.name & ' in ' & $lowercase(inputs.location) }
+    request:
+      method: PUT
+      path: /subscriptions/${ $encode($guid(inputs.subscriptionId)) }/resourcegroups/${ $encode(inputs.name) }
+      apiVersion: "2021-04-01"
+      body: >-
+        ${ { 'location': $lowercase(inputs.location), 'tags': steps.parseTags.output } }
+    dryRunOutput:
+      id: /subscriptions/${ inputs.subscriptionId }/resourceGroups/${ inputs.name }
+      name: ${ inputs.name }
+
+outputs:
+  summary: ${ 'Resource group ' & inputs.name & ' created in ' & $lowercase(inputs.location) & '.' }
+  resourceGroupId: ${ steps.create.output.id }
+
+tests:
+  - name: refuses a name that already exists
+    inputs: { subscriptionId: 00000000-0000-4000-8000-0000000000a1, name: rg-example-functions, location: westeurope }
+    mocks:
+      existing: { value: [{ id: /subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-functions, name: rg-example-functions, location: westeurope }] }
+    expect: { status: failed, failedStep: nameFree }
+  - name: refuses a region the subscription cannot use
+    inputs: { subscriptionId: 00000000-0000-4000-8000-0000000000a1, name: rg-example-new, location: moonbase1 }
+    mocks:
+      existing: { value: [] }
+      locations: { value: [{ name: westeurope }, { name: northeurope }] }
+    expect: { status: failed, failedStep: locationValid }
+  - name: plans the create with parsed tags
+    inputs: { subscriptionId: 00000000-0000-4000-8000-0000000000a1, name: rg-example-new, location: westeurope, tags: "owner=platform-team; env=prod" }
+    mocks:
+      existing: { value: [] }
+      locations: { value: [{ name: westeurope }, { name: northeurope }] }
+    expect:
+      status: succeeded
+      plan: [create]
+      outputs:
+        summary: Resource group rg-example-new created in westeurope.
+        resourceGroupId: /subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-new

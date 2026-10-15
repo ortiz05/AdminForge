@@ -1,0 +1,268 @@
+$schema: ../../../packages/schemas/generated/page.schema.json
+kind: page
+id: m365.licence
+version: 1.0.0
+title: Licence
+summary: One subscription — who holds a seat, whether it was assigned directly or through a group, assignment errors, and the service plans it includes.
+owner: m365-team
+tags: [m365, licensing]
+template: entity
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    graph: [Organization.Read.All, User.Read.All, AuditLog.Read.All]
+  entraRoles: [License Administrator, Global Reader]
+
+params:
+  skuId: { type: guid, label: SKU, required: true, hidden: true }
+  q: { type: string, default: "", label: Search, placeholder: Name or sign-in name }
+  assignment:
+    type: enum
+    label: Assigned
+    facet: true
+    default: All
+    values:
+      - { value: All, label: Directly or by group }
+      - { value: Direct, label: Directly }
+      - { value: Group, label: Through a group }
+      - { value: Error, label: With assignment errors }
+  enabled:
+    type: enum
+    label: Sign-in
+    facet: true
+    default: Any
+    values: [Any, Enabled, Disabled]
+
+filters:
+  search: q
+  facets: [assignment, enabled]
+
+savedViews:
+  enabled: true
+  shared: true
+  presets:
+    - { name: Disabled accounts holding a seat, params: { enabled: Disabled } }
+    - { name: Assignment errors, params: { assignment: Error } }
+
+datasources:
+  sku:
+    source: graph
+    request:
+      path: /subscribedSkus
+      query:
+        $select: skuId,skuPartNumber,capabilityStatus,appliesTo,consumedUnits,prepaidUnits,servicePlans
+    cache: { ttl: 300 }
+    # The one subscribedSku with this skuId, plus seat maths and its service plans.
+    transform: >-
+      ${ (
+        $p := params;
+        $s := value.value[skuId = $lowercase($p.skuId)][0];
+        $enabled := $s.prepaidUnits.enabled ? $s.prepaidUnits.enabled : 0;
+        $s ? {
+          "skuId": $s.skuId,
+          "skuPartNumber": $s.skuPartNumber,
+          "capabilityStatus": $s.capabilityStatus,
+          "appliesTo": $s.appliesTo,
+          "enabled": $enabled,
+          "consumed": $s.consumedUnits,
+          "available": $max([0, $enabled - $s.consumedUnits]),
+          "warning": $s.prepaidUnits.warning,
+          "suspended": $s.prepaidUnits.suspended,
+          "utilization": $enabled > 0 ? $round($s.consumedUnits / $enabled, 4) : 0,
+          "servicePlans": [$s.servicePlans.{ "servicePlanId": servicePlanId, "servicePlanName": servicePlanName, "provisioningStatus": provisioningStatus, "appliesTo": appliesTo }]
+        }
+      ) }
+  users:
+    source: graph
+    request:
+      path: /users
+      headers: { ConsistencyLevel: eventual }
+      query:
+        $filter: ${ 'assignedLicenses/any(x:x/skuId eq ' & $guid(params.skuId) & ')' }
+        $select: id,displayName,userPrincipalName,accountEnabled,userType,department,usageLocation,licenseAssignmentStates,signInActivity
+        $count: true
+        $top: 999
+    paging: all
+    maxItems: 50000
+    cache: { ttl: 300 }
+    # One row per licensed user: how the seat was assigned (direct / group / both), assignment errors and last sign-in.
+    transform: >-
+      ${ (
+        $p := params;
+        $sku := $lowercase($p.skuId);
+        $q := $lowercase($trim($p.q ? $p.q : ''));
+        $all := [value.value.(
+          $states := licenseAssignmentStates[$lowercase(skuId) = $sku];
+          $direct := $exists($states[$not($exists(assignedByGroup)) or assignedByGroup = null]);
+          $group := $exists($states[$exists(assignedByGroup) and assignedByGroup != null]);
+          $err := $states[error != 'None' and $exists(error)][0].error;
+          $last := signInActivity.lastSignInDateTime;
+          {
+            "id": id,
+            "displayName": displayName,
+            "userPrincipalName": userPrincipalName,
+            "accountEnabled": accountEnabled,
+            "userType": userType,
+            "department": department,
+            "usageLocation": usageLocation,
+            "assignment": $direct and $group ? 'Both' : $group ? 'Group' : 'Direct',
+            "groupIds": [$states.assignedByGroup[$ != null]],
+            "error": $err ? $err : null,
+            "state": $err ? 'Error' : $states[0].state,
+            "lastSignIn": $last,
+            "inactiveDays": $last ? -$daysUntil($last) : null
+          }
+        )];
+        $rows := [$all[
+            ($q = '' or $contains($lowercase(displayName & ' ' & userPrincipalName), $q))
+            and ($p.enabled = 'Any' or $not($exists($p.enabled)) or accountEnabled = ($p.enabled = 'Enabled'))
+            and ($p.assignment = 'All' or $not($exists($p.assignment))
+                 or ($p.assignment = 'Error' and $exists(error) and error != null)
+                 or ($p.assignment = 'Direct' and assignment in ['Direct', 'Both'])
+                 or ($p.assignment = 'Group' and assignment in ['Group', 'Both']))
+          ]];
+        {
+          "rows": $rows,
+          "total": $count($all),
+          "viaGroup": $count($all[assignment in ['Group', 'Both']]),
+          "errors": $count($all[$exists(error) and error != null]),
+          "disabled": $count($all[accountEnabled = false]),
+          "inactive": $count($all[accountEnabled = true and ($not($exists(lastSignIn)) or lastSignIn = null or inactiveDays > 90)])
+        }
+      ) }
+
+header:
+  title: ${ sku.skuPartNumber }
+  subtitle: "${ sku.consumed & ' of ' & sku.enabled & ' seats assigned' }"
+  status: "${ sku.capabilityStatus != 'Enabled' ? 'crit' : sku.utilization >= 0.9 ? 'warn' : 'ok' }"
+  statusLabel: "${ sku.capabilityStatus != 'Enabled' ? sku.capabilityStatus : sku.utilization >= 0.9 ? 'Nearly full' : 'Seats available' }"
+  ids:
+    SKU id: ${ sku.skuId }
+
+actions:
+  - playbook: identity.assign-licence
+    label: Assign this licence
+    icon: user-plus
+    inputs:
+      sku: ${ params.skuId }
+  - label: Open in Microsoft 365 admin center
+    icon: arrow-square-out
+    href: "https://admin.microsoft.com/Adminportal/Home#/licensedetailpage?skuId=${ $encode(params.skuId) }"
+
+layout:
+  - widget: kpi
+    id: assigned
+    data: users.total
+    label: Users with a seat
+    format: number
+  - widget: kpi
+    id: viaGroup
+    data: users.viaGroup
+    label: Assigned through a group
+    format: number
+  - widget: kpi
+    id: disabled
+    data: users.disabled
+    label: Disabled accounts holding a seat
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+  - widget: kpi
+    id: inactive
+    data: users.inactive
+    label: No sign-in for 90+ days
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+
+tabs:
+  - id: users
+    label: Users
+    layout:
+      - widget: table
+        id: users
+        span: 12
+        data: users.rows
+        rowKey: id
+        columns:
+          - { field: displayName, label: Name, kind: identity, secondary: userPrincipalName }
+          - field: accountEnabled
+            label: Sign-in
+            kind: status
+            map: { "true": [ok, Enabled], "false": [crit, Disabled] }
+            filter: { type: facet, param: enabled }
+          - field: assignment
+            label: Assigned
+            kind: status
+            map: { Direct: [neutral, Directly], Group: [info, Through a group], Both: [info, Directly and by group] }
+            filter: facet
+          - field: state
+            label: Assignment state
+            kind: status
+            map: { Active: [ok, Active], ActiveWithError: [warn, Active with error], Disabled: [neutral, Disabled], Error: [crit, Error] }
+            filter: facet
+          - { field: error, label: Error, filter: facet }
+          - { field: department, label: Department, filter: text }
+          - { field: lastSignIn, label: Last sign-in, kind: relativeTime, filter: date, sortable: true }
+          - { field: inactiveDays, label: Days since sign-in, kind: number, filter: range, hidden: true }
+          - { field: usageLocation, label: Usage location, filter: facet, hidden: true }
+          - { field: userType, label: Type, filter: facet, hidden: true }
+          - { field: id, label: Object id, kind: guid, hidden: true }
+        inspect:
+          page: identity.user
+          params:
+            id: ${ row.id }
+        selection: multi
+        rowActions:
+          - playbook: identity.remove-licence
+            label: Remove licence
+            icon: user-minus
+            inputs:
+              userId: ${ row.id }
+              sku: ${ params.skuId }
+            when: ${ row.assignment in ['Direct', 'Both'] }
+          - label: Open licences in Entra admin center
+            icon: arrow-square-out
+            href: "https://entra.microsoft.com/#view/Microsoft_AAD_UsersAndTenants/UserProfileMenuBlade/~/Licenses/userId/${ $encode(row.id) }"
+        bulkActions:
+          - playbook: identity.remove-licence
+            label: Remove licence (direct assignments)
+            icon: user-minus
+            forEach:
+              inputs:
+                userId: ${ row.id }
+                sku: ${ params.skuId }
+              concurrency: 5
+            maxItems: 200
+            when: "${ $count(rows[assignment = 'Group']) = 0 }"
+        empty:
+          title: Nobody matches
+          body: No user holds this licence with the current filters. Clear the filters to see every assignment.
+  - id: plans
+    label: Service plans
+    layout:
+      - widget: table
+        span: 12
+        data: sku.servicePlans
+        rowKey: servicePlanId
+        columns:
+          - { field: servicePlanName, label: Service plan }
+          - field: provisioningStatus
+            label: Provisioning
+            kind: status
+            map:
+              Success: [ok, Provisioned]
+              PendingActivation: [warn, Pending activation]
+              PendingInput: [warn, Pending input]
+              PendingProvisioning: [info, Provisioning]
+              Disabled: [neutral, Disabled]
+            filter: facet
+          - { field: appliesTo, label: Applies to, filter: facet }
+          - { field: servicePlanId, label: Service plan id, kind: guid, hidden: true }
+        empty:
+          title: No service plans
+          body: Microsoft didn't return service plans for this subscription.
+
+export:
+  formats: [csv, xlsx]
+  fileName: licence-${ sku.skuPartNumber }-users
+  data: users.rows
+  columns: all

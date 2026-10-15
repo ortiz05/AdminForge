@@ -1,0 +1,13 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#sites/$entity",
+  "id": "exampleorg.sharepoint.com,10000000-0000-4000-8000-000000000902,10000000-0000-4000-8000-000000000a02",
+  "name": "ProjectAtlas",
+  "displayName": "Project Atlas",
+  "description": "Project Atlas site",
+  "webUrl": "https://exampleorg.sharepoint.com/sites/ProjectAtlas",
+  "createdDateTime": "2026-03-19T09:00:00Z",
+  "lastModifiedDateTime": "2026-10-14T09:00:00Z",
+  "siteCollection": {
+    "hostname": "exampleorg.sharepoint.com"
+  }
+}

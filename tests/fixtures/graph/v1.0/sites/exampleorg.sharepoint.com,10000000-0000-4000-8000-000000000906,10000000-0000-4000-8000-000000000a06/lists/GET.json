@@ -1,0 +1,96 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#sites(...)/lists",
+  "value": [
+    {
+      "id": "10000000-0000-4000-8000-000000000b00",
+      "name": "Documents",
+      "displayName": "Documents",
+      "webUrl": "https://exampleorg.sharepoint.com/sites/HRPolicies/Documents",
+      "createdDateTime": "2025-02-22T09:00:00Z",
+      "lastModifiedDateTime": "2026-10-15T09:00:00Z",
+      "list": {
+        "contentTypesEnabled": false,
+        "hidden": false,
+        "template": "documentLibrary"
+      }
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000b01",
+      "name": "SitePages",
+      "displayName": "Site Pages",
+      "webUrl": "https://exampleorg.sharepoint.com/sites/HRPolicies/SitePages",
+      "createdDateTime": "2025-02-22T09:00:00Z",
+      "lastModifiedDateTime": "2026-10-14T09:00:00Z",
+      "list": {
+        "contentTypesEnabled": false,
+        "hidden": false,
+        "template": "webPageLibrary"
+      }
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000b02",
+      "name": "Announcements",
+      "displayName": "Announcements",
+      "webUrl": "https://exampleorg.sharepoint.com/sites/HRPolicies/Announcements",
+      "createdDateTime": "2025-02-22T09:00:00Z",
+      "lastModifiedDateTime": "2026-10-12T09:00:00Z",
+      "list": {
+        "contentTypesEnabled": false,
+        "hidden": false,
+        "template": "announcements"
+      }
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000b03",
+      "name": "Policies",
+      "displayName": "Policies",
+      "webUrl": "https://exampleorg.sharepoint.com/sites/HRPolicies/Policies",
+      "createdDateTime": "2025-02-22T09:00:00Z",
+      "lastModifiedDateTime": "2026-09-25T09:00:00Z",
+      "list": {
+        "contentTypesEnabled": false,
+        "hidden": false,
+        "template": "documentLibrary"
+      }
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000b04",
+      "name": "Events",
+      "displayName": "Events",
+      "webUrl": "https://exampleorg.sharepoint.com/sites/HRPolicies/Events",
+      "createdDateTime": "2025-02-22T09:00:00Z",
+      "lastModifiedDateTime": "2026-10-06T09:00:00Z",
+      "list": {
+        "contentTypesEnabled": false,
+        "hidden": false,
+        "template": "events"
+      }
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000b05",
+      "name": "FormTemplates",
+      "displayName": "Form Templates",
+      "webUrl": "https://exampleorg.sharepoint.com/sites/HRPolicies/FormTemplates",
+      "createdDateTime": "2025-02-22T09:00:00Z",
+      "lastModifiedDateTime": "2024-04-28T09:00:00Z",
+      "list": {
+        "contentTypesEnabled": false,
+        "hidden": true,
+        "template": "documentLibrary"
+      }
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000b06",
+      "name": "StyleLibrary",
+      "displayName": "Style Library",
+      "webUrl": "https://exampleorg.sharepoint.com/sites/HRPolicies/StyleLibrary",
+      "createdDateTime": "2025-02-22T09:00:00Z",
+      "lastModifiedDateTime": "2024-04-28T09:00:00Z",
+      "list": {
+        "contentTypesEnabled": false,
+        "hidden": true,
+        "template": "documentLibrary"
+      }
+    }
+  ]
+}

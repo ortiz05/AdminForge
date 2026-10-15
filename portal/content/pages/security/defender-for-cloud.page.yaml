@@ -1,0 +1,234 @@
+$schema: ../../../packages/schemas/generated/page.schema.json
+kind: page
+id: security.defender-for-cloud
+version: 1.0.0
+title: Defender for Cloud
+summary: Microsoft Defender for Cloud posture across every subscription you can read — secure score, Defender plan coverage, top recommendations and active alerts.
+owner: security-team
+tags: [security, azure, defender-for-cloud, posture]
+template: dashboard
+nav: { section: security, label: Defender for Cloud, icon: cloud-check, order: 50 }
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    arm: [user_impersonation]
+  azureRoles: [Security Reader]
+
+datasources:
+  scores:
+    label: Secure score per subscription
+    source: resourceGraph
+    query: |
+      // af:security.defender-for-cloud#scores
+      securityresources
+      | where type =~ 'microsoft.security/securescores' and name =~ 'ascScore'
+      | extend current = toreal(properties.score.current), max = toreal(properties.score.max), percentage = toreal(properties.score.percentage), weight = tolong(properties.weight)
+      | join kind=leftouter (resourcecontainers | where type =~ 'microsoft.resources/subscriptions' | project subscriptionId, subscriptionName = name) on subscriptionId
+      | project subscriptionId, subscriptionName, current, max, percentage, weight
+      | order by percentage asc
+    paging: all
+    maxItems: 1000
+    cache: { ttl: 900 }
+    transform: >-
+      ${ (
+        $rows := [value.value];
+        {
+          "rows": $rows,
+          "overall": $sum($rows.max) > 0 ? $round($sum($rows.current) / $sum($rows.max), 4) : 0,
+          "below50": $count($rows[percentage < 0.5]),
+          "subscriptions": $count($rows)
+        }
+      ) }
+  plans:
+    label: Defender plans per subscription
+    source: resourceGraph
+    query: |
+      // af:security.defender-for-cloud#plans
+      securityresources
+      | where type =~ 'microsoft.security/pricings'
+      | extend plan = name, tier = tostring(properties.pricingTier), subPlan = tostring(properties.subPlan), enabledSince = todatetime(properties.enablementTime)
+      | join kind=leftouter (resourcecontainers | where type =~ 'microsoft.resources/subscriptions' | project subscriptionId, subscriptionName = name) on subscriptionId
+      | project subscriptionId, subscriptionName, plan, tier, subPlan, enabledSince
+    paging: all
+    maxItems: 5000
+    cache: { ttl: 900 }
+    # Coverage per plan: how many subscriptions have the paid (Standard) tier on.
+    transform: >-
+      ${ (
+        $rows := [value.value];
+        $names := {
+          "CloudPosture": "Defender CSPM",
+          "VirtualMachines": "Servers",
+          "AppServices": "App Service",
+          "SqlServers": "Azure SQL Databases",
+          "SqlServerVirtualMachines": "SQL servers on machines",
+          "OpenSourceRelationalDatabases": "Open-source relational databases",
+          "CosmosDbs": "Azure Cosmos DB",
+          "StorageAccounts": "Storage",
+          "Containers": "Containers",
+          "KubernetesService": "Kubernetes (legacy)",
+          "ContainerRegistry": "Container registries (legacy)",
+          "KeyVaults": "Key Vault",
+          "Arm": "Resource Manager",
+          "Dns": "DNS (legacy)",
+          "Api": "APIs",
+          "AI": "AI services"
+        };
+        $byPlan := [$distinct($rows.plan).(
+          $p := $;
+          $on := $count($rows[plan = $p and tier = 'Standard']);
+          $total := $count($rows[plan = $p]);
+          {
+            "plan": $p,
+            "name": ($n := $lookup($names, $p); $n ? $n : $p),
+            "enabled": $on,
+            "total": $total,
+            "coverage": $total > 0 ? $round($on / $total, 4) : 0,
+            "state": $on = $total ? 'full' : $on = 0 ? 'none' : 'partial',
+            "missingIn": $join($rows[plan = $p and tier != 'Standard'].subscriptionName, ', ')
+          }
+        )^(>coverage, name)];
+        {
+          "byPlan": $byPlan,
+          "full": $count($byPlan[state = 'full']),
+          "partial": $count($byPlan[state = 'partial']),
+          "none": $count($byPlan[state = 'none'])
+        }
+      ) }
+  topRecs:
+    label: Top unhealthy recommendations
+    source: resourceGraph
+    query: |
+      // af:security.defender-for-cloud#toprecs
+      securityresources
+      | where type =~ 'microsoft.security/assessments'
+      | where tostring(properties.status.code) =~ 'Unhealthy'
+      | extend recommendation = tostring(properties.displayName), severity = tostring(properties.metadata.severity), category = tostring(properties.metadata.categories[0])
+      | summarize unhealthy = count() by assessmentKey = name, recommendation, severity, category
+      | extend sevRank = case(severity =~ 'High', 0, severity =~ 'Medium', 1, 2)
+      | order by sevRank asc, unhealthy desc
+      | take 15
+    cache: { ttl: 900 }
+    transform: ${ [value.value] }
+  alertCounts:
+    label: Active Defender for Cloud alerts
+    source: resourceGraph
+    query: |
+      // af:security.defender-for-cloud#alertcounts
+      securityresources
+      | where type =~ 'microsoft.security/locations/alerts'
+      | where tostring(properties.status) in~ ('Active', 'InProgress')
+      | summarize count_ = count() by severity = tostring(properties.severity)
+    cache: { ttl: 300 }
+    transform: >-
+      ${ (
+        $z := function($v) { $exists($v) ? $v : 0 };
+        $rows := [value.value];
+        {
+          "high": $z($sum($rows[severity = 'High'].count_)),
+          "total": $z($sum($rows.count_)),
+          "bySeverity": [['High', 'Medium', 'Low', 'Informational'].(
+            $s := $;
+            { "severity": $s, "count": $z($sum($rows[severity = $s].count_)) }
+          )]
+        }
+      ) }
+
+layout:
+  - widget: kpi
+    data: scores.overall
+    label: Secure score (all subscriptions)
+    format: percent
+    status: "${ value >= 0.7 ? 'ok' : value >= 0.5 ? 'warn' : 'crit' }"
+  - widget: kpi
+    data: scores.below50
+    label: Subscriptions below 50 %
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+  - widget: kpi
+    data: plans.none
+    label: Defender plans off everywhere
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+  - widget: kpi
+    data: alertCounts.high
+    label: Active high-severity alerts
+    format: number
+    status: "${ value > 0 ? 'crit' : 'ok' }"
+    href: /p/security.cloud-alerts?severity=High
+  - widget: chart
+    id: scores_chart
+    title: Secure score by subscription
+    span: 6
+    rows: 3
+    type: bar
+    data: scores.rows
+    x: subscriptionName
+    y: percentage
+    format: percent
+  - widget: chart
+    id: alerts_by_severity
+    title: Active alerts by severity
+    span: 6
+    rows: 3
+    type: donut
+    data: alertCounts.bySeverity
+    x: severity
+    y: count
+    format: number
+  - widget: table
+    id: plans
+    title: Defender plan coverage
+    span: 6
+    data: plans.byPlan
+    rowKey: plan
+    empty:
+      title: No Defender plans found
+      body: You may not have Security Reader on any subscription, or Defender for Cloud has never been opened for these subscriptions.
+    columns:
+      - { field: name, label: Plan }
+      - field: state
+        label: Coverage
+        kind: status
+        filter: facet
+        map: { full: [ok, All subscriptions], partial: [warn, Some subscriptions], none: [neutral, Off] }
+      - { field: coverage, label: Covered, kind: percent, sortable: true }
+      - { field: enabled, label: Subscriptions on, kind: number }
+      - { field: missingIn, label: Off in }
+      - { field: plan, label: Plan key, kind: code, hidden: true }
+    rowActions:
+      - label: Open environment settings
+        icon: arrow-square-out
+        href: https://portal.azure.com/#view/Microsoft_Azure_Security/SecurityMenuBlade/~/EnvironmentSettings
+  - widget: list
+    id: top_recs
+    title: Top unhealthy recommendations
+    span: 6
+    data: topRecs
+    primary: recommendation
+    secondary: category
+    status: { field: severity, map: { High: [crit, High], Medium: [warn, Medium], Low: [info, Low] } }
+    href: "${ '/p/security.cloud-recommendations?assessmentKey=' & $encode(row.assessmentKey) & '&status=Unhealthy' }"
+    limit: 10
+  - widget: table
+    id: scores
+    title: Subscriptions
+    span: 12
+    data: scores.rows
+    rowKey: subscriptionId
+    empty:
+      title: No secure scores
+      body: Defender for Cloud calculates a secure score for each subscription after it is first opened. You need Security Reader (or Reader) on the subscription.
+    columns:
+      - { field: subscriptionName, label: Subscription, kind: identity, secondary: subscriptionId }
+      - { field: percentage, label: Secure score, kind: percent, sortable: true, filter: range }
+      - { field: current, label: Points, kind: number }
+      - { field: max, label: Max points, kind: number }
+      - { field: weight, label: Weight, kind: number, hidden: true }
+    rowActions:
+      - label: Recommendations for this subscription
+        icon: list-checks
+        href: ${ '/p/security.cloud-recommendations?subscriptionId=' & $encode(row.subscriptionId) }
+      - label: Open in Defender for Cloud
+        icon: arrow-square-out
+        href: https://portal.azure.com/#view/Microsoft_Azure_Security/SecurityMenuBlade/~/SecureScore

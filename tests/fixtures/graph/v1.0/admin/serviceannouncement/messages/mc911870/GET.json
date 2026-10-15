@@ -1,0 +1,44 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#admin/serviceAnnouncement/messages/$entity",
+  "id": "MC911870",
+  "title": "(Updated) Exchange Online: Retirement of Basic authentication for SMTP AUTH client submission",
+  "services": [
+    "Exchange Online"
+  ],
+  "category": "planForChange",
+  "severity": "high",
+  "isMajorChange": true,
+  "actionRequiredByDateTime": "2026-10-27T09:00:00Z",
+  "startDateTime": "2026-09-05T09:00:00Z",
+  "endDateTime": "2027-01-13T09:00:00Z",
+  "lastModifiedDateTime": "2026-10-14T09:00:00Z",
+  "tags": [
+    "Retirement",
+    "Admin impact"
+  ],
+  "hasAttachments": false,
+  "attachmentsArchive": null,
+  "viewPoint": {
+    "isRead": false,
+    "isArchived": false,
+    "isFavorited": false
+  },
+  "details": [
+    {
+      "name": "Summary",
+      "value": "(Updated) Exchange Online: Retirement of Basic authentication for SMTP AUTH client submission"
+    },
+    {
+      "name": "RoadmapIds",
+      "value": "401961"
+    },
+    {
+      "name": "Platforms",
+      "value": "Web, Desktop, Mac"
+    }
+  ],
+  "body": {
+    "contentType": "html",
+    "content": "<p>SMTP AUTH client submission with Basic authentication will be retired.</p><p><b>What you need to do to prepare:</b> Move devices and applications that send mail with SMTP AUTH to OAuth, or to a connector-based relay.</p><p>&nbsp;</p><p>Use the <b>SMTP AUTH clients report</b> to find affected senders.</p>"
+  }
+}

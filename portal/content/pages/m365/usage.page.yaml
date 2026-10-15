@@ -1,0 +1,187 @@
+$schema: ../../../packages/schemas/generated/page.schema.json
+kind: page
+id: m365.usage
+version: 1.0.0
+title: Usage
+summary: Active users and activity across Exchange, Teams, OneDrive and SharePoint from the Microsoft 365 usage reports.
+owner: m365-team
+tags: [m365, usage, reports]
+template: dashboard
+nav: { section: m365, label: Usage, icon: chart-line-up, order: 40 }
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    graph: [Reports.Read.All, ReportSettings.Read.All]
+  entraRoles: [Reports Reader, Global Reader]
+
+params:
+  period:
+    type: enum
+    label: Period
+    facet: true
+    default: D30
+    values:
+      - { value: D7, label: Last 7 days }
+      - { value: D30, label: Last 30 days }
+      - { value: D90, label: Last 90 days }
+      - { value: D180, label: Last 180 days }
+
+filters:
+  facets: [period]
+
+datasources:
+  settings:
+    source: graph
+    label: Report privacy setting
+    request:
+      path: /admin/reportSettings
+    cache: { ttl: 3600 }
+  serviceCounts:
+    source: graph
+    label: Active and inactive users per service
+    request:
+      beta: true
+      path: /reports/getOffice365ServicesUserCounts(period='${ $encode(params.period) }')
+      query: { $format: application/json }
+    cache: { ttl: 3600 }
+    transform: ${ value.value[0] }
+  activeUsers:
+    source: graph
+    label: Daily active users per service
+    request:
+      beta: true
+      path: /reports/getOffice365ActiveUserCounts(period='${ $encode(params.period) }')
+      query: { $format: application/json }
+    cache: { ttl: 3600 }
+    transform: "${ [$sort(value.value, function($a, $b) { $a.reportDate > $b.reportDate })] }"
+  email:
+    source: graph
+    label: Email activity
+    request:
+      beta: true
+      path: /reports/getEmailActivityCounts(period='${ $encode(params.period) }')
+      query: { $format: application/json }
+    cache: { ttl: 3600 }
+    transform: "${ [$sort(value.value, function($a, $b) { $a.reportDate > $b.reportDate })] }"
+  teams:
+    source: graph
+    label: Teams activity
+    request:
+      beta: true
+      path: /reports/getTeamsUserActivityCounts(period='${ $encode(params.period) }')
+      query: { $format: application/json }
+    cache: { ttl: 3600 }
+    transform: "${ [$sort(value.value, function($a, $b) { $a.reportDate > $b.reportDate })] }"
+  oneDrive:
+    source: graph
+    label: OneDrive file activity
+    request:
+      beta: true
+      path: /reports/getOneDriveActivityFileCounts(period='${ $encode(params.period) }')
+      query: { $format: application/json }
+    cache: { ttl: 3600 }
+    transform: "${ [$sort(value.value, function($a, $b) { $a.reportDate > $b.reportDate })] }"
+  userDetail:
+    source: graph
+    label: Last activity per user
+    request:
+      beta: true
+      path: /reports/getOffice365ActiveUserDetail(period='${ $encode(params.period) }')
+      query: { $format: application/json }
+    paging: cursor
+    cache: { ttl: 3600 }
+
+layout:
+  - widget: markdown
+    id: concealed
+    span: 12
+    when: ${ settings.displayConcealedNames = true }
+    text: |
+      **User, group and site names are concealed in usage reports.** The per-user table below shows hashed names
+      that can't be matched to accounts. To show real names, a Global Administrator turns off
+      *Display concealed user, group, and site names in all reports* in the Microsoft 365 admin center →
+      **Settings → Org settings → Services → Reports**. The change applies to every report within a few minutes.
+  - widget: kpi
+    id: m365Active
+    data: serviceCounts.office365Active
+    label: Active Microsoft 365 users
+    format: number
+  - widget: kpi
+    id: teamsActive
+    data: serviceCounts.teamsActive
+    label: Active in Teams
+    format: number
+  - widget: kpi
+    id: exchangeActive
+    data: serviceCounts.exchangeActive
+    label: Active in Exchange
+    format: number
+  - widget: kpi
+    id: oneDriveActive
+    data: serviceCounts.oneDriveActive
+    label: Active in OneDrive
+    format: number
+  - widget: chart
+    id: activeUsers
+    title: Daily active users
+    span: 12
+    rows: 3
+    type: line
+    data: activeUsers
+    x: reportDate
+    y: [office365, exchange, teams, oneDrive, sharePoint]
+    format: number
+  - widget: chart
+    id: email
+    title: Email activity
+    span: 4
+    type: line
+    data: email
+    x: reportDate
+    y: [send, receive, read]
+    format: number
+  - widget: chart
+    id: teams
+    title: Teams activity
+    span: 4
+    type: line
+    data: teams
+    x: reportDate
+    y: [teamChatMessages, privateChatMessages, calls, meetings]
+    format: number
+  - widget: chart
+    id: oneDrive
+    title: OneDrive files
+    span: 4
+    type: line
+    data: oneDrive
+    x: reportDate
+    y: [viewedOrEdited, synced, sharedInternally, sharedExternally]
+    format: number
+  - widget: table
+    id: userDetail
+    title: Last activity per user
+    span: 12
+    data: userDetail.value
+    rowKey: userPrincipalName
+    columns:
+      - { field: displayName, label: User, kind: identity, secondary: userPrincipalName }
+      - { field: exchangeLastActivityDate, label: Exchange, kind: date, filter: date }
+      - { field: teamsLastActivityDate, label: Teams, kind: date, filter: date }
+      - { field: oneDriveLastActivityDate, label: OneDrive, kind: date, filter: date }
+      - { field: sharePointLastActivityDate, label: SharePoint, kind: date, filter: date }
+      - { field: assignedProducts, label: Licences, kind: tags }
+      - { field: hasTeamsLicense, label: Teams licence, kind: boolean, hidden: true }
+      - { field: hasExchangeLicense, label: Exchange licence, kind: boolean, hidden: true }
+      - { field: isDeleted, label: Deleted, kind: boolean, filter: facet, hidden: true }
+      - { field: reportRefreshDate, label: Report date, kind: date, hidden: true }
+    search: true
+    empty:
+      title: No user activity in this period
+      body: Usage data appears 24–48 hours after activity. New tenants show nothing until the first reports are generated.
+
+export:
+  formats: [csv, xlsx]
+  fileName: m365-active-user-detail-${ params.period }
+  data: userDetail.value
+  columns: all

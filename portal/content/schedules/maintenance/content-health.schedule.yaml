@@ -1,0 +1,25 @@
+$schema: ../../../packages/schemas/generated/schedule.schema.json
+kind: schedule
+id: maintenance.content-health
+version: 1.0.0
+title: Daily content health check
+summary: >-
+  Every day at 05:15 UTC, re-validates every published page, report, playbook, probe and schedule against the current
+  schemas and checks the permissions they declare against what the automation identity actually holds, so drift shows
+  up before an engineer or a scheduled run hits it.
+owner: portal-admins
+tags: [maintenance, content, permissions]
+cron: "15 5 * * *"
+timezone: UTC
+enabled: true
+identity: automation
+job:
+  kind: contentHealth
+  scopes: true
+retry: { max: 1, backoff: fixed, delay: 10m }
+timeoutSeconds: 600
+overlap: skip
+requires:
+  scopes:
+    # Reads the automation identity's own app role assignments to compare declared and granted permissions.
+    graph: [Application.Read.All]

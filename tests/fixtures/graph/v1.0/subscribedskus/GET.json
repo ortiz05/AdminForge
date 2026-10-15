@@ -1,0 +1,184 @@
+{
+  "value": [
+    {
+      "skuId": "30000000-0000-4000-8000-000000000401",
+      "skuPartNumber": "SPE_E5",
+      "capabilityStatus": "Enabled",
+      "consumedUnits": 1104,
+      "prepaidUnits": {
+        "enabled": 1200,
+        "suspended": 0,
+        "warning": 0
+      },
+      "servicePlans": [
+        {
+          "servicePlanName": "AAD_PREMIUM",
+          "provisioningStatus": "Success",
+          "appliesTo": "User"
+        },
+        {
+          "servicePlanName": "AAD_PREMIUM_P2",
+          "provisioningStatus": "Success",
+          "appliesTo": "User"
+        },
+        {
+          "servicePlanName": "INTUNE_A",
+          "provisioningStatus": "Success",
+          "appliesTo": "User"
+        },
+        {
+          "servicePlanName": "EXCHANGE_S_ENTERPRISE",
+          "provisioningStatus": "Success",
+          "appliesTo": "User"
+        },
+        {
+          "servicePlanName": "TEAMS1",
+          "provisioningStatus": "Success",
+          "appliesTo": "User"
+        },
+        {
+          "servicePlanName": "SHAREPOINTENTERPRISE",
+          "provisioningStatus": "Success",
+          "appliesTo": "User"
+        },
+        {
+          "servicePlanName": "MTP",
+          "provisioningStatus": "Success",
+          "appliesTo": "User"
+        },
+        {
+          "servicePlanName": "WINDEFATP",
+          "provisioningStatus": "Success",
+          "appliesTo": "User"
+        },
+        {
+          "servicePlanName": "ATP_ENTERPRISE",
+          "provisioningStatus": "Success",
+          "appliesTo": "User"
+        },
+        {
+          "servicePlanName": "THREAT_INTELLIGENCE",
+          "provisioningStatus": "Success",
+          "appliesTo": "User"
+        },
+        {
+          "servicePlanName": "ADALLOM_S_STANDALONE",
+          "provisioningStatus": "Success",
+          "appliesTo": "User"
+        },
+        {
+          "servicePlanName": "OFFICESUBSCRIPTION",
+          "provisioningStatus": "Success",
+          "appliesTo": "User"
+        }
+      ]
+    },
+    {
+      "skuId": "30000000-0000-4000-8000-000000000402",
+      "skuPartNumber": "SPE_E3",
+      "capabilityStatus": "Enabled",
+      "consumedUnits": 148,
+      "prepaidUnits": {
+        "enabled": 150,
+        "suspended": 0,
+        "warning": 0
+      },
+      "servicePlans": [
+        {
+          "servicePlanName": "AAD_PREMIUM",
+          "provisioningStatus": "Success",
+          "appliesTo": "User"
+        },
+        {
+          "servicePlanName": "INTUNE_A",
+          "provisioningStatus": "Success",
+          "appliesTo": "User"
+        },
+        {
+          "servicePlanName": "EXCHANGE_S_ENTERPRISE",
+          "provisioningStatus": "Success",
+          "appliesTo": "User"
+        },
+        {
+          "servicePlanName": "TEAMS1",
+          "provisioningStatus": "Success",
+          "appliesTo": "User"
+        },
+        {
+          "servicePlanName": "SHAREPOINTENTERPRISE",
+          "provisioningStatus": "Success",
+          "appliesTo": "User"
+        },
+        {
+          "servicePlanName": "MDE_LITE",
+          "provisioningStatus": "Success",
+          "appliesTo": "User"
+        },
+        {
+          "servicePlanName": "OFFICESUBSCRIPTION",
+          "provisioningStatus": "Success",
+          "appliesTo": "User"
+        }
+      ]
+    },
+    {
+      "skuId": "30000000-0000-4000-8000-000000000403",
+      "skuPartNumber": "EMS",
+      "capabilityStatus": "Enabled",
+      "consumedUnits": 62,
+      "prepaidUnits": {
+        "enabled": 100,
+        "suspended": 0,
+        "warning": 0
+      },
+      "servicePlans": [
+        {
+          "servicePlanName": "AAD_PREMIUM",
+          "provisioningStatus": "Success",
+          "appliesTo": "User"
+        },
+        {
+          "servicePlanName": "INTUNE_A",
+          "provisioningStatus": "Success",
+          "appliesTo": "User"
+        }
+      ]
+    },
+    {
+      "skuId": "30000000-0000-4000-8000-000000000404",
+      "skuPartNumber": "POWER_BI_PRO",
+      "capabilityStatus": "Enabled",
+      "consumedUnits": 40,
+      "prepaidUnits": {
+        "enabled": 40,
+        "suspended": 0,
+        "warning": 0
+      },
+      "servicePlans": [
+        {
+          "servicePlanName": "BI_AZURE_P2",
+          "provisioningStatus": "Success",
+          "appliesTo": "User"
+        }
+      ]
+    },
+    {
+      "skuId": "30000000-0000-4000-8000-000000000405",
+      "skuPartNumber": "FLOW_FREE",
+      "capabilityStatus": "Enabled",
+      "consumedUnits": 311,
+      "prepaidUnits": {
+        "enabled": 10000,
+        "suspended": 0,
+        "warning": 0
+      },
+      "servicePlans": [
+        {
+          "servicePlanName": "FLOW_P2_VIRAL",
+          "provisioningStatus": "Success",
+          "appliesTo": "User"
+        }
+      ]
+    }
+  ]
+}

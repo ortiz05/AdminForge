@@ -1,0 +1,44 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#admin/serviceAnnouncement/messages/$entity",
+  "id": "MC909100",
+  "title": "Microsoft Teams: Retirement of Office 365 connectors in Teams",
+  "services": [
+    "Microsoft Teams"
+  ],
+  "category": "preventOrFixIssue",
+  "severity": "high",
+  "isMajorChange": true,
+  "actionRequiredByDateTime": "2026-10-12T09:00:00Z",
+  "startDateTime": "2026-08-16T09:00:00Z",
+  "endDateTime": "2027-01-13T09:00:00Z",
+  "lastModifiedDateTime": "2026-10-08T09:00:00Z",
+  "tags": [
+    "Retirement",
+    "Admin impact"
+  ],
+  "hasAttachments": false,
+  "attachmentsArchive": null,
+  "viewPoint": {
+    "isRead": false,
+    "isArchived": false,
+    "isFavorited": false
+  },
+  "details": [
+    {
+      "name": "Summary",
+      "value": "Microsoft Teams: Retirement of Office 365 connectors in Teams"
+    },
+    {
+      "name": "RoadmapIds",
+      "value": "409190"
+    },
+    {
+      "name": "Platforms",
+      "value": "Web, Desktop, Mac"
+    }
+  ],
+  "body": {
+    "contentType": "html",
+    "content": "<p>Office 365 connectors in Teams are being retired. Existing connectors stop posting after the retirement date.</p><p><b>What you need to do to prepare:</b> Recreate connector-based notifications with workflows in Teams.</p>"
+  }
+}

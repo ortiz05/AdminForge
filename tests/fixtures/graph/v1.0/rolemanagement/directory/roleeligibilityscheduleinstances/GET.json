@@ -1,0 +1,28 @@
+{
+  "value": [
+    {
+      "id": "eligible-1",
+      "principalId": "00000000-0000-4000-8000-0000000000a1",
+      "roleDefinitionId": "fe930be7-5e62-47db-91af-98c3a49a38b1",
+      "directoryScopeId": "/",
+      "memberType": "Direct",
+      "startDateTime": "2026-01-05T09:00:00Z",
+      "endDateTime": "2027-01-05T09:00:00Z",
+      "roleDefinition": {
+        "displayName": "User Administrator"
+      }
+    },
+    {
+      "id": "eligible-2",
+      "principalId": "00000000-0000-4000-8000-0000000000a1",
+      "roleDefinitionId": "fdd7a751-b60b-444a-984c-02652fe8fa1c",
+      "directoryScopeId": "/",
+      "memberType": "Direct",
+      "startDateTime": "2026-01-05T09:00:00Z",
+      "endDateTime": "2027-01-05T09:00:00Z",
+      "roleDefinition": {
+        "displayName": "Groups Administrator"
+      }
+    }
+  ]
+}

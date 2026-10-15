@@ -1,0 +1,13 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#sites/$entity",
+  "id": "exampleorg.sharepoint.com,10000000-0000-4000-8000-000000000906,10000000-0000-4000-8000-000000000a06",
+  "name": "HRPolicies",
+  "displayName": "HR Policies",
+  "description": "HR Policies site",
+  "webUrl": "https://exampleorg.sharepoint.com/sites/HRPolicies",
+  "createdDateTime": "2025-02-22T09:00:00Z",
+  "lastModifiedDateTime": "2026-10-01T09:00:00Z",
+  "siteCollection": {
+    "hostname": "exampleorg.sharepoint.com"
+  }
+}

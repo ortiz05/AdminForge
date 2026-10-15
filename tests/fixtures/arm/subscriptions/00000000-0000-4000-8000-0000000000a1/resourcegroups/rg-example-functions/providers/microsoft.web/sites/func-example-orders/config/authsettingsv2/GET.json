@@ -1,0 +1,29 @@
+{
+  "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-functions/providers/Microsoft.Web/sites/func-example-orders/config/authsettingsV2",
+  "name": "authsettingsV2",
+  "type": "Microsoft.Web/sites/config",
+  "properties": {
+    "platform": {
+      "enabled": false,
+      "runtimeVersion": "~1"
+    },
+    "globalValidation": {
+      "requireAuthentication": false,
+      "unauthenticatedClientAction": "AllowAnonymous"
+    },
+    "identityProviders": {
+      "azureActiveDirectory": {
+        "enabled": false,
+        "registration": {},
+        "validation": {
+          "allowedAudiences": []
+        }
+      }
+    },
+    "login": {
+      "tokenStore": {
+        "enabled": false
+      }
+    }
+  }
+}

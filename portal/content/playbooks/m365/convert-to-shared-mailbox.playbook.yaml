@@ -1,0 +1,149 @@
+$schema: ../../../packages/schemas/generated/playbook.schema.json
+kind: playbook
+id: m365.convert-to-shared-mailbox
+version: 1.0.0
+title: Convert to shared mailbox
+summary: Converts a user mailbox to a shared mailbox so colleagues keep access to the mail, and blocks direct sign-in to the account. The licence is left in place for a separate review.
+owner: m365-team
+tags: [m365, exchange, offboarding]
+risk: high
+mode: write
+requires:
+  portalRoles: [Portal.Operator]
+  scopes:
+    graph: [User.Read.All, MailboxSettings.Read, User.EnableDisableAccount.All, User.RevokeSessions.All]
+    exchange: [Exchange.Manage]
+  entraRoles: [Exchange Recipient Administrator, User Administrator]
+  licences: [exchange]
+confirm:
+  type: typed
+  value: ${ inputs.mailbox }
+  message: Type the mailbox address to confirm. People with Full Access keep using it; the owner can no longer sign in to it directly.
+approval:
+  required: false
+
+inputs:
+  mailbox: { type: string, format: email, label: Mailbox, description: Primary email address or sign-in name of the user mailbox }
+  blockSignIn:
+    type: boolean
+    label: Block sign-in to the account
+    description: Recommended. Nobody should sign in to a shared mailbox directly; access goes through Full Access permissions.
+    default: true
+  reason: { type: string, label: Reason, minLength: 10, multiline: true, placeholder: e.g. Leaver HR-1234 — mailbox kept for the sales team }
+
+steps:
+  - id: lookup
+    type: graph
+    mode: read
+    describe: Find the account that owns the mailbox
+    request:
+      method: GET
+      path: /users
+      query:
+        $filter: ${ 'mail eq ' & $odata(inputs.mailbox) & ' or userPrincipalName eq ' & $odata(inputs.mailbox) }
+        $select: id,displayName,userPrincipalName,mail,accountEnabled
+
+  - id: found
+    type: assert
+    that: ${ $count(steps.lookup.output.value) = 1 }
+    message: ${ 'No single account uses the address ' & inputs.mailbox & '. Check the address, or convert it in the Exchange admin center.' }
+
+  - id: purpose
+    type: graph
+    mode: read
+    describe: Read the mailbox type
+    request:
+      method: GET
+      path: /users/${ $encode($guid(steps.lookup.output.value[0].id)) }/mailboxSettings/userPurpose
+
+  - id: guard
+    type: assert
+    that: ${ steps.purpose.output.value = 'user' }
+    message: ${ inputs.mailbox & ' is a ' & steps.purpose.output.value & ' mailbox. Only user mailboxes can be converted.' }
+
+  - id: convert
+    type: runner
+    mode: write
+    describe: ${ 'Convert ' & inputs.mailbox & ' to a shared mailbox' }
+    script: exchange/Convert-ToSharedMailbox.ps1
+    sha256: c389a6355effe960cdc1e922cb8cb1fe6e45ec77dd41d32e9680d0b57c927e67
+    services: [exchange]
+    timeoutSeconds: 300
+    parameters:
+      identity: ${ inputs.mailbox }
+    idempotent: true
+    # The runner returns one element per output event; this script emits one result object.
+    dryRunOutput:
+      - identity: ${ inputs.mailbox }
+        displayName: ${ steps.lookup.output.value[0].displayName }
+        before: UserMailbox
+        after: SharedMailbox
+        changed: true
+        verified: true
+
+  - id: block
+    type: graph
+    mode: write
+    when: ${ inputs.blockSignIn = true and steps.lookup.output.value[0].accountEnabled = true }
+    describe: ${ 'Block sign-in for ' & steps.lookup.output.value[0].userPrincipalName }
+    request:
+      method: PATCH
+      path: /users/${ $encode($guid(steps.lookup.output.value[0].id)) }
+      body: { accountEnabled: false }
+    compensate:
+      type: graph
+      describe: Allow sign-in again
+      request:
+        method: PATCH
+        path: /users/${ $encode($guid(steps.lookup.output.value[0].id)) }
+        body: { accountEnabled: true }
+
+  - id: revoke
+    type: graph
+    mode: write
+    when: ${ inputs.blockSignIn = true }
+    describe: Sign the account out of every session
+    onError: compensate
+    request:
+      method: POST
+      path: /users/${ $encode($guid(steps.lookup.output.value[0].id)) }/revokeSignInSessions
+    dryRunOutput: { value: true }
+
+outputs:
+  summary: >-
+    ${ steps.convert.output[0].displayName & ' (' & inputs.mailbox & ') is now a shared mailbox'
+       & (inputs.blockSignIn = true ? ' and sign-in is blocked' : '')
+       & '. The licence was not removed; review it once the mailbox is under 50 GB and has no hold or archive.' }
+  verified: ${ steps.convert.output[0].verified }
+
+tests:
+  - name: converts a user mailbox and blocks sign-in
+    inputs: { mailbox: adele.vance@example.com, blockSignIn: true, reason: Leaver HR-1001 mailbox kept for marketing }
+    mocks:
+      lookup: { value: [{ id: 10000000-0000-4000-8000-000000000001, displayName: Adele Vance, userPrincipalName: adele.vance@example.com, mail: adele.vance@example.com, accountEnabled: true }] }
+      purpose: { value: user }
+    expect:
+      status: succeeded
+      plan: [convert, block, revoke]
+      outputs:
+        summary: Adele Vance (adele.vance@example.com) is now a shared mailbox and sign-in is blocked. The licence was not removed; review it once the mailbox is under 50 GB and has no hold or archive.
+  - name: leaves sign-in alone when asked
+    inputs: { mailbox: lee.gu@example.com, blockSignIn: false, reason: Mailbox becomes the finance team inbox }
+    mocks:
+      lookup: { value: [{ id: 10000000-0000-4000-8000-000000000007, displayName: Lee Gu, userPrincipalName: lee.gu@example.com, mail: lee.gu@example.com, accountEnabled: true }] }
+      purpose: { value: user }
+    expect:
+      status: succeeded
+      plan: [convert]
+      steps: { block: skipped, revoke: skipped }
+  - name: refuses a mailbox that is already shared
+    inputs: { mailbox: reception@example.com, reason: Duplicate request for reception }
+    mocks:
+      lookup: { value: [{ id: 10000000-0000-4000-8000-000000000012, displayName: Reception, userPrincipalName: reception@example.com, mail: reception@example.com, accountEnabled: false }] }
+      purpose: { value: shared }
+    expect: { status: failed, failedStep: guard }
+  - name: refuses an unknown address
+    inputs: { mailbox: nobody@example.com, reason: Typo check for the test suite }
+    mocks:
+      lookup: { value: [] }
+    expect: { status: failed, failedStep: found }

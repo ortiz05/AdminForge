@@ -1,0 +1,26 @@
+$schema: ../../../packages/schemas/generated/schedule.schema.json
+kind: schedule
+id: reports.arc-disconnected-daily
+version: 1.0.0
+title: Daily disconnected Azure Arc machines report
+summary: >-
+  Every day at 06:20 UTC, writes Azure Arc-enabled servers that are disconnected, expired or in error, as CSV, so the infrastructure team can chase agents before ESU, Defender or policy coverage lapses.
+owner: azure-team
+tags: [azure, arc, report]
+cron: "20 6 * * *"
+timezone: UTC
+enabled: true
+identity: automation
+job:
+  kind: report
+  ref: azure.arc-disconnected
+  delivery:
+    - type: file
+      format: csv
+      path: azure/arc-disconnected/{date}.csv
+      retain: 31
+retry: { max: 2, backoff: exponential, delay: 5m }
+timeoutSeconds: 1800
+overlap: skip
+requires:
+  azureRoles: [Reader]

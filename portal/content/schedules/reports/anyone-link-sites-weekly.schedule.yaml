@@ -1,0 +1,29 @@
+$schema: ../../../packages/schemas/generated/schedule.schema.json
+kind: schedule
+id: reports.anyone-link-sites-weekly
+version: 1.0.0
+title: Weekly Anyone-link SharePoint sites report
+summary: >-
+  Every Monday at 07:00 UTC, writes SharePoint sites that allow Anyone links as XLSX. Disabled until the automation identity has a certificate credential (SharePoint refuses app-only tokens from client secrets) and the SharePoint Sites.FullControl.All application permission.
+owner: m365-team
+tags: [m365, sharepoint, security, report]
+cron: "0 7 * * 1"
+timezone: UTC
+enabled: false
+identity: automation
+job:
+  kind: report
+  ref: m365.anyone-link-sites
+  delivery:
+    - type: file
+      format: xlsx
+      path: m365/anyone-link-sites/{date}.xlsx
+      retain: 26
+retry: { max: 2, backoff: exponential, delay: 5m }
+timeoutSeconds: 1800
+overlap: skip
+requires:
+  scopes:
+    sharepointAdmin: [Sites.FullControl.All]
+    graph: [Reports.Read.All]
+  licences: [sharepoint]

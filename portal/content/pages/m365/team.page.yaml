@@ -1,0 +1,248 @@
+$schema: ../../../packages/schemas/generated/page.schema.json
+kind: page
+id: m365.team
+version: 1.0.0
+title: Team or Microsoft 365 group
+summary: One Microsoft 365 group and, when it is team-enabled, its team — owners, members, guests, channels and team settings.
+owner: m365-team
+tags: [m365, teams, groups, collaboration]
+template: entity
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    graph: [Group.Read.All, GroupMember.Read.All, User.Read.All, Team.ReadBasic.All, TeamSettings.Read.All, Channel.ReadBasic.All]
+  entraRoles: [Teams Administrator, Global Reader]
+
+params:
+  id: { type: guid, label: Group, required: true, hidden: true }
+
+datasources:
+  group:
+    source: graph
+    request:
+      path: /groups/${ $encode($guid(params.id)) }
+      query:
+        $select: id,displayName,description,mail,visibility,groupTypes,resourceProvisioningOptions,createdDateTime,renewedDateTime,expirationDateTime,membershipRule,onPremisesSyncEnabled,classification
+    cache: { ttl: 60 }
+    transform: "${ $merge([value, { 'isTeam': 'Team' in value.resourceProvisioningOptions }]) }"
+  team:
+    source: graph
+    label: Team settings
+    when: ${ group.isTeam = true }
+    request:
+      path: /teams/${ $encode($guid(params.id)) }
+    cache: { ttl: 60 }
+  owners:
+    source: graph
+    request:
+      path: /groups/${ $encode($guid(params.id)) }/owners/microsoft.graph.user
+      query:
+        $select: id,displayName,userPrincipalName,mail,userType,accountEnabled
+        $top: 100
+    cache: { ttl: 60 }
+  members:
+    source: graph
+    request:
+      path: /groups/${ $encode($guid(params.id)) }/members/microsoft.graph.user
+      query:
+        $select: id,displayName,userPrincipalName,mail,userType,accountEnabled,department,jobTitle
+        $top: 999
+    paging: all
+    maxItems: 25000
+    cache: { ttl: 60 }
+    transform: >-
+      ${ (
+        $rows := [value.value];
+        {
+          "rows": $rows,
+          "guests": [$rows[userType = 'Guest']],
+          "total": $count($rows),
+          "guestCount": $count($rows[userType = 'Guest']),
+          "disabled": $count($rows[accountEnabled = false])
+        }
+      ) }
+  channels:
+    source: graph
+    when: ${ group.isTeam = true }
+    request:
+      path: /teams/${ $encode($guid(params.id)) }/channels
+      query:
+        $select: id,displayName,description,membershipType,createdDateTime,email,webUrl
+    cache: { ttl: 120 }
+    transform: "${ { 'rows': [value.value], 'total': $count(value.value), 'private': $count(value.value[membershipType = 'private']), 'shared': $count(value.value[membershipType = 'shared']) } }"
+
+header:
+  title: ${ group.displayName }
+  subtitle: ${ group.mail }
+  status: "${ team.isArchived = true ? 'neutral' : $count(owners.value) = 0 ? 'crit' : $count(owners.value) = 1 ? 'warn' : 'ok' }"
+  statusLabel: "${ team.isArchived = true ? 'Archived' : $count(owners.value) = 0 ? 'No owners' : $count(owners.value) = 1 ? 'One owner' : group.isTeam ? 'Active team' : 'Active group' }"
+  ids:
+    Group id: ${ group.id }
+
+actions:
+  - label: Open in Teams admin center
+    icon: arrow-square-out
+    href: "https://admin.teams.microsoft.com/teams/manage/${ $encode(params.id) }"
+    when: ${ group.isTeam = true }
+  - label: Open in Teams
+    icon: arrow-square-out
+    href: ${ team.webUrl }
+    when: ${ $exists(team.webUrl) }
+  - label: Open in Entra admin center
+    icon: arrow-square-out
+    href: "https://entra.microsoft.com/#view/Microsoft_AAD_IAM/GroupDetailsMenuBlade/~/Overview/groupId/${ $encode(params.id) }"
+
+tabs:
+  - id: overview
+    label: Overview
+    layout:
+      - widget: kpi
+        data: members.total
+        label: Members
+        format: number
+      - widget: kpi
+        data: members.guestCount
+        label: Guests
+        format: number
+        status: "${ value > 0 ? 'info' : 'ok' }"
+      - widget: kpi
+        data: members.disabled
+        label: Disabled members
+        format: number
+        status: "${ value > 0 ? 'warn' : 'ok' }"
+      - widget: kpi
+        data: channels.total
+        label: Channels
+        format: number
+        when: ${ group.isTeam = true }
+      - widget: keyValue
+        span: 6
+        title: Group
+        data: group
+        fields:
+          - { field: mail, label: Email, kind: id }
+          - { field: visibility, label: Visibility }
+          - { field: groupTypes, label: Group types, kind: tags }
+          - { field: resourceProvisioningOptions, label: Provisioned as, kind: tags }
+          - { field: membershipRule, label: Membership rule }
+          - { field: onPremisesSyncEnabled, label: Synced from on-premises, kind: boolean }
+          - { field: createdDateTime, label: Created, kind: datetime }
+          - { field: renewedDateTime, label: Renewed, kind: datetime }
+          - { field: expirationDateTime, label: Expires, kind: datetime }
+          - { field: description, label: Description }
+      - widget: keyValue
+        span: 6
+        title: Team
+        data: team
+        when: ${ group.isTeam = true }
+        fields:
+          - { field: isArchived, label: Archived, kind: status, map: { "true": [neutral, Archived], "false": [ok, Active] } }
+          - { field: visibility, label: Visibility }
+          - { field: specialization, label: Template }
+          - { field: classification, label: Classification }
+          - { field: memberSettings.allowCreatePrivateChannels, label: Members can create private channels, kind: boolean }
+          - { field: memberSettings.allowCreateUpdateChannels, label: Members can create and update channels, kind: boolean }
+          - { field: memberSettings.allowAddRemoveApps, label: Members can add and remove apps, kind: boolean }
+          - { field: guestSettings.allowCreateUpdateChannels, label: Guests can create and update channels, kind: boolean }
+          - { field: guestSettings.allowDeleteChannels, label: Guests can delete channels, kind: boolean }
+          - { field: messagingSettings.allowOwnerDeleteMessages, label: Owners can delete messages, kind: boolean }
+          - { field: messagingSettings.allowTeamMentions, label: "@team mentions", kind: boolean }
+          - { field: funSettings.allowGiphy, label: Giphy, kind: boolean }
+  - id: owners
+    label: Owners
+    layout:
+      - widget: table
+        span: 12
+        data: owners.value
+        rowKey: id
+        columns:
+          - { field: displayName, label: Owner, kind: identity, secondary: userPrincipalName }
+          - { field: accountEnabled, label: Sign-in, kind: status, map: { "true": [ok, Enabled], "false": [crit, Disabled] }, filter: facet }
+          - { field: userType, label: Type, filter: facet }
+          - { field: id, label: Object id, kind: guid, hidden: true }
+        inspect:
+          page: identity.user
+          params:
+            id: ${ row.id }
+        empty:
+          title: This group has no owners
+          body: Nobody can manage membership or settings except administrators. Add at least two owners in the Teams or Entra admin center.
+  - id: members
+    label: Members
+    layout:
+      - widget: table
+        span: 12
+        data: members.rows
+        rowKey: id
+        search: true
+        columns:
+          - { field: displayName, label: Member, kind: identity, secondary: userPrincipalName }
+          - { field: userType, label: Type, filter: facet }
+          - { field: accountEnabled, label: Sign-in, kind: status, map: { "true": [ok, Enabled], "false": [crit, Disabled] }, filter: facet }
+          - { field: department, label: Department, filter: facet }
+          - { field: jobTitle, label: Job title, hidden: true }
+          - { field: id, label: Object id, kind: guid, hidden: true }
+        inspect:
+          page: identity.user
+          params:
+            id: ${ row.id }
+        empty:
+          title: No members
+          body: This group has no user members.
+  - id: guests
+    label: Guests
+    layout:
+      - widget: table
+        span: 12
+        data: members.guests
+        rowKey: id
+        columns:
+          - { field: displayName, label: Guest, kind: identity, secondary: mail }
+          - { field: accountEnabled, label: Sign-in, kind: status, map: { "true": [ok, Enabled], "false": [crit, Disabled] }, filter: facet }
+          - { field: userPrincipalName, label: Sign-in name, hidden: true }
+          - { field: id, label: Object id, kind: guid, hidden: true }
+        inspect:
+          page: identity.user
+          params:
+            id: ${ row.id }
+        empty:
+          title: No guests
+          body: Only people from your organization are members.
+  - id: channels
+    label: Channels
+    layout:
+      - widget: kpi
+        data: channels.private
+        label: Private channels
+        format: number
+        when: ${ group.isTeam = true }
+      - widget: kpi
+        data: channels.shared
+        label: Shared channels
+        format: number
+        when: ${ group.isTeam = true }
+      - widget: table
+        span: 12
+        data: channels.rows
+        rowKey: id
+        when: ${ group.isTeam = true }
+        columns:
+          - { field: displayName, label: Channel, kind: identity, secondary: email }
+          - field: membershipType
+            label: Type
+            kind: status
+            map: { standard: [neutral, Standard], private: [info, Private], shared: [warn, Shared] }
+            filter: facet
+          - { field: createdDateTime, label: Created, kind: date }
+          - { field: description, label: Description, hidden: true }
+        rowActions:
+          - label: Open in Teams
+            icon: arrow-square-out
+            href: ${ row.webUrl }
+            when: ${ $exists(row.webUrl) }
+        empty:
+          title: No channels
+          body: Every team has at least a General channel; if none show, the team may still be provisioning.
+      - widget: markdown
+        when: ${ group.isTeam != true }
+        text: This Microsoft 365 group isn't team-enabled, so it has no channels.

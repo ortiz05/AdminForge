@@ -1,0 +1,191 @@
+$schema: ../../../packages/schemas/generated/page.schema.json
+kind: page
+id: m365.distribution-list
+version: 1.0.0
+title: Distribution list
+summary: One distribution list or mail-enabled security group — delivery settings, owners and members. Add or remove members.
+owner: m365-team
+tags: [m365, exchange, distribution-lists]
+template: entity
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    exchange: [Exchange.Manage]
+    graph: [Group.Read.All, GroupMember.Read.All]
+  entraRoles: [Exchange Recipient Administrator, Global Reader]
+  licences: [exchange]
+
+params:
+  address: { type: string, format: email, label: List address, required: true, hidden: true }
+
+datasources:
+  dl:
+    source: runner
+    label: Exchange settings (PowerShell)
+    script: exchange/Get-DistributionLists.ps1
+    sha256: c01955b6360e5f136324f7287ec7dd63394bd0cb71c8d600293d8d01431b9404
+    services: [exchange]
+    timeoutSeconds: 900
+    # Same parameters as the Distribution lists page, so the cached result is reused.
+    parameters:
+      resultSize: 5000
+      groupType: All
+      includeMemberCounts: false
+      maxGroupsForMembers: 500
+    cache: { ttl: 900 }
+    transform: >-
+      ${ (
+        $v := value[0];  /* runner result = [output data]; one summary object */
+        $p := params;
+        $g := $v.groups[$lowercase(primarySmtpAddress) = $lowercase($p.address)][0];
+        $g ? $merge([$g, {
+          "acceptsExternal": $g.requireSenderAuthenticationEnabled = false,
+          "typeLabel": $g.recipientTypeDetails = 'MailUniversalSecurityGroup' ? 'Mail-enabled security group' : 'Distribution list'
+        }])
+      ) }
+  group:
+    source: graph
+    label: Directory object
+    request:
+      path: /groups
+      query:
+        $filter: ${ 'mail eq ' & $odata(params.address) }
+        $select: id,displayName,mail,mailEnabled,securityEnabled,onPremisesSyncEnabled,createdDateTime
+    cache: { ttl: 300 }
+    transform: ${ value.value[0] }
+  members:
+    source: graph
+    label: Members
+    when: ${ $exists(group.id) }
+    request:
+      path: /groups/${ $encode($guid(group.id)) }/members
+      query:
+        $select: id,displayName,mail,userPrincipalName,userType,accountEnabled
+        $top: 999
+    paging: all
+    maxItems: 25000
+    cache: { ttl: 60 }
+    # Users, nested groups and mail contacts; the type comes from @odata.type.
+    transform: >-
+      ${ (
+        $rows := [value.value.{
+          "id": id,
+          "displayName": displayName,
+          "mail": mail,
+          "userPrincipalName": userPrincipalName,
+          "kind": `@odata.type` = '#microsoft.graph.user' ? (userType = 'Guest' ? 'Guest' : 'User')
+                : `@odata.type` = '#microsoft.graph.group' ? 'Group'
+                : `@odata.type` = '#microsoft.graph.orgContact' ? 'Contact' : 'Other',
+          "accountEnabled": accountEnabled
+        }];
+        {
+          "rows": $rows,
+          "total": $count($rows),
+          "guests": $count($rows[kind = 'Guest']),
+          "contacts": $count($rows[kind = 'Contact']),
+          "nested": $count($rows[kind = 'Group'])
+        }
+      ) }
+
+header:
+  title: "${ dl.displayName ? dl.displayName : params.address }"
+  subtitle: ${ params.address }
+  status: "${ $not($exists(dl)) ? 'neutral' : dl.isDirSynced ? 'info' : dl.acceptsExternal ? 'warn' : 'ok' }"
+  statusLabel: "${ $not($exists(dl)) ? 'Not found in Exchange' : dl.isDirSynced ? 'Managed on-premises' : dl.acceptsExternal ? 'Accepts outside senders' : 'Internal senders only' }"
+  ids:
+    Address: ${ params.address }
+    Group id: ${ group.id }
+
+actions:
+  - playbook: m365.add-distribution-list-members
+    label: Add members
+    icon: user-plus
+    inputs:
+      identity: ${ params.address }
+    when: ${ dl.isDirSynced = false }
+  - label: Open in Exchange admin center
+    icon: arrow-square-out
+    href: https://admin.exchange.microsoft.com/#/groups
+
+layout:
+  - widget: kpi
+    data: members.total
+    label: Members
+    format: number
+  - widget: kpi
+    data: members.guests
+    label: Guests
+    format: number
+  - widget: kpi
+    data: members.contacts
+    label: Mail contacts
+    format: number
+  - widget: kpi
+    data: members.nested
+    label: Nested groups
+    format: number
+
+tabs:
+  - id: members
+    label: Members
+    layout:
+      - widget: markdown
+        span: 12
+        when: ${ dl.isDirSynced = true }
+        text: This list is synced from on-premises Active Directory. Change its membership there; changes made in Exchange Online would be overwritten.
+      - widget: table
+        id: members
+        span: 12
+        data: members.rows
+        rowKey: id
+        selection: multi
+        search: true
+        columns:
+          - { field: displayName, label: Member, kind: identity, secondary: mail }
+          - field: kind
+            label: Type
+            kind: status
+            map: { User: [neutral, User], Guest: [info, Guest], Contact: [info, Mail contact], Group: [neutral, Nested group], Other: [neutral, Other] }
+            filter: facet
+          - { field: accountEnabled, label: Sign-in, kind: status, map: { "true": [ok, Enabled], "false": [crit, Disabled] }, filter: facet }
+          - { field: userPrincipalName, label: Sign-in name, hidden: true }
+          - { field: id, label: Object id, kind: guid, hidden: true }
+        rowActions:
+          - playbook: m365.remove-distribution-list-members
+            label: Remove from list
+            icon: user-minus
+            inputs:
+              identity: ${ params.address }
+              members: ${ row.mail }
+            when: ${ $exists(row.mail) and row.mail != null }
+        bulkActions:
+          - playbook: m365.remove-distribution-list-members
+            label: Remove from list
+            icon: user-minus
+            forEach:
+              inputs:
+                identity: ${ params.address }
+                members: ${ row.mail }
+              concurrency: 3
+            maxItems: 200
+            when: ${ $count(rows[$exists(mail) and mail != null]) > 0 }
+        empty:
+          title: This list has no members
+          body: Add members with the button above. Mail sent to an empty list is delivered to nobody.
+  - id: settings
+    label: Delivery settings
+    layout:
+      - widget: keyValue
+        span: 12
+        data: dl
+        fields:
+          - { field: primarySmtpAddress, label: Address, kind: id }
+          - { field: alias, label: Alias }
+          - { field: typeLabel, label: Type }
+          - { field: managedBy, label: Owners, kind: tags }
+          - { field: acceptsExternal, label: Outside senders, kind: status, map: { "true": [warn, Accepted], "false": [ok, Blocked] } }
+          - { field: memberJoinRestriction, label: Joining, kind: status, map: { Open: [warn, Anyone can join], ApprovalRequired: [info, Owner approval], Closed: [ok, Closed] } }
+          - { field: memberDepartRestriction, label: Leaving }
+          - { field: hiddenFromAddressListsEnabled, label: Hidden from address lists, kind: boolean }
+          - { field: isDirSynced, label: Synced from on-premises, kind: boolean }
+          - { field: whenCreated, label: Created, kind: datetime }

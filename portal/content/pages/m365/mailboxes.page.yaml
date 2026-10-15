@@ -1,0 +1,195 @@
+$schema: ../../../packages/schemas/generated/page.schema.json
+kind: page
+id: m365.mailboxes
+version: 1.0.0
+title: Mailboxes
+summary: Exchange Online mailboxes by type with hold, archive and address-list flags. Convert leavers' mailboxes to shared in bulk.
+owner: m365-team
+tags: [m365, exchange, mailboxes]
+template: list-detail
+nav: { section: m365, label: Mailboxes, icon: envelope-simple, order: 50 }
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    exchange: [Exchange.Manage]
+  entraRoles: [Exchange Recipient Administrator, Global Reader]
+  licences: [exchange]
+
+params:
+  q: { type: string, default: "", label: Search, placeholder: Name or email address }
+  type:
+    type: enum
+    label: Mailbox type
+    facet: true
+    default: All
+    values:
+      - { value: All, label: All types }
+      - { value: UserMailbox, label: User }
+      - { value: SharedMailbox, label: Shared }
+      - { value: RoomMailbox, label: Room }
+      - { value: EquipmentMailbox, label: Equipment }
+      - { value: SchedulingMailbox, label: Scheduling }
+  hold:
+    type: enum
+    label: Litigation hold
+    facet: true
+    default: Any
+    values: [Any, "On", "Off"]
+  archive:
+    type: enum
+    label: Archive
+    facet: true
+    default: Any
+    values: [Any, Active, None]
+  hidden: { type: boolean, label: Hidden from address lists only, default: false, facet: true }
+
+filters:
+  search: q
+  facets: [type, hold, archive, hidden]
+
+savedViews:
+  enabled: true
+  shared: true
+  presets:
+    - { name: User mailboxes, params: { type: UserMailbox } }
+    - { name: On litigation hold, params: { hold: "On" } }
+    - { name: Hidden from address lists, params: { hidden: true } }
+
+datasources:
+  mailboxes:
+    source: runner
+    label: Exchange Online mailboxes (PowerShell)
+    script: exchange/Get-MailboxSummary.ps1
+    sha256: 45facf19c4619af0897f322e35906ddd5f62ff98de23c3ca1933c26f4dec5ae1
+    services: [exchange]
+    timeoutSeconds: 600
+    parameters:
+      resultSize: 5000
+      includeMailboxes: true
+    cache: { ttl: 900 }
+    # value = [script output] — one summary object { total, truncated, byType, …, mailboxes }. Facets filter the cached result.
+    transform: >-
+      ${ (
+        $v := value[0];  /* runner result = [output data]; one summary object */
+        $p := params;
+        $q := $lowercase($trim($p.q ? $p.q : ''));
+        $rows := [$v.mailboxes[
+            ($q = '' or $contains($lowercase(displayName & ' ' & primarySmtpAddress & ' ' & userPrincipalName), $q))
+            and ($p.type = 'All' or $not($exists($p.type)) or recipientTypeDetails = $p.type)
+            and ($p.hold = 'Any' or $not($exists($p.hold)) or litigationHoldEnabled = ($p.hold = 'On'))
+            and ($p.archive = 'Any' or $not($exists($p.archive)) or archiveStatus = $p.archive)
+            and ($p.hidden != true or hiddenFromAddressListsEnabled = true)
+          ]];
+        {
+          "rows": $rows,
+          "total": $v.total,
+          "truncated": $v.truncated,
+          "shared": $count($v.mailboxes[recipientTypeDetails = 'SharedMailbox']),
+          "litigationHold": $v.litigationHold,
+          "archiveEnabled": $v.archiveEnabled,
+          "hidden": $v.hiddenFromAddressLists,
+          "byType": [$v.byType.{
+            "type": type = 'UserMailbox' ? 'User' : type = 'SharedMailbox' ? 'Shared' : type = 'RoomMailbox' ? 'Room' : type = 'EquipmentMailbox' ? 'Equipment' : type = 'SchedulingMailbox' ? 'Scheduling' : type,
+            "count": count
+          }]
+        }
+      ) }
+
+layout:
+  - widget: markdown
+    span: 12
+    when: ${ mailboxes.truncated = true }
+    text: The scan stopped at 5,000 mailboxes, so counts and the table may be incomplete. Narrow the scan or export from the Exchange admin center for a full list.
+  - widget: kpi
+    id: total
+    data: mailboxes.total
+    label: Mailboxes
+    format: number
+  - widget: kpi
+    id: shared
+    data: mailboxes.shared
+    label: Shared mailboxes
+    format: number
+    href: /p/m365.shared-mailboxes
+  - widget: kpi
+    id: litigationHold
+    data: mailboxes.litigationHold
+    label: On litigation hold
+    format: number
+    href: /p/m365.mailboxes?hold=On
+  - widget: kpi
+    id: archiveEnabled
+    data: mailboxes.archiveEnabled
+    label: Archive enabled
+    format: number
+    href: /p/m365.mailboxes?archive=Active
+  - widget: chart
+    id: byType
+    title: Mailboxes by type
+    span: 4
+    type: donut
+    data: mailboxes.byType
+    x: type
+    y: count
+    format: number
+  - widget: table
+    id: mailboxes
+    title: Mailboxes
+    span: 8
+    data: mailboxes.rows
+    rowKey: primarySmtpAddress
+    selection: multi
+    columns:
+      - { field: displayName, label: Mailbox, kind: identity, secondary: primarySmtpAddress }
+      - field: recipientTypeDetails
+        label: Type
+        kind: status
+        map:
+          UserMailbox: [neutral, User]
+          SharedMailbox: [info, Shared]
+          RoomMailbox: [neutral, Room]
+          EquipmentMailbox: [neutral, Equipment]
+          SchedulingMailbox: [neutral, Scheduling]
+        filter: { type: facet, param: type }
+      - field: litigationHoldEnabled
+        label: Litigation hold
+        kind: status
+        map: { "true": [info, "On"], "false": [neutral, "Off"] }
+        filter: { type: facet, param: hold }
+      - field: archiveStatus
+        label: Archive
+        kind: status
+        map: { Active: [ok, Active], None: [neutral, None] }
+        filter: { type: facet, param: archive }
+      - { field: hiddenFromAddressListsEnabled, label: Hidden from address lists, kind: boolean, filter: { type: facet, param: hidden } }
+      - { field: whenCreated, label: Created, kind: date, filter: date, sortable: true }
+      - { field: userPrincipalName, label: Sign-in name, hidden: true }
+    rowActions:
+      - playbook: m365.convert-to-shared-mailbox
+        label: Convert to shared mailbox
+        icon: users-three
+        inputs:
+          mailbox: ${ row.primarySmtpAddress }
+        when: ${ row.recipientTypeDetails = 'UserMailbox' }
+      - label: Open in Exchange admin center
+        icon: arrow-square-out
+        href: https://admin.exchange.microsoft.com/#/mailboxes
+    bulkActions:
+      - playbook: m365.convert-to-shared-mailbox
+        label: Convert to shared mailboxes
+        icon: users-three
+        forEach:
+          inputs:
+            mailbox: ${ row.primarySmtpAddress }
+          concurrency: 3
+        maxItems: 50
+        when: ${ $count(rows[recipientTypeDetails = 'UserMailbox']) > 0 }
+    empty:
+      title: No mailboxes match
+      body: Clear the filters. If the list is empty without filters, check that you hold an Exchange role that can read recipients (View-Only Recipients or higher).
+
+export:
+  formats: [csv, xlsx]
+  fileName: mailboxes
+  data: mailboxes.rows
+  columns: all

@@ -1,0 +1,434 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#subscribedSkus",
+  "value": [
+    {
+      "accountId": "00000000-0000-4000-8000-0000000000f0",
+      "accountName": "Example Org",
+      "appliesTo": "User",
+      "capabilityStatus": "Enabled",
+      "consumedUnits": 1104,
+      "id": "00000000-0000-4000-8000-0000000000f0_10000000-0000-4000-8000-000000000501",
+      "skuId": "10000000-0000-4000-8000-000000000501",
+      "skuPartNumber": "SPE_E5",
+      "subscriptionIds": [
+        "10000000-0000-4000-8000-000000000864"
+      ],
+      "prepaidUnits": {
+        "enabled": 1200,
+        "suspended": 0,
+        "warning": 0,
+        "lockedOut": 0
+      },
+      "servicePlans": [
+        {
+          "servicePlanId": "10000000-0000-4000-8000-000000000701",
+          "servicePlanName": "EXCHANGE_S_ENTERPRISE",
+          "provisioningStatus": "Success",
+          "appliesTo": "User"
+        },
+        {
+          "servicePlanId": "10000000-0000-4000-8000-000000000702",
+          "servicePlanName": "TEAMS1",
+          "provisioningStatus": "Success",
+          "appliesTo": "User"
+        },
+        {
+          "servicePlanId": "10000000-0000-4000-8000-000000000703",
+          "servicePlanName": "SHAREPOINTENTERPRISE",
+          "provisioningStatus": "Success",
+          "appliesTo": "User"
+        },
+        {
+          "servicePlanId": "10000000-0000-4000-8000-000000000704",
+          "servicePlanName": "AAD_PREMIUM_P2",
+          "provisioningStatus": "Success",
+          "appliesTo": "User"
+        },
+        {
+          "servicePlanId": "10000000-0000-4000-8000-000000000705",
+          "servicePlanName": "INTUNE_A",
+          "provisioningStatus": "Success",
+          "appliesTo": "User"
+        },
+        {
+          "servicePlanId": "10000000-0000-4000-8000-000000000706",
+          "servicePlanName": "WINDEFATP",
+          "provisioningStatus": "Success",
+          "appliesTo": "User"
+        },
+        {
+          "servicePlanId": "10000000-0000-4000-8000-000000000707",
+          "servicePlanName": "ATP_ENTERPRISE",
+          "provisioningStatus": "Success",
+          "appliesTo": "User"
+        },
+        {
+          "servicePlanId": "10000000-0000-4000-8000-000000000708",
+          "servicePlanName": "THREAT_INTELLIGENCE",
+          "provisioningStatus": "Success",
+          "appliesTo": "User"
+        },
+        {
+          "servicePlanId": "10000000-0000-4000-8000-000000000709",
+          "servicePlanName": "MCOEV",
+          "provisioningStatus": "Success",
+          "appliesTo": "User"
+        },
+        {
+          "servicePlanId": "10000000-0000-4000-8000-00000000070a",
+          "servicePlanName": "OFFICESUBSCRIPTION",
+          "provisioningStatus": "Success",
+          "appliesTo": "User"
+        },
+        {
+          "servicePlanId": "10000000-0000-4000-8000-00000000070b",
+          "servicePlanName": "M365_LIGHTHOUSE_CUSTOMER_PLAN1",
+          "provisioningStatus": "PendingActivation",
+          "appliesTo": "User"
+        },
+        {
+          "servicePlanId": "10000000-0000-4000-8000-00000000070c",
+          "servicePlanName": "YAMMER_ENTERPRISE",
+          "provisioningStatus": "Disabled",
+          "appliesTo": "User"
+        }
+      ]
+    },
+    {
+      "accountId": "00000000-0000-4000-8000-0000000000f0",
+      "accountName": "Example Org",
+      "appliesTo": "User",
+      "capabilityStatus": "Enabled",
+      "consumedUnits": 148,
+      "id": "00000000-0000-4000-8000-0000000000f0_30000000-0000-4000-8000-000000000401",
+      "skuId": "30000000-0000-4000-8000-000000000401",
+      "skuPartNumber": "SPE_E3",
+      "subscriptionIds": [
+        "10000000-0000-4000-8000-000000000894"
+      ],
+      "prepaidUnits": {
+        "enabled": 150,
+        "suspended": 0,
+        "warning": 0,
+        "lockedOut": 0
+      },
+      "servicePlans": [
+        {
+          "servicePlanId": "10000000-0000-4000-8000-000000000715",
+          "servicePlanName": "EXCHANGE_S_ENTERPRISE",
+          "provisioningStatus": "Success",
+          "appliesTo": "User"
+        },
+        {
+          "servicePlanId": "10000000-0000-4000-8000-000000000716",
+          "servicePlanName": "TEAMS1",
+          "provisioningStatus": "Success",
+          "appliesTo": "User"
+        },
+        {
+          "servicePlanId": "10000000-0000-4000-8000-000000000717",
+          "servicePlanName": "SHAREPOINTENTERPRISE",
+          "provisioningStatus": "Success",
+          "appliesTo": "User"
+        },
+        {
+          "servicePlanId": "10000000-0000-4000-8000-000000000718",
+          "servicePlanName": "AAD_PREMIUM",
+          "provisioningStatus": "Success",
+          "appliesTo": "User"
+        },
+        {
+          "servicePlanId": "10000000-0000-4000-8000-000000000719",
+          "servicePlanName": "INTUNE_A",
+          "provisioningStatus": "Success",
+          "appliesTo": "User"
+        },
+        {
+          "servicePlanId": "10000000-0000-4000-8000-00000000071a",
+          "servicePlanName": "MDE_LITE",
+          "provisioningStatus": "Success",
+          "appliesTo": "User"
+        },
+        {
+          "servicePlanId": "10000000-0000-4000-8000-00000000071b",
+          "servicePlanName": "OFFICESUBSCRIPTION",
+          "provisioningStatus": "Success",
+          "appliesTo": "User"
+        }
+      ]
+    },
+    {
+      "accountId": "00000000-0000-4000-8000-0000000000f0",
+      "accountName": "Example Org",
+      "appliesTo": "User",
+      "capabilityStatus": "Enabled",
+      "consumedUnits": 40,
+      "id": "00000000-0000-4000-8000-0000000000f0_30000000-0000-4000-8000-000000000402",
+      "skuId": "30000000-0000-4000-8000-000000000402",
+      "skuPartNumber": "POWER_BI_PRO",
+      "subscriptionIds": [
+        "10000000-0000-4000-8000-000000000828"
+      ],
+      "prepaidUnits": {
+        "enabled": 40,
+        "suspended": 0,
+        "warning": 0,
+        "lockedOut": 0
+      },
+      "servicePlans": [
+        {
+          "servicePlanId": "10000000-0000-4000-8000-00000000071f",
+          "servicePlanName": "BI_AZURE_P2",
+          "provisioningStatus": "Success",
+          "appliesTo": "User"
+        }
+      ]
+    },
+    {
+      "accountId": "00000000-0000-4000-8000-0000000000f0",
+      "accountName": "Example Org",
+      "appliesTo": "User",
+      "capabilityStatus": "Suspended",
+      "consumedUnits": 0,
+      "id": "00000000-0000-4000-8000-0000000000f0_30000000-0000-4000-8000-000000000403",
+      "skuId": "30000000-0000-4000-8000-000000000403",
+      "skuPartNumber": "EMS",
+      "subscriptionIds": [
+        "10000000-0000-4000-8000-000000000800"
+      ],
+      "prepaidUnits": {
+        "enabled": 0,
+        "suspended": 100,
+        "warning": 0,
+        "lockedOut": 0
+      },
+      "servicePlans": [
+        {
+          "servicePlanId": "10000000-0000-4000-8000-000000000729",
+          "servicePlanName": "AAD_PREMIUM",
+          "provisioningStatus": "Success",
+          "appliesTo": "User"
+        },
+        {
+          "servicePlanId": "10000000-0000-4000-8000-00000000072a",
+          "servicePlanName": "INTUNE_A",
+          "provisioningStatus": "Success",
+          "appliesTo": "User"
+        }
+      ]
+    },
+    {
+      "accountId": "00000000-0000-4000-8000-0000000000f0",
+      "accountName": "Example Org",
+      "appliesTo": "User",
+      "capabilityStatus": "Enabled",
+      "consumedUnits": 210,
+      "id": "00000000-0000-4000-8000-0000000000f0_10000000-0000-4000-8000-000000000502",
+      "skuId": "10000000-0000-4000-8000-000000000502",
+      "skuPartNumber": "AAD_PREMIUM_P2",
+      "subscriptionIds": [
+        "10000000-0000-4000-8000-0000000008d2"
+      ],
+      "prepaidUnits": {
+        "enabled": 250,
+        "suspended": 0,
+        "warning": 0,
+        "lockedOut": 0
+      },
+      "servicePlans": [
+        {
+          "servicePlanId": "10000000-0000-4000-8000-000000000733",
+          "servicePlanName": "AAD_PREMIUM_P2",
+          "provisioningStatus": "Success",
+          "appliesTo": "User"
+        },
+        {
+          "servicePlanId": "10000000-0000-4000-8000-000000000734",
+          "servicePlanName": "AAD_PREMIUM",
+          "provisioningStatus": "Success",
+          "appliesTo": "User"
+        }
+      ]
+    },
+    {
+      "accountId": "00000000-0000-4000-8000-0000000000f0",
+      "accountName": "Example Org",
+      "appliesTo": "User",
+      "capabilityStatus": "Enabled",
+      "consumedUnits": 48,
+      "id": "00000000-0000-4000-8000-0000000000f0_10000000-0000-4000-8000-000000000503",
+      "skuId": "10000000-0000-4000-8000-000000000503",
+      "skuPartNumber": "Microsoft_365_Copilot",
+      "subscriptionIds": [
+        "10000000-0000-4000-8000-000000000830"
+      ],
+      "prepaidUnits": {
+        "enabled": 50,
+        "suspended": 0,
+        "warning": 0,
+        "lockedOut": 0
+      },
+      "servicePlans": [
+        {
+          "servicePlanId": "10000000-0000-4000-8000-00000000073d",
+          "servicePlanName": "M365_COPILOT_APPS",
+          "provisioningStatus": "Success",
+          "appliesTo": "User"
+        },
+        {
+          "servicePlanId": "10000000-0000-4000-8000-00000000073e",
+          "servicePlanName": "M365_COPILOT_TEAMS",
+          "provisioningStatus": "Success",
+          "appliesTo": "User"
+        },
+        {
+          "servicePlanId": "10000000-0000-4000-8000-00000000073f",
+          "servicePlanName": "GRAPH_CONNECTORS_COPILOT",
+          "provisioningStatus": "Success",
+          "appliesTo": "User"
+        }
+      ]
+    },
+    {
+      "accountId": "00000000-0000-4000-8000-0000000000f0",
+      "accountName": "Example Org",
+      "appliesTo": "User",
+      "capabilityStatus": "Enabled",
+      "consumedUnits": 12,
+      "id": "00000000-0000-4000-8000-0000000000f0_10000000-0000-4000-8000-000000000504",
+      "skuId": "10000000-0000-4000-8000-000000000504",
+      "skuPartNumber": "VISIOCLIENT",
+      "subscriptionIds": [
+        "10000000-0000-4000-8000-00000000080c"
+      ],
+      "prepaidUnits": {
+        "enabled": 25,
+        "suspended": 0,
+        "warning": 0,
+        "lockedOut": 0
+      },
+      "servicePlans": [
+        {
+          "servicePlanId": "10000000-0000-4000-8000-000000000747",
+          "servicePlanName": "VISIO_CLIENT_SUBSCRIPTION",
+          "provisioningStatus": "Success",
+          "appliesTo": "User"
+        },
+        {
+          "servicePlanId": "10000000-0000-4000-8000-000000000748",
+          "servicePlanName": "VISIOONLINE",
+          "provisioningStatus": "Success",
+          "appliesTo": "User"
+        }
+      ]
+    },
+    {
+      "accountId": "00000000-0000-4000-8000-0000000000f0",
+      "accountName": "Example Org",
+      "appliesTo": "User",
+      "capabilityStatus": "Enabled",
+      "consumedUnits": 302,
+      "id": "00000000-0000-4000-8000-0000000000f0_10000000-0000-4000-8000-000000000505",
+      "skuId": "10000000-0000-4000-8000-000000000505",
+      "skuPartNumber": "MCOEV",
+      "subscriptionIds": [
+        "10000000-0000-4000-8000-000000000833"
+      ],
+      "prepaidUnits": {
+        "enabled": 300,
+        "suspended": 0,
+        "warning": 0,
+        "lockedOut": 0
+      },
+      "servicePlans": [
+        {
+          "servicePlanId": "10000000-0000-4000-8000-000000000751",
+          "servicePlanName": "MCOEV",
+          "provisioningStatus": "Success",
+          "appliesTo": "User"
+        }
+      ]
+    },
+    {
+      "accountId": "00000000-0000-4000-8000-0000000000f0",
+      "accountName": "Example Org",
+      "appliesTo": "User",
+      "capabilityStatus": "Warning",
+      "consumedUnits": 40,
+      "id": "00000000-0000-4000-8000-0000000000f0_10000000-0000-4000-8000-000000000506",
+      "skuId": "10000000-0000-4000-8000-000000000506",
+      "skuPartNumber": "EXCHANGESTANDARD",
+      "subscriptionIds": [
+        "10000000-0000-4000-8000-000000000828"
+      ],
+      "prepaidUnits": {
+        "enabled": 60,
+        "suspended": 0,
+        "warning": 60,
+        "lockedOut": 0
+      },
+      "servicePlans": [
+        {
+          "servicePlanId": "10000000-0000-4000-8000-00000000075b",
+          "servicePlanName": "EXCHANGE_S_STANDARD",
+          "provisioningStatus": "Success",
+          "appliesTo": "User"
+        }
+      ]
+    },
+    {
+      "accountId": "00000000-0000-4000-8000-0000000000f0",
+      "accountName": "Example Org",
+      "appliesTo": "User",
+      "capabilityStatus": "Enabled",
+      "consumedUnits": 311,
+      "id": "00000000-0000-4000-8000-0000000000f0_10000000-0000-4000-8000-000000000507",
+      "skuId": "10000000-0000-4000-8000-000000000507",
+      "skuPartNumber": "FLOW_FREE",
+      "subscriptionIds": [
+        "10000000-0000-4000-8000-00000000083c"
+      ],
+      "prepaidUnits": {
+        "enabled": 10000,
+        "suspended": 0,
+        "warning": 0,
+        "lockedOut": 0
+      },
+      "servicePlans": [
+        {
+          "servicePlanId": "10000000-0000-4000-8000-000000000765",
+          "servicePlanName": "FLOW_P2_VIRAL",
+          "provisioningStatus": "Success",
+          "appliesTo": "User"
+        }
+      ]
+    },
+    {
+      "accountId": "00000000-0000-4000-8000-0000000000f0",
+      "accountName": "Example Org",
+      "appliesTo": "User",
+      "capabilityStatus": "Enabled",
+      "consumedUnits": 14,
+      "id": "00000000-0000-4000-8000-0000000000f0_10000000-0000-4000-8000-000000000508",
+      "skuId": "10000000-0000-4000-8000-000000000508",
+      "skuPartNumber": "TEAMS_EXPLORATORY",
+      "subscriptionIds": [
+        "10000000-0000-4000-8000-00000000080e"
+      ],
+      "prepaidUnits": {
+        "enabled": 100,
+        "suspended": 0,
+        "warning": 0,
+        "lockedOut": 0
+      },
+      "servicePlans": [
+        {
+          "servicePlanId": "10000000-0000-4000-8000-00000000076f",
+          "servicePlanName": "TEAMS1",
+          "provisioningStatus": "Success",
+          "appliesTo": "User"
+        }
+      ]
+    }
+  ]
+}

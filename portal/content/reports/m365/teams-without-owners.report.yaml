@@ -1,0 +1,108 @@
+$schema: ../../../packages/schemas/generated/report.schema.json
+kind: report
+id: m365.teams-without-owners
+version: 1.0.0
+title: Teams without owners
+summary: Teams that have no owner (and optionally only one), with visibility and archive state, so they can be handed to a new owner or retired.
+owner: m365-team
+tags: [m365, teams, governance]
+nav: { section: reports, label: Teams without owners, icon: microsoft-teams-logo, order: 130 }
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    graph: [Group.Read.All, GroupMember.Read.All]
+    teams: [user_impersonation]
+  entraRoles: [Teams Administrator, Global Reader]
+  licences: [teams]
+
+params:
+  includeSingleOwner: { type: boolean, label: Include teams with one owner, default: false, facet: true }
+  includeArchived: { type: boolean, label: Include archived teams, default: true, facet: true }
+
+filters:
+  facets: [includeSingleOwner, includeArchived]
+
+datasources:
+  teams:
+    source: runner
+    label: Teams owner scan (PowerShell)
+    script: teams/Get-TeamsSummary.ps1
+    sha256: 6ea9d9332539ca9be5f0be6a6c01937eca307d1079aeeeee4e66ab277e4e5aa8
+    services: [graph, teams]
+    timeoutSeconds: 1800
+    parameters:
+      includeOwnerCounts: true
+      maxTeamsForOwners: 2000
+      includeTeams: true
+    cache: { ttl: 1800 }
+    # value = [script output] — one object { total, archived, byVisibility, ownerless, teams }. Teams whose owners couldn't be read have ownerCount null.
+    transform: >-
+      ${ (
+        $v := value[0];  /* runner result = [output data]; one summary object */
+        $p := params;
+        $limit := $p.includeSingleOwner = true ? 1 : 0;
+        $rows := [$sort($v.teams[
+            $exists(ownerCount) and ownerCount != null and ownerCount <= $limit
+            and ($p.includeArchived != false or archived = false)
+          ].$merge([$, { "ownership": ownerCount = 0 ? 'none' : 'single' }]), function($a, $b) { $a.ownerCount > $b.ownerCount })];
+        {
+          "rows": $rows,
+          "ownerless": $count($v.teams[ownerCount = 0]),
+          "singleOwner": $count($v.teams[ownerCount = 1]),
+          "total": $v.total,
+          "notChecked": $count($v.teams[$not($exists(ownerCount)) or ownerCount = null])
+        }
+      ) }
+
+layout:
+  - widget: kpi
+    data: teams.ownerless
+    label: Teams without owners
+    format: number
+    status: "${ value > 0 ? 'crit' : 'ok' }"
+  - widget: kpi
+    data: teams.singleOwner
+    label: Teams with one owner
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+  - widget: kpi
+    data: teams.total
+    label: Teams scanned
+    format: number
+  - widget: kpi
+    data: teams.notChecked
+    label: Owners not checked
+    format: number
+    status: "${ value > 0 ? 'info' : 'ok' }"
+  - widget: table
+    id: teams
+    span: 12
+    data: teams.rows
+    rowKey: groupId
+    columns:
+      - { field: displayName, label: Team, kind: identity, secondary: mailNickName }
+      - field: ownership
+        label: Owners
+        kind: status
+        map: { none: [crit, No owners], single: [warn, One owner] }
+        filter: facet
+      - { field: visibility, label: Visibility, filter: facet }
+      - { field: archived, label: Archived, kind: boolean, filter: facet }
+      - { field: groupId, label: Group id, kind: guid, hidden: true }
+    inspect:
+      page: m365.team
+      params:
+        id: ${ row.groupId }
+    rowActions:
+      - label: Open in Teams admin center
+        icon: arrow-square-out
+        href: "https://admin.teams.microsoft.com/teams/manage/${ $encode(row.groupId) }"
+    empty:
+      title: Every team has an owner
+      body: No team in the scan is missing an owner. Teams beyond the first 2,000 aren't checked.
+
+export:
+  formats: [csv, xlsx]
+  fileName: teams-without-owners
+  data: teams.rows
+  columns: all

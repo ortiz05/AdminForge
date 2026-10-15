@@ -1,0 +1,25 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#security/incidents(alerts())/$entity",
+  "id": "4215",
+  "tenantId": "00000000-0000-4000-8000-0000000000f0",
+  "status": "resolved",
+  "incidentWebUrl": "https://security.microsoft.com/incidents/4215?tid=00000000-0000-4000-8000-0000000000f0",
+  "redirectIncidentId": null,
+  "displayName": "Penetration testing tool detected on one endpoint",
+  "createdDateTime": "2026-10-08T07:00:00Z",
+  "lastUpdateDateTime": "2026-10-08T09:00:00Z",
+  "assignedTo": "jordan.lee@example.com",
+  "classification": "informationalExpectedActivity",
+  "determination": "securityTesting",
+  "severity": "low",
+  "customTags": [
+    "Pen test Q4"
+  ],
+  "systemTags": [],
+  "description": null,
+  "summary": null,
+  "lastModifiedBy": "alex.admin@example.com",
+  "resolvingComment": null,
+  "comments": [],
+  "alerts": []
+}

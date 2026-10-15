@@ -1,0 +1,399 @@
+$schema: ../../../packages/schemas/generated/page.schema.json
+kind: page
+id: azure.function-app
+version: 1.0.0
+title: Function App
+summary: One Function App — state, functions and their triggers, invocations and HTTP errors, app setting names, configuration, authentication and access.
+owner: azure-team
+tags: [azure, functions, app-service]
+template: entity
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    arm: [user_impersonation]
+  azureRoles: [Reader, Monitoring Reader]
+
+params:
+  subscriptionId: { type: guid, label: Subscription, required: true, hidden: true }
+  resourceGroup: { type: string, label: Resource group, required: true, hidden: true }
+  name: { type: string, label: Function App, required: true, hidden: true }
+  range: { type: dateRange, label: Invocations window, default: P1D, presets: [PT6H, P1D, P7D, P30D], max: P30D }
+
+datasources:
+  app:
+    source: arm
+    request:
+      path: /subscriptions/${ $encode($guid(params.subscriptionId)) }/resourceGroups/${ $encode(params.resourceGroup) }/providers/Microsoft.Web/sites/${ $encode(params.name) }
+      apiVersion: "2023-12-01"
+    transform: >-
+      ${ $merge([value, {
+        'state': value.properties.state,
+        'defaultHostName': value.properties.defaultHostName,
+        'httpsOnly': value.properties.httpsOnly,
+        'plan': value.properties.sku = 'Dynamic' ? 'Consumption' : value.properties.sku = 'FlexConsumption' ? 'Flex Consumption' : value.properties.sku = 'ElasticPremium' ? 'Premium' : 'Dedicated',
+        'planName': $split(value.properties.serverFarmId, '/')[-1],
+        'os': $contains(value.kind, 'linux') ? 'Linux' : 'Windows',
+        'identityType': value.identity.type ? value.identity.type : 'None',
+        'publicNetworkAccess': value.properties.publicNetworkAccess ? value.properties.publicNetworkAccess : 'Enabled',
+        'clientCertEnabled': value.properties.clientCertEnabled,
+        'vnetSubnet': value.properties.virtualNetworkSubnetId,
+        'lastModified': value.properties.lastModifiedTimeUtc,
+        'hostNames': value.properties.enabledHostNames
+      }]) }
+    cache: { ttl: 30 }
+  config:
+    source: arm
+    request:
+      path: /subscriptions/${ $encode($guid(params.subscriptionId)) }/resourceGroups/${ $encode(params.resourceGroup) }/providers/Microsoft.Web/sites/${ $encode(params.name) }/config/web
+      apiVersion: "2023-12-01"
+    transform: >-
+      ${ $merge([value.properties, {
+        'ipRestrictions': $count(value.properties.ipSecurityRestrictions[action = 'Allow' and ipAddress != 'Any']),
+        'runtime': value.properties.linuxFxVersion ? value.properties.linuxFxVersion : value.properties.powerShellVersion ? 'PowerShell ' & value.properties.powerShellVersion : value.properties.netFrameworkVersion
+      }]) }
+    cache: { ttl: 120 }
+  auth:
+    source: arm
+    request:
+      path: /subscriptions/${ $encode($guid(params.subscriptionId)) }/resourceGroups/${ $encode(params.resourceGroup) }/providers/Microsoft.Web/sites/${ $encode(params.name) }/config/authsettingsV2
+      apiVersion: "2023-12-01"
+    transform: >-
+      ${ {
+        'enabled': value.properties.platform.enabled = true,
+        'requireAuthentication': value.properties.globalValidation.requireAuthentication = true,
+        'unauthenticatedClientAction': value.properties.globalValidation.unauthenticatedClientAction,
+        'entraEnabled': value.properties.identityProviders.azureActiveDirectory.enabled = true,
+        'entraClientId': value.properties.identityProviders.azureActiveDirectory.registration.clientId,
+        'entraIssuer': value.properties.identityProviders.azureActiveDirectory.registration.openIdIssuer,
+        'allowedAudiences': value.properties.identityProviders.azureActiveDirectory.validation.allowedAudiences,
+        'tokenStore': value.properties.login.tokenStore.enabled = true,
+        'runtimeVersion': value.properties.platform.runtimeVersion
+      } }
+    cache: { ttl: 300 }
+  functions:
+    source: arm
+    request:
+      path: /subscriptions/${ $encode($guid(params.subscriptionId)) }/resourceGroups/${ $encode(params.resourceGroup) }/providers/Microsoft.Web/sites/${ $encode(params.name) }/functions
+      apiVersion: "2023-12-01"
+    paging: all
+    maxItems: 2000
+    transform: >-
+      ${ [value.value.(
+        $trigger := properties.config.bindings[direction = 'in' and $contains(type, 'Trigger')][0];
+        {
+          'id': id,
+          'name': $split(name, '/')[-1],
+          'trigger': $trigger.type,
+          'schedule': $trigger.schedule,
+          'authLevel': $trigger.authLevel,
+          'disabled': properties.isDisabled = true,
+          'language': properties.language,
+          'invokeUrl': properties.invoke_url_template
+        }
+      )] }
+    cache: { ttl: 120 }
+  settings:
+    source: arm
+    label: App setting names
+    # The list action returns values; the transform keeps names and derived flags only, so values never reach the browser.
+    # Needs Microsoft.Web/sites/config/list/action (Website Contributor or higher) and a BFF allowlist entry for this read POST.
+    requires:
+      azureRoles: [Website Contributor]
+    request:
+      method: POST
+      path: /subscriptions/${ $encode($guid(params.subscriptionId)) }/resourceGroups/${ $encode(params.resourceGroup) }/providers/Microsoft.Web/sites/${ $encode(params.name) }/config/appsettings/list
+      apiVersion: "2023-12-01"
+    transform: >-
+      ${ (
+        $props := value.properties;
+        {
+          'rows': [$keys($props)^($).(
+            $name := $;
+            $v := $string($lookup($props, $name));
+            {
+              'name': $name,
+              'source': $contains($v, '@Microsoft.KeyVault(') ? 'Key Vault reference' : $contains($v, '@Microsoft.AppConfiguration(') ? 'App Configuration reference' : 'Value',
+              'platform': $contains($name, 'FUNCTIONS_') or $contains($name, 'WEBSITE_') or $contains($name, 'AzureWebJobs') or $contains($name, 'APPLICATIONINSIGHTS_')
+            }
+          )],
+          'runtime': $props.FUNCTIONS_WORKER_RUNTIME,
+          'extensionVersion': $props.FUNCTIONS_EXTENSION_VERSION
+        }
+      ) }
+    cache: { ttl: 120 }
+  host:
+    source: arm
+    label: Functions host status
+    requires:
+      azureRoles: [Website Contributor]
+    request:
+      path: /subscriptions/${ $encode($guid(params.subscriptionId)) }/resourceGroups/${ $encode(params.resourceGroup) }/providers/Microsoft.Web/sites/${ $encode(params.name) }/hostruntime/admin/host/status
+      apiVersion: "2022-03-01"
+    transform: >-
+      ${ $merge([value, { 'extensionBundleVersion': value.extensionBundle.id & ' ' & value.extensionBundle.version, 'errorCount': $count(value.errors) }]) }
+    cache: { ttl: 30 }
+  invocations:
+    source: arm
+    request:
+      path: /subscriptions/${ $encode($guid(params.subscriptionId)) }/resourceGroups/${ $encode(params.resourceGroup) }/providers/Microsoft.Web/sites/${ $encode(params.name) }/providers/Microsoft.Insights/metrics
+      apiVersion: "2023-10-01"
+      query:
+        metricnames: FunctionExecutionCount,Requests,Http5xx
+        aggregation: Total
+        interval: "${ params.range.timespan in ['PT6H', 'P1D'] ? 'PT15M' : 'PT1H' }"
+        timespan: ${ params.range.from & '/' & params.range.to }
+    transform: >-
+      ${ (
+        $series := value.value.{ 'metric': name.value, 'label': name.localizedValue, 'data': timeseries.data };
+        {
+          'points': [$series.( $l := label; data.{ 'time': timeStamp, 'metric': $l, 'value': total ? total : 0 } )],
+          'executions': $sum($series[metric = 'FunctionExecutionCount'].data.total),
+          'requests': $sum($series[metric = 'Requests'].data.total),
+          'http5xx': $sum($series[metric = 'Http5xx'].data.total)
+        }
+      ) }
+    cache: { ttl: 60 }
+  access:
+    source: resourceGraph
+    query: |
+      // af:azure.function-app#access
+      authorizationresources
+      | where type =~ 'microsoft.authorization/roleassignments'
+      | extend scope = tolower(tostring(properties.scope)), principalId = tostring(properties.principalId), principalType = tostring(properties.principalType), roleDefinitionGuid = tolower(extract('([0-9a-fA-F-]{36})$', 1, tostring(properties.roleDefinitionId))), createdOn = todatetime(properties.createdOn)
+      | extend site = tolower(strcat('/subscriptions/${ $guid(params.subscriptionId) }/resourcegroups/${ $lowercase($replace(params.resourceGroup, /[^A-Za-z0-9._()-]/, '')) }/providers/microsoft.web/sites/${ $lowercase($replace(params.name, /[^A-Za-z0-9._-]/, '')) }'))
+      | where site == scope or site startswith strcat(scope, '/')
+      | join kind=leftouter (authorizationresources | where type =~ 'microsoft.authorization/roledefinitions' | extend roleDefinitionGuid = tolower(name), roleName = tostring(properties.roleName), roleType = tostring(properties.type) | summarize roleName = any(roleName), roleType = any(roleType) by roleDefinitionGuid) on roleDefinitionGuid
+      | extend inherited = site != scope
+      | project id, roleName, roleType, principalId, principalType, scope, inherited, createdOn
+      | order by roleName asc
+    cache: { ttl: 120 }
+
+header:
+  title: ${ app.name }
+  subtitle: ${ app.defaultHostName }
+  status: "${ app.state = 'Running' ? 'ok' : 'warn' }"
+  statusLabel: ${ app.state }
+  ids:
+    Resource id: ${ app.id }
+
+actions:
+  - playbook: azure.restart-app
+    label: Restart
+    icon: arrow-clockwise
+    inputs:
+      subscriptionId: ${ params.subscriptionId }
+      resourceGroup: ${ params.resourceGroup }
+      name: ${ params.name }
+    when: ${ app.state = 'Running' }
+  - playbook: azure.stop-app
+    label: Stop
+    icon: stop
+    inputs:
+      subscriptionId: ${ params.subscriptionId }
+      resourceGroup: ${ params.resourceGroup }
+      name: ${ params.name }
+    when: ${ app.state = 'Running' }
+  - playbook: azure.start-app
+    label: Start
+    icon: play
+    inputs:
+      subscriptionId: ${ params.subscriptionId }
+      resourceGroup: ${ params.resourceGroup }
+      name: ${ params.name }
+    when: ${ app.state = 'Stopped' }
+  - playbook: azure.sync-function-triggers
+    label: Sync triggers
+    icon: arrows-clockwise
+    inputs:
+      subscriptionId: ${ params.subscriptionId }
+      resourceGroup: ${ params.resourceGroup }
+      name: ${ params.name }
+  - label: Metrics
+    icon: chart-line
+    href: /p/azure.metrics?resourceId=${ $encode(app.id) }&metrics=FunctionExecutionCount,Http5xx&aggregation=Total
+  - label: Open in Azure portal
+    icon: arrow-square-out
+    href: https://portal.azure.com/#resource${ app.id }/overview
+
+tabs:
+  - id: overview
+    label: Overview
+    layout:
+      - widget: kpi
+        data: invocations.executions
+        label: Executions in window
+        format: number
+      - widget: kpi
+        data: invocations.requests
+        label: HTTP requests
+        format: number
+      - widget: kpi
+        data: invocations.http5xx
+        label: HTTP 5xx
+        format: number
+        status: "${ value > 0 ? 'warn' : 'ok' }"
+      - widget: kpi
+        data: host.errorCount
+        label: Host errors
+        format: number
+        status: "${ value > 0 ? 'crit' : 'ok' }"
+      - widget: keyValue
+        span: 6
+        title: App
+        data: app
+        fields:
+          - field: state
+            label: State
+            kind: status
+            map: { Running: [ok, Running], Stopped: [warn, Stopped] }
+          - { field: plan, label: Hosting plan }
+          - { field: planName, label: App Service plan }
+          - { field: os, label: OS }
+          - { field: location, label: Location }
+          - field: httpsOnly
+            label: HTTPS only
+            kind: status
+            map: { "true": [ok, "Yes"], "false": [warn, "No — HTTP allowed"] }
+          - { field: publicNetworkAccess, label: Public network access }
+          - { field: identityType, label: Managed identity }
+          - { field: vnetSubnet, label: VNet integration subnet, kind: id }
+          - { field: hostNames, label: Host names, kind: tags }
+          - { field: lastModified, label: Last modified, kind: relativeTime }
+      - widget: keyValue
+        span: 6
+        title: Functions host
+        data: host
+        fields:
+          - field: state
+            label: Host state
+            kind: status
+            map: { Running: [ok, Running], Default: [info, Starting], Error: [crit, Error], Offline: [crit, Offline], Stopped: [warn, Stopped] }
+          - { field: version, label: Host version }
+          - { field: extensionBundleVersion, label: Extension bundle }
+          - { field: platformVersion, label: Platform version }
+          - { field: processUptime, label: Process uptime (ms), kind: number }
+          - { field: instanceId, label: Instance, kind: id }
+  - id: functions
+    label: Functions
+    layout:
+      - widget: table
+        span: 12
+        data: functions
+        rowKey: id
+        search: true
+        columns:
+          - { field: name, label: Function, sortable: true }
+          - { field: trigger, label: Trigger, filter: facet }
+          - { field: schedule, label: Schedule, kind: code }
+          - { field: authLevel, label: HTTP auth level, filter: facet }
+          - field: disabled
+            label: State
+            kind: status
+            map: { "false": [ok, Enabled], "true": [neutral, Disabled] }
+            filter: facet
+          - { field: language, label: Language, hidden: true }
+          - { field: invokeUrl, label: Invoke URL, kind: link, hidden: true }
+        rowActions:
+          - label: Open in Azure portal
+            icon: arrow-square-out
+            href: https://portal.azure.com/#resource${ row.id }/overview
+        empty:
+          title: No functions found
+          body: The app has no functions deployed, or the host failed to index them — check Host state on the Overview tab and run Sync triggers.
+  - id: invocations
+    label: Invocations
+    layout:
+      - widget: chart
+        span: 12
+        rows: 3
+        title: Executions, requests and HTTP 5xx
+        type: line
+        data: invocations.points
+        x: time
+        y: value
+        series: metric
+        format: number
+  - id: settings
+    label: App settings
+    layout:
+      - widget: markdown
+        span: 12
+        text: Setting **names only** — values are never sent to the browser. Key Vault and App Configuration references are flagged so you can spot plain-text secrets.
+      - widget: keyValue
+        span: 12
+        data: settings
+        fields:
+          - { field: runtime, label: Worker runtime }
+          - { field: extensionVersion, label: Functions runtime version }
+      - widget: table
+        span: 12
+        data: settings.rows
+        rowKey: name
+        search: true
+        columns:
+          - { field: name, label: Setting, kind: code, sortable: true }
+          - field: source
+            label: Value source
+            kind: status
+            map: { "Key Vault reference": [ok, Key Vault reference], "App Configuration reference": [ok, App Configuration], Value: [neutral, Stored in app] }
+            filter: facet
+          - { field: platform, label: Platform setting, kind: boolean, filter: facet }
+        empty:
+          title: No app settings
+          body: This app has no application settings.
+  - id: configuration
+    label: Configuration
+    layout:
+      - widget: keyValue
+        span: 6
+        title: Platform configuration
+        data: config
+        fields:
+          - { field: runtime, label: Runtime stack }
+          - { field: minTlsVersion, label: Minimum TLS }
+          - { field: scmMinTlsVersion, label: Minimum TLS (Kudu) }
+          - { field: ftpsState, label: FTP state }
+          - { field: http20Enabled, label: HTTP/2, kind: boolean }
+          - { field: alwaysOn, label: Always on, kind: boolean }
+          - { field: remoteDebuggingEnabled, label: Remote debugging, kind: boolean }
+          - { field: use32BitWorkerProcess, label: 32-bit worker, kind: boolean }
+          - { field: ipSecurityRestrictionsDefaultAction, label: Inbound default action }
+          - { field: ipRestrictions, label: Inbound allow rules, kind: number }
+          - { field: functionsRuntimeScaleMonitoringEnabled, label: Runtime scale monitoring, kind: boolean }
+      - widget: keyValue
+        span: 6
+        title: Authentication (App Service authentication)
+        data: auth
+        fields:
+          - field: enabled
+            label: Authentication
+            kind: status
+            map: { "true": [ok, Enabled], "false": [warn, Disabled] }
+          - { field: requireAuthentication, label: Require authentication, kind: boolean }
+          - { field: unauthenticatedClientAction, label: Unauthenticated requests }
+          - { field: entraEnabled, label: Microsoft Entra provider, kind: boolean }
+          - { field: entraClientId, label: Entra app (client) id, kind: id }
+          - { field: allowedAudiences, label: Allowed audiences, kind: tags }
+          - { field: tokenStore, label: Token store, kind: boolean }
+  - id: access
+    label: Access
+    layout:
+      - widget: table
+        span: 12
+        data: access.value
+        rowKey: id
+        search: true
+        columns:
+          - { field: roleName, label: Role, kind: identity, secondary: roleType, filter: facet }
+          - { field: principalId, label: Principal, kind: guid }
+          - { field: principalType, label: Principal type, filter: facet }
+          - field: inherited
+            label: Assigned at
+            kind: status
+            map: { "true": [neutral, Inherited], "false": [info, This app] }
+            filter: facet
+          - { field: scope, label: Scope, kind: code, hidden: true }
+          - { field: createdOn, label: Assigned, kind: date }
+        empty:
+          title: No role assignments found
+          body: Nobody has a role at this app, its resource group or subscription (management groups aside).

@@ -1,0 +1,27 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#admin/serviceAnnouncement/issues/$entity",
+  "id": "TM913002",
+  "title": "Meeting recordings may take longer than usual to appear in chat",
+  "service": "Microsoft Teams",
+  "feature": "Meetings",
+  "featureGroup": "Teams Components",
+  "classification": "advisory",
+  "status": "investigating",
+  "origin": "microsoft",
+  "isResolved": false,
+  "startDateTime": "2026-10-15T03:00:00Z",
+  "endDateTime": null,
+  "lastModifiedDateTime": "2026-10-15T07:00:00Z",
+  "impactDescription": "Recordings are saved but can take up to an hour to show in the meeting chat.",
+  "posts": [
+    {
+      "createdDateTime": "2026-10-15T03:12:00Z",
+      "postType": "regular",
+      "description": {
+        "contentType": "html",
+        "content": "<p><b>Current status:</b> We are investigating a backlog in recording processing.</p>"
+      }
+    }
+  ],
+  "details": []
+}

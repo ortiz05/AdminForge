@@ -1,0 +1,602 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#admin/serviceAnnouncement/messages",
+  "value": [
+    {
+      "id": "MC912001",
+      "title": "Microsoft Teams: New meeting chat experience for external participants",
+      "services": [
+        "Microsoft Teams"
+      ],
+      "category": "planForChange",
+      "severity": "normal",
+      "isMajorChange": false,
+      "actionRequiredByDateTime": "2026-11-12T09:00:00Z",
+      "startDateTime": "2026-10-14T09:00:00Z",
+      "endDateTime": "2027-01-13T09:00:00Z",
+      "lastModifiedDateTime": "2026-10-15T04:12:00Z",
+      "tags": [
+        "Feature update",
+        "User impact"
+      ],
+      "hasAttachments": false,
+      "attachmentsArchive": null,
+      "viewPoint": {
+        "isRead": false,
+        "isArchived": false,
+        "isFavorited": false
+      },
+      "details": [
+        {
+          "name": "Summary",
+          "value": "Microsoft Teams: New meeting chat experience for external participants"
+        },
+        {
+          "name": "RoadmapIds",
+          "value": "402092"
+        },
+        {
+          "name": "Platforms",
+          "value": "Web, Desktop, Mac"
+        }
+      ],
+      "body": {
+        "contentType": "html",
+        "content": "<p>We are updating the meeting chat experience for external participants.</p><p><b>When this will happen:</b></p><ul><li>Targeted release: early November 2026</li><li>General availability: late November 2026</li></ul><p><b>How this will affect your organization:</b> External participants will see chat history from the time they join.</p><p><b>What you need to do to prepare:</b> Review your external access policies and update your training.</p>"
+      }
+    },
+    {
+      "id": "MC911870",
+      "title": "(Updated) Exchange Online: Retirement of Basic authentication for SMTP AUTH client submission",
+      "services": [
+        "Exchange Online"
+      ],
+      "category": "planForChange",
+      "severity": "high",
+      "isMajorChange": true,
+      "actionRequiredByDateTime": "2026-10-27T09:00:00Z",
+      "startDateTime": "2026-09-05T09:00:00Z",
+      "endDateTime": "2027-01-13T09:00:00Z",
+      "lastModifiedDateTime": "2026-10-14T09:00:00Z",
+      "tags": [
+        "Retirement",
+        "Admin impact"
+      ],
+      "hasAttachments": false,
+      "attachmentsArchive": null,
+      "viewPoint": {
+        "isRead": false,
+        "isArchived": false,
+        "isFavorited": false
+      },
+      "details": [
+        {
+          "name": "Summary",
+          "value": "(Updated) Exchange Online: Retirement of Basic authentication for SMTP AUTH client submission"
+        },
+        {
+          "name": "RoadmapIds",
+          "value": "401961"
+        },
+        {
+          "name": "Platforms",
+          "value": "Web, Desktop, Mac"
+        }
+      ],
+      "body": {
+        "contentType": "html",
+        "content": "<p>SMTP AUTH client submission with Basic authentication will be retired.</p><p><b>What you need to do to prepare:</b> Move devices and applications that send mail with SMTP AUTH to OAuth, or to a connector-based relay.</p><p>&nbsp;</p><p>Use the <b>SMTP AUTH clients report</b> to find affected senders.</p>"
+      }
+    },
+    {
+      "id": "MC911455",
+      "title": "Microsoft Entra: Mandatory multifactor authentication for admin portals — phase 2",
+      "services": [
+        "Microsoft Entra"
+      ],
+      "category": "preventOrFixIssue",
+      "severity": "high",
+      "isMajorChange": true,
+      "actionRequiredByDateTime": "2026-11-29T09:00:00Z",
+      "startDateTime": "2026-09-15T09:00:00Z",
+      "endDateTime": "2027-01-13T09:00:00Z",
+      "lastModifiedDateTime": "2026-10-13T09:00:00Z",
+      "tags": [
+        "Admin impact",
+        "Change to user experience"
+      ],
+      "hasAttachments": false,
+      "attachmentsArchive": null,
+      "viewPoint": {
+        "isRead": false,
+        "isArchived": false,
+        "isFavorited": false
+      },
+      "details": [
+        {
+          "name": "Summary",
+          "value": "Microsoft Entra: Mandatory multifactor authentication for admin portals — phase 2"
+        },
+        {
+          "name": "RoadmapIds",
+          "value": "401546"
+        },
+        {
+          "name": "Platforms",
+          "value": "Web, Desktop, Mac"
+        }
+      ],
+      "body": {
+        "contentType": "html",
+        "content": "<p>Phase 2 of mandatory MFA extends to Azure CLI, PowerShell and infrastructure-as-code tools.</p><p><b>What you need to do to prepare:</b> Make sure break-glass accounts and automation use workload identities or certificate-based authentication.</p>"
+      }
+    },
+    {
+      "id": "MC910333",
+      "title": "SharePoint Online: Anyone links will expire by default after 30 days",
+      "services": [
+        "SharePoint Online",
+        "OneDrive for Business"
+      ],
+      "category": "planForChange",
+      "severity": "normal",
+      "isMajorChange": true,
+      "actionRequiredByDateTime": "2026-10-24T09:00:00Z",
+      "startDateTime": "2026-09-20T09:00:00Z",
+      "endDateTime": "2027-01-13T09:00:00Z",
+      "lastModifiedDateTime": "2026-10-12T09:00:00Z",
+      "tags": [
+        "Admin impact",
+        "Feature update"
+      ],
+      "hasAttachments": false,
+      "attachmentsArchive": null,
+      "viewPoint": {
+        "isRead": false,
+        "isArchived": false,
+        "isFavorited": false
+      },
+      "details": [
+        {
+          "name": "Summary",
+          "value": "SharePoint Online: Anyone links will expire by default after 30 days"
+        },
+        {
+          "name": "RoadmapIds",
+          "value": "400424"
+        },
+        {
+          "name": "Platforms",
+          "value": "Web, Desktop, Mac"
+        }
+      ],
+      "body": {
+        "contentType": "html",
+        "content": "<p>New Anyone links will expire after 30 days unless you set a different default.</p><p><b>What you need to do to prepare:</b> Review the link expiration setting in the SharePoint admin center.</p>"
+      }
+    },
+    {
+      "id": "MC910120",
+      "title": "Microsoft Intune: Plan for change — end of support for Android device administrator",
+      "services": [
+        "Microsoft Intune"
+      ],
+      "category": "planForChange",
+      "severity": "high",
+      "isMajorChange": false,
+      "actionRequiredByDateTime": "2026-12-14T09:00:00Z",
+      "startDateTime": "2026-09-25T09:00:00Z",
+      "endDateTime": "2027-01-13T09:00:00Z",
+      "lastModifiedDateTime": "2026-10-11T09:00:00Z",
+      "tags": [
+        "Retirement"
+      ],
+      "hasAttachments": false,
+      "attachmentsArchive": null,
+      "viewPoint": {
+        "isRead": false,
+        "isArchived": false,
+        "isFavorited": false
+      },
+      "details": [
+        {
+          "name": "Summary",
+          "value": "Microsoft Intune: Plan for change — end of support for Android device administrator"
+        },
+        {
+          "name": "RoadmapIds",
+          "value": "400211"
+        },
+        {
+          "name": "Platforms",
+          "value": "Web, Desktop, Mac"
+        }
+      ],
+      "body": {
+        "contentType": "html",
+        "content": "<p>Intune ends support for Android device administrator management on devices with Google Mobile Services.</p><p>Move devices to Android Enterprise before the deadline.</p>"
+      }
+    },
+    {
+      "id": "MC909876",
+      "title": "Microsoft 365 apps: Copilot in Outlook will summarize long threads automatically",
+      "services": [
+        "Microsoft 365 apps",
+        "Microsoft Copilot (Microsoft 365)"
+      ],
+      "category": "stayInformed",
+      "severity": "normal",
+      "isMajorChange": false,
+      "actionRequiredByDateTime": null,
+      "startDateTime": "2026-10-06T09:00:00Z",
+      "endDateTime": "2027-01-13T09:00:00Z",
+      "lastModifiedDateTime": "2026-10-10T09:00:00Z",
+      "tags": [
+        "New feature",
+        "User impact"
+      ],
+      "hasAttachments": false,
+      "attachmentsArchive": null,
+      "viewPoint": {
+        "isRead": true,
+        "isArchived": false,
+        "isFavorited": false
+      },
+      "details": [
+        {
+          "name": "Summary",
+          "value": "Microsoft 365 apps: Copilot in Outlook will summarize long threads automatically"
+        },
+        {
+          "name": "RoadmapIds",
+          "value": "409966"
+        },
+        {
+          "name": "Platforms",
+          "value": "Web, Desktop, Mac"
+        }
+      ],
+      "body": {
+        "contentType": "html",
+        "content": "<p>Copilot in Outlook will show a summary card at the top of long email threads for licensed users.</p>"
+      }
+    },
+    {
+      "id": "MC909522",
+      "title": "Microsoft Purview: Updates to the audit log retention defaults",
+      "services": [
+        "Microsoft Purview"
+      ],
+      "category": "stayInformed",
+      "severity": "normal",
+      "isMajorChange": false,
+      "actionRequiredByDateTime": null,
+      "startDateTime": "2026-10-01T09:00:00Z",
+      "endDateTime": "2027-01-13T09:00:00Z",
+      "lastModifiedDateTime": "2026-10-09T09:00:00Z",
+      "tags": [
+        "Admin impact"
+      ],
+      "hasAttachments": false,
+      "attachmentsArchive": null,
+      "viewPoint": {
+        "isRead": false,
+        "isArchived": false,
+        "isFavorited": false
+      },
+      "details": [
+        {
+          "name": "Summary",
+          "value": "Microsoft Purview: Updates to the audit log retention defaults"
+        },
+        {
+          "name": "RoadmapIds",
+          "value": "409612"
+        },
+        {
+          "name": "Platforms",
+          "value": "Web, Desktop, Mac"
+        }
+      ],
+      "body": {
+        "contentType": "html",
+        "content": "<p>Audit log records for Microsoft 365 E3 will be kept for 180 days by default.</p>"
+      }
+    },
+    {
+      "id": "MC909100",
+      "title": "Microsoft Teams: Retirement of Office 365 connectors in Teams",
+      "services": [
+        "Microsoft Teams"
+      ],
+      "category": "preventOrFixIssue",
+      "severity": "high",
+      "isMajorChange": true,
+      "actionRequiredByDateTime": "2026-10-12T09:00:00Z",
+      "startDateTime": "2026-08-16T09:00:00Z",
+      "endDateTime": "2027-01-13T09:00:00Z",
+      "lastModifiedDateTime": "2026-10-08T09:00:00Z",
+      "tags": [
+        "Retirement",
+        "Admin impact"
+      ],
+      "hasAttachments": false,
+      "attachmentsArchive": null,
+      "viewPoint": {
+        "isRead": false,
+        "isArchived": false,
+        "isFavorited": false
+      },
+      "details": [
+        {
+          "name": "Summary",
+          "value": "Microsoft Teams: Retirement of Office 365 connectors in Teams"
+        },
+        {
+          "name": "RoadmapIds",
+          "value": "409190"
+        },
+        {
+          "name": "Platforms",
+          "value": "Web, Desktop, Mac"
+        }
+      ],
+      "body": {
+        "contentType": "html",
+        "content": "<p>Office 365 connectors in Teams are being retired. Existing connectors stop posting after the retirement date.</p><p><b>What you need to do to prepare:</b> Recreate connector-based notifications with workflows in Teams.</p>"
+      }
+    },
+    {
+      "id": "MC908765",
+      "title": "Microsoft Defender XDR: Unified role-based access control becomes the default",
+      "services": [
+        "Microsoft Defender XDR"
+      ],
+      "category": "planForChange",
+      "severity": "normal",
+      "isMajorChange": false,
+      "actionRequiredByDateTime": "2026-11-19T09:00:00Z",
+      "startDateTime": "2026-09-27T09:00:00Z",
+      "endDateTime": "2027-01-13T09:00:00Z",
+      "lastModifiedDateTime": "2026-10-07T09:00:00Z",
+      "tags": [
+        "Admin impact"
+      ],
+      "hasAttachments": false,
+      "attachmentsArchive": null,
+      "viewPoint": {
+        "isRead": false,
+        "isArchived": false,
+        "isFavorited": false
+      },
+      "details": [
+        {
+          "name": "Summary",
+          "value": "Microsoft Defender XDR: Unified role-based access control becomes the default"
+        },
+        {
+          "name": "RoadmapIds",
+          "value": "408855"
+        },
+        {
+          "name": "Platforms",
+          "value": "Web, Desktop, Mac"
+        }
+      ],
+      "body": {
+        "contentType": "html",
+        "content": "<p>New tenants will use unified RBAC. Existing tenants can migrate from the Permissions page.</p>"
+      }
+    },
+    {
+      "id": "MC908001",
+      "title": "Planner: The new Planner replaces Planner for the web",
+      "services": [
+        "Planner"
+      ],
+      "category": "stayInformed",
+      "severity": "normal",
+      "isMajorChange": false,
+      "actionRequiredByDateTime": null,
+      "startDateTime": "2026-09-29T09:00:00Z",
+      "endDateTime": "2027-01-13T09:00:00Z",
+      "lastModifiedDateTime": "2026-10-05T09:00:00Z",
+      "tags": [
+        "Feature update"
+      ],
+      "hasAttachments": false,
+      "attachmentsArchive": null,
+      "viewPoint": {
+        "isRead": true,
+        "isArchived": false,
+        "isFavorited": false
+      },
+      "details": [
+        {
+          "name": "Summary",
+          "value": "Planner: The new Planner replaces Planner for the web"
+        },
+        {
+          "name": "RoadmapIds",
+          "value": "408091"
+        },
+        {
+          "name": "Platforms",
+          "value": "Web, Desktop, Mac"
+        }
+      ],
+      "body": {
+        "contentType": "html",
+        "content": "<p>Planner for the web will redirect to the new Planner experience.</p>"
+      }
+    },
+    {
+      "id": "MC907412",
+      "title": "OneDrive: Sync client minimum version update",
+      "services": [
+        "OneDrive for Business"
+      ],
+      "category": "preventOrFixIssue",
+      "severity": "normal",
+      "isMajorChange": false,
+      "actionRequiredByDateTime": "2026-11-05T09:00:00Z",
+      "startDateTime": "2026-09-23T09:00:00Z",
+      "endDateTime": "2027-01-13T09:00:00Z",
+      "lastModifiedDateTime": "2026-10-03T09:00:00Z",
+      "tags": [
+        "Admin impact"
+      ],
+      "hasAttachments": false,
+      "attachmentsArchive": null,
+      "viewPoint": {
+        "isRead": false,
+        "isArchived": false,
+        "isFavorited": false
+      },
+      "details": [
+        {
+          "name": "Summary",
+          "value": "OneDrive: Sync client minimum version update"
+        },
+        {
+          "name": "RoadmapIds",
+          "value": "407502"
+        },
+        {
+          "name": "Platforms",
+          "value": "Web, Desktop, Mac"
+        }
+      ],
+      "body": {
+        "contentType": "html",
+        "content": "<p>OneDrive sync clients older than one year will stop syncing.</p><p>Update managed clients through your software deployment tools.</p>"
+      }
+    },
+    {
+      "id": "MC906600",
+      "title": "Power Platform: Changes to default environment routing",
+      "services": [
+        "Power Platform"
+      ],
+      "category": "stayInformed",
+      "severity": "normal",
+      "isMajorChange": false,
+      "actionRequiredByDateTime": null,
+      "startDateTime": "2026-09-19T09:00:00Z",
+      "endDateTime": "2027-01-13T09:00:00Z",
+      "lastModifiedDateTime": "2026-10-01T09:00:00Z",
+      "tags": [
+        "Admin impact"
+      ],
+      "hasAttachments": false,
+      "attachmentsArchive": null,
+      "viewPoint": {
+        "isRead": false,
+        "isArchived": false,
+        "isFavorited": false
+      },
+      "details": [
+        {
+          "name": "Summary",
+          "value": "Power Platform: Changes to default environment routing"
+        },
+        {
+          "name": "RoadmapIds",
+          "value": "406690"
+        },
+        {
+          "name": "Platforms",
+          "value": "Web, Desktop, Mac"
+        }
+      ],
+      "body": {
+        "contentType": "html",
+        "content": "<p>Makers will be routed to personal developer environments by default.</p>"
+      }
+    },
+    {
+      "id": "MC905999",
+      "title": "Microsoft Viva: Viva Engage community analytics updates",
+      "services": [
+        "Microsoft Viva"
+      ],
+      "category": "stayInformed",
+      "severity": "normal",
+      "isMajorChange": false,
+      "actionRequiredByDateTime": null,
+      "startDateTime": "2026-09-18T09:00:00Z",
+      "endDateTime": "2027-01-13T09:00:00Z",
+      "lastModifiedDateTime": "2026-09-27T09:00:00Z",
+      "tags": [
+        "Feature update"
+      ],
+      "hasAttachments": false,
+      "attachmentsArchive": null,
+      "viewPoint": {
+        "isRead": true,
+        "isArchived": false,
+        "isFavorited": false
+      },
+      "details": [
+        {
+          "name": "Summary",
+          "value": "Microsoft Viva: Viva Engage community analytics updates"
+        },
+        {
+          "name": "RoadmapIds",
+          "value": "406089"
+        },
+        {
+          "name": "Platforms",
+          "value": "Web, Desktop, Mac"
+        }
+      ],
+      "body": {
+        "contentType": "html",
+        "content": "<p>Community analytics now include reaction trends.</p>"
+      }
+    },
+    {
+      "id": "MC905321",
+      "title": "Exchange Online: Throttling of external recipients per day for large senders",
+      "services": [
+        "Exchange Online"
+      ],
+      "category": "planForChange",
+      "severity": "normal",
+      "isMajorChange": true,
+      "actionRequiredByDateTime": "2026-12-29T09:00:00Z",
+      "startDateTime": "2026-09-17T09:00:00Z",
+      "endDateTime": "2027-01-13T09:00:00Z",
+      "lastModifiedDateTime": "2026-09-24T09:00:00Z",
+      "tags": [
+        "Admin impact",
+        "User impact"
+      ],
+      "hasAttachments": false,
+      "attachmentsArchive": null,
+      "viewPoint": {
+        "isRead": false,
+        "isArchived": false,
+        "isFavorited": false
+      },
+      "details": [
+        {
+          "name": "Summary",
+          "value": "Exchange Online: Throttling of external recipients per day for large senders"
+        },
+        {
+          "name": "RoadmapIds",
+          "value": "405411"
+        },
+        {
+          "name": "Platforms",
+          "value": "Web, Desktop, Mac"
+        }
+      ],
+      "body": {
+        "contentType": "html",
+        "content": "<p>Exchange Online will enforce an external recipient rate limit per mailbox per day.</p><p>Use connector-based solutions for bulk email.</p>"
+      }
+    }
+  ]
+}

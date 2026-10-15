@@ -1,0 +1,39 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#teams/$entity",
+  "id": "10000000-0000-4000-8000-000000000209",
+  "createdDateTime": "2024-02-08T09:00:00Z",
+  "displayName": "Project Orion (retired)",
+  "description": "Archived project.",
+  "internalId": "19:100000000000400080000000@thread.tacv2",
+  "classification": null,
+  "specialization": "none",
+  "visibility": "private",
+  "webUrl": "https://teams.microsoft.com/l/team/19%3a10000000%40thread.tacv2/conversations?groupId=10000000-0000-4000-8000-000000000209&tenantId=00000000-0000-4000-8000-0000000000f0",
+  "isArchived": true,
+  "isMembershipLimitedToOwners": false,
+  "memberSettings": {
+    "allowCreateUpdateChannels": true,
+    "allowCreatePrivateChannels": true,
+    "allowDeleteChannels": false,
+    "allowAddRemoveApps": true,
+    "allowCreateUpdateRemoveTabs": true,
+    "allowCreateUpdateRemoveConnectors": true
+  },
+  "guestSettings": {
+    "allowCreateUpdateChannels": false,
+    "allowDeleteChannels": false
+  },
+  "messagingSettings": {
+    "allowUserEditMessages": true,
+    "allowUserDeleteMessages": true,
+    "allowOwnerDeleteMessages": true,
+    "allowTeamMentions": true,
+    "allowChannelMentions": true
+  },
+  "funSettings": {
+    "allowGiphy": true,
+    "giphyContentRating": "moderate",
+    "allowStickersAndMemes": true,
+    "allowCustomMemes": false
+  }
+}

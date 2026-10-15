@@ -1,0 +1,72 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#security/incidents(alerts())/$entity",
+  "id": "4212",
+  "tenantId": "00000000-0000-4000-8000-0000000000f0",
+  "status": "awaitingAction",
+  "incidentWebUrl": "https://security.microsoft.com/incidents/4212?tid=00000000-0000-4000-8000-0000000000f0",
+  "redirectIncidentId": null,
+  "displayName": "Suspicious authentication activity on a virtual machine",
+  "createdDateTime": "2026-10-09T03:00:00Z",
+  "lastUpdateDateTime": "2026-10-09T05:00:00Z",
+  "assignedTo": "sam.soc@example.com",
+  "classification": "unknown",
+  "determination": "unknown",
+  "severity": "medium",
+  "customTags": [],
+  "systemTags": [],
+  "description": null,
+  "summary": null,
+  "lastModifiedBy": "alex.admin@example.com",
+  "resolvingComment": null,
+  "comments": [],
+  "alerts": [
+    {
+      "id": "da638647315200000014_-1194836014",
+      "providerAlertId": "00000014-0000-4000-8000-00000000c0de",
+      "incidentId": "4212",
+      "status": "new",
+      "severity": "medium",
+      "classification": null,
+      "determination": null,
+      "serviceSource": "microsoftDefenderForCloud",
+      "detectionSource": "microsoftDefenderForCloud",
+      "productName": "Microsoft Defender for Cloud",
+      "detectorId": "0000000e-1111-4000-8000-000000000000",
+      "tenantId": "00000000-0000-4000-8000-0000000000f0",
+      "title": "Suspicious authentication activity",
+      "description": "",
+      "recommendedActions": "",
+      "category": "CredentialAccess",
+      "assignedTo": null,
+      "alertWebUrl": "https://security.microsoft.com/alerts/da638647315200000014_-1194836014?tid=00000000-0000-4000-8000-0000000000f0",
+      "incidentWebUrl": "https://security.microsoft.com/incidents/4212?tid=00000000-0000-4000-8000-0000000000f0",
+      "actorDisplayName": null,
+      "threatDisplayName": null,
+      "threatFamilyName": null,
+      "mitreTechniques": [
+        "T1110"
+      ],
+      "createdDateTime": "2026-10-09T03:00:00Z",
+      "lastUpdateDateTime": "2026-10-09T04:00:00Z",
+      "resolvedDateTime": null,
+      "firstActivityDateTime": "2026-10-09T02:00:00Z",
+      "lastActivityDateTime": "2026-10-09T03:00:00Z",
+      "comments": [],
+      "evidence": [
+        {
+          "@odata.type": "#microsoft.graph.security.ipEvidence",
+          "createdDateTime": "2026-10-15T06:00:00Z",
+          "verdict": "malicious",
+          "remediationStatus": "none",
+          "roles": [
+            "attacker"
+          ],
+          "tags": [],
+          "ipAddress": "192.0.2.200",
+          "countryLetterCode": "US"
+        }
+      ],
+      "systemTags": []
+    }
+  ]
+}

@@ -1,0 +1,32 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#teams('10000000-0000-4000-8000-000000000207')/channels",
+  "value": [
+    {
+      "id": "19:0002070general@thread.tacv2",
+      "displayName": "General",
+      "description": null,
+      "membershipType": "standard",
+      "createdDateTime": "2026-05-28T09:00:00Z",
+      "email": "General.partner-fabrikam@example.com",
+      "webUrl": "https://teams.microsoft.com/l/channel/19%3a0002070%40thread.tacv2/General?groupId=10000000-0000-4000-8000-000000000207"
+    },
+    {
+      "id": "19:0002071contracts@thread.tacv2",
+      "displayName": "Contracts",
+      "description": "Contracts channel",
+      "membershipType": "private",
+      "createdDateTime": "2026-05-31T09:00:00Z",
+      "email": "",
+      "webUrl": "https://teams.microsoft.com/l/channel/19%3a0002071%40thread.tacv2/Contracts?groupId=10000000-0000-4000-8000-000000000207"
+    },
+    {
+      "id": "19:0002072engineeringsync@thread.tacv2",
+      "displayName": "Engineering sync",
+      "description": "Engineering sync channel",
+      "membershipType": "shared",
+      "createdDateTime": "2026-06-03T09:00:00Z",
+      "email": "",
+      "webUrl": "https://teams.microsoft.com/l/channel/19%3a0002072%40thread.tacv2/Engineering%20sync?groupId=10000000-0000-4000-8000-000000000207"
+    }
+  ]
+}

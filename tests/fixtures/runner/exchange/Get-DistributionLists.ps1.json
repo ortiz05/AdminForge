@@ -1,0 +1,331 @@
+{
+  "$fixture": {
+    "variants": [
+      {
+        "match": {
+          "bodyIncludes": "\"includeMemberCounts\":true"
+        },
+        "body": [
+          {
+            "total": 9,
+            "truncated": false,
+            "byType": [
+              {
+                "type": "MailUniversalDistributionGroup",
+                "count": 7
+              },
+              {
+                "type": "MailUniversalSecurityGroup",
+                "count": 2
+              }
+            ],
+            "acceptExternalSenders": 4,
+            "groups": [
+              {
+                "displayName": "All Staff",
+                "primarySmtpAddress": "all-staff@example.com",
+                "alias": "all-staff",
+                "recipientTypeDetails": "MailUniversalDistributionGroup",
+                "managedBy": [
+                  "Eli O'Brien"
+                ],
+                "memberJoinRestriction": "Closed",
+                "memberDepartRestriction": "Closed",
+                "requireSenderAuthenticationEnabled": true,
+                "hiddenFromAddressListsEnabled": false,
+                "isDirSynced": false,
+                "whenCreated": "2023-07-03T09:00:00Z",
+                "memberCount": 12
+              },
+              {
+                "displayName": "Sales Team",
+                "primarySmtpAddress": "sales-team@example.com",
+                "alias": "sales-team",
+                "recipientTypeDetails": "MailUniversalDistributionGroup",
+                "managedBy": [
+                  "Gabriel Nunes"
+                ],
+                "memberJoinRestriction": "ApprovalRequired",
+                "memberDepartRestriction": "Closed",
+                "requireSenderAuthenticationEnabled": false,
+                "hiddenFromAddressListsEnabled": false,
+                "isDirSynced": false,
+                "whenCreated": "2024-08-06T09:00:00Z",
+                "memberCount": 4
+              },
+              {
+                "displayName": "IT Alerts",
+                "primarySmtpAddress": "it-alerts@example.com",
+                "alias": "it-alerts",
+                "recipientTypeDetails": "MailUniversalSecurityGroup",
+                "managedBy": [
+                  "Eli O'Brien",
+                  "Avery Engineer"
+                ],
+                "memberJoinRestriction": "Closed",
+                "memberDepartRestriction": "Closed",
+                "requireSenderAuthenticationEnabled": false,
+                "hiddenFromAddressListsEnabled": false,
+                "isDirSynced": false,
+                "whenCreated": "2025-02-22T09:00:00Z",
+                "memberCount": 3
+              },
+              {
+                "displayName": "Finance Approvers",
+                "primarySmtpAddress": "finance-approvers@example.com",
+                "alias": "finance-approvers",
+                "recipientTypeDetails": "MailUniversalSecurityGroup",
+                "managedBy": [
+                  "Nora Fischer"
+                ],
+                "memberJoinRestriction": "Closed",
+                "memberDepartRestriction": "Closed",
+                "requireSenderAuthenticationEnabled": true,
+                "hiddenFromAddressListsEnabled": false,
+                "isDirSynced": false,
+                "whenCreated": "2025-06-02T09:00:00Z",
+                "memberCount": 2
+              },
+              {
+                "displayName": "Marketing Newsletter",
+                "primarySmtpAddress": "newsletter@example.com",
+                "alias": "newsletter",
+                "recipientTypeDetails": "MailUniversalDistributionGroup",
+                "managedBy": [],
+                "memberJoinRestriction": "Open",
+                "memberDepartRestriction": "Open",
+                "requireSenderAuthenticationEnabled": false,
+                "hiddenFromAddressListsEnabled": false,
+                "isDirSynced": false,
+                "whenCreated": "2025-07-22T09:00:00Z",
+                "memberCount": 1
+              },
+              {
+                "displayName": "Legacy Helpdesk",
+                "primarySmtpAddress": "helpdesk-legacy@example.com",
+                "alias": "helpdesk-legacy",
+                "recipientTypeDetails": "MailUniversalDistributionGroup",
+                "managedBy": [],
+                "memberJoinRestriction": "Closed",
+                "memberDepartRestriction": "Closed",
+                "requireSenderAuthenticationEnabled": true,
+                "hiddenFromAddressListsEnabled": true,
+                "isDirSynced": true,
+                "whenCreated": "2021-01-14T09:00:00Z",
+                "memberCount": 1
+              },
+              {
+                "displayName": "Engineering Leads",
+                "primarySmtpAddress": "eng-leads@example.com",
+                "alias": "eng-leads",
+                "recipientTypeDetails": "MailUniversalDistributionGroup",
+                "managedBy": [
+                  "Hana Kim"
+                ],
+                "memberJoinRestriction": "Closed",
+                "memberDepartRestriction": "Closed",
+                "requireSenderAuthenticationEnabled": true,
+                "hiddenFromAddressListsEnabled": false,
+                "isDirSynced": false,
+                "whenCreated": "2026-05-18T09:00:00Z",
+                "memberCount": 2
+              },
+              {
+                "displayName": "Partners – Fabrikam",
+                "primarySmtpAddress": "partners-fabrikam@example.com",
+                "alias": "partners-fabrikam",
+                "recipientTypeDetails": "MailUniversalDistributionGroup",
+                "managedBy": [
+                  "Isaac Mensah"
+                ],
+                "memberJoinRestriction": "Closed",
+                "memberDepartRestriction": "Closed",
+                "requireSenderAuthenticationEnabled": false,
+                "hiddenFromAddressListsEnabled": false,
+                "isDirSynced": false,
+                "whenCreated": "2026-05-28T09:00:00Z",
+                "memberCount": 4
+              },
+              {
+                "displayName": "Office – Lisbon",
+                "primarySmtpAddress": "office-lisbon@example.com",
+                "alias": "office-lisbon",
+                "recipientTypeDetails": "MailUniversalDistributionGroup",
+                "managedBy": [
+                  "Leah Moreau"
+                ],
+                "memberJoinRestriction": "Open",
+                "memberDepartRestriction": "Open",
+                "requireSenderAuthenticationEnabled": true,
+                "hiddenFromAddressListsEnabled": false,
+                "isDirSynced": true,
+                "whenCreated": "2021-11-10T09:00:00Z",
+                "memberCount": 1
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "body": [
+      {
+        "total": 9,
+        "truncated": false,
+        "byType": [
+          {
+            "type": "MailUniversalDistributionGroup",
+            "count": 7
+          },
+          {
+            "type": "MailUniversalSecurityGroup",
+            "count": 2
+          }
+        ],
+        "acceptExternalSenders": 4,
+        "groups": [
+          {
+            "displayName": "All Staff",
+            "primarySmtpAddress": "all-staff@example.com",
+            "alias": "all-staff",
+            "recipientTypeDetails": "MailUniversalDistributionGroup",
+            "managedBy": [
+              "Eli O'Brien"
+            ],
+            "memberJoinRestriction": "Closed",
+            "memberDepartRestriction": "Closed",
+            "requireSenderAuthenticationEnabled": true,
+            "hiddenFromAddressListsEnabled": false,
+            "isDirSynced": false,
+            "whenCreated": "2023-07-03T09:00:00Z",
+            "memberCount": null
+          },
+          {
+            "displayName": "Sales Team",
+            "primarySmtpAddress": "sales-team@example.com",
+            "alias": "sales-team",
+            "recipientTypeDetails": "MailUniversalDistributionGroup",
+            "managedBy": [
+              "Gabriel Nunes"
+            ],
+            "memberJoinRestriction": "ApprovalRequired",
+            "memberDepartRestriction": "Closed",
+            "requireSenderAuthenticationEnabled": false,
+            "hiddenFromAddressListsEnabled": false,
+            "isDirSynced": false,
+            "whenCreated": "2024-08-06T09:00:00Z",
+            "memberCount": null
+          },
+          {
+            "displayName": "IT Alerts",
+            "primarySmtpAddress": "it-alerts@example.com",
+            "alias": "it-alerts",
+            "recipientTypeDetails": "MailUniversalSecurityGroup",
+            "managedBy": [
+              "Eli O'Brien",
+              "Avery Engineer"
+            ],
+            "memberJoinRestriction": "Closed",
+            "memberDepartRestriction": "Closed",
+            "requireSenderAuthenticationEnabled": false,
+            "hiddenFromAddressListsEnabled": false,
+            "isDirSynced": false,
+            "whenCreated": "2025-02-22T09:00:00Z",
+            "memberCount": null
+          },
+          {
+            "displayName": "Finance Approvers",
+            "primarySmtpAddress": "finance-approvers@example.com",
+            "alias": "finance-approvers",
+            "recipientTypeDetails": "MailUniversalSecurityGroup",
+            "managedBy": [
+              "Nora Fischer"
+            ],
+            "memberJoinRestriction": "Closed",
+            "memberDepartRestriction": "Closed",
+            "requireSenderAuthenticationEnabled": true,
+            "hiddenFromAddressListsEnabled": false,
+            "isDirSynced": false,
+            "whenCreated": "2025-06-02T09:00:00Z",
+            "memberCount": null
+          },
+          {
+            "displayName": "Marketing Newsletter",
+            "primarySmtpAddress": "newsletter@example.com",
+            "alias": "newsletter",
+            "recipientTypeDetails": "MailUniversalDistributionGroup",
+            "managedBy": [],
+            "memberJoinRestriction": "Open",
+            "memberDepartRestriction": "Open",
+            "requireSenderAuthenticationEnabled": false,
+            "hiddenFromAddressListsEnabled": false,
+            "isDirSynced": false,
+            "whenCreated": "2025-07-22T09:00:00Z",
+            "memberCount": null
+          },
+          {
+            "displayName": "Legacy Helpdesk",
+            "primarySmtpAddress": "helpdesk-legacy@example.com",
+            "alias": "helpdesk-legacy",
+            "recipientTypeDetails": "MailUniversalDistributionGroup",
+            "managedBy": [],
+            "memberJoinRestriction": "Closed",
+            "memberDepartRestriction": "Closed",
+            "requireSenderAuthenticationEnabled": true,
+            "hiddenFromAddressListsEnabled": true,
+            "isDirSynced": true,
+            "whenCreated": "2021-01-14T09:00:00Z",
+            "memberCount": null
+          },
+          {
+            "displayName": "Engineering Leads",
+            "primarySmtpAddress": "eng-leads@example.com",
+            "alias": "eng-leads",
+            "recipientTypeDetails": "MailUniversalDistributionGroup",
+            "managedBy": [
+              "Hana Kim"
+            ],
+            "memberJoinRestriction": "Closed",
+            "memberDepartRestriction": "Closed",
+            "requireSenderAuthenticationEnabled": true,
+            "hiddenFromAddressListsEnabled": false,
+            "isDirSynced": false,
+            "whenCreated": "2026-05-18T09:00:00Z",
+            "memberCount": null
+          },
+          {
+            "displayName": "Partners – Fabrikam",
+            "primarySmtpAddress": "partners-fabrikam@example.com",
+            "alias": "partners-fabrikam",
+            "recipientTypeDetails": "MailUniversalDistributionGroup",
+            "managedBy": [
+              "Isaac Mensah"
+            ],
+            "memberJoinRestriction": "Closed",
+            "memberDepartRestriction": "Closed",
+            "requireSenderAuthenticationEnabled": false,
+            "hiddenFromAddressListsEnabled": false,
+            "isDirSynced": false,
+            "whenCreated": "2026-05-28T09:00:00Z",
+            "memberCount": null
+          },
+          {
+            "displayName": "Office – Lisbon",
+            "primarySmtpAddress": "office-lisbon@example.com",
+            "alias": "office-lisbon",
+            "recipientTypeDetails": "MailUniversalDistributionGroup",
+            "managedBy": [
+              "Leah Moreau"
+            ],
+            "memberJoinRestriction": "Open",
+            "memberDepartRestriction": "Open",
+            "requireSenderAuthenticationEnabled": true,
+            "hiddenFromAddressListsEnabled": false,
+            "isDirSynced": true,
+            "whenCreated": "2021-11-10T09:00:00Z",
+            "memberCount": null
+          }
+        ]
+      }
+    ]
+  }
+}

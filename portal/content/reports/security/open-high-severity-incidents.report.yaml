@@ -1,0 +1,156 @@
+$schema: ../../../packages/schemas/generated/report.schema.json
+kind: report
+id: security.open-high-severity-incidents
+version: 1.0.0
+title: Open high-severity incidents
+summary: Every Microsoft Defender XDR incident that is still open at high (or high and medium) severity, oldest first, with age and ownership.
+owner: security-team
+tags: [security, defender, incidents, report]
+nav: { section: reports, label: Open high-severity incidents, icon: siren, order: 150 }
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    graph: [SecurityIncident.Read.All]
+  entraRoles: [Security Reader]
+  licences: [defender]
+
+params:
+  severity:
+    type: enum
+    label: Severity
+    facet: true
+    default: high
+    values:
+      - { value: high, label: High }
+      - { value: highAndMedium, label: High and medium }
+  assignment:
+    type: enum
+    label: Ownership
+    facet: true
+    default: any
+    values:
+      - { value: any, label: Assigned or not }
+      - { value: unassigned, label: Unassigned only }
+  minAgeDays: { type: number, label: Open for at least, unit: days, min: 0, max: 365, integer: true, default: 0, facet: true }
+
+datasources:
+  incidents:
+    source: graph
+    request:
+      path: /security/incidents
+      query:
+        $top: 50
+        $filter: >-
+          ${ "(status eq 'active' or status eq 'inProgress' or status eq 'awaitingAction') and "
+             & (params.severity = 'highAndMedium' ? "(severity eq 'high' or severity eq 'medium')" : "severity eq 'high'") }
+    paging: all
+    maxItems: 20000
+    cache: { ttl: 300 }
+    # Ages are whole days since creation / last activity; filters are re-applied so the report is exact.
+    transform: >-
+      ${ (
+        $sev := params.severity = 'highAndMedium' ? ['high', 'medium'] : ['high'];
+        $min := params.minAgeDays ? $number(params.minAgeDays) : 0;
+        $all := [value.value[status in ['active', 'inProgress', 'awaitingAction'] and severity in $sev].{
+          "id": id,
+          "displayName": displayName,
+          "severity": severity,
+          "status": status,
+          "assignedTo": assignedTo ? assignedTo : null,
+          "owner": assignedTo ? assignedTo : 'Unassigned',
+          "createdDateTime": createdDateTime,
+          "lastUpdateDateTime": lastUpdateDateTime,
+          "ageDays": -$daysUntil(createdDateTime),
+          "idleDays": -$daysUntil(lastUpdateDateTime),
+          "tags": $append(customTags, systemTags),
+          "incidentWebUrl": incidentWebUrl
+        }];
+        $rows := [$all[ageDays >= $min and ($not($$.params.assignment = 'unassigned') or assignedTo = null)]^(>ageDays)];
+        {
+          "rows": $rows,
+          "total": $count($rows),
+          "unassigned": $count($rows[assignedTo = null]),
+          "olderThan7": $count($rows[ageDays > 7]),
+          "oldestDays": $count($rows) > 0 ? $max($rows.ageDays) : 0
+        }
+      ) }
+
+layout:
+  - widget: kpi
+    data: incidents.total
+    label: Open incidents in this report
+    format: number
+    status: "${ value > 0 ? 'crit' : 'ok' }"
+  - widget: kpi
+    data: incidents.unassigned
+    label: Unassigned
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+  - widget: kpi
+    data: incidents.olderThan7
+    label: Open longer than 7 days
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+  - widget: kpi
+    data: incidents.oldestDays
+    label: Oldest (days)
+    format: number
+  - widget: table
+    id: incidents
+    span: 12
+    data: incidents.rows
+    rowKey: id
+    selection: multi
+    empty:
+      title: No open incidents at this severity
+      body: Nothing is waiting. Lower the minimum age or include medium severity to widen the report.
+    columns:
+      - { field: displayName, label: Incident, kind: identity, secondary: id }
+      - field: severity
+        label: Severity
+        kind: status
+        map: { high: [crit, High], medium: [warn, Medium] }
+        filter: facet
+      - field: status
+        label: Status
+        kind: status
+        map: { active: [warn, Active], inProgress: [info, In progress], awaitingAction: [warn, Awaiting action] }
+        filter: facet
+      - { field: owner, label: Assigned to, filter: facet }
+      - { field: ageDays, label: Age (days), kind: number, sortable: true, filter: range }
+      - { field: idleDays, label: Days since last activity, kind: number, sortable: true, filter: range }
+      - { field: createdDateTime, label: Created, kind: datetime, sortable: true }
+      - { field: lastUpdateDateTime, label: Last activity, kind: datetime, hidden: true }
+      - { field: tags, label: Tags, kind: tags, hidden: true }
+      - { field: incidentWebUrl, label: Defender link, kind: link, hidden: true }
+    inspect:
+      page: security.incident
+      params:
+        id: ${ row.id }
+    rowActions:
+      - playbook: security.assign-incident
+        label: Assign to me
+        icon: user-check
+        inputs:
+          incidentId: ${ row.id }
+          assignee: ${ user.upn }
+        when: ${ $not(row.assignedTo = user.upn) }
+      - label: Open in Microsoft Defender
+        icon: arrow-square-out
+        href: ${ row.incidentWebUrl }
+    bulkActions:
+      - playbook: security.assign-incident
+        label: Assign to me
+        icon: user-check
+        forEach:
+          inputs:
+            incidentId: ${ row.id }
+            assignee: ${ user.upn }
+          concurrency: 5
+        maxItems: 100
+
+export:
+  formats: [csv, xlsx]
+  fileName: open-${ params.severity }-severity-incidents
+  data: incidents.rows
+  columns: all

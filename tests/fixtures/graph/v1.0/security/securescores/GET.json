@@ -1,0 +1,1239 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#security/secureScores",
+  "value": [
+    {
+      "id": "00000000-0000-4000-8000-0000000000f0_2026-10-15",
+      "azureTenantId": "00000000-0000-4000-8000-0000000000f0",
+      "activeUserCount": 1206,
+      "createdDateTime": "2026-10-15T00:00:00Z",
+      "currentScore": 451.4,
+      "enabledServices": [
+        "HasExchange",
+        "HasSharePoint",
+        "HasOD4B",
+        "HasMDEP",
+        "HasMCAS",
+        "HasMDO"
+      ],
+      "licensedUserCount": 1284,
+      "maxScore": 721.0,
+      "averageComparativeScores": [
+        {
+          "basis": "AllTenants",
+          "averageScore": 371.6
+        },
+        {
+          "basis": "TotalSeats",
+          "averageScore": 402.3,
+          "seatSizeRangeLowerValue": 1001,
+          "seatSizeRangeUpperValue": 5000
+        }
+      ],
+      "controlScores": [
+        {
+          "controlCategory": "Identity",
+          "controlName": "AdminMFAV2",
+          "description": "Ensure multifactor authentication is enabled for all users in administrative roles",
+          "score": 10.0,
+          "scoreInPercentage": 100.0,
+          "lastSynced": "2026-10-15T01:00:00Z",
+          "implementationStatus": "Completed"
+        },
+        {
+          "controlCategory": "Identity",
+          "controlName": "MFARegistrationV2",
+          "description": "Ensure multifactor authentication is enabled for all users",
+          "score": 6.12,
+          "scoreInPercentage": 68.0,
+          "lastSynced": "2026-10-15T01:00:00Z",
+          "implementationStatus": "Partially implemented"
+        },
+        {
+          "controlCategory": "Identity",
+          "controlName": "BlockLegacyAuthentication",
+          "description": "Enable Conditional Access policies to block legacy authentication",
+          "score": 8.0,
+          "scoreInPercentage": 100.0,
+          "lastSynced": "2026-10-15T01:00:00Z",
+          "implementationStatus": "Completed"
+        },
+        {
+          "controlCategory": "Identity",
+          "controlName": "UserRiskPolicy",
+          "description": "Ensure user risk policies are enabled",
+          "score": 0.0,
+          "scoreInPercentage": 0.0,
+          "lastSynced": "2026-10-15T01:00:00Z",
+          "implementationStatus": "Not implemented"
+        },
+        {
+          "controlCategory": "Identity",
+          "controlName": "SigninRiskPolicy",
+          "description": "Ensure sign-in risk policies are enabled",
+          "score": 7.0,
+          "scoreInPercentage": 100.0,
+          "lastSynced": "2026-10-15T01:00:00Z",
+          "implementationStatus": "Completed"
+        },
+        {
+          "controlCategory": "Identity",
+          "controlName": "OneAdmin",
+          "description": "Designate more than one Global Administrator",
+          "score": 1.0,
+          "scoreInPercentage": 100.0,
+          "lastSynced": "2026-10-15T01:00:00Z",
+          "implementationStatus": "Completed"
+        },
+        {
+          "controlCategory": "Identity",
+          "controlName": "RoleOverlap",
+          "description": "Use least privileged administrative roles",
+          "score": 0.0,
+          "scoreInPercentage": 0.0,
+          "lastSynced": "2026-10-15T01:00:00Z",
+          "implementationStatus": "Not implemented"
+        },
+        {
+          "controlCategory": "Identity",
+          "controlName": "PWAgePolicyNew",
+          "description": "Set the password expiration policy to never expire",
+          "score": 8.0,
+          "scoreInPercentage": 100.0,
+          "lastSynced": "2026-10-15T01:00:00Z",
+          "implementationStatus": "Completed"
+        },
+        {
+          "controlCategory": "Identity",
+          "controlName": "SelfServicePasswordReset",
+          "description": "Enable self-service password reset",
+          "score": 0.0,
+          "scoreInPercentage": 0.0,
+          "lastSynced": "2026-10-15T01:00:00Z",
+          "implementationStatus": "Not implemented"
+        },
+        {
+          "controlCategory": "Apps",
+          "controlName": "IntegratedApps",
+          "description": "Do not allow users to grant consent to unreliable applications",
+          "score": 0.0,
+          "scoreInPercentage": 0.0,
+          "lastSynced": "2026-10-15T01:00:00Z",
+          "implementationStatus": "Not implemented"
+        },
+        {
+          "controlCategory": "Apps",
+          "controlName": "mdo_safelinksforemail",
+          "description": "Create Safe Links policies for email messages",
+          "score": 9.0,
+          "scoreInPercentage": 100.0,
+          "lastSynced": "2026-10-15T01:00:00Z",
+          "implementationStatus": "Completed"
+        },
+        {
+          "controlCategory": "Apps",
+          "controlName": "mdo_safeattachments",
+          "description": "Turn on Safe Attachments in block mode",
+          "score": 4.0,
+          "scoreInPercentage": 50.0,
+          "lastSynced": "2026-10-15T01:00:00Z",
+          "implementationStatus": "Partially implemented"
+        },
+        {
+          "controlCategory": "Data",
+          "controlName": "mdo_autoforwardingmode",
+          "description": "Ensure all forms of mail forwarding are blocked and/or disabled",
+          "score": 0.0,
+          "scoreInPercentage": 0.0,
+          "lastSynced": "2026-10-15T01:00:00Z",
+          "implementationStatus": "Not implemented"
+        },
+        {
+          "controlCategory": "Data",
+          "controlName": "DLPEnabled",
+          "description": "Turn on data loss prevention policies",
+          "score": 0.0,
+          "scoreInPercentage": 0.0,
+          "lastSynced": "2026-10-15T01:00:00Z",
+          "implementationStatus": "Not implemented"
+        },
+        {
+          "controlCategory": "Device",
+          "controlName": "scid_2010",
+          "description": "Turn on Microsoft Defender Antivirus PUA protection in block mode",
+          "score": 3.3,
+          "scoreInPercentage": 55.0,
+          "lastSynced": "2026-10-15T01:00:00Z",
+          "implementationStatus": "Partially implemented"
+        },
+        {
+          "controlCategory": "Device",
+          "controlName": "scid_2061",
+          "description": "Block credential stealing from the Windows local security authority subsystem",
+          "score": 7.0,
+          "scoreInPercentage": 100.0,
+          "lastSynced": "2026-10-15T01:00:00Z",
+          "implementationStatus": "Completed"
+        },
+        {
+          "controlCategory": "Device",
+          "controlName": "scid_5095",
+          "description": "Turn on Microsoft Defender for Endpoint tamper protection",
+          "score": 6.0,
+          "scoreInPercentage": 100.0,
+          "lastSynced": "2026-10-15T01:00:00Z",
+          "implementationStatus": "Completed"
+        }
+      ],
+      "vendorInformation": {
+        "provider": "SecureScore",
+        "providerVersion": null,
+        "subProvider": null,
+        "vendor": "Microsoft"
+      }
+    },
+    {
+      "id": "00000000-0000-4000-8000-0000000000f0_2026-10-14",
+      "azureTenantId": "00000000-0000-4000-8000-0000000000f0",
+      "activeUserCount": 1205,
+      "createdDateTime": "2026-10-14T00:00:00Z",
+      "currentScore": 450.25,
+      "enabledServices": [
+        "HasExchange",
+        "HasSharePoint",
+        "HasOD4B",
+        "HasMDEP",
+        "HasMCAS",
+        "HasMDO"
+      ],
+      "licensedUserCount": 1284,
+      "maxScore": 721.0,
+      "averageComparativeScores": [
+        {
+          "basis": "AllTenants",
+          "averageScore": 371.6
+        },
+        {
+          "basis": "TotalSeats",
+          "averageScore": 402.3,
+          "seatSizeRangeLowerValue": 1001,
+          "seatSizeRangeUpperValue": 5000
+        }
+      ],
+      "controlScores": [],
+      "vendorInformation": {
+        "provider": "SecureScore",
+        "providerVersion": null,
+        "subProvider": null,
+        "vendor": "Microsoft"
+      }
+    },
+    {
+      "id": "00000000-0000-4000-8000-0000000000f0_2026-10-13",
+      "azureTenantId": "00000000-0000-4000-8000-0000000000f0",
+      "activeUserCount": 1204,
+      "createdDateTime": "2026-10-13T00:00:00Z",
+      "currentScore": 449.1,
+      "enabledServices": [
+        "HasExchange",
+        "HasSharePoint",
+        "HasOD4B",
+        "HasMDEP",
+        "HasMCAS",
+        "HasMDO"
+      ],
+      "licensedUserCount": 1284,
+      "maxScore": 721.0,
+      "averageComparativeScores": [
+        {
+          "basis": "AllTenants",
+          "averageScore": 371.6
+        },
+        {
+          "basis": "TotalSeats",
+          "averageScore": 402.3,
+          "seatSizeRangeLowerValue": 1001,
+          "seatSizeRangeUpperValue": 5000
+        }
+      ],
+      "controlScores": [],
+      "vendorInformation": {
+        "provider": "SecureScore",
+        "providerVersion": null,
+        "subProvider": null,
+        "vendor": "Microsoft"
+      }
+    },
+    {
+      "id": "00000000-0000-4000-8000-0000000000f0_2026-10-12",
+      "azureTenantId": "00000000-0000-4000-8000-0000000000f0",
+      "activeUserCount": 1203,
+      "createdDateTime": "2026-10-12T00:00:00Z",
+      "currentScore": 447.95,
+      "enabledServices": [
+        "HasExchange",
+        "HasSharePoint",
+        "HasOD4B",
+        "HasMDEP",
+        "HasMCAS",
+        "HasMDO"
+      ],
+      "licensedUserCount": 1284,
+      "maxScore": 721.0,
+      "averageComparativeScores": [
+        {
+          "basis": "AllTenants",
+          "averageScore": 371.6
+        },
+        {
+          "basis": "TotalSeats",
+          "averageScore": 402.3,
+          "seatSizeRangeLowerValue": 1001,
+          "seatSizeRangeUpperValue": 5000
+        }
+      ],
+      "controlScores": [],
+      "vendorInformation": {
+        "provider": "SecureScore",
+        "providerVersion": null,
+        "subProvider": null,
+        "vendor": "Microsoft"
+      }
+    },
+    {
+      "id": "00000000-0000-4000-8000-0000000000f0_2026-10-11",
+      "azureTenantId": "00000000-0000-4000-8000-0000000000f0",
+      "activeUserCount": 1202,
+      "createdDateTime": "2026-10-11T00:00:00Z",
+      "currentScore": 446.8,
+      "enabledServices": [
+        "HasExchange",
+        "HasSharePoint",
+        "HasOD4B",
+        "HasMDEP",
+        "HasMCAS",
+        "HasMDO"
+      ],
+      "licensedUserCount": 1284,
+      "maxScore": 721.0,
+      "averageComparativeScores": [
+        {
+          "basis": "AllTenants",
+          "averageScore": 371.6
+        },
+        {
+          "basis": "TotalSeats",
+          "averageScore": 402.3,
+          "seatSizeRangeLowerValue": 1001,
+          "seatSizeRangeUpperValue": 5000
+        }
+      ],
+      "controlScores": [],
+      "vendorInformation": {
+        "provider": "SecureScore",
+        "providerVersion": null,
+        "subProvider": null,
+        "vendor": "Microsoft"
+      }
+    },
+    {
+      "id": "00000000-0000-4000-8000-0000000000f0_2026-10-10",
+      "azureTenantId": "00000000-0000-4000-8000-0000000000f0",
+      "activeUserCount": 1201,
+      "createdDateTime": "2026-10-10T00:00:00Z",
+      "currentScore": 445.65,
+      "enabledServices": [
+        "HasExchange",
+        "HasSharePoint",
+        "HasOD4B",
+        "HasMDEP",
+        "HasMCAS",
+        "HasMDO"
+      ],
+      "licensedUserCount": 1284,
+      "maxScore": 721.0,
+      "averageComparativeScores": [
+        {
+          "basis": "AllTenants",
+          "averageScore": 371.6
+        },
+        {
+          "basis": "TotalSeats",
+          "averageScore": 402.3,
+          "seatSizeRangeLowerValue": 1001,
+          "seatSizeRangeUpperValue": 5000
+        }
+      ],
+      "controlScores": [],
+      "vendorInformation": {
+        "provider": "SecureScore",
+        "providerVersion": null,
+        "subProvider": null,
+        "vendor": "Microsoft"
+      }
+    },
+    {
+      "id": "00000000-0000-4000-8000-0000000000f0_2026-10-09",
+      "azureTenantId": "00000000-0000-4000-8000-0000000000f0",
+      "activeUserCount": 1200,
+      "createdDateTime": "2026-10-09T00:00:00Z",
+      "currentScore": 444.5,
+      "enabledServices": [
+        "HasExchange",
+        "HasSharePoint",
+        "HasOD4B",
+        "HasMDEP",
+        "HasMCAS",
+        "HasMDO"
+      ],
+      "licensedUserCount": 1284,
+      "maxScore": 721.0,
+      "averageComparativeScores": [
+        {
+          "basis": "AllTenants",
+          "averageScore": 371.6
+        },
+        {
+          "basis": "TotalSeats",
+          "averageScore": 402.3,
+          "seatSizeRangeLowerValue": 1001,
+          "seatSizeRangeUpperValue": 5000
+        }
+      ],
+      "controlScores": [],
+      "vendorInformation": {
+        "provider": "SecureScore",
+        "providerVersion": null,
+        "subProvider": null,
+        "vendor": "Microsoft"
+      }
+    },
+    {
+      "id": "00000000-0000-4000-8000-0000000000f0_2026-10-08",
+      "azureTenantId": "00000000-0000-4000-8000-0000000000f0",
+      "activeUserCount": 1199,
+      "createdDateTime": "2026-10-08T00:00:00Z",
+      "currentScore": 443.35,
+      "enabledServices": [
+        "HasExchange",
+        "HasSharePoint",
+        "HasOD4B",
+        "HasMDEP",
+        "HasMCAS",
+        "HasMDO"
+      ],
+      "licensedUserCount": 1284,
+      "maxScore": 721.0,
+      "averageComparativeScores": [
+        {
+          "basis": "AllTenants",
+          "averageScore": 371.6
+        },
+        {
+          "basis": "TotalSeats",
+          "averageScore": 402.3,
+          "seatSizeRangeLowerValue": 1001,
+          "seatSizeRangeUpperValue": 5000
+        }
+      ],
+      "controlScores": [],
+      "vendorInformation": {
+        "provider": "SecureScore",
+        "providerVersion": null,
+        "subProvider": null,
+        "vendor": "Microsoft"
+      }
+    },
+    {
+      "id": "00000000-0000-4000-8000-0000000000f0_2026-10-07",
+      "azureTenantId": "00000000-0000-4000-8000-0000000000f0",
+      "activeUserCount": 1198,
+      "createdDateTime": "2026-10-07T00:00:00Z",
+      "currentScore": 442.2,
+      "enabledServices": [
+        "HasExchange",
+        "HasSharePoint",
+        "HasOD4B",
+        "HasMDEP",
+        "HasMCAS",
+        "HasMDO"
+      ],
+      "licensedUserCount": 1284,
+      "maxScore": 721.0,
+      "averageComparativeScores": [
+        {
+          "basis": "AllTenants",
+          "averageScore": 371.6
+        },
+        {
+          "basis": "TotalSeats",
+          "averageScore": 402.3,
+          "seatSizeRangeLowerValue": 1001,
+          "seatSizeRangeUpperValue": 5000
+        }
+      ],
+      "controlScores": [],
+      "vendorInformation": {
+        "provider": "SecureScore",
+        "providerVersion": null,
+        "subProvider": null,
+        "vendor": "Microsoft"
+      }
+    },
+    {
+      "id": "00000000-0000-4000-8000-0000000000f0_2026-10-06",
+      "azureTenantId": "00000000-0000-4000-8000-0000000000f0",
+      "activeUserCount": 1197,
+      "createdDateTime": "2026-10-06T00:00:00Z",
+      "currentScore": 441.05,
+      "enabledServices": [
+        "HasExchange",
+        "HasSharePoint",
+        "HasOD4B",
+        "HasMDEP",
+        "HasMCAS",
+        "HasMDO"
+      ],
+      "licensedUserCount": 1284,
+      "maxScore": 721.0,
+      "averageComparativeScores": [
+        {
+          "basis": "AllTenants",
+          "averageScore": 371.6
+        },
+        {
+          "basis": "TotalSeats",
+          "averageScore": 402.3,
+          "seatSizeRangeLowerValue": 1001,
+          "seatSizeRangeUpperValue": 5000
+        }
+      ],
+      "controlScores": [],
+      "vendorInformation": {
+        "provider": "SecureScore",
+        "providerVersion": null,
+        "subProvider": null,
+        "vendor": "Microsoft"
+      }
+    },
+    {
+      "id": "00000000-0000-4000-8000-0000000000f0_2026-10-05",
+      "azureTenantId": "00000000-0000-4000-8000-0000000000f0",
+      "activeUserCount": 1196,
+      "createdDateTime": "2026-10-05T00:00:00Z",
+      "currentScore": 439.9,
+      "enabledServices": [
+        "HasExchange",
+        "HasSharePoint",
+        "HasOD4B",
+        "HasMDEP",
+        "HasMCAS",
+        "HasMDO"
+      ],
+      "licensedUserCount": 1284,
+      "maxScore": 721.0,
+      "averageComparativeScores": [
+        {
+          "basis": "AllTenants",
+          "averageScore": 371.6
+        },
+        {
+          "basis": "TotalSeats",
+          "averageScore": 402.3,
+          "seatSizeRangeLowerValue": 1001,
+          "seatSizeRangeUpperValue": 5000
+        }
+      ],
+      "controlScores": [],
+      "vendorInformation": {
+        "provider": "SecureScore",
+        "providerVersion": null,
+        "subProvider": null,
+        "vendor": "Microsoft"
+      }
+    },
+    {
+      "id": "00000000-0000-4000-8000-0000000000f0_2026-10-04",
+      "azureTenantId": "00000000-0000-4000-8000-0000000000f0",
+      "activeUserCount": 1195,
+      "createdDateTime": "2026-10-04T00:00:00Z",
+      "currentScore": 438.75,
+      "enabledServices": [
+        "HasExchange",
+        "HasSharePoint",
+        "HasOD4B",
+        "HasMDEP",
+        "HasMCAS",
+        "HasMDO"
+      ],
+      "licensedUserCount": 1284,
+      "maxScore": 721.0,
+      "averageComparativeScores": [
+        {
+          "basis": "AllTenants",
+          "averageScore": 371.6
+        },
+        {
+          "basis": "TotalSeats",
+          "averageScore": 402.3,
+          "seatSizeRangeLowerValue": 1001,
+          "seatSizeRangeUpperValue": 5000
+        }
+      ],
+      "controlScores": [],
+      "vendorInformation": {
+        "provider": "SecureScore",
+        "providerVersion": null,
+        "subProvider": null,
+        "vendor": "Microsoft"
+      }
+    },
+    {
+      "id": "00000000-0000-4000-8000-0000000000f0_2026-10-03",
+      "azureTenantId": "00000000-0000-4000-8000-0000000000f0",
+      "activeUserCount": 1194,
+      "createdDateTime": "2026-10-03T00:00:00Z",
+      "currentScore": 437.6,
+      "enabledServices": [
+        "HasExchange",
+        "HasSharePoint",
+        "HasOD4B",
+        "HasMDEP",
+        "HasMCAS",
+        "HasMDO"
+      ],
+      "licensedUserCount": 1284,
+      "maxScore": 721.0,
+      "averageComparativeScores": [
+        {
+          "basis": "AllTenants",
+          "averageScore": 371.6
+        },
+        {
+          "basis": "TotalSeats",
+          "averageScore": 402.3,
+          "seatSizeRangeLowerValue": 1001,
+          "seatSizeRangeUpperValue": 5000
+        }
+      ],
+      "controlScores": [],
+      "vendorInformation": {
+        "provider": "SecureScore",
+        "providerVersion": null,
+        "subProvider": null,
+        "vendor": "Microsoft"
+      }
+    },
+    {
+      "id": "00000000-0000-4000-8000-0000000000f0_2026-10-02",
+      "azureTenantId": "00000000-0000-4000-8000-0000000000f0",
+      "activeUserCount": 1193,
+      "createdDateTime": "2026-10-02T00:00:00Z",
+      "currentScore": 430.45,
+      "enabledServices": [
+        "HasExchange",
+        "HasSharePoint",
+        "HasOD4B",
+        "HasMDEP",
+        "HasMCAS",
+        "HasMDO"
+      ],
+      "licensedUserCount": 1284,
+      "maxScore": 721.0,
+      "averageComparativeScores": [
+        {
+          "basis": "AllTenants",
+          "averageScore": 371.6
+        },
+        {
+          "basis": "TotalSeats",
+          "averageScore": 402.3,
+          "seatSizeRangeLowerValue": 1001,
+          "seatSizeRangeUpperValue": 5000
+        }
+      ],
+      "controlScores": [],
+      "vendorInformation": {
+        "provider": "SecureScore",
+        "providerVersion": null,
+        "subProvider": null,
+        "vendor": "Microsoft"
+      }
+    },
+    {
+      "id": "00000000-0000-4000-8000-0000000000f0_2026-10-01",
+      "azureTenantId": "00000000-0000-4000-8000-0000000000f0",
+      "activeUserCount": 1192,
+      "createdDateTime": "2026-10-01T00:00:00Z",
+      "currentScore": 429.3,
+      "enabledServices": [
+        "HasExchange",
+        "HasSharePoint",
+        "HasOD4B",
+        "HasMDEP",
+        "HasMCAS",
+        "HasMDO"
+      ],
+      "licensedUserCount": 1284,
+      "maxScore": 721.0,
+      "averageComparativeScores": [
+        {
+          "basis": "AllTenants",
+          "averageScore": 371.6
+        },
+        {
+          "basis": "TotalSeats",
+          "averageScore": 402.3,
+          "seatSizeRangeLowerValue": 1001,
+          "seatSizeRangeUpperValue": 5000
+        }
+      ],
+      "controlScores": [],
+      "vendorInformation": {
+        "provider": "SecureScore",
+        "providerVersion": null,
+        "subProvider": null,
+        "vendor": "Microsoft"
+      }
+    },
+    {
+      "id": "00000000-0000-4000-8000-0000000000f0_2026-09-30",
+      "azureTenantId": "00000000-0000-4000-8000-0000000000f0",
+      "activeUserCount": 1191,
+      "createdDateTime": "2026-09-30T00:00:00Z",
+      "currentScore": 428.15,
+      "enabledServices": [
+        "HasExchange",
+        "HasSharePoint",
+        "HasOD4B",
+        "HasMDEP",
+        "HasMCAS",
+        "HasMDO"
+      ],
+      "licensedUserCount": 1284,
+      "maxScore": 721.0,
+      "averageComparativeScores": [
+        {
+          "basis": "AllTenants",
+          "averageScore": 371.6
+        },
+        {
+          "basis": "TotalSeats",
+          "averageScore": 402.3,
+          "seatSizeRangeLowerValue": 1001,
+          "seatSizeRangeUpperValue": 5000
+        }
+      ],
+      "controlScores": [],
+      "vendorInformation": {
+        "provider": "SecureScore",
+        "providerVersion": null,
+        "subProvider": null,
+        "vendor": "Microsoft"
+      }
+    },
+    {
+      "id": "00000000-0000-4000-8000-0000000000f0_2026-09-29",
+      "azureTenantId": "00000000-0000-4000-8000-0000000000f0",
+      "activeUserCount": 1190,
+      "createdDateTime": "2026-09-29T00:00:00Z",
+      "currentScore": 427.0,
+      "enabledServices": [
+        "HasExchange",
+        "HasSharePoint",
+        "HasOD4B",
+        "HasMDEP",
+        "HasMCAS",
+        "HasMDO"
+      ],
+      "licensedUserCount": 1284,
+      "maxScore": 721.0,
+      "averageComparativeScores": [
+        {
+          "basis": "AllTenants",
+          "averageScore": 371.6
+        },
+        {
+          "basis": "TotalSeats",
+          "averageScore": 402.3,
+          "seatSizeRangeLowerValue": 1001,
+          "seatSizeRangeUpperValue": 5000
+        }
+      ],
+      "controlScores": [],
+      "vendorInformation": {
+        "provider": "SecureScore",
+        "providerVersion": null,
+        "subProvider": null,
+        "vendor": "Microsoft"
+      }
+    },
+    {
+      "id": "00000000-0000-4000-8000-0000000000f0_2026-09-28",
+      "azureTenantId": "00000000-0000-4000-8000-0000000000f0",
+      "activeUserCount": 1189,
+      "createdDateTime": "2026-09-28T00:00:00Z",
+      "currentScore": 425.85,
+      "enabledServices": [
+        "HasExchange",
+        "HasSharePoint",
+        "HasOD4B",
+        "HasMDEP",
+        "HasMCAS",
+        "HasMDO"
+      ],
+      "licensedUserCount": 1284,
+      "maxScore": 721.0,
+      "averageComparativeScores": [
+        {
+          "basis": "AllTenants",
+          "averageScore": 371.6
+        },
+        {
+          "basis": "TotalSeats",
+          "averageScore": 402.3,
+          "seatSizeRangeLowerValue": 1001,
+          "seatSizeRangeUpperValue": 5000
+        }
+      ],
+      "controlScores": [],
+      "vendorInformation": {
+        "provider": "SecureScore",
+        "providerVersion": null,
+        "subProvider": null,
+        "vendor": "Microsoft"
+      }
+    },
+    {
+      "id": "00000000-0000-4000-8000-0000000000f0_2026-09-27",
+      "azureTenantId": "00000000-0000-4000-8000-0000000000f0",
+      "activeUserCount": 1188,
+      "createdDateTime": "2026-09-27T00:00:00Z",
+      "currentScore": 424.7,
+      "enabledServices": [
+        "HasExchange",
+        "HasSharePoint",
+        "HasOD4B",
+        "HasMDEP",
+        "HasMCAS",
+        "HasMDO"
+      ],
+      "licensedUserCount": 1284,
+      "maxScore": 721.0,
+      "averageComparativeScores": [
+        {
+          "basis": "AllTenants",
+          "averageScore": 371.6
+        },
+        {
+          "basis": "TotalSeats",
+          "averageScore": 402.3,
+          "seatSizeRangeLowerValue": 1001,
+          "seatSizeRangeUpperValue": 5000
+        }
+      ],
+      "controlScores": [],
+      "vendorInformation": {
+        "provider": "SecureScore",
+        "providerVersion": null,
+        "subProvider": null,
+        "vendor": "Microsoft"
+      }
+    },
+    {
+      "id": "00000000-0000-4000-8000-0000000000f0_2026-09-26",
+      "azureTenantId": "00000000-0000-4000-8000-0000000000f0",
+      "activeUserCount": 1187,
+      "createdDateTime": "2026-09-26T00:00:00Z",
+      "currentScore": 423.55,
+      "enabledServices": [
+        "HasExchange",
+        "HasSharePoint",
+        "HasOD4B",
+        "HasMDEP",
+        "HasMCAS",
+        "HasMDO"
+      ],
+      "licensedUserCount": 1284,
+      "maxScore": 721.0,
+      "averageComparativeScores": [
+        {
+          "basis": "AllTenants",
+          "averageScore": 371.6
+        },
+        {
+          "basis": "TotalSeats",
+          "averageScore": 402.3,
+          "seatSizeRangeLowerValue": 1001,
+          "seatSizeRangeUpperValue": 5000
+        }
+      ],
+      "controlScores": [],
+      "vendorInformation": {
+        "provider": "SecureScore",
+        "providerVersion": null,
+        "subProvider": null,
+        "vendor": "Microsoft"
+      }
+    },
+    {
+      "id": "00000000-0000-4000-8000-0000000000f0_2026-09-25",
+      "azureTenantId": "00000000-0000-4000-8000-0000000000f0",
+      "activeUserCount": 1186,
+      "createdDateTime": "2026-09-25T00:00:00Z",
+      "currentScore": 422.4,
+      "enabledServices": [
+        "HasExchange",
+        "HasSharePoint",
+        "HasOD4B",
+        "HasMDEP",
+        "HasMCAS",
+        "HasMDO"
+      ],
+      "licensedUserCount": 1284,
+      "maxScore": 721.0,
+      "averageComparativeScores": [
+        {
+          "basis": "AllTenants",
+          "averageScore": 371.6
+        },
+        {
+          "basis": "TotalSeats",
+          "averageScore": 402.3,
+          "seatSizeRangeLowerValue": 1001,
+          "seatSizeRangeUpperValue": 5000
+        }
+      ],
+      "controlScores": [],
+      "vendorInformation": {
+        "provider": "SecureScore",
+        "providerVersion": null,
+        "subProvider": null,
+        "vendor": "Microsoft"
+      }
+    },
+    {
+      "id": "00000000-0000-4000-8000-0000000000f0_2026-09-24",
+      "azureTenantId": "00000000-0000-4000-8000-0000000000f0",
+      "activeUserCount": 1185,
+      "createdDateTime": "2026-09-24T00:00:00Z",
+      "currentScore": 421.25,
+      "enabledServices": [
+        "HasExchange",
+        "HasSharePoint",
+        "HasOD4B",
+        "HasMDEP",
+        "HasMCAS",
+        "HasMDO"
+      ],
+      "licensedUserCount": 1284,
+      "maxScore": 721.0,
+      "averageComparativeScores": [
+        {
+          "basis": "AllTenants",
+          "averageScore": 371.6
+        },
+        {
+          "basis": "TotalSeats",
+          "averageScore": 402.3,
+          "seatSizeRangeLowerValue": 1001,
+          "seatSizeRangeUpperValue": 5000
+        }
+      ],
+      "controlScores": [],
+      "vendorInformation": {
+        "provider": "SecureScore",
+        "providerVersion": null,
+        "subProvider": null,
+        "vendor": "Microsoft"
+      }
+    },
+    {
+      "id": "00000000-0000-4000-8000-0000000000f0_2026-09-23",
+      "azureTenantId": "00000000-0000-4000-8000-0000000000f0",
+      "activeUserCount": 1184,
+      "createdDateTime": "2026-09-23T00:00:00Z",
+      "currentScore": 420.1,
+      "enabledServices": [
+        "HasExchange",
+        "HasSharePoint",
+        "HasOD4B",
+        "HasMDEP",
+        "HasMCAS",
+        "HasMDO"
+      ],
+      "licensedUserCount": 1284,
+      "maxScore": 721.0,
+      "averageComparativeScores": [
+        {
+          "basis": "AllTenants",
+          "averageScore": 371.6
+        },
+        {
+          "basis": "TotalSeats",
+          "averageScore": 402.3,
+          "seatSizeRangeLowerValue": 1001,
+          "seatSizeRangeUpperValue": 5000
+        }
+      ],
+      "controlScores": [],
+      "vendorInformation": {
+        "provider": "SecureScore",
+        "providerVersion": null,
+        "subProvider": null,
+        "vendor": "Microsoft"
+      }
+    },
+    {
+      "id": "00000000-0000-4000-8000-0000000000f0_2026-09-22",
+      "azureTenantId": "00000000-0000-4000-8000-0000000000f0",
+      "activeUserCount": 1183,
+      "createdDateTime": "2026-09-22T00:00:00Z",
+      "currentScore": 418.95,
+      "enabledServices": [
+        "HasExchange",
+        "HasSharePoint",
+        "HasOD4B",
+        "HasMDEP",
+        "HasMCAS",
+        "HasMDO"
+      ],
+      "licensedUserCount": 1284,
+      "maxScore": 721.0,
+      "averageComparativeScores": [
+        {
+          "basis": "AllTenants",
+          "averageScore": 371.6
+        },
+        {
+          "basis": "TotalSeats",
+          "averageScore": 402.3,
+          "seatSizeRangeLowerValue": 1001,
+          "seatSizeRangeUpperValue": 5000
+        }
+      ],
+      "controlScores": [],
+      "vendorInformation": {
+        "provider": "SecureScore",
+        "providerVersion": null,
+        "subProvider": null,
+        "vendor": "Microsoft"
+      }
+    },
+    {
+      "id": "00000000-0000-4000-8000-0000000000f0_2026-09-21",
+      "azureTenantId": "00000000-0000-4000-8000-0000000000f0",
+      "activeUserCount": 1182,
+      "createdDateTime": "2026-09-21T00:00:00Z",
+      "currentScore": 417.8,
+      "enabledServices": [
+        "HasExchange",
+        "HasSharePoint",
+        "HasOD4B",
+        "HasMDEP",
+        "HasMCAS",
+        "HasMDO"
+      ],
+      "licensedUserCount": 1284,
+      "maxScore": 721.0,
+      "averageComparativeScores": [
+        {
+          "basis": "AllTenants",
+          "averageScore": 371.6
+        },
+        {
+          "basis": "TotalSeats",
+          "averageScore": 402.3,
+          "seatSizeRangeLowerValue": 1001,
+          "seatSizeRangeUpperValue": 5000
+        }
+      ],
+      "controlScores": [],
+      "vendorInformation": {
+        "provider": "SecureScore",
+        "providerVersion": null,
+        "subProvider": null,
+        "vendor": "Microsoft"
+      }
+    },
+    {
+      "id": "00000000-0000-4000-8000-0000000000f0_2026-09-20",
+      "azureTenantId": "00000000-0000-4000-8000-0000000000f0",
+      "activeUserCount": 1181,
+      "createdDateTime": "2026-09-20T00:00:00Z",
+      "currentScore": 416.65,
+      "enabledServices": [
+        "HasExchange",
+        "HasSharePoint",
+        "HasOD4B",
+        "HasMDEP",
+        "HasMCAS",
+        "HasMDO"
+      ],
+      "licensedUserCount": 1284,
+      "maxScore": 721.0,
+      "averageComparativeScores": [
+        {
+          "basis": "AllTenants",
+          "averageScore": 371.6
+        },
+        {
+          "basis": "TotalSeats",
+          "averageScore": 402.3,
+          "seatSizeRangeLowerValue": 1001,
+          "seatSizeRangeUpperValue": 5000
+        }
+      ],
+      "controlScores": [],
+      "vendorInformation": {
+        "provider": "SecureScore",
+        "providerVersion": null,
+        "subProvider": null,
+        "vendor": "Microsoft"
+      }
+    },
+    {
+      "id": "00000000-0000-4000-8000-0000000000f0_2026-09-19",
+      "azureTenantId": "00000000-0000-4000-8000-0000000000f0",
+      "activeUserCount": 1180,
+      "createdDateTime": "2026-09-19T00:00:00Z",
+      "currentScore": 415.5,
+      "enabledServices": [
+        "HasExchange",
+        "HasSharePoint",
+        "HasOD4B",
+        "HasMDEP",
+        "HasMCAS",
+        "HasMDO"
+      ],
+      "licensedUserCount": 1284,
+      "maxScore": 721.0,
+      "averageComparativeScores": [
+        {
+          "basis": "AllTenants",
+          "averageScore": 371.6
+        },
+        {
+          "basis": "TotalSeats",
+          "averageScore": 402.3,
+          "seatSizeRangeLowerValue": 1001,
+          "seatSizeRangeUpperValue": 5000
+        }
+      ],
+      "controlScores": [],
+      "vendorInformation": {
+        "provider": "SecureScore",
+        "providerVersion": null,
+        "subProvider": null,
+        "vendor": "Microsoft"
+      }
+    },
+    {
+      "id": "00000000-0000-4000-8000-0000000000f0_2026-09-18",
+      "azureTenantId": "00000000-0000-4000-8000-0000000000f0",
+      "activeUserCount": 1179,
+      "createdDateTime": "2026-09-18T00:00:00Z",
+      "currentScore": 414.35,
+      "enabledServices": [
+        "HasExchange",
+        "HasSharePoint",
+        "HasOD4B",
+        "HasMDEP",
+        "HasMCAS",
+        "HasMDO"
+      ],
+      "licensedUserCount": 1284,
+      "maxScore": 721.0,
+      "averageComparativeScores": [
+        {
+          "basis": "AllTenants",
+          "averageScore": 371.6
+        },
+        {
+          "basis": "TotalSeats",
+          "averageScore": 402.3,
+          "seatSizeRangeLowerValue": 1001,
+          "seatSizeRangeUpperValue": 5000
+        }
+      ],
+      "controlScores": [],
+      "vendorInformation": {
+        "provider": "SecureScore",
+        "providerVersion": null,
+        "subProvider": null,
+        "vendor": "Microsoft"
+      }
+    },
+    {
+      "id": "00000000-0000-4000-8000-0000000000f0_2026-09-17",
+      "azureTenantId": "00000000-0000-4000-8000-0000000000f0",
+      "activeUserCount": 1178,
+      "createdDateTime": "2026-09-17T00:00:00Z",
+      "currentScore": 413.2,
+      "enabledServices": [
+        "HasExchange",
+        "HasSharePoint",
+        "HasOD4B",
+        "HasMDEP",
+        "HasMCAS",
+        "HasMDO"
+      ],
+      "licensedUserCount": 1284,
+      "maxScore": 721.0,
+      "averageComparativeScores": [
+        {
+          "basis": "AllTenants",
+          "averageScore": 371.6
+        },
+        {
+          "basis": "TotalSeats",
+          "averageScore": 402.3,
+          "seatSizeRangeLowerValue": 1001,
+          "seatSizeRangeUpperValue": 5000
+        }
+      ],
+      "controlScores": [],
+      "vendorInformation": {
+        "provider": "SecureScore",
+        "providerVersion": null,
+        "subProvider": null,
+        "vendor": "Microsoft"
+      }
+    },
+    {
+      "id": "00000000-0000-4000-8000-0000000000f0_2026-09-16",
+      "azureTenantId": "00000000-0000-4000-8000-0000000000f0",
+      "activeUserCount": 1177,
+      "createdDateTime": "2026-09-16T00:00:00Z",
+      "currentScore": 412.05,
+      "enabledServices": [
+        "HasExchange",
+        "HasSharePoint",
+        "HasOD4B",
+        "HasMDEP",
+        "HasMCAS",
+        "HasMDO"
+      ],
+      "licensedUserCount": 1284,
+      "maxScore": 721.0,
+      "averageComparativeScores": [
+        {
+          "basis": "AllTenants",
+          "averageScore": 371.6
+        },
+        {
+          "basis": "TotalSeats",
+          "averageScore": 402.3,
+          "seatSizeRangeLowerValue": 1001,
+          "seatSizeRangeUpperValue": 5000
+        }
+      ],
+      "controlScores": [],
+      "vendorInformation": {
+        "provider": "SecureScore",
+        "providerVersion": null,
+        "subProvider": null,
+        "vendor": "Microsoft"
+      }
+    }
+  ]
+}

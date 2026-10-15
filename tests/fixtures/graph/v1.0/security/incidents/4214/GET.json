@@ -1,0 +1,23 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#security/incidents(alerts())/$entity",
+  "id": "4214",
+  "tenantId": "00000000-0000-4000-8000-0000000000f0",
+  "status": "redirected",
+  "incidentWebUrl": "https://security.microsoft.com/incidents/4214?tid=00000000-0000-4000-8000-0000000000f0",
+  "redirectIncidentId": "4219",
+  "displayName": "Email messages containing phish URLs delivered",
+  "createdDateTime": "2026-10-07T11:00:00Z",
+  "lastUpdateDateTime": "2026-10-12T11:00:00Z",
+  "assignedTo": null,
+  "classification": "unknown",
+  "determination": "unknown",
+  "severity": "medium",
+  "customTags": [],
+  "systemTags": [],
+  "description": null,
+  "summary": null,
+  "lastModifiedBy": "Automation",
+  "resolvingComment": null,
+  "comments": [],
+  "alerts": []
+}

@@ -1,0 +1,55 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#security/alerts_v2/$entity",
+  "id": "da638647315200000003_-1194836003",
+  "providerAlertId": "00000003-0000-4000-8000-00000000c0de",
+  "incidentId": "4224",
+  "status": "inProgress",
+  "severity": "medium",
+  "classification": null,
+  "determination": null,
+  "serviceSource": "microsoftDefenderForCloudApps",
+  "detectionSource": "microsoftDefenderForCloudApps",
+  "productName": "Microsoft Defender for Cloud Apps",
+  "detectorId": "00000003-1111-4000-8000-000000000000",
+  "tenantId": "00000000-0000-4000-8000-0000000000f0",
+  "title": "Suspicious inbox manipulation rule",
+  "description": "",
+  "recommendedActions": "",
+  "category": "Exfiltration",
+  "assignedTo": "alex.admin@example.com",
+  "alertWebUrl": "https://security.microsoft.com/alerts/da638647315200000003_-1194836003?tid=00000000-0000-4000-8000-0000000000f0",
+  "incidentWebUrl": "https://security.microsoft.com/incidents/4224?tid=00000000-0000-4000-8000-0000000000f0",
+  "actorDisplayName": null,
+  "threatDisplayName": null,
+  "threatFamilyName": null,
+  "mitreTechniques": [
+    "T1114.003",
+    "T1564.008"
+  ],
+  "createdDateTime": "2026-10-15T07:00:00Z",
+  "lastUpdateDateTime": "2026-10-15T08:00:00Z",
+  "resolvedDateTime": null,
+  "firstActivityDateTime": "2026-10-15T06:00:00Z",
+  "lastActivityDateTime": "2026-10-15T07:00:00Z",
+  "comments": [],
+  "evidence": [
+    {
+      "@odata.type": "#microsoft.graph.security.mailboxEvidence",
+      "createdDateTime": "2026-10-15T06:00:00Z",
+      "verdict": "suspicious",
+      "remediationStatus": "none",
+      "roles": [
+        "compromised"
+      ],
+      "tags": [],
+      "primaryAddress": "avery@example.com",
+      "displayName": "Avery Engineer",
+      "userAccount": {
+        "azureAdUserId": "30000000-0000-4000-8000-000000000001",
+        "userPrincipalName": "avery@example.com",
+        "displayName": "Avery Engineer"
+      }
+    }
+  ],
+  "systemTags": []
+}

@@ -1,0 +1,23 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#drives/$entity",
+  "id": "b!exampleDrive0009",
+  "name": "Documents",
+  "driveType": "documentLibrary",
+  "webUrl": "https://exampleorg.sharepoint.com/sites/ITOperations/Shared%20Documents",
+  "createdDateTime": "2024-07-17T09:00:00Z",
+  "lastModifiedDateTime": "2026-10-15T09:00:00Z",
+  "owner": {
+    "user": {
+      "id": "30000000-0000-4000-8000-000000000005",
+      "displayName": "Eli O'Brien",
+      "email": "eli.obrien@example.com"
+    }
+  },
+  "quota": {
+    "deleted": 219902326,
+    "remaining": 1077521395220,
+    "state": "normal",
+    "total": 1099511627776,
+    "used": 21990232556
+  }
+}

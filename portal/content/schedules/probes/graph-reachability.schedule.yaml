@@ -1,0 +1,20 @@
+$schema: ../../../packages/schemas/generated/schedule.schema.json
+kind: schedule
+id: sweep.graph-reachability
+version: 1.0.0
+title: "Hourly probe: Microsoft Graph reachability"
+summary: Runs the probes.graph-reachability probe every hour (minute 21, staggered across the sweep) as the automation identity.
+owner: portal-admins
+tags: [synthetic, probe-sweep]
+cron: "21 * * * *"
+timezone: UTC
+enabled: true
+identity: automation
+job:
+  kind: probe
+  ref: probes.graph-reachability
+timeoutSeconds: 120
+overlap: skip
+requires:
+  scopes:
+    graph: [Organization.Read.All]

@@ -1,0 +1,251 @@
+$schema: ../../packages/schemas/generated/dashboard.schema.json
+kind: dashboard
+id: security.overview
+version: 1.0.0
+title: Security posture
+summary: Open incidents, new alerts, Secure Score, risky users and Defender for Cloud posture in one view.
+owner: security-team
+tags: [security, dashboard]
+nav: { section: security, label: Overview, icon: gauge, order: 5 }
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    graph: [SecurityIncident.Read.All, SecurityAlert.Read.All, SecurityEvents.Read.All, IdentityRiskyUser.Read.All]
+    arm: [user_impersonation]
+  entraRoles: [Security Reader]
+  azureRoles: [Security Reader]
+refresh: 300
+
+datasources:
+  incidents:
+    label: Open incidents
+    source: graph
+    request:
+      path: /security/incidents
+      query:
+        $top: 50
+        $filter: "status eq 'active' or status eq 'inProgress' or status eq 'awaitingAction'"
+    paging: all
+    maxItems: 2000
+    cache: { ttl: 120 }
+    requires: { licences: [defender] }
+    transform: >-
+      ${ (
+        $open := [value.value[status in ['active', 'inProgress', 'awaitingAction']]];
+        {
+          "open": $count($open),
+          "high": $count($open[severity = 'high']),
+          "unassigned": $count($open[$not($exists(assignedTo)) or assignedTo = null or assignedTo = '']),
+          "bySeverity": [
+            { "severity": "High", "count": $count($open[severity = 'high']) },
+            { "severity": "Medium", "count": $count($open[severity = 'medium']) },
+            { "severity": "Low", "count": $count($open[severity = 'low']) },
+            { "severity": "Informational", "count": $count($open[severity = 'informational']) }
+          ],
+          "latest": [($open^(>createdDateTime))[[0..7]]]
+        }
+      ) }
+  alerts:
+    label: Alerts created in the last 24 hours
+    source: graph
+    request:
+      path: /security/alerts_v2
+      query:
+        $top: 100
+        $filter: "${ 'createdDateTime ge ' & $daysAgo(1) }"
+    paging: all
+    maxItems: 2000
+    cache: { ttl: 120 }
+    requires: { licences: [defender] }
+    transform: >-
+      ${ (
+        $all := [value.value];
+        $labels := {
+          "microsoftDefenderForEndpoint": "Endpoint",
+          "microsoftDefenderForIdentity": "Identity",
+          "microsoftDefenderForOffice365": "Office 365",
+          "microsoftDefenderForCloudApps": "Cloud Apps",
+          "microsoftDefenderForCloud": "Cloud",
+          "microsoft365Defender": "Defender XDR",
+          "azureAdIdentityProtection": "ID Protection",
+          "dataLossPrevention": "DLP"
+        };
+        {
+          "count": $count($all),
+          "high": $count($all[severity = 'high']),
+          "byProduct": [$distinct($all.serviceSource).(
+            $s := $;
+            {
+              "product": ($l := $lookup($labels, $s); $l ? $l : $s),
+              "high": $count($all[serviceSource = $s and severity = 'high']),
+              "medium": $count($all[serviceSource = $s and severity = 'medium']),
+              "low": $count($all[serviceSource = $s and severity in ['low', 'informational']])
+            }
+          )]
+        }
+      ) }
+  score:
+    label: Secure Score
+    source: graph
+    request:
+      path: /security/secureScores
+      query:
+        $top: 30
+    cache: { ttl: 3600 }
+    transform: >-
+      ${ (
+        $rows := [(value.value^(createdDateTime)).{
+          "day": $substring(createdDateTime, 0, 10),
+          "percent": maxScore > 0 ? $round(currentScore / maxScore, 4) : 0
+        }];
+        {
+          "trend": $rows,
+          "percent": $count($rows) > 0 ? $rows[-1].percent : 0,
+          "delta": $count($rows) > 1 ? $round($rows[-1].percent - $rows[0].percent, 4) : 0
+        }
+      ) }
+  risky:
+    label: Users at risk
+    source: graph
+    request:
+      path: /identityProtection/riskyUsers
+      query:
+        $top: 500
+        $filter: "riskState eq microsoft.graph.riskState'atRisk'"
+    paging: all
+    maxItems: 10000
+    cache: { ttl: 300 }
+    requires: { licences: [identityProtection] }
+    transform: >-
+      ${ (
+        $r := [value.value[riskState = 'atRisk' and $not(isDeleted = true)]];
+        {
+          "high": $count($r[riskLevel = 'high']),
+          "atRisk": $count($r),
+          "top": [($r[riskLevel in ['high', 'medium']]^(>riskLastUpdatedDateTime))[[0..5]]]
+        }
+      ) }
+  mdc:
+    label: Defender for Cloud secure score
+    source: resourceGraph
+    query: |
+      // af:security.overview#mdcscores
+      securityresources
+      | where type =~ 'microsoft.security/securescores' and name =~ 'ascScore'
+      | extend current = toreal(properties.score.current), max = toreal(properties.score.max), percentage = toreal(properties.score.percentage)
+      | join kind=leftouter (resourcecontainers | where type =~ 'microsoft.resources/subscriptions' | project subscriptionId, subscriptionName = name) on subscriptionId
+      | project subscriptionId, subscriptionName, current, max, percentage
+      | order by percentage asc
+    paging: all
+    maxItems: 1000
+    cache: { ttl: 900 }
+    transform: >-
+      ${ (
+        $rows := [value.value];
+        {
+          "rows": $rows,
+          "overall": $sum($rows.max) > 0 ? $round($sum($rows.current) / $sum($rows.max), 4) : 0
+        }
+      ) }
+
+layout:
+  - widget: licenceGate
+    feature: defender
+    title: Microsoft Defender XDR isn't licensed in this tenant — incidents and alerts are unavailable
+  - widget: kpi
+    id: high_incidents
+    data: incidents.high
+    label: Open high-severity incidents
+    format: number
+    status: "${ value > 0 ? 'crit' : 'ok' }"
+    href: /p/security.incidents?status=open&severity=high
+  - widget: kpi
+    id: alerts_24h
+    data: alerts.count
+    label: New alerts (24 h)
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+    href: /p/security.alerts?status=any
+  - widget: kpi
+    id: secure_score
+    data: score.percent
+    label: Secure Score
+    format: percent
+    delta: score.delta
+    status: "${ value >= 0.7 ? 'ok' : value >= 0.5 ? 'warn' : 'crit' }"
+    href: /p/security.secure-score
+  - widget: kpi
+    id: high_risk_users
+    data: risky.high
+    label: Users at high risk
+    format: number
+    status: "${ value > 0 ? 'crit' : 'ok' }"
+    href: /p/security.risky-users?riskState=atRisk&riskLevel=high
+  - widget: chart
+    id: score_trend
+    title: Secure Score (30 days)
+    span: 8
+    rows: 2
+    type: line
+    data: score.trend
+    x: day
+    y: percent
+    format: percent
+  - widget: chart
+    id: incidents_by_severity
+    title: Open incidents by severity
+    span: 4
+    rows: 2
+    type: donut
+    data: incidents.bySeverity
+    x: severity
+    y: count
+    format: number
+  - widget: list
+    id: latest_incidents
+    title: Latest open incidents
+    span: 6
+    data: incidents.latest
+    primary: displayName
+    secondary: createdDateTime
+    secondaryFormat: relativeTime
+    status: { field: severity, map: { high: [crit, High], medium: [warn, Medium], low: [info, Low], informational: [neutral, Informational] } }
+    href: ${ '/p/security.incident?id=' & row.id }
+    limit: 8
+  - widget: chart
+    id: alerts_by_product
+    title: Alerts in the last 24 hours by product
+    span: 6
+    rows: 2
+    type: stackedBar
+    data: alerts.byProduct
+    x: product
+    y: [high, medium, low]
+    stack: true
+    format: number
+  - widget: list
+    id: risky_users
+    title: Users at high or medium risk
+    span: 6
+    data: risky.top
+    primary: userDisplayName
+    secondary: riskLastUpdatedDateTime
+    secondaryFormat: relativeTime
+    status: { field: riskLevel, map: { high: [crit, High], medium: [warn, Medium], low: [info, Low] } }
+    href: ${ '/p/security.risky-user?id=' & row.id }
+    limit: 6
+  - widget: chart
+    id: mdc_scores
+    title: Defender for Cloud secure score by subscription
+    span: 6
+    rows: 2
+    type: bar
+    data: mdc.rows
+    x: subscriptionName
+    y: percentage
+    format: percent
+  - widget: markdown
+    span: 12
+    text: |
+      Drill in: [Incidents](/p/security.incidents) · [Alerts](/p/security.alerts) · [Secure Score](/p/security.secure-score) ·
+      [Risky users](/p/security.risky-users) · [Defender for Cloud](/p/security.defender-for-cloud). Figures refresh every 5 minutes.

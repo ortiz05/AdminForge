@@ -1,0 +1,139 @@
+$schema: ../../../packages/schemas/generated/page.schema.json
+kind: page
+id: m365.sharepoint-site
+version: 1.0.0
+title: SharePoint site
+summary: One SharePoint site — storage quota, document libraries and lists.
+owner: m365-team
+tags: [m365, sharepoint]
+template: entity
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    graph: [Sites.Read.All]
+  entraRoles: [SharePoint Administrator, Global Reader]
+  licences: [sharepoint]
+
+params:
+  id:
+    type: string
+    label: Site
+    required: true
+    hidden: true
+    description: Graph site id (hostname,site collection id,web id)
+    pattern: "^[A-Za-z0-9.-]+,[0-9a-fA-F-]{36},[0-9a-fA-F-]{36}$"
+
+datasources:
+  site:
+    source: graph
+    request:
+      path: /sites/${ $encode(params.id) }
+      query:
+        $select: id,name,displayName,description,webUrl,createdDateTime,lastModifiedDateTime,siteCollection
+    cache: { ttl: 120 }
+  drive:
+    source: graph
+    label: Default document library
+    request:
+      path: /sites/${ $encode(params.id) }/drive
+      query:
+        $select: id,name,driveType,webUrl,quota,owner,createdDateTime,lastModifiedDateTime
+    cache: { ttl: 120 }
+    transform: >-
+      ${ $merge([value, {
+        "usedRatio": value.quota.total > 0 ? $round(value.quota.used / value.quota.total, 4) : 0
+      }]) }
+  lists:
+    source: graph
+    request:
+      path: /sites/${ $encode(params.id) }/lists
+      query:
+        $select: id,name,displayName,webUrl,createdDateTime,lastModifiedDateTime,list
+        $top: 200
+    paging: all
+    maxItems: 2000
+    cache: { ttl: 300 }
+    # Visible lists and libraries only; `template` comes from the list facet.
+    transform: >-
+      ${ [value.value[list.hidden != true].{
+        "id": id,
+        "displayName": displayName,
+        "webUrl": webUrl,
+        "template": list.template,
+        "library": list.template = 'documentLibrary',
+        "createdDateTime": createdDateTime,
+        "lastModifiedDateTime": lastModifiedDateTime
+      }] }
+
+header:
+  title: ${ site.displayName }
+  subtitle: ${ site.webUrl }
+  status: "${ drive.quota.state = 'exceeded' ? 'crit' : drive.quota.state = 'critical' ? 'crit' : drive.quota.state = 'nearing' ? 'warn' : 'ok' }"
+  statusLabel: "${ drive.quota.state = 'exceeded' ? 'Storage quota exceeded' : drive.quota.state = 'critical' ? 'Storage almost full' : drive.quota.state = 'nearing' ? 'Storage nearing quota' : 'Storage OK' }"
+  ids:
+    Site id: ${ site.id }
+
+actions:
+  - label: Open site
+    icon: arrow-square-out
+    href: ${ site.webUrl }
+  - label: Open in SharePoint admin center
+    icon: arrow-square-out
+    href: "${ 'https://' & env.AF_SPO_TENANT_NAME & '-admin.sharepoint.com/_layouts/15/online/AdminHome.aspx#/siteManagement' }"
+    when: ${ $boolean(env.AF_SPO_TENANT_NAME) }
+  - label: Review sharing settings
+    icon: share-network
+    href: /p/m365.sharepoint-sharing
+
+tabs:
+  - id: overview
+    label: Overview
+    layout:
+      - widget: kpi
+        data: drive.quota.used
+        label: Storage used
+        format: bytes
+      - widget: kpi
+        data: drive.quota.remaining
+        label: Remaining
+        format: bytes
+      - widget: kpi
+        data: drive.usedRatio
+        label: Of quota
+        format: percent
+        status: "${ value >= 0.9 ? 'crit' : value >= 0.75 ? 'warn' : 'ok' }"
+      - widget: kpi
+        data: drive.quota.deleted
+        label: In recycle bin
+        format: bytes
+      - widget: keyValue
+        span: 12
+        data: site
+        fields:
+          - { field: webUrl, label: URL, kind: link }
+          - { field: siteCollection.hostname, label: Host }
+          - { field: name, label: Name }
+          - { field: description, label: Description }
+          - { field: createdDateTime, label: Created, kind: datetime }
+          - { field: lastModifiedDateTime, label: Last modified, kind: datetime }
+  - id: lists
+    label: Libraries and lists
+    layout:
+      - widget: table
+        span: 12
+        data: lists
+        rowKey: id
+        columns:
+          - { field: displayName, label: Name, kind: identity, secondary: webUrl }
+          - { field: template, label: Template, filter: facet }
+          - { field: library, label: Document library, kind: boolean, filter: facet }
+          - { field: lastModifiedDateTime, label: Last modified, kind: relativeTime, sortable: true }
+          - { field: createdDateTime, label: Created, kind: date, hidden: true }
+          - { field: id, label: List id, kind: guid, hidden: true }
+        rowActions:
+          - label: Open
+            icon: arrow-square-out
+            href: ${ row.webUrl }
+        empty:
+          title: No visible lists
+          body: This site has no lists or libraries you can read.

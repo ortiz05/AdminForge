@@ -1,0 +1,117 @@
+{
+  "value": [
+    {
+      "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-functions/providers/Microsoft.Web/sites/func-example/functions/HttpOrders",
+      "name": "func-example/HttpOrders",
+      "type": "Microsoft.Web/sites/functions",
+      "properties": {
+        "name": "HttpOrders",
+        "language": "dotnet-isolated",
+        "isDisabled": false,
+        "invoke_url_template": "https://func-example.azurewebsites.net/api/httporders",
+        "config": {
+          "bindings": [
+            {
+              "name": "req",
+              "type": "httpTrigger",
+              "direction": "in",
+              "authLevel": "function"
+            },
+            {
+              "name": "$return",
+              "type": "http",
+              "direction": "out"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-functions/providers/Microsoft.Web/sites/func-example/functions/TimerNightlySync",
+      "name": "func-example/TimerNightlySync",
+      "type": "Microsoft.Web/sites/functions",
+      "properties": {
+        "name": "TimerNightlySync",
+        "language": "dotnet-isolated",
+        "isDisabled": false,
+        "invoke_url_template": null,
+        "config": {
+          "bindings": [
+            {
+              "name": "input",
+              "type": "timerTrigger",
+              "direction": "in",
+              "schedule": "0 0 2 * * *"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-functions/providers/Microsoft.Web/sites/func-example/functions/QueueProcessInvoice",
+      "name": "func-example/QueueProcessInvoice",
+      "type": "Microsoft.Web/sites/functions",
+      "properties": {
+        "name": "QueueProcessInvoice",
+        "language": "dotnet-isolated",
+        "isDisabled": false,
+        "invoke_url_template": null,
+        "config": {
+          "bindings": [
+            {
+              "name": "input",
+              "type": "queueTrigger",
+              "direction": "in"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-functions/providers/Microsoft.Web/sites/func-example/functions/EventGridBlobCreated",
+      "name": "func-example/EventGridBlobCreated",
+      "type": "Microsoft.Web/sites/functions",
+      "properties": {
+        "name": "EventGridBlobCreated",
+        "language": "dotnet-isolated",
+        "isDisabled": true,
+        "invoke_url_template": null,
+        "config": {
+          "bindings": [
+            {
+              "name": "input",
+              "type": "eventGridTrigger",
+              "direction": "in"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-functions/providers/Microsoft.Web/sites/func-example/functions/HttpHealth",
+      "name": "func-example/HttpHealth",
+      "type": "Microsoft.Web/sites/functions",
+      "properties": {
+        "name": "HttpHealth",
+        "language": "dotnet-isolated",
+        "isDisabled": false,
+        "invoke_url_template": "https://func-example.azurewebsites.net/api/httphealth",
+        "config": {
+          "bindings": [
+            {
+              "name": "req",
+              "type": "httpTrigger",
+              "direction": "in",
+              "authLevel": "anonymous"
+            },
+            {
+              "name": "$return",
+              "type": "http",
+              "direction": "out"
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

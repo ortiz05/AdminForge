@@ -1,0 +1,93 @@
+$schema: ../../../packages/schemas/generated/playbook.schema.json
+kind: playbook
+id: azure.change-alert-state
+version: 1.0.0
+title: Change Azure Monitor alert state
+summary: Acknowledges, closes or reopens an Azure Monitor alert, with an optional comment. The alert rule keeps evaluating either way.
+owner: azure-team
+tags: [azure, monitoring, alerts]
+risk: low
+mode: write
+requires:
+  portalRoles: [Portal.Operator]
+  scopes:
+    arm: [user_impersonation]
+  azureRoles: [Monitoring Contributor]
+confirm:
+  type: none
+approval:
+  required: false
+
+inputs:
+  alertId:
+    type: string
+    label: Alert id
+    pattern: "^/subscriptions/[0-9a-fA-F-]{36}/.*providers/[Mm]icrosoft\\.[Aa]lerts[Mm]anagement/alerts/[0-9a-fA-F-]{36}$"
+  state:
+    type: enum
+    label: New state
+    default: Acknowledged
+    values:
+      - { value: Acknowledged, label: Acknowledged }
+      - { value: Closed, label: Closed }
+      - { value: New, label: New (reopen) }
+  comment: { type: string, label: Comment, required: false, maxLength: 1000, multiline: true }
+
+steps:
+  - id: path
+    type: transform
+    expression: ${ $join($split(inputs.alertId, '/')[$ != ''].('/' & $encode($)), '') }
+
+  - id: lookup
+    type: arm
+    mode: read
+    describe: Read the alert
+    request:
+      method: GET
+      path: ${ steps.path.output }
+      apiVersion: "2019-05-05-preview"
+
+  - id: guard
+    type: assert
+    that: ${ steps.lookup.output.properties.essentials.alertState != inputs.state }
+    message: ${ 'The alert is already ' & $lowercase(inputs.state) & '.' }
+
+  - id: change
+    type: arm
+    mode: write
+    describe: ${ 'Set alert ' & steps.lookup.output.name & ' to ' & inputs.state }
+    request:
+      method: POST
+      path: ${ steps.path.output }/changestate
+      apiVersion: "2019-05-05-preview"
+      query:
+        newState: ${ inputs.state }
+      body: >-
+        ${ inputs.comment ? { 'comments': inputs.comment } }
+    compensate:
+      type: arm
+      describe: ${ 'Set the alert back to ' & steps.lookup.output.properties.essentials.alertState }
+      request:
+        method: POST
+        path: ${ steps.path.output }/changestate
+        apiVersion: "2019-05-05-preview"
+        query:
+          newState: ${ steps.lookup.output.properties.essentials.alertState }
+
+outputs:
+  summary: ${ 'Alert ' & steps.lookup.output.name & ' set to ' & inputs.state & '.' }
+
+tests:
+  - name: refuses a no-op change
+    inputs: { alertId: /subscriptions/00000000-0000-4000-8000-0000000000a1/providers/Microsoft.AlertsManagement/alerts/30000000-0000-4000-8000-000000000301, state: Acknowledged }
+    mocks:
+      lookup: { name: Function App HTTP 5xx above 5%, properties: { essentials: { alertState: Acknowledged } } }
+    expect: { status: failed, failedStep: guard }
+  - name: plans an acknowledgement with a comment
+    inputs: { alertId: /subscriptions/00000000-0000-4000-8000-0000000000a1/providers/Microsoft.AlertsManagement/alerts/30000000-0000-4000-8000-000000000301, state: Acknowledged, comment: Investigating in INC-5120 }
+    mocks:
+      lookup: { name: Function App HTTP 5xx above 5%, properties: { essentials: { alertState: New } } }
+    expect:
+      status: succeeded
+      plan: [change]
+      outputs: { summary: Alert Function App HTTP 5xx above 5% set to Acknowledged. }

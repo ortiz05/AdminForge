@@ -1,0 +1,220 @@
+$schema: ../../../packages/schemas/generated/page.schema.json
+kind: page
+id: m365.message-center
+version: 1.0.0
+title: Message center
+summary: Planned changes, new features and actions Microsoft announces for this tenant, with the ones that need action first.
+owner: m365-team
+tags: [m365, message-center, change-management]
+template: list-detail
+nav: { section: m365, label: Message center, icon: megaphone, order: 20 }
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    graph: [ServiceMessage.Read.All]
+  entraRoles: [Message Center Reader, Global Reader]
+
+params:
+  q: { type: string, default: "", label: Search, placeholder: Title or MC id }
+  service:
+    type: enum
+    label: Service
+    facet: true
+    default: All
+    values:
+      - { value: All, label: All services }
+      - Microsoft 365 suite
+      - Exchange Online
+      - Microsoft Teams
+      - SharePoint Online
+      - OneDrive for Business
+      - Microsoft Entra
+      - Microsoft Intune
+      - Microsoft 365 apps
+      - Microsoft Defender XDR
+      - Microsoft Purview
+      - Microsoft Copilot (Microsoft 365)
+      - Microsoft Viva
+      - Power Platform
+      - Planner
+  category:
+    type: enum
+    label: Category
+    facet: true
+    default: All
+    values:
+      - { value: All, label: All categories }
+      - { value: preventOrFixIssue, label: Prevent or fix issues }
+      - { value: planForChange, label: Plan for change }
+      - { value: stayInformed, label: Stay informed }
+  actionRequired:
+    type: enum
+    label: Action required
+    facet: true
+    default: Any
+    values: [Any, "Yes", "No"]
+  majorChange: { type: boolean, label: Major changes only, default: false, facet: true }
+  since: { type: date, label: Updated since, default: -30d, facet: true }
+
+filters:
+  search: q
+  facets: [service, category, actionRequired, majorChange, since]
+
+savedViews:
+  enabled: true
+  shared: true
+  presets:
+    - { name: Action required, params: { actionRequired: "Yes" } }
+    - { name: Major changes, params: { majorChange: true } }
+    - { name: Plan for change, params: { category: planForChange } }
+    - { name: Teams changes, params: { service: Microsoft Teams } }
+
+datasources:
+  messages:
+    source: graph
+    request:
+      path: /admin/serviceAnnouncement/messages
+      query:
+        $filter: >-
+          ${ $join([
+               params.category and params.category != 'All' ? 'category eq ' & $odata(params.category),
+               params.since ? 'lastModifiedDateTime ge ' & $iso(params.since)
+             ][$], ' and ') }
+        $orderby: lastModifiedDateTime desc
+        $top: 100
+    paging: all
+    maxItems: 2000
+    cache: { ttl: 300 }
+    # value = { value: [serviceUpdateMessage] }. Service, action-required, major-change and text filters apply here.
+    transform: >-
+      ${ (
+        $p := params;
+        $q := $lowercase($trim($p.q ? $p.q : ''));
+        $svc := $p.service ? $p.service : 'All';
+        $act := $p.actionRequired ? $p.actionRequired : 'Any';
+        $due := function($d) { $exists($d) and $d != null };
+        $rows := [value.value[
+            ($q = '' or $contains($lowercase(id & ' ' & title), $q))
+            and ($svc = 'All' or $svc in services)
+            and ($act = 'Any' or ($act = 'Yes') = $due(actionRequiredByDateTime))
+            and ($p.majorChange != true or isMajorChange = true)
+            and ($p.category = 'All' or $not($exists($p.category)) or category = $p.category)
+          ].{
+            "id": id,
+            "title": title,
+            "services": services,
+            "category": category,
+            "severity": severity,
+            "isMajorChange": isMajorChange,
+            "actionRequiredByDateTime": actionRequiredByDateTime,
+            "daysToAct": $due(actionRequiredByDateTime) ? $daysUntil(actionRequiredByDateTime) : null,
+            "startDateTime": startDateTime,
+            "endDateTime": endDateTime,
+            "lastModifiedDateTime": lastModifiedDateTime,
+            "tags": tags,
+            "isRead": viewPoint.isRead = true
+          }];
+        $all := $rows.services;
+        {
+          "rows": $rows,
+          "total": $count($rows),
+          "actionRequired": $count($rows[$due(actionRequiredByDateTime)]),
+          "dueSoon": $count($rows[$due(daysToAct) and daysToAct >= 0 and daysToAct <= 30]),
+          "major": $count($rows[isMajorChange = true]),
+          "byCategory": [$distinct($rows.category).(
+            $c := $;
+            { "category": $c = 'planForChange' ? 'Plan for change' : $c = 'preventOrFixIssue' ? 'Prevent or fix issues' : 'Stay informed', "count": $count($rows[category = $c]) }
+          )],
+          "byService": [$sort($distinct($all).( $s := $; { "service": $s, "count": $count($all[$ = $s]) } ), function($a, $b) { $a.count < $b.count })[[0..5]]]
+        }
+      ) }
+
+layout:
+  - widget: kpi
+    id: actionRequired
+    data: messages.actionRequired
+    label: Need action
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+    href: /p/m365.message-center?actionRequired=Yes
+  - widget: kpi
+    id: dueSoon
+    data: messages.dueSoon
+    label: Action due within 30 days
+    format: number
+    status: "${ value > 0 ? 'crit' : 'ok' }"
+  - widget: kpi
+    id: major
+    data: messages.major
+    label: Major changes
+    format: number
+    href: /p/m365.message-center?majorChange=true
+  - widget: kpi
+    id: total
+    data: messages.total
+    label: Messages in this view
+    format: number
+  - widget: chart
+    id: byCategory
+    title: By category
+    span: 4
+    type: donut
+    data: messages.byCategory
+    x: category
+    y: count
+    format: number
+  - widget: chart
+    id: byService
+    title: Busiest services
+    span: 8
+    type: bar
+    data: messages.byService
+    x: service
+    y: count
+    format: number
+  - widget: table
+    id: messages
+    title: Messages
+    span: 12
+    data: messages.rows
+    rowKey: id
+    columns:
+      - { field: title, label: Message, kind: identity, secondary: id }
+      - { field: services, label: Services, kind: tags }
+      - field: category
+        label: Category
+        kind: status
+        map:
+          preventOrFixIssue: [warn, Prevent or fix issues]
+          planForChange: [info, Plan for change]
+          stayInformed: [neutral, Stay informed]
+        filter: { type: facet, param: category }
+      - field: severity
+        label: Severity
+        kind: status
+        map: { normal: [neutral, Normal], high: [warn, High], critical: [crit, Critical] }
+        filter: facet
+      - { field: isMajorChange, label: Major change, kind: boolean, filter: facet }
+      - { field: actionRequiredByDateTime, label: Act by, kind: date, filter: date, sortable: true }
+      - { field: daysToAct, label: Days left, kind: number, filter: range, hidden: true }
+      - { field: lastModifiedDateTime, label: Last update, kind: relativeTime, sortable: true }
+      - { field: startDateTime, label: Published, kind: date, hidden: true }
+      - { field: tags, label: Tags, kind: tags, hidden: true }
+      - { field: isRead, label: Read by me, kind: boolean, hidden: true }
+    inspect:
+      page: m365.message
+      params:
+        id: ${ row.id }
+    rowActions:
+      - label: Open in Microsoft 365 admin center
+        icon: arrow-square-out
+        href: "https://admin.microsoft.com/Adminportal/Home#/MessageCenter/:/messages/${ $encode(row.id) }"
+    empty:
+      title: No messages match these filters
+      body: Try a longer date range, or clear the service and category filters.
+
+export:
+  formats: [csv, xlsx]
+  fileName: message-center
+  data: messages.rows
+  columns: visible

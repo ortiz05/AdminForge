@@ -1,0 +1,115 @@
+$schema: ../../../packages/schemas/generated/report.schema.json
+kind: report
+id: azure.untagged-resources
+version: 1.0.0
+title: Untagged Azure resources
+summary: Resources with no tags at all — or, when a required tag is set, resources missing that tag — so cost, ownership and incident routing work.
+owner: azure-team
+tags: [azure, governance, tags, cost]
+nav: { section: reports, label: Untagged Azure resources, icon: tag, order: 170 }
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    arm: [user_impersonation]
+  azureRoles: [Reader]
+
+params:
+  requiredTag: { type: string, default: "", label: Required tag, placeholder: owner, facet: true, description: Leave empty to list resources with no tags at all. }
+  subscriptionId: { type: string, format: guid, label: Subscription, picker: subscription, facet: true }
+  includeChildTypes: { type: boolean, default: false, label: Include extensions and child resources, facet: true }
+
+datasources:
+  untagged:
+    source: resourceGraph
+    query: |
+      // af:azure.untagged-resources#rows
+      resources
+      ${ params.includeChildTypes = true ? '' : "| where type !endswith '/extensions' and array_length(split(type, '/')) == 2" }
+      ${ params.subscriptionId ? "| where subscriptionId == '" & $guid(params.subscriptionId) & "'" }
+      | extend tagCount = iff(isnull(tags), 0, array_length(bag_keys(tags)))
+      ${ params.requiredTag ? "| where isnull(tags['" & $replace(params.requiredTag, /[^A-Za-z0-9 ._:@+=\/-]/, '') & "']) or isempty(tostring(tags['" & $replace(params.requiredTag, /[^A-Za-z0-9 ._:@+=\/-]/, '') & "']))" : '| where tagCount == 0' }
+      | join kind=leftouter (resourcecontainers | where type =~ 'microsoft.resources/subscriptions' | project subscriptionId, subscriptionName = name) on subscriptionId
+      | project id, name, type, location, resourceGroup, subscriptionId, subscriptionName, tags, tagCount
+      | order by subscriptionName asc, resourceGroup asc, name asc
+    paging: all
+    maxItems: 100000
+    transform: >-
+      ${ (
+        $rows := [value.value];
+        $types := $distinct($rows.type);
+        {
+          'rows': $rows,
+          'total': $count($rows),
+          'types': $count($types),
+          'groups': $count($distinct($rows.(subscriptionId & '/' & $lowercase(resourceGroup)))),
+          'byType': [($types.( $t := $; { 'type': $t, 'resources': $count($rows[type = $t]) } ))^(>resources)[[0..9]]]
+        }
+      ) }
+    cache: { ttl: 300 }
+
+layout:
+  - widget: kpi
+    data: untagged.total
+    label: Resources to tag
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+  - widget: kpi
+    data: untagged.types
+    label: Resource types affected
+    format: number
+  - widget: kpi
+    data: untagged.groups
+    label: Resource groups affected
+    format: number
+  - widget: chart
+    title: Top resource types
+    span: 12
+    type: bar
+    data: untagged.byType
+    x: type
+    y: resources
+    format: number
+  - widget: table
+    id: untagged
+    span: 12
+    data: untagged.rows
+    rowKey: id
+    selection: multi
+    columns:
+      - { field: name, label: Resource, kind: identity, secondary: type, sortable: true }
+      - { field: type, label: Type, filter: facet }
+      - { field: resourceGroup, label: Resource group, filter: facet }
+      - { field: subscriptionName, label: Subscription, filter: facet }
+      - { field: location, label: Location, filter: facet }
+      - { field: tags, label: Existing tags, kind: tags }
+      - { field: subscriptionId, label: Subscription id, kind: guid, hidden: true }
+      - { field: id, label: Resource id, kind: code, hidden: true }
+    inspect:
+      page: azure.resource
+      params:
+        id: ${ row.id }
+    rowActions:
+      - playbook: azure.add-tags
+        label: Add tag
+        icon: tag
+        inputs:
+          resourceId: ${ row.id }
+          tagName: "${ params.requiredTag ? params.requiredTag : 'owner' }"
+    bulkActions:
+      - playbook: azure.add-tags
+        label: Add or update a tag
+        icon: tag
+        forEach:
+          inputs:
+            resourceId: ${ row.id }
+          concurrency: 5
+        maxItems: 500
+    empty:
+      title: Every resource is tagged
+      body: Nothing is missing tags in the subscriptions you can read. Set Required tag to check for a specific tag such as owner or costCenter.
+
+export:
+  formats: [csv, xlsx]
+  fileName: "${ params.requiredTag ? 'azure-resources-missing-' & params.requiredTag : 'azure-untagged-resources' }"
+  data: untagged.rows
+  columns: all

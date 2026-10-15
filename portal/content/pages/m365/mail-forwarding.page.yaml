@@ -1,0 +1,164 @@
+$schema: ../../../packages/schemas/generated/page.schema.json
+kind: page
+id: m365.mail-forwarding
+version: 1.0.0
+title: Mail forwarding
+summary: Mailboxes that forward mail — mailbox-level forwarding and, optionally, inbox rules — with forwarding to outside domains flagged.
+owner: m365-team
+tags: [m365, exchange, security, data-loss]
+template: list-detail
+nav: { section: m365, label: Mail forwarding, icon: arrow-bend-up-right, order: 65 }
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    exchange: [Exchange.Manage]
+  entraRoles: [Exchange Administrator, Global Reader]
+  licences: [exchange]
+
+params:
+  q: { type: string, default: "", label: Search, placeholder: Mailbox or target address }
+  scope:
+    type: enum
+    label: Target
+    facet: true
+    default: All
+    values:
+      - { value: All, label: Inside or outside }
+      - { value: external, label: Outside the organization }
+      - { value: internal, label: Inside the organization }
+  source:
+    type: enum
+    label: Configured by
+    facet: true
+    default: All
+    values:
+      - { value: All, label: Mailbox setting or inbox rule }
+      - { value: mailbox, label: Mailbox setting }
+      - { value: inboxRule, label: Inbox rule }
+  inboxRules: { type: boolean, label: Scan inbox rules (slower), default: false, facet: true }
+
+filters:
+  search: q
+  facets: [scope, source, inboxRules]
+
+savedViews:
+  enabled: true
+  shared: true
+  presets:
+    - { name: Forwarding outside the organization, params: { scope: external } }
+    - { name: Full scan including inbox rules, params: { inboxRules: true } }
+
+datasources:
+  forwarding:
+    source: runner
+    label: Forwarding audit (PowerShell)
+    script: exchange/Get-MailboxForwarding.ps1
+    sha256: ace0dc4fbff00a81d4874bade56eb0d427cda9d584ccd4b889103d310510daf2
+    services: [exchange]
+    timeoutSeconds: 1800
+    parameters:
+      includeInboxRules: ${ params.inboxRules = true }
+      maxMailboxesForRules: 500
+      externalOnly: false
+    cache: { ttl: 900 }
+    # value = [script output] — one object { acceptedDomains, summary, findings }. Adds a stable row key and the target domain.
+    transform: >-
+      ${ (
+        $v := value[0];  /* runner result = [output data]; one summary object */
+        $p := params;
+        $q := $lowercase($trim($p.q ? $p.q : ''));
+        $all := [$v.findings.$merge([$, {
+          "key": mailbox & '|' & source & '|' & (ruleName ? ruleName : '') & '|' & target,
+          "targetDomain": $contains(target, '@') ? $substringAfter(target, '@') : null
+        }])];
+        $rows := [$all[
+            ($q = '' or $contains($lowercase(mailbox & ' ' & target & ' ' & (ruleName ? ruleName : '')), $q))
+            and ($p.scope = 'All' or $not($exists($p.scope)) or external = ($p.scope = 'external'))
+            and ($p.source = 'All' or $not($exists($p.source)) or source = $p.source)
+          ]];
+        $ext := $all[external = true].targetDomain;
+        {
+          "rows": $rows,
+          "summary": $v.summary,
+          "acceptedDomains": $join($v.acceptedDomains, ', '),
+          "byDomain": [$sort($distinct($ext).( $d := $; { "domain": $d, "count": $count($ext[$ = $d]) } ), function($a, $b) { $a.count < $b.count })[[0..9]]]
+        }
+      ) }
+
+layout:
+  - widget: kpi
+    id: external
+    data: forwarding.summary.external
+    label: Forwarding outside the organization
+    format: number
+    status: "${ value > 0 ? 'crit' : 'ok' }"
+    href: /p/m365.mail-forwarding?scope=external
+  - widget: kpi
+    id: mailboxForwarding
+    data: forwarding.summary.mailboxForwarding
+    label: Mailbox forwarding settings
+    format: number
+  - widget: kpi
+    id: inboxRuleForwarding
+    data: forwarding.summary.inboxRuleForwarding
+    label: Forwarding inbox rules
+    format: number
+  - widget: kpi
+    id: scanned
+    data: forwarding.summary.mailboxesScannedForRules
+    label: Mailboxes scanned for rules
+    format: number
+  - widget: chart
+    id: byDomain
+    title: Outside domains receiving mail
+    span: 5
+    type: bar
+    data: forwarding.byDomain
+    x: domain
+    y: count
+    format: number
+  - widget: markdown
+    span: 7
+    text: |
+      **Why this matters.** Forwarding to outside addresses is a common way attackers keep reading mail after
+      compromising an account, and a common way data leaves the organization. Exchange Online blocks automatic
+      external forwarding by default through the outbound spam filter policy; findings here forward anyway
+      when that policy allows it for the mailbox or the target is a mail contact.
+
+      Inbox rules are only scanned when *Scan inbox rules* is on (first 500 mailboxes). Treat an unexpected
+      forwarding rule as a possible account compromise: check the user's recent sign-ins before removing it.
+  - widget: table
+    id: findings
+    span: 12
+    data: forwarding.rows
+    rowKey: key
+    columns:
+      - { field: mailbox, label: Mailbox, kind: identity, secondary: userPrincipalName }
+      - field: external
+        label: Target
+        kind: status
+        map: { "true": [crit, Outside the organization], "false": [ok, Inside the organization] }
+        filter: { type: facet, param: scope }
+      - { field: target, label: Forwards to }
+      - { field: targetDomain, label: Domain, filter: facet }
+      - field: source
+        label: Configured by
+        kind: status
+        map: { mailbox: [neutral, Mailbox setting], inboxRule: [info, Inbox rule] }
+        filter: { type: facet, param: source }
+      - { field: ruleName, label: Rule }
+      - { field: ruleEnabled, label: Rule enabled, kind: boolean, filter: facet }
+      - { field: deliverToMailboxAndForward, label: Keeps a copy, kind: boolean, hidden: true }
+    rowActions:
+      - label: Open in Exchange admin center
+        icon: arrow-square-out
+        href: https://admin.exchange.microsoft.com/#/mailboxes
+    empty:
+      title: No forwarding found
+      body: No mailbox forwards mail with the current filters. Turn on "Scan inbox rules" for a deeper check.
+
+export:
+  formats: [csv, xlsx]
+  fileName: mail-forwarding
+  data: forwarding.rows
+  columns: all

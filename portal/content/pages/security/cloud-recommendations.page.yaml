@@ -1,0 +1,203 @@
+$schema: ../../../packages/schemas/generated/page.schema.json
+kind: page
+id: security.cloud-recommendations
+version: 1.0.0
+title: Cloud recommendations
+summary: Microsoft Defender for Cloud assessments per resource across all subscriptions — what is unhealthy, how severe, and since when.
+owner: security-team
+tags: [security, azure, defender-for-cloud, posture]
+template: list-detail
+nav: { section: security, label: Cloud recommendations, icon: list-checks, order: 60 }
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    arm: [user_impersonation]
+  azureRoles: [Security Reader]
+
+params:
+  status:
+    type: enum
+    label: Status
+    facet: true
+    default: Unhealthy
+    values:
+      - { value: Unhealthy, label: Unhealthy }
+      - { value: Healthy, label: Healthy }
+      - { value: NotApplicable, label: Not applicable }
+      - { value: any, label: Any status }
+  severity:
+    type: enum
+    label: Severity
+    facet: true
+    default: any
+    values:
+      - { value: any, label: Any severity }
+      - { value: High, label: High }
+      - { value: Medium, label: Medium }
+      - { value: Low, label: Low }
+  subscriptionId: { type: subscription, label: Subscription, facet: true }
+  resourceType: { type: string, label: Resource type, facet: true, placeholder: microsoft.web/sites }
+  assessmentKey: { type: string, label: Recommendation, hidden: true, format: guid }
+
+filters:
+  facets: [status, severity, subscriptionId, resourceType]
+
+savedViews:
+  enabled: true
+  shared: true
+  presets:
+    - { name: High severity, params: { status: Unhealthy, severity: High } }
+    - { name: Virtual machines, params: { status: Unhealthy, resourceType: microsoft.compute/virtualmachines } }
+    - { name: Storage accounts, params: { status: Unhealthy, resourceType: microsoft.storage/storageaccounts } }
+    - { name: Exempted or not applicable, params: { status: NotApplicable } }
+
+datasources:
+  recommendations:
+    source: resourceGraph
+    # Only GUID-validated or charset-stripped values reach the query text.
+    query: |
+      // af:security.cloud-recommendations#rows
+      securityresources
+      | where type =~ 'microsoft.security/assessments'
+      | extend status = tostring(properties.status.code), severity = tostring(properties.metadata.severity), recommendation = tostring(properties.displayName)
+      | extend resourceId = tolower(tostring(properties.resourceDetails.Id)), source = tostring(properties.resourceDetails.Source)
+      | extend parts = split(resourceId, '/')
+      | extend resourceName = tostring(parts[array_length(parts) - 1]), resourceGroup = iff(array_length(parts) > 4, tostring(parts[4]), '')
+      | extend resourceType = iff(array_length(parts) >= 9, strcat(tostring(parts[6]), '/', tostring(parts[7])), iff(array_length(parts) >= 5, 'microsoft.resources/resourcegroups', 'microsoft.resources/subscriptions'))
+      | extend statusCause = tostring(properties.status.cause), statusDescription = tostring(properties.status.description), category = tostring(properties.metadata.categories[0])
+      | extend firstEvaluated = todatetime(properties.status.firstEvaluationDate), statusChanged = todatetime(properties.status.statusChangeDate), portalLink = tostring(properties.links.azurePortal), assessmentKey = name
+      ${ params.status in ['Unhealthy', 'Healthy', 'NotApplicable'] ? "| where status =~ '" & $replace(params.status, /[^A-Za-z]/, '') & "'" : '' }
+      ${ params.severity in ['High', 'Medium', 'Low'] ? "| where severity =~ '" & $replace(params.severity, /[^A-Za-z]/, '') & "'" : '' }
+      ${ params.subscriptionId ? "| where subscriptionId =~ '" & $guid(params.subscriptionId) & "'" : '' }
+      ${ params.resourceType ? "| where resourceType =~ '" & $replace(params.resourceType, /[^A-Za-z0-9._\/-]/, '') & "'" : '' }
+      ${ params.assessmentKey ? "| where assessmentKey =~ '" & $guid(params.assessmentKey) & "'" : '' }
+      | join kind=leftouter (resourcecontainers | where type =~ 'microsoft.resources/subscriptions' | project subscriptionId, subscriptionName = name) on subscriptionId
+      | extend sevRank = case(severity =~ 'High', 0, severity =~ 'Medium', 1, 2)
+      | project id, assessmentKey, recommendation, severity, sevRank, status, statusCause, statusDescription, category, resourceId, resourceName, resourceType, resourceGroup, subscriptionId, subscriptionName, source, firstEvaluated, statusChanged, portalLink
+      | order by sevRank asc, recommendation asc, resourceName asc
+    paging: cursor
+    cache: { ttl: 300 }
+  summary:
+    label: Assessment counts
+    source: resourceGraph
+    query: |
+      // af:security.cloud-recommendations#summary
+      securityresources
+      | where type =~ 'microsoft.security/assessments'
+      | extend status = tostring(properties.status.code), severity = tostring(properties.metadata.severity)
+      | extend parts = split(tolower(tostring(properties.resourceDetails.Id)), '/')
+      | extend resourceType = iff(array_length(parts) >= 9, strcat(tostring(parts[6]), '/', tostring(parts[7])), iff(array_length(parts) >= 5, 'microsoft.resources/resourcegroups', 'microsoft.resources/subscriptions'))
+      | summarize count_ = count() by status, severity, resourceType
+    paging: all
+    maxItems: 5000
+    cache: { ttl: 300 }
+    transform: >-
+      ${ (
+        $z := function($v) { $exists($v) ? $v : 0 };
+        $rows := [value.value];
+        $bad := [$rows[status = 'Unhealthy']];
+        $types := $distinct($bad.resourceType);
+        {
+          "high": $z($sum($bad[severity = 'High'].count_)),
+          "medium": $z($sum($bad[severity = 'Medium'].count_)),
+          "low": $z($sum($bad[severity = 'Low'].count_)),
+          "healthy": $z($sum($rows[status = 'Healthy'].count_)),
+          "healthyShare": $sum($rows[status in ['Healthy', 'Unhealthy']].count_) > 0
+            ? $round($sum($rows[status = 'Healthy'].count_) / $sum($rows[status in ['Healthy', 'Unhealthy']].count_), 4) : 0,
+          "byType": [($types.(
+            $t := $;
+            {
+              "resourceType": $t,
+              "high": $z($sum($bad[resourceType = $t and severity = 'High'].count_)),
+              "medium": $z($sum($bad[resourceType = $t and severity = 'Medium'].count_)),
+              "low": $z($sum($bad[resourceType = $t and severity = 'Low'].count_)),
+              "total": $z($sum($bad[resourceType = $t].count_))
+            }
+          ))^(>total)][[0..9]]
+        }
+      ) }
+
+layout:
+  - widget: kpi
+    data: summary.high
+    label: Unhealthy — high
+    format: number
+    status: "${ value > 0 ? 'crit' : 'ok' }"
+    href: /p/security.cloud-recommendations?status=Unhealthy&severity=High
+  - widget: kpi
+    data: summary.medium
+    label: Unhealthy — medium
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+    href: /p/security.cloud-recommendations?status=Unhealthy&severity=Medium
+  - widget: kpi
+    data: summary.low
+    label: Unhealthy — low
+    format: number
+    href: /p/security.cloud-recommendations?status=Unhealthy&severity=Low
+  - widget: kpi
+    data: summary.healthyShare
+    label: Healthy assessments
+    format: percent
+  - widget: chart
+    id: by_type
+    title: Unhealthy assessments by resource type (top 10)
+    span: 12
+    rows: 2
+    type: stackedBar
+    data: summary.byType
+    x: resourceType
+    y: [high, medium, low]
+    stack: true
+    format: number
+  - widget: table
+    id: recommendations
+    span: 12
+    data: recommendations.value
+    rowKey: id
+    search: true
+    pageSize: 100
+    empty:
+      title: No assessments match these filters
+      body: Clear the subscription or resource type filter. Assessments appear once Defender for Cloud has evaluated a resource (Security Reader or Reader on the subscription is needed).
+    columns:
+      - { field: recommendation, label: Recommendation, kind: identity, secondary: statusDescription, sortable: true }
+      - field: severity
+        label: Severity
+        kind: status
+        sortable: true
+        map: { High: [crit, High], Medium: [warn, Medium], Low: [info, Low] }
+        filter: { type: facet, param: severity }
+      - field: status
+        label: Status
+        kind: status
+        map: { Unhealthy: [crit, Unhealthy], Healthy: [ok, Healthy], NotApplicable: [neutral, Not applicable] }
+        filter: { type: facet, param: status }
+      - { field: resourceName, label: Resource, sortable: true }
+      - { field: resourceType, label: Resource type, filter: { type: facet, param: resourceType } }
+      - { field: resourceGroup, label: Resource group, filter: facet }
+      - { field: subscriptionName, label: Subscription, filter: facet }
+      - { field: category, label: Category, filter: facet, hidden: true }
+      - { field: statusCause, label: Cause, hidden: true }
+      - { field: statusChanged, label: Status changed, kind: relativeTime, sortable: true, filter: date }
+      - { field: firstEvaluated, label: First evaluated, kind: date, hidden: true }
+      - { field: source, label: Source, hidden: true, filter: facet }
+      - { field: resourceId, label: Resource id, kind: code, hidden: true }
+      - { field: assessmentKey, label: Assessment key, kind: guid, hidden: true }
+    inspect:
+      page: azure.resource
+      params:
+        id: ${ row.resourceId }
+    rowActions:
+      - label: Open in Defender for Cloud
+        icon: arrow-square-out
+        href: "${ row.portalLink ? ($substring(row.portalLink, 0, 4) = 'http' ? row.portalLink : 'https://' & row.portalLink) : 'https://portal.azure.com/#view/Microsoft_Azure_Security/SecurityMenuBlade/~/5' }"
+      - label: All resources with this recommendation
+        icon: funnel
+        href: ${ '/p/security.cloud-recommendations?assessmentKey=' & $encode(row.assessmentKey) & '&status=any' }
+
+export:
+  formats: [csv, xlsx]
+  fileName: defender-for-cloud-recommendations
+  data: recommendations.value
+  columns: visible

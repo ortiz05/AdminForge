@@ -1,0 +1,255 @@
+$schema: ../../../packages/schemas/generated/page.schema.json
+kind: page
+id: azure.subscription
+version: 1.0.0
+title: Subscription
+summary: One Azure subscription — state, resource groups, what it contains, who has access and which Defender for Cloud plans are on.
+owner: azure-team
+tags: [azure, subscriptions, rbac, defender-for-cloud]
+template: entity
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    arm: [user_impersonation]
+  azureRoles: [Reader]
+
+params:
+  id: { type: guid, label: Subscription, required: true, hidden: true }
+
+datasources:
+  subscription:
+    source: arm
+    request:
+      path: /subscriptions/${ $encode($guid(params.id)) }
+      apiVersion: "2022-12-01"
+    cache: { ttl: 300 }
+  groups:
+    source: arm
+    request:
+      path: /subscriptions/${ $encode($guid(params.id)) }/resourcegroups
+      apiVersion: "2021-04-01"
+    paging: all
+    maxItems: 5000
+    transform: >-
+      ${ [value.value.{
+        'id': id,
+        'name': name,
+        'location': location,
+        'tags': tags,
+        'tagCount': tags ? $count($keys(tags)) : 0,
+        'provisioningState': properties.provisioningState,
+        'managedBy': managedBy
+      }] }
+    cache: { ttl: 120 }
+  types:
+    source: resourceGraph
+    query: |
+      // af:azure.subscription#types
+      resources
+      | where subscriptionId == '${ $guid(params.id) }'
+      | summarize resources = count() by type
+      | order by resources desc
+    transform: >-
+      ${ (
+        $rows := [value.value];
+        { 'rows': $rows, 'top': [$rows[[0..9]]], 'total': $sum($rows.resources), 'types': $count($rows) }
+      ) }
+    cache: { ttl: 300 }
+  access:
+    source: resourceGraph
+    query: |
+      // af:azure.subscription#access
+      authorizationresources
+      | where type =~ 'microsoft.authorization/roleassignments'
+      | extend scope = tolower(tostring(properties.scope)), principalId = tostring(properties.principalId), principalType = tostring(properties.principalType), roleDefinitionGuid = tolower(extract('([0-9a-fA-F-]{36})$', 1, tostring(properties.roleDefinitionId))), createdOn = todatetime(properties.createdOn), hasCondition = isnotempty(tostring(properties.condition))
+      | where scope == '/subscriptions/${ $guid(params.id) }'
+      | join kind=leftouter (authorizationresources | where type =~ 'microsoft.authorization/roledefinitions' | extend roleDefinitionGuid = tolower(name), roleName = tostring(properties.roleName), roleType = tostring(properties.type) | summarize roleName = any(roleName), roleType = any(roleType) by roleDefinitionGuid) on roleDefinitionGuid
+      | extend privileged = roleName in~ ('Owner', 'User Access Administrator', 'Role Based Access Control Administrator')
+      | project id, roleName, roleType, principalId, principalType, privileged, hasCondition, createdOn
+      | order by privileged desc, roleName asc
+    cache: { ttl: 120 }
+  defender:
+    source: resourceGraph
+    query: |
+      // af:azure.subscription#defender
+      securityresources
+      | where type =~ 'microsoft.security/pricings' and subscriptionId == '${ $guid(params.id) }'
+      | project id, plan = name, pricingTier = tostring(properties.pricingTier), subPlan = tostring(properties.subPlan), enablementTime = todatetime(properties.enablementTime), deprecated = tobool(properties.deprecated)
+      | where deprecated != true
+      | order by plan asc
+    transform: >-
+      ${ (
+        $rows := [value.value];
+        { 'rows': $rows, 'enabled': $count($rows[pricingTier = 'Standard']), 'total': $count($rows) }
+      ) }
+    requires:
+      azureRoles: [Security Reader]
+    cache: { ttl: 600 }
+
+header:
+  title: ${ subscription.displayName }
+  subtitle: ${ 'Subscription · ' & subscription.subscriptionId }
+  status: "${ subscription.state = 'Enabled' ? 'ok' : subscription.state in ['Warned', 'PastDue'] ? 'warn' : 'crit' }"
+  statusLabel: ${ subscription.state }
+  ids:
+    Subscription id: ${ subscription.subscriptionId }
+    Tenant id: ${ subscription.tenantId }
+
+actions:
+  - playbook: azure.create-resource-group
+    label: Create resource group
+    icon: folder-plus
+    inputs:
+      subscriptionId: ${ params.id }
+    when: ${ subscription.state = 'Enabled' }
+  - label: Show resources
+    icon: cube
+    href: /p/azure.resources?subscriptionId=${ $encode(params.id) }
+  - label: Open in Azure portal
+    icon: arrow-square-out
+    href: https://portal.azure.com/#resource/subscriptions/${ $encode(params.id) }/overview
+
+tabs:
+  - id: overview
+    label: Overview
+    layout:
+      - widget: kpi
+        data: types.total
+        label: Resources
+        format: number
+      - widget: kpi
+        data: types.types
+        label: Resource types
+        format: number
+      - widget: kpi
+        data: defender.enabled
+        label: Defender plans on
+        format: number
+        status: "${ value = 0 ? 'warn' : 'ok' }"
+      - widget: keyValue
+        span: 6
+        data: subscription
+        fields:
+          - { field: displayName, label: Name }
+          - { field: subscriptionId, label: Subscription id, kind: id }
+          - field: state
+            label: State
+            kind: status
+            map: { Enabled: [ok, Enabled], Warned: [warn, Warned], PastDue: [warn, Past due], Disabled: [crit, Disabled], Deleted: [crit, Deleted] }
+          - { field: authorizationSource, label: Access via }
+          - { field: subscriptionPolicies.quotaId, label: Offer }
+          - { field: subscriptionPolicies.spendingLimit, label: Spending limit }
+          - { field: subscriptionPolicies.locationPlacementId, label: Location placement }
+          - { field: tenantId, label: Tenant id, kind: id }
+      - widget: chart
+        title: Top resource types
+        span: 6
+        type: bar
+        data: types.top
+        x: type
+        y: resources
+        format: number
+  - id: groups
+    label: Resource groups
+    layout:
+      - widget: table
+        span: 12
+        data: groups
+        rowKey: id
+        selection: multi
+        search: true
+        columns:
+          - { field: name, label: Resource group, sortable: true }
+          - { field: location, label: Location, filter: facet }
+          - { field: tags, label: Tags, kind: tags }
+          - { field: tagCount, label: Tag count, kind: number, filter: range, hidden: true }
+          - field: provisioningState
+            label: State
+            kind: status
+            map: { Succeeded: [ok, Succeeded], Deleting: [warn, Deleting], Failed: [crit, Failed] }
+            filter: facet
+          - { field: managedBy, label: Managed by, kind: code, hidden: true }
+          - { field: id, label: Resource id, kind: code, hidden: true }
+        inspect:
+          page: azure.resource
+          params:
+            id: ${ row.id }
+        bulkActions:
+          - playbook: azure.add-tags
+            label: Add or update a tag
+            icon: tag
+            forEach:
+              inputs:
+                resourceId: ${ row.id }
+              concurrency: 5
+            maxItems: 200
+        empty:
+          title: This subscription has no resource groups
+          body: Create one with Create resource group.
+  - id: access
+    label: Access
+    layout:
+      - widget: markdown
+        span: 12
+        text: Role assignments made directly on this subscription. Assignments inherited from management groups and those on resource groups or resources are on the [Role assignments](/p/azure.role-assignments) page.
+      - widget: table
+        span: 12
+        data: access.value
+        rowKey: id
+        selection: multi
+        search: true
+        columns:
+          - { field: roleName, label: Role, kind: identity, secondary: roleType, filter: facet }
+          - field: privileged
+            label: Privileged
+            kind: status
+            map: { "true": [warn, Privileged], "false": [neutral, Standard] }
+            filter: facet
+          - { field: principalId, label: Principal, kind: guid }
+          - { field: principalType, label: Principal type, filter: facet }
+          - { field: hasCondition, label: Condition, kind: boolean }
+          - { field: createdOn, label: Assigned, kind: date, filter: date }
+        rowActions:
+          - playbook: azure.remove-role-assignment
+            label: Remove assignment
+            icon: user-minus
+            inputs:
+              assignmentId: ${ row.id }
+        bulkActions:
+          - playbook: azure.remove-role-assignment
+            label: Remove assignments
+            icon: user-minus
+            forEach:
+              inputs:
+                assignmentId: ${ row.id }
+              concurrency: 3
+            maxItems: 50
+        empty:
+          title: No direct role assignments
+          body: Access to this subscription is inherited from a management group, or assigned on resource groups and resources.
+  - id: defender
+    label: Defender for Cloud
+    layout:
+      - widget: markdown
+        span: 12
+        text: Microsoft Defender for Cloud plans are enabled and billed per subscription. Plans marked Off only get the free foundational CSPM recommendations.
+      - widget: table
+        span: 12
+        data: defender.rows
+        rowKey: id
+        columns:
+          - { field: plan, label: Plan, sortable: true }
+          - field: pricingTier
+            label: Status
+            kind: status
+            map: { Standard: [ok, "On"], Free: [neutral, "Off"] }
+            filter: facet
+          - { field: subPlan, label: Sub-plan }
+          - { field: enablementTime, label: Enabled since, kind: date }
+        rowActions:
+          - label: Open environment settings
+            icon: arrow-square-out
+            href: https://portal.azure.com/#view/Microsoft_Azure_Security/SecurityMenuBlade/~/EnvironmentSettings
+        empty:
+          title: No Defender for Cloud plan data
+          body: Your account needs Security Reader (or Reader) on this subscription to see Defender for Cloud plans.

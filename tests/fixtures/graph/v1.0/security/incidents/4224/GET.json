@@ -1,0 +1,251 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#security/incidents(alerts())/$entity",
+  "id": "4224",
+  "tenantId": "00000000-0000-4000-8000-0000000000f0",
+  "status": "active",
+  "incidentWebUrl": "https://security.microsoft.com/incidents/4224?tid=00000000-0000-4000-8000-0000000000f0",
+  "redirectIncidentId": null,
+  "displayName": "Multi-stage incident involving Initial access & Credential access involving one user",
+  "createdDateTime": "2026-10-15T06:00:00Z",
+  "lastUpdateDateTime": "2026-10-15T08:00:00Z",
+  "assignedTo": null,
+  "classification": "unknown",
+  "determination": "unknown",
+  "severity": "high",
+  "customTags": [],
+  "systemTags": [],
+  "description": null,
+  "summary": "A password spray from 203.0.113.45 was followed by a successful sign-in for one user and a new inbox rule that moves mail to RSS Feeds.",
+  "lastModifiedBy": "Automation",
+  "resolvingComment": null,
+  "comments": [
+    {
+      "comment": "Triage started. Checking sign-in logs for avery@example.com.",
+      "createdByDisplayName": "Alex Admin",
+      "createdDateTime": "2026-10-15T07:00:00Z"
+    },
+    {
+      "comment": "User confirmed by phone that the 03:12 sign-in from NL was not theirs. Escalating.",
+      "createdByDisplayName": "Alex Admin",
+      "createdDateTime": "2026-10-15T08:00:00Z"
+    }
+  ],
+  "alerts": [
+    {
+      "id": "da638647315200000001_-1194836001",
+      "providerAlertId": "00000001-0000-4000-8000-00000000c0de",
+      "incidentId": "4224",
+      "status": "new",
+      "severity": "high",
+      "classification": null,
+      "determination": null,
+      "serviceSource": "azureAdIdentityProtection",
+      "detectionSource": "azureAdIdentityProtection",
+      "productName": "Microsoft Entra ID Protection",
+      "detectorId": "00000001-1111-4000-8000-000000000000",
+      "tenantId": "00000000-0000-4000-8000-0000000000f0",
+      "title": "Password spray from a malicious IP address",
+      "description": "Multiple accounts received failed sign-in attempts from the same IP address, consistent with a password spray. One account (Avery Engineer) then signed in successfully from that address.",
+      "recommendedActions": "1. Confirm with the user whether the successful sign-in was theirs.\n2. If not, confirm the user compromised, reset the password and revoke sessions.\n3. Block the source IP address with a named location and Conditional Access.",
+      "category": "CredentialAccess",
+      "assignedTo": null,
+      "alertWebUrl": "https://security.microsoft.com/alerts/da638647315200000001_-1194836001?tid=00000000-0000-4000-8000-0000000000f0",
+      "incidentWebUrl": "https://security.microsoft.com/incidents/4224?tid=00000000-0000-4000-8000-0000000000f0",
+      "actorDisplayName": null,
+      "threatDisplayName": null,
+      "threatFamilyName": null,
+      "mitreTechniques": [
+        "T1110.003"
+      ],
+      "createdDateTime": "2026-10-15T06:00:00Z",
+      "lastUpdateDateTime": "2026-10-15T07:00:00Z",
+      "resolvedDateTime": null,
+      "firstActivityDateTime": "2026-10-15T05:00:00Z",
+      "lastActivityDateTime": "2026-10-15T06:00:00Z",
+      "comments": [
+        {
+          "comment": "Triage started. Checking sign-in logs for avery@example.com.",
+          "createdByDisplayName": "Alex Admin",
+          "createdDateTime": "2026-10-15T07:00:00Z"
+        },
+        {
+          "comment": "User confirmed by phone that the 03:12 sign-in from NL was not theirs.",
+          "createdByDisplayName": "Alex Admin",
+          "createdDateTime": "2026-10-15T08:00:00Z"
+        }
+      ],
+      "evidence": [
+        {
+          "@odata.type": "#microsoft.graph.security.userEvidence",
+          "createdDateTime": "2026-10-15T06:00:00Z",
+          "verdict": "suspicious",
+          "remediationStatus": "none",
+          "remediationStatusDetails": null,
+          "roles": [
+            "compromised"
+          ],
+          "tags": [],
+          "userAccount": {
+            "accountName": "avery",
+            "domainName": "example.com",
+            "userSid": null,
+            "azureAdUserId": "30000000-0000-4000-8000-000000000001",
+            "userPrincipalName": "avery@example.com",
+            "displayName": "Avery Engineer"
+          }
+        },
+        {
+          "@odata.type": "#microsoft.graph.security.userEvidence",
+          "createdDateTime": "2026-10-15T06:00:00Z",
+          "verdict": "suspicious",
+          "remediationStatus": "none",
+          "remediationStatusDetails": null,
+          "roles": [
+            "suspicious"
+          ],
+          "tags": [],
+          "userAccount": {
+            "accountName": "farah.haddad",
+            "domainName": "example.com",
+            "userSid": null,
+            "azureAdUserId": "10000000-0000-4000-8000-000000000006",
+            "userPrincipalName": "farah.haddad@example.com",
+            "displayName": "Farah Haddad"
+          }
+        },
+        {
+          "@odata.type": "#microsoft.graph.security.ipEvidence",
+          "createdDateTime": "2026-10-15T06:00:00Z",
+          "verdict": "malicious",
+          "remediationStatus": "none",
+          "roles": [
+            "attacker"
+          ],
+          "tags": [],
+          "ipAddress": "203.0.113.45",
+          "countryLetterCode": "NL"
+        }
+      ],
+      "systemTags": []
+    },
+    {
+      "id": "da638647315200000002_-1194836002",
+      "providerAlertId": "00000002-0000-4000-8000-00000000c0de",
+      "incidentId": "4224",
+      "status": "new",
+      "severity": "medium",
+      "classification": null,
+      "determination": null,
+      "serviceSource": "azureAdIdentityProtection",
+      "detectionSource": "azureAdIdentityProtection",
+      "productName": "Microsoft Entra ID Protection",
+      "detectorId": "00000002-1111-4000-8000-000000000000",
+      "tenantId": "00000000-0000-4000-8000-0000000000f0",
+      "title": "Unfamiliar sign-in properties",
+      "description": "",
+      "recommendedActions": "",
+      "category": "InitialAccess",
+      "assignedTo": null,
+      "alertWebUrl": "https://security.microsoft.com/alerts/da638647315200000002_-1194836002?tid=00000000-0000-4000-8000-0000000000f0",
+      "incidentWebUrl": "https://security.microsoft.com/incidents/4224?tid=00000000-0000-4000-8000-0000000000f0",
+      "actorDisplayName": null,
+      "threatDisplayName": null,
+      "threatFamilyName": null,
+      "mitreTechniques": [
+        "T1078.004"
+      ],
+      "createdDateTime": "2026-10-15T06:00:00Z",
+      "lastUpdateDateTime": "2026-10-15T07:00:00Z",
+      "resolvedDateTime": null,
+      "firstActivityDateTime": "2026-10-15T05:00:00Z",
+      "lastActivityDateTime": "2026-10-15T06:00:00Z",
+      "comments": [],
+      "evidence": [
+        {
+          "@odata.type": "#microsoft.graph.security.userEvidence",
+          "createdDateTime": "2026-10-15T06:00:00Z",
+          "verdict": "suspicious",
+          "remediationStatus": "none",
+          "remediationStatusDetails": null,
+          "roles": [
+            "compromised"
+          ],
+          "tags": [],
+          "userAccount": {
+            "accountName": "avery",
+            "domainName": "example.com",
+            "userSid": null,
+            "azureAdUserId": "30000000-0000-4000-8000-000000000001",
+            "userPrincipalName": "avery@example.com",
+            "displayName": "Avery Engineer"
+          }
+        },
+        {
+          "@odata.type": "#microsoft.graph.security.ipEvidence",
+          "createdDateTime": "2026-10-15T06:00:00Z",
+          "verdict": "suspicious",
+          "remediationStatus": "none",
+          "roles": [],
+          "tags": [],
+          "ipAddress": "203.0.113.45",
+          "countryLetterCode": "NL"
+        }
+      ],
+      "systemTags": []
+    },
+    {
+      "id": "da638647315200000003_-1194836003",
+      "providerAlertId": "00000003-0000-4000-8000-00000000c0de",
+      "incidentId": "4224",
+      "status": "inProgress",
+      "severity": "medium",
+      "classification": null,
+      "determination": null,
+      "serviceSource": "microsoftDefenderForCloudApps",
+      "detectionSource": "microsoftDefenderForCloudApps",
+      "productName": "Microsoft Defender for Cloud Apps",
+      "detectorId": "00000003-1111-4000-8000-000000000000",
+      "tenantId": "00000000-0000-4000-8000-0000000000f0",
+      "title": "Suspicious inbox manipulation rule",
+      "description": "",
+      "recommendedActions": "",
+      "category": "Exfiltration",
+      "assignedTo": "alex.admin@example.com",
+      "alertWebUrl": "https://security.microsoft.com/alerts/da638647315200000003_-1194836003?tid=00000000-0000-4000-8000-0000000000f0",
+      "incidentWebUrl": "https://security.microsoft.com/incidents/4224?tid=00000000-0000-4000-8000-0000000000f0",
+      "actorDisplayName": null,
+      "threatDisplayName": null,
+      "threatFamilyName": null,
+      "mitreTechniques": [
+        "T1114.003",
+        "T1564.008"
+      ],
+      "createdDateTime": "2026-10-15T07:00:00Z",
+      "lastUpdateDateTime": "2026-10-15T08:00:00Z",
+      "resolvedDateTime": null,
+      "firstActivityDateTime": "2026-10-15T06:00:00Z",
+      "lastActivityDateTime": "2026-10-15T07:00:00Z",
+      "comments": [],
+      "evidence": [
+        {
+          "@odata.type": "#microsoft.graph.security.mailboxEvidence",
+          "createdDateTime": "2026-10-15T06:00:00Z",
+          "verdict": "suspicious",
+          "remediationStatus": "none",
+          "roles": [
+            "compromised"
+          ],
+          "tags": [],
+          "primaryAddress": "avery@example.com",
+          "displayName": "Avery Engineer",
+          "userAccount": {
+            "azureAdUserId": "30000000-0000-4000-8000-000000000001",
+            "userPrincipalName": "avery@example.com",
+            "displayName": "Avery Engineer"
+          }
+        }
+      ],
+      "systemTags": []
+    }
+  ]
+}

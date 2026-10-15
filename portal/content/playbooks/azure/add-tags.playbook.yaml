@@ -1,0 +1,98 @@
+$schema: ../../../packages/schemas/generated/playbook.schema.json
+kind: playbook
+id: azure.add-tags
+version: 1.0.0
+title: Add or update a tag
+summary: Adds a tag to an Azure resource, resource group or subscription, or changes its value. Other tags are kept (Tags API merge).
+owner: azure-team
+tags: [azure, tags, governance]
+risk: low
+mode: write
+requires:
+  portalRoles: [Portal.Operator]
+  scopes:
+    arm: [user_impersonation]
+  azureRoles: [Tag Contributor]
+confirm:
+  type: click
+  message: Set this tag?
+approval:
+  required: false
+
+inputs:
+  resourceId: { type: string, label: Resource, picker: resource, pattern: "^/subscriptions/[0-9a-fA-F-]{36}(/.*)?$", description: "Resource, resource group or subscription id." }
+  tagName: { type: string, label: Tag name, maxLength: 512, pattern: "^[^<>%&\\\\?/]+$", placeholder: owner }
+  tagValue: { type: string, label: Value, maxLength: 256, placeholder: platform-team }
+
+steps:
+  - id: current
+    type: arm
+    mode: read
+    describe: Read the current tags
+    request:
+      method: GET
+      path: ${ $join($split(inputs.resourceId, '/')[$ != ''].('/' & $encode($)), '') }/providers/Microsoft.Resources/tags/default
+      apiVersion: "2021-04-01"
+
+  - id: previous
+    type: transform
+    expression: ${ $lookup(steps.current.output.properties.tags, inputs.tagName) }
+
+  - id: roomForTag
+    type: assert
+    that: ${ $exists(steps.previous.output) or $count($keys(steps.current.output.properties.tags)) < 50 }
+    message: This resource already has 50 tags, the Azure maximum. Remove one first.
+
+  - id: merge
+    type: arm
+    mode: write
+    when: ${ $not(steps.previous.output = inputs.tagValue) }
+    describe: ${ 'Set tag ' & inputs.tagName & ' = ' & inputs.tagValue }
+    request:
+      method: PATCH
+      path: ${ $join($split(inputs.resourceId, '/')[$ != ''].('/' & $encode($)), '') }/providers/Microsoft.Resources/tags/default
+      apiVersion: "2021-04-01"
+      body: >-
+        ${ { 'operation': 'Merge', 'properties': { 'tags': { inputs.tagName: inputs.tagValue } } } }
+    compensate:
+      type: arm
+      describe: "${ $exists(steps.previous.output) ? 'Restore tag ' & inputs.tagName & ' = ' & steps.previous.output : 'Remove tag ' & inputs.tagName }"
+      request:
+        method: PATCH
+        path: ${ $join($split(inputs.resourceId, '/')[$ != ''].('/' & $encode($)), '') }/providers/Microsoft.Resources/tags/default
+        apiVersion: "2021-04-01"
+        body: >-
+          ${ $exists(steps.previous.output)
+             ? { 'operation': 'Merge', 'properties': { 'tags': { inputs.tagName: steps.previous.output } } }
+             : { 'operation': 'Delete', 'properties': { 'tags': { inputs.tagName: inputs.tagValue } } } }
+
+outputs:
+  summary: >-
+    ${ steps.previous.output = inputs.tagValue
+       ? 'Tag ' & inputs.tagName & ' already had this value; nothing changed.'
+       : 'Tag ' & inputs.tagName & ' set to ' & inputs.tagValue & ' on ' & $split(inputs.resourceId, '/')[-1] & '.' }
+
+tests:
+  - name: adds a new tag
+    inputs: { resourceId: /subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-web/providers/Microsoft.Web/sites/app-example-portal, tagName: owner, tagValue: web-team }
+    mocks:
+      current: { properties: { tags: { env: prod } } }
+    expect:
+      status: succeeded
+      plan: [merge]
+      outputs: { summary: Tag owner set to web-team on app-example-portal. }
+  - name: skips a tag that already has the value
+    inputs: { resourceId: /subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-functions, tagName: env, tagValue: prod }
+    mocks:
+      current: { properties: { tags: { env: prod, owner: platform-team } } }
+    expect:
+      status: succeeded
+      plan: []
+      steps: { merge: skipped }
+  - name: refuses a 51st tag
+    inputs: { resourceId: /subscriptions/00000000-0000-4000-8000-0000000000a1, tagName: costCenter, tagValue: CC-1001 }
+    mocks:
+      current:
+        properties:
+          tags: { t01: a, t02: a, t03: a, t04: a, t05: a, t06: a, t07: a, t08: a, t09: a, t10: a, t11: a, t12: a, t13: a, t14: a, t15: a, t16: a, t17: a, t18: a, t19: a, t20: a, t21: a, t22: a, t23: a, t24: a, t25: a, t26: a, t27: a, t28: a, t29: a, t30: a, t31: a, t32: a, t33: a, t34: a, t35: a, t36: a, t37: a, t38: a, t39: a, t40: a, t41: a, t42: a, t43: a, t44: a, t45: a, t46: a, t47: a, t48: a, t49: a, t50: a }
+    expect: { status: failed, failedStep: roomForTag }

@@ -1,0 +1,160 @@
+$schema: ../../../packages/schemas/generated/playbook.schema.json
+kind: playbook
+id: azure.assign-role
+version: 1.0.0
+title: Assign Azure role
+summary: Grants an Azure RBAC role to a user, group or service principal at a management group, subscription, resource group or resource. Needs approval by a second engineer.
+owner: azure-team
+tags: [azure, rbac, access]
+risk: high
+mode: write
+requires:
+  portalRoles: [Portal.Operator]
+  scopes:
+    arm: [user_impersonation]
+    graph: [Directory.Read.All]
+  azureRoles: [Role Based Access Control Administrator]
+confirm:
+  type: typed
+  value: ${ steps.role.output.value[0].properties.roleName }
+  message: Type the role name to confirm this assignment.
+approval:
+  required: true
+  approvers: [Playbook.Approver]
+  minApprovals: 1
+  expiresIn: PT8H
+
+inputs:
+  scope:
+    type: string
+    label: Scope
+    pattern: "^/(subscriptions/[0-9a-fA-F-]{36}(/.*)?|providers/[Mm]icrosoft\\.[Mm]anagement/management[Gg]roups/[^/]+)$"
+    placeholder: /subscriptions/<id>/resourceGroups/<name>
+    description: Management group, subscription, resource group or resource id.
+  principalId: { type: string, format: guid, label: Principal object id, description: "Object id of the user, group or service principal (enterprise app)." }
+  principalType:
+    type: enum
+    label: Principal type
+    default: Group
+    values:
+      - { value: Group, label: Group (recommended) }
+      - { value: User, label: User }
+      - { value: ServicePrincipal, label: Service principal / managed identity }
+  roleName: { type: string, label: Role, placeholder: Reader, description: "Built-in or custom role name exactly as Azure shows it." }
+  reason: { type: string, label: Justification, minLength: 10, multiline: true, description: "Shown to the approver and recorded in the assignment description." }
+
+steps:
+  - id: scopePath
+    type: transform
+    expression: ${ $join($split(inputs.scope, '/')[$ != ''].('/' & $encode($)), '') }
+
+  - id: role
+    type: arm
+    mode: read
+    describe: Find the role definition by name
+    request:
+      method: GET
+      path: ${ steps.scopePath.output }/providers/Microsoft.Authorization/roleDefinitions
+      apiVersion: "2022-04-01"
+      query:
+        $filter: ${ 'roleName eq ' & $odata(inputs.roleName) }
+
+  - id: roleFound
+    type: assert
+    that: ${ $count(steps.role.output.value) = 1 }
+    message: ${ 'No role named ' & inputs.roleName & ' is available at this scope.' }
+
+  - id: principal
+    type: graph
+    mode: read
+    describe: Look up the principal
+    request:
+      method: GET
+      path: /directoryObjects/${ $encode($guid(inputs.principalId)) }
+      query:
+        $select: id,displayName,userPrincipalName,appId
+
+  - id: existing
+    type: arm
+    mode: read
+    describe: List the principal's assignments that apply at this scope
+    request:
+      method: GET
+      path: ${ steps.scopePath.output }/providers/Microsoft.Authorization/roleAssignments
+      apiVersion: "2022-04-01"
+      query:
+        $filter: ${ 'atScope() and assignedTo(' & $odata($guid(inputs.principalId)) & ')' }
+
+  - id: notAssigned
+    type: assert
+    that: >-
+      ${ (
+        $role := $lowercase(steps.role.output.value[0].name);
+        $scope := $lowercase(inputs.scope);
+        $count(steps.existing.output.value[
+          $contains($lowercase(properties.roleDefinitionId), $role) and $lowercase(properties.scope) = $scope
+        ]) = 0
+      ) }
+    message: ${ steps.principal.output.displayName & ' already has ' & inputs.roleName & ' at this scope.' }
+
+  - id: assign
+    type: arm
+    mode: write
+    describe: ${ 'Assign ' & steps.role.output.value[0].properties.roleName & ' to ' & steps.principal.output.displayName & ' (' & inputs.principalType & ') at ' & inputs.scope }
+    # The assignment name must be a new GUID; the run id is one, so retries of this run reuse it (idempotent PUT).
+    request:
+      method: PUT
+      path: ${ steps.scopePath.output }/providers/Microsoft.Authorization/roleAssignments/${ $encode($guid(run.id)) }
+      apiVersion: "2022-04-01"
+      body: >-
+        ${ { 'properties': {
+          'roleDefinitionId': steps.role.output.value[0].id,
+          'principalId': $guid(inputs.principalId),
+          'principalType': inputs.principalType,
+          'description': $substring(inputs.reason, 0, 1000)
+        } } }
+    compensate:
+      type: arm
+      describe: Remove the assignment again
+      request:
+        method: DELETE
+        path: ${ steps.scopePath.output }/providers/Microsoft.Authorization/roleAssignments/${ $encode($guid(run.id)) }
+        apiVersion: "2022-04-01"
+    dryRunOutput:
+      id: ${ inputs.scope & '/providers/Microsoft.Authorization/roleAssignments/' & run.id }
+
+outputs:
+  summary: ${ steps.role.output.value[0].properties.roleName & ' assigned to ' & steps.principal.output.displayName & ' at ' & inputs.scope & '.' }
+  assignmentId: ${ steps.assign.output.id }
+
+tests:
+  - name: refuses an unknown role name
+    inputs: { scope: /subscriptions/00000000-0000-4000-8000-0000000000a1, principalId: 30000000-0000-4000-8000-000000000101, principalType: Group, roleName: Reeder, reason: access request REQ-2041 }
+    mocks:
+      role: { value: [] }
+    expect: { status: failed, failedStep: roleFound }
+  - name: refuses a duplicate assignment
+    inputs: { scope: /subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-functions, principalId: 30000000-0000-4000-8000-000000000101, principalType: Group, roleName: Website Contributor, reason: access request REQ-2042 }
+    mocks:
+      role: { value: [{ id: /subscriptions/00000000-0000-4000-8000-0000000000a1/providers/Microsoft.Authorization/roleDefinitions/de139f84-1756-47ae-9be6-808fbbe84772, name: de139f84-1756-47ae-9be6-808fbbe84772, properties: { roleName: Website Contributor } }] }
+      principal: { id: 30000000-0000-4000-8000-000000000101, displayName: AF Platform Engineers }
+      existing:
+        value:
+          - properties:
+              roleDefinitionId: /subscriptions/00000000-0000-4000-8000-0000000000a1/providers/Microsoft.Authorization/roleDefinitions/de139f84-1756-47ae-9be6-808fbbe84772
+              scope: /subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-functions
+    expect: { status: failed, failedStep: notAssigned }
+  - name: plans the assignment
+    inputs: { scope: /subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-functions, principalId: 30000000-0000-4000-8000-000000000101, principalType: Group, roleName: Website Contributor, reason: access request REQ-2043 }
+    mocks:
+      role: { value: [{ id: /subscriptions/00000000-0000-4000-8000-0000000000a1/providers/Microsoft.Authorization/roleDefinitions/de139f84-1756-47ae-9be6-808fbbe84772, name: de139f84-1756-47ae-9be6-808fbbe84772, properties: { roleName: Website Contributor } }] }
+      principal: { id: 30000000-0000-4000-8000-000000000101, displayName: AF Platform Engineers }
+      existing:
+        value:
+          - properties:
+              roleDefinitionId: /subscriptions/00000000-0000-4000-8000-0000000000a1/providers/Microsoft.Authorization/roleDefinitions/acdd72a7-3385-48ef-bd42-f606fba81ae7
+              scope: /subscriptions/00000000-0000-4000-8000-0000000000a1
+    expect:
+      status: succeeded
+      plan: [assign]
+      outputs: { summary: Website Contributor assigned to AF Platform Engineers at /subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-functions. }

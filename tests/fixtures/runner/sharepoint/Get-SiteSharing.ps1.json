@@ -1,0 +1,147 @@
+[
+  {
+    "tenant": {
+      "sharingCapability": "ExternalUserAndGuestSharing",
+      "oneDriveSharingCapability": "ExternalUserSharingOnly",
+      "defaultSharingLinkType": "Internal",
+      "defaultLinkPermission": "View",
+      "requireAnonymousLinksExpireInDays": 0,
+      "sharingDomainRestrictionMode": "None",
+      "preventExternalUsersFromResharing": false
+    },
+    "summary": {
+      "total": 11,
+      "bySharingCapability": [
+        {
+          "sharingCapability": "Disabled",
+          "count": 5
+        },
+        {
+          "sharingCapability": "ExternalUserSharingOnly",
+          "count": 1
+        },
+        {
+          "sharingCapability": "ExternalUserAndGuestSharing",
+          "count": 3
+        },
+        {
+          "sharingCapability": "ExistingExternalUserSharingOnly",
+          "count": 2
+        }
+      ],
+      "anyoneLinks": 3
+    },
+    "sites": [
+      {
+        "url": "https://exampleorg.sharepoint.com/sites/allcompany",
+        "title": "All Company",
+        "template": "GROUP#0",
+        "owner": "eli.obrien@example.com",
+        "sharingCapability": "Disabled",
+        "lastContentModified": "2026-10-15T09:00:00Z",
+        "storageUsedMB": 392914,
+        "lockState": "Unlock"
+      },
+      {
+        "url": "https://exampleorg.sharepoint.com/sites/intranet",
+        "title": "Example Org Intranet",
+        "template": "SITEPAGEPUBLISHING#0",
+        "owner": "leah.moreau@example.com",
+        "sharingCapability": "Disabled",
+        "lastContentModified": "2026-10-15T09:00:00Z",
+        "storageUsedMB": 36240,
+        "lockState": "Unlock"
+      },
+      {
+        "url": "https://exampleorg.sharepoint.com/sites/ProjectAtlas",
+        "title": "Project Atlas",
+        "template": "GROUP#0",
+        "owner": "hana.kim@example.com",
+        "sharingCapability": "ExternalUserSharingOnly",
+        "lastContentModified": "2026-10-14T09:00:00Z",
+        "storageUsedMB": 91553,
+        "lockState": "Unlock"
+      },
+      {
+        "url": "https://exampleorg.sharepoint.com/sites/PartnerCollaborationFabrikam",
+        "title": "Partner Collaboration – Fabrikam",
+        "template": "GROUP#0",
+        "owner": "isaac.mensah@example.com",
+        "sharingCapability": "ExternalUserAndGuestSharing",
+        "lastContentModified": "2026-10-13T09:00:00Z",
+        "storageUsedMB": 20981,
+        "lockState": "Unlock"
+      },
+      {
+        "url": "https://exampleorg.sharepoint.com/sites/MarketingCampaigns",
+        "title": "Marketing Campaigns",
+        "template": "GROUP#0",
+        "owner": "",
+        "sharingCapability": "ExternalUserAndGuestSharing",
+        "lastContentModified": "2026-10-09T09:00:00Z",
+        "storageUsedMB": 134468,
+        "lockState": "Unlock"
+      },
+      {
+        "url": "https://exampleorg.sharepoint.com/sites/SalesEMEA",
+        "title": "Sales EMEA",
+        "template": "GROUP#0",
+        "owner": "gabriel.nunes@example.com",
+        "sharingCapability": "ExistingExternalUserSharingOnly",
+        "lastContentModified": "2026-10-12T09:00:00Z",
+        "storageUsedMB": 51498,
+        "lockState": "Unlock"
+      },
+      {
+        "url": "https://exampleorg.sharepoint.com/sites/HRPolicies",
+        "title": "HR Policies",
+        "template": "STS#3",
+        "owner": "leah.moreau@example.com",
+        "sharingCapability": "Disabled",
+        "lastContentModified": "2026-10-01T09:00:00Z",
+        "storageUsedMB": 3910,
+        "lockState": "Unlock"
+      },
+      {
+        "url": "https://exampleorg.sharepoint.com/sites/ProjectOrion",
+        "title": "Project Orion (retired)",
+        "template": "GROUP#0",
+        "owner": "dana@example.com",
+        "sharingCapability": "ExternalUserAndGuestSharing",
+        "lastContentModified": "2026-03-17T09:00:00Z",
+        "storageUsedMB": 69618,
+        "lockState": "Unlock"
+      },
+      {
+        "url": "https://exampleorg.sharepoint.com/sites/LegalReview",
+        "title": "Legal Review",
+        "template": "GROUP#0",
+        "owner": "",
+        "sharingCapability": "Disabled",
+        "lastContentModified": "2026-09-04T09:00:00Z",
+        "storageUsedMB": 9155,
+        "lockState": "Unlock"
+      },
+      {
+        "url": "https://exampleorg.sharepoint.com/sites/ITOperations",
+        "title": "IT Operations",
+        "template": "GROUP#0",
+        "owner": "eli.obrien@example.com",
+        "sharingCapability": "ExistingExternalUserSharingOnly",
+        "lastContentModified": "2026-10-15T09:00:00Z",
+        "storageUsedMB": 16212,
+        "lockState": "Unlock"
+      },
+      {
+        "url": "https://exampleorg.sharepoint.com/sites/Archive2019",
+        "title": "Archive 2019",
+        "template": "STS#0",
+        "owner": "",
+        "sharingCapability": "Disabled",
+        "lastContentModified": "2024-11-14T09:00:00Z",
+        "storageUsedMB": 247955,
+        "lockState": "ReadOnly"
+      }
+    ]
+  }
+]

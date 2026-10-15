@@ -1,0 +1,41 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#teams('10000000-0000-4000-8000-000000000204')/channels",
+  "value": [
+    {
+      "id": "19:0002040general@thread.tacv2",
+      "displayName": "General",
+      "description": null,
+      "membershipType": "standard",
+      "createdDateTime": "2024-07-17T09:00:00Z",
+      "email": "General.it-operations@example.com",
+      "webUrl": "https://teams.microsoft.com/l/channel/19%3a0002040%40thread.tacv2/General?groupId=10000000-0000-4000-8000-000000000204"
+    },
+    {
+      "id": "19:0002041incidents@thread.tacv2",
+      "displayName": "Incidents",
+      "description": "Incidents channel",
+      "membershipType": "standard",
+      "createdDateTime": "2024-07-20T09:00:00Z",
+      "email": "Incidents.it-operations@example.com",
+      "webUrl": "https://teams.microsoft.com/l/channel/19%3a0002041%40thread.tacv2/Incidents?groupId=10000000-0000-4000-8000-000000000204"
+    },
+    {
+      "id": "19:0002042changeboard@thread.tacv2",
+      "displayName": "Change board",
+      "description": "Change board channel",
+      "membershipType": "standard",
+      "createdDateTime": "2024-07-23T09:00:00Z",
+      "email": "Changeboard.it-operations@example.com",
+      "webUrl": "https://teams.microsoft.com/l/channel/19%3a0002042%40thread.tacv2/Change%20board?groupId=10000000-0000-4000-8000-000000000204"
+    },
+    {
+      "id": "19:0002043vendors@thread.tacv2",
+      "displayName": "Vendors",
+      "description": "Vendors channel",
+      "membershipType": "shared",
+      "createdDateTime": "2024-07-26T09:00:00Z",
+      "email": "",
+      "webUrl": "https://teams.microsoft.com/l/channel/19%3a0002043%40thread.tacv2/Vendors?groupId=10000000-0000-4000-8000-000000000204"
+    }
+  ]
+}

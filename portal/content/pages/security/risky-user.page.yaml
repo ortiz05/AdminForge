@@ -1,0 +1,214 @@
+$schema: ../../../packages/schemas/generated/page.schema.json
+kind: page
+id: security.risky-user
+version: 1.0.0
+title: Risky user
+summary: One user's Identity Protection risk — current state, risk detections and the history of risk changes.
+owner: security-team
+tags: [security, identity-protection, risk]
+template: entity
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    graph: [IdentityRiskyUser.Read.All, IdentityRiskEvent.Read.All]
+  entraRoles: [Security Reader]
+  licences: [identityProtection]
+
+params:
+  id: { type: guid, label: User, required: true, hidden: true }
+  days:
+    type: enum
+    label: Detections from the last
+    facet: true
+    default: 90
+    values:
+      - { value: 7, label: 7 days }
+      - { value: 30, label: 30 days }
+      - { value: 90, label: 90 days }
+
+datasources:
+  risky:
+    source: graph
+    request:
+      path: /identityProtection/riskyUsers/${ $encode($guid(params.id)) }
+    cache: { ttl: 30 }
+  history:
+    source: graph
+    request:
+      path: /identityProtection/riskyUsers/${ $encode($guid(params.id)) }/history
+    paging: all
+    maxItems: 500
+    cache: { ttl: 60 }
+    # One readable event per history item, newest first.
+    transform: >-
+      ${ (
+        $detail := {
+          "none": "Risk detected",
+          "adminGeneratedTemporaryPassword": "Admin issued a temporary password",
+          "userPerformedSecuredPasswordChange": "User changed password securely",
+          "userPerformedSecuredPasswordReset": "User reset password securely",
+          "adminConfirmedSigninSafe": "Admin confirmed sign-in safe",
+          "aiConfirmedSigninSafe": "AI confirmed sign-in safe",
+          "userPassedMFADrivenByRiskBasedPolicy": "User passed MFA required by a risk policy",
+          "adminDismissedAllRiskForUser": "Admin dismissed all risk",
+          "adminConfirmedSigninCompromised": "Admin confirmed sign-in compromised",
+          "adminConfirmedUserCompromised": "Admin confirmed user compromised"
+        };
+        [(value.value^(>riskLastUpdatedDateTime)).{
+          "when": riskLastUpdatedDateTime,
+          "event": ($d := $lookup($detail, riskDetail); $d ? $d : riskDetail),
+          "riskLevel": riskLevel,
+          "riskState": riskState,
+          "detections": $join(activity.riskEventTypes, ', '),
+          "initiatedBy": initiatedBy
+        }]
+      ) }
+  detections:
+    source: graph
+    request:
+      path: /identityProtection/riskDetections
+      query:
+        $top: 200
+        $filter: "${ 'userId eq ' & $odata($guid(params.id)) & ' and detectedDateTime ge ' & $daysAgo($number(params.days)) }"
+    paging: cursor
+    cache: { ttl: 60 }
+
+header:
+  title: ${ risky.userDisplayName }
+  subtitle: ${ risky.userPrincipalName }
+  status: "${ risky.riskState = 'confirmedCompromised' or risky.riskLevel = 'high' ? 'crit' : risky.riskLevel = 'medium' ? 'warn' : risky.riskLevel = 'low' ? 'info' : 'ok' }"
+  statusLabel: >-
+    ${ ($lvl := {'high': 'High', 'medium': 'Medium', 'low': 'Low', 'none': 'No', 'hidden': 'Hidden'};
+        $st := {'atRisk': 'At risk', 'confirmedCompromised': 'Confirmed compromised', 'remediated': 'Remediated', 'dismissed': 'Dismissed', 'confirmedSafe': 'Confirmed safe'};
+        $lookup($lvl, risky.riskLevel) & ' risk · ' & $lookup($st, risky.riskState)) }
+  ids:
+    Object id: ${ risky.id }
+
+actions:
+  - playbook: security.confirm-risky-user-compromised
+    label: Confirm compromised
+    icon: skull
+    inputs:
+      userId: ${ params.id }
+    when: ${ risky.riskState != 'confirmedCompromised' and $not(risky.isDeleted = true) }
+  - playbook: security.dismiss-risky-user
+    label: Dismiss risk
+    icon: check-circle
+    inputs:
+      userId: ${ params.id }
+    when: ${ risky.riskState in ['atRisk', 'confirmedCompromised'] }
+  - label: Open user profile
+    icon: user
+    href: ${ '/p/identity.user?id=' & $encode(params.id) }
+  - label: Open in Entra admin center
+    icon: arrow-square-out
+    href: https://entra.microsoft.com/#view/Microsoft_AAD_IAM/IdentityProtectionMenuBlade/~/RiskyUsers
+
+tabs:
+  - id: overview
+    label: Overview
+    layout:
+      - widget: keyValue
+        span: 12
+        data: risky
+        fields:
+          - field: riskLevel
+            label: Risk level
+            kind: status
+            map: { high: [crit, High], medium: [warn, Medium], low: [info, Low], none: [ok, None], hidden: [neutral, Hidden] }
+          - field: riskState
+            label: Risk state
+            kind: status
+            map:
+              atRisk: [warn, At risk]
+              confirmedCompromised: [crit, Confirmed compromised]
+              remediated: [ok, Remediated]
+              dismissed: [neutral, Dismissed]
+              confirmedSafe: [ok, Confirmed safe]
+          - { field: riskDetail, label: Last action }
+          - { field: riskLastUpdatedDateTime, label: Risk last updated, kind: datetime }
+          - field: isProcessing
+            label: Processing
+            kind: status
+            map: { "true": [info, Risk is being recalculated], "false": [ok, Up to date] }
+          - { field: isDeleted, label: User deleted, kind: boolean }
+          - { field: userPrincipalName, label: Sign-in name, kind: id }
+  - id: detections
+    label: Risk detections
+    layout:
+      - widget: table
+        id: detections
+        span: 12
+        data: detections.value
+        rowKey: id
+        search: true
+        empty:
+          title: No risk detections in this period
+          body: Choose a longer period, or check the risk history — detections older than 90 days are no longer returned.
+        columns:
+          - field: riskEventType
+            label: Detection
+            kind: status
+            filter: facet
+            map:
+              unfamiliarFeatures: [warn, Unfamiliar sign-in properties]
+              anonymizedIPAddress: [warn, Anonymous IP address]
+              maliciousIPAddress: [crit, Malicious IP address]
+              leakedCredentials: [crit, Leaked credentials]
+              passwordSpray: [crit, Password spray]
+              impossibleTravel: [warn, Atypical travel]
+              unlikelyTravel: [warn, Atypical travel]
+              newCountry: [info, New country]
+              investigationsThreatIntelligence: [crit, Microsoft Entra threat intelligence]
+              suspiciousInboxManipulationRules: [warn, Suspicious inbox manipulation rules]
+              suspiciousInboxForwarding: [warn, Suspicious inbox forwarding]
+              mcasImpossibleTravel: [warn, Impossible travel]
+              anomalousToken: [crit, Anomalous token]
+              tokenIssuerAnomaly: [crit, Token issuer anomaly]
+              suspiciousBrowser: [warn, Suspicious browser]
+              attackerinTheMiddle: [crit, Attacker in the middle]
+              adminConfirmedUserCompromised: [crit, Admin confirmed user compromised]
+          - field: riskLevel
+            label: Level
+            kind: status
+            filter: facet
+            map: { high: [crit, High], medium: [warn, Medium], low: [info, Low], none: [ok, None], hidden: [neutral, Hidden] }
+          - field: riskState
+            label: State
+            kind: status
+            filter: facet
+            map:
+              atRisk: [warn, At risk]
+              confirmedCompromised: [crit, Confirmed compromised]
+              remediated: [ok, Remediated]
+              dismissed: [neutral, Dismissed]
+              confirmedSafe: [ok, Confirmed safe]
+          - { field: detectionTimingType, label: Timing, filter: facet }
+          - { field: activity, label: Activity, filter: facet }
+          - { field: ipAddress, label: IP address, kind: code }
+          - { field: location.countryOrRegion, label: Country, filter: facet }
+          - { field: location.city, label: City }
+          - { field: detectedDateTime, label: Detected, kind: datetime, sortable: true, filter: date }
+          - { field: source, label: Source, hidden: true }
+          - { field: requestId, label: Sign-in request id, kind: guid, hidden: true }
+          - { field: correlationId, label: Correlation id, kind: guid, hidden: true }
+  - id: history
+    label: Risk history
+    layout:
+      - widget: timeline
+        span: 12
+        data: history
+        ts: when
+        title: event
+        detail: "${ detections ? 'Detections: ' & detections : 'Risk level ' & riskLevel }"
+        status:
+          field: riskState
+          map:
+            atRisk: [warn, At risk]
+            confirmedCompromised: [crit, Confirmed compromised]
+            remediated: [ok, Remediated]
+            dismissed: [neutral, Dismissed]
+            confirmedSafe: [ok, Confirmed safe]
+        empty:
+          title: No risk history
+          body: This user has no recorded risk changes.

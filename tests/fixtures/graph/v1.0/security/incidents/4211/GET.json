@@ -1,0 +1,23 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#security/incidents(alerts())/$entity",
+  "id": "4211",
+  "tenantId": "00000000-0000-4000-8000-0000000000f0",
+  "status": "inProgress",
+  "incidentWebUrl": "https://security.microsoft.com/incidents/4211?tid=00000000-0000-4000-8000-0000000000f0",
+  "redirectIncidentId": null,
+  "displayName": "Anomalous token and impossible travel involving one user",
+  "createdDateTime": "2026-09-28T17:00:00Z",
+  "lastUpdateDateTime": "2026-09-28T19:00:00Z",
+  "assignedTo": "jordan.lee@example.com",
+  "classification": "unknown",
+  "determination": "unknown",
+  "severity": "low",
+  "customTags": [],
+  "systemTags": [],
+  "description": null,
+  "summary": null,
+  "lastModifiedBy": "alex.admin@example.com",
+  "resolvingComment": null,
+  "comments": [],
+  "alerts": []
+}

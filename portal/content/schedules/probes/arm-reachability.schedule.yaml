@@ -1,0 +1,19 @@
+$schema: ../../../packages/schemas/generated/schedule.schema.json
+kind: schedule
+id: sweep.arm-reachability
+version: 1.0.0
+title: "Hourly probe: Azure Resource Manager reachability"
+summary: Runs the probes.arm-reachability probe every hour (minute 05, staggered across the sweep) as the automation identity.
+owner: portal-admins
+tags: [synthetic, probe-sweep]
+cron: "5 * * * *"
+timezone: UTC
+enabled: true
+identity: automation
+job:
+  kind: probe
+  ref: probes.arm-reachability
+timeoutSeconds: 120
+overlap: skip
+requires:
+  azureRoles: [Reader]

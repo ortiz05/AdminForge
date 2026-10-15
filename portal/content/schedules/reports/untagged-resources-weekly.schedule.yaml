@@ -1,0 +1,26 @@
+$schema: ../../../packages/schemas/generated/schedule.schema.json
+kind: schedule
+id: reports.untagged-resources-weekly
+version: 1.0.0
+title: Weekly untagged Azure resources report
+summary: >-
+  Every Monday at 06:00 UTC, writes every Azure resource without tags across all subscriptions the automation identity can read, as XLSX, for the tagging-policy review.
+owner: azure-team
+tags: [azure, governance, tags, report]
+cron: "0 6 * * 1"
+timezone: UTC
+enabled: true
+identity: automation
+job:
+  kind: report
+  ref: azure.untagged-resources
+  delivery:
+    - type: file
+      format: xlsx
+      path: azure/untagged-resources/{date}.xlsx
+      retain: 26
+retry: { max: 2, backoff: exponential, delay: 5m }
+timeoutSeconds: 1800
+overlap: skip
+requires:
+  azureRoles: [Reader]

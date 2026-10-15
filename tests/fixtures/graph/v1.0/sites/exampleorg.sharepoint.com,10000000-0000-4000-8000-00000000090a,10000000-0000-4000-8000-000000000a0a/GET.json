@@ -1,0 +1,13 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#sites/$entity",
+  "id": "exampleorg.sharepoint.com,10000000-0000-4000-8000-00000000090a,10000000-0000-4000-8000-000000000a0a",
+  "name": "Archive2019",
+  "displayName": "Archive 2019",
+  "description": "Archive 2019 site",
+  "webUrl": "https://exampleorg.sharepoint.com/sites/Archive2019",
+  "createdDateTime": "2020-03-20T09:00:00Z",
+  "lastModifiedDateTime": "2025-12-19T09:00:00Z",
+  "siteCollection": {
+    "hostname": "exampleorg.sharepoint.com"
+  }
+}

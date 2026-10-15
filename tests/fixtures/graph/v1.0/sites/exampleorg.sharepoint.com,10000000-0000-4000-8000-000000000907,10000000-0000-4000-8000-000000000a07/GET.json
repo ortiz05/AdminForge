@@ -1,0 +1,13 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#sites/$entity",
+  "id": "exampleorg.sharepoint.com,10000000-0000-4000-8000-000000000907,10000000-0000-4000-8000-000000000a07",
+  "name": "ProjectOrion",
+  "displayName": "Project Orion (retired)",
+  "description": "Project Orion (retired) site",
+  "webUrl": "https://exampleorg.sharepoint.com/sites/ProjectOrion",
+  "createdDateTime": "2024-02-08T09:00:00Z",
+  "lastModifiedDateTime": "2026-03-17T09:00:00Z",
+  "siteCollection": {
+    "hostname": "exampleorg.sharepoint.com"
+  }
+}

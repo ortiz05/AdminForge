@@ -1,0 +1,43 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#admin/serviceAnnouncement/messages/$entity",
+  "id": "MC906600",
+  "title": "Power Platform: Changes to default environment routing",
+  "services": [
+    "Power Platform"
+  ],
+  "category": "stayInformed",
+  "severity": "normal",
+  "isMajorChange": false,
+  "actionRequiredByDateTime": null,
+  "startDateTime": "2026-09-19T09:00:00Z",
+  "endDateTime": "2027-01-13T09:00:00Z",
+  "lastModifiedDateTime": "2026-10-01T09:00:00Z",
+  "tags": [
+    "Admin impact"
+  ],
+  "hasAttachments": false,
+  "attachmentsArchive": null,
+  "viewPoint": {
+    "isRead": false,
+    "isArchived": false,
+    "isFavorited": false
+  },
+  "details": [
+    {
+      "name": "Summary",
+      "value": "Power Platform: Changes to default environment routing"
+    },
+    {
+      "name": "RoadmapIds",
+      "value": "406690"
+    },
+    {
+      "name": "Platforms",
+      "value": "Web, Desktop, Mac"
+    }
+  ],
+  "body": {
+    "contentType": "html",
+    "content": "<p>Makers will be routed to personal developer environments by default.</p>"
+  }
+}

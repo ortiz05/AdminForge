@@ -1,0 +1,39 @@
+$schema: ../../packages/schemas/generated/connection.schema.json
+kind: connection
+id: integrations.hr-sync
+version: 1.0.0
+title: HR sync Function App (example)
+summary: >-
+  Example connection to an Entra-secured Azure Function that syncs employees from the HR system. It stays a draft until
+  you point baseUrl and audience at your own Function App (Easy Auth with Entra ID, exposing user_impersonation) and
+  publish it. Only the named operations below can ever be called; read sessions may only call read operations.
+owner: portal-admins
+tags: [integration, functions, example]
+status: draft
+baseUrl: https://func-hr-sync.example.com
+audience: api://example-hr-sync
+scopes: [user_impersonation]
+timeoutMs: 30000
+health: health
+operations:
+  health:
+    method: GET
+    path: /api/health
+    mode: read
+    description: Liveness of the Function host and its HR system dependency.
+  listEmployees:
+    method: GET
+    path: /api/employees
+    mode: read
+    description: Employees known to the HR system, with their sync state.
+  getEmployee:
+    method: GET
+    path: /api/employees/{employeeId}
+    mode: read
+    description: One employee record and its last sync result.
+  syncEmployee:
+    method: POST
+    path: /api/employees/{employeeId}/sync
+    mode: write
+    idempotent: true
+    description: Re-runs the HR → Entra sync for one employee.

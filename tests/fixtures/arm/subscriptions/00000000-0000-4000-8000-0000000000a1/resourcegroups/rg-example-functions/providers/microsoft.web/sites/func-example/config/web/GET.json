@@ -1,0 +1,28 @@
+{
+  "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-functions/providers/Microsoft.Web/sites/func-example/config/web",
+  "name": "web",
+  "type": "Microsoft.Web/sites/config",
+  "properties": {
+    "netFrameworkVersion": "v8.0",
+    "powerShellVersion": "",
+    "linuxFxVersion": "",
+    "minTlsVersion": "1.2",
+    "scmMinTlsVersion": "1.2",
+    "ftpsState": "Disabled",
+    "http20Enabled": true,
+    "alwaysOn": false,
+    "remoteDebuggingEnabled": false,
+    "use32BitWorkerProcess": false,
+    "ipSecurityRestrictionsDefaultAction": "Allow",
+    "ipSecurityRestrictions": [
+      {
+        "ipAddress": "Any",
+        "action": "Allow",
+        "priority": 2147483647,
+        "name": "Allow all"
+      }
+    ],
+    "functionsRuntimeScaleMonitoringEnabled": true,
+    "siteAuthEnabled": true
+  }
+}

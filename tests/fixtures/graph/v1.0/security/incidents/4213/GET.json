@@ -1,0 +1,144 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#security/incidents(alerts())/$entity",
+  "id": "4213",
+  "tenantId": "00000000-0000-4000-8000-0000000000f0",
+  "status": "active",
+  "incidentWebUrl": "https://security.microsoft.com/incidents/4213?tid=00000000-0000-4000-8000-0000000000f0",
+  "redirectIncidentId": null,
+  "displayName": "Activity from infrequent country followed by mass download",
+  "createdDateTime": "2026-10-06T09:00:00Z",
+  "lastUpdateDateTime": "2026-10-09T03:00:00Z",
+  "assignedTo": null,
+  "classification": "unknown",
+  "determination": "unknown",
+  "severity": "high",
+  "customTags": [],
+  "systemTags": [],
+  "description": null,
+  "summary": null,
+  "lastModifiedBy": "Automation",
+  "resolvingComment": null,
+  "comments": [],
+  "alerts": [
+    {
+      "id": "da638647315200000012_-1194836012",
+      "providerAlertId": "00000012-0000-4000-8000-00000000c0de",
+      "incidentId": "4213",
+      "status": "new",
+      "severity": "medium",
+      "classification": null,
+      "determination": null,
+      "serviceSource": "microsoftDefenderForCloudApps",
+      "detectionSource": "microsoftDefenderForCloudApps",
+      "productName": "Microsoft Defender for Cloud Apps",
+      "detectorId": "0000000c-1111-4000-8000-000000000000",
+      "tenantId": "00000000-0000-4000-8000-0000000000f0",
+      "title": "Activity from infrequent country",
+      "description": "",
+      "recommendedActions": "",
+      "category": "InitialAccess",
+      "assignedTo": null,
+      "alertWebUrl": "https://security.microsoft.com/alerts/da638647315200000012_-1194836012?tid=00000000-0000-4000-8000-0000000000f0",
+      "incidentWebUrl": "https://security.microsoft.com/incidents/4213?tid=00000000-0000-4000-8000-0000000000f0",
+      "actorDisplayName": null,
+      "threatDisplayName": null,
+      "threatFamilyName": null,
+      "mitreTechniques": [
+        "T1078"
+      ],
+      "createdDateTime": "2026-10-08T17:00:00Z",
+      "lastUpdateDateTime": "2026-10-08T18:00:00Z",
+      "resolvedDateTime": null,
+      "firstActivityDateTime": "2026-10-08T16:00:00Z",
+      "lastActivityDateTime": "2026-10-08T17:00:00Z",
+      "comments": [],
+      "evidence": [
+        {
+          "@odata.type": "#microsoft.graph.security.userEvidence",
+          "createdDateTime": "2026-10-15T06:00:00Z",
+          "verdict": "suspicious",
+          "remediationStatus": "none",
+          "remediationStatusDetails": null,
+          "roles": [
+            "compromised"
+          ],
+          "tags": [],
+          "userAccount": {
+            "accountName": "eli.obrien",
+            "domainName": "example.com",
+            "userSid": null,
+            "azureAdUserId": "30000000-0000-4000-8000-000000000005",
+            "userPrincipalName": "eli.obrien@example.com",
+            "displayName": "Eli O'Brien"
+          }
+        },
+        {
+          "@odata.type": "#microsoft.graph.security.ipEvidence",
+          "createdDateTime": "2026-10-15T06:00:00Z",
+          "verdict": "suspicious",
+          "remediationStatus": "none",
+          "roles": [],
+          "tags": [],
+          "ipAddress": "198.51.100.77",
+          "countryLetterCode": "BR"
+        }
+      ],
+      "systemTags": []
+    },
+    {
+      "id": "da638647315200000013_-1194836013",
+      "providerAlertId": "00000013-0000-4000-8000-00000000c0de",
+      "incidentId": "4213",
+      "status": "new",
+      "severity": "high",
+      "classification": null,
+      "determination": null,
+      "serviceSource": "microsoftDefenderForCloudApps",
+      "detectionSource": "microsoftDefenderForCloudApps",
+      "productName": "Microsoft Defender for Cloud Apps",
+      "detectorId": "0000000d-1111-4000-8000-000000000000",
+      "tenantId": "00000000-0000-4000-8000-0000000000f0",
+      "title": "Mass download by a single user",
+      "description": "",
+      "recommendedActions": "",
+      "category": "Exfiltration",
+      "assignedTo": null,
+      "alertWebUrl": "https://security.microsoft.com/alerts/da638647315200000013_-1194836013?tid=00000000-0000-4000-8000-0000000000f0",
+      "incidentWebUrl": "https://security.microsoft.com/incidents/4213?tid=00000000-0000-4000-8000-0000000000f0",
+      "actorDisplayName": null,
+      "threatDisplayName": null,
+      "threatFamilyName": null,
+      "mitreTechniques": [
+        "T1530"
+      ],
+      "createdDateTime": "2026-10-08T18:00:00Z",
+      "lastUpdateDateTime": "2026-10-08T19:00:00Z",
+      "resolvedDateTime": null,
+      "firstActivityDateTime": "2026-10-08T17:00:00Z",
+      "lastActivityDateTime": "2026-10-08T18:00:00Z",
+      "comments": [],
+      "evidence": [
+        {
+          "@odata.type": "#microsoft.graph.security.userEvidence",
+          "createdDateTime": "2026-10-15T06:00:00Z",
+          "verdict": "suspicious",
+          "remediationStatus": "none",
+          "remediationStatusDetails": null,
+          "roles": [
+            "compromised"
+          ],
+          "tags": [],
+          "userAccount": {
+            "accountName": "eli.obrien",
+            "domainName": "example.com",
+            "userSid": null,
+            "azureAdUserId": "30000000-0000-4000-8000-000000000005",
+            "userPrincipalName": "eli.obrien@example.com",
+            "displayName": "Eli O'Brien"
+          }
+        }
+      ],
+      "systemTags": []
+    }
+  ]
+}

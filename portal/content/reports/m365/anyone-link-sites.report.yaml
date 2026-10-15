@@ -1,0 +1,146 @@
+$schema: ../../../packages/schemas/generated/report.schema.json
+kind: report
+id: m365.anyone-link-sites
+version: 1.0.0
+title: Public and Anyone-link sites
+summary: SharePoint sites whose sharing allows Anyone links (optionally also new guests), plus the sites where Anyone links actually exist.
+owner: m365-team
+tags: [m365, sharepoint, sharing, security]
+nav: { section: reports, label: Public and Anyone-link sites, icon: globe, order: 140 }
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    sharepointAdmin: [AllSites.FullControl]
+    graph: [Reports.Read.All]
+  entraRoles: [SharePoint Administrator]
+  licences: [sharepoint]
+
+params:
+  includeGuestSharing: { type: boolean, label: Also list sites open to new guests, default: false, facet: true }
+  includeOneDrive: { type: boolean, label: Include OneDrive sites, default: false, facet: true }
+
+filters:
+  facets: [includeGuestSharing, includeOneDrive]
+
+datasources:
+  sharing:
+    source: runner
+    label: Site sharing settings (PowerShell)
+    script: sharepoint/Get-SiteSharing.ps1
+    sha256: d444a361a681d44bcc1808177b0f071a040e12791097c3c7bda0d84b16ed1cc9
+    services: [sharepointAdmin]
+    timeoutSeconds: 900
+    parameters:
+      includeOneDrive: ${ params.includeOneDrive = true }
+      includeSites: true
+    cache: { ttl: 900 }
+    transform: >-
+      ${ (
+        $v := value[0];  /* runner result = [output data]; one summary object */
+        $p := params;
+        $levels := $p.includeGuestSharing = true ? ['ExternalUserAndGuestSharing', 'ExternalUserSharingOnly'] : ['ExternalUserAndGuestSharing'];
+        $rows := [$v.sites[sharingCapability in $levels].$merge([$, {
+          "level": sharingCapability = 'ExternalUserAndGuestSharing' ? 'anyone' : 'guests',
+          "storageUsedInBytes": storageUsedMB ? storageUsedMB * 1048576 : 0
+        }])];
+        {
+          "rows": $rows,
+          "anyone": $v.summary.anyoneLinks,
+          "guests": $count($v.sites[sharingCapability = 'ExternalUserSharingOnly']),
+          "tenantLevel": $v.tenant.sharingCapability,
+          "tenantAnyone": $v.tenant.sharingCapability = 'ExternalUserAndGuestSharing' ? 1 : 0,
+          "linkExpiryDays": $v.tenant.requireAnonymousLinksExpireInDays
+        }
+      ) }
+  links:
+    source: graph
+    label: Sites holding Anyone links (usage report, last 7 days)
+    request:
+      beta: true
+      path: /reports/getSharePointSiteUsageDetail(period='D7')
+      query: { $format: application/json }
+    paging: all
+    maxItems: 50000
+    cache: { ttl: 3600 }
+    transform: >-
+      ${ (
+        $rows := [$sort(value.value[isDeleted != true and anonymousLinkCount > 0], function($a, $b) { $a.anonymousLinkCount < $b.anonymousLinkCount }).{
+          "siteId": siteId,
+          "siteUrl": siteUrl,
+          "ownerDisplayName": ownerDisplayName,
+          "anonymousLinkCount": anonymousLinkCount,
+          "guestLinkCount": secureLinkForGuestCount,
+          "lastActivityDate": lastActivityDate
+        }];
+        { "rows": $rows, "sites": $count($rows), "links": $sum($rows.anonymousLinkCount) }
+      ) }
+
+layout:
+  - widget: kpi
+    data: sharing.anyone
+    label: Sites allowing Anyone links
+    format: number
+    status: "${ value > 0 ? 'crit' : 'ok' }"
+  - widget: kpi
+    data: links.sites
+    label: Sites with Anyone links
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+  - widget: kpi
+    data: links.links
+    label: Anyone links in use
+    format: number
+  - widget: kpi
+    data: sharing.guests
+    label: Sites open to new guests
+    format: number
+  - widget: markdown
+    span: 12
+    when: ${ sharing.tenantAnyone = 1 and (sharing.linkExpiryDays = null or sharing.linkExpiryDays <= 0) }
+    text: |
+      **Anyone links never expire in this tenant.** Set an expiry for Anyone links in the SharePoint admin center →
+      **Policies → Sharing → Choose expiration and permissions options for Anyone links**, so forgotten links stop working.
+  - widget: table
+    id: sites
+    title: Sites that allow Anyone links
+    span: 12
+    data: sharing.rows
+    rowKey: url
+    columns:
+      - { field: title, label: Site, kind: identity, secondary: url }
+      - field: level
+        label: Sharing
+        kind: status
+        map: { anyone: [crit, Anyone], guests: [warn, New and existing guests] }
+        filter: facet
+      - { field: template, label: Template, filter: facet }
+      - { field: owner, label: Owner }
+      - { field: storageUsedInBytes, label: Storage, kind: bytes, align: end }
+      - { field: lastContentModified, label: Last content change, kind: date, filter: date }
+    rowActions:
+      - label: Open site
+        icon: arrow-square-out
+        href: ${ row.url }
+    empty:
+      title: No site allows Anyone links
+      body: Every site restricts sharing to people in the organization or guests.
+  - widget: table
+    id: links
+    title: Sites where Anyone links exist
+    span: 12
+    data: links.rows
+    rowKey: siteId
+    columns:
+      - { field: siteUrl, label: Site, kind: identity, secondary: ownerDisplayName }
+      - { field: anonymousLinkCount, label: Anyone links, kind: number, align: end, sortable: true }
+      - { field: guestLinkCount, label: Guest links, kind: number, align: end }
+      - { field: lastActivityDate, label: Last activity, kind: date }
+    empty:
+      title: No Anyone links in use
+      body: The usage report shows no site with Anyone links in the last 7 days.
+
+export:
+  formats: [csv, xlsx]
+  fileName: anyone-link-sites
+  data: sharing.rows
+  columns: all

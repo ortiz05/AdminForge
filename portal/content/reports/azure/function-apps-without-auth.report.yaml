@@ -1,0 +1,129 @@
+$schema: ../../../packages/schemas/generated/report.schema.json
+kind: report
+id: azure.function-apps-without-auth
+version: 1.0.0
+title: Function Apps without authentication
+summary: Function Apps where App Service authentication (Easy Auth) is off, with their HTTPS, TLS and public network settings — candidates for Microsoft Entra authentication or private access.
+owner: azure-team
+tags: [azure, functions, security, authentication]
+nav: { section: reports, label: Function Apps without authentication, icon: lock-open, order: 175 }
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    arm: [user_impersonation]
+  azureRoles: [Reader]
+
+params:
+  publicOnly: { type: boolean, default: false, label: Publicly reachable only, facet: true, description: Leave out apps with public network access disabled. }
+  includeStopped: { type: boolean, default: true, label: Include stopped apps, facet: true }
+  subscriptionId: { type: string, format: guid, label: Subscription, picker: subscription, facet: true }
+
+datasources:
+  apps:
+    source: resourceGraph
+    # Authentication state comes from the site's "web" configuration (siteAuthEnabled) in the appserviceresources table.
+    # The Function App page reads authsettingsV2 directly and is authoritative for a single app.
+    query: |
+      // af:azure.function-apps-without-auth#rows
+      resources
+      | where type =~ 'microsoft.web/sites' and kind contains 'functionapp'
+      ${ params.subscriptionId ? "| where subscriptionId == '" & $guid(params.subscriptionId) & "'" }
+      | extend lid = tolower(id), state = tostring(properties.state), httpsOnly = tobool(properties.httpsOnly), publicNetworkAccess = iff(isempty(tostring(properties.publicNetworkAccess)), 'Enabled', tostring(properties.publicNetworkAccess)), defaultHostName = tostring(properties.defaultHostName), skuName = tostring(properties.sku)
+      | join kind=leftouter (appserviceresources | where type =~ 'microsoft.web/sites/config' | extend siteId = tolower(tostring(split(id, '/config/')[0])), authEnabled = tobool(properties.siteAuthEnabled), minTlsVersion = tostring(properties.minTlsVersion), ftpsState = tostring(properties.ftpsState) | project siteId, authEnabled, minTlsVersion, ftpsState) on $left.lid == $right.siteId
+      | where authEnabled != true
+      ${ params.publicOnly = true ? "| where publicNetworkAccess != 'Disabled'" }
+      ${ params.includeStopped = false ? "| where state == 'Running'" }
+      | extend plan = case(skuName =~ 'Dynamic', 'Consumption', skuName =~ 'FlexConsumption', 'Flex Consumption', skuName =~ 'ElasticPremium', 'Premium', 'Dedicated')
+      | join kind=leftouter (resourcecontainers | where type =~ 'microsoft.resources/subscriptions' | project subscriptionId, subscriptionName = name) on subscriptionId
+      | project id, name, defaultHostName, state, plan, httpsOnly, publicNetworkAccess, minTlsVersion, ftpsState, resourceGroup, subscriptionId, subscriptionName, location
+      | order by name asc
+    paging: all
+    maxItems: 10000
+    transform: >-
+      ${ (
+        $rows := [value.value];
+        {
+          'rows': $rows,
+          'total': $count($rows),
+          'public': $count($rows[publicNetworkAccess != 'Disabled']),
+          'httpAllowed': $count($rows[httpsOnly != true]),
+          'oldTls': $count($rows[minTlsVersion in ['1.0', '1.1']])
+        }
+      ) }
+    cache: { ttl: 300 }
+
+layout:
+  - widget: markdown
+    span: 12
+    text: Function keys alone don't identify callers. Turn on App Service authentication with the Microsoft Entra provider, or restrict network access, for HTTP-triggered apps. Apps that only run timer, queue or event triggers may legitimately have authentication off — check the **Functions** tab on the app before changing anything.
+  - widget: kpi
+    data: apps.total
+    label: Without authentication
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+  - widget: kpi
+    data: apps.public
+    label: Publicly reachable
+    format: number
+    status: "${ value > 0 ? 'crit' : 'ok' }"
+  - widget: kpi
+    data: apps.httpAllowed
+    label: Plain HTTP allowed
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+  - widget: kpi
+    data: apps.oldTls
+    label: TLS below 1.2
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+  - widget: table
+    id: apps
+    span: 12
+    data: apps.rows
+    rowKey: id
+    columns:
+      - { field: name, label: Function App, kind: identity, secondary: defaultHostName, sortable: true }
+      - field: publicNetworkAccess
+        label: Public access
+        kind: status
+        map: { Enabled: [crit, Public], Disabled: [ok, Private only] }
+        filter: facet
+      - field: httpsOnly
+        label: HTTPS
+        kind: status
+        map: { "true": [ok, HTTPS only], "false": [warn, HTTP allowed] }
+        filter: facet
+      - { field: minTlsVersion, label: Minimum TLS, filter: facet }
+      - { field: ftpsState, label: FTP, filter: facet, hidden: true }
+      - field: state
+        label: State
+        kind: status
+        map: { Running: [ok, Running], Stopped: [neutral, Stopped] }
+        filter: facet
+      - { field: plan, label: Plan, filter: facet }
+      - { field: resourceGroup, label: Resource group, filter: facet }
+      - { field: subscriptionName, label: Subscription, filter: facet }
+      - { field: location, label: Location, hidden: true }
+      - { field: id, label: Resource id, kind: code, hidden: true }
+    inspect:
+      page: azure.function-app
+      params:
+        subscriptionId: ${ row.subscriptionId }
+        resourceGroup: ${ row.resourceGroup }
+        name: ${ row.name }
+    rowActions:
+      - label: Open Authentication in Azure portal
+        icon: arrow-square-out
+        href: https://portal.azure.com/#resource${ row.id }/overview
+      - label: Set up Entra authentication (guide)
+        icon: book-open
+        href: https://learn.microsoft.com/azure/app-service/configure-authentication-provider-aad
+    empty:
+      title: Every Function App has authentication on
+      body: No Function App in the subscriptions you can read has App Service authentication turned off.
+
+export:
+  formats: [csv, xlsx]
+  fileName: azure-function-apps-without-auth
+  data: apps.rows
+  columns: all

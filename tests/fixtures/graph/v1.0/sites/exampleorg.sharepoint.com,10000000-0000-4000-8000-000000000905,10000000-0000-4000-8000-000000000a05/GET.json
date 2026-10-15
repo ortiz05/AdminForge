@@ -1,0 +1,13 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#sites/$entity",
+  "id": "exampleorg.sharepoint.com,10000000-0000-4000-8000-000000000905,10000000-0000-4000-8000-000000000a05",
+  "name": "SalesEMEA",
+  "displayName": "Sales EMEA",
+  "description": "Sales EMEA site",
+  "webUrl": "https://exampleorg.sharepoint.com/sites/SalesEMEA",
+  "createdDateTime": "2024-09-15T09:00:00Z",
+  "lastModifiedDateTime": "2026-10-12T09:00:00Z",
+  "siteCollection": {
+    "hostname": "exampleorg.sharepoint.com"
+  }
+}

@@ -1,0 +1,220 @@
+$schema: ../../../packages/schemas/generated/page.schema.json
+kind: page
+id: azure.resources
+version: 1.0.0
+title: Resources
+summary: Every Azure resource you can read, across subscriptions, from Azure Resource Graph — filter by type, location, resource group, subscription and tags.
+owner: azure-team
+tags: [azure, inventory, resource-graph]
+template: list-detail
+nav: { section: azure, label: Resources, icon: cube, order: 30 }
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    arm: [user_impersonation]
+  azureRoles: [Reader]
+
+params:
+  q: { type: string, default: "", label: Search, placeholder: Resource name contains… }
+  type: { type: string, label: Resource type, placeholder: microsoft.web/sites, facet: true }
+  location: { type: string, label: Location, placeholder: westeurope, facet: true }
+  resourceGroup: { type: string, label: Resource group, facet: true }
+  subscriptionId: { type: string, format: guid, label: Subscription, picker: subscription, facet: true }
+  tagState:
+    type: enum
+    label: Tags
+    facet: true
+    default: All
+    values:
+      - { value: All, label: Any }
+      - { value: Tagged, label: Tagged }
+      - { value: Untagged, label: Untagged }
+  tagName: { type: string, label: Tag name, placeholder: owner, facet: true }
+  tagValue: { type: string, label: Tag value, description: Used together with Tag name. Leave empty to match any value. }
+  where: { type: string, hidden: true, description: Compiled by the advanced filter builder. }
+
+filters:
+  search: q
+  facets: [type, location, resourceGroup, subscriptionId, tagState, tagName]
+  advanced:
+    dialect: kql
+    param: where
+    fields:
+      - { field: name, label: Name, type: string, operators: [eq, ne, startsWith, contains] }
+      - { field: type, label: Resource type, type: string, operators: [eq, ne, startsWith, contains] }
+      - { field: kind, label: Kind, type: string, operators: [eq, ne, contains, isEmpty] }
+      - { field: location, label: Location, type: string, operators: [eq, ne, in] }
+      - { field: resourceGroup, label: Resource group, type: string, operators: [eq, ne, startsWith, contains] }
+      - { field: subscriptionId, label: Subscription id, type: guid, operators: [eq, ne, in] }
+      - { field: sku, label: SKU, type: string, operators: [eq, ne, contains, isEmpty] }
+      - { field: tagCount, label: Number of tags, type: number, operators: [eq, lt, gt] }
+
+savedViews:
+  enabled: true
+  shared: true
+  presets:
+    - { name: Untagged resources, params: { tagState: Untagged } }
+    - { name: App Service and Function Apps, params: { type: microsoft.web/sites } }
+    - { name: Azure Arc servers, params: { type: microsoft.hybridcompute/machines } }
+    - { name: Public IP addresses, params: { type: microsoft.network/publicipaddresses } }
+    - { name: Storage accounts, params: { type: microsoft.storage/storageaccounts } }
+
+datasources:
+  inventory:
+    source: resourceGraph
+    # Only GUID-validated, enum-whitelisted or charset-stripped values reach the KQL text.
+    query: |
+      // af:azure.resources#inventory
+      resources
+      | extend tagCount = iff(isnull(tags), 0, array_length(bag_keys(tags))), sku = tostring(sku.name), provisioningState = tostring(properties.provisioningState)
+      ${ params.subscriptionId ? "| where subscriptionId == '" & $guid(params.subscriptionId) & "'" }
+      ${ params.type ? "| where type =~ '" & $lowercase($replace(params.type, /[^A-Za-z0-9._\/-]/, '')) & "'" }
+      ${ params.location ? "| where location =~ '" & $lowercase($replace(params.location, /[^A-Za-z0-9]/, '')) & "'" }
+      ${ params.resourceGroup ? "| where resourceGroup =~ '" & $replace(params.resourceGroup, /[^A-Za-z0-9._()-]/, '') & "'" }
+      ${ params.tagState = 'Untagged' ? '| where tagCount == 0' : params.tagState = 'Tagged' ? '| where tagCount > 0' }
+      ${ params.tagName ? "| where isnotnull(tags['" & $replace(params.tagName, /[^A-Za-z0-9 ._:@+=\/-]/, '') & "'])" }
+      ${ params.tagName and params.tagValue ? "| where tostring(tags['" & $replace(params.tagName, /[^A-Za-z0-9 ._:@+=\/-]/, '') & "']) =~ '" & $replace(params.tagValue, /[^A-Za-z0-9 ._:@+=\/-]/, '') & "'" }
+      ${ params.q ? "| where name contains '" & $replace(params.q, /[^A-Za-z0-9 ._()-]/, '') & "'" }
+      ${ params.where ? '| where ' & params.where }
+      | join kind=leftouter (resourcecontainers | where type =~ 'microsoft.resources/subscriptions' | project subscriptionId, subscriptionName = name) on subscriptionId
+      | project id, name, type, kind, location, resourceGroup, subscriptionId, subscriptionName, sku, tags, tagCount, provisioningState, managedBy
+      | order by name asc
+    paging: cursor
+    cache: { ttl: 120 }
+  summary:
+    source: resourceGraph
+    query: |
+      // af:azure.resources#summary
+      resources
+      | extend tagCount = iff(isnull(tags), 0, array_length(bag_keys(tags)))
+      | summarize total = count(), untagged = countif(tagCount == 0), types = dcount(type), locations = dcount(location), resourceGroups = dcount(strcat(subscriptionId, '/', tolower(resourceGroup)))
+    transform: "${ $merge([{ 'total': 0, 'untagged': 0, 'types': 0, 'locations': 0, 'resourceGroups': 0 }, value.value[0]]) }"
+    cache: { ttl: 300 }
+  byType:
+    source: resourceGraph
+    query: |
+      // af:azure.resources#bytype
+      resources
+      | summarize resources = count() by type
+      | top 10 by resources desc
+    transform: "${ [value.value] }"
+    cache: { ttl: 300 }
+  byLocation:
+    source: resourceGraph
+    query: |
+      // af:azure.resources#bylocation
+      resources
+      | summarize resources = count() by location
+      | order by resources desc
+    # Donuts show at most six slices: the five largest locations plus everything else as "Other".
+    transform: >-
+      ${ (
+        $rows := [value.value];
+        $rest := $sum($rows[[5..1000]].resources);
+        [$append($rows[[0..4]], $rest > 0 ? [{ 'location': 'Other', 'resources': $rest }] : [])]
+      ) }
+    cache: { ttl: 300 }
+
+layout:
+  - widget: kpi
+    data: summary.total
+    label: Resources
+    format: number
+  - widget: kpi
+    data: summary.untagged
+    label: Untagged
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+    href: /p/azure.resources?tagState=Untagged
+  - widget: kpi
+    data: summary.types
+    label: Resource types
+    format: number
+  - widget: kpi
+    data: summary.locations
+    label: Locations
+    format: number
+  - widget: chart
+    id: byType
+    title: Top resource types
+    span: 8
+    type: bar
+    data: byType
+    x: type
+    y: resources
+    format: number
+  - widget: chart
+    id: byLocation
+    title: Resources by location
+    span: 4
+    type: donut
+    data: byLocation
+    x: location
+    y: resources
+    format: number
+  - widget: table
+    id: resources
+    title: Inventory
+    span: 12
+    data: inventory.value
+    rowKey: id
+    selection: multi
+    pageSize: 100
+    columns:
+      - { field: name, label: Name, kind: identity, secondary: type, sortable: true }
+      - { field: type, label: Type, filter: { type: facet, param: type } }
+      - { field: location, label: Location, filter: { type: facet, param: location } }
+      - { field: resourceGroup, label: Resource group, filter: { type: text, param: resourceGroup } }
+      - { field: subscriptionName, label: Subscription, filter: facet }
+      - { field: tags, label: Tags, kind: tags }
+      - { field: tagCount, label: Tag count, kind: number, filter: range, hidden: true }
+      - { field: sku, label: SKU, filter: facet, hidden: true }
+      - { field: kind, label: Kind, filter: facet, hidden: true }
+      - { field: provisioningState, label: Provisioning state, filter: facet, hidden: true }
+      - { field: managedBy, label: Managed by, kind: code, hidden: true }
+      - { field: subscriptionId, label: Subscription id, kind: guid, hidden: true }
+      - { field: id, label: Resource id, kind: code, hidden: true }
+    inspect:
+      page: azure.resource
+      params:
+        id: ${ row.id }
+    rowActions:
+      - label: Open in Azure portal
+        icon: arrow-square-out
+        href: https://portal.azure.com/#resource${ row.id }/overview
+      - label: Metrics
+        icon: chart-line
+        href: /p/azure.metrics?resourceId=${ $encode(row.id) }
+      - playbook: azure.add-tags
+        label: Add or update a tag
+        icon: tag
+        inputs:
+          resourceId: ${ row.id }
+    bulkActions:
+      - playbook: azure.add-tags
+        label: Add or update a tag
+        icon: tag
+        forEach:
+          inputs:
+            resourceId: ${ row.id }
+          concurrency: 5
+        maxItems: 500
+      - playbook: azure.remove-tags
+        label: Remove a tag
+        icon: tag-simple
+        forEach:
+          inputs:
+            resourceId: ${ row.id }
+          concurrency: 5
+        maxItems: 500
+        when: ${ $count(rows[tagCount > 0]) > 0 }
+    empty:
+      title: No resources match these filters
+      body: Clear a filter, or check that your account has Reader on the subscriptions you expect to see. Resource Graph only returns resources you can read.
+
+export:
+  formats: [csv, xlsx]
+  fileName: azure-resources
+  data: inventory.value
+  columns: visible
+  maxRows: 100000

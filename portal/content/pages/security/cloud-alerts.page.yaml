@@ -1,0 +1,178 @@
+$schema: ../../../packages/schemas/generated/page.schema.json
+kind: page
+id: security.cloud-alerts
+version: 1.0.0
+title: Cloud alerts
+summary: Microsoft Defender for Cloud security alerts for Azure resources (servers, storage, Key Vault, App Service, …) across all subscriptions.
+owner: security-team
+tags: [security, azure, defender-for-cloud, alerts]
+template: list-detail
+nav: { section: security, label: Cloud alerts, icon: bell-ringing, order: 70 }
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    arm: [user_impersonation]
+  azureRoles: [Security Reader]
+
+params:
+  status:
+    type: enum
+    label: Status
+    facet: true
+    default: open
+    values:
+      - { value: open, label: Active or in progress }
+      - { value: Active, label: Active }
+      - { value: InProgress, label: In progress }
+      - { value: Resolved, label: Resolved }
+      - { value: Dismissed, label: Dismissed }
+      - { value: any, label: Any status }
+  severity:
+    type: enum
+    label: Severity
+    facet: true
+    default: any
+    values:
+      - { value: any, label: Any severity }
+      - { value: High, label: High }
+      - { value: Medium, label: Medium }
+      - { value: Low, label: Low }
+      - { value: Informational, label: Informational }
+  days:
+    type: enum
+    label: Generated in the last
+    facet: true
+    default: 30
+    values:
+      - { value: 1, label: 24 hours }
+      - { value: 7, label: 7 days }
+      - { value: 30, label: 30 days }
+      - { value: 90, label: 90 days }
+  subscriptionId: { type: subscription, label: Subscription, facet: true }
+
+filters:
+  facets: [status, severity, days, subscriptionId]
+
+savedViews:
+  enabled: true
+  shared: true
+  presets:
+    - { name: Active high severity, params: { status: open, severity: High } }
+    - { name: Last 24 hours, params: { status: any, days: 1 } }
+
+datasources:
+  alerts:
+    source: resourceGraph
+    query: |
+      // af:security.cloud-alerts#rows
+      securityresources
+      | where type =~ 'microsoft.security/locations/alerts'
+      | extend alertName = tostring(properties.alertDisplayName), severity = tostring(properties.severity), status = tostring(properties.status)
+      | extend timeGenerated = todatetime(properties.timeGeneratedUtc), startTime = todatetime(properties.startTimeUtc)
+      | extend compromisedEntity = tostring(properties.compromisedEntity), intent = tostring(properties.intent), productName = tostring(properties.productName)
+      | extend alertType = tostring(properties.alertType), description = tostring(properties.description), alertUri = tostring(properties.alertUri), isIncident = tobool(properties.isIncident)
+      | extend resourceId = tolower(tostring(properties.resourceIdentifiers[0].azureResourceId))
+      | extend parts = split(resourceId, '/')
+      | extend resourceType = iff(array_length(parts) >= 9, strcat(tostring(parts[6]), '/', tostring(parts[7])), '')
+      | where timeGenerated >= ago(${ $replace($string(params.days), /[^0-9]/, '') }d)
+      ${ params.status = 'open' ? "| where status in~ ('Active', 'InProgress')" : params.status in ['Active', 'InProgress', 'Resolved', 'Dismissed'] ? "| where status =~ '" & $replace(params.status, /[^A-Za-z]/, '') & "'" : '' }
+      ${ params.severity in ['High', 'Medium', 'Low', 'Informational'] ? "| where severity =~ '" & $replace(params.severity, /[^A-Za-z]/, '') & "'" : '' }
+      ${ params.subscriptionId ? "| where subscriptionId =~ '" & $guid(params.subscriptionId) & "'" : '' }
+      | join kind=leftouter (resourcecontainers | where type =~ 'microsoft.resources/subscriptions' | project subscriptionId, subscriptionName = name) on subscriptionId
+      | extend sevRank = case(severity =~ 'High', 0, severity =~ 'Medium', 1, severity =~ 'Low', 2, 3)
+      | project id, alertName, severity, sevRank, status, compromisedEntity, intent, productName, alertType, description, timeGenerated, startTime, resourceId, resourceType, subscriptionId, subscriptionName, alertUri, isIncident
+      | order by timeGenerated desc
+    paging: cursor
+    cache: { ttl: 120 }
+  summary:
+    label: Alert counts
+    source: resourceGraph
+    query: |
+      // af:security.cloud-alerts#summary
+      securityresources
+      | where type =~ 'microsoft.security/locations/alerts'
+      | where todatetime(properties.timeGeneratedUtc) >= ago(${ $replace($string(params.days), /[^0-9]/, '') }d)
+      | summarize count_ = count() by status = tostring(properties.status), severity = tostring(properties.severity)
+    paging: all
+    maxItems: 1000
+    cache: { ttl: 120 }
+    transform: >-
+      ${ (
+        $z := function($v) { $exists($v) ? $v : 0 };
+        $rows := [value.value];
+        $open := [$rows[status in ['Active', 'InProgress']]];
+        {
+          "openHigh": $z($sum($open[severity = 'High'].count_)),
+          "open": $z($sum($open.count_)),
+          "resolved": $z($sum($rows[status = 'Resolved'].count_)),
+          "dismissed": $z($sum($rows[status = 'Dismissed'].count_))
+        }
+      ) }
+
+layout:
+  - widget: kpi
+    data: summary.openHigh
+    label: Active high severity
+    format: number
+    status: "${ value > 0 ? 'crit' : 'ok' }"
+    href: /p/security.cloud-alerts?status=open&severity=High
+  - widget: kpi
+    data: summary.open
+    label: Active or in progress
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+  - widget: kpi
+    data: summary.resolved
+    label: Resolved in period
+    format: number
+  - widget: kpi
+    data: summary.dismissed
+    label: Dismissed in period
+    format: number
+  - widget: table
+    id: cloud_alerts
+    span: 12
+    data: alerts.value
+    rowKey: id
+    search: true
+    pageSize: 100
+    empty:
+      title: No Defender for Cloud alerts in this period
+      body: Widen the time range or status filter. Alerts only appear for subscriptions with a paid Defender plan enabled.
+    columns:
+      - { field: alertName, label: Alert, kind: identity, secondary: compromisedEntity, sortable: true }
+      - field: severity
+        label: Severity
+        kind: status
+        sortable: true
+        map: { High: [crit, High], Medium: [warn, Medium], Low: [info, Low], Informational: [neutral, Informational] }
+        filter: { type: facet, param: severity }
+      - field: status
+        label: Status
+        kind: status
+        map: { Active: [warn, Active], InProgress: [info, In progress], Resolved: [ok, Resolved], Dismissed: [neutral, Dismissed] }
+        filter: { type: facet, param: status }
+      - { field: productName, label: Defender plan, filter: facet }
+      - { field: intent, label: Kill-chain intent, filter: text }
+      - { field: resourceType, label: Resource type, filter: facet }
+      - { field: subscriptionName, label: Subscription, filter: facet }
+      - { field: timeGenerated, label: Generated, kind: relativeTime, sortable: true, filter: date }
+      - { field: startTime, label: Activity start, kind: datetime, hidden: true }
+      - { field: alertType, label: Alert type, kind: code, hidden: true }
+      - { field: description, label: Description, hidden: true }
+      - { field: isIncident, label: Security incident, kind: boolean, hidden: true }
+      - { field: resourceId, label: Resource id, kind: code, hidden: true }
+    rowActions:
+      - label: Open affected resource
+        icon: cube
+        href: ${ '/p/azure.resource?id=' & $encode(row.resourceId) }
+        when: ${ $exists(row.resourceId) and row.resourceId != '' }
+      - label: Open in Defender for Cloud
+        icon: arrow-square-out
+        href: "${ row.alertUri ? row.alertUri : 'https://portal.azure.com/#view/Microsoft_Azure_Security/SecurityMenuBlade/~/7' }"
+
+export:
+  formats: [csv, xlsx]
+  fileName: defender-for-cloud-alerts
+  data: alerts.value
+  columns: visible

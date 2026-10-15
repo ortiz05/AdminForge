@@ -1,0 +1,21 @@
+$schema: ../../../packages/schemas/generated/schedule.schema.json
+kind: schedule
+id: sweep.sign-in-health-adminforge
+version: 1.0.0
+title: "Hourly probe: AdminForge sign-in failure rate"
+summary: Runs the probes.sign-in-health-adminforge probe every hour (minute 33, staggered across the sweep) as the automation identity.
+owner: portal-admins
+tags: [synthetic, probe-sweep]
+cron: "33 * * * *"
+timezone: UTC
+enabled: true
+identity: automation
+job:
+  kind: probe
+  ref: probes.sign-in-health-adminforge
+timeoutSeconds: 120
+overlap: skip
+requires:
+  scopes:
+    graph: [AuditLog.Read.All]
+  licences: [signInLogs]

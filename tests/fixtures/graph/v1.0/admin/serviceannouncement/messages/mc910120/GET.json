@@ -1,0 +1,43 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#admin/serviceAnnouncement/messages/$entity",
+  "id": "MC910120",
+  "title": "Microsoft Intune: Plan for change — end of support for Android device administrator",
+  "services": [
+    "Microsoft Intune"
+  ],
+  "category": "planForChange",
+  "severity": "high",
+  "isMajorChange": false,
+  "actionRequiredByDateTime": "2026-12-14T09:00:00Z",
+  "startDateTime": "2026-09-25T09:00:00Z",
+  "endDateTime": "2027-01-13T09:00:00Z",
+  "lastModifiedDateTime": "2026-10-11T09:00:00Z",
+  "tags": [
+    "Retirement"
+  ],
+  "hasAttachments": false,
+  "attachmentsArchive": null,
+  "viewPoint": {
+    "isRead": false,
+    "isArchived": false,
+    "isFavorited": false
+  },
+  "details": [
+    {
+      "name": "Summary",
+      "value": "Microsoft Intune: Plan for change — end of support for Android device administrator"
+    },
+    {
+      "name": "RoadmapIds",
+      "value": "400211"
+    },
+    {
+      "name": "Platforms",
+      "value": "Web, Desktop, Mac"
+    }
+  ],
+  "body": {
+    "contentType": "html",
+    "content": "<p>Intune ends support for Android device administrator management on devices with Google Mobile Services.</p><p>Move devices to Android Enterprise before the deadline.</p>"
+  }
+}

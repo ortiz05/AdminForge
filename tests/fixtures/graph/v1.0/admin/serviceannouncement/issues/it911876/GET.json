@@ -1,0 +1,35 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#admin/serviceAnnouncement/issues/$entity",
+  "id": "IT911876",
+  "title": "Admins may see delays in device compliance status updates",
+  "service": "Microsoft Intune",
+  "feature": "Device compliance",
+  "featureGroup": "Device management",
+  "classification": "advisory",
+  "status": "investigating",
+  "origin": "microsoft",
+  "isResolved": false,
+  "startDateTime": "2026-10-14T22:00:00Z",
+  "endDateTime": null,
+  "lastModifiedDateTime": "2026-10-15T07:30:00Z",
+  "impactDescription": "Compliance state changes can take up to four hours to appear in the Intune admin center.",
+  "posts": [
+    {
+      "createdDateTime": "2026-10-14T22:30:00Z",
+      "postType": "regular",
+      "description": {
+        "contentType": "html",
+        "content": "<p><b>Title:</b> Delays in device compliance status updates</p><p><b>Current status:</b> We are investigating increased processing times.</p>"
+      }
+    },
+    {
+      "createdDateTime": "2026-10-15T07:30:00Z",
+      "postType": "regular",
+      "description": {
+        "contentType": "html",
+        "content": "<p><b>Current status:</b> We are scaling out the processing service.</p>"
+      }
+    }
+  ],
+  "details": []
+}

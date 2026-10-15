@@ -1,0 +1,125 @@
+$schema: ../../../packages/schemas/generated/page.schema.json
+kind: page
+id: m365.shared-mailboxes
+version: 1.0.0
+title: Shared mailboxes
+summary: Shared mailboxes, and which of them need a licence because they have an archive or litigation hold.
+owner: m365-team
+tags: [m365, exchange, mailboxes]
+template: list-detail
+nav: { section: m365, label: Shared mailboxes, icon: tray, order: 55 }
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    exchange: [Exchange.Manage]
+  entraRoles: [Exchange Recipient Administrator, Global Reader]
+  licences: [exchange]
+
+params:
+  q: { type: string, default: "", label: Search, placeholder: Name or email address }
+  licence:
+    type: enum
+    label: Licence
+    facet: true
+    default: Any
+    values:
+      - { value: Any, label: Any }
+      - { value: needed, label: Needs a licence (archive or hold) }
+      - { value: notNeeded, label: No licence needed }
+
+filters:
+  search: q
+  facets: [licence]
+
+savedViews:
+  enabled: true
+  shared: true
+  presets:
+    - { name: Need a licence, params: { licence: needed } }
+
+datasources:
+  shared:
+    source: runner
+    label: Shared mailboxes (PowerShell)
+    script: exchange/Get-MailboxSummary.ps1
+    sha256: 45facf19c4619af0897f322e35906ddd5f62ff98de23c3ca1933c26f4dec5ae1
+    services: [exchange]
+    timeoutSeconds: 600
+    parameters:
+      resultSize: 5000
+      recipientTypeDetails: [SharedMailbox]
+      includeMailboxes: true
+    cache: { ttl: 900 }
+    # A shared mailbox needs a licence when it has an archive or is on litigation hold (or exceeds 50 GB, not visible here).
+    transform: >-
+      ${ (
+        $v := value[0];  /* runner result = [output data]; one summary object */
+        $p := params;
+        $q := $lowercase($trim($p.q ? $p.q : ''));
+        $all := [$v.mailboxes.$merge([$, { "needsLicence": litigationHoldEnabled = true or archiveStatus = 'Active' }])];
+        $rows := [$all[
+            ($q = '' or $contains($lowercase(displayName & ' ' & primarySmtpAddress), $q))
+            and ($p.licence = 'Any' or $not($exists($p.licence))
+                 or ($p.licence = 'needed' and needsLicence) or ($p.licence = 'notNeeded' and $not(needsLicence)))
+          ]];
+        {
+          "rows": $rows,
+          "total": $v.total,
+          "needsLicence": $count($all[needsLicence]),
+          "hidden": $v.hiddenFromAddressLists
+        }
+      ) }
+
+layout:
+  - widget: kpi
+    id: total
+    data: shared.total
+    label: Shared mailboxes
+    format: number
+  - widget: kpi
+    id: needsLicence
+    data: shared.needsLicence
+    label: Need a licence
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+    href: /p/m365.shared-mailboxes?licence=needed
+  - widget: kpi
+    id: hidden
+    data: shared.hidden
+    label: Hidden from address lists
+    format: number
+  - widget: markdown
+    span: 3
+    text: |
+      Shared mailboxes don't need a licence up to 50 GB. Block sign-in for the account behind each one —
+      nobody should sign in to a shared mailbox directly.
+  - widget: table
+    id: shared
+    span: 12
+    data: shared.rows
+    rowKey: primarySmtpAddress
+    columns:
+      - { field: displayName, label: Mailbox, kind: identity, secondary: primarySmtpAddress }
+      - field: needsLicence
+        label: Licence
+        kind: status
+        map: { "true": [warn, Needs a licence], "false": [ok, Not needed] }
+        filter: { type: facet, param: licence }
+      - { field: litigationHoldEnabled, label: Litigation hold, kind: boolean, filter: facet }
+      - { field: archiveStatus, label: Archive, kind: status, map: { Active: [ok, Active], None: [neutral, None] }, filter: facet }
+      - { field: hiddenFromAddressListsEnabled, label: Hidden from address lists, kind: boolean, filter: facet }
+      - { field: whenCreated, label: Created, kind: date, filter: date, sortable: true }
+      - { field: userPrincipalName, label: Sign-in name, hidden: true }
+    rowActions:
+      - label: Open in Exchange admin center
+        icon: arrow-square-out
+        href: https://admin.exchange.microsoft.com/#/mailboxes
+    empty:
+      title: No shared mailboxes
+      body: Convert a user mailbox to shared from Mailboxes when someone leaves and the team still needs their mail.
+
+export:
+  formats: [csv, xlsx]
+  fileName: shared-mailboxes
+  data: shared.rows
+  columns: all

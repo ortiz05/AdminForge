@@ -1,0 +1,166 @@
+$schema: ../../../packages/schemas/generated/page.schema.json
+kind: page
+id: azure.metrics
+version: 1.0.0
+title: Metrics
+summary: Azure Monitor platform metrics for one resource — pick a resource, then the metrics, aggregation and interval to chart.
+owner: azure-team
+tags: [azure, monitoring, metrics]
+template: dashboard
+nav: { section: azure, label: Metrics, icon: chart-line, order: 65 }
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    arm: [user_impersonation]
+  azureRoles: [Monitoring Reader]
+
+params:
+  resourceId: { type: resource, label: Resource, description: Any Azure resource that emits platform metrics. }
+  metrics: { type: string, default: "", label: Metrics, placeholder: "Comma-separated, e.g. Requests,Http5xx (empty = the resource's default metric)" }
+  aggregation:
+    type: enum
+    label: Aggregation
+    facet: true
+    default: Average
+    values: [Average, Total, Maximum, Minimum, Count]
+  interval:
+    type: enum
+    label: Granularity
+    facet: true
+    default: PT1H
+    values:
+      - { value: PT5M, label: 5 minutes }
+      - { value: PT15M, label: 15 minutes }
+      - { value: PT1H, label: 1 hour }
+      - { value: PT6H, label: 6 hours }
+      - { value: P1D, label: 1 day }
+  range: { type: dateRange, label: Time range, default: P1D, presets: [PT1H, PT6H, P1D, P7D, P30D], max: P93D }
+
+filters:
+  facets: [aggregation, interval]
+
+datasources:
+  definitions:
+    source: arm
+    when: ${ $boolean(params.resourceId) }
+    request:
+      path: ${ $join($split(params.resourceId, '/')[$ != ''].('/' & $encode($)), '') }/providers/Microsoft.Insights/metricDefinitions
+      apiVersion: "2023-10-01"
+    transform: >-
+      ${ [value.value.{
+        'name': name.value,
+        'displayName': name.localizedValue,
+        'unit': unit,
+        'primaryAggregation': primaryAggregationType,
+        'aggregations': supportedAggregationTypes,
+        'grains': [metricAvailabilities.timeGrain],
+        'namespace': namespace,
+        'description': displayDescription
+      }] }
+    cache: { ttl: 3600 }
+  series:
+    source: arm
+    when: ${ $boolean(params.resourceId) }
+    request:
+      path: ${ $join($split(params.resourceId, '/')[$ != ''].('/' & $encode($)), '') }/providers/Microsoft.Insights/metrics
+      apiVersion: "2023-10-01"
+      query:
+        metricnames: ${ params.metrics ? $replace(params.metrics, /\s*,\s*/, ',') }
+        aggregation: "${ params.aggregation in ['Average', 'Total', 'Maximum', 'Minimum', 'Count'] ? params.aggregation : 'Average' }"
+        interval: "${ params.interval in ['PT5M', 'PT15M', 'PT1H', 'PT6H', 'P1D'] ? params.interval : 'PT1H' }"
+        timespan: ${ params.range.from & '/' & params.range.to }
+    # One row per metric and time grain: { time, metric, value } — the chart splits series by metric.
+    transform: >-
+      ${ (
+        $agg := $lowercase(params.aggregation ? params.aggregation : 'Average');
+        $points := [value.value.(
+          $m := name.localizedValue;
+          $u := unit;
+          timeseries.data.{ 'time': timeStamp, 'metric': $m, 'unit': $u, 'value': $lookup($, $agg) }
+        )];
+        {
+          'points': $points,
+          'summary': [value.value.(
+            $m := name.localizedValue;
+            $vals := timeseries.data.$lookup($, $agg);
+            {
+              'metric': $m,
+              'unit': unit,
+              'latest': $vals[-1],
+              'minimum': $min($vals),
+              'average': $count($vals) > 0 ? $round($average($vals), 2) : null,
+              'maximum': $max($vals),
+              'points': $count($vals)
+            }
+          )]
+        }
+      ) }
+    cache: { ttl: 60 }
+
+layout:
+  - widget: markdown
+    span: 12
+    when: ${ $not($boolean(params.resourceId)) }
+    text: |
+      **Pick a resource** to chart its platform metrics. You can also open this page from the **Metrics** action on any resource, Function App or Arc server.
+
+      Metrics come from Azure Monitor and need *Monitoring Reader* (or Reader) on the resource. Platform metrics are kept for 93 days.
+  - widget: chart
+    id: metricChart
+    title: Metrics
+    span: 12
+    rows: 3
+    when: ${ $boolean(params.resourceId) }
+    type: line
+    data: series.points
+    x: time
+    y: value
+    series: metric
+    format: number
+    empty:
+      title: No data points in this range
+      body: The resource emitted no values for these metrics. Try a longer time range or a different aggregation.
+  - widget: table
+    id: metricSummary
+    title: Summary
+    span: 12
+    when: ${ $boolean(params.resourceId) }
+    data: series.summary
+    rowKey: metric
+    columns:
+      - { field: metric, label: Metric }
+      - { field: unit, label: Unit }
+      - { field: latest, label: Latest, kind: number }
+      - { field: minimum, label: Minimum, kind: number }
+      - { field: average, label: Average, kind: number }
+      - { field: maximum, label: Maximum, kind: number }
+      - { field: points, label: Data points, kind: number, hidden: true }
+  - widget: table
+    id: definitions
+    title: Available metrics
+    span: 12
+    when: ${ $boolean(params.resourceId) }
+    data: definitions
+    rowKey: name
+    search: true
+    pageSize: 50
+    columns:
+      - field: displayName
+        label: Metric
+        kind: identity
+        secondary: name
+        link:
+          page: azure.metrics
+          params:
+            resourceId: ${ params.resourceId }
+            metrics: ${ row.name }
+            aggregation: ${ row.primaryAggregation }
+      - { field: unit, label: Unit, filter: facet }
+      - { field: primaryAggregation, label: Default aggregation, filter: facet }
+      - { field: aggregations, label: Aggregations, kind: tags }
+      - { field: grains, label: Granularities, kind: tags, hidden: true }
+      - { field: namespace, label: Namespace, hidden: true }
+      - { field: description, label: Description }
+    empty:
+      title: This resource publishes no platform metrics
+      body: Some resource types only emit logs. Send them to a Log Analytics workspace with a diagnostic setting.

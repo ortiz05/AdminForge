@@ -1,0 +1,17 @@
+$schema: ../../../packages/schemas/generated/schedule.schema.json
+kind: schedule
+id: sweep.portal-readiness
+version: 1.0.0
+title: "Hourly probe: AdminForge readiness"
+summary: Runs the probes.portal-readiness probe every hour (minute 29, staggered across the sweep) as the automation identity.
+owner: portal-admins
+tags: [synthetic, probe-sweep]
+cron: "29 * * * *"
+timezone: UTC
+enabled: true
+identity: automation
+job:
+  kind: probe
+  ref: probes.portal-readiness
+timeoutSeconds: 120
+overlap: skip

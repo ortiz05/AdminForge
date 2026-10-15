@@ -1,0 +1,230 @@
+$schema: ../../../packages/schemas/generated/page.schema.json
+kind: page
+id: m365.service-health
+version: 1.0.0
+title: Service health
+summary: Current health of Microsoft 365 services, and the incidents and advisories Microsoft is tracking for this tenant.
+owner: m365-team
+tags: [m365, service-health]
+template: list-detail
+nav: { section: m365, label: Service health, icon: heartbeat, order: 10 }
+refresh: 300
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    graph: [ServiceHealth.Read.All]
+  entraRoles: [Service Support Administrator, Global Reader]
+
+params:
+  q: { type: string, default: "", label: Search, placeholder: "Title, issue id or feature" }
+  state:
+    type: enum
+    label: State
+    facet: true
+    default: Active
+    values: [Active, Resolved, All]
+  classification:
+    type: enum
+    label: Type
+    facet: true
+    default: All
+    values:
+      - { value: All, label: All types }
+      - { value: incident, label: Incident }
+      - { value: advisory, label: Advisory }
+  service: { type: string, label: Service, facet: true, placeholder: e.g. Exchange Online }
+  since: { type: date, label: Updated since, default: -30d, facet: true }
+
+filters:
+  search: q
+  facets: [state, classification, service, since]
+
+savedViews:
+  enabled: true
+  shared: true
+  presets:
+    - { name: Active incidents, params: { state: Active, classification: incident } }
+    - { name: Active advisories, params: { state: Active, classification: advisory } }
+    - { name: Resolved in the last 30 days, params: { state: Resolved } }
+
+datasources:
+  overviews:
+    source: graph
+    request:
+      path: /admin/serviceAnnouncement/healthOverviews
+      query:
+        $select: id,service,status
+    cache: { ttl: 120 }
+    # value = { value: [{ id, service, status }] }. `affected` counts services not in a healthy state.
+    transform: >-
+      ${ (
+        $healthy := ['serviceOperational', 'serviceRestored', 'falsePositive', 'postIncidentReviewPublished', 'resolved', 'resolvedExternal', 'mitigated', 'mitigatedExternal'];
+        $rows := [$sort(value.value, function($a, $b) { $a.service > $b.service })];
+        {
+          "value": $rows,
+          "affected": $count($rows[$not(status in $healthy)])
+        }
+      ) }
+  issues:
+    source: graph
+    request:
+      path: /admin/serviceAnnouncement/issues
+      query:
+        $filter: >-
+          ${ $join([
+               params.state = 'Active' ? 'isResolved eq false',
+               params.state = 'Resolved' ? 'isResolved eq true',
+               params.classification and params.classification != 'All' ? 'classification eq ' & $odata(params.classification),
+               params.service ? 'service eq ' & $odata(params.service),
+               params.since ? 'lastModifiedDateTime ge ' & $iso(params.since)
+             ][$], ' and ') }
+        $orderby: lastModifiedDateTime desc
+        $top: 100
+    paging: all
+    maxItems: 1000
+    cache: { ttl: 120 }
+    # value = { value: [serviceHealthIssue] }. Search is applied here (filters are re-applied too, so cached pages stay consistent).
+    transform: >-
+      ${ (
+        $p := params;
+        $q := $lowercase($trim($p.q ? $p.q : ''));
+        $rows := [value.value[
+            ($q = '' or $contains($lowercase(id & ' ' & title & ' ' & service & ' ' & feature & ' ' & featureGroup), $q))
+            and ($p.state != 'Active' or isResolved = false)
+            and ($p.state != 'Resolved' or isResolved = true)
+            and ($p.classification = 'All' or $not($exists($p.classification)) or classification = $p.classification)
+            and ($not($exists($p.service)) or $p.service = '' or service = $p.service)
+          ].{
+          "id": id,
+          "title": title,
+          "service": service,
+          "feature": feature,
+          "featureGroup": featureGroup,
+          "classification": classification,
+          "status": status,
+          "origin": origin,
+          "impactDescription": impactDescription,
+          "isResolved": isResolved,
+          "startDateTime": startDateTime,
+          "endDateTime": endDateTime,
+          "lastModifiedDateTime": lastModifiedDateTime
+        }];
+        {
+          "rows": $rows,
+          "total": $count($rows),
+          "incidents": $count($rows[classification = 'incident' and isResolved = false]),
+          "advisories": $count($rows[classification = 'advisory' and isResolved = false])
+        }
+      ) }
+
+layout:
+  - widget: kpi
+    id: affected
+    data: overviews.affected
+    label: Services with issues
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+  - widget: kpi
+    id: incidents
+    data: issues.incidents
+    label: Active incidents
+    format: number
+    status: "${ value > 0 ? 'crit' : 'ok' }"
+    href: /p/m365.service-health?state=Active&classification=incident
+  - widget: kpi
+    id: advisories
+    data: issues.advisories
+    label: Active advisories
+    format: number
+    status: "${ value > 0 ? 'info' : 'ok' }"
+    href: /p/m365.service-health?state=Active&classification=advisory
+  - widget: kpi
+    id: inView
+    data: issues.total
+    label: Issues in this view
+    format: number
+  - widget: statusGrid
+    id: services
+    title: Services
+    span: 12
+    data: overviews.value
+    label: service
+    status: status
+    map:
+      serviceOperational: [ok, Healthy]
+      serviceRestored: [ok, Restored]
+      postIncidentReviewPublished: [ok, Post-incident report published]
+      falsePositive: [ok, False positive]
+      resolved: [ok, Resolved]
+      resolvedExternal: [ok, Resolved externally]
+      mitigated: [ok, Mitigated]
+      mitigatedExternal: [ok, Mitigated externally]
+      investigating: [warn, Investigating]
+      restoringService: [warn, Restoring service]
+      extendedRecovery: [warn, Extended recovery]
+      serviceDegradation: [warn, Degraded]
+      confirmed: [warn, Confirmed]
+      verifyingService: [info, Verifying]
+      reported: [info, Reported]
+      investigationSuspended: [info, Investigation suspended]
+      serviceInterruption: [crit, Interrupted]
+    default: [info, Advisory]
+  - widget: table
+    id: issues
+    title: Incidents and advisories
+    span: 12
+    data: issues.rows
+    rowKey: id
+    columns:
+      - { field: title, label: Issue, kind: identity, secondary: id }
+      - { field: service, label: Service, filter: { type: facet, param: service } }
+      - field: classification
+        label: Type
+        kind: status
+        map: { incident: [crit, Incident], advisory: [info, Advisory] }
+        filter: { type: facet, param: classification }
+      - field: status
+        label: Status
+        kind: status
+        map:
+          investigating: [warn, Investigating]
+          confirmed: [warn, Confirmed]
+          serviceDegradation: [warn, Degraded]
+          serviceInterruption: [crit, Interrupted]
+          restoringService: [warn, Restoring service]
+          extendedRecovery: [warn, Extended recovery]
+          verifyingService: [info, Verifying]
+          reported: [info, Reported]
+          investigationSuspended: [info, Investigation suspended]
+          serviceRestored: [ok, Restored]
+          postIncidentReviewPublished: [ok, Post-incident report published]
+          falsePositive: [ok, False positive]
+          resolved: [ok, Resolved]
+          resolvedExternal: [ok, Resolved externally]
+          mitigated: [ok, Mitigated]
+          mitigatedExternal: [ok, Mitigated externally]
+        filter: facet
+      - { field: feature, label: Feature, filter: facet }
+      - { field: impactDescription, label: User impact, hidden: true }
+      - { field: startDateTime, label: Started, kind: datetime, filter: date }
+      - { field: lastModifiedDateTime, label: Last update, kind: relativeTime, sortable: true }
+      - { field: endDateTime, label: Ended, kind: datetime, hidden: true }
+      - { field: origin, label: Origin, hidden: true }
+      - { field: featureGroup, label: Feature group, hidden: true }
+    inspect:
+      page: m365.service-issue
+      params:
+        id: ${ row.id }
+    rowActions:
+      - label: Open in Microsoft 365 admin center
+        icon: arrow-square-out
+        href: "https://admin.microsoft.com/Adminportal/Home#/servicehealth/:/alerts/${ $encode(row.id) }"
+    empty:
+      title: No issues match these filters
+      body: Microsoft isn't tracking any incident or advisory for this tenant that matches the current filters. Clear the filters or widen the date range to see resolved issues.
+
+export:
+  formats: [csv, xlsx]
+  fileName: service-health-issues
+  data: issues.rows
+  columns: visible

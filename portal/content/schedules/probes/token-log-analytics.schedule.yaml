@@ -1,0 +1,17 @@
+$schema: ../../../packages/schemas/generated/schedule.schema.json
+kind: schedule
+id: sweep.token-log-analytics
+version: 1.0.0
+title: "Hourly probe: Token acquisition — Log Analytics"
+summary: Runs the probes.token-log-analytics probe every hour (minute 43, staggered across the sweep) as the automation identity.
+owner: portal-admins
+tags: [synthetic, probe-sweep]
+cron: "43 * * * *"
+timezone: UTC
+enabled: true
+identity: automation
+job:
+  kind: probe
+  ref: probes.token-log-analytics
+timeoutSeconds: 120
+overlap: skip

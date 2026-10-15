@@ -1,0 +1,179 @@
+$schema: ../../../packages/schemas/generated/runbook.schema.json
+kind: runbook
+id: security.compromised-account-response
+version: 1.0.0
+title: Compromised account response
+summary: Guided response to a suspected account compromise — confirm the signal, contain (block sign-in, revoke sessions, confirm compromised), investigate, recover and close.
+owner: security-team
+tags: [security, identity, incident, runbook]
+nav: { section: security, label: Compromised account response, icon: first-aid-kit, order: 90 }
+risk: high
+mode: write
+requires:
+  portalRoles: [Portal.Operator]
+  scopes:
+    graph: [User.Read.All, User.EnableDisableAccount.All, User.RevokeSessions.All, IdentityRiskyUser.ReadWrite.All, IdentityRiskEvent.Read.All, SecurityIncident.ReadWrite.All]
+  entraRoles: [Security Operator, User Administrator]
+  licences: [identityProtection]
+confirm:
+  type: click
+  message: Containment blocks the user's sign-in, revokes all sessions and marks the user compromised. Coordinate with the user's manager before you start.
+approval:
+  required: false
+timeout: 4h
+
+inputs:
+  userId: { type: string, format: guid, label: User, picker: user }
+  reason: { type: string, label: Reason, minLength: 10, multiline: true, placeholder: "What was observed and where (incident number, alert)" }
+  incidentId: { type: string, label: Defender incident id, required: false, pattern: '^[0-9]+$', description: Optional — progress is recorded as a comment on this incident. }
+
+sections:
+  - id: confirm_signal
+    title: 1. Confirm the signal
+    body: |
+      Before containing, make sure the signal points at a real compromise rather than unusual but legitimate activity.
+      The user's current risk and recent detections are read below.
+    steps:
+      - id: user
+        type: graph
+        mode: read
+        describe: Look up the user
+        request:
+          method: GET
+          path: /users/${ $encode($guid(inputs.userId)) }
+          query:
+            $select: id,displayName,userPrincipalName,accountEnabled,lastPasswordChangeDateTime,onPremisesSyncEnabled
+      - id: risk
+        type: graph
+        mode: read
+        describe: Read Identity Protection risk (if any)
+        onError: continue
+        request:
+          method: GET
+          path: /identityProtection/riskyUsers/${ $encode($guid(inputs.userId)) }
+      - id: detections
+        type: graph
+        mode: read
+        describe: Risk detections in the last 30 days
+        onError: continue
+        request:
+          method: GET
+          path: /identityProtection/riskDetections
+          query:
+            $top: 50
+            $filter: "${ 'userId eq ' & $odata($guid(inputs.userId)) & ' and detectedDateTime ge ' & $daysAgo(30) }"
+      - id: triage
+        type: manual
+        instructions: |
+          Review **${ steps.user.output.displayName }** (`${ steps.user.output.userPrincipalName }`).
+          Current risk: **${ steps.risk.output.riskLevel ? steps.risk.output.riskLevel & ' / ' & steps.risk.output.riskState : 'no Identity Protection record' }**.
+          Open the [risky user page](/p/security.risky-user?id=${ $encode(inputs.userId) }) and the [user profile](/p/identity.user?id=${ $encode(inputs.userId) }).
+        checklist:
+          - Sign-ins from the flagged IP addresses or countries were not made by the user (confirmed out of band — phone or in person, never by email)
+          - No approved travel, VPN or new device explains the activity
+          - The user's manager has been told that the account will be blocked
+          - "${ steps.user.output.onPremisesSyncEnabled = true ? 'The account is synced from on-premises AD — also disable it there, or the next sync re-enables sign-in' : 'The account is cloud-only' }"
+
+  - id: contain
+    title: 2. Contain
+    body: |
+      Block sign-in and revoke every session, then mark the user compromised so risk-based Conditional Access treats any further sign-in as high risk.
+    steps:
+      - id: disable
+        type: playbook
+        mode: write
+        describe: ${ 'Block sign-in and revoke sessions for ' & steps.user.output.userPrincipalName }
+        ref: identity.disable-user
+        inputs:
+          userId: ${ inputs.userId }
+          reason: ${ inputs.reason }
+      - id: confirm_compromised
+        type: playbook
+        mode: write
+        describe: ${ 'Confirm ' & steps.user.output.userPrincipalName & ' compromised in Identity Protection' }
+        ref: security.confirm-risky-user-compromised
+        when: ${ $not(steps.risk.output.riskState = 'confirmedCompromised') }
+        inputs:
+          userId: ${ inputs.userId }
+          reason: ${ inputs.reason }
+      - id: incident_note
+        type: playbook
+        mode: write
+        describe: ${ 'Record containment on incident ' & inputs.incidentId }
+        ref: security.update-incident
+        when: ${ $exists(inputs.incidentId) and inputs.incidentId != '' }
+        inputs:
+          incidentId: ${ inputs.incidentId }
+          status: inProgress
+          comment: "${ 'Containment done in AdminForge by ' & user.upn & ': sign-in blocked, sessions revoked, user confirmed compromised. Reason: ' & inputs.reason }"
+
+  - id: investigate
+    title: 3. Investigate
+    body: |
+      Work out what the attacker did with the account while it was open. Start from the sign-in time of the first risky detection.
+    steps:
+      - id: investigation
+        type: manual
+        instructions: |
+          Use [Alerts](/p/security.alerts) and [Incidents](/p/security.incidents) for correlated activity, and the mailbox views under Microsoft 365 for forwarding.
+        checklist:
+          - Inbox rules and mailbox forwarding reviewed; malicious rules removed
+          - Recently registered MFA methods reviewed; unknown methods removed
+          - OAuth consents granted by the user reviewed; suspicious app grants revoked
+          - Recently sent mail reviewed for internal phishing; recipients warned if needed
+          - Files shared externally or downloaded in bulk reviewed (OneDrive / SharePoint)
+          - Devices registered or joined by the user reviewed
+          - Azure and Entra role assignments of the user reviewed
+
+  - id: recover
+    title: 4. Recover
+    body: |
+      Give the account back only after the investigation is complete.
+    steps:
+      - id: recovery
+        type: manual
+        instructions: |
+          Reset credentials and hand the account back from the [user profile](/p/identity.user?id=${ $encode(inputs.userId) }).
+          Resetting the password as an admin also remediates the user's risk in Identity Protection.
+        checklist:
+          - Password reset (or Temporary Access Pass issued) and delivered out of band
+          - User re-registered MFA with the Temporary Access Pass
+          - Sign-in re-enabled
+          - User risk shows remediated or dismissed
+
+  - id: close
+    title: 5. Close
+    body: |
+      Resolve the Defender incident with the classification **True positive / Compromised account** and a short summary of what was found.
+    steps:
+      - id: closure
+        type: manual
+        instructions: Record the timeline and lessons learned in the incident before resolving it.
+        checklist:
+          - Incident resolved with classification and determination
+          - Detection or policy gaps raised with the security engineering team
+
+outputs:
+  summary: ${ 'Compromised account response for ' & steps.user.output.userPrincipalName & ' completed' }
+
+tests:
+  - name: contains a user at risk and records it on the incident
+    inputs: { userId: 30000000-0000-4000-8000-000000000001, reason: Incident 4224 - password spray then a successful sign-in from NL., incidentId: '4224' }
+    mocks:
+      user: { id: 30000000-0000-4000-8000-000000000001, displayName: Avery Engineer, userPrincipalName: avery@example.com, accountEnabled: true, onPremisesSyncEnabled: false }
+      risk: { riskLevel: high, riskState: atRisk }
+      detections: { value: [] }
+    expect:
+      status: succeeded
+      plan: [disable, confirm_compromised, incident_note]
+      outputs: { summary: Compromised account response for avery@example.com completed }
+  - name: skips confirm-compromised and the incident note when they do not apply
+    inputs: { userId: 30000000-0000-4000-8000-000000000005, reason: Already confirmed by the SOC; blocking sign-in now. }
+    mocks:
+      user: { id: 30000000-0000-4000-8000-000000000005, displayName: "Eli O'Brien", userPrincipalName: eli.obrien@example.com, accountEnabled: true, onPremisesSyncEnabled: true }
+      risk: { riskLevel: high, riskState: confirmedCompromised }
+      detections: { value: [] }
+    expect:
+      status: succeeded
+      plan: [disable]
+      steps: { confirm_compromised: skipped, incident_note: skipped }

@@ -1,0 +1,304 @@
+{
+  "value": [
+    {
+      "reportRefreshDate": "2026-10-13",
+      "reportDate": "2026-09-14",
+      "send": 8927,
+      "receive": 39228,
+      "read": 29080,
+      "meetingCreated": 773,
+      "meetingInteracted": 2482,
+      "reportPeriod": "30"
+    },
+    {
+      "reportRefreshDate": "2026-10-13",
+      "reportDate": "2026-09-15",
+      "send": 9074,
+      "receive": 39840,
+      "read": 29521,
+      "meetingCreated": 787,
+      "meetingInteracted": 2518,
+      "reportPeriod": "30"
+    },
+    {
+      "reportRefreshDate": "2026-10-13",
+      "reportDate": "2026-09-16",
+      "send": 9256,
+      "receive": 40601,
+      "read": 30069,
+      "meetingCreated": 806,
+      "meetingInteracted": 2564,
+      "reportPeriod": "30"
+    },
+    {
+      "reportRefreshDate": "2026-10-13",
+      "reportDate": "2026-09-17",
+      "send": 9455,
+      "receive": 41428,
+      "read": 30664,
+      "meetingCreated": 825,
+      "meetingInteracted": 2614,
+      "reportPeriod": "30"
+    },
+    {
+      "reportRefreshDate": "2026-10-13",
+      "reportDate": "2026-09-18",
+      "send": 9647,
+      "receive": 42230,
+      "read": 31242,
+      "meetingCreated": 845,
+      "meetingInteracted": 2662,
+      "reportPeriod": "30"
+    },
+    {
+      "reportRefreshDate": "2026-10-13",
+      "reportDate": "2026-09-19",
+      "send": 3434,
+      "receive": 15022,
+      "read": 11108,
+      "meetingCreated": 301,
+      "meetingInteracted": 946,
+      "reportPeriod": "30"
+    },
+    {
+      "reportRefreshDate": "2026-10-13",
+      "reportDate": "2026-09-20",
+      "send": 3476,
+      "receive": 15196,
+      "read": 11234,
+      "meetingCreated": 306,
+      "meetingInteracted": 957,
+      "reportPeriod": "30"
+    },
+    {
+      "reportRefreshDate": "2026-10-13",
+      "reportDate": "2026-09-21",
+      "send": 9994,
+      "receive": 43673,
+      "read": 32281,
+      "meetingCreated": 879,
+      "meetingInteracted": 2748,
+      "reportPeriod": "30"
+    },
+    {
+      "reportRefreshDate": "2026-10-13",
+      "reportDate": "2026-09-22",
+      "send": 9990,
+      "receive": 43656,
+      "read": 32269,
+      "meetingCreated": 879,
+      "meetingInteracted": 2747,
+      "reportPeriod": "30"
+    },
+    {
+      "reportRefreshDate": "2026-10-13",
+      "reportDate": "2026-09-23",
+      "send": 9920,
+      "receive": 43369,
+      "read": 32061,
+      "meetingCreated": 872,
+      "meetingInteracted": 2730,
+      "reportPeriod": "30"
+    },
+    {
+      "reportRefreshDate": "2026-10-13",
+      "reportDate": "2026-09-24",
+      "send": 9794,
+      "receive": 42842,
+      "read": 31683,
+      "meetingCreated": 859,
+      "meetingInteracted": 2699,
+      "reportPeriod": "30"
+    },
+    {
+      "reportRefreshDate": "2026-10-13",
+      "reportDate": "2026-09-25",
+      "send": 9624,
+      "receive": 42135,
+      "read": 31173,
+      "meetingCreated": 842,
+      "meetingInteracted": 2656,
+      "reportPeriod": "30"
+    },
+    {
+      "reportRefreshDate": "2026-10-13",
+      "reportDate": "2026-09-26",
+      "send": 3301,
+      "receive": 14464,
+      "read": 10707,
+      "meetingCreated": 288,
+      "meetingInteracted": 913,
+      "reportPeriod": "30"
+    },
+    {
+      "reportRefreshDate": "2026-10-13",
+      "reportDate": "2026-09-27",
+      "send": 3231,
+      "receive": 14176,
+      "read": 10499,
+      "meetingCreated": 281,
+      "meetingInteracted": 895,
+      "reportPeriod": "30"
+    },
+    {
+      "reportRefreshDate": "2026-10-13",
+      "reportDate": "2026-09-28",
+      "send": 9053,
+      "receive": 39755,
+      "read": 29459,
+      "meetingCreated": 785,
+      "meetingInteracted": 2513,
+      "reportPeriod": "30"
+    },
+    {
+      "reportRefreshDate": "2026-10-13",
+      "reportDate": "2026-09-29",
+      "send": 8912,
+      "receive": 39167,
+      "read": 29036,
+      "meetingCreated": 771,
+      "meetingInteracted": 2478,
+      "reportPeriod": "30"
+    },
+    {
+      "reportRefreshDate": "2026-10-13",
+      "reportDate": "2026-09-30",
+      "send": 8825,
+      "receive": 38803,
+      "read": 28774,
+      "meetingCreated": 762,
+      "meetingInteracted": 2456,
+      "reportPeriod": "30"
+    },
+    {
+      "reportRefreshDate": "2026-10-13",
+      "reportDate": "2026-10-01",
+      "send": 8801,
+      "receive": 38703,
+      "read": 28702,
+      "meetingCreated": 760,
+      "meetingInteracted": 2450,
+      "reportPeriod": "30"
+    },
+    {
+      "reportRefreshDate": "2026-10-13",
+      "reportDate": "2026-10-02",
+      "send": 8843,
+      "receive": 38877,
+      "read": 28828,
+      "meetingCreated": 764,
+      "meetingInteracted": 2461,
+      "reportPeriod": "30"
+    },
+    {
+      "reportRefreshDate": "2026-10-13",
+      "reportDate": "2026-10-03",
+      "send": 3131,
+      "receive": 13758,
+      "read": 10198,
+      "meetingCreated": 271,
+      "meetingInteracted": 870,
+      "reportPeriod": "30"
+    },
+    {
+      "reportRefreshDate": "2026-10-13",
+      "reportDate": "2026-10-04",
+      "send": 3185,
+      "receive": 13981,
+      "read": 10359,
+      "meetingCreated": 276,
+      "meetingInteracted": 884,
+      "reportPeriod": "30"
+    },
+    {
+      "reportRefreshDate": "2026-10-13",
+      "reportDate": "2026-10-05",
+      "send": 9286,
+      "receive": 40724,
+      "read": 30157,
+      "meetingCreated": 809,
+      "meetingInteracted": 2571,
+      "reportPeriod": "30"
+    },
+    {
+      "reportRefreshDate": "2026-10-13",
+      "reportDate": "2026-10-06",
+      "send": 9485,
+      "receive": 41553,
+      "read": 30754,
+      "meetingCreated": 828,
+      "meetingInteracted": 2621,
+      "reportPeriod": "30"
+    },
+    {
+      "reportRefreshDate": "2026-10-13",
+      "reportDate": "2026-10-07",
+      "send": 9674,
+      "receive": 42343,
+      "read": 31323,
+      "meetingCreated": 847,
+      "meetingInteracted": 2669,
+      "reportPeriod": "30"
+    },
+    {
+      "reportRefreshDate": "2026-10-13",
+      "reportDate": "2026-10-08",
+      "send": 9834,
+      "receive": 43008,
+      "read": 31802,
+      "meetingCreated": 863,
+      "meetingInteracted": 2708,
+      "reportPeriod": "30"
+    },
+    {
+      "reportRefreshDate": "2026-10-13",
+      "reportDate": "2026-10-09",
+      "send": 9946,
+      "receive": 43473,
+      "read": 32137,
+      "meetingCreated": 875,
+      "meetingInteracted": 2736,
+      "reportPeriod": "30"
+    },
+    {
+      "reportRefreshDate": "2026-10-13",
+      "reportDate": "2026-10-10",
+      "send": 3499,
+      "receive": 15291,
+      "read": 11302,
+      "meetingCreated": 308,
+      "meetingInteracted": 962,
+      "reportPeriod": "30"
+    },
+    {
+      "reportRefreshDate": "2026-10-13",
+      "reportDate": "2026-10-11",
+      "send": 3494,
+      "receive": 15270,
+      "read": 11287,
+      "meetingCreated": 307,
+      "meetingInteracted": 961,
+      "reportPeriod": "30"
+    },
+    {
+      "reportRefreshDate": "2026-10-13",
+      "reportDate": "2026-10-12",
+      "send": 9905,
+      "receive": 43304,
+      "read": 32015,
+      "meetingCreated": 870,
+      "meetingInteracted": 2726,
+      "reportPeriod": "30"
+    },
+    {
+      "reportRefreshDate": "2026-10-13",
+      "reportDate": "2026-10-13",
+      "send": 9771,
+      "receive": 42746,
+      "read": 31613,
+      "meetingCreated": 857,
+      "meetingInteracted": 2693,
+      "reportPeriod": "30"
+    }
+  ]
+}

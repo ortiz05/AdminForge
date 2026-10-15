@@ -1,0 +1,27 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#admin/serviceAnnouncement/issues/$entity",
+  "id": "PL905211",
+  "title": "Users may be unable to create tasks in Planner",
+  "service": "Planner",
+  "feature": "Planner",
+  "featureGroup": "Planner",
+  "classification": "incident",
+  "status": "serviceRestored",
+  "origin": "microsoft",
+  "isResolved": true,
+  "startDateTime": "2026-09-18T04:00:00Z",
+  "endDateTime": "2026-09-18T07:00:00Z",
+  "lastModifiedDateTime": "2026-09-18T09:00:00Z",
+  "impactDescription": "Creating a task returned an error.",
+  "posts": [
+    {
+      "createdDateTime": "2026-09-18T09:00:00Z",
+      "postType": "regular",
+      "description": {
+        "contentType": "html",
+        "content": "<p><b>Final status:</b> A fix was deployed.</p>"
+      }
+    }
+  ],
+  "details": []
+}

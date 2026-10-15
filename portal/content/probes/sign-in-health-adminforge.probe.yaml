@@ -1,0 +1,23 @@
+$schema: ../../packages/schemas/generated/probe.schema.json
+kind: probe
+id: probes.sign-in-health-adminforge
+version: 1.0.0
+title: AdminForge sign-in failure rate
+summary: >-
+  Failure rate of sign-ins to the AdminForge Read app (AF_READ_CLIENT_ID) over the last hour. Catches Conditional
+  Access or app-registration changes that lock engineers out of the portal.
+owner: portal-admins
+tags: [synthetic, portal, sign-ins]
+check:
+  kind: signInHealth
+  window: PT1H
+  maxFailurePercent: 30
+  minSignIns: 5
+  appId: ${ env.AF_READ_CLIENT_ID }
+thresholds: { warn: 10, crit: 30 }
+intervalHint: PT15M
+timeoutMs: 60000
+requires:
+  scopes:
+    graph: [AuditLog.Read.All]
+  licences: [signInLogs]

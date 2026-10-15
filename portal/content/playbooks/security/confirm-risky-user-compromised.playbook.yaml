@@ -1,0 +1,97 @@
+$schema: ../../../packages/schemas/generated/playbook.schema.json
+kind: playbook
+id: security.confirm-risky-user-compromised
+version: 1.0.0
+title: Confirm user compromised
+summary: Marks a user as compromised in Microsoft Entra ID Protection. Their user risk becomes high, so risk-based Conditional Access policies apply at the next sign-in.
+owner: security-team
+tags: [security, identity-protection, risk, incident]
+risk: high
+mode: write
+requires:
+  portalRoles: [Portal.Operator]
+  scopes:
+    graph: [User.Read.All, IdentityRiskyUser.ReadWrite.All]
+  entraRoles: [Security Operator]
+  licences: [identityProtection]
+confirm:
+  type: typed
+  value: ${ steps.user.output.userPrincipalName }
+  message: Type the user's sign-in name to confirm. Their risk is set to high and risk policies will block or challenge them.
+approval:
+  required: false
+
+inputs:
+  userId: { type: string, format: guid, label: User, picker: user }
+  reason: { type: string, label: Reason, minLength: 10, multiline: true, placeholder: Incident number and what you found }
+
+steps:
+  - id: user
+    type: graph
+    mode: read
+    describe: Look up the user
+    request:
+      method: GET
+      path: /users/${ $encode($guid(inputs.userId)) }
+      query:
+        $select: id,displayName,userPrincipalName,accountEnabled
+
+  # Users who never had a risk detection are not in riskyUsers (404); they can still be confirmed compromised.
+  - id: risk
+    type: graph
+    mode: read
+    describe: Read the user's current risk (if any)
+    onError: continue
+    request:
+      method: GET
+      path: /identityProtection/riskyUsers/${ $encode($guid(inputs.userId)) }
+
+  - id: not_already_confirmed
+    type: assert
+    that: ${ $not(steps.risk.output.riskState = 'confirmedCompromised') }
+    message: ${ steps.user.output.userPrincipalName & ' is already confirmed compromised.' }
+
+  - id: confirm
+    type: graph
+    mode: write
+    describe: ${ 'Confirm ' & steps.user.output.userPrincipalName & ' compromised (user risk becomes high)' }
+    request:
+      method: POST
+      path: /identityProtection/riskyUsers/confirmCompromised
+      body:
+        userIds:
+          - ${ $guid(inputs.userId) }
+    dryRunOutput: null
+
+outputs:
+  summary: ${ steps.user.output.userPrincipalName & ' confirmed compromised; user risk is now high' }
+  followUp: >-
+    Reset the password (or issue a Temporary Access Pass), revoke sessions and review sign-ins and inbox rules.
+    Dismiss the risk only after the account is secured.
+
+tests:
+  - name: confirms a user at risk
+    inputs: { userId: 30000000-0000-4000-8000-000000000001, reason: Incident 4224 - password spray then successful sign-in. }
+    mocks:
+      user: { id: 30000000-0000-4000-8000-000000000001, userPrincipalName: avery@example.com, accountEnabled: true }
+      risk: { id: 30000000-0000-4000-8000-000000000001, riskState: atRisk, riskLevel: high }
+    expect:
+      status: succeeded
+      plan: [confirm]
+      outputs: { summary: avery@example.com confirmed compromised; user risk is now high }
+  - name: confirms a user who has no risk record yet
+    inputs: { userId: 10000000-0000-4000-8000-000000000010, reason: Reported by the user's manager after a phishing call. }
+    mocks:
+      user: { id: 10000000-0000-4000-8000-000000000010, userPrincipalName: nora.fischer@example.com, accountEnabled: true }
+    errors:
+      risk: { status: 404, code: ResourceNotFound, message: Risky user not found }
+    expect:
+      status: succeeded
+      plan: [confirm]
+      steps: { risk: failed }
+  - name: refuses a user already confirmed compromised
+    inputs: { userId: 30000000-0000-4000-8000-000000000005, reason: Duplicate request from the queue. }
+    mocks:
+      user: { id: 30000000-0000-4000-8000-000000000005, userPrincipalName: eli.obrien@example.com, accountEnabled: false }
+      risk: { id: 30000000-0000-4000-8000-000000000005, riskState: confirmedCompromised, riskLevel: high }
+    expect: { status: failed, failedStep: not_already_confirmed }

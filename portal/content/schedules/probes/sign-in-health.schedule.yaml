@@ -1,0 +1,21 @@
+$schema: ../../../packages/schemas/generated/schedule.schema.json
+kind: schedule
+id: sweep.sign-in-health
+version: 1.0.0
+title: "Hourly probe: Tenant sign-in failure rate"
+summary: Runs the probes.sign-in-health probe every hour (minute 35, staggered across the sweep) as the automation identity.
+owner: portal-admins
+tags: [synthetic, probe-sweep]
+cron: "35 * * * *"
+timezone: UTC
+enabled: true
+identity: automation
+job:
+  kind: probe
+  ref: probes.sign-in-health
+timeoutSeconds: 120
+overlap: skip
+requires:
+  scopes:
+    graph: [AuditLog.Read.All]
+  licences: [signInLogs]

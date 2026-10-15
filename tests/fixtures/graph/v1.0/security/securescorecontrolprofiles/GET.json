@@ -1,0 +1,548 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#security/secureScoreControlProfiles",
+  "value": [
+    {
+      "id": "AdminMFAV2",
+      "azureTenantId": "00000000-0000-4000-8000-0000000000f0",
+      "actionType": "Config",
+      "actionUrl": "https://entra.microsoft.com/#view/Microsoft_AAD_ConditionalAccess/ConditionalAccessBlade/~/Policies",
+      "controlCategory": "Identity",
+      "title": "Ensure multifactor authentication is enabled for all users in administrative roles",
+      "deprecated": false,
+      "implementationCost": "Low",
+      "lastModifiedDateTime": null,
+      "maxScore": 10.0,
+      "rank": 1,
+      "remediation": "<p>Ensure multifactor authentication is enabled for all users in administrative roles.</p>",
+      "remediationImpact": "Users in scope may be prompted to complete an extra step.",
+      "service": "AzureAD",
+      "threats": [
+        "AccountBreach",
+        "ElevationOfPrivilege"
+      ],
+      "tier": "Core",
+      "userImpact": "Low",
+      "complianceInformation": [],
+      "controlStateUpdates": [],
+      "vendorInformation": {
+        "provider": "SecureScore",
+        "providerVersion": null,
+        "subProvider": null,
+        "vendor": "Microsoft"
+      }
+    },
+    {
+      "id": "MFARegistrationV2",
+      "azureTenantId": "00000000-0000-4000-8000-0000000000f0",
+      "actionType": "Config",
+      "actionUrl": "https://entra.microsoft.com/#view/Microsoft_AAD_ConditionalAccess/ConditionalAccessBlade/~/Policies",
+      "controlCategory": "Identity",
+      "title": "Ensure multifactor authentication is enabled for all users",
+      "deprecated": false,
+      "implementationCost": "Moderate",
+      "lastModifiedDateTime": null,
+      "maxScore": 9.0,
+      "rank": 2,
+      "remediation": "<p>Ensure multifactor authentication is enabled for all users.</p>",
+      "remediationImpact": "Users in scope may be prompted to complete an extra step.",
+      "service": "AzureAD",
+      "threats": [
+        "AccountBreach",
+        "PasswordCracking"
+      ],
+      "tier": "Core",
+      "userImpact": "Moderate",
+      "complianceInformation": [],
+      "controlStateUpdates": [],
+      "vendorInformation": {
+        "provider": "SecureScore",
+        "providerVersion": null,
+        "subProvider": null,
+        "vendor": "Microsoft"
+      }
+    },
+    {
+      "id": "BlockLegacyAuthentication",
+      "azureTenantId": "00000000-0000-4000-8000-0000000000f0",
+      "actionType": "Config",
+      "actionUrl": "https://entra.microsoft.com/#view/Microsoft_AAD_ConditionalAccess/ConditionalAccessBlade/~/Policies",
+      "controlCategory": "Identity",
+      "title": "Enable Conditional Access policies to block legacy authentication",
+      "deprecated": false,
+      "implementationCost": "Moderate",
+      "lastModifiedDateTime": null,
+      "maxScore": 8.0,
+      "rank": 3,
+      "remediation": "<p>Enable Conditional Access policies to block legacy authentication.</p>",
+      "remediationImpact": "Users in scope may be prompted to complete an extra step.",
+      "service": "AzureAD",
+      "threats": [
+        "PasswordSpray",
+        "AccountBreach"
+      ],
+      "tier": "Core",
+      "userImpact": "Moderate",
+      "complianceInformation": [],
+      "controlStateUpdates": [],
+      "vendorInformation": {
+        "provider": "SecureScore",
+        "providerVersion": null,
+        "subProvider": null,
+        "vendor": "Microsoft"
+      }
+    },
+    {
+      "id": "UserRiskPolicy",
+      "azureTenantId": "00000000-0000-4000-8000-0000000000f0",
+      "actionType": "Config",
+      "actionUrl": "https://entra.microsoft.com/#view/Microsoft_AAD_ConditionalAccess/ConditionalAccessBlade/~/Policies",
+      "controlCategory": "Identity",
+      "title": "Ensure user risk policies are enabled",
+      "deprecated": false,
+      "implementationCost": "Moderate",
+      "lastModifiedDateTime": null,
+      "maxScore": 7.0,
+      "rank": 4,
+      "remediation": "<p>Ensure user risk policies are enabled.</p>",
+      "remediationImpact": "Users in scope may be prompted to complete an extra step.",
+      "service": "AzureAD",
+      "threats": [
+        "AccountBreach"
+      ],
+      "tier": "Core",
+      "userImpact": "Moderate",
+      "complianceInformation": [],
+      "controlStateUpdates": [],
+      "vendorInformation": {
+        "provider": "SecureScore",
+        "providerVersion": null,
+        "subProvider": null,
+        "vendor": "Microsoft"
+      }
+    },
+    {
+      "id": "SigninRiskPolicy",
+      "azureTenantId": "00000000-0000-4000-8000-0000000000f0",
+      "actionType": "Config",
+      "actionUrl": "https://entra.microsoft.com/#view/Microsoft_AAD_ConditionalAccess/ConditionalAccessBlade/~/Policies",
+      "controlCategory": "Identity",
+      "title": "Ensure sign-in risk policies are enabled",
+      "deprecated": false,
+      "implementationCost": "Moderate",
+      "lastModifiedDateTime": null,
+      "maxScore": 7.0,
+      "rank": 5,
+      "remediation": "<p>Ensure sign-in risk policies are enabled.</p>",
+      "remediationImpact": "Users in scope may be prompted to complete an extra step.",
+      "service": "AzureAD",
+      "threats": [
+        "AccountBreach"
+      ],
+      "tier": "Core",
+      "userImpact": "Moderate",
+      "complianceInformation": [],
+      "controlStateUpdates": [],
+      "vendorInformation": {
+        "provider": "SecureScore",
+        "providerVersion": null,
+        "subProvider": null,
+        "vendor": "Microsoft"
+      }
+    },
+    {
+      "id": "OneAdmin",
+      "azureTenantId": "00000000-0000-4000-8000-0000000000f0",
+      "actionType": "Config",
+      "actionUrl": "https://entra.microsoft.com/#view/Microsoft_AAD_IAM/RolesManagementMenuBlade/~/AllRoles",
+      "controlCategory": "Identity",
+      "title": "Designate more than one Global Administrator",
+      "deprecated": false,
+      "implementationCost": "Low",
+      "lastModifiedDateTime": null,
+      "maxScore": 1.0,
+      "rank": 30,
+      "remediation": "<p>Designate more than one Global Administrator.</p>",
+      "remediationImpact": "Users in scope may be prompted to complete an extra step.",
+      "service": "AzureAD",
+      "threats": [
+        "ElevationOfPrivilege"
+      ],
+      "tier": "Core",
+      "userImpact": "Low",
+      "complianceInformation": [],
+      "controlStateUpdates": [],
+      "vendorInformation": {
+        "provider": "SecureScore",
+        "providerVersion": null,
+        "subProvider": null,
+        "vendor": "Microsoft"
+      }
+    },
+    {
+      "id": "RoleOverlap",
+      "azureTenantId": "00000000-0000-4000-8000-0000000000f0",
+      "actionType": "Config",
+      "actionUrl": "https://entra.microsoft.com/#view/Microsoft_AAD_IAM/RolesManagementMenuBlade/~/AllRoles",
+      "controlCategory": "Identity",
+      "title": "Use least privileged administrative roles",
+      "deprecated": false,
+      "implementationCost": "Low",
+      "lastModifiedDateTime": null,
+      "maxScore": 1.0,
+      "rank": 31,
+      "remediation": "<p>Use least privileged administrative roles.</p>",
+      "remediationImpact": "Users in scope may be prompted to complete an extra step.",
+      "service": "AzureAD",
+      "threats": [
+        "ElevationOfPrivilege"
+      ],
+      "tier": "Core",
+      "userImpact": "Low",
+      "complianceInformation": [],
+      "controlStateUpdates": [],
+      "vendorInformation": {
+        "provider": "SecureScore",
+        "providerVersion": null,
+        "subProvider": null,
+        "vendor": "Microsoft"
+      }
+    },
+    {
+      "id": "PWAgePolicyNew",
+      "azureTenantId": "00000000-0000-4000-8000-0000000000f0",
+      "actionType": "Config",
+      "actionUrl": "https://admin.microsoft.com/Adminportal/Home#/Settings/SecurityPrivacy/:/Settings/L1/PasswordPolicy",
+      "controlCategory": "Identity",
+      "title": "Set the password expiration policy to never expire",
+      "deprecated": false,
+      "implementationCost": "Low",
+      "lastModifiedDateTime": null,
+      "maxScore": 8.0,
+      "rank": 10,
+      "remediation": "<p>Set the password expiration policy to never expire.</p>",
+      "remediationImpact": "Users in scope may be prompted to complete an extra step.",
+      "service": "AzureAD",
+      "threats": [
+        "PasswordCracking"
+      ],
+      "tier": "Core",
+      "userImpact": "Moderate",
+      "complianceInformation": [],
+      "controlStateUpdates": [],
+      "vendorInformation": {
+        "provider": "SecureScore",
+        "providerVersion": null,
+        "subProvider": null,
+        "vendor": "Microsoft"
+      }
+    },
+    {
+      "id": "SelfServicePasswordReset",
+      "azureTenantId": "00000000-0000-4000-8000-0000000000f0",
+      "actionType": "Config",
+      "actionUrl": "https://entra.microsoft.com/#view/Microsoft_AAD_IAM/PasswordResetMenuBlade/~/Properties",
+      "controlCategory": "Identity",
+      "title": "Enable self-service password reset",
+      "deprecated": false,
+      "implementationCost": "Low",
+      "lastModifiedDateTime": null,
+      "maxScore": 1.0,
+      "rank": 40,
+      "remediation": "<p>Enable self-service password reset.</p>",
+      "remediationImpact": "Users in scope may be prompted to complete an extra step.",
+      "service": "AzureAD",
+      "threats": [
+        "AccountBreach"
+      ],
+      "tier": "Core",
+      "userImpact": "Moderate",
+      "complianceInformation": [],
+      "controlStateUpdates": [
+        {
+          "assignedTo": "",
+          "comment": "Handled by the third-party identity provider",
+          "state": "ThirdParty",
+          "updatedBy": "alex.admin@example.com",
+          "updatedDateTime": "2026-09-25T09:00:00Z"
+        }
+      ],
+      "vendorInformation": {
+        "provider": "SecureScore",
+        "providerVersion": null,
+        "subProvider": null,
+        "vendor": "Microsoft"
+      }
+    },
+    {
+      "id": "IntegratedApps",
+      "azureTenantId": "00000000-0000-4000-8000-0000000000f0",
+      "actionType": "Config",
+      "actionUrl": "https://entra.microsoft.com/#view/Microsoft_AAD_IAM/ConsentPoliciesMenuBlade/~/UserSettings",
+      "controlCategory": "Apps",
+      "title": "Do not allow users to grant consent to unreliable applications",
+      "deprecated": false,
+      "implementationCost": "Moderate",
+      "lastModifiedDateTime": null,
+      "maxScore": 4.0,
+      "rank": 12,
+      "remediation": "<p>Do not allow users to grant consent to unreliable applications.</p>",
+      "remediationImpact": "Users in scope may be prompted to complete an extra step.",
+      "service": "AzureAD",
+      "threats": [
+        "DataExfiltration",
+        "Phishing"
+      ],
+      "tier": "Core",
+      "userImpact": "Moderate",
+      "complianceInformation": [],
+      "controlStateUpdates": [],
+      "vendorInformation": {
+        "provider": "SecureScore",
+        "providerVersion": null,
+        "subProvider": null,
+        "vendor": "Microsoft"
+      }
+    },
+    {
+      "id": "mdo_safelinksforemail",
+      "azureTenantId": "00000000-0000-4000-8000-0000000000f0",
+      "actionType": "Config",
+      "actionUrl": "https://security.microsoft.com/safelinksv2",
+      "controlCategory": "Apps",
+      "title": "Create Safe Links policies for email messages",
+      "deprecated": false,
+      "implementationCost": "Low",
+      "lastModifiedDateTime": null,
+      "maxScore": 9.0,
+      "rank": 6,
+      "remediation": "<p>Create Safe Links policies for email messages.</p>",
+      "remediationImpact": "Users in scope may be prompted to complete an extra step.",
+      "service": "MDO",
+      "threats": [
+        "Phishing",
+        "MaliciousLink"
+      ],
+      "tier": "Core",
+      "userImpact": "Low",
+      "complianceInformation": [],
+      "controlStateUpdates": [],
+      "vendorInformation": {
+        "provider": "SecureScore",
+        "providerVersion": null,
+        "subProvider": null,
+        "vendor": "Microsoft"
+      }
+    },
+    {
+      "id": "mdo_safeattachments",
+      "azureTenantId": "00000000-0000-4000-8000-0000000000f0",
+      "actionType": "Config",
+      "actionUrl": "https://security.microsoft.com/safeattachmentv2",
+      "controlCategory": "Apps",
+      "title": "Turn on Safe Attachments in block mode",
+      "deprecated": false,
+      "implementationCost": "Low",
+      "lastModifiedDateTime": null,
+      "maxScore": 8.0,
+      "rank": 7,
+      "remediation": "<p>Turn on Safe Attachments in block mode.</p>",
+      "remediationImpact": "Users in scope may be prompted to complete an extra step.",
+      "service": "MDO",
+      "threats": [
+        "Malware"
+      ],
+      "tier": "Core",
+      "userImpact": "Low",
+      "complianceInformation": [],
+      "controlStateUpdates": [],
+      "vendorInformation": {
+        "provider": "SecureScore",
+        "providerVersion": null,
+        "subProvider": null,
+        "vendor": "Microsoft"
+      }
+    },
+    {
+      "id": "mdo_autoforwardingmode",
+      "azureTenantId": "00000000-0000-4000-8000-0000000000f0",
+      "actionType": "Config",
+      "actionUrl": "https://security.microsoft.com/antispam",
+      "controlCategory": "Data",
+      "title": "Ensure all forms of mail forwarding are blocked and/or disabled",
+      "deprecated": false,
+      "implementationCost": "Low",
+      "lastModifiedDateTime": null,
+      "maxScore": 8.0,
+      "rank": 9,
+      "remediation": "<p>Ensure all forms of mail forwarding are blocked and/or disabled.</p>",
+      "remediationImpact": "Users in scope may be prompted to complete an extra step.",
+      "service": "EXO",
+      "threats": [
+        "DataExfiltration"
+      ],
+      "tier": "Core",
+      "userImpact": "Moderate",
+      "complianceInformation": [],
+      "controlStateUpdates": [],
+      "vendorInformation": {
+        "provider": "SecureScore",
+        "providerVersion": null,
+        "subProvider": null,
+        "vendor": "Microsoft"
+      }
+    },
+    {
+      "id": "DLPEnabled",
+      "azureTenantId": "00000000-0000-4000-8000-0000000000f0",
+      "actionType": "Config",
+      "actionUrl": "https://purview.microsoft.com/datalossprevention/policies",
+      "controlCategory": "Data",
+      "title": "Turn on data loss prevention policies",
+      "deprecated": false,
+      "implementationCost": "Moderate",
+      "lastModifiedDateTime": null,
+      "maxScore": 5.0,
+      "rank": 20,
+      "remediation": "<p>Turn on data loss prevention policies.</p>",
+      "remediationImpact": "Users in scope may be prompted to complete an extra step.",
+      "service": "MIP",
+      "threats": [
+        "DataExfiltration",
+        "DataDeletion"
+      ],
+      "tier": "Defense in depth",
+      "userImpact": "Moderate",
+      "complianceInformation": [],
+      "controlStateUpdates": [
+        {
+          "assignedTo": "",
+          "comment": "Accepted risk until Q1 review",
+          "state": "Ignored",
+          "updatedBy": "alex.admin@example.com",
+          "updatedDateTime": "2026-09-25T09:00:00Z"
+        }
+      ],
+      "vendorInformation": {
+        "provider": "SecureScore",
+        "providerVersion": null,
+        "subProvider": null,
+        "vendor": "Microsoft"
+      }
+    },
+    {
+      "id": "scid_2010",
+      "azureTenantId": "00000000-0000-4000-8000-0000000000f0",
+      "actionType": "Config",
+      "actionUrl": "https://security.microsoft.com/securescore?viewid=actions",
+      "controlCategory": "Device",
+      "title": "Turn on Microsoft Defender Antivirus PUA protection in block mode",
+      "deprecated": false,
+      "implementationCost": "Low",
+      "lastModifiedDateTime": null,
+      "maxScore": 6.0,
+      "rank": 8,
+      "remediation": "<p>Turn on Microsoft Defender Antivirus PUA protection in block mode.</p>",
+      "remediationImpact": "Users in scope may be prompted to complete an extra step.",
+      "service": "MDATP",
+      "threats": [
+        "Malware"
+      ],
+      "tier": "Core",
+      "userImpact": "Low",
+      "complianceInformation": [],
+      "controlStateUpdates": [],
+      "vendorInformation": {
+        "provider": "SecureScore",
+        "providerVersion": null,
+        "subProvider": null,
+        "vendor": "Microsoft"
+      }
+    },
+    {
+      "id": "scid_2061",
+      "azureTenantId": "00000000-0000-4000-8000-0000000000f0",
+      "actionType": "Config",
+      "actionUrl": "https://security.microsoft.com/securescore?viewid=actions",
+      "controlCategory": "Device",
+      "title": "Block credential stealing from the Windows local security authority subsystem",
+      "deprecated": false,
+      "implementationCost": "Moderate",
+      "lastModifiedDateTime": null,
+      "maxScore": 7.0,
+      "rank": 11,
+      "remediation": "<p>Block credential stealing from the Windows local security authority subsystem.</p>",
+      "remediationImpact": "Users in scope may be prompted to complete an extra step.",
+      "service": "MDATP",
+      "threats": [
+        "CredentialTheft"
+      ],
+      "tier": "Core",
+      "userImpact": "Low",
+      "complianceInformation": [],
+      "controlStateUpdates": [],
+      "vendorInformation": {
+        "provider": "SecureScore",
+        "providerVersion": null,
+        "subProvider": null,
+        "vendor": "Microsoft"
+      }
+    },
+    {
+      "id": "scid_5095",
+      "azureTenantId": "00000000-0000-4000-8000-0000000000f0",
+      "actionType": "Config",
+      "actionUrl": "https://security.microsoft.com/securescore?viewid=actions",
+      "controlCategory": "Device",
+      "title": "Turn on Microsoft Defender for Endpoint tamper protection",
+      "deprecated": false,
+      "implementationCost": "Low",
+      "lastModifiedDateTime": null,
+      "maxScore": 6.0,
+      "rank": 13,
+      "remediation": "<p>Turn on Microsoft Defender for Endpoint tamper protection.</p>",
+      "remediationImpact": "Users in scope may be prompted to complete an extra step.",
+      "service": "MDATP",
+      "threats": [
+        "Malware",
+        "ElevationOfPrivilege"
+      ],
+      "tier": "Core",
+      "userImpact": "Low",
+      "complianceInformation": [],
+      "controlStateUpdates": [],
+      "vendorInformation": {
+        "provider": "SecureScore",
+        "providerVersion": null,
+        "subProvider": null,
+        "vendor": "Microsoft"
+      }
+    },
+    {
+      "id": "LegacyMailboxAudit",
+      "azureTenantId": "00000000-0000-4000-8000-0000000000f0",
+      "actionType": "Config",
+      "actionUrl": null,
+      "controlCategory": "Data",
+      "title": "Enable mailbox auditing for all users (retired)",
+      "deprecated": true,
+      "implementationCost": "Low",
+      "lastModifiedDateTime": null,
+      "maxScore": 0.0,
+      "rank": 99,
+      "remediation": "<p>Enable mailbox auditing for all users (retired).</p>",
+      "remediationImpact": "Users in scope may be prompted to complete an extra step.",
+      "service": "EXO",
+      "threats": [],
+      "tier": "Core",
+      "userImpact": "Low",
+      "complianceInformation": [],
+      "controlStateUpdates": [],
+      "vendorInformation": {
+        "provider": "SecureScore",
+        "providerVersion": null,
+        "subProvider": null,
+        "vendor": "Microsoft"
+      }
+    }
+  ]
+}

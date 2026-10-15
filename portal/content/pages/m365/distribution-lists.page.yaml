@@ -1,0 +1,195 @@
+$schema: ../../../packages/schemas/generated/page.schema.json
+kind: page
+id: m365.distribution-lists
+version: 1.0.0
+title: Distribution lists
+summary: Distribution lists and mail-enabled security groups — owners, who can join, whether outside senders can mail them. Add members in bulk.
+owner: m365-team
+tags: [m365, exchange, distribution-lists]
+template: list-detail
+nav: { section: m365, label: Distribution lists, icon: address-book, order: 60 }
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    exchange: [Exchange.Manage]
+  entraRoles: [Exchange Recipient Administrator, Global Reader]
+  licences: [exchange]
+
+params:
+  q: { type: string, default: "", label: Search, placeholder: "Name, alias or email address" }
+  groupType:
+    type: enum
+    label: Type
+    facet: true
+    default: All
+    values:
+      - { value: All, label: All types }
+      - { value: MailUniversalDistributionGroup, label: Distribution list }
+      - { value: MailUniversalSecurityGroup, label: Mail-enabled security group }
+  external:
+    type: enum
+    label: Outside senders
+    facet: true
+    default: Any
+    values:
+      - { value: Any, label: Any }
+      - { value: allowed, label: Accepts outside senders }
+      - { value: blocked, label: Internal senders only }
+  owners:
+    type: enum
+    label: Owners
+    facet: true
+    default: Any
+    values:
+      - { value: Any, label: Any }
+      - { value: none, label: No owner }
+  source:
+    type: enum
+    label: Source
+    facet: true
+    default: Any
+    values:
+      - { value: Any, label: Cloud or synced }
+      - { value: cloud, label: Cloud only }
+      - { value: synced, label: Synced from on-premises }
+  countMembers: { type: boolean, label: Count members (slower), default: false, facet: true }
+
+filters:
+  search: q
+  facets: [groupType, external, owners, source, countMembers]
+
+savedViews:
+  enabled: true
+  shared: true
+  presets:
+    - { name: Accept outside senders, params: { external: allowed } }
+    - { name: Without an owner, params: { owners: none } }
+    - { name: Synced from on-premises, params: { source: synced } }
+
+datasources:
+  lists:
+    source: runner
+    label: Distribution lists (PowerShell)
+    script: exchange/Get-DistributionLists.ps1
+    sha256: c01955b6360e5f136324f7287ec7dd63394bd0cb71c8d600293d8d01431b9404
+    services: [exchange]
+    timeoutSeconds: 900
+    parameters:
+      resultSize: 5000
+      groupType: All
+      includeMemberCounts: ${ params.countMembers = true }
+      maxGroupsForMembers: 500
+    cache: { ttl: 900 }
+    # value = [script output] — one summary object { total, truncated, byType, acceptExternalSenders, groups }. Facets filter the cached result.
+    transform: >-
+      ${ (
+        $v := value[0];  /* runner result = [output data]; one summary object */
+        $p := params;
+        $q := $lowercase($trim($p.q ? $p.q : ''));
+        $all := [$v.groups.$merge([$, {
+          "ownerCount": $count(managedBy),
+          "acceptsExternal": requireSenderAuthenticationEnabled = false,
+          "typeLabel": recipientTypeDetails = 'MailUniversalSecurityGroup' ? 'Mail-enabled security group' : 'Distribution list'
+        }])];
+        $rows := [$all[
+            ($q = '' or $contains($lowercase(displayName & ' ' & alias & ' ' & primarySmtpAddress), $q))
+            and ($p.groupType = 'All' or $not($exists($p.groupType)) or recipientTypeDetails = $p.groupType)
+            and ($p.external = 'Any' or $not($exists($p.external)) or acceptsExternal = ($p.external = 'allowed'))
+            and ($p.owners != 'none' or ownerCount = 0)
+            and ($p.source = 'Any' or $not($exists($p.source)) or isDirSynced = ($p.source = 'synced'))
+          ]];
+        {
+          "rows": $rows,
+          "total": $v.total,
+          "truncated": $v.truncated,
+          "acceptExternal": $v.acceptExternalSenders,
+          "noOwner": $count($all[ownerCount = 0]),
+          "openJoin": $count($all[memberJoinRestriction = 'Open']),
+          "synced": $count($all[isDirSynced = true])
+        }
+      ) }
+
+layout:
+  - widget: kpi
+    id: total
+    data: lists.total
+    label: Lists and mail-enabled groups
+    format: number
+  - widget: kpi
+    id: acceptExternal
+    data: lists.acceptExternal
+    label: Accept outside senders
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+    href: /p/m365.distribution-lists?external=allowed
+  - widget: kpi
+    id: noOwner
+    data: lists.noOwner
+    label: Without an owner
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+    href: /p/m365.distribution-lists?owners=none
+  - widget: kpi
+    id: openJoin
+    data: lists.openJoin
+    label: Anyone can join
+    format: number
+  - widget: table
+    id: lists
+    span: 12
+    data: lists.rows
+    rowKey: primarySmtpAddress
+    selection: multi
+    columns:
+      - { field: displayName, label: List, kind: identity, secondary: primarySmtpAddress }
+      - { field: typeLabel, label: Type, filter: { type: facet, param: groupType } }
+      - { field: memberCount, label: Members, kind: number, align: end, filter: range, sortable: true }
+      - { field: managedBy, label: Owners, kind: tags }
+      - field: acceptsExternal
+        label: Outside senders
+        kind: status
+        map: { "true": [warn, Accepted], "false": [ok, Blocked] }
+        filter: { type: facet, param: external }
+      - field: memberJoinRestriction
+        label: Joining
+        kind: status
+        map: { Open: [warn, Anyone can join], ApprovalRequired: [info, Owner approval], Closed: [ok, Closed] }
+        filter: facet
+      - { field: memberDepartRestriction, label: Leaving, filter: facet, hidden: true }
+      - { field: isDirSynced, label: Synced from on-premises, kind: boolean, filter: { type: facet, param: source } }
+      - { field: hiddenFromAddressListsEnabled, label: Hidden from address lists, kind: boolean, filter: facet, hidden: true }
+      - { field: whenCreated, label: Created, kind: date, filter: date, hidden: true }
+      - { field: alias, label: Alias, hidden: true }
+    inspect:
+      page: m365.distribution-list
+      params:
+        address: ${ row.primarySmtpAddress }
+    rowActions:
+      - playbook: m365.add-distribution-list-members
+        label: Add members
+        icon: user-plus
+        inputs:
+          identity: ${ row.primarySmtpAddress }
+        when: ${ row.isDirSynced = false }
+      - label: Open in Exchange admin center
+        icon: arrow-square-out
+        href: https://admin.exchange.microsoft.com/#/groups
+    bulkActions:
+      - playbook: m365.add-distribution-list-members
+        label: Add the same members to each list
+        icon: user-plus
+        forEach:
+          inputs:
+            identity: ${ row.primarySmtpAddress }
+          concurrency: 3
+        maxItems: 50
+        when: ${ $count(rows[isDirSynced = true]) = 0 }
+    empty:
+      title: No distribution lists match
+      body: Clear the filters. Lists synced from on-premises Active Directory are managed there, not in Exchange Online.
+
+export:
+  formats: [csv, xlsx]
+  fileName: distribution-lists
+  data: lists.rows
+  columns: all

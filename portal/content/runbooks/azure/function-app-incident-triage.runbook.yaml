@@ -1,0 +1,174 @@
+$schema: ../../../packages/schemas/generated/runbook.schema.json
+kind: runbook
+id: azure.function-app-incident-triage
+version: 1.0.0
+title: Function App incident triage
+summary: Guided triage for a failing Function App — rule out a platform incident, check resource and host health, read recent errors and HTTP 5xx, then decide between sync triggers, restart or rollback.
+owner: azure-team
+tags: [azure, functions, incident, runbook]
+nav: { section: azure, label: Function App triage, icon: first-aid-kit, order: 90 }
+risk: low
+mode: read
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    arm: [user_impersonation]
+    logAnalytics: [Data.Read]
+  azureRoles: [Reader, Monitoring Reader, Log Analytics Reader]
+
+inputs:
+  subscriptionId: { type: string, format: guid, label: Subscription, picker: subscription }
+  resourceGroup: { type: string, label: Resource group, pattern: "^[-\\w._()]{1,90}$" }
+  name: { type: string, label: Function App, pattern: "^[A-Za-z0-9][A-Za-z0-9-]{0,58}$" }
+  workspace: { type: string, format: guid, label: Log Analytics workspace id, required: false, description: Workspace that receives FunctionAppLogs from this app (optional). }
+  incident: { type: string, label: Incident reference, required: false, placeholder: INC-1234 }
+
+sections:
+  - id: scope
+    title: Confirm scope and impact
+    body: |
+      Triage for **${ inputs.name }** in resource group **${ inputs.resourceGroup }**${ inputs.incident ? ' (' & inputs.incident & ')' : '' }.
+
+      Write down what is failing (HTTP endpoints, timers, queue processing), since when, and who is affected before changing anything.
+    steps:
+      - id: impact
+        type: manual
+        instructions: Record the impact in the incident.
+        checklist:
+          - Incident ticket opened and linked to this run
+          - Failing functions and their callers identified
+          - Start time of the problem noted (deployment, config change, traffic spike?)
+
+  - id: platform
+    title: Rule out a platform issue
+    body: Active Azure service issues for Functions or App Service, and the app's own Resource Health, tell you whether the problem is on Microsoft's side.
+    steps:
+      - id: serviceIssues
+        type: resourceGraph
+        describe: Active Azure service issues affecting Functions or App Service
+        query: |
+          // af:azure.function-app-incident-triage#serviceissues
+          servicehealthresources
+          | where type =~ 'microsoft.resourcehealth/events'
+          | where tostring(properties.EventType) == 'ServiceIssue' and tostring(properties.Status) == 'Active'
+          | mv-expand impact = properties.Impact
+          | where tostring(impact.ImpactedService) in~ ('Azure Functions', 'App Service')
+          | project trackingId = tostring(properties.TrackingId), title = tostring(properties.Title), service = tostring(impact.ImpactedService), lastUpdate = todatetime(properties.LastUpdateTime)
+      - id: resourceHealth
+        type: resourceGraph
+        describe: Resource Health of the app
+        query: |
+          // af:azure.function-app-incident-triage#resourcehealth
+          healthresources
+          | where type =~ 'microsoft.resourcehealth/availabilitystatuses'
+          | where tolower(id) startswith tolower('/subscriptions/${ $guid(inputs.subscriptionId) }/resourcegroups/${ $replace(inputs.resourceGroup, /[^A-Za-z0-9._()-]/, '') }/providers/microsoft.web/sites/${ $replace(inputs.name, /[^A-Za-z0-9-]/, '') }/')
+          | project availabilityState = tostring(properties.availabilityState), summary = tostring(properties.summary), reasonType = tostring(properties.reasonType), occurredTime = todatetime(properties.occuredTime)
+      - id: platformReview
+        type: manual
+        instructions: >-
+          ${ $count(steps.serviceIssues.output.value) > 0
+             ? 'Azure reports ' & $count(steps.serviceIssues.output.value) & ' active service issue(s) for Functions or App Service. Follow the Service Health tracking id before restarting anything.'
+             : 'No active Azure service issue for Functions or App Service. Resource Health: ' & ($exists(steps.resourceHealth.output.value[0].availabilityState) ? steps.resourceHealth.output.value[0].availabilityState : 'unknown') & '.' }
+        checklist:
+          - Service Health checked for the app's region
+          - Resource Health state recorded
+
+  - id: app
+    title: Check the app and its Functions host
+    body: A stopped app, a host in Error, or a recent configuration change explains most outages.
+    steps:
+      - id: site
+        type: arm
+        describe: Read the app
+        request:
+          method: GET
+          path: /subscriptions/${ $encode($guid(inputs.subscriptionId)) }/resourceGroups/${ $encode(inputs.resourceGroup) }/providers/Microsoft.Web/sites/${ $encode(inputs.name) }
+          apiVersion: "2023-12-01"
+      - id: host
+        type: arm
+        describe: Read the Functions host status
+        onError: continue
+        request:
+          method: GET
+          path: /subscriptions/${ $encode($guid(inputs.subscriptionId)) }/resourceGroups/${ $encode(inputs.resourceGroup) }/providers/Microsoft.Web/sites/${ $encode(inputs.name) }/hostruntime/admin/host/status
+          apiVersion: "2022-03-01"
+      - id: appReview
+        type: manual
+        instructions: >-
+          ${ 'App state: ' & steps.site.output.properties.state
+             & '. Host: ' & ($exists(steps.host.output.state) ? steps.host.output.state & ' (version ' & steps.host.output.version & ')' : 'status unavailable')
+             & '. Last modified: ' & steps.site.output.properties.lastModifiedTimeUtc & '.' }
+        checklist:
+          - App is running (start it if it was stopped by mistake)
+          - Host state is Running and shows no errors
+          - Recent deployments or configuration changes reviewed in the activity log
+
+  - id: errors
+    title: Read the errors
+    body: HTTP 5xx from Azure Monitor metrics, plus the top exceptions from FunctionAppLogs when a workspace is given.
+    steps:
+      - id: http5xx
+        type: arm
+        describe: HTTP 5xx and executions over the last 6 hours
+        request:
+          method: GET
+          path: /subscriptions/${ $encode($guid(inputs.subscriptionId)) }/resourceGroups/${ $encode(inputs.resourceGroup) }/providers/Microsoft.Web/sites/${ $encode(inputs.name) }/providers/Microsoft.Insights/metrics
+          apiVersion: "2023-10-01"
+          query:
+            metricnames: Http5xx,FunctionExecutionCount
+            aggregation: Total
+            interval: PT15M
+            timespan: ${ $daysAgo(0.25) & '/' & $iso() }
+      - id: topErrors
+        type: logAnalytics
+        describe: Top exceptions in the last 6 hours
+        when: ${ $boolean(inputs.workspace) }
+        workspace: ${ $guid(inputs.workspace) }
+        timespan: PT6H
+        query: |
+          // af:azure.function-app-incident-triage#toperrors
+          FunctionAppLogs
+          | where AppName =~ '${ $replace(inputs.name, /[^A-Za-z0-9-]/, '') }' and Level in ('Error', 'Critical')
+          | summarize Errors = count(), LastSeen = max(TimeGenerated), Sample = take_any(Message) by FunctionName, ExceptionType
+          | top 10 by Errors desc
+      - id: errorReview
+        type: manual
+        instructions: >-
+          ${ 'HTTP 5xx in the last 6 hours: ' & $string($sum(steps.http5xx.output.value[name.value = 'Http5xx'].timeseries.data.total))
+             & ($exists(steps.topErrors.output.value[0]) ? '. Top exception: ' & steps.topErrors.output.value[0].ExceptionType & ' in ' & steps.topErrors.output.value[0].FunctionName & ' (' & $string(steps.topErrors.output.value[0].Errors) & ' times).' : '.') }
+        checklist:
+          - Failing dependency (database, API, storage, Key Vault) identified or ruled out
+          - Errors correlate (or not) with the start time recorded above
+
+  - id: remediate
+    title: Remediate
+    body: |
+      Pick the smallest change that fixes the cause, from the [Function App page](/p/azure.function-app?subscriptionId=${ $encode(inputs.subscriptionId) }&resourceGroup=${ $encode(inputs.resourceGroup) }&name=${ $encode(inputs.name) }) (each action asks for write access and confirmation):
+
+      - **Triggers stopped firing after a deployment** → *Sync triggers*.
+      - **Host in Error, memory exhausted, or stuck executions** → *Restart*.
+      - **Bad deployment** → redeploy the previous package or swap the staging slot back (from your pipeline).
+      - **Dependency outage** → leave the app running; consider *Stop* only to protect a downstream system, and record why.
+    steps:
+      - id: remediation
+        type: manual
+        instructions: Record what you changed and why.
+        checklist:
+          - Remediation applied (or consciously deferred)
+          - Change recorded in the incident
+
+  - id: close
+    title: Verify and close
+    body: Confirm recovery before closing the incident.
+    steps:
+      - id: verify
+        type: manual
+        instructions: Check that errors and HTTP 5xx are back to their normal level, then close out.
+        checklist:
+          - HTTP 5xx and exception counts back to baseline
+          - Azure Monitor alert acknowledged or closed
+          - Follow-up actions (alert tuning, tests, post-incident review) captured
+
+outputs:
+  summary: >-
+    ${ inputs.name & ' triage: app ' & steps.site.output.properties.state & ', host ' & ($exists(steps.host.output.state) ? steps.host.output.state : 'unknown') & '.' }

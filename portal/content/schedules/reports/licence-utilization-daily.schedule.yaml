@@ -1,0 +1,27 @@
+$schema: ../../../packages/schemas/generated/schedule.schema.json
+kind: schedule
+id: reports.licence-utilization-daily
+version: 1.0.0
+title: Daily licence utilization report
+summary: >-
+  Every day at 06:30 UTC, writes seat usage per SKU (enabled, assigned, available, utilization) as XLSX, keeping three months of history for trend and true-up conversations.
+owner: m365-team
+tags: [m365, licences, report]
+cron: "30 6 * * *"
+timezone: UTC
+enabled: true
+identity: automation
+job:
+  kind: report
+  ref: m365.licence-utilization
+  delivery:
+    - type: file
+      format: xlsx
+      path: licence-utilization/{date}.xlsx
+      retain: 92
+retry: { max: 2, backoff: exponential, delay: 5m }
+timeoutSeconds: 1800
+overlap: skip
+requires:
+  scopes:
+    graph: [Organization.Read.All]

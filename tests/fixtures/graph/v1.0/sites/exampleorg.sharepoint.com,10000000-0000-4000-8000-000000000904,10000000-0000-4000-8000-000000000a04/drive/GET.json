@@ -1,0 +1,21 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#drives/$entity",
+  "id": "b!exampleDrive0004",
+  "name": "Documents",
+  "driveType": "documentLibrary",
+  "webUrl": "https://exampleorg.sharepoint.com/sites/MarketingCampaigns/Shared%20Documents",
+  "createdDateTime": "2025-06-02T09:00:00Z",
+  "lastModifiedDateTime": "2026-10-09T09:00:00Z",
+  "owner": {
+    "group": {
+      "displayName": "Marketing Campaigns Owners"
+    }
+  },
+  "quota": {
+    "deleted": 9455799999,
+    "remaining": 153931627889,
+    "state": "nearing",
+    "total": 1099511627776,
+    "used": 945579999887
+  }
+}

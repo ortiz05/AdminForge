@@ -1,0 +1,210 @@
+$schema: ../../../packages/schemas/generated/page.schema.json
+kind: page
+id: m365.sharepoint-sites
+version: 1.0.0
+title: SharePoint sites
+summary: SharePoint sites with their storage, activity and how many Anyone links they hold.
+owner: m365-team
+tags: [m365, sharepoint, storage]
+template: list-detail
+nav: { section: m365, label: SharePoint sites, icon: globe-hemisphere-west, order: 80 }
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    graph: [Sites.Read.All, Reports.Read.All]
+  entraRoles: [SharePoint Administrator, Reports Reader, Global Reader]
+  licences: [sharepoint]
+
+params:
+  q: { type: string, default: "", label: Search sites, placeholder: Site name or keyword }
+  activity:
+    type: enum
+    label: Activity
+    facet: true
+    default: All
+    values:
+      - { value: All, label: Any activity }
+      - { value: inactive, label: No activity for 90+ days }
+      - { value: anyone, label: Has Anyone links }
+  template:
+    type: enum
+    label: Template
+    facet: true
+    default: All
+    values:
+      - { value: All, label: All templates }
+      - { value: Group, label: Team site (Microsoft 365 group) }
+      - { value: Team Site, label: Team site (no group) }
+      - { value: Communication Site, label: Communication site }
+      - { value: Team Channel, label: Private or shared channel }
+
+filters:
+  search: q
+  facets: [activity, template]
+
+savedViews:
+  enabled: true
+  shared: true
+  presets:
+    - { name: Inactive sites, params: { activity: inactive } }
+    - { name: Sites with Anyone links, params: { activity: anyone } }
+
+datasources:
+  sites:
+    source: graph
+    label: Sites (search)
+    request:
+      path: /sites
+      query:
+        search: "${ params.q ? params.q : '*' }"
+        $select: id,name,displayName,webUrl,description,createdDateTime,lastModifiedDateTime
+        $top: 200
+    paging: cursor
+    cache: { ttl: 300 }
+  storage:
+    source: graph
+    label: Site usage report (last 7 days)
+    request:
+      beta: true
+      path: /reports/getSharePointSiteUsageDetail(period='D7')
+      query: { $format: application/json }
+    paging: all
+    maxItems: 50000
+    cache: { ttl: 3600 }
+    # value = { value: [site usage rows] }. Skips deleted sites; adds inactivity and a short site name for charts.
+    transform: >-
+      ${ (
+        $p := params;
+        $all := [value.value[isDeleted != true].(
+          $idle := lastActivityDate ? -$daysUntil(lastActivityDate) : null;
+          {
+            "siteId": siteId,
+            "siteUrl": siteUrl,
+            "site": $reverse($split($replace(siteUrl, /\/$/, ''), '/'))[0],
+            "ownerDisplayName": ownerDisplayName,
+            "ownerPrincipalName": ownerPrincipalName,
+            "rootWebTemplate": rootWebTemplate,
+            "storageUsedInBytes": storageUsedInBytes,
+            "storageAllocatedInBytes": storageAllocatedInBytes,
+            "storageUsed": storageAllocatedInBytes > 0 ? $round(storageUsedInBytes / storageAllocatedInBytes, 4) : 0,
+            "fileCount": fileCount,
+            "activeFileCount": activeFileCount,
+            "pageViewCount": pageViewCount,
+            "anonymousLinkCount": anonymousLinkCount,
+            "companyLinkCount": companyLinkCount,
+            "guestLinkCount": secureLinkForGuestCount,
+            "externalSharing": externalSharing,
+            "lastActivityDate": lastActivityDate,
+            "idleDays": $idle,
+            "inactive": $idle = null or $idle > 90
+          }
+        )];
+        $rows := [$all[
+            ($p.activity = 'All' or $not($exists($p.activity))
+              or ($p.activity = 'inactive' and inactive)
+              or ($p.activity = 'anyone' and anonymousLinkCount > 0))
+            and ($p.template = 'All' or $not($exists($p.template)) or rootWebTemplate = $p.template)
+          ]];
+        {
+          "rows": $rows,
+          "sites": $count($all),
+          "usedBytes": $sum($all.storageUsedInBytes),
+          "inactive": $count($all[inactive]),
+          "withAnyoneLinks": $count($all[anonymousLinkCount > 0]),
+          "top": [$sort($all, function($a, $b) { $a.storageUsedInBytes < $b.storageUsedInBytes })[[0..9]].{ "site": site, "storageUsedInBytes": storageUsedInBytes }]
+        }
+      ) }
+
+layout:
+  - widget: kpi
+    id: sites
+    data: storage.sites
+    label: Active sites
+    format: number
+  - widget: kpi
+    id: usedBytes
+    data: storage.usedBytes
+    label: Storage used
+    format: bytes
+  - widget: kpi
+    id: inactive
+    data: storage.inactive
+    label: No activity for 90+ days
+    format: number
+    status: "${ value > 0 ? 'info' : 'ok' }"
+    href: /p/m365.sharepoint-sites?activity=inactive
+  - widget: kpi
+    id: withAnyoneLinks
+    data: storage.withAnyoneLinks
+    label: Sites with Anyone links
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+    href: /p/m365.sharepoint-sites?activity=anyone
+  - widget: chart
+    id: topStorage
+    title: Largest sites
+    span: 12
+    type: bar
+    data: storage.top
+    x: site
+    y: storageUsedInBytes
+    format: bytes
+  - widget: table
+    id: usage
+    title: Storage and activity
+    span: 12
+    data: storage.rows
+    rowKey: siteId
+    columns:
+      - { field: siteUrl, label: Site, kind: identity, secondary: ownerDisplayName }
+      - { field: rootWebTemplate, label: Template, filter: { type: facet, param: template } }
+      - { field: storageUsedInBytes, label: Storage used, kind: bytes, align: end, filter: range, sortable: true }
+      - { field: storageUsed, label: Of quota, kind: percent, align: end, filter: range }
+      - { field: fileCount, label: Files, kind: number, align: end, filter: range }
+      - { field: lastActivityDate, label: Last activity, kind: date, filter: date, sortable: true }
+      - { field: anonymousLinkCount, label: Anyone links, kind: number, align: end, filter: range, sortable: true }
+      - { field: guestLinkCount, label: Guest links, kind: number, align: end, hidden: true }
+      - { field: companyLinkCount, label: Organization links, kind: number, align: end, hidden: true }
+      - { field: activeFileCount, label: Active files, kind: number, hidden: true }
+      - { field: pageViewCount, label: Page views, kind: number, hidden: true }
+      - { field: storageAllocatedInBytes, label: Quota, kind: bytes, hidden: true }
+      - { field: ownerPrincipalName, label: Owner sign-in name, hidden: true }
+      - { field: siteId, label: Site collection id, kind: guid, hidden: true }
+    rowActions:
+      - label: Open site
+        icon: arrow-square-out
+        href: ${ row.siteUrl }
+        when: "${ $contains(row.siteUrl, 'https://') }"
+    empty:
+      title: No sites match
+      body: Usage data appears 24–48 hours after activity. If names look like hashes, concealed names are on — see Usage.
+  - widget: table
+    id: sites
+    title: Sites
+    span: 12
+    data: sites.value
+    rowKey: id
+    columns:
+      - { field: displayName, label: Site, kind: identity, secondary: webUrl }
+      - { field: name, label: Name, hidden: true }
+      - { field: createdDateTime, label: Created, kind: date, filter: date }
+      - { field: lastModifiedDateTime, label: Last modified, kind: relativeTime, filter: date, sortable: true }
+      - { field: description, label: Description, hidden: true }
+      - { field: id, label: Site id, kind: code, hidden: true }
+    inspect:
+      page: m365.sharepoint-site
+      params:
+        id: ${ row.id }
+    rowActions:
+      - label: Open site
+        icon: arrow-square-out
+        href: ${ row.webUrl }
+    empty:
+      title: No sites found
+      body: Search matches site names and keywords. Use * to list every site you can read.
+
+export:
+  formats: [csv, xlsx]
+  fileName: sharepoint-site-usage
+  data: storage.rows
+  columns: all

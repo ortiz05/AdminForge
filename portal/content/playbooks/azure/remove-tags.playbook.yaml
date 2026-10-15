@@ -1,0 +1,81 @@
+$schema: ../../../packages/schemas/generated/playbook.schema.json
+kind: playbook
+id: azure.remove-tags
+version: 1.0.0
+title: Remove a tag
+summary: Removes one tag from an Azure resource, resource group or subscription. Other tags are kept.
+owner: azure-team
+tags: [azure, tags, governance]
+risk: low
+mode: write
+requires:
+  portalRoles: [Portal.Operator]
+  scopes:
+    arm: [user_impersonation]
+  azureRoles: [Tag Contributor]
+confirm:
+  type: click
+  message: Remove this tag? Cost reports and policies that rely on it stop matching.
+approval:
+  required: false
+
+inputs:
+  resourceId: { type: string, label: Resource, picker: resource, pattern: "^/subscriptions/[0-9a-fA-F-]{36}(/.*)?$", description: "Resource, resource group or subscription id." }
+  tagName: { type: string, label: Tag name, maxLength: 512, placeholder: owner }
+
+steps:
+  - id: current
+    type: arm
+    mode: read
+    describe: Read the current tags
+    request:
+      method: GET
+      path: ${ $join($split(inputs.resourceId, '/')[$ != ''].('/' & $encode($)), '') }/providers/Microsoft.Resources/tags/default
+      apiVersion: "2021-04-01"
+
+  - id: previous
+    type: transform
+    expression: ${ $lookup(steps.current.output.properties.tags, inputs.tagName) }
+
+  - id: hasTag
+    type: assert
+    that: ${ $exists(steps.previous.output) }
+    message: ${ 'This resource has no tag named ' & inputs.tagName & '.' }
+
+  - id: delete
+    type: arm
+    mode: write
+    describe: ${ 'Remove tag ' & inputs.tagName & ' (was ' & steps.previous.output & ')' }
+    request:
+      method: PATCH
+      path: ${ $join($split(inputs.resourceId, '/')[$ != ''].('/' & $encode($)), '') }/providers/Microsoft.Resources/tags/default
+      apiVersion: "2021-04-01"
+      body: >-
+        ${ { 'operation': 'Delete', 'properties': { 'tags': { inputs.tagName: steps.previous.output } } } }
+    compensate:
+      type: arm
+      describe: ${ 'Restore tag ' & inputs.tagName & ' = ' & steps.previous.output }
+      request:
+        method: PATCH
+        path: ${ $join($split(inputs.resourceId, '/')[$ != ''].('/' & $encode($)), '') }/providers/Microsoft.Resources/tags/default
+        apiVersion: "2021-04-01"
+        body: >-
+          ${ { 'operation': 'Merge', 'properties': { 'tags': { inputs.tagName: steps.previous.output } } } }
+
+outputs:
+  summary: ${ 'Tag ' & inputs.tagName & ' removed from ' & $split(inputs.resourceId, '/')[-1] & '.' }
+
+tests:
+  - name: refuses a tag that isn't there
+    inputs: { resourceId: /subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-network, tagName: owner }
+    mocks:
+      current: { properties: {} }
+    expect: { status: failed, failedStep: hasTag }
+  - name: plans the removal
+    inputs: { resourceId: /subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-functions/providers/Microsoft.Web/sites/func-example, tagName: owner }
+    mocks:
+      current: { properties: { tags: { env: prod, owner: platform-team } } }
+    expect:
+      status: succeeded
+      plan: [delete]
+      outputs: { summary: Tag owner removed from func-example. }

@@ -1,0 +1,167 @@
+$schema: ../../../packages/schemas/generated/page.schema.json
+kind: page
+id: azure.arc-server
+version: 1.0.0
+title: Azure Arc server
+summary: One Arc-enabled server — connectivity, agent, operating system, extensions and agent errors.
+owner: azure-team
+tags: [azure, arc, hybrid, servers]
+template: entity
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    arm: [user_impersonation]
+  azureRoles: [Reader]
+
+params:
+  id: { type: string, label: Machine resource id, required: true, hidden: true, pattern: "^/subscriptions/[0-9a-fA-F-]{36}/.+" }
+
+datasources:
+  machine:
+    source: resourceGraph
+    query: |
+      // af:azure.arc-server#machine
+      resources
+      | where type =~ 'microsoft.hybridcompute/machines' and tolower(id) == '${ $lowercase($replace(params.id, /[^A-Za-z0-9._()\/-]/, '')) }'
+      | project id, name, location, resourceGroup, subscriptionId, tags, identity, properties
+      | take 1
+    transform: >-
+      ${ (
+        $m := value.value[0];
+        $p := $m.properties;
+        $m ? {
+          'id': $m.id,
+          'name': $m.name,
+          'location': $m.location,
+          'resourceGroup': $m.resourceGroup,
+          'subscriptionId': $m.subscriptionId,
+          'tags': $m.tags,
+          'identityType': $m.identity.type,
+          'status': $p.status,
+          'lastStatusChange': $p.lastStatusChange,
+          'agentVersion': $p.agentVersion,
+          'osName': $p.osName,
+          'osSku': $p.osSku,
+          'osVersion': $p.osVersion,
+          'osType': $p.osType,
+          'machineFqdn': $p.machineFqdn,
+          'domainName': $p.domainName,
+          'manufacturer': $p.detectedProperties.manufacturer,
+          'model': $p.detectedProperties.model,
+          'cloudProvider': $p.cloudMetadata.provider,
+          'vmUuid': $p.vmUuid,
+          'esuState': $p.licenseProfile.esuProfile.licenseAssignmentState,
+          'privateLinkScope': $p.privateLinkScopeResourceId,
+          'errors': [$p.errorDetails.{ 'code': code, 'message': message }]
+        }
+      ) }
+    cache: { ttl: 60 }
+  extensions:
+    source: resourceGraph
+    query: |
+      // af:azure.arc-server#extensions
+      resources
+      | where type =~ 'microsoft.hybridcompute/machines/extensions' and tolower(id) startswith strcat('${ $lowercase($replace(params.id, /[^A-Za-z0-9._()\/-]/, '')) }', '/extensions/')
+      | project id, name, publisher = tostring(properties.publisher), extensionType = tostring(properties.type), version = tostring(properties.typeHandlerVersion), provisioningState = tostring(properties.provisioningState), autoUpgrade = tobool(properties.enableAutomaticUpgrade), statusCode = tostring(properties.instanceView.status.code), statusLevel = tostring(properties.instanceView.status.level), statusMessage = tostring(properties.instanceView.status.message)
+      | order by name asc
+    cache: { ttl: 60 }
+
+header:
+  title: ${ machine.name }
+  subtitle: ${ machine.osName & ' · ' & machine.machineFqdn }
+  status: "${ machine.status = 'Connected' ? 'ok' : 'crit' }"
+  statusLabel: ${ machine.status }
+  ids:
+    Resource id: ${ params.id }
+    VM UUID: ${ machine.vmUuid }
+
+actions:
+  - playbook: azure.add-tags
+    label: Add or update a tag
+    icon: tag
+    inputs:
+      resourceId: ${ params.id }
+  - label: Access and activity
+    icon: identification-badge
+    href: /p/azure.resource?id=${ $encode(params.id) }
+  - label: Open in Azure portal
+    icon: arrow-square-out
+    href: https://portal.azure.com/#resource${ params.id }/overview
+
+tabs:
+  - id: overview
+    label: Overview
+    layout:
+      - widget: keyValue
+        span: 6
+        title: Connectivity and agent
+        data: machine
+        fields:
+          - field: status
+            label: Status
+            kind: status
+            map: { Connected: [ok, Connected], Disconnected: [crit, Disconnected], Error: [crit, Error], Expired: [crit, Expired] }
+          - { field: lastStatusChange, label: Status since, kind: relativeTime }
+          - { field: agentVersion, label: Agent version }
+          - { field: identityType, label: Managed identity }
+          - { field: privateLinkScope, label: Private link scope, kind: id }
+          - { field: esuState, label: ESU licence }
+      - widget: keyValue
+        span: 6
+        title: Machine
+        data: machine
+        fields:
+          - { field: machineFqdn, label: FQDN }
+          - { field: domainName, label: Domain }
+          - { field: osName, label: Operating system }
+          - { field: osSku, label: Edition }
+          - { field: osVersion, label: Version }
+          - { field: manufacturer, label: Manufacturer }
+          - { field: model, label: Model }
+          - { field: cloudProvider, label: Hosted in }
+          - { field: location, label: Azure region }
+          - { field: resourceGroup, label: Resource group }
+  - id: extensions
+    label: Extensions
+    layout:
+      - widget: table
+        span: 12
+        data: extensions.value
+        rowKey: id
+        search: true
+        columns:
+          - { field: name, label: Extension, kind: identity, secondary: publisher, sortable: true }
+          - { field: extensionType, label: Type }
+          - { field: version, label: Version }
+          - field: provisioningState
+            label: State
+            kind: status
+            map: { Succeeded: [ok, Succeeded], Failed: [crit, Failed], Creating: [info, Installing], Updating: [info, Updating], Deleting: [warn, Removing] }
+            filter: facet
+          - { field: autoUpgrade, label: Automatic upgrade, kind: boolean, filter: facet }
+          - { field: statusMessage, label: Last status message, hidden: true }
+          - { field: statusCode, label: Status code, kind: code, hidden: true }
+        rowActions:
+          - label: Open in Azure portal
+            icon: arrow-square-out
+            href: https://portal.azure.com/#resource${ params.id }/extensions
+        empty:
+          title: No extensions installed
+          body: Install Azure Monitor Agent, Defender for Servers or Update Manager extensions from the Azure portal or with Azure Policy.
+  - id: errors
+    label: Agent errors
+    layout:
+      - widget: table
+        span: 12
+        data: machine.errors
+        rowKey: code
+        columns:
+          - { field: code, label: Code, kind: code }
+          - { field: message, label: Message }
+        rowActions:
+          - label: Troubleshooting guide
+            icon: book-open
+            href: https://learn.microsoft.com/azure/azure-arc/servers/troubleshoot-agent-onboard
+        empty:
+          title: The agent reports no errors
+          body: Errors from the Connected Machine agent (for example expired certificates or blocked endpoints) appear here.

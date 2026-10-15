@@ -1,0 +1,27 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#admin/serviceAnnouncement/issues/$entity",
+  "id": "EX907001",
+  "title": "Mail flow delays to some external recipients",
+  "service": "Exchange Online",
+  "feature": "E-Mail and calendar access",
+  "featureGroup": "Exchange Online",
+  "classification": "advisory",
+  "status": "falsePositive",
+  "origin": "customer",
+  "isResolved": true,
+  "startDateTime": "2026-09-28T09:00:00Z",
+  "endDateTime": "2026-09-28T09:00:00Z",
+  "lastModifiedDateTime": "2026-09-28T09:00:00Z",
+  "impactDescription": "Reported delays were caused by a recipient-side issue.",
+  "posts": [
+    {
+      "createdDateTime": "2026-09-28T09:00:00Z",
+      "postType": "regular",
+      "description": {
+        "contentType": "html",
+        "content": "<p><b>Final status:</b> Our investigation determined the issue was outside Microsoft 365.</p>"
+      }
+    }
+  ],
+  "details": []
+}

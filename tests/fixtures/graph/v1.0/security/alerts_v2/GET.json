@@ -1,0 +1,906 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#security/alerts_v2",
+  "value": [
+    {
+      "id": "da638647315200000001_-1194836001",
+      "providerAlertId": "00000001-0000-4000-8000-00000000c0de",
+      "incidentId": "4224",
+      "status": "new",
+      "severity": "high",
+      "classification": null,
+      "determination": null,
+      "serviceSource": "azureAdIdentityProtection",
+      "detectionSource": "azureAdIdentityProtection",
+      "productName": "Microsoft Entra ID Protection",
+      "detectorId": "00000001-1111-4000-8000-000000000000",
+      "tenantId": "00000000-0000-4000-8000-0000000000f0",
+      "title": "Password spray from a malicious IP address",
+      "description": "Multiple accounts received failed sign-in attempts from the same IP address, consistent with a password spray. One account (Avery Engineer) then signed in successfully from that address.",
+      "recommendedActions": "1. Confirm with the user whether the successful sign-in was theirs.\n2. If not, confirm the user compromised, reset the password and revoke sessions.\n3. Block the source IP address with a named location and Conditional Access.",
+      "category": "CredentialAccess",
+      "assignedTo": null,
+      "alertWebUrl": "https://security.microsoft.com/alerts/da638647315200000001_-1194836001?tid=00000000-0000-4000-8000-0000000000f0",
+      "incidentWebUrl": "https://security.microsoft.com/incidents/4224?tid=00000000-0000-4000-8000-0000000000f0",
+      "actorDisplayName": null,
+      "threatDisplayName": null,
+      "threatFamilyName": null,
+      "mitreTechniques": [
+        "T1110.003"
+      ],
+      "createdDateTime": "2026-10-15T06:00:00Z",
+      "lastUpdateDateTime": "2026-10-15T07:00:00Z",
+      "resolvedDateTime": null,
+      "firstActivityDateTime": "2026-10-15T05:00:00Z",
+      "lastActivityDateTime": "2026-10-15T06:00:00Z",
+      "comments": [
+        {
+          "comment": "Triage started. Checking sign-in logs for avery@example.com.",
+          "createdByDisplayName": "Alex Admin",
+          "createdDateTime": "2026-10-15T07:00:00Z"
+        },
+        {
+          "comment": "User confirmed by phone that the 03:12 sign-in from NL was not theirs.",
+          "createdByDisplayName": "Alex Admin",
+          "createdDateTime": "2026-10-15T08:00:00Z"
+        }
+      ],
+      "evidence": [
+        {
+          "@odata.type": "#microsoft.graph.security.userEvidence",
+          "createdDateTime": "2026-10-15T06:00:00Z",
+          "verdict": "suspicious",
+          "remediationStatus": "none",
+          "remediationStatusDetails": null,
+          "roles": [
+            "compromised"
+          ],
+          "tags": [],
+          "userAccount": {
+            "accountName": "avery",
+            "domainName": "example.com",
+            "userSid": null,
+            "azureAdUserId": "30000000-0000-4000-8000-000000000001",
+            "userPrincipalName": "avery@example.com",
+            "displayName": "Avery Engineer"
+          }
+        },
+        {
+          "@odata.type": "#microsoft.graph.security.userEvidence",
+          "createdDateTime": "2026-10-15T06:00:00Z",
+          "verdict": "suspicious",
+          "remediationStatus": "none",
+          "remediationStatusDetails": null,
+          "roles": [
+            "suspicious"
+          ],
+          "tags": [],
+          "userAccount": {
+            "accountName": "farah.haddad",
+            "domainName": "example.com",
+            "userSid": null,
+            "azureAdUserId": "10000000-0000-4000-8000-000000000006",
+            "userPrincipalName": "farah.haddad@example.com",
+            "displayName": "Farah Haddad"
+          }
+        },
+        {
+          "@odata.type": "#microsoft.graph.security.ipEvidence",
+          "createdDateTime": "2026-10-15T06:00:00Z",
+          "verdict": "malicious",
+          "remediationStatus": "none",
+          "roles": [
+            "attacker"
+          ],
+          "tags": [],
+          "ipAddress": "203.0.113.45",
+          "countryLetterCode": "NL"
+        }
+      ],
+      "systemTags": []
+    },
+    {
+      "id": "da638647315200000002_-1194836002",
+      "providerAlertId": "00000002-0000-4000-8000-00000000c0de",
+      "incidentId": "4224",
+      "status": "new",
+      "severity": "medium",
+      "classification": null,
+      "determination": null,
+      "serviceSource": "azureAdIdentityProtection",
+      "detectionSource": "azureAdIdentityProtection",
+      "productName": "Microsoft Entra ID Protection",
+      "detectorId": "00000002-1111-4000-8000-000000000000",
+      "tenantId": "00000000-0000-4000-8000-0000000000f0",
+      "title": "Unfamiliar sign-in properties",
+      "description": "",
+      "recommendedActions": "",
+      "category": "InitialAccess",
+      "assignedTo": null,
+      "alertWebUrl": "https://security.microsoft.com/alerts/da638647315200000002_-1194836002?tid=00000000-0000-4000-8000-0000000000f0",
+      "incidentWebUrl": "https://security.microsoft.com/incidents/4224?tid=00000000-0000-4000-8000-0000000000f0",
+      "actorDisplayName": null,
+      "threatDisplayName": null,
+      "threatFamilyName": null,
+      "mitreTechniques": [
+        "T1078.004"
+      ],
+      "createdDateTime": "2026-10-15T06:00:00Z",
+      "lastUpdateDateTime": "2026-10-15T07:00:00Z",
+      "resolvedDateTime": null,
+      "firstActivityDateTime": "2026-10-15T05:00:00Z",
+      "lastActivityDateTime": "2026-10-15T06:00:00Z",
+      "comments": [],
+      "evidence": [
+        {
+          "@odata.type": "#microsoft.graph.security.userEvidence",
+          "createdDateTime": "2026-10-15T06:00:00Z",
+          "verdict": "suspicious",
+          "remediationStatus": "none",
+          "remediationStatusDetails": null,
+          "roles": [
+            "compromised"
+          ],
+          "tags": [],
+          "userAccount": {
+            "accountName": "avery",
+            "domainName": "example.com",
+            "userSid": null,
+            "azureAdUserId": "30000000-0000-4000-8000-000000000001",
+            "userPrincipalName": "avery@example.com",
+            "displayName": "Avery Engineer"
+          }
+        },
+        {
+          "@odata.type": "#microsoft.graph.security.ipEvidence",
+          "createdDateTime": "2026-10-15T06:00:00Z",
+          "verdict": "suspicious",
+          "remediationStatus": "none",
+          "roles": [],
+          "tags": [],
+          "ipAddress": "203.0.113.45",
+          "countryLetterCode": "NL"
+        }
+      ],
+      "systemTags": []
+    },
+    {
+      "id": "da638647315200000003_-1194836003",
+      "providerAlertId": "00000003-0000-4000-8000-00000000c0de",
+      "incidentId": "4224",
+      "status": "inProgress",
+      "severity": "medium",
+      "classification": null,
+      "determination": null,
+      "serviceSource": "microsoftDefenderForCloudApps",
+      "detectionSource": "microsoftDefenderForCloudApps",
+      "productName": "Microsoft Defender for Cloud Apps",
+      "detectorId": "00000003-1111-4000-8000-000000000000",
+      "tenantId": "00000000-0000-4000-8000-0000000000f0",
+      "title": "Suspicious inbox manipulation rule",
+      "description": "",
+      "recommendedActions": "",
+      "category": "Exfiltration",
+      "assignedTo": "alex.admin@example.com",
+      "alertWebUrl": "https://security.microsoft.com/alerts/da638647315200000003_-1194836003?tid=00000000-0000-4000-8000-0000000000f0",
+      "incidentWebUrl": "https://security.microsoft.com/incidents/4224?tid=00000000-0000-4000-8000-0000000000f0",
+      "actorDisplayName": null,
+      "threatDisplayName": null,
+      "threatFamilyName": null,
+      "mitreTechniques": [
+        "T1114.003",
+        "T1564.008"
+      ],
+      "createdDateTime": "2026-10-15T07:00:00Z",
+      "lastUpdateDateTime": "2026-10-15T08:00:00Z",
+      "resolvedDateTime": null,
+      "firstActivityDateTime": "2026-10-15T06:00:00Z",
+      "lastActivityDateTime": "2026-10-15T07:00:00Z",
+      "comments": [],
+      "evidence": [
+        {
+          "@odata.type": "#microsoft.graph.security.mailboxEvidence",
+          "createdDateTime": "2026-10-15T06:00:00Z",
+          "verdict": "suspicious",
+          "remediationStatus": "none",
+          "roles": [
+            "compromised"
+          ],
+          "tags": [],
+          "primaryAddress": "avery@example.com",
+          "displayName": "Avery Engineer",
+          "userAccount": {
+            "azureAdUserId": "30000000-0000-4000-8000-000000000001",
+            "userPrincipalName": "avery@example.com",
+            "displayName": "Avery Engineer"
+          }
+        }
+      ],
+      "systemTags": []
+    },
+    {
+      "id": "da638647315200000004_-1194836004",
+      "providerAlertId": "00000004-0000-4000-8000-00000000c0de",
+      "incidentId": "4223",
+      "status": "inProgress",
+      "severity": "medium",
+      "classification": null,
+      "determination": null,
+      "serviceSource": "microsoft365Defender",
+      "detectionSource": "microsoft365Defender",
+      "productName": "Microsoft Defender XDR",
+      "detectorId": "00000004-1111-4000-8000-000000000000",
+      "tenantId": "00000000-0000-4000-8000-0000000000f0",
+      "title": "Suspicious email forwarding activity",
+      "description": "",
+      "recommendedActions": "",
+      "category": "Exfiltration",
+      "assignedTo": "alex.admin@example.com",
+      "alertWebUrl": "https://security.microsoft.com/alerts/da638647315200000004_-1194836004?tid=00000000-0000-4000-8000-0000000000f0",
+      "incidentWebUrl": "https://security.microsoft.com/incidents/4223?tid=00000000-0000-4000-8000-0000000000f0",
+      "actorDisplayName": null,
+      "threatDisplayName": null,
+      "threatFamilyName": null,
+      "mitreTechniques": [
+        "T1114.003"
+      ],
+      "createdDateTime": "2026-10-14T23:00:00Z",
+      "lastUpdateDateTime": "2026-10-15T00:00:00Z",
+      "resolvedDateTime": null,
+      "firstActivityDateTime": "2026-10-14T22:00:00Z",
+      "lastActivityDateTime": "2026-10-14T23:00:00Z",
+      "comments": [],
+      "evidence": [
+        {
+          "@odata.type": "#microsoft.graph.security.mailboxEvidence",
+          "createdDateTime": "2026-10-15T06:00:00Z",
+          "verdict": "suspicious",
+          "remediationStatus": "none",
+          "roles": [
+            "compromised"
+          ],
+          "tags": [],
+          "primaryAddress": "gabriel.nunes@example.com",
+          "displayName": "Gabriel Nunes",
+          "userAccount": {
+            "azureAdUserId": "10000000-0000-4000-8000-000000000007",
+            "userPrincipalName": "gabriel.nunes@example.com",
+            "displayName": "Gabriel Nunes"
+          }
+        }
+      ],
+      "systemTags": []
+    },
+    {
+      "id": "da638647315200000005_-1194836005",
+      "providerAlertId": "00000005-0000-4000-8000-00000000c0de",
+      "incidentId": "4223",
+      "status": "inProgress",
+      "severity": "high",
+      "classification": null,
+      "determination": null,
+      "serviceSource": "azureAdIdentityProtection",
+      "detectionSource": "azureAdIdentityProtection",
+      "productName": "Microsoft Entra ID Protection",
+      "detectorId": "00000005-1111-4000-8000-000000000000",
+      "tenantId": "00000000-0000-4000-8000-0000000000f0",
+      "title": "Anomalous token",
+      "description": "",
+      "recommendedActions": "",
+      "category": "CredentialAccess",
+      "assignedTo": "alex.admin@example.com",
+      "alertWebUrl": "https://security.microsoft.com/alerts/da638647315200000005_-1194836005?tid=00000000-0000-4000-8000-0000000000f0",
+      "incidentWebUrl": "https://security.microsoft.com/incidents/4223?tid=00000000-0000-4000-8000-0000000000f0",
+      "actorDisplayName": null,
+      "threatDisplayName": null,
+      "threatFamilyName": null,
+      "mitreTechniques": [
+        "T1528"
+      ],
+      "createdDateTime": "2026-10-14T22:00:00Z",
+      "lastUpdateDateTime": "2026-10-14T23:00:00Z",
+      "resolvedDateTime": null,
+      "firstActivityDateTime": "2026-10-14T21:00:00Z",
+      "lastActivityDateTime": "2026-10-14T22:00:00Z",
+      "comments": [],
+      "evidence": [
+        {
+          "@odata.type": "#microsoft.graph.security.userEvidence",
+          "createdDateTime": "2026-10-15T06:00:00Z",
+          "verdict": "suspicious",
+          "remediationStatus": "none",
+          "remediationStatusDetails": null,
+          "roles": [
+            "compromised"
+          ],
+          "tags": [],
+          "userAccount": {
+            "accountName": "gabriel.nunes",
+            "domainName": "example.com",
+            "userSid": null,
+            "azureAdUserId": "10000000-0000-4000-8000-000000000007",
+            "userPrincipalName": "gabriel.nunes@example.com",
+            "displayName": "Gabriel Nunes"
+          }
+        }
+      ],
+      "systemTags": []
+    },
+    {
+      "id": "da638647315200000006_-1194836006",
+      "providerAlertId": "00000006-0000-4000-8000-00000000c0de",
+      "incidentId": "4222",
+      "status": "new",
+      "severity": "medium",
+      "classification": null,
+      "determination": null,
+      "serviceSource": "microsoftDefenderForEndpoint",
+      "detectionSource": "antivirus",
+      "productName": "Microsoft Defender for Endpoint",
+      "detectorId": "00000006-1111-4000-8000-000000000000",
+      "tenantId": "00000000-0000-4000-8000-0000000000f0",
+      "title": "'Emotet' malware was prevented",
+      "description": "",
+      "recommendedActions": "",
+      "category": "Malware",
+      "assignedTo": null,
+      "alertWebUrl": "https://security.microsoft.com/alerts/da638647315200000006_-1194836006?tid=00000000-0000-4000-8000-0000000000f0",
+      "incidentWebUrl": "https://security.microsoft.com/incidents/4222?tid=00000000-0000-4000-8000-0000000000f0",
+      "actorDisplayName": null,
+      "threatDisplayName": "Trojan:Win32/Emotet",
+      "threatFamilyName": "Emotet",
+      "mitreTechniques": [
+        "T1204.002"
+      ],
+      "createdDateTime": "2026-10-14T15:00:00Z",
+      "lastUpdateDateTime": "2026-10-14T16:00:00Z",
+      "resolvedDateTime": null,
+      "firstActivityDateTime": "2026-10-14T14:00:00Z",
+      "lastActivityDateTime": "2026-10-14T15:00:00Z",
+      "comments": [],
+      "evidence": [
+        {
+          "@odata.type": "#microsoft.graph.security.deviceEvidence",
+          "createdDateTime": "2026-10-14T13:00:00Z",
+          "verdict": "suspicious",
+          "remediationStatus": "none",
+          "roles": [],
+          "tags": [],
+          "deviceDnsName": "wks-0142.corp.example.com",
+          "osPlatform": "Windows11",
+          "osBuild": 26100,
+          "healthStatus": "active",
+          "riskScore": "medium",
+          "rbacGroupName": "Workstations",
+          "onboardingStatus": "onboarded",
+          "mdeDeviceId": "a1b2c3d4e5f60718293a4b5c6d7e8f9012345678"
+        },
+        {
+          "@odata.type": "#microsoft.graph.security.fileEvidence",
+          "createdDateTime": "2026-10-14T13:00:00Z",
+          "verdict": "malicious",
+          "remediationStatus": "remediated",
+          "roles": [],
+          "tags": [],
+          "detectionStatus": "prevented",
+          "fileDetails": {
+            "fileName": "invoice_0914.iso",
+            "filePath": "C:\\Users\\farah.haddad\\Downloads",
+            "fileSize": 482304,
+            "sha1": null,
+            "sha256": null
+          }
+        }
+      ],
+      "systemTags": []
+    },
+    {
+      "id": "da638647315200000007_-1194836007",
+      "providerAlertId": "00000007-0000-4000-8000-00000000c0de",
+      "incidentId": "4221",
+      "status": "inProgress",
+      "severity": "high",
+      "classification": null,
+      "determination": null,
+      "serviceSource": "microsoftDefenderForEndpoint",
+      "detectionSource": "microsoftDefenderForEndpoint",
+      "productName": "Microsoft Defender for Endpoint",
+      "detectorId": "00000007-1111-4000-8000-000000000000",
+      "tenantId": "00000000-0000-4000-8000-0000000000f0",
+      "title": "Ransomware behavior detected in the file system",
+      "description": "",
+      "recommendedActions": "",
+      "category": "Ransomware",
+      "assignedTo": "sam.soc@example.com",
+      "alertWebUrl": "https://security.microsoft.com/alerts/da638647315200000007_-1194836007?tid=00000000-0000-4000-8000-0000000000f0",
+      "incidentWebUrl": "https://security.microsoft.com/incidents/4221?tid=00000000-0000-4000-8000-0000000000f0",
+      "actorDisplayName": null,
+      "threatDisplayName": null,
+      "threatFamilyName": null,
+      "mitreTechniques": [
+        "T1486"
+      ],
+      "createdDateTime": "2026-10-13T17:00:00Z",
+      "lastUpdateDateTime": "2026-10-13T18:00:00Z",
+      "resolvedDateTime": null,
+      "firstActivityDateTime": "2026-10-13T16:00:00Z",
+      "lastActivityDateTime": "2026-10-13T17:00:00Z",
+      "comments": [],
+      "evidence": [
+        {
+          "@odata.type": "#microsoft.graph.security.deviceEvidence",
+          "createdDateTime": "2026-10-14T13:00:00Z",
+          "verdict": "suspicious",
+          "remediationStatus": "none",
+          "roles": [],
+          "tags": [],
+          "deviceDnsName": "srv-file-02.corp.example.com",
+          "osPlatform": "Windows11",
+          "osBuild": 26100,
+          "healthStatus": "active",
+          "riskScore": "high",
+          "rbacGroupName": "Workstations",
+          "onboardingStatus": "onboarded",
+          "mdeDeviceId": "a1b2c3d4e5f60718293a4b5c6d7e8f9012345678"
+        }
+      ],
+      "systemTags": []
+    },
+    {
+      "id": "da638647315200000008_-1194836008",
+      "providerAlertId": "00000008-0000-4000-8000-00000000c0de",
+      "incidentId": "4221",
+      "status": "inProgress",
+      "severity": "medium",
+      "classification": null,
+      "determination": null,
+      "serviceSource": "microsoftDefenderForEndpoint",
+      "detectionSource": "microsoftDefenderForEndpoint",
+      "productName": "Microsoft Defender for Endpoint",
+      "detectorId": "00000008-1111-4000-8000-000000000000",
+      "tenantId": "00000000-0000-4000-8000-0000000000f0",
+      "title": "Suspicious remote activity",
+      "description": "",
+      "recommendedActions": "",
+      "category": "LateralMovement",
+      "assignedTo": "sam.soc@example.com",
+      "alertWebUrl": "https://security.microsoft.com/alerts/da638647315200000008_-1194836008?tid=00000000-0000-4000-8000-0000000000f0",
+      "incidentWebUrl": "https://security.microsoft.com/incidents/4221?tid=00000000-0000-4000-8000-0000000000f0",
+      "actorDisplayName": null,
+      "threatDisplayName": null,
+      "threatFamilyName": null,
+      "mitreTechniques": [
+        "T1021.002"
+      ],
+      "createdDateTime": "2026-10-13T16:00:00Z",
+      "lastUpdateDateTime": "2026-10-13T17:00:00Z",
+      "resolvedDateTime": null,
+      "firstActivityDateTime": "2026-10-13T15:00:00Z",
+      "lastActivityDateTime": "2026-10-13T16:00:00Z",
+      "comments": [],
+      "evidence": [
+        {
+          "@odata.type": "#microsoft.graph.security.deviceEvidence",
+          "createdDateTime": "2026-10-14T13:00:00Z",
+          "verdict": "suspicious",
+          "remediationStatus": "none",
+          "roles": [],
+          "tags": [],
+          "deviceDnsName": "wks-0217.corp.example.com",
+          "osPlatform": "Windows11",
+          "osBuild": 26100,
+          "healthStatus": "active",
+          "riskScore": "high",
+          "rbacGroupName": "Workstations",
+          "onboardingStatus": "onboarded",
+          "mdeDeviceId": "a1b2c3d4e5f60718293a4b5c6d7e8f9012345678"
+        }
+      ],
+      "systemTags": []
+    },
+    {
+      "id": "da638647315200000009_-1194836009",
+      "providerAlertId": "00000009-0000-4000-8000-00000000c0de",
+      "incidentId": "4220",
+      "status": "new",
+      "severity": "low",
+      "classification": null,
+      "determination": null,
+      "serviceSource": "microsoftDefenderForCloudApps",
+      "detectionSource": "microsoftDefenderForCloudApps",
+      "productName": "Microsoft Defender for Cloud Apps",
+      "detectorId": "00000009-1111-4000-8000-000000000000",
+      "tenantId": "00000000-0000-4000-8000-0000000000f0",
+      "title": "Mass delete",
+      "description": "",
+      "recommendedActions": "",
+      "category": "Impact",
+      "assignedTo": null,
+      "alertWebUrl": "https://security.microsoft.com/alerts/da638647315200000009_-1194836009?tid=00000000-0000-4000-8000-0000000000f0",
+      "incidentWebUrl": "https://security.microsoft.com/incidents/4220?tid=00000000-0000-4000-8000-0000000000f0",
+      "actorDisplayName": null,
+      "threatDisplayName": null,
+      "threatFamilyName": null,
+      "mitreTechniques": [
+        "T1485"
+      ],
+      "createdDateTime": "2026-10-13T13:00:00Z",
+      "lastUpdateDateTime": "2026-10-13T14:00:00Z",
+      "resolvedDateTime": null,
+      "firstActivityDateTime": "2026-10-13T12:00:00Z",
+      "lastActivityDateTime": "2026-10-13T13:00:00Z",
+      "comments": [],
+      "evidence": [
+        {
+          "@odata.type": "#microsoft.graph.security.userEvidence",
+          "createdDateTime": "2026-10-15T06:00:00Z",
+          "verdict": "suspicious",
+          "remediationStatus": "none",
+          "remediationStatusDetails": null,
+          "roles": [
+            "suspicious"
+          ],
+          "tags": [],
+          "userAccount": {
+            "accountName": "jordan.price",
+            "domainName": "example.com",
+            "userSid": null,
+            "azureAdUserId": "10000000-0000-4000-8000-00000000000a",
+            "userPrincipalName": "jordan.price@example.com",
+            "displayName": "Jordan Price"
+          }
+        }
+      ],
+      "systemTags": []
+    },
+    {
+      "id": "da638647315200000010_-1194836010",
+      "providerAlertId": "00000010-0000-4000-8000-00000000c0de",
+      "incidentId": "4219",
+      "status": "inProgress",
+      "severity": "informational",
+      "classification": null,
+      "determination": null,
+      "serviceSource": "microsoftDefenderForOffice365",
+      "detectionSource": "microsoftDefenderForOffice365",
+      "productName": "Microsoft Defender for Office 365",
+      "detectorId": "0000000a-1111-4000-8000-000000000000",
+      "tenantId": "00000000-0000-4000-8000-0000000000f0",
+      "title": "Email messages containing phish URLs removed after delivery",
+      "description": "",
+      "recommendedActions": "",
+      "category": "InitialAccess",
+      "assignedTo": "jordan.lee@example.com",
+      "alertWebUrl": "https://security.microsoft.com/alerts/da638647315200000010_-1194836010?tid=00000000-0000-4000-8000-0000000000f0",
+      "incidentWebUrl": "https://security.microsoft.com/incidents/4219?tid=00000000-0000-4000-8000-0000000000f0",
+      "actorDisplayName": null,
+      "threatDisplayName": null,
+      "threatFamilyName": null,
+      "mitreTechniques": [
+        "T1566.002"
+      ],
+      "createdDateTime": "2026-10-12T11:00:00Z",
+      "lastUpdateDateTime": "2026-10-12T12:00:00Z",
+      "resolvedDateTime": null,
+      "firstActivityDateTime": "2026-10-12T10:00:00Z",
+      "lastActivityDateTime": "2026-10-12T11:00:00Z",
+      "comments": [],
+      "evidence": [
+        {
+          "@odata.type": "#microsoft.graph.security.analyzedMessageEvidence",
+          "createdDateTime": "2026-10-12T09:00:00Z",
+          "verdict": "malicious",
+          "remediationStatus": "remediated",
+          "roles": [],
+          "tags": [],
+          "subject": "Action required: invoice overdue",
+          "recipientEmailAddress": "isaac.mensah@example.com",
+          "senderIp": "198.51.100.23",
+          "p1Sender": {
+            "emailAddress": "billing@invoices-example.net",
+            "displayName": "Billing"
+          },
+          "deliveryAction": "delivered",
+          "deliveryLocation": "inbox",
+          "internetMessageId": "<msg-0914@invoices-example.net>"
+        },
+        {
+          "@odata.type": "#microsoft.graph.security.urlEvidence",
+          "createdDateTime": "2026-10-12T09:00:00Z",
+          "verdict": "malicious",
+          "remediationStatus": "remediated",
+          "roles": [],
+          "tags": [],
+          "url": "https://invoices-example.net/view?id=0914"
+        }
+      ],
+      "systemTags": []
+    },
+    {
+      "id": "da638647315200000011_-1194836011",
+      "providerAlertId": "00000011-0000-4000-8000-00000000c0de",
+      "incidentId": "4218",
+      "status": "new",
+      "severity": "informational",
+      "classification": null,
+      "determination": null,
+      "serviceSource": "microsoftDefenderForOffice365",
+      "detectionSource": "microsoftDefenderForOffice365",
+      "productName": "Microsoft Defender for Office 365",
+      "detectorId": "0000000b-1111-4000-8000-000000000000",
+      "tenantId": "00000000-0000-4000-8000-0000000000f0",
+      "title": "Email reported by user as malware or phish",
+      "description": "",
+      "recommendedActions": "",
+      "category": "InitialAccess",
+      "assignedTo": null,
+      "alertWebUrl": "https://security.microsoft.com/alerts/da638647315200000011_-1194836011?tid=00000000-0000-4000-8000-0000000000f0",
+      "incidentWebUrl": "https://security.microsoft.com/incidents/4218?tid=00000000-0000-4000-8000-0000000000f0",
+      "actorDisplayName": null,
+      "threatDisplayName": null,
+      "threatFamilyName": null,
+      "mitreTechniques": [],
+      "createdDateTime": "2026-10-12T09:00:00Z",
+      "lastUpdateDateTime": "2026-10-12T10:00:00Z",
+      "resolvedDateTime": null,
+      "firstActivityDateTime": "2026-10-12T08:00:00Z",
+      "lastActivityDateTime": "2026-10-12T09:00:00Z",
+      "comments": [],
+      "evidence": [
+        {
+          "@odata.type": "#microsoft.graph.security.analyzedMessageEvidence",
+          "createdDateTime": "2026-10-12T09:00:00Z",
+          "verdict": "malicious",
+          "remediationStatus": "remediated",
+          "roles": [],
+          "tags": [],
+          "subject": "Your mailbox is almost full",
+          "recipientEmailAddress": "hana.kim@example.com",
+          "senderIp": "198.51.100.23",
+          "p1Sender": {
+            "emailAddress": "billing@invoices-example.net",
+            "displayName": "Billing"
+          },
+          "deliveryAction": "delivered",
+          "deliveryLocation": "inbox",
+          "internetMessageId": "<msg-0914@invoices-example.net>"
+        }
+      ],
+      "systemTags": []
+    },
+    {
+      "id": "da638647315200000012_-1194836012",
+      "providerAlertId": "00000012-0000-4000-8000-00000000c0de",
+      "incidentId": "4213",
+      "status": "new",
+      "severity": "medium",
+      "classification": null,
+      "determination": null,
+      "serviceSource": "microsoftDefenderForCloudApps",
+      "detectionSource": "microsoftDefenderForCloudApps",
+      "productName": "Microsoft Defender for Cloud Apps",
+      "detectorId": "0000000c-1111-4000-8000-000000000000",
+      "tenantId": "00000000-0000-4000-8000-0000000000f0",
+      "title": "Activity from infrequent country",
+      "description": "",
+      "recommendedActions": "",
+      "category": "InitialAccess",
+      "assignedTo": null,
+      "alertWebUrl": "https://security.microsoft.com/alerts/da638647315200000012_-1194836012?tid=00000000-0000-4000-8000-0000000000f0",
+      "incidentWebUrl": "https://security.microsoft.com/incidents/4213?tid=00000000-0000-4000-8000-0000000000f0",
+      "actorDisplayName": null,
+      "threatDisplayName": null,
+      "threatFamilyName": null,
+      "mitreTechniques": [
+        "T1078"
+      ],
+      "createdDateTime": "2026-10-08T17:00:00Z",
+      "lastUpdateDateTime": "2026-10-08T18:00:00Z",
+      "resolvedDateTime": null,
+      "firstActivityDateTime": "2026-10-08T16:00:00Z",
+      "lastActivityDateTime": "2026-10-08T17:00:00Z",
+      "comments": [],
+      "evidence": [
+        {
+          "@odata.type": "#microsoft.graph.security.userEvidence",
+          "createdDateTime": "2026-10-15T06:00:00Z",
+          "verdict": "suspicious",
+          "remediationStatus": "none",
+          "remediationStatusDetails": null,
+          "roles": [
+            "compromised"
+          ],
+          "tags": [],
+          "userAccount": {
+            "accountName": "eli.obrien",
+            "domainName": "example.com",
+            "userSid": null,
+            "azureAdUserId": "30000000-0000-4000-8000-000000000005",
+            "userPrincipalName": "eli.obrien@example.com",
+            "displayName": "Eli O'Brien"
+          }
+        },
+        {
+          "@odata.type": "#microsoft.graph.security.ipEvidence",
+          "createdDateTime": "2026-10-15T06:00:00Z",
+          "verdict": "suspicious",
+          "remediationStatus": "none",
+          "roles": [],
+          "tags": [],
+          "ipAddress": "198.51.100.77",
+          "countryLetterCode": "BR"
+        }
+      ],
+      "systemTags": []
+    },
+    {
+      "id": "da638647315200000013_-1194836013",
+      "providerAlertId": "00000013-0000-4000-8000-00000000c0de",
+      "incidentId": "4213",
+      "status": "new",
+      "severity": "high",
+      "classification": null,
+      "determination": null,
+      "serviceSource": "microsoftDefenderForCloudApps",
+      "detectionSource": "microsoftDefenderForCloudApps",
+      "productName": "Microsoft Defender for Cloud Apps",
+      "detectorId": "0000000d-1111-4000-8000-000000000000",
+      "tenantId": "00000000-0000-4000-8000-0000000000f0",
+      "title": "Mass download by a single user",
+      "description": "",
+      "recommendedActions": "",
+      "category": "Exfiltration",
+      "assignedTo": null,
+      "alertWebUrl": "https://security.microsoft.com/alerts/da638647315200000013_-1194836013?tid=00000000-0000-4000-8000-0000000000f0",
+      "incidentWebUrl": "https://security.microsoft.com/incidents/4213?tid=00000000-0000-4000-8000-0000000000f0",
+      "actorDisplayName": null,
+      "threatDisplayName": null,
+      "threatFamilyName": null,
+      "mitreTechniques": [
+        "T1530"
+      ],
+      "createdDateTime": "2026-10-08T18:00:00Z",
+      "lastUpdateDateTime": "2026-10-08T19:00:00Z",
+      "resolvedDateTime": null,
+      "firstActivityDateTime": "2026-10-08T17:00:00Z",
+      "lastActivityDateTime": "2026-10-08T18:00:00Z",
+      "comments": [],
+      "evidence": [
+        {
+          "@odata.type": "#microsoft.graph.security.userEvidence",
+          "createdDateTime": "2026-10-15T06:00:00Z",
+          "verdict": "suspicious",
+          "remediationStatus": "none",
+          "remediationStatusDetails": null,
+          "roles": [
+            "compromised"
+          ],
+          "tags": [],
+          "userAccount": {
+            "accountName": "eli.obrien",
+            "domainName": "example.com",
+            "userSid": null,
+            "azureAdUserId": "30000000-0000-4000-8000-000000000005",
+            "userPrincipalName": "eli.obrien@example.com",
+            "displayName": "Eli O'Brien"
+          }
+        }
+      ],
+      "systemTags": []
+    },
+    {
+      "id": "da638647315200000014_-1194836014",
+      "providerAlertId": "00000014-0000-4000-8000-00000000c0de",
+      "incidentId": "4212",
+      "status": "new",
+      "severity": "medium",
+      "classification": null,
+      "determination": null,
+      "serviceSource": "microsoftDefenderForCloud",
+      "detectionSource": "microsoftDefenderForCloud",
+      "productName": "Microsoft Defender for Cloud",
+      "detectorId": "0000000e-1111-4000-8000-000000000000",
+      "tenantId": "00000000-0000-4000-8000-0000000000f0",
+      "title": "Suspicious authentication activity",
+      "description": "",
+      "recommendedActions": "",
+      "category": "CredentialAccess",
+      "assignedTo": null,
+      "alertWebUrl": "https://security.microsoft.com/alerts/da638647315200000014_-1194836014?tid=00000000-0000-4000-8000-0000000000f0",
+      "incidentWebUrl": "https://security.microsoft.com/incidents/4212?tid=00000000-0000-4000-8000-0000000000f0",
+      "actorDisplayName": null,
+      "threatDisplayName": null,
+      "threatFamilyName": null,
+      "mitreTechniques": [
+        "T1110"
+      ],
+      "createdDateTime": "2026-10-09T03:00:00Z",
+      "lastUpdateDateTime": "2026-10-09T04:00:00Z",
+      "resolvedDateTime": null,
+      "firstActivityDateTime": "2026-10-09T02:00:00Z",
+      "lastActivityDateTime": "2026-10-09T03:00:00Z",
+      "comments": [],
+      "evidence": [
+        {
+          "@odata.type": "#microsoft.graph.security.ipEvidence",
+          "createdDateTime": "2026-10-15T06:00:00Z",
+          "verdict": "malicious",
+          "remediationStatus": "none",
+          "roles": [
+            "attacker"
+          ],
+          "tags": [],
+          "ipAddress": "192.0.2.200",
+          "countryLetterCode": "US"
+        }
+      ],
+      "systemTags": []
+    },
+    {
+      "id": "da638647315200000015_-1194836015",
+      "providerAlertId": "00000015-0000-4000-8000-00000000c0de",
+      "incidentId": "4217",
+      "status": "resolved",
+      "severity": "high",
+      "classification": "truePositive",
+      "determination": "compromisedAccount",
+      "serviceSource": "microsoftDefenderForIdentity",
+      "detectionSource": "microsoftDefenderForIdentity",
+      "productName": "Microsoft Defender for Identity",
+      "detectorId": "0000000f-1111-4000-8000-000000000000",
+      "tenantId": "00000000-0000-4000-8000-0000000000f0",
+      "title": "Password spray",
+      "description": "",
+      "recommendedActions": "",
+      "category": "CredentialAccess",
+      "assignedTo": "alex.admin@example.com",
+      "alertWebUrl": "https://security.microsoft.com/alerts/da638647315200000015_-1194836015?tid=00000000-0000-4000-8000-0000000000f0",
+      "incidentWebUrl": "https://security.microsoft.com/incidents/4217?tid=00000000-0000-4000-8000-0000000000f0",
+      "actorDisplayName": null,
+      "threatDisplayName": null,
+      "threatFamilyName": null,
+      "mitreTechniques": [
+        "T1110.003"
+      ],
+      "createdDateTime": "2026-10-10T09:00:00Z",
+      "lastUpdateDateTime": "2026-10-10T10:00:00Z",
+      "resolvedDateTime": "2026-10-11T09:00:00Z",
+      "firstActivityDateTime": "2026-10-10T08:00:00Z",
+      "lastActivityDateTime": "2026-10-10T09:00:00Z",
+      "comments": [],
+      "evidence": [
+        {
+          "@odata.type": "#microsoft.graph.security.userEvidence",
+          "createdDateTime": "2026-10-15T06:00:00Z",
+          "verdict": "suspicious",
+          "remediationStatus": "none",
+          "remediationStatusDetails": null,
+          "roles": [
+            "compromised"
+          ],
+          "tags": [],
+          "userAccount": {
+            "accountName": "eli.obrien",
+            "domainName": "example.com",
+            "userSid": null,
+            "azureAdUserId": "30000000-0000-4000-8000-000000000005",
+            "userPrincipalName": "eli.obrien@example.com",
+            "displayName": "Eli O'Brien"
+          }
+        },
+        {
+          "@odata.type": "#microsoft.graph.security.ipEvidence",
+          "createdDateTime": "2026-10-15T06:00:00Z",
+          "verdict": "malicious",
+          "remediationStatus": "none",
+          "roles": [
+            "attacker"
+          ],
+          "tags": [],
+          "ipAddress": "203.0.113.9",
+          "countryLetterCode": "RU"
+        }
+      ],
+      "systemTags": []
+    }
+  ]
+}

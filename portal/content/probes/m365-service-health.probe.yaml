@@ -1,0 +1,23 @@
+$schema: ../../packages/schemas/generated/probe.schema.json
+kind: probe
+id: probes.m365-service-health
+version: 1.0.0
+title: Microsoft 365 service health API
+summary: Reads the service health overview as the automation identity, so the Service health page and alerts keep working.
+owner: m365-team
+tags: [synthetic, m365, graph]
+check:
+  kind: graph
+  path: /admin/serviceAnnouncement/healthOverviews
+  query:
+    $select: service,status
+  expect:
+    status: 200
+    bodyContains: service
+thresholds: { warn: 2000, crit: 6000 }
+intervalHint: PT15M
+timeoutMs: 15000
+requires:
+  # Application permission held by the automation identity (ADR-011).
+  scopes:
+    graph: [ServiceHealth.Read.All]

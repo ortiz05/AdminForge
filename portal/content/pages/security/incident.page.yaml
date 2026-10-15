@@ -1,0 +1,236 @@
+$schema: ../../../packages/schemas/generated/page.schema.json
+kind: page
+id: security.incident
+version: 1.0.0
+title: Incident
+summary: One Microsoft Defender XDR incident — status, correlated alerts, impacted assets and analyst comments.
+owner: security-team
+tags: [security, defender, incidents]
+template: entity
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    graph: [SecurityIncident.Read.All]
+  entraRoles: [Security Reader]
+  licences: [defender]
+
+params:
+  id: { type: string, label: Incident, required: true, hidden: true, pattern: '^[0-9]+$' }
+
+datasources:
+  incident:
+    source: graph
+    request:
+      path: /security/incidents/${ $encode(params.id) }
+      query:
+        $expand: alerts
+    cache: { ttl: 30 }
+    # Adds `assets` (evidence across all alerts, one row per alert + entity) and alert counts to the incident.
+    transform: >-
+      ${ (
+        $alerts := [value.alerts];
+        $assets := [$alerts.(
+          $alert := $;
+          evidence.(
+            $t := $substringAfter(`@odata.type`, 'microsoft.graph.security.');
+            {
+              "alertId": $alert.id,
+              "alertTitle": $alert.title,
+              "type": $t = 'userEvidence' ? 'User' : $t = 'deviceEvidence' ? 'Device' : $t = 'ipEvidence' ? 'IP address'
+                : $t = 'urlEvidence' ? 'URL' : $t = 'fileEvidence' ? 'File' : $t = 'processEvidence' ? 'Process'
+                : $t = 'mailboxEvidence' ? 'Mailbox' : $t = 'analyzedMessageEvidence' ? 'Email message'
+                : $t = 'cloudApplicationEvidence' ? 'Cloud app' : $t,
+              "name": $t = 'userEvidence' ? userAccount.userPrincipalName
+                : $t = 'deviceEvidence' ? deviceDnsName
+                : $t = 'ipEvidence' ? ipAddress & (countryLetterCode ? ' (' & countryLetterCode & ')' : '')
+                : $t = 'urlEvidence' ? url
+                : $t = 'fileEvidence' ? fileDetails.fileName
+                : $t = 'processEvidence' ? imageFile.fileName
+                : $t = 'mailboxEvidence' ? primaryAddress
+                : $t = 'analyzedMessageEvidence' ? subject
+                : $t = 'cloudApplicationEvidence' ? displayName
+                : '—',
+              "verdict": verdict,
+              "remediationStatus": remediationStatus,
+              "roles": roles
+            }
+          )
+        )];
+        $merge([value, {
+          "assets": [$map($assets, function($a, $i) { $merge([$a, { "key": $string($i) }]) })],
+          "alertCount": $count($alerts),
+          "activeAlertCount": $count($alerts[status != 'resolved'])
+        }])
+      ) }
+
+header:
+  title: ${ incident.displayName }
+  subtitle: "${ 'Incident ' & incident.id & ' · created ' & $substring(incident.createdDateTime, 0, 10) & ' · ' & $string(incident.alertCount) & ' alerts' }"
+  status: "${ incident.status = 'resolved' ? 'ok' : incident.severity = 'high' ? 'crit' : incident.severity = 'medium' ? 'warn' : incident.severity = 'low' ? 'info' : 'neutral' }"
+  statusLabel: >-
+    ${ ($sev := {'high': 'High', 'medium': 'Medium', 'low': 'Low', 'informational': 'Informational'};
+        $st := {'active': 'Active', 'inProgress': 'In progress', 'awaitingAction': 'Awaiting action', 'resolved': 'Resolved', 'redirected': 'Redirected'};
+        $lookup($sev, incident.severity) & ' severity · ' & $lookup($st, incident.status)) }
+  ids:
+    Incident id: ${ incident.id }
+
+actions:
+  - playbook: security.assign-incident
+    label: Assign to me
+    icon: user-check
+    inputs:
+      incidentId: ${ params.id }
+      assignee: ${ user.upn }
+    when: ${ $not(incident.assignedTo = user.upn) and $not(incident.status = 'redirected') }
+  - playbook: security.update-incident
+    label: Update status
+    icon: pencil-simple
+    inputs:
+      incidentId: ${ params.id }
+    when: ${ $not(incident.status = 'redirected') }
+  - label: Open in Microsoft Defender
+    icon: arrow-square-out
+    href: ${ incident.incidentWebUrl }
+
+tabs:
+  - id: overview
+    label: Overview
+    layout:
+      - widget: kpi
+        data: incident.alertCount
+        label: Alerts
+        format: number
+      - widget: kpi
+        data: incident.activeAlertCount
+        label: Unresolved alerts
+        format: number
+        status: "${ value > 0 ? 'warn' : 'ok' }"
+      - widget: markdown
+        span: 6
+        when: ${ $exists(incident.summary) and incident.summary != null }
+        text: |
+          **Summary.** ${ incident.summary }
+      - widget: keyValue
+        span: 12
+        data: incident
+        fields:
+          - field: status
+            label: Status
+            kind: status
+            map:
+              active: [warn, Active]
+              inProgress: [info, In progress]
+              awaitingAction: [warn, Awaiting action]
+              resolved: [ok, Resolved]
+              redirected: [neutral, Redirected]
+          - field: severity
+            label: Severity
+            kind: status
+            map: { high: [crit, High], medium: [warn, Medium], low: [info, Low], informational: [neutral, Informational] }
+          - { field: assignedTo, label: Assigned to }
+          - field: classification
+            label: Classification
+            kind: status
+            map:
+              unknown: [neutral, Not set]
+              truePositive: [crit, True positive]
+              falsePositive: [ok, False positive]
+              informationalExpectedActivity: [info, "Informational, expected activity"]
+          - { field: determination, label: Determination }
+          - { field: customTags, label: Tags, kind: tags }
+          - { field: systemTags, label: System tags, kind: tags }
+          - { field: createdDateTime, label: Created, kind: datetime }
+          - { field: lastUpdateDateTime, label: Last activity, kind: datetime }
+          - { field: lastModifiedBy, label: Last modified by }
+          - { field: resolvingComment, label: Resolving comment }
+          - { field: redirectIncidentId, label: Merged into incident, kind: id }
+  - id: alerts
+    label: Alerts
+    layout:
+      - widget: table
+        id: alerts
+        span: 12
+        data: incident.alerts
+        rowKey: id
+        search: true
+        empty:
+          title: No alerts in this incident
+          body: Alerts may have been moved to another incident when Defender re-correlated them.
+        columns:
+          - { field: title, label: Alert, kind: identity, secondary: category }
+          - field: severity
+            label: Severity
+            kind: status
+            map: { high: [crit, High], medium: [warn, Medium], low: [info, Low], informational: [neutral, Informational] }
+            filter: facet
+          - field: status
+            label: Status
+            kind: status
+            map: { new: [warn, New], inProgress: [info, In progress], resolved: [ok, Resolved] }
+            filter: facet
+          - field: serviceSource
+            label: Detected by
+            kind: status
+            filter: facet
+            map:
+              microsoftDefenderForEndpoint: [neutral, Defender for Endpoint]
+              microsoftDefenderForIdentity: [neutral, Defender for Identity]
+              microsoftDefenderForCloudApps: [neutral, Defender for Cloud Apps]
+              microsoftDefenderForOffice365: [neutral, Defender for Office 365]
+              microsoft365Defender: [neutral, Defender XDR]
+              azureAdIdentityProtection: [neutral, Entra ID Protection]
+              microsoftDefenderForCloud: [neutral, Defender for Cloud]
+              dataLossPrevention: [neutral, Data loss prevention]
+              microsoftInsiderRiskManagement: [neutral, Insider risk management]
+              microsoftSentinel: [neutral, Microsoft Sentinel]
+          - { field: mitreTechniques, label: MITRE techniques, kind: tags }
+          - { field: assignedTo, label: Assigned to, hidden: true }
+          - { field: createdDateTime, label: Created, kind: relativeTime }
+          - { field: id, label: Alert id, kind: code, hidden: true }
+        inspect:
+          page: security.alert
+          params:
+            id: ${ row.id }
+        rowActions:
+          - label: Open in Microsoft Defender
+            icon: arrow-square-out
+            href: ${ row.alertWebUrl }
+  - id: assets
+    label: Impacted assets
+    layout:
+      - widget: table
+        id: assets
+        span: 12
+        data: incident.assets
+        rowKey: key
+        search: true
+        empty:
+          title: No evidence recorded
+          body: Defender adds users, devices, mailboxes, files and IP addresses here as alerts are investigated.
+        columns:
+          - { field: name, label: Entity, kind: identity, secondary: type }
+          - { field: type, label: Type, filter: facet }
+          - field: verdict
+            label: Verdict
+            kind: status
+            filter: facet
+            map: { malicious: [crit, Malicious], suspicious: [warn, Suspicious], noThreatsFound: [ok, No threats found], unknown: [neutral, Unknown] }
+          - field: remediationStatus
+            label: Remediation
+            kind: status
+            filter: facet
+            map: { none: [neutral, None], remediated: [ok, Remediated], prevented: [ok, Prevented], blocked: [ok, Blocked], notFound: [neutral, Not found] }
+          - { field: roles, label: Roles, kind: tags }
+          - { field: alertTitle, label: Alert }
+  - id: comments
+    label: Comments
+    layout:
+      - widget: timeline
+        span: 12
+        data: incident.comments
+        ts: createdDateTime
+        title: createdByDisplayName
+        detail: ${ comment }
+        empty:
+          title: No comments yet
+          body: Add a comment when you update the incident status — it is kept with the incident in Microsoft Defender.

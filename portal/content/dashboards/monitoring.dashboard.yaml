@@ -1,0 +1,93 @@
+$schema: ../../packages/schemas/generated/dashboard.schema.json
+kind: dashboard
+id: automation.monitoring
+version: 1.0.0
+title: Synthetic monitoring
+summary: >-
+  Latest result and recent trend of every synthetic probe the scheduler runs as the automation identity — portal and
+  Microsoft cloud reachability, token acquisition per service, mail-flow DNS, certificate and credential expiry,
+  licence seats and sign-in health.
+owner: portal-admins
+tags: [synthetic, monitoring, automation]
+nav: { section: automation, label: Probe dashboard, icon: heartbeat, order: 35 }
+requires:
+  portalRoles: [Portal.Reader]
+refresh: 60
+
+layout:
+  - widget: markdown
+    id: intro
+    span: 12
+    text: |
+      Each probe runs hourly from this host as the **automation identity** (see *Automation › Schedules*, tag
+      `probe-sweep`). A probe turns **warn** or **crit** when its main measurement crosses the thresholds in its
+      definition — latency for reachability checks, days remaining for certificates and credentials, seats in use for
+      licences, failure rate for sign-ins. Select a probe to see its history and the last error.
+
+      A failing *Token acquisition* probe usually means the automation identity's certificate or secret expired, or
+      admin consent was removed. Failing *DNS* probes point at mail-flow records for the primary domain. Change the
+      licence probes to the SKUs your tenant uses.
+
+  - widget: probeStatus
+    id: portal_and_cloud
+    title: Portal and Microsoft cloud reachability
+    span: 6
+    probes:
+      - probes.portal-readiness
+      - probes.entra-openid-metadata
+      - probes.graph-reachability
+      - probes.arm-reachability
+      - probes.arm-subscription-access
+      - probes.m365-service-health
+
+  - widget: probeStatus
+    id: tokens
+    title: Token acquisition (automation identity)
+    span: 6
+    probes:
+      - probes.token-graph
+      - probes.token-arm
+      - probes.token-log-analytics
+      - probes.token-exchange
+      - probes.token-teams
+      - probes.token-sharepoint-admin
+
+  - widget: probeStatus
+    id: sign_ins_and_licences
+    title: Sign-ins and licence seats
+    span: 6
+    probes:
+      - probes.sign-in-health
+      - probes.sign-in-health-adminforge
+      - probes.licence-seats-spe-e3
+      - probes.licence-seats-spe-e5
+
+  - widget: probeStatus
+    id: expiry
+    title: Certificates and credentials
+    span: 6
+    probes:
+      - probes.portal-tls-certificate
+      - probes.app-credential-expiry
+
+  - widget: probeStatus
+    id: mail_dns
+    title: Mail-flow DNS for the primary domain
+    span: 6
+    probes:
+      - probes.dns-mx
+      - probes.dns-autodiscover
+      - probes.dns-spf
+      - probes.dns-dmarc
+
+  - widget: probeStatus
+    id: functions
+    title: Function App connections
+    span: 6
+    probes:
+      - probes.function-hr-sync-health
+
+  - widget: probeStatus
+    id: all_probes
+    title: All probes
+    span: 12

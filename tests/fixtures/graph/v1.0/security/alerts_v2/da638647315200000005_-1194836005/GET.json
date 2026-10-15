@@ -1,0 +1,56 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#security/alerts_v2/$entity",
+  "id": "da638647315200000005_-1194836005",
+  "providerAlertId": "00000005-0000-4000-8000-00000000c0de",
+  "incidentId": "4223",
+  "status": "inProgress",
+  "severity": "high",
+  "classification": null,
+  "determination": null,
+  "serviceSource": "azureAdIdentityProtection",
+  "detectionSource": "azureAdIdentityProtection",
+  "productName": "Microsoft Entra ID Protection",
+  "detectorId": "00000005-1111-4000-8000-000000000000",
+  "tenantId": "00000000-0000-4000-8000-0000000000f0",
+  "title": "Anomalous token",
+  "description": "",
+  "recommendedActions": "",
+  "category": "CredentialAccess",
+  "assignedTo": "alex.admin@example.com",
+  "alertWebUrl": "https://security.microsoft.com/alerts/da638647315200000005_-1194836005?tid=00000000-0000-4000-8000-0000000000f0",
+  "incidentWebUrl": "https://security.microsoft.com/incidents/4223?tid=00000000-0000-4000-8000-0000000000f0",
+  "actorDisplayName": null,
+  "threatDisplayName": null,
+  "threatFamilyName": null,
+  "mitreTechniques": [
+    "T1528"
+  ],
+  "createdDateTime": "2026-10-14T22:00:00Z",
+  "lastUpdateDateTime": "2026-10-14T23:00:00Z",
+  "resolvedDateTime": null,
+  "firstActivityDateTime": "2026-10-14T21:00:00Z",
+  "lastActivityDateTime": "2026-10-14T22:00:00Z",
+  "comments": [],
+  "evidence": [
+    {
+      "@odata.type": "#microsoft.graph.security.userEvidence",
+      "createdDateTime": "2026-10-15T06:00:00Z",
+      "verdict": "suspicious",
+      "remediationStatus": "none",
+      "remediationStatusDetails": null,
+      "roles": [
+        "compromised"
+      ],
+      "tags": [],
+      "userAccount": {
+        "accountName": "gabriel.nunes",
+        "domainName": "example.com",
+        "userSid": null,
+        "azureAdUserId": "10000000-0000-4000-8000-000000000007",
+        "userPrincipalName": "gabriel.nunes@example.com",
+        "displayName": "Gabriel Nunes"
+      }
+    }
+  ],
+  "systemTags": []
+}

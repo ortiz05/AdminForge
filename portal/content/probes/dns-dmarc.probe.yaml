@@ -1,0 +1,17 @@
+$schema: ../../packages/schemas/generated/probe.schema.json
+kind: probe
+id: probes.dns-dmarc
+version: 1.0.0
+title: DMARC record for the primary domain
+summary: Resolves _dmarc.<primary domain> and expects a published DMARC policy (v=DMARC1).
+owner: m365-team
+tags: [synthetic, m365, exchange, dns, email-security]
+check:
+  kind: dnsResolve
+  name: ${ '_dmarc.' & env.AF_PRIMARY_DOMAIN }
+  type: TXT
+  expect:
+    contains: [v=DMARC1]
+    minAnswers: 1
+intervalHint: PT1H
+timeoutMs: 5000

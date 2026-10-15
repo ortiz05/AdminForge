@@ -1,0 +1,75 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#admin/serviceAnnouncement/healthOverviews(id,service,status)",
+  "value": [
+    {
+      "id": "Exchange",
+      "service": "Exchange Online",
+      "status": "serviceOperational"
+    },
+    {
+      "id": "OrgLiveID",
+      "service": "Microsoft Entra",
+      "status": "serviceOperational"
+    },
+    {
+      "id": "microsoftteams",
+      "service": "Microsoft Teams",
+      "status": "serviceDegradation"
+    },
+    {
+      "id": "SharePoint",
+      "service": "SharePoint Online",
+      "status": "serviceOperational"
+    },
+    {
+      "id": "OneDriveForBusiness",
+      "service": "OneDrive for Business",
+      "status": "serviceOperational"
+    },
+    {
+      "id": "Intune",
+      "service": "Microsoft Intune",
+      "status": "investigating"
+    },
+    {
+      "id": "DefenderATP",
+      "service": "Microsoft Defender XDR",
+      "status": "serviceOperational"
+    },
+    {
+      "id": "OSDPPlatform",
+      "service": "Microsoft 365 suite",
+      "status": "serviceOperational"
+    },
+    {
+      "id": "O365Client",
+      "service": "Microsoft 365 apps",
+      "status": "serviceRestored"
+    },
+    {
+      "id": "Planner",
+      "service": "Planner",
+      "status": "serviceOperational"
+    },
+    {
+      "id": "MicrosoftPurview",
+      "service": "Microsoft Purview",
+      "status": "serviceOperational"
+    },
+    {
+      "id": "M365Copilot",
+      "service": "Microsoft Copilot (Microsoft 365)",
+      "status": "serviceOperational"
+    },
+    {
+      "id": "Viva",
+      "service": "Microsoft Viva",
+      "status": "serviceOperational"
+    },
+    {
+      "id": "PowerPlatform",
+      "service": "Power Platform",
+      "status": "serviceOperational"
+    }
+  ]
+}

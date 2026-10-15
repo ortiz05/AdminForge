@@ -1,0 +1,69 @@
+$schema: ../../../packages/schemas/generated/playbook.schema.json
+kind: playbook
+id: security.dismiss-risky-user
+version: 1.0.0
+title: Dismiss user risk
+summary: Clears Microsoft Entra ID Protection risk for one user after you have verified the activity was legitimate.
+owner: security-team
+tags: [security, identity-protection, risk]
+risk: medium
+mode: write
+requires:
+  portalRoles: [Portal.Operator]
+  scopes:
+    graph: [IdentityRiskyUser.ReadWrite.All]
+  entraRoles: [Security Operator]
+  licences: [identityProtection]
+confirm:
+  type: click
+  message: "${ 'Dismissing risk for ' & steps.lookup.output.userPrincipalName & ' closes all of their open risk detections without remediation.' }"
+approval:
+  required: false
+
+inputs:
+  userId: { type: string, format: guid, label: User, picker: user }
+  reason: { type: string, label: Why the activity is legitimate, minLength: 10, multiline: true }
+
+steps:
+  - id: lookup
+    type: graph
+    mode: read
+    describe: Read the user's current risk
+    request:
+      method: GET
+      path: /identityProtection/riskyUsers/${ $encode($guid(inputs.userId)) }
+
+  - id: has_risk
+    type: assert
+    that: ${ steps.lookup.output.riskState in ['atRisk', 'confirmedCompromised'] }
+    message: "${ steps.lookup.output.userPrincipalName & ' has no open risk to dismiss (risk state: ' & steps.lookup.output.riskState & ').' }"
+
+  - id: dismiss
+    type: graph
+    mode: write
+    describe: ${ 'Dismiss risk for ' & steps.lookup.output.userPrincipalName }
+    request:
+      method: POST
+      path: /identityProtection/riskyUsers/dismiss
+      body:
+        userIds:
+          - ${ $guid(inputs.userId) }
+    dryRunOutput: null
+
+outputs:
+  summary: ${ 'Risk dismissed for ' & steps.lookup.output.userPrincipalName }
+
+tests:
+  - name: dismisses risk for a user at risk
+    inputs: { userId: 10000000-0000-4000-8000-000000000006, reason: Verified with the user - travel booked in advance. }
+    mocks:
+      lookup: { id: 10000000-0000-4000-8000-000000000006, riskState: atRisk, riskLevel: medium, userPrincipalName: farah.haddad@example.com }
+    expect:
+      status: succeeded
+      plan: [dismiss]
+      outputs: { summary: Risk dismissed for farah.haddad@example.com }
+  - name: refuses a user whose risk is already remediated
+    inputs: { userId: 10000000-0000-4000-8000-00000000000b, reason: Duplicate request from the queue. }
+    mocks:
+      lookup: { id: 10000000-0000-4000-8000-00000000000b, riskState: remediated, riskLevel: none, userPrincipalName: kai.lindqvist@example.com }
+    expect: { status: failed, failedStep: has_risk }

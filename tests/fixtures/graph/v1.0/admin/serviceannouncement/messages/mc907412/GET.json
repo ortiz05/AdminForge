@@ -1,0 +1,43 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#admin/serviceAnnouncement/messages/$entity",
+  "id": "MC907412",
+  "title": "OneDrive: Sync client minimum version update",
+  "services": [
+    "OneDrive for Business"
+  ],
+  "category": "preventOrFixIssue",
+  "severity": "normal",
+  "isMajorChange": false,
+  "actionRequiredByDateTime": "2026-11-05T09:00:00Z",
+  "startDateTime": "2026-09-23T09:00:00Z",
+  "endDateTime": "2027-01-13T09:00:00Z",
+  "lastModifiedDateTime": "2026-10-03T09:00:00Z",
+  "tags": [
+    "Admin impact"
+  ],
+  "hasAttachments": false,
+  "attachmentsArchive": null,
+  "viewPoint": {
+    "isRead": false,
+    "isArchived": false,
+    "isFavorited": false
+  },
+  "details": [
+    {
+      "name": "Summary",
+      "value": "OneDrive: Sync client minimum version update"
+    },
+    {
+      "name": "RoadmapIds",
+      "value": "407502"
+    },
+    {
+      "name": "Platforms",
+      "value": "Web, Desktop, Mac"
+    }
+  ],
+  "body": {
+    "contentType": "html",
+    "content": "<p>OneDrive sync clients older than one year will stop syncing.</p><p>Update managed clients through your software deployment tools.</p>"
+  }
+}

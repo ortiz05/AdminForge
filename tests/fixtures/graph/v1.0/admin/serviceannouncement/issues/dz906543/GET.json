@@ -1,0 +1,27 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#admin/serviceAnnouncement/issues/$entity",
+  "id": "DZ906543",
+  "title": "Delays in alert generation for Microsoft Defender XDR",
+  "service": "Microsoft Defender XDR",
+  "feature": "Alerts",
+  "featureGroup": "Microsoft Defender XDR",
+  "classification": "advisory",
+  "status": "serviceRestored",
+  "origin": "microsoft",
+  "isResolved": true,
+  "startDateTime": "2026-09-21T09:00:00Z",
+  "endDateTime": "2026-09-22T09:00:00Z",
+  "lastModifiedDateTime": "2026-09-22T09:00:00Z",
+  "impactDescription": "New alerts appeared up to 45 minutes late.",
+  "posts": [
+    {
+      "createdDateTime": "2026-09-22T09:00:00Z",
+      "postType": "regular",
+      "description": {
+        "contentType": "html",
+        "content": "<p><b>Final status:</b> Processing caught up and no alerts were lost.</p>"
+      }
+    }
+  ],
+  "details": []
+}

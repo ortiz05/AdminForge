@@ -1,0 +1,143 @@
+$schema: ../../../packages/schemas/generated/report.schema.json
+kind: report
+id: m365.licence-utilization
+version: 1.0.0
+title: Licence utilization
+summary: Seats purchased, assigned and unassigned per subscription, with SKUs above the utilization threshold and subscriptions in grace period flagged.
+owner: m365-team
+tags: [m365, licensing, cost]
+nav: { section: reports, label: Licence utilization, icon: identification-badge, order: 110 }
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    graph: [Organization.Read.All]
+  entraRoles: [License Administrator, Global Reader]
+
+params:
+  threshold:
+    type: number
+    label: Flag SKUs used at or above
+    unit: "%"
+    default: 90
+    min: 50
+    max: 100
+    integer: true
+    facet: true
+  includeFree: { type: boolean, label: Include free and trial SKUs, default: false, facet: true }
+
+filters:
+  facets: [threshold, includeFree]
+
+datasources:
+  skus:
+    source: graph
+    request:
+      path: /subscribedSkus
+      query:
+        $select: skuId,skuPartNumber,capabilityStatus,appliesTo,consumedUnits,prepaidUnits,servicePlans
+    cache: { ttl: 300 }
+    # One row per SKU with seat maths, a status against the threshold, and totals for the summary.
+    transform: >-
+      ${ (
+        $p := params;
+        $names := {
+          "SPE_E5": "Microsoft 365 E5", "SPE_E3": "Microsoft 365 E3", "SPE_F1": "Microsoft 365 F3", "M365_F1": "Microsoft 365 F1",
+          "SPB": "Microsoft 365 Business Premium", "O365_BUSINESS_PREMIUM": "Microsoft 365 Business Standard",
+          "O365_BUSINESS_ESSENTIALS": "Microsoft 365 Business Basic", "ENTERPRISEPACK": "Office 365 E3", "ENTERPRISEPREMIUM": "Office 365 E5",
+          "STANDARDPACK": "Office 365 E1", "DESKLESSPACK": "Office 365 F3", "EMS": "Enterprise Mobility + Security E3",
+          "EMSPREMIUM": "Enterprise Mobility + Security E5", "AAD_PREMIUM": "Microsoft Entra ID P1", "AAD_PREMIUM_P2": "Microsoft Entra ID P2",
+          "INTUNE_A": "Microsoft Intune Plan 1", "POWER_BI_PRO": "Power BI Pro", "POWER_BI_STANDARD": "Power BI (free)",
+          "FLOW_FREE": "Power Automate Free", "POWERAPPS_DEV": "Power Apps Developer", "TEAMS_EXPLORATORY": "Microsoft Teams Exploratory",
+          "Microsoft_Teams_Premium": "Teams Premium", "MCOEV": "Teams Phone Standard", "MCOMEETADV": "Audio Conferencing",
+          "EXCHANGESTANDARD": "Exchange Online (Plan 1)", "EXCHANGEENTERPRISE": "Exchange Online (Plan 2)", "VISIOCLIENT": "Visio Plan 2",
+          "PROJECTPREMIUM": "Project Plan 5", "PROJECTPROFESSIONAL": "Project Plan 3", "WIN_DEF_ATP": "Microsoft Defender for Endpoint P2",
+          "ATP_ENTERPRISE": "Microsoft Defender for Office 365 (Plan 1)", "THREAT_INTELLIGENCE": "Microsoft Defender for Office 365 (Plan 2)",
+          "IDENTITY_THREAT_PROTECTION": "Microsoft 365 E5 Security", "Microsoft_365_Copilot": "Microsoft 365 Copilot"
+        };
+        $free := ['FLOW_FREE', 'POWER_BI_STANDARD', 'TEAMS_EXPLORATORY', 'POWERAPPS_DEV', 'POWERAPPS_VIRAL', 'WINDOWS_STORE', 'STREAM',
+                  'MICROSOFT_BUSINESS_CENTER', 'CCIBOTS_PRIVPREV_VIRAL', 'RMSBASIC'];
+        $limit := ($p.threshold ? $number($p.threshold) : 90) / 100;
+        $rows := [$sort(value.value[$p.includeFree = true or $not(skuPartNumber in $free)].(
+          $enabled := prepaidUnits.enabled ? prepaidUnits.enabled : 0;
+          $use := $enabled > 0 ? $round(consumedUnits / $enabled, 4) : 0;
+          $name := $lookup($names, skuPartNumber);
+          {
+            "skuId": skuId,
+            "skuPartNumber": skuPartNumber,
+            "product": $name ? $name : skuPartNumber,
+            "subscription": capabilityStatus,
+            "purchased": $enabled,
+            "assigned": consumedUnits,
+            "unassigned": $max([0, $enabled - consumedUnits]),
+            "inGracePeriod": prepaidUnits.warning,
+            "suspended": prepaidUnits.suspended,
+            "utilization": $use,
+            "state": capabilityStatus != 'Enabled' ? 'subscription' : consumedUnits > $enabled ? 'over' : $use >= $limit ? 'high' : $use < 0.5 and $enabled >= 10 ? 'low' : 'ok'
+          }
+        ), function($a, $b) { $a.utilization < $b.utilization })];
+        {
+          "rows": $rows,
+          "purchased": $sum($rows.purchased),
+          "assigned": $sum($rows.assigned),
+          "unassigned": $sum($rows.unassigned),
+          "flagged": $count($rows[state in ['high', 'over', 'subscription']])
+        }
+      ) }
+
+layout:
+  - widget: kpi
+    data: skus.purchased
+    label: Seats purchased
+    format: number
+  - widget: kpi
+    data: skus.assigned
+    label: Seats assigned
+    format: number
+  - widget: kpi
+    data: skus.unassigned
+    label: Seats unassigned
+    format: number
+    status: "${ value > 0 ? 'info' : 'ok' }"
+  - widget: kpi
+    data: skus.flagged
+    label: SKUs needing attention
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+  - widget: table
+    id: skus
+    span: 12
+    data: skus.rows
+    rowKey: skuId
+    columns:
+      - { field: product, label: Product, kind: identity, secondary: skuPartNumber }
+      - field: state
+        label: Status
+        kind: status
+        map:
+          over: [crit, Over-assigned]
+          subscription: [crit, Subscription not active]
+          high: [warn, Above threshold]
+          low: [info, Under half used]
+          ok: [ok, OK]
+        filter: facet
+      - { field: assigned, label: Assigned, kind: number, align: end }
+      - { field: purchased, label: Purchased, kind: number, align: end }
+      - { field: unassigned, label: Unassigned, kind: number, align: end, filter: range }
+      - { field: utilization, label: Used, kind: percent, align: end, filter: range, sortable: true }
+      - { field: subscription, label: Subscription, filter: facet }
+      - { field: inGracePeriod, label: Seats in grace period, kind: number, align: end }
+      - { field: suspended, label: Suspended seats, kind: number, align: end, hidden: true }
+      - { field: skuId, label: SKU id, kind: guid, hidden: true }
+    inspect:
+      page: m365.licence
+      params:
+        skuId: ${ row.skuId }
+    empty:
+      title: No subscriptions
+      body: This tenant has no purchased subscriptions, or only free and trial SKUs (turn on "Include free and trial SKUs").
+
+export:
+  formats: [csv, xlsx]
+  fileName: licence-utilization
+  data: skus.rows
+  columns: all

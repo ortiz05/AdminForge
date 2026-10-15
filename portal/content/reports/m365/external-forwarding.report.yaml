@@ -1,0 +1,104 @@
+$schema: ../../../packages/schemas/generated/report.schema.json
+kind: report
+id: m365.external-forwarding
+version: 1.0.0
+title: Mailbox external forwarding
+summary: Mailboxes and inbox rules that forward or redirect mail to addresses outside the organization's accepted domains.
+owner: m365-team
+tags: [m365, exchange, security, data-loss]
+nav: { section: reports, label: Mailbox external forwarding, icon: arrow-bend-up-right, order: 120 }
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    exchange: [Exchange.Manage]
+  entraRoles: [Exchange Administrator, Global Reader]
+  licences: [exchange]
+
+params:
+  inboxRules: { type: boolean, label: Include inbox rules, default: true, facet: true }
+  maxMailboxes:
+    type: number
+    label: Mailboxes to scan for rules
+    default: 500
+    min: 1
+    max: 5000
+    integer: true
+    facet: true
+
+filters:
+  facets: [inboxRules, maxMailboxes]
+
+datasources:
+  forwarding:
+    source: runner
+    label: Forwarding audit (PowerShell)
+    script: exchange/Get-MailboxForwarding.ps1
+    sha256: ace0dc4fbff00a81d4874bade56eb0d427cda9d584ccd4b889103d310510daf2
+    services: [exchange]
+    timeoutSeconds: 1800
+    parameters:
+      includeInboxRules: ${ params.inboxRules != false }
+      maxMailboxesForRules: "${ params.maxMailboxes ? $number(params.maxMailboxes) : 500 }"
+      externalOnly: true
+    cache: { ttl: 900 }
+    transform: >-
+      ${ (
+        $v := value[0];  /* runner result = [output data]; one summary object */
+        $rows := [$v.findings.$merge([$, {
+          "key": mailbox & '|' & source & '|' & (ruleName ? ruleName : '') & '|' & target,
+          "targetDomain": $contains(target, '@') ? $substringAfter(target, '@') : null
+        }])];
+        {
+          "rows": $rows,
+          "external": $count($rows),
+          "mailboxes": $count($distinct($rows.mailbox)),
+          "viaRules": $count($rows[source = 'inboxRule']),
+          "domains": $count($distinct($rows.targetDomain)),
+          "scanned": $v.summary.mailboxesScannedForRules
+        }
+      ) }
+
+layout:
+  - widget: kpi
+    data: forwarding.external
+    label: External forwarding findings
+    format: number
+    status: "${ value > 0 ? 'crit' : 'ok' }"
+  - widget: kpi
+    data: forwarding.mailboxes
+    label: Mailboxes affected
+    format: number
+  - widget: kpi
+    data: forwarding.viaRules
+    label: Through inbox rules
+    format: number
+  - widget: kpi
+    data: forwarding.domains
+    label: Outside domains
+    format: number
+  - widget: table
+    id: findings
+    span: 12
+    data: forwarding.rows
+    rowKey: key
+    columns:
+      - { field: mailbox, label: Mailbox, kind: identity, secondary: userPrincipalName }
+      - { field: target, label: Forwards to }
+      - { field: targetDomain, label: Domain, filter: facet }
+      - field: source
+        label: Configured by
+        kind: status
+        map: { mailbox: [neutral, Mailbox setting], inboxRule: [warn, Inbox rule] }
+        filter: facet
+      - { field: ruleName, label: Rule }
+      - { field: ruleEnabled, label: Rule enabled, kind: boolean, filter: facet }
+      - { field: deliverToMailboxAndForward, label: Keeps a copy, kind: boolean }
+    empty:
+      title: No external forwarding
+      body: No mailbox forwards mail outside the organization's accepted domains.
+
+export:
+  formats: [csv, xlsx]
+  fileName: mailbox-external-forwarding
+  data: forwarding.rows
+  columns: all

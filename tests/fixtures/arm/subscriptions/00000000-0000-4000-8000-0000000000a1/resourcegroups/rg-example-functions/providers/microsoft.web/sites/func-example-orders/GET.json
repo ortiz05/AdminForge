@@ -1,0 +1,36 @@
+{
+  "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-functions/providers/Microsoft.Web/sites/func-example-orders",
+  "name": "func-example-orders",
+  "type": "Microsoft.Web/sites",
+  "kind": "functionapp,linux",
+  "location": "West Europe",
+  "tags": {
+    "env": "prod",
+    "owner": "orders-team"
+  },
+  "identity": {
+    "type": "UserAssigned",
+    "principalId": "30000000-0000-4000-8000-000000000106",
+    "tenantId": "00000000-0000-4000-8000-0000000000f0"
+  },
+  "properties": {
+    "state": "Stopped",
+    "enabled": true,
+    "defaultHostName": "func-example-orders.azurewebsites.net",
+    "enabledHostNames": [
+      "func-example-orders.azurewebsites.net",
+      "func-example-orders.scm.azurewebsites.net"
+    ],
+    "httpsOnly": true,
+    "sku": "FlexConsumption",
+    "serverFarmId": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-functions/providers/Microsoft.Web/serverFarms/plan-example-functions",
+    "publicNetworkAccess": "Enabled",
+    "clientCertEnabled": false,
+    "virtualNetworkSubnetId": null,
+    "lastModifiedTimeUtc": "2026-10-14T18:04:00Z",
+    "resourceGroup": "rg-example-functions",
+    "usageState": "Normal",
+    "availabilityState": "Normal",
+    "reserved": true
+  }
+}

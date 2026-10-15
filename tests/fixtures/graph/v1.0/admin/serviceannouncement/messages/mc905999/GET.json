@@ -1,0 +1,43 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#admin/serviceAnnouncement/messages/$entity",
+  "id": "MC905999",
+  "title": "Microsoft Viva: Viva Engage community analytics updates",
+  "services": [
+    "Microsoft Viva"
+  ],
+  "category": "stayInformed",
+  "severity": "normal",
+  "isMajorChange": false,
+  "actionRequiredByDateTime": null,
+  "startDateTime": "2026-09-18T09:00:00Z",
+  "endDateTime": "2027-01-13T09:00:00Z",
+  "lastModifiedDateTime": "2026-09-27T09:00:00Z",
+  "tags": [
+    "Feature update"
+  ],
+  "hasAttachments": false,
+  "attachmentsArchive": null,
+  "viewPoint": {
+    "isRead": true,
+    "isArchived": false,
+    "isFavorited": false
+  },
+  "details": [
+    {
+      "name": "Summary",
+      "value": "Microsoft Viva: Viva Engage community analytics updates"
+    },
+    {
+      "name": "RoadmapIds",
+      "value": "406089"
+    },
+    {
+      "name": "Platforms",
+      "value": "Web, Desktop, Mac"
+    }
+  ],
+  "body": {
+    "contentType": "html",
+    "content": "<p>Community analytics now include reaction trends.</p>"
+  }
+}

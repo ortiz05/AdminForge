@@ -1,0 +1,66 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#security/alerts_v2/$entity",
+  "id": "da638647315200000002_-1194836002",
+  "providerAlertId": "00000002-0000-4000-8000-00000000c0de",
+  "incidentId": "4224",
+  "status": "new",
+  "severity": "medium",
+  "classification": null,
+  "determination": null,
+  "serviceSource": "azureAdIdentityProtection",
+  "detectionSource": "azureAdIdentityProtection",
+  "productName": "Microsoft Entra ID Protection",
+  "detectorId": "00000002-1111-4000-8000-000000000000",
+  "tenantId": "00000000-0000-4000-8000-0000000000f0",
+  "title": "Unfamiliar sign-in properties",
+  "description": "",
+  "recommendedActions": "",
+  "category": "InitialAccess",
+  "assignedTo": null,
+  "alertWebUrl": "https://security.microsoft.com/alerts/da638647315200000002_-1194836002?tid=00000000-0000-4000-8000-0000000000f0",
+  "incidentWebUrl": "https://security.microsoft.com/incidents/4224?tid=00000000-0000-4000-8000-0000000000f0",
+  "actorDisplayName": null,
+  "threatDisplayName": null,
+  "threatFamilyName": null,
+  "mitreTechniques": [
+    "T1078.004"
+  ],
+  "createdDateTime": "2026-10-15T06:00:00Z",
+  "lastUpdateDateTime": "2026-10-15T07:00:00Z",
+  "resolvedDateTime": null,
+  "firstActivityDateTime": "2026-10-15T05:00:00Z",
+  "lastActivityDateTime": "2026-10-15T06:00:00Z",
+  "comments": [],
+  "evidence": [
+    {
+      "@odata.type": "#microsoft.graph.security.userEvidence",
+      "createdDateTime": "2026-10-15T06:00:00Z",
+      "verdict": "suspicious",
+      "remediationStatus": "none",
+      "remediationStatusDetails": null,
+      "roles": [
+        "compromised"
+      ],
+      "tags": [],
+      "userAccount": {
+        "accountName": "avery",
+        "domainName": "example.com",
+        "userSid": null,
+        "azureAdUserId": "30000000-0000-4000-8000-000000000001",
+        "userPrincipalName": "avery@example.com",
+        "displayName": "Avery Engineer"
+      }
+    },
+    {
+      "@odata.type": "#microsoft.graph.security.ipEvidence",
+      "createdDateTime": "2026-10-15T06:00:00Z",
+      "verdict": "suspicious",
+      "remediationStatus": "none",
+      "roles": [],
+      "tags": [],
+      "ipAddress": "203.0.113.45",
+      "countryLetterCode": "NL"
+    }
+  ],
+  "systemTags": []
+}

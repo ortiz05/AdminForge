@@ -1,0 +1,154 @@
+$schema: ../../../packages/schemas/generated/page.schema.json
+kind: page
+id: m365.groups
+version: 1.0.0
+title: Microsoft 365 groups
+summary: Microsoft 365 (Unified) groups — the collaboration groups behind Teams, shared mailboxes, Planner and SharePoint team sites.
+owner: m365-team
+tags: [m365, groups, collaboration]
+template: list-detail
+nav: { section: m365, label: Microsoft 365 groups, icon: users-three, order: 70 }
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    graph: [Group.Read.All]
+  entraRoles: [Groups Administrator, Global Reader]
+
+params:
+  q: { type: string, default: "", label: Search, placeholder: Group name }
+  teams:
+    type: enum
+    label: Teams
+    facet: true
+    default: Any
+    values:
+      - { value: Any, label: With or without a team }
+      - { value: Team, label: Team-enabled }
+      - { value: NoTeam, label: Not a team }
+  visibility:
+    type: enum
+    label: Visibility
+    facet: true
+    default: All
+    values: [All, Public, Private, HiddenMembership]
+  membership:
+    type: enum
+    label: Membership
+    facet: true
+    default: Any
+    values:
+      - { value: Any, label: Assigned or dynamic }
+      - { value: Assigned, label: Assigned }
+      - { value: Dynamic, label: Dynamic }
+
+filters:
+  search: q
+  facets: [teams, visibility, membership]
+
+savedViews:
+  enabled: true
+  shared: true
+  presets:
+    - { name: Public groups, params: { visibility: Public } }
+    - { name: Groups without a team, params: { teams: NoTeam } }
+    - { name: Dynamic groups, params: { membership: Dynamic } }
+
+datasources:
+  groups:
+    source: graph
+    request:
+      path: /groups
+      headers: { ConsistencyLevel: eventual }
+      query:
+        $select: id,displayName,description,mail,visibility,groupTypes,resourceProvisioningOptions,createdDateTime,renewedDateTime,expirationDateTime,membershipRule,onPremisesSyncEnabled
+        $count: true
+        $top: 100
+        $orderby: displayName
+        # Advanced query (ConsistencyLevel: eventual + $count) is required for NOT and for combining $search with $filter.
+        $filter: >-
+          ${ $join([
+               "groupTypes/any(c:c eq 'Unified')",
+               params.teams = 'Team' ? "resourceProvisioningOptions/any(x:x eq 'Team')",
+               params.teams = 'NoTeam' ? "NOT(resourceProvisioningOptions/any(x:x eq 'Team'))",
+               params.visibility and params.visibility != 'All' ? 'visibility eq ' & $odata(params.visibility),
+               params.membership = 'Dynamic' ? "groupTypes/any(c:c eq 'DynamicMembership')",
+               params.membership = 'Assigned' ? "NOT(groupTypes/any(c:c eq 'DynamicMembership'))"
+             ][$], ' and ') }
+        $search: ${ params.q ? '"displayName:' & $odataSearch(params.q) & '"' }
+    paging: cursor
+    cache: { ttl: 120 }
+  counts:
+    source: graphBatch
+    requests:
+      unified: { path: /groups/$count, query: { $filter: "groupTypes/any(c:c eq 'Unified')" }, headers: { ConsistencyLevel: eventual } }
+      teams: { path: /groups/$count, query: { $filter: "resourceProvisioningOptions/any(x:x eq 'Team')" }, headers: { ConsistencyLevel: eventual } }
+      dynamic: { path: /groups/$count, query: { $filter: "groupTypes/any(c:c eq 'Unified') and groupTypes/any(c:c eq 'DynamicMembership')" }, headers: { ConsistencyLevel: eventual } }
+      public: { path: /groups/$count, query: { $filter: "groupTypes/any(c:c eq 'Unified') and visibility eq 'Public'" }, headers: { ConsistencyLevel: eventual } }
+    cache: { ttl: 300 }
+
+layout:
+  - widget: kpi
+    id: unified
+    data: counts.unified
+    label: Microsoft 365 groups
+    format: number
+  - widget: kpi
+    id: teams
+    data: counts.teams
+    label: Team-enabled
+    format: number
+    href: /p/m365.teams
+  - widget: kpi
+    id: public
+    data: counts.public
+    label: Public
+    format: number
+    href: /p/m365.groups?visibility=Public
+  - widget: kpi
+    id: dynamic
+    data: counts.dynamic
+    label: Dynamic membership
+    format: number
+    href: /p/m365.groups?membership=Dynamic
+  - widget: table
+    id: groups
+    span: 12
+    data: groups.value
+    rowKey: id
+    columns:
+      - { field: displayName, label: Group, kind: identity, secondary: mail }
+      - { field: resourceProvisioningOptions, label: Provisioned as, kind: tags, filter: { type: facet, param: teams } }
+      - field: visibility
+        label: Visibility
+        kind: status
+        map: { Public: [info, Public], Private: [neutral, Private], HiddenMembership: [neutral, Hidden membership] }
+        filter: { type: facet, param: visibility }
+      - { field: groupTypes, label: Group types, kind: tags, filter: { type: facet, param: membership } }
+      - { field: createdDateTime, label: Created, kind: date, filter: date, sortable: true }
+      - { field: renewedDateTime, label: Renewed, kind: relativeTime, hidden: true }
+      - { field: expirationDateTime, label: Expires, kind: date, filter: date }
+      - { field: onPremisesSyncEnabled, label: Synced from on-premises, kind: boolean, hidden: true }
+      - { field: membershipRule, label: Membership rule, kind: code, hidden: true }
+      - { field: description, label: Description, hidden: true }
+      - { field: id, label: Object id, kind: guid, hidden: true }
+    inspect:
+      page: m365.team
+      params:
+        id: ${ row.id }
+    rowActions:
+      - label: Open in Entra admin center
+        icon: arrow-square-out
+        href: "https://entra.microsoft.com/#view/Microsoft_AAD_IAM/GroupDetailsMenuBlade/~/Overview/groupId/${ $encode(row.id) }"
+      - label: Open in Teams admin center
+        icon: arrow-square-out
+        href: "https://admin.teams.microsoft.com/teams/manage/${ $encode(row.id) }"
+        when: "${ 'Team' in row.resourceProvisioningOptions }"
+    empty:
+      title: No Microsoft 365 groups match
+      body: Clear the filters, or check the search text — group search matches the start of words in the name.
+
+export:
+  formats: [csv, xlsx]
+  fileName: m365-groups
+  data: groups.value
+  columns: visible

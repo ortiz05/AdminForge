@@ -1,0 +1,104 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#sites",
+  "value": [
+    {
+      "id": "exampleorg.sharepoint.com,10000000-0000-4000-8000-000000000900,10000000-0000-4000-8000-000000000a00",
+      "name": "allcompany",
+      "displayName": "All Company",
+      "webUrl": "https://exampleorg.sharepoint.com/sites/allcompany",
+      "description": "All Company site",
+      "createdDateTime": "2024-04-28T09:00:00Z",
+      "lastModifiedDateTime": "2026-10-15T09:00:00Z"
+    },
+    {
+      "id": "exampleorg.sharepoint.com,10000000-0000-4000-8000-000000000901,10000000-0000-4000-8000-000000000a01",
+      "name": "intranet",
+      "displayName": "Example Org Intranet",
+      "webUrl": "https://exampleorg.sharepoint.com/sites/intranet",
+      "description": "Example Org Intranet site",
+      "createdDateTime": "2024-01-19T09:00:00Z",
+      "lastModifiedDateTime": "2026-10-15T09:00:00Z"
+    },
+    {
+      "id": "exampleorg.sharepoint.com,10000000-0000-4000-8000-000000000902,10000000-0000-4000-8000-000000000a02",
+      "name": "ProjectAtlas",
+      "displayName": "Project Atlas",
+      "webUrl": "https://exampleorg.sharepoint.com/sites/ProjectAtlas",
+      "description": "Project Atlas site",
+      "createdDateTime": "2026-03-19T09:00:00Z",
+      "lastModifiedDateTime": "2026-10-14T09:00:00Z"
+    },
+    {
+      "id": "exampleorg.sharepoint.com,10000000-0000-4000-8000-000000000903,10000000-0000-4000-8000-000000000a03",
+      "name": "PartnerCollaborationFabrikam",
+      "displayName": "Partner Collaboration – Fabrikam",
+      "webUrl": "https://exampleorg.sharepoint.com/sites/PartnerCollaborationFabrikam",
+      "description": "Partner Collaboration – Fabrikam site",
+      "createdDateTime": "2026-05-28T09:00:00Z",
+      "lastModifiedDateTime": "2026-10-13T09:00:00Z"
+    },
+    {
+      "id": "exampleorg.sharepoint.com,10000000-0000-4000-8000-000000000904,10000000-0000-4000-8000-000000000a04",
+      "name": "MarketingCampaigns",
+      "displayName": "Marketing Campaigns",
+      "webUrl": "https://exampleorg.sharepoint.com/sites/MarketingCampaigns",
+      "description": "Marketing Campaigns site",
+      "createdDateTime": "2025-06-02T09:00:00Z",
+      "lastModifiedDateTime": "2026-10-09T09:00:00Z"
+    },
+    {
+      "id": "exampleorg.sharepoint.com,10000000-0000-4000-8000-000000000905,10000000-0000-4000-8000-000000000a05",
+      "name": "SalesEMEA",
+      "displayName": "Sales EMEA",
+      "webUrl": "https://exampleorg.sharepoint.com/sites/SalesEMEA",
+      "description": "Sales EMEA site",
+      "createdDateTime": "2024-09-15T09:00:00Z",
+      "lastModifiedDateTime": "2026-10-12T09:00:00Z"
+    },
+    {
+      "id": "exampleorg.sharepoint.com,10000000-0000-4000-8000-000000000906,10000000-0000-4000-8000-000000000a06",
+      "name": "HRPolicies",
+      "displayName": "HR Policies",
+      "webUrl": "https://exampleorg.sharepoint.com/sites/HRPolicies",
+      "description": "HR Policies site",
+      "createdDateTime": "2025-02-22T09:00:00Z",
+      "lastModifiedDateTime": "2026-10-01T09:00:00Z"
+    },
+    {
+      "id": "exampleorg.sharepoint.com,10000000-0000-4000-8000-000000000907,10000000-0000-4000-8000-000000000a07",
+      "name": "ProjectOrion",
+      "displayName": "Project Orion (retired)",
+      "webUrl": "https://exampleorg.sharepoint.com/sites/ProjectOrion",
+      "description": "Project Orion (retired) site",
+      "createdDateTime": "2024-02-08T09:00:00Z",
+      "lastModifiedDateTime": "2026-03-17T09:00:00Z"
+    },
+    {
+      "id": "exampleorg.sharepoint.com,10000000-0000-4000-8000-000000000908,10000000-0000-4000-8000-000000000a08",
+      "name": "LegalReview",
+      "displayName": "Legal Review",
+      "webUrl": "https://exampleorg.sharepoint.com/sites/LegalReview",
+      "description": "Legal Review site",
+      "createdDateTime": "2025-12-19T09:00:00Z",
+      "lastModifiedDateTime": "2026-09-04T09:00:00Z"
+    },
+    {
+      "id": "exampleorg.sharepoint.com,10000000-0000-4000-8000-000000000909,10000000-0000-4000-8000-000000000a09",
+      "name": "ITOperations",
+      "displayName": "IT Operations",
+      "webUrl": "https://exampleorg.sharepoint.com/sites/ITOperations",
+      "description": "IT Operations site",
+      "createdDateTime": "2024-07-17T09:00:00Z",
+      "lastModifiedDateTime": "2026-10-15T09:00:00Z"
+    },
+    {
+      "id": "exampleorg.sharepoint.com,10000000-0000-4000-8000-00000000090a,10000000-0000-4000-8000-000000000a0a",
+      "name": "Archive2019",
+      "displayName": "Archive 2019",
+      "webUrl": "https://exampleorg.sharepoint.com/sites/Archive2019",
+      "description": "Archive 2019 site",
+      "createdDateTime": "2020-03-20T09:00:00Z",
+      "lastModifiedDateTime": "2025-12-19T09:00:00Z"
+    }
+  ]
+}

@@ -1,0 +1,19 @@
+$schema: ../../../packages/schemas/generated/schedule.schema.json
+kind: schedule
+id: sweep.arm-subscription-access
+version: 1.0.0
+title: "Hourly probe: Default subscription access"
+summary: Runs the probes.arm-subscription-access probe every hour (minute 07, staggered across the sweep) as the automation identity.
+owner: portal-admins
+tags: [synthetic, probe-sweep]
+cron: "7 * * * *"
+timezone: UTC
+enabled: true
+identity: automation
+job:
+  kind: probe
+  ref: probes.arm-subscription-access
+timeoutSeconds: 120
+overlap: skip
+requires:
+  azureRoles: [Reader]

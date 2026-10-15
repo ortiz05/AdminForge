@@ -1,0 +1,23 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#security/incidents(alerts())/$entity",
+  "id": "4216",
+  "tenantId": "00000000-0000-4000-8000-0000000000f0",
+  "status": "resolved",
+  "incidentWebUrl": "https://security.microsoft.com/incidents/4216?tid=00000000-0000-4000-8000-0000000000f0",
+  "redirectIncidentId": null,
+  "displayName": "Suspicious PowerShell command line on one endpoint",
+  "createdDateTime": "2026-10-09T03:00:00Z",
+  "lastUpdateDateTime": "2026-10-09T13:00:00Z",
+  "assignedTo": "sam.soc@example.com",
+  "classification": "falsePositive",
+  "determination": "notMalicious",
+  "severity": "medium",
+  "customTags": [],
+  "systemTags": [],
+  "description": null,
+  "summary": null,
+  "lastModifiedBy": "alex.admin@example.com",
+  "resolvingComment": "Signed admin script from the patching team.",
+  "comments": [],
+  "alerts": []
+}

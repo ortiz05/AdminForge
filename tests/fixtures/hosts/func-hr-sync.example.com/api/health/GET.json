@@ -1,0 +1,9 @@
+{
+  "status": "Healthy",
+  "version": "2026.10.2",
+  "checkedAt": "2026-10-15T08:55:00Z",
+  "dependencies": [
+    { "name": "hr-system-api", "status": "Healthy", "latencyMs": 182 },
+    { "name": "microsoft-graph", "status": "Healthy", "latencyMs": 96 }
+  ]
+}

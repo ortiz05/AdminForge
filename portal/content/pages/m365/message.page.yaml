@@ -1,0 +1,95 @@
+$schema: ../../../packages/schemas/generated/page.schema.json
+kind: page
+id: m365.message
+version: 1.0.0
+title: Message center post
+summary: One Message center announcement — what changes, when, which services, and whether you need to act.
+owner: m365-team
+tags: [m365, message-center, change-management]
+template: entity
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    graph: [ServiceMessage.Read.All]
+  entraRoles: [Message Center Reader, Global Reader]
+
+params:
+  id: { type: string, label: Message id, required: true, hidden: true, pattern: "^MC[0-9]{3,}$" }
+
+datasources:
+  message:
+    source: graph
+    request:
+      path: /admin/serviceAnnouncement/messages/${ $encode(params.id) }
+    cache: { ttl: 300 }
+    # Converts the HTML body to light Markdown (paragraphs, line breaks, list items, bold) and adds act-by countdown.
+    transform: >-
+      ${ (
+        $html := value.body.content ? value.body.content : '';
+        $md := $replace($html, /<\s*(b|strong)\s*>/i, '**');
+        $md := $replace($md, /<\s*\/\s*(b|strong)\s*>/i, '**');
+        $md := $replace($md, /<\s*li[^>]*>/i, '\n- ');
+        $md := $replace($md, /<\s*(br|\/p|\/ul|\/ol|\/div|\/h[1-6])[^>]*>/i, '\n\n');
+        $md := $replace($md, /<[^>]+>/, '');
+        $md := $replace($replace($replace($replace($replace($md, '&nbsp;', ' '), '&amp;', '&'), '&lt;', '<'), '&gt;', '>'), '&quot;', '"');
+        $md := $replace($md, /\n{3,}/, '\n\n');
+        $due := $exists(value.actionRequiredByDateTime) and value.actionRequiredByDateTime != null;
+        $merge([value, {
+          "bodyMarkdown": $trim($md),
+          "servicesText": $join(value.services, ', '),
+          "actionRequired": $due,
+          "daysToAct": $due ? $daysUntil(value.actionRequiredByDateTime) : null,
+          "details": [value.details.{ "name": name, "value": value }]
+        }])
+      ) }
+
+header:
+  title: ${ message.title }
+  subtitle: ${ message.id & ' · ' & message.servicesText }
+  status: "${ message.actionRequired ? (message.daysToAct <= 30 ? 'crit' : 'warn') : message.isMajorChange ? 'info' : 'neutral' }"
+  statusLabel: "${ message.actionRequired ? 'Act by ' & $substring(message.actionRequiredByDateTime, 0, 10) : message.isMajorChange ? 'Major change' : 'For your information' }"
+  ids:
+    Message id: ${ message.id }
+
+actions:
+  - label: Open in Microsoft 365 admin center
+    icon: arrow-square-out
+    href: "https://admin.microsoft.com/Adminportal/Home#/MessageCenter/:/messages/${ $encode(params.id) }"
+
+tabs:
+  - id: overview
+    label: Overview
+    layout:
+      - widget: keyValue
+        span: 4
+        data: message
+        fields:
+          - { field: services, label: Services, kind: tags }
+          - field: category
+            label: Category
+            kind: status
+            map: { preventOrFixIssue: [warn, Prevent or fix issues], planForChange: [info, Plan for change], stayInformed: [neutral, Stay informed] }
+          - { field: severity, label: Severity, kind: status, map: { normal: [neutral, Normal], high: [warn, High], critical: [crit, Critical] } }
+          - { field: isMajorChange, label: Major change, kind: boolean }
+          - { field: actionRequiredByDateTime, label: Act by, kind: date }
+          - { field: startDateTime, label: Published, kind: datetime }
+          - { field: lastModifiedDateTime, label: Last update, kind: datetime }
+          - { field: endDateTime, label: Expires, kind: date }
+          - { field: tags, label: Tags, kind: tags }
+      - widget: markdown
+        span: 8
+        title: Announcement
+        text: ${ message.bodyMarkdown }
+  - id: details
+    label: Details
+    layout:
+      - widget: table
+        span: 12
+        data: message.details
+        rowKey: name
+        columns:
+          - { field: name, label: Detail }
+          - { field: value, label: Value }
+        empty:
+          title: No extra details
+          body: This post has no roadmap ids, platforms or external links attached.

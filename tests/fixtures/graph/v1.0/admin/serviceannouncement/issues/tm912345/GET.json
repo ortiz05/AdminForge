@@ -1,0 +1,43 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#admin/serviceAnnouncement/issues/$entity",
+  "id": "TM912345",
+  "title": "Some users may experience delays receiving chat messages in Microsoft Teams",
+  "service": "Microsoft Teams",
+  "feature": "Teams Components",
+  "featureGroup": "Teams Components",
+  "classification": "incident",
+  "status": "serviceDegradation",
+  "origin": "microsoft",
+  "isResolved": false,
+  "startDateTime": "2026-10-15T06:30:00Z",
+  "endDateTime": null,
+  "lastModifiedDateTime": "2026-10-15T08:30:00Z",
+  "impactDescription": "Users may see chat messages arrive several minutes late in the desktop and web clients.",
+  "posts": [
+    {
+      "createdDateTime": "2026-10-15T06:48:00Z",
+      "postType": "quick",
+      "description": {
+        "contentType": "html",
+        "content": "<p><b>Title:</b> Some users may experience delays receiving chat messages</p><p><b>User impact:</b> Users may see chat messages arrive several minutes late.</p><p><b>Current status:</b> We are reviewing service telemetry to identify the cause.</p>"
+      }
+    },
+    {
+      "createdDateTime": "2026-10-15T07:48:00Z",
+      "postType": "regular",
+      "description": {
+        "contentType": "html",
+        "content": "<p><b>Current status:</b> We identified a recent configuration change in a messaging component and are reverting it.</p><p><b>Next update by:</b> Wednesday, October 15, 2026, at 10:00 AM UTC</p>"
+      }
+    },
+    {
+      "createdDateTime": "2026-10-15T08:30:00Z",
+      "postType": "regular",
+      "description": {
+        "contentType": "html",
+        "content": "<p><b>Current status:</b> The revert is 60% complete and delays are decreasing in monitored regions.</p><ul><li>Affected: North America, Europe</li><li>Workaround: refresh the client</li></ul>"
+      }
+    }
+  ],
+  "details": []
+}

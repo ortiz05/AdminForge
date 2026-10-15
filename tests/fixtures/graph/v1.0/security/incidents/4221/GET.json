@@ -1,0 +1,133 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#security/incidents(alerts())/$entity",
+  "id": "4221",
+  "tenantId": "00000000-0000-4000-8000-0000000000f0",
+  "status": "awaitingAction",
+  "incidentWebUrl": "https://security.microsoft.com/incidents/4221?tid=00000000-0000-4000-8000-0000000000f0",
+  "redirectIncidentId": null,
+  "displayName": "Ransomware-linked emergence of suspicious behavior on multiple endpoints",
+  "createdDateTime": "2026-10-13T16:00:00Z",
+  "lastUpdateDateTime": "2026-10-13T18:00:00Z",
+  "assignedTo": "sam.soc@example.com",
+  "classification": "unknown",
+  "determination": "unknown",
+  "severity": "high",
+  "customTags": [
+    "Ransomware",
+    "Exec notified"
+  ],
+  "systemTags": [
+    "Defender Experts"
+  ],
+  "description": null,
+  "summary": null,
+  "lastModifiedBy": "alex.admin@example.com",
+  "resolvingComment": null,
+  "comments": [],
+  "alerts": [
+    {
+      "id": "da638647315200000007_-1194836007",
+      "providerAlertId": "00000007-0000-4000-8000-00000000c0de",
+      "incidentId": "4221",
+      "status": "inProgress",
+      "severity": "high",
+      "classification": null,
+      "determination": null,
+      "serviceSource": "microsoftDefenderForEndpoint",
+      "detectionSource": "microsoftDefenderForEndpoint",
+      "productName": "Microsoft Defender for Endpoint",
+      "detectorId": "00000007-1111-4000-8000-000000000000",
+      "tenantId": "00000000-0000-4000-8000-0000000000f0",
+      "title": "Ransomware behavior detected in the file system",
+      "description": "",
+      "recommendedActions": "",
+      "category": "Ransomware",
+      "assignedTo": "sam.soc@example.com",
+      "alertWebUrl": "https://security.microsoft.com/alerts/da638647315200000007_-1194836007?tid=00000000-0000-4000-8000-0000000000f0",
+      "incidentWebUrl": "https://security.microsoft.com/incidents/4221?tid=00000000-0000-4000-8000-0000000000f0",
+      "actorDisplayName": null,
+      "threatDisplayName": null,
+      "threatFamilyName": null,
+      "mitreTechniques": [
+        "T1486"
+      ],
+      "createdDateTime": "2026-10-13T17:00:00Z",
+      "lastUpdateDateTime": "2026-10-13T18:00:00Z",
+      "resolvedDateTime": null,
+      "firstActivityDateTime": "2026-10-13T16:00:00Z",
+      "lastActivityDateTime": "2026-10-13T17:00:00Z",
+      "comments": [],
+      "evidence": [
+        {
+          "@odata.type": "#microsoft.graph.security.deviceEvidence",
+          "createdDateTime": "2026-10-14T13:00:00Z",
+          "verdict": "suspicious",
+          "remediationStatus": "none",
+          "roles": [],
+          "tags": [],
+          "deviceDnsName": "srv-file-02.corp.example.com",
+          "osPlatform": "Windows11",
+          "osBuild": 26100,
+          "healthStatus": "active",
+          "riskScore": "high",
+          "rbacGroupName": "Workstations",
+          "onboardingStatus": "onboarded",
+          "mdeDeviceId": "a1b2c3d4e5f60718293a4b5c6d7e8f9012345678"
+        }
+      ],
+      "systemTags": []
+    },
+    {
+      "id": "da638647315200000008_-1194836008",
+      "providerAlertId": "00000008-0000-4000-8000-00000000c0de",
+      "incidentId": "4221",
+      "status": "inProgress",
+      "severity": "medium",
+      "classification": null,
+      "determination": null,
+      "serviceSource": "microsoftDefenderForEndpoint",
+      "detectionSource": "microsoftDefenderForEndpoint",
+      "productName": "Microsoft Defender for Endpoint",
+      "detectorId": "00000008-1111-4000-8000-000000000000",
+      "tenantId": "00000000-0000-4000-8000-0000000000f0",
+      "title": "Suspicious remote activity",
+      "description": "",
+      "recommendedActions": "",
+      "category": "LateralMovement",
+      "assignedTo": "sam.soc@example.com",
+      "alertWebUrl": "https://security.microsoft.com/alerts/da638647315200000008_-1194836008?tid=00000000-0000-4000-8000-0000000000f0",
+      "incidentWebUrl": "https://security.microsoft.com/incidents/4221?tid=00000000-0000-4000-8000-0000000000f0",
+      "actorDisplayName": null,
+      "threatDisplayName": null,
+      "threatFamilyName": null,
+      "mitreTechniques": [
+        "T1021.002"
+      ],
+      "createdDateTime": "2026-10-13T16:00:00Z",
+      "lastUpdateDateTime": "2026-10-13T17:00:00Z",
+      "resolvedDateTime": null,
+      "firstActivityDateTime": "2026-10-13T15:00:00Z",
+      "lastActivityDateTime": "2026-10-13T16:00:00Z",
+      "comments": [],
+      "evidence": [
+        {
+          "@odata.type": "#microsoft.graph.security.deviceEvidence",
+          "createdDateTime": "2026-10-14T13:00:00Z",
+          "verdict": "suspicious",
+          "remediationStatus": "none",
+          "roles": [],
+          "tags": [],
+          "deviceDnsName": "wks-0217.corp.example.com",
+          "osPlatform": "Windows11",
+          "osBuild": 26100,
+          "healthStatus": "active",
+          "riskScore": "high",
+          "rbacGroupName": "Workstations",
+          "onboardingStatus": "onboarded",
+          "mdeDeviceId": "a1b2c3d4e5f60718293a4b5c6d7e8f9012345678"
+        }
+      ],
+      "systemTags": []
+    }
+  ]
+}

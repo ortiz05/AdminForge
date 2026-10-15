@@ -1,0 +1,225 @@
+$schema: ../../../packages/schemas/generated/page.schema.json
+kind: page
+id: security.risky-users
+version: 1.0.0
+title: Risky users
+summary: Accounts that Microsoft Entra ID Protection considers at risk, with bulk confirm-compromised and dismiss actions.
+owner: security-team
+tags: [security, identity-protection, risk]
+template: list-detail
+nav: { section: security, label: Risky users, icon: user-focus, order: 40 }
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    graph: [IdentityRiskyUser.Read.All]
+  entraRoles: [Security Reader]
+  licences: [identityProtection]
+
+params:
+  riskState:
+    type: enum
+    label: Risk state
+    facet: true
+    default: atRisk
+    values:
+      - { value: atRisk, label: At risk }
+      - { value: confirmedCompromised, label: Confirmed compromised }
+      - { value: remediated, label: Remediated }
+      - { value: dismissed, label: Dismissed }
+      - { value: confirmedSafe, label: Confirmed safe }
+      - { value: any, label: Any state }
+  riskLevel:
+    type: enum
+    label: Risk level
+    facet: true
+    default: any
+    values:
+      - { value: any, label: Any level }
+      - { value: high, label: High }
+      - { value: medium, label: Medium }
+      - { value: low, label: Low }
+
+filters:
+  facets: [riskState, riskLevel]
+
+savedViews:
+  enabled: true
+  shared: true
+  presets:
+    - { name: High risk, params: { riskState: atRisk, riskLevel: high } }
+    - { name: Confirmed compromised, params: { riskState: confirmedCompromised } }
+    - { name: Recently remediated, params: { riskState: remediated } }
+
+datasources:
+  users:
+    source: graph
+    request:
+      path: /identityProtection/riskyUsers
+      query:
+        $top: 100
+        # Enum literals use the documented microsoft.graph.riskState'…' / riskLevel'…' form; values come from fixed lists.
+        $filter: >-
+          ${ $join([
+               params.riskState in ['atRisk', 'confirmedCompromised', 'remediated', 'dismissed', 'confirmedSafe'] ? "riskState eq microsoft.graph.riskState" & $odata(params.riskState),
+               params.riskLevel in ['high', 'medium', 'low'] ? "riskLevel eq microsoft.graph.riskLevel" & $odata(params.riskLevel)
+             ][$], ' and ') }
+    paging: cursor
+    cache: { ttl: 60 }
+  summary:
+    label: Users at risk
+    source: graph
+    request:
+      path: /identityProtection/riskyUsers
+      query:
+        $top: 500
+        $filter: "riskState eq microsoft.graph.riskState'atRisk' or riskState eq microsoft.graph.riskState'confirmedCompromised'"
+    paging: all
+    maxItems: 10000
+    cache: { ttl: 120 }
+    transform: >-
+      ${ (
+        $atRisk := [value.value[riskState = 'atRisk' and $not(isDeleted = true)]];
+        {
+          "high": $count($atRisk[riskLevel = 'high']),
+          "medium": $count($atRisk[riskLevel = 'medium']),
+          "low": $count($atRisk[riskLevel = 'low']),
+          "atRisk": $count($atRisk),
+          "compromised": $count(value.value[riskState = 'confirmedCompromised'])
+        }
+      ) }
+
+layout:
+  - widget: kpi
+    data: summary.high
+    label: High risk
+    format: number
+    status: "${ value > 0 ? 'crit' : 'ok' }"
+    href: /p/security.risky-users?riskState=atRisk&riskLevel=high
+  - widget: kpi
+    data: summary.medium
+    label: Medium risk
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+    href: /p/security.risky-users?riskState=atRisk&riskLevel=medium
+  - widget: kpi
+    data: summary.low
+    label: Low risk
+    format: number
+    href: /p/security.risky-users?riskState=atRisk&riskLevel=low
+  - widget: kpi
+    data: summary.compromised
+    label: Confirmed compromised
+    format: number
+    status: "${ value > 0 ? 'crit' : 'ok' }"
+    href: /p/security.risky-users?riskState=confirmedCompromised
+  - widget: markdown
+    span: 12
+    text: |
+      **Confirm compromised** raises the user's risk to high so risk-based Conditional Access policies apply (and trains Identity Protection).
+      **Dismiss** clears the risk without remediation — use it only after you have verified the activity was legitimate.
+      Users who reset their password securely or pass MFA required by a risk policy are remediated automatically.
+  - widget: table
+    id: risky_users
+    span: 12
+    data: users.value
+    rowKey: id
+    selection: multi
+    search: true
+    pageSize: 100
+    empty:
+      title: No risky users in this view
+      body: Nobody matches these filters. Identity Protection lists users here when it detects risky sign-ins or leaked credentials.
+    columns:
+      - { field: userDisplayName, label: User, kind: identity, secondary: userPrincipalName, sortable: true }
+      - field: riskLevel
+        label: Risk level
+        kind: status
+        sortable: true
+        map: { high: [crit, High], medium: [warn, Medium], low: [info, Low], none: [ok, None], hidden: [neutral, Hidden] }
+        filter: { type: facet, param: riskLevel }
+      - field: riskState
+        label: Risk state
+        kind: status
+        map:
+          atRisk: [warn, At risk]
+          confirmedCompromised: [crit, Confirmed compromised]
+          remediated: [ok, Remediated]
+          dismissed: [neutral, Dismissed]
+          confirmedSafe: [ok, Confirmed safe]
+        filter: { type: facet, param: riskState }
+      - field: riskDetail
+        label: Last action
+        kind: status
+        filter: facet
+        map:
+          none: [neutral, None]
+          adminGeneratedTemporaryPassword: [ok, Admin issued temporary password]
+          userPerformedSecuredPasswordChange: [ok, User changed password securely]
+          userPerformedSecuredPasswordReset: [ok, User reset password securely]
+          adminConfirmedSigninSafe: [ok, Admin confirmed sign-in safe]
+          aiConfirmedSigninSafe: [ok, AI confirmed sign-in safe]
+          userPassedMFADrivenByRiskBasedPolicy: [ok, User passed MFA (risk policy)]
+          adminDismissedAllRiskForUser: [neutral, Admin dismissed risk]
+          adminConfirmedSigninCompromised: [crit, Admin confirmed sign-in compromised]
+          adminConfirmedUserCompromised: [crit, Admin confirmed user compromised]
+          hidden: [neutral, Hidden]
+      - { field: riskLastUpdatedDateTime, label: Risk last updated, kind: relativeTime, sortable: true, filter: date }
+      - { field: isProcessing, label: Processing, kind: boolean, hidden: true }
+      - { field: isDeleted, label: Deleted user, kind: boolean, filter: facet }
+      - field: id
+        label: User object id
+        kind: guid
+        hidden: true
+        link:
+          page: identity.user
+          params:
+            id: ${ row.id }
+    inspect:
+      page: security.risky-user
+      params:
+        id: ${ row.id }
+    rowActions:
+      - playbook: security.confirm-risky-user-compromised
+        label: Confirm compromised
+        icon: skull
+        inputs:
+          userId: ${ row.id }
+        when: ${ row.riskState != 'confirmedCompromised' and $not(row.isDeleted = true) }
+      - playbook: security.dismiss-risky-user
+        label: Dismiss risk
+        icon: check-circle
+        inputs:
+          userId: ${ row.id }
+        when: ${ row.riskState in ['atRisk', 'confirmedCompromised'] }
+      - label: Open user profile
+        icon: user
+        href: ${ '/p/identity.user?id=' & $encode(row.id) }
+        when: ${ $not(row.isDeleted = true) }
+      - label: Open in Entra admin center
+        icon: arrow-square-out
+        href: https://entra.microsoft.com/#view/Microsoft_AAD_IAM/IdentityProtectionMenuBlade/~/RiskyUsers
+    bulkActions:
+      - playbook: security.confirm-risky-user-compromised
+        label: Confirm compromised
+        icon: skull
+        forEach:
+          inputs:
+            userId: ${ row.id }
+          concurrency: 5
+        maxItems: 60
+        when: ${ $count(rows[riskState != 'confirmedCompromised' and $not(isDeleted = true)]) > 0 }
+      - playbook: security.dismiss-risky-user
+        label: Dismiss risk
+        icon: check-circle
+        forEach:
+          inputs:
+            userId: ${ row.id }
+          concurrency: 5
+        maxItems: 60
+        when: ${ $count(rows[riskState in ['atRisk', 'confirmedCompromised']]) > 0 }
+
+export:
+  formats: [csv, xlsx]
+  fileName: risky-users
+  data: users.value
+  columns: visible

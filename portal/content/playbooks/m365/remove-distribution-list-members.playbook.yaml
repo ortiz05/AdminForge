@@ -1,0 +1,107 @@
+$schema: ../../../packages/schemas/generated/playbook.schema.json
+kind: playbook
+id: m365.remove-distribution-list-members
+version: 1.0.0
+title: Remove members from a distribution list
+summary: Removes one or more addresses from a distribution list or mail-enabled security group. Addresses that aren't members are skipped.
+owner: m365-team
+tags: [m365, exchange, distribution-lists]
+risk: medium
+mode: write
+requires:
+  portalRoles: [Portal.Operator]
+  scopes:
+    exchange: [Exchange.Manage]
+  entraRoles: [Exchange Recipient Administrator]
+  licences: [exchange]
+confirm:
+  type: click
+  message: Remove these members? They stop receiving mail sent to the list right away.
+
+inputs:
+  identity: { type: string, format: email, label: Distribution list, description: Primary email address of the list }
+  members:
+    type: string
+    multiline: true
+    label: Addresses to remove
+    description: One email address per line.
+    maxLength: 20000
+  reason: { type: string, label: Reason, required: false, multiline: true }
+
+steps:
+  - id: collect
+    type: transform
+    describe: Validate the addresses
+    expression: >-
+      ${ (
+        $typed := [$split(inputs.members ? inputs.members : '', /[\s,;]+/)[$ != '']];
+        {
+          "addresses": [$distinct($typed.$lowercase($))],
+          "invalid": [$typed[$not($contains($, /^[^\s@]+@[^\s@]+\.[^\s@]+$/))]]
+        }
+      ) }
+
+  - id: validAddresses
+    type: assert
+    that: ${ $count(steps.collect.output.invalid) = 0 }
+    message: >-
+      ${ 'These are not valid email addresses: ' & $join(steps.collect.output.invalid, ', ') }
+
+  - id: somethingToRemove
+    type: assert
+    that: ${ $count(steps.collect.output.addresses) > 0 }
+    message: Enter at least one address to remove.
+
+  - id: notTheListItself
+    type: assert
+    that: ${ $not($lowercase(inputs.identity) in steps.collect.output.addresses) }
+    message: A list can't be removed from itself.
+
+  - id: update
+    type: runner
+    mode: write
+    describe: ${ 'Remove ' & $count(steps.collect.output.addresses) & ' member(s) from ' & inputs.identity }
+    script: exchange/Set-DistributionListMembers.ps1
+    sha256: c81ec602a6f63e4bd0c0965a90fb9912f336c42ab2778885051fac7a161685f4
+    services: [exchange]
+    timeoutSeconds: 600
+    parameters:
+      identity: ${ inputs.identity }
+      remove: ${ steps.collect.output.addresses }
+    idempotent: true
+    # The runner returns one element per output event; this script emits one result object.
+    dryRunOutput:
+      - group: ${ inputs.identity }
+        added: []
+        removed: ${ steps.collect.output.addresses }
+        skipped: []
+        failed: []
+
+outputs:
+  summary: >-
+    ${ 'Removed ' & $count(steps.update.output[0].removed) & ' member(s) from ' & inputs.identity
+       & ($count(steps.update.output[0].skipped) > 0 ? '; ' & $count(steps.update.output[0].skipped) & ' were not members' : '') & '.' }
+  removed: ${ steps.update.output[0].removed }
+
+tests:
+  - name: removes one member
+    inputs: { identity: sales-team@example.com, members: Isaiah.Langer@example.com }
+    expect:
+      status: succeeded
+      plan: [update]
+      outputs:
+        summary: Removed 1 member(s) from sales-team@example.com.
+        removed: [isaiah.langer@example.com]
+  - name: removes several members from a pasted list
+    inputs: { identity: all-staff@example.com, members: "lee.gu@example.com\npatti.fernandez@example.com, lee.gu@example.com" }
+    expect:
+      status: succeeded
+      plan: [update]
+      outputs:
+        removed: [lee.gu@example.com, patti.fernandez@example.com]
+  - name: refuses malformed addresses
+    inputs: { identity: sales-team@example.com, members: "isaiah.langer" }
+    expect: { status: failed, failedStep: validAddresses }
+  - name: refuses to remove the list from itself
+    inputs: { identity: sales-team@example.com, members: Sales-Team@example.com }
+    expect: { status: failed, failedStep: notTheListItself }

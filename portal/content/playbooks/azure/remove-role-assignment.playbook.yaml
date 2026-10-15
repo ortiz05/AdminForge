@@ -1,0 +1,99 @@
+$schema: ../../../packages/schemas/generated/playbook.schema.json
+kind: playbook
+id: azure.remove-role-assignment
+version: 1.0.0
+title: Remove Azure role assignment
+summary: Removes one Azure RBAC role assignment. Needs approval by a second engineer; refuses to remove your own assignment.
+owner: azure-team
+tags: [azure, rbac, access]
+risk: high
+mode: write
+requires:
+  portalRoles: [Portal.Operator]
+  scopes:
+    arm: [user_impersonation]
+  azureRoles: [Role Based Access Control Administrator]
+confirm:
+  type: click
+  message: Remove this role assignment? The principal loses the access it grants within a few minutes.
+approval:
+  required: true
+  approvers: [Playbook.Approver]
+  minApprovals: 1
+  expiresIn: PT8H
+
+inputs:
+  assignmentId:
+    type: string
+    label: Role assignment id
+    pattern: "^/.+/providers/[Mm]icrosoft\\.[Aa]uthorization/role[Aa]ssignments/[0-9a-fA-F-]{36}$"
+  reason: { type: string, label: Justification, minLength: 10, multiline: true, description: Shown to the approver and recorded in the audit log. }
+
+steps:
+  - id: path
+    type: transform
+    expression: ${ $join($split(inputs.assignmentId, '/')[$ != ''].('/' & $encode($)), '') }
+
+  - id: lookup
+    type: arm
+    mode: read
+    describe: Read the role assignment
+    request:
+      method: GET
+      path: ${ steps.path.output }
+      apiVersion: "2022-04-01"
+
+  - id: notSelf
+    type: assert
+    that: ${ $lowercase(steps.lookup.output.properties.principalId) != $lowercase(user.oid) }
+    message: This assignment is your own. Ask another administrator to remove it.
+
+  - id: delete
+    type: arm
+    mode: write
+    describe: ${ 'Remove role assignment for principal ' & steps.lookup.output.properties.principalId & ' (' & steps.lookup.output.properties.principalType & ') at ' & steps.lookup.output.properties.scope }
+    request:
+      method: DELETE
+      path: ${ steps.path.output }
+      apiVersion: "2022-04-01"
+    compensate:
+      type: arm
+      describe: Recreate the role assignment
+      request:
+        method: PUT
+        path: ${ steps.path.output }
+        apiVersion: "2022-04-01"
+        body: >-
+          ${ { 'properties': {
+            'roleDefinitionId': steps.lookup.output.properties.roleDefinitionId,
+            'principalId': steps.lookup.output.properties.principalId,
+            'principalType': steps.lookup.output.properties.principalType,
+            'condition': steps.lookup.output.properties.condition,
+            'conditionVersion': steps.lookup.output.properties.conditionVersion,
+            'description': steps.lookup.output.properties.description
+          } } }
+
+outputs:
+  summary: ${ 'Role assignment removed for principal ' & steps.lookup.output.properties.principalId & ' at ' & steps.lookup.output.properties.scope & '.' }
+
+tests:
+  - name: refuses to remove the engineer's own assignment
+    inputs: { assignmentId: /subscriptions/00000000-0000-4000-8000-0000000000a1/providers/Microsoft.Authorization/roleAssignments/30000000-0000-4000-8000-000000000201, reason: quarterly access review }
+    user: { oid: 00000000-0000-4000-8000-000000000a01, upn: alex.admin@example.com }
+    mocks:
+      lookup: { properties: { principalId: 00000000-0000-4000-8000-000000000a01, principalType: User, scope: /subscriptions/00000000-0000-4000-8000-0000000000a1 } }
+    expect: { status: failed, failedStep: notSelf }
+  - name: plans the removal
+    inputs: { assignmentId: /subscriptions/00000000-0000-4000-8000-0000000000a1/providers/Microsoft.Authorization/roleAssignments/30000000-0000-4000-8000-000000000202, reason: quarterly access review }
+    user: { oid: 00000000-0000-4000-8000-000000000a01, upn: alex.admin@example.com }
+    mocks:
+      lookup:
+        properties:
+          roleDefinitionId: /subscriptions/00000000-0000-4000-8000-0000000000a1/providers/Microsoft.Authorization/roleDefinitions/8e3af657-a8ff-443c-a75c-2fe8c4bcb635
+          principalId: 30000000-0000-4000-8000-000000000102
+          principalType: User
+          scope: /subscriptions/00000000-0000-4000-8000-0000000000a1
+    expect:
+      status: succeeded
+      plan: [delete]
+      outputs: { summary: Role assignment removed for principal 30000000-0000-4000-8000-000000000102 at /subscriptions/00000000-0000-4000-8000-0000000000a1. }

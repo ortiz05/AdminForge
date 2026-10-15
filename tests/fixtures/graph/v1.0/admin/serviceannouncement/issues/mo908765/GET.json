@@ -1,0 +1,27 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#admin/serviceAnnouncement/issues/$entity",
+  "id": "MO908765",
+  "title": "Users may be unable to sign in to Microsoft 365 apps",
+  "service": "Microsoft 365 suite",
+  "feature": "Portal",
+  "featureGroup": "Portal",
+  "classification": "incident",
+  "status": "serviceRestored",
+  "origin": "microsoft",
+  "isResolved": true,
+  "startDateTime": "2026-10-03T06:00:00Z",
+  "endDateTime": "2026-10-03T08:00:00Z",
+  "lastModifiedDateTime": "2026-10-04T09:00:00Z",
+  "impactDescription": "Sign-in attempts to Microsoft 365 apps failed intermittently.",
+  "posts": [
+    {
+      "createdDateTime": "2026-10-03T07:00:00Z",
+      "postType": "regular",
+      "description": {
+        "contentType": "html",
+        "content": "<p><b>Final status:</b> We rolled back the affected update and sign-ins succeed.</p>"
+      }
+    }
+  ],
+  "details": []
+}

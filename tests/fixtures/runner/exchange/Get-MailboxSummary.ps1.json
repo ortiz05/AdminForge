@@ -1,0 +1,287 @@
+{
+  "$fixture": {
+    "variants": [
+      {
+        "match": {
+          "bodyIncludes": "\"recipientTypeDetails\":[\"SharedMailbox\"]"
+        },
+        "body": [
+          {
+            "total": 4,
+            "truncated": false,
+            "byType": [
+              {
+                "type": "SharedMailbox",
+                "count": 4
+              }
+            ],
+            "hiddenFromAddressLists": 1,
+            "litigationHold": 1,
+            "archiveEnabled": 1,
+            "mailboxes": [
+              {
+                "displayName": "Reception",
+                "userPrincipalName": "reception@example.com",
+                "primarySmtpAddress": "reception@example.com",
+                "recipientTypeDetails": "SharedMailbox",
+                "whenCreated": "2024-08-06T09:00:00Z",
+                "hiddenFromAddressListsEnabled": false,
+                "litigationHoldEnabled": false,
+                "archiveStatus": "None"
+              },
+              {
+                "displayName": "Finance Invoices",
+                "userPrincipalName": "invoices@example.com",
+                "primarySmtpAddress": "invoices@example.com",
+                "recipientTypeDetails": "SharedMailbox",
+                "whenCreated": "2025-01-13T09:00:00Z",
+                "hiddenFromAddressListsEnabled": false,
+                "litigationHoldEnabled": false,
+                "archiveStatus": "Active"
+              },
+              {
+                "displayName": "Customer Support",
+                "userPrincipalName": "support@example.com",
+                "primarySmtpAddress": "support@example.com",
+                "recipientTypeDetails": "SharedMailbox",
+                "whenCreated": "2024-10-25T09:00:00Z",
+                "hiddenFromAddressListsEnabled": false,
+                "litigationHoldEnabled": false,
+                "archiveStatus": "None"
+              },
+              {
+                "displayName": "HR Confidential",
+                "userPrincipalName": "hr-confidential@example.com",
+                "primarySmtpAddress": "hr-confidential@example.com",
+                "recipientTypeDetails": "SharedMailbox",
+                "whenCreated": "2025-08-31T09:00:00Z",
+                "hiddenFromAddressListsEnabled": true,
+                "litigationHoldEnabled": true,
+                "archiveStatus": "None"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "body": [
+      {
+        "total": 19,
+        "truncated": false,
+        "byType": [
+          {
+            "type": "UserMailbox",
+            "count": 12
+          },
+          {
+            "type": "SharedMailbox",
+            "count": 4
+          },
+          {
+            "type": "RoomMailbox",
+            "count": 2
+          },
+          {
+            "type": "EquipmentMailbox",
+            "count": 1
+          }
+        ],
+        "hiddenFromAddressLists": 2,
+        "litigationHold": 3,
+        "archiveEnabled": 5,
+        "mailboxes": [
+          {
+            "displayName": "Avery Engineer",
+            "userPrincipalName": "avery@example.com",
+            "primarySmtpAddress": "avery@example.com",
+            "recipientTypeDetails": "UserMailbox",
+            "whenCreated": "2025-12-19T09:00:00Z",
+            "hiddenFromAddressListsEnabled": false,
+            "litigationHoldEnabled": false,
+            "archiveStatus": "Active"
+          },
+          {
+            "displayName": "Blake Analyst",
+            "userPrincipalName": "blake@example.com",
+            "primarySmtpAddress": "blake@example.com",
+            "recipientTypeDetails": "UserMailbox",
+            "whenCreated": "2025-10-19T09:00:00Z",
+            "hiddenFromAddressListsEnabled": false,
+            "litigationHoldEnabled": false,
+            "archiveStatus": "None"
+          },
+          {
+            "displayName": "Dana Former",
+            "userPrincipalName": "dana@example.com",
+            "primarySmtpAddress": "dana@example.com",
+            "recipientTypeDetails": "UserMailbox",
+            "whenCreated": "2025-08-19T09:00:00Z",
+            "hiddenFromAddressListsEnabled": false,
+            "litigationHoldEnabled": true,
+            "archiveStatus": "None"
+          },
+          {
+            "displayName": "Eli O'Brien",
+            "userPrincipalName": "eli.obrien@example.com",
+            "primarySmtpAddress": "eli.obrien@example.com",
+            "recipientTypeDetails": "UserMailbox",
+            "whenCreated": "2025-06-19T09:00:00Z",
+            "hiddenFromAddressListsEnabled": false,
+            "litigationHoldEnabled": false,
+            "archiveStatus": "Active"
+          },
+          {
+            "displayName": "Farah Haddad",
+            "userPrincipalName": "farah.haddad@example.com",
+            "primarySmtpAddress": "farah.haddad@example.com",
+            "recipientTypeDetails": "UserMailbox",
+            "whenCreated": "2025-04-19T09:00:00Z",
+            "hiddenFromAddressListsEnabled": false,
+            "litigationHoldEnabled": false,
+            "archiveStatus": "None"
+          },
+          {
+            "displayName": "Gabriel Nunes",
+            "userPrincipalName": "gabriel.nunes@example.com",
+            "primarySmtpAddress": "gabriel.nunes@example.com",
+            "recipientTypeDetails": "UserMailbox",
+            "whenCreated": "2025-02-17T09:00:00Z",
+            "hiddenFromAddressListsEnabled": false,
+            "litigationHoldEnabled": false,
+            "archiveStatus": "None"
+          },
+          {
+            "displayName": "Hana Kim",
+            "userPrincipalName": "hana.kim@example.com",
+            "primarySmtpAddress": "hana.kim@example.com",
+            "recipientTypeDetails": "UserMailbox",
+            "whenCreated": "2024-12-18T09:00:00Z",
+            "hiddenFromAddressListsEnabled": false,
+            "litigationHoldEnabled": false,
+            "archiveStatus": "Active"
+          },
+          {
+            "displayName": "Isaac Mensah",
+            "userPrincipalName": "isaac.mensah@example.com",
+            "primarySmtpAddress": "isaac.mensah@example.com",
+            "recipientTypeDetails": "UserMailbox",
+            "whenCreated": "2024-10-18T09:00:00Z",
+            "hiddenFromAddressListsEnabled": false,
+            "litigationHoldEnabled": false,
+            "archiveStatus": "None"
+          },
+          {
+            "displayName": "Jordan Price",
+            "userPrincipalName": "jordan.price@example.com",
+            "primarySmtpAddress": "jordan.price@example.com",
+            "recipientTypeDetails": "UserMailbox",
+            "whenCreated": "2024-08-18T09:00:00Z",
+            "hiddenFromAddressListsEnabled": false,
+            "litigationHoldEnabled": true,
+            "archiveStatus": "None"
+          },
+          {
+            "displayName": "Kai Lindqvist",
+            "userPrincipalName": "kai.lindqvist@example.com",
+            "primarySmtpAddress": "kai.lindqvist@example.com",
+            "recipientTypeDetails": "UserMailbox",
+            "whenCreated": "2024-06-18T09:00:00Z",
+            "hiddenFromAddressListsEnabled": false,
+            "litigationHoldEnabled": false,
+            "archiveStatus": "Active"
+          },
+          {
+            "displayName": "Leah Moreau",
+            "userPrincipalName": "leah.moreau@example.com",
+            "primarySmtpAddress": "leah.moreau@example.com",
+            "recipientTypeDetails": "UserMailbox",
+            "whenCreated": "2024-04-18T09:00:00Z",
+            "hiddenFromAddressListsEnabled": false,
+            "litigationHoldEnabled": false,
+            "archiveStatus": "None"
+          },
+          {
+            "displayName": "Nora Fischer",
+            "userPrincipalName": "nora.fischer@example.com",
+            "primarySmtpAddress": "nora.fischer@example.com",
+            "recipientTypeDetails": "UserMailbox",
+            "whenCreated": "2024-02-17T09:00:00Z",
+            "hiddenFromAddressListsEnabled": false,
+            "litigationHoldEnabled": false,
+            "archiveStatus": "None"
+          },
+          {
+            "displayName": "Reception",
+            "userPrincipalName": "reception@example.com",
+            "primarySmtpAddress": "reception@example.com",
+            "recipientTypeDetails": "SharedMailbox",
+            "whenCreated": "2024-08-06T09:00:00Z",
+            "hiddenFromAddressListsEnabled": false,
+            "litigationHoldEnabled": false,
+            "archiveStatus": "None"
+          },
+          {
+            "displayName": "Finance Invoices",
+            "userPrincipalName": "invoices@example.com",
+            "primarySmtpAddress": "invoices@example.com",
+            "recipientTypeDetails": "SharedMailbox",
+            "whenCreated": "2025-01-13T09:00:00Z",
+            "hiddenFromAddressListsEnabled": false,
+            "litigationHoldEnabled": false,
+            "archiveStatus": "Active"
+          },
+          {
+            "displayName": "Customer Support",
+            "userPrincipalName": "support@example.com",
+            "primarySmtpAddress": "support@example.com",
+            "recipientTypeDetails": "SharedMailbox",
+            "whenCreated": "2024-10-25T09:00:00Z",
+            "hiddenFromAddressListsEnabled": false,
+            "litigationHoldEnabled": false,
+            "archiveStatus": "None"
+          },
+          {
+            "displayName": "HR Confidential",
+            "userPrincipalName": "hr-confidential@example.com",
+            "primarySmtpAddress": "hr-confidential@example.com",
+            "recipientTypeDetails": "SharedMailbox",
+            "whenCreated": "2025-08-31T09:00:00Z",
+            "hiddenFromAddressListsEnabled": true,
+            "litigationHoldEnabled": true,
+            "archiveStatus": "None"
+          },
+          {
+            "displayName": "Boardroom",
+            "userPrincipalName": "room-boardroom@example.com",
+            "primarySmtpAddress": "room-boardroom@example.com",
+            "recipientTypeDetails": "RoomMailbox",
+            "whenCreated": "2024-03-09T09:00:00Z",
+            "hiddenFromAddressListsEnabled": false,
+            "litigationHoldEnabled": false,
+            "archiveStatus": "None"
+          },
+          {
+            "displayName": "Atlas Room (4th floor)",
+            "userPrincipalName": "room-atlas@example.com",
+            "primarySmtpAddress": "room-atlas@example.com",
+            "recipientTypeDetails": "RoomMailbox",
+            "whenCreated": "2025-12-19T09:00:00Z",
+            "hiddenFromAddressListsEnabled": false,
+            "litigationHoldEnabled": false,
+            "archiveStatus": "None"
+          },
+          {
+            "displayName": "Projector 01",
+            "userPrincipalName": "projector-01@example.com",
+            "primarySmtpAddress": "projector-01@example.com",
+            "recipientTypeDetails": "EquipmentMailbox",
+            "whenCreated": "2024-01-29T09:00:00Z",
+            "hiddenFromAddressListsEnabled": true,
+            "litigationHoldEnabled": false,
+            "archiveStatus": "None"
+          }
+        ]
+      }
+    ]
+  }
+}

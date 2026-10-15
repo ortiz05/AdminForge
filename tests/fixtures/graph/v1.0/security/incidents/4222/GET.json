@@ -1,0 +1,92 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#security/incidents(alerts())/$entity",
+  "id": "4222",
+  "tenantId": "00000000-0000-4000-8000-0000000000f0",
+  "status": "active",
+  "incidentWebUrl": "https://security.microsoft.com/incidents/4222?tid=00000000-0000-4000-8000-0000000000f0",
+  "redirectIncidentId": null,
+  "displayName": "'Emotet' malware was prevented on one endpoint",
+  "createdDateTime": "2026-10-14T15:00:00Z",
+  "lastUpdateDateTime": "2026-10-14T17:00:00Z",
+  "assignedTo": null,
+  "classification": "unknown",
+  "determination": "unknown",
+  "severity": "medium",
+  "customTags": [],
+  "systemTags": [],
+  "description": null,
+  "summary": null,
+  "lastModifiedBy": "Automation",
+  "resolvingComment": null,
+  "comments": [],
+  "alerts": [
+    {
+      "id": "da638647315200000006_-1194836006",
+      "providerAlertId": "00000006-0000-4000-8000-00000000c0de",
+      "incidentId": "4222",
+      "status": "new",
+      "severity": "medium",
+      "classification": null,
+      "determination": null,
+      "serviceSource": "microsoftDefenderForEndpoint",
+      "detectionSource": "antivirus",
+      "productName": "Microsoft Defender for Endpoint",
+      "detectorId": "00000006-1111-4000-8000-000000000000",
+      "tenantId": "00000000-0000-4000-8000-0000000000f0",
+      "title": "'Emotet' malware was prevented",
+      "description": "",
+      "recommendedActions": "",
+      "category": "Malware",
+      "assignedTo": null,
+      "alertWebUrl": "https://security.microsoft.com/alerts/da638647315200000006_-1194836006?tid=00000000-0000-4000-8000-0000000000f0",
+      "incidentWebUrl": "https://security.microsoft.com/incidents/4222?tid=00000000-0000-4000-8000-0000000000f0",
+      "actorDisplayName": null,
+      "threatDisplayName": "Trojan:Win32/Emotet",
+      "threatFamilyName": "Emotet",
+      "mitreTechniques": [
+        "T1204.002"
+      ],
+      "createdDateTime": "2026-10-14T15:00:00Z",
+      "lastUpdateDateTime": "2026-10-14T16:00:00Z",
+      "resolvedDateTime": null,
+      "firstActivityDateTime": "2026-10-14T14:00:00Z",
+      "lastActivityDateTime": "2026-10-14T15:00:00Z",
+      "comments": [],
+      "evidence": [
+        {
+          "@odata.type": "#microsoft.graph.security.deviceEvidence",
+          "createdDateTime": "2026-10-14T13:00:00Z",
+          "verdict": "suspicious",
+          "remediationStatus": "none",
+          "roles": [],
+          "tags": [],
+          "deviceDnsName": "wks-0142.corp.example.com",
+          "osPlatform": "Windows11",
+          "osBuild": 26100,
+          "healthStatus": "active",
+          "riskScore": "medium",
+          "rbacGroupName": "Workstations",
+          "onboardingStatus": "onboarded",
+          "mdeDeviceId": "a1b2c3d4e5f60718293a4b5c6d7e8f9012345678"
+        },
+        {
+          "@odata.type": "#microsoft.graph.security.fileEvidence",
+          "createdDateTime": "2026-10-14T13:00:00Z",
+          "verdict": "malicious",
+          "remediationStatus": "remediated",
+          "roles": [],
+          "tags": [],
+          "detectionStatus": "prevented",
+          "fileDetails": {
+            "fileName": "invoice_0914.iso",
+            "filePath": "C:\\Users\\farah.haddad\\Downloads",
+            "fileSize": 482304,
+            "sha1": null,
+            "sha256": null
+          }
+        }
+      ],
+      "systemTags": []
+    }
+  ]
+}

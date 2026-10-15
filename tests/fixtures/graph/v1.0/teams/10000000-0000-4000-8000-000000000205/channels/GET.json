@@ -1,0 +1,14 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#teams('10000000-0000-4000-8000-000000000205')/channels",
+  "value": [
+    {
+      "id": "19:0002050general@thread.tacv2",
+      "displayName": "General",
+      "description": null,
+      "membershipType": "standard",
+      "createdDateTime": "2025-12-19T09:00:00Z",
+      "email": "General.legal-review@example.com",
+      "webUrl": "https://teams.microsoft.com/l/channel/19%3a0002050%40thread.tacv2/General?groupId=10000000-0000-4000-8000-000000000205"
+    }
+  ]
+}

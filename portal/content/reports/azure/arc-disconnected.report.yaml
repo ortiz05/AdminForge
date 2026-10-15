@@ -1,0 +1,132 @@
+$schema: ../../../packages/schemas/generated/report.schema.json
+kind: report
+id: azure.arc-disconnected
+version: 1.0.0
+title: Disconnected Azure Arc servers
+summary: Arc-enabled servers that are disconnected, in error or expired for longer than the chosen threshold. Servers expire after 45 days offline and must be re-onboarded.
+owner: azure-team
+tags: [azure, arc, hybrid, servers]
+nav: { section: reports, label: Disconnected Arc servers, icon: plugs, order: 180 }
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    arm: [user_impersonation]
+  azureRoles: [Reader]
+
+params:
+  hours:
+    type: enum
+    label: Not connected for at least
+    facet: true
+    default: 1
+    values:
+      - { value: 1, label: 1 hour }
+      - { value: 24, label: 24 hours }
+      - { value: 168, label: 7 days }
+      - { value: 720, label: 30 days }
+  subscriptionId: { type: string, format: guid, label: Subscription, picker: subscription, facet: true }
+
+datasources:
+  machines:
+    source: resourceGraph
+    query: |
+      // af:azure.arc-disconnected#rows
+      resources
+      | where type =~ 'microsoft.hybridcompute/machines'
+      ${ params.subscriptionId ? "| where subscriptionId == '" & $guid(params.subscriptionId) & "'" }
+      | extend status = tostring(properties.status), lastStatusChange = todatetime(properties.lastStatusChange), agentVersion = tostring(properties.agentVersion), osName = tostring(properties.osName), machineFqdn = tostring(properties.machineFqdn)
+      | where status != 'Connected'
+      | extend hoursNotConnected = datetime_diff('hour', now(), lastStatusChange)
+      | where hoursNotConnected >= ${ $number(params.hours) in [1, 24, 168, 720] ? $string($number(params.hours)) : '1' }
+      | extend daysToExpiry = iff(status == 'Expired', 0, max_of(0, 45 - hoursNotConnected / 24))
+      | join kind=leftouter (resourcecontainers | where type =~ 'microsoft.resources/subscriptions' | project subscriptionId, subscriptionName = name) on subscriptionId
+      | project id, name, machineFqdn, status, lastStatusChange, hoursNotConnected, daysToExpiry, agentVersion, osName, resourceGroup, subscriptionId, subscriptionName, location, tags
+      | order by hoursNotConnected desc
+    paging: all
+    maxItems: 20000
+    transform: >-
+      ${ (
+        $rows := [value.value];
+        {
+          'rows': $rows,
+          'total': $count($rows),
+          'expired': $count($rows[status = 'Expired']),
+          'expiringSoon': $count($rows[status != 'Expired' and daysToExpiry <= 7]),
+          'error': $count($rows[status = 'Error'])
+        }
+      ) }
+    cache: { ttl: 300 }
+
+layout:
+  - widget: kpi
+    data: machines.total
+    label: Not connected
+    format: number
+    status: "${ value > 0 ? 'crit' : 'ok' }"
+  - widget: kpi
+    data: machines.expiringSoon
+    label: Expire within 7 days
+    format: number
+    status: "${ value > 0 ? 'crit' : 'ok' }"
+  - widget: kpi
+    data: machines.expired
+    label: Expired (re-onboard)
+    format: number
+    status: "${ value > 0 ? 'crit' : 'ok' }"
+  - widget: kpi
+    data: machines.error
+    label: In error
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+  - widget: table
+    id: machines
+    span: 12
+    data: machines.rows
+    rowKey: id
+    selection: multi
+    columns:
+      - { field: name, label: Machine, kind: identity, secondary: machineFqdn, sortable: true }
+      - field: status
+        label: Status
+        kind: status
+        map: { Disconnected: [crit, Disconnected], Error: [crit, Error], Expired: [crit, Expired] }
+        filter: facet
+      - { field: lastStatusChange, label: Since, kind: relativeTime, sortable: true }
+      - { field: hoursNotConnected, label: Hours not connected, kind: number, sortable: true, filter: range }
+      - { field: daysToExpiry, label: Days until expiry, kind: number, sortable: true, filter: range }
+      - { field: agentVersion, label: Agent version, filter: facet }
+      - { field: osName, label: Operating system, filter: facet }
+      - { field: resourceGroup, label: Resource group, filter: facet }
+      - { field: subscriptionName, label: Subscription, filter: facet }
+      - { field: location, label: Location, hidden: true }
+      - { field: tags, label: Tags, kind: tags, hidden: true }
+      - { field: id, label: Resource id, kind: code, hidden: true }
+    inspect:
+      page: azure.arc-server
+      params:
+        id: ${ row.id }
+    rowActions:
+      - label: Troubleshooting guide
+        icon: book-open
+        href: https://learn.microsoft.com/azure/azure-arc/servers/troubleshoot-agent-onboard
+      - label: Open in Azure portal
+        icon: arrow-square-out
+        href: https://portal.azure.com/#resource${ row.id }/overview
+    bulkActions:
+      - playbook: azure.add-tags
+        label: Add or update a tag
+        icon: tag
+        forEach:
+          inputs:
+            resourceId: ${ row.id }
+          concurrency: 5
+        maxItems: 500
+    empty:
+      title: Every Arc server is connected
+      body: No Arc-enabled server has been disconnected for longer than the selected threshold.
+
+export:
+  formats: [csv, xlsx]
+  fileName: azure-arc-disconnected
+  data: machines.rows
+  columns: all

@@ -1,0 +1,240 @@
+$schema: ../../../packages/schemas/generated/page.schema.json
+kind: page
+id: security.secure-score
+version: 1.0.0
+title: Secure Score
+summary: Microsoft Secure Score trend, comparison and the improvement actions that would raise it, ranked by points available.
+owner: security-team
+tags: [security, secure-score, posture]
+template: dashboard
+nav: { section: security, label: Secure Score, icon: shield-check, order: 30 }
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    graph: [SecurityEvents.Read.All]
+  entraRoles: [Security Reader]
+
+params:
+  days:
+    type: enum
+    label: Trend period
+    facet: true
+    default: 30
+    values:
+      - { value: 30, label: 30 days }
+      - { value: 60, label: 60 days }
+      - { value: 90, label: 90 days }
+  category:
+    type: enum
+    label: Category
+    facet: true
+    default: All
+    values: [All, Identity, Data, Device, Apps, Infrastructure]
+  state:
+    type: enum
+    label: Action status
+    facet: true
+    default: open
+    values:
+      - { value: open, label: To address }
+      - { value: completed, label: Completed }
+      - { value: accepted, label: Risk accepted or third party }
+      - { value: all, label: All actions }
+
+filters:
+  facets: [days, category, state]
+
+savedViews:
+  enabled: true
+  shared: true
+  presets:
+    - { name: Identity actions to address, params: { category: Identity, state: open } }
+    - { name: Accepted risks, params: { state: accepted } }
+
+datasources:
+  history:
+    source: graph
+    request:
+      path: /security/secureScores
+      query:
+        $top: ${ $number(params.days) }
+    cache: { ttl: 3600 }
+    # Daily snapshots, newest first from the API → ascending rows for the chart plus headline numbers.
+    transform: >-
+      ${ (
+        $rows := [(value.value^(createdDateTime)).{
+          "day": $substring(createdDateTime, 0, 10),
+          "score": $round(currentScore, 1),
+          "maxScore": $round(maxScore, 1),
+          "percent": maxScore > 0 ? $round(currentScore / maxScore, 4) : 0
+        }];
+        $last := $rows[-1];
+        $first := $rows[0];
+        $latest := (value.value^(>createdDateTime))[0];
+        $all := $latest.averageComparativeScores[basis = 'AllTenants'][0].averageScore;
+        $seats := $latest.averageComparativeScores[basis = 'TotalSeats'][0].averageScore;
+        {
+          "trend": $rows,
+          "percent": $last.percent ? $last.percent : 0,
+          "score": $last.score ? $last.score : 0,
+          "maxScore": $last.maxScore ? $last.maxScore : 0,
+          "delta": $count($rows) > 1 ? $round($last.percent - $first.percent, 4) : 0,
+          "allTenants": $all and $latest.maxScore ? $round($all / $latest.maxScore, 4) : null,
+          "similarSize": $seats and $latest.maxScore ? $round($seats / $latest.maxScore, 4) : null,
+          "licensedUsers": $latest.licensedUserCount,
+          "activeUsers": $latest.activeUserCount
+        }
+      ) }
+  actions:
+    label: Improvement actions
+    source: graphBatch
+    requests:
+      latest: { path: /security/secureScores, query: { $top: 1 } }
+      profiles: { path: /security/secureScoreControlProfiles, query: { $top: 500 } }
+    cache: { ttl: 3600 }
+    # Joins the latest score's per-control results with the control profiles (title, max points, cost, impact, state).
+    transform: >-
+      ${ (
+        $latest := (value.latest.value^(>createdDateTime))[0];
+        $scores := $latest.controlScores;
+        $all := [value.profiles.value[$not(deprecated = true)].(
+          $p := $;
+          $cs := $scores[controlName = $p.id][0];
+          $got := $exists($cs.score) ? $round($cs.score, 2) : 0;
+          $st := ($p.controlStateUpdates^(>updatedDateTime))[0].state;
+          $state := $st in ['Ignored', 'ThirdParty'] ? 'accepted' : ($got >= $p.maxScore ? 'completed' : 'open');
+          {
+            "id": $p.id,
+            "title": $p.title,
+            "category": $p.controlCategory,
+            "service": $p.service,
+            "maxScore": $p.maxScore,
+            "score": $got,
+            "pointsAvailable": $round($p.maxScore - $got, 2),
+            "progress": $p.maxScore > 0 ? $round($got / $p.maxScore, 4) : 1,
+            "implementationCost": $p.implementationCost,
+            "userImpact": $p.userImpact,
+            "tier": $p.tier,
+            "rank": $p.rank,
+            "threats": $p.threats,
+            "actionUrl": $p.actionUrl,
+            "manualState": $st ? $st : 'Default',
+            "state": $state
+          }
+        )];
+        $rows := [$all[
+          ($$.params.category = 'All' or $not($exists($$.params.category)) or category = $$.params.category)
+          and ($$.params.state = 'all' or $not($exists($$.params.state)) or state = $$.params.state)
+        ]^(>pointsAvailable, rank)];
+        $cats := $distinct($all.category);
+        {
+          "rows": $rows,
+          "open": $count($all[state = 'open']),
+          "completed": $count($all[state = 'completed']),
+          "accepted": $count($all[state = 'accepted']),
+          "pointsAvailable": $round($sum($all[state = 'open'].pointsAvailable), 1),
+          "byCategory": [$cats.(
+            $c := $;
+            {
+              "category": $c,
+              "achieved": $round($sum($all[category = $c].score), 1),
+              "remaining": $round($sum($all[category = $c].pointsAvailable), 1)
+            }
+          )]
+        }
+      ) }
+
+layout:
+  - widget: kpi
+    id: secure_score
+    data: history.percent
+    label: Secure Score
+    format: percent
+    delta: history.delta
+    status: "${ value >= 0.7 ? 'ok' : value >= 0.5 ? 'warn' : 'crit' }"
+  - widget: kpi
+    data: history.allTenants
+    label: Average across all tenants
+    format: percent
+  - widget: kpi
+    data: actions.pointsAvailable
+    label: Points available (open actions)
+    format: number
+  - widget: kpi
+    data: actions.open
+    label: Actions to address
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+  - widget: chart
+    id: trend
+    title: Secure Score over time
+    span: 8
+    rows: 3
+    type: line
+    data: history.trend
+    x: day
+    y: percent
+    format: percent
+  - widget: chart
+    id: by_category
+    title: Points by category
+    span: 4
+    rows: 3
+    type: stackedBar
+    data: actions.byCategory
+    x: category
+    y: [achieved, remaining]
+    stack: true
+    format: number
+  - widget: table
+    id: actions
+    title: Improvement actions
+    span: 12
+    data: actions.rows
+    rowKey: id
+    search: true
+    pageSize: 50
+    empty:
+      title: Nothing to address in this view
+      body: Every improvement action in this category is completed, accepted as a risk, or handled by a third party.
+    columns:
+      - { field: title, label: Improvement action, kind: identity, secondary: service }
+      - { field: category, label: Category, filter: { type: facet, param: category } }
+      - { field: pointsAvailable, label: Points available, kind: number, sortable: true, filter: range }
+      - { field: score, label: Points achieved, kind: number, sortable: true }
+      - { field: maxScore, label: Max points, kind: number, hidden: true }
+      - { field: progress, label: Progress, kind: percent, sortable: true }
+      - field: implementationCost
+        label: Implementation cost
+        kind: status
+        filter: facet
+        map: { Low: [ok, Low], Moderate: [warn, Moderate], High: [crit, High] }
+      - field: userImpact
+        label: User impact
+        kind: status
+        filter: facet
+        map: { Low: [ok, Low], Moderate: [warn, Moderate], High: [crit, High] }
+      - field: state
+        label: Status
+        kind: status
+        filter: { type: facet, param: state }
+        map: { open: [warn, To address], completed: [ok, Completed], accepted: [neutral, Risk accepted / third party] }
+      - { field: manualState, label: State set in Defender, hidden: true }
+      - { field: threats, label: Threats, kind: tags, hidden: true }
+      - { field: tier, label: Tier, hidden: true, filter: facet }
+      - { field: rank, label: Rank, kind: number, hidden: true, sortable: true }
+      - { field: id, label: Control, kind: code, hidden: true }
+    rowActions:
+      - label: Open in Microsoft Defender
+        icon: arrow-square-out
+        href: "${ 'https://security.microsoft.com/securescore?viewid=actions&actionId=' & $encode(row.id) }"
+      - label: Open configuration
+        icon: wrench
+        href: ${ row.actionUrl }
+        when: ${ $exists(row.actionUrl) and row.actionUrl != null }
+
+export:
+  formats: [csv, xlsx]
+  fileName: secure-score-improvement-actions
+  data: actions.rows
+  columns: all

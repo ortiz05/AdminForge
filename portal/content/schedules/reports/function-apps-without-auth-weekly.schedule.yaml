@@ -1,0 +1,26 @@
+$schema: ../../../packages/schemas/generated/schedule.schema.json
+kind: schedule
+id: reports.function-apps-without-auth-weekly
+version: 1.0.0
+title: Weekly Function Apps without authentication report
+summary: >-
+  Every Monday at 06:10 UTC, writes Function Apps that have no App Service authentication (Easy Auth) enabled, as XLSX.
+owner: azure-team
+tags: [azure, functions, security, report]
+cron: "10 6 * * 1"
+timezone: UTC
+enabled: true
+identity: automation
+job:
+  kind: report
+  ref: azure.function-apps-without-auth
+  delivery:
+    - type: file
+      format: xlsx
+      path: azure/function-apps-without-auth/{date}.xlsx
+      retain: 26
+retry: { max: 2, backoff: exponential, delay: 5m }
+timeoutSeconds: 1800
+overlap: skip
+requires:
+  azureRoles: [Reader]

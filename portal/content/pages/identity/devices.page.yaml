@@ -42,7 +42,6 @@ params:
       - { value: Active30, label: Active in the last 30 days }
       - { value: Stale90, label: Inactive more than 90 days }
       - { value: Stale180, label: Inactive more than 180 days }
-  adv: { type: string, hidden: true, label: Advanced filter }
 
 filters:
   search: q
@@ -94,7 +93,7 @@ datasources:
                params.activity = 'Active30' ? "approximateLastSignInDateTime ge " & $daysAgo(30),
                params.activity = 'Stale90' ? "approximateLastSignInDateTime le " & $daysAgo(90),
                params.activity = 'Stale180' ? "approximateLastSignInDateTime le " & $daysAgo(180),
-               params.adv
+               advanced
              ][$], ' and ') }
         $search: ${ params.q ? '"displayName:' & $odataSearch(params.q) & '"' }
     paging: cursor

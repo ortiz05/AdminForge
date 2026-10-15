@@ -31,14 +31,12 @@ params:
       - { value: Untagged, label: Untagged }
   tagName: { type: string, label: Tag name, placeholder: owner, facet: true }
   tagValue: { type: string, label: Tag value, description: Used together with Tag name. Leave empty to match any value. }
-  where: { type: string, hidden: true, description: Compiled by the advanced filter builder. }
 
 filters:
   search: q
   facets: [type, location, resourceGroup, subscriptionId, tagState, tagName]
   advanced:
     dialect: kql
-    param: where
     fields:
       - { field: name, label: Name, type: string, operators: [eq, ne, startsWith, contains] }
       - { field: type, label: Resource type, type: string, operators: [eq, ne, startsWith, contains] }
@@ -75,7 +73,7 @@ datasources:
       ${ params.tagName ? "| where isnotnull(tags['" & $replace(params.tagName, /[^A-Za-z0-9 ._:@+=\/-]/, '') & "'])" }
       ${ params.tagName and params.tagValue ? "| where tostring(tags['" & $replace(params.tagName, /[^A-Za-z0-9 ._:@+=\/-]/, '') & "']) =~ '" & $replace(params.tagValue, /[^A-Za-z0-9 ._:@+=\/-]/, '') & "'" }
       ${ params.q ? "| where name contains '" & $replace(params.q, /[^A-Za-z0-9 ._()-]/, '') & "'" }
-      ${ params.where ? '| where ' & params.where }
+      ${ advanced ? '| where ' & advanced }
       | join kind=leftouter (resourcecontainers | where type =~ 'microsoft.resources/subscriptions' | project subscriptionId, subscriptionName = name) on subscriptionId
       | project id, name, type, kind, location, resourceGroup, subscriptionId, subscriptionName, sku, tags, tagCount, provisioningState, managedBy
       | order by name asc

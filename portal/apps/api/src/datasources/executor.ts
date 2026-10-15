@@ -8,8 +8,9 @@ import type { DefinitionRegistry, ResolvedDefinition } from '../definitions/type
 import { AppError } from '../errors';
 import { errorHint, outboundAppError } from '../execution/outbound';
 import type { ExecutionIdentity, OutboundExecutor, ServiceCall } from '../execution/types';
+import { AdvancedFilterError, advancedParamOf, compileAdvanced, dialectFor, parseAdvanced, type AdvancedGroup } from './advanced';
 import { cacheKey, TtlCache } from './cache';
-import { defaultTimespan, resolveParams } from './params';
+import { defaultTimespan, InvalidParams, resolveParams } from './params';
 
 export const PAGE_KINDS = ['page', 'dashboard', 'report'] as const satisfies readonly Kind[];
 export type PageKind = (typeof PAGE_KINDS)[number];
@@ -229,9 +230,50 @@ export class DatasourceRunner {
     return { params, user, env: this.deps.env(), now: this.deps.now().toISOString() };
   }
 
-  /** Validates and defaults params for a page. Throws InvalidParams (400). */
-  prepareParams(page: LoadedPage, raw: Record<string, unknown> | undefined, user: UserScope): Promise<Record<string, unknown>> {
-    return resolveParams(page.def.params, raw, { user, env: this.deps.env(), now: this.deps.now().toISOString() });
+  /**
+   * Expression scope for one datasource. The query builder's validated filter is removed from `params` and offered
+   * only compiled for this datasource's dialect as `advanced` (OData for Graph, KQL for Resource Graph/Log Analytics).
+   */
+  private datasourceScope(page: LoadedPage, ds: Datasource, user: UserScope, params: Record<string, unknown>, deps: Record<string, unknown>): Scope & { now: string } {
+    const name = advancedParamOf(page.def.filters);
+    if (!name) return { ...this.scope(user, params), ds: deps };
+    const { [name]: filter, ...plain } = params;
+    const dialect = page.def.filters?.advanced?.dialect === 'client' ? undefined : dialectFor(ds.source);
+    const advanced = filter && dialect ? compileAdvanced(filter as AdvancedGroup, dialect) : undefined;
+    return { ...this.scope(user, plain), ds: deps, advanced };
+  }
+
+  /** Params minus the query builder's filter (file names, audit summaries). */
+  publicParams(page: LoadedPage, params: Record<string, unknown>): Record<string, unknown> {
+    const name = advancedParamOf(page.def.filters);
+    if (!name || !(name in params)) return params;
+    const { [name]: _f, ...plain } = params;
+    return plain;
+  }
+
+  /**
+   * Validates and defaults params for a page. Throws InvalidParams (400). The query builder's filter (request param
+   * `filters.advanced.param`, default `adv`) is validated against the declared fields and kept as structured data.
+   */
+  async prepareParams(page: LoadedPage, raw: Record<string, unknown> | undefined, user: UserScope): Promise<Record<string, unknown>> {
+    const name = advancedParamOf(page.def.filters);
+    const now = this.deps.now();
+    let rest = raw;
+    let filter: AdvancedGroup | undefined;
+    if (name && raw && Object.hasOwn(raw, name)) {
+      const { [name]: rawFilter, ...others } = raw;
+      rest = others;
+      if (page.def.filters!.advanced!.dialect !== 'client') {
+        try {
+          filter = parseAdvanced(page.def.filters!.advanced!, rawFilter, now);
+        } catch (err) {
+          if (err instanceof AdvancedFilterError) throw new InvalidParams(err.issues);
+          throw err;
+        }
+      }
+    }
+    const values = await resolveParams(page.def.params, rest, { user, env: this.deps.env(), now: now.toISOString() });
+    return filter && name ? { ...values, [name]: filter } : values;
   }
 
   datasource(page: LoadedPage, name: string): Datasource {
@@ -325,7 +367,7 @@ export class DatasourceRunner {
     if (ds.requires?.portalRoles) this.assertAccess(user.roles, ds.requires, `Datasource ${input.datasource}`);
     const depNames = this.dependencies(page, input.datasource);
     const depValues = depNames.length ? (input.deps ?? (await this.resolveDeps(input, depNames))) : {};
-    const scope = { ...this.scope(user, input.params), ds: depValues };
+    const scope = this.datasourceScope(page, ds, user, input.params, depValues);
 
     if (ds.when !== undefined) {
       const ok = typeof ds.when === 'boolean' ? ds.when : await this.expr(() => renderString(ds.when as string, scope), 'when');

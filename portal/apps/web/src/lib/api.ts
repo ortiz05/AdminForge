@@ -1,4 +1,4 @@
-import { ApiErrorBody } from '@adminforge/schemas';
+import { parseApiError } from './contracts';
 import { browser } from './browser';
 
 /** Anything with zod's `parse` — the contracts in @adminforge/schemas, or a small hand-written guard. */
@@ -89,9 +89,9 @@ export async function api<T = unknown>(
   const data = text ? parseJson(text) : undefined;
 
   if (!res.ok) {
-    const parsed = ApiErrorBody.safeParse(data);
+    const parsed = parseApiError(data);
     const correlation = res.headers.get('x-correlation-id') ?? undefined;
-    if (!parsed.success) {
+    if (!parsed) {
       throw new ApiRequestError(
         res.status,
         `http_${res.status}`,
@@ -100,7 +100,7 @@ export async function api<T = unknown>(
         correlation,
       );
     }
-    const err = parsed.data.error;
+    const err = parsed.error;
     if (res.status === 401 && err.login) browser.assign(loginUrl(err.login));
     throw new ApiRequestError(
       res.status,

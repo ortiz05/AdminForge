@@ -41,7 +41,6 @@ params:
       - { value: Registered, label: MFA registered }
       - { value: NotRegistered, label: Not MFA registered }
   department: { type: string, label: Department, facet: true }
-  adv: { type: string, hidden: true, label: Advanced filter }
 
 filters:
   search: q
@@ -85,8 +84,8 @@ datasources:
         $select: id,displayName,userPrincipalName,mail,accountEnabled,userType,department,jobTitle,companyName,officeLocation,usageLocation,employeeId,createdDateTime,onPremisesSyncEnabled,onPremisesLastSyncDateTime,assignedLicenses,externalUserState,signInActivity
         $count: true
         $top: 100
-        # Every user-supplied value goes through $odata() / $odataSearch(); empty clauses drop out. `adv` is the
-        # query builder's server-compiled filter.
+        # Every user-supplied value goes through $odata() / $odataSearch(); empty clauses drop out. `advanced` is
+        # the query builder's filter, validated against filters.advanced.fields and compiled to OData by the server.
         $filter: >-
           ${ $join([
                params.userType != 'All' ? "userType eq " & $odata(params.userType),
@@ -97,7 +96,7 @@ datasources:
                params.licensed = 'Unlicensed' ? "assignedLicenses/$count eq 0",
                params.source = 'Synced' ? "onPremisesSyncEnabled eq true",
                params.source = 'Cloud' ? "NOT(onPremisesSyncEnabled eq true)",
-               params.adv
+               advanced
              ][$], ' and ') }
         $search: >-
           ${ params.q ? '"displayName:' & $odataSearch(params.q) & '" OR "userPrincipalName:' & $odataSearch(params.q) & '"' }

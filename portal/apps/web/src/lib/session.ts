@@ -1,12 +1,13 @@
 import { createContext, useContext } from 'react';
 import { queryOptions, useQuery } from '@tanstack/react-query';
-import { MeResponse, NavResponse } from '@adminforge/schemas';
+import type { MeResponse } from '@adminforge/schemas';
+import { meContract, navContract } from './contracts';
 import { api, rememberCsrf } from './api';
 
 export const meQuery = queryOptions({
   queryKey: ['me'] as const,
   queryFn: async ({ signal }) => {
-    const me = await api('/api/me', { schema: MeResponse, signal });
+    const me = await api('/api/me', { schema: meContract, signal });
     rememberCsrf(me.csrf);
     return me;
   },
@@ -16,7 +17,7 @@ export const meQuery = queryOptions({
 
 export const navQuery = queryOptions({
   queryKey: ['nav'] as const,
-  queryFn: ({ signal }) => api('/api/nav', { schema: NavResponse, signal }),
+  queryFn: ({ signal }) => api('/api/nav', { schema: navContract, signal }),
   staleTime: 5 * 60_000,
 });
 

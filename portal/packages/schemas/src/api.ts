@@ -1,7 +1,8 @@
 import { z } from 'zod';
 
-/** Portal roles = app roles on the Read app, assigned to groups (§5.3). */
-export const PORTAL_ROLES = ['Portal.Reader', 'Portal.Operator', 'Playbook.Author', 'Playbook.Approver', 'Portal.Admin'] as const;
+import { PORTAL_ROLES } from './constants';
+
+export { PORTAL_ROLES };
 export const PortalRole = z.enum(PORTAL_ROLES);
 export type PortalRole = z.infer<typeof PortalRole>;
 

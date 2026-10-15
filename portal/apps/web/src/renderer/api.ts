@@ -96,6 +96,7 @@ function readOutcome(raw: unknown): DatasourceOutcome {
         code: typeof raw.error.code === 'string' ? raw.error.code : undefined,
         message: typeof raw.error.message === 'string' ? raw.error.message : 'The data source failed.',
         hint: typeof raw.error.hint === 'string' ? raw.error.hint : undefined,
+        correlationId: typeof raw.error.correlationId === 'string' ? raw.error.correlationId : undefined,
       },
     };
   return {
@@ -184,7 +185,9 @@ export async function loadNextPage(
 export function toWidgetError(e: unknown): WidgetError {
   if (e instanceof ApiRequestError)
     return { code: e.code, message: e.message, hint: e.hint, correlationId: e.correlationId };
-  return { message: e instanceof Error ? e.message : 'The request failed.' };
+  return {
+    message: 'AdminForge couldn’t load this data. Try again; if it keeps happening, reload the page.',
+  };
 }
 
 // ── Capabilities ────────────────────────────────────────────────────────────────────────────────────

@@ -1,3 +1,4 @@
+import { ApiRequestError } from '@adminforge/web/src/lib/api';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
@@ -65,13 +66,20 @@ describe('ArmControl · read mode', () => {
 
   it('shows why arming failed and lets you try again', async () => {
     const onArm = vi.fn(async () => {
-      throw new Error('Your account is not assigned to the Write app.');
+      throw new ApiRequestError(
+        403,
+        'forbidden',
+        'Arming write access needs the Portal.Operator role.',
+        'Ask a portal administrator to add you to the AdminForge Operator group.',
+      );
     });
     render(<Harness onArm={onArm} />);
     await userEvent.click(screen.getByRole('button', { name: 'Arm write access' }));
     await userEvent.type(await screen.findByLabelText('Reason'), 'Quarterly review');
     await userEvent.click(screen.getByRole('button', { name: 'Continue to sign-in' }));
-    expect(await screen.findByRole('alert')).toHaveTextContent('not assigned to the Write app');
+    // The message and the next step (which group to join), not just the message.
+    expect(await screen.findByRole('alert')).toHaveTextContent('needs the Portal.Operator role');
+    expect(screen.getByRole('alert')).toHaveTextContent('AdminForge Operator group');
     expect(screen.getByRole('button', { name: 'Continue to sign-in' })).not.toHaveAttribute('aria-busy');
   });
 

@@ -107,7 +107,8 @@ export async function schedulesApp(o: SchedulesAppOptions = {}) {
     return {
       record,
       headers,
-      get: (url: string) => app.inject({ method: 'GET', url, headers }),
+      get: (url: string, extra: Record<string, string> = {}) =>
+        app.inject({ method: 'GET', url, headers: { ...headers, ...extra } }),
       post: (url: string, payload: unknown = {}) =>
         app.inject({ method: 'POST', url, headers, payload: payload as Record<string, unknown> }),
       patch: (url: string, payload: unknown) =>

@@ -26,8 +26,10 @@ function identityError(err: unknown): IdentityUnavailable | undefined {
 
 /** API errors (policy denials, configuration) become non-retryable step errors with their code and hint. */
 function stepError(err: AppError): StepError {
-  const hint = err.extras.hint ? ` ${err.extras.hint}` : '';
-  return new StepError(err.code, `${err.message}${hint}`, { status: err.status });
+  return new StepError(err.code, err.message, {
+    status: err.status,
+    ...(err.extras.hint ? { hint: err.extras.hint } : {}),
+  });
 }
 
 /** OutboundPort over the API's OutboundExecutor (policy → token → connector). */

@@ -143,6 +143,7 @@ describe.skipIf(!url)('Postgres-backed stores', () => {
       nonce: 'n',
       returnTo: '/',
       sessionIdHash: 'h',
+      bindingHash: 'b',
       details: { minutes: 30, reason: 'Testing arm' },
       expiresAt,
     });
@@ -153,6 +154,7 @@ describe.skipIf(!url)('Postgres-backed stores', () => {
       nonce: 'n',
       returnTo: '/',
       sessionIdHash: 'h',
+      bindingHash: 'b',
       details: { minutes: 30, reason: 'Testing arm' },
       expiresAt,
     });
@@ -164,6 +166,7 @@ describe.skipIf(!url)('Postgres-backed stores', () => {
       nonce: 'n',
       returnTo: '/',
       sessionIdHash: null,
+      bindingHash: null,
       details: null,
       expiresAt: new Date(Date.now() - 1),
     });

@@ -79,7 +79,7 @@ export function liveRunner(opts: {
               hint:
                 res.status === 'timeout'
                   ? `Scripts run for at most ${job.timeoutSeconds} s.`
-                  : 'See the runner logs for the script error.',
+                  : 'Try again. If it keeps failing, give a portal administrator the reference: the PowerShell runner log has the script error.',
             },
           );
         return { data: outputs };

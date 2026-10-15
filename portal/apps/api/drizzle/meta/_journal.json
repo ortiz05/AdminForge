@@ -29,6 +29,13 @@
       "when": 1792047611036,
       "tag": "0003_schedule_approved_target",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1792048971586,
+      "tag": "0004_preauth_binding",
+      "breakpoints": true
     }
   ]
 }

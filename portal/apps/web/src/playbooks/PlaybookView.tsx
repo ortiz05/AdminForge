@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, useState } from 'react';
+import { errorText } from '../lib/errors';
 import {
   Button,
   CodeBlock,
@@ -350,7 +351,7 @@ export function PlaybookSections({ flow, problems }: { flow: PlaybookFlow; probl
           )}
           {flow.failure instanceof ApiRequestError && flow.failure.correlationId && (
             <p className="mt-2">
-              <IdChip value={flow.failure.correlationId} label="Correlation ID" />
+              <IdChip value={flow.failure.correlationId} label="Reference" />
             </p>
           )}
         </Callout>
@@ -382,7 +383,7 @@ function RunConfirmDialog({ flow, label }: { flow: PlaybookFlow; label: string }
       flow.closeConfirm();
     } catch (e) {
       if (isConfirmationError(e)) setError((e as Error).message);
-      else if (!isPreviewError(e)) setFailure((e as Error).message);
+      else if (!isPreviewError(e)) setFailure(errorText(e));
     } finally {
       setPending(false);
     }

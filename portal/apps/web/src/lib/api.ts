@@ -52,16 +52,16 @@ export interface RequestOptions<T> {
   signal?: AbortSignal;
   /** Send the CSRF header on a GET too (reads with a side effect, e.g. fetching a show-once secret). */
   csrf?: boolean;
+  /** Internal: a stale CSRF token is refreshed and the request retried once. */
+  csrfRetried?: boolean;
 }
 
 /**
  * fetch for the BFF: same-origin cookies, CSRF header on writes, typed errors, contract validation.
  * A 401 that carries `error.login` sends the browser to sign in.
  */
-export async function api<T = unknown>(
-  path: string,
-  { method = 'GET', body, schema, signal, csrf }: RequestOptions<T> = {},
-): Promise<T> {
+export async function api<T = unknown>(path: string, options: RequestOptions<T> = {}): Promise<T> {
+  const { method = 'GET', body, schema, signal, csrf, csrfRetried } = options;
   const headers: Record<string, string> = { Accept: 'application/json' };
   if (body !== undefined) headers['Content-Type'] = 'application/json';
   if ((method !== 'GET' || csrf) && csrfToken) headers[CSRF_HEADER] = csrfToken;
@@ -101,6 +101,9 @@ export async function api<T = unknown>(
       );
     }
     const err = parsed.error;
+    // The page's CSRF token went stale (signed in again in another tab): take the current one and retry once.
+    if (res.status === 403 && err.code === 'csrf' && !csrfRetried && (await refreshCsrf(signal)))
+      return api(path, { ...options, csrfRetried: true });
     if (res.status === 401 && err.login) browser.assign(loginUrl(err.login));
     throw new ApiRequestError(
       res.status,
@@ -123,6 +126,23 @@ export async function api<T = unknown>(
       'The API and the web app may be on different versions. Reload the page; if it persists, tell a Portal Admin.',
       res.headers.get('x-correlation-id') ?? undefined,
     );
+  }
+}
+
+/** Re-reads the session's CSRF token from /api/me; false when there is no session. */
+async function refreshCsrf(signal?: AbortSignal): Promise<boolean> {
+  try {
+    const res = await fetch('/api/me', {
+      headers: { Accept: 'application/json' },
+      credentials: 'same-origin',
+      signal,
+    });
+    const me = res.ok ? parseJson(await res.text()) : undefined;
+    if (!isRecord(me) || typeof me.csrf !== 'string') return false;
+    rememberCsrf(me.csrf);
+    return true;
+  } catch {
+    return false;
   }
 }
 

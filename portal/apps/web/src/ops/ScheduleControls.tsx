@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { errorDescription } from '../lib/errors';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { Button, ConfirmDialog, PlayIcon, StatusPill, Switch, useToast } from '@adminforge/ui';
@@ -43,7 +44,7 @@ export function ScheduleToggle({ schedule, withLabel }: { schedule: ScheduleItem
       void queryClient.invalidateQueries({ queryKey: ['approvals'] });
     },
     onError: (e) =>
-      toast({ tone: 'crit', title: 'The schedule didn’t change', description: (e as Error).message }),
+      toast({ tone: 'crit', title: 'The schedule didn’t change', description: errorDescription(e) }),
   });
 
   if (schedule.pendingApprovalId && !schedule.enabled)
@@ -109,7 +110,7 @@ export function RunNowButton({ schedule, size = 'sm' }: { schedule: ScheduleItem
       void queryClient.invalidateQueries({ queryKey: ['schedule-runs', schedule.key] });
     },
     onError: (e) =>
-      toast({ tone: 'crit', title: `${schedule.title} didn’t start`, description: (e as Error).message }),
+      toast({ tone: 'crit', title: `${schedule.title} didn’t start`, description: errorDescription(e) }),
   });
   return (
     <>

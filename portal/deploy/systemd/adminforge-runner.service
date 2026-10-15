@@ -10,8 +10,9 @@ Type=simple
 WorkingDirectory=%h/AdminForge/portal/apps/runner
 ExecStart=/usr/bin/env node dist/main.js
 Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
-# The runner reads only process.env (it never parses the env file itself).
-EnvironmentFile=%h/.config/adminforge/dev.env
+# The runner reads only process.env, and gets only its own file: RUNNER_SHARED_KEY (the same value as in dev.env).
+# Never point it at dev.env, which holds the API's client secrets and token-cache key.
+EnvironmentFile=%h/.config/adminforge/dev.runner.env
 Environment=PWSH_PATH=%h/.local/bin/pwsh
 # Az.Accounts probes the desktop keyring at import (no D-Bus in user services): import it on demand instead.
 Environment=RUNNER_PRELOAD_MODULES=graph,exchange,teams,sharepoint

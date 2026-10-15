@@ -1,4 +1,5 @@
 import { useMemo, type ReactNode } from 'react';
+import { errorDescription } from '../lib/errors';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import type { Playbook, Runbook } from '@adminforge/schemas';
@@ -257,7 +258,7 @@ export function RunPage({ id }: { id: string }) {
       void queryClient.invalidateQueries({ queryKey: activeRunsQueryKey });
     },
     onError: (e) =>
-      toast({ tone: 'crit', title: 'The run wasn’t cancelled', description: (e as Error).message }),
+      toast({ tone: 'crit', title: 'The run wasn’t cancelled', description: errorDescription(e) }),
   });
   const resume = useMutation({
     mutationFn: () => api(`/api/runs/${encodeURIComponent(id)}/resume`, { method: 'POST' }),
@@ -265,8 +266,7 @@ export function RunPage({ id }: { id: string }) {
       toast({ tone: 'info', title: 'Run resumed' });
       refresh();
     },
-    onError: (e) =>
-      toast({ tone: 'crit', title: 'The run didn’t resume', description: (e as Error).message }),
+    onError: (e) => toast({ tone: 'crit', title: 'The run didn’t resume', description: errorDescription(e) }),
   });
 
   const crumbs = [{ label: 'Runs', href: '/runs' }, { label: run?.title ?? 'Run' }];

@@ -47,8 +47,8 @@ export function approvalRoutes(
     const body = parseBody(ApprovalBody, request.body);
     const approval = schedules ? await schedules.service.getApproval(request.params.id) : null;
     if (!approval)
-      throw new AppError(404, 'approval_not_found', 'No schedule approval with that id.', {
-        hint: 'Run approvals are decided with POST /api/runs/:runId/approvals/:stepId.',
+      throw new AppError(404, 'approval_not_found', 'That approval request no longer exists.', {
+        hint: 'It may have been decided, withdrawn or expired. Open Approvals to see what is waiting for you.',
       });
     return schedules!.service.decide(callerOf(request), request.params.id, body);
   });

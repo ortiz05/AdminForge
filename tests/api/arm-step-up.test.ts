@@ -1,5 +1,6 @@
 import { STEP_UP_MAX_AGE_SECONDS } from '@adminforge/api/src/auth/arm-routes';
 import {
+  bindingCookie,
   cookieFrom,
   entraConfig,
   FakeAuthClient,
@@ -22,7 +23,11 @@ async function setup(overrides: Record<string, string> = {}): Promise<Setup> {
 async function signInAndStartArm(t: Setup) {
   const login = await t.app.inject({ method: 'GET', url: '/auth/login?returnTo=%2F' });
   const state = new URL(login.headers.location as string).searchParams.get('state');
-  const cb = await t.app.inject({ method: 'GET', url: `/auth/callback?code=good-code&state=${state}` });
+  const cb = await t.app.inject({
+    method: 'GET',
+    url: `/auth/callback?code=good-code&state=${state}`,
+    headers: { cookie: bindingCookie(login)! },
+  });
   const cookie = cookieFrom(cb)!;
   const { me } = await getMe(t.app, cookie);
   const arm = await t.app.inject({
@@ -31,7 +36,10 @@ async function signInAndStartArm(t: Setup) {
     headers: { cookie, 'x-adminforge-csrf': me!.csrf },
     payload: { minutes: 30, reason: 'Disable test user' },
   });
-  return { cookie, armState: new URL(arm.json().redirect).searchParams.get('state')! };
+  return {
+    cookie: `${cookie}; ${bindingCookie(arm)}`,
+    armState: new URL(arm.json().redirect).searchParams.get('state')!,
+  };
 }
 
 const callback = (t: Setup, cookie: string, state: string) =>

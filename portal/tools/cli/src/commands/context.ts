@@ -70,6 +70,7 @@ export function provisionSettings(env: CliContext['env']): ProvisionSettings {
     tenantId,
     subscriptionId,
     primaryDomain: env.AF_PRIMARY_DOMAIN || undefined,
+    allowAutomationWrites: env.AF_AUTOMATION_ALLOW_WRITE_PERMISSIONS === 'true',
   };
 }
 

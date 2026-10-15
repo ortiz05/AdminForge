@@ -345,9 +345,9 @@ export function createJobRunner(deps: JobDeps): JobRunner {
           throw new AppError(
             501,
             'script_not_supported',
-            'Scheduled PowerShell scripts are not supported yet: the runner cannot run scripts as the automation identity (app-only Exchange/Teams/PnP). The script was not run.',
+            'Scheduled PowerShell scripts can’t run yet: the runner can’t sign in to Exchange, Teams or SharePoint as the automation identity. The script was not run.',
             {
-              hint: 'Backlog: PowerShell steps for scheduled (automation) runs.',
+              hint: 'Run the script from its page instead, or turn this schedule off. (Tracked in docs/backlog.md.)',
             },
           );
         case 'contentHealth': {

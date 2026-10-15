@@ -82,6 +82,25 @@ function parseBody(text: string, contentType: string): unknown {
   return /^\d+$/.test(text.trim()) ? Number(text) : text;
 }
 
+interface UpstreamErrorBody {
+  code?: string;
+  message?: string;
+  /** Log Analytics / Kusto: nested causes, the innermost is the specific one (e.g. a KQL syntax error). */
+  innererror?: UpstreamErrorBody;
+  /** ARM: per-field details. */
+  details?: Array<{ code?: string; message?: string }>;
+}
+
+/** The most specific message Microsoft gave: the innermost `innererror`, else the first ARM detail. */
+function specificMessage(err: UpstreamErrorBody): string | undefined {
+  let inner = err.innererror;
+  let deepest: string | undefined;
+  for (let depth = 0; inner && depth < 8; depth++, inner = inner.innererror)
+    if (typeof inner.message === 'string' && inner.message) deepest = inner.message;
+  const detail = err.details?.find((d) => typeof d.message === 'string' && d.message)?.message;
+  return (deepest ?? detail)?.slice(0, 500);
+}
+
 function errorFrom(
   status: number,
   statusText: string,
@@ -89,13 +108,15 @@ function errorFrom(
   headers: Headers,
   requestId?: string,
 ): ApiError {
-  const body = data as { error?: { code?: string; message?: string } | string; message?: string } | undefined;
+  const body = data as { error?: UpstreamErrorBody | string; message?: string } | undefined;
   const err = typeof body?.error === 'object' ? body.error : undefined;
   const code = err?.code ?? (typeof body?.error === 'string' ? body.error : `HTTP${status}`);
-  const message =
+  const outer =
     err?.message ??
     (typeof body?.message === 'string' ? body.message : undefined) ??
     (statusText || `HTTP ${status}`);
+  const specific = err ? specificMessage(err) : undefined;
+  const message = specific && specific !== outer ? `${outer.replace(/\.$/, '')}: ${specific}` : outer;
   const claims = /claims="([^"]+)"/.exec(headers.get('www-authenticate') ?? '')?.[1];
   return new ApiError(status, code, message, requestId, claims);
 }

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { errorDescription } from '../lib/errors';
 import { useQueryClient } from '@tanstack/react-query';
 import { useRouterState } from '@tanstack/react-router';
 import type { ArmRequest, MeResponse } from '@adminforge/schemas';
@@ -81,7 +82,7 @@ function SignedInShell({ me, children }: { me: MeResponse; children: ReactNode }
       );
       toast({ tone: 'ok', title: `Write access extended until ${timeOf(armedUntil)}` });
     } catch (e) {
-      toast({ tone: 'crit', title: 'Write access was not extended', description: (e as Error).message });
+      toast({ tone: 'crit', title: 'Write access was not extended', description: errorDescription(e) });
     }
   }, [queryClient, toast]);
 
@@ -97,7 +98,7 @@ function SignedInShell({ me, children }: { me: MeResponse; children: ReactNode }
       toast({
         tone: 'crit',
         title: 'Write access is still on',
-        description: `${(e as Error).message} Try Disarm again, or sign out.`,
+        description: <>{errorDescription(e)} Try Disarm again, or sign out.</>,
       });
     }
   }, [queryClient, refreshMe, toast]);
@@ -118,7 +119,7 @@ function SignedInShell({ me, children }: { me: MeResponse; children: ReactNode }
       const { redirect } = await api('/auth/logout', { method: 'POST', schema: RedirectResponse });
       browser.assign(redirect);
     } catch (e) {
-      toast({ tone: 'crit', title: 'Sign-out did not complete', description: (e as Error).message });
+      toast({ tone: 'crit', title: 'Sign-out did not complete', description: errorDescription(e) });
     }
   }, [toast]);
 

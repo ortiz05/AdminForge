@@ -4,7 +4,8 @@ import type { Config } from '../config';
 import { auditActor, type AppContext } from '../context';
 import { randomToken, sha256Hex } from '../security/tokens';
 import { isArmed, type SessionRecord } from './session-store';
-import { partitionKey } from './types';
+import { portalRoles } from './roles';
+import { partitionKey, ReauthRequired } from './types';
 
 declare module 'fastify' {
   interface FastifyRequest {
@@ -124,6 +125,7 @@ export async function dropWriteAccess(ctx: AppContext, session: SessionRecord): 
 export function registerSessions(app: FastifyInstance, ctx: AppContext) {
   const cookieName = sessionCookieName(ctx.config);
   const idleMs = ctx.config.SESSION_IDLE_MINUTES * 60_000;
+  const roleCheck = new RoleCheck(ctx);
   app.decorateRequest('session', null);
 
   // preHandler (not onRequest) so route rate limits reject floods before any session lookup.
@@ -160,6 +162,77 @@ export function registerSessions(app: FastifyInstance, ctx: AppContext) {
     if (now.getTime() - session.lastSeenAt.getTime() > TOUCH_INTERVAL_MS) {
       session = (await ctx.sessions.update(idHash, { lastSeenAt: now })) ?? session;
     }
-    request.session = session;
+    const current = await roleCheck.check(request, session, now);
+    if (!current) {
+      clearSessionCookie(ctx, reply);
+      return;
+    }
+    request.session = current;
   });
+}
+
+/** How often a session's roles are re-read from Entra (removals and disabled accounts take effect within this). */
+export const ROLE_RECHECK_MS = 5 * 60_000;
+const ROLE_RETRY_MS = 60_000;
+
+/**
+ * Roles come from the ID token at sign-in; this keeps them current for the session's lifetime. Every ROLE_RECHECK_MS
+ * the Read token is refreshed and `roles` re-read: changes are applied and audited, a session left without an
+ * AdminForge role ends, and so does one Entra won't refresh (disabled account, password reset, policy). Transient
+ * failures keep the session and retry after a minute.
+ */
+export class RoleCheck {
+  /** idHash → when the session's roles were last confirmed (in this process; a restart rechecks once). */
+  private readonly checked = new Map<string, number>();
+
+  constructor(private readonly ctx: AppContext) {}
+
+  async check(request: FastifyRequest, session: SessionRecord, now: Date): Promise<SessionRecord | null> {
+    const { ctx } = this;
+    if (!ctx.auth || !session.readAccountId) return session;
+    const last = this.checked.get(session.idHash) ?? session.createdAt.getTime();
+    if (now.getTime() - last < ROLE_RECHECK_MS) return session;
+    if (this.checked.size > 50_000) this.checked.clear();
+    let roles: string[];
+    try {
+      const claims = await ctx.auth.refreshClaims({
+        kind: 'read',
+        partitionKey: partitionKey('read', session.idHash),
+        homeAccountId: session.readAccountId,
+      });
+      roles = portalRoles(claims);
+    } catch (err) {
+      if (!(err instanceof ReauthRequired)) {
+        request.log.warn({ err: { name: (err as Error).name } }, 'role refresh failed; retrying shortly');
+        this.checked.set(session.idHash, now.getTime() - ROLE_RECHECK_MS + ROLE_RETRY_MS);
+        return session;
+      }
+      roles = [];
+    }
+    this.checked.set(session.idHash, now.getTime());
+    const same = roles.length === session.roles.length && roles.every((r) => session.roles.includes(r));
+    if (same) return session;
+    if (roles.length === 0) {
+      this.checked.delete(session.idHash);
+      await endSession(ctx, session);
+      await ctx.audit.append({
+        ...auditActor(ctx, request, session),
+        action: 'session.access_revoked',
+        result: 'success',
+        details: { previousRoles: session.roles },
+      });
+      return null;
+    }
+    const updated = (await ctx.sessions.update(session.idHash, { roles })) ?? { ...session, roles };
+    await ctx.audit.append({
+      ...auditActor(ctx, request, updated),
+      action: 'session.roles_changed',
+      result: 'success',
+      details: { previousRoles: session.roles, roles },
+    });
+    // Losing Operator also ends write access right away.
+    if (!roles.includes('Portal.Operator') && (updated.writeAccountId || updated.writeExpiresAt))
+      return dropWriteAccess(ctx, updated);
+    return updated;
+  }
 }

@@ -1,7 +1,16 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { cookieFrom, entraConfig, FakeAuthClient, json, makeApp, mockConfig, orgResponse } from './helpers';
+import {
+  cookieFrom,
+  entraConfig,
+  FakeAuthClient,
+  json,
+  makeApp,
+  mockConfig,
+  orgResponse,
+  bindingCookie,
+} from './helpers';
 
 /**
  * Self-contained content + fixtures for the content/platform API tests (synthetic only), so they don't depend on
@@ -551,7 +560,11 @@ export async function liveApp(
   const t = await makeApp(entraConfig(env.overrides), { auth, fetch });
   const login = await t.app.inject({ method: 'GET', url: '/auth/login' });
   const state = new URL(login.headers.location as string).searchParams.get('state')!;
-  const cb = await t.app.inject({ method: 'GET', url: `/auth/callback?code=c&state=${state}` });
+  const cb = await t.app.inject({
+    method: 'GET',
+    url: `/auth/callback?code=c&state=${state}`,
+    headers: { cookie: bindingCookie(login)! },
+  });
   const cookie = cookieFrom(cb)!;
   const me = await t.app.inject({ method: 'GET', url: '/api/me', headers: { cookie } });
   return { ...t, auth, calls, cookie, csrf: (me.json() as { csrf: string }).csrf };

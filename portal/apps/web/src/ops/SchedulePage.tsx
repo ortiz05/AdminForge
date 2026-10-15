@@ -166,8 +166,10 @@ function History({ s }: { s: ScheduleItem }) {
                       <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
                         {r.artifact && (
                           <a
+                            // No `download` attribute: the server's Content-Disposition saves the file, and a failure
+                            // (expired file, missing role, signed out) opens the explained problem page instead of
+                            // saving the error as the report.
                             href={r.artifact.href}
-                            download={r.artifact.name}
                             title={r.artifact.name}
                             aria-label={`Download ${r.artifact.name}${r.artifact.size !== null ? ` (${formatBytes(r.artifact.size)})` : ''}`}
                             className="inline-flex items-center gap-1.5 whitespace-nowrap font-medium text-accent hover:underline"

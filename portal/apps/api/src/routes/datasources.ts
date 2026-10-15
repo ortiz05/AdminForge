@@ -58,6 +58,9 @@ export function datasourceRoutes(api: FastifyInstance, ctx: AppContext) {
       },
       names,
     );
+    // Each failed datasource carries the request's reference, so a widget's error can be traced in the logs.
+    for (const r of Object.values(results) as Array<{ error?: Record<string, unknown> }>)
+      if (r?.error && typeof r.error === 'object') r.error.correlationId = request.id;
     return { page: page.key, version: page.version, sha256: page.sha256, results };
   });
 }

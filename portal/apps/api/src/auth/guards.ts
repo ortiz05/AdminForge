@@ -19,9 +19,18 @@ export function requireSessionWithCsrf(request: FastifyRequest): SessionRecord {
 export const hasRole = (session: Pick<SessionRecord, 'roles'>, role: PortalRole) =>
   session.roles.includes(role);
 
+/** The SG-AdminForge-<label>-<Role> groups grant each role (portal/tools/cli/src/provision/entra-desired.ts). */
+const ROLE_GROUP: Record<PortalRole, string> = {
+  'Portal.Reader': 'Reader',
+  'Portal.Operator': 'Operator',
+  'Playbook.Author': 'Playbook Author',
+  'Playbook.Approver': 'Playbook Approver',
+  'Portal.Admin': 'Admin',
+};
+
 export function requireRole(session: SessionRecord, role: PortalRole, action: string) {
   if (!hasRole(session, role))
     throw new AppError(403, 'forbidden', `${action} needs the ${role} role.`, {
-      hint: `Ask a portal administrator to add you to the ${role} group.`,
+      hint: `Ask a portal administrator to add you to the AdminForge ${ROLE_GROUP[role] ?? role} group (SG-AdminForge-…-${role}). It applies within 5 minutes.`,
     });
 }

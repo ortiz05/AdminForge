@@ -15,7 +15,8 @@ export function assertCsrf(request: FastifyRequest) {
     throw new AppError(
       403,
       'csrf',
-      'Missing or invalid X-AdminForge-CSRF header. Reload the page and try again.',
+      'This page is out of date with your sign-in (for example, you signed in again in another tab).',
+      { hint: 'Reload the page, then try again. Nothing was changed.' },
     );
   }
 }

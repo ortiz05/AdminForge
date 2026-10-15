@@ -8,6 +8,7 @@ import {
   acrsOf,
   authContextClaims,
   beginRoundTrip,
+  browserBinding,
   finishRoundTrip,
   providerDescription,
   providerError,
@@ -104,7 +105,7 @@ export function entraArmRoutes(app: FastifyInstance, ctx: AppContext) {
   app.post<{ Querystring: { returnTo?: string } }>(
     '/auth/arm',
     { config: { rateLimit: ARM_RATE_LIMIT } },
-    async (request) => {
+    async (request, reply) => {
       const { session, body } = armPreconditions(request);
       if (!writeAppConfigured(cfg)) {
         throw new AppError(
@@ -118,6 +119,7 @@ export function entraArmRoutes(app: FastifyInstance, ctx: AppContext) {
       }
       const { state, nonce, challenge } = await beginRoundTrip(ctx, {
         kind: 'write',
+        binding: browserBinding(ctx, request, reply),
         returnTo: safeReturnTo(request.query.returnTo),
         sessionIdHash: session.idHash,
         details: { minutes: body.minutes, reason: body.reason },
@@ -142,7 +144,7 @@ export function entraArmRoutes(app: FastifyInstance, ctx: AppContext) {
     '/auth/arm/callback',
     { config: { rateLimit: ARM_RATE_LIMIT } },
     async (request, reply) => {
-      const pending = await finishRoundTrip(ctx, 'write', request.query.state);
+      const pending = await finishRoundTrip(ctx, 'write', request.query.state, request);
       const session = request.session;
       if (!session || session.idHash !== pending.sessionIdHash) {
         throw new AppError(

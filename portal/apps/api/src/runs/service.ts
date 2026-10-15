@@ -325,7 +325,7 @@ export class RunService {
         'preview_required',
         'Preview this change first — the confirmation is based on what the preview found.',
         {
-          hint: 'Run it as a dry run, then send previewRunId (and the confirmation) with the real run.',
+          hint: 'Select Preview, check what it will change, then run it.',
         },
       );
     const stale = (why: string) =>

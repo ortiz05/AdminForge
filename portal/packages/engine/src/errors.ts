@@ -36,6 +36,8 @@ export class StepError extends Error {
       requestId?: string;
       retryAfterMs?: number;
       details?: Record<string, unknown>;
+      /** Next step for the person (shown with the run's failure). */
+      hint?: string;
     } = {},
   ) {
     super(message);
@@ -76,15 +78,19 @@ export function toRunError(err: unknown, at?: { stepId: string; path: string }):
       ...(err.opts.status !== undefined ? { status: err.opts.status } : {}),
       ...(err.opts.requestId ? { requestId: err.opts.requestId } : {}),
       ...(err.opts.details ? { details: err.opts.details } : {}),
+      ...(err.opts.hint ? { hint: err.opts.hint } : {}),
     };
   }
   if (err instanceof ApiError) {
+    // The API's OutboundError subclass carries an actionable hint (which role, licence or permission is missing).
+    const hint = (err as { hint?: unknown }).hint;
     return {
       code: err.code || `HTTP${err.status}`,
       message: err.message,
       ...where,
       status: err.status,
       ...(err.requestId ? { requestId: err.requestId } : {}),
+      ...(typeof hint === 'string' && hint ? { hint } : {}),
     };
   }
   if (err instanceof ExpressionError) {

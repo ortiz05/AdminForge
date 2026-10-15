@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { Brand, button, cn, IdChip, useCopy } from '@adminforge/ui';
+import { Brand, button, cn, useCopy } from '@adminforge/ui';
 import { ACTION_LABEL, actionHref, problemCopy, type ProblemAction } from './sign-in-problems';
 
 /** Pages that render without a session (the shell would otherwise send the browser straight back to sign-in). */
@@ -9,7 +9,7 @@ function PublicLayout({ children }: { children: ReactNode }) {
   return (
     <main className="flex min-h-dvh flex-col items-center justify-center gap-8 bg-canvas p-6">
       <Brand size="lg" />
-      <section className="w-full max-w-lg rounded-lg border border-line bg-panel p-6 shadow-sm sm:p-8">
+      <section className="w-full max-w-xl rounded-lg border border-line bg-panel p-6 shadow-sm sm:p-8">
         {children}
       </section>
     </main>
@@ -43,9 +43,9 @@ export function SignedOutPage() {
 
 function DetailRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
-      <dt className="w-32 text-fg-3">{label}</dt>
-      <dd className="font-mono break-all">{value}</dd>
+    <div className="flex items-baseline gap-x-4">
+      <dt className="w-28 shrink-0 text-fg-3">{label}</dt>
+      <dd className="min-w-0 flex-1 font-mono text-xs break-all">{value}</dd>
     </div>
   );
 }
@@ -53,7 +53,7 @@ function DetailRow({ label, value }: { label: string; value: string }) {
 export interface ProblemSearch {
   code?: string;
   ref?: string;
-  during?: 'arm';
+  during?: 'arm' | 'download';
   detail?: string;
 }
 
@@ -65,14 +65,14 @@ export function validateProblemSearch(search: Record<string, unknown>): ProblemS
   return {
     code: pick(search.code),
     ref: pick(search.ref),
-    during: search.during === 'arm' ? 'arm' : undefined,
+    during: search.during === 'arm' || search.during === 'download' ? search.during : undefined,
     detail: pick(search.detail),
   };
 }
 
 /** A failed sign-in or write-access verification, explained (the API redirects here instead of showing JSON). */
 export function SignInProblemPage({ search, now = new Date() }: { search: ProblemSearch; now?: Date }) {
-  const during = search.during === 'arm' ? 'arm' : 'sign-in';
+  const during = search.during ?? 'sign-in';
   const copy = problemCopy(search.code, during);
   const [copied, copyText] = useCopy();
   const details = [
@@ -89,7 +89,7 @@ export function SignInProblemPage({ search, now = new Date() }: { search: Proble
   return (
     <PublicLayout>
       <p className="text-xs font-semibold tracking-wide text-fg-3 uppercase">
-        {during === 'arm' ? 'Write access' : 'Sign-in'}
+        {during === 'arm' ? 'Write access' : during === 'download' ? 'Report download' : 'Sign-in'}
       </p>
       <h1 className="mt-1 font-display text-xl font-semibold text-fg">{copy.title}</h1>
       <p className="mt-3 text-fg-2">{copy.body}</p>
@@ -104,14 +104,7 @@ export function SignInProblemPage({ search, now = new Date() }: { search: Proble
         <dl className="mt-3 flex flex-col gap-2 text-fg-2">
           {search.code && <DetailRow label="Error code" value={search.code} />}
           {search.detail && <DetailRow label="Microsoft code" value={search.detail} />}
-          {search.ref && (
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-              <dt className="w-32 text-fg-3">Reference</dt>
-              <dd>
-                <IdChip value={search.ref} label="Reference" showLabel={false} full />
-              </dd>
-            </div>
-          )}
+          {search.ref && <DetailRow label="Reference" value={search.ref} />}
           <DetailRow label="Time" value={now.toISOString()} />
         </dl>
         {copy.admin && <p className="mt-3 text-fg-2">{copy.admin}</p>}

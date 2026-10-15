@@ -1,6 +1,7 @@
 import { ReauthRequired } from '@adminforge/api/src/auth/types';
 import { ApiErrorBody, MeResponse } from '@adminforge/schemas';
 import {
+  bindingCookie,
   cookieFrom,
   entraConfig,
   FakeAuthClient,
@@ -30,12 +31,21 @@ async function startLogin(t: Setup, returnTo = '/p/identity.users') {
   });
   expect(res.statusCode).toBe(302);
   const url = new URL(res.headers.location as string);
-  return { url, state: url.searchParams.get('state')!, nonce: url.searchParams.get('nonce')! };
+  return {
+    url,
+    state: url.searchParams.get('state')!,
+    nonce: url.searchParams.get('nonce')!,
+    pre: bindingCookie(res)!,
+  };
 }
 
 async function signIn(t: Setup) {
-  const { state } = await startLogin(t);
-  const res = await t.app.inject({ method: 'GET', url: `/auth/callback?code=good-code&state=${state}` });
+  const { state, pre } = await startLogin(t);
+  const res = await t.app.inject({
+    method: 'GET',
+    url: `/auth/callback?code=good-code&state=${state}`,
+    headers: { cookie: pre },
+  });
   expect(res.statusCode).toBe(302);
   const cookie = cookieFrom(res)!;
   const { me } = await getMe(t.app, cookie);
@@ -83,19 +93,33 @@ describe('Entra sign-in routes (fake AuthClient)', () => {
   });
 
   it('rejects an expired state', async () => {
-    const { state } = await startLogin(t);
+    const { state, pre } = await startLogin(t);
     t.clock.advance(10 * MINUTE + 1);
-    const res = await t.app.inject({ method: 'GET', url: `/auth/callback?code=good-code&state=${state}` });
+    const res = await t.app.inject({
+      method: 'GET',
+      url: `/auth/callback?code=good-code&state=${state}`,
+      headers: { cookie: pre },
+    });
     expect(res.statusCode).toBe(400);
     expect(res.json().error.code).toBe('invalid_state');
   });
 
   it('state is single use', async () => {
-    const { state } = await startLogin(t);
+    const { state, pre } = await startLogin(t);
     expect(
-      (await t.app.inject({ method: 'GET', url: `/auth/callback?code=good-code&state=${state}` })).statusCode,
+      (
+        await t.app.inject({
+          method: 'GET',
+          url: `/auth/callback?code=good-code&state=${state}`,
+          headers: { cookie: pre },
+        })
+      ).statusCode,
     ).toBe(302);
-    const replay = await t.app.inject({ method: 'GET', url: `/auth/callback?code=good-code&state=${state}` });
+    const replay = await t.app.inject({
+      method: 'GET',
+      url: `/auth/callback?code=good-code&state=${state}`,
+      headers: { cookie: pre },
+    });
     expect(replay.statusCode).toBe(400);
     expect(replay.json().error.code).toBe('invalid_state');
   });
@@ -126,8 +150,12 @@ describe('Entra sign-in routes (fake AuthClient)', () => {
 
   it('nonce mismatch → 400, no session, cache partition dropped, failure audited', async () => {
     t.auth.claims = () => ({ nonce: 'something-else' });
-    const { state } = await startLogin(t);
-    const res = await t.app.inject({ method: 'GET', url: `/auth/callback?code=good-code&state=${state}` });
+    const { state, pre } = await startLogin(t);
+    const res = await t.app.inject({
+      method: 'GET',
+      url: `/auth/callback?code=good-code&state=${state}`,
+      headers: { cookie: pre },
+    });
     expect(res.statusCode).toBe(400);
     expect(res.json().error.code).toBe('invalid_nonce');
     expect(cookieFrom(res)).toBeUndefined();
@@ -140,8 +168,12 @@ describe('Entra sign-in routes (fake AuthClient)', () => {
 
   it('tenant mismatch → 400 wrong_tenant, no session', async () => {
     t.auth.claims = () => ({ tid: '99999999-9999-4999-8999-999999999999' });
-    const { state } = await startLogin(t);
-    const res = await t.app.inject({ method: 'GET', url: `/auth/callback?code=good-code&state=${state}` });
+    const { state, pre } = await startLogin(t);
+    const res = await t.app.inject({
+      method: 'GET',
+      url: `/auth/callback?code=good-code&state=${state}`,
+      headers: { cookie: pre },
+    });
     expect(res.statusCode).toBe(400);
     expect(res.json().error.code).toBe('wrong_tenant');
     expect(t.sessions.rows.size).toBe(0);
@@ -149,21 +181,26 @@ describe('Entra sign-in routes (fake AuthClient)', () => {
 
   it('no portal role → 403 no_portal_role', async () => {
     t.auth.claims = () => ({ roles: ['Something.Else'] });
-    const { state } = await startLogin(t);
-    const res = await t.app.inject({ method: 'GET', url: `/auth/callback?code=good-code&state=${state}` });
+    const { state, pre } = await startLogin(t);
+    const res = await t.app.inject({
+      method: 'GET',
+      url: `/auth/callback?code=good-code&state=${state}`,
+      headers: { cookie: pre },
+    });
     expect(res.statusCode).toBe(403);
     expect(res.json().error.code).toBe('no_portal_role');
     expect(t.sessions.rows.size).toBe(0);
   });
 
   it('an Entra error redirect → a specific code, the AADSTS number as detail, no Entra text shown', async () => {
-    const { state } = await startLogin(t);
+    const { state, pre } = await startLogin(t);
     const description = encodeURIComponent(
       'AADSTS50105: The signed in user is not assigned to a role.\r\nTrace ID: abc',
     );
     const res = await t.app.inject({
       method: 'GET',
       url: `/auth/callback?error=access_denied&error_description=${description}&state=${state}`,
+      headers: { cookie: pre },
     });
     expect(res.statusCode).toBe(403);
     expect(res.json().error).toMatchObject({
@@ -174,8 +211,12 @@ describe('Entra sign-in routes (fake AuthClient)', () => {
   });
 
   it('a failed code redemption → 400 without a session', async () => {
-    const { state } = await startLogin(t);
-    const res = await t.app.inject({ method: 'GET', url: `/auth/callback?code=bad-code&state=${state}` });
+    const { state, pre } = await startLogin(t);
+    const res = await t.app.inject({
+      method: 'GET',
+      url: `/auth/callback?code=bad-code&state=${state}`,
+      headers: { cookie: pre },
+    });
     expect(res.statusCode).toBe(400);
     expect(res.json().error.code).toBe('signin_failed');
     expect(t.sessions.rows.size).toBe(0);
@@ -238,8 +279,12 @@ describe('Entra sign-in routes (fake AuthClient)', () => {
       }),
       { auth, fetch: async () => orgResponse() },
     );
-    const { state } = await startLogin({ ...prod, auth });
-    const res = await prod.app.inject({ method: 'GET', url: `/auth/callback?code=good-code&state=${state}` });
+    const { state, pre } = await startLogin({ ...prod, auth });
+    const res = await prod.app.inject({
+      method: 'GET',
+      url: `/auth/callback?code=good-code&state=${state}`,
+      headers: { cookie: pre },
+    });
     const set = setCookieHeader(res, '__Host-adminforge')!;
     expect(set).toMatch(/Secure/);
     expect(set).toMatch(/HttpOnly/);
@@ -271,12 +316,13 @@ describe('Entra arm / extend / disarm (fake AuthClient)', () => {
     });
   }
 
-  async function armCallback(cookie: string, redirect: string) {
-    const state = new URL(redirect).searchParams.get('state')!;
+  /** The callback in the browser that started arming: its binding cookie plus `cookie` (the session). */
+  async function armCallback(cookie: string, started: Awaited<ReturnType<Setup['app']['inject']>>) {
+    const state = new URL(started.json().redirect).searchParams.get('state')!;
     return t.app.inject({
       method: 'GET',
       url: `/auth/arm/callback?code=write-code&state=${state}`,
-      headers: { cookie },
+      headers: { cookie: `${cookie}; ${bindingCookie(started)}` },
     });
   }
 
@@ -311,7 +357,7 @@ describe('Entra arm / extend / disarm (fake AuthClient)', () => {
     expect(url.searchParams.get('prompt')).toBeNull();
 
     // Callback without the acrs claim → refused.
-    const refused = await armCallback(cookie, res.json().redirect);
+    const refused = await armCallback(cookie, res);
     expect(refused.statusCode).toBe(403);
     expect(refused.json().error.code).toBe('step_up_required');
     expect((await getMe(t.app, cookie)).me!.mode).toBe('read');
@@ -319,7 +365,7 @@ describe('Entra arm / extend / disarm (fake AuthClient)', () => {
     // Second attempt satisfies c1.
     t.auth.claims = (kind) => (kind === 'write' ? { acrs: ['c1'] } : {});
     const again = await armStart(cookie, csrf);
-    const ok = await armCallback(cookie, again.json().redirect);
+    const ok = await armCallback(cookie, again);
     expect(ok.statusCode).toBe(302);
     expect((await getMe(t.app, cookie)).me!.mode).toBe('armed');
     const armed = t.audit.rows.filter((r) => r.action === 'session.armed');
@@ -331,7 +377,7 @@ describe('Entra arm / extend / disarm (fake AuthClient)', () => {
     t = await setup({ WRITE_SESSION_MAX_MINUTES: '45' });
     const { cookie, csrf } = await signIn(t);
     const res = await armStart(cookie, csrf, { minutes: 120, reason: 'Maintenance window' });
-    const cb = await armCallback(cookie, res.json().redirect);
+    const cb = await armCallback(cookie, res);
     expect(cb.statusCode).toBe(302);
     expect(cb.headers.location).toBe('/');
     const [session] = [...t.sessions.rows.values()];
@@ -348,7 +394,7 @@ describe('Entra arm / extend / disarm (fake AuthClient)', () => {
     const { cookie, csrf } = await signIn(t);
     t.auth.claims = (kind) => (kind === 'write' ? { oid: '55555555-6666-4777-8888-999999999999' } : {});
     const res = await armStart(cookie, csrf);
-    const cb = await armCallback(cookie, res.json().redirect);
+    const cb = await armCallback(cookie, res);
     expect(cb.statusCode).toBe(403);
     expect(cb.json().error.code).toBe('user_mismatch');
     expect((await getMe(t.app, cookie)).me!.mode).toBe('read');
@@ -366,7 +412,7 @@ describe('Entra arm / extend / disarm (fake AuthClient)', () => {
     const a = await signIn(t);
     const b = await signIn(t);
     const res = await armStart(a.cookie, a.csrf);
-    const cb = await armCallback(b.cookie, res.json().redirect);
+    const cb = await armCallback(b.cookie, res);
     expect(cb.statusCode).toBe(401);
     expect(cb.json().error.code).toBe('session_mismatch');
     expect(t.auth.redeems.filter((r) => r.kind === 'write')).toHaveLength(0);
@@ -404,7 +450,7 @@ describe('Entra arm / extend / disarm (fake AuthClient)', () => {
     t = await setup();
     const { cookie, csrf } = await signIn(t);
     const res = await armStart(cookie, csrf);
-    await armCallback(cookie, res.json().redirect);
+    await armCallback(cookie, res);
     const h = { cookie, 'x-adminforge-csrf': csrf };
     expect(
       (await t.app.inject({ method: 'POST', url: '/auth/arm/extend', headers: h, payload: { minutes: 30 } }))

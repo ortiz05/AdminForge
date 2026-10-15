@@ -72,7 +72,7 @@ export function ErrorState({
               {code}
             </Badge>
           )}
-          {correlationId && <IdChip value={correlationId} label="Correlation ID" />}
+          {correlationId && <IdChip value={correlationId} label="Reference" />}
         </div>
       )}
       {action && <div className={s.actions()}>{action}</div>}

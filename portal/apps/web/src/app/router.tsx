@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createMemoryHistory, createRouter, RouterProvider } from '@tanstack/react-router';
 import { ToastProvider } from '@adminforge/ui';
 import { ApiRequestError } from '../lib/api';
+import { RouteError } from './RouteError';
 import { routeTree } from '../routeTree.gen';
 
 export function createQueryClient(): QueryClient {
@@ -24,6 +25,8 @@ export function createAppRouter(queryClient: QueryClient, { initialPath }: { ini
     context: { queryClient },
     defaultPreload: 'intent',
     scrollRestoration: true,
+    // Never TanStack's bare "Something went wrong!": the designed error panel with a next step and a reference.
+    defaultErrorComponent: RouteError,
     history: initialPath ? createMemoryHistory({ initialEntries: [initialPath] }) : undefined,
   });
 }

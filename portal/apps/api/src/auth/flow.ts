@@ -1,16 +1,41 @@
+import { timingSafeEqual } from 'node:crypto';
 import { CryptoProvider } from '@azure/msal-node';
+import type { FastifyReply, FastifyRequest } from 'fastify';
 import type { AppContext } from '../context';
 import { AppError } from '../errors';
-import { randomToken } from '../security/tokens';
+import { randomToken, sha256Hex } from '../security/tokens';
+import { sessionCookieName, sessionCookieOptions } from './session-plugin';
 import { PREAUTH_TTL_MS, type PreauthDetails, type PreauthRecord } from './preauth-store';
 import type { AppKind, IdClaims } from './types';
 
 const crypto = new CryptoProvider();
 
+/** The browser-binding cookie: random, per browser, HttpOnly; its hash ties a round trip to the browser that began it. */
+export const bindingCookieName = (cfg: AppContext['config']) => `${sessionCookieName(cfg)}-pre`;
+
+/**
+ * The browser's binding value, created (and refreshed) when a round trip starts. Without it, a callback URL captured
+ * from someone else's sign-in could be completed in a victim's browser (login CSRF / session swap).
+ */
+export function browserBinding(ctx: AppContext, request: FastifyRequest, reply: FastifyReply): string {
+  const name = bindingCookieName(ctx.config);
+  const existing = request.cookies[name];
+  const value = existing && /^[A-Za-z0-9_-]{43}$/.test(existing) ? existing : randomToken();
+  reply.setCookie(name, value, { ...sessionCookieOptions(ctx.config), maxAge: 24 * 3600 });
+  return value;
+}
+
 /** Starts an authorization-code round trip: random state + nonce, PKCE pair, 10-minute single-use record. */
 export async function beginRoundTrip(
   ctx: AppContext,
-  input: { kind: AppKind; returnTo: string; sessionIdHash?: string | null; details?: PreauthDetails | null },
+  input: {
+    kind: AppKind;
+    returnTo: string;
+    /** browserBinding() of the request that starts it. */
+    binding: string;
+    sessionIdHash?: string | null;
+    details?: PreauthDetails | null;
+  },
 ): Promise<{ state: string; nonce: string; challenge: string }> {
   const { verifier, challenge } = await crypto.generatePkceCodes();
   const record: PreauthRecord = {
@@ -20,6 +45,7 @@ export async function beginRoundTrip(
     nonce: randomToken(),
     returnTo: input.returnTo,
     sessionIdHash: input.sessionIdHash ?? null,
+    bindingHash: sha256Hex(input.binding),
     details: input.details ?? null,
     expiresAt: new Date(ctx.now().getTime() + PREAUTH_TTL_MS),
   };
@@ -33,15 +59,21 @@ const invalidState = () =>
     login: '/auth/login?returnTo=%2F',
   });
 
-/** Consumes the pending record for `state` (single use) and checks kind and expiry. */
+/** Consumes the pending record for `state` (single use) and checks kind, expiry and the browser binding. */
 export async function finishRoundTrip(
   ctx: AppContext,
   kind: AppKind,
   state: unknown,
+  request: FastifyRequest,
 ): Promise<PreauthRecord> {
   if (typeof state !== 'string' || state.length < 16 || state.length > 128) throw invalidState();
   const record = await ctx.preauth.take(state);
   if (!record || record.kind !== kind || record.expiresAt.getTime() <= ctx.now().getTime())
+    throw invalidState();
+  const binding = request.cookies[bindingCookieName(ctx.config)];
+  const expected = Buffer.from(record.bindingHash ?? '', 'utf8');
+  const actual = Buffer.from(binding ? sha256Hex(binding) : '', 'utf8');
+  if (!record.bindingHash || expected.length !== actual.length || !timingSafeEqual(expected, actual))
     throw invalidState();
   return record;
 }

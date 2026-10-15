@@ -85,6 +85,8 @@ export interface RunError {
   status?: number;
   /** Microsoft request-id of an upstream failure. */
   requestId?: string;
+  /** What the person can do about it (missing role, licence, PIM activation…), when the failure says. */
+  hint?: string;
   /** Set while compensation is in progress (a resumed run continues compensating). */
   compensating?: boolean;
   /** Compensations that failed (run → needs_review). */

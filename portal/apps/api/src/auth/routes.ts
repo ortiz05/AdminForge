@@ -1,5 +1,4 @@
 import { createGraphClient } from '@adminforge/connectors';
-import { PORTAL_ROLES, type PortalRole } from '@adminforge/schemas';
 import type { FastifyInstance } from 'fastify';
 import type { Config } from '../config';
 import { auditActor, type AppContext } from '../context';
@@ -7,6 +6,7 @@ import { AppError } from '../errors';
 import { randomToken, sha256Hex } from '../security/tokens';
 import {
   beginRoundTrip,
+  browserBinding,
   decodeClaimsParam,
   finishRoundTrip,
   providerDescription,
@@ -14,18 +14,16 @@ import {
   type CallbackQuery,
 } from './flow';
 import { safeReturnTo } from './return-to';
+import { portalRoles } from './roles';
 import { clearSessionCookie, endSession, startSession } from './session-plugin';
 import { assertCsrf } from '../security/csrf';
-import { partitionKey, type IdClaims } from './types';
+import { partitionKey } from './types';
 
 export const AUTH_RATE_LIMIT = { max: 30, timeWindow: '1 minute' };
 
 /** Where Entra sends the browser after end-session (register it on the Read app). */
 export const signedOutUri = (cfg: Pick<Config, 'PUBLIC_BASE_URL'>) =>
   `${cfg.PUBLIC_BASE_URL}/auth/signed-out`;
-
-const portalRoles = (claims: IdClaims): PortalRole[] =>
-  (claims.roles ?? []).filter((r): r is PortalRole => (PORTAL_ROLES as readonly string[]).includes(r));
 
 /** Tenant display name and default domain for the shell. Best effort: never blocks sign-in. */
 async function tenantProfile(
@@ -102,7 +100,11 @@ export function entraSignInRoutes(app: FastifyInstance, ctx: AppContext) {
       const returnTo = safeReturnTo(request.query.returnTo);
       const claims = decodeClaimsParam(request.query.claims);
       const choose = request.query.account === 'choose';
-      const { state, nonce, challenge } = await beginRoundTrip(ctx, { kind: 'read', returnTo });
+      const { state, nonce, challenge } = await beginRoundTrip(ctx, {
+        kind: 'read',
+        returnTo,
+        binding: browserBinding(ctx, request, reply),
+      });
       const url = await auth.authUrl({
         kind: 'read',
         state,
@@ -119,7 +121,7 @@ export function entraSignInRoutes(app: FastifyInstance, ctx: AppContext) {
     '/auth/callback',
     { config: { rateLimit: AUTH_RATE_LIMIT } },
     async (request, reply) => {
-      const pending = await finishRoundTrip(ctx, 'read', request.query.state);
+      const pending = await finishRoundTrip(ctx, 'read', request.query.state, request);
       const fail = async (err: AppError, details: Record<string, unknown> = {}) => {
         await ctx.audit.append({
           ...auditActor(ctx, request, null),

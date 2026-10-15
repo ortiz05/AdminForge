@@ -56,6 +56,8 @@ export const preauth = pgTable(
     nonce: text('nonce').notNull(),
     returnTo: text('return_to').notNull(),
     sessionIdHash: text('session_id_hash'),
+    /** sha256 of the browser-binding cookie that started the round trip (login CSRF protection). */
+    bindingHash: text('binding_hash'),
     details: jsonb('details'),
     createdAt: ts('created_at').notNull().defaultNow(),
     expiresAt: ts('expires_at').notNull(),

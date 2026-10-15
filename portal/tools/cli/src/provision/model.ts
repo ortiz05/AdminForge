@@ -17,6 +17,12 @@ export interface ProvisionSettings {
   tenantId: string;
   subscriptionId?: string;
   primaryDomain?: string;
+  /**
+   * Grant application permissions that change data when content declares them for the automation identity
+   * (AF_AUTOMATION_ALLOW_WRITE_PERMISSIONS=true). Off by default: a merged schedule could otherwise give the
+   * unattended identity tenant-wide write access on the next provisioning run.
+   */
+  allowAutomationWrites?: boolean;
 }
 
 // ── Microsoft Graph shapes (the subset AdminForge reads and writes) ───────────

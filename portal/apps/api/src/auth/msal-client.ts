@@ -102,6 +102,20 @@ export function createMsalAuthClient(cfg: Config, cache: TokenCacheStore, log?: 
       }
     },
 
+    async refreshClaims({ kind, partitionKey, homeAccountId }) {
+      const cca = app(kind, partitionKey);
+      const account = await cca.getTokenCache().getAccountByHomeId(homeAccountId);
+      if (!account) throw new ReauthRequired(kind);
+      try {
+        // The refresh-token grant with openid returns a new ID token, so `roles` are re-evaluated by Entra.
+        const result = await cca.acquireTokenSilent({ account, scopes: SIGN_IN_SCOPES, forceRefresh: true });
+        return result.idTokenClaims as IdClaims;
+      } catch (err) {
+        if (err instanceof InteractionRequiredAuthError) throw new ReauthRequired(kind);
+        throw err;
+      }
+    },
+
     async forget({ partitionKey }) {
       await cache.delete(partitionKey);
     },

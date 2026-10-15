@@ -208,6 +208,25 @@ try {
     console.error(
       `✗ ${err.status} ${err.code}: ${err.message}${err.requestId ? ` (request-id ${err.requestId})` : ''}`,
     );
-  else console.error(err);
+  else console.error(`✗ ${describeFailure(err)}`);
+  if (process.env.ADMINFORGE_DEBUG === '1' && err instanceof Error) console.error(err.stack);
   process.exitCode = 1;
+}
+
+/** One line for an unexpected failure, with the usual fix; the stack only with ADMINFORGE_DEBUG=1. */
+function describeFailure(err: unknown): string {
+  // Drivers wrap the real failure (Drizzle: "Failed query: …" with the pg error as `cause`): use the root cause.
+  let root = err as { cause?: unknown } | undefined;
+  for (let i = 0; i < 5 && root?.cause; i++) root = root.cause as { cause?: unknown };
+  const e = root as { code?: string; message?: string; address?: string; port?: number } | undefined;
+  const where = e?.address ? `${e.address}${e.port ? `:${e.port}` : ''}` : 'the configured host';
+  if (e?.code === 'ECONNREFUSED')
+    return `Can't connect to ${where}. If that's Postgres, start it with \`pnpm db:up\` (and check DATABASE_URL).`;
+  if (e?.code === 'ENOTFOUND' || e?.code === 'EAI_AGAIN')
+    return `Can't resolve a host name (${e.message ?? 'DNS lookup failed'}). Check your network or proxy.`;
+  if (e?.code === '28P01') return 'Postgres rejected the password in DATABASE_URL.';
+  if (e?.code === '3D000')
+    return "The database in DATABASE_URL doesn't exist. Run `pnpm --filter @adminforge/api db:migrate`.";
+  const message = (e?.message ?? String(err)).split('\n')[0]!.slice(0, 300);
+  return `${message} (run with ADMINFORGE_DEBUG=1 for details)`;
 }

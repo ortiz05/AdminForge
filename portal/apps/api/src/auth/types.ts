@@ -54,6 +54,11 @@ export interface AuthClient {
     forceRefresh?: boolean;
     claims?: string;
   }): Promise<string>;
+  /**
+   * Current ID token claims through a forced refresh (roles reflect today's app-role assignments). Throws
+   * ReauthRequired when Entra wants the user back (account disabled, password reset, policy).
+   */
+  refreshClaims(input: { kind: AppKind; partitionKey: string; homeAccountId: string }): Promise<IdClaims>;
   /** Drops everything cached for the partition. */
   forget(input: { kind: AppKind; partitionKey: string }): Promise<void>;
   /** Entra end-session URL. */

@@ -100,7 +100,9 @@ describe('TokenBroker', () => {
       extras: { login: '/auth/login?returnTo=%2F', reauth: { url: '/auth/login?returnTo=%2F' } },
     });
     const write = toAppError(new ReauthRequired('write'));
-    expect(write).toMatchObject({ status: 403, code: 'rearm', extras: { reauth: { url: '/auth/arm' } } });
+    // No reauth URL: arming is a POST from the shell (the SPA shows its Arm control), not a link.
+    expect(write).toMatchObject({ status: 403, code: 'rearm' });
+    expect(write.extras.reauth).toBeUndefined();
     const withClaims = toAppError(new ReauthRequired('read', '{"access_token":{}}')) as AppError;
     const url = new URL(withClaims.extras.reauth!.url, 'http://x');
     expect(Buffer.from(url.searchParams.get('claims')!, 'base64url').toString()).toBe('{"access_token":{}}');

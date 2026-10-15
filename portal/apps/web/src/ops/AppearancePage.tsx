@@ -1,4 +1,5 @@
 import { useMemo, useState, type CSSProperties } from 'react';
+import { errorDescription } from '../lib/errors';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { densities, scale } from '@adminforge/design-tokens';
 import {
@@ -219,7 +220,7 @@ export function AppearancePage() {
       });
     },
     onError: (e) =>
-      toast({ tone: 'crit', title: 'Appearance wasn’t saved', description: (e as Error).message }),
+      toast({ tone: 'crit', title: 'Appearance wasn’t saved', description: errorDescription(e) }),
   });
 
   const publish = () => {

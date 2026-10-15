@@ -34,6 +34,7 @@ export function isNavigation(request: FastifyRequest): boolean {
 export function problemPageUrl(request: FastifyRequest, err: AppError): string {
   const params = new URLSearchParams({ code: err.code, ref: String(request.id) });
   if (request.url.startsWith('/auth/arm')) params.set('during', 'arm');
+  else if (request.url.startsWith('/api/artifacts/')) params.set('during', 'download');
   const detail = err.extras.detail;
   if (detail && /^[A-Za-z0-9_]{1,40}$/.test(detail)) params.set('detail', detail);
   return `${PROBLEM_PAGE}?${params}`;
@@ -59,13 +60,26 @@ export function parseBody<T extends z.ZodType>(schema: T, body: unknown): z.infe
 }
 
 function upstreamError(err: ApiError): AppError {
-  const extras = { hint: err.requestId ? `Microsoft request-id ${err.requestId}` : undefined };
+  const ref = err.requestId ? ` Microsoft request-id: ${err.requestId}.` : '';
+  const detail = err.code ? { detail: err.code.replace(/[^A-Za-z0-9_]/g, '').slice(0, 40) || undefined } : {};
   if (err.status === 401 || err.status === 403)
-    return new AppError(403, 'upstream_forbidden', err.message, extras);
-  if (err.status === 404) return new AppError(404, 'upstream_not_found', err.message, extras);
+    return new AppError(403, 'upstream_forbidden', err.message, {
+      hint: `Your Microsoft Entra role may not allow this (check PIM for an eligible role), or the tenant lacks the licence or permission it needs.${ref}`,
+      ...detail,
+    });
+  if (err.status === 404)
+    return new AppError(404, 'upstream_not_found', err.message, {
+      hint: `It may have been deleted or renamed. Refresh the list and try again.${ref}`,
+      ...detail,
+    });
   if (err.status === 429)
-    return new AppError(429, 'throttled', 'Microsoft throttled this request. Try again shortly.', extras);
-  return new AppError(502, 'upstream_error', err.message, extras);
+    return new AppError(429, 'throttled', 'Microsoft is limiting requests right now.', {
+      hint: `Wait a minute, then try again.${ref}`,
+    });
+  return new AppError(502, 'upstream_error', err.message, {
+    hint: `Microsoft returned an error. Try again; if it persists, give a portal administrator the reference.${ref}`,
+    ...detail,
+  });
 }
 
 /** Normalises anything thrown by a route into an AppError. */
@@ -73,13 +87,12 @@ export function toAppError(err: unknown): AppError {
   if (err instanceof AppError) return err;
   if (err instanceof ReauthRequired) {
     if (err.kind === 'write') {
-      return new AppError(403, 'rearm', 'Write access needs to be re-armed.', {
+      return new AppError(403, 'rearm', 'Your write access needs a fresh verification.', {
         hint: 'Arm write access again to continue.',
-        reauth: { url: '/auth/arm' },
       });
     }
     const url = loginUrl('/', err.claims);
-    return new AppError(401, 'reauth', 'Your sign-in needs to be refreshed.', {
+    return new AppError(401, 'reauth', 'Microsoft needs you to sign in again.', {
       login: url,
       reauth: { url },
     });
@@ -90,13 +103,18 @@ export function toAppError(err: unknown): AppError {
   if (err instanceof ApiError) return upstreamError(err);
   const fe = err as Partial<FastifyError> | undefined;
   const status = typeof fe?.statusCode === 'number' ? fe.statusCode : 500;
-  if (status === 429) return new AppError(429, 'rate_limited', 'Too many requests. Slow down and try again.');
+  if (status === 429)
+    return new AppError(429, 'rate_limited', 'Too many requests from your browser this minute.', {
+      hint: 'Wait a minute, then try again.',
+    });
   if (fe?.validation) return new AppError(400, 'invalid_request', fe.message ?? 'The request is not valid.');
   if (status >= 400 && status < 500) {
     const code = (fe?.code ?? 'bad_request').replace(/^FST_(ERR_)?/, '').toLowerCase();
     return new AppError(status, code, fe?.message ?? 'Bad request.');
   }
-  return new AppError(500, 'internal', 'Something went wrong. Quote the correlation id if you report this.');
+  return new AppError(500, 'internal', 'AdminForge hit an unexpected problem and didn’t finish this.', {
+    hint: 'Try again. If it keeps happening, give a portal administrator the reference below.',
+  });
 }
 
 export function sendError(request: FastifyRequest, reply: FastifyReply, err: AppError) {
@@ -112,15 +130,18 @@ export function sendError(request: FastifyRequest, reply: FastifyReply, err: App
 }
 
 /**
- * The single error handler: every failure leaves as an ApiErrorBody — except a browser navigation to /auth/*
- * (Entra redirects back there), which goes to the problem page so nobody is ever shown raw JSON.
+ * The single error handler: every failure leaves as an ApiErrorBody — except a browser navigation to /auth/* (Entra
+ * redirects back there) or to a report download link, which goes to the problem page so nobody sees raw JSON.
  */
 export function registerErrorHandler(app: FastifyInstance) {
   app.setErrorHandler((err, request, reply) => {
     const appErr = toAppError(err);
     if (appErr.status >= 500) request.log.error({ err }, 'request failed');
     else request.log.info({ code: appErr.code, status: appErr.status }, 'request rejected');
-    if (request.url.startsWith('/auth/') && isNavigation(request)) {
+    if (
+      (request.url.startsWith('/auth/') || request.url.startsWith('/api/artifacts/')) &&
+      isNavigation(request)
+    ) {
       return reply.header('cache-control', 'no-store').redirect(problemPageUrl(request, appErr), 303);
     }
     return sendError(request, reply, appErr);

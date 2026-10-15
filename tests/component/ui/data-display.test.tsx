@@ -198,7 +198,7 @@ describe('ErrorState', () => {
     expect(alert).toHaveTextContent('Activate Reports Reader in PIM.');
     expect(within(alert).getByText('forbidden').className).toContain('font-mono');
     expect(
-      within(alert).getByRole('button', { name: 'Copy Correlation ID 5f0c2e81-7a4d-4b39-8c6e-1d2f3a4b5c6d' }),
+      within(alert).getByRole('button', { name: 'Copy Reference 5f0c2e81-7a4d-4b39-8c6e-1d2f3a4b5c6d' }),
     ).toBeInTheDocument();
     expect(await axeViolations(container)).toEqual([]);
   });

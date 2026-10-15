@@ -1,5 +1,6 @@
 import { ApiErrorBody } from '@adminforge/schemas';
 import {
+  bindingCookie,
   cookieFrom,
   entraConfig,
   FakeAuthClient,
@@ -19,8 +20,10 @@ async function setup(): Promise<Setup> {
   return { ...t, auth };
 }
 
+let pre = '';
 async function loginState(t: Setup, query = '') {
   const res = await t.app.inject({ method: 'GET', url: `/auth/login?returnTo=%2F${query}` });
+  pre = bindingCookie(res)!;
   return new URL(res.headers.location as string);
 }
 
@@ -45,7 +48,7 @@ describe('sign-in problem page redirects', () => {
     const res = await t.app.inject({
       method: 'GET',
       url: `/auth/callback?error=access_denied&error_description=${description}&state=${state}`,
-      headers: NAVIGATE,
+      headers: { ...NAVIGATE, cookie: pre },
     });
     expect(res.statusCode).toBe(303);
     expect(res.headers['cache-control']).toBe('no-store');
@@ -62,7 +65,7 @@ describe('sign-in problem page redirects', () => {
     const res = await t.app.inject({
       method: 'GET',
       url: `/auth/callback?code=good-code&state=${'x'.repeat(43)}`,
-      headers: NAVIGATE,
+      headers: { ...NAVIGATE, cookie: pre },
     });
     expect(res.statusCode).toBe(303);
     expect(problem(res.headers.location).get('code')).toBe('invalid_state');
@@ -73,7 +76,7 @@ describe('sign-in problem page redirects', () => {
     const res = await t.app.inject({
       method: 'GET',
       url: `/auth/callback?error=access_denied&state=${state}`,
-      headers: NAVIGATE,
+      headers: { ...NAVIGATE, cookie: pre },
     });
     const q = problem(res.headers.location);
     expect(q.get('code')).toBe('signin_cancelled');
@@ -84,6 +87,7 @@ describe('sign-in problem page redirects', () => {
     const signedIn = await t.app.inject({
       method: 'GET',
       url: `/auth/callback?code=good-code&state=${(await loginState(t)).searchParams.get('state')}`,
+      headers: { cookie: pre },
     });
     const cookie = cookieFrom(signedIn)!;
     const { me } = await getMe(t.app, cookie);
@@ -98,7 +102,7 @@ describe('sign-in problem page redirects', () => {
     const res = await t.app.inject({
       method: 'GET',
       url: `/auth/arm/callback?error=access_denied&state=${state}`,
-      headers: { ...NAVIGATE, cookie },
+      headers: { ...NAVIGATE, cookie: `${cookie}; ${bindingCookie(arm)}` },
     });
     expect(res.statusCode).toBe(303);
     const q = problem(res.headers.location);
@@ -110,7 +114,7 @@ describe('sign-in problem page redirects', () => {
     const res = await t.app.inject({
       method: 'GET',
       url: `/auth/callback?code=good-code&state=${'x'.repeat(43)}`,
-      headers: { 'sec-fetch-mode': 'cors', accept: 'application/json' },
+      headers: { 'sec-fetch-mode': 'cors', accept: 'application/json', cookie: pre },
     });
     expect(res.statusCode).toBe(400);
     expect(ApiErrorBody.parse(res.json()).error.code).toBe('invalid_state');

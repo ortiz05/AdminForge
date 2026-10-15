@@ -13,6 +13,7 @@ import {
   mockConfig,
   mockLogin,
   orgResponse,
+  bindingCookie,
 } from './helpers';
 
 const fixture = (name: string) =>
@@ -43,7 +44,11 @@ async function liveApp(batch: (call: number) => Response) {
   const t = await makeApp(entraConfig(), { auth, fetch });
   const login = await t.app.inject({ method: 'GET', url: '/auth/login' });
   const state = new URL(login.headers.location as string).searchParams.get('state')!;
-  const cb = await t.app.inject({ method: 'GET', url: `/auth/callback?code=c&state=${state}` });
+  const cb = await t.app.inject({
+    method: 'GET',
+    url: `/auth/callback?code=c&state=${state}`,
+    headers: { cookie: bindingCookie(login)! },
+  });
   const cookie = cookieFrom(cb)!;
   return { ...t, auth, calls, cookie };
 }
@@ -253,7 +258,9 @@ describe('GET /api/overview', () => {
     expect(ApiErrorBody.parse(res.json()).error).toMatchObject({
       code: 'upstream_forbidden',
       message: 'Denied',
-      hint: 'Microsoft request-id req-x',
+      // A next step for the person, Microsoft's request id for support, and the Graph code as detail.
+      hint: expect.stringMatching(/Entra role.*Microsoft request-id: req-x\.$/),
+      detail: 'Authorization_RequestDenied',
     });
     expect((await getMe(t.app, t.cookie)).res.statusCode).toBe(200);
     await t.app.close();

@@ -45,6 +45,15 @@ describe('public pages', () => {
     expect(screen.getByRole('link', { name: 'Back to AdminForge' })).toHaveAttribute('href', '/');
   });
 
+  it('report downloads explain a missing role and an expired file', async () => {
+    renderApp({ path: '/sign-in-problem?code=artifact_not_found&during=download&ref=r1' });
+    expect(
+      await screen.findByRole('heading', { name: 'This report file is no longer available' }),
+    ).toBeInTheDocument();
+    expect(screen.getByText('Report download')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Back to AdminForge' })).toHaveAttribute('href', '/');
+  });
+
   it('unknown or unsafe codes get general copy and are not echoed', async () => {
     renderApp({ path: `/sign-in-problem?code=${encodeURIComponent('<img src=x onerror=alert(1)>')}` });
     expect(

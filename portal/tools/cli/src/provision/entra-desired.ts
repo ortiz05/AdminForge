@@ -133,6 +133,9 @@ function appBody(
   };
 }
 
+/** Application permissions that only read: the verb after the resource is Read or ReadBasic (User.Read.All). */
+export const isReadOnlyAppRole = (value: string) => ['Read', 'ReadBasic'].includes(value.split('.')[1] ?? '');
+
 /** Pure: the full desired Entra/Azure state for one environment label. */
 /** Permissions declared by content (`requires.scopes`), per app and service — see content/scopes.ts. */
 export type ContentScopes = Partial<
@@ -281,11 +284,28 @@ export function buildDesiredEntra(
 
   {
     const names = appNames(label, 'automation');
+    // Ceiling: content may add read-only application permissions; ones that change data need an explicit opt-in.
+    const ceiling = (requests: PermissionRequest[]): PermissionRequest[] =>
+      requests.flatMap((r) => {
+        const denied = settings.allowAutomationWrites ? [] : r.values.filter((v) => !isReadOnlyAppRole(v));
+        for (const v of denied)
+          skipped.push({
+            section: 'App role assignments',
+            title: `automation → ${RESOURCES[r.resource].name}: ${v}`,
+            reason:
+              'changes data; set AF_AUTOMATION_ALLOW_WRITE_PERMISSIONS=true to grant write permissions to the automation identity',
+          });
+        const values = r.values.filter((v) => !denied.includes(v));
+        return values.length ? [{ ...r, values }] : [];
+      });
     const { rra, resolved } = resolvePermissions(
       names.displayName,
       mergeByResource([
-        { resource: 'graph', values: union(AUTOMATION_GRAPH_ROLES, content.automation?.graph), type: 'Role' },
-        ...extra('automation', 'Role'),
+        { resource: 'graph', values: [...AUTOMATION_GRAPH_ROLES], type: 'Role' },
+        ...ceiling([
+          { resource: 'graph', values: [...(content.automation?.graph ?? [])], type: 'Role' },
+          ...extra('automation', 'Role'),
+        ]),
       ]),
       resources,
       skipped,

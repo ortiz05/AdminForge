@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { errorDescription } from '../lib/errors';
 import type { ExportSpec } from '@adminforge/schemas';
 import {
   Button,
@@ -124,7 +125,7 @@ export function ExportMenu({
         description: 'All rows matching these filters. The export is recorded in the audit log.',
       });
     } catch (e) {
-      toast({ tone: 'crit', title: 'The export didn’t complete', description: (e as Error).message });
+      toast({ tone: 'crit', title: 'The export didn’t complete', description: errorDescription(e) });
     } finally {
       setBusy(false);
     }

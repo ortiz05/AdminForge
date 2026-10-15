@@ -18,6 +18,8 @@ export interface PreauthRecord {
   returnTo: string;
   /** For arm (write) round trips: the session that started it. */
   sessionIdHash: string | null;
+  /** sha256 of the browser-binding cookie: the callback must come back to the same browser. */
+  bindingHash: string | null;
   details: PreauthDetails | null;
   expiresAt: Date;
 }
@@ -48,6 +50,7 @@ export class PgPreauthStore implements PreauthStore {
       nonce: row.nonce,
       returnTo: row.returnTo,
       sessionIdHash: row.sessionIdHash,
+      bindingHash: row.bindingHash,
       details: (row.details as PreauthDetails | null) ?? null,
       expiresAt: row.expiresAt,
     };

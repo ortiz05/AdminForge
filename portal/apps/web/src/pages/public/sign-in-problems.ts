@@ -154,6 +154,42 @@ const ARM: Record<string, ProblemCopy> = {
   },
 };
 
+const DOWNLOAD: Record<string, ProblemCopy> = {
+  forbidden: {
+    title: 'You can’t download this report',
+    body: 'Scheduled reports are collected with AdminForge’s own permissions, so they’re limited to the roles the schedule names (Operator by default).',
+    next: 'Ask a portal administrator for access, or for a copy of the report.',
+    admin:
+      'Add the account to SG-AdminForge-<environment>-Portal.Operator, or set requires.portalRoles on the schedule.',
+    primary: 'back',
+  },
+  artifact_not_found: {
+    title: 'This report file is no longer available',
+    body: 'Report files are kept for a limited time, and this one has been removed.',
+    next: 'Open the schedule and select Run now for a fresh copy.',
+    primary: 'back',
+  },
+  unauthenticated: {
+    title: 'Sign in to download this report',
+    body: 'Your AdminForge session ended before the download started.',
+    next: 'Sign in, then select the report again.',
+    primary: 'sign-in',
+  },
+  rate_limited: {
+    title: 'Too many downloads this minute',
+    body: 'AdminForge paused downloads from this browser for a moment.',
+    next: 'Wait a minute, then try again.',
+    primary: 'back',
+  },
+};
+
+const FALLBACK_DOWNLOAD: ProblemCopy = {
+  title: 'The report didn’t download',
+  body: 'AdminForge couldn’t send this file.',
+  next: `Try again from the schedule’s run history. ${REPORT}`,
+  primary: 'back',
+};
+
 const FALLBACK_SIGN_IN: ProblemCopy = {
   title: 'AdminForge couldn’t complete your sign-in',
   body: 'Something went wrong between AdminForge and Microsoft Entra.',
@@ -170,7 +206,8 @@ const FALLBACK_ARM: ProblemCopy = {
 };
 
 /** The copy for a failure code; unknown codes get a general explanation rather than the code itself. */
-export function problemCopy(code: string | undefined, during: 'sign-in' | 'arm'): ProblemCopy {
+export function problemCopy(code: string | undefined, during: 'sign-in' | 'arm' | 'download'): ProblemCopy {
+  if (during === 'download') return (code && DOWNLOAD[code]) || FALLBACK_DOWNLOAD;
   if (during === 'arm') {
     if (code === 'blocked_by_policy' || code === 'entra_unavailable' || code === 'rate_limited') {
       const base = SIGN_IN[code]!;

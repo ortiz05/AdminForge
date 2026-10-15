@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from 'react';
+import { errorText } from '../lib/errors';
 import { Button, Dialog, EyeIcon, LightningIcon, LockKeyOpenIcon, Select, Textarea } from '@adminforge/ui';
 import type { ArmRequest } from '@adminforge/schemas';
 import {
@@ -65,7 +66,8 @@ function ArmDialog({
     try {
       await onArm({ minutes: Number(minutes), reason: reason.trim() });
     } catch (err) {
-      setFailure((err as Error).message || 'Write access could not be started.');
+      // Keep the next step (e.g. which group grants Operator) — the message alone isn't actionable.
+      setFailure(errorText(err));
       setPending(false);
     }
   };

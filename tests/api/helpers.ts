@@ -11,7 +11,7 @@ import { MeResponse } from '@adminforge/schemas';
 
 type App = Awaited<ReturnType<typeof buildApp>>;
 /** The bits of an inject() response these helpers read (fastify's types aren't a tests dependency). */
-interface InjectResponse {
+export interface InjectResponse {
   headers: Record<string, string | string[] | number | undefined>;
 }
 
@@ -99,6 +99,10 @@ export function cookieFrom(res: InjectResponse, name = 'adminforge-dev'): string
   return hit?.split(';')[0];
 }
 
+/** "name=value" of the browser-binding cookie set when a sign-in or arm round trip starts (send it to the callback). */
+export const bindingCookie = (res: InjectResponse): string | undefined =>
+  cookieFrom(res, 'adminforge-dev-pre') ?? cookieFrom(res, '__Host-adminforge-pre');
+
 export function setCookieHeader(res: InjectResponse, name = 'adminforge-dev'): string | undefined {
   const raw = res.headers['set-cookie'];
   const list = Array.isArray(raw) ? raw : raw ? [String(raw)] : [];
@@ -184,6 +188,20 @@ export class FakeAuthClient implements AuthClient {
   }) {
     this.tokens.push(input);
     return this.tokenImpl ? this.tokenImpl(input) : `token-${input.kind}${input.claims ? '-claims' : ''}`;
+  }
+
+  /** Roles (and other claims) Entra would put in a refreshed ID token; `refreshImpl` simulates failures. */
+  refreshes: Array<{ kind: string; partitionKey: string }> = [];
+  refreshImpl?: () => Promise<Partial<IdClaims>>;
+  async refreshClaims(input: { kind: 'read' | 'write'; partitionKey: string; homeAccountId: string }) {
+    this.refreshes.push({ kind: input.kind, partitionKey: input.partitionKey });
+    const extra = this.refreshImpl ? await this.refreshImpl() : this.claims(input.kind);
+    return {
+      oid: USER_OID,
+      tid: TENANT_ID,
+      roles: ['Portal.Reader', 'Portal.Operator', 'Not.A.Portal.Role'],
+      ...extra,
+    } as IdClaims;
   }
 
   async forget(input: { kind: 'read' | 'write'; partitionKey: string }) {

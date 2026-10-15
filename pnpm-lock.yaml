@@ -133,6 +133,9 @@ importers:
 
   portal/apps/scheduler:
     dependencies:
+      '@adminforge/api':
+        specifier: workspace:*
+        version: link:../api
       '@adminforge/config':
         specifier: workspace:*
         version: link:../../packages/config
@@ -145,6 +148,9 @@ importers:
       '@adminforge/expressions':
         specifier: workspace:*
         version: link:../../packages/expressions
+      '@adminforge/runner':
+        specifier: workspace:*
+        version: link:../runner
       '@adminforge/schemas':
         specifier: workspace:*
         version: link:../../packages/schemas

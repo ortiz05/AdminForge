@@ -21,5 +21,8 @@
   }
   root.setAttribute('data-theme', theme);
   root.setAttribute('data-density', prefs.density === 'compact' ? 'compact' : 'comfortable');
-  root.setAttribute('data-nav', prefs.navCollapsed ? 'collapsed' : 'expanded');
+  // Own choice, else collapsed below 1024 px (NARROW_NAV_QUERY in prefs.ts).
+  var navCollapsed =
+    typeof prefs.navCollapsed === 'boolean' ? prefs.navCollapsed : media('(max-width: 1023px)');
+  root.setAttribute('data-nav', navCollapsed ? 'collapsed' : 'expanded');
 })();

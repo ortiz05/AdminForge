@@ -7,7 +7,16 @@ import type { ArmRequest, MeResponse } from '@adminforge/schemas';
 import { Brand, Button, ErrorState, Skeleton, useMediaQuery, useToast } from '@adminforge/ui';
 import { api, ApiRequestError, ExtendResponse, RedirectResponse } from '../lib/api';
 import { browser } from '../lib/browser';
-import { hydratePrefs, pushRecent, updatePrefs, usePrefs, setOrgDefaults } from '../lib/prefs';
+import {
+  NARROW_NAV_QUERY,
+  applyPrefs,
+  getPrefs,
+  hydratePrefs,
+  pushRecent,
+  setOrgDefaults,
+  updatePrefs,
+  usePrefs,
+} from '../lib/prefs';
 import { meQuery, SessionContext, useNav, useSession } from '../lib/session';
 import { useAppearanceStylesheet } from '../ops/appearance-link';
 import { PlaybookDrawerMount } from '../playbooks/PlaybookDrawerMount';
@@ -46,8 +55,10 @@ function SignedInShell({ me, children }: { me: MeResponse; children: ReactNode }
   const arm = useArmState(me);
   useLiveUpdates();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
-  const narrow = useMediaQuery('(max-width: 1023px)');
-  const collapsed = Boolean(prefs.navCollapsed) || narrow;
+  const narrow = useMediaQuery(NARROW_NAV_QUERY);
+  // Own choice wins; without one the rail follows the window width (applyPrefs keeps data-nav in step).
+  const collapsed = prefs.navCollapsed ?? narrow;
+  useEffect(() => applyPrefs(getPrefs()), [narrow]);
   const [paletteOpen, setPaletteOpen] = useState(false);
   useAppearanceStylesheet();
   const [armDialogOpen, setArmDialogOpen] = useState(false);

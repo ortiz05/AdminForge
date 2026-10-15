@@ -16,7 +16,7 @@ import {
   XIcon,
 } from '@adminforge/ui';
 import { splitHref, useNavigateHref } from '../lib/links';
-import { pushRecent, updatePrefs, usePrefs } from '../lib/prefs';
+import { isNavCollapsed, pushRecent, updatePrefs, usePrefs } from '../lib/prefs';
 import { SEARCH_SECTIONS, useSearch, type SearchResult } from '../lib/search';
 import { DENSITY_OPTIONS, THEME_OPTIONS } from './UserMenu';
 import { useShell } from './shell-context';
@@ -233,9 +233,9 @@ export function CommandPalette({ open, onOpenChange, sections, canArm }: Command
           value="Toggle navigation"
           keywords={['sidebar', 'collapse', 'expand']}
           icon={<SidebarSimpleIcon size={16} />}
-          onSelect={act(() => updatePrefs({ navCollapsed: !prefs.navCollapsed }))}
+          onSelect={act(() => updatePrefs({ navCollapsed: !isNavCollapsed(prefs) }))}
         >
-          {prefs.navCollapsed ? 'Expand navigation' : 'Collapse navigation'}
+          {isNavCollapsed(prefs) ? 'Expand navigation' : 'Collapse navigation'}
         </CommandItem>
         <CommandItem
           value="Sign out"

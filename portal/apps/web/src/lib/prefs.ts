@@ -55,11 +55,19 @@ export function resolveTheme(theme: ThemePref | undefined): ThemeName {
   return DEFAULT_THEME;
 }
 
+/** Below this width the navigation starts collapsed (public/theme-init.js uses the same query). */
+export const NARROW_NAV_QUERY = '(max-width: 1023px)';
+
+/** The person's own choice, else collapsed in narrow windows. The rail's width and its toggle both use this. */
+export function isNavCollapsed(p: UserPrefs): boolean {
+  return p.navCollapsed ?? media(NARROW_NAV_QUERY);
+}
+
 /** Sets the <html> attributes every token selector keys off. */
 export function applyPrefs(p: UserPrefs, root: HTMLElement = document.documentElement): void {
   root.dataset.theme = resolveTheme(p.theme);
   root.dataset.density = p.density ?? orgDefaults.density ?? DEFAULT_DENSITY;
-  root.dataset.nav = p.navCollapsed ? 'collapsed' : 'expanded';
+  root.dataset.nav = isNavCollapsed(p) ? 'collapsed' : 'expanded';
 }
 
 // A tiny external store so the user menu, palette and nav share one source of truth.

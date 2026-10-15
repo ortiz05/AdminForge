@@ -6,7 +6,7 @@ import { App, createAppRouter, createQueryClient } from '@adminforge/web/src/app
 import { browser } from '@adminforge/web/src/lib/browser';
 import { __resetPrefsForTests } from '@adminforge/web/src/lib/prefs';
 import { overview } from '../../e2e/fixtures/overview';
-import { armedMe, me, NAV } from '../../e2e/fixtures/session';
+import { armedMe, FIXED_NOW, me, NAV } from '../../e2e/fixtures/session';
 import { axeViolations } from '../axe';
 
 const json = (body: unknown, status = 200) =>
@@ -60,8 +60,14 @@ describe('AppShell (real routes, mocked API)', () => {
     localStorage.clear();
     __resetPrefsForTests({});
     document.documentElement.dataset.mode = 'read';
+    // Fixture times (armedUntil, run timestamps) are relative to FIXED_NOW: fake only Date, timers stay real.
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(FIXED_NOW);
   });
-  afterEach(() => vi.unstubAllGlobals());
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
 
   it('loads the session, then renders rail, navigation from /api/nav, run dock and the overview', async () => {
     renderApp();

@@ -2,14 +2,20 @@ import { createHash, createHmac, randomBytes, randomUUID, timingSafeEqual } from
 import {
   ApiError,
   buildUrl,
+  cleanPath,
   createArmClient,
   createFunctionClient,
   createGraphClient,
   createLogAnalyticsClient,
   createResourceGraphClient,
+  DEFAULT_MAX_RESPONSE_BYTES,
+  describePath,
   evaluate,
+  hasControlChars,
+  LOG_ANALYTICS_BASE_URL,
   RESOURCE_GRAPH_API_VERSION,
   RESOURCE_GRAPH_PATH,
+  RESPONSE_TOO_LARGE,
   type FunctionConnection,
   type GraphRequest,
   type Mode,
@@ -62,7 +68,8 @@ export type OutboundConfig = Pick<
   | 'OUTBOUND_USER_CONCURRENCY'
   | 'OUTBOUND_TIMEOUT_MS'
   | 'TOKEN_CACHE_KEY'
->;
+> &
+  Partial<Pick<Config, 'OUTBOUND_MAX_BYTES' | 'AF_CONNECTION_AUDIENCE_HOSTS'>>;
 
 export interface OutboundDeps {
   config: OutboundConfig;
@@ -130,36 +137,102 @@ export function settingNamesOnly(data: unknown): unknown {
   return { ...d, properties: Object.fromEntries(Object.keys(props).map((k) => [k, null])) };
 }
 
-// ── Errors ────────────────────────────────────────────────────────────────────
+// ── Connection audiences ──────────────────────────────────────────────────────
 
-/** Microsoft first-party resources (by host or well-known application id): never a connection's audience. */
+/**
+ * Microsoft first-party resources by host: never a connection's audience, even when listed in
+ * AF_CONNECTION_AUDIENCE_HOSTS. (Microsoft's own top-level domains — `.microsoft`, `.azure`, `.office`, … — included.)
+ */
 const MICROSOFT_RESOURCE_HOSTS =
-  /(^|\.)(microsoft\.com|microsoftonline\.com|windows\.net|azure\.com|azure\.net|office\.com|office365\.com|sharepoint\.com|loganalytics\.io|dynamics\.com|powerbi\.com|microsoftazuread-sso\.com)$/i;
+  /(^|\.)(microsoft\.com|microsoftonline\.com|microsoftonline-p\.com|windows\.net|windows\.com|azure\.com|azure\.net|office\.com|office\.net|office365\.com|outlook\.com|live\.com|sharepoint\.com|sharepoint-df\.com|loganalytics\.io|applicationinsights\.io|dynamics\.com|powerbi\.com|fabric\.microsoft\.com|visualstudio\.com|skype\.com|lync\.com|botframework\.com|microsoftazuread-sso\.com|microsoft|azure|office|windows|bing|xbox)$/i;
+/** Well-known first-party resource application ids (the `0000000x-0000-0000-c000-…` / `…-0ff1-ce00-…` families too). */
 const MICROSOFT_RESOURCE_APP_IDS = new Set([
-  '00000003-0000-0000-c000-000000000000', // Microsoft Graph
-  '00000002-0000-0000-c000-000000000000', // Azure AD Graph
   '797f4846-ba00-4fd7-ba43-dac1f8f63013', // Azure Resource Manager
   'ca7f3f0b-7d91-482c-8e09-c5d840d0eac5', // Log Analytics API
-  '00000002-0000-0ff1-ce00-000000000000', // Exchange Online
-  '00000003-0000-0ff1-ce00-000000000000', // SharePoint Online
   'cfa8b339-82a2-471a-a3c9-0fc0be7a4093', // Azure Key Vault
   'e406a681-f3d4-42a8-90b6-c2b029497af1', // Azure Storage
   '022907d3-0f1b-48f7-badc-1ba6abab6d66', // Azure SQL Database
   'fc780465-2017-40d4-a0c5-307022471b92', // Microsoft Defender for Endpoint
   '8ee8fdad-f234-4243-8f3b-15c294843740', // Microsoft 365 Defender
+  '05a65629-4c1b-48c1-a78b-804c4abdd4af', // Microsoft Defender for Cloud Apps
   'c5393580-f805-4401-95e8-94b7a6ef2fc2', // Office 365 Management APIs
   '48ac35b8-9aa8-4d74-927d-1f4a14a0b239', // Skype and Teams Tenant Admin API
+  'cc15fd57-2c6c-4117-a88c-83b1d56b4bbe', // Microsoft Teams Services
+  'c161e42e-d4df-4a3d-9b42-e7a3c31f59d4', // Microsoft Intune API
+  '499b84ac-1321-427f-aa17-267ca6975798', // Azure DevOps
+  'f5c26e74-f226-4ae8-85f0-b4af0080ac9e', // Application Insights API
+  '2746ea77-4702-4b45-80ca-3c97e680e8b7', // Azure Data Explorer
+  '6dae42f8-4368-4678-94ff-3960e28e3630', // Azure Kubernetes Service AAD Server
+  'ddbf3205-c6bd-46ae-8127-60eb93363864', // Azure Batch
+  'fa3d9a0c-3fb0-42cc-9193-47c7ecd2edbd', // Microsoft Partner Center
+  '2d4d3d8e-2be3-4bef-9f87-7875a61c29de', // OneNote
 ]);
+/** Graph, Azure AD Graph, Dynamics CRM, Power BI, Intune, Azure RMS… and Exchange, SharePoint, Skype, Yammer… */
+const MICROSOFT_APP_ID_FAMILIES = /^[0-9a-f]{8}-0000-(0000-c000|0ff1-ce00)-000000000000$/i;
+/** Audiences of Entra's own token exchange (workload identity federation): never requested for a connection. */
+const MICROSOFT_API_URIS = new Set(['api://azureadtokenexchange']);
 
+const stripDot = (host: string) => host.replace(/\.+$/, '').toLowerCase();
+
+const isMicrosoftAppId = (id: string) =>
+  MICROSOFT_RESOURCE_APP_IDS.has(id.toLowerCase()) || MICROSOFT_APP_ID_FAMILIES.test(id);
+
+/** A Microsoft first-party resource (by host, well-known application id or token-exchange URI). */
 export function isMicrosoftResource(audience: string): boolean {
-  if (MICROSOFT_RESOURCE_APP_IDS.has(audience.toLowerCase())) return true;
-  if (!/^https:\/\//i.test(audience)) return false;
+  const a = audience.trim().replace(/\/+$/, '');
+  if (GUID.test(a)) return isMicrosoftAppId(a);
+  if (/^api:\/\//i.test(a)) {
+    if (MICROSOFT_API_URIS.has(a.toLowerCase())) return true;
+    const first = a.slice('api://'.length).split('/')[0] ?? '';
+    return GUID.test(first) && isMicrosoftAppId(first);
+  }
+  if (!/^https?:\/\//i.test(a)) return false;
   try {
-    return MICROSOFT_RESOURCE_HOSTS.test(new URL(audience).hostname);
+    return MICROSOFT_RESOURCE_HOSTS.test(stripDot(new URL(a).hostname));
   } catch {
     return true;
   }
 }
+
+/** AF_CONNECTION_AUDIENCE_HOSTS → normalised host names (lower case, no trailing dot). */
+export const audienceHostList = (value: string | undefined): string[] =>
+  (value ?? '')
+    .split(/[\s,]+/)
+    .map(stripDot)
+    .filter(Boolean);
+
+export type AudienceProblem = 'microsoft' | 'not_listed' | 'invalid';
+
+/**
+ * Allow-list for connection audiences (a token for it is sent to the connection's own host): `api://…` app ID URIs,
+ * application ids, and https URIs on hosts an administrator listed in AF_CONNECTION_AUDIENCE_HOSTS. Microsoft
+ * first-party audiences are refused even when listed. Undefined = allowed.
+ */
+export function connectionAudienceProblem(
+  audience: string,
+  allowedHosts: readonly string[],
+): AudienceProblem | undefined {
+  const a = audience.trim().replace(/\/+$/, '');
+  if (!a || /\s/.test(a) || hasControlChars(a)) return 'invalid';
+  if (isMicrosoftResource(a)) return 'microsoft';
+  if (GUID.test(a)) return undefined;
+  if (/^api:\/\/[^/\s]+(\/[^\s]*)?$/i.test(a)) return undefined;
+  if (!/^https:\/\//i.test(a)) return 'invalid';
+  let host: string;
+  try {
+    const url = new URL(a);
+    if (url.username || url.password) return 'invalid';
+    host = stripDot(url.hostname);
+  } catch {
+    return 'invalid';
+  }
+  return allowedHosts.includes(host) ? undefined : 'not_listed';
+}
+
+/** Scope names on the connection's own audience (never a full scope URI). */
+const SCOPE_NAME = /^[A-Za-z0-9._-]+$/;
+
+// ── Errors ────────────────────────────────────────────────────────────────────
 
 /** Refused by the request policy (ADR-003). Never retried. */
 export class PolicyDenied extends AppError {
@@ -185,11 +258,49 @@ export class OutboundError extends ApiError {
     /** The failure is a missing tenant licence rather than a permission. */
     readonly licence: boolean,
     readonly provenance?: Provenance,
+    /** A written message replacing Microsoft's (default: Microsoft's, never as raw JSON). */
+    message?: string,
   ) {
-    super(base.status, base.code, base.message, base.requestId, base.claims);
+    super(base.status, base.code, message ?? readableMessage(base.message), base.requestId, base.claims);
     this.name = 'OutboundError';
   }
 }
+
+const UNREADABLE = 'Microsoft returned an error without a readable description.';
+
+/**
+ * Microsoft's error text for people: some services (the Microsoft 365 usage reports) put a whole JSON error body into
+ * `error.message`. The innermost `message` is used then; JSON is never shown as-is.
+ */
+export function readableMessage(message: string): string {
+  let text = message.trim();
+  for (let depth = 0; depth < 4 && /^[[{]/.test(text); depth++) {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      return UNREADABLE;
+    }
+    const e = parsed as { error?: { message?: unknown } | string; message?: unknown } | null;
+    const inner =
+      typeof e?.error === 'object' && e.error && typeof e.error.message === 'string'
+        ? e.error.message
+        : typeof e?.message === 'string'
+          ? e.message
+          : undefined;
+    if (!inner?.trim()) return UNREADABLE;
+    text = inner.trim();
+  }
+  return /^[[{]/.test(text) ? UNREADABLE : text || UNREADABLE;
+}
+
+/** Microsoft 365 usage reports answer 404 UnknownTenantId (often wrapped as JSON text) without Microsoft 365. */
+const isUnknownTenant = (err: ApiError) =>
+  err.status === 404 && (/^UnknownTenantId$/i.test(err.code) || /\bUnknownTenantId\b/.test(err.message));
+
+/** The message for a 404 UnknownTenantId from the usage reports (Microsoft's own text is a JSON blob). */
+export const USAGE_REPORTS_UNAVAILABLE =
+  'Microsoft 365 usage reports aren’t available: this tenant has no Microsoft 365 subscription, or usage data hasn’t been collected yet (it appears 24–48 hours after activity).';
 
 /** Response mapping for anything the executor throws (OutboundError keeps its hint). */
 export function outboundAppError(err: unknown): AppError {
@@ -197,17 +308,19 @@ export function outboundAppError(err: unknown): AppError {
     const s = err.status;
     const [status, code] = err.licence
       ? [403, 'licence_required']
-      : s === 401 || s === 403
-        ? [403, 'upstream_forbidden']
-        : s === 404
-          ? [404, 'upstream_not_found']
-          : s === 429
-            ? [429, 'throttled']
-            : s === 400
-              ? [400, 'upstream_bad_request']
-              : s === 0
-                ? [504, 'upstream_unreachable']
-                : [502, 'upstream_error'];
+      : err.code === RESPONSE_TOO_LARGE
+        ? [502, 'response_too_large']
+        : s === 401 || s === 403
+          ? [403, 'upstream_forbidden']
+          : s === 404
+            ? [404, 'upstream_not_found']
+            : s === 429
+              ? [429, 'throttled']
+              : s === 400
+                ? [400, 'upstream_bad_request']
+                : s === 0
+                  ? [504, 'upstream_unreachable']
+                  : [502, 'upstream_error'];
     return new AppError(status as number, code as string, err.message, { hint: err.hint });
   }
   return toAppError(err);
@@ -225,17 +338,25 @@ export function errorHint(
   identity: Pick<ExecutionIdentity, 'kind' | 'mode'>,
   requires?: Requires,
   connection?: string,
-): { hint: string; licence: boolean } {
+): { hint: string; licence: boolean; message?: string } {
   const ref = err.requestId ? ` Microsoft request-id ${err.requestId}.` : '';
+  if (err.code === RESPONSE_TOO_LARGE)
+    return {
+      hint: 'Narrow it down (filters, fewer columns, a shorter time range or a smaller page) so the result is smaller. A portal administrator can raise OUTBOUND_MAX_BYTES.',
+      licence: false,
+    };
   const licence =
     ((err.status === 401 || err.status === 403 || err.status === 400) &&
       (LICENCE_CODES.test(err.code) || LICENCE_TEXT.test(err.message))) ||
     // Microsoft 365 usage reports answer 404 UnknownTenantId for tenants without Microsoft 365 workloads.
-    (err.status === 404 &&
-      (/^UnknownTenantId$/i.test(err.code) || /"code"\s*:\s*"UnknownTenantId"/.test(err.message)));
+    isUnknownTenant(err);
   if (licence) {
     const need = requires?.licences?.length ? ` It requires ${requires.licences.join(' or ')}.` : '';
-    return { hint: `Your tenant's licences don't include this feature.${need}${ref}`, licence: true };
+    return {
+      hint: `Your tenant's licences don't include this feature.${need}${ref}`,
+      licence: true,
+      ...(isUnknownTenant(err) ? { message: USAGE_REPORTS_UNAVAILABLE } : {}),
+    };
   }
   if (err.status === 401 || err.status === 403) {
     const scopes =
@@ -455,6 +576,17 @@ function normaliseBatch(
     const method = typeof r.method === 'string' ? r.method.toUpperCase() : 'GET';
     const headers = r.headers as Record<string, string> | undefined;
     const itemBeta = typeof r.beta === 'boolean' ? r.beta : beta;
+    // Checked before parsing: the URL parser would silently drop control characters and resolve `..` segments.
+    const target = typeof r.url === 'string' ? r.url : typeof r.path === 'string' ? r.path : undefined;
+    if (
+      target !== undefined &&
+      (hasControlChars(target) || cleanPath(target.startsWith('/') ? target : `/${target}`) === undefined)
+    )
+      throw new AppError(
+        400,
+        'invalid_request',
+        `$batch request ${describePath(id)} has a path that isn't a clean service path (${describePath(target)}).`,
+      );
     if (typeof r.url === 'string') {
       const u = new URL(`https://graph.invalid${r.url.startsWith('/') ? '' : '/'}${r.url}`);
       const query: Record<string, string> = {};
@@ -501,6 +633,56 @@ function normaliseBatch(
     }),
   };
   return { wire, items };
+}
+
+// ── What is actually sent ───────────────────────────────────────────────────
+
+/**
+ * The path as the service will receive it: the URL the connector builds, parsed the way fetch parses it. Throws
+ * PolicyDenied when parsing leaves the service's origin or path prefix (it never should for a clean path).
+ */
+export function sentPath(
+  service: ServiceId,
+  method: string,
+  path: string,
+  call: Pick<ServiceCall, 'beta'>,
+  fn?: { connection: { baseUrl: string } },
+): string {
+  let base: string;
+  let prefix = '';
+  switch (service) {
+    case 'graph':
+      base = GRAPH_BASE;
+      prefix = `/${call.beta ? 'beta' : 'v1.0'}`;
+      break;
+    case 'arm':
+      base = ARM_BASE;
+      break;
+    case 'logAnalytics':
+      base = LOG_ANALYTICS_BASE_URL;
+      break;
+    case 'function':
+      if (!fn) return path;
+      base = fn.connection.baseUrl.replace(/\/+$/, '');
+      break;
+    default:
+      return path;
+  }
+  const refuse = () =>
+    new PolicyDenied(`Refusing ${method} ${describePath(path)}: not a clean service path.`);
+  if (hasControlChars(path)) throw refuse();
+  let expected: URL;
+  let url: URL;
+  try {
+    expected = new URL(`${base}${prefix}`);
+    url = new URL(`${base}${prefix}${path}`);
+  } catch {
+    throw refuse();
+  }
+  const root = expected.pathname.replace(/\/+$/, '');
+  if (url.origin !== expected.origin || !url.pathname.startsWith(`${root}/`) || url.search || url.hash)
+    throw refuse();
+  return url.pathname.slice(root.length);
 }
 
 // ── Function connections ────────────────────────────────────────────────────
@@ -611,6 +793,20 @@ export class Outbound implements OutboundExecutor {
       declaredRead: fn ? fn.mode === 'read' : call.declaredRead === true,
     });
     if (!decision.allowed) throw new PolicyDenied(decision.reason);
+    // The policy must judge what is actually sent: fetch's URL parser can still rewrite a path (it drops TAB/LF/CR and
+    // then resolves dot segments). Parse the URL the connector will build and check it again.
+    const sent = sentPath(service, method, path, call, fn);
+    if (sent !== path) {
+      const again = evaluate(identity.mode, {
+        service,
+        method,
+        path: sent,
+        body,
+        declaredWrite: call.declaredWrite === true,
+        declaredRead: fn ? fn.mode === 'read' : call.declaredRead === true,
+      });
+      if (!again.allowed) throw new PolicyDenied(again.reason);
+    }
 
     const template = call.pathTemplate ?? fn?.template ?? templatePath(path);
     const sensitive = service === 'arm' && method === 'POST' && APP_SETTINGS_LIST.test(path);
@@ -696,8 +892,8 @@ export class Outbound implements OutboundExecutor {
           correlationId,
           err.requestId,
         );
-        const { hint, licence } = errorHint(err, service, identity, call.requires, call.connection);
-        throw new OutboundError(err, service, hint, licence, provenance);
+        const { hint, licence, message } = errorHint(err, service, identity, call.requires, call.connection);
+        throw new OutboundError(err, service, hint, licence, provenance, message);
       }
       if (
         err instanceof Error &&
@@ -791,6 +987,7 @@ export class Outbound implements OutboundExecutor {
       fetch: this.deps.fetch,
       correlationId: d.correlationId,
       timeoutMs: this.deps.config.OUTBOUND_TIMEOUT_MS,
+      maxResponseBytes: this.deps.config.OUTBOUND_MAX_BYTES ?? DEFAULT_MAX_RESPONSE_BYTES,
       ...(this.deps.sleep ? { sleep: this.deps.sleep } : {}),
       ...(this.deps.maxRetries !== undefined ? { maxRetries: this.deps.maxRetries } : {}),
     };
@@ -1060,16 +1257,39 @@ export class Outbound implements OutboundExecutor {
       );
     const env = this.deps.env?.() ?? {};
     const baseUrl = await asText(def.baseUrl, env, 'baseUrl');
-    const audience = (await asText(def.audience, env, 'audience')).replace(/\/+$/, '');
+    const audience = (await asText(def.audience, env, 'audience')).trim().replace(/\/+$/, '');
     // A token for a Microsoft service (Graph, ARM, Exchange…) sent to a connection's own host would hand that host
     // the caller's (or the automation identity's) access: connections may only target your own app registrations.
-    if (isMicrosoftResource(audience))
+    const problem = connectionAudienceProblem(
+      audience,
+      audienceHostList(this.deps.config.AF_CONNECTION_AUDIENCE_HOSTS),
+    );
+    if (problem)
       throw new AppError(
         400,
         'connection_audience_not_allowed',
-        `Connection ${call.connection} asks for a token for a Microsoft service (${audience}).`,
+        problem === 'microsoft'
+          ? `Connection ${call.connection} asks for a token for a Microsoft service, which AdminForge never sends to another host.`
+          : problem === 'not_listed'
+            ? `Connection ${call.connection} asks for a token for an audience on a host that isn't approved for connections.`
+            : `Connection ${call.connection} has an audience AdminForge can't use.`,
         {
-          hint: 'Connections call your own APIs: set audience to your app registration (api://… or its application id). Use graph/arm steps for Microsoft services.',
+          hint:
+            problem === 'microsoft'
+              ? 'Connections call your own APIs: point the audience at your app registration (api://… or its application id). Use graph or arm steps for Microsoft services.'
+              : 'Ask a portal administrator to set the audience to your app registration (api://… or its application id), or to add its host to AF_CONNECTION_AUDIENCE_HOSTS.',
+        },
+      );
+    // Scope names only: the token is always for `<audience>/<name>`, so a scope can't name another resource.
+    const names = def.scopes?.length ? def.scopes : ['user_impersonation'];
+    const badScope = names.find((n) => typeof n !== 'string' || !SCOPE_NAME.test(n));
+    if (badScope !== undefined)
+      throw new AppError(
+        400,
+        'connection_scope_not_allowed',
+        `Connection ${call.connection} lists a scope that isn't a plain scope name.`,
+        {
+          hint: 'Ask a portal administrator to list scope names only (for example user_impersonation); AdminForge adds the connection audience itself.',
         },
       );
     const operations: FunctionConnection['operations'] = {};
@@ -1089,9 +1309,7 @@ export class Outbound implements OutboundExecutor {
     } catch (err) {
       throw new AppError(400, 'invalid_request', (err as Error).message);
     }
-    const scopes = (def.scopes?.length ? def.scopes : ['user_impersonation']).map((s) =>
-      s.includes('/') ? s : `${audience}/${s}`,
-    );
+    const scopes = names.map((n) => `${audience}/${n}`);
     return {
       connection,
       operation: name,

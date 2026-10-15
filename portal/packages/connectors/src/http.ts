@@ -17,7 +17,69 @@ export class ApiError extends Error {
 
 /** Throttling, server errors and network failures — worth retrying for idempotent work (§7.8). */
 export function isTransient(err: unknown): boolean {
-  return err instanceof ApiError && (err.status === 0 || err.status === 429 || err.status >= 500);
+  return (
+    err instanceof ApiError &&
+    err.code !== RESPONSE_TOO_LARGE &&
+    (err.status === 0 || err.status === 429 || err.status >= 500)
+  );
+}
+
+/** ApiError code for a response body over the size limit (never retried: it would be just as large again). */
+export const RESPONSE_TOO_LARGE = 'ResponseTooLarge';
+/** Default cap on one response body (OUTBOUND_MAX_BYTES in the API): above Microsoft's own 64 MB result limits. */
+export const DEFAULT_MAX_RESPONSE_BYTES = 64 * 1024 * 1024;
+
+const hostOf = (url: string) => {
+  try {
+    return new URL(url).host;
+  } catch {
+    return 'the service';
+  }
+};
+
+const megabytes = (bytes: number) => `${Math.max(1, Math.round(bytes / (1024 * 1024)))} MB`;
+
+/**
+ * Reads a response body as text, streaming, and stops at `maxBytes`: `onLimit: 'throw'` refuses the response with a
+ * ResponseTooLarge ApiError (connectors), `'truncate'` returns the first `maxBytes` (probes looking for a marker).
+ * A Content-Length above the limit is refused before anything is read.
+ */
+export async function readBodyText(
+  res: Response,
+  maxBytes: number,
+  opts: { onLimit?: 'throw' | 'truncate'; url?: string; requestId?: string } = {},
+): Promise<{ text: string; truncated: boolean }> {
+  const onLimit = opts.onLimit ?? 'throw';
+  const tooLarge = () =>
+    new ApiError(
+      502,
+      RESPONSE_TOO_LARGE,
+      `The response from ${opts.url ? hostOf(opts.url) : 'the service'} is larger than the ${megabytes(maxBytes)} AdminForge accepts.`,
+      opts.requestId,
+    );
+  const declared = Number(res.headers.get('content-length'));
+  if (onLimit === 'throw' && Number.isFinite(declared) && declared > maxBytes) {
+    await res.body?.cancel().catch(() => undefined);
+    throw tooLarge();
+  }
+  if (!res.body) return { text: '', truncated: false };
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let text = '';
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    if (total + value.byteLength > maxBytes) {
+      await reader.cancel().catch(() => undefined);
+      if (onLimit === 'throw') throw tooLarge();
+      text += decoder.decode(value.subarray(0, maxBytes - total), { stream: true });
+      return { text: text + decoder.decode(), truncated: true };
+    }
+    total += value.byteLength;
+    text += decoder.decode(value, { stream: true });
+  }
+  return { text: text + decoder.decode(), truncated: false };
 }
 
 export interface HttpRequest {
@@ -54,6 +116,8 @@ export interface HttpClientOptions {
   timeoutMs?: number;
   /** 'error' refuses redirects (connections to your own APIs: a bearer token must never follow one elsewhere). */
   redirect?: 'follow' | 'error' | 'manual';
+  /** Largest response body accepted, in bytes (default DEFAULT_MAX_RESPONSE_BYTES); larger ones are refused. */
+  maxResponseBytes?: number;
 }
 
 const SERVER_RETRYABLE = new Set([500, 502, 503, 504]);
@@ -128,13 +192,7 @@ const isFetchFailure = (err: unknown): boolean => {
 
 function networkError(err: unknown, url: string): ApiError {
   const name = (err as { name?: string } | undefined)?.name;
-  const host = (() => {
-    try {
-      return new URL(url).host;
-    } catch {
-      return 'the service';
-    }
-  })();
+  const host = hostOf(url);
   if (name === 'TimeoutError')
     return new ApiError(0, 'Timeout', `No response from ${host} before the timeout.`);
   return new ApiError(
@@ -150,6 +208,7 @@ export function createHttpClient(opts: HttpClientOptions) {
   const maxRetries = opts.maxRetries ?? 4;
   const sleep = opts.sleep ?? defaultSleep;
   const reqIdHeader = opts.requestIdHeader ?? 'request-id';
+  const maxBytes = opts.maxResponseBytes ?? DEFAULT_MAX_RESPONSE_BYTES;
 
   async function send<T>(req: HttpRequest): Promise<HttpResult<T>> {
     const method = (req.method ?? 'GET').toUpperCase();
@@ -198,7 +257,9 @@ export function createHttpClient(opts: HttpClientOptions) {
         await sleep(retryDelay(retryAfter, attempt));
         continue;
       }
-      const data = parseBody(await res.text(), res.headers.get('content-type') ?? '');
+      // Streamed with a cap: a huge (or endless) body must not be buffered whole into memory.
+      const { text } = await readBodyText(res, maxBytes, { url: req.url, requestId });
+      const data = parseBody(text, res.headers.get('content-type') ?? '');
       const ms = Math.round(performance.now() - started);
       if (!res.ok) throw errorFrom(res.status, res.statusText, data, res.headers, requestId);
       return { data: data as T, status: res.status, requestId, ms, headers: res.headers };

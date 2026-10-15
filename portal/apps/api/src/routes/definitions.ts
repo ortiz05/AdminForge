@@ -48,13 +48,17 @@ export function definitionRoutes(api: FastifyInstance, ctx: AppContext) {
           : undefined;
       const rec = await ctx.definitions.get(kind.data, request.params.key, version);
       if (!rec) throw definitionNotFound(kind.data, request.params.key, version);
-      if (!allowed(session.roles, rec.def))
-        throw new AppError(
-          403,
-          'forbidden',
-          `This ${rec.kind} needs one of the roles ${rec.def.requires!.portalRoles!.join(', ')}.`,
-          { hint: 'Ask a portal administrator for access.' },
-        );
+      // An exact older version (a run's pinned one) also needs the roles the current version asks for: a role added
+      // later can't be side-stepped by asking for the version before it.
+      const current = version ? await ctx.definitions.get(kind.data, request.params.key) : null;
+      for (const def of [rec.def, ...(current ? [current.def] : [])])
+        if (!allowed(session.roles, def))
+          throw new AppError(
+            403,
+            'forbidden',
+            `This ${rec.kind} needs the ${def.requires!.portalRoles!.join(' and ')} role.`,
+            { hint: 'Ask a portal administrator for access.' },
+          );
       return { ...clientDefinition(rec.def), version: rec.version, sha256: rec.sha256 };
     },
   );

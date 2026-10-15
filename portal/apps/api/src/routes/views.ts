@@ -50,6 +50,8 @@ export function viewRoutes(api: FastifyInstance, ctx: AppContext) {
     const session = requireSession(request);
     const body = parseBody(CreateViewRequest, request.body);
     const page = await ctx.definitions.resolveAny(PAGE_KINDS, body.page);
+    // The same check as reading views: only for a page the caller may open.
+    ctx.datasources.assertAccess(session.roles, page.def.requires, `Page ${body.page}`);
     const spec = page.def.savedViews;
     if (spec?.enabled === false)
       throw new AppError(400, 'views_disabled', `${body.page} does not offer saved views.`);

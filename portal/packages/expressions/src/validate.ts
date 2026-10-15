@@ -48,6 +48,15 @@ function walkStrings(
     for (const [k, v] of Object.entries(value)) walkStrings(v, visit, opts, [...segments, k]);
 }
 
+/** `$eval(…)` anywhere in an expression (disabled at runtime: it would run code taken from data). */
+function callsEval(node: unknown): boolean {
+  if (!node || typeof node !== 'object') return false;
+  if (Array.isArray(node)) return node.some(callsEval);
+  const n = node as { type?: string; value?: unknown };
+  if (n.type === 'variable' && n.value === 'eval') return true;
+  return Object.values(node).some((v) => typeof v === 'object' && callsEval(v));
+}
+
 /** Compiles every `${ … }` in a definition and reports the ones that are malformed. Empty array = all good. */
 export function validateExpressions(def: unknown, opts: WalkOptions = {}): ExpressionIssue[] {
   const issues: ExpressionIssue[] = [];
@@ -60,7 +69,12 @@ export function validateExpressions(def: unknown, opts: WalkOptions = {}): Expre
         for (const seg of splitTemplate(str)) {
           if (seg.type !== 'expr') continue;
           try {
-            compile(seg.source);
+            if (callsEval(compile(seg.source).ast()))
+              issues.push({
+                ...at,
+                expression: seg.source,
+                message: '$eval is not available in AdminForge expressions.',
+              });
           } catch (err) {
             const e = err as ExpressionError;
             issues.push({
@@ -209,8 +223,9 @@ function compiledKqlParams(def: unknown): string[] {
 
 /**
  * Lint (§5.10, §7.9, R12): user data concatenated into `$filter` / `$search` without `$odata()` / `$odataSearch()`,
- * and user data (`params`, `inputs`, `row`, …) reaching a KQL `query` without `$kql()` — either concatenated with `&`
- * or interpolated straight into the query text (`where name == '${ params.q }'`). Wrapping the value in a helper
+ * user data (`params`, `inputs`, `row`, …) reaching a KQL `query` without `$kql()` — either concatenated with `&`
+ * or interpolated straight into the query text (`where name == '${ params.q }'`) — and user data placed inside a
+ * request `path` / `url` (`/users/${ params.id }`) without `$encode()`. Wrapping the value in a helper
  * (`$kql`, `$guid`, `$number`, …), guarding it with a literal allowlist (`params.x in ['a', 'b'] ? … : …`), or a param
  * the advanced KQL filter builder compiles clears the warning. Returns warnings; expressions that do not compile are
  * skipped (validateExpressions reports them).
@@ -225,7 +240,8 @@ export function lintExpressions(def: unknown, opts: WalkOptions = {}): Expressio
       const key = segments[segments.length - 1];
       const odata = key === '$filter' || key === '$search';
       const kql = isKqlQuery(segments);
-      if (!hasTemplate(str) || (!odata && !kql)) return;
+      const pathLike = key === 'path' || key === 'url';
+      if (!hasTemplate(str) || (!odata && !kql && !pathLike)) return;
       try {
         const parts = splitTemplate(str);
         const mixed = parts.some((p) => p.type === 'text' && p.value.trim() !== '');
@@ -248,6 +264,11 @@ export function lintExpressions(def: unknown, opts: WalkOptions = {}): Expressio
               ...at,
               message:
                 'User data reaches the KQL query without $kql() (or another quoting helper such as $guid()).',
+            });
+          else if (pathLike && (rawConcat(ast, none) || (mixed && yieldsUserData(ast, none))))
+            issues.push({
+              ...at,
+              message: `User data is placed in the ${key} without $encode() (or another helper such as $guid()).`,
             });
         }
       } catch {

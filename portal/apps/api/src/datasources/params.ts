@@ -28,6 +28,15 @@ const HOST = /^(?=.{1,253}$)([A-Za-z0-9-]{1,63}\.)*[A-Za-z0-9-]{1,63}$/;
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}([T ][\d:.]+(Z|[+-]\d{2}:?\d{2})?)?$/;
 const RELATIVE = /^(today|now|([+-])(\d+)([hdwmy]))$/;
 const MAX_STRING = 4096;
+/** C0 controls and DEL; multi-line text params may still contain TAB, LF and CR. */
+function hasControl(s: string, allowLines = false): boolean {
+  for (let i = 0; i < s.length; i++) {
+    const c = s.charCodeAt(i);
+    if (allowLines && (c === 0x09 || c === 0x0a || c === 0x0d)) continue;
+    if (c < 0x20 || c === 0x7f) return true;
+  }
+  return false;
+}
 const MAX_ITEMS = 1000;
 const UNIT_MS = {
   h: 3_600_000,
@@ -103,6 +112,11 @@ function checkOne(name: string, p: Param, v: unknown, now: Date, issues: ParamIs
     case 'string': {
       if (typeof v !== 'string' && typeof v !== 'number') return bad('expected text');
       const s = String(v);
+      // fetch drops TAB/LF/CR from URLs before resolving `..`: a value like ".\t." would become a dot segment there.
+      if (hasControl(s, p.multiline === true))
+        return bad(
+          p.multiline ? 'contains control characters' : 'must be a single line without control characters',
+        );
       if (s.length > (p.maxLength ?? MAX_STRING))
         return bad(`at most ${p.maxLength ?? MAX_STRING} characters`);
       if (p.minLength !== undefined && s.length < p.minLength)
@@ -175,7 +189,8 @@ function checkOne(name: string, p: Param, v: unknown, now: Date, issues: ParamIs
       if (!p.multiple && Array.isArray(v)) return bad('expected one value');
       if (list.length > (p.maxItems ?? MAX_ITEMS)) return bad(`at most ${p.maxItems ?? MAX_ITEMS} items`);
       for (const item of list)
-        if (typeof item !== 'string' || !item.trim() || item.length > 1024) return bad('expected an id');
+        if (typeof item !== 'string' || !item.trim() || item.length > 1024 || hasControl(item))
+          return bad('expected an id');
       return p.multiple ? list.map((s) => (s as string).trim()) : (list[0] as string).trim();
     }
   }

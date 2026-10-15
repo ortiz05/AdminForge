@@ -30,8 +30,12 @@ const BUILT_IN: Record<string, NavItem & { order: number }> = {
   overview: { key: 'overview', label: 'Overview', href: '/', icon: 'house', order: 0 },
 };
 
+/** navigation.yaml `roles` on sections and coded items: shown to anyone holding one of them. */
 const anyRole = (roles: string[], need: readonly PortalRole[] | undefined) =>
   !need?.length || need.some((r) => hasRole({ roles }, r));
+/** A definition's `requires.portalRoles`: every listed role (the rule pages, playbooks and exports enforce). */
+const everyRole = (roles: string[], need: readonly PortalRole[] | undefined) =>
+  (need ?? []).every((r) => hasRole({ roles }, r));
 const byOrder = <T extends { order?: number; label: string }>(a: T, b: T) =>
   (a.order ?? 1000) - (b.order ?? 1000) || a.label.localeCompare(b.label);
 
@@ -58,7 +62,7 @@ export function composeNav(input: {
         !def.nav.hidden &&
         def.status !== 'draft' &&
         def.status !== 'retired' &&
-        anyRole(roles, def.requires?.portalRoles),
+        everyRole(roles, def.requires?.portalRoles),
     );
 
   const declared: Navigation['sections'] =

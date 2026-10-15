@@ -13,6 +13,21 @@ import { ReauthRequired, type AppKind, type AuthClient, type IdClaims } from './
 /** Scopes requested at sign-in. Graph `.default` = everything consented to the app (read or write split by app). */
 const SIGN_IN_SCOPES = ['openid', 'profile', 'offline_access', 'https://graph.microsoft.com/.default'];
 
+/**
+ * OAuth errors from the token endpoint that mean the refresh token is dead and only an interactive sign-in helps:
+ * disabled or deleted account, password reset, revoked sessions (AADSTS50057, 50173, 700082, …). MSAL raises these
+ * as a plain ServerError (not InteractionRequiredAuthError) unless Entra adds a sub-error.
+ */
+const DEAD_GRANT = new Set(['invalid_grant', 'unauthorized_client']);
+
+/** What a failed silent acquisition means: ReauthRequired when Entra wants the user back, else the original error. */
+export function silentFailure(err: unknown, kind: AppKind, claims?: string): unknown {
+  if (err instanceof InteractionRequiredAuthError) return new ReauthRequired(kind, claims);
+  const code = (err as { errorCode?: unknown } | null | undefined)?.errorCode;
+  if (typeof code === 'string' && DEAD_GRANT.has(code)) return new ReauthRequired(kind, claims);
+  return err;
+}
+
 export interface MsalLogger {
   warn(obj: object, msg: string): void;
   info?(obj: object, msg: string): void;
@@ -23,7 +38,18 @@ export interface MsalLogger {
  * One ConfidentialClientApplication per call: the DistributedCachePlugin then loads exactly one
  * partition (read:<sha256(sid)> or write:<sha256(sid)>), so users' caches never mix in memory.
  */
-export function createMsalAuthClient(cfg: Config, cache: TokenCacheStore, log?: MsalLogger): AuthClient {
+/** The MSAL calls the AuthClient makes (a test seam: `createApp` replaces the real application). */
+export type MsalApp = Pick<
+  ConfidentialClientApplication,
+  'getAuthCodeUrl' | 'acquireTokenByCode' | 'acquireTokenSilent' | 'getTokenCache'
+>;
+
+export function createMsalAuthClient(
+  cfg: Config,
+  cache: TokenCacheStore,
+  log?: MsalLogger,
+  opts: { createApp?: (kind: AppKind, partitionKey?: string) => MsalApp } = {},
+): AuthClient {
   const authority = `https://login.microsoftonline.com/${cfg.AF_TENANT_ID}`;
 
   const credentials = (kind: AppKind) => {
@@ -37,7 +63,8 @@ export function createMsalAuthClient(cfg: Config, cache: TokenCacheStore, log?: 
   const redirectUri = (kind: AppKind) =>
     `${cfg.PUBLIC_BASE_URL}${kind === 'read' ? '/auth/callback' : '/auth/arm/callback'}`;
 
-  const app = (kind: AppKind, partitionKey?: string) =>
+  const app = (kind: AppKind, partitionKey?: string): MsalApp =>
+    opts.createApp?.(kind, partitionKey) ??
     new ConfidentialClientApplication({
       auth: { ...credentials(kind), authority, clientCapabilities: ['CP1'] },
       cache: partitionKey
@@ -98,8 +125,7 @@ export function createMsalAuthClient(cfg: Config, cache: TokenCacheStore, log?: 
         });
         return result.accessToken;
       } catch (err) {
-        if (err instanceof InteractionRequiredAuthError) throw new ReauthRequired(kind, claims);
-        throw err;
+        throw silentFailure(err, kind, claims);
       }
     },
 
@@ -112,8 +138,7 @@ export function createMsalAuthClient(cfg: Config, cache: TokenCacheStore, log?: 
         const result = await cca.acquireTokenSilent({ account, scopes: SIGN_IN_SCOPES, forceRefresh: true });
         return result.idTokenClaims as IdClaims;
       } catch (err) {
-        if (err instanceof InteractionRequiredAuthError) throw new ReauthRequired(kind);
-        throw err;
+        throw silentFailure(err, kind);
       }
     },
 

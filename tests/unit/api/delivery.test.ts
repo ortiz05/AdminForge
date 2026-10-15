@@ -35,12 +35,12 @@ function deps(env: Record<string, string> = {}, fail?: number) {
 }
 
 describe('recipients and webhooks come from configuration', () => {
-  it('expands ${ env.X } into addresses and reports unset keys', () => {
+  it('expands ${ env.X } into addresses, reports unset keys, and drops literal addresses', () => {
     expect(
-      resolveRecipients(['${ env.AF_REPORT_RECIPIENTS }', 'ops@example.com', '${ env.AF_MISSING }'], {
+      resolveRecipients(['${ env.AF_REPORT_RECIPIENTS }', 'ops@example.com', '${ env.AF_MISSING_ALERTS }'], {
         AF_REPORT_RECIPIENTS: 'a@example.com; B@example.com',
       }),
-    ).toEqual({ to: ['a@example.com', 'b@example.com', 'ops@example.com'], missing: ['AF_MISSING'] });
+    ).toEqual({ to: ['a@example.com', 'b@example.com'], missing: ['AF_MISSING_ALERTS'] });
   });
 
   it('accepts only https webhooks on Microsoft hosts, by env reference', () => {
@@ -96,10 +96,10 @@ describe('email', () => {
   });
 
   it('links instead of attaching large files', async () => {
-    const { d, calls } = deps({ T: 'a@example.com' });
+    const { d, calls } = deps({ AF_T_RECIPIENTS: 'a@example.com' });
     await sendEmail(
       d,
-      { to: ['${ env.T }'] },
+      { to: ['${ env.AF_T_RECIPIENTS }'] },
       {
         title: 't',
         text: 'x',
@@ -129,8 +129,8 @@ describe('email', () => {
       ).status,
     ).toBe('not_configured');
     const denied = await sendEmail(
-      deps({}, 403).d,
-      { to: ['a@example.com'] },
+      deps({ AF_REPORT_RECIPIENTS: 'a@example.com' }, 403).d,
+      { to: ['${ env.AF_REPORT_RECIPIENTS }'] },
       { title: 't', text: 'x' },
       'c',
     );

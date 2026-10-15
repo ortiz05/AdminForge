@@ -86,9 +86,9 @@ describe('arm step-up freshness (no auth context)', () => {
     expect(res.json().error.code).toBe('step_up_stale');
   });
 
-  it('with WRITE_AUTH_CONTEXT the acrs claim decides, not auth_time', async () => {
+  it('with WRITE_AUTH_CONTEXT both the acrs claim and a fresh auth_time are required', async () => {
     t = await setup({ WRITE_AUTH_CONTEXT: 'c1' });
-    t.auth.claims = (kind) => (kind === 'write' ? { auth_time: undefined, acrs: ['c1'] } : {});
+    t.auth.claims = (kind) => (kind === 'write' ? { acrs: ['c1'] } : {});
     const { cookie, armState } = await signInAndStartArm(t);
     expect((await callback(t, cookie, armState)).statusCode).toBe(302);
   });

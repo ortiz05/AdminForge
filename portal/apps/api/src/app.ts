@@ -11,6 +11,7 @@ import { entraSignInRoutes, sessionEndRoutes } from './auth/routes';
 import { registerSessions } from './auth/session-plugin';
 import { webDistAvailable, type Config } from './config';
 import { createContext, type AppContext, type AppDeps } from './context';
+import { serializeError } from './logging';
 import { AppError, registerErrorHandler, sendError, unauthenticated } from './errors';
 import { contentRoutes } from './routes/content';
 import { healthRoutes } from './routes/health';
@@ -32,7 +33,6 @@ declare module 'fastify' {
   }
 }
 
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 /** Query parameters that must never reach the logs (auth codes, state, CAE claims, hints). */
 const SECRET_QUERY = /([?&](?:code|state|session_state|id_token|client_info|claims|login_hint)=)[^&#]*/gi;
 
@@ -48,7 +48,8 @@ const API_OR_AUTH = /^\/(api|auth)(\/|$|\?)/;
 const STATIC_ASSET =
   /^\/assets\/|\.(js|mjs|css|map|json|png|jpe?g|gif|svg|ico|webp|avif|woff2?|ttf|txt|webmanifest|wasm)$/i;
 
-function loggerOptions(config: Config): FastifyServerOptions['logger'] {
+/** Fastify/pino logger options: redaction and serializers (no bound query parameters, no secrets in URLs). */
+export function loggerOptions(config: Config): FastifyServerOptions['logger'] {
   if (config.NODE_ENV === 'test') return false;
   let transport: { target: string; options: Record<string, unknown> } | undefined;
   if (config.NODE_ENV === 'development') {
@@ -81,6 +82,9 @@ function loggerOptions(config: Config): FastifyServerOptions['logger'] {
         url: redactUrl(req.url),
         remoteAddress: req.ip,
       }),
+      // Failed DB queries carry their bound parameters (CSRF tokens, PKCE verifiers, run inputs): never logged.
+      err: serializeError,
+      error: serializeError,
     },
     ...(transport ? { transport } : {}),
   };
@@ -95,11 +99,9 @@ export async function buildApp(
     logger: loggerOptions(config),
     trustProxy: trustProxyOption(config.TRUST_PROXY),
     bodyLimit: 256 * 1024,
-    genReqId: (req) => {
-      const header = req.headers['x-correlation-id'];
-      const value = Array.isArray(header) ? header[0] : header;
-      return value && UUID.test(value) ? value.toLowerCase() : randomUUID();
-    },
+    // Always ours: the id is the audit log's "Reference", so a browser must not be able to choose (or reuse) it.
+    // No internal caller sends X-Correlation-Id; outbound calls carry this id to Microsoft, not the other way round.
+    genReqId: () => randomUUID(),
   });
   const ctx = createContext(config, deps, {
     warn: (obj, msg) => app.log.warn(obj, msg),

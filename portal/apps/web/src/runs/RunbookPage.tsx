@@ -9,6 +9,7 @@ import {
   Checkbox,
   cn,
   EmptyState,
+  escapeMarkdown,
   PageHeader,
   Panel,
   PlayIcon,
@@ -40,6 +41,10 @@ export interface RunbookSearch {
   run?: string;
 }
 
+/** A value inserted into runbook Markdown: plain text, escaped so data never becomes a link or markup. */
+const asMarkdownText = (v: unknown) =>
+  escapeMarkdown(v === undefined || v === null ? '' : typeof v === 'string' ? v : JSON.stringify(v));
+
 /** Renders `${ … }` in runbook text against the run's inputs (JSONata loads on demand); raw text until then. */
 function useTemplated(text: string | undefined, scope: Record<string, unknown>): string {
   const key = JSON.stringify(scope);
@@ -48,12 +53,13 @@ function useTemplated(text: string | undefined, scope: Record<string, unknown>):
     let live = true;
     if (!text || !text.includes('${')) return;
     void import('@adminforge/expressions')
-      .then(({ renderString }) => renderString(text, scope))
-      .then(
-        (v) =>
-          live &&
-          setRendered({ for: `${text}\u0000${key}`, value: typeof v === 'string' ? v : JSON.stringify(v) }),
-      )
+      .then(async ({ evaluate, splitTemplate }) => {
+        let out = '';
+        for (const seg of splitTemplate(text))
+          out += seg.type === 'text' ? seg.value : asMarkdownText(await evaluate(seg.source, scope));
+        return out;
+      })
+      .then((value) => live && setRendered({ for: `${text}\u0000${key}`, value }))
       .catch(() => undefined);
     return () => {
       live = false;

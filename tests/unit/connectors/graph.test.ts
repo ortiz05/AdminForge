@@ -197,7 +197,7 @@ describe('graph client', () => {
           method: 'PATCH',
           url: '/users/1',
           body: { accountEnabled: false },
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', 'Accept-Language': 'en-US' },
         },
       ],
     });

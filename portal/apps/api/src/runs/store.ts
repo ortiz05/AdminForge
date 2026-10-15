@@ -128,7 +128,7 @@ export class RepositoryRunStore implements RunStore {
               }
             : {}),
           ...(row.identity === 'automation'
-            ? { scheduledBy: row.initiatorOid, executedAs: 'automation identity' }
+            ? { scheduledBy: row.initiatorUpn ?? row.initiatorOid, executedAs: 'automation identity' }
             : {}),
         },
         result: auditResult(patch.status),
@@ -184,7 +184,7 @@ export class RepositoryRunStore implements RunStore {
             }
           : {}),
         ...(row.identity === 'automation'
-          ? { scheduledBy: row.initiatorOid, executedAs: 'automation identity' }
+          ? { scheduledBy: row.initiatorUpn ?? row.initiatorOid, executedAs: 'automation identity' }
           : {}),
       },
       result: record.status === 'succeeded' ? 'success' : 'failure',

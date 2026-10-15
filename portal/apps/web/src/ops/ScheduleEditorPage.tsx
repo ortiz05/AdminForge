@@ -278,7 +278,7 @@ export function ScheduleEditorPage() {
                     value={emailEnv}
                     onChange={(e) => setEmailEnv(e.target.value.toUpperCase())}
                     placeholder="AF_REPORT_RECIPIENTS"
-                    hint="Recipient addresses are configuration, not content: name an env key that holds them (comma-separated)."
+                    hint="Recipient addresses are configuration, not content: name an env key ending in _RECIPIENTS, _EMAIL or _ALERTS that holds them (comma-separated)."
                   />
                 </>
               )}
@@ -410,6 +410,7 @@ export function ScheduleEditorPage() {
                 value={alertEnv}
                 onChange={(e) => setAlertEnv(e.target.value.toUpperCase())}
                 placeholder="AF_SCHEDULE_ALERTS"
+                hint="An env key ending in _RECIPIENTS, _EMAIL or _ALERTS that holds the addresses."
               />
               <Switch label="Enabled after publishing" checked={enabled} onCheckedChange={setEnabled} />
             </div>

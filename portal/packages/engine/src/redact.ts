@@ -35,6 +35,18 @@ export function redact(value: unknown, secrets: readonly string[] = []): unknown
   return walk(value, 0);
 }
 
+/** Whether `[redacted]` appears anywhere in a value (a masked value must never be sent anywhere as if it were data). */
+export function containsRedacted(value: unknown): boolean {
+  const walk = (v: unknown, depth: number): boolean => {
+    if (depth > 32) return false;
+    if (typeof v === 'string') return v.includes(REDACTED);
+    if (Array.isArray(v)) return v.some((x) => walk(x, depth + 1));
+    if (isPlainObject(v)) return Object.values(v).some((x) => walk(x, depth + 1));
+    return false;
+  };
+  return walk(value, 0);
+}
+
 /** String values of inputs whose param is declared `redact: true`. */
 export function secretInputValues(params: Params | undefined, inputs: Record<string, unknown>): string[] {
   if (!params) return [];

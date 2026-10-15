@@ -81,6 +81,7 @@ describe('loadConfig', () => {
     const cfg = loadConfig({
       ...base,
       AUTH_MODE: 'mock',
+      DATA_MODE: 'fixtures',
       ADMINFORGE_FIXTURES_DIR: '',
       WRITE_AUTH_CONTEXT: '',
       AF_TENANT_ID: '',
@@ -91,13 +92,13 @@ describe('loadConfig', () => {
   });
 
   it('MOCK_ROLES defaults to every portal role and validates names', () => {
-    expect(loadConfig({ ...base, AUTH_MODE: 'mock' }).MOCK_ROLES).toEqual([...PORTAL_ROLES]);
-    expect(
-      loadConfig({ ...base, AUTH_MODE: 'mock', MOCK_ROLES: 'Portal.Reader, Portal.Admin' }).MOCK_ROLES,
-    ).toEqual(['Portal.Reader', 'Portal.Admin']);
-    expect(() => loadConfig({ ...base, AUTH_MODE: 'mock', MOCK_ROLES: 'Portal.Reader,Root' })).toThrow(
-      /MOCK_ROLES/,
-    );
+    const mock = { ...base, AUTH_MODE: 'mock', DATA_MODE: 'fixtures' };
+    expect(loadConfig(mock).MOCK_ROLES).toEqual([...PORTAL_ROLES]);
+    expect(loadConfig({ ...mock, MOCK_ROLES: 'Portal.Reader, Portal.Admin' }).MOCK_ROLES).toEqual([
+      'Portal.Reader',
+      'Portal.Admin',
+    ]);
+    expect(() => loadConfig({ ...mock, MOCK_ROLES: 'Portal.Reader,Root' })).toThrow(/MOCK_ROLES/);
   });
 
   it('validates WRITE_AUTH_CONTEXT, write-app pairs, and the write window', () => {

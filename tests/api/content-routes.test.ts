@@ -4,7 +4,6 @@ import { search } from '@adminforge/api/src/search/search';
 import type { SessionRecord } from '@adminforge/api/src/auth/session-store';
 import type { DefinitionRegistry } from '@adminforge/api/src/definitions/types';
 import {
-  ApiErrorBody,
   CapabilitiesResponse,
   DefinitionListResponse,
   DefinitionResponse,
@@ -349,13 +348,8 @@ describe('GET /api/me/capabilities', () => {
     await t.app.close();
   });
 
-  it('mock sign-in with live data cannot read Microsoft', async () => {
-    const t = await fixturesApp(env, { DATA_MODE: 'live' });
-    const { cookie } = await mockLogin(t.app);
-    const res = await t.app.inject({ method: 'GET', url: '/api/me/capabilities', headers: { cookie } });
-    expect(res.statusCode).toBe(409);
-    expect(ApiErrorBody.parse(res.json()).error.code).toBe('live_data_unavailable');
-    await t.app.close();
+  it('mock sign-in with live data cannot read Microsoft (refused at startup)', async () => {
+    await expect(fixturesApp(env, { DATA_MODE: 'live' })).rejects.toThrow(/DATA_MODE=fixtures/);
   });
 });
 

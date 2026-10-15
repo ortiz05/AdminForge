@@ -7,7 +7,7 @@ import { parseBody } from '../errors';
 import { outboundAppError } from '../execution/outbound';
 import { advancedParamOf, describeAdvanced, type AdvancedGroup } from '../datasources/advanced';
 import { contentType, exportPages, exportStream, planExport } from '../reports/export';
-import { userScope } from './datasources';
+import { currentPage, userScope } from './datasources';
 
 const EXPORT_KINDS = ['report', ...PAGE_KINDS.filter((k) => k !== 'report')] as const;
 
@@ -30,14 +30,7 @@ export function reportRoutes(api: FastifyInstance, ctx: AppContext) {
       const session = requireSession(request);
       const body = parseBody(ExportRequest, request.body);
       const runner = ctx.datasources;
-      const resolved = await ctx.definitions.resolveAny(EXPORT_KINDS, request.params.key, body.version);
-      const page: LoadedPage = {
-        def: resolved.def,
-        version: resolved.version,
-        sha256: resolved.sha256,
-        kind: resolved.kind,
-        key: request.params.key,
-      };
+      const page = await currentPage(ctx, EXPORT_KINDS, request.params.key, body.version);
       runner.assertAccess(session.roles, page.def.requires, `Exporting ${page.key}`);
       const user = userScope(session);
       const params = await runner.prepareParams(page, body.params, user);

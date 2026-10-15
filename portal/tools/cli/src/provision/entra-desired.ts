@@ -12,6 +12,12 @@ import {
   type ResourceKey,
 } from './catalog';
 import { appRoleId } from './ids';
+import {
+  isPrivilegedDelegatedScope,
+  isReadOnlyPermission,
+  isSensitiveReadAppRole,
+  isWriteCapableDelegatedScope,
+} from './privilege';
 import type {
   AppKey,
   ApplicationBody,
@@ -48,7 +54,7 @@ export const ENV_KEYS: Record<AppKey, { clientId: string; secret: string }> = {
 
 type Resources = EntraState['resources'];
 
-interface PermissionRequest {
+export interface PermissionRequest {
   resource: ResourceKey;
   values: readonly string[];
   type: 'Scope' | 'Role';
@@ -126,6 +132,10 @@ function appBody(
     signInAudience: 'AzureADMyOrg',
     groupMembershipClaims: 'None',
     web: { redirectUris, implicitGrantSettings: NO_IMPLICIT },
+    // Confidential web clients only: no public-client flows, no SPA (browser) redirect URIs.
+    isFallbackPublicClient: false,
+    publicClient: { redirectUris: [] },
+    spa: { redirectUris: [] },
     appRoles: [],
     optionalClaims: { idToken: [], accessToken: [], saml2Token: [] },
     requiredResourceAccess: rra,
@@ -133,15 +143,18 @@ function appBody(
   };
 }
 
+const idTokenClaims = (...names: string[]) =>
+  names.map((name) => ({ name, source: null, essential: false, additionalProperties: [] }));
+
 /** Application permissions that only read: the verb after the resource is Read or ReadBasic (User.Read.All). */
 export const isReadOnlyAppRole = (value: string) => ['Read', 'ReadBasic'].includes(value.split('.')[1] ?? '');
 
-/** Pure: the full desired Entra/Azure state for one environment label. */
 /** Permissions declared by content (`requires.scopes`), per app and service — see content/scopes.ts. */
 export type ContentScopes = Partial<
   Record<'read' | 'write' | 'automation', Partial<Record<string, Iterable<string>>>>
 >;
 
+/** Content service key (content/scopes.ts) → resource. ARM and Log Analytics come from the baseline only. */
 const SERVICE_RESOURCE: Record<string, ResourceKey | undefined> = {
   graph: 'graph',
   exchange: 'exchange',
@@ -157,12 +170,147 @@ const union = (...lists: Array<Iterable<string> | undefined>) => {
 };
 
 /** Read-only scope names (`X.Read.Y`, `X.ReadBasic.Y`) — dry runs of write playbooks execute their reads with the Read app. */
-const readOnly = (scopes: Iterable<string> | undefined) =>
-  [...(scopes ?? [])].filter((s) => /\.Read(Basic)?(\.|$)/.test(s) && !/ReadWrite/.test(s));
+export const readOnly = (scopes: Iterable<string> | undefined) =>
+  [...(scopes ?? [])].filter(isReadOnlyPermission);
+
+const mergeByResource = (requests: PermissionRequest[]): PermissionRequest[] => {
+  const byKey = new Map<string, PermissionRequest>();
+  for (const r of requests) {
+    const k = `${r.resource}:${r.type}`;
+    const prev = byKey.get(k);
+    byKey.set(
+      k,
+      prev ? { ...prev, values: union(prev.values, r.values) } : { ...r, values: union(r.values) },
+    );
+  }
+  return [...byKey.values()];
+};
+
+/** Permissions every installation gets, whatever content declares (catalog.ts). */
+export function baselinePermissions(): Record<AppKey, PermissionRequest[]> {
+  return {
+    read: [
+      { resource: 'graph', values: READ_GRAPH_SCOPES, type: 'Scope' },
+      { resource: 'arm', values: ['user_impersonation'], type: 'Scope' },
+      { resource: 'logAnalytics', values: ['Data.Read'], type: 'Scope' },
+      { resource: 'exchange', values: ['Exchange.Manage'], type: 'Scope' },
+    ],
+    write: [
+      { resource: 'graph', values: WRITE_GRAPH_SCOPES, type: 'Scope' },
+      { resource: 'arm', values: ['user_impersonation'], type: 'Scope' },
+      { resource: 'exchange', values: ['Exchange.Manage'], type: 'Scope' },
+    ],
+    automation: [{ resource: 'graph', values: AUTOMATION_GRAPH_ROLES, type: 'Role' }],
+  };
+}
+
+/** Env keys that lift a ceiling, and why a permission is withheld without them. */
+export const CEILINGS = {
+  privileged: {
+    envKey: 'AF_ALLOW_PRIVILEGED_WRITE_SCOPES',
+    reason:
+      'tier-0 delegated permission (an armed session could change who holds privilege); set AF_ALLOW_PRIVILEGED_WRITE_SCOPES=true to grant it',
+  },
+  automationWrite: {
+    envKey: 'AF_AUTOMATION_ALLOW_WRITE_PERMISSIONS',
+    reason:
+      'changes data; set AF_AUTOMATION_ALLOW_WRITE_PERMISSIONS=true to grant write permissions to the automation identity',
+  },
+  automationSensitive: {
+    envKey: 'AF_AUTOMATION_ALLOW_SENSITIVE_READS',
+    reason:
+      'reads mail, files, chats or other personal content tenant-wide; set AF_AUTOMATION_ALLOW_SENSITIVE_READS=true to grant it to the automation identity',
+  },
+} as const;
+
+/** A permission the baseline or content asks for that a ceiling withholds. */
+export interface Withheld {
+  app: AppKey;
+  resource: ResourceKey;
+  value: string;
+  ceiling: keyof typeof CEILINGS;
+}
+
+export type CeilingSettings = Pick<
+  ProvisionSettings,
+  'allowAutomationWrites' | 'allowPrivilegedWriteScopes' | 'allowAutomationSensitiveReads' | 'emailDelivery'
+>;
+
+/** Which ceiling (if any) withholds `value` from `app`. */
+export function ceilingFor(
+  settings: CeilingSettings,
+  app: AppKey,
+  resource: ResourceKey,
+  value: string,
+): keyof typeof CEILINGS | undefined {
+  if (app === 'automation') {
+    if (!settings.allowAutomationWrites && !isReadOnlyAppRole(value)) return 'automationWrite';
+    if (!settings.allowAutomationSensitiveReads && isSensitiveReadAppRole(value))
+      return 'automationSensitive';
+    return undefined;
+  }
+  if (!settings.allowPrivilegedWriteScopes && resource === 'graph' && isPrivilegedDelegatedScope(value))
+    return 'privileged';
+  return undefined;
+}
+
+/**
+ * Pure, no tenant lookups: the permission names each app gets — baseline ∪ content-declared (∪ the read-only scopes
+ * of write content for the Read app) — after the ceilings. `adminforge validate --scopes` uses the same function, so
+ * provisioning and validation agree on what is expected.
+ */
+export function desiredPermissions(
+  settings: CeilingSettings,
+  content: ContentScopes = {},
+): { requests: Record<AppKey, PermissionRequest[]>; withheld: Withheld[] } {
+  const baseline = baselinePermissions();
+  const declared = (app: AppKey, type: 'Scope' | 'Role'): PermissionRequest[] =>
+    Object.entries(content[app] ?? {}).flatMap(([service, values]) => {
+      const resource = SERVICE_RESOURCE[service];
+      const list = [...(values ?? [])];
+      return resource && list.length ? [{ resource, values: list, type }] : [];
+    });
+  const withheld: Withheld[] = [];
+  const ceiling = (app: AppKey, requests: PermissionRequest[]) =>
+    requests.flatMap((r) => {
+      const values = r.values.filter((value) => {
+        const c = ceilingFor(settings, app, r.resource, value);
+        if (c) withheld.push({ app, resource: r.resource, value, ceiling: c });
+        return !c;
+      });
+      return values.length ? [{ ...r, values }] : [];
+    });
+  return {
+    requests: {
+      read: ceiling(
+        'read',
+        mergeByResource([
+          ...baseline.read,
+          ...declared('read', 'Scope'),
+          { resource: 'graph', values: readOnly(content.write?.graph), type: 'Scope' },
+        ]),
+      ),
+      write: ceiling('write', mergeByResource([...baseline.write, ...declared('write', 'Scope')])),
+      automation: ceiling(
+        'automation',
+        mergeByResource([
+          ...baseline.automation,
+          ...declared('automation', 'Role'),
+          // Built-in email delivery (delivery/notifier.ts) sends as AF_MAIL_SENDER.
+          ...(settings.emailDelivery
+            ? [{ resource: 'graph' as const, values: ['Mail.Send'], type: 'Role' as const }]
+            : []),
+        ]),
+      ),
+    },
+    withheld,
+  };
+}
 
 /**
  * Desired Entra objects. Each app's permissions = the baseline catalog ∪ what published content declares
- * (`requires.scopes`), so provisioning and `adminforge validate --scopes` stay in sync (least privilege, verified).
+ * (`requires.scopes`), under the ceilings in provision/privilege.ts, so provisioning and `adminforge validate --scopes`
+ * stay in sync (least privilege, verified).
  */
 export function buildDesiredEntra(
   settings: ProvisionSettings,
@@ -172,25 +320,29 @@ export function buildDesiredEntra(
   const { label, baseUrl } = settings;
   const skipped: Skipped[] = [];
   const apps: DesiredApp[] = [];
+  const { requests, withheld } = desiredPermissions(settings, content);
+  for (const w of withheld)
+    skipped.push(
+      w.app === 'automation'
+        ? {
+            section: 'App role assignments',
+            title: `automation → ${RESOURCES[w.resource].name}: ${w.value}`,
+            reason: CEILINGS[w.ceiling].reason,
+          }
+        : {
+            section: 'Consent grants',
+            title: `${appNames(label, w.app).displayName} → ${RESOURCES[w.resource].name}: ${w.value}`,
+            reason: CEILINGS[w.ceiling].reason,
+          },
+    );
 
   const delegatedApp = (
-    key: AppKey,
-    graphScopes: readonly string[],
+    key: 'read' | 'write',
     redirectPath: string | string[],
     extra: Partial<ApplicationBody>,
-    more: PermissionRequest[],
   ) => {
     const names = appNames(label, key);
-    const { rra, resolved } = resolvePermissions(
-      names.displayName,
-      [
-        { resource: 'graph', values: graphScopes, type: 'Scope' },
-        { resource: 'arm', values: ['user_impersonation'], type: 'Scope' },
-        ...more,
-      ],
-      resources,
-      skipped,
-    );
+    const { rra, resolved } = resolvePermissions(names.displayName, requests[key], resources, skipped);
     apps.push({
       key,
       uniqueName: names.uniqueName,
@@ -207,33 +359,11 @@ export function buildDesiredEntra(
       appPermissions: [],
       env: ENV_KEYS[key],
     });
+    return resolved;
   };
 
-  const extra = (
-    app: 'read' | 'write' | 'automation',
-    type: 'Scope' | 'Role',
-    exclude: string[] = [],
-  ): PermissionRequest[] =>
-    Object.entries(content[app] ?? {}).flatMap(([service, values]) => {
-      const resource = SERVICE_RESOURCE[service];
-      const list = [...(values ?? [])];
-      return resource && resource !== 'graph' && !exclude.includes(service) && list.length
-        ? [{ resource, values: list, type }]
-        : [];
-    });
-  const mergeByResource = (requests: PermissionRequest[]): PermissionRequest[] => {
-    const byKey = new Map<string, PermissionRequest>();
-    for (const r of requests) {
-      const k = `${r.resource}:${r.type}`;
-      const prev = byKey.get(k);
-      byKey.set(k, prev ? { ...prev, values: union(prev.values, r.values) } : r);
-    }
-    return [...byKey.values()];
-  };
-
-  delegatedApp(
+  const readResolved = delegatedApp(
     'read',
-    union(READ_GRAPH_SCOPES, content.read?.graph, readOnly(content.write?.graph)),
     // The sign-out landing page doubles as the post_logout_redirect_uri, which must be registered.
     ['/auth/callback', '/auth/signed-out'],
     {
@@ -245,81 +375,56 @@ export function buildDesiredEntra(
         allowedMemberTypes: ['User'],
         isEnabled: true,
       })),
+      // acct tells member (0) from guest (1) accounts, so the API can refuse guests from the ID token itself.
       optionalClaims: {
-        idToken: [
-          { name: 'acrs', source: null, essential: false, additionalProperties: [] },
-          { name: 'login_hint', source: null, essential: false, additionalProperties: [] },
-        ],
+        idToken: idTokenClaims('acrs', 'login_hint', 'acct'),
         accessToken: [],
         saml2Token: [],
       },
     },
-    mergeByResource([
-      { resource: 'logAnalytics', values: ['Data.Read'], type: 'Scope' },
-      { resource: 'exchange', values: ['Exchange.Manage'], type: 'Scope' },
-      ...extra('read', 'Scope'),
-    ]),
   );
 
-  delegatedApp(
-    'write',
-    union(WRITE_GRAPH_SCOPES, content.write?.graph),
-    '/auth/arm/callback',
-    {
-      // auth_time proves the step-up was a fresh sign-in; acrs carries a satisfied Conditional Access auth context.
-      optionalClaims: {
-        idToken: [
-          { name: 'auth_time', source: null, essential: false, additionalProperties: [] },
-          { name: 'acrs', source: null, essential: false, additionalProperties: [] },
-        ],
-        accessToken: [],
-        saml2Token: [],
-      },
+  delegatedApp('write', '/auth/arm/callback', {
+    // auth_time proves the step-up was a fresh sign-in; acrs carries a satisfied Conditional Access auth context;
+    // acct (0 member, 1 guest) lets the API refuse guest accounts.
+    optionalClaims: {
+      idToken: idTokenClaims('auth_time', 'acrs', 'acct'),
+      accessToken: [],
+      saml2Token: [],
     },
-    mergeByResource([
-      { resource: 'exchange', values: ['Exchange.Manage'], type: 'Scope' },
-      ...extra('write', 'Scope'),
-    ]),
-  );
+  });
 
   {
     const names = appNames(label, 'automation');
-    // Ceiling: content may add read-only application permissions; ones that change data need an explicit opt-in.
-    const ceiling = (requests: PermissionRequest[]): PermissionRequest[] =>
-      requests.flatMap((r) => {
-        const denied = settings.allowAutomationWrites ? [] : r.values.filter((v) => !isReadOnlyAppRole(v));
-        for (const v of denied)
-          skipped.push({
-            section: 'App role assignments',
-            title: `automation → ${RESOURCES[r.resource].name}: ${v}`,
-            reason:
-              'changes data; set AF_AUTOMATION_ALLOW_WRITE_PERMISSIONS=true to grant write permissions to the automation identity',
-          });
-        const values = r.values.filter((v) => !denied.includes(v));
-        return values.length ? [{ ...r, values }] : [];
-      });
-    const { rra, resolved } = resolvePermissions(
-      names.displayName,
-      mergeByResource([
-        { resource: 'graph', values: [...AUTOMATION_GRAPH_ROLES], type: 'Role' },
-        ...ceiling([
-          { resource: 'graph', values: [...(content.automation?.graph ?? [])], type: 'Role' },
-          ...extra('automation', 'Role'),
-        ]),
-      ]),
-      resources,
-      skipped,
-    );
+    const { rra, resolved } = resolvePermissions(names.displayName, requests.automation, resources, skipped);
     apps.push({
       key: 'automation',
       uniqueName: names.uniqueName,
       body: appBody(names.displayName, [], rra),
-      sp: { appRoleAssignmentRequired: false, tags: [ENTERPRISE_APP_TAG] },
+      // Nobody signs in to the automation app and nothing calls it as a resource: require assignment anyway.
+      sp: { appRoleAssignmentRequired: true, tags: [ENTERPRISE_APP_TAG] },
       grants: [],
       appPermissions: resolved.map((r) => ({ resource: r.resource, roles: r.items })),
       env: ENV_KEYS.automation,
+      ...(settings.automationCertificate ? { certificate: settings.automationCertificate } : {}),
     });
   }
+
+  // Write-capable delegated scopes on the Read app (provisioning warns; ARM user_impersonation is inherent).
+  const readWriteCapable: DesiredEntra['readWriteCapable'] = [];
+  let readArmInherent = false;
+  for (const r of requests.read)
+    for (const scope of r.values) {
+      if (r.resource === 'arm' && scope === 'user_impersonation') readArmInherent = true;
+      else if (isWriteCapableDelegatedScope(scope))
+        readWriteCapable.push({
+          resource: r.resource,
+          scope,
+          granted: readResolved.some(
+            (x) => x.resource === r.resource && x.items.some((i) => i.value === scope),
+          ),
+        });
+    }
 
   const groups: DesiredGroup[] = PORTAL_ROLES.map((r) => {
     const names = groupNames(label, r.value);
@@ -368,5 +473,5 @@ export function buildDesiredEntra(
     });
   }
 
-  return { settings, apps, groups, groupAssignments, arm, skipped };
+  return { settings, apps, groups, groupAssignments, arm, skipped, readWriteCapable, readArmInherent };
 }

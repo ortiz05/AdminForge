@@ -38,7 +38,7 @@ export function runJobOnWorker(opts: RunOnWorkerOptions): Promise<{ status: Runn
   return new Promise((resolve) => {
     let exitStatus: 'succeeded' | 'failed' | undefined;
     let stopReason: { kind: 'timeout' | 'cancelled' | 'protocol'; message: string } | undefined;
-    let outputChars = 0;
+    let outputBytes = 0;
     let stderrLines = 0;
     let graceTimer: NodeJS.Timeout | undefined;
 
@@ -48,8 +48,9 @@ export function runJobOnWorker(opts: RunOnWorkerOptions): Promise<{ status: Runn
     };
 
     const onStdout = (line: string) => {
-      outputChars += line.length + 1;
-      if (outputChars > maxOutputBytes) {
+      // UTF-8 bytes as the worker wrote them (the limit is documented in bytes, not UTF-16 characters).
+      outputBytes += Buffer.byteLength(line, 'utf8') + 1;
+      if (outputBytes > maxOutputBytes) {
         stop(
           'protocol',
           `The script produced more than ${Math.round(maxOutputBytes / 1024 / 1024)} MiB of output; the worker was stopped`,

@@ -2,7 +2,12 @@ import { timingSafeEqual } from 'node:crypto';
 import { RUNNER_AUTH_SCHEME, RUNNER_MAX_CLOCK_SKEW_SECONDS, computeRunnerSignature } from './client';
 
 export type AuthFailureReason =
-  'missing_signature' | 'malformed_signature' | 'missing_timestamp' | 'stale_timestamp' | 'bad_signature';
+  | 'missing_signature'
+  | 'malformed_signature'
+  | 'missing_timestamp'
+  | 'stale_timestamp'
+  | 'before_start'
+  | 'bad_signature';
 
 export type AuthResult = { ok: true } | { ok: false; reason: AuthFailureReason };
 
@@ -25,6 +30,11 @@ export function verifyRunnerRequest(opts: {
   body: Buffer;
   nowSeconds?: number;
   maxSkewSeconds?: number;
+  /**
+   * Unix seconds when this runner process started. The replay cache (job ids) lives in memory, so a request signed
+   * before the process started could only be a replay across a restart; it is refused.
+   */
+  notBeforeSeconds?: number;
 }): AuthResult {
   if (!opts.authorization) return { ok: false, reason: 'missing_signature' };
   const match = SIGNATURE_RE.exec(opts.authorization.trim());
@@ -34,6 +44,9 @@ export function verifyRunnerRequest(opts: {
   const now = opts.nowSeconds ?? Math.floor(Date.now() / 1000);
   if (Math.abs(now - Number(opts.timestamp)) > (opts.maxSkewSeconds ?? RUNNER_MAX_CLOCK_SKEW_SECONDS)) {
     return { ok: false, reason: 'stale_timestamp' };
+  }
+  if (opts.notBeforeSeconds !== undefined && Number(opts.timestamp) < opts.notBeforeSeconds) {
+    return { ok: false, reason: 'before_start' };
   }
   let expectedHex: string;
   try {

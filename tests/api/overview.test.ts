@@ -71,13 +71,8 @@ describe('GET /api/overview', () => {
     await t.app.close();
   });
 
-  it('mock auth with live data is refused with a hint', async () => {
-    const t = await makeApp(mockConfig({ DATA_MODE: 'live' }));
-    const { cookie } = await mockLogin(t.app);
-    const res = await t.app.inject({ method: 'GET', url: '/api/overview', headers: { cookie } });
-    expect(res.statusCode).toBe(409);
-    expect(ApiErrorBody.parse(res.json()).error.code).toBe('live_data_unavailable');
-    await t.app.close();
+  it('mock auth with live data is refused (at startup)', () => {
+    expect(() => mockConfig({ DATA_MODE: 'live' })).toThrow(/mock sign-in needs DATA_MODE=fixtures/);
   });
 
   it('live: one $batch with the read token, correlation id, eventual consistency for counts', async () => {

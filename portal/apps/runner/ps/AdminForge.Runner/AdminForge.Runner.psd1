@@ -10,7 +10,8 @@
         'Set-AdminForgeEventSink', 'Send-AdminForgeEvent', 'Send-AdminForgeStreamRecord',
         'Write-AdminForgeLog', 'Write-AdminForgeProgress', 'Write-AdminForgeOutput',
         'New-AdminForgeError', 'Get-AdminForgeErrorCategory', 'Get-AdminForgeInput',
-        'Connect-AdminForgeServices', 'Enable-AdminForgeReadOnlyMode', 'Get-AdminForgeMode'
+        'Connect-AdminForgeServices', 'Enable-AdminForgeReadOnlyMode', 'Get-AdminForgeMode',
+        'Test-AdminForgeReadOnlyScript', 'Assert-AdminForgeReadOnlyScript'
     )
     CmdletsToExport      = @()
     VariablesToExport    = @()

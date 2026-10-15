@@ -1,18 +1,18 @@
 import { Fragment, type ReactNode } from 'react';
-import { cn } from '@adminforge/ui';
+import { cn, safeUrl } from '@adminforge/ui';
 
 /**
  * A small, safe Markdown subset for runbook sections and manual-step instructions (§5.10: Markdown is rendered with
  * a sanitizer). Nothing is injected as HTML: the text becomes React elements, so markup in content stays text.
  * Supported: #–#### headings, paragraphs, - / * / 1. lists, > quotes, ``` fences, `code`, **bold**, *italic*,
- * [links](https://…) (http(s) and relative only).
+ * [links](https://…) (http(s), mailto, in-app paths and #anchors only — see safeUrl), and backslash escapes (`\*`):
+ * values the server interpolates into instructions and messages arrive escaped, so tenant data never becomes markup.
  */
-
-const SAFE_HREF = /^(https?:\/\/|\/(?!\/)|#)/i;
 
 function inline(text: string, keyBase: string): ReactNode[] {
   const out: ReactNode[] = [];
-  const re = /(`[^`]+`)|(\*\*[^*]+\*\*)|(\*[^*\s][^*]*\*)|(\[[^\]]+\]\([^)\s]+\))/g;
+  const re =
+    /(`[^`]+`)|(\\[!-/:-@[-`{-~])|(\*\*(?:\\.|[^*\\])+\*\*)|(\*[^*\s\\](?:\\.|[^*\\])*\*)|(\[(?:\\.|[^\]\\])+\]\([^)\s]+\))/g;
   let last = 0;
   let m: RegExpExecArray | null;
   let i = 0;
@@ -20,7 +20,8 @@ function inline(text: string, keyBase: string): ReactNode[] {
     if (m.index > last) out.push(text.slice(last, m.index));
     const tok = m[0];
     const key = `${keyBase}-${i++}`;
-    if (tok.startsWith('`'))
+    if (tok.startsWith('\\')) out.push(tok.slice(1));
+    else if (tok.startsWith('`'))
       out.push(
         <code key={key} className="rounded-sm bg-sunken px-1 py-0.5 font-mono text-xs text-fg">
           {tok.slice(1, -1)}
@@ -29,25 +30,26 @@ function inline(text: string, keyBase: string): ReactNode[] {
     else if (tok.startsWith('**'))
       out.push(
         <strong key={key} className="font-semibold text-fg">
-          {tok.slice(2, -2)}
+          {inline(tok.slice(2, -2), key)}
         </strong>,
       );
-    else if (tok.startsWith('*')) out.push(<em key={key}>{tok.slice(1, -1)}</em>);
+    else if (tok.startsWith('*')) out.push(<em key={key}>{inline(tok.slice(1, -1), key)}</em>);
     else {
-      const lm = /^\[([^\]]+)\]\(([^)\s]+)\)$/.exec(tok)!;
-      const href = lm[2]!;
+      const lm = /^\[((?:\\.|[^\]\\])+)\]\(([^)\s]+)\)$/.exec(tok)!;
+      const target = safeUrl(lm[2]!);
+      const label = inline(lm[1]!, key);
       out.push(
-        SAFE_HREF.test(href) ? (
+        target ? (
           <a
             key={key}
-            href={href}
+            href={target.href}
             className="font-medium text-accent underline-offset-2 hover:underline"
-            {...(/^https?:/i.test(href) ? { target: '_blank', rel: 'noreferrer' } : {})}
+            {...(target.external ? { target: '_blank', rel: 'noreferrer' } : {})}
           >
-            {lm[1]}
+            {label}
           </a>
         ) : (
-          <Fragment key={key}>{lm[1]}</Fragment>
+          <Fragment key={key}>{label}</Fragment>
         ),
       );
     }

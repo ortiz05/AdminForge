@@ -4,19 +4,21 @@ import path from 'node:path';
 import {
   RunnerRequestError,
   cancelRunnerJob,
+  prepareRunnerJob,
   readNdjson,
   signRunnerRequest,
   submitRunnerJob,
 } from '@adminforge/runner/src/client';
+import { verifyRunnerResponse } from '@adminforge/runner/src/crypto';
 import { WorkerPool } from '@adminforge/runner/src/pool';
 import type { RunnerEvent } from '@adminforge/runner/src/protocol';
 import { buildRunnerServer } from '@adminforge/runner/src/server';
 import {
   fakeWorkerCommand,
+  injectJob,
   job,
   makeScriptsDir,
   newKey,
-  parseEvents,
   signedInject,
   testConfig,
   waitFor,
@@ -54,15 +56,12 @@ describe('runner server with a fake worker', () => {
     rmSync(modulesDir, { recursive: true, force: true });
   });
 
-  it('streams NDJSON events from accepted to done', async () => {
-    const res = await signedInject(app, key, {
-      method: 'POST',
-      url: '/v1/jobs',
-      body: job({ script, inputs: { behaviour: 'echo', n: 1 } }),
-    });
+  it('streams signed NDJSON events from accepted to done', async () => {
+    const sent = await injectJob(app, key, job({ script, inputs: { behaviour: 'echo', n: 1 } }));
+    const res = sent.res;
     expect(res.statusCode).toBe(200);
     expect(res.headers['content-type']).toBe('application/x-ndjson; charset=utf-8');
-    const events = parseEvents(res.body);
+    const events = sent.events();
     expect(events.map((e) => e.type)).toEqual(['accepted', 'log', 'progress', 'output', 'done']);
     expect(events[0]).toMatchObject({ type: 'accepted' });
     const output = events[3] as Extract<RunnerEvent, { type: 'output' }>;
@@ -87,14 +86,19 @@ describe('runner server with a fake worker', () => {
     expect(seen.at(-1)).toMatchObject({ type: 'done', status: 'succeeded' });
   });
 
-  it('answers 400 with issues for an invalid job and for invalid JSON', async () => {
-    const res = await signedInject(app, key, {
-      method: 'POST',
-      url: '/v1/jobs',
-      body: { ...job({ script }), timeoutSeconds: 5000 },
-    });
+  it('answers 400 with issues for an invalid job (signed for its nonce) and for invalid JSON', async () => {
+    const { res, nonce } = await injectJob(app, key, { ...job({ script }), timeoutSeconds: 5000 });
     expect(res.statusCode).toBe(400);
     expect(res.json()).toMatchObject({ error: 'invalid_request', issues: [{ path: 'timeoutSeconds' }] });
+    expect(
+      verifyRunnerResponse({
+        key,
+        nonce,
+        status: 400,
+        body: res.body,
+        signature: res.headers['x-adminforge-signature'] as string,
+      }),
+    ).toBe(true);
     const raw = '{not json';
     const bad = await app.inject({
       method: 'POST',
@@ -110,12 +114,9 @@ describe('runner server with a fake worker', () => {
   });
 
   it('requires spoTenantName when a SharePoint token is sent', async () => {
-    const res = await signedInject(app, key, {
-      method: 'POST',
-      url: '/v1/jobs',
-      body: job({ script, tokens: { sharepointAdmin: 'x'.repeat(20) } }),
-    });
+    const { res } = await injectJob(app, key, job({ script, tokens: { sharepointAdmin: 'x'.repeat(20) } }));
     expect(res.statusCode).toBe(400);
+    expect(res.json()).toMatchObject({ message: expect.stringMatching(/spoTenantName/) });
   });
 
   it('cancels a running job on request', async () => {
@@ -141,27 +142,19 @@ describe('runner server with a fake worker', () => {
   });
 
   it('times out a job and kills its worker', async () => {
-    const res = await signedInject(app, key, {
-      method: 'POST',
-      url: '/v1/jobs',
-      body: job({ script, inputs: { behaviour: 'hang' }, timeoutSeconds: 1 }),
-    });
-    const events = parseEvents(res.body);
+    const sent = await injectJob(app, key, job({ script, inputs: { behaviour: 'hang' }, timeoutSeconds: 1 }));
+    const events = sent.events();
     expect(events.at(-2)).toMatchObject({ type: 'error', category: 'timeout' });
     expect(events.at(-1)).toMatchObject({ type: 'done', status: 'timeout' });
   });
 
   it('cancels the job when the client disconnects', async () => {
-    const body = job({ script, inputs: { behaviour: 'hang' } });
+    const prepared = prepareRunnerJob({ key, job: job({ script, inputs: { behaviour: 'hang' } }) });
     const controller = new AbortController();
-    const payload = JSON.stringify(body);
     const res = await fetch(`${baseUrl}/v1/jobs`, {
       method: 'POST',
-      body: payload,
-      headers: {
-        'content-type': 'application/json',
-        ...signRunnerRequest({ key, method: 'POST', path: '/v1/jobs', body: payload }),
-      },
+      body: prepared.body,
+      headers: prepared.headers,
       signal: controller.signal,
     });
     const reader = res.body!.getReader();
@@ -172,14 +165,14 @@ describe('runner server with a fake worker', () => {
   });
 
   it('sends blank keep-alive lines that the client ignores', async () => {
-    const payload = JSON.stringify(job({ script, inputs: { behaviour: 'hang' }, timeoutSeconds: 1 }));
+    const prepared = prepareRunnerJob({
+      key,
+      job: job({ script, inputs: { behaviour: 'hang' }, timeoutSeconds: 1 }),
+    });
     const res = await fetch(`${baseUrl}/v1/jobs`, {
       method: 'POST',
-      body: payload,
-      headers: {
-        'content-type': 'application/json',
-        ...signRunnerRequest({ key, method: 'POST', path: '/v1/jobs', body: payload }),
-      },
+      body: prepared.body,
+      headers: prepared.headers,
     });
     const text = await res.text();
     expect(text).toMatch(/\n\n/);
@@ -242,11 +235,7 @@ describe('runner server when workers cannot start', () => {
   });
 
   it('answers 503 with Retry-After instead of accepting jobs', async () => {
-    const res = await signedInject(app, key, {
-      method: 'POST',
-      url: '/v1/jobs',
-      body: job({ script: { path: scripts.script, sha256: scripts.sha } }),
-    });
+    const { res } = await injectJob(app, key, job({ script: { path: scripts.script, sha256: scripts.sha } }));
     expect(res.statusCode).toBe(503);
     expect(res.headers['retry-after']).toBe('10');
     expect(res.json()).toMatchObject({ error: 'runner_unavailable' });

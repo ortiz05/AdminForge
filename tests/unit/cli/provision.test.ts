@@ -131,7 +131,7 @@ describe('adminforge provision test-identities and status', () => {
     await provisionEntra(ctx);
     written.length = 0;
     const run = await provisionTestIdentities(ctx);
-    expect(changed(run.ops)).toHaveLength(13);
+    expect(changed(run.ops)).toHaveLength(11);
     expect(cloud.users.map((u) => u.userPrincipalName).sort()).toEqual([
       'af-test-user-01@example.com',
       'af-test-user-02@example.com',
@@ -140,10 +140,10 @@ describe('adminforge provision test-identities and status', () => {
     ]);
     const tester = cloud.users.find((u) => u.userPrincipalName === 'af-tester@example.com')!;
     expect(tester.passwordProfile).toMatchObject({ forceChangePasswordNextSignIn: false });
-    expect(cloud.members.filter((m) => m.memberId === tester.id)).toHaveLength(5);
+    expect(cloud.members.filter((m) => m.memberId === tester.id)).toHaveLength(3);
     expect(
       cloud.roleAssignments.filter((r) => r.principalId === tester.id && r.directoryScopeId === '/'),
-    ).toHaveLength(3);
+    ).toHaveLength(2);
     expect(cloud.groups.some((g) => g.displayName === 'AF-Test-Group-01')).toBe(true);
     expect(written.flatMap((w) => Object.keys(w))).toEqual(['AF_TEST_USER_UPN', 'AF_TEST_USER_PASSWORD']);
     expect(lines.join('\n')).not.toContain(env.AF_TEST_USER_PASSWORD!);

@@ -11,8 +11,9 @@ import { TokenBroker } from '@adminforge/api/src/auth/token-broker';
 import type { AuthClient } from '@adminforge/api/src/auth/types';
 import { createFixtureFetch } from '@adminforge/connectors';
 import { ApiErrorBody, DatasourceExecuteManyResponse, DatasourceResult } from '@adminforge/schemas';
-import { fixturesApp, setupContent, type ContentEnv } from './content-helpers';
+import { fixturesApp, liveApp, setupContent, type ContentEnv } from './content-helpers';
 import { mockLogin } from './helpers';
+import { readFakeRunnerRequest, signedRunnerAnswer, type FakeRunnerRequest } from './runner-fake';
 
 let env: ContentEnv;
 beforeAll(() => {
@@ -153,25 +154,25 @@ describe('runner datasources', () => {
   });
 
   it('live: the runs adapter forwards read tokens, the job is clamped to 1800 s, and every output event is returned', async () => {
-    const sent: Array<{ url: string; body: Record<string, unknown> }> = [];
-    const ndjson = [
-      { type: 'log', level: 'info', message: 'connecting' },
-      { type: 'output', data: { name: 'a' } },
-      { type: 'output', data: { name: 'b' } },
-      { type: 'done', status: 'succeeded' },
-    ]
-      .map((e) => JSON.stringify(e))
-      .join('\n');
+    // The runner opens sealed tokens and signs every event of its answer (tests/api/runner-fake.ts).
+    const key = Buffer.alloc(32, 9).toString('base64');
+    const sent: FakeRunnerRequest[] = [];
     const fetch: typeof globalThis.fetch = async (input, init) => {
-      sent.push({ url: String(input), body: JSON.parse(String(init!.body)) });
-      return new Response(ndjson, { status: 200, headers: { 'content-type': 'application/x-ndjson' } });
+      const req = readFakeRunnerRequest(key, input, init);
+      sent.push(req);
+      return signedRunnerAnswer(key, req, [
+        { type: 'log', level: 'info', message: 'connecting' },
+        { type: 'output', data: { name: 'a' } },
+        { type: 'output', data: { name: 'b' } },
+        { type: 'done', status: 'succeeded', durationMs: 1 },
+      ]);
     };
     const auth = {
       token: async (i: { kind: string; scopes: string[] }) => `tok-${i.kind}-${i.scopes[0]}`,
     } as unknown as AuthClient;
     const runner = liveRunner({
       url: 'http://127.0.0.1:3101',
-      key: Buffer.alloc(32, 9).toString('base64'),
+      key,
       broker: new TokenBroker(auth, {}),
       config: {
         AF_TENANT_ID: '11111111-2222-4333-8444-555555555555',
@@ -206,15 +207,18 @@ describe('runner datasources', () => {
       script: { path: 'exchange/Get-Test.ps1' },
       mode: 'read',
       inputs: { kinds: ['Member'] },
-      tokens: { exchange: 'tok-read-https://outlook.office365.com/.default' },
       timeoutSeconds: 1800,
     });
+    // Tokens travel sealed: the runner opens them; they never appear in the request body.
+    expect(sent[0]!.tokens).toEqual({ exchange: 'tok-read-https://outlook.office365.com/.default' });
+    expect(sent[0]!.rawBody).not.toContain('tok-read-');
     expect(String(sent[0]!.body.jobId)).toMatch(/^ds-corr-/);
   });
 
   it('live: without RUNNER_URL / RUNNER_SHARED_KEY a runner datasource explains what to configure', async () => {
-    const t = await fixturesApp(env, { DATA_MODE: 'live' });
-    const { cookie, csrf } = await mockLogin(t.app);
+    // Live data needs Entra sign-in (mock sign-in only runs on fixtures): a fake AuthClient, no network.
+    const t = await liveApp(env, () => new Response('unexpected', { status: 500 }));
+    const { cookie, csrf } = t;
     const res = await post(
       t.app,
       '/api/datasources/execute',

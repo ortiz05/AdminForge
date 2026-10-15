@@ -5,7 +5,7 @@ import { auditActor, type AppContext } from '../context';
 import { randomToken, sha256Hex } from '../security/tokens';
 import { isArmed, type SessionRecord } from './session-store';
 import { portalRoles } from './roles';
-import { partitionKey, ReauthRequired } from './types';
+import { isGuestAccount, partitionKey, ReauthRequired } from './types';
 
 declare module 'fastify' {
   interface FastifyRequest {
@@ -174,42 +174,66 @@ export function registerSessions(app: FastifyInstance, ctx: AppContext) {
 /** How often a session's roles are re-read from Entra (removals and disabled accounts take effect within this). */
 export const ROLE_RECHECK_MS = 5 * 60_000;
 const ROLE_RETRY_MS = 60_000;
+/** Without a successful confirmation for this long (Entra failing, or failing in a way we can't classify), end it. */
+export const ROLE_FAIL_CLOSED_MS = 15 * 60_000;
 
 /**
  * Roles come from the ID token at sign-in; this keeps them current for the session's lifetime. Every ROLE_RECHECK_MS
  * the Read token is refreshed and `roles` re-read: changes are applied and audited, a session left without an
- * AdminForge role ends, and so does one Entra won't refresh (disabled account, password reset, policy). Transient
- * failures keep the session and retry after a minute.
+ * AdminForge role ends, and so does one Entra won't refresh (disabled account, password reset, revoked sessions).
+ * Other failures keep the session and retry after a minute — but only for ROLE_FAIL_CLOSED_MS after the last
+ * confirmation: a session whose roles can't be confirmed for that long ends (fail closed).
  */
 export class RoleCheck {
   /** idHash → when the session's roles were last confirmed (in this process; a restart rechecks once). */
   private readonly checked = new Map<string, number>();
+  /** idHash → when the next attempt is due after a failed one. */
+  private readonly retryAt = new Map<string, number>();
+  /** Sessions older than this process count their unconfirmed time from the process start, not their sign-in. */
+  private readonly startedAt: number;
 
-  constructor(private readonly ctx: AppContext) {}
+  constructor(private readonly ctx: AppContext) {
+    this.startedAt = ctx.now().getTime();
+  }
 
   async check(request: FastifyRequest, session: SessionRecord, now: Date): Promise<SessionRecord | null> {
     const { ctx } = this;
     if (!ctx.auth || !session.readAccountId) return session;
-    const last = this.checked.get(session.idHash) ?? session.createdAt.getTime();
-    if (now.getTime() - last < ROLE_RECHECK_MS) return session;
+    const t = now.getTime();
+    const confirmed =
+      this.checked.get(session.idHash) ?? Math.max(session.createdAt.getTime(), this.startedAt);
+    if (t - confirmed < ROLE_RECHECK_MS) return session;
+    if (t < (this.retryAt.get(session.idHash) ?? 0)) return session;
     if (this.checked.size > 50_000) this.checked.clear();
+    if (this.retryAt.size > 50_000) this.retryAt.clear();
     let roles: string[];
+    let reason: 'roles' | 'guest' | 'reauth' | 'unconfirmed' = 'roles';
     try {
       const claims = await ctx.auth.refreshClaims({
         kind: 'read',
         partitionKey: partitionKey('read', session.idHash),
         homeAccountId: session.readAccountId,
       });
-      roles = portalRoles(claims);
+      // An account turned into a guest keeps no access (guests are refused at sign-in too).
+      roles = isGuestAccount(claims) ? [] : portalRoles(claims);
+      if (isGuestAccount(claims)) reason = 'guest';
     } catch (err) {
       if (!(err instanceof ReauthRequired)) {
-        request.log.warn({ err: { name: (err as Error).name } }, 'role refresh failed; retrying shortly');
-        this.checked.set(session.idHash, now.getTime() - ROLE_RECHECK_MS + ROLE_RETRY_MS);
-        return session;
-      }
+        if (t - confirmed < ROLE_FAIL_CLOSED_MS) {
+          request.log.warn({ err: { name: (err as Error).name } }, 'role refresh failed; retrying shortly');
+          this.retryAt.set(session.idHash, t + ROLE_RETRY_MS);
+          return session;
+        }
+        request.log.warn(
+          { err: { name: (err as Error).name } },
+          'roles could not be confirmed for too long; ending the session',
+        );
+        reason = 'unconfirmed';
+      } else reason = 'reauth';
       roles = [];
     }
-    this.checked.set(session.idHash, now.getTime());
+    this.retryAt.delete(session.idHash);
+    this.checked.set(session.idHash, t);
     const same = roles.length === session.roles.length && roles.every((r) => session.roles.includes(r));
     if (same) return session;
     if (roles.length === 0) {
@@ -219,7 +243,7 @@ export class RoleCheck {
         ...auditActor(ctx, request, session),
         action: 'session.access_revoked',
         result: 'success',
-        details: { previousRoles: session.roles },
+        details: { previousRoles: session.roles, reason },
       });
       return null;
     }

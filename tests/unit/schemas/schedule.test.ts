@@ -71,7 +71,7 @@ describe('schedule', () => {
   it('accepts email and Teams delivery and failure notifications', () =>
     expect(
       ok<Schedule>(
-        `${base}job:\n  kind: report\n  ref: identity.x\n  delivery:\n    - { type: email, to: ["\${ env.AF_REPORT_TO }"], subject: Weekly }\n    - { type: teams, webhook: "\${ env.AF_TEAMS_WEBHOOK }" }\nnotify:\n  onFailure: [{ type: teams, team: Ops, channel: Alerts }]\n`,
+        `${base}job:\n  kind: report\n  ref: identity.x\n  delivery:\n    - { type: email, to: ["\${ env.AF_REPORT_RECIPIENTS }"], subject: Weekly }\n    - { type: teams, webhook: "\${ env.AF_TEAMS_WEBHOOK }" }\nnotify:\n  onFailure: [{ type: teams, team: Ops, channel: Alerts }]\n`,
       ).job,
     ).toMatchObject({ delivery: [{ type: 'email', format: 'xlsx', attach: true }, { type: 'teams' }] }));
   it.each([

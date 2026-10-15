@@ -16,7 +16,7 @@ import {
 } from '@adminforge/runner/src/config';
 import { readModulesLock } from '@adminforge/runner/src/health';
 import { WorkerPool } from '@adminforge/runner/src/pool';
-import type { RunnerEvent, RunnerJobRequest } from '@adminforge/runner/src/protocol';
+import type { RunnerEvent, RunnerJobInput } from '@adminforge/runner/src/protocol';
 import { buildRunnerServer } from '@adminforge/runner/src/server';
 import { fakeJwt, job, logCapture, newKey, sha256, waitFor } from './helpers';
 
@@ -86,7 +86,7 @@ async function startRunner(key: string, preload: PreloadService[], poolSize = 1)
 async function collect(
   baseUrl: string,
   key: string,
-  body: RunnerJobRequest,
+  body: RunnerJobInput,
   onEvent?: (e: RunnerEvent) => Promise<void> | void,
 ) {
   const events: RunnerEvent[] = [];
@@ -97,7 +97,7 @@ async function collect(
   return events;
 }
 
-const testRunner = (inputs: Record<string, unknown>, extra: Partial<RunnerJobRequest> = {}) =>
+const testRunner = (inputs: Record<string, unknown>, extra: Partial<RunnerJobInput> = {}) =>
   job({ script: { path: TEST_RUNNER, sha256: testRunnerSha }, inputs, ...extra });
 
 describe.skipIf(!hasPwsh)('runner with real pwsh workers', () => {

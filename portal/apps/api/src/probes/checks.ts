@@ -2,7 +2,7 @@ import { Resolver } from 'node:dns/promises';
 import type { AuditWriter } from '../audit/writer';
 import { isIP } from 'node:net';
 import tls from 'node:tls';
-import { ApiError } from '@adminforge/connectors';
+import { ApiError, readBodyText } from '@adminforge/connectors';
 import { ExpressionError, renderString, renderTemplate, type Scope } from '@adminforge/expressions';
 import {
   DEFAULT_LOG_ANALYTICS_WORKSPACE,
@@ -18,6 +18,7 @@ import { AppError } from '../errors';
 import { OutboundError } from '../execution/outbound';
 import type { ExecutionIdentity, OutboundExecutor } from '../execution/types';
 import type { ProbeStatus } from '../schedules/types';
+import { defaultLookup, isNonPublicAddress, type HostLookup } from './addresses';
 import { aggregate, detailRows, runKql } from './kql';
 import { classify, describeThresholds, effectiveThresholds, worst, type Thresholds } from './thresholds';
 
@@ -90,6 +91,8 @@ export interface ProbeDeps {
   tls?: TlsInspector;
   /** The portal's audit chain (`auditChain` checks); absent → the check reports not configured. */
   audit?: Pick<AuditWriter, 'verify'>;
+  /** Host → addresses for the HTTP probe SSRF guard (tests); default: the system resolver. */
+  lookup?: HostLookup;
 }
 
 const AUTOMATION: ExecutionIdentity = { kind: 'automation', mode: 'read' };
@@ -179,27 +182,80 @@ const bodyText = (data: unknown) => (typeof data === 'string' ? data : JSON.stri
 
 // ── Checks ──────────────────────────────────────────────────────────────────────────────────────────────────────────
 
+/** Bytes of an HTTP probe's response searched for `expect.bodyContains` (the rest is never read). */
+const HTTP_PROBE_MAX_BYTES = 1_000_000;
+
+const targetNotAllowed = (why: string) =>
+  new AppError(400, 'probe_target_not_allowed', `The probe URL ${why}.`, {
+    hint: 'HTTP probes check public endpoints (or this portal itself). Point the probe at a public https URL.',
+  });
+
+/**
+ * SSRF guard for HTTP probes: the portal's own origin is always allowed; anything else must be http(s) on the default
+ * port range and resolve only to public addresses (no loopback, LAN, link-local or cloud metadata).
+ */
+async function assertProbeTarget(url: URL, x: CheckContext): Promise<void> {
+  const own = (() => {
+    try {
+      return new URL(String(x.deps.env().PUBLIC_BASE_URL ?? '')).origin;
+    } catch {
+      return undefined;
+    }
+  })();
+  if (own && url.origin === own) return;
+  if (url.username || url.password) throw targetNotAllowed('contains credentials');
+  const host = url.hostname.replace(/^\[|\]$/g, '').replace(/\.+$/, '');
+  if (!host || /^localhost$/i.test(host) || /\.localhost$/i.test(host))
+    throw targetNotAllowed('points at this host');
+  let addresses: string[];
+  try {
+    addresses = isIP(host) ? [host] : await (x.deps.lookup ?? defaultLookup)(host);
+  } catch (err) {
+    const code = (err as { code?: string }).code;
+    throw Object.assign(new TypeError('fetch failed'), { cause: { code: code ?? 'ENOTFOUND' } });
+  }
+  if (!addresses.length || addresses.some(isNonPublicAddress))
+    throw targetNotAllowed('resolves to a private, loopback or link-local address');
+}
+
 async function http(c: Extract<ProbeCheck, { kind: 'http' }>, x: CheckContext): Promise<CheckResult> {
-  const url = await text(c.url, x.scope);
-  if (!/^https?:\/\/[^\s/]+/.test(url))
+  const raw = await text(c.url, x.scope);
+  if (!/^https?:\/\/[^\s/]+/.test(raw))
     throw new NotConfigured(
       'The probe URL is empty or not an http(s) URL.',
       'Set the env keys the URL uses (for example PUBLIC_BASE_URL).',
     );
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    throw new NotConfigured('The probe URL is not a valid URL.', 'Check the env keys the URL uses.');
+  }
+  // Probes observe; a POST must be asked for explicitly (it may change something on the other side).
+  if (c.method === 'POST' && (c as { allowPost?: unknown }).allowPost !== true)
+    throw new AppError(400, 'content_error', 'The probe sends POST without allowPost: true.', {
+      hint: 'Use GET or HEAD, or set allowPost: true on the check if the endpoint is meant to be probed with POST.',
+    });
+  await assertProbeTarget(url, x);
   const headers = (await renderTemplate<Record<string, unknown>>(c.headers ?? {}, x.scope)) ?? {};
   const body = c.body === undefined ? undefined : await renderTemplate<unknown>(c.body, x.scope);
   const t0 = performance.now();
-  const res = await x.deps.fetch(url, {
+  // Redirects are not followed: a public URL could otherwise bounce the probe to an internal address.
+  const res = await x.deps.fetch(url.toString(), {
     method: c.method,
     headers: Object.fromEntries(Object.entries(headers).map(([k, v]) => [k, String(v)])),
     body: body === undefined ? undefined : typeof body === 'string' ? body : JSON.stringify(body),
     signal: x.signal,
-    redirect: 'follow',
+    redirect: 'manual',
   });
   let content = '';
-  if (c.expect?.bodyContains) content = (await res.text()).slice(0, 1_000_000);
+  if (c.expect?.bodyContains)
+    content = (await readBodyText(res, HTTP_PROBE_MAX_BYTES, { onLimit: 'truncate' })).text;
   else await res.body?.cancel().catch(() => undefined);
-  return expectResult('HTTP', res.status, () => content, ms(t0), c.expect);
+  const result = expectResult('HTTP', res.status, () => content, ms(t0), c.expect);
+  if (res.status >= 300 && res.status < 400 && result.code === 'expectation_failed')
+    result.message = `${result.message} Redirects aren't followed; point the probe at the final URL.`;
+  return result;
 }
 
 async function service(
@@ -248,6 +304,49 @@ async function service(
     ms(t0),
     c.expect,
   );
+}
+
+/** Counts items of a Graph list (optionally an expression's selection of them) against the thresholds. */
+async function graphCount(
+  c: Extract<ProbeCheck, { kind: 'graphCount' }>,
+  x: CheckContext,
+): Promise<CheckResult> {
+  const path = await text(c.path, x.scope);
+  const query = cleanQuery(await renderTemplate(c.query ?? {}, x.scope));
+  const res = await x.deps.outbound.execute<{ value?: unknown[] }>(
+    AUTOMATION,
+    {
+      service: 'graph',
+      method: 'GET',
+      path,
+      query,
+      beta: c.beta,
+      paging: 'all',
+      maxItems: c.maxItems,
+      requires: x.probe.requires,
+    },
+    { signal: x.signal, correlationId: x.correlationId },
+  );
+  const value = Array.isArray(res.data?.value) ? res.data.value : [];
+  const picked = c.items ? await renderTemplate(c.items, { ...x.scope, value }) : value;
+  const items = Array.isArray(picked) ? picked : picked === undefined || picked === null ? [] : [picked];
+  const fields = c.fields ?? ['id', 'displayName'];
+  const field = (item: unknown, name: string) =>
+    name
+      .split('.')
+      .reduce<unknown>(
+        (v, k) => (v && typeof v === 'object' ? (v as Record<string, unknown>)[k] : undefined),
+        item,
+      );
+  const rows = items
+    .slice(0, c.detailsLimit)
+    .map((item) => Object.fromEntries(fields.map((f) => [f, field(item, f) ?? null])));
+  const capped = value.length >= c.maxItems;
+  return {
+    metric: items.length,
+    message: `${items.length} item${items.length === 1 ? '' : 's'} counted${capped ? ` (only the first ${c.maxItems} read)` : ''}; ${describeThresholds(x.thresholds)}.`,
+    details: { rows, totalRows: items.length, truncated: items.length > rows.length || capped },
+  };
 }
 
 async function tokenAcquisition(
@@ -846,6 +945,7 @@ const CHECKS: {
 } = {
   http,
   graph: service,
+  graphCount,
   arm: service,
   tokenAcquisition,
   functionHealth,

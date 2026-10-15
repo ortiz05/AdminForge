@@ -1,4 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query';
+import { forgetAllHistory } from '../query/history';
 import { usePortalEvent } from '../runs/event-stream';
 
 /** Query keys that depend on published content: refetched when an administrator publishes. */
@@ -21,5 +22,9 @@ export function useLiveUpdates(): void {
     for (const queryKey of CONTENT_KEYS) void queryClient.invalidateQueries({ queryKey: [...queryKey] });
   });
   usePortalEvent('session.mode', () => void queryClient.invalidateQueries({ queryKey: ['me'] }));
-  usePortalEvent('session.ended', () => void queryClient.invalidateQueries({ queryKey: ['me'] }));
+  usePortalEvent('session.ended', () => {
+    // Signed out here or in another tab (or the session expired): query history leaves the browser.
+    forgetAllHistory();
+    void queryClient.invalidateQueries({ queryKey: ['me'] });
+  });
 }

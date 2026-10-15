@@ -1,11 +1,14 @@
 import { z } from 'zod';
+import { RESPONSE_NONCE_RE } from './crypto';
 
 /**
  * Wire protocol of the AdminForge runner.
  *
- * API → runner:   POST /v1/jobs  (RunnerJobRequest, JSON)
- * runner → API:   200 application/x-ndjson, one RunnerEvent per line, ending with `done`.
- *                 Blank lines are keep-alives and must be ignored.
+ * API → runner:   POST /v1/jobs  (RunnerJobRequest, JSON; tokens sealed, see crypto.ts)
+ * runner → API:   200 application/x-ndjson, one RunnerEvent per line, starting with `accepted` and ending with
+ *                 `done`. Every event carries `seq` and `mac` (signed over the request's nonce, crypto.ts) and
+ *                 is verified before the API uses it. Blank lines are keep-alives and must be ignored.
+ *                 Refusals are JSON with X-AdminForge-Signature.
  * worker → runner (stdout of the pwsh worker): the same log/progress/output/error events plus the
  *                 internal `ready` and `exit` messages, which never reach the API.
  */
@@ -27,6 +30,19 @@ export const Sha256Schema = z.string().regex(/^[0-9a-f]{64}$/, 'Expected a lower
 const TokenSchema = z.string().min(1).max(32_768);
 const HostLabel = '[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?';
 
+/** Delegated access tokens of the calling engineer, as sealed by the client (crypto.ts) and opened by the runner. */
+export const RunnerTokensSchema = z.strictObject({
+  graph: TokenSchema.optional(),
+  exchange: TokenSchema.optional(),
+  teams: TokenSchema.optional(),
+  sharepointAdmin: TokenSchema.optional(),
+  arm: TokenSchema.optional(),
+});
+export type RunnerTokens = z.output<typeof RunnerTokensSchema>;
+
+/** Upper bound for the sealed token payload (five tokens of at most 32 KiB, JSON, base64url). */
+export const SEALED_TOKENS_MAX_CHARS = 262_144;
+
 export const RunnerJobRequestSchema = z.strictObject({
   /** Unique per job; the API uses `<runId>:<stepId>`. Reusing an id within 10 minutes is refused. */
   jobId: z
@@ -36,16 +52,13 @@ export const RunnerJobRequestSchema = z.strictObject({
   /** Passed to the script as a hashtable ($Inputs); never interpolated into code. */
   inputs: z.record(z.string(), z.unknown()).default({}),
   mode: z.enum(['read', 'write']),
-  /** Delegated access tokens of the calling engineer. Only the services the script declares. */
-  tokens: z
-    .strictObject({
-      graph: TokenSchema.optional(),
-      exchange: TokenSchema.optional(),
-      teams: TokenSchema.optional(),
-      sharepointAdmin: TokenSchema.optional(),
-      arm: TokenSchema.optional(),
-    })
-    .default({}),
+  /**
+   * The delegated tokens for the services the script declares, AES-256-GCM-sealed for this job id and request
+   * timestamp (crypto.ts). Absent when the script needs no service. Plaintext tokens are refused.
+   */
+  sealedTokens: z.string().max(SEALED_TOKENS_MAX_CHARS).optional(),
+  /** Random per request (32 bytes, base64url). The runner signs every event of its answer over it. */
+  nonce: z.string().regex(RESPONSE_NONCE_RE, 'Expected a 32-byte base64url nonce'),
   tenant: z.strictObject({
     id: z.guid(),
     /** Organization for Exchange Online (e.g. the tenant's initial *.onmicrosoft.com domain). */
@@ -67,10 +80,14 @@ export const RunnerJobRequestSchema = z.strictObject({
     .default(RUNNER_DEFAULT_TIMEOUT_SECONDS),
 });
 
-/** What a client sends (defaults optional). */
+/** The request body on the wire (defaults optional). */
 export type RunnerJobRequest = z.input<typeof RunnerJobRequestSchema>;
-/** What the runner works with after validation. */
-export type RunnerJob = z.output<typeof RunnerJobRequestSchema>;
+/** What a client hands to prepareRunnerJob: plaintext tokens, which are sealed before they leave the process. */
+export type RunnerJobInput = Omit<RunnerJobRequest, 'sealedTokens' | 'nonce'> & { tokens?: RunnerTokens };
+/** What the runner works with after validation and decryption. */
+export type RunnerJob = Omit<z.output<typeof RunnerJobRequestSchema>, 'sealedTokens' | 'nonce'> & {
+  tokens: RunnerTokens;
+};
 
 export const LOG_LEVELS = ['debug', 'info', 'warn', 'error'] as const;
 export type RunnerLogLevel = (typeof LOG_LEVELS)[number];
@@ -139,7 +156,7 @@ export interface WorkerJobPayload {
   mode: 'read' | 'write';
   script: { path: string; sha256: string; content: string };
   inputs: Record<string, unknown>;
-  tokens: Partial<Record<RunnerService, string>>;
+  tokens: RunnerTokens;
   tenant: RunnerJob['tenant'];
   timeoutSeconds: number;
 }

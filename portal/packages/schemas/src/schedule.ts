@@ -125,10 +125,24 @@ export const TeamsTarget = z
     path: ['webhook'],
   });
 
+/**
+ * Email recipients are configuration, never addresses in content: each entry is `${ env.X }` naming a key of the
+ * installation's configuration whose name ends in RECIPIENTS, EMAIL or ALERTS (e.g. `${ env.AF_REPORT_RECIPIENTS }`,
+ * holding comma- or semicolon-separated addresses). The scheduler reads only keys named like that.
+ */
+export const RECIPIENT_REF = /^\s*\$\{\s*env\.AF_[A-Z0-9_]*(RECIPIENTS|EMAIL|ALERTS)\s*\}\s*$/;
+export const RecipientRef = z
+  .string()
+  .regex(
+    RECIPIENT_REF,
+    'Use ${ env.AF_…_RECIPIENTS } (or a key ending in _EMAIL or _ALERTS): addresses live in the configuration, not in content',
+  )
+  .meta({ description: 'An ${ env.AF_…_RECIPIENTS } reference; the addresses live in local configuration' });
+
 export const EmailTarget = z.strictObject({
   type: z.literal('email'),
-  to: z.array(Template).min(1),
-  cc: z.array(Template).optional(),
+  to: z.array(RecipientRef).min(1),
+  cc: z.array(RecipientRef).optional(),
   subject: Template.optional(),
   message: Template.optional(),
 });

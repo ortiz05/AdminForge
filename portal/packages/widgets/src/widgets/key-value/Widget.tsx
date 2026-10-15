@@ -1,6 +1,14 @@
 import { useMemo, type ReactNode } from 'react';
-import { Badge, IdChip, StatusPill, cn, formatRelative, formatTimestamp, useNow } from '@adminforge/ui';
-import { isExternal } from '../../lib/actions';
+import {
+  Badge,
+  IdChip,
+  StatusPill,
+  cn,
+  formatRelative,
+  formatTimestamp,
+  safeUrl,
+  useNow,
+} from '@adminforge/ui';
 import { useTemplate } from '../../lib/expr';
 import { formatValue } from '../../lib/format';
 import { getPath, isRecord } from '../../lib/path';
@@ -25,12 +33,14 @@ function LinkValue({
 }) {
   const scope = useMemo(() => ({ ...runtime.scope, row, value }), [runtime.scope, row, value]);
   const href = useTemplate<unknown>(field.href ?? (typeof value === 'string' ? value : undefined), scope);
-  const target = typeof href.value === 'string' ? href.value : undefined;
+  // The target often comes from data: only safe ones (http(s), mailto, in-app paths) become links.
+  const safe = typeof href.value === 'string' ? safeUrl(href.value) : null;
+  const target = safe?.href;
   const label = value == null ? '' : String(value);
   if (!label) return <Dash />;
   if (!target) return <span className="break-words">{label}</span>;
   const cls = 'break-all text-accent underline-offset-2 hover:underline';
-  if (isExternal(target))
+  if (safe.external)
     return (
       <a href={target} target="_blank" rel="noreferrer" className={cls}>
         {label}

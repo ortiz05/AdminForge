@@ -4,7 +4,10 @@ import type { TokenProvider } from '@adminforge/connectors';
 export interface ClientCredentials {
   tenantId: string;
   clientId: string;
-  clientSecret: string;
+  /** Exactly one of clientSecret / clientAssertion (certificate, RFC 7523). */
+  clientSecret?: string;
+  /** Builds a signed client assertion for the token endpoint (see provision/certificate.ts). */
+  clientAssertion?: (tokenEndpoint: string) => string;
 }
 
 export interface ClientCredentialOptions extends ClientCredentials {
@@ -39,13 +42,20 @@ export function clientCredentialToken(opts: ClientCredentialOptions): TokenProvi
 
   return async () => {
     if (cached && cached.expiresAt > now()) return cached.token;
-    const res = await doFetch(`${authority}/${encodeURIComponent(opts.tenantId)}/oauth2/v2.0/token`, {
+    const endpoint = `${authority}/${encodeURIComponent(opts.tenantId)}/oauth2/v2.0/token`;
+    const credential: Record<string, string> = opts.clientAssertion
+      ? {
+          client_assertion_type: 'urn:ietf:params:oauth:client-assertion-type:jwt-bearer',
+          client_assertion: opts.clientAssertion(endpoint),
+        }
+      : { client_secret: opts.clientSecret ?? '' };
+    const res = await doFetch(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({
         grant_type: 'client_credentials',
         client_id: opts.clientId,
-        client_secret: opts.clientSecret,
+        ...credential,
         scope: opts.scope,
       }).toString(),
     });

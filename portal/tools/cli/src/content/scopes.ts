@@ -1,6 +1,13 @@
 import type { GraphClient } from '@adminforge/connectors';
 import type { LoadedDefinition, Scopes } from '@adminforge/schemas';
-import { RESOURCES } from '../provision/catalog';
+import { AUTOMATION_BUILTIN_USES, RESOURCES, type ResourceKey } from '../provision/catalog';
+import {
+  baselinePermissions,
+  CEILINGS,
+  desiredPermissions,
+  type CeilingSettings,
+  type ContentScopes,
+} from '../provision/entra-desired';
 
 /** Services whose permissions `validate --scopes` compares (connections use their own audiences and are not checked). */
 export const SCOPE_SERVICES = [
@@ -24,6 +31,17 @@ export const RESOURCE_APP_IDS: Record<ScopeService, string> = {
   sharepointAdmin: '00000003-0000-0ff1-ce00-000000000000',
 };
 const SERVICE_BY_APP_ID = new Map(Object.entries(RESOURCE_APP_IDS).map(([s, id]) => [id, s as ScopeService]));
+
+const RESOURCE_SERVICE: Record<ResourceKey, ScopeService> = {
+  graph: 'graph',
+  arm: 'arm',
+  logAnalytics: 'logAnalytics',
+  exchange: 'exchange',
+  teams: 'teams',
+  sharepoint: 'sharepointAdmin',
+};
+/** Provisioning's resource key → the service key content uses in `requires.scopes`. */
+export const serviceForResource = (resource: ResourceKey): ScopeService => RESOURCE_SERVICE[resource];
 
 /** Sign-in scopes every delegated app holds; never reported as unused. */
 const OIDC = new Set(['openid', 'profile', 'offline_access', 'email', 'user.read']);
@@ -89,31 +107,101 @@ export interface ScopeFinding {
 }
 
 export interface ScopeComparison {
+  /** Declared, expected by provisioning, and not granted: `provision entra` fixes it. */
   missing: ScopeFinding[];
+  /** Granted, but neither declared by content nor expected by provisioning (or, without `provisioned`, not declared). */
   unused: ScopeFinding[];
+  /** Declared, but a ceiling withholds it (provisioning skips it too); `reason` names the env key. */
+  withheld: Array<ScopeFinding & { reason: string }>;
+  /** Declared for a workload whose resource service principal is not in this tenant (provisioning skips it too). */
+  unlicensed: ScopeFinding[];
+  /** Granted by provisioning's baseline (catalog.ts) though no content declares it; `builtin` = code relies on it. */
+  baseline: Array<ScopeFinding & { builtin?: string }>;
 }
 
-/** Declared-but-not-consented (missing) and consented-but-not-declared (unused), per app and service. */
-export function compareScopes(declared: Declared, consented: ScopeSet): ScopeComparison {
-  const missing: ScopeFinding[] = [];
-  const unused: ScopeFinding[] = [];
+/** What provisioning expects for each app (provision/entra-desired.ts desiredPermissions), as scope sets. */
+export interface Provisioned {
+  /** Everything provisioning requests (baseline ∪ content ∪ read-only scopes of write content), after the ceilings. */
+  expected: ScopeSet;
+  /** The baseline alone. */
+  baseline: ScopeSet;
+  /** `app:service:scope` (lower case) → why a ceiling withholds it. */
+  withheld: Map<string, string>;
+}
+
+/** Pure: the same desired permissions `provision entra` computes, keyed like content declarations. */
+export function provisionedScopes(settings: CeilingSettings, declared: ScopeSet): Provisioned {
+  const { requests, withheld } = desiredPermissions(settings, declared as ContentScopes);
+  const toSet = (reqs: Record<ScopeApp, Array<{ resource: ResourceKey; values: readonly string[] }>>) => {
+    const set = emptyScopeSet();
+    for (const app of ['read', 'write', 'automation'] as const)
+      for (const r of reqs[app])
+        for (const v of r.values) (set[app][serviceForResource(r.resource)] ??= new Set()).add(v);
+    return set;
+  };
+  return {
+    expected: toSet(requests),
+    baseline: toSet(baselinePermissions()),
+    withheld: new Map(
+      withheld.map((w) => [
+        `${w.app}:${serviceForResource(w.resource)}:${w.value}`.toLowerCase(),
+        CEILINGS[w.ceiling].reason,
+      ]),
+    ),
+  };
+}
+
+const has = (set: Set<string> | undefined, scope: string) =>
+  [...(set ?? [])].some((s) => s.toLowerCase() === scope.toLowerCase());
+
+/**
+ * Declared-but-not-consented (missing) and consented-but-not-declared (unused), per app and service. With
+ * `provisioned` (and `present`, the resources that exist in the tenant) the comparison agrees with `provision entra`:
+ * withheld and unlicensed permissions aren't "missing", and what provisioning grants on purpose — the read-only scopes
+ * of write content on the Read app, the baseline — isn't "unused" (the baseline is listed separately).
+ */
+export function compareScopes(
+  declared: Declared,
+  consented: ScopeSet,
+  provisioned?: Provisioned,
+  present?: ReadonlySet<ScopeService>,
+): ScopeComparison {
+  const out: ScopeComparison = { missing: [], unused: [], withheld: [], unlicensed: [], baseline: [] };
   for (const app of ['read', 'write', 'automation'] as const) {
     for (const service of SCOPE_SERVICES) {
       const want = declared.scopes[app][service] ?? new Set<string>();
       const have = consented[app][service] ?? new Set<string>();
-      for (const scope of [...want].sort())
-        if (!satisfied(have, scope))
-          missing.push({ app, service, scope, files: declared.files.get(`${app}:${service}:${scope}`) });
+      for (const scope of [...want].sort()) {
+        if (satisfied(have, scope)) continue;
+        const finding = { app, service, scope, files: declared.files.get(`${app}:${service}:${scope}`) };
+        const reason = provisioned?.withheld.get(`${app}:${service}:${scope}`.toLowerCase());
+        if (reason) out.withheld.push({ ...finding, reason });
+        else if (present && !present.has(service)) out.unlicensed.push(finding);
+        else out.missing.push(finding);
+      }
       for (const scope of [...have].sort()) {
         if (OIDC.has(scope.toLowerCase())) continue;
         const used = [...want].some(
           (w) => w.toLowerCase() === scope.toLowerCase() || satisfied(new Set([scope]), w),
         );
-        if (!used) unused.push({ app, service, scope });
+        if (used) continue;
+        if (provisioned && has(provisioned.expected[app][service], scope)) {
+          if (has(provisioned.baseline[app][service], scope))
+            out.baseline.push({
+              app,
+              service,
+              scope,
+              builtin:
+                app === 'automation' && service === 'graph' ? AUTOMATION_BUILTIN_USES[scope] : undefined,
+            });
+          // Otherwise derived on purpose (read-only scopes of write content: dry runs read with the Read app).
+          continue;
+        }
+        out.unused.push({ app, service, scope });
       }
     }
   }
-  return { missing, unused };
+  return out;
 }
 
 interface Sp {
@@ -131,9 +219,18 @@ const odata = (s: string) => `'${s.replace(/'/g, "''")}'`;
 export async function consentedScopes(
   graph: GraphClient,
   apps: Partial<Record<ScopeApp, string>>,
-): Promise<{ scopes: ScopeSet; notFound: ScopeApp[] }> {
+): Promise<{ scopes: ScopeSet; notFound: ScopeApp[]; present: Set<ScopeService> }> {
   const scopes = emptyScopeSet();
   const notFound: ScopeApp[] = [];
+  // Which Microsoft resources exist here: unlicensed workloads have no service principal (provisioning skips them).
+  const present = new Set<ScopeService>();
+  for (const service of SCOPE_SERVICES) {
+    const r = await graph.request<{ value?: Sp[] }>({
+      path: '/servicePrincipals',
+      query: { $filter: `appId eq ${odata(RESOURCE_APP_IDS[service])}`, $select: 'id,appId' },
+    });
+    if (r.data.value?.length) present.add(service);
+  }
   const resources = new Map<string, Sp | null>();
   const resource = async (id: string) => {
     if (!resources.has(id)) {
@@ -183,5 +280,5 @@ export async function consentedScopes(
       }
     }
   }
-  return { scopes, notFound };
+  return { scopes, notFound, present };
 }

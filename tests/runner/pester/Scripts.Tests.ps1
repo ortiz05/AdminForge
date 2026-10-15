@@ -3,37 +3,8 @@
 # global stub functions returning synthetic data (example.com / fabrikam.example), so these run without a tenant.
 
 BeforeAll {
-    $script:Repo = (Resolve-Path (Join-Path $PSScriptRoot '../../..')).Path
-    $script:ScriptsDir = Join-Path $Repo 'portal/content/scripts'
-    Import-Module (Join-Path $Repo 'portal/apps/runner/ps/AdminForge.Runner/AdminForge.Runner.psd1') -Force
-
-    # Runs a content script exactly as the worker does: text → scriptblock, merged streams → events.
-    function Invoke-ContentScript([string]$RelativePath, [hashtable]$Inputs = @{}, [string]$Mode = 'read') {
-        $events = [System.Collections.Generic.List[object]]::new()
-        Set-AdminForgeEventSink -ScriptBlock { param($e) $events.Add($e) }.GetNewClosure()
-        $context = @{
-            JobId = 'pester'; Mode = $Mode; Services = @('Exchange')
-            Tenant = @{ Id = '0f3a4c2e-8b1d-4e6f-9a7c-2d5b8e1f4a63'; Domain = 'example.onmicrosoft.com'; SpoTenantName = 'example' }
-            User = @{ Upn = 'engineer@example.com'; ObjectId = $null }
-        }
-        $sb = [scriptblock]::Create((Get-Content -Raw -LiteralPath (Join-Path $ScriptsDir $RelativePath)))
-        $failure = $null
-        try {
-            & $sb -Inputs $Inputs -Context $context *>&1 | Send-AdminForgeStreamRecord
-        } catch {
-            $failure = $_
-        } finally {
-            Set-AdminForgeEventSink -Reset
-        }
-        [pscustomobject]@{
-            Events   = $events.ToArray()
-            Output   = @($events | Where-Object { $_.type -eq 'output' } | ForEach-Object { $_.data })
-            Failure  = $failure
-            Category = if ($failure) { Get-AdminForgeErrorCategory $failure } else { $null }
-        }
-    }
-
-    function New-Stub([string]$Name, [scriptblock]$Body) { Set-Item -Path "function:global:$Name" -Value $Body }
+    # Invoke-ContentScript (read mode applies the static read-only policy, as the worker does), New-Stub, Remove-Stubs.
+    . (Join-Path $PSScriptRoot 'ContentScript.Helpers.ps1')
 
     $script:StubNames = @(
         'Get-EXOMailbox', 'Get-EXORecipient', 'Get-AcceptedDomain', 'Get-InboxRule', 'Set-Mailbox',

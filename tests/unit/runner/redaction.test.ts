@@ -5,12 +5,12 @@ import { buildWorkerCommand } from '@adminforge/runner/src/config';
 import {
   FAKE_WORKER,
   fakeJwt,
+  injectJob,
   job,
   logCapture,
   makeScriptsDir,
   newKey,
   parseEvents,
-  signedInject,
   testConfig,
 } from './helpers';
 
@@ -69,17 +69,15 @@ describe('tokens never leak from a job', () => {
   });
 
   const run = async (inputs: Record<string, unknown>) => {
-    const res = await signedInject(app, key, {
-      method: 'POST',
-      url: '/v1/jobs',
-      body: job({
-        script: { path: scripts.script, sha256: scripts.sha },
-        inputs,
-        tokens: { graph, exchange },
-      }),
-    });
-    expect(res.statusCode).toBe(200);
-    return res;
+    const sent = await injectJob(
+      app,
+      key,
+      job({ script: { path: scripts.script, sha256: scripts.sha }, inputs, tokens: { graph, exchange } }),
+    );
+    expect(sent.res.statusCode).toBe(200);
+    // Tokens travel sealed: the request body never holds them.
+    for (const secret of [graph, exchange]) expect(sent.body).not.toContain(secret);
+    return sent.res;
   };
 
   it('redacts tokens a script echoes into logs, stderr, raw stdout, output data and errors', async () => {

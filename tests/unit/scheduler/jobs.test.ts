@@ -169,7 +169,7 @@ describe('report jobs', () => {
     const def = reportSchedule([
       { type: 'file', format: 'xlsx', retain: 2 },
       { type: 'file', format: 'json' },
-      { type: 'email', to: ['ops@example.com'] },
+      { type: 'email', to: ['${ env.AF_OPS_RECIPIENTS }'] },
     ]);
     for (const old of ['2026-10-01T06-00-00Z', '2026-10-08T06-00-00Z']) {
       mkdirSync(path.join(dir, def.id), { recursive: true });

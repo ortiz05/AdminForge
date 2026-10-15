@@ -1,13 +1,14 @@
 import { ApiError, createLogAnalyticsClient } from '@adminforge/connectors';
 import {
   appClients,
+  appToken,
   ConfigError,
   provisionerClients,
   provisionSettings,
   type CliContext,
   type Clients,
 } from '../commands/context';
-import { clientCredentialToken, TokenError } from './auth';
+import { TokenError } from './auth';
 import { ENV_KEYS } from './entra-desired';
 import { ARM_BASE } from './entra-io';
 import { isGuid } from './ids';
@@ -106,21 +107,15 @@ export async function verifyWorkspace(
   workspaceId: string,
   opts: { attempts?: number; intervalMs?: number } = {},
 ): Promise<VerifyResult> {
-  const clientId = ctx.env[ENV_KEYS.automation.clientId];
-  const clientSecret = ctx.env[ENV_KEYS.automation.secret];
-  if (!isGuid(clientId) || !clientSecret)
+  // The automation identity's certificate (AF_AUTOMATION_CERT_PATH) when configured, else its client secret.
+  const getToken = appToken(ctx, settings.tenantId, 'automation', LOG_ANALYTICS_SCOPE);
+  if (!getToken)
     return {
       ok: false,
-      error: `${ENV_KEYS.automation.clientId} / ${ENV_KEYS.automation.secret} are not in the env file`,
+      error: `${ENV_KEYS.automation.clientId} / ${ENV_KEYS.automation.secret} (or AF_AUTOMATION_CERT_PATH) are not in the env file`,
     };
   const la = createLogAnalyticsClient({
-    getToken: clientCredentialToken({
-      tenantId: settings.tenantId,
-      clientId,
-      clientSecret,
-      scope: LOG_ANALYTICS_SCOPE,
-      fetch: ctx.fetch,
-    }),
+    getToken,
     fetch: ctx.fetch,
     sleep: ctx.sleep,
     timeoutMs: 60_000,

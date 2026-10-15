@@ -47,8 +47,20 @@ export const Connection = z
     ...envelopeShape,
     baseUrl: BaseUrl,
     audience: Audience,
-    /** Delegated scopes requested for the audience (default user_impersonation). */
-    scopes: z.array(z.string().min(1)).optional(),
+    /**
+     * Delegated scope names on the connection's own audience (default user_impersonation). Names only: the token is
+     * always requested as `<audience>/<name>`, so a scope can never point at another resource (e.g. Graph).
+     */
+    scopes: z
+      .array(
+        z
+          .string()
+          .regex(
+            /^[A-Za-z0-9._-]+$/,
+            'Expected a scope name such as user_impersonation (the audience is added automatically)',
+          ),
+      )
+      .optional(),
     operations: z.record(Identifier, ConnectionOperation),
     /** Operation used by functionHealth probes. */
     health: Identifier.optional(),

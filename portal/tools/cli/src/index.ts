@@ -14,7 +14,12 @@ import {
 } from './commands/content';
 import { envCheck } from './commands/env';
 import { ConfigError, type CliContext } from './commands/context';
-import { provisionEntra, provisionStatus, provisionTestIdentities } from './commands/provision';
+import {
+  provisionEntra,
+  provisionStatus,
+  provisionTestIdentities,
+  setTesterEnabled,
+} from './commands/provision';
 import { destroyAzureTestRun, provisionAzureTest } from './provision/azure-test-command';
 import { TokenError } from './provision/auth';
 
@@ -76,9 +81,20 @@ provision
   });
 provision
   .command('test-identities')
-  .description('Create the validation user and AF-Test-* write-test targets (test tenants only)')
+  .description(
+    'Create the validation user (disabled) and AF-Test-* write-test targets — test environments only (AF_TEST_IDENTITY_LABELS)',
+  )
   .option('--dry-run', 'print the plan without changing anything')
-  .action(async (opts: { dryRun?: boolean }) => {
+  .option('--enable', 'only enable the validation user’s sign-in (before a live run)')
+  .option('--disable', 'only disable the validation user and revoke its sessions (after a live run)')
+  .action(async (opts: { dryRun?: boolean; enable?: boolean; disable?: boolean }) => {
+    if (opts.enable && opts.disable) throw new ConfigError('Use either --enable or --disable, not both.');
+    if (opts.enable || opts.disable) {
+      if (opts.dryRun)
+        throw new ConfigError('--dry-run plans provisioning; it does not combine with --enable/--disable.');
+      await setTesterEnabled(liveContext(), !!opts.enable);
+      return;
+    }
     await provisionTestIdentities(liveContext(), { dryRun: opts.dryRun });
   });
 provision

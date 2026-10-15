@@ -1,4 +1,5 @@
 import { parseEnv } from '@adminforge/config';
+import { originProblem } from './commands/context';
 
 /** What a key is needed for. A key is reported as required when any selected purpose needs it. */
 export type Purpose = 'provision' | 'portal' | 'schedules' | 'validation';
@@ -67,13 +68,29 @@ export interface EnvReport {
 
 function validate(key: string, value: string): string | undefined {
   if (GUID_KEYS.has(key) && !GUID.test(value)) return 'expected a GUID';
-  if (key === 'PUBLIC_BASE_URL' || key === 'RUNNER_URL') {
+  if (key === 'RUNNER_URL') {
     try {
       new URL(value);
     } catch {
       return 'expected a URL';
     }
   }
+  // Origins that become Entra redirect URIs: https, or http on loopback only.
+  if (key === 'PUBLIC_BASE_URL' || key === 'AF_REDIRECT_BASE_URLS') {
+    const problem = value
+      .split(',')
+      .map((u) => u.trim())
+      .filter(Boolean)
+      .map((u) => originProblem(u))
+      .find(Boolean);
+    if (problem)
+      return problem === 'is not a valid URL'
+        ? 'expected a URL'
+        : 'expected https (http only for localhost, 127.0.0.1 or ::1)';
+  }
+  // Permission-ceiling opt-ins are on only when exactly "true".
+  if (/^AF_(AUTOMATION_)?ALLOW_/.test(key) && !['true', 'false'].includes(value))
+    return 'expected true or false';
   if (key === 'TOKEN_CACHE_KEY' && Buffer.from(value, 'base64').length !== 32)
     return 'expected 32 random bytes, base64';
   if (key === 'AUTH_MODE' && !['entra', 'mock'].includes(value)) return 'expected entra or mock';

@@ -1,6 +1,7 @@
 import { ApiError, type GraphClient } from '@adminforge/connectors';
 import { findGroup, odata } from './entra-io';
 import { groupNames } from './entra-desired';
+import { PORTAL_ROLES } from './catalog';
 import type { DesiredIdentities, GraphUser, IdentityOp, IdentityState } from './identities-plan';
 import type { GraphGroup } from './model';
 import { generatePassword } from './password';
@@ -38,19 +39,50 @@ export async function fetchIdentityState(
       query: { $select: 'id' },
     });
     state.testerGroupIds = memberOf.map((m) => m.id);
-    const roles = await graph.all<{ roleDefinitionId: string; directoryScopeId: string }>({
+    const roles = await graph.all<{ id: string; roleDefinitionId: string; directoryScopeId: string }>({
       path: '/roleManagement/directory/roleAssignments',
       query: { $filter: `principalId eq ${odata(state.tester.id)}` },
     });
-    state.testerRoleIds = roles.filter((r) => r.directoryScopeId === '/').map((r) => r.roleDefinitionId);
+    state.testerRoleAssignments = roles
+      .filter((r) => r.directoryScopeId === '/')
+      .map((r) => ({ id: r.id, roleDefinitionId: r.roleDefinitionId }));
+    state.testerRoleIds = state.testerRoleAssignments.map((r) => r.roleDefinitionId);
   }
-  for (const role of desired.testerGroups) {
-    const g = await findGroup(graph, groupNames(desired.label, role).uniqueName);
-    if (g) state.portalGroups[role] = g;
+  // Every portal group: the tester's memberships in groups it no longer needs are removed.
+  for (const r of PORTAL_ROLES) {
+    const g = await findGroup(graph, groupNames(desired.label, r.value).uniqueName);
+    if (g) state.portalGroups[r.value] = g;
   }
   for (const t of desired.targets) state.targets[t.upn.toLowerCase()] = await findUser(graph, t.upn);
   state.testGroup = await findGroup(graph, desired.testGroup.uniqueName);
+  if (state.testGroup)
+    state.testGroupOwnerIds = (
+      await graph.all<{ id: string }>({
+        path: `/groups/${state.testGroup.id}/owners`,
+        query: { $select: 'id' },
+      })
+    ).map((o) => o.id);
   return state;
+}
+
+/**
+ * `provision test-identities --enable | --disable`: the validation user holds standing directory roles, so it stays
+ * disabled except while the live suite runs. Disabling also revokes its sign-in sessions. Idempotent.
+ */
+export async function setUserEnabled(
+  graph: GraphClient,
+  upn: string,
+  enabled: boolean,
+): Promise<'changed' | 'unchanged' | 'missing'> {
+  const user = await findUser(graph, upn);
+  if (!user) return 'missing';
+  if ((user.accountEnabled ?? true) === enabled) return 'unchanged';
+  await graph.request({ method: 'PATCH', path: `/users/${user.id}`, body: { accountEnabled: enabled } });
+  if (!enabled)
+    await graph
+      .request({ method: 'POST', path: `/users/${user.id}/revokeSignInSessions` })
+      .catch(() => undefined); // best effort: a disabled account can't refresh its tokens anyway
+  return 'changed';
 }
 
 /** Security Defaults state: true/false, or "unknown" when no identity available may read it. */
@@ -96,19 +128,21 @@ export async function applyIdentityOps(
         log(`      … waiting ${Math.round(ms / 1000)}s for directory replication (attempt ${n})`),
     });
   let testerId = state.tester?.id;
+  const testGroupId = state.testGroup?.id;
   const groupId = (role: keyof IdentityState['portalGroups']) => state.portalGroups[role]?.id;
 
   const createUser = async (
     spec: { upn: string; displayName: string; mailNickname: string },
     pwd: string,
     neverExpire: boolean,
+    enabled = true,
   ) =>
     (
       await graph.request<GraphUser>({
         method: 'POST',
         path: '/users',
         body: {
-          accountEnabled: true,
+          accountEnabled: enabled,
           displayName: spec.displayName,
           mailNickname: spec.mailNickname,
           userPrincipalName: spec.upn,
@@ -126,7 +160,8 @@ export async function applyIdentityOps(
         let created = false;
         if (op.mode === 'create') {
           try {
-            testerId = (await createUser(op.user, pwd, true)).id;
+            // Created disabled: the live suite enables it for the run (`--enable`) and disables it afterwards.
+            testerId = (await createUser(op.user, pwd, true, false)).id;
             created = true;
             log(`  ✓ created user: ${op.title}`);
           } catch (err) {
@@ -173,6 +208,51 @@ export async function applyIdentityOps(
           if (!isAlreadyExists(err)) throw err;
         }
         log(`  ✓ added: ${op.title}`);
+        break;
+      }
+      case 'membershipRemove': {
+        const gid = groupId(op.role)!;
+        const uid = testerId!;
+        try {
+          await retry(() => graph.request({ method: 'DELETE', path: `/groups/${gid}/members/${uid}/$ref` }));
+        } catch (err) {
+          if (!(err instanceof ApiError && err.status === 404)) throw err;
+        }
+        log(`  ✓ removed: ${op.title}`);
+        break;
+      }
+      case 'directoryRoleRemove': {
+        for (const id of op.assignmentIds)
+          try {
+            await retry(() =>
+              graph.request({ method: 'DELETE', path: `/roleManagement/directory/roleAssignments/${id}` }),
+            );
+          } catch (err) {
+            if (!(err instanceof ApiError && err.status === 404)) throw err;
+          }
+        log(`  ✓ removed: ${op.title}`);
+        break;
+      }
+      case 'testGroupOwner': {
+        const uid = testerId!;
+        const group = await retry(
+          async () =>
+            testGroupId ??
+            (await findGroup(graph, op.uniqueName))?.id ??
+            Promise.reject(notYetVisible(op.uniqueName)),
+        );
+        try {
+          await retry(() =>
+            graph.request({
+              method: 'POST',
+              path: `/groups/${group}/owners/$ref`,
+              body: { '@odata.id': `https://graph.microsoft.com/v1.0/users/${uid}` },
+            }),
+          );
+        } catch (err) {
+          if (!isAlreadyExists(err)) throw err;
+        }
+        log(`  ✓ added owner: ${op.title}`);
         break;
       }
       case 'directoryRole': {

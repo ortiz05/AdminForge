@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { evaluate, splitTemplate, type Scope } from '@adminforge/expressions';
+import { escapeMarkdownInline } from '@adminforge/ui';
 
 const ENTITIES: Record<string, string> = {
   amp: '&',
@@ -49,13 +50,15 @@ export function toText(v: unknown): string {
 async function interpolate(source: string, scope: Scope): Promise<string> {
   let out = '';
   for (const seg of splitTemplate(source))
-    out += seg.type === 'text' ? seg.value : toText(await evaluate(seg.source, scope));
+    out += seg.type === 'text' ? seg.value : escapeMarkdownInline(toText(await evaluate(seg.source, scope)));
   return out;
 }
 
 /**
  * Templated text (`markdown.text`): literal parts stay as written (they are Markdown), values from `${ … }` are
- * converted to plain text first, so HTML coming from data can never become markup.
+ * converted to plain text and their inline Markdown escaped first, so neither HTML nor Markdown coming from data (a
+ * display name like `[Open](/admin)`) can become markup or a link. Line structure stays: HTML lists from Microsoft
+ * APIs keep showing as lists.
  */
 export function useInterpolatedText(
   source: string,

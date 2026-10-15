@@ -11,7 +11,9 @@ export interface UserSpec {
 export interface DesiredIdentities {
   label: string;
   tester: UserSpec;
+  /** Portal roles the live suite needs (tests/live/e2e): read pages, arm and write, verify the audit chain. */
   testerGroups: PortalRole[];
+  /** Directory roles the live suite needs: read everything (Global Reader) and disable/enable a test user. */
   testerRoles: DirectoryRoleName[];
   targets: UserSpec[];
   testGroup: { uniqueName: string; body: GroupBody };
@@ -30,9 +32,13 @@ export interface IdentityState {
   testerGroupIds: string[];
   /** Role definition ids assigned to the tester at directory scope "/". */
   testerRoleIds: string[];
+  /** The tester's directory-scope role assignments (ids are needed to remove one). */
+  testerRoleAssignments?: Array<{ id: string; roleDefinitionId: string }>;
   portalGroups: Partial<Record<PortalRole, GraphGroup>>;
   targets: Record<string, GraphUser | undefined>;
   testGroup?: GraphGroup;
+  /** Owners (object ids) of the AF-Test group. */
+  testGroupOwnerIds?: string[];
   env: { upn?: string; password?: string };
 }
 
@@ -47,12 +53,33 @@ interface Base {
 export type IdentityOp =
   | (Base & { kind: 'tester'; mode: 'create' | 'resetPassword' | 'none'; user: UserSpec })
   | (Base & { kind: 'membership'; role: PortalRole })
+  | (Base & { kind: 'membershipRemove'; role: PortalRole })
   | (Base & { kind: 'directoryRole'; roleName: DirectoryRoleName; roleDefinitionId: string })
+  | (Base & { kind: 'directoryRoleRemove'; roleName: DirectoryRoleName; assignmentIds: string[] })
   | (Base & { kind: 'target'; user: UserSpec })
   | (Base & { kind: 'testGroup'; uniqueName: string; body: GroupBody })
+  | (Base & { kind: 'testGroupOwner'; uniqueName: string })
   | (Base & { kind: 'skipped' });
 
 const localPart = (upn: string) => upn.split('@')[0]!;
+
+/**
+ * Portal roles of the validation user. The live suite reads every page (Reader), arms and runs reversible writes
+ * (Operator) and verifies the audit chain and admin pages (Admin). Playbook.Author gates nothing yet; approval tests
+ * need a second person, so the tester is never an approver (it could otherwise approve its own scheduled writes).
+ */
+export const TESTER_PORTAL_ROLES: readonly PortalRole[] = [
+  'Portal.Reader',
+  'Portal.Operator',
+  'Portal.Admin',
+];
+
+/**
+ * Directory roles of the validation user. Global Reader lets pages render; User Administrator lets the live suite
+ * disable/re-enable AF-Test-User-02. Groups Administrator is deliberately not held: the tester owns AF-Test-Group-01
+ * instead (enough to add and remove its members), so it can't add itself to other groups through that role.
+ */
+export const TESTER_DIRECTORY_ROLES: readonly DirectoryRoleName[] = ['User Administrator', 'Global Reader'];
 
 /** Pure: who and what `provision test-identities` maintains. */
 export function buildDesiredIdentities(opts: {
@@ -64,8 +91,8 @@ export function buildDesiredIdentities(opts: {
   return {
     label: opts.label,
     tester: { upn, displayName: 'AF Tester', mailNickname: localPart(upn).replace(/[^A-Za-z0-9._-]/g, '') },
-    testerGroups: PORTAL_ROLES.map((r) => r.value),
-    testerRoles: ['User Administrator', 'Groups Administrator', 'Global Reader'],
+    testerGroups: [...TESTER_PORTAL_ROLES],
+    testerRoles: [...TESTER_DIRECTORY_ROLES],
     targets: [1, 2, 3].map((n) => ({
       upn: `af-test-user-0${n}@${opts.domain}`,
       displayName: `AF-Test-User-0${n}`,
@@ -99,6 +126,7 @@ export function planIdentities(desired: DesiredIdentities, state: IdentityState)
       action: 'create',
       section: 'Test identities',
       title: `${tester.displayName} (AF_TEST_USER_UPN)`,
+      changes: ['created disabled: `provision test-identities --enable` before a live run'],
       user: tester,
     });
   else if (!state.env.password || !envMatches)
@@ -121,6 +149,7 @@ export function planIdentities(desired: DesiredIdentities, state: IdentityState)
       action: 'noop',
       section: 'Test identities',
       title: `${tester.displayName} (AF_TEST_USER_UPN)`,
+      detail: `account ${state.tester.accountEnabled === false ? 'disabled' : 'enabled'}`,
       user: tester,
     });
 
@@ -146,10 +175,28 @@ export function planIdentities(desired: DesiredIdentities, state: IdentityState)
       role,
     });
   }
+  // Portal roles the tester no longer needs (e.g. Playbook.Approver from earlier versions) are removed.
+  for (const r of PORTAL_ROLES) {
+    if (desired.testerGroups.includes(r.value)) continue;
+    const group = state.portalGroups[r.value];
+    if (!state.tester || !group || !state.testerGroupIds.includes(group.id)) continue;
+    ops.push({
+      kind: 'membershipRemove',
+      action: 'delete',
+      section: 'Group membership',
+      title: `${tester.displayName} ∉ ${groupNames(desired.label, r.value).displayName}`,
+      changes: ['not needed by the live suite'],
+      role: r.value,
+    });
+  }
 
+  const assignments =
+    state.testerRoleAssignments ??
+    state.testerRoleIds.map((roleDefinitionId) => ({ id: '', roleDefinitionId }));
   for (const roleName of desired.testerRoles) {
     const roleDefinitionId = DIRECTORY_ROLES[roleName];
-    const has = !!state.tester && state.testerRoleIds.some((id) => id.toLowerCase() === roleDefinitionId);
+    const has =
+      !!state.tester && assignments.some((a) => a.roleDefinitionId.toLowerCase() === roleDefinitionId);
     ops.push({
       kind: 'directoryRole',
       action: has ? 'noop' : 'create',
@@ -157,6 +204,23 @@ export function planIdentities(desired: DesiredIdentities, state: IdentityState)
       title: `${tester.displayName}: ${roleName} (directory scope /)`,
       roleName,
       roleDefinitionId,
+    });
+  }
+  // Directory roles AdminForge used to give the tester and no longer wants (Groups Administrator) are removed.
+  for (const [roleName, roleDefinitionId] of Object.entries(DIRECTORY_ROLES) as Array<
+    [DirectoryRoleName, string]
+  >) {
+    if (desired.testerRoles.includes(roleName) || !state.tester) continue;
+    const held = assignments.filter((a) => a.roleDefinitionId.toLowerCase() === roleDefinitionId);
+    if (!held.length) continue;
+    ops.push({
+      kind: 'directoryRoleRemove',
+      action: 'delete',
+      section: 'Directory roles',
+      title: `${tester.displayName}: ${roleName} (directory scope /)`,
+      changes: ['standing role the live suite does not need'],
+      roleName,
+      assignmentIds: held.map((a) => a.id).filter(Boolean),
     });
   }
 
@@ -177,5 +241,18 @@ export function planIdentities(desired: DesiredIdentities, state: IdentityState)
     uniqueName: desired.testGroup.uniqueName,
     body: desired.testGroup.body,
   });
+  const owner =
+    !!state.tester && !!state.testGroup && (state.testGroupOwnerIds ?? []).includes(state.tester.id);
+  ops.push({
+    kind: 'testGroupOwner',
+    action: owner ? 'noop' : 'create',
+    section: 'Write-test targets',
+    title: `${tester.displayName} owns ${desired.testGroup.body.displayName}`,
+    uniqueName: desired.testGroup.uniqueName,
+  });
   return ops;
 }
+
+/** Whether any test identity exists (for `provision status` in an environment that isn't a test label). */
+export const testIdentitiesExist = (state: IdentityState) =>
+  !!state.tester || !!state.testGroup || Object.values(state.targets).some(Boolean);

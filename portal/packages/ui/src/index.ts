@@ -30,6 +30,7 @@ export * from './recipes/toggles';
 export * from './recipes/tooltip';
 
 export * from './lib/format';
+export { escapeMarkdown, escapeMarkdownInline, safeUrl } from './lib/links';
 export { useCopy, useCssVarPx, useHtmlAttribute, useMediaQuery, useNow } from './lib/hooks';
 export { STATUS_ICON, STATUS_SEVERITY, STATUS_TONES, type StatusTone } from './lib/status';
 

@@ -3,6 +3,7 @@ import { useQueries, useQueryClient } from '@tanstack/react-query';
 import { getPath, splitDataRef, type WidgetData, type WidgetError } from '@adminforge/widgets';
 import { ApiRequestError } from '../lib/api';
 import {
+  isStaleDefinition,
   loadDatasource,
   loadNextPage,
   toWidgetError,
@@ -82,6 +83,17 @@ export function usePageData(
 
   const [extra, setExtra] = useState<Record<string, ExtraPages>>({});
 
+  // The page was updated or retired since this tab loaded it: reload its definition (its data follows the new
+  // version). The server never answers for the old version, so nothing is shown under the old rules meanwhile.
+  const reloadDefinition = useCallback(
+    () => void queryClient.invalidateQueries({ queryKey: ['definition', def.id] }),
+    [queryClient, def.id],
+  );
+  const stale = queries.some((q) => isStaleDefinition(q.error));
+  useEffect(() => {
+    if (stale) reloadDefinition();
+  }, [stale, reloadDefinition]);
+
   const stateKey = queries.map((q) => `${q.status}:${q.dataUpdatedAt}:${q.errorUpdatedAt}`).join('|');
   const neededKey = needed.join(',');
   const extraKey = paramsKey;
@@ -120,15 +132,17 @@ export function usePageData(
               [ds]: { basedOn, pages: [...prev.pages, next.data], cursor: next.cursor, loading: false },
             };
           }),
-        (err: unknown) =>
+        (err: unknown) => {
+          if (isStaleDefinition(err)) reloadDefinition();
           setExtra((e) => {
             const prev = e[ds];
             if (!prev || prev.basedOn !== basedOn) return e;
             return { ...e, [ds]: { ...prev, loading: false, error: toWidgetError(err) } };
-          }),
+          });
+        },
       );
     },
-    [extra, def.id, def.version, paramsKey],
+    [extra, def.id, def.version, paramsKey, reloadDefinition],
   );
 
   const api = useMemo(() => {

@@ -4,8 +4,11 @@ import type { PortalRole, ResourceKey } from './catalog';
 export type AppKey = 'read' | 'write' | 'automation';
 export const APP_KEYS: readonly AppKey[] = ['read', 'write', 'automation'];
 
-/** What provisioning will do with one object. `skip` = cannot be done here (licensing/permissions/config). */
-export type Action = 'create' | 'update' | 'noop' | 'skip';
+/**
+ * What provisioning will do with one object. `skip` = cannot be done here (licensing/permissions/config);
+ * `delete` = remove something AdminForge manages that is no longer wanted (a credential, a test-user role).
+ */
+export type Action = 'create' | 'update' | 'delete' | 'noop' | 'skip';
 
 export interface ProvisionSettings {
   /** Environment label used in names (AF_ENV_LABEL, default "dev"). */
@@ -23,6 +26,35 @@ export interface ProvisionSettings {
    * unattended identity tenant-wide write access on the next provisioning run.
    */
   allowAutomationWrites?: boolean;
+  /**
+   * Grant tier-0 delegated permissions (provision/privilege.ts) to the Read/Write apps when content declares them
+   * (AF_ALLOW_PRIVILEGED_WRITE_SCOPES=true). Off by default: skipped and listed in the plan.
+   */
+  allowPrivilegedWriteScopes?: boolean;
+  /**
+   * Grant application permissions that read mail, files, chats and other personal content to the automation identity
+   * when content declares them (AF_AUTOMATION_ALLOW_SENSITIVE_READS=true). Off by default.
+   */
+  allowAutomationSensitiveReads?: boolean;
+  /**
+   * AF_MAIL_SENDER is set: reports and alerts are emailed as the automation identity, which needs the Mail.Send
+   * application permission — a write permission, so still only with AF_AUTOMATION_ALLOW_WRITE_PERMISSIONS=true.
+   */
+  emailDelivery?: boolean;
+  /** AF_AUTOMATION_CERT_PATH: the automation identity authenticates with this certificate instead of a secret. */
+  automationCertificate?: CertificateInfo;
+  /** Whether AF_ENV_LABEL is a test environment (AF_TEST_IDENTITY_LABELS, default dev,test): test identities allowed. */
+  testIdentitiesAllowed?: boolean;
+}
+
+/** Public part of the automation certificate (the private key never leaves the PEM file). */
+export interface CertificateInfo {
+  /** Base64 DER of the X.509 certificate (Graph keyCredential.key). */
+  key: string;
+  /** SHA-1 thumbprint, upper-case hex (what Graph returns as customKeyIdentifier). */
+  thumbprint: string;
+  startDateTime: string;
+  endDateTime: string;
 }
 
 // ── Microsoft Graph shapes (the subset AdminForge reads and writes) ───────────
@@ -61,9 +93,23 @@ export interface ApplicationBody {
     redirectUris: string[];
     implicitGrantSettings: { enableAccessTokenIssuance: boolean; enableIdTokenIssuance: boolean };
   };
+  /** Never a public client: no device-code/ROPC flows without a client secret. */
+  isFallbackPublicClient: boolean;
+  publicClient: { redirectUris: string[] };
+  spa: { redirectUris: string[] };
   appRoles: AppRole[];
   optionalClaims: { idToken: OptionalClaim[]; accessToken: OptionalClaim[]; saml2Token: OptionalClaim[] };
   requiredResourceAccess: RequiredResourceAccess[];
+}
+
+export interface KeyCredential {
+  keyId?: string;
+  type?: string;
+  usage?: string;
+  displayName?: string | null;
+  /** Base64 of the SHA-1 thumbprint bytes. */
+  customKeyIdentifier?: string | null;
+  endDateTime?: string | null;
 }
 
 export interface PasswordCredential {
@@ -85,6 +131,12 @@ export interface GraphApplication {
   optionalClaims?: Partial<ApplicationBody['optionalClaims']> | null;
   requiredResourceAccess?: RequiredResourceAccess[];
   passwordCredentials?: PasswordCredential[];
+  keyCredentials?: KeyCredential[];
+  isFallbackPublicClient?: boolean | null;
+  publicClient?: { redirectUris?: string[] } | null;
+  spa?: { redirectUris?: string[] } | null;
+  identifierUris?: string[];
+  api?: { oauth2PermissionScopes?: Array<{ id: string; value?: string | null }> } | null;
 }
 
 export interface ServicePrincipalBody {
@@ -98,6 +150,8 @@ export interface GraphServicePrincipal {
   displayName?: string;
   appRoleAssignmentRequired?: boolean;
   tags?: string[];
+  passwordCredentials?: PasswordCredential[];
+  keyCredentials?: KeyCredential[];
 }
 
 export interface PermissionScope {
@@ -125,6 +179,8 @@ export interface AppRoleAssignment {
   principalId: string;
   resourceId: string;
   appRoleId: string;
+  /** User, Group or ServicePrincipal. */
+  principalType?: string;
   principalDisplayName?: string;
   resourceDisplayName?: string;
 }
@@ -171,6 +227,8 @@ export interface DesiredApp {
   /** Application permissions (app role assignments on resource service principals). */
   appPermissions: Array<{ resource: ResourceKey; roles: Array<{ value: string; id: string }> }>;
   env: { clientId: string; secret: string };
+  /** Certificate credential that replaces the client secret (automation identity with AF_AUTOMATION_CERT_PATH). */
+  certificate?: CertificateInfo;
 }
 
 export interface DesiredGroup {
@@ -196,6 +254,10 @@ export interface DesiredEntra {
   arm?: { scope: string; roleDefinitionId: string; roleName: string };
   /** Things that cannot be provisioned in this tenant (missing resource SPs, unknown scopes, missing config). */
   skipped: Skipped[];
+  /** Write-capable delegated scopes requested for the Read app (granted = the resource exists in this tenant). */
+  readWriteCapable: Array<{ resource: ResourceKey; scope: string; granted: boolean }>;
+  /** ARM user_impersonation is requested for the Read app (inherent: ARM has no read-only delegated scope). */
+  readArmInherent: boolean;
 }
 
 // ── Current state (fetched) ───────────────────────────────────────────────────
@@ -215,6 +277,10 @@ export interface EntraState {
   arm: { assignments: ArmRoleAssignment[]; error?: string };
   /** Env-file values (only keys AdminForge reads; never printed). */
   env: Record<string, string | undefined>;
+  /** Owners (object ids) of each app registration and its service principal. */
+  owners?: Partial<Record<AppKey, { app: string[]; sp: string[] }>>;
+  /** Object id of the provisioner's own service principal (to tell its ownership apart). */
+  provisionerSpId?: string;
 }
 
 // ── Operations (the plan) ─────────────────────────────────────────────────────
@@ -233,7 +299,8 @@ export type Section =
   | 'Write-test targets'
   | 'Azure test environment'
   | 'Activity log export'
-  | 'Env file';
+  | 'Env file'
+  | 'Unexpected privilege';
 
 interface OpBase {
   action: Action;
@@ -253,6 +320,8 @@ export type EntraOp =
   | (OpBase & { kind: 'servicePrincipal'; app: AppKey; body: ServicePrincipalBody })
   | (OpBase & { kind: 'envClientId'; app: AppKey; envKey: string })
   | (OpBase & { kind: 'secret'; app: AppKey; envKey: string; displayName: string; days: number })
+  | (OpBase & { kind: 'keyCredential'; app: AppKey; certificate: CertificateInfo; displayName: string })
+  | (OpBase & { kind: 'removePassword'; app: AppKey; keyId: string })
   | (OpBase & { kind: 'group'; role: PortalRole; uniqueName: string; body: GroupBody })
   | (OpBase & { kind: 'grant'; app: AppKey; resource: ResourceKey; scope: string; grantId?: string })
   | (OpBase & { kind: 'appRoleAssignment'; principal: PrincipalRef; target: ResourceRef; appRoleId: string })

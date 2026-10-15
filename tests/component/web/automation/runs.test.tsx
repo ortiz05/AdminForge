@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { __resetPrefsForTests } from '@adminforge/web/src/lib/prefs';
 import { encodeParam } from '@adminforge/web/src/playbooks/url';
 import { IDS } from '../../../e2e/fixtures/automation';
-import { armedMe, me } from '../../../e2e/fixtures/session';
+import { armedMe, FIXED_NOW, me } from '../../../e2e/fixtures/session';
 import { axeViolations } from '../../axe';
 import { renderApp } from './render';
 
@@ -13,8 +13,14 @@ describe('Runs, run page, approvals, runbooks, run dock', () => {
   beforeEach(() => {
     localStorage.clear();
     __resetPrefsForTests({});
+    // Fixture times (armedUntil, run timestamps) are relative to FIXED_NOW: fake only Date, timers stay real.
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(FIXED_NOW);
   });
-  afterEach(() => vi.unstubAllGlobals());
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
 
   it('/runs lists my runs with status facets; Everyone’s widens the scope', async () => {
     const { calls } = renderApp({ path: '/runs' });

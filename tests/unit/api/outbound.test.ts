@@ -246,7 +246,8 @@ describe('outbound executor', () => {
       id: 'members',
       method: 'GET',
       url: "/users/$count?$filter=userType%20eq%20'Member'",
-      headers: { ConsistencyLevel: 'eventual' },
+      // Sub-requests with headers also get Accept-Language: en-US (Node's fetch default `*` breaks some Graph APIs).
+      headers: { ConsistencyLevel: 'eventual', 'Accept-Language': 'en-US' },
     });
     expect(res.provenance.path).toBe('/$batch');
 

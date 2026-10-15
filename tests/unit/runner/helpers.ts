@@ -4,9 +4,10 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { Writable } from 'node:stream';
 import { fileURLToPath } from 'node:url';
-import { decodeRunnerKey, signRunnerRequest } from '@adminforge/runner/src/client';
+import { decodeRunnerKey, prepareRunnerJob, signRunnerRequest } from '@adminforge/runner/src/client';
 import type { RunnerConfig, WorkerCommand } from '@adminforge/runner/src/config';
-import { type RunnerEvent, type RunnerJobRequest, RunnerEventSchema } from '@adminforge/runner/src/protocol';
+import { RunnerEventVerifier } from '@adminforge/runner/src/crypto';
+import { type RunnerEvent, type RunnerJobInput, RunnerEventSchema } from '@adminforge/runner/src/protocol';
 import type { buildRunnerServer } from '@adminforge/runner/src/server';
 
 type FastifyInstance = Awaited<ReturnType<typeof buildRunnerServer>>;
@@ -76,9 +77,7 @@ export function testConfig(key: string, overrides: Partial<RunnerConfig> = {}): 
   };
 }
 
-export function job(
-  overrides: Partial<RunnerJobRequest> & Pick<RunnerJobRequest, 'script'>,
-): RunnerJobRequest {
+export function job(overrides: Partial<RunnerJobInput> & Pick<RunnerJobInput, 'script'>): RunnerJobInput {
   return {
     jobId: `job-${randomUUID()}`,
     mode: 'read',
@@ -108,6 +107,36 @@ export async function signedInject(
   return app.inject({ method: opts.method, url: opts.url, payload: payload || undefined, headers });
 }
 
+/**
+ * POSTs a job the way the API does (tokens sealed for this job and timestamp, a fresh nonce, signed) and returns
+ * the response with its events verified against the nonce.
+ */
+export async function injectJob(app: FastifyInstance, key: string, body: RunnerJobInput, timestamp?: number) {
+  const prepared = prepareRunnerJob({ key, job: body, timestamp });
+  const res = await app.inject({
+    method: 'POST',
+    url: '/v1/jobs',
+    payload: prepared.body,
+    headers: prepared.headers,
+  });
+  return {
+    res,
+    nonce: prepared.nonce,
+    body: prepared.body,
+    events: () => verifiedEvents(res.body, key, prepared.jobId, prepared.nonce),
+  };
+}
+
+/** Parses an NDJSON answer and verifies every event's signature and order (throws RunnerResponseError). */
+export function verifiedEvents(text: string, key: string, jobId: string, nonce: string): RunnerEvent[] {
+  const verifier = new RunnerEventVerifier(key, jobId, nonce);
+  return text
+    .split('\n')
+    .filter((l) => l.trim())
+    .map((l) => RunnerEventSchema.parse(verifier.accept(JSON.parse(l))) as RunnerEvent);
+}
+
+/** Parses an NDJSON answer without verifying it (seq and mac are dropped). */
 export function parseEvents(text: string): RunnerEvent[] {
   return text
     .split('\n')

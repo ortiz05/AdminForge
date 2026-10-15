@@ -1,9 +1,11 @@
 import { readNdjson } from '@adminforge/runner/src/client';
 import { LineSplitter } from '@adminforge/runner/src/pool';
+import { newResponseNonce } from '@adminforge/runner/src/crypto';
 import {
   type RunnerEvent,
   RunnerEventSchema,
   RunnerJobRequestSchema,
+  RunnerTokensSchema,
   encodeEvent,
   parseWorkerLine,
 } from '@adminforge/runner/src/protocol';
@@ -14,30 +16,41 @@ const base = {
   script: { path: 'exchange/Get-MailboxForwarding.ps1', sha256: 'a'.repeat(64) },
   mode: 'read',
   tenant: TENANT,
+  nonce: newResponseNonce(),
 };
 
 describe('job request schema', () => {
   it('accepts a minimal job and applies defaults', () => {
     const job = RunnerJobRequestSchema.parse(base);
-    expect(job).toMatchObject({ inputs: {}, tokens: {}, timeoutSeconds: 300 });
+    expect(job).toMatchObject({ inputs: {}, timeoutSeconds: 300 });
+    expect(job.sealedTokens).toBeUndefined();
   });
 
-  it('accepts all token kinds and a SharePoint tenant name', () => {
-    const tokens = { graph: 'g', exchange: 'e', teams: 't', sharepointAdmin: 's', arm: 'a' };
+  it('accepts sealed tokens and a SharePoint tenant name', () => {
     expect(
       RunnerJobRequestSchema.safeParse({
         ...base,
-        tokens,
+        sealedTokens: 'v1.xxxx',
         tenant: { ...TENANT, spoTenantName: 'example' },
         timeoutSeconds: 1800,
       }).success,
     ).toBe(true);
   });
 
+  it('accepts every token kind once decrypted, and nothing else', () => {
+    const tokens = { graph: 'g', exchange: 'e', teams: 't', sharepointAdmin: 's', arm: 'a' };
+    expect(RunnerTokensSchema.safeParse(tokens).success).toBe(true);
+    expect(RunnerTokensSchema.safeParse({ intune: 'x' }).success).toBe(false);
+    expect(RunnerTokensSchema.safeParse({ graph: '' }).success).toBe(false);
+  });
+
   it.each([
+    ['plaintext tokens', { tokens: { graph: 'g' } }],
+    ['a missing nonce', { nonce: undefined }],
+    ['a short nonce', { nonce: 'abc' }],
+    ['a sealed payload that is too large', { sealedTokens: 'x'.repeat(262_145) }],
     ['a timeout above 30 minutes', { timeoutSeconds: 1801 }],
     ['a fractional timeout', { timeoutSeconds: 1.5 }],
-    ['an unknown token service', { tokens: { intune: 'x' } }],
     ['an unknown top-level field', { command: 'Remove-Item /' }],
     ['an unknown mode', { mode: 'admin' }],
     ['a job id with spaces', { jobId: 'run 1' }],

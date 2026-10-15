@@ -1,4 +1,13 @@
-import { decodeRunnerKey, RUNNER_MAX_TIMEOUT_SECONDS, signRunnerRequest } from '@adminforge/runner';
+import {
+  decodeRunnerKey,
+  prepareRunnerJob,
+  readNdjson,
+  readRunnerRefusal,
+  RUNNER_MAX_TIMEOUT_SECONDS,
+  RunnerEventVerifier,
+  RunnerResponseError,
+  type RunnerTokens,
+} from '@adminforge/runner';
 import {
   IdentityUnavailable,
   StepError,
@@ -77,35 +86,26 @@ export interface RunnerPortOptions {
 
 const RUNNER_SERVICES = new Set(['graph', 'exchange', 'teams', 'sharepointAdmin', 'arm']);
 
-/** NDJSON lines from a fetch body. */
-async function* ndjson(body: ReadableStream<Uint8Array>): AsyncGenerator<unknown> {
-  const decoder = new TextDecoder();
-  const reader = body.getReader();
-  let buffer = '';
-  try {
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-      let nl = buffer.indexOf('\n');
-      while (nl !== -1) {
-        const line = buffer.slice(0, nl).trim();
-        buffer = buffer.slice(nl + 1);
-        if (line) yield JSON.parse(line) as unknown;
-        nl = buffer.indexOf('\n');
-      }
-    }
-    buffer += decoder.decode();
-    if (buffer.trim()) yield JSON.parse(buffer) as unknown;
-  } finally {
-    reader.releaseLock();
-  }
+/** The runner's answer could not be verified: nothing of it is used and the step fails. */
+function unverified(reason: string): StepError {
+  return new StepError(
+    'runner_unverified',
+    'The answer of the PowerShell runner could not be verified, so it was discarded.',
+    {
+      status: 502,
+      details: { reason },
+      hint: 'Try again. If it keeps failing, give a portal administrator the reference: the answer did not come from the AdminForge runner, or the runner and the API use different keys.',
+    },
+  );
 }
 
 /**
  * RunnerPort for the PowerShell runner (apps/runner, `POST /v1/jobs` → NDJSON events), implemented against its
- * protocol, signed with the runner's own `signRunnerRequest` (HMAC over timestamp, method, path, and body hash). Delegated tokens for the services the script declares are minted for the step's
- * identity and mode, and travel only in the job body (stdin on the runner side).
+ * protocol with the runner's own helpers: the request is HMAC-signed (timestamp, method, path, body hash), the
+ * delegated tokens for the services the script declares are minted for the step's identity and mode and travel
+ * only AES-256-GCM-sealed for this job, and the answer is used only after every event verified against the
+ * request's nonce (a process answering on RUNNER_URL instead of the runner gets ciphertext and can't fake results).
+ * Redirects are refused.
  */
 export function createRunnerPort(opts: RunnerPortOptions): RunnerPort {
   const key = decodeRunnerKey(opts.key);
@@ -129,12 +129,16 @@ export function createRunnerPort(opts: RunnerPortOptions): RunnerPort {
           'runner_unavailable',
           'PowerShell steps need Entra sign-in (not available with mock sign-in).',
         );
-      const tokens: Record<string, string> = {};
+      const tokens: RunnerTokens = {};
       for (const service of job.services) {
         if (!RUNNER_SERVICES.has(service))
           throw new StepError('invalid_request', `Unknown runner service ${service}.`);
         try {
-          tokens[service] = await opts.broker.get(exec.session, service as BrokerService, job.mode);
+          tokens[service as keyof RunnerTokens] = await opts.broker.get(
+            exec.session,
+            service as BrokerService,
+            job.mode,
+          );
         } catch (err) {
           const park = identityError(err);
           if (park) throw park;
@@ -142,34 +146,32 @@ export function createRunnerPort(opts: RunnerPortOptions): RunnerPort {
           throw err;
         }
       }
-      const body = JSON.stringify({
-        jobId: job.jobId,
-        script: { path: job.script, sha256: job.sha256 },
-        inputs: job.parameters,
-        mode: job.mode,
-        tokens,
-        tenant: {
-          id: opts.tenant.id,
-          domain: opts.tenant.domain,
-          ...(opts.tenant.spoTenantName ? { spoTenantName: opts.tenant.spoTenantName } : {}),
-        },
-        ...(job.timeoutSeconds
-          ? { timeoutSeconds: Math.min(job.timeoutSeconds, RUNNER_MAX_TIMEOUT_SECONDS) }
-          : {}),
-      });
-      const signed = signRunnerRequest({
+      const prepared = prepareRunnerJob({
         key,
-        method: 'POST',
-        path: '/v1/jobs',
-        body,
         timestamp: Math.floor(now().getTime() / 1000),
+        job: {
+          jobId: job.jobId,
+          script: { path: job.script, sha256: job.sha256 },
+          inputs: job.parameters,
+          mode: job.mode,
+          tokens,
+          tenant: {
+            id: opts.tenant.id,
+            domain: opts.tenant.domain,
+            ...(opts.tenant.spoTenantName ? { spoTenantName: opts.tenant.spoTenantName } : {}),
+          },
+          ...(job.timeoutSeconds
+            ? { timeoutSeconds: Math.min(job.timeoutSeconds, RUNNER_MAX_TIMEOUT_SECONDS) }
+            : {}),
+        },
       });
       let res: Response;
       try {
         res = await doFetch(new URL('/v1/jobs', opts.url), {
           method: 'POST',
-          headers: { 'content-type': 'application/json', ...signed },
-          body,
+          headers: prepared.headers,
+          body: prepared.body,
+          redirect: 'error',
           signal,
         });
       } catch (err) {
@@ -181,48 +183,68 @@ export function createRunnerPort(opts: RunnerPortOptions): RunnerPort {
         );
       }
       if (res.status !== 200 || !res.body) {
-        let code = 'runner_error';
-        let message = `The runner answered ${res.status}.`;
-        try {
-          const p = (await res.json()) as { error?: unknown; message?: unknown };
-          if (typeof p.error === 'string') code = p.error;
-          if (typeof p.message === 'string') message = p.message;
-        } catch {
-          // non-JSON
-        }
-        throw new StepError(`runner_${code}`.replace(/^runner_runner_/, 'runner_'), message, {
+        const refusal = await readRunnerRefusal(res, { key, nonce: prepared.nonce });
+        if (!refusal.verified)
+          throw new StepError(
+            'runner_error',
+            `The PowerShell runner refused the job (HTTP ${res.status}), and its answer could not be verified.`,
+            {
+              status: res.status >= 400 && res.status < 600 ? res.status : 502,
+              hint: 'Give a portal administrator the reference: the runner may be misconfigured or another program is answering in its place.',
+            },
+          );
+        throw new StepError(`runner_${refusal.code}`.replace(/^runner_runner_/, 'runner_'), refusal.message, {
           status: res.status,
           transient: res.status === 429 || res.status === 503,
         });
       }
+      const verifier = new RunnerEventVerifier(key, prepared.jobId, prepared.nonce);
       const outputs: unknown[] = [];
       let error: RunnerResult['error'];
       let status: RunnerResult['status'] = 'failed';
-      for await (const raw of ndjson(res.body)) {
-        const e = raw as { type?: string; [k: string]: unknown };
-        if (e.type === 'log')
-          await onEvent({
-            type: 'log',
-            level: (['debug', 'info', 'warn', 'error'].includes(String(e.level))
-              ? e.level
-              : 'info') as 'info',
-            message: String(e.message ?? ''),
-          });
-        else if (e.type === 'progress')
-          await onEvent({
-            type: 'progress',
-            percent: Number(e.percent) || 0,
-            message: String(e.message ?? ''),
-          });
-        else if (e.type === 'output') {
-          outputs.push(e.data ?? null);
-          await onEvent({ type: 'output', data: e.data ?? null });
-        } else if (e.type === 'error')
-          error = { message: String(e.message ?? 'Script failed'), category: String(e.category ?? 'script') };
-        else if (e.type === 'done')
-          status = (
-            ['succeeded', 'failed', 'timeout', 'cancelled'].includes(String(e.status)) ? e.status : 'failed'
-          ) as RunnerResult['status'];
+      try {
+        for await (const raw of readNdjson(res.body)) {
+          // Nothing reaches the run before it verified: an unsigned, foreign or reordered event ends the step.
+          const e = verifier.accept(raw);
+          if (e.type === 'log')
+            await onEvent({
+              type: 'log',
+              level: (['debug', 'info', 'warn', 'error'].includes(String(e.level))
+                ? e.level
+                : 'info') as 'info',
+              message: String(e.message ?? ''),
+            });
+          else if (e.type === 'progress')
+            await onEvent({
+              type: 'progress',
+              percent: Number(e.percent) || 0,
+              message: String(e.message ?? ''),
+            });
+          else if (e.type === 'output') {
+            outputs.push(e.data ?? null);
+            await onEvent({ type: 'output', data: e.data ?? null });
+          } else if (e.type === 'error')
+            error = {
+              message: String(e.message ?? 'Script failed'),
+              category: String(e.category ?? 'script'),
+            };
+          else if (e.type === 'done') {
+            status = (
+              ['succeeded', 'failed', 'timeout', 'cancelled'].includes(String(e.status)) ? e.status : 'failed'
+            ) as RunnerResult['status'];
+            break;
+          }
+        }
+      } catch (err) {
+        if (err instanceof RunnerResponseError) throw unverified(err.message);
+        if (err instanceof SyntaxError) throw unverified('the answer is not NDJSON');
+        throw err;
+      }
+      if (!verifier.finished) {
+        if (signal.aborted) throw signal.reason instanceof Error ? signal.reason : new Error('aborted');
+        throw unverified(
+          verifier.accepted ? 'the answer ended before the job finished' : 'the job was never accepted',
+        );
       }
       return {
         status,

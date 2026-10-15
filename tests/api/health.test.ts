@@ -23,14 +23,13 @@ describe('health, headers, errors', () => {
     await app.close();
   });
 
-  it('echoes a valid incoming x-correlation-id and ignores junk', async () => {
+  it('never takes the correlation id (the audit Reference) from the browser', async () => {
     const { app } = await makeApp(mockConfig());
     const id = '0f8fad5b-d9cb-469f-a165-70867728950e';
-    expect(
-      (await app.inject({ method: 'GET', url: '/healthz', headers: { 'x-correlation-id': id } })).headers[
-        'x-correlation-id'
-      ],
-    ).toBe(id);
+    const chosen = (await app.inject({ method: 'GET', url: '/healthz', headers: { 'x-correlation-id': id } }))
+      .headers['x-correlation-id'];
+    expect(chosen).not.toBe(id);
+    expect(chosen).toMatch(/^[0-9a-f-]{36}$/);
     const junk = await app.inject({
       method: 'GET',
       url: '/healthz',

@@ -37,10 +37,16 @@ import {
   type Scaffold,
   type ScaffoldKind,
 } from '../content/scaffold';
-import { compareScopes, consentedScopes, declaredScopes, type ScopeApp } from '../content/scopes';
+import {
+  compareScopes,
+  consentedScopes,
+  declaredScopes,
+  provisionedScopes,
+  type ScopeApp,
+} from '../content/scopes';
 import { AZURE_READER_ROLE_ID, DIRECTORY_ROLES, RESOURCES } from '../provision/catalog';
 import type { Out } from '../provision/render';
-import { ConfigError, provisionerClients, provisionSettings } from './context';
+import { ceilingSettings, ConfigError, provisionerClients, provisionSettings } from './context';
 
 /** What the content commands need from the outside world (injected in tests). */
 export interface ContentCliContext {
@@ -159,8 +165,17 @@ export async function validateContent(
       { env: ctx.env, writeEnv: () => undefined, out: ctx.out, fetch: ctx.fetch },
       provisionSettings(ctx.env),
     ).graph;
-  const { scopes: consented, notFound } = await consentedScopes(graph, apps);
-  const { missing, unused } = compareScopes(declared, consented);
+  const { scopes: consented, notFound, present } = await consentedScopes(graph, apps);
+  // Same expectation as `provision entra` (baseline, content, ceilings), so the two never disagree.
+  const provisioned = provisionedScopes(ceilingSettings(ctx.env), declared.scopes);
+  const { missing, unused, withheld, unlicensed, baseline } = compareScopes(
+    declared,
+    consented,
+    provisioned,
+    present,
+  );
+  const files = (f?: string[]) =>
+    f?.length ? `  (${f.slice(0, 3).join(', ')}${f.length > 3 ? ', …' : ''})` : '';
   ctx.out('');
   ctx.out('Scopes declared by content vs. granted in Entra:');
   for (const app of ['read', 'write', 'automation'] as const)
@@ -168,13 +183,27 @@ export async function validateContent(
   for (const app of notFound)
     ctx.out(`  ✗ ${APP_LABEL[app]}: no service principal found for the configured client id.`);
   for (const m of missing)
+    ctx.out(`  ✗ missing  ${APP_LABEL[m.app]} · ${m.service} · ${m.scope}${files(m.files)}`);
+  for (const w of withheld)
+    ctx.out(`  ⚠ withheld ${APP_LABEL[w.app]} · ${w.service} · ${w.scope} — ${w.reason}${files(w.files)}`);
+  for (const u of unlicensed)
     ctx.out(
-      `  ✗ missing  ${APP_LABEL[m.app]} · ${m.service} · ${m.scope}${m.files?.length ? `  (${m.files.slice(0, 3).join(', ')}${m.files.length > 3 ? ', …' : ''})` : ''}`,
+      `  ⚠ skipped  ${APP_LABEL[u.app]} · ${u.service} · ${u.scope} — workload not in this tenant (not licensed)${files(u.files)}`,
     );
-  for (const u of unused) ctx.out(`  · unused   ${APP_LABEL[u.app]} · ${u.service} · ${u.scope}`);
+  for (const u of unused)
+    ctx.out(
+      `  · unused   ${APP_LABEL[u.app]} · ${u.service} · ${u.scope}  (not expected by provisioning: ${u.app === 'automation' ? 'remove the app role assignment' : '`provision entra` removes it'})`,
+    );
+  for (const b of baseline)
+    ctx.out(
+      b.builtin
+        ? `  · built-in ${APP_LABEL[b.app]} · ${b.service} · ${b.scope}  (${b.builtin})`
+        : `  · unused   ${APP_LABEL[b.app]} · ${b.service} · ${b.scope}  (baseline in provision/catalog.ts; no content declares it)`,
+    );
   if (declared.connections.length)
     ctx.out(`  · not checked (own audiences): connections ${declared.connections.join(', ')}`);
-  if (!missing.length && !notFound.length) ctx.out('  ✓ every declared scope is granted.');
+  if (!missing.length && !notFound.length)
+    ctx.out('  ✓ every declared scope provisioning grants is granted.');
   ok &&= missing.length === 0 && notFound.length === 0;
   return ok;
 }

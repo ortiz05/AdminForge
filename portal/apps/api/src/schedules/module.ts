@@ -1,6 +1,6 @@
 import type { Connection } from '@adminforge/schemas';
 import { loadEnv } from '@adminforge/config';
-import { notifyApprovers, type DeliveryDeps } from '../delivery/notifier';
+import { deliveryEnv, notifyApprovers, type DeliveryDeps } from '../delivery/notifier';
 import { randomUUID } from 'node:crypto';
 import { Heartbeat } from '../health/heartbeat';
 import { ArtifactStore } from '../artifacts/store';
@@ -92,11 +92,12 @@ export function createSchedulesModule(
     audit: ctx.audit,
     ...opts.probeDeps,
   };
-  // Email/Teams delivery reads recipients and webhooks from configuration (never content, never expressions).
+  // Email/Teams delivery reads recipients and webhooks from configuration (never content, never expressions) — and
+  // only the delivery keys of it (recipient lists, webhooks, the sender), never the rest (DATABASE_URL, secrets).
   const delivery: DeliveryDeps = {
     outbound: ctx.outbound,
     fetch: ctx.fetch,
-    env: ctx.config.NODE_ENV === 'test' ? {} : loadEnv(),
+    env: ctx.config.NODE_ENV === 'test' ? {} : deliveryEnv(loadEnv()),
     publicBaseUrl: ctx.config.PUBLIC_BASE_URL,
     ...opts.delivery,
   };
@@ -135,9 +136,20 @@ export function createSchedulesModule(
         randomUUID(),
       );
     },
+    // The same fingerprint scheduled runs check (playbooks, children and the connections they call).
     fingerprint: (ref) =>
-      automationFingerprint((r, v) => ctx.definitions.resolveAny(['playbook', 'runbook'], r, v), ref),
+      runs
+        ? runs.service.fingerprint(ref)
+        : automationFingerprint(
+            (r, v) => ctx.definitions.resolveAny(['playbook', 'runbook'], r, v),
+            ref,
+            async (key) => ctx.definitions.resolve('connection', key),
+          ),
   });
+  // Run views of scheduled runs follow the schedule's `requires.portalRoles` (default Portal.Operator).
+  runs?.service.useSchedules(
+    async (id) => (await store.getScheduleById(id))?.definition.requires?.portalRoles ?? null,
+  );
   const probes = new ProbeViews({ store, definitions: ctx.definitions, now: ctx.now });
 
   const inProcess =

@@ -193,7 +193,7 @@ describe('buildDesiredEntra', () => {
     expect(buildDesiredEntra(settings, resources()).apps[0]!.body.appRoles.map((r) => r.id)).toEqual(
       read.body.appRoles.map((r) => r.id),
     );
-    expect(read.body.optionalClaims.idToken.map((c) => c.name)).toEqual(['acrs', 'login_hint']);
+    expect(read.body.optionalClaims.idToken.map((c) => c.name)).toEqual(['acrs', 'login_hint', 'acct']);
     expect(read.sp.appRoleAssignmentRequired).toBe(true);
     expect(read.grants.map((g) => g.resource)).toEqual(['graph', 'arm', 'logAnalytics']);
   });

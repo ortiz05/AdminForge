@@ -28,11 +28,16 @@ export function effectiveThresholds(probe: Pick<Probe, 'check' | 'thresholds'>):
     crit ??= c.critPercent ?? null;
   } else if (c.kind === 'signInHealth') {
     crit ??= c.maxFailurePercent;
-  } else if (c.kind === 'kql' && warn === null && crit === null) {
+  } else if (
+    (c.kind === 'kql' || (c.kind === 'graphCount' && c.worse === 'higher')) &&
+    warn === null &&
+    crit === null
+  ) {
     warn = 1;
   }
   const unit = c.kind === 'kql' && c.metric !== 'rowCount' ? c.metric.column : meta.unit;
-  return { warn, crit, unit, worse: meta.worse, metric: meta.metric };
+  const worse = c.kind === 'graphCount' ? c.worse : meta.worse;
+  return { warn, crit, unit, worse, metric: meta.metric };
 }
 
 /** ok / warn / crit for a metric (inclusive: reaching a threshold counts). */

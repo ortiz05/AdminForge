@@ -17,9 +17,15 @@ import { safeReturnTo } from './return-to';
 import { portalRoles } from './roles';
 import { clearSessionCookie, endSession, startSession } from './session-plugin';
 import { assertCsrf } from '../security/csrf';
-import { partitionKey } from './types';
+import { isGuestAccount, partitionKey } from './types';
 
 export const AUTH_RATE_LIMIT = { max: 30, timeWindow: '1 minute' };
+
+/** A guest (B2B) account of this tenant: refused at sign-in and when arming (`acct` claim = 1). */
+export const guestAccount = () =>
+  new AppError(403, 'guest_account', 'You signed in with a guest account.', {
+    hint: 'Sign in with your work account in this organisation; guest accounts can’t use AdminForge.',
+  });
 
 /** Where Entra sends the browser after end-session (register it on the Read app). */
 export const signedOutUri = (cfg: Pick<Config, 'PUBLIC_BASE_URL'>) =>
@@ -195,10 +201,11 @@ export function entraSignInRoutes(app: FastifyInstance, ctx: AppContext) {
             'invalid_token',
             'Microsoft didn’t identify your account in the sign-in response.',
             {
-              hint: 'Sign in again with a work account. Guest and personal accounts can’t use AdminForge.',
+              hint: 'Sign in again with your own account in this organisation. Guest accounts can’t use AdminForge.',
             },
           ),
         );
+      if (isGuestAccount(claims)) throw await reject(guestAccount());
       const roles = portalRoles(claims);
       if (roles.length === 0) {
         throw await reject(

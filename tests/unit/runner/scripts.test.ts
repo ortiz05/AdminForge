@@ -4,16 +4,7 @@ import path from 'node:path';
 import { WorkerPool } from '@adminforge/runner/src/pool';
 import { ScriptError, resolveScript } from '@adminforge/runner/src/scripts';
 import { buildRunnerServer } from '@adminforge/runner/src/server';
-import {
-  fakeWorkerCommand,
-  job,
-  makeScriptsDir,
-  newKey,
-  parseEvents,
-  sha256,
-  signedInject,
-  testConfig,
-} from './helpers';
+import { fakeWorkerCommand, injectJob, job, makeScriptsDir, newKey, sha256, testConfig } from './helpers';
 
 describe('resolveScript', () => {
   const scripts = makeScriptsDir("Write-AdminForgeLog 'hi'\n");
@@ -113,37 +104,29 @@ describe('POST /v1/jobs script checks', () => {
   });
 
   it('answers 409 when the sha256 does not match', async () => {
-    const res = await signedInject(app, key, {
-      method: 'POST',
-      url: '/v1/jobs',
-      body: job({ script: { path: scripts.script, sha256: sha256('x') } }),
-    });
+    const { res } = await injectJob(app, key, job({ script: { path: scripts.script, sha256: sha256('x') } }));
     expect(res.statusCode).toBe(409);
     expect(res.json()).toMatchObject({ error: 'script_hash_mismatch' });
   });
 
   it('answers 404 for a missing script and 400 for a path outside the directory', async () => {
-    const missing = await signedInject(app, key, {
-      method: 'POST',
-      url: '/v1/jobs',
-      body: job({ script: { path: 'nope/Missing.ps1', sha256: scripts.sha } }),
-    });
-    expect(missing.statusCode).toBe(404);
-    const escape = await signedInject(app, key, {
-      method: 'POST',
-      url: '/v1/jobs',
-      body: job({ script: { path: '../etc/x.ps1', sha256: scripts.sha } }),
-    });
-    expect(escape.statusCode).toBe(400);
+    const missing = await injectJob(
+      app,
+      key,
+      job({ script: { path: 'nope/Missing.ps1', sha256: scripts.sha } }),
+    );
+    expect(missing.res.statusCode).toBe(404);
+    const escape = await injectJob(app, key, job({ script: { path: '../etc/x.ps1', sha256: scripts.sha } }));
+    expect(escape.res.statusCode).toBe(400);
   });
 
   it('runs a script whose hash matches, and refuses the same job id again (replay)', async () => {
     const body = job({ script: { path: scripts.script, sha256: scripts.sha } });
-    const res = await signedInject(app, key, { method: 'POST', url: '/v1/jobs', body });
-    expect(res.statusCode).toBe(200);
-    expect(parseEvents(res.body).at(-1)).toMatchObject({ type: 'done', status: 'succeeded' });
-    const again = await signedInject(app, key, { method: 'POST', url: '/v1/jobs', body });
-    expect(again.statusCode).toBe(409);
-    expect(again.json()).toMatchObject({ error: 'duplicate_job' });
+    const first = await injectJob(app, key, body);
+    expect(first.res.statusCode).toBe(200);
+    expect(first.events().at(-1)).toMatchObject({ type: 'done', status: 'succeeded' });
+    const again = await injectJob(app, key, body);
+    expect(again.res.statusCode).toBe(409);
+    expect(again.res.json()).toMatchObject({ error: 'duplicate_job' });
   });
 });

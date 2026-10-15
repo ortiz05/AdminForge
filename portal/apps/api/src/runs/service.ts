@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import {
   checkDefinition,
   findStep,
@@ -13,16 +13,18 @@ import {
   type RunStore,
 } from '@adminforge/engine';
 import { renderTemplate } from '@adminforge/expressions';
-import { PORTAL_ROLES, type Kind, type PortalRole } from '@adminforge/schemas';
+import { PORTAL_ROLES, type Connection, type Kind, type PortalRole } from '@adminforge/schemas';
 import type { AuditInput, AuditWriter } from '../audit/writer';
 import { hasRole, requireRole } from '../auth/guards';
 import { isArmed, type SessionRecord } from '../auth/session-store';
+import { definitionRetired, RELOAD_HINT, versionSuperseded } from '../definitions/current';
 import type { DefinitionResolver } from '../definitions/types';
 import { AppError } from '../errors';
+import { SCHEDULED_DATA_ROLES } from '../schedules/service';
 import type { RunQueue } from './queue';
 import { pinnedDefinition, rootOf } from './run-worker';
 import { decisionOf } from './store';
-import { automationFingerprint } from './fingerprint';
+import { automationFingerprint, writesInTree, type PlaybookRef } from './fingerprint';
 import {
   RUN_STATUS_ACTIVE as NON_TERMINAL,
   type NewRun,
@@ -74,7 +76,10 @@ export interface ScheduledRunInput {
   schedule: {
     id?: string | null;
     key: string;
+    /** Who scheduled it, for display and audit ("content (owner: …)", or the UPN of whoever pressed Run now). */
     createdBy?: string | null;
+    /** Run now: the requester's oid (they may not approve gates in this run). */
+    requestedByOid?: string | null;
     approvedBy?: string[] | null;
     /** Fingerprint of the playbook (and children) the second person approved (runs/fingerprint.ts). */
     approvedTarget?: string | null;
@@ -101,6 +106,23 @@ const SEES_ALL: PortalRole[] = ['Portal.Operator', 'Playbook.Approver', 'Portal.
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const hasAny = (s: SessionRecord, roles: readonly string[]) => roles.some((r) => s.roles.includes(r));
+const hasEvery = (s: SessionRecord, roles: readonly string[]) => roles.every((r) => s.roles.includes(r));
+
+/**
+ * The id of the run a preview confirms: derived from the preview's id, so a preview starts at most one run (a second
+ * insert with the same id finds the first one).
+ */
+export function confirmedRunId(previewRunId: string): string {
+  const h = createHash('sha256').update(`adminforge.confirmed:${previewRunId}`).digest('hex');
+  const variant = ((parseInt(h[16]!, 16) & 0x3) | 0x8).toString(16);
+  return `${h.slice(0, 8)}-${h.slice(8, 12)}-5${h.slice(13, 16)}-${variant}${h.slice(17, 20)}-${h.slice(20, 32)}`;
+}
+
+/** Looks up a schedule's `requires.portalRoles` by schedule id (wired by the schedules module). */
+export type ScheduleRolesLookup = (scheduleId: string) => Promise<readonly PortalRole[] | null | undefined>;
+
+/** Per-request memo for view checks (definition and schedule roles). */
+type ViewCache = Map<string, Promise<readonly string[]>>;
 export const PREVIEW_MAX_AGE_MS = 15 * 60_000;
 
 /** JSON with sorted keys, so equal inputs compare equal whatever their key order. */
@@ -162,6 +184,13 @@ export class RunService {
     },
   ) {}
 
+  private scheduleRoles: ScheduleRolesLookup | null = null;
+
+  /** Wires the schedule lookup (the schedules module is created after the runs module). */
+  useSchedules(lookup: ScheduleRolesLookup): void {
+    this.scheduleRoles = lookup;
+  }
+
   // ── helpers ──
 
   private actor(caller: Caller): Omit<AuditInput, 'action' | 'result'> {
@@ -210,25 +239,39 @@ export class RunService {
       // No current version: retired (an exact older version may still resolve) or never published.
       if (version && err instanceof AppError && err.status === 404) {
         const old = await this.resolve(key, version, kinds);
-        throw new AppError(409, 'definition_retired', `${old.def.title} is retired and can no longer run.`);
+        throw definitionRetired(old.def.title, 'can no longer run');
       }
       throw err;
     }
     if (version && version !== current.version)
-      throw new AppError(
-        409,
-        'version_superseded',
-        `${current.def.title} was updated (version ${current.version}) since this page loaded.`,
-        { hint: 'Reload the page to use the current version, then preview and run it again.' },
-      );
+      throw versionSuperseded(current.def.title, current.version, RELOAD_HINT.run);
     return current;
   }
 
-  private checkRunnable(def: AutomationDefinition) {
-    if (def.status === 'retired')
-      throw new AppError(409, 'definition_retired', `${def.title} is retired and can no longer run.`);
+  /** Retired definitions never run; drafts can be previewed (dry run) but not executed. */
+  private checkRunnable(def: AutomationDefinition, dryRun: boolean) {
+    if (def.status === 'retired') throw definitionRetired(def.title, 'can no longer run');
+    if (def.status === 'draft' && !dryRun)
+      throw new AppError(409, 'definition_draft', `${def.title} is a draft and can't run yet.`, {
+        hint: 'Preview it to try it out. It can run once its owner publishes it with status: published.',
+      });
     const tooBig = checkDefinition(def);
     if (tooBig) throw new AppError(422, 'limit_exceeded', tooBig);
+  }
+
+  /** The connection a function step calls, as it would resolve now (for schedule approval fingerprints). */
+  private async connection(key: string) {
+    const r = await this.deps.definitions().resolve('connection', key);
+    return { version: r.version, sha256: r.sha256, def: r.def as Connection };
+  }
+
+  /** What a schedule's two-person approval covers: the playbook, its children and the connections they call. */
+  fingerprint(ref: PlaybookRef): Promise<string> {
+    return automationFingerprint(
+      (r, v) => this.resolve(r, v),
+      ref,
+      (key) => this.connection(key),
+    );
   }
 
   /**
@@ -263,13 +306,57 @@ export class RunService {
     return v.values;
   }
 
-  canView(session: SessionRecord, row: RunRow): boolean {
-    return row.initiatorOid === session.userOid || hasAny(session, SEES_ALL);
+  private memo(cache: ViewCache, key: string, load: () => Promise<readonly string[]>) {
+    let p = cache.get(key);
+    if (!p) cache.set(key, (p = load()));
+    return p;
   }
 
-  private async load(caller: Caller, id: string): Promise<RunRow> {
+  /** `requires.portalRoles` of the run's pinned definition ([] when it can no longer be resolved). */
+  private async definitionRoles(row: RunRow): Promise<readonly string[]> {
+    try {
+      const r = await this.deps.definitions().resolve(row.kind, row.definitionKey, row.definitionVersion);
+      return (r.def as AutomationDefinition).requires?.portalRoles ?? [];
+    } catch {
+      return [];
+    }
+  }
+
+  /** Who may see what a scheduled run collected: the schedule's `requires.portalRoles`, else Operator. */
+  private async scheduledRoles(row: RunRow): Promise<readonly string[]> {
+    const roles =
+      row.scheduleId && this.scheduleRoles
+        ? await this.scheduleRoles(row.scheduleId).catch(() => null)
+        : null;
+    return roles ?? SCHEDULED_DATA_ROLES;
+  }
+
+  /**
+   * Who may see a run (§9): its initiator, or a Portal.Operator, Playbook.Approver or Portal.Admin who also holds the
+   * roles its definition requires. Scheduled runs (automation identity) collected data with application
+   * permissions: they need the schedule's `requires.portalRoles` (default Portal.Operator) plus the definition's roles,
+   * like the schedule's report files and probe rows.
+   */
+  async canView(session: SessionRecord, row: RunRow, cache: ViewCache = new Map()): Promise<boolean> {
+    const defRoles = () =>
+      this.memo(cache, `def:${row.kind}:${row.definitionKey}@${row.definitionVersion}`, () =>
+        this.definitionRoles(row),
+      );
+    if (row.identity === 'automation') {
+      const scheduled = await this.memo(cache, `schedule:${row.scheduleId ?? ''}`, () =>
+        this.scheduledRoles(row),
+      );
+      return hasEvery(session, scheduled) && hasEvery(session, await defRoles());
+    }
+    if (row.initiatorOid === session.userOid) return true;
+    return hasAny(session, SEES_ALL) && hasEvery(session, await defRoles());
+  }
+
+  /** The run, if the caller may see it (or `also` allows them to act on it without seeing its data). */
+  private async load(caller: Caller, id: string, also?: (s: SessionRecord) => boolean): Promise<RunRow> {
     const row = UUID.test(id) ? await this.deps.repo.getRun(id) : null;
-    if (!row || !this.canView(caller.session, row)) throw new AppError(404, 'run_not_found', 'No such run.');
+    if (!row || !(also?.(caller.session) || (await this.canView(caller.session, row))))
+      throw new AppError(404, 'run_not_found', 'No such run.');
     return row;
   }
 
@@ -281,21 +368,22 @@ export class RunService {
   private newRun(
     def: AutomationDefinition,
     pinned: { version: string; sha256: string },
-    fields: Pick<
-      NewRun,
-      | 'dryRun'
-      | 'trigger'
-      | 'identity'
-      | 'initiatorOid'
-      | 'initiatorUpn'
-      | 'sessionHash'
-      | 'scheduleId'
-      | 'inputs'
-      | 'correlationId'
-    >,
+    fields: Partial<Pick<NewRun, 'id'>> &
+      Pick<
+        NewRun,
+        | 'dryRun'
+        | 'trigger'
+        | 'identity'
+        | 'initiatorOid'
+        | 'initiatorUpn'
+        | 'sessionHash'
+        | 'scheduleId'
+        | 'inputs'
+        | 'correlationId'
+      >,
   ): NewRun {
     return {
-      id: randomUUID(),
+      id: fields.id ?? randomUUID(),
       kind: def.kind,
       definitionKey: def.id,
       definitionVersion: pinned.version,
@@ -436,6 +524,26 @@ export class RunService {
     return !dryRun && !!def.confirm && def.confirm.type !== 'none';
   }
 
+  /**
+   * Inserts a run; a confirmed execution gets the id derived from its preview, so a preview is used at most once
+   * (a replayed or concurrent confirmation finds the run the first one started).
+   */
+  private async insert(run: NewRun, caller: Caller, confirmed: Confirmed | null): Promise<RunRow> {
+    if (!confirmed) return this.deps.repo.insertRun(run);
+    const row = await this.deps.repo.insertRunIfAbsent({
+      ...run,
+      id: confirmedRunId(confirmed.previewRunId),
+    });
+    if (row.correlationId !== caller.correlationId)
+      throw new AppError(
+        409,
+        'preview_stale',
+        'This preview was already used to start a run. Preview it again to run the change again.',
+        { hint: 'Select Preview, check what it will change, then run it.' },
+      );
+    return row;
+  }
+
   private async recordPreview(runId: string, c: Confirmed) {
     await this.deps.store.appendEvent(runId, {
       type: 'status',
@@ -455,7 +563,7 @@ export class RunService {
     const dryRun = input.dryRun === true;
     const pinned = await this.resolveCurrent(input.playbook, input.version);
     const def = pinned.def;
-    this.checkRunnable(def);
+    this.checkRunnable(def, dryRun);
     this.authorize(caller.session, def, dryRun);
     let inputs: Record<string, unknown>;
     let confirmed: Confirmed | null = null;
@@ -474,7 +582,7 @@ export class RunService {
       confirmed = this.confirmed(def, preview);
     } else inputs = await this.validate(def, input.inputs);
     const s = caller.session;
-    const row = await this.deps.repo.insertRun(
+    const row = await this.insert(
       this.newRun(def, pinned, {
         dryRun,
         trigger: 'interactive',
@@ -486,6 +594,8 @@ export class RunService {
         inputs,
         correlationId: caller.correlationId,
       }),
+      caller,
+      confirmed,
     );
     await this.deps.audit.append({
       ...this.actor(caller),
@@ -518,7 +628,7 @@ export class RunService {
     const dryRun = input.dryRun === true;
     const pinned = await this.resolveCurrent(input.playbook, input.version, ['playbook']);
     const def = pinned.def;
-    this.checkRunnable(def);
+    this.checkRunnable(def, dryRun);
     this.authorize(caller.session, def, dryRun);
     if (!input.items.length)
       throw new AppError(400, 'invalid_request', 'A bulk action needs at least one item.');
@@ -561,7 +671,7 @@ export class RunService {
       confirmed = this.confirmed(def, preview);
     }
     const s = caller.session;
-    const row = await this.deps.repo.insertRun(
+    const row = await this.insert(
       this.newRun(def, pinned, {
         dryRun,
         trigger: 'bulk',
@@ -573,6 +683,8 @@ export class RunService {
         inputs: preview ? preview.inputs : bulkInputs,
         correlationId: caller.correlationId,
       }),
+      caller,
+      confirmed,
     );
     await this.deps.audit.append({
       ...this.actor(caller),
@@ -605,9 +717,14 @@ export class RunService {
     const ref = typeof input.playbook === 'string' ? { ref: input.playbook } : input.playbook;
     const pinned = await this.resolve(ref.ref, ref.version);
     const def = pinned.def;
-    this.checkRunnable(def);
     const dryRun = input.dryRun === true;
-    const writes = def.mode === 'write' || hasWriteSteps(def);
+    this.checkRunnable(def, dryRun);
+    // Write capability of the whole tree: a child playbook can change data even when the top level reads only.
+    const writes = await writesInTree(
+      (r, v) => this.resolve(r, v),
+      ref,
+      (d) => d.mode === 'write' || hasWriteSteps(d),
+    );
     if (writes && !dryRun && !input.schedule.approvedBy?.length)
       throw new AppError(
         403,
@@ -616,7 +733,7 @@ export class RunService {
       );
     if (writes && !dryRun) {
       // The approval covered specific playbook versions: anything published since needs a new approval.
-      const current = await automationFingerprint((r, v) => this.resolve(r, v), ref);
+      const current = await this.fingerprint(ref);
       if (input.schedule.approvedTarget !== current) {
         await this.deps.audit.append({
           actorOid: 'automation',
@@ -646,8 +763,13 @@ export class RunService {
         dryRun,
         trigger: 'schedule',
         identity: 'automation',
-        initiatorOid: input.schedule.createdBy ?? null,
-        initiatorUpn: null,
+        // An oid, so self-approval checks work: Run now's requester (who then can't approve gates in it), else the
+        // schedule's creator when that is an oid. Cron runs of content schedules have no initiating person.
+        initiatorOid:
+          [input.schedule.requestedByOid, input.schedule.createdBy].find(
+            (v): v is string => typeof v === 'string' && UUID.test(v),
+          ) ?? null,
+        initiatorUpn: input.schedule.createdBy ?? null,
         sessionHash: null,
         scheduleId: input.schedule.id && UUID.test(input.schedule.id) ? input.schedule.id : null,
         inputs,
@@ -709,21 +831,42 @@ export class RunService {
         'forbidden',
         'Seeing everyone’s runs needs the Portal.Operator, Playbook.Approver or Portal.Admin role.',
       );
-    const rows = await this.deps.repo.listRuns({
-      ...(q.scope === 'mine' ? { initiatorOid: caller.session.userOid } : {}),
-      ...(q.statuses?.length ? { statuses: q.statuses } : {}),
-      ...(q.definitionKey ? { definitionKey: q.definitionKey } : {}),
-      ...(q.parentRunId ? { parentRunId: q.parentRunId } : {}),
-      ...(q.from ? { from: q.from } : {}),
-      ...(q.to ? { to: q.to } : {}),
-      limit: q.limit + 1,
-      ...(q.cursor ? { cursor: decodeCursor(q.cursor) } : {}),
-    });
-    const page = rows.slice(0, q.limit);
+    // Runs the caller may not open (scheduled data, definition roles) are left out; keep reading until the page is
+    // full, the runs run out, or a few batches were scanned (the cursor then continues after the last one scanned).
+    const cache: ViewCache = new Map();
+    const visible: RunRow[] = [];
+    let cursor = q.cursor ? decodeCursor(q.cursor) : undefined;
+    let exhausted = false;
+    let lastScanned: RunRow | undefined;
+    for (let batch = 0; batch < 5 && visible.length <= q.limit; batch++) {
+      const rows = await this.deps.repo.listRuns({
+        ...(q.scope === 'mine' ? { initiatorOid: caller.session.userOid } : {}),
+        ...(q.statuses?.length ? { statuses: q.statuses } : {}),
+        ...(q.definitionKey ? { definitionKey: q.definitionKey } : {}),
+        ...(q.parentRunId ? { parentRunId: q.parentRunId } : {}),
+        ...(q.from ? { from: q.from } : {}),
+        ...(q.to ? { to: q.to } : {}),
+        limit: q.limit + 1,
+        ...(cursor ? { cursor } : {}),
+      });
+      for (const r of rows) {
+        lastScanned = r;
+        if (await this.canView(caller.session, r, cache)) visible.push(r);
+        if (visible.length > q.limit) break;
+      }
+      if (rows.length <= q.limit) {
+        exhausted = true;
+        break;
+      }
+      cursor = { createdAt: lastScanned!.createdAt, id: lastScanned!.id };
+    }
+    const page = visible.slice(0, q.limit);
     const titles = await this.titles(page);
+    const next =
+      visible.length > q.limit ? page[page.length - 1]! : !exhausted && lastScanned ? lastScanned : undefined;
     return {
       items: page.map((r) => runSummary(r, titles.get(r.id))),
-      ...(rows.length > q.limit ? { cursor: encodeCursor(page[page.length - 1]!) } : {}),
+      ...(next ? { cursor: encodeCursor(next) } : {}),
     };
   }
 
@@ -748,11 +891,16 @@ export class RunService {
       def = null;
     }
     const titles = await this.titles(children);
+    // Values typed into a manual step's `redact: true` fields are masked like secret inputs.
+    const manualParams = (t: TaskRow) => {
+      const step = def && t.stepId ? findStep(def, stepIdOf(t.stepId)) : undefined;
+      return step?.type === 'manual' ? step.inputs : undefined;
+    };
     return {
       run: { ...runView(row, def, steps, params), previewRunId },
       steps: steps.map(stepView),
       plan: runPlan(steps),
-      tasks: tasks.map((t) => taskView(t, this.canDecide(caller.session, row, t))),
+      tasks: tasks.map((t) => taskView(t, this.canDecide(caller.session, row, t), manualParams(t))),
       children: children.map((c) => runSummary(c, titles.get(c.id))),
     };
   }
@@ -765,7 +913,8 @@ export class RunService {
   // ── control ──
 
   async cancel(caller: Caller, id: string): Promise<RunRow> {
-    const row = await this.load(caller, id);
+    // A Portal.Admin can stop any run, including a scheduled one whose data they may not see.
+    const row = await this.load(caller, id, (s) => hasRole(s, 'Portal.Admin'));
     if (row.initiatorOid !== caller.session.userOid && !hasRole(caller.session, 'Portal.Admin'))
       throw new AppError(
         403,
@@ -889,8 +1038,13 @@ export class RunService {
   ): Promise<{ status: TaskRow['status']; approvals: number; required: number }> {
     const s = caller.session;
     requireRole(s, 'Playbook.Approver', 'Approving runs');
-    const row = await this.load(caller, id);
-    const task = await this.deps.repo.getTask(id, path);
+    // An approver named by the gate may decide on it without being allowed to see the run's data (scheduled runs need
+    // the schedule's roles for that); the approvals inbox shows what is being approved.
+    const row = UUID.test(id) ? await this.deps.repo.getRun(id) : null;
+    const task = row ? await this.deps.repo.getTask(id, path) : null;
+    const approver = task?.policy.kind === 'approval' && hasAny(s, task.policy.approvers);
+    if (!row || (!approver && !(await this.canView(s, row))))
+      throw new AppError(404, 'run_not_found', 'No such run.');
     if (!task || task.policy.kind !== 'approval')
       throw new AppError(404, 'approval_not_found', 'This run has no approval at that step.');
     if (isTerminal(row.status))
@@ -912,6 +1066,18 @@ export class RunService {
       );
     if (task.decisions.some((d) => d.oid === s.userOid))
       throw new AppError(409, 'already_decided', 'You already decided on this approval.');
+    if (input.decision === 'approve' && row.identity === 'delegated') {
+      // The steps after the gate run as the approver: they need the roles the playbook requires, like its initiator.
+      const def = await pinnedDefinition(this.deps.definitions(), row).catch(() => null);
+      const missing = (def?.requires?.portalRoles ?? []).filter((r) => !hasRole(s, r));
+      if (missing.length)
+        throw new AppError(
+          403,
+          'forbidden',
+          `The steps after this approval run as you, and ${def!.title} needs the ${missing.join(' and ')} role.`,
+          { hint: 'Ask an approver who holds that role, or a portal administrator for the role.' },
+        );
+    }
     if (
       input.decision === 'approve' &&
       task.policy.writesAfter &&
@@ -998,10 +1164,23 @@ export class RunService {
         'Only the engineer running this (or a Portal.Operator) can confirm its steps.',
       );
     let values: Record<string, unknown> = {};
+    const def = await pinnedDefinition(this.deps.definitions(), row).catch(() => null);
+    const step = def ? findStep(def, stepIdOf(path)) : undefined;
+    const params = step?.type === 'manual' ? step.inputs : undefined;
     if (input.confirmed) {
-      const def = await pinnedDefinition(this.deps.definitions(), row).catch(() => null);
-      const step = def ? findStep(def, stepIdOf(path)) : undefined;
-      const params = step?.type === 'manual' ? step.inputs : undefined;
+      // Values feed the steps that follow, which act as the person the step is waiting for (the run's initiator, or
+      // the approver after an approval). Only they may fill them in; anyone else may only decline.
+      const takesValues = Object.keys(params ?? {}).length > 0 || Object.keys(input.values ?? {}).length > 0;
+      const actor = task.requestedBy && task.requestedBy !== 'automation' ? task.requestedBy : null;
+      if (takesValues && actor !== s.userOid)
+        throw new AppError(
+          403,
+          'not_your_step',
+          'Only the engineer this step is waiting for can fill it in: the steps after it use these values and run as them.',
+          {
+            hint: `Ask ${task.policy.requestedByUpn ?? 'the engineer running it'} to complete it, or mark it as not done.`,
+          },
+        );
       if (params || input.values) {
         const v = await validateInputs(params, input.values ?? {}, {
           now: this.deps.now(),
@@ -1046,6 +1225,8 @@ export class RunService {
         version: row.definitionVersion,
         step: path,
         notes: input.notes ?? null,
+        // What was typed in, with `redact: true` fields masked.
+        values: redactInputs(params, values),
       },
       result: 'success',
     });

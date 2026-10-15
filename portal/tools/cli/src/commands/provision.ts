@@ -2,7 +2,7 @@ import { randomBytes } from 'node:crypto';
 import path from 'node:path';
 import { repoRoot } from '@adminforge/config';
 import { loadContentDir } from '@adminforge/schemas';
-import { declaredScopes } from '../content/scopes';
+import { declaredScopes, serviceForResource, type Declared } from '../content/scopes';
 import { RESOURCES, OPTIONAL_RESOURCES, RESOURCE_KEYS } from '../provision/catalog';
 import {
   buildAuthorizeUrl,
@@ -15,18 +15,31 @@ import {
 import { buildDesiredEntra, type ContentScopes } from '../provision/entra-desired';
 import { applyEntraOps, fetchEntraState, fetchResources } from '../provision/entra-io';
 import { planEntra } from '../provision/entra-plan';
-import { buildDesiredIdentities, planIdentities, type IdentityOp } from '../provision/identities-plan';
-import { applyIdentityOps, fetchIdentityState, readSecurityDefaults } from '../provision/identities-io';
+import {
+  buildDesiredIdentities,
+  planIdentities,
+  testIdentitiesExist,
+  type IdentityOp,
+} from '../provision/identities-plan';
+import {
+  applyIdentityOps,
+  fetchIdentityState,
+  readSecurityDefaults,
+  setUserEnabled,
+} from '../provision/identities-io';
 import type { DesiredEntra, EntraOp, EntraState, ProvisionSettings } from '../provision/model';
-import { counts, renderPlan, renderStatus, summaryLine } from '../provision/render';
+import { counts, isChange, renderPlan, renderStatus, summaryLine } from '../provision/render';
+import { findUnexpected, unexpectedFailures } from '../provision/unexpected';
 import { azureTestStatus } from '../provision/azure-test-command';
 import {
   appClients,
+  appCredential,
   ConfigError,
   envSubset,
   GRAPH_SCOPE,
   provisionerClients,
   provisionSettings,
+  testIdentityLabels,
   type CliContext,
   type Clients,
 } from './context';
@@ -36,14 +49,23 @@ export interface EntraRun {
   desired: DesiredEntra;
   state: EntraState;
   ops: EntraOp[];
+  /** Which content files declare each permission (`app:service:scope`), for warnings. */
+  files: Declared['files'];
+}
+
+/** Everything portal/content declares (requires.scopes), with the files that declare it. */
+export async function contentDeclarations(
+  contentDir = path.join(repoRoot, 'portal', 'content'),
+): Promise<Declared> {
+  const { definitions } = await loadContentDir(contentDir);
+  return declaredScopes(definitions);
 }
 
 /** Permissions declared by portal/content (requires.scopes) — provisioning grants exactly these on top of the baseline. */
 export async function contentScopes(
   contentDir = path.join(repoRoot, 'portal', 'content'),
 ): Promise<ContentScopes> {
-  const { definitions } = await loadContentDir(contentDir);
-  return declaredScopes(definitions).scopes;
+  return (await contentDeclarations(contentDir)).scopes;
 }
 
 /** Read-only: fetch → desired → plan. */
@@ -52,18 +74,70 @@ export async function planEntraRun(
   clients: Clients,
   settings = provisionSettings(ctx.env),
 ): Promise<EntraRun> {
+  const declared = ctx.contentScopes
+    ? { scopes: ctx.contentScopes, files: ctx.contentFiles ?? new Map<string, string[]>() }
+    : await contentDeclarations();
   const resources = await fetchResources(clients.graph);
-  const desired = buildDesiredEntra(settings, resources, ctx.contentScopes ?? (await contentScopes()));
+  const desired = buildDesiredEntra(settings, resources, declared.scopes as ContentScopes);
   const state = await fetchEntraState(clients.graph, clients.arm, desired, resources, envSubset(ctx.env));
-  return { settings, desired, state, ops: planEntra(desired, state, ctx.now?.() ?? new Date()) };
+  return {
+    settings,
+    desired,
+    state,
+    ops: planEntra(desired, state, ctx.now?.() ?? new Date()),
+    files: declared.files,
+  };
 }
+
+/** A ceiling skip names the env key that lifts it ("set AF_…=true"); everything else is licensing or tenant shape. */
+const isCeiling = (o: { changes?: string[] }) =>
+  (o.changes ?? []).some((c) => /\bset AF_[A-Z_]+=true\b/.test(c));
 
 function printBlocked(ctx: CliContext, ops: Array<{ action: string; title: string; changes?: string[] }>) {
   const skipped = ops.filter((o) => o.action === 'skip');
-  if (!skipped.length) return;
+  const ceiling = skipped.filter(isCeiling);
+  const other = skipped.filter((o) => !isCeiling(o));
+  if (ceiling.length) {
+    ctx.out('');
+    ctx.out(
+      'Withheld by a permission ceiling (content declares them; an explicit opt-in in the env file grants them):',
+    );
+    for (const s of ceiling) ctx.out(`  ⚠ ${s.title} — ${s.changes?.join(', ') ?? 'skipped'}`);
+  }
+  if (!other.length) return;
   ctx.out('');
   ctx.out('Not provisioned here (record in docs/licensing-review.md):');
-  for (const s of skipped) ctx.out(`  ⚠ ${s.title} — ${s.changes?.join(', ') ?? 'skipped'}`);
+  for (const s of other) ctx.out(`  ⚠ ${s.title} — ${s.changes?.join(', ') ?? 'skipped'}`);
+}
+
+const listFiles = (files: string[] | undefined) =>
+  files?.length
+    ? `${files.slice(0, 4).join(', ')}${files.length > 4 ? `, … (${files.length} files)` : ''}`
+    : '';
+
+/**
+ * Loud warning: write-capable delegated permissions requested for the READ app. The Read app is used in read mode by
+ * everyone with a portal role; with these scopes only the API's read policy stands between a read session and a write.
+ */
+export function readAppWriteWarnings(run: Pick<EntraRun, 'desired' | 'files'>): string[] {
+  const lines: string[] = [];
+  const { readWriteCapable, readArmInherent } = run.desired;
+  if (readWriteCapable.length) {
+    lines.push(
+      `⚠ WRITE-CAPABLE delegated permissions on the READ app ${run.desired.apps.find((a) => a.key === 'read')!.body.displayName} — anyone with a portal role holds them in read mode, so only the API's read-only request policy keeps them from writing. Move the content that needs them to write playbooks, or accept them in docs/access.md:`,
+    );
+    for (const w of readWriteCapable) {
+      const files = run.files.get(`read:${serviceForResource(w.resource)}:${w.scope}`);
+      lines.push(
+        `    ${RESOURCES[w.resource].name}: ${w.scope}${w.granted ? '' : ' (not granted here: workload not licensed)'} — ${listFiles(files) || 'AdminForge baseline (portal/tools/cli/src/provision/catalog.ts)'}`,
+      );
+    }
+  }
+  if (readArmInherent)
+    lines.push(
+      'ℹ Azure Service Management user_impersonation on the Read app is inherent: Azure Resource Manager has no read-only delegated scope, so the user’s Azure RBAC roles bound what it can do.',
+    );
+  return lines;
 }
 
 /** `adminforge provision entra [--dry-run]` */
@@ -82,11 +156,14 @@ export async function provisionEntra(ctx: CliContext, opts: { dryRun?: boolean }
   ctx.out('');
   ctx.out('Plan:');
   renderPlan(run.ops, ctx.out);
+  const warnings = readAppWriteWarnings(run);
+  if (warnings.length) ctx.out('');
+  for (const w of warnings) ctx.out(w);
   const c = counts(run.ops);
   if (opts.dryRun) {
     ctx.out('');
     ctx.out('Dry run: nothing was changed.');
-  } else if (c.create + c.update === 0) {
+  } else if (c.changes === 0) {
     ctx.out('');
     ctx.out('Nothing to do: everything is already in the desired state.');
   } else {
@@ -101,7 +178,9 @@ export async function provisionEntra(ctx: CliContext, opts: { dryRun?: boolean }
       now: ctx.now,
     });
     ctx.out('');
-    ctx.out(`Done: ${c.create} created, ${c.update} updated, ${c.noop} unchanged, ${c.skip} skipped.`);
+    ctx.out(
+      `Done: ${c.create} created, ${c.update} updated, ${c.delete ? `${c.delete} removed, ` : ''}${c.noop} unchanged, ${c.skip} skipped.`,
+    );
   }
   printBlocked(ctx, run.ops);
   return run;
@@ -111,6 +190,9 @@ export interface IdentitiesRun {
   ops: IdentityOp[];
   securityDefaults: boolean | 'unknown';
 }
+
+const notTestLabel = (ctx: CliContext, settings: ProvisionSettings) =>
+  `Environment "${settings.label}" is not a test environment: test identities are only provisioned for labels in AF_TEST_IDENTITY_LABELS (now: ${testIdentityLabels(ctx.env).join(', ')}).`;
 
 async function identityPlan(ctx: CliContext, clients: Clients, settings: ProvisionSettings) {
   if (!settings.primaryDomain) throw new ConfigError('AF_PRIMARY_DOMAIN must be set in the env file.');
@@ -144,12 +226,43 @@ const securityDefaultsLine = (v: boolean | 'unknown') =>
       ? 'Security Defaults: ENABLED — the test user will be prompted to register MFA, which blocks unattended Playwright sign-in'
       : 'Security Defaults: disabled';
 
+/**
+ * `adminforge provision test-identities --enable | --disable`: turns the validation user's sign-in on for a live run
+ * and off again (it holds standing directory roles). Idempotent; prints no identifiers.
+ */
+export async function setTesterEnabled(ctx: CliContext, enabled: boolean): Promise<{ changed: boolean }> {
+  const settings = provisionSettings(ctx.env);
+  // Disabling is always allowed (it only removes access); enabling only in a test environment.
+  if (enabled && !settings.testIdentitiesAllowed) throw new ConfigError(notTestLabel(ctx, settings));
+  const upn = ctx.env.AF_TEST_USER_UPN || (settings.primaryDomain && `af-tester@${settings.primaryDomain}`);
+  if (!upn) throw new ConfigError('AF_TEST_USER_UPN (or AF_PRIMARY_DOMAIN) must be set in the env file.');
+  const clients = provisionerClients(ctx, settings);
+  const result = await setUserEnabled(clients.graph, upn, enabled);
+  const state = enabled ? 'enabled' : 'disabled';
+  if (result === 'missing') {
+    if (!enabled) {
+      ctx.out('Validation user (AF_TEST_USER_UPN): does not exist — nothing to disable.');
+      return { changed: false };
+    }
+    throw new ConfigError(
+      'The validation user (AF_TEST_USER_UPN) does not exist. Run `pnpm adminforge provision test-identities` first.',
+    );
+  }
+  ctx.out(
+    result === 'changed'
+      ? `✓ Validation user (AF_TEST_USER_UPN): ${state}${enabled ? ' — Entra can take up to a minute to accept its sign-ins' : ', sign-in sessions revoked'}.`
+      : `Validation user (AF_TEST_USER_UPN): already ${state}.`,
+  );
+  return { changed: result === 'changed' };
+}
+
 /** `adminforge provision test-identities [--dry-run]` */
 export async function provisionTestIdentities(
   ctx: CliContext,
   opts: { dryRun?: boolean } = {},
 ): Promise<IdentitiesRun> {
   const settings = provisionSettings(ctx.env);
+  if (!settings.testIdentitiesAllowed) throw new ConfigError(notTestLabel(ctx, settings));
   const clients = provisionerClients(ctx, settings);
   ctx.out(
     `AdminForge provision test-identities — environment "${settings.label}"${opts.dryRun ? ' (dry run)' : ''}`,
@@ -161,7 +274,7 @@ export async function provisionTestIdentities(
   const c = counts(ops);
   ctx.out('');
   if (opts.dryRun) ctx.out('Dry run: nothing was changed.');
-  else if (c.create + c.update === 0) ctx.out('Nothing to do: everything is already in the desired state.');
+  else if (c.changes === 0) ctx.out('Nothing to do: everything is already in the desired state.');
   else {
     ctx.out('Applying:');
     await applyIdentityOps(ops, state, {
@@ -171,7 +284,9 @@ export async function provisionTestIdentities(
       retry: { sleep: ctx.sleep, ...ctx.retry },
     });
     ctx.out('');
-    ctx.out(`Done: ${c.create} created, ${c.update} updated, ${c.noop} unchanged, ${c.skip} skipped.`);
+    ctx.out(
+      `Done: ${c.create} created, ${c.update} updated, ${c.delete ? `${c.delete} removed, ` : ''}${c.noop} unchanged, ${c.skip} skipped.`,
+    );
   }
   const sd = await securityDefaults(ctx, clients, settings);
   ctx.out(securityDefaultsLine(sd));
@@ -194,16 +309,49 @@ export async function provisionStatus(ctx: CliContext): Promise<StatusResult> {
 
   const run = await planEntraRun(ctx, clients, settings);
   renderStatus(run.ops, ctx.out);
-  failures.push(...run.ops.filter((o) => o.action === 'create' || o.action === 'update').map((o) => o.title));
+  failures.push(...run.ops.filter(isChange).map((o) => o.title));
+
+  // Privilege nobody provisioned: extra assignments, permissions, grants, owners, credentials, sign-in surface, RBAC.
+  ctx.out('  Unexpected privilege');
+  const unexpected = findUnexpected(run.desired, run.state, ctx.now?.() ?? new Date());
+  for (const u of unexpected)
+    ctx.out(
+      u.unknown
+        ? `    ⚠ ${u.title} — ${u.unknown}`
+        : `    ${u.problems.length ? '✗' : '✓'} ${u.title}${u.problems.length ? ` — ${u.problems.join('; ')}` : ''}`,
+    );
+  failures.push(...unexpectedFailures(unexpected));
+  for (const w of readAppWriteWarnings(run)) ctx.out(`  ${w}`);
 
   let identityOps: IdentityOp[] = [];
-  if (settings.primaryDomain) {
+  if (!settings.primaryDomain) ctx.out('  ⚠ Test identities — AF_PRIMARY_DOMAIN is not set');
+  else if (!settings.testIdentitiesAllowed) {
+    // Production-like environment: the validation user and AF-Test-* objects must not exist here.
+    const desired = buildDesiredIdentities({
+      label: settings.label,
+      domain: settings.primaryDomain,
+      testerUpn: ctx.env.AF_TEST_USER_UPN,
+    });
+    const state = await fetchIdentityState(clients.graph, desired, {});
+    const exists = testIdentitiesExist(state);
+    const line = `Test identities in a non-test environment (AF_ENV_LABEL is not in AF_TEST_IDENTITY_LABELS)`;
+    ctx.out('  Test identities');
+    ctx.out(
+      exists
+        ? `    ✗ ${line} — the validation user or AF-Test-* objects exist; delete them, or add this label to AF_TEST_IDENTITY_LABELS if it is a test tenant`
+        : `    ✓ No test identities (environment "${settings.label}" is not a test environment)`,
+    );
+    if (exists) failures.push(line);
+  } else {
     identityOps = (await identityPlan(ctx, clients, settings)).ops;
     renderStatus(identityOps, ctx.out);
-    failures.push(
-      ...identityOps.filter((o) => o.action === 'create' || o.action === 'update').map((o) => o.title),
-    );
-  } else ctx.out('  ⚠ Test identities — AF_PRIMARY_DOMAIN is not set');
+    failures.push(...identityOps.filter(isChange).map((o) => o.title));
+    const tester = identityOps.find((o) => o.kind === 'tester');
+    if (tester?.action === 'noop' && tester.detail === 'account enabled')
+      ctx.out(
+        '    ⚠ The validation user is enabled: it holds standing directory roles. Disable it between live runs: `pnpm adminforge provision test-identities --disable`.',
+      );
+  }
 
   ctx.out('  Token checks');
   const check = (ok: boolean, line: string, detail?: string) => {
@@ -215,22 +363,27 @@ export async function provisionStatus(ctx: CliContext): Promise<StatusResult> {
 
   for (const app of ['read', 'write', 'automation'] as const) {
     const desiredApp = run.desired.apps.find((a) => a.key === app)!;
-    const id = ctx.env[desiredApp.env.clientId];
-    const secret = ctx.env[desiredApp.env.secret];
     const name = desiredApp.body.displayName;
-    if (!id || !secret) {
+    let credential: ReturnType<typeof appCredential>;
+    try {
+      credential = appCredential(ctx, app);
+    } catch (err) {
+      check(false, `${name}: client credentials`, err instanceof Error ? err.message : String(err));
+      continue;
+    }
+    if (!credential) {
       check(
         false,
         `${name}: client credentials in env file`,
-        `${desiredApp.env.clientId} / ${desiredApp.env.secret} missing`,
+        `${desiredApp.env.clientId} / ${desiredApp.env.secret}${app === 'automation' ? ' (or AF_AUTOMATION_CERT_PATH)' : ''} missing`,
       );
       continue;
     }
     try {
       const token = await clientCredentialToken({
         tenantId: settings.tenantId,
-        clientId: id,
-        clientSecret: secret,
+        clientId: credential.clientId,
+        ...credential.credential,
         scope: GRAPH_SCOPE,
         fetch: ctx.fetch,
       })();
@@ -238,6 +391,8 @@ export async function provisionStatus(ctx: CliContext): Promise<StatusResult> {
         check(true, `${name}: stored client secret is accepted by Entra`);
         continue;
       }
+      if (credential.kind === 'certificate')
+        check(true, `${name}: certificate (AF_AUTOMATION_CERT_PATH) is accepted by Entra`);
       const roles = tokenRoles(token);
       const expected = desiredApp.appPermissions.flatMap((p) => p.roles.map((r) => r.value));
       const missing = expected.filter((r) => !roles.includes(r));
@@ -302,7 +457,7 @@ export async function provisionStatus(ctx: CliContext): Promise<StatusResult> {
   ctx.out('');
   ctx.out(
     failures.length
-      ? `${failures.length} item(s) not in the desired state. Run \`pnpm adminforge provision entra\` / \`provision test-identities\` / \`provision azure-test\`.`
+      ? `${failures.length} item(s) not in the desired state. Run \`pnpm adminforge provision entra\` / \`provision test-identities\` / \`provision azure-test\`; remove unexpected privilege in the Entra admin centre.`
       : `All provisioned items are in the desired state (${summaryLine([...run.ops, ...identityOps, ...azure.ops])}).`,
   );
   return { ok: failures.length === 0, failures };

@@ -10,6 +10,12 @@ import type { ExecutionIdentity, OutboundExecutor } from '../execution/types';
  */
 
 const ENV_REF = /^\s*\$\{\s*env\.([A-Z][A-Z0-9_]*)\s*\}\s*$/;
+/** Configuration keys that may hold email recipients (content names them as `${ env.X }`). */
+export const RECIPIENT_KEY = /^AF_[A-Z0-9_]*(RECIPIENTS|EMAIL|ALERTS)$/;
+/** Configuration keys delivery passes on for Teams Workflows webhook URLs. */
+export const WEBHOOK_KEY = /^AF_[A-Z0-9_]*WEBHOOK[A-Z0-9_]*$/;
+const ANY_KEY = /^/;
+const SENDER_KEY = 'AF_MAIL_SENDER';
 const EMAIL = /^[^\s@,;<>]+@[^\s@,;<>]+\.[^\s@,;<>]+$/;
 /** Microsoft-hosted webhook endpoints (Teams Workflows / Power Automate, legacy connectors). */
 const WEBHOOK_HOSTS =
@@ -33,18 +39,33 @@ export type DeliveryStatus = {
   message: string;
 };
 
-/** `${ env.X }` → the configured value; anything else is taken literally. */
+/**
+ * The part of the installation's configuration delivery may read: the sender, recipient lists and webhooks. Never the
+ * whole env file — a `${ env.DATABASE_URL }` in a schedule must not turn a secret into an email address.
+ */
+export function deliveryEnv(env: Record<string, string | undefined>): Record<string, string | undefined> {
+  return Object.fromEntries(
+    Object.entries(env).filter(([k]) => k === SENDER_KEY || RECIPIENT_KEY.test(k) || WEBHOOK_KEY.test(k)),
+  );
+}
+
+/** `${ env.X }` → the configured value of an allowed key; anything else (a literal, another key) resolves to nothing. */
 function resolveRef(
   ref: string,
   env: DeliveryDeps['env'],
+  allowed: RegExp,
 ): { value: string | undefined; key: string | null } {
   const m = ENV_REF.exec(ref);
-  return m
-    ? { value: env[m[1]!]?.trim() || undefined, key: m[1]! }
-    : { value: ref.trim() || undefined, key: null };
+  if (!m) return { value: undefined, key: null };
+  const key = m[1]!;
+  return { value: allowed.test(key) ? env[key]?.trim() || undefined : undefined, key };
 }
 
-/** Recipients from templates: each may be an address or `${ env.X }` holding addresses (comma/semicolon separated). */
+/**
+ * Recipients from `${ env.X }` references, each holding addresses (comma/semicolon separated). Only keys named like a
+ * recipient list (AF_…RECIPIENTS, AF_…EMAIL, AF_…ALERTS) are read; literal addresses in content are dropped (content
+ * validation refuses them too), so who receives tenant data is always the installation's choice.
+ */
 export function resolveRecipients(
   list: readonly string[],
   env: DeliveryDeps['env'],
@@ -52,7 +73,7 @@ export function resolveRecipients(
   const to: string[] = [];
   const missing: string[] = [];
   for (const item of list) {
-    const { value, key } = resolveRef(item, env);
+    const { value, key } = resolveRef(item, env, RECIPIENT_KEY);
     if (!value) {
       if (key) missing.push(key);
       continue;
@@ -69,9 +90,11 @@ export function resolveWebhook(
   env: DeliveryDeps['env'],
 ): { url?: string; problem?: string } {
   if (!ref) return { problem: 'No webhook is configured for this Teams target.' };
-  const { value, key } = resolveRef(ref, env);
+  // Any key of the (delivery) configuration; the URL must still be https on a Microsoft webhook host.
+  const { value, key } = resolveRef(ref, env, ANY_KEY);
   if (!key) return { problem: 'Teams webhooks must be an ${ env.X } reference (the URL is a secret).' };
-  if (!value) return { problem: `${key} is not set in the configuration.` };
+  if (!value)
+    return { problem: `${key} is not set in the configuration (webhook keys are named AF_…_WEBHOOK).` };
   let url: URL;
   try {
     url = new URL(value);
@@ -160,8 +183,8 @@ export async function sendEmail(
       type: 'email',
       status: 'not_configured',
       message: to.missing.length
-        ? `${to.missing.join(', ')} is not set in the configuration.`
-        : 'No valid recipient addresses.',
+        ? `${to.missing.join(', ')} is not set in the configuration (recipient keys are named AF_…_RECIPIENTS, AF_…_EMAIL or AF_…_ALERTS).`
+        : 'No valid recipient addresses: recipients must be ${ env.AF_…_RECIPIENTS } references.',
     };
   const attach =
     msg.attachment && msg.attachment.bytes.length <= MAX_ATTACHMENT_BYTES ? msg.attachment : undefined;

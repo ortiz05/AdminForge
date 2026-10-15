@@ -1,4 +1,4 @@
-import { ApiError } from '@adminforge/connectors';
+import { ApiError, RESPONSE_TOO_LARGE } from '@adminforge/connectors';
 import type { ApiErrorBody } from '@adminforge/schemas';
 import type { FastifyError, FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
@@ -71,6 +71,10 @@ function upstreamError(err: ApiError): AppError {
     return new AppError(404, 'upstream_not_found', err.message, {
       hint: `It may have been deleted or renamed. Refresh the list and try again.${ref}`,
       ...detail,
+    });
+  if (err.code === RESPONSE_TOO_LARGE)
+    return new AppError(502, 'response_too_large', err.message, {
+      hint: 'Narrow it down (filters, fewer columns or a shorter time range) so the result is smaller.',
     });
   if (err.status === 429)
     return new AppError(429, 'throttled', 'Microsoft is limiting requests right now.', {

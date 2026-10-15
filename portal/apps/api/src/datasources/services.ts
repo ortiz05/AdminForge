@@ -56,8 +56,13 @@ export function createContentServices(
   const cachedEnv = deps.contentEnv ? {} : contentEnv(config);
   const env = deps.contentEnv ?? (() => cachedEnv);
   const definitions = deps.definitions ?? createDefinitionRegistry(config, base.database, log);
+  // Mock sign-in never holds the automation identity: its schedules and probes would run on real tenant data.
   const automation =
-    deps.automation !== undefined ? deps.automation : createAutomationTokenProvider(config, { log });
+    deps.automation !== undefined
+      ? deps.automation
+      : config.AUTH_MODE === 'mock'
+        ? null
+        : createAutomationTokenProvider(config, { log });
   // Secret-bearing reads (App Service app settings): values are stripped by the executor; the read is audited.
   const onSensitiveRead = async (r: SensitiveRead) => {
     const s = r.identity.kind === 'delegated' ? r.identity.session : null;

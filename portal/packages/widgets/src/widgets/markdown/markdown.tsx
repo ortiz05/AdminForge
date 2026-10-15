@@ -1,10 +1,11 @@
 import type { ReactNode } from 'react';
-import type { LinkComponent } from '@adminforge/ui';
+import { safeUrl, type LinkComponent } from '@adminforge/ui';
 
 /**
  * A deliberately small Markdown subset for guidance text: headings, paragraphs, lists, code, emphasis and links.
  * It builds React elements directly — there is no HTML string and no `dangerouslySetInnerHTML`, so raw HTML in
- * content is shown as text. Links are limited to http(s), mailto and in-app paths.
+ * content is shown as text. Links are limited to http(s), mailto, in-app paths and #anchors (safeUrl), and backslash
+ * escapes (`\*`) show the character itself — values interpolated from data arrive escaped, so they stay text.
  */
 
 export type Block =
@@ -80,15 +81,11 @@ export function parseBlocks(source: string): Block[] {
   return blocks;
 }
 
-const INLINE = /(`[^`]+`)|(\*\*[^*]+\*\*|__[^_]+__)|(\*[^*\s][^*]*\*|_[^_\s][^_]*_)|(\[[^\]]+\]\([^)\s]+\))/;
+const INLINE =
+  /(`[^`]+`)|(\*\*(?:\\.|[^*\\])+\*\*|__(?:\\.|[^_\\])+__)|(\*[^*\s\\](?:\\.|[^*\\])*\*|_[^_\s\\](?:\\.|[^_\\])*_)|(\[(?:\\.|[^\]\\])+\]\([^)\s]+\))|(\\[!-/:-@[-`{-~])/;
 
-/** Only these link targets become links; anything else (javascript:, data:, …) stays text. */
-export function safeHref(href: string): { href: string; external: boolean } | null {
-  if (/^https?:\/\//i.test(href)) return { href, external: true };
-  if (/^mailto:[^\s]+$/i.test(href)) return { href, external: true };
-  if (/^\/(?!\/)/.test(href)) return { href, external: false };
-  return null;
-}
+/** Only these link targets become links; anything else (javascript:, data:, `//host`, `/\host`, …) stays text. */
+export const safeHref = safeUrl;
 
 export function renderInline(text: string, Link: LinkComponent, keyPrefix = 'i'): ReactNode[] {
   const out: ReactNode[] = [];
@@ -103,7 +100,9 @@ export function renderInline(text: string, Link: LinkComponent, keyPrefix = 'i')
     if (m.index > 0) out.push(rest.slice(0, m.index));
     const token = m[0];
     const key = `${keyPrefix}-${n++}`;
-    if (m[1]) {
+    if (m[5]) {
+      out.push(token.slice(1));
+    } else if (m[1]) {
       out.push(
         <code key={key} className="rounded-sm bg-sunken px-1 py-0.5 font-mono text-xs text-fg">
           {token.slice(1, -1)}
@@ -118,7 +117,7 @@ export function renderInline(text: string, Link: LinkComponent, keyPrefix = 'i')
     } else if (m[3]) {
       out.push(<em key={key}>{renderInline(token.slice(1, -1), Link, key)}</em>);
     } else if (m[4]) {
-      const lm = /^\[([^\]]+)\]\(([^)\s]+)\)$/.exec(token)!;
+      const lm = /^\[((?:\\.|[^\]\\])+)\]\(([^)\s]+)\)$/.exec(token)!;
       const target = safeHref(lm[2]!);
       const label = renderInline(lm[1]!, Link, key);
       const cls = 'font-medium text-accent underline underline-offset-2 hover:text-accent-strong';

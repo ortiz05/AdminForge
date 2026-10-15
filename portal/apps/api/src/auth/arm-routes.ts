@@ -18,11 +18,12 @@ import { requireRole, requireSession, requireSessionWithCsrf } from './guards';
 import { safeReturnTo } from './return-to';
 import { dropWriteAccess } from './session-plugin';
 import { isArmed, type SessionRecord } from './session-store';
-import { partitionKey } from './types';
+import { guestAccount } from './routes';
+import { isGuestAccount, partitionKey } from './types';
 
 export const ARM_RATE_LIMIT = { max: 10, timeWindow: '1 minute' };
 
-/** Without WRITE_AUTH_CONTEXT, the Write app sign-in must have happened within this many seconds. */
+/** The Write app sign-in must have happened within this many seconds (with or without WRITE_AUTH_CONTEXT). */
 export const STEP_UP_MAX_AGE_SECONDS = 300;
 
 /** Body of POST /auth/arm/extend. Without `minutes` the extension is WRITE_SESSION_MAX_MINUTES. */
@@ -125,17 +126,17 @@ export function entraArmRoutes(app: FastifyInstance, ctx: AppContext) {
         sessionIdHash: session.idHash,
         details: { minutes: body.minutes, reason: body.reason },
       });
-      const stepUp = cfg.WRITE_AUTH_CONTEXT
-        ? { claims: authContextClaims(cfg.WRITE_AUTH_CONTEXT) }
-        : // No auth context (needs Entra ID P1): force a fresh interactive sign-in instead.
-          { prompt: 'login' as const, maxAge: 0 };
+      // Always a fresh interactive sign-in (prompt=login, max_age=0) — with an auth context too: a Conditional Access
+      // policy without "sign-in frequency: every time" could otherwise satisfy the context silently from SSO.
       const redirect = await auth.authUrl({
         kind: 'write',
         state,
         challenge,
         nonce,
         loginHint: session.upn,
-        ...stepUp,
+        prompt: 'login',
+        maxAge: 0,
+        ...(cfg.WRITE_AUTH_CONTEXT ? { claims: authContextClaims(cfg.WRITE_AUTH_CONTEXT) } : {}),
       });
       return { redirect };
     },
@@ -246,6 +247,7 @@ export function entraArmRoutes(app: FastifyInstance, ctx: AppContext) {
           },
         );
       }
+      if (isGuestAccount(claims)) throw await reject(guestAccount());
       const acrs = acrsOf(claims);
       if (cfg.WRITE_AUTH_CONTEXT && !acrs.includes(cfg.WRITE_AUTH_CONTEXT)) {
         throw await reject(
@@ -261,28 +263,23 @@ export function entraArmRoutes(app: FastifyInstance, ctx: AppContext) {
         );
       }
       const now = ctx.now();
-      if (!cfg.WRITE_AUTH_CONTEXT) {
-        // Without an auth context the only proof of step-up is a recent auth_time: prompt=login travels in a URL the
-        // browser controls, so a stripped prompt (silent SSO) must not arm. Missing auth_time fails closed.
-        if (typeof claims.auth_time !== 'number') {
-          throw await reject(
-            new AppError(
-              403,
-              'step_up_unverified',
-              'AdminForge couldn’t confirm that you verified just now.',
-              {
-                hint: 'An administrator needs to run `adminforge provision entra` (it adds the auth_time claim to the Write app).',
-              },
-            ),
-          );
-        }
-        if (now.getTime() / 1000 - claims.auth_time > STEP_UP_MAX_AGE_SECONDS) {
-          throw await reject(
-            new AppError(403, 'step_up_stale', 'Write access needs a fresh verification.', {
-              hint: 'Microsoft reused an earlier sign-in. Arm again and enter your credentials when asked.',
-            }),
-          );
-        }
+      // The proof of a fresh sign-in is a recent auth_time — with or without an auth context: prompt=login travels in
+      // a URL the browser controls, and an auth context can be satisfied from an earlier sign-in, so neither alone
+      // may arm. Missing auth_time fails closed.
+      if (typeof claims.auth_time !== 'number') {
+        throw await reject(
+          new AppError(403, 'step_up_unverified', 'AdminForge couldn’t confirm that you verified just now.', {
+            hint: 'An administrator needs to run `adminforge provision entra` (it adds the auth_time claim to the Write app).',
+          }),
+        );
+      }
+      if (now.getTime() / 1000 - claims.auth_time > STEP_UP_MAX_AGE_SECONDS) {
+        throw await reject(
+          new AppError(403, 'step_up_stale', 'Write access needs a fresh verification.', {
+            hint: 'Microsoft reused an earlier sign-in. Arm again and enter your credentials when asked.',
+          }),
+          { authAgeSeconds: Math.round(now.getTime() / 1000 - claims.auth_time) },
+        );
       }
 
       const minutes = armMinutes(ctx, requested);

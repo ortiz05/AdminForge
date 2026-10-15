@@ -20,6 +20,7 @@ import {
 import { meQuery, SessionContext, useNav, useSession } from '../lib/session';
 import { useAppearanceStylesheet } from '../ops/appearance-link';
 import { PlaybookDrawerMount } from '../playbooks/PlaybookDrawerMount';
+import { forgetAllHistory, setHistoryOwner } from '../query/history';
 import { useArmState, WARN_BEFORE_MS } from './arm';
 import { ArmControl } from './ArmControl';
 import { CommandPalette } from './CommandPalette';
@@ -62,6 +63,9 @@ function SignedInShell({ me, children }: { me: MeResponse; children: ReactNode }
   const [paletteOpen, setPaletteOpen] = useState(false);
   useAppearanceStylesheet();
   const [armDialogOpen, setArmDialogOpen] = useState(false);
+
+  // Query Studio history belongs to this user (keyed by oid in this browser).
+  useEffect(() => setHistoryOwner(me.user.oid), [me.user.oid]);
 
   // Server preferences win once per session load.
   const hydrated = useRef(false);
@@ -131,6 +135,8 @@ function SignedInShell({ me, children }: { me: MeResponse; children: ReactNode }
   const signOut = useCallback(async () => {
     try {
       const { redirect } = await api('/auth/logout', { method: 'POST', schema: RedirectResponse });
+      // Nothing the user ran stays behind for the next person on this browser.
+      forgetAllHistory();
       browser.assign(redirect);
     } catch (e) {
       toast({ tone: 'crit', title: 'Sign-out did not complete', description: errorDescription(e) });

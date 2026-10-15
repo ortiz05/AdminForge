@@ -1,4 +1,4 @@
-import { createHash, createHmac } from 'node:crypto';
+import { createHash, createHmac, hkdfSync } from 'node:crypto';
 import { verifyRunnerRequest } from '@adminforge/runner/src/auth';
 import {
   canonicalRunnerString,
@@ -22,11 +22,15 @@ describe('runner request signing', () => {
   const keyBytes = decodeRunnerKey(key);
   const body = JSON.stringify({ jobId: 'a', inputs: { x: 1 } });
   const now = 1_800_000_000;
-  const hmac = (canonical: string) => createHmac('sha256', keyBytes).update(canonical).digest('hex');
+  // The request-mac key: HKDF-SHA256(RUNNER_SHARED_KEY, salt "adminforge-runner", info "adminforge-runner/v1 request-mac").
+  const requestKey = Buffer.from(
+    hkdfSync('sha256', keyBytes, Buffer.from('adminforge-runner'), 'adminforge-runner/v1 request-mac', 32),
+  );
+  const hmac = (canonical: string) => createHmac('sha256', requestKey).update(canonical).digest('hex');
   const bodyHash = createHash('sha256').update(body).digest('hex');
   const emptyHash = createHash('sha256').update('').digest('hex');
 
-  it('signs HMAC-SHA256(key, `${ts}.${METHOD}.${pathAndQuery}.${sha256hex(body)}`) as hex', () => {
+  it('signs HMAC-SHA256(request-mac key, `${ts}.${METHOD}.${pathAndQuery}.${sha256hex(body)}`) as hex', () => {
     const canonical = `${now}.POST./v1/jobs.${bodyHash}`;
     expect(canonicalRunnerString({ timestamp: now, method: 'post', path: '/v1/jobs', body })).toBe(canonical);
     expect(computeRunnerSignature({ key, timestamp: now, method: 'POST', path: '/v1/jobs', body })).toBe(
@@ -55,6 +59,25 @@ describe('runner request signing', () => {
     expect(
       requestTarget(new URL(`/v1/jobs/${encodeURIComponent('run-1:step 2')}/cancel?x=1`, 'http://h')),
     ).toBe('/v1/jobs/run-1%3Astep%202/cancel?x=1');
+  });
+
+  it('never uses RUNNER_SHARED_KEY itself as the HMAC key', () => {
+    const canonical = `${now}.POST./v1/jobs.${bodyHash}`;
+    const raw = createHmac('sha256', keyBytes).update(canonical).digest('hex');
+    expect(computeRunnerSignature({ key, timestamp: now, method: 'POST', path: '/v1/jobs', body })).not.toBe(
+      raw,
+    );
+    expect(
+      verifyRunnerRequest({
+        key: keyBytes,
+        authorization: `AdminForge-HMAC ${raw}`,
+        timestamp: String(now),
+        method: 'POST',
+        path: '/v1/jobs',
+        body: Buffer.from(body),
+        nowSeconds: now,
+      }),
+    ).toEqual({ ok: false, reason: 'bad_signature' });
   });
 
   it('rejects keys shorter than 32 bytes', () => {

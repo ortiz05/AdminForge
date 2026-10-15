@@ -24,18 +24,39 @@ export type GraphClientOptions = Omit<HttpClientOptions, 'correlationHeader' | '
 };
 
 const DOT_SEGMENT = /^(\.|%2e){1,2}$/i;
+/**
+ * True for C0 controls and DEL. The WHATWG URL parser (fetch) silently drops TAB/LF/CR and *then* resolves dot
+ * segments, so `/users/.\t./.\t./applications` would pass a dot-segment check and still be sent as `/applications`.
+ */
+export function hasControlChars(s: string): boolean {
+  for (let i = 0; i < s.length; i++) {
+    const c = s.charCodeAt(i);
+    if (c < 0x20 || c === 0x7f) return true;
+  }
+  return false;
+}
 
-/** Rejects paths that are not rooted, or that contain dot segments (also percent-encoded) or encoded slashes. */
+/** A path for error messages: control characters shown as escapes, long values shortened. */
+export const describePath = (path: string): string => {
+  const shown = JSON.stringify(path).slice(1, -1);
+  return shown.length > 200 ? `${shown.slice(0, 197)}…` : shown;
+};
+
+/**
+ * Rejects paths that are not rooted, or that contain dot segments (also percent-encoded), encoded slashes, control
+ * characters, `?` or `#`.
+ */
 export function assertSafePath(path: string, label = 'Graph'): void {
   const segments = path.split('/');
   // `?`/`#` belong in `query`: inside the path they would be checked by the policy differently than they are sent.
   if (
     !path.startsWith('/') ||
+    hasControlChars(path) ||
     segments.some((s) => DOT_SEGMENT.test(s)) ||
     /%2f|%5c|\\/i.test(path) ||
     /[?#]/.test(path)
   )
-    throw new Error(`Invalid ${label} path: ${path}`);
+    throw new Error(`Invalid ${label} path: ${describePath(path)}`);
 }
 
 /** Query string with `$` kept literal in keys and values percent-encoded (spaces as %20, never "+"). Empty values are dropped. */
@@ -59,6 +80,16 @@ type BatchItem = { id: string } & GraphRequest;
 type BatchResponse = { id: string; status: number; headers?: Record<string, string>; body: unknown };
 
 const SAFE = new Set(['GET', 'HEAD']);
+
+/** Graph's default language. Node's fetch sends `Accept-Language: *`, which some Graph APIs (PIM schedule instances)
+ * reject with 400 CultureNotFoundException. */
+export const GRAPH_ACCEPT_LANGUAGE = 'en-US';
+
+/** `headers` plus `Accept-Language: en-US` unless the request sets its own (any casing). */
+export function withAcceptLanguage(headers: Record<string, string> | undefined): Record<string, string> {
+  if (headers && Object.keys(headers).some((k) => k.toLowerCase() === 'accept-language')) return headers;
+  return { ...headers, 'Accept-Language': GRAPH_ACCEPT_LANGUAGE };
+}
 
 /** $batch returns non-JSON bodies (e.g. `$count`) base64-encoded with a text/plain content type; decode them. */
 export function decodeBatchBody(r: { headers?: Record<string, string>; body: unknown }): unknown {
@@ -90,7 +121,7 @@ export function createGraphClient(opts: GraphClientOptions) {
     const r = await http.send<T>({
       method: req.method,
       url,
-      headers: req.headers,
+      headers: withAcceptLanguage(req.headers),
       body: req.body,
       ...(isBatch ? { idempotent: batchIsRead } : {}),
     });
@@ -123,10 +154,11 @@ export function createGraphClient(opts: GraphClientOptions) {
     id: r.id,
     method: (r.method ?? 'GET').toUpperCase(),
     url: buildUrl('', r).replace(/^\/(v1\.0|beta)/, ''),
+    // Sub-requests that carry headers get the language too (those without inherit nothing and work as they are).
     ...(r.body !== undefined
-      ? { body: r.body, headers: { 'Content-Type': 'application/json', ...r.headers } }
+      ? { body: r.body, headers: withAcceptLanguage({ 'Content-Type': 'application/json', ...r.headers }) }
       : r.headers
-        ? { headers: r.headers }
+        ? { headers: withAcceptLanguage(r.headers) }
         : {}),
   });
 

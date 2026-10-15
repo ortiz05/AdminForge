@@ -1,6 +1,7 @@
 import {
   redact,
   redactInputs,
+  secretInputValues,
   type AutomationDefinition,
   type PlanEntry,
   type StepRecord,
@@ -39,6 +40,15 @@ export function viewInputs(row: RunRow, params: Params | undefined): Record<stri
     return { ...rest, items: (items ?? []).map((i) => redactInputs(params, i)) };
   }
   return redactInputs(params, row.inputs);
+}
+
+/** Values of the run's `redact: true` inputs (each bulk item's too): masked wherever the run is shown. */
+export function runSecrets(row: RunRow, params: Params | undefined): string[] {
+  if (row.trigger === 'bulk') {
+    const items = (row.inputs as { items?: Array<Record<string, unknown>> }).items ?? [];
+    return items.flatMap((i) => secretInputValues(params, i ?? {}));
+  }
+  return secretInputValues(params, row.inputs ?? {});
 }
 
 /** Latest record per path, in seq order. */
@@ -86,13 +96,15 @@ export function runView(
   steps: StepRecord[],
   params?: Params,
 ): RunView {
+  // Runs stored before outputs and errors were masked by the engine are masked here too.
+  const secrets = runSecrets(row, params ?? def?.inputs);
   return {
     ...runSummary(row, def?.title),
     definitionSha256: row.definitionSha256,
     correlationId: row.correlationId,
     inputs: viewInputs(row, params ?? def?.inputs),
-    outputs: row.outputs ? (redact(row.outputs) as Record<string, unknown>) : null,
-    error: row.error,
+    outputs: row.outputs ? (redact(row.outputs, secrets) as Record<string, unknown>) : null,
+    error: row.error && secrets.length ? (redact(row.error, secrets) as RunRow['error']) : row.error,
     previewRunId: null,
     waiting:
       row.status === 'succeeded' ||
@@ -124,7 +136,8 @@ export function stepView(s: StepRecord): StepView {
   };
 }
 
-export function taskView(t: TaskRow, canDecide: boolean): TaskView {
+/** A human task as shown; `manualParams` (the manual step's fields) masks values typed into `redact: true` ones. */
+export function taskView(t: TaskRow, canDecide: boolean, manualParams?: Params): TaskView {
   const { initiatorOid: _i, ...policy } = t.policy;
   return {
     id: t.id,
@@ -140,7 +153,9 @@ export function taskView(t: TaskRow, canDecide: boolean): TaskView {
     expiresAt: iso(t.expiresAt),
     decidedAt: iso(t.decidedAt),
     policy,
-    decisions: t.decisions.map(({ sessionHash: _s, ...d }) => d),
+    decisions: t.decisions.map(({ sessionHash: _s, ...d }) =>
+      d.values ? { ...d, values: redactInputs(manualParams, d.values) } : d,
+    ),
     canDecide,
   };
 }

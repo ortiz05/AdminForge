@@ -10,8 +10,9 @@ import type { NewSchedule, SchedulePatch, ScheduleRow } from './types';
  * - A new content schedule starts **disabled**, unless its YAML says `enabled: true` and it is read-only (a write-capable
  *   schedule always needs a second person's approval before it runs) and it is not a draft.
  * - When the content changes (sha256), content can turn a schedule off (`enabled: true` → `false`, or draft/retired)
- *   but never on; a write-capable schedule whose definition changed loses its approval and is disabled until someone
- *   approves the new definition.
+ *   but never on; a write-capable schedule — or any schedule that was approved — whose definition changed loses its
+ *   approval and is disabled until someone approves (or enables) the new definition. Whether the new version still
+ *   writes is not trusted: its playbook's children decide that at run time.
  * - A content schedule that disappears is disabled (the row and its history stay).
  */
 
@@ -65,7 +66,9 @@ export function planSync(
     }
     if (row.source !== 'content') continue;
     if (row.sha256 !== c.sha256) {
-      const write = isWriteCapable(c.def);
+      // An approval covered the definition it was given for: any change voids it, whatever the new version says.
+      const approved = !!row.approvedBy || !!row.approvedTarget;
+      const write = isWriteCapable(c.def) || approved;
       // Content turns a schedule off only by changing `enabled: true` to `false` (an operator's choice otherwise stands).
       const turnedOff = row.definition.enabled !== false && c.def.enabled === false;
       const enabled = row.enabled && !turnedOff && !inactiveStatus(c.def) && !write;

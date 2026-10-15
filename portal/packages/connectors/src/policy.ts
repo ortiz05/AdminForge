@@ -1,3 +1,4 @@
+import { describePath, hasControlChars } from './graph';
 import type { Mode, ServiceId } from './types';
 
 export interface OutboundRequest {
@@ -34,12 +35,18 @@ const READ_POSTS: Partial<Record<ServiceId, RegExp[]>> = {
     /\/providers\/Microsoft\.Web\/sites\/[^/]+(\/slots\/[^/]+)?\/config\/appsettings\/list$/i,
     /\/providers\/Microsoft\.Authorization\/permissions$/i,
     /\/providers\/Microsoft\.Insights\/metrics$/i,
+    // Cost Management query/forecast: reads that take their filters as a POST body.
+    /^(\/providers\/Microsoft\.Management\/managementGroups\/[^/]+|\/subscriptions\/[^/]+(\/resourceGroups\/[^/]+)?)\/providers\/Microsoft\.CostManagement\/(query|forecast)$/i,
   ],
   logAnalytics: [/^\/v1\/workspaces\/[0-9a-f-]{36}\/query$/i],
 };
 
-/** Path without query/fragment; undefined when it is not a clean rooted path (dot segments, encoded separators). */
-function cleanPath(path: string): string | undefined {
+/**
+ * Path without query/fragment; undefined when it is not a clean rooted path (dot segments, encoded separators, or
+ * control characters — fetch's URL parser drops TAB/LF/CR before resolving `..`, so `.\t.` is a dot segment there).
+ */
+export function cleanPath(path: string): string | undefined {
+  if (hasControlChars(path)) return undefined;
   const p = path.split(/[?#]/)[0] ?? '';
   if (!p.startsWith('/') || /\\|%2f|%5c/i.test(p)) return undefined;
   if (p.split('/').some((s) => /^(\.|%2e){1,2}$/i.test(s))) return undefined;
@@ -52,7 +59,8 @@ function evaluateBatch(body: unknown): PolicyDecision {
   const unclean = requests.find(
     (r) => typeof r.url !== 'string' || cleanPath(r.url.startsWith('/') ? r.url : `/${r.url}`) === undefined,
   );
-  if (unclean) return deny(`Refusing $batch: ${String(unclean.url)} is not a clean service path.`);
+  if (unclean)
+    return deny(`Refusing $batch: ${describePath(String(unclean.url))} is not a clean service path.`);
   const bad = requests.find((r) => !SAFE.has((r.method ?? 'GET').toUpperCase()));
   return bad
     ? deny(`$batch includes ${bad.method} ${bad.url}, which changes data. Arm write access to continue.`)
@@ -85,7 +93,8 @@ function evaluateRead(req: OutboundRequest, method: string, path: string): Polic
 export function evaluate(mode: Mode, req: OutboundRequest): PolicyDecision {
   const method = req.method.toUpperCase();
   const path = cleanPath(req.path);
-  if (path === undefined) return deny(`Refusing ${method} ${req.path}: not a clean service path.`);
+  if (path === undefined)
+    return deny(`Refusing ${method} ${describePath(req.path)}: not a clean service path.`);
   if (mode === 'write') {
     if (req.declaredWrite) return ALLOW;
     const read = evaluateRead(req, method, path);

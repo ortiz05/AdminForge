@@ -25,6 +25,9 @@ export interface DefinitionEntry {
 }
 
 const PAGE_KINDS = new Set(['page', 'dashboard', 'report']);
+/** Whether starting a playbook asks the engineer to preview and confirm it (risk high/critical always does). */
+const asksToConfirm = (d: { risk: string; confirm?: { type: string } }) =>
+  (!!d.confirm && d.confirm.type !== 'none') || d.risk === 'high' || d.risk === 'critical';
 
 /**
  * Cross-file checks: unique ids, navigation sections, and every reference between pages, playbooks, runbooks,
@@ -151,6 +154,14 @@ export function validateReferences(entries: readonly DefinitionEntry[]): Content
           checkInputs(child, s.inputs, [...path, 'inputs']);
           if (child?.kind === 'playbook' && child.mode === 'write' && def.mode !== 'write')
             err([...path, 'ref'], `Child playbook "${s.ref}" writes; set the top-level mode: write.`);
+          // The engineer previews and confirms only the playbook they start — a child's own confirmation is never
+          // asked. A child that needs one may only be started by a playbook that asks for one too, so the whole tree
+          // (child plans included) is previewed and confirmed before anything runs.
+          if (child?.kind === 'playbook' && asksToConfirm(child) && !asksToConfirm(def))
+            err(
+              ['confirm'],
+              `Child playbook "${s.ref}" (risk: ${child.risk}) asks for a confirmation; a playbook that starts it needs a confirm block too (click or typed), so the change is previewed and confirmed first.`,
+            );
         }
       };
       const groups: Array<{ steps: Step[]; path: PathSegment[] }> =

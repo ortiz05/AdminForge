@@ -3,7 +3,8 @@ import type { FastifyInstance } from 'fastify';
 import { requireSession } from '../auth/guards';
 import type { SessionRecord } from '../auth/session-store';
 import type { AppContext } from '../context';
-import type { DatasourceOutput, UserScope } from '../datasources/executor';
+import { PAGE_KINDS, type DatasourceOutput, type LoadedPage, type UserScope } from '../datasources/executor';
+import { RELOAD_HINT, resolveCurrent } from '../definitions/current';
 import { parseBody } from '../errors';
 import { outboundAppError } from '../execution/outbound';
 
@@ -14,6 +15,24 @@ export const userScope = (s: SessionRecord): UserScope => ({
   roles: s.roles,
 });
 
+/**
+ * The current published version of a page, dashboard or report. The browser sends the version it loaded: an older
+ * one is refused (409 `version_superseded`, the browser reloads the definition) so a page's data is never fetched under
+ * an older version's roles, licences or requests — and a retired page not at all.
+ */
+export async function currentPage(
+  ctx: Pick<AppContext, 'definitions'>,
+  kinds: readonly LoadedPage['kind'][],
+  key: string,
+  version: string | undefined,
+): Promise<LoadedPage> {
+  const r = await resolveCurrent(ctx.definitions, kinds, key, version, {
+    hint: RELOAD_HINT.page,
+    retired: 'is no longer available',
+  });
+  return { def: r.def as LoadedPage['def'], version: r.version, sha256: r.sha256, kind: r.kind, key };
+}
+
 export function datasourceRoutes(api: FastifyInstance, ctx: AppContext) {
   const runner = ctx.datasources;
 
@@ -21,7 +40,7 @@ export function datasourceRoutes(api: FastifyInstance, ctx: AppContext) {
     const session = requireSession(request);
     const body = parseBody(DatasourceExecuteRequest, request.body);
     try {
-      const page = await runner.page(body.page, body.version);
+      const page = await currentPage(ctx, PAGE_KINDS, body.page, body.version);
       runner.assertAccess(session.roles, page.def.requires, `Page ${page.key}`);
       const user = userScope(session);
       const params = await runner.prepareParams(page, body.params, user);
@@ -42,7 +61,7 @@ export function datasourceRoutes(api: FastifyInstance, ctx: AppContext) {
   api.post('/datasources/execute-many', async (request) => {
     const session = requireSession(request);
     const body = parseBody(DatasourceExecuteManyRequest, request.body);
-    const page = await runner.page(body.page, body.version);
+    const page = await currentPage(ctx, PAGE_KINDS, body.page, body.version);
     runner.assertAccess(session.roles, page.def.requires, `Page ${page.key}`);
     const user = userScope(session);
     const params = await runner.prepareParams(page, body.params, user);

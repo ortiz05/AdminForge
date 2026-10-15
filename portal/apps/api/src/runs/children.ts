@@ -1,7 +1,11 @@
 import { createHash } from 'node:crypto';
 import {
+  containsRedacted,
+  IdentityUnavailable,
   isTerminal,
+  redactedValueError,
   StepError,
+  type Actor,
   validateInputs,
   type AutomationDefinition,
   type ChildRunner,
@@ -58,9 +62,15 @@ export class RunChildRunner implements ChildRunner {
         );
       def = resolved.def;
     } else {
+      // Inputs built from a masked value after the parent paused would start the child with "[redacted]".
+      if (containsRedacted(req.inputs)) throw redactedValueError();
       const resolved = await this.resolve(req.ref, req.version);
       def = resolved.def;
       if (def.status === 'retired') throw new StepError('definition_retired', `${req.ref} is retired.`);
+      if (def.status === 'draft' && !req.dryRun)
+        throw new StepError('definition_draft', `${def.title} is a draft and can't run yet.`, {
+          hint: 'It can run once its owner publishes it with status: published.',
+        });
       const v = await validateInputs(def.inputs, req.inputs, { now: this.deps.now(), env: this.deps.env() });
       if (!v.ok)
         throw new StepError(
@@ -73,6 +83,7 @@ export class RunChildRunner implements ChildRunner {
         : req.actor.oid === parent.initiatorOid
           ? parent.sessionHash
           : await this.deps.identity.sessionFor(parent.id, req.actor);
+      if (!automation) await this.checkRoles(def, sessionHash, req.actor);
       row = await repo.insertRunIfAbsent({
         id,
         kind: def.kind,
@@ -127,6 +138,26 @@ export class RunChildRunner implements ChildRunner {
       error: row.error,
       plan: await this.plan(id),
     };
+  }
+
+  /**
+   * A child playbook runs as the parent's current actor (the initiator, or the approver after an approval), who needs
+   * the roles the child requires — the same rule as starting it directly.
+   */
+  private async checkRoles(def: AutomationDefinition, sessionHash: string | null, actor: Actor) {
+    const required = def.requires?.portalRoles ?? [];
+    if (!required.length) return;
+    const who = actor.upn ?? 'The engineer running this';
+    const session = await this.deps.identity.liveSession(sessionHash);
+    if (!session)
+      throw new IdentityUnavailable('reauth', `${who} needs to sign in again, then resume the run.`);
+    const missing = required.filter((r) => !session.roles.includes(r));
+    if (missing.length)
+      throw new StepError(
+        'forbidden',
+        `${def.title} needs the ${missing.join(' and ')} role, which ${actor.upn ?? 'the engineer running this'} doesn't have.`,
+        { hint: 'Ask a portal administrator for the role, or ask someone who has it to run this playbook.' },
+      );
   }
 
   private async plan(runId: string) {

@@ -1,6 +1,8 @@
 # Shared by the content-script Pester files (dot-source it in BeforeAll). Not a test file itself: Pester only runs
-# *.Tests.ps1. Runs portal/content/scripts exactly as the worker does (text → scriptblock, merged streams → events)
-# against global stub cmdlets that return synthetic data (example.com / fabrikam.example), so no tenant is needed.
+# *.Tests.ps1. Runs portal/content/scripts exactly as the worker does (read mode: the static read-only policy first;
+# then text → scriptblock, merged streams → events) against global stub cmdlets that return synthetic data
+# (example.com / fabrikam.example), so no tenant is needed. The runtime guards of read mode change global session
+# state and are covered in AdminForge.Runner.Tests.ps1 / ReadOnlyPolicy.Tests.ps1 in a separate pwsh instead.
 
 $script:Repo = (Resolve-Path (Join-Path $PSScriptRoot '../../..')).Path
 $script:ScriptsDir = Join-Path $script:Repo 'portal/content/scripts'
@@ -14,9 +16,11 @@ function Invoke-ContentScript([string]$RelativePath, [hashtable]$Inputs = @{}, [
         JobId = 'pester'; Mode = $Mode; Services = @('Exchange'); Tenant = $Tenant
         User = @{ Upn = 'engineer@example.com'; ObjectId = $null }
     }
-    $sb = [scriptblock]::Create((Get-Content -Raw -LiteralPath (Join-Path $script:ScriptsDir $RelativePath)))
+    $text = Get-Content -Raw -LiteralPath (Join-Path $script:ScriptsDir $RelativePath)
     $failure = $null
     try {
+        if ($Mode -ne 'write') { Assert-AdminForgeReadOnlyScript -Content $text }
+        $sb = [scriptblock]::Create($text)
         & $sb -Inputs $Inputs -Context $context *>&1 | Send-AdminForgeStreamRecord
     } catch {
         $failure = $_

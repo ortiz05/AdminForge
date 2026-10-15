@@ -20,8 +20,8 @@ export const ARM_BASE = 'https://management.azure.com';
 const ARM_API = '2022-04-01';
 
 const APP_SELECT =
-  'id,appId,displayName,uniqueName,signInAudience,groupMembershipClaims,web,appRoles,optionalClaims,requiredResourceAccess,passwordCredentials';
-const SP_SELECT = 'id,appId,displayName,appRoleAssignmentRequired,tags';
+  'id,appId,displayName,uniqueName,signInAudience,groupMembershipClaims,web,appRoles,optionalClaims,requiredResourceAccess,passwordCredentials,keyCredentials,isFallbackPublicClient,publicClient,spa,identifierUris,api';
+const SP_SELECT = 'id,appId,displayName,appRoleAssignmentRequired,tags,passwordCredentials,keyCredentials';
 const GROUP_SELECT = 'id,displayName,uniqueName,description,securityEnabled,mailEnabled';
 
 /** OData string literal. */
@@ -133,6 +133,18 @@ export async function fetchEntraState(
       path: `/servicePrincipals/${sp.id}/appRoleAssignments`,
     });
   }
+  // Owners of the apps and their service principals (an owner can add credentials and act as the app).
+  state.owners = {};
+  for (const key of Object.keys(state.apps) as AppKey[]) {
+    const ids = async (path: string) =>
+      (await graph.all<{ id: string }>({ path, query: { $select: 'id' } })).map((o) => o.id);
+    state.owners[key] = {
+      app: await ids(`/applications/${state.apps[key]!.id}/owners`),
+      sp: state.sps[key] ? await ids(`/servicePrincipals/${state.sps[key]!.id}/owners`) : [],
+    };
+  }
+  const provisioner = env.AF_PROVISIONER_CLIENT_ID;
+  if (provisioner) state.provisionerSpId = (await findServicePrincipal(graph, provisioner))?.id;
   for (const g of desired.groups) {
     const current = await findGroup(graph, g.uniqueName);
     if (current) state.groups[g.role] = current;
@@ -341,6 +353,42 @@ export async function applyEntraOps(ops: EntraOp[], state: EntraState, ctx: Appl
         log(
           `  ✓ created client secret "${op.displayName}" (${op.days} days) → ${op.envKey} written to the env file (value not shown)`,
         );
+        continue;
+      }
+      case 'keyCredential': {
+        // PATCH replaces the whole collection: afterwards the app holds exactly this certificate.
+        const id = need(refs.app[op.app], `${op.app} application`).id;
+        await retry(() =>
+          graph.request({
+            method: 'PATCH',
+            path: `/applications/${id}`,
+            body: {
+              keyCredentials: [
+                {
+                  type: 'AsymmetricX509Cert',
+                  usage: 'Verify',
+                  key: op.certificate.key,
+                  displayName: op.displayName,
+                },
+              ],
+            },
+          }),
+        );
+        log(
+          `  ✓ registered certificate "${op.displayName}" (${op.detail ?? 'from AF_AUTOMATION_CERT_PATH'})`,
+        );
+        continue;
+      }
+      case 'removePassword': {
+        const id = need(refs.app[op.app], `${op.app} application`).id;
+        await retry(() =>
+          graph.request({
+            method: 'POST',
+            path: `/applications/${id}/removePassword`,
+            body: { keyId: op.keyId },
+          }),
+        );
+        log(`  ✓ removed ${op.title}`);
         continue;
       }
       case 'group': {

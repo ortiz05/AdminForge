@@ -390,6 +390,8 @@ export class Scheduler {
   ): Promise<ScheduleRunRow | null> {
     const def = s.definition;
     const requestedBy = typeof run.result?.requestedBy === 'string' ? run.result.requestedBy : null;
+    // Run now (and its retries): who asked, by oid — a UPN can't be compared with an approver's oid.
+    const requestedByOid = typeof run.result?.requestedByOid === 'string' ? run.result.requestedByOid : null;
     const attempt = typeof run.result?.attempt === 'number' ? run.result.attempt : 0;
     const scheduledBy =
       run.trigger === 'manual' && requestedBy
@@ -421,7 +423,7 @@ export class Scheduler {
       );
       abort.catch(() => undefined);
       const r = await Promise.race([
-        this.o.jobs.run({ schedule: s, def, run, signal, correlationId, scheduledBy }),
+        this.o.jobs.run({ schedule: s, def, run, signal, correlationId, scheduledBy, requestedByOid }),
         abort,
       ]);
       status = r.status ?? 'succeeded';
@@ -441,7 +443,11 @@ export class Scheduler {
       }
     }
     const ended = this.o.now();
-    const keep = { ...(requestedBy ? { requestedBy } : {}), ...(attempt ? { attempt } : {}) };
+    const keep = {
+      ...(requestedBy ? { requestedBy } : {}),
+      ...(requestedByOid ? { requestedByOid } : {}),
+      ...(attempt ? { attempt } : {}),
+    };
     const finalResult = result || Object.keys(keep).length ? { ...result, ...keep } : null;
     const row = await this.o.store.updateRun(
       run.id,
@@ -623,6 +629,9 @@ export class Scheduler {
           attempt: attempt + 1,
           retryOf: run.id,
           ...(typeof run.result?.requestedBy === 'string' ? { requestedBy: run.result.requestedBy } : {}),
+          ...(typeof run.result?.requestedByOid === 'string'
+            ? { requestedByOid: run.result.requestedByOid }
+            : {}),
         },
       });
   }

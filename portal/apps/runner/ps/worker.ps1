@@ -119,6 +119,17 @@ $tenant = $job['tenant']
 $inputs = if ($job['inputs'] -is [System.Collections.IDictionary]) { $job['inputs'] } else { @{} }
 $tokens = if ($job['tokens'] -is [System.Collections.IDictionary]) { $job['tokens'] } else { @{} }
 
+# Read mode, first layer: refuse a script that could write (module-qualified or dynamic calls, PowerShell's own
+# commands outside the allow-list, reflection …) before anything connects.
+if ($mode -eq 'read') {
+    $finding = @(Test-AdminForgeReadOnlyScript -Content ([string]$job['script']['content'])) | Select-Object -First 1
+    if ($finding) {
+        $tokens.Clear()
+        Send-WorkerError $finding.Message 'readOnly'
+        Exit-Worker 'failed'
+    }
+}
+
 # Services follow the tokens the API forwarded (it forwards only what the script declares).
 $services = [System.Collections.Generic.List[string]]::new()
 if ($tokens['graph']) { $services.Add('Graph') }
@@ -133,6 +144,7 @@ try {
         $connection = Connect-AdminForgeServices -Context @{ Mode = $mode; Tenant = $tenant; Tokens = $tokens } -Services $services.ToArray()
         Write-AdminForgeLog -Level Debug "Connected: $($connection.Services -join ', ')"
     }
+    # Read mode, second layer: guard every service write command and stop module auto-loading.
     if ($mode -eq 'read') { $null = Enable-AdminForgeReadOnlyMode }
 } catch {
     Send-WorkerError $_.Exception.Message (Get-AdminForgeErrorCategory $_)

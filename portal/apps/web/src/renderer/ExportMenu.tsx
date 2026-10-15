@@ -12,9 +12,11 @@ import {
   MenuTrigger,
   useToast,
 } from '@adminforge/ui';
+import { useQueryClient } from '@tanstack/react-query';
 import { ApiErrorBody } from '@adminforge/schemas';
-import { CSRF_HEADER } from '../lib/api';
+import { ApiRequestError, CSRF_HEADER } from '../lib/api';
 import { useMe } from '../lib/session';
+import { isStaleDefinition } from './api';
 
 const FORMAT_LABEL = { csv: 'CSV', xlsx: 'Excel workbook' } as const;
 const EXT = { csv: 'csv', xlsx: 'xlsx' } as const;
@@ -57,18 +59,22 @@ export async function downloadExport(
     body: JSON.stringify(body),
   });
   if (!res.ok) {
+    let code = `http_${res.status}`;
     let message = `The server answered ${res.status}.`;
     let hint: string | undefined;
+    let correlationId = res.headers.get('x-correlation-id') ?? undefined;
     try {
       const parsed = ApiErrorBody.safeParse(await res.json());
       if (parsed.success) {
+        code = parsed.data.error.code;
         message = parsed.data.error.message;
         hint = parsed.data.error.hint;
+        correlationId = parsed.data.error.correlationId ?? correlationId;
       }
     } catch {
       /* not JSON */
     }
-    throw new Error(hint ? `${message} ${hint}` : message);
+    throw new ApiRequestError(res.status, code, message, hint, correlationId);
   }
   const blob = await res.blob();
   const name = fileNameFrom(res.headers.get('content-disposition')) ?? `${fallbackName}.${EXT[body.format]}`;
@@ -109,6 +115,7 @@ export function ExportMenu({
 }: ExportMenuProps) {
   const me = useMe();
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const [busy, setBusy] = useState(false);
   const run = async (format: 'csv' | 'xlsx') => {
     setBusy(true);
@@ -125,7 +132,15 @@ export function ExportMenu({
         description: 'All rows matching these filters. The export is recorded in the audit log.',
       });
     } catch (e) {
-      toast({ tone: 'crit', title: 'The export didn’t complete', description: errorDescription(e) });
+      if (isStaleDefinition(e)) {
+        // The report changed since this page loaded: load the current version, then the person exports again.
+        void queryClient.invalidateQueries({ queryKey: ['definition', pageKey] });
+        toast({
+          tone: 'info',
+          title: 'This report was updated',
+          description: 'The page now shows the current version. Check it, then export again.',
+        });
+      } else toast({ tone: 'crit', title: 'The export didn’t complete', description: errorDescription(e) });
     } finally {
       setBusy(false);
     }

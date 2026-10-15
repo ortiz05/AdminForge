@@ -40,6 +40,15 @@ function readDefinition(input: unknown): PageDefinition {
 
 const notFound = (e: unknown) => e instanceof ApiRequestError && e.status === 404;
 
+/**
+ * The server refused the page version this tab loaded (409): it was updated (`version_superseded`) or retired
+ * (`definition_retired`) since. The renderer reloads the definition, and its data with it.
+ */
+export const isStaleDefinition = (e: unknown) =>
+  e instanceof ApiRequestError &&
+  e.status === 409 &&
+  (e.code === 'version_superseded' || e.code === 'definition_retired');
+
 /** Content keys don't say their kind: try page, then dashboard and report. */
 export async function fetchDefinition(key: string, signal?: AbortSignal): Promise<PageDefinition> {
   const path = (kind: PageKind) => `/api/definitions/${kind}/${encodeURIComponent(key)}`;

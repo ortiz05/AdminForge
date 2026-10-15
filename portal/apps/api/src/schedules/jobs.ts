@@ -45,6 +45,8 @@ export interface JobContext {
   correlationId: string;
   /** "scheduled by" for audit and scheduled playbook runs. */
   scheduledBy: string | null;
+  /** Run now: the requester's oid (they can't approve gates in the run they asked for). */
+  requestedByOid?: string | null;
 }
 
 export interface JobResult {
@@ -328,6 +330,7 @@ export function createJobRunner(deps: JobDeps): JobRunner {
           id: ctx.schedule.id,
           key: ctx.schedule.key,
           createdBy: ctx.scheduledBy,
+          ...(ctx.requestedByOid ? { requestedByOid: ctx.requestedByOid } : {}),
           approvedBy: ctx.schedule.approvedBy ? [ctx.schedule.approvedBy] : [],
           approvedTarget: ctx.schedule.approvedTarget,
         },

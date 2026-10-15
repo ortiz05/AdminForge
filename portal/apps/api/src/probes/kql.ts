@@ -41,14 +41,87 @@ export interface KqlResult {
 const GUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:?\d{2})$/;
 
+/** Top-level `;` and `|` positions of a KQL text (outside strings, comments and brackets). */
+function scanKql(q: string): { semicolons: number[]; pipes: number[] } {
+  const semicolons: number[] = [];
+  const pipes: number[] = [];
+  let depth = 0;
+  for (let i = 0; i < q.length; i++) {
+    const c = q[i]!;
+    if (c === '/' && q[i + 1] === '/') {
+      const nl = q.indexOf('\n', i);
+      i = nl < 0 ? q.length : nl;
+    } else if (q.startsWith('```', i)) {
+      const end = q.indexOf('```', i + 3);
+      i = end < 0 ? q.length : end + 2;
+    } else if (
+      (c === '@' || ((c === 'h' || c === 'H') && !/[A-Za-z0-9_]/.test(q[i - 1] ?? ''))) &&
+      (q[i + 1] === "'" || q[i + 1] === '"')
+    ) {
+      // Verbatim (@'…') and obfuscated (h'…') strings: '' / "" doubles the quote, no backslash escapes for @.
+      const quote = q[i + 1]!;
+      const verbatim = c === '@';
+      let j = i + 2;
+      for (; j < q.length; j++) {
+        if (!verbatim && q[j] === '\\') j++;
+        else if (q[j] === quote) {
+          if (verbatim && q[j + 1] === quote) j++;
+          else break;
+        }
+      }
+      i = j;
+    } else if (c === "'" || c === '"') {
+      let j = i + 1;
+      for (; j < q.length && q[j] !== c; j++) if (q[j] === '\\') j++;
+      i = j;
+    } else if (c === '(' || c === '[' || c === '{') depth++;
+    else if (c === ')' || c === ']' || c === '}') depth = Math.max(0, depth - 1);
+    else if (depth === 0 && c === ';') semicolons.push(i);
+    else if (depth === 0 && c === '|') pipes.push(i);
+  }
+  return { semicolons, pipes };
+}
+
+const meaningful = (statement: string) => statement.replace(/\/\/[^\n]*/g, '').trim() !== '';
+/** Statements that only declare things for the query that follows (let, set, declare, alias, pattern). */
+const DECLARATION = /^(?:\s|\/\/[^\n]*\n)*(let|set|declare|alias|pattern)\b/i;
+
+const kqlRefused = (message: string, hint: string) => new AppError(400, 'invalid_query', message, { hint });
+
 /**
  * Asks the service for at most `max + 1` rows (one extra shows truncation). Without it Log Analytics and hunting
- * return up to their own limits (tens of MB), which the API would buffer and parse before trimming. A query that ends
- * in `render` is left alone (nothing may follow it).
+ * return up to their own limits (tens of MB), which the API would buffer and parse before trimming. Only one query
+ * runs: `let`/`set`/`declare` statements may precede it, but a second tabular statement (which would return its own,
+ * unlimited result) is refused. A trailing `render` keeps its place after the limit.
  */
 export function withRowLimit(query: string, max: number): string {
-  if (/\|\s*render\b/i.test(query)) return query;
-  return `${query.replace(/;\s*$/, '')}\n| take ${max + 1}`;
+  const { semicolons, pipes } = scanKql(query);
+  const starts = [0, ...semicolons.map((i) => i + 1)];
+  const statements = starts.map((s, k) =>
+    query.slice(s, k < semicolons.length ? semicolons[k] : query.length),
+  );
+  let last = -1;
+  statements.forEach((st, k) => {
+    if (meaningful(st)) last = k;
+  });
+  if (last < 0) throw new AppError(400, 'invalid_request', 'The query is empty.');
+  if (statements.slice(0, last).some((st) => meaningful(st) && !DECLARATION.test(st)))
+    throw kqlRefused(
+      'Only one query can run at a time.',
+      'Remove the extra statements separated by ";". let statements before the query are fine.',
+    );
+  const begin = starts[last]!;
+  const end = begin + statements[last]!.length;
+  const prefix = query.slice(0, begin);
+  const own = pipes.filter((p) => p >= begin && p < end);
+  const render = own.find((p) => /^\|\s*render\b/i.test(query.slice(p)));
+  if (render === undefined) return `${prefix}${query.slice(begin, end).trimEnd()}\n| take ${max + 1}`;
+  if (own.some((p) => p > render))
+    throw kqlRefused(
+      'render must be the last operator of the query.',
+      'Move | render to the end of the query.',
+    );
+  return `${prefix}${query.slice(begin, render).trimEnd()}\n| take ${max + 1}\n${query.slice(render, end).trim()}`;
 }
 
 export const workspaceNotConfigured = () =>

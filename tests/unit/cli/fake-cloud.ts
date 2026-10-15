@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { RESOURCES } from '@adminforge/cli/src/provision/catalog';
 
 /**
@@ -103,6 +103,10 @@ export function createFakeCloud(opts: FakeCloudOptions) {
   const assignments: Obj[] = [];
   const members: Array<{ groupId: string; memberId: string }> = [];
   const roleAssignments: Obj[] = [];
+  /** Owners per object id (applications, service principals, groups). */
+  const owners = new Map<string, string[]>();
+  /** Users whose sign-in sessions were revoked. */
+  const revoked: string[] = [];
   const armAssignments: Array<{ id: string; name: string; properties: Json }> = [];
   const secrets = new Map<string, string>(); // clientId → secret (live credentials only)
   const calls: string[] = [];
@@ -148,7 +152,13 @@ export function createFakeCloud(opts: FakeCloudOptions) {
 
   function token(form: URLSearchParams) {
     const clientId = form.get('client_id')!;
-    if (!secrets.has(clientId) || secrets.get(clientId) !== form.get('client_secret'))
+    // Certificate (client assertion): accepted when the app has a key credential (signature checked in unit tests).
+    const app = apps.find((a) => a.appId === clientId);
+    const assertionOk =
+      form.get('client_assertion_type') === 'urn:ietf:params:oauth:client-assertion-type:jwt-bearer' &&
+      !!form.get('client_assertion') &&
+      ((app?.keyCredentials as unknown[] | undefined) ?? []).length > 0;
+    if (!assertionOk && (!secrets.has(clientId) || secrets.get(clientId) !== form.get('client_secret')))
       return json(401, {
         error: 'invalid_client',
         error_description: 'AADSTS7000215: Invalid client secret provided.\r\nTrace ID: x',
@@ -259,9 +269,58 @@ export function createFakeCloud(opts: FakeCloudOptions) {
       if (!target) return graphError(404, 'Request_ResourceNotFound', `Resource '${m[2]}' does not exist.`);
       if (method === 'GET') return json(200, strip(target));
       if (method === 'PATCH') {
-        Object.assign(target, body);
+        // Like Graph: a certificate's thumbprint becomes customKeyIdentifier; the key itself is never returned.
+        const patch = { ...body };
+        if (Array.isArray(patch.keyCredentials))
+          patch.keyCredentials = (patch.keyCredentials as Json[]).map(({ key, ...rest }) => ({
+            keyId: randomUUID(),
+            ...rest,
+            customKeyIdentifier: createHash('sha1')
+              .update(Buffer.from(String(key), 'base64'))
+              .digest('base64'),
+          }));
+        Object.assign(target, patch);
         return json(204);
       }
+    }
+    if ((m = /^\/(applications|servicePrincipals|groups)\/([^/]+)\/owners$/.exec(path)) && method === 'GET')
+      return json(200, { value: (owners.get(m[2]!) ?? []).map((id) => ({ id })) });
+    if ((m = /^\/groups\/([^/]+)\/owners\/\$ref$/.exec(path)) && method === 'POST') {
+      const ownerId = String(body!['@odata.id']).split('/').pop()!;
+      const list = owners.get(m[1]!) ?? [];
+      if (list.includes(ownerId))
+        return graphError(
+          400,
+          'Request_BadRequest',
+          "One or more added object references already exist for the following modified properties: 'owners'.",
+        );
+      owners.set(m[1]!, [...list, ownerId]);
+      return json(204);
+    }
+    if ((m = /^\/groups\/([^/]+)\/members\/([^/]+)\/\$ref$/.exec(path)) && method === 'DELETE') {
+      const i = members.findIndex((x) => x.groupId === m![1] && x.memberId === m![2]);
+      if (i < 0) return graphError(404, 'Request_ResourceNotFound', 'not a member');
+      members.splice(i, 1);
+      return json(204);
+    }
+    if ((m = /^\/roleManagement\/directory\/roleAssignments\/([^/]+)$/.exec(path)) && method === 'DELETE') {
+      const i = roleAssignments.findIndex((x) => x.id === m![1]);
+      if (i < 0) return graphError(404, 'Request_ResourceNotFound', 'no such assignment');
+      roleAssignments.splice(i, 1);
+      return json(204);
+    }
+    if ((m = /^\/users\/([^/]+)\/revokeSignInSessions$/.exec(path)) && method === 'POST') {
+      revoked.push(m[1]!);
+      return json(200, { value: true });
+    }
+    if ((m = /^\/applications\/([^/]+)\/removePassword$/.exec(path)) && method === 'POST') {
+      const app = apps.find((a) => a.id === m![1])!;
+      const creds = app.passwordCredentials as Json[];
+      const gone = creds.find((c) => c.keyId === body!.keyId);
+      app.passwordCredentials = creds.filter((c) => c !== gone);
+      if (gone && [...secrets].some(([id, v]) => id === app.appId && v === gone.secret))
+        secrets.delete(app.appId as string);
+      return json(204);
     }
     if ((m = /^\/applications\/([^/]+)\/addPassword$/.exec(path)) && method === 'POST') {
       const app = apps.find((a) => a.id === m![1])!;
@@ -383,6 +442,8 @@ export function createFakeCloud(opts: FakeCloudOptions) {
     members,
     roleAssignments,
     armAssignments,
+    owners,
+    revoked,
     calls,
     secrets,
   };

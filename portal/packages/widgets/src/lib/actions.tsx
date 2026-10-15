@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { Scope } from '@adminforge/expressions';
-import { ArrowSquareOutIcon, Button, Icon, button, type ButtonProps } from '@adminforge/ui';
+import { ArrowSquareOutIcon, Button, Icon, button, safeUrl, type ButtonProps } from '@adminforge/ui';
 import type { WidgetRuntime } from '../types';
 import { evaluateTemplate, useTemplate, useWhen } from './expr';
 import type { ActionSpec } from './schema-common';
@@ -56,9 +56,11 @@ export function ActionButton({
   const icon = action.icon ? <Icon name={action.icon} size={size === 'sm' ? 14 : 16} /> : null;
 
   if (action.href) {
-    const target = typeof href.value === 'string' ? href.value : '';
-    if (!target) return null;
-    const external = action.external ?? isExternal(target);
+    // Templated from data: only safe targets become links (never javascript:, //host or /\host).
+    const safe = typeof href.value === 'string' ? safeUrl(href.value) : null;
+    if (!safe) return null;
+    const target = safe.href;
+    const external = safe.external || action.external === true;
     const cls = button({ intent, size, className });
     if (external)
       return (

@@ -36,7 +36,8 @@ import type {
   StepInterceptor,
   StepResult,
 } from './ports';
-import { redact, secretInputValues, storableOutput } from './redact';
+import { renderMarkdown } from './markdown';
+import { containsRedacted, redact, REDACTED, secretInputValues, storableOutput } from './redact';
 import { extractSecrets, secretSpec, type SecretSpec } from './secrets';
 import {
   DEFAULT_LIMITS,
@@ -145,6 +146,16 @@ const CANCEL_CHECK_MS = 1_000;
 const truthy = (v: unknown) => (Array.isArray(v) ? v.length > 0 : Boolean(v));
 const iso = (d: Date) => d.toISOString();
 
+/** A step (or child playbook) would send the `[redacted]` placeholder instead of a real value. */
+export const redactedValueError = () =>
+  new StepError(
+    'redacted_value',
+    `This step would have sent a hidden value ("${REDACTED}") instead of the real one, so nothing was sent.`,
+    {
+      hint: 'Values marked redact are saved masked when a run pauses. Run the playbook again; if this step fails the same way, ask its owner to use the input directly in this step.',
+    },
+  );
+
 export class Engine {
   readonly limits: Limits;
   readonly clock: Clock;
@@ -183,8 +194,16 @@ class Execution {
   private lastCancelCheck = 0;
   private top!: Frame;
   private readonly depth: number;
-  /** Values of inputs declared `redact: true`: masked wherever they would be stored or emitted. */
+  /**
+   * Values of inputs declared `redact: true` (run inputs, and manual-step values as they arrive): masked wherever they
+   * would be stored or emitted.
+   */
   private readonly secrets: string[];
+  /**
+   * Paths whose record came from the store (an earlier pass of this run). Stored records are masked, so when the run
+   * has secrets their outputs may hold `[redacted]` instead of the real value (see `restoreView`).
+   */
+  private readonly restored = new Set<string>();
 
   constructor(
     private readonly engine: Engine,
@@ -203,6 +222,7 @@ class Execution {
     this.secrets = secretInputValues(def.inputs, run.inputs ?? {});
     for (const r of [...records].sort((a, b) => a.seq - b.seq)) {
       this.records.set(r.path, r);
+      this.restored.add(r.path);
       this.seq = Math.max(this.seq, r.seq + 1);
     }
     for (const s of allSteps(def)) this.byId.set(s.id, s);
@@ -303,7 +323,12 @@ class Execution {
     patch: { outputs?: Record<string, unknown> | null; error?: RunError | null },
   ): Promise<RunOutcome> {
     const from = status === 'cancelled' ? NON_TERMINAL : (['running'] as const);
-    const r = await this.store.updateRun(this.run.id, { status, endedAt: this.clock.now(), ...patch }, from);
+    // Run outputs and errors are stored and shown: values of `redact: true` inputs never reach them.
+    const masked = {
+      ...('outputs' in patch ? { outputs: this.mask(patch.outputs) } : {}),
+      ...('error' in patch ? { error: this.mask(patch.error) } : {}),
+    };
+    const r = await this.store.updateRun(this.run.id, { status, endedAt: this.clock.now(), ...masked }, from);
     if (!r) return this.current();
     this.run = r;
     await this.runEvent(status, patch.error ?? undefined);
@@ -313,8 +338,17 @@ class Execution {
   private async runEvent(status: RunStatus, error?: RunError, extra: Record<string, unknown> = {}) {
     await this.store.appendEvent(this.run.id, {
       type: 'status',
-      data: { scope: 'run', status, ...(error ? { error } : {}), ...extra },
+      data: { scope: 'run', status, ...(error ? { error: this.mask(error) } : {}), ...extra },
     });
+  }
+
+  private addSecrets(values: readonly string[]) {
+    for (const v of values) if (!this.secrets.includes(v)) this.secrets.push(v);
+  }
+
+  /** A copy with the run's secret values (and credential-named keys) masked — for anything stored or emitted. */
+  private mask<T>(v: T): T {
+    return this.secrets.length && v != null ? (redact(v, this.secrets) as T) : v;
   }
 
   // ───────────────────────────── scope & frames ─────────────────────────────
@@ -372,6 +406,61 @@ class Execution {
     return { output: rec.output === null ? undefined : rec.output, status: rec.status, error: rec.error };
   }
 
+  /** Whether a record was read back from the store with masked values in it (only when the run has secrets). */
+  private maskedRecord(rec: StepRecord, value: unknown): boolean {
+    return this.secrets.length > 0 && this.restored.has(rec.path) && containsRedacted(value);
+  }
+
+  /**
+   * The view of a finished step reused after a pause. Stored records are masked, so a pure step (transform, assert)
+   * whose output held a secret would hand later steps the literal `[redacted]`: it is computed again from the run's
+   * real inputs instead — and used only when, masked, it equals what was stored (the same result, not a new one).
+   * Outputs of steps that called a service can't be recomputed; sending them on is refused (see `attempt`).
+   */
+  private async restoreView(
+    step: Step,
+    handler: StepHandler,
+    rec: StepRecord,
+    frame: Frame,
+    path: string,
+    mode: Mode,
+  ): Promise<View> {
+    const stored = this.viewOf(rec);
+    if (handler.external || rec.status !== 'succeeded' || !this.maskedRecord(rec, rec.output)) return stored;
+    let fresh: unknown;
+    const intercepted = this.engine.opts.intercept?.({ id: step.id, type: step.type, mode }, path, {
+      dryRun: this.dryRun,
+      runId: this.run.id,
+      compensation: false,
+    });
+    try {
+      if (intercepted) {
+        if (!('output' in intercepted)) return stored;
+        fresh = intercepted.output;
+      } else {
+        const ctx = {
+          ...this.context(step.id, path, mode, frame, this.ac.signal, { seq: null }),
+          emit: async () => undefined,
+        };
+        const res = await handler.execute(await handler.prepare(step as never, ctx), ctx);
+        if (res.error || res.park) return stored;
+        fresh = res.output ?? null;
+      }
+    } catch {
+      return stored;
+    }
+    fresh =
+      extractSecrets(fresh ?? null, secretSpec(step as { secret?: boolean; secretOutputs?: string[] }))
+        .masked ?? null;
+    const same =
+      JSON.stringify(storableOutput(this.mask(fresh), this.limits.maxOutputBytes)) ===
+      JSON.stringify(rec.output);
+    if (!same) return stored;
+    // In memory only (compensations render against it); saving the record masks it again.
+    rec.output = fresh;
+    return this.viewOf(rec);
+  }
+
   // ───────────────────────────── records & events ─────────────────────────────
 
   private newRecord(
@@ -404,14 +493,14 @@ class Execution {
 
   private async save(rec: StepRecord, actor: Actor | null) {
     this.records.set(rec.path, rec);
+    this.restored.delete(rec.path);
     // Redacted copy for the store (and from there the run view and audit); the in-memory record keeps real values.
-    const mask = <T>(v: T): T => (this.secrets.length && v != null ? (redact(v, this.secrets) as T) : v);
     const stored: StepRecord = {
       ...rec,
-      request: mask(rec.request),
-      plan: mask(rec.plan),
-      error: mask(rec.error),
-      output: storableOutput(mask(rec.output), this.limits.maxOutputBytes),
+      request: this.mask(rec.request),
+      plan: this.mask(rec.plan),
+      error: this.mask(rec.error),
+      output: storableOutput(this.mask(rec.output), this.limits.maxOutputBytes),
     };
     await this.store.saveStep(this.run.id, stored, { actor, dryRun: this.dryRun });
     await this.store.appendEvent(this.run.id, {
@@ -424,7 +513,7 @@ class Execution {
         type: rec.type,
         status: rec.status,
         attempt: rec.attempt,
-        ...(rec.error ? { error: rec.error } : {}),
+        ...(stored.error ? { error: stored.error } : {}),
       },
     });
   }
@@ -659,9 +748,18 @@ class Execution {
     return masked;
   }
 
-  private async describe(text: string | undefined, frame: Frame): Promise<string | null> {
+  /**
+   * A templated text shown to people. `markdown`: the text is rendered as Markdown (approval messages, manual-step
+   * instructions), so the values its expressions produce are escaped and can never become links or markup.
+   */
+  private async describe(
+    text: string | undefined,
+    frame: Frame,
+    opts: { markdown?: boolean } = {},
+  ): Promise<string | null> {
     if (!text) return null;
     try {
+      if (opts.markdown) return await renderMarkdown(text, this.scope(frame));
       const v = await this.render(text, frame);
       return v === undefined || v === null ? null : String(v);
     } catch {
@@ -697,7 +795,7 @@ class Execution {
     }
     if (rec) {
       if (REUSABLE.includes(rec.status)) {
-        this.setView(frame, step.id, this.viewOf(rec));
+        this.setView(frame, step.id, await this.restoreView(step, handler, rec, frame, path, mode));
         return OK;
       }
       if (rec.status === 'running') {
@@ -841,6 +939,12 @@ class Execution {
       });
       return { kind: 'ok', rec };
     }
+
+    // A value masked when the run was saved must never be sent as if it were data (e.g. set as a password after the run
+    // paused for an approval). Refuse the step rather than send the placeholder. (Child playbooks check their inputs
+    // when the child run is created — a resumed child already has its own.)
+    if (handler.external && !handler.plansItself && !intercepted && containsRedacted(prep.payload))
+      return fail(redactedValueError());
 
     // Identity for external steps (write steps refuse to run unless the actor is armed). Child playbooks resolve their own.
     let identity: ResolvedIdentity | null = null;
@@ -1078,9 +1182,10 @@ class Execution {
     if ('done' in pre) return pre.done;
     let rec = pre.rec;
     let items: unknown[];
-    if (rec && Array.isArray((rec.request as { items?: unknown } | null)?.items))
+    if (rec && Array.isArray((rec.request as { items?: unknown } | null)?.items)) {
       items = (rec.request as { items: unknown[] }).items;
-    else {
+      if (this.maskedRecord(rec, items)) items = await this.restoreItems(step, rec, items, frame);
+    } else {
       let raw: unknown;
       try {
         raw = await this.render(step.items, frame);
@@ -1191,6 +1296,24 @@ class Execution {
     return OK;
   }
 
+  /** forEach items saved masked (see `restoreView`): evaluated again, used only when they mask to what was stored. */
+  private async restoreItems(
+    step: ForEachStep,
+    rec: StepRecord,
+    stored: unknown[],
+    frame: Frame,
+  ): Promise<unknown[]> {
+    let fresh: unknown;
+    try {
+      fresh = await this.render(step.items, frame);
+    } catch {
+      return stored;
+    }
+    if (!Array.isArray(fresh) || JSON.stringify(this.mask(fresh)) !== JSON.stringify(stored)) return stored;
+    rec.request = { ...(rec.request as Record<string, unknown>), items: fresh };
+    return fresh;
+  }
+
   private async failControl(step: Step, frame: Frame, error: RunError): Promise<Flow> {
     const path = frame.prefix + step.id;
     const rec = this.records.get(path) ?? this.newRecord(step.id, step.type, path, 'read', frame.actor);
@@ -1239,7 +1362,12 @@ class Execution {
         this.setView(frame, step.id, this.viewOf(skipped));
         return OK;
       }
-      const task = this.approvalTask(step, path, frame, await this.describe(step.message, frame));
+      const task = this.approvalTask(
+        step,
+        path,
+        frame,
+        await this.describe(step.message, frame, { markdown: true }),
+      );
       const { requestedBy: _r, ...request } = task;
       const waiting = this.newRecord(step.id, 'approval', path, 'read', frame.actor, {
         status: 'waiting',
@@ -1316,6 +1444,14 @@ class Execution {
     if ('done' in pre) return pre.done;
     const rec = pre.rec;
     if (rec && (rec.status === 'succeeded' || rec.status === 'failed')) {
+      // Values typed into `redact: true` fields were saved masked: take the real ones from the decision again.
+      if (this.restored.has(path) && Object.values(step.inputs ?? {}).some((p) => p.redact)) {
+        const decision = await this.store.getDecision(this.run.id, path);
+        if (decision?.kind === 'manual') {
+          this.addSecrets(secretInputValues(step.inputs, decision.values ?? {}));
+          rec.output = { ...(rec.output as Record<string, unknown>), values: decision.values ?? {} };
+        }
+      }
       this.setView(frame, step.id, this.viewOf(rec));
       return OK;
     }
@@ -1323,7 +1459,7 @@ class Execution {
       kind: 'manual',
       path,
       stepId: step.id,
-      instructions: (await this.describe(step.instructions, frame)) ?? '',
+      instructions: (await this.describe(step.instructions, frame, { markdown: true })) ?? '',
       checklist: await Promise.all(
         (step.checklist ?? []).map(async (c) => (await this.describe(c, frame)) ?? ''),
       ),
@@ -1352,6 +1488,8 @@ class Execution {
     await this.store.openTask(this.run.id, await task());
     const decision = await this.store.getDecision(this.run.id, path);
     if (!decision || decision.kind !== 'manual') return { kind: 'park', status: 'awaiting_input' };
+    // Values of the step's `redact: true` fields are masked from here on, like the run's own secret inputs.
+    this.addSecrets(secretInputValues(step.inputs, decision.values ?? {}));
     const output = {
       confirmed: decision.confirmed,
       notes: decision.notes ?? null,
@@ -1505,7 +1643,7 @@ class Execution {
 
   private async finishCompensation(failure: RunError): Promise<RunOutcome> {
     const marked = { ...failure, compensating: true };
-    const r = await this.store.updateRun(this.run.id, { error: marked }, ['running']);
+    const r = await this.store.updateRun(this.run.id, { error: this.mask(marked) }, ['running']);
     if (!r) return this.current();
     this.run = r;
     await this.runEvent('running', undefined, { compensating: true });

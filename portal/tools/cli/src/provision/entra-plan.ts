@@ -3,6 +3,8 @@ import { appNames, groupNames } from './entra-desired';
 import type {
   ApplicationBody,
   AppRole,
+  CertificateInfo,
+  KeyCredential,
   DesiredApp,
   DesiredEntra,
   EntraOp,
@@ -56,6 +58,11 @@ export function diffApplication(desired: ApplicationBody, current: GraphApplicat
     (implicit?.enableIdTokenIssuance ?? false) !== desired.web.implicitGrantSettings.enableIdTokenIssuance
   )
     changes.push('implicitGrantSettings');
+  if ((current.isFallbackPublicClient ?? false) !== desired.isFallbackPublicClient)
+    changes.push('isFallbackPublicClient');
+  if (!sameSet(current.publicClient?.redirectUris ?? [], desired.publicClient.redirectUris))
+    changes.push('publicClient');
+  if (!sameSet(current.spa?.redirectUris ?? [], desired.spa.redirectUris)) changes.push('spa');
   const haveRoles = new Map((current.appRoles ?? []).map((r) => [r.id.toLowerCase(), r]));
   if (desired.appRoles.some((r) => roleDiffers(r, haveRoles.get(r.id.toLowerCase()))))
     changes.push('appRoles');
@@ -117,6 +124,53 @@ const scopeDelta = (want: string[], have: string[]) => {
 };
 
 export const secretDisplayName = (label: string) => `adminforge-${label}-local`;
+export const certificateDisplayName = (label: string) => `adminforge-${label}-certificate`;
+
+/** Upper-case hex SHA-1 thumbprint of a Graph keyCredential (customKeyIdentifier is base64 of the thumbprint bytes). */
+export function keyThumbprint(k: KeyCredential): string | undefined {
+  if (!k.customKeyIdentifier) return undefined;
+  const hex = Buffer.from(k.customKeyIdentifier, 'base64').toString('hex').toUpperCase();
+  // Some tenants hold certificates uploaded with the hex thumbprint as text; accept that form too.
+  const text = Buffer.from(k.customKeyIdentifier, 'base64').toString('latin1');
+  return /^[0-9A-F]{40}$/i.test(text) ? text.toUpperCase() : hex;
+}
+
+/** Certificate mode (AF_AUTOMATION_CERT_PATH): register the certificate, then remove every client secret. */
+function certificateOps(
+  desired: DesiredApp & { certificate: CertificateInfo },
+  app: GraphApplication | undefined,
+  label: string,
+): EntraOp[] {
+  const ops: EntraOp[] = [];
+  const keys = app?.keyCredentials ?? [];
+  const registered = keys.some((k) => keyThumbprint(k) === desired.certificate.thumbprint);
+  const others = keys.filter((k) => keyThumbprint(k) !== desired.certificate.thumbprint).length;
+  ops.push({
+    app: desired.key,
+    kind: 'keyCredential',
+    action: registered && !others ? 'noop' : app && registered ? 'update' : 'create',
+    section: 'Local credentials',
+    title: `${desired.body.displayName}: certificate from AF_AUTOMATION_CERT_PATH`,
+    changes: [
+      ...(registered ? [] : ['not registered on the app']),
+      ...(others ? [`replaces ${others} other certificate(s)`] : []),
+    ],
+    detail: `valid until ${desired.certificate.endDateTime.slice(0, 10)}`,
+    certificate: desired.certificate,
+    displayName: certificateDisplayName(label),
+  });
+  for (const c of app?.passwordCredentials ?? [])
+    ops.push({
+      app: desired.key,
+      kind: 'removePassword',
+      action: 'delete',
+      section: 'Local credentials',
+      title: `${desired.body.displayName}: client secret${c.displayName ? ` "${c.displayName}"` : ''}`,
+      changes: ['certificate configured (AF_AUTOMATION_CERT_PATH): client secrets are removed'],
+      keyId: c.keyId,
+    });
+  return ops;
+}
 
 function planApp(desired: DesiredApp, state: EntraState, label: string, now: Date): EntraOp[] {
   const ops: EntraOp[] = [];
@@ -185,6 +239,11 @@ function planApp(desired: DesiredApp, state: EntraState, label: string, now: Dat
     changes: idMismatch ? ['env file holds a different client id'] : undefined,
     envKey: desired.env.clientId,
   });
+
+  if (desired.certificate) {
+    ops.push(...certificateOps({ ...desired, certificate: desired.certificate }, app, label));
+    return ops;
+  }
 
   const secret = state.env[desired.env.secret];
   let why: string | undefined;

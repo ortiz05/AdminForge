@@ -17,7 +17,14 @@ import { describeCron, nextRuns } from './cron';
  * the YAML is validated with the content schema before it is returned.
  */
 
-const EnvKey = z.string().regex(/^AF_[A-Z0-9_]+$/, 'Expected an env key like AF_REPORT_RECIPIENTS');
+const EnvKey = z.string().regex(/^AF_[A-Z0-9_]+$/, 'Expected an env key like AF_TEAMS_ALERTS_WEBHOOK');
+/** Recipient lists: only keys named like one are ever read for email (delivery/notifier.ts RECIPIENT_KEY). */
+const RecipientKey = z
+  .string()
+  .regex(
+    /^AF_[A-Z0-9_]*(RECIPIENTS|EMAIL|ALERTS)$/,
+    'Expected an env key ending in _RECIPIENTS, _EMAIL or _ALERTS, like AF_REPORT_RECIPIENTS',
+  );
 const Section = z.string().regex(/^[a-z][a-z0-9-]*$/);
 
 export const ScheduleScaffoldRequest = z.object({
@@ -38,7 +45,7 @@ export const ScheduleScaffoldRequest = z.object({
       /** Keep the newest N files. */
       retain: z.number().int().min(1).max(1000).optional(),
       /** Env key holding recipient addresses (comma-separated); addresses are configuration, never content. */
-      emailEnv: EnvKey.optional(),
+      emailEnv: RecipientKey.optional(),
       /** Env key holding a Teams workflow webhook URL. */
       teamsWebhookEnv: EnvKey.optional(),
     }),
@@ -56,7 +63,9 @@ export const ScheduleScaffoldRequest = z.object({
   ]),
   retries: z.number().int().min(0).max(10).default(2),
   timeoutSeconds: z.number().int().min(60).max(14_400).optional(),
-  notifyOnFailure: z.object({ emailEnv: EnvKey.optional(), teamsWebhookEnv: EnvKey.optional() }).optional(),
+  notifyOnFailure: z
+    .object({ emailEnv: RecipientKey.optional(), teamsWebhookEnv: EnvKey.optional() })
+    .optional(),
 });
 export type ScheduleScaffoldRequest = z.infer<typeof ScheduleScaffoldRequest>;
 

@@ -49,8 +49,10 @@ export const READ_GRAPH_SCOPES = [
 ] as const;
 
 /**
- * Write app, Microsoft Graph delegated scopes. Directory.ReadWrite.All is deliberately absent; scopes only some content
- * needs (directory roles, Conditional Access, …) come from that content's `requires.scopes` instead of this baseline.
+ * Write app, Microsoft Graph delegated scopes. No tier-0 scope is in this baseline (provision/privilege.ts:
+ * Directory.ReadWrite.All, Directory.AccessAsUser.All — a superset of it —, RoleManagement.ReadWrite.Directory,
+ * Application.ReadWrite.All, PIM schedules, …). Scopes only some content needs come from that content's
+ * `requires.scopes`, and tier-0 ones are granted only with AF_ALLOW_PRIVILEGED_WRITE_SCOPES=true.
  */
 export const WRITE_GRAPH_SCOPES = [
   ...OIDC_SCOPES,
@@ -60,8 +62,6 @@ export const WRITE_GRAPH_SCOPES = [
   'Group.ReadWrite.All',
   'GroupMember.ReadWrite.All',
   'UserAuthenticationMethod.ReadWrite.All',
-  'RoleAssignmentSchedule.ReadWrite.Directory',
-  'Application.ReadWrite.All',
   'DeviceManagementManagedDevices.PrivilegedOperations.All',
   'Mail.Send',
 ] as const;
@@ -86,6 +86,18 @@ export const AUTOMATION_GRAPH_ROLES = [
   'SecurityAlert.Read.All',
   'IdentityRiskyUser.Read.All',
 ] as const;
+
+/**
+ * Automation application permissions that built-in code (not content) relies on, so `validate --scopes` doesn't
+ * report them as unused. Everything else in AUTOMATION_GRAPH_ROLES is only needed when content declares it.
+ */
+export const AUTOMATION_BUILTIN_USES: Readonly<Record<string, string>> = {
+  'Application.Read.All': 'app credential expiry probes and the content-health job',
+  'AuditLog.Read.All': 'sign-in health probes',
+  'Organization.Read.All': 'licence checks (/subscribedSkus)',
+  'Policy.Read.All': 'CLI: Security Defaults check in provision status / test-identities',
+  'Mail.Send': 'email delivery of reports and alerts from AF_MAIL_SENDER (only when it is set)',
+};
 
 /** Portal roles (§5.3) — app roles on the Read app, each backed by a security group. */
 export const PORTAL_ROLES = [
@@ -118,6 +130,16 @@ export const DEFAULT_ACCESS_ROLE_ID = '00000000-0000-0000-0000-000000000000';
 
 /** Built-in Azure RBAC "Reader". */
 export const AZURE_READER_ROLE_ID = 'acdd72a7-3385-48ef-bd42-f606fba81ae7';
+
+/** Built-in Azure RBAC roles named in `provision status` (identical in every tenant). */
+export const AZURE_BUILTIN_ROLE_NAMES: Readonly<Record<string, string>> = {
+  [AZURE_READER_ROLE_ID]: 'Reader',
+  '73c42c96-874c-492b-b04d-ab87d138a893': 'Log Analytics Reader',
+  '8e3af657-a8ff-443c-a75c-2fe8c4bcb635': 'Owner',
+  'b24988ac-6180-49ed-a52f-4b4c8da4bd7f': 'Contributor',
+  '18d7d88d-d35e-4fb5-a5c3-7773c20a72d9': 'User Access Administrator',
+  'f58310d9-a9f6-439a-9e8d-f62e7b41a168': 'Role Based Access Control Administrator',
+};
 
 /** Built-in Entra directory role template ids (identical in every tenant). */
 export const DIRECTORY_ROLES = {

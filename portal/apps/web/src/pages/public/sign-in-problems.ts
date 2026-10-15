@@ -33,6 +33,14 @@ const SIGN_IN: Record<string, ProblemCopy> = {
     primary: 'sign-in',
     secondary: 'choose-account',
   },
+  guest_account: {
+    title: 'Guest accounts can’t use AdminForge',
+    body: 'You signed in with an account that is a guest in this organisation.',
+    next: 'Sign in with your own account in this organisation.',
+    admin:
+      'AdminForge refuses accounts that are guests in the tenant (acct claim 1). Members — including a personal Microsoft account that is a member of the tenant — can sign in.',
+    primary: 'choose-account',
+  },
   wrong_tenant: {
     title: 'That account isn’t part of this organisation',
     body: 'AdminForge only accepts work accounts from the organisation it manages.',
@@ -41,7 +49,7 @@ const SIGN_IN: Record<string, ProblemCopy> = {
   },
   invalid_token: {
     title: 'Microsoft didn’t identify your account',
-    body: 'The sign-in response didn’t include your account details. Guest and personal accounts can’t use AdminForge.',
+    body: 'The sign-in response didn’t include your account details. Guest accounts can’t use AdminForge.',
     next: 'Sign in with your work account for this organisation.',
     primary: 'choose-account',
   },

@@ -97,14 +97,13 @@ export function searchDefinitions(
   types: ReadonlySet<SearchType>,
 ): SearchResult[] {
   const needle = q.trim().toLowerCase();
+  // Every role in requires.portalRoles: the rule the page or playbook itself enforces.
+  const allowed = (r: DefinitionRecord) =>
+    (r.def.requires?.portalRoles ?? []).every((role) => hasRole({ roles }, role));
   return records
     .filter((r) => DEF_KINDS.has(r.kind as SearchType) && types.has(r.kind as SearchType))
     .filter((r) => r.def.status !== 'draft' && !needsContext(r.def))
-    .filter(
-      (r) =>
-        !r.def.requires?.portalRoles?.length ||
-        r.def.requires.portalRoles.some((role) => hasRole({ roles }, role)),
-    )
+    .filter(allowed)
     .map((r) => ({ r, s: needle ? score(r.def, needle) : 1 }))
     .filter((x) => x.s > 0)
     .sort((a, b) => b.s - a.s || a.r.def.title.localeCompare(b.r.def.title))

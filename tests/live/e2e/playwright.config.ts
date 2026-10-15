@@ -6,6 +6,9 @@ import { loadEnv } from '@adminforge/config';
 const env = loadEnv(process.env, { admin: true });
 export default defineConfig({
   testDir: '.',
+  // The validation user is disabled between runs: enabled for the run, disabled afterwards.
+  globalSetup: './global-setup.ts',
+  globalTeardown: './global-teardown.ts',
   timeout: 240_000,
   workers: 1,
   outputDir: `${process.env.AF_LIVE_OUT ?? '/tmp/adminforge-live'}/results`,

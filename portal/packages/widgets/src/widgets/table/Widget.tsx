@@ -15,6 +15,7 @@ import {
   TABLE_MUTED_TEXT,
   formatNumber,
   formatTimestamp,
+  safeUrl,
   type ColumnFilterKind,
   type ColumnKind,
   type DataColumn,
@@ -104,7 +105,7 @@ function LinkCell({ col, row, runtime }: { col: TableColumnConfig; row: Row; run
       </button>
     );
   }
-  if (isExternal(text))
+  if (isExternal(text) && safeUrl(text))
     return (
       <a href={text} target="_blank" rel="noreferrer" className={cls}>
         {text}
@@ -268,9 +269,11 @@ function RowActionsMenu({
     if (a.playbook) return void launchPlaybook(runtime, a.playbook, a.inputs, scope);
     if (a.href)
       void evaluateTemplate<unknown>(a.href, scope).then((href) => {
-        if (typeof href !== 'string' || !href) return;
-        if (isExternal(href)) window.open(href, '_blank', 'noopener,noreferrer');
-        else runtime.navigate(href);
+        // Templated from the row: only safe targets are followed (never javascript:, //host or /\host).
+        const safe = typeof href === 'string' ? safeUrl(href) : null;
+        if (!safe) return;
+        if (safe.external) window.open(safe.href, '_blank', 'noopener,noreferrer');
+        else runtime.navigate(safe.href);
       });
   };
   return (

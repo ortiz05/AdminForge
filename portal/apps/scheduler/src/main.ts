@@ -1,5 +1,6 @@
 import { parseArgs } from 'node:util';
 import { loadConfig } from '@adminforge/api/src/config';
+import { safeLogFields } from '@adminforge/api/src/logging';
 import { createContext } from '@adminforge/api/src/context';
 import { runProbe, type ProbeOutcome } from '@adminforge/api/src/probes/checks';
 import { createRunsModule } from '@adminforge/api/src/runs/module';
@@ -23,7 +24,13 @@ import type {} from '@adminforge/api/src/auth/session-plugin';
 
 type Level = 'debug' | 'info' | 'warn' | 'error';
 const write = (level: Level) => (obj: object, msg: string) => {
-  const line = JSON.stringify({ level, time: new Date().toISOString(), role: 'scheduler', msg, ...obj });
+  const line = JSON.stringify({
+    level,
+    time: new Date().toISOString(),
+    role: 'scheduler',
+    msg,
+    ...safeLogFields(obj),
+  });
   (level === 'error' || level === 'warn' ? process.stderr : process.stdout).write(`${line}\n`);
 };
 const warn = write('warn');

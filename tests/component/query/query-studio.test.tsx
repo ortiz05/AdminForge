@@ -3,7 +3,7 @@ import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { App, createAppRouter, createQueryClient } from '@adminforge/web/src/app/router';
 import { __resetPrefsForTests } from '@adminforge/web/src/lib/prefs';
-import { __resetHistoryForTests, HISTORY_KEY } from '@adminforge/web/src/query/history';
+import { __resetHistoryForTests, historyKey } from '@adminforge/web/src/query/history';
 import { GALLERY } from '@adminforge/web/src/query/gallery';
 import { CAPABILITIES_NO_DEFENDER, answerQuery, QIDS } from '../../e2e/fixtures/query';
 import { me, NAV } from '../../e2e/fixtures/session';
@@ -155,7 +155,7 @@ describe('Query Studio (/query)', () => {
     await user.keyboard('{Control>}{Enter}{/Control}');
     await screen.findByRole('grid', { name: 'Query results' });
     expect(runs()).toHaveLength(1);
-    const stored = JSON.parse(localStorage.getItem(HISTORY_KEY) ?? '[]') as Array<{
+    const stored = JSON.parse(localStorage.getItem(historyKey(me().user.oid)) ?? '[]') as Array<{
       query: string;
       rowCount: number;
       source: string;

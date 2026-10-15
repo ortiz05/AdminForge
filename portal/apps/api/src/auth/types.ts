@@ -14,7 +14,13 @@ export interface IdClaims {
   /** Satisfied authentication contexts; Entra emits an array (older tokens: a single string). */
   acrs?: string[] | string;
   auth_time?: number;
+  /** Account status in the tenant (optional claim): 0 = member, 1 = guest. Some token versions send it as a string. */
+  acct?: number | string;
 }
+
+/** True for a guest (B2B) account in this tenant. Members — including a personal account that owns the tenant — are 0. */
+export const isGuestAccount = (claims: Pick<IdClaims, 'acct'>): boolean =>
+  claims.acct === 1 || (typeof claims.acct === 'string' && claims.acct.trim() === '1');
 
 export interface AuthUrlInput {
   kind: AppKind;

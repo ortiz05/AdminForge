@@ -1,4 +1,5 @@
 import { loadConfig } from './config';
+import { safeLogFields } from './logging';
 import { createContext } from './context';
 import { createRunsModule } from './runs/module';
 
@@ -12,7 +13,13 @@ import { createRunsModule } from './runs/module';
 
 type Level = 'debug' | 'info' | 'warn' | 'error';
 const write = (level: Level) => (obj: object, msg: string) => {
-  const line = JSON.stringify({ level, time: new Date().toISOString(), role: 'worker', msg, ...obj });
+  const line = JSON.stringify({
+    level,
+    time: new Date().toISOString(),
+    role: 'worker',
+    msg,
+    ...safeLogFields(obj),
+  });
   (level === 'error' || level === 'warn' ? process.stderr : process.stdout).write(`${line}\n`);
 };
 const log = { info: write('info'), warn: write('warn'), error: write('error') };

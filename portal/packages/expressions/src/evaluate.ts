@@ -1,9 +1,12 @@
 import jsonata from 'jsonata';
 import { registerHelpers } from './helpers';
+import { MAX_SEQUENCE, registerLimits } from './limits';
 
 /**
  * JSONata evaluation with AdminForge limits (§7.6): compiled expressions are cached (LRU), evaluation is timeboxed
- * (250 ms default) and depth-limited, and every error names the expression it came from.
+ * (250 ms default) and depth-limited, ranges and sequences are capped at MAX_SEQUENCE items, built-ins that could
+ * run long in one step are size-limited and `$eval` is disabled (limits.ts), and every error names the expression it
+ * came from.
  */
 
 /** Expression scope: `params`, `inputs`, `row`, `rows`, `value`, `steps`, `run`, `user`, `env`, `now`, … */
@@ -94,12 +97,13 @@ export function compile(expr: string, opts: EvaluateOptions = {}): jsonata.Expre
   if (hit) return hit;
   let compiled: jsonata.Expression;
   try {
-    compiled = jsonata(expr, { timeout, stack });
+    compiled = jsonata(expr, { timeout, stack, sequence: MAX_SEQUENCE });
   } catch (err) {
     const e = err as JsonataFailure;
     throw new ExpressionError(`Invalid expression: ${e.message ?? String(err)}`, expr, e.code, e.position);
   }
   registerHelpers(compiled);
+  registerLimits(compiled);
   cache.set(key, compiled);
   return compiled;
 }

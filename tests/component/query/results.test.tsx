@@ -1,7 +1,7 @@
 import {
   __resetHistoryForTests,
   clearHistory,
-  HISTORY_KEY,
+  historyKey,
   HISTORY_MAX,
   readHistory,
   recordRun,
@@ -158,9 +158,11 @@ describe('query results helpers', () => {
 });
 
 describe('query history', () => {
+  const OID = '00000000-0000-4000-8000-0000000000a1';
+  const HISTORY_KEY = historyKey(OID);
   beforeEach(() => {
     localStorage.clear();
-    __resetHistoryForTests();
+    __resetHistoryForTests(OID);
   });
 
   it('keeps the newest first, de-duplicates the same query, caps the list, and ignores corrupt storage', () => {

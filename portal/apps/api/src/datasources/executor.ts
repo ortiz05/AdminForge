@@ -19,7 +19,7 @@ import type { Datasource, Kind, PageLike, Requires } from '@adminforge/schemas';
 import { missingLicences, requiresBadge, type LicenceService } from '../capabilities/licences';
 import type { DefinitionRegistry, ResolvedDefinition } from '../definitions/types';
 import { AppError } from '../errors';
-import { errorHint, outboundAppError } from '../execution/outbound';
+import { errorHint, outboundAppError, readableMessage } from '../execution/outbound';
 import type { ExecutionIdentity, OutboundExecutor, ServiceCall } from '../execution/types';
 import {
   AdvancedFilterError,
@@ -638,10 +638,12 @@ export class DatasourceRunner {
           e?.code ?? `HTTP${r.status}`,
           e?.message ?? `Microsoft Graph returned ${r.status}.`,
         );
+        const mapped = errorHint(apiErr, 'graph', identity, requires);
         errors[r.id] = {
-          code: apiErr.code,
-          message: apiErr.message,
-          hint: errorHint(apiErr, 'graph', identity, requires).hint,
+          code: mapped.licence ? 'licence_required' : apiErr.code,
+          // Written text, never Microsoft's raw JSON (the usage reports nest a whole error body in `message`).
+          message: mapped.message ?? readableMessage(apiErr.message),
+          hint: mapped.hint,
         };
       }
     }

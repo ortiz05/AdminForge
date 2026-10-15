@@ -5,10 +5,15 @@ export type Out = (line: string) => void;
 const PLAN_MARK: Record<Action, string> = {
   create: '+ create',
   update: '~ update',
+  delete: '- remove',
   noop: '= no-op ',
   skip: '! skip  ',
 };
-const STATUS_MARK: Record<Action, string> = { noop: '✓', create: '✗', update: '✗', skip: '⚠' };
+const STATUS_MARK: Record<Action, string> = { noop: '✓', create: '✗', update: '✗', delete: '✗', skip: '⚠' };
+
+/** Operations that change something (what `provision status` counts as not in the desired state). */
+export const isChange = (op: Pick<PlanOp, 'action'>) =>
+  op.action === 'create' || op.action === 'update' || op.action === 'delete';
 
 function bySection<T extends PlanOp>(ops: T[]): Map<Section, T[]> {
   const map = new Map<Section, T[]>();
@@ -18,12 +23,20 @@ function bySection<T extends PlanOp>(ops: T[]): Map<Section, T[]> {
 
 export function counts(ops: PlanOp[]) {
   const n = (a: Action) => ops.filter((o) => o.action === a).length;
-  return { create: n('create'), update: n('update'), noop: n('noop'), skip: n('skip') };
+  return {
+    create: n('create'),
+    update: n('update'),
+    delete: n('delete'),
+    noop: n('noop'),
+    skip: n('skip'),
+    /** Everything that changes something. */
+    changes: n('create') + n('update') + n('delete'),
+  };
 }
 
 export const summaryLine = (ops: PlanOp[]) => {
   const c = counts(ops);
-  return `${c.create} to create, ${c.update} to update, ${c.noop} unchanged, ${c.skip} skipped`;
+  return `${c.create} to create, ${c.update} to update, ${c.delete ? `${c.delete} to remove, ` : ''}${c.noop} unchanged, ${c.skip} skipped`;
 };
 
 /** Plan view: one line per object with create/update/no-op/skip and what differs. */
@@ -48,7 +61,9 @@ export function renderStatus(ops: PlanOp[], out: Out): void {
           ? ` — ${op.changes.join(', ')}`
           : op.action === 'create'
             ? ' — missing'
-            : '';
+            : op.action === 'delete'
+              ? ' — to remove'
+              : '';
       out(`    ${STATUS_MARK[op.action]} ${op.title}${why}`);
       if (op.detail) out(`        ${op.detail}`);
     }

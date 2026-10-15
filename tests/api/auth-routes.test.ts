@@ -354,7 +354,9 @@ describe('Entra arm / extend / disarm (fake AuthClient)', () => {
       id_token: { acrs: { essential: true, value: 'c1' } },
       access_token: { acrs: { essential: true, value: 'c1' } },
     });
-    expect(url.searchParams.get('prompt')).toBeNull();
+    // A fresh interactive sign-in is still forced: a CA policy may not demand one for the auth context.
+    expect(url.searchParams.get('prompt')).toBe('login');
+    expect(url.searchParams.get('max_age')).toBe('0');
 
     // Callback without the acrs claim → refused.
     const refused = await armCallback(cookie, res);

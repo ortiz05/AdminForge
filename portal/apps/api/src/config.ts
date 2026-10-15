@@ -19,6 +19,24 @@ const RoleList = z
   )
   .pipe(z.array(z.enum(PORTAL_ROLES)).min(1, 'at least one portal role is required'));
 
+/** Loopback interface names and addresses (mock sign-in may only listen on these). */
+export const isLoopbackHost = (host: string): boolean => {
+  const h = host
+    .trim()
+    .toLowerCase()
+    .replace(/^\[|\]$/g, '');
+  return h === 'localhost' || h === '::1' || /^127(\.\d{1,3}){3}$/.test(h);
+};
+
+/** Credentials that must never be loaded with mock sign-in (Read/Write app, automation identity, runner key). */
+const MOCK_FORBIDDEN_KEYS = [
+  'AF_READ_CLIENT_SECRET',
+  'AF_WRITE_CLIENT_SECRET',
+  'AF_AUTOMATION_CLIENT_SECRET',
+  'AF_AUTOMATION_CERT_PATH',
+  'RUNNER_SHARED_KEY',
+] as const;
+
 const Schema = z
   .object({
     NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
@@ -88,6 +106,18 @@ const Schema = z
     OUTBOUND_CONCURRENCY: z.coerce.number().int().min(1).max(256).default(16),
     OUTBOUND_USER_CONCURRENCY: z.coerce.number().int().min(1).max(64).default(6),
     OUTBOUND_TIMEOUT_MS: z.coerce.number().int().min(1000).max(300_000).default(30_000),
+    /** Largest response body accepted from Microsoft or a connection, in bytes (streamed; larger is refused). */
+    OUTBOUND_MAX_BYTES: z.coerce
+      .number()
+      .int()
+      .min(1024 * 1024)
+      .max(1024 * 1024 * 1024)
+      .default(64 * 1024 * 1024),
+    /**
+     * Hosts (comma-separated) whose https:// URIs a connection may use as its audience, e.g. api.contoso.com. api://…
+     * and application ids need no entry; Microsoft first-party hosts are refused even when listed.
+     */
+    AF_CONNECTION_AUDIENCE_HOSTS: z.string().optional(),
     SEARCH_TIMEOUT_MS: z.coerce.number().int().min(250).max(30_000).default(2500),
     EXPORT_MAX_ROWS: z.coerce.number().int().min(1).max(1_000_000).default(100_000),
     // PowerShell runner on this host (apps/runner); both unset = PowerShell steps/datasources disabled.
@@ -158,6 +188,37 @@ const Schema = z
     }
     if ((env.CONTENT_SOURCE ?? (env.NODE_ENV === 'production' ? 'db' : 'fs')) === 'db')
       need('DATABASE_URL', 'when CONTENT_SOURCE=db');
+    for (const host of (env.AF_CONNECTION_AUDIENCE_HOSTS ?? '').split(/[\s,]+/).filter(Boolean)) {
+      if (!/^(?=.{1,253}\.?$)([A-Za-z0-9-]{1,63}\.)*[A-Za-z0-9-]{1,63}\.?$/.test(host))
+        ctx.addIssue({
+          code: 'custom',
+          path: ['AF_CONNECTION_AUDIENCE_HOSTS'],
+          message: 'must be host names only, comma-separated (for example api.contoso.com), without https://',
+        });
+    }
+    // Mock sign-in hands every visitor every portal role without a password: only ever on this machine, on
+    // synthetic data, with no credentials that could reach the tenant.
+    if (env.AUTH_MODE === 'mock') {
+      if (env.DATA_MODE !== 'fixtures')
+        ctx.addIssue({
+          code: 'custom',
+          path: ['AUTH_MODE'],
+          message: 'mock sign-in needs DATA_MODE=fixtures (it never runs against tenant data)',
+        });
+      if (env.API_HOST !== undefined && !isLoopbackHost(env.API_HOST))
+        ctx.addIssue({
+          code: 'custom',
+          path: ['API_HOST'],
+          message: 'mock sign-in only listens on loopback (127.0.0.1, ::1 or localhost)',
+        });
+      for (const key of MOCK_FORBIDDEN_KEYS)
+        if (env[key])
+          ctx.addIssue({
+            code: 'custom',
+            path: [key],
+            message: `must not be set with AUTH_MODE=mock (mock sign-in never holds tenant or runner credentials; use ADMINFORGE_ENV_FILE=/dev/null)`,
+          });
+    }
   })
   .transform((env) => {
     const root = workspaceRoot();

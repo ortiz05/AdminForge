@@ -30,6 +30,8 @@ export const HttpCheck = z.strictObject({
   method: z.enum(['GET', 'HEAD', 'POST']).default('GET'),
   headers: z.record(z.string(), z.string()).optional(),
   body: z.unknown().optional(),
+  /** POST probes must say so explicitly (a POST can change the target). */
+  allowPost: z.literal(true).optional(),
   expect: ProbeExpect.optional(),
 });
 export const GraphCheck = z.strictObject({
@@ -38,6 +40,25 @@ export const GraphCheck = z.strictObject({
   query: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])).optional(),
   beta: z.boolean().optional(),
   expect: ProbeExpect.optional(),
+});
+/**
+ * Counts items in a Microsoft Graph list (automation identity, pages followed) — alert when there are too many
+ * (`worse: higher`, e.g. new high-severity alerts) or too few (`worse: lower`, e.g. fewer than 2 Global Administrators).
+ */
+export const GraphCountCheck = z.strictObject({
+  kind: z.literal('graphCount'),
+  path: z.string().regex(/^\//),
+  query: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])).optional(),
+  beta: z.boolean().optional(),
+  /** The items to count: an expression over the list `value` (e.g. `${ value[userType = 'Guest'] }`); default all. */
+  items: Expr.optional(),
+  /** `higher` (default): more items is worse. `lower`: fewer items is worse. */
+  worse: z.enum(['higher', 'lower']).default('higher'),
+  /** Most items read (pages are followed). */
+  maxItems: z.number().int().min(1).max(5000).default(1000),
+  /** Item fields kept on each result row (default id, displayName). */
+  fields: z.array(z.string().min(1)).min(1).max(10).optional(),
+  detailsLimit: z.number().int().min(0).max(200).default(50),
 });
 export const ArmCheck = z.strictObject({
   kind: z.literal('arm'),
@@ -171,6 +192,7 @@ export const KqlCheck = z.strictObject({
 export const ProbeCheck = z.discriminatedUnion('kind', [
   HttpCheck,
   GraphCheck,
+  GraphCountCheck,
   ArmCheck,
   TokenAcquisitionCheck,
   CertExpiryCheck,
@@ -192,6 +214,8 @@ export const PROBE_METRICS: Record<
 > = {
   http: { metric: 'latency', unit: 'ms', worse: 'higher' },
   graph: { metric: 'latency', unit: 'ms', worse: 'higher' },
+  /** Items counted; which direction is worse is the check's own `worse`. */
+  graphCount: { metric: 'items', unit: 'items', worse: 'higher' },
   arm: { metric: 'latency', unit: 'ms', worse: 'higher' },
   tokenAcquisition: { metric: 'latency', unit: 'ms', worse: 'higher' },
   dnsResolve: { metric: 'latency', unit: 'ms', worse: 'higher' },
@@ -219,8 +243,19 @@ export const Probe = z
   })
   .superRefine((def, ctx) => {
     const t = def.thresholds;
+    if (
+      def.check.kind === 'graphCount' &&
+      def.check.worse === 'lower' &&
+      t?.warn === undefined &&
+      t?.crit === undefined
+    )
+      ctx.addIssue({
+        code: 'custom',
+        path: ['thresholds'],
+        message: 'With worse: lower, set thresholds (e.g. crit: 1 for "at least 2").',
+      });
     if (t?.warn !== undefined && t.crit !== undefined) {
-      const worse = PROBE_METRICS[def.check.kind].worse;
+      const worse = def.check.kind === 'graphCount' ? def.check.worse : PROBE_METRICS[def.check.kind].worse;
       if (worse === 'higher' ? t.warn > t.crit : t.warn < t.crit)
         ctx.addIssue({
           code: 'custom',

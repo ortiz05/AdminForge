@@ -5,7 +5,8 @@ tools: Read, Grep, Glob, Bash
 ---
 
 You review AdminForge code changes for security. Read `CLAUDE.md`, `docs/adr/` (especially 001–003, 010–012) and
-§5 of `docs/plans/2026-10-15-adminforge-master-plan.md` first. Inspect `git diff HEAD` (and untracked files).
+`SECURITY.md` (the current security model and known gaps) first, then §5 of
+`docs/plans/2026-10-15-adminforge-master-plan.md` for background. Inspect `git diff HEAD` (and untracked files).
 
 Check, citing file:line:
 

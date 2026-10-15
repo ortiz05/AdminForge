@@ -48,7 +48,12 @@ extension point — and the reviewer agents in `.claude/agents/`.
 8. **Secrets** are never printed, logged, committed, or kept in run outputs (`secretOutputs` on playbook steps).
 9. **Licences are data, not blockers.** Declare `requires.licences`; the UI gates and explains. Record new findings in
    `docs/licensing-review.md`; record gaps you can't fix now in `docs/backlog.md`.
-10. **Every change ships complete:** content/code + tests + fixtures + docs. If you changed how something is extended,
+10. **Errors are written for the person in front of the browser:** `message` says what happened, `hint` what to do
+    (which role or group, licence, or action); every error shows a reference. Never raw JSON, stack traces or header
+    names in the UI (env keys and CLI commands only in setup errors meant for administrators, e.g.
+    `*_not_configured`); failed browser navigations go to the public problem page. See `SECURITY.md` for
+    the security model these rules protect.
+11. **Every change ships complete:** content/code + tests + fixtures + docs. If you changed how something is extended,
     update the matching skill in `.claude/skills/` and `docs/extending.md`.
 
 ## Commands
@@ -73,9 +78,10 @@ extension point — and the reviewer agents in `.claude/agents/`.
 
 Mock mode ignores the env file (`ADMINFORGE_ENV_FILE=/dev/null`), so it runs on in-memory stores and never touches a
 shared database; `PUBLIC_BASE_URL` has no default and must be set. Against the tenant, playbook runs and schedules need
-`RUN_WORKER_IN_PROCESS=true` and `SCHEDULER_IN_PROCESS=true` in the env file — **unless** the host services
-(`portal/deploy`: worker, scheduler) already run against the same database: then leave both `false`, or the dev API
-consumes their queued runs.
+`RUN_WORKER_IN_PROCESS=true` and `SCHEDULER_IN_PROCESS=true` in the env file. The host services (`portal/deploy`) use
+their own database through the `host` overlay (`<env>.host.env`), so `pnpm dev` never consumes their runs — never point
+dev at the services' database. Provisioner and live-test credentials live in `<env>.admin.env` (CLI and live tests
+only).
 
 Postgres for dev runs in Docker on `127.0.0.1:55432` (`pnpm db:up`). System Chrome is used by Playwright (no browser
 download).

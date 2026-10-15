@@ -6,6 +6,23 @@ Gaps found while building. Each item names where it lands. Items move to a phase
 
 - [x] **Secret outputs** (done): `secretOutputs` on playbook steps. Temporary passwords, Temporary Access Passes and new app secrets are shown once to the initiator over the live stream, never persisted (a redacted marker is stored), never in audit/export. Used by identity.reset-password, identity.issue-tap and identity.rotate-app-secret; identity.create-user issues its first credential through those child runs.
 - [x] `$secureRandom(len)` helper (crypto-backed); `create-user` uses it for the throwaway initial password instead of JSONata `$random()`.
+- [x] Security review (2026-10-15) — fixed: open redirect via dot segments; `auth_time`-proven step-up; browser-bound
+      sign-in round trips; roles re-checked every 5 min; schedule approvals bound to the playbook fingerprint;
+      current-version-only runs; scheduled data limited to Operators; connection audiences; `redact: true` masking;
+      provisioning ceiling for automation write permissions; env-file split; DB isolation; Caddy admin API off. See
+      `SECURITY.md`.
+- [ ] Rotate the session id when write access is turned on (`auth/arm-routes.ts`): issue a new sid, re-key both
+      token-cache partitions, and re-key `runs.session_hash` and pending show-once secrets in one transaction, so a
+      cookie stolen while read-only can't ride a later arm.
+- [ ] Anchor the audit chain outside the database: periodically write an HMAC (key outside Postgres) of the head hash
+      to a file or the journal, and verify against it, so a database writer can't rewrite the tail.
+- [ ] Re-validate definitions loaded from the database (`definitions/db-store.ts`): schema-parse and re-hash on load
+      (cached by sha256), refusing rows that don't match.
+- [ ] Response-size cap in `createHttpClient` (stream and stop at N MB) as a backstop to KQL `take` limits.
+- [ ] Child runs: check the child playbook's `requires.portalRoles` and `confirm` against the initiator
+      (`runs/children.ts`).
+- [ ] Run AdminForge as a dedicated system user with system units (filesystem isolation: `ProtectSystem=strict`,
+      `ProtectHome`, `ReadWritePaths`), which user units can't enforce on Ubuntu 24.04.
 
 ## Schema / content model
 

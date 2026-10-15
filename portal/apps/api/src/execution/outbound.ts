@@ -116,7 +116,6 @@ export function settingNamesOnly(data: unknown): unknown {
 
 // ── Errors ────────────────────────────────────────────────────────────────────
 
-/** Refused by the request policy (ADR-003). Never retried. */
 /** Microsoft first-party resources (by host or well-known application id): never a connection's audience. */
 const MICROSOFT_RESOURCE_HOSTS =
   /(^|\.)(microsoft\.com|microsoftonline\.com|windows\.net|azure\.com|azure\.net|office\.com|office365\.com|sharepoint\.com|loganalytics\.io|dynamics\.com|powerbi\.com|microsoftazuread-sso\.com)$/i;
@@ -146,12 +145,13 @@ export function isMicrosoftResource(audience: string): boolean {
   }
 }
 
+/** Refused by the request policy (ADR-003). Never retried. */
 export class PolicyDenied extends AppError {
   constructor(reason: string) {
-    super(403, 'policy_denied', reason, {
-      hint: /Arm write access/.test(reason)
-        ? 'Arm write access, then run it from a published playbook.'
-        : undefined,
+    // The policy's "Arm write access to continue." becomes the hint, so the next step is said once.
+    const needsArm = /\s*Arm write access to continue\.$/;
+    super(403, 'policy_denied', reason.replace(needsArm, ''), {
+      hint: needsArm.test(reason) ? 'Arm write access, then run it from a published playbook.' : undefined,
     });
     this.name = 'PolicyDenied';
   }

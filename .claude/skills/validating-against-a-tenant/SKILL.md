@@ -23,7 +23,12 @@ azure-test` → `pnpm exec tsx tests/live/scripts/register-test-user-mfa.ts` (re
 - API end to end (SSO, overview, arm, logout): `pnpm db:up`, start the API, then
   `pnpm exec tsx tests/live/scripts/verify-api-live.ts`.
 - Full sweep (every page, Query Studio, schedules, read-mode refusals, reversible writes, audit chain):
-  `pnpm test:live` — prerequisites and env knobs in `tests/live/README.md`.
+  `pnpm test:live` — prerequisites and env knobs in `tests/live/README.md`. Against the host services behind Caddy:
+  `PUBLIC_BASE_URL=https://<lan-address>:8443 AF_LIVE_INSECURE_TLS=1 NODE_EXTRA_CA_CERTS=<caddy root.crt> pnpm test:live`.
+- Credentials for provisioning and the test user live in `<env>.admin.env` (the CLI and live tests read it; the
+  services never do). Don't put them back in `<env>.env` — `adminforge env check` flags that.
+- Never run `pnpm dev` against the services' database: the host services use the `host` overlay
+  (`<env>.host.env`); dev uses the database in `<env>.env`.
 - In a browser test: `openPortalSession()` / `armWriteAccess()` from `tests/live/lib/portal-session.ts`.
 - Writes: **only** against `AF-Test-*` users/groups/resources that provisioning created. Dry run first, then run,
   then run the compensating playbook; check `/audit` (chain verified).

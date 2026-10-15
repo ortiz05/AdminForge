@@ -73,6 +73,14 @@ export function WidgetPanel({
         <span className="sr-only">Loading {label.toLowerCase()}</span>
       </div>
     );
+  } else if (data.status === 'error' && data.error?.code === 'licence_required') {
+    // Not a failure: the tenant lacks a licence. Explain it in the same neutral voice as the page licence gate.
+    body = (
+      <EmptyState compact title={`${label} needs a licence your tenant doesn’t have`}>
+        {data.error.message}
+        {data.error.hint ? ` ${data.error.hint}` : ''}
+      </EmptyState>
+    );
   } else if (data.status === 'error') {
     const err = data.error ?? { message: 'The data source returned an error.' };
     body = (

@@ -36,10 +36,13 @@ Markdown sections, manual steps and executable steps.
 
 ## Common mistakes
 
-| Mistake                                              | Fix                                                                                  |
-| ---------------------------------------------------- | ------------------------------------------------------------------------------------ |
-| Write step without `describe` / undeclared POST mode | Schema rejects it — describe what changes, in plain words                            |
-| No precondition read → acts on stale data            | `graph` read + `assert` before the write                                             |
-| Secret in `outputs` or logs                          | `secretOutputs`; it's delivered once to the initiator                                |
-| New write scope not on the Write app                 | Add to provisioning desired state, `pnpm adminforge provision entra`, record in docs |
-| Bulk flow as a custom loop                           | Page `bulkActions` with `forEach.inputs` — one child run per item                    |
+| Mistake                                                                              | Fix                                                                                  |
+| ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------ |
+| Write step without `describe` / undeclared POST mode                                 | Schema rejects it — describe what changes, in plain words                            |
+| No precondition read → acts on stale data                                            | `graph` read + `assert` before the write                                             |
+| Secret in `outputs` or logs                                                          | `secretOutputs`; it's delivered once to the initiator                                |
+| New write scope not on the Write app                                                 | Add to provisioning desired state, `pnpm adminforge provision entra`, record in docs |
+| Bulk flow as a custom loop                                                           | Page `bulkActions` with `forEach.inputs` — one child run per item                    |
+| Sensitive input echoed into a request or output                                      | Declare it `redact: true` — its value is masked in stored steps, events and audit    |
+| Restricting a playbook with `requires.portalRoles` and expecting previews to be open | Previews check those roles too (their read steps really run)                         |
+| Publishing a new version of a playbook a write schedule runs                         | Expected: that schedule switches off until a second person re-approves it            |

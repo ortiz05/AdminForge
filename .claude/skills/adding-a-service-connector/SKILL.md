@@ -14,7 +14,10 @@ mode) → token for the identity → connector in `portal/packages/connectors`. 
 ## Your own API / Azure Function
 
 1. `pnpm adminforge new connection <section>/<name>`: `baseUrl: ${env.X}`, `audience: ${env.Y}` (add both keys to
-   `config/example.env`), named `operations` with `method`, `path`, `mode: read|write`.
+   `config/example.env`), named `operations` with `method`, `path`, `mode: read|write`. The audience must be **your
+   own** app registration (`api://…` or its application id): Microsoft first-party audiences (Graph, ARM, Exchange,
+   SharePoint…) are refused, because the token would go to the connection's host. Function calls never follow
+   redirects.
 2. Grant the Read/Write apps delegated access to that API's scope (add to provisioning; `provision entra`).
 3. Use it from content: datasource `source: function` / step `type: function` with `connection` + `operation`.
 

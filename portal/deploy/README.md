@@ -5,13 +5,25 @@ AdminForge runs as four Node processes next to PostgreSQL (R5, R6):
 | Process       | What it does                                                                                     | Entry                                    |
 | ------------- | ------------------------------------------------------------------------------------------------ | ---------------------------------------- |
 | **api**       | The BFF: sign-in, every `/api` route, serves the built web app                                   | `portal/apps/api` → `dist/main.js`       |
-| **worker**    | Executes playbook and runbook runs from the queue (`ROLE=worker`)                                | `portal/apps/api` → `dist/worker.js`     |
+| **worker**    | Executes playbook and runbook runs from the queue                                                | `portal/apps/api` → `dist/worker.js`     |
 | **scheduler** | Runs content schedules (probe sweeps, KQL checks, reports, playbooks) as the automation identity | `portal/apps/scheduler` → `dist/main.js` |
 | **runner**    | PowerShell runner on loopback (Exchange, Teams, SharePoint)                                      | `portal/apps/runner` → `dist/main.js`    |
 
-Every process reads its configuration from `~/.config/adminforge/dev.env` (choose another file with
-`ADMINFORGE_ENV=<name>` or `ADMINFORGE_ENV_FILE=<path>`). Nothing tenant-specific lives in the repository;
-`config/example.env` documents every key.
+Configuration lives outside the repository in `~/.config/adminforge/` (mode 700, files mode 600), in layers
+(`portal/packages/config`; `config/example.env` documents every key):
+
+| File             | Read by                                      | Holds                                                                     |
+| ---------------- | -------------------------------------------- | ------------------------------------------------------------------------- |
+| `dev.env`        | api, worker, scheduler, CLI, `pnpm dev`      | Runtime settings and secrets (`ADMINFORGE_ENV=<name>` picks another file) |
+| `dev.host.env`   | the services (`ADMINFORGE_ENV_OVERLAY=host`) | Their own `DATABASE_URL`, so `pnpm dev` never shares their run queue      |
+| `dev.admin.env`  | CLI and live tests only                      | Provisioner and live-test credentials                                     |
+| `dev.runner.env` | runner only (`EnvironmentFile=`)             | `RUNNER_SHARED_KEY`                                                       |
+
+On a host that also runs `pnpm dev`, keep the two apart: the services use the `adminforge` database (its URL in
+`dev.host.env`), and `dev.env` points at a second one, `adminforge_dev`
+(`docker exec adminforge-dev-postgres-1 createdb -U adminforge adminforge_dev`). Migrate both
+(`pnpm --filter @adminforge/api db:migrate`, then the same with `ADMINFORGE_ENV_OVERLAY=host`) and publish content to
+the services' database with `ADMINFORGE_ENV_OVERLAY=host pnpm adminforge publish`.
 
 ## Database
 
@@ -35,6 +47,8 @@ The units in `systemd/` are **user** units: they run as you, without root, and r
 mkdir -p ~/.config/systemd/user
 for u in api worker scheduler runner; do   # + proxy for LAN access, below
   sed "s#%h/AdminForge#$PWD#g" portal/deploy/systemd/adminforge-$u.service > ~/.config/systemd/user/adminforge-$u.service
+  # Sandboxing that user units enforce (seccomp-based; see the comments in hardening.conf)
+  install -D -m 644 portal/deploy/systemd/hardening.conf ~/.config/systemd/user/adminforge-$u.service.d/hardening.conf
 done
 systemctl --user daemon-reload
 systemctl --user enable --now adminforge-api adminforge-worker adminforge-scheduler adminforge-runner
@@ -57,9 +71,13 @@ Environment=PUBLIC_BASE_URL=http://localhost:3300
 Environment=CONTENT_SOURCE=db
 Environment=RUN_WORKER_IN_PROCESS=false
 Environment=SCHEDULER_IN_PROCESS=false
+Environment=ADMINFORGE_ENV_OVERLAY=host
+# api only: listen on loopback (the default since 0.1.0; Caddy publishes it — see LAN access)
+Environment=API_HOST=127.0.0.1
 ```
 
-Production reads definitions from Postgres: run `pnpm adminforge publish` after content changes (CI does this on merge).
+Production reads definitions from Postgres: run `ADMINFORGE_ENV_OVERLAY=host pnpm adminforge publish` after content
+changes (CI does not publish).
 `http://localhost` works because browsers treat it as a secure context; any other host name needs TLS in front
 (see below), because the session cookie is `__Host-` and `Secure` and Entra only accepts `http://` redirect URIs for
 `localhost`.

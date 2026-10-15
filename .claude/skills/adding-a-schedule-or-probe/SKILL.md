@@ -48,10 +48,13 @@ checks that write time-series results shown on `/monitoring`.
 
 ## Common mistakes
 
-| Mistake                                          | Fix                                                                 |
-| ------------------------------------------------ | ------------------------------------------------------------------- |
-| One schedule per probe                           | Tag the probe; reuse the tag sweep                                  |
-| Thousands of Graph calls for a tenant-wide check | KQL (Resource Graph / Log Analytics)                                |
-| Delegated scopes for a schedule                  | Schedules use application permissions on the automation identity    |
-| Subscription/workspace ids in YAML               | `${env.AF_SUBSCRIPTION_ID}`, `${env.AF_LOG_ANALYTICS_WORKSPACE_ID}` |
-| Write job without approval                       | `approvedBy` + two-person approval to enable                        |
+| Mistake                                          | Fix                                                                                                                                                                    |
+| ------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| One schedule per probe                           | Tag the probe; reuse the tag sweep                                                                                                                                     |
+| Thousands of Graph calls for a tenant-wide check | KQL (Resource Graph / Log Analytics)                                                                                                                                   |
+| Delegated scopes for a schedule                  | Schedules use application permissions on the automation identity                                                                                                       |
+| Subscription/workspace ids in YAML               | `${env.AF_SUBSCRIPTION_ID}`, `${env.AF_LOG_ANALYTICS_WORKSPACE_ID}`                                                                                                    |
+| Write job without approval                       | `approvedBy` + two-person approval to enable                                                                                                                           |
+| Treating `job.approvedBy` as the approval        | It's a review note; only the in-app approval counts, and it covers the playbook's current version (a new playbook version switches the schedule off until re-approved) |
+| Report or probe rows visible to every Reader     | Scheduled data is collected with application permissions: Operators by default; widen deliberately with `requires.portalRoles`                                         |
+| Declaring an app-only **write** permission       | Provisioning skips it unless `AF_AUTOMATION_ALLOW_WRITE_PERMISSIONS=true` — say so in the PR                                                                           |

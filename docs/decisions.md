@@ -26,6 +26,20 @@ Decisions taken while building AdminForge, in addition to the ADRs in `docs/adr/
 
 ## Security
 
+- **Security review, 2026-10-15** — see `SECURITY.md` for the resulting model. Decisions taken:
+  - Step-up without an auth context is proven by `auth_time` (≤ 5 min) and fails closed when the claim is missing.
+  - Sign-in round trips are bound to the browser (HttpOnly binding cookie, hash on the pre-auth record).
+  - Roles are re-read every 5 minutes by refreshing the Read token, rather than trusting the sign-in token for 12 h.
+  - A schedule approval covers a fingerprint of the playbook and its children; content `job.approvedBy` is not proof.
+  - Scheduled report files and probe rows need Operator by default (collected with application permissions).
+  - Provisioning grants content-declared automation **write** permissions only with
+    `AF_AUTOMATION_ALLOW_WRITE_PERMISSIONS=true`.
+  - Configuration is layered: runtime / admin-only / per-deployment overlay / runner-only files; the host services and
+    `pnpm dev` use separate databases.
+  - Failed browser navigations (sign-in, arming, report downloads) land on a public problem page with only a code,
+    reference and Microsoft code in the URL; the copy lives in the web app.
+  - Deferred (backlog): session-id rotation on arm, keyed audit anchor, re-validating definitions on load.
+
 - **Two delegated apps** (Read, Write) plus an **automation** app for schedules (ADR-002, ADR-011).
 - **Provisioning grants exactly the baseline ∪ content-declared scopes**; `adminforge validate --scopes` reports drift. Remaining drift is limited to unlicensed workloads (Exchange, Teams, SharePoint).
 - **Preview-then-confirm** for risky playbooks is enforced by the API (not only the UI).

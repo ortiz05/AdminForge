@@ -56,7 +56,8 @@ pnpm dev                                             # http://localhost:5173
 ```
 
 Playbook runs and schedules in `pnpm dev` need `RUN_WORKER_IN_PROCESS=true` and `SCHEDULER_IN_PROCESS=true` in the env
-file, unless the host services (worker, scheduler) already use the same database — then leave both `false`.
+file. Never point `pnpm dev` at the host services' database: they use their own through the `host` overlay
+(`portal/deploy/README.md`), so the two never consume each other's runs.
 
 No tenant handy? This runs everything on synthetic data, in memory, ignoring the env file:
 

@@ -14,7 +14,11 @@ need **no** new route — check that first.
 ## Steps
 
 1. Contract first: zod request/response schemas in `portal/packages/schemas/src/` (exported), so web and tests share
-   them. Errors use `AppError` → `ApiErrorBody` (`code`, `message`, `hint`).
+   them. Errors use `AppError` → `ApiErrorBody` (`code`, `message`, `hint`, optional `detail`). Write them for the
+   person in front of the browser: `message` says what happened, `hint` what to do next (which role/group, licence,
+   or action); no header names, endpoints or env keys in either. Browser navigations that can fail (links, downloads)
+   are redirected to the public problem page by `registerErrorHandler` — add the path there and its copy in
+   `portal/apps/web/src/pages/public/sign-in-problems.ts`.
 2. Route file `src/routes/<area>.ts`; register it in `src/app.ts` inside the `/api` prefix block.
 3. Guards: the `/api` block already requires a session, plus the CSRF header on every non-GET. In the handler, get the
    session with `requireSession(request)` and check roles with `requireRole(session, 'Portal.…', '<what it does>')`

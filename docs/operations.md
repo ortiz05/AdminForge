@@ -215,8 +215,7 @@ pnpm adminforge provision status
 
 `AF_ALLOW_PRIVILEGED_WRITE_SCOPES` (tier-0 delegated scopes on the Write app), `AF_AUTOMATION_ALLOW_WRITE_PERMISSIONS`
 (application permissions that change data) and `AF_AUTOMATION_ALLOW_SENSITIVE_READS` (mail, files, sites, chats, …)
-are deliberate decisions: set them in `<env>.admin.env`, review `provision entra --dry-run`, and record why in
-`docs/access.md`. `provision status` fails on privilege that provisioning didn't grant.
+are deliberate decisions: set them in `<env>.admin.env`, review `provision entra --dry-run`, and record the decision in your change record (not in this repository: it's installation state). `provision status` fails on privilege that provisioning didn't grant.
 
 ## Certificates (LAN access)
 

@@ -60,7 +60,3 @@ validate --scopes` compares them), within ceilings that need a deliberate opt-in
 
 AdminForge never manages its own access: its playbooks refuse to change the `SG-AdminForge-*` groups, its own app
 registrations and the apps in `AF_PROTECTED_APP_IDS` (the provisioner). Do that in the Microsoft Entra admin center.
-
-**This installation:** `AF_ALLOW_PRIVILEGED_WRITE_SCOPES=true` (2026-10-15) — the identity playbooks for directory
-roles, PIM eligibility, app access, consent grants, app owners and stale-device deletion need it. Review whether all
-of them are wanted before go-live.

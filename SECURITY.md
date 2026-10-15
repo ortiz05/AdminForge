@@ -195,8 +195,7 @@ probe results, report files) is purged after its retention period; the audit log
 
 Tracked in `docs/backlog.md`:
 
-- **The provisioner is powerful while its credential is on the host** (Global Administrator, and Owner through the
-  subscription owner group in the validation tenant). Remove its directory role and Owner membership when not
+- **The provisioner is powerful while its credential is on the host** (typically Global Administrator, plus a role that can assign Azure roles). Remove its directory role and Owner membership when not
   provisioning, or use a short-lived secret per run (`docs/operations.md`).
 - The Read app holds write-capable workload scopes where those workloads are licensed (Exchange, SharePoint, Teams;
   ARM always). Only AdminForge's read policy and the runner's read-mode constraints stop writes through them.

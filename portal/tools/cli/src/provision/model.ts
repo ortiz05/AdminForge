@@ -222,7 +222,10 @@ export type Section =
   | 'Test identities'
   | 'Group membership'
   | 'Directory roles'
-  | 'Write-test targets';
+  | 'Write-test targets'
+  | 'Azure test environment'
+  | 'Activity log export'
+  | 'Env file';
 
 interface OpBase {
   action: Action;

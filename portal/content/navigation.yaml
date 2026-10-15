@@ -39,6 +39,7 @@ sections:
       - { key: runs, label: Runs, href: /runs, icon: list-checks, order: 10 }
       - { key: schedules, label: Schedules, href: /schedules, icon: calendar-check, order: 20 }
       - { key: monitoring, label: Synthetic monitoring, href: /monitoring, icon: pulse, order: 30 }
+      - { key: query, label: Query Studio, href: /query, icon: terminal, order: 40 }
   - key: reports
     label: Reports
     icon: chart-bar

@@ -8,6 +8,7 @@ import { buildDesiredIdentities, planIdentities, type IdentityOp } from '../prov
 import { applyIdentityOps, fetchIdentityState, readSecurityDefaults } from '../provision/identities-io';
 import type { DesiredEntra, EntraOp, EntraState, ProvisionSettings } from '../provision/model';
 import { counts, renderPlan, renderStatus, summaryLine } from '../provision/render';
+import { azureTestStatus } from '../provision/azure-test-command';
 import { appClients, ConfigError, envSubset, GRAPH_SCOPE, provisionerClients, provisionSettings, type CliContext, type Clients } from './context';
 
 export interface EntraRun {
@@ -201,10 +202,14 @@ export async function provisionStatus(ctx: CliContext): Promise<StatusResult> {
     }
   }
 
+  // Azure test environment for live KQL validation (optional: shown, but only drift or a failed query counts).
+  const azure = await azureTestStatus(ctx, clients);
+  failures.push(...azure.failures);
+
   const sd = await securityDefaults(ctx, clients, settings);
   ctx.out(`  ${sd === true ? '⚠' : 'ℹ'} ${securityDefaultsLine(sd)}`);
   printBlocked(ctx, [...run.ops, ...identityOps]);
   ctx.out('');
-  ctx.out(failures.length ? `${failures.length} item(s) not in the desired state. Run \`pnpm adminforge provision entra\` / \`provision test-identities\`.` : `All provisioned items are in the desired state (${summaryLine([...run.ops, ...identityOps])}).`);
+  ctx.out(failures.length ? `${failures.length} item(s) not in the desired state. Run \`pnpm adminforge provision entra\` / \`provision test-identities\` / \`provision azure-test\`.` : `All provisioned items are in the desired state (${summaryLine([...run.ops, ...identityOps, ...azure.ops])}).`);
   return { ok: failures.length === 0, failures };
 }

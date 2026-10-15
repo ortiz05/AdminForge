@@ -33,6 +33,8 @@ Gaps found while building. Each item names where it lands. Items move to a phase
 - [ ] Runner HMAC already binds method + path; consider mTLS if the runner ever leaves loopback.
 
 ## Platform
+- [ ] Run datasource `transform`s off the API event loop (worker_threads pool) with a larger budget (today 250 ms on the main thread — large tenants, e.g. >2–4k guests, time out).
+- [ ] Enforce formatting: Prettier check in CI and pre-commit for TS/JSON/CSS/YAML (format the repo once).
 - [ ] Read-mode allowlist: Graph `POST /directoryObjects/getByIds`; ARM `…/config/appsettings/list` with values stripped server-side.
 - [ ] Example connection `connections/hr-sync`: env keys for base URL + audience.
 - [ ] Default Log Analytics workspace key (`AF_LOG_ANALYTICS_WORKSPACE_ID`).

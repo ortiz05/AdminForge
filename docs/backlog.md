@@ -35,7 +35,7 @@ Gaps found while building. Each item names where it lands. Items move to a phase
 ## Platform
 - [ ] Probe "not configured" state: a probe whose required env key is empty should report `skipped` (not `error`) — e.g. DNS probes without `AF_MAIL_DOMAIN`.
 - [ ] Run datasource `transform`s off the API event loop (worker_threads pool) with a larger budget (today 250 ms on the main thread — large tenants, e.g. >2–4k guests, time out). `identity.inactive-guests` and its Monday schedule `reports.inactive-guests-weekly` hit this first: Graph can't combine a `signInActivity` filter with `userType`, so the 90-day window is applied in the transform.
-- [ ] Tenant-data guard and `forbiddenValues` (CLI fixture recording) exempt `https?://localhost.*`, which also lets `http://localhost.<domain>` through; anchor it to `localhost(:port)/?` in both places.
+- [x] Tenant-data guard and `forbiddenValues` (CLI fixture recording) exempt `https?://localhost.*`, which also lets `http://localhost.<domain>` through; anchor it to `localhost(:port)/?` in both places.
 - [ ] Enforce formatting: Prettier check in CI and pre-commit for TS/JSON/CSS/YAML (format the repo once).
 - [ ] Read-mode allowlist: Graph `POST /directoryObjects/getByIds`; ARM `…/config/appsettings/list` with values stripped server-side.
 - [ ] Example connection `connections/hr-sync`: env keys for base URL + audience.

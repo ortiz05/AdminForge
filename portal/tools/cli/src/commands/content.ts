@@ -269,7 +269,7 @@ export function forbiddenValues(env: Record<string, string | undefined>): string
   for (const [key, value] of Object.entries(env)) {
     if (!value || !/^[A-Z][A-Z0-9_]*$/.test(key)) continue;
     if (!/^(AF_|DATABASE_URL|POSTGRES_|TOKEN_CACHE_KEY|RUNNER_|ANTHROPIC_|PUBLIC_BASE_URL)/.test(key)) continue;
-    if (value.length >= 8 && !/^(true|false|\d+|https?:\/\/localhost.*|https?:\/\/127\.0\.0\.1(:\d+)?\/?|postgres:\/\/.*@127\.0\.0\.1.*)$/i.test(value)) out.add(value);
+    if (value.length >= 8 && !/^(true|false|\d+|https?:\/\/localhost(:\d+)?\/?|https?:\/\/127\.0\.0\.1(:\d+)?\/?|postgres:\/\/.*@127\.0\.0\.1.*)$/i.test(value)) out.add(value);
     if (/DOMAIN/.test(key)) out.add(value.toLowerCase());
   }
   return [...out];

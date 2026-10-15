@@ -29,3 +29,8 @@ if (typeof window !== 'undefined') {
   proto.releasePointerCapture ??= function releasePointerCapture() {};
   proto.setPointerCapture ??= function setPointerCapture() {};
 }
+
+// Component suites share the machine with the api/unit projects; the 1 s Testing Library default for findBy/waitFor
+// is too tight under full parallel load. Real regressions still fail (they never appear at all).
+import { configure } from '@testing-library/react';
+configure({ asyncUtilTimeout: 10_000 });

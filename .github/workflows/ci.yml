@@ -53,7 +53,10 @@ jobs:
       - run: pnpm --filter @adminforge/api db:migrate
       - name: Tests (unit, component, api, content)
         run: pnpm test
-      - run: pnpm build
+      - name: Build (production, as deployed)
+        run: pnpm build
+        env:
+          NODE_ENV: production
       - name: Initial-load budget (≤ 250 KB gzip JS)
         run: node tooling/ci/check-bundle.mjs
       - name: End-to-end and visual (mock mode, system Chrome)

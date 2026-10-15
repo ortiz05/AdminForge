@@ -16,7 +16,9 @@ import { ready, renderWidget, spyRuntime } from './helpers';
 const Gate = WIDGETS.licenceGate!.component;
 const Probes = WIDGETS.probeStatus!.component;
 const gateConfig = WIDGETS.licenceGate!.schema.parse(licenceGateFixtures.intune.config) as LicenceGateConfig;
-const probeConfig = WIDGETS.probeStatus!.schema.parse(probeStatusFixtures.reachability.config) as ProbeStatusConfig;
+const probeConfig = WIDGETS.probeStatus!.schema.parse(
+  probeStatusFixtures.reachability.config,
+) as ProbeStatusConfig;
 
 describe('licenceGate widget', () => {
   it('renders nothing when the feature is licensed or its state is unknown', () => {
@@ -44,10 +46,15 @@ describe('licenceGate widget', () => {
   });
 
   it('in mock mode it becomes a “Preview with sample data” banner', async () => {
-    const { runtime } = spyRuntime({ feature: () => licenceGateFixtures.intune.feature, dataMode: 'fixtures' });
+    const { runtime } = spyRuntime({
+      feature: () => licenceGateFixtures.intune.feature,
+      dataMode: 'fixtures',
+    });
     const { container } = renderWidget(Gate, gateConfig, ready(undefined), runtime);
     const note = screen.getByRole('note', { name: 'Preview with sample data' });
-    expect(note).toHaveTextContent('Microsoft Intune isn’t licensed in this tenant, so this page shows synthetic data');
+    expect(note).toHaveTextContent(
+      'Microsoft Intune isn’t licensed in this tenant, so this page shows synthetic data',
+    );
     expect(await axeViolations(container)).toEqual([]);
   });
 
@@ -56,7 +63,14 @@ describe('licenceGate widget', () => {
       () => (
         <LicenceGatePanel
           missing={[
-            { key: 'pim', state: { available: false, label: 'Privileged Identity Management', reason: 'No P2 plan is assigned.' } },
+            {
+              key: 'pim',
+              state: {
+                available: false,
+                label: 'Privileged Identity Management',
+                reason: 'No P2 plan is assigned.',
+              },
+            },
             { key: 'identityProtection' },
           ]}
         />
@@ -64,7 +78,9 @@ describe('licenceGate widget', () => {
       null,
       ready(undefined),
     );
-    expect(container).toHaveTextContent('Privileged Identity Management and Identity Protection aren’t licensed in this tenant');
+    expect(container).toHaveTextContent(
+      'Privileged Identity Management and Identity Protection aren’t licensed in this tenant',
+    );
     expect(container).toHaveTextContent('No P2 plan is assigned.');
     expect(container).toHaveTextContent('Microsoft Entra ID P2 (AAD_PREMIUM_P2)');
   });
@@ -73,7 +89,11 @@ describe('licenceGate widget', () => {
 describe('probeStatus widget', () => {
   beforeEach(() => vi.useFakeTimers({ toFake: ['Date'], now: FIXTURE_NOW }));
   afterEach(() => vi.useRealTimers());
-  const probes: ProbesState = { status: 'ready', probes: probeStatusFixtures.reachability.probes, provenance: { service: 'scheduler', path: '/probes', ms: 12 } };
+  const probes: ProbesState = {
+    status: 'ready',
+    probes: probeStatusFixtures.reachability.probes,
+    provenance: { service: 'scheduler', path: '/probes', ms: 12 },
+  };
 
   it('one row per probe in the configured order: status words, metric, last run; expands to the message', async () => {
     const user = userEvent.setup();
@@ -103,18 +123,34 @@ describe('probeStatus widget', () => {
   });
 
   it('loading, error and the empty state', () => {
-    const a = renderWidget(Probes, probeConfig, ready(undefined), spyRuntime({ useProbes: () => ({ status: 'loading', probes: [] }) }).runtime);
+    const a = renderWidget(
+      Probes,
+      probeConfig,
+      ready(undefined),
+      spyRuntime({ useProbes: () => ({ status: 'loading', probes: [] }) }).runtime,
+    );
     expect(screen.getByText('Loading reachability')).toBeInTheDocument();
     a.unmount();
     const b = renderWidget(
       Probes,
       probeConfig,
       ready(undefined),
-      spyRuntime({ useProbes: () => ({ status: 'error', probes: [], error: { code: 'not_found', message: 'The scheduler API is not running.' } }) }).runtime,
+      spyRuntime({
+        useProbes: () => ({
+          status: 'error',
+          probes: [],
+          error: { code: 'not_found', message: 'The scheduler API is not running.' },
+        }),
+      }).runtime,
     );
     expect(screen.getByRole('alert')).toHaveTextContent('The scheduler API is not running.');
     b.unmount();
-    renderWidget(Probes, probeConfig, ready(undefined), spyRuntime({ useProbes: () => ({ status: 'ready', probes: [] }) }).runtime);
+    renderWidget(
+      Probes,
+      probeConfig,
+      ready(undefined),
+      spyRuntime({ useProbes: () => ({ status: 'ready', probes: [] }) }).runtime,
+    );
     expect(screen.getByText('No probe results yet')).toBeInTheDocument();
   });
 });

@@ -1,4 +1,10 @@
-import { IdentityUnavailable, type Actor, type IdentityResolver, type ResolvedIdentity, type RunRecord } from '@adminforge/engine';
+import {
+  IdentityUnavailable,
+  type Actor,
+  type IdentityResolver,
+  type ResolvedIdentity,
+  type RunRecord,
+} from '@adminforge/engine';
 import type { Mode } from '@adminforge/connectors';
 import { isArmed, type SessionRecord, type SessionStore } from '../auth/session-store';
 import type { ExecutionIdentity } from '../execution/types';
@@ -29,7 +35,8 @@ export class SessionIdentityResolver implements IdentityResolver {
     if (row.initiatorOid === actor.oid && row.sessionHash) return row.sessionHash;
     const tasks = await this.repo.listTasks({ runId });
     let hash: string | null = null;
-    for (const t of tasks) for (const d of t.decisions) if (d.oid === actor.oid && d.sessionHash) hash = d.sessionHash;
+    for (const t of tasks)
+      for (const d of t.decisions) if (d.oid === actor.oid && d.sessionHash) hash = d.sessionHash;
     return hash;
   }
 
@@ -38,17 +45,25 @@ export class SessionIdentityResolver implements IdentityResolver {
     if (!hash) return null;
     const s = await this.sessions.get(hash);
     const now = this.now().getTime();
-    if (!s || s.expiresAt.getTime() <= now || s.lastSeenAt.getTime() + this.config.SESSION_IDLE_MINUTES * 60_000 <= now) return null;
+    if (
+      !s ||
+      s.expiresAt.getTime() <= now ||
+      s.lastSeenAt.getTime() + this.config.SESSION_IDLE_MINUTES * 60_000 <= now
+    )
+      return null;
     this.roles.set(s.userOid, s.roles);
     return s;
   }
 
   async resolve(run: RunRecord, actor: Actor, mode: Mode): Promise<ResolvedIdentity> {
-    if (run.identity === 'automation') return { actor, mode, handle: { kind: 'automation', mode } satisfies ExecutionIdentity };
+    if (run.identity === 'automation')
+      return { actor, mode, handle: { kind: 'automation', mode } satisfies ExecutionIdentity };
     const who = actor.upn ?? 'The engineer running this';
     const session = await this.liveSession(await this.sessionFor(run.id, actor));
-    if (!session) throw new IdentityUnavailable('reauth', `${who} needs to sign in again, then resume the run.`);
-    if (mode === 'write' && !isArmed(session, this.now())) throw new IdentityUnavailable('not_armed', `${who} needs to arm write access, then resume the run.`);
+    if (!session)
+      throw new IdentityUnavailable('reauth', `${who} needs to sign in again, then resume the run.`);
+    if (mode === 'write' && !isArmed(session, this.now()))
+      throw new IdentityUnavailable('not_armed', `${who} needs to arm write access, then resume the run.`);
     return { actor, mode, handle: { kind: 'delegated', session, mode } satisfies ExecutionIdentity };
   }
 }

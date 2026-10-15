@@ -70,7 +70,12 @@ export default function PlaybookDrawer({ search }: { search: Record<string, unkn
   const [launch] = useState(() => parseLaunch(search)!);
   const q = useQuery({ ...definitionQuery<Playbook>('playbook', launch.key), enabled: launch.keyValid });
   const close = useCallback(
-    () => void navigate({ to: '.', search: (prev: Record<string, unknown>) => withoutPlaybook(prev), replace: true }),
+    () =>
+      void navigate({
+        to: '.',
+        search: (prev: Record<string, unknown>) => withoutPlaybook(prev),
+        replace: true,
+      }),
     [navigate],
   );
 
@@ -98,7 +103,12 @@ export default function PlaybookDrawer({ search }: { search: Record<string, unkn
           title={notFound ? 'There’s no published playbook with this key' : 'The playbook didn’t load'}
           error={
             notFound
-              ? new ApiRequestError(404, 'definition_not_found', `Nothing is published as “${launch.key}”.`, 'Check the link, or ask the content owner whether it was renamed or retired.')
+              ? new ApiRequestError(
+                  404,
+                  'definition_not_found',
+                  `Nothing is published as “${launch.key}”.`,
+                  'Check the link, or ask the content owner whether it was renamed or retired.',
+                )
               : q.error
           }
           onRetry={notFound ? undefined : () => void q.refetch()}

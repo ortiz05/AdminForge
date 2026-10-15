@@ -12,6 +12,10 @@ export function assertCsrf(request: FastifyRequest) {
   const header = request.headers[CSRF_HEADER];
   const value = Array.isArray(header) ? header[0] : header;
   if (!request.session || !safeEqual(value, request.session.csrf)) {
-    throw new AppError(403, 'csrf', 'Missing or invalid X-AdminForge-CSRF header. Reload the page and try again.');
+    throw new AppError(
+      403,
+      'csrf',
+      'Missing or invalid X-AdminForge-CSRF header. Reload the page and try again.',
+    );
   }
 }

@@ -28,7 +28,15 @@ const firstLines = (q: string) =>
     .slice(0, 3)
     .join(' ');
 
-function StarterList({ source, current, onPick }: { source: QuerySource; current: string; onPick: (q: StarterQuery) => void }) {
+function StarterList({
+  source,
+  current,
+  onPick,
+}: {
+  source: QuerySource;
+  current: string;
+  onPick: (q: StarterQuery) => void;
+}) {
   const items = galleryFor(source);
   return (
     <ul className="flex flex-col gap-1.5" aria-label={`Starter queries for ${SOURCE_META[source].label}`}>
@@ -42,15 +50,32 @@ function StarterList({ source, current, onPick }: { source: QuerySource; current
               aria-current={active || undefined}
               className={cn(
                 'group flex w-full flex-col gap-1 rounded-(--af-input-radius) border px-3 py-2.5 text-left transition-colors duration-(--af-motion-fast)',
-                active ? 'border-accent/50 bg-accent-subtle' : 'border-transparent hover:border-line hover:bg-hover',
+                active
+                  ? 'border-accent/50 bg-accent-subtle'
+                  : 'border-transparent hover:border-line hover:bg-hover',
               )}
             >
               <span className="flex items-center justify-between gap-2">
-                <span className={cn('text-sm font-medium', active ? 'text-accent' : 'text-fg group-hover:text-fg')}>{q.title}</span>
-                {q.chart && <ChartLineIcon size={14} className="shrink-0 text-fg-3" aria-label="Has a suggested chart" />}
+                <span
+                  className={cn(
+                    'text-sm font-medium',
+                    active ? 'text-accent' : 'text-fg group-hover:text-fg',
+                  )}
+                >
+                  {q.title}
+                </span>
+                {q.chart && (
+                  <ChartLineIcon
+                    size={14}
+                    className="shrink-0 text-fg-3"
+                    aria-label="Has a suggested chart"
+                  />
+                )}
               </span>
               {/* fg-3 is too faint on the accent tint of the selected card (contrast); fg-2 keeps AA there. */}
-              <span className={cn('text-xs leading-snug', active ? 'text-fg-2' : 'text-fg-3')}>{q.description}</span>
+              <span className={cn('text-xs leading-snug', active ? 'text-fg-2' : 'text-fg-3')}>
+                {q.description}
+              </span>
             </button>
           </li>
         );
@@ -78,10 +103,21 @@ function HistoryList({ onPick }: { onPick: (e: HistoryEntry) => void }) {
               onClick={() => onPick(e)}
               className="flex w-full flex-col gap-1.5 rounded-(--af-input-radius) border border-transparent py-2.5 pr-9 pl-3 text-left transition-colors duration-(--af-motion-fast) hover:border-line hover:bg-hover"
             >
-              <span className="line-clamp-2 font-mono text-xs leading-snug wrap-break-word text-fg">{firstLines(e.query)}</span>
+              <span className="line-clamp-2 font-mono text-xs leading-snug wrap-break-word text-fg">
+                {firstLines(e.query)}
+              </span>
               <span className="truncate text-2xs text-fg-3">
-                {SOURCE_META[e.source].short} · {e.failed ? <span className="text-crit">failed</span> : `${formatNumber(e.rowCount ?? 0)} row${e.rowCount === 1 ? '' : 's'}`} ·{' '}
-                <time dateTime={e.ranAt} title={e.ms !== undefined ? `Took ${formatDuration(e.ms)}` : undefined}>
+                {SOURCE_META[e.source].short} ·{' '}
+                {e.failed ? (
+                  <span className="text-crit">failed</span>
+                ) : (
+                  `${formatNumber(e.rowCount ?? 0)} row${e.rowCount === 1 ? '' : 's'}`
+                )}{' '}
+                ·{' '}
+                <time
+                  dateTime={e.ranAt}
+                  title={e.ms !== undefined ? `Took ${formatDuration(e.ms)}` : undefined}
+                >
                   {formatRelative(e.ranAt, now)}
                 </time>
               </span>
@@ -121,7 +157,10 @@ export function Sidebar({
   onTabChange: (tab: string) => void;
 }) {
   return (
-    <aside aria-label="Starter queries and history" className="flex min-w-0 flex-col rounded-(--af-panel-radius) border border-line bg-panel">
+    <aside
+      aria-label="Starter queries and history"
+      className="flex min-w-0 flex-col rounded-(--af-panel-radius) border border-line bg-panel"
+    >
       <Tabs value={tab} onValueChange={onTabChange} className="flex min-h-0 flex-col">
         <TabsList aria-label="Query library" className="px-3">
           <TabsTrigger value="gallery">Starter queries</TabsTrigger>

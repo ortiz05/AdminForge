@@ -1,5 +1,12 @@
 import { ApiError, createLogAnalyticsClient } from '@adminforge/connectors';
-import { appClients, ConfigError, provisionerClients, provisionSettings, type CliContext, type Clients } from '../commands/context';
+import {
+  appClients,
+  ConfigError,
+  provisionerClients,
+  provisionSettings,
+  type CliContext,
+  type Clients,
+} from '../commands/context';
 import { clientCredentialToken, TokenError } from './auth';
 import { ENV_KEYS } from './entra-desired';
 import { ARM_BASE } from './entra-io';
@@ -18,15 +25,26 @@ import {
   type AzureTestState,
   type DesiredAzureTest,
 } from './azure-test-plan';
-import { API, applyAzureTestOps, destroyAzureTest, fetchAzureTestState, resolvePrincipals, type DestroyResult } from './azure-test-io';
+import {
+  API,
+  applyAzureTestOps,
+  destroyAzureTest,
+  fetchAzureTestState,
+  resolvePrincipals,
+  type DestroyResult,
+} from './azure-test-io';
 
 export const LOG_ANALYTICS_SCOPE = 'https://api.loganalytics.io/.default';
 
 export function azureTestSettings(env: CliContext['env']): AzureTestSettings {
   const base = provisionSettings(env);
-  if (!base.subscriptionId) throw new ConfigError('AF_SUBSCRIPTION_ID must be set in the env file (the subscription that holds the test environment).');
+  if (!base.subscriptionId)
+    throw new ConfigError(
+      'AF_SUBSCRIPTION_ID must be set in the env file (the subscription that holds the test environment).',
+    );
   const location = (env[ENV_LOCATION] || AZURE_TEST_DEFAULT_LOCATION).toLowerCase().replace(/\s+/g, '');
-  if (!/^[a-z][a-z0-9]{2,30}$/.test(location)) throw new ConfigError(`${ENV_LOCATION} must be an Azure region name such as eastus or westeurope.`);
+  if (!/^[a-z][a-z0-9]{2,30}$/.test(location))
+    throw new ConfigError(`${ENV_LOCATION} must be an Azure region name such as eastus or westeurope.`);
   return { label: base.label, subscriptionId: base.subscriptionId, location };
 }
 
@@ -37,12 +55,19 @@ export interface AzureTestRun {
 }
 
 /** Read-only: desired → fetch → plan. */
-export async function planAzureTestRun(ctx: CliContext, clients: Clients, settings = azureTestSettings(ctx.env)): Promise<AzureTestRun> {
+export async function planAzureTestRun(
+  ctx: CliContext,
+  clients: Clients,
+  settings = azureTestSettings(ctx.env),
+): Promise<AzureTestRun> {
   const desired = buildDesiredAzureTest(settings);
   const state = await fetchAzureTestState(clients.arm, clients.graph, desired, {
     automationClientId: ctx.env[ENV_KEYS.automation.clientId] || undefined,
     testerUpn: ctx.env.AF_TEST_USER_UPN || undefined,
-    env: { workspaceId: ctx.env[ENV_WORKSPACE_ID] || undefined, location: ctx.env[ENV_LOCATION] || undefined },
+    env: {
+      workspaceId: ctx.env[ENV_WORKSPACE_ID] || undefined,
+      location: ctx.env[ENV_LOCATION] || undefined,
+    },
   });
   return { desired, state, ops: planAzureTest(desired, state) };
 }
@@ -58,9 +83,18 @@ export interface VerifyResult {
 
 /** Errors that mean "not yet": new workspace still provisioning, or the role assignment still propagating. */
 const notYet = (err: unknown) =>
-  err instanceof ApiError && (err.status === 401 || err.status === 403 || err.status === 404 || /InsufficientAccess|WorkspaceNotFound|PathNotFound|Authorization/i.test(err.code));
+  err instanceof ApiError &&
+  (err.status === 401 ||
+    err.status === 403 ||
+    err.status === 404 ||
+    /InsufficientAccess|WorkspaceNotFound|PathNotFound|Authorization/i.test(err.code));
 
-const describe = (err: unknown) => (err instanceof ApiError ? `${err.status} ${err.code}: ${err.message.split('\n')[0]}` : err instanceof TokenError ? `${err.aadsts ?? err.error}` : String(err));
+const describe = (err: unknown) =>
+  err instanceof ApiError
+    ? `${err.status} ${err.code}: ${err.message.split('\n')[0]}`
+    : err instanceof TokenError
+      ? `${err.aadsts ?? err.error}`
+      : String(err);
 
 /**
  * Runs `print ok = 1` (answers even in an empty workspace) and an AzureActivity count as the automation identity.
@@ -74,9 +108,19 @@ export async function verifyWorkspace(
 ): Promise<VerifyResult> {
   const clientId = ctx.env[ENV_KEYS.automation.clientId];
   const clientSecret = ctx.env[ENV_KEYS.automation.secret];
-  if (!isGuid(clientId) || !clientSecret) return { ok: false, error: `${ENV_KEYS.automation.clientId} / ${ENV_KEYS.automation.secret} are not in the env file` };
+  if (!isGuid(clientId) || !clientSecret)
+    return {
+      ok: false,
+      error: `${ENV_KEYS.automation.clientId} / ${ENV_KEYS.automation.secret} are not in the env file`,
+    };
   const la = createLogAnalyticsClient({
-    getToken: clientCredentialToken({ tenantId: settings.tenantId, clientId, clientSecret, scope: LOG_ANALYTICS_SCOPE, fetch: ctx.fetch }),
+    getToken: clientCredentialToken({
+      tenantId: settings.tenantId,
+      clientId,
+      clientSecret,
+      scope: LOG_ANALYTICS_SCOPE,
+      fetch: ctx.fetch,
+    }),
     fetch: ctx.fetch,
     sleep: ctx.sleep,
     timeoutMs: 60_000,
@@ -91,7 +135,11 @@ export async function verifyWorkspace(
       if (r.rows[0]?.ok !== 1) return { ok: false, error: 'print returned an unexpected result' };
       let activityRows: number | null = null;
       try {
-        const a = await la.query({ workspace: workspaceId, query: 'AzureActivity | summarize rows = count()', timespan: 'P1D' });
+        const a = await la.query({
+          workspace: workspaceId,
+          query: 'AzureActivity | summarize rows = count()',
+          timespan: 'P1D',
+        });
         activityRows = typeof a.rows[0]?.rows === 'number' ? (a.rows[0].rows as number) : 0;
       } catch (err) {
         // The table appears with the first exported event (up to ~15 minutes after the export is created).
@@ -101,7 +149,10 @@ export async function verifyWorkspace(
     } catch (err) {
       lastError = err;
       if (!notYet(err) || i === attempts) break;
-      if (i === 1) ctx.out('      … waiting for the role assignment to reach Log Analytics (this can take a few minutes)');
+      if (i === 1)
+        ctx.out(
+          '      … waiting for the role assignment to reach Log Analytics (this can take a few minutes)',
+        );
       await sleep(interval);
     }
   }
@@ -132,11 +183,16 @@ function printSkipped(ctx: CliContext, ops: AzureTestOp[]) {
 }
 
 /** `adminforge provision azure-test [--dry-run] [--no-verify]` */
-export async function provisionAzureTest(ctx: CliContext, opts: { dryRun?: boolean; verify?: boolean; verifyAttempts?: number } = {}): Promise<AzureTestRun & { verify?: VerifyResult }> {
+export async function provisionAzureTest(
+  ctx: CliContext,
+  opts: { dryRun?: boolean; verify?: boolean; verifyAttempts?: number } = {},
+): Promise<AzureTestRun & { verify?: VerifyResult }> {
   const settings = azureTestSettings(ctx.env);
   const base = provisionSettings(ctx.env);
   const clients = provisionerClients(ctx, base);
-  ctx.out(`AdminForge provision azure-test — environment "${settings.label}", location ${settings.location}${opts.dryRun ? ' (dry run)' : ''}`);
+  ctx.out(
+    `AdminForge provision azure-test — environment "${settings.label}", location ${settings.location}${opts.dryRun ? ' (dry run)' : ''}`,
+  );
   const run = await planAzureTestRun(ctx, clients, settings);
   ctx.out('');
   ctx.out('Plan:');
@@ -151,9 +207,17 @@ export async function provisionAzureTest(ctx: CliContext, opts: { dryRun?: boole
   if (c.create + c.update === 0) ctx.out('Nothing to do: everything is already in the desired state.');
   else {
     ctx.out('Applying:');
-    await applyAzureTestOps(run.ops, run.desired, run.state, { arm: clients.arm, writeEnv: ctx.writeEnv, log: ctx.out, retry: { sleep: ctx.sleep, ...ctx.retry }, sleep: ctx.sleep });
+    await applyAzureTestOps(run.ops, run.desired, run.state, {
+      arm: clients.arm,
+      writeEnv: ctx.writeEnv,
+      log: ctx.out,
+      retry: { sleep: ctx.sleep, ...ctx.retry },
+      sleep: ctx.sleep,
+    });
     ctx.out('');
-    ctx.out(`Done: ${c.create} created, ${c.update} updated, ${c.noop} unchanged, ${c.skip} skipped. Ingestion is capped at ${DAILY_CAP_GB} GB a day.`);
+    ctx.out(
+      `Done: ${c.create} created, ${c.update} updated, ${c.noop} unchanged, ${c.skip} skipped. Ingestion is capped at ${DAILY_CAP_GB} GB a day.`,
+    );
   }
   printSkipped(ctx, run.ops);
   if (opts.verify === false) return run;
@@ -161,7 +225,9 @@ export async function provisionAzureTest(ctx: CliContext, opts: { dryRun?: boole
   if (!isGuid(workspaceId)) return run;
   ctx.out('');
   ctx.out('Check:');
-  const verify = await verifyWorkspace(ctx, { ...settings, tenantId: base.tenantId }, workspaceId, { attempts: opts.verifyAttempts });
+  const verify = await verifyWorkspace(ctx, { ...settings, tenantId: base.tenantId }, workspaceId, {
+    attempts: opts.verifyAttempts,
+  });
   verifyLines(ctx, run.desired.workspace.name, verify);
   return { ...run, verify };
 }
@@ -169,7 +235,11 @@ export async function provisionAzureTest(ctx: CliContext, opts: { dryRun?: boole
 /** `adminforge provision azure-test --destroy [--yes]` */
 export async function destroyAzureTestRun(
   ctx: CliContext,
-  opts: { yes?: boolean; confirm?: (question: string) => Promise<string>; poll?: { attempts?: number; intervalMs?: number } } = {},
+  opts: {
+    yes?: boolean;
+    confirm?: (question: string) => Promise<string>;
+    poll?: { attempts?: number; intervalMs?: number };
+  } = {},
 ): Promise<DestroyResult | null> {
   const settings = azureTestSettings(ctx.env);
   const base = provisionSettings(ctx.env);
@@ -178,12 +248,15 @@ export async function destroyAzureTestRun(
   ctx.out(`AdminForge provision azure-test --destroy — environment "${settings.label}"`);
   ctx.out('');
   ctx.out('This deletes:');
-  ctx.out(`  - resource group ${desired.resourceGroup.name} and everything in it (Log Analytics workspace ${desired.workspace.name}, its data and role assignments)`);
+  ctx.out(
+    `  - resource group ${desired.resourceGroup.name} and everything in it (Log Analytics workspace ${desired.workspace.name}, its data and role assignments)`,
+  );
   ctx.out(`  - subscription diagnostic setting ${desired.diagnostic.name} (activity log export)`);
   ctx.out('  - the validation user’s Reader assignment on the subscription that provisioning created');
   ctx.out('');
   if (!opts.yes) {
-    if (!opts.confirm) throw new ConfigError('Refusing to delete without confirmation: run interactively, or pass --yes.');
+    if (!opts.confirm)
+      throw new ConfigError('Refusing to delete without confirmation: run interactively, or pass --yes.');
     const answer = (await opts.confirm(`Type ${desired.resourceGroup.name} to delete it: `)).trim();
     if (answer !== desired.resourceGroup.name) {
       ctx.out('Nothing was deleted.');
@@ -191,16 +264,25 @@ export async function destroyAzureTestRun(
     }
   }
   const ws = await clients.arm
-    .send<{ properties?: { customerId?: string } }>({ url: `${ARM_BASE}${desired.workspace.id}?api-version=${API.workspaces}` })
+    .send<{ properties?: { customerId?: string } }>({
+      url: `${ARM_BASE}${desired.workspace.id}?api-version=${API.workspaces}`,
+    })
     .then((r) => r.data.properties?.customerId)
     .catch(() => undefined);
   const { principals } = await resolvePrincipals(
     clients.graph,
-    { automationClientId: ctx.env[ENV_KEYS.automation.clientId] || undefined, testerUpn: ctx.env.AF_TEST_USER_UPN || undefined },
+    {
+      automationClientId: ctx.env[ENV_KEYS.automation.clientId] || undefined,
+      testerUpn: ctx.env.AF_TEST_USER_UPN || undefined,
+    },
     { automation: desired.roles[0]!.principalLabel },
   );
   ctx.out('Deleting:');
-  const result = await destroyAzureTest(clients.arm, desired, principals, { log: ctx.out, sleep: ctx.sleep, poll: opts.poll });
+  const result = await destroyAzureTest(clients.arm, desired, principals, {
+    log: ctx.out,
+    sleep: ctx.sleep,
+    poll: opts.poll,
+  });
   if (ws && (ctx.env[ENV_WORKSPACE_ID] ?? '').toLowerCase() === ws.toLowerCase()) {
     ctx.writeEnv({ [ENV_WORKSPACE_ID]: '' });
     ctx.out(`  ✓ cleared ${ENV_WORKSPACE_ID} in the env file`);
@@ -209,7 +291,10 @@ export async function destroyAzureTestRun(
 }
 
 /** The Azure test environment block of `adminforge provision status`. Optional: absent means "not provisioned", not failure. */
-export async function azureTestStatus(ctx: CliContext, clients: Clients): Promise<{ failures: string[]; ops: AzureTestOp[] }> {
+export async function azureTestStatus(
+  ctx: CliContext,
+  clients: Clients,
+): Promise<{ failures: string[]; ops: AzureTestOp[] }> {
   let settings: AzureTestSettings;
   try {
     settings = azureTestSettings(ctx.env);
@@ -225,7 +310,9 @@ export async function azureTestStatus(ctx: CliContext, clients: Clients): Promis
     return { failures: [], ops: [] };
   }
   if (notProvisioned(run.state)) {
-    ctx.out('  ℹ Azure test environment — not provisioned (optional; `pnpm adminforge provision azure-test` creates it)');
+    ctx.out(
+      '  ℹ Azure test environment — not provisioned (optional; `pnpm adminforge provision azure-test` creates it)',
+    );
     return { failures: [], ops: [] };
   }
   renderStatus(run.ops, ctx.out);
@@ -233,7 +320,12 @@ export async function azureTestStatus(ctx: CliContext, clients: Clients): Promis
   const workspaceId = ctx.env[ENV_WORKSPACE_ID];
   const automation = appClients(ctx, provisionSettings(ctx.env), 'automation');
   if (isGuid(workspaceId) && automation) {
-    const v = await verifyWorkspace(ctx, { ...settings, tenantId: provisionSettings(ctx.env).tenantId }, workspaceId, { attempts: 1 });
+    const v = await verifyWorkspace(
+      ctx,
+      { ...settings, tenantId: provisionSettings(ctx.env).tenantId },
+      workspaceId,
+      { attempts: 1 },
+    );
     verifyLines(ctx, run.desired.workspace.name, v, '    ');
     if (!v.ok) failures.push(`Automation identity can query ${run.desired.workspace.name}`);
   }

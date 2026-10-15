@@ -55,7 +55,12 @@ const toRun = (r: RunsRow): ScheduleRunRow => ({
   endedAt: r.endedAt,
 });
 
-const toProbe = (r: Pick<ProbeRow, 'id' | 'probeKey' | 'ts' | 'status' | 'metric' | 'durationMs' | 'message' | 'scheduleRunId'> & { details?: unknown }): ProbeResultRow => ({
+const toProbe = (
+  r: Pick<
+    ProbeRow,
+    'id' | 'probeKey' | 'ts' | 'status' | 'metric' | 'durationMs' | 'message' | 'scheduleRunId'
+  > & { details?: unknown },
+): ProbeResultRow => ({
   id: r.id,
   probeKey: r.probeKey,
   ts: r.ts,
@@ -103,10 +108,17 @@ export class PgScheduleStore implements ScheduleStore {
       .returning();
     return r ? toSchedule(r) : null;
   }
-  async updateSchedule(id: string, patch: SchedulePatch, expect: { sha256?: string; nextRunAt?: Date | null } = {}) {
+  async updateSchedule(
+    id: string,
+    patch: SchedulePatch,
+    expect: { sha256?: string; nextRunAt?: Date | null } = {},
+  ) {
     const conds: SQL[] = [eq(schedules.id, id)];
     if (expect.sha256 !== undefined) conds.push(eq(schedules.sha256, expect.sha256));
-    if (expect.nextRunAt !== undefined) conds.push(expect.nextRunAt === null ? isNull(schedules.nextRunAt) : eq(schedules.nextRunAt, expect.nextRunAt));
+    if (expect.nextRunAt !== undefined)
+      conds.push(
+        expect.nextRunAt === null ? isNull(schedules.nextRunAt) : eq(schedules.nextRunAt, expect.nextRunAt),
+      );
     const [r] = await this.db
       .update(schedules)
       .set({ ...patch, updatedAt: sql`now()` })
@@ -120,7 +132,9 @@ export class PgScheduleStore implements ScheduleStore {
     return toRun(r!);
   }
   async updateRun(id: string, patch: ScheduleRunPatch, expectStatus?: ScheduleRunStatus) {
-    const where = expectStatus ? and(eq(scheduleRuns.id, id), eq(scheduleRuns.status, expectStatus)) : eq(scheduleRuns.id, id);
+    const where = expectStatus
+      ? and(eq(scheduleRuns.id, id), eq(scheduleRuns.status, expectStatus))
+      : eq(scheduleRuns.id, id);
     const [r] = await this.db.update(scheduleRuns).set(patch).where(where).returning();
     return r ? toRun(r) : null;
   }
@@ -131,7 +145,12 @@ export class PgScheduleStore implements ScheduleStore {
   async listRuns(scheduleId: string, opts: { limit: number; before?: RunCursor }) {
     const conds: SQL[] = [eq(scheduleRuns.scheduleId, scheduleId)];
     if (opts.before)
-      conds.push(or(lt(scheduleRuns.startedAt, opts.before.startedAt), and(eq(scheduleRuns.startedAt, opts.before.startedAt), lt(scheduleRuns.id, opts.before.id)))!);
+      conds.push(
+        or(
+          lt(scheduleRuns.startedAt, opts.before.startedAt),
+          and(eq(scheduleRuns.startedAt, opts.before.startedAt), lt(scheduleRuns.id, opts.before.id)),
+        )!,
+      );
     const rows = await this.db
       .select()
       .from(scheduleRuns)
@@ -141,7 +160,11 @@ export class PgScheduleStore implements ScheduleStore {
     return rows.map(toRun);
   }
   async runsInStatus(statuses: ScheduleRunStatus[]) {
-    const rows = await this.db.select().from(scheduleRuns).where(inArray(scheduleRuns.status, statuses)).orderBy(asc(scheduleRuns.startedAt));
+    const rows = await this.db
+      .select()
+      .from(scheduleRuns)
+      .where(inArray(scheduleRuns.status, statuses))
+      .orderBy(asc(scheduleRuns.startedAt));
     return rows.map(toRun);
   }
 
@@ -166,7 +189,9 @@ export class PgScheduleStore implements ScheduleStore {
         durationMs: probeResults.durationMs,
         message: probeResults.message,
         scheduleRunId: probeResults.scheduleRunId,
-        rank: sql<number>`row_number() over (partition by ${probeResults.probeKey} order by ${probeResults.ts} desc, ${probeResults.id} desc)`.as('rank'),
+        rank: sql<number>`row_number() over (partition by ${probeResults.probeKey} order by ${probeResults.ts} desc, ${probeResults.id} desc)`.as(
+          'rank',
+        ),
       })
       .from(probeResults)
       .where(gte(probeResults.ts, since))
@@ -191,7 +216,15 @@ export class PgScheduleStore implements ScheduleStore {
   async insertApproval(row: NewScheduleApproval) {
     const [r] = await this.db
       .insert(approvals)
-      .values({ subjectType: 'schedule', subjectId: row.subjectId, policy: row.policy, requestedBy: row.requestedBy, expiresAt: row.expiresAt, decisions: [], status: 'pending' })
+      .values({
+        subjectType: 'schedule',
+        subjectId: row.subjectId,
+        policy: row.policy,
+        requestedBy: row.requestedBy,
+        expiresAt: row.expiresAt,
+        decisions: [],
+        status: 'pending',
+      })
       .returning();
     return toApproval(r!);
   }

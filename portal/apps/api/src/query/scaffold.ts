@@ -1,4 +1,13 @@
-import { DEFAULT_LOG_ANALYTICS_WORKSPACE, DefinitionId, formatContentError, KqlMetric, KqlSource, parseDefinition, TimeZone, validateCron } from '@adminforge/schemas';
+import {
+  DEFAULT_LOG_ANALYTICS_WORKSPACE,
+  DefinitionId,
+  formatContentError,
+  KqlMetric,
+  KqlSource,
+  parseDefinition,
+  TimeZone,
+  validateCron,
+} from '@adminforge/schemas';
 import { stringify } from 'yaml';
 import { z } from 'zod';
 import { AppError } from '../errors';
@@ -26,10 +35,19 @@ export const ScaffoldRequest = z
      */
     scope: z.enum(['all', 'default']).optional(),
     /** Env key holding the Log Analytics workspace id (default AF_LOG_ANALYTICS_WORKSPACE_ID). */
-    workspaceEnv: z.string().regex(/^AF_[A-Z0-9_]+$/).optional(),
-    timespan: z.string().regex(/^P(?!$)(\d+Y)?(\d+M)?(\d+W)?(\d+D)?(T(?=\d)(\d+H)?(\d+M)?(\d+(\.\d+)?S)?)?$/).optional(),
+    workspaceEnv: z
+      .string()
+      .regex(/^AF_[A-Z0-9_]+$/)
+      .optional(),
+    timespan: z
+      .string()
+      .regex(/^P(?!$)(\d+Y)?(\d+M)?(\d+W)?(\d+D)?(T(?=\d)(\d+H)?(\d+M)?(\d+(\.\d+)?S)?)?$/)
+      .optional(),
     /** Report table columns (Query Studio passes the result columns). */
-    columns: z.array(z.object({ name: z.string().min(1).max(200), type: z.string().max(40).optional() })).max(60).optional(),
+    columns: z
+      .array(z.object({ name: z.string().min(1).max(200), type: z.string().max(40).optional() }))
+      .max(60)
+      .optional(),
     // probe
     metric: KqlMetric.optional(),
     thresholds: z.object({ warn: z.number().optional(), crit: z.number().optional() }).optional(),
@@ -57,17 +75,31 @@ const ONMICROSOFT = /[a-z0-9-]+\.onmicrosoft\.(com|us|de)\b/i;
  * Throws 400 `tenant_value_in_query` when user text that would land in the YAML holds a configured tenant value, a
  * GUID, or an onmicrosoft.com domain. The message names the kind and the field, never the value.
  */
-export function assertNoTenantValues(fields: Record<string, string | undefined>, known: readonly TenantValue[]): void {
+export function assertNoTenantValues(
+  fields: Record<string, string | undefined>,
+  known: readonly TenantValue[],
+): void {
   const values = known.filter((k) => k.value && k.value.trim().length >= 4);
   for (const [field, text] of Object.entries(fields)) {
     if (!text) continue;
     const lower = text.toLowerCase();
     const hit = values.find((k) => lower.includes(k.value.trim().toLowerCase()));
-    const kind = hit?.kind ?? (GUID_IN_TEXT.test(text) ? 'a GUID (object, subscription, tenant or workspace id)' : ONMICROSOFT.test(text) ? 'a tenant domain' : undefined);
+    const kind =
+      hit?.kind ??
+      (GUID_IN_TEXT.test(text)
+        ? 'a GUID (object, subscription, tenant or workspace id)'
+        : ONMICROSOFT.test(text)
+          ? 'a tenant domain'
+          : undefined);
     if (kind)
-      throw new AppError(400, 'tenant_value_in_query', `The ${field} contains ${kind}. Content never holds tenant values, so it cannot be saved as YAML.`, {
-        hint: 'Parameterise it: use an env key from config/example.env (for example ${ env.AF_SUBSCRIPTION_ID }) or a param quoted with $kql(), then save again.',
-      });
+      throw new AppError(
+        400,
+        'tenant_value_in_query',
+        `The ${field} contains ${kind}. Content never holds tenant values, so it cannot be saved as YAML.`,
+        {
+          hint: 'Parameterise it: use an env key from config/example.env (for example ${ env.AF_SUBSCRIPTION_ID }) or a param quoted with $kql(), then save again.',
+        },
+      );
   }
 }
 
@@ -90,9 +122,26 @@ const slug = (title: string) =>
 /** KQL text is literal content: escape `${` so it is never read as an expression. */
 const literal = (s: string) => s.replace(/\$\{/g, () => '$${');
 
-const COLUMN_KIND: Record<string, string> = { datetime: 'datetime', date: 'datetime', timestamp: 'datetime', long: 'number', int: 'number', real: 'number', double: 'number', decimal: 'number', bool: 'boolean', boolean: 'boolean', guid: 'guid', dynamic: 'code' };
+const COLUMN_KIND: Record<string, string> = {
+  datetime: 'datetime',
+  date: 'datetime',
+  timestamp: 'datetime',
+  long: 'number',
+  int: 'number',
+  real: 'number',
+  double: 'number',
+  decimal: 'number',
+  bool: 'boolean',
+  boolean: 'boolean',
+  guid: 'guid',
+  dynamic: 'code',
+};
 
-const label = (name: string) => name.replace(/([a-z0-9])([A-Z])/g, '$1 $2').replace(/[_-]+/g, ' ').replace(/^./, (c) => c.toUpperCase());
+const label = (name: string) =>
+  name
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .replace(/[_-]+/g, ' ')
+    .replace(/^./, (c) => c.toUpperCase());
 
 function contentPath(kind: 'report' | 'probe' | 'schedule', key: string): { path: string; schema: string } {
   const [section, ...rest] = key.split('.');
@@ -101,11 +150,21 @@ function contentPath(kind: 'report' | 'probe' | 'schedule', key: string): { path
   const flat = kind === 'probe' && section === 'probes';
   const rel = flat ? `${folder}/${name}.${kind}.yaml` : `${folder}/${section}/${name}.${kind}.yaml`;
   const depth = rel.split('/').length - 1;
-  return { path: `portal/content/${rel}`, schema: `${'../'.repeat(depth + 1)}packages/schemas/generated/${kind}.schema.json` };
+  return {
+    path: `portal/content/${rel}`,
+    schema: `${'../'.repeat(depth + 1)}packages/schemas/generated/${kind}.schema.json`,
+  };
 }
 
 function defaultKey(r: ScaffoldRequest): string {
-  const section = r.as === 'probe' ? 'probes' : r.as === 'schedule' ? 'kql' : r.source === 'advancedHunting' ? 'security' : 'azure';
+  const section =
+    r.as === 'probe'
+      ? 'probes'
+      : r.as === 'schedule'
+        ? 'kql'
+        : r.source === 'advancedHunting'
+          ? 'security'
+          : 'azure';
   return `${section}.${slug(r.title)}`;
 }
 
@@ -113,11 +172,24 @@ const DEFAULT_SUBSCRIPTION = ['${ env.AF_SUBSCRIPTION_ID }'];
 
 function datasource(r: ScaffoldRequest, workspace: string): Record<string, unknown> {
   const query = literal(r.query);
-  if (r.source === 'resourceGraph') return { source: 'resourceGraph', query, ...(r.scope === 'default' ? { subscriptions: DEFAULT_SUBSCRIPTION } : {}), paging: 'all', maxItems: 5000, cache: { ttl: 300 } };
-  if (r.source === 'logAnalytics') return { source: 'logAnalytics', workspace, timespan: r.timespan ?? 'P1D', query, cache: { ttl: 300 } };
+  if (r.source === 'resourceGraph')
+    return {
+      source: 'resourceGraph',
+      query,
+      ...(r.scope === 'default' ? { subscriptions: DEFAULT_SUBSCRIPTION } : {}),
+      paging: 'all',
+      maxItems: 5000,
+      cache: { ttl: 300 },
+    };
+  if (r.source === 'logAnalytics')
+    return { source: 'logAnalytics', workspace, timespan: r.timespan ?? 'P1D', query, cache: { ttl: 300 } };
   return {
     source: 'graph',
-    request: { method: 'POST', path: '/security/runHuntingQuery', body: { Query: query, ...(r.timespan ? { Timespan: r.timespan } : {}) } },
+    request: {
+      method: 'POST',
+      path: '/security/runHuntingQuery',
+      body: { Query: query, ...(r.timespan ? { Timespan: r.timespan } : {}) },
+    },
     transform: '${ value.results }',
     cache: { ttl: 300 },
   };
@@ -129,7 +201,16 @@ function datasource(r: ScaffoldRequest, workspace: string): Record<string, unkno
  */
 export function scaffoldFromQuery(r: ScaffoldRequest, known: readonly TenantValue[] = []): ScaffoldResult {
   assertNoTenantValues(
-    { query: r.query, title: r.title, summary: r.summary, owner: r.owner, key: r.key, columns: r.columns?.map((c) => c.name).join(' '), job: r.job?.ref, metric: typeof r.metric === 'object' ? r.metric.column : undefined },
+    {
+      query: r.query,
+      title: r.title,
+      summary: r.summary,
+      owner: r.owner,
+      key: r.key,
+      columns: r.columns?.map((c) => c.name).join(' '),
+      job: r.job?.ref,
+      metric: typeof r.metric === 'object' ? r.metric.column : undefined,
+    },
     known,
   );
   const key = r.key ?? defaultKey(r);
@@ -151,7 +232,10 @@ export function scaffoldFromQuery(r: ScaffoldRequest, known: readonly TenantValu
     r.source === 'resourceGraph'
       ? { azureRoles: ['Reader'] }
       : r.source === 'logAnalytics'
-        ? { ...(r.as === 'report' ? { scopes: { logAnalytics: ['Data.Read'] } } : {}), azureRoles: ['Log Analytics Reader'] }
+        ? {
+            ...(r.as === 'report' ? { scopes: { logAnalytics: ['Data.Read'] } } : {}),
+            azureRoles: ['Log Analytics Reader'],
+          }
         : { scopes: { graph: ['ThreatHunting.Read.All'] }, licences: ['defender'] };
 
   let doc: Record<string, unknown>;
@@ -159,13 +243,22 @@ export function scaffoldFromQuery(r: ScaffoldRequest, known: readonly TenantValu
     const data = r.source === 'advancedHunting' ? 'rows' : 'rows.value';
     const columns = (r.columns?.length ? r.columns : [{ name: 'name', type: 'string' }]).map((c) => {
       const kind = COLUMN_KIND[(c.type ?? '').toLowerCase()];
-      return { field: c.name, label: label(c.name), ...(kind ? { kind } : {}), ...(/^id$|resourceid$/i.test(c.name) ? { hidden: true } : {}) };
+      return {
+        field: c.name,
+        label: label(c.name),
+        ...(kind ? { kind } : {}),
+        ...(/^id$|resourceid$/i.test(c.name) ? { hidden: true } : {}),
+      };
     });
     const ds = datasource(r, workspace);
     if (r.source === 'resourceGraph') ds.query = `// af:${key}#rows\n${ds.query as string}`;
     doc = {
       ...header,
-      requires: { portalRoles: ['Portal.Reader'], ...(r.source === 'resourceGraph' ? { scopes: { arm: ['user_impersonation'] } } : {}), ...requires },
+      requires: {
+        portalRoles: ['Portal.Reader'],
+        ...(r.source === 'resourceGraph' ? { scopes: { arm: ['user_impersonation'] } } : {}),
+        ...requires,
+      },
       datasources: { rows: ds },
       layout: [{ widget: 'table', id: 'rows', span: 12, data, columns, search: true }],
       export: { formats: ['csv', 'xlsx'], fileName: slug(r.title), data, columns: 'all' },
@@ -178,7 +271,9 @@ export function scaffoldFromQuery(r: ScaffoldRequest, known: readonly TenantValu
         kind: 'kql',
         source: r.source,
         query: literal(r.query),
-        ...(r.source === 'resourceGraph' && r.scope === 'default' ? { subscriptions: DEFAULT_SUBSCRIPTION } : {}),
+        ...(r.source === 'resourceGraph' && r.scope === 'default'
+          ? { subscriptions: DEFAULT_SUBSCRIPTION }
+          : {}),
         ...(r.source === 'logAnalytics' && r.workspaceEnv ? { workspace } : {}),
         ...(r.source !== 'resourceGraph' && r.timespan ? { timespan: r.timespan } : {}),
         metric: r.metric ?? 'rowCount',
@@ -202,7 +297,10 @@ export function scaffoldFromQuery(r: ScaffoldRequest, known: readonly TenantValu
       // Runs as the automation identity (ADR-011). Enable after review.
       enabled: false,
       identity: 'automation',
-      job: job.kind === 'probe' ? { kind: 'probe', ref: job.ref } : { kind: 'report', ref: job.ref, delivery: [{ type: 'file', format: 'xlsx', retain: 30 }] },
+      job:
+        job.kind === 'probe'
+          ? { kind: 'probe', ref: job.ref }
+          : { kind: 'report', ref: job.ref, delivery: [{ type: 'file', format: 'xlsx', retain: 30 }] },
       timeoutSeconds: 900,
       overlap: 'skip',
       requires,
@@ -214,6 +312,11 @@ export function scaffoldFromQuery(r: ScaffoldRequest, known: readonly TenantValu
       : '';
   const yaml = `# Scaffolded by Query Studio. Review, then commit under ${path} (adminforge validate).\n${scopeNote}${stringify(doc, { lineWidth: 0, defaultStringType: 'PLAIN', defaultKeyType: 'PLAIN' })}`;
   const parsed = parseDefinition(yaml, path.replace(/^portal\/content\//, ''));
-  if (!parsed.ok) throw new AppError(400, 'invalid_scaffold', `The ${r.as} would not be valid: ${parsed.errors.slice(0, 3).map(formatContentError).join('; ')}`);
+  if (!parsed.ok)
+    throw new AppError(
+      400,
+      'invalid_scaffold',
+      `The ${r.as} would not be valid: ${parsed.errors.slice(0, 3).map(formatContentError).join('; ')}`,
+    );
   return { yaml, path, key };
 }

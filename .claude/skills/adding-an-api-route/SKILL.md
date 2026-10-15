@@ -6,11 +6,13 @@ description: Use when AdminForge needs new backend behaviour that content cannot
 # Adding an API route
 
 ## Overview
+
 The BFF is Fastify (`portal/apps/api/src`). Everything a handler needs is on `AppContext` (`src/context.ts`):
 config, sessions, `broker`, `outbound`, `definitions`, `audit`, `events`, `database`. Content-driven features usually
 need **no** new route — check that first.
 
 ## Steps
+
 1. Contract first: zod request/response schemas in `portal/packages/schemas/src/` (exported), so web and tests share
    them. Errors use `AppError` → `ApiErrorBody` (`code`, `message`, `hint`).
 2. Route file `src/routes/<area>.ts`; register it in `src/app.ts` inside the `/api` prefix block.

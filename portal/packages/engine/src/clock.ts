@@ -3,10 +3,13 @@ import type { Clock } from './ports';
 function abortable(ms: number, signal?: AbortSignal): Promise<void> {
   return new Promise<void>((resolve, reject) => {
     if (signal?.aborted) return reject(signal.reason ?? new Error('aborted'));
-    const t = setTimeout(() => {
-      signal?.removeEventListener('abort', onAbort);
-      resolve();
-    }, Math.max(0, ms));
+    const t = setTimeout(
+      () => {
+        signal?.removeEventListener('abort', onAbort);
+        resolve();
+      },
+      Math.max(0, ms),
+    );
     const onAbort = () => {
       clearTimeout(t);
       reject(signal?.reason ?? new Error('aborted'));

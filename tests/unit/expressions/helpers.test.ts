@@ -1,4 +1,13 @@
-import { assertGuid, daysAgo, daysUntil, encodePathSegment, evaluate, odataLiteral, odataSearchEscape, toIso } from '@adminforge/expressions';
+import {
+  assertGuid,
+  daysAgo,
+  daysUntil,
+  encodePathSegment,
+  evaluate,
+  odataLiteral,
+  odataSearchEscape,
+  toIso,
+} from '@adminforge/expressions';
 
 describe('expression helpers', () => {
   it("$odata quotes and doubles single quotes: O'Brien → 'O''Brien'", async () => {
@@ -7,7 +16,9 @@ describe('expression helpers', () => {
     expect(odataLiteral(5)).toBe("'5'");
   });
   it('$odata refuses missing values', async () => {
-    await expect(evaluate('$odata(params.missing)', { params: {} })).rejects.toThrow(/\$odata: value is missing/);
+    await expect(evaluate('$odata(params.missing)', { params: {} })).rejects.toThrow(
+      /\$odata: value is missing/,
+    );
     expect(() => odataLiteral({})).toThrow(/expected a string/);
   });
   it('$odataSearch escapes backslashes and double quotes', async () => {
@@ -21,7 +32,9 @@ describe('expression helpers', () => {
     await expect(evaluate('$encode(x)', {})).rejects.toThrow(/value is missing/);
   });
   it('$guid validates and lower-cases', async () => {
-    expect(await evaluate('$guid("6F1C2F6E-0000-4000-8000-000000000001")')).toBe('6f1c2f6e-0000-4000-8000-000000000001');
+    expect(await evaluate('$guid("6F1C2F6E-0000-4000-8000-000000000001")')).toBe(
+      '6f1c2f6e-0000-4000-8000-000000000001',
+    );
     await expect(evaluate('$guid("6f1c2f6e")')).rejects.toThrow(/not a valid GUID: 6f1c2f6e/);
     expect(() => assertGuid(undefined)).toThrow(/not a valid GUID/);
   });

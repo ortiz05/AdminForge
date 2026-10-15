@@ -17,17 +17,17 @@ Claude picks the matching skill automatically (or name it: "use the adding-a-pla
 
 ## Extension points
 
-| You want… | Skill | Usually touches |
-|---|---|---|
-| A page, dashboard, entity view, list, report; new columns, filters, KPIs, row/bulk actions | `adding-a-page-or-report` | `portal/content/{pages,dashboards,reports}`, `tests/fixtures` |
-| An action or guided procedure (disable user, reset MFA, restart app, runbook) | `adding-a-playbook` | `portal/content/{playbooks,runbooks}` |
-| Something that runs on a schedule on this host; monitoring; a configuration/compliance check; KQL at scale | `adding-a-schedule-or-probe` | `portal/content/{schedules,probes}` |
-| A visualisation or interaction the widgets can't express | `adding-a-widget` | `portal/packages/widgets`, `docs/widgets.md` |
-| A new Microsoft API, your own Entra-secured API/Function, a blocked read-only POST | `adding-a-service-connector` | `portal/content/connections`, `portal/packages/connectors`, provisioning |
-| PowerShell (Exchange, distribution lists, Teams, SharePoint) | `adding-a-runner-script` | `portal/content/scripts`, `tests/runner` |
-| Backend behaviour content can't express | `adding-an-api-route` | `portal/apps/api`, `portal/packages/schemas` |
-| The look and feel | `changing-the-design-system` | `portal/packages/design-tokens`, `packages/ui/src/recipes` |
-| Checking it against a real tenant | `validating-against-a-tenant` | `tests/live`, `~/.config/adminforge/*.env` |
+| You want…                                                                                                  | Skill                         | Usually touches                                                          |
+| ---------------------------------------------------------------------------------------------------------- | ----------------------------- | ------------------------------------------------------------------------ |
+| A page, dashboard, entity view, list, report; new columns, filters, KPIs, row/bulk actions                 | `adding-a-page-or-report`     | `portal/content/{pages,dashboards,reports}`, `tests/fixtures`            |
+| An action or guided procedure (disable user, reset MFA, restart app, runbook)                              | `adding-a-playbook`           | `portal/content/{playbooks,runbooks}`                                    |
+| Something that runs on a schedule on this host; monitoring; a configuration/compliance check; KQL at scale | `adding-a-schedule-or-probe`  | `portal/content/{schedules,probes}`                                      |
+| A visualisation or interaction the widgets can't express                                                   | `adding-a-widget`             | `portal/packages/widgets`, `docs/widgets.md`                             |
+| A new Microsoft API, your own Entra-secured API/Function, a blocked read-only POST                         | `adding-a-service-connector`  | `portal/content/connections`, `portal/packages/connectors`, provisioning |
+| PowerShell (Exchange, distribution lists, Teams, SharePoint)                                               | `adding-a-runner-script`      | `portal/content/scripts`, `tests/runner`                                 |
+| Backend behaviour content can't express                                                                    | `adding-an-api-route`         | `portal/apps/api`, `portal/packages/schemas`                             |
+| The look and feel                                                                                          | `changing-the-design-system`  | `portal/packages/design-tokens`, `packages/ui/src/recipes`               |
+| Checking it against a real tenant                                                                          | `validating-against-a-tenant` | `tests/live`, `~/.config/adminforge/*.env`                               |
 
 ## Guardrails that run automatically
 
@@ -46,7 +46,7 @@ Ask Claude to run a reviewer before you open a PR:
 
 ## Keeping this working
 
-When you change *how* something is extended (a new schema field, a new CLI command, a new widget convention), update the
+When you change _how_ something is extended (a new schema field, a new CLI command, a new widget convention), update the
 matching skill in `.claude/skills/` and this page in the same change. Skills are tested like code: run a fresh agent
 through a realistic request with the skill and check it follows the rules (see the writing-skills approach in the
 plan's R7).

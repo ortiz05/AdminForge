@@ -7,7 +7,20 @@ import { Cron } from 'croner';
 
 const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const DAY_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+const MONTHS = [
+  'January',
+  'February',
+  'March',
+  'April',
+  'May',
+  'June',
+  'July',
+  'August',
+  'September',
+  'October',
+  'November',
+  'December',
+];
 const DOW_NAMES: Record<string, number> = { SUN: 0, MON: 1, TUE: 2, WED: 3, THU: 4, FRI: 5, SAT: 6 };
 const NICK: Record<string, string> = {
   '@yearly': '0 0 1 1 *',
@@ -42,7 +55,9 @@ function dayList(field: string): number[] | null {
 }
 
 function joinWords(words: string[]): string {
-  return words.length <= 1 ? (words[0] ?? '') : `${words.slice(0, -1).join(', ')} and ${words[words.length - 1]}`;
+  return words.length <= 1
+    ? (words[0] ?? '')
+    : `${words.slice(0, -1).join(', ')} and ${words[words.length - 1]}`;
 }
 
 function zoneLabel(tz: string): string {
@@ -72,7 +87,9 @@ export function describeCron(expr: string, timezone = 'UTC'): string {
     return Number(min) === 0 ? 'Every hour, on the hour' : `Every hour at ${pad(Number(min))} past`;
   if (isNum(min) && every.test(hour) && dom === '*' && mon === '*' && dow === '*') {
     const n = Number(every.exec(hour)![1]);
-    return Number(min) === 0 ? `Every ${n} hours, on the hour` : `Every ${n} hours at ${pad(Number(min))} past`;
+    return Number(min) === 0
+      ? `Every ${n} hours, on the hour`
+      : `Every ${n} hours at ${pad(Number(min))} past`;
   }
   if (!isNum(min) || !/^\d+(,\d+)*$/.test(hour)) return `Custom: ${expr}`;
   const at = hour
@@ -93,11 +110,19 @@ export function describeCron(expr: string, timezone = 'UTC'): string {
   }
   if (isNum(dom) && (dow === '*' || dow === '?')) {
     const d = Number(dom);
-    const suffix = d % 10 === 1 && d !== 11 ? 'st' : d % 10 === 2 && d !== 12 ? 'nd' : d % 10 === 3 && d !== 13 ? 'rd' : 'th';
+    const suffix =
+      d % 10 === 1 && d !== 11
+        ? 'st'
+        : d % 10 === 2 && d !== 12
+          ? 'nd'
+          : d % 10 === 3 && d !== 13
+            ? 'rd'
+            : 'th';
     if (mon === '*') return `On the ${d}${suffix} of every month ${time}`;
     if (isNum(mon)) return `Every year on ${d} ${MONTHS[Number(mon) - 1] ?? mon} ${time}`;
   }
-  if (dom === 'L' && mon === '*' && (dow === '*' || dow === '?')) return `On the last day of every month ${time}`;
+  if (dom === 'L' && mon === '*' && (dow === '*' || dow === '?'))
+    return `On the last day of every month ${time}`;
   return `Custom: ${expr}`;
 }
 

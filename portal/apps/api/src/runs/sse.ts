@@ -19,7 +19,12 @@ const PAGE = 500;
  */
 export function sseData(e: EventRow) {
   const type = notificationType(e);
-  const data = e.type === 'output' ? { level: 'info', message: 'Script output', output: (e.data as { data?: unknown }).data ?? null } : e.type === 'log' ? { level: e.level ?? 'info', ...e.data } : e.data;
+  const data =
+    e.type === 'output'
+      ? { level: 'info', message: 'Script output', output: (e.data as { data?: unknown }).data ?? null }
+      : e.type === 'log'
+        ? { level: e.level ?? 'info', ...e.data }
+        : e.data;
   return { id: e.id, type, ts: e.ts.toISOString(), stepSeq: e.stepSeq ?? null, data };
 }
 
@@ -115,8 +120,15 @@ export async function streamRunEvents(
   untrack = deps.bus.track(close);
   // Show-once secrets of this run reach only the initiator's own open streams, live, and are never stored (no id).
   if (deps.secrets && request.session)
-    detach = deps.secrets.attach({ runId, sessionHash: request.session.idHash, send: (m) => void (!closed && raw.write(`data: ${JSON.stringify(m)}\n\n`)) });
+    detach = deps.secrets.attach({
+      runId,
+      sessionHash: request.session.idHash,
+      send: (m) => void (!closed && raw.write(`data: ${JSON.stringify(m)}\n\n`)),
+    });
   // LISTEN must be up before the replay, or an event landing in between would only show up with the next one.
-  await Promise.race([deps.bus.start().catch(() => undefined), new Promise((r) => setTimeout(r, 2_000).unref?.())]);
+  await Promise.race([
+    deps.bus.start().catch(() => undefined),
+    new Promise((r) => setTimeout(r, 2_000).unref?.()),
+  ]);
   await pump();
 }

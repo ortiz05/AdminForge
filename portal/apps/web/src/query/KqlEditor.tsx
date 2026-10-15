@@ -18,7 +18,13 @@ import 'monaco-editor/features/snippet/register';
 import 'monaco-editor/editor/contrib/suggest/browser/suggestController';
 import { fonts, THEME_NAMES, type ThemeName } from '@adminforge/design-tokens';
 import { Skeleton, useHtmlAttribute, useMediaQuery } from '@adminforge/ui';
-import { completionWords, KQL_LANGUAGE_ID, kqlConfiguration, kqlMonarch, type CompletionKind } from './kql-language';
+import {
+  completionWords,
+  KQL_LANGUAGE_ID,
+  kqlConfiguration,
+  kqlMonarch,
+  type CompletionKind,
+} from './kql-language';
 import { monacoTheme, monacoThemeName } from './monaco-theme';
 
 /**
@@ -27,7 +33,8 @@ import { monacoTheme, monacoThemeName } from './monaco-theme';
  */
 
 (globalThis as { MonacoEnvironment?: unknown }).MonacoEnvironment = {
-  getWorker: () => new Worker(new URL('./editor.worker.ts', import.meta.url), { type: 'module', name: 'monaco-editor' }),
+  getWorker: () =>
+    new Worker(new URL('./editor.worker.ts', import.meta.url), { type: 'module', name: 'monaco-editor' }),
 };
 loader.config({ monaco });
 
@@ -51,14 +58,21 @@ function registerKql() {
   monaco.languages.registerCompletionItemProvider(KQL_LANGUAGE_ID, {
     provideCompletionItems(model, position) {
       const word = model.getWordUntilPosition(position);
-      const range = new monaco.Range(position.lineNumber, word.startColumn, position.lineNumber, word.endColumn);
+      const range = new monaco.Range(
+        position.lineNumber,
+        word.startColumn,
+        position.lineNumber,
+        word.endColumn,
+      );
       return {
         suggestions: completionWords(completionTables, completionColumns).map((w) => ({
           label: w.label,
           kind: KIND[w.kind],
           detail: w.kind,
           insertText: w.kind === 'function' ? `${w.label}($0)` : w.label,
-          ...(w.kind === 'function' ? { insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet } : {}),
+          ...(w.kind === 'function'
+            ? { insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet }
+            : {}),
           range,
         })),
       };
@@ -89,7 +103,18 @@ export interface KqlEditorProps {
   maxHeight?: number;
 }
 
-export default function KqlEditor({ value, onChange, onRun, tables, columns, ariaLabel, placeholder, onReady, minHeight = 168, maxHeight = 440 }: KqlEditorProps) {
+export default function KqlEditor({
+  value,
+  onChange,
+  onRun,
+  tables,
+  columns,
+  ariaLabel,
+  placeholder,
+  onReady,
+  minHeight = 168,
+  maxHeight = 440,
+}: KqlEditorProps) {
   const themeAttr = useHtmlAttribute('data-theme');
   const theme: ThemeName = isTheme(themeAttr) ? themeAttr : 'steel';
   const reducedMotion = useMediaQuery('(prefers-reduced-motion: reduce)');

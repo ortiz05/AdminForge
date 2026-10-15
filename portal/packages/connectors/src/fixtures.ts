@@ -64,7 +64,8 @@ function routeOf(url: URL, method: string): { service: string; segments: string[
   const raw = url.pathname.split('/').filter(Boolean).map(decode);
   if (host === 'graph.microsoft.com') return { service: 'graph', segments: raw };
   if (host === 'management.azure.com') {
-    if (method === 'POST' && /^\/providers\/microsoft\.resourcegraph\/resources\/?$/i.test(url.pathname)) return { service: 'resourceGraph', segments: [] };
+    if (method === 'POST' && /^\/providers\/microsoft\.resourcegraph\/resources\/?$/i.test(url.pathname))
+      return { service: 'resourceGraph', segments: [] };
     return { service: 'arm', segments: raw };
   }
   if (host === 'api.loganalytics.io' || host === 'api.loganalytics.azure.com') {
@@ -86,7 +87,8 @@ export function fixtureKey(method: string, rawUrl: string): FixtureKey {
     .sort(([a, av], [b, bv]) => (a === b ? av.localeCompare(bv) : a.localeCompare(b)))
     .map(([k, v]) => `${sanitize(k)}=${sanitize(v)}`)
     .join('&');
-  const query = pairs.length > QUERY_MAX ? `h${createHash('sha256').update(pairs).digest('hex').slice(0, 16)}` : pairs;
+  const query =
+    pairs.length > QUERY_MAX ? `h${createHash('sha256').update(pairs).digest('hex').slice(0, 16)}` : pairs;
   return { service, candidates: [...(query ? [`${dir}/${m}__${query}.json`] : []), `${dir}/${m}.json`] };
 }
 
@@ -96,18 +98,23 @@ interface FixtureResponse {
   body?: unknown;
 }
 interface FixtureEnvelope extends FixtureResponse {
-  variants?: Array<FixtureResponse & { match?: { bodyIncludes?: string | string[]; query?: Record<string, string> } }>;
+  variants?: Array<
+    FixtureResponse & { match?: { bodyIncludes?: string | string[]; query?: Record<string, string> } }
+  >;
 }
 
 const norm = (s: string) => s.toLowerCase().replace(/\s+/g, ' ');
 
 function pick(content: unknown, url: URL, bodyText: string): FixtureResponse | undefined {
-  if (!content || typeof content !== 'object' || Array.isArray(content) || !('$fixture' in content)) return { status: 200, body: content };
+  if (!content || typeof content !== 'object' || Array.isArray(content) || !('$fixture' in content))
+    return { status: 200, body: content };
   const env = (content as { $fixture: FixtureEnvelope }).$fixture ?? {};
   const body = norm(bodyText);
   for (const v of env.variants ?? []) {
     const includes = v.match?.bodyIncludes === undefined ? [] : [v.match.bodyIncludes].flat();
-    const queryOk = Object.entries(v.match?.query ?? {}).every(([k, val]) => (url.searchParams.get(k) ?? '').toLowerCase() === String(val).toLowerCase());
+    const queryOk = Object.entries(v.match?.query ?? {}).every(
+      ([k, val]) => (url.searchParams.get(k) ?? '').toLowerCase() === String(val).toLowerCase(),
+    );
     if (queryOk && includes.every((s) => body.includes(norm(s)))) return v;
   }
   if ('body' in env || env.status !== undefined) return env;
@@ -123,7 +130,12 @@ function respond(r: FixtureResponse): Response {
   const id = `fixture-${++seq}`;
   return new Response(nullBody ? null : text ? String(r.body) : JSON.stringify(r.body), {
     status,
-    headers: { 'content-type': text ? 'text/plain' : 'application/json', 'request-id': id, 'x-ms-request-id': id, ...r.headers },
+    headers: {
+      'content-type': text ? 'text/plain' : 'application/json',
+      'request-id': id,
+      'x-ms-request-id': id,
+      ...r.headers,
+    },
   });
 }
 
@@ -144,12 +156,20 @@ export function createFixtureFetch(dir: string, opts: FixtureFetchOptions = {}):
     try {
       return JSON.parse(await readFile(file, 'utf8'));
     } catch (err) {
-      if ((err as NodeJS.ErrnoException).code === 'ENOENT' || (err as NodeJS.ErrnoException).code === 'EISDIR') return undefined;
+      if (
+        (err as NodeJS.ErrnoException).code === 'ENOENT' ||
+        (err as NodeJS.ErrnoException).code === 'EISDIR'
+      )
+        return undefined;
       throw new Error(`Fixture ${rel} is not valid JSON: ${(err as Error).message}`, { cause: err });
     }
   }
 
-  async function resolveRequest(method: string, url: URL, text: string): Promise<{ response: FixtureResponse; file?: string }> {
+  async function resolveRequest(
+    method: string,
+    url: URL,
+    text: string,
+  ): Promise<{ response: FixtureResponse; file?: string }> {
     const key = fixtureKey(method, url.href);
     for (const rel of key.candidates) {
       const content = await load(rel);
@@ -159,17 +179,36 @@ export function createFixtureFetch(dir: string, opts: FixtureFetchOptions = {}):
     }
     if (key.service === 'graph' && method === 'POST' && /\/\$batch\/?$/.test(url.pathname)) {
       const version = url.pathname.split('/').filter(Boolean)[0] ?? 'v1.0';
-      const requests = (JSON.parse(text || '{}') as { requests?: Array<{ id: string; method?: string; url: string; body?: unknown }> }).requests ?? [];
+      const requests =
+        (
+          JSON.parse(text || '{}') as {
+            requests?: Array<{ id: string; method?: string; url: string; body?: unknown }>;
+          }
+        ).requests ?? [];
       const responses = [];
       for (const sub of requests) {
         const subUrl = new URL(`${url.origin}/${version}${sub.url.startsWith('/') ? '' : '/'}${sub.url}`);
-        const r = await resolveRequest((sub.method ?? 'GET').toUpperCase(), subUrl, sub.body === undefined ? '' : JSON.stringify(sub.body));
+        const r = await resolveRequest(
+          (sub.method ?? 'GET').toUpperCase(),
+          subUrl,
+          sub.body === undefined ? '' : JSON.stringify(sub.body),
+        );
         const body = r.response.body;
         // Like Graph: non-JSON sub-response bodies come back base64-encoded as text/plain.
         responses.push(
           typeof body === 'number' || typeof body === 'string'
-            ? { id: sub.id, status: r.response.status ?? 200, headers: { 'content-type': 'text/plain', ...r.response.headers }, body: btoa(String(body)) }
-            : { id: sub.id, status: r.response.status ?? 200, headers: { 'content-type': 'application/json', ...r.response.headers }, body },
+            ? {
+                id: sub.id,
+                status: r.response.status ?? 200,
+                headers: { 'content-type': 'text/plain', ...r.response.headers },
+                body: btoa(String(body)),
+              }
+            : {
+                id: sub.id,
+                status: r.response.status ?? 200,
+                headers: { 'content-type': 'application/json', ...r.response.headers },
+                body,
+              },
         );
       }
       return { response: { status: 200, body: { responses } } };

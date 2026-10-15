@@ -22,17 +22,30 @@ const defaultSkip = (s: readonly PathSegment[]) => s.length === 1 && (s[0] === '
 
 export function formatPath(segments: readonly PathSegment[]): string {
   return segments.reduce<string>(
-    (out, seg) => (typeof seg === 'number' ? `${out}[${seg}]` : /^[A-Za-z_$][\w$-]*$/.test(seg) ? (out ? `${out}.${seg}` : seg) : `${out}[${JSON.stringify(seg)}]`),
+    (out, seg) =>
+      typeof seg === 'number'
+        ? `${out}[${seg}]`
+        : /^[A-Za-z_$][\w$-]*$/.test(seg)
+          ? out
+            ? `${out}.${seg}`
+            : seg
+          : `${out}[${JSON.stringify(seg)}]`,
     '',
   );
 }
 
 /** Visits every string in a definition with its path. */
-function walkStrings(value: unknown, visit: (s: string, segments: PathSegment[]) => void, opts: WalkOptions, segments: PathSegment[] = []): void {
+function walkStrings(
+  value: unknown,
+  visit: (s: string, segments: PathSegment[]) => void,
+  opts: WalkOptions,
+  segments: PathSegment[] = [],
+): void {
   if ((opts.skip ?? defaultSkip)(segments)) return;
   if (typeof value === 'string') visit(value, segments);
   else if (Array.isArray(value)) value.forEach((v, i) => walkStrings(v, visit, opts, [...segments, i]));
-  else if (value && typeof value === 'object') for (const [k, v] of Object.entries(value)) walkStrings(v, visit, opts, [...segments, k]);
+  else if (value && typeof value === 'object')
+    for (const [k, v] of Object.entries(value)) walkStrings(v, visit, opts, [...segments, k]);
 }
 
 /** Compiles every `${ … }` in a definition and reports the ones that are malformed. Empty array = all good. */
@@ -50,7 +63,12 @@ export function validateExpressions(def: unknown, opts: WalkOptions = {}): Expre
             compile(seg.source);
           } catch (err) {
             const e = err as ExpressionError;
-            issues.push({ ...at, expression: seg.source, message: e.reason ?? e.message, position: e.position });
+            issues.push({
+              ...at,
+              expression: seg.source,
+              message: e.reason ?? e.message,
+              position: e.position,
+            });
           }
         }
       } catch (err) {
@@ -64,14 +82,18 @@ export function validateExpressions(def: unknown, opts: WalkOptions = {}): Expre
 }
 
 /** Every expression source in a definition (useful for reference scans such as `env.X`). */
-export function collectExpressions(def: unknown, opts: WalkOptions = {}): Array<{ path: string; source: string }> {
+export function collectExpressions(
+  def: unknown,
+  opts: WalkOptions = {},
+): Array<{ path: string; source: string }> {
   const out: Array<{ path: string; source: string }> = [];
   walkStrings(
     def,
     (str, segments) => {
       if (!hasTemplate(str)) return;
       try {
-        for (const seg of splitTemplate(str)) if (seg.type === 'expr') out.push({ path: formatPath(segments), source: seg.source });
+        for (const seg of splitTemplate(str))
+          if (seg.type === 'expr') out.push({ path: formatPath(segments), source: seg.source });
       } catch {
         // malformed templates are reported by validateExpressions
       }
@@ -88,13 +110,19 @@ type AstNode = { type?: string; value?: unknown; steps?: AstNode[] } & Record<st
 function pathKey(n: AstNode | undefined): string | undefined {
   if (!n) return undefined;
   if (n.type === 'name') return String(n.value);
-  if (n.type === 'path' && n.steps?.every((s) => s.type === 'name')) return n.steps.map((s) => String(s.value)).join('.');
+  if (n.type === 'path' && n.steps?.every((s) => s.type === 'name'))
+    return n.steps.map((s) => String(s.value)).join('.');
   return undefined;
 }
 
 const isUserData = (n: AstNode | undefined, trusted: ReadonlySet<string>): boolean => {
   if (!n) return false;
-  const root = n.type === 'name' ? String(n.value) : n.type === 'path' && n.steps?.[0]?.type === 'name' ? String(n.steps[0].value) : undefined;
+  const root =
+    n.type === 'name'
+      ? String(n.value)
+      : n.type === 'path' && n.steps?.[0]?.type === 'name'
+        ? String(n.steps[0].value)
+        : undefined;
   if (!root || !USER_DATA_ROOTS.has(root)) return false;
   const key = pathKey(n);
   return !(key && trusted.has(key));
@@ -107,35 +135,59 @@ function allowlisted(cond: unknown): string[] {
   if (n.value === 'and') return [...allowlisted(n.lhs), ...allowlisted(n.rhs)];
   if (n.value !== 'in') return [];
   const list = n.rhs as AstNode | undefined;
-  const literal = list?.type === 'unary' && list.value === '[' && Array.isArray(list.expressions) && (list.expressions as AstNode[]).every((e) => e.type === 'string' || e.type === 'number');
+  const literal =
+    list?.type === 'unary' &&
+    list.value === '[' &&
+    Array.isArray(list.expressions) &&
+    (list.expressions as AstNode[]).every((e) => e.type === 'string' || e.type === 'number');
   const key = literal ? pathKey(n.lhs as AstNode) : undefined;
   return key ? [key] : [];
 }
 
 /** Walks an AST, extending `trusted` with allowlist guards for the `then` branch of conditionals. */
-function someNode(node: unknown, trusted: ReadonlySet<string>, test: (n: AstNode, trusted: ReadonlySet<string>) => boolean): boolean {
+function someNode(
+  node: unknown,
+  trusted: ReadonlySet<string>,
+  test: (n: AstNode, trusted: ReadonlySet<string>) => boolean,
+): boolean {
   if (!node || typeof node !== 'object') return false;
   if (Array.isArray(node)) return node.some((v) => someNode(v, trusted, test));
   const n = node as AstNode;
   if (test(n, trusted)) return true;
   if (n.type === 'condition') {
     const guarded = new Set([...trusted, ...allowlisted(n.condition)]);
-    return someNode(n.condition, trusted, test) || someNode(n.then, guarded, test) || someNode(n.else, trusted, test);
+    return (
+      someNode(n.condition, trusted, test) ||
+      someNode(n.then, guarded, test) ||
+      someNode(n.else, trusted, test)
+    );
   }
   return Object.values(n).some((v) => typeof v === 'object' && someNode(v, trusted, test));
 }
 
 /** `… & params.q & …` — user data concatenated as-is. */
 const rawConcat = (ast: unknown, trusted: ReadonlySet<string>) =>
-  someNode(ast, trusted, (n, t) => n.type === 'binary' && n.value === '&' && (isUserData(n.lhs as AstNode, t) || isUserData(n.rhs as AstNode, t)));
+  someNode(
+    ast,
+    trusted,
+    (n, t) =>
+      n.type === 'binary' &&
+      n.value === '&' &&
+      (isUserData(n.lhs as AstNode, t) || isUserData(n.rhs as AstNode, t)),
+  );
 
 /** User data as the value itself: `params.q`, or a conditional / block whose result can be such a path. */
 function yieldsUserData(node: unknown, trusted: ReadonlySet<string>): boolean {
   if (!node || typeof node !== 'object') return false;
   const n = node as AstNode;
   if (isUserData(n, trusted)) return true;
-  if (n.type === 'condition') return yieldsUserData(n.then, new Set([...trusted, ...allowlisted(n.condition)])) || yieldsUserData(n.else, trusted);
-  if (n.type === 'block' && Array.isArray(n.expressions)) return yieldsUserData(n.expressions.at(-1), trusted);
+  if (n.type === 'condition')
+    return (
+      yieldsUserData(n.then, new Set([...trusted, ...allowlisted(n.condition)])) ||
+      yieldsUserData(n.else, trusted)
+    );
+  if (n.type === 'block' && Array.isArray(n.expressions))
+    return yieldsUserData(n.expressions.at(-1), trusted);
   return false;
 }
 
@@ -144,7 +196,8 @@ const isKqlQuery = (segments: readonly PathSegment[]) => segments[segments.lengt
 
 /** Params compiled server-side into safe KQL by the advanced filter builder (`filters.advanced` with `dialect: kql`). */
 function compiledKqlParams(def: unknown): string[] {
-  const adv = (def as { filters?: { advanced?: { dialect?: unknown; param?: unknown } } } | null)?.filters?.advanced;
+  const adv = (def as { filters?: { advanced?: { dialect?: unknown; param?: unknown } } } | null)?.filters
+    ?.advanced;
   return adv && adv.dialect === 'kql' && typeof adv.param === 'string' ? [`params.${adv.param}`] : [];
 }
 
@@ -180,9 +233,16 @@ export function lintExpressions(def: unknown, opts: WalkOptions = {}): Expressio
           }
           const at = { path: formatPath(segments), segments, expression: seg.source };
           if (odata && rawConcat(ast, none))
-            issues.push({ ...at, message: `User data is concatenated into ${key} without ${key === '$filter' ? '$odata()' : '$odataSearch()'}.` });
+            issues.push({
+              ...at,
+              message: `User data is concatenated into ${key} without ${key === '$filter' ? '$odata()' : '$odataSearch()'}.`,
+            });
           else if (kql && (rawConcat(ast, trustedKql) || (mixed && yieldsUserData(ast, trustedKql))))
-            issues.push({ ...at, message: 'User data reaches the KQL query without $kql() (or another quoting helper such as $guid()).' });
+            issues.push({
+              ...at,
+              message:
+                'User data reaches the KQL query without $kql() (or another quoting helper such as $guid()).',
+            });
         }
       } catch {
         // malformed templates are reported by validateExpressions

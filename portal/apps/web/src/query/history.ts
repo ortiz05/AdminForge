@@ -29,14 +29,17 @@ function sanitize(raw: unknown): HistoryEntry[] {
   return raw.flatMap((e): HistoryEntry[] => {
     if (typeof e !== 'object' || e === null) return [];
     const o = e as Record<string, unknown>;
-    if (!isSource(o.source) || typeof o.query !== 'string' || !o.query.trim() || typeof o.ranAt !== 'string') return [];
+    if (!isSource(o.source) || typeof o.query !== 'string' || !o.query.trim() || typeof o.ranAt !== 'string')
+      return [];
     return [
       {
         source: o.source,
         query: o.query.slice(0, QUERY_MAX),
         ranAt: o.ranAt,
         ...(typeof o.workspace === 'string' ? { workspace: o.workspace } : {}),
-        ...(Array.isArray(o.subscriptions) ? { subscriptions: o.subscriptions.filter((s): s is string => typeof s === 'string').slice(0, 100) } : {}),
+        ...(Array.isArray(o.subscriptions)
+          ? { subscriptions: o.subscriptions.filter((s): s is string => typeof s === 'string').slice(0, 100) }
+          : {}),
         ...(typeof o.timespan === 'string' ? { timespan: o.timespan } : {}),
         ...(typeof o.rowCount === 'number' ? { rowCount: o.rowCount } : {}),
         ...(typeof o.ms === 'number' ? { ms: o.ms } : {}),
@@ -70,7 +73,10 @@ const emit = () => listeners.forEach((l) => l());
 /** Adds a run at the top; the same query on the same source moves up instead of repeating. */
 export function recordRun(entry: HistoryEntry): void {
   const key = (e: HistoryEntry) => `${e.source}\u0000${e.query.trim()}`;
-  const next = [{ ...entry, query: entry.query.slice(0, QUERY_MAX) }, ...current().filter((e) => key(e) !== key(entry))].slice(0, HISTORY_MAX);
+  const next = [
+    { ...entry, query: entry.query.slice(0, QUERY_MAX) },
+    ...current().filter((e) => key(e) !== key(entry)),
+  ].slice(0, HISTORY_MAX);
   cache = next;
   write(next);
   emit();

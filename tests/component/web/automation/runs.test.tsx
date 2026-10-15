@@ -30,7 +30,9 @@ describe('Runs, run page, approvals, runbooks, run dock', () => {
   it('a failed run explains the error with its hint, request id and correlation id', async () => {
     renderApp({ path: `/runs/${IDS.failedRun}` });
     expect(await screen.findByRole('heading', { level: 1, name: 'Disable sign-in' })).toBeInTheDocument();
-    const alert = (await screen.findAllByRole('alert')).find((a) => a.textContent?.includes('The run failed'))!;
+    const alert = (await screen.findAllByRole('alert')).find((a) =>
+      a.textContent?.includes('The run failed'),
+    )!;
     expect(alert).toHaveTextContent('Microsoft Graph refused this change (403).');
     expect(alert).toHaveTextContent('Activate User Administrator in PIM');
     expect(within(alert).getByRole('button', { name: /Copy Microsoft request-id/ })).toBeInTheDocument();
@@ -54,7 +56,10 @@ describe('Runs, run page, approvals, runbooks, run dock', () => {
   it('a run waiting for approval shows the approval panel; approving is locked until armed', async () => {
     renderApp({ session: APPROVER, path: `/runs/${IDS.approvalRun}` });
     const card = await screen.findByRole('article', { name: /Approval: Disable sign-in/ });
-    expect(within(card).getByRole('button', { name: 'Approve and continue' })).toHaveAttribute('aria-disabled', 'true');
+    expect(within(card).getByRole('button', { name: 'Approve and continue' })).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
     expect(within(card).getByText('Approving needs write access')).toBeInTheDocument();
     expect(within(card).getByText(/contract ended early/)).toBeInTheDocument();
     expect(await axeViolations()).toEqual([]);
@@ -78,7 +83,15 @@ describe('Runs, run page, approvals, runbooks, run dock', () => {
       handlers: [
         ({ path }) =>
           path === '/api/approvals'
-            ? { status: 403, body: { error: { code: 'forbidden', message: 'The approval inbox needs the Playbook.Approver role.' } } }
+            ? {
+                status: 403,
+                body: {
+                  error: {
+                    code: 'forbidden',
+                    message: 'The approval inbox needs the Playbook.Approver role.',
+                  },
+                },
+              }
             : undefined,
       ],
     });
@@ -90,10 +103,14 @@ describe('Runs, run page, approvals, runbooks, run dock', () => {
     expect(await screen.findByRole('heading', { level: 1, name: 'Offboard a leaver' })).toBeInTheDocument();
     const rail = screen.getByRole('navigation', { name: 'Runbook progress' });
     expect(await within(rail).findByRole('link', { name: /Confirm the request.*done/ })).toBeInTheDocument();
-    expect(within(rail).getByRole('link', { name: /Hand over mail and files.*in progress/ })).toBeInTheDocument();
+    expect(
+      within(rail).getByRole('link', { name: /Hand over mail and files.*in progress/ }),
+    ).toBeInTheDocument();
     const done = await screen.findByRole('button', { name: 'Mark done' });
     for (const label of ['Mailbox converted to shared', 'Manager has Full Access'])
-      await userEvent.click(screen.getAllByRole('checkbox', { name: label }).find((c) => !c.hasAttribute('disabled'))!);
+      await userEvent.click(
+        screen.getAllByRole('checkbox', { name: label }).find((c) => !c.hasAttribute('disabled'))!,
+      );
     await userEvent.click(done);
     await waitFor(() => expect(state.manual).toHaveLength(1));
     expect(state.manual[0]!.body).toEqual({ confirmed: true });
@@ -109,7 +126,12 @@ describe('Runs, run page, approvals, runbooks, run dock', () => {
     await userEvent.type(screen.getByLabelText('HR ticket'), 'HR-2231');
     await userEvent.click(screen.getByRole('button', { name: 'Start runbook' }));
     await waitFor(() => expect(router.state.location.search).toMatchObject({ run: IDS.runbookRun }));
-    expect(state.runPosts[0]).toEqual({ playbook: 'identity.offboard-leaver', version: '2.1.0', inputs: { userId: IDS.jDoe, ticket: 'HR-2231' }, dryRun: false });
+    expect(state.runPosts[0]).toEqual({
+      playbook: 'identity.offboard-leaver',
+      version: '2.1.0',
+      inputs: { userId: IDS.jDoe, ticket: 'HR-2231' },
+      dryRun: false,
+    });
   });
 
   it('runbook links prefill the start form (plain params and base64url inputs), validated first', async () => {
@@ -120,7 +142,9 @@ describe('Runs, run page, approvals, runbooks, run dock', () => {
   });
 
   it('runbook prefill: base64url inputs; invalid values are dropped and explained', async () => {
-    renderApp({ path: `/runbooks/identity.offboard-leaver?userId=nope&inputs=${encodeParam({ ticket: 'HR-77' })}` });
+    renderApp({
+      path: `/runbooks/identity.offboard-leaver?userId=nope&inputs=${encodeParam({ ticket: 'HR-77' })}`,
+    });
     expect(await screen.findByText('Check the prefilled values')).toBeInTheDocument();
     expect(screen.getByText('The link’s Leaver wasn’t used: Expected a GUID.')).toBeInTheDocument();
     expect(screen.getByLabelText('HR ticket')).toHaveValue('HR-77');

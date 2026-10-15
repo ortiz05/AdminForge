@@ -20,7 +20,13 @@ export { FakeDefinitions, FakeJobs, probe, schedule } from '../unit/scheduler/he
 export const AVERY = { oid: '00000000-0000-4000-8000-0000000000a1', upn: 'avery@example.com' };
 export const BLAKE = { oid: '00000000-0000-4000-8000-0000000000b2', upn: 'blake@example.com' };
 export const READER = { oid: '00000000-0000-4000-8000-0000000000c3', upn: 'casey@example.com' };
-export const ALL_ROLES = ['Portal.Reader', 'Portal.Operator', 'Playbook.Author', 'Playbook.Approver', 'Portal.Admin'];
+export const ALL_ROLES = [
+  'Portal.Reader',
+  'Portal.Operator',
+  'Playbook.Author',
+  'Playbook.Approver',
+  'Portal.Admin',
+];
 
 const sha = (s: string) => createHash('sha256').update(s).digest('hex');
 
@@ -30,7 +36,11 @@ export class FakeOutbound implements OutboundExecutor {
   async execute<T>(identity: ExecutionIdentity, call: ServiceCall) {
     this.calls.push({ identity, call });
     const data = (await this.respond(call)) as T;
-    return { data, status: 200, provenance: { service: call.service, path: call.pathTemplate ?? call.path, ms: 4, requestId: 'req-1' } };
+    return {
+      data,
+      status: 200,
+      provenance: { service: call.service, path: call.pathTemplate ?? call.path, ms: 4, requestId: 'req-1' },
+    };
   }
 }
 
@@ -98,8 +108,10 @@ export async function schedulesApp(o: SchedulesAppOptions = {}) {
       record,
       headers,
       get: (url: string) => app.inject({ method: 'GET', url, headers }),
-      post: (url: string, payload: unknown = {}) => app.inject({ method: 'POST', url, headers, payload: payload as Record<string, unknown> }),
-      patch: (url: string, payload: unknown) => app.inject({ method: 'PATCH', url, headers, payload: payload as Record<string, unknown> }),
+      post: (url: string, payload: unknown = {}) =>
+        app.inject({ method: 'POST', url, headers, payload: payload as Record<string, unknown> }),
+      patch: (url: string, payload: unknown) =>
+        app.inject({ method: 'PATCH', url, headers, payload: payload as Record<string, unknown> }),
     };
   }
 

@@ -22,10 +22,14 @@ const containsWrite = (step: Step): boolean => {
 };
 
 /** True when any step (nested included) writes. */
-export const hasWriteSteps = (def: AutomationDefinition): boolean => allSteps(def).some((s) => stepMode(s) === 'write');
+export const hasWriteSteps = (def: AutomationDefinition): boolean =>
+  allSteps(def).some((s) => stepMode(s) === 'write');
 
 /** Static checks done before a run is created or started. Returns a message, or undefined when the definition can run. */
-export function checkDefinition(def: AutomationDefinition, limits: Limits = DEFAULT_LIMITS): string | undefined {
+export function checkDefinition(
+  def: AutomationDefinition,
+  limits: Limits = DEFAULT_LIMITS,
+): string | undefined {
   const n = countSteps(def);
   if (n > limits.maxSteps) return `This ${def.kind} has ${n} steps; the limit is ${limits.maxSteps}.`;
   return undefined;

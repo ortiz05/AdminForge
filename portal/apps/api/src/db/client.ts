@@ -13,7 +13,12 @@ export interface Database {
 }
 
 export function createDatabase(url: string, opts: { max?: number } = {}): Database {
-  const pool = new pg.Pool({ connectionString: url, max: opts.max ?? 10, connectionTimeoutMillis: 5_000, idleTimeoutMillis: 30_000 });
+  const pool = new pg.Pool({
+    connectionString: url,
+    max: opts.max ?? 10,
+    connectionTimeoutMillis: 5_000,
+    idleTimeoutMillis: 30_000,
+  });
   // An idle client erroring (e.g. Postgres restarted) must not crash the process; the pool replaces it.
   pool.on('error', () => {});
   const db = drizzle({ client: pool, schema });

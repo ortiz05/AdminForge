@@ -49,7 +49,11 @@ function useTemplated(text: string | undefined, scope: Record<string, unknown>):
     if (!text || !text.includes('${')) return;
     void import('@adminforge/expressions')
       .then(({ renderString }) => renderString(text, scope))
-      .then((v) => live && setRendered({ for: `${text}\u0000${key}`, value: typeof v === 'string' ? v : JSON.stringify(v) }))
+      .then(
+        (v) =>
+          live &&
+          setRendered({ for: `${text}\u0000${key}`, value: typeof v === 'string' ? v : JSON.stringify(v) }),
+      )
       .catch(() => undefined);
     return () => {
       live = false;
@@ -75,17 +79,40 @@ function sectionState(section: RunbookSection, byId: Map<string, RunStep>): Sect
   return 'pending';
 }
 
-function StepRow({ step, record, runId, scope }: { step: Step; record?: RunStep; runId?: string; scope: Record<string, unknown> }) {
+function StepRow({
+  step,
+  record,
+  runId,
+  scope,
+}: {
+  step: Step;
+  record?: RunStep;
+  runId?: string;
+  scope: Record<string, unknown>;
+}) {
   const status: StepStatus = record?.status ?? 'pending';
   const view = STEP_STATUS_VIEW[status];
   const label = step.name ?? step.describe ?? step.id;
 
   if (step.type === 'manual') {
     if (runId && status === 'waiting')
-      return <ManualStepCard runId={runId} stepId={step.id} title={label} instructions={step.instructions} checklist={step.checklist ?? []} />;
+      return (
+        <ManualStepCard
+          runId={runId}
+          stepId={step.id}
+          title={label}
+          instructions={step.instructions}
+          checklist={step.checklist ?? []}
+        />
+      );
     const done = status === 'succeeded';
     return (
-      <div className={cn('flex flex-col gap-2 rounded-md border border-line p-4', done ? 'bg-panel' : 'bg-raised')}>
+      <div
+        className={cn(
+          'flex flex-col gap-2 rounded-md border border-line p-4',
+          done ? 'bg-panel' : 'bg-raised',
+        )}
+      >
         <p className="flex items-center gap-2 text-sm font-semibold text-fg">
           <StatusGlyph status={status} tone={view.tone} size={16} colored />
           {label}
@@ -115,7 +142,9 @@ function StepRow({ step, record, runId, scope }: { step: Step; record?: RunStep;
           <span className="sr-only">: {view.label}</span>
         </p>
         <p className="flex flex-wrap items-center gap-1.5 text-xs text-fg-3">
-          <Badge mono>{step.type === 'playbook' ? `Playbook ${step.ref}` : (TYPE_LABEL[step.type] ?? step.type)}</Badge>
+          <Badge mono>
+            {step.type === 'playbook' ? `Playbook ${step.ref}` : (TYPE_LABEL[step.type] ?? step.type)}
+          </Badge>
           {(step.mode ?? 'read') === 'write' && <Badge tone="outline">Changes tenant</Badge>}
           <span>{view.label}</span>
         </p>
@@ -128,12 +157,23 @@ function StepRow({ step, record, runId, scope }: { step: Step; record?: RunStep;
         {step.type === 'playbook' && (
           <span className="flex flex-wrap gap-3 text-xs">
             {record?.childRunId && (
-              <Link to="/runs/$id" params={{ id: record.childRunId }} className="font-medium text-accent hover:underline">
+              <Link
+                to="/runs/$id"
+                params={{ id: record.childRunId }}
+                className="font-medium text-accent hover:underline"
+              >
                 Open child run
               </Link>
             )}
             {!runId && (
-              <Link to="." search={(prev: Record<string, unknown>) => ({ ...prev, ...playbookSearch({ playbook: step.ref, inputs: undefined }) })} className="inline-flex items-center gap-1 font-medium text-accent hover:underline">
+              <Link
+                to="."
+                search={(prev: Record<string, unknown>) => ({
+                  ...prev,
+                  ...playbookSearch({ playbook: step.ref, inputs: undefined }),
+                })}
+                className="inline-flex items-center gap-1 font-medium text-accent hover:underline"
+              >
                 Open this playbook on its own
                 <ArrowSquareOutIcon size={12} aria-hidden />
               </Link>
@@ -145,7 +185,17 @@ function StepRow({ step, record, runId, scope }: { step: Step; record?: RunStep;
   );
 }
 
-function ProgressRail({ sections, byId, total, done }: { sections: RunbookSection[]; byId: Map<string, RunStep>; total: number; done: number }) {
+function ProgressRail({
+  sections,
+  byId,
+  total,
+  done,
+}: {
+  sections: RunbookSection[];
+  byId: Map<string, RunStep>;
+  total: number;
+  done: number;
+}) {
   return (
     <nav aria-label="Runbook progress" className="sticky top-(--af-layout-rail-h) flex flex-col gap-3 pt-2">
       <p className="af-eyebrow">Progress</p>
@@ -153,12 +203,16 @@ function ProgressRail({ sections, byId, total, done }: { sections: RunbookSectio
         <span className="af-display text-xl font-semibold text-fg tabular-nums">{done}</span> of {total} steps
       </p>
       <div className="h-1 overflow-hidden rounded-pill bg-hover" aria-hidden>
-        <div className="h-full rounded-pill bg-accent" style={{ width: `${total ? (done / total) * 100 : 0}%` }} />
+        <div
+          className="h-full rounded-pill bg-accent"
+          style={{ width: `${total ? (done / total) * 100 : 0}%` }}
+        />
       </div>
       <ol className="flex flex-col gap-0.5">
         {sections.map((s, i) => {
           const state = sectionState(s, byId);
-          const tone = state === 'done' ? 'ok' : state === 'blocked' ? 'crit' : state === 'active' ? 'info' : 'neutral';
+          const tone =
+            state === 'done' ? 'ok' : state === 'blocked' ? 'crit' : state === 'active' ? 'info' : 'neutral';
           return (
             <li key={s.id}>
               <a
@@ -169,13 +223,26 @@ function ProgressRail({ sections, byId, total, done }: { sections: RunbookSectio
                   state === 'active' ? 'bg-accent-subtle font-medium text-fg' : 'text-fg-2',
                 )}
               >
-                <StatusGlyph status={state === 'active' ? 'waiting' : state} tone={tone} size={15} colored className="mt-0.5" />
+                <StatusGlyph
+                  status={state === 'active' ? 'waiting' : state}
+                  tone={tone}
+                  size={15}
+                  colored
+                  className="mt-0.5"
+                />
                 <span className="min-w-0">
                   <span className="font-mono text-2xs text-fg-3">{i + 1}. </span>
                   {s.title}
                   <span className="sr-only">
                     {' '}
-                    — {state === 'done' ? 'done' : state === 'active' ? 'in progress' : state === 'blocked' ? 'needs attention' : 'not started'}
+                    —{' '}
+                    {state === 'done'
+                      ? 'done'
+                      : state === 'active'
+                        ? 'in progress'
+                        : state === 'blocked'
+                          ? 'needs attention'
+                          : 'not started'}
                   </span>
                 </span>
               </a>
@@ -203,14 +270,24 @@ function RunbookBody({ def, version, runId }: { def: Runbook; version: string; r
   const detail: RunDetail | undefined = runId ? live.detail : undefined;
   const byId = useMemo(() => new Map(latestSteps(detail?.steps ?? []).map((s) => [s.stepId, s])), [detail]);
   const allSteps = def.sections.flatMap((s) => s.steps ?? []);
-  const doneCount = allSteps.filter((s) => ['succeeded', 'skipped', 'planned'].includes(byId.get(s.id)?.status ?? '')).length;
+  const doneCount = allSteps.filter((s) =>
+    ['succeeded', 'skipped', 'planned'].includes(byId.get(s.id)?.status ?? ''),
+  ).length;
   const scope = { inputs: detail?.run.inputs ?? values, user: { upn: me.user.upn, name: me.user.name } };
 
   const start = useMutation({
     mutationFn: (inputs: Record<string, unknown>) =>
-      api('/api/runs', { method: 'POST', body: { playbook: def.id, version, inputs, dryRun: false }, schema: StartRunResponse }),
+      api('/api/runs', {
+        method: 'POST',
+        body: { playbook: def.id, version, inputs, dryRun: false },
+        schema: StartRunResponse,
+      }),
     onSuccess: ({ runId: id }) => {
-      toast({ tone: 'info', title: `${def.title} started`, description: 'Work through the sections in order; progress is saved as you go.' });
+      toast({
+        tone: 'info',
+        title: `${def.title} started`,
+        description: 'Work through the sections in order; progress is saved as you go.',
+      });
       void queryClient.invalidateQueries({ queryKey: activeRunsQueryKey });
       void navigate({ to: '/runbooks/$key', params: { key: def.id }, search: { run: id } });
     },
@@ -227,13 +304,19 @@ function RunbookBody({ def, version, runId }: { def: Runbook; version: string; r
         meta={
           <>
             {detail && <RunStatusPill status={detail.run.status} />}
-            <Badge tone={def.mode === 'write' ? 'outline' : 'neutral'}>{def.mode === 'write' ? 'Changes tenant' : 'Read-only'}</Badge>
+            <Badge tone={def.mode === 'write' ? 'outline' : 'neutral'}>
+              {def.mode === 'write' ? 'Changes tenant' : 'Read-only'}
+            </Badge>
             <Badge mono>v{version}</Badge>
           </>
         }
         actions={
           detail ? (
-            <Link to="/runs/$id" params={{ id: detail.run.id }} className="inline-flex h-(--af-control-h) items-center gap-1.5 rounded-md border border-line bg-raised px-3 font-semibold text-fg hover:bg-hover">
+            <Link
+              to="/runs/$id"
+              params={{ id: detail.run.id }}
+              className="inline-flex h-(--af-control-h) items-center gap-1.5 rounded-md border border-line bg-raised px-3 font-semibold text-fg hover:bg-hover"
+            >
               Open run timeline
             </Link>
           ) : undefined
@@ -255,15 +338,25 @@ function RunbookBody({ def, version, runId }: { def: Runbook; version: string; r
                 )}
                 <RiskBanner def={def} />
                 {Object.keys(params).length > 0 && (
-                  <InputsForm params={params} values={values} errors={showErrors ? validation.errors : {}} onChange={(k, v) => setValues((x) => ({ ...x, [k]: v }))} />
+                  <InputsForm
+                    params={params}
+                    values={values}
+                    errors={showErrors ? validation.errors : {}}
+                    onChange={(k, v) => setValues((x) => ({ ...x, [k]: v }))}
+                  />
                 )}
                 {def.mode === 'write' && (
-                  <p className="text-sm text-fg-3">Steps that change the tenant pause until you arm write access; checklists and read steps don’t need it.</p>
+                  <p className="text-sm text-fg-3">
+                    Steps that change the tenant pause until you arm write access; checklists and read steps
+                    don’t need it.
+                  </p>
                 )}
                 {start.isError && (
                   <Callout tone="crit" role="alert" title="The runbook didn’t start">
                     {(start.error as Error).message}
-                    {start.error instanceof ApiRequestError && start.error.hint && <span className="mt-1 block">{start.error.hint}</span>}
+                    {start.error instanceof ApiRequestError && start.error.hint && (
+                      <span className="mt-1 block">{start.error.hint}</span>
+                    )}
                   </Callout>
                 )}
                 <div className="flex justify-end">
@@ -282,7 +375,13 @@ function RunbookBody({ def, version, runId }: { def: Runbook; version: string; r
               </div>
             </Panel>
           )}
-          {runId && live.query.isError && <QueryError title="The run didn’t load" error={live.query.error} onRetry={() => void live.query.refetch()} />}
+          {runId && live.query.isError && (
+            <QueryError
+              title="The run didn’t load"
+              error={live.query.error}
+              onRetry={() => void live.query.refetch()}
+            />
+          )}
           {live.secrets.map((s) => (
             <SecretPanel
               key={secretKey(s)}
@@ -293,9 +392,19 @@ function RunbookBody({ def, version, runId }: { def: Runbook; version: string; r
             />
           ))}
           {def.sections.map((section, i) => (
-            <section key={section.id} id={`section-${section.id}`} aria-labelledby={`section-${section.id}-title`} className="flex scroll-mt-20 flex-col gap-4">
-              <h2 id={`section-${section.id}-title`} className="af-display flex items-baseline gap-3 text-xl font-semibold text-fg">
-                <span className="font-mono text-sm text-fg-3 tabular-nums">{String(i + 1).padStart(2, '0')}</span>
+            <section
+              key={section.id}
+              id={`section-${section.id}`}
+              aria-labelledby={`section-${section.id}-title`}
+              className="flex scroll-mt-20 flex-col gap-4"
+            >
+              <h2
+                id={`section-${section.id}-title`}
+                className="af-display flex items-baseline gap-3 text-xl font-semibold text-fg"
+              >
+                <span className="font-mono text-sm text-fg-3 tabular-nums">
+                  {String(i + 1).padStart(2, '0')}
+                </span>
                 {section.title}
               </h2>
               {section.body && <TemplatedMarkdown source={section.body} scope={scope} />}
@@ -329,7 +438,9 @@ export function RunbookPage({ runbookKey, search }: { runbookKey: string; search
         <PageHeader eyebrow="Runbook" title={notFound ? 'Runbook not found' : 'Runbook'} />
         <Panel>
           {notFound ? (
-            <EmptyState title={`Nothing is published as “${runbookKey}”`}>Check the link, or ask the content owner whether it was renamed or retired.</EmptyState>
+            <EmptyState title={`Nothing is published as “${runbookKey}”`}>
+              Check the link, or ask the content owner whether it was renamed or retired.
+            </EmptyState>
           ) : (
             <QueryError title="The runbook didn’t load" error={q.error} onRetry={() => void q.refetch()} />
           )}
@@ -345,5 +456,7 @@ export function RunbookPage({ runbookKey, search }: { runbookKey: string; search
         <Skeleton shape="block" className="h-32 w-full" />
       </div>
     );
-  return <RunbookBody key={search.run ?? 'new'} def={q.data.def} version={q.data.version} runId={search.run} />;
+  return (
+    <RunbookBody key={search.run ?? 'new'} def={q.data.def} version={q.data.version} runId={search.run} />
+  );
 }

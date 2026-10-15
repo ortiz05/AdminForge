@@ -38,7 +38,8 @@ export function readApprovalItem(raw: unknown): ApprovalItem | null {
   const subjectId = pick(o, 'subjectId', 'runId');
   if (!id || !subjectId || (o.kind ?? policy.kind) === 'manual') return null;
   const subjectType = o.subjectType === 'schedule' || o.subjectType === 'definition' ? o.subjectType : 'run';
-  const status = o.status === 'approved' || o.status === 'rejected' || o.status === 'expired' ? o.status : 'pending';
+  const status =
+    o.status === 'approved' || o.status === 'rejected' || o.status === 'expired' ? o.status : 'pending';
   const explicitArm = bool(o.requiresArm) ?? bool(policy.writesAfter) ?? bool(policy.requiresArm);
   return {
     id,
@@ -64,15 +65,25 @@ export const approvalsQuery = (status = 'pending') =>
   queryOptions({
     queryKey: ['approvals', status] as const,
     queryFn: ({ signal }) =>
-      api(`/api/approvals?status=${encodeURIComponent(status)}`, { schema: listOf(readApprovalItem), signal }),
+      api(`/api/approvals?status=${encodeURIComponent(status)}`, {
+        schema: listOf(readApprovalItem),
+        signal,
+      }),
     refetchInterval: 30_000,
   });
 
 export type Decision = 'approve' | 'reject';
 
-export function decide(item: Pick<ApprovalItem, 'id' | 'subjectType' | 'subjectId' | 'stepId'>, decision: Decision, comment: string) {
+export function decide(
+  item: Pick<ApprovalItem, 'id' | 'subjectType' | 'subjectId' | 'stepId'>,
+  decision: Decision,
+  comment: string,
+) {
   const body = { decision, comment: comment.trim() || undefined };
   if (item.subjectType === 'run' && item.stepId)
-    return api(`/api/runs/${encodeURIComponent(item.subjectId)}/approvals/${encodeURIComponent(item.stepId)}`, { method: 'POST', body });
+    return api(
+      `/api/runs/${encodeURIComponent(item.subjectId)}/approvals/${encodeURIComponent(item.stepId)}`,
+      { method: 'POST', body },
+    );
   return api(`/api/approvals/${encodeURIComponent(item.id)}`, { method: 'POST', body });
 }

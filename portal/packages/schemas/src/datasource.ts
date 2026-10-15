@@ -10,7 +10,9 @@ const QueryValue = z.union([z.string(), z.number(), z.boolean(), z.null()]);
 const Query = z.record(z.string(), QueryValue);
 const Headers = z.record(z.string(), z.string());
 /** Path relative to the service root (no scheme/host), starting with `/`. */
-const ServicePath = z.string().regex(/^(\/|\$\{)/, 'Expected a path starting with / (relative to the service root)');
+const ServicePath = z
+  .string()
+  .regex(/^(\/|\$\{)/, 'Expected a path starting with / (relative to the service root)');
 
 export const GraphRequestSpec = z.strictObject({
   method: HttpMethod.default('GET'),
@@ -29,7 +31,9 @@ export const ArmRequestSpec = z.strictObject({
   /** Relative to https://management.azure.com, e.g. `/subscriptions/${ $encode(params.subscriptionId) }/resourceGroups`. */
   path: ServicePath,
   /** Required on every ARM request. */
-  apiVersion: z.string().regex(/^\d{4}-\d{2}-\d{2}(-preview)?$/, 'Expected an ARM api-version like 2022-12-01'),
+  apiVersion: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}(-preview)?$/, 'Expected an ARM api-version like 2022-12-01'),
   query: Query.optional(),
   headers: Headers.optional(),
   body: z.unknown().optional(),
@@ -107,17 +111,42 @@ const dsBase = {
 
 const paged = { paging: Paging.default('none'), maxItems: z.number().int().min(1).max(100_000).optional() };
 
-export const GraphDatasource = z.strictObject({ source: z.literal('graph'), ...dsBase, request: GraphRequestSpec, ...paged });
+export const GraphDatasource = z.strictObject({
+  source: z.literal('graph'),
+  ...dsBase,
+  request: GraphRequestSpec,
+  ...paged,
+});
 export const GraphBatchDatasource = z.strictObject({
   source: z.literal('graphBatch'),
   ...dsBase,
   /** Named sub-requests in one $batch round trip (auto-chunked by 20). */
-  requests: z.record(Identifier, GraphRequestSpec).refine((r) => Object.keys(r).length > 0, 'Add at least one request'),
+  requests: z
+    .record(Identifier, GraphRequestSpec)
+    .refine((r) => Object.keys(r).length > 0, 'Add at least one request'),
 });
-export const ArmDatasource = z.strictObject({ source: z.literal('arm'), ...dsBase, request: ArmRequestSpec, ...paged });
-export const ResourceGraphDatasource = z.strictObject({ source: z.literal('resourceGraph'), ...dsBase, ...ResourceGraphSpec, ...paged });
-export const LogAnalyticsDatasource = z.strictObject({ source: z.literal('logAnalytics'), ...dsBase, ...LogAnalyticsSpec });
-export const FunctionDatasource = z.strictObject({ source: z.literal('function'), ...dsBase, ...FunctionCallSpec });
+export const ArmDatasource = z.strictObject({
+  source: z.literal('arm'),
+  ...dsBase,
+  request: ArmRequestSpec,
+  ...paged,
+});
+export const ResourceGraphDatasource = z.strictObject({
+  source: z.literal('resourceGraph'),
+  ...dsBase,
+  ...ResourceGraphSpec,
+  ...paged,
+});
+export const LogAnalyticsDatasource = z.strictObject({
+  source: z.literal('logAnalytics'),
+  ...dsBase,
+  ...LogAnalyticsSpec,
+});
+export const FunctionDatasource = z.strictObject({
+  source: z.literal('function'),
+  ...dsBase,
+  ...FunctionCallSpec,
+});
 export const RunnerDatasource = z.strictObject({ source: z.literal('runner'), ...dsBase, ...RunnerSpec });
 export const StaticDatasource = z.strictObject({ source: z.literal('static'), ...dsBase, data: z.unknown() });
 

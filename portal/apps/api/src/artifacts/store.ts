@@ -19,7 +19,11 @@ const SAFE_SEGMENT = /^[a-z0-9][a-z0-9.-]*$/;
 const SAFE_FILE = /^[0-9TZ-]+(-\d+)?\.(csv|xlsx|json)$/;
 
 /** `2026-10-15T06:00:00.123Z` → `2026-10-15T06-00-00Z` (sortable, no colons). */
-export const stamp = (at: Date) => at.toISOString().replace(/\.\d{3}Z$/, 'Z').replace(/:/g, '-');
+export const stamp = (at: Date) =>
+  at
+    .toISOString()
+    .replace(/\.\d{3}Z$/, 'Z')
+    .replace(/:/g, '-');
 
 export interface WrittenArtifact {
   /** Relative to the artifacts directory. */
@@ -42,8 +46,14 @@ export class ArtifactStore {
   }
 
   /** Creates `<schedule>/<timestamp>.<ext>` exclusively (a `-2`, `-3`… suffix if that second is taken) and lets `fill` write it. */
-  async write(scheduleKey: string, at: Date, ext: 'csv' | 'xlsx' | 'json', fill: (out: Writable) => Promise<void>): Promise<WrittenArtifact> {
-    if (!SAFE_SEGMENT.test(scheduleKey)) throw new Error(`Unsafe schedule key for an artifact path: ${scheduleKey}`);
+  async write(
+    scheduleKey: string,
+    at: Date,
+    ext: 'csv' | 'xlsx' | 'json',
+    fill: (out: Writable) => Promise<void>,
+  ): Promise<WrittenArtifact> {
+    if (!SAFE_SEGMENT.test(scheduleKey))
+      throw new Error(`Unsafe schedule key for an artifact path: ${scheduleKey}`);
     const folder = path.join(this.dir, scheduleKey);
     await mkdir(folder, { recursive: true, mode: 0o750 });
     for (let n = 1; n < 100; n++) {
@@ -59,7 +69,10 @@ export class ArtifactStore {
       const out = handle.createWriteStream();
       try {
         await fill(out);
-        if (!out.writableFinished) await new Promise<void>((resolve, reject) => out.end((e?: Error | null) => (e ? reject(e) : resolve())));
+        if (!out.writableFinished)
+          await new Promise<void>((resolve, reject) =>
+            out.end((e?: Error | null) => (e ? reject(e) : resolve())),
+          );
       } catch (err) {
         out.destroy();
         await rm(abs, { force: true });
@@ -91,7 +104,12 @@ export class ArtifactStore {
       const s = await stat(real);
       if (!s.isFile()) return null;
       const ext = path.extname(real).slice(1);
-      return { stream: createReadStream(real), size: s.size, name: rel.replace('/', '-'), contentType: ARTIFACT_TYPES[ext] ?? 'application/octet-stream' };
+      return {
+        stream: createReadStream(real),
+        size: s.size,
+        name: rel.replace('/', '-'),
+        contentType: ARTIFACT_TYPES[ext] ?? 'application/octet-stream',
+      };
     } catch {
       return null;
     }

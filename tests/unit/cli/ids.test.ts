@@ -3,7 +3,9 @@ import { appRoleId, armRoleAssignmentName, isGuid, uuidV5 } from '@adminforge/cl
 describe('deterministic ids', () => {
   it('implements RFC 4122 UUIDv5 (known vector)', () => {
     // DNS namespace + "www.example.com" is the textbook v5 example.
-    expect(uuidV5('www.example.com', '6ba7b810-9dad-11d1-80b4-00c04fd430c8')).toBe('2ed6657d-e927-568b-95e1-2665a8aea6a2');
+    expect(uuidV5('www.example.com', '6ba7b810-9dad-11d1-80b4-00c04fd430c8')).toBe(
+      '2ed6657d-e927-568b-95e1-2665a8aea6a2',
+    );
   });
 
   it('sets version 5 and the RFC variant', () => {

@@ -35,14 +35,21 @@ function readDefinition<D extends Playbook | Runbook>(kind: AutomationKind) {
 }
 
 /** `version` pins an exact published (or retired) version, e.g. the one a run used. */
-export const definitionQuery = <D extends Playbook | Runbook>(kind: AutomationKind, key: string, version?: string) =>
+export const definitionQuery = <D extends Playbook | Runbook>(
+  kind: AutomationKind,
+  key: string,
+  version?: string,
+) =>
   queryOptions({
     queryKey: ['definition', kind, key, version ?? 'latest'] as const,
     queryFn: ({ signal }) =>
-      api(`/api/definitions/${kind}/${encodeURIComponent(key)}${version ? `?version=${encodeURIComponent(version)}` : ''}`, {
-        schema: readDefinition<D>(kind),
-        signal,
-      }),
+      api(
+        `/api/definitions/${kind}/${encodeURIComponent(key)}${version ? `?version=${encodeURIComponent(version)}` : ''}`,
+        {
+          schema: readDefinition<D>(kind),
+          signal,
+        },
+      ),
     staleTime: 60_000,
   });
 

@@ -45,6 +45,7 @@ jobs:
       - name: Guards (secrets, tenant data, design tokens)
         run: pnpm --filter @adminforge/tests exec vitest run --project guards
       - run: pnpm lint
+      - run: pnpm format:check
       - run: pnpm --filter @adminforge/design-tokens build
       - run: pnpm typecheck
       - run: pnpm --filter @adminforge/api db:migrate

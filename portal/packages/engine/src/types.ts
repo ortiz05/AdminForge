@@ -28,8 +28,19 @@ export const RUN_STATUSES = [
 ] as const;
 export type RunStatus = (typeof RUN_STATUSES)[number];
 
-export const TERMINAL_RUN_STATUSES: readonly RunStatus[] = ['succeeded', 'failed', 'cancelled', 'compensated', 'needs_review'];
-export const PARKED_RUN_STATUSES: readonly RunStatus[] = ['awaiting_approval', 'awaiting_input', 'awaiting_arm', 'awaiting_reauth'];
+export const TERMINAL_RUN_STATUSES: readonly RunStatus[] = [
+  'succeeded',
+  'failed',
+  'cancelled',
+  'compensated',
+  'needs_review',
+];
+export const PARKED_RUN_STATUSES: readonly RunStatus[] = [
+  'awaiting_approval',
+  'awaiting_input',
+  'awaiting_arm',
+  'awaiting_reauth',
+];
 export const isTerminal = (s: RunStatus): boolean => TERMINAL_RUN_STATUSES.includes(s);
 export const isParked = (s: RunStatus): boolean => PARKED_RUN_STATUSES.includes(s);
 
@@ -152,8 +163,22 @@ export interface PlanEntry {
 /** Human decisions recorded by the API and read back when a run resumes. */
 export type Decision =
   | { kind: 'approval'; approved: true; actor: Actor; comment?: string | null; decidedAt: string }
-  | { kind: 'approval'; approved: false; actor: Actor | null; comment?: string | null; decidedAt: string; expired?: boolean }
-  | { kind: 'manual'; confirmed: boolean; actor: Actor; notes?: string | null; values?: Record<string, unknown>; decidedAt: string };
+  | {
+      kind: 'approval';
+      approved: false;
+      actor: Actor | null;
+      comment?: string | null;
+      decidedAt: string;
+      expired?: boolean;
+    }
+  | {
+      kind: 'manual';
+      confirmed: boolean;
+      actor: Actor;
+      notes?: string | null;
+      values?: Record<string, unknown>;
+      decidedAt: string;
+    };
 
 /** What the engine asks a human for when it parks on approval/manual. Opened idempotently per (run, path). */
 export type HumanTask =

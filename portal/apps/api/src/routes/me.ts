@@ -15,7 +15,9 @@ export async function buildMe(ctx: AppContext, session: SessionRecord): Promise<
     roles: session.roles,
     mode: armed ? 'armed' : 'read',
     armedUntil: armed ? session.writeExpiresAt!.toISOString() : null,
-    canArm: hasRole(session, 'Portal.Operator') && (ctx.config.AUTH_MODE === 'mock' || writeAppConfigured(ctx.config)),
+    canArm:
+      hasRole(session, 'Portal.Operator') &&
+      (ctx.config.AUTH_MODE === 'mock' || writeAppConfigured(ctx.config)),
     armExtended: armed && session.writeExtended,
     armMaxMinutes: ctx.config.WRITE_SESSION_MAX_MINUTES,
     csrf: session.csrf,
@@ -36,7 +38,9 @@ export function meRoutes(api: FastifyInstance, ctx: AppContext) {
     const current = await ctx.prefs.get(session.userOid);
     const prefs: UserPrefs = { ...current, ...patch };
     await ctx.prefs.put(session.userOid, prefs);
-    const changed = Object.keys(patch).filter((k) => JSON.stringify(current[k as keyof UserPrefs]) !== JSON.stringify(patch[k as keyof UserPrefs]));
+    const changed = Object.keys(patch).filter(
+      (k) => JSON.stringify(current[k as keyof UserPrefs]) !== JSON.stringify(patch[k as keyof UserPrefs]),
+    );
     if (changed.length) {
       await ctx.audit.append({
         ...auditActor(ctx, request, session),

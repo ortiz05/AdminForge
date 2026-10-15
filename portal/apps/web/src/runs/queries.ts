@@ -17,7 +17,10 @@ export interface RunsFilter {
 
 /** GET /api/runs?scope=&status=&playbook=&cursor= (one page). */
 export const fetchRunsPage = (filter: RunsFilter, cursor: string | null, signal?: AbortSignal) =>
-  api(`/api/runs${query({ scope: filter.scope, status: filter.status, playbook: filter.playbook, cursor })}`, {
-    schema: RunListResponse,
-    signal,
-  });
+  api(
+    `/api/runs${query({ scope: filter.scope, status: filter.status, playbook: filter.playbook, cursor })}`,
+    {
+      schema: RunListResponse,
+      signal,
+    },
+  );

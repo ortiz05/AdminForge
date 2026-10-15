@@ -1,6 +1,10 @@
 import { randomUUID } from 'node:crypto';
 import type { CliContext } from '@adminforge/cli/src/commands/context';
-import { provisionEntra, provisionStatus, provisionTestIdentities } from '@adminforge/cli/src/commands/provision';
+import {
+  provisionEntra,
+  provisionStatus,
+  provisionTestIdentities,
+} from '@adminforge/cli/src/commands/provision';
 import { createFakeCloud, type FakeCloudOptions } from './fake-cloud';
 
 const TENANT = randomUUID();
@@ -33,7 +37,8 @@ function setup(opts: Partial<FakeCloudOptions> = {}) {
   return { cloud, env, written, lines, ctx };
 }
 
-const changed = <T extends { action: string }>(ops: T[]): T[] => ops.filter((o) => o.action === 'create' || o.action === 'update');
+const changed = <T extends { action: string }>(ops: T[]): T[] =>
+  ops.filter((o) => o.action === 'create' || o.action === 'update');
 
 describe('adminforge provision entra (against a fake Graph/ARM)', () => {
   it('--dry-run reads only and changes nothing', async () => {
@@ -48,8 +53,16 @@ describe('adminforge provision entra (against a fake Graph/ARM)', () => {
     const { cloud, ctx, env, written, lines } = setup({ spReplicationMisses: 2 });
     await provisionEntra(ctx);
 
-    expect(cloud.apps.map((a) => a.displayName).sort()).toEqual(['AdminForge Automation [test]', 'AdminForge Read [test]', 'AdminForge Write [test]']);
-    expect(cloud.apps.map((a) => a.uniqueName).sort()).toEqual(['adminforge-automation-test', 'adminforge-read-test', 'adminforge-write-test']);
+    expect(cloud.apps.map((a) => a.displayName).sort()).toEqual([
+      'AdminForge Automation [test]',
+      'AdminForge Read [test]',
+      'AdminForge Write [test]',
+    ]);
+    expect(cloud.apps.map((a) => a.uniqueName).sort()).toEqual([
+      'adminforge-automation-test',
+      'adminforge-read-test',
+      'adminforge-write-test',
+    ]);
     expect(cloud.groups.map((g) => g.displayName)).toHaveLength(5);
     expect(cloud.grants).toHaveLength(5); // Read: Graph, ARM, Log Analytics; Write: Graph, ARM (Exchange absent)
     expect(cloud.grants.every((g) => g.consentType === 'AllPrincipals')).toBe(true);
@@ -57,9 +70,17 @@ describe('adminforge provision entra (against a fake Graph/ARM)', () => {
     expect(cloud.armAssignments[0]!.properties).toMatchObject({ principalType: 'ServicePrincipal' });
 
     const keys = written.flatMap((w) => Object.keys(w)).sort();
-    expect(keys).toEqual(['AF_AUTOMATION_CLIENT_ID', 'AF_AUTOMATION_CLIENT_SECRET', 'AF_READ_CLIENT_ID', 'AF_READ_CLIENT_SECRET', 'AF_WRITE_CLIENT_ID', 'AF_WRITE_CLIENT_SECRET']);
+    expect(keys).toEqual([
+      'AF_AUTOMATION_CLIENT_ID',
+      'AF_AUTOMATION_CLIENT_SECRET',
+      'AF_READ_CLIENT_ID',
+      'AF_READ_CLIENT_SECRET',
+      'AF_WRITE_CLIENT_ID',
+      'AF_WRITE_CLIENT_SECRET',
+    ]);
     const output = lines.join('\n');
-    for (const k of ['AF_READ_CLIENT_SECRET', 'AF_WRITE_CLIENT_SECRET', 'AF_AUTOMATION_CLIENT_SECRET']) expect(output).not.toContain(env[k]!);
+    for (const k of ['AF_READ_CLIENT_SECRET', 'AF_WRITE_CLIENT_SECRET', 'AF_AUTOMATION_CLIENT_SECRET'])
+      expect(output).not.toContain(env[k]!);
     expect(output).not.toContain(PROVISIONER.secret);
     expect(output).toContain('waiting'); // replication retry was exercised
     expect(output).toContain('Office 365 Exchange Online');
@@ -92,8 +113,14 @@ describe('adminforge provision entra (against a fake Graph/ARM)', () => {
     (read.web as { redirectUris: string[] }).redirectUris = [];
     cloud.grants[0]!.scope = 'openid';
     const run = await provisionEntra(ctx);
-    expect(changed(run.ops).map((o) => `${o.action} ${o.section}`)).toEqual(['update Applications', 'update Consent grants']);
-    expect((read.web as { redirectUris: string[] }).redirectUris).toEqual(['http://localhost:5173/auth/callback', 'http://localhost:5173/auth/signed-out']);
+    expect(changed(run.ops).map((o) => `${o.action} ${o.section}`)).toEqual([
+      'update Applications',
+      'update Consent grants',
+    ]);
+    expect((read.web as { redirectUris: string[] }).redirectUris).toEqual([
+      'http://localhost:5173/auth/callback',
+      'http://localhost:5173/auth/signed-out',
+    ]);
     expect(cloud.apps).toHaveLength(3);
   });
 });
@@ -114,7 +141,9 @@ describe('adminforge provision test-identities and status', () => {
     const tester = cloud.users.find((u) => u.userPrincipalName === 'af-tester@example.com')!;
     expect(tester.passwordProfile).toMatchObject({ forceChangePasswordNextSignIn: false });
     expect(cloud.members.filter((m) => m.memberId === tester.id)).toHaveLength(5);
-    expect(cloud.roleAssignments.filter((r) => r.principalId === tester.id && r.directoryScopeId === '/')).toHaveLength(3);
+    expect(
+      cloud.roleAssignments.filter((r) => r.principalId === tester.id && r.directoryScopeId === '/'),
+    ).toHaveLength(3);
     expect(cloud.groups.some((g) => g.displayName === 'AF-Test-Group-01')).toBe(true);
     expect(written.flatMap((w) => Object.keys(w))).toEqual(['AF_TEST_USER_UPN', 'AF_TEST_USER_PASSWORD']);
     expect(lines.join('\n')).not.toContain(env.AF_TEST_USER_PASSWORD!);
@@ -136,7 +165,13 @@ describe('adminforge provision test-identities and status', () => {
     expect(output).toContain('app-only token carries 17/17 expected roles');
     expect(output).toContain('authorize URL is well-formed');
     expect(output).not.toContain('✗');
-    for (const k of ['AF_READ_CLIENT_SECRET', 'AF_WRITE_CLIENT_SECRET', 'AF_AUTOMATION_CLIENT_SECRET', 'AF_TEST_USER_PASSWORD']) expect(output).not.toContain(env[k]!);
+    for (const k of [
+      'AF_READ_CLIENT_SECRET',
+      'AF_WRITE_CLIENT_SECRET',
+      'AF_AUTOMATION_CLIENT_SECRET',
+      'AF_TEST_USER_PASSWORD',
+    ])
+      expect(output).not.toContain(env[k]!);
   });
 
   it('status reports ✗ for missing objects and a stale stored secret', async () => {
@@ -147,7 +182,11 @@ describe('adminforge provision test-identities and status', () => {
     const status = await provisionStatus(ctx);
     expect(status.ok).toBe(false);
     expect(status.failures).toEqual(
-      expect.arrayContaining(['AF_WRITE_CLIENT_SECRET', 'SG-AdminForge-test-Portal.Reader', 'AdminForge Write [test]: client-credentials token']),
+      expect.arrayContaining([
+        'AF_WRITE_CLIENT_SECRET',
+        'SG-AdminForge-test-Portal.Reader',
+        'AdminForge Write [test]: client-credentials token',
+      ]),
     );
   });
 });

@@ -6,15 +6,17 @@ description: Use when asked to schedule something to run on the AdminForge host 
 # Adding a schedule or probe
 
 ## Overview
+
 Schedules (`portal/content/schedules/`) run on this host via `portal/apps/scheduler` as the **automation identity**
 (app-only; ADR-011) — never as a person. Probes (`portal/content/probes/`) are synthetic tests and configuration
 checks that write time-series results shown on `/monitoring`.
 
 ## Steps
+
 1. **Reuse first.** Probes are swept by tag: tag a new probe (`tags: [hourly]`, `[config-check]`) and an existing
    sweep schedule (`schedules/probes/*.schedule.yaml`, `job.select.tags`) picks it up — often no new schedule needed.
 2. **Scaffold:** `pnpm adminforge new probe <section>/<name>` / `new schedule <section>/<name>`, or design the query
-   in **Query Studio** (`/query`) and use *Save as probe/report/schedule*.
+   in **Query Studio** (`/query`) and use _Save as probe/report/schedule_.
 3. **Pick the check:** `check.kind` = `http`, `dnsResolve`, `certExpiry`, `graph`, `arm`, `tokenAcquisition`,
    `appCredentialExpiry`, `licenseThreshold`, `signInHealth`, `functionHealth`, or **`kql`**.
    - Tenant-wide configuration questions → `kql` with `source: resourceGraph` (all subscriptions, one query),
@@ -35,10 +37,11 @@ checks that write time-series results shown on `/monitoring`.
    `/monitoring`.
 
 ## Common mistakes
-| Mistake | Fix |
-|---|---|
-| One schedule per probe | Tag the probe; reuse the tag sweep |
-| Thousands of Graph calls for a tenant-wide check | KQL (Resource Graph / Log Analytics) |
-| Delegated scopes for a schedule | Schedules use application permissions on the automation identity |
-| Subscription/workspace ids in YAML | `${env.AF_SUBSCRIPTION_ID}`, `${env.AF_LOG_ANALYTICS_WORKSPACE_ID}` |
-| Write job without approval | `approvedBy` + two-person approval to enable |
+
+| Mistake                                          | Fix                                                                 |
+| ------------------------------------------------ | ------------------------------------------------------------------- |
+| One schedule per probe                           | Tag the probe; reuse the tag sweep                                  |
+| Thousands of Graph calls for a tenant-wide check | KQL (Resource Graph / Log Analytics)                                |
+| Delegated scopes for a schedule                  | Schedules use application permissions on the automation identity    |
+| Subscription/workspace ids in YAML               | `${env.AF_SUBSCRIPTION_ID}`, `${env.AF_LOG_ANALYTICS_WORKSPACE_ID}` |
+| Write job without approval                       | `approvedBy` + two-person approval to enable                        |

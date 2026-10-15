@@ -43,8 +43,14 @@ export class PgBossRunQueue implements RunQueue {
   private ensure(): Promise<PgBoss> {
     if (this.boss) return Promise.resolve(this.boss);
     this.starting ??= (async () => {
-      const boss = new PgBoss({ connectionString: this.connectionString, application_name: 'adminforge-runs', max: 4 });
-      boss.on('error', (err: unknown) => this.log?.warn({ err: { message: (err as Error)?.message } }, 'pg-boss error'));
+      const boss = new PgBoss({
+        connectionString: this.connectionString,
+        application_name: 'adminforge-runs',
+        max: 4,
+      });
+      boss.on('error', (err: unknown) =>
+        this.log?.warn({ err: { message: (err as Error)?.message } }, 'pg-boss error'),
+      );
       await boss.start();
       if (!(await boss.getQueue(RUN_QUEUE))) {
         try {
@@ -77,14 +83,22 @@ export class PgBossRunQueue implements RunQueue {
 
   async enqueue(runId: string, opts: { startAfter?: Date } = {}): Promise<void> {
     const boss = await this.ensure();
-    await boss.send(RUN_QUEUE, { runId }, { singletonKey: runId, ...(opts.startAfter ? { startAfter: opts.startAfter } : {}) });
+    await boss.send(
+      RUN_QUEUE,
+      { runId },
+      { singletonKey: runId, ...(opts.startAfter ? { startAfter: opts.startAfter } : {}) },
+    );
   }
 
   async work(handler: RunJobHandler, opts: { concurrency: number }): Promise<void> {
     const boss = await this.ensure();
-    await boss.work<{ runId: string }>(RUN_QUEUE, { localConcurrency: Math.max(1, opts.concurrency), batchSize: 1, pollingIntervalSeconds: 1 }, async (jobs) => {
-      for (const job of jobs) await handler(job.data.runId, job.signal);
-    });
+    await boss.work<{ runId: string }>(
+      RUN_QUEUE,
+      { localConcurrency: Math.max(1, opts.concurrency), batchSize: 1, pollingIntervalSeconds: 1 },
+      async (jobs) => {
+        for (const job of jobs) await handler(job.data.runId, job.signal);
+      },
+    );
   }
 
   async stop(): Promise<void> {
@@ -104,7 +118,10 @@ export class InProcessRunQueue implements RunQueue {
   private concurrency = 4;
   private active = 0;
   private readonly waiting: Array<() => void> = [];
-  private readonly state = new Map<string, { running: boolean; again: boolean; timer?: NodeJS.Timeout; at?: number }>();
+  private readonly state = new Map<
+    string,
+    { running: boolean; again: boolean; timer?: NodeJS.Timeout; at?: number }
+  >();
   private readonly pendingStart = new Set<string>();
   private readonly inflight = new Set<Promise<void>>();
   private stopped = false;

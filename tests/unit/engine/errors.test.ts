@@ -9,9 +9,12 @@ const fail = (status: number, code = `E${status}`) => {
 describe('engine: retries (transient errors only)', () => {
   it('retries 429/5xx/network with exponential backoff, one record per attempt', async () => {
     let n = 0;
-    const h = harness(playbook([read('a', '/a', { retry: { max: 3, backoff: 'exponential', delay: '2s' } })]), {
-      respond: () => (++n < 3 ? fail(n === 1 ? 503 : 0) : { ok: true }),
-    });
+    const h = harness(
+      playbook([read('a', '/a', { retry: { max: 3, backoff: 'exponential', delay: '2s' } })]),
+      {
+        respond: () => (++n < 3 ? fail(n === 1 ? 503 : 0) : { ok: true }),
+      },
+    );
     expect((await h.exec()).status).toBe('succeeded');
     expect(h.clock.sleeps).toEqual([2000, 4000]);
     expect((await h.all()).map((r) => [r.attempt, r.status])).toEqual([
@@ -19,11 +22,16 @@ describe('engine: retries (transient errors only)', () => {
       [2, 'retried'],
       [3, 'succeeded'],
     ]);
-    expect(h.store.events.filter((e) => e.type === 'log').map((e) => e.data.message)).toEqual([expect.stringMatching(/^Attempt 1 failed \(E503/), expect.stringMatching(/^Attempt 2 failed \(E0/)]);
+    expect(h.store.events.filter((e) => e.type === 'log').map((e) => e.data.message)).toEqual([
+      expect.stringMatching(/^Attempt 1 failed \(E503/),
+      expect.stringMatching(/^Attempt 2 failed \(E0/),
+    ]);
   });
 
   it('gives up after retry.max and fails the step', async () => {
-    const h = harness(playbook([read('a', '/a', { retry: { max: 2, backoff: 'fixed', delay: '1s' } })]), { respond: () => fail(500) });
+    const h = harness(playbook([read('a', '/a', { retry: { max: 2, backoff: 'fixed', delay: '1s' } })]), {
+      respond: () => fail(500),
+    });
     const out = await h.exec();
     expect(out).toMatchObject({ status: 'failed', error: { code: 'E500', status: 500, stepId: 'a' } });
     expect(h.outbound.calls).toHaveLength(3);
@@ -66,7 +74,9 @@ describe('engine: retries (transient errors only)', () => {
 
 describe('engine: onError', () => {
   it('fail (default) stops the run at the failing step', async () => {
-    const h = harness(playbook([write('a'), write('b'), write('c')]), { respond: (c) => (c.path === '/things/b' ? fail(400) : null) });
+    const h = harness(playbook([write('a'), write('b'), write('c')]), {
+      respond: (c) => (c.path === '/things/b' ? fail(400) : null),
+    });
     const out = await h.exec();
     expect(out).toMatchObject({ status: 'failed', error: { stepId: 'b' } });
     expect(h.status('c')).toBeUndefined();
@@ -75,7 +85,11 @@ describe('engine: onError', () => {
 
   it('continue records the failure and carries on (status visible to later steps)', async () => {
     const h = harness(
-      playbook([write('a', { onError: 'continue' }), { id: 'seen', type: 'transform', expression: '${ [steps.a.status, steps.a.error.code] }' }, write('b')]),
+      playbook([
+        write('a', { onError: 'continue' }),
+        { id: 'seen', type: 'transform', expression: '${ [steps.a.status, steps.a.error.code] }' },
+        write('b'),
+      ]),
       { respond: (c) => (c.path === '/things/a' ? fail(409, 'Conflict') : null) },
     );
     const out = await h.exec();
@@ -86,7 +100,11 @@ describe('engine: onError', () => {
   });
 
   it('compensate undoes completed steps in reverse order and ends compensated', async () => {
-    const comp = (id: string) => ({ type: 'graph', describe: `Undo ${id}`, request: { method: 'PATCH', path: `/undo/${id}`, body: { id } } });
+    const comp = (id: string) => ({
+      type: 'graph',
+      describe: `Undo ${id}`,
+      request: { method: 'PATCH', path: `/undo/${id}`, body: { id } },
+    });
     const def = playbook([
       write('one', { compensate: comp('one') }),
       write('two'), // no compensate block
@@ -97,9 +115,25 @@ describe('engine: onError', () => {
     const out = await h.exec();
     expect(out.status).toBe('compensated');
     expect(out.error).toMatchObject({ code: 'E400', stepId: 'four', compensating: false });
-    expect(h.outbound.paths()).toEqual(['/things/one', '/things/two', '/things/three', '/things/four', '/undo/three', '/undo/one']);
-    expect(['one', 'two', 'three', 'four'].map(h.status)).toEqual(['compensated', 'succeeded', 'compensated', 'failed']);
-    expect(h.record('three#compensate')).toMatchObject({ status: 'succeeded', mode: 'write', stepId: 'three' });
+    expect(h.outbound.paths()).toEqual([
+      '/things/one',
+      '/things/two',
+      '/things/three',
+      '/things/four',
+      '/undo/three',
+      '/undo/one',
+    ]);
+    expect(['one', 'two', 'three', 'four'].map(h.status)).toEqual([
+      'compensated',
+      'succeeded',
+      'compensated',
+      'failed',
+    ]);
+    expect(h.record('three#compensate')).toMatchObject({
+      status: 'succeeded',
+      mode: 'write',
+      stepId: 'three',
+    });
     expect(h.outbound.calls.at(-1)!.call.declaredWrite).toBe(true);
   });
 
@@ -109,10 +143,14 @@ describe('engine: onError', () => {
       write('two', { compensate: { type: 'graph', request: { method: 'PATCH', path: '/undo/two' } } }),
       write('boom', { onError: 'compensate' }),
     ]);
-    const h = harness(def, { respond: (c) => (c.path === '/things/boom' || c.path === '/undo/two' ? fail(400) : null) });
+    const h = harness(def, {
+      respond: (c) => (c.path === '/things/boom' || c.path === '/undo/two' ? fail(400) : null),
+    });
     const out = await h.exec();
     expect(out.status).toBe('needs_review');
-    expect(out.error?.compensationFailures).toEqual([{ stepId: 'two', path: 'two', message: 'failed with 400' }]);
+    expect(out.error?.compensationFailures).toEqual([
+      { stepId: 'two', path: 'two', message: 'failed with 400' },
+    ]);
     expect(h.outbound.paths()).toContain('/undo/one');
     expect(h.status('one')).toBe('compensated');
     expect(h.status('two')).toBe('succeeded');
@@ -121,7 +159,13 @@ describe('engine: onError', () => {
   it('compensation in a dry run is planned (compensation: true) and marks steps compensated', async () => {
     const def = playbook([
       read('lookup'),
-      write('disable', { compensate: { type: 'graph', describe: 'Re-enable', request: { method: 'PATCH', path: '/users/x', body: { accountEnabled: true } } } }),
+      write('disable', {
+        compensate: {
+          type: 'graph',
+          describe: 'Re-enable',
+          request: { method: 'PATCH', path: '/users/x', body: { accountEnabled: true } },
+        },
+      }),
       { id: 'check', type: 'assert', that: '${ false }', message: 'nope', onError: 'compensate' },
     ]);
     const h = harness(def, { dryRun: true });
@@ -135,7 +179,10 @@ describe('engine: onError', () => {
   });
 
   it('compensation that needs write access parks the run (awaiting_arm) and finishes after re-arming', async () => {
-    const def = playbook([write('one', { compensate: { type: 'graph', request: { method: 'PATCH', path: '/undo/one' } } }), write('two', { onError: 'compensate' })]);
+    const def = playbook([
+      write('one', { compensate: { type: 'graph', request: { method: 'PATCH', path: '/undo/one' } } }),
+      write('two', { onError: 'compensate' }),
+    ]);
     const h = harness(def);
     h.outbound.respond = (c) => {
       if (c.path === '/things/two') {

@@ -49,7 +49,8 @@ export function applyRunEvent(old: RunDetail, data: unknown): RunDetail {
   if ('error' in o) run.error = readError(o.error);
   if (o.outputs && typeof o.outputs === 'object') run.outputs = o.outputs as Record<string, unknown>;
   const p = rec(o.progress);
-  if (num(p.total) !== undefined) run.progress = { done: num(p.done) ?? 0, total: num(p.total)!, failed: num(p.failed) };
+  if (num(p.total) !== undefined)
+    run.progress = { done: num(p.done) ?? 0, total: num(p.total)!, failed: num(p.failed) };
   const current = pick(o, 'currentStep');
   if (current) run.currentStep = current;
   return { ...old, run };
@@ -64,7 +65,8 @@ export function applyStepEvent(old: RunDetail, data: unknown, stepSeq?: number |
   const path = pick(o, 'path') ?? pick(o, 'stepId');
   if (!path) return old;
   const existing = old.steps.filter((s) => s.path === path).sort((a, b) => b.seq - a.seq)[0];
-  const seq = stepSeq ?? num(o.seq) ?? (existing ? existing.seq : Math.max(0, ...old.steps.map((s) => s.seq)) + 1);
+  const seq =
+    stepSeq ?? num(o.seq) ?? (existing ? existing.seq : Math.max(0, ...old.steps.map((s) => s.seq)) + 1);
   const parsed = readStep({ ...o, seq, path, stepId: pick(o, 'stepId') ?? existing?.stepId ?? path }, seq);
   if (!parsed) return old;
   const merged: RunStep = existing
@@ -84,11 +86,22 @@ export function applyProgressEvent(old: RunDetail, data: unknown): RunDetail {
   const o = rec(data);
   const total = num(o.total);
   if (total === undefined) return old;
-  return { ...old, run: { ...old.run, progress: { done: num(o.done) ?? num(o.completed) ?? 0, total, failed: num(o.failed) } } };
+  return {
+    ...old,
+    run: {
+      ...old.run,
+      progress: { done: num(o.done) ?? num(o.completed) ?? 0, total, failed: num(o.failed) },
+    },
+  };
 }
 
 /** One run/step/progress event applied to the detail (logs are kept separately). */
-export function applyEnvelope(old: RunDetail, type: string, data: unknown, stepSeq: number | null): RunDetail {
+export function applyEnvelope(
+  old: RunDetail,
+  type: string,
+  data: unknown,
+  stepSeq: number | null,
+): RunDetail {
   if (type === 'run') return applyRunEvent(old, data);
   if (type === 'step') return applyStepEvent(old, data, stepSeq);
   if (type === 'progress') return applyProgressEvent(old, data);
@@ -133,7 +146,9 @@ export function useRunLive(id: string, { enabled = true }: { enabled?: boolean }
     const queued = early.current;
     early.current = [];
     if (queued.length)
-      queryClient.setQueryData<RunDetail>(key, (old) => (old ? queued.reduce((d, e) => applyEnvelope(d, e.type, e.data, e.stepSeq), old) : old));
+      queryClient.setQueryData<RunDetail>(key, (old) =>
+        old ? queued.reduce((d, e) => applyEnvelope(d, e.type, e.data, e.stepSeq), old) : old,
+      );
     if (queued.length || endedEarly.current) {
       endedEarly.current = false;
       void queryClient.invalidateQueries({ queryKey: key });
@@ -190,7 +205,10 @@ export function useRunLive(id: string, { enabled = true }: { enabled?: boolean }
               else setNotices((all) => ({ ...all, [k]: { ...notice, error: r.message } }));
             });
         }
-        const line = readLog({ ...rec(data), id: eventId || undefined, ts: env.ts, stepSeq }, eventId || `live-${++anon}`);
+        const line = readLog(
+          { ...rec(data), id: eventId || undefined, ts: env.ts, stepSeq },
+          eventId || `live-${++anon}`,
+        );
         if (line) setStreamLogs((all) => [...all, line].slice(-MAX_LOG_LINES));
         return;
       }
@@ -199,7 +217,9 @@ export function useRunLive(id: string, { enabled = true }: { enabled?: boolean }
         early.current.push({ type, data, stepSeq });
         return;
       }
-      queryClient.setQueryData<RunDetail>(key, (old) => (old ? applyEnvelope(old, type, data, stepSeq) : old));
+      queryClient.setQueryData<RunDetail>(key, (old) =>
+        old ? applyEnvelope(old, type, data, stepSeq) : old,
+      );
       reconcileSoon();
     };
     es.onmessage = (e) => {
@@ -208,7 +228,16 @@ export function useRunLive(id: string, { enabled = true }: { enabled?: boolean }
     };
     // Servers that name their events instead (event: step / data: {…}).
     const named = (['run', 'step', 'log', 'progress', 'secret'] as const).map(
-      (t) => [t, (e: MessageEvent) => handle({ type: t, ...(t === 'secret' ? rec(parse(e.data)) : { data: parse(e.data) }), id: e.lastEventId || undefined })] as const,
+      (t) =>
+        [
+          t,
+          (e: MessageEvent) =>
+            handle({
+              type: t,
+              ...(t === 'secret' ? rec(parse(e.data)) : { data: parse(e.data) }),
+              id: e.lastEventId || undefined,
+            }),
+        ] as const,
     );
     for (const [t, l] of named) es.addEventListener(t, l as EventListener);
     // `event: end` — the run is over: stop (EventSource would otherwise reconnect and replay).
@@ -244,7 +273,15 @@ export function useRunLive(id: string, { enabled = true }: { enabled?: boolean }
     dismissed.current.add(key);
     setSecrets((all) => all.filter((s) => secretKey(s) !== key));
   };
-  return { query: q, detail: q.data, logs, live: connected && !terminal, secrets, notices: Object.values(notices), dismissSecret };
+  return {
+    query: q,
+    detail: q.data,
+    logs,
+    live: connected && !terminal,
+    secrets,
+    notices: Object.values(notices),
+    dismissSecret,
+  };
 }
 
 /** Child records grouped under their top-level step (`items[3].run` → `items`). */
@@ -254,4 +291,3 @@ export function topLevelKey(path: string): string {
 }
 
 export const isNested = (path: string) => /[.[]/.test(path) && !path.includes('#');
-

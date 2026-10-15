@@ -160,7 +160,10 @@ export function Markdown({ source, Link }: { source: string; Link: LinkComponent
             const depth = b.level - top;
             const Tag = HEADING[Math.min(depth, HEADING.length - 1)]!;
             return (
-              <Tag key={key} className={depth === 0 ? 'text-md font-semibold text-fg' : 'text-sm font-semibold text-fg'}>
+              <Tag
+                key={key}
+                className={depth === 0 ? 'text-md font-semibold text-fg' : 'text-sm font-semibold text-fg'}
+              >
                 {renderInline(b.text, Link, key)}
               </Tag>
             );
@@ -168,7 +171,10 @@ export function Markdown({ source, Link }: { source: string; Link: LinkComponent
           case 'list': {
             const Tag = b.ordered ? 'ol' : 'ul';
             return (
-              <Tag key={key} className={`flex flex-col gap-1 pl-5 ${b.ordered ? 'list-decimal' : 'list-disc'} marker:text-fg-3`}>
+              <Tag
+                key={key}
+                className={`flex flex-col gap-1 pl-5 ${b.ordered ? 'list-decimal' : 'list-disc'} marker:text-fg-3`}
+              >
                 {b.items.map((it, j) => (
                   <li key={j}>{renderInline(it, Link, `${key}-${j}`)}</li>
                 ))}
@@ -177,7 +183,10 @@ export function Markdown({ source, Link }: { source: string; Link: LinkComponent
           }
           case 'code':
             return (
-              <pre key={key} className="overflow-x-auto rounded-md border border-line bg-sunken p-3 font-mono text-xs text-fg">
+              <pre
+                key={key}
+                className="overflow-x-auto rounded-md border border-line bg-sunken p-3 font-mono text-xs text-fg"
+              >
                 <code>{b.text}</code>
               </pre>
             );

@@ -11,14 +11,32 @@ export const listFixtures = {
       primary: 'displayName',
       secondary: 'createdDateTime',
       secondaryFormat: 'relativeTime',
-      status: { field: 'severity', map: { high: ['crit', 'High'], medium: ['warn', 'Medium'], low: ['info', 'Low'] } },
+      status: {
+        field: 'severity',
+        map: { high: ['crit', 'High'], medium: ['warn', 'Medium'], low: ['info', 'Low'] },
+      },
       href: "${ '/p/security.incident?id=' & row.id }",
       limit: 8,
     } satisfies ListConfig,
     rows: [
-      { id: 'inc-1042', displayName: 'Impossible travel for adele.vance@example.com', severity: 'high', createdDateTime: ago(25 * MIN) },
-      { id: 'inc-1041', displayName: 'Mass download from SharePoint site Finance', severity: 'medium', createdDateTime: ago(3 * HOUR) },
-      { id: 'inc-1039', displayName: 'Suspicious inbox rule created', severity: 'low', createdDateTime: ago(9 * HOUR) },
+      {
+        id: 'inc-1042',
+        displayName: 'Impossible travel for adele.vance@example.com',
+        severity: 'high',
+        createdDateTime: ago(25 * MIN),
+      },
+      {
+        id: 'inc-1041',
+        displayName: 'Mass download from SharePoint site Finance',
+        severity: 'medium',
+        createdDateTime: ago(3 * HOUR),
+      },
+      {
+        id: 'inc-1039',
+        displayName: 'Suspicious inbox rule created',
+        severity: 'low',
+        createdDateTime: ago(9 * HOUR),
+      },
     ],
   },
 };

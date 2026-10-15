@@ -25,9 +25,13 @@ const base = {
 
 const GUID_RE = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
 export const Guid = z.string().regex(GUID_RE, 'Expected a GUID');
-const IsoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}([T ][\d:.]+(Z|[+-]\d{2}:?\d{2})?)?$/, 'Expected an ISO date like 2026-01-31');
+const IsoDate = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}([T ][\d:.]+(Z|[+-]\d{2}:?\d{2})?)?$/, 'Expected an ISO date like 2026-01-31');
 /** Relative date: `today`, `now`, `-30d`, `+7d`, `-12h`. */
-const RelativeDate = z.string().regex(/^(today|now|[+-]\d+[hdwmy])$/, 'Expected today, now, or an offset like -30d');
+const RelativeDate = z
+  .string()
+  .regex(/^(today|now|[+-]\d+[hdwmy])$/, 'Expected today, now, or an offset like -30d');
 
 export const StringParam = z.strictObject({
   type: z.literal('string'),
@@ -60,7 +64,10 @@ export const BooleanParam = z.strictObject({
 });
 
 const EnumValue = z.union([z.string(), z.number(), z.boolean()]);
-export const EnumOption = z.union([EnumValue, z.strictObject({ value: EnumValue, label: z.string().min(1), icon: z.string().optional() })]);
+export const EnumOption = z.union([
+  EnumValue,
+  z.strictObject({ value: EnumValue, label: z.string().min(1), icon: z.string().optional() }),
+]);
 
 export const EnumParam = z.strictObject({
   type: z.literal('enum'),
@@ -87,7 +94,12 @@ export const DateRangeParam = z.strictObject({
   ...base,
   /** Preset ISO durations offered in the picker, e.g. [PT1H, P1D, P7D, P30D]. */
   presets: z.array(z.string().regex(/^P/)).optional(),
-  default: z.union([z.string().regex(/^P/, 'Expected an ISO duration like P7D'), z.strictObject({ from: z.string(), to: z.string() })]).optional(),
+  default: z
+    .union([
+      z.string().regex(/^P/, 'Expected an ISO duration like P7D'),
+      z.strictObject({ from: z.string(), to: z.string() }),
+    ])
+    .optional(),
   /** Longest range allowed, as an ISO duration. */
   max: z.string().regex(/^P/).optional(),
 });
@@ -111,24 +123,21 @@ const entityParam = <K extends (typeof ENTITY_KINDS)[number]>(kind: K) =>
     resourceTypes: z.array(z.string()).optional(),
   });
 
-export const Param = z.discriminatedUnion(
-  'type',
-  [
-    StringParam,
-    NumberParam,
-    BooleanParam,
-    EnumParam,
-    DateParam,
-    DateRangeParam,
-    GuidParam,
-    entityParam('user'),
-    entityParam('group'),
-    entityParam('device'),
-    entityParam('app'),
-    entityParam('resource'),
-    entityParam('subscription'),
-  ],
-);
+export const Param = z.discriminatedUnion('type', [
+  StringParam,
+  NumberParam,
+  BooleanParam,
+  EnumParam,
+  DateParam,
+  DateRangeParam,
+  GuidParam,
+  entityParam('user'),
+  entityParam('group'),
+  entityParam('device'),
+  entityParam('app'),
+  entityParam('resource'),
+  entityParam('subscription'),
+]);
 export type Param = z.infer<typeof Param>;
 export type ParamType = Param['type'];
 

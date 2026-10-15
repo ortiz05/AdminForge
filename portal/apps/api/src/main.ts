@@ -34,5 +34,8 @@ for (const signal of ['SIGINT', 'SIGTERM'] as const) {
 }
 
 await app.listen({ port: config.API_PORT, host: config.API_HOST });
-app.log.info({ authMode: config.AUTH_MODE, dataMode: config.DATA_MODE, store: ctx.database ? 'postgres' : 'memory' }, 'AdminForge API ready');
+app.log.info(
+  { authMode: config.AUTH_MODE, dataMode: config.DATA_MODE, store: ctx.database ? 'postgres' : 'memory' },
+  'AdminForge API ready',
+);
 void housekeeping();

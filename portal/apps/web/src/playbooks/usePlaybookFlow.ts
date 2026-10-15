@@ -37,8 +37,10 @@ export interface ConfirmState {
 
 /** Errors that mean "preview again" rather than "something broke". */
 const PREVIEW_CODES = new Set(['preview_required', 'preview_stale']);
-export const isPreviewError = (e: unknown) => e instanceof ApiRequestError && e.status === 409 && PREVIEW_CODES.has(e.code);
-export const isConfirmationError = (e: unknown) => e instanceof ApiRequestError && e.status === 422 && e.code === 'confirmation_mismatch';
+export const isPreviewError = (e: unknown) =>
+  e instanceof ApiRequestError && e.status === 409 && PREVIEW_CODES.has(e.code);
+export const isConfirmationError = (e: unknown) =>
+  e instanceof ApiRequestError && e.status === 422 && e.code === 'confirmation_mismatch';
 
 const previewTime = (d: RunDetail | undefined) => {
   const t = d ? Date.parse(d.run.endedAt ?? d.run.startedAt ?? d.run.createdAt ?? '') : Number.NaN;
@@ -63,13 +65,20 @@ export function usePlaybookFlow({ def, version, launch, setSearch, onStarted }: 
   const items = launch.items;
   const bulk = items !== null;
   const writes = def.mode === 'write';
-  const confirmType = def.confirm?.type ?? (def.risk === 'high' || def.risk === 'critical' ? 'typed' : 'none');
+  const confirmType =
+    def.confirm?.type ?? (def.risk === 'high' || def.risk === 'critical' ? 'typed' : 'none');
   /** Single write runs always preview first; bulk runs do when the playbook asks for a typed confirmation. */
-  const needsPreview = writes && (!bulk || confirmType === 'typed' || def.risk === 'high' || def.risk === 'critical');
+  const needsPreview =
+    writes && (!bulk || confirmType === 'typed' || def.risk === 'high' || def.risk === 'critical');
 
   // Bulk: inputs that every item supplies are not asked again.
   const perItemKeys = useMemo(
-    () => (items ? Object.keys(params).filter((k) => items.length > 0 && items.every((it) => itemInputs(it)[k] !== undefined)) : []),
+    () =>
+      items
+        ? Object.keys(params).filter(
+            (k) => items.length > 0 && items.every((it) => itemInputs(it)[k] !== undefined),
+          )
+        : [],
     [items, params],
   );
 
@@ -112,21 +121,34 @@ export function usePlaybookFlow({ def, version, launch, setSearch, onStarted }: 
   const detail = preview.data as RunDetail | undefined;
   const previewDone = Boolean(detail && (isTerminal(detail.run.status) || isParked(detail.run.status)));
   const previewOk = previewDone && detail?.run.status === 'succeeded';
-  const sameInputs = Boolean(detail && validation.ok && (bulk || previewMatches(validation.values, detail.run.inputs)));
+  const sameInputs = Boolean(
+    detail && validation.ok && (bulk || previewMatches(validation.values, detail.run.inputs)),
+  );
   const previewFresh = Boolean(detail) && !edited && sameInputs;
   const at = previewTime(detail);
   const expiresInMs = at === null ? null : at + PREVIEW_TTL_MS - now;
-  const previewStale = Boolean(detail) && (rejected === previewId || (expiresInMs !== null && expiresInMs <= 0));
+  const previewStale =
+    Boolean(detail) && (rejected === previewId || (expiresInMs !== null && expiresInMs <= 0));
 
   const startPreview = useMutation({
     mutationFn: (inputs: Record<string, unknown>) =>
       bulk
         ? api('/api/runs/bulk', {
             method: 'POST',
-            body: { playbook: def.id, version, items: (items ?? []).map(itemInputs), inputsTemplate: inputs, dryRun: true },
+            body: {
+              playbook: def.id,
+              version,
+              items: (items ?? []).map(itemInputs),
+              inputsTemplate: inputs,
+              dryRun: true,
+            },
             schema: StartRunResponse,
           })
-        : api('/api/runs', { method: 'POST', body: { playbook: def.id, version, inputs, dryRun: true }, schema: StartRunResponse }),
+        : api('/api/runs', {
+            method: 'POST',
+            body: { playbook: def.id, version, inputs, dryRun: true },
+            schema: StartRunResponse,
+          }),
     onSuccess: ({ runId }) => {
       setPreviewId(runId);
       setRejected(null);
@@ -147,7 +169,11 @@ export function usePlaybookFlow({ def, version, launch, setSearch, onStarted }: 
   // ── Run ─────────────────────────────────────────────────────────────────────────────────────────
   const started = (runId: string, label: string) => {
     void queryClient.invalidateQueries({ queryKey: activeRunsQueryKey });
-    toast({ tone: 'info', title: `${label} started`, description: 'Follow it on the run page or in the run dock.' });
+    toast({
+      tone: 'info',
+      title: `${label} started`,
+      description: 'Follow it on the run page or in the run dock.',
+    });
     if (onStarted) onStarted(runId);
     else void navigate({ to: '/runs/$id', params: { id: runId } });
   };
@@ -225,7 +251,9 @@ export function usePlaybookFlow({ def, version, launch, setSearch, onStarted }: 
 
   const openConfirm = async (basis: RunDetail | undefined) => {
     const count = items?.length ?? 0;
-    const changes = bulk ? `${count} object${count === 1 ? '' : 's'}` : `${basis?.plan.length ?? 0} change${basis?.plan.length === 1 ? '' : 's'}`;
+    const changes = bulk
+      ? `${count} object${count === 1 ? '' : 's'}`
+      : `${basis?.plan.length ?? 0} change${basis?.plan.length === 1 ? '' : 's'}`;
     const description = writes
       ? bulk
         ? `This changes ${changes} in ${me.tenant.name} as ${me.user.upn}, one child run per item.`
@@ -269,7 +297,9 @@ export function usePlaybookFlow({ def, version, launch, setSearch, onStarted }: 
   };
 
   const runError = startRun.error ?? startBulk.error ?? null;
-  const failure = startPreview.error ?? (runError && !isConfirmationError(runError) && !isPreviewError(runError) ? runError : null);
+  const failure =
+    startPreview.error ??
+    (runError && !isConfirmationError(runError) && !isPreviewError(runError) ? runError : null);
 
   return {
     def,

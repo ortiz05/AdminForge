@@ -24,7 +24,13 @@ export type ErrorInfo = z.infer<typeof ErrorInfo>;
 // ── Definitions ──────────────────────────────────────────────────────────────
 
 /** GET /api/definitions/:kind/:key[?version] → the client-safe definition plus `version` and `sha256`. */
-export const DefinitionResponse = z.looseObject({ kind: z.string(), id: z.string(), version: z.string(), sha256: z.string(), title: z.string() });
+export const DefinitionResponse = z.looseObject({
+  kind: z.string(),
+  id: z.string(),
+  version: z.string(),
+  sha256: z.string(),
+  title: z.string(),
+});
 export type DefinitionResponse = z.infer<typeof DefinitionResponse>;
 
 /** GET /api/definitions?kind= */
@@ -39,7 +45,15 @@ export const DefinitionSummary = z.object({
   owner: z.string(),
   status: z.string().optional(),
   template: z.string().optional(),
-  nav: z.object({ section: z.string(), label: z.string().optional(), icon: z.string().optional(), order: z.number().optional(), hidden: z.boolean().optional() }).optional(),
+  nav: z
+    .object({
+      section: z.string(),
+      label: z.string().optional(),
+      icon: z.string().optional(),
+      order: z.number().optional(),
+      hidden: z.boolean().optional(),
+    })
+    .optional(),
   risk: z.string().optional(),
   mode: z.string().optional(),
   /** In-app route: /p/<key> (page, dashboard, report), /playbooks/<key>, /runbooks/<key>. */
@@ -82,7 +96,12 @@ export const DatasourceResult = z.object({
 export type DatasourceResult = z.infer<typeof DatasourceResult>;
 
 /** POST /api/datasources/execute-many — every datasource of the page when `datasources` is omitted. */
-export const DatasourceExecuteManyRequest = z.object({ page: PageRef, version: DefVersion, datasources: z.array(z.string().min(1).max(100)).max(50).optional(), params: ParamValues });
+export const DatasourceExecuteManyRequest = z.object({
+  page: PageRef,
+  version: DefVersion,
+  datasources: z.array(z.string().min(1).max(100)).max(50).optional(),
+  params: ParamValues,
+});
 export type DatasourceExecuteManyRequest = z.infer<typeof DatasourceExecuteManyRequest>;
 
 export const DatasourceFailure = z.object({ error: ErrorInfo });
@@ -96,7 +115,18 @@ export type DatasourceExecuteManyResponse = z.infer<typeof DatasourceExecuteMany
 
 // ── Search ───────────────────────────────────────────────────────────────────
 
-export const SEARCH_RESULT_TYPES = ['page', 'dashboard', 'report', 'playbook', 'runbook', 'user', 'group', 'device', 'app', 'resource'] as const;
+export const SEARCH_RESULT_TYPES = [
+  'page',
+  'dashboard',
+  'report',
+  'playbook',
+  'runbook',
+  'user',
+  'group',
+  'device',
+  'app',
+  'resource',
+] as const;
 export const SearchResultType = z.enum(SEARCH_RESULT_TYPES);
 
 /** GET /api/search?q=&type= */
@@ -121,7 +151,17 @@ export type SearchResponse = z.infer<typeof SearchResponse>;
 
 // ── Capabilities ─────────────────────────────────────────────────────────────
 
-export const FEATURE_KEYS = ['conditionalAccess', 'pim', 'identityProtection', 'intune', 'exchange', 'teams', 'sharepoint', 'defender', 'signInLogs'] as const;
+export const FEATURE_KEYS = [
+  'conditionalAccess',
+  'pim',
+  'identityProtection',
+  'intune',
+  'exchange',
+  'teams',
+  'sharepoint',
+  'defender',
+  'signInLogs',
+] as const;
 
 export const FeatureState = z.object({
   available: z.boolean(),
@@ -153,7 +193,16 @@ export const CapabilitiesResponse = z.object({
     eligibleAvailable: z.boolean().optional(),
     activeSource: z.enum(['pim', 'assignments']).nullable().optional(),
   }),
-  skus: z.array(z.object({ skuPartNumber: z.string(), capabilityStatus: z.string(), enabled: z.number(), consumed: z.number() })).optional(),
+  skus: z
+    .array(
+      z.object({
+        skuPartNumber: z.string(),
+        capabilityStatus: z.string(),
+        enabled: z.number(),
+        consumed: z.number(),
+      }),
+    )
+    .optional(),
   errors: z.record(z.string(), ErrorInfo).optional(),
   provenance: ProvenanceInfo.optional(),
 });
@@ -165,7 +214,10 @@ export const MAX_VIEW_STATE_BYTES = 16 * 1024;
 /** Opaque to the API (params, columns, sort, filters, density…), ≤ 16 KB as JSON. */
 export const SavedViewState = z
   .record(z.string(), z.unknown())
-  .refine((s) => JSON.stringify(s).length <= MAX_VIEW_STATE_BYTES, `View state must be at most ${MAX_VIEW_STATE_BYTES / 1024} KB`);
+  .refine(
+    (s) => JSON.stringify(s).length <= MAX_VIEW_STATE_BYTES,
+    `View state must be at most ${MAX_VIEW_STATE_BYTES / 1024} KB`,
+  );
 const ViewName = z.string().trim().min(1).max(80);
 
 export const SavedView = z.object({
@@ -185,7 +237,12 @@ export type SavedView = z.infer<typeof SavedView>;
 /** GET /api/views?page= */
 export const SavedViewList = z.object({ items: z.array(SavedView) });
 /** POST /api/views → 201 SavedView */
-export const CreateViewRequest = z.object({ page: PageRef, name: ViewName, state: SavedViewState, shared: z.boolean().optional() });
+export const CreateViewRequest = z.object({
+  page: PageRef,
+  name: ViewName,
+  state: SavedViewState,
+  shared: z.boolean().optional(),
+});
 /** PATCH /api/views/:id → SavedView (owner only). DELETE /api/views/:id → 204. */
 export const UpdateViewRequest = z
   .object({ name: ViewName.optional(), state: SavedViewState.optional(), shared: z.boolean().optional() })
@@ -206,9 +263,22 @@ export type ExportRequest = z.infer<typeof ExportRequest>;
 
 // ── Events (GET /api/events, SSE) ────────────────────────────────────────────
 
-export const SSE_EVENTS = ['ready', 'definitions.changed', 'session.mode', 'session.ended', 'run.updated', 'appearance.changed'] as const;
-export const DefinitionsChangedEvent = z.object({ keys: z.array(z.string()).optional(), all: z.boolean().optional() });
-export const SessionModeEvent = z.object({ mode: z.enum(['read', 'armed']), armedUntil: z.string().nullable() });
+export const SSE_EVENTS = [
+  'ready',
+  'definitions.changed',
+  'session.mode',
+  'session.ended',
+  'run.updated',
+  'appearance.changed',
+] as const;
+export const DefinitionsChangedEvent = z.object({
+  keys: z.array(z.string()).optional(),
+  all: z.boolean().optional(),
+});
+export const SessionModeEvent = z.object({
+  mode: z.enum(['read', 'armed']),
+  armedUntil: z.string().nullable(),
+});
 
 // ── Audit, appearance, settings (Portal.Admin) ───────────────────────────────
 
@@ -228,12 +298,21 @@ export const AuditItem = z.object({
 /** GET /api/audit?actor=&action=&from=&to=&cursor=&limit= (newest first; action may end in `.` or `*` for a prefix) */
 export const AuditPage = z.object({ items: z.array(AuditItem), cursor: z.string().optional() });
 /** GET /api/audit/verify */
-export const AuditVerifyResponse = z.object({ ok: z.boolean(), checked: z.number(), brokenAt: z.number().optional() });
+export const AuditVerifyResponse = z.object({
+  ok: z.boolean(),
+  checked: z.number(),
+  brokenAt: z.number().optional(),
+});
 export type AuditItem = z.infer<typeof AuditItem>;
 export type AuditPage = z.infer<typeof AuditPage>;
 
 const HexColor = z.string().regex(/^#[0-9a-fA-F]{6}$/);
-export const AppearanceThemeOverrides = z.object({ accent: HexColor.optional(), 'accent-strong': HexColor.optional(), focus: HexColor.optional(), 'radius-scale': z.number().optional() });
+export const AppearanceThemeOverrides = z.object({
+  accent: HexColor.optional(),
+  'accent-strong': HexColor.optional(),
+  focus: HexColor.optional(),
+  'radius-scale': z.number().optional(),
+});
 /** GET /api/admin/appearance; PUT takes the same body (+ the `version` it was based on → 409 when stale). */
 export const AppearanceResponse = z.object({
   version: z.number(),

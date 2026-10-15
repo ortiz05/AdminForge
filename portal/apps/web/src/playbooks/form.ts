@@ -1,4 +1,11 @@
-import { inputErrors, inputsSchema, inputValueSchema, literalDefault, type Param, type Params } from '@adminforge/schemas';
+import {
+  inputErrors,
+  inputsSchema,
+  inputValueSchema,
+  literalDefault,
+  type Param,
+  type Params,
+} from '@adminforge/schemas';
 
 /** Form state: raw control values keyed by input name. */
 export type FormValues = Record<string, unknown>;
@@ -43,7 +50,11 @@ export interface ValidationResult {
 }
 
 /** zod-validates the form (client side; the engine re-validates). */
-export function validateForm(params: Params, values: FormValues, omit: readonly string[] = []): ValidationResult {
+export function validateForm(
+  params: Params,
+  values: FormValues,
+  omit: readonly string[] = [],
+): ValidationResult {
   const result = inputsSchema(params, { omit }).safeParse(values);
   if (result.success) {
     const clean = Object.fromEntries(Object.entries(result.data).filter(([, v]) => v !== undefined));
@@ -87,7 +98,17 @@ export function previewMatches(sent: Record<string, unknown>, ran: Record<string
   return Object.entries(sent).every(([k, v]) => stableJson(normInput(v)) === stableJson(normInput(ran[k])));
 }
 
-const RESERVED_PARAMS = new Set(['run', 'inputs', 'items', 'preview', 'playbook', 'inspect', 'itab', 'view', 'tab']);
+const RESERVED_PARAMS = new Set([
+  'run',
+  'inputs',
+  'items',
+  'preview',
+  'playbook',
+  'inspect',
+  'itab',
+  'view',
+  'tab',
+]);
 
 export interface Prefill {
   values: FormValues;
@@ -109,22 +130,34 @@ export function prefillFromSearch(
   let encoded: Record<string, unknown> = {};
   if (search.inputs !== undefined) {
     const decoded = decode(search.inputs);
-    if (decoded && typeof decoded === 'object' && !Array.isArray(decoded)) encoded = decoded as Record<string, unknown>;
+    if (decoded && typeof decoded === 'object' && !Array.isArray(decoded))
+      encoded = decoded as Record<string, unknown>;
     else problems.push('The prefilled inputs in the link could not be read.');
   }
   const unknown = Object.keys(encoded).filter((k) => !Object.hasOwn(params, k));
-  if (unknown.length) problems.push(`The link included inputs this runbook doesn’t take (${unknown.join(', ')}); they were left out.`);
+  if (unknown.length)
+    problems.push(
+      `The link included inputs this runbook doesn’t take (${unknown.join(', ')}); they were left out.`,
+    );
 
   const values: FormValues = {};
   for (const [name, p] of Object.entries(params)) {
     let v = !RESERVED_PARAMS.has(name) && search[name] !== undefined ? search[name] : encoded[name];
     if (v === undefined || v === null || v === '') continue;
     const multi = ('multiple' in p && p.multiple) === true;
-    if (multi && typeof v === 'string') v = v.split(',').map((x) => x.trim()).filter(Boolean);
-    if (typeof v === 'number' || typeof v === 'boolean') v = p.type === 'string' || p.type === 'guid' ? String(v) : v;
+    if (multi && typeof v === 'string')
+      v = v
+        .split(',')
+        .map((x) => x.trim())
+        .filter(Boolean);
+    if (typeof v === 'number' || typeof v === 'boolean')
+      v = p.type === 'string' || p.type === 'guid' ? String(v) : v;
     const r = inputValueSchema(p).safeParse(v);
     if (r.success) values[name] = typeof r.data === 'string' || Array.isArray(r.data) ? v : r.data;
-    else problems.push(`The link’s ${labelOf(name, p)} wasn’t used: ${r.error.issues[0]?.message ?? 'not valid'}`);
+    else
+      problems.push(
+        `The link’s ${labelOf(name, p)} wasn’t used: ${r.error.issues[0]?.message ?? 'not valid'}`,
+      );
   }
   return { values, problems };
 }

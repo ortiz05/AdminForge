@@ -1,4 +1,11 @@
-import { isTruncated, redact, redactInputs, secretInputValues, storableOutput, validateInputs } from '@adminforge/engine';
+import {
+  isTruncated,
+  redact,
+  redactInputs,
+  secretInputValues,
+  storableOutput,
+  validateInputs,
+} from '@adminforge/engine';
 import { Params } from '@adminforge/schemas';
 
 const now = new Date('2026-10-15T12:00:00.000Z');
@@ -23,7 +30,17 @@ const params = Params.parse({
 
 describe('validateInputs', () => {
   it('applies defaults, coerces unambiguous values and normalises ids', async () => {
-    const r = await validateInputs(params, { userId: 'AAAAAAAA-0000-4000-8000-000000000001', reason: 'incident 4411 test', level: '3', notify: 'true', users: ['b@example.com'] }, { now });
+    const r = await validateInputs(
+      params,
+      {
+        userId: 'AAAAAAAA-0000-4000-8000-000000000001',
+        reason: 'incident 4411 test',
+        level: '3',
+        notify: 'true',
+        users: ['b@example.com'],
+      },
+      { now },
+    );
     expect(r).toEqual({
       ok: true,
       values: {
@@ -43,7 +60,20 @@ describe('validateInputs', () => {
   it('reports every problem with the field name', async () => {
     const r = await validateInputs(
       params,
-      { userId: 'nope', reason: 'short', count: 9, level: 'mid', tags: ['a', 'z'], group: 'not-a-guid', users: ['a@example.com', 'b@example.com', 'c@example.com'], sub: 'x', res: 'y', code: 'abc', mail: 'x', extra: 1 },
+      {
+        userId: 'nope',
+        reason: 'short',
+        count: 9,
+        level: 'mid',
+        tags: ['a', 'z'],
+        group: 'not-a-guid',
+        users: ['a@example.com', 'b@example.com', 'c@example.com'],
+        sub: 'x',
+        res: 'y',
+        code: 'abc',
+        mail: 'x',
+        extra: 1,
+      },
       { now },
     );
     expect(r.ok).toBe(false);
@@ -65,10 +95,26 @@ describe('validateInputs', () => {
   });
 
   it('requires inputs unless required: false or a default; params are optional unless required: true', async () => {
-    const p = Params.parse({ a: { type: 'string' }, b: { type: 'string', required: false }, c: { type: 'string', required: true } });
-    expect(await validateInputs(p, {}, { now })).toEqual({ ok: false, errors: [{ field: 'a', message: 'a is required.' }, { field: 'c', message: 'c is required.' }] });
-    expect(await validateInputs(p, {}, { now, kind: 'params' })).toEqual({ ok: false, errors: [{ field: 'c', message: 'c is required.' }] });
-    expect(await validateInputs(undefined, { x: 1 })).toEqual({ ok: false, errors: [{ field: 'x', message: 'Unknown input.' }] });
+    const p = Params.parse({
+      a: { type: 'string' },
+      b: { type: 'string', required: false },
+      c: { type: 'string', required: true },
+    });
+    expect(await validateInputs(p, {}, { now })).toEqual({
+      ok: false,
+      errors: [
+        { field: 'a', message: 'a is required.' },
+        { field: 'c', message: 'c is required.' },
+      ],
+    });
+    expect(await validateInputs(p, {}, { now, kind: 'params' })).toEqual({
+      ok: false,
+      errors: [{ field: 'c', message: 'c is required.' }],
+    });
+    expect(await validateInputs(undefined, { x: 1 })).toEqual({
+      ok: false,
+      errors: [{ field: 'x', message: 'Unknown input.' }],
+    });
     expect(await validateInputs(undefined, [] as unknown)).toMatchObject({ ok: false });
     expect(await validateInputs(undefined, undefined)).toEqual({ ok: true, values: {} });
   });
@@ -76,7 +122,13 @@ describe('validateInputs', () => {
 
 describe('redaction', () => {
   it('redacts credential-looking keys and redact: true inputs wherever they appear', () => {
-    const body = { passwordProfile: { password: 'p@ss', forceChangePasswordNextSignIn: true }, clientSecret: 's', token: null, note: 'contains Hunter22 inside', nested: [{ apiKey: 'k' }] };
+    const body = {
+      passwordProfile: { password: 'p@ss', forceChangePasswordNextSignIn: true },
+      clientSecret: 's',
+      token: null,
+      note: 'contains Hunter22 inside',
+      nested: [{ apiKey: 'k' }],
+    };
     expect(redact(body, ['Hunter22'])).toEqual({
       passwordProfile: { password: '[redacted]', forceChangePasswordNextSignIn: true },
       clientSecret: '[redacted]',

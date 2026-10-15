@@ -36,8 +36,12 @@ export function effectiveThresholds(probe: Pick<Probe, 'check' | 'thresholds'>):
 }
 
 /** ok / warn / crit for a metric (inclusive: reaching a threshold counts). */
-export function classify(metric: number, t: Pick<Thresholds, 'warn' | 'crit' | 'worse'>): Exclude<ProbeStatus, 'error'> {
-  const reached = (limit: number | null) => limit !== null && (t.worse === 'higher' ? metric >= limit : metric <= limit);
+export function classify(
+  metric: number,
+  t: Pick<Thresholds, 'warn' | 'crit' | 'worse'>,
+): Exclude<ProbeStatus, 'error'> {
+  const reached = (limit: number | null) =>
+    limit !== null && (t.worse === 'higher' ? metric >= limit : metric <= limit);
   if (reached(t.crit)) return 'crit';
   if (reached(t.warn)) return 'warn';
   return 'ok';
@@ -46,7 +50,9 @@ export function classify(metric: number, t: Pick<Thresholds, 'warn' | 'crit' | '
 /** "warn ≥ 1, crit ≥ 10" — for messages. */
 export function describeThresholds(t: Thresholds): string {
   const op = t.worse === 'higher' ? '≥' : '≤';
-  return [t.warn !== null ? `warn ${op} ${t.warn}` : '', t.crit !== null ? `crit ${op} ${t.crit}` : ''].filter(Boolean).join(', ');
+  return [t.warn !== null ? `warn ${op} ${t.warn}` : '', t.crit !== null ? `crit ${op} ${t.crit}` : '']
+    .filter(Boolean)
+    .join(', ');
 }
 
 const RANK: Record<ProbeStatus, number> = { ok: 0, warn: 1, crit: 2, error: 3 };

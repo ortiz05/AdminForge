@@ -7,9 +7,13 @@ import type { Out } from '../provision/render';
 
 export function parsePurposes(raw: string | undefined): Purpose[] {
   if (!raw || raw === 'all') return [...PURPOSES];
-  const list = raw.split(',').map((s) => s.trim()).filter(Boolean);
+  const list = raw
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
   const bad = list.filter((p) => !(PURPOSES as readonly string[]).includes(p));
-  if (bad.length) throw new ConfigError(`Unknown purpose(s): ${bad.join(', ')}. Use ${PURPOSES.join(', ')} or all.`);
+  if (bad.length)
+    throw new ConfigError(`Unknown purpose(s): ${bad.join(', ')}. Use ${PURPOSES.join(', ')} or all.`);
   return list as Purpose[];
 }
 

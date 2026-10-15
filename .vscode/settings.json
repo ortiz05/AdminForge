@@ -32,9 +32,7 @@
       "portal/content/**/*.connection.yaml",
       "portal/content/**/*.connection.yml"
     ],
-    "./portal/packages/schemas/generated/navigation.schema.json": [
-      "portal/content/navigation.yaml"
-    ]
+    "./portal/packages/schemas/generated/navigation.schema.json": ["portal/content/navigation.yaml"]
   },
   "yaml.validate": true
 }

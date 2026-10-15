@@ -41,7 +41,8 @@ export const redactUrl = (url: string) => url.replace(SECRET_QUERY, '$1[redacted
 /** Paths whose responses must never be cached by the browser or a proxy. */
 const NO_STORE = /^\/(api|auth)(\/|$|\?)|^\/(healthz|readyz)(\?|$)/;
 const API_OR_AUTH = /^\/(api|auth)(\/|$|\?)/;
-const STATIC_ASSET = /^\/assets\/|\.(js|mjs|css|map|json|png|jpe?g|gif|svg|ico|webp|avif|woff2?|ttf|txt|webmanifest|wasm)$/i;
+const STATIC_ASSET =
+  /^\/assets\/|\.(js|mjs|css|map|json|png|jpe?g|gif|svg|ico|webp|avif|woff2?|ttf|txt|webmanifest|wasm)$/i;
 
 function loggerOptions(config: Config): FastifyServerOptions['logger'] {
   if (config.NODE_ENV === 'test') return false;
@@ -49,7 +50,10 @@ function loggerOptions(config: Config): FastifyServerOptions['logger'] {
   if (config.NODE_ENV === 'development') {
     try {
       // Resolved here so pino's worker finds it under pnpm's strict layout; absent in production installs.
-      transport = { target: createRequire(import.meta.url).resolve('pino-pretty'), options: { translateTime: 'HH:MM:ss', ignore: 'pid,hostname' } };
+      transport = {
+        target: createRequire(import.meta.url).resolve('pino-pretty'),
+        options: { translateTime: 'HH:MM:ss', ignore: 'pid,hostname' },
+      };
     } catch {
       transport = undefined;
     }
@@ -68,14 +72,21 @@ function loggerOptions(config: Config): FastifyServerOptions['logger'] {
       censor: '[redacted]',
     },
     serializers: {
-      req: (req: { method: string; url: string; ip?: string }) => ({ method: req.method, url: redactUrl(req.url), remoteAddress: req.ip }),
+      req: (req: { method: string; url: string; ip?: string }) => ({
+        method: req.method,
+        url: redactUrl(req.url),
+        remoteAddress: req.ip,
+      }),
     },
     ...(transport ? { transport } : {}),
   };
 }
 
 /** Builds the BFF. `deps` replaces stores/clients (tests use in-memory stores and a fake AuthClient). */
-export async function buildApp(config: Config, deps: AppDeps & { schedules?: SchedulesOptions } = {}): Promise<FastifyInstance> {
+export async function buildApp(
+  config: Config,
+  deps: AppDeps & { schedules?: SchedulesOptions } = {},
+): Promise<FastifyInstance> {
   const app = Fastify({
     logger: loggerOptions(config),
     trustProxy: config.TRUST_PROXY,
@@ -190,7 +201,8 @@ export async function buildApp(config: Config, deps: AppDeps & { schedules?: Sch
       root: config.WEB_DIST_DIR,
       setHeaders: (reply, filePath) => {
         // Vite fingerprints everything under assets/; index.html must always be revalidated.
-        if (/[\\/]assets[\\/]/.test(filePath)) reply.header('cache-control', 'public, max-age=31536000, immutable');
+        if (/[\\/]assets[\\/]/.test(filePath))
+          reply.header('cache-control', 'public, max-age=31536000, immutable');
         else reply.header('cache-control', 'no-cache');
       },
     });
@@ -200,12 +212,19 @@ export async function buildApp(config: Config, deps: AppDeps & { schedules?: Sch
     const pathname = request.url.split(/[?#]/)[0]!;
     // Client routes only (page keys contain dots, e.g. /p/identity.users); a missing asset gets a 404, not index.html.
     const isPage =
-      (request.method === 'GET' || request.method === 'HEAD') && !API_OR_AUTH.test(pathname) && !NO_STORE.test(pathname) && !STATIC_ASSET.test(pathname);
+      (request.method === 'GET' || request.method === 'HEAD') &&
+      !API_OR_AUTH.test(pathname) &&
+      !NO_STORE.test(pathname) &&
+      !STATIC_ASSET.test(pathname);
     if (serveSpa && isPage) {
       // SPA fallback: client-side routes (e.g. /p/identity.users) get index.html.
       return reply.header('cache-control', 'no-cache').sendFile('index.html');
     }
-    return sendError(request, reply, new AppError(404, 'not_found', `No route for ${request.method} ${request.url.split('?')[0]}.`));
+    return sendError(
+      request,
+      reply,
+      new AppError(404, 'not_found', `No route for ${request.method} ${request.url.split('?')[0]}.`),
+    );
   });
 
   return app;

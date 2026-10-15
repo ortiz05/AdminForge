@@ -43,7 +43,8 @@ vi.mock('@adminforge/web/src/query/KqlEditor', async () => {
   return { default: MockKqlEditor };
 });
 
-const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
+const json = (body: unknown, status = 200) =>
+  new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
 
 interface Call {
   method: string;
@@ -51,13 +52,17 @@ interface Call {
   body?: Record<string, unknown>;
 }
 
-function renderStudio({ path = '/query', capabilities = CAPABILITIES_NO_DEFENDER as unknown }: { path?: string; capabilities?: unknown } = {}) {
+function renderStudio({
+  path = '/query',
+  capabilities = CAPABILITIES_NO_DEFENDER as unknown,
+}: { path?: string; capabilities?: unknown } = {}) {
   const calls: Call[] = [];
   vi.stubGlobal(
     'fetch',
     vi.fn(async (url: string, init?: RequestInit) => {
       const method = init?.method ?? 'GET';
-      const body = typeof init?.body === 'string' ? (JSON.parse(init.body) as Record<string, unknown>) : undefined;
+      const body =
+        typeof init?.body === 'string' ? (JSON.parse(init.body) as Record<string, unknown>) : undefined;
       calls.push({ method, url, body });
       if (url === '/api/me') return json(me());
       if (url === '/api/nav') return json(NAV);
@@ -74,7 +79,13 @@ function renderStudio({ path = '/query', capabilities = CAPABILITIES_NO_DEFENDER
   queryClient.setDefaultOptions({ queries: { retry: false } });
   const router = createAppRouter(queryClient, { initialPath: path });
   render(<App router={router} queryClient={queryClient} />);
-  const runs = () => calls.filter((c) => c.method === 'POST' && c.url === '/api/query' && !/resourcecontainers|operationalinsights\/workspaces/.test(String(c.body?.query)));
+  const runs = () =>
+    calls.filter(
+      (c) =>
+        c.method === 'POST' &&
+        c.url === '/api/query' &&
+        !/resourcecontainers|operationalinsights\/workspaces/.test(String(c.body?.query)),
+    );
   return { calls, runs, router };
 }
 
@@ -110,12 +121,18 @@ describe('Query Studio (/query)', () => {
     expect(titles).toEqual(GALLERY.filter((q) => q.source === 'resourceGraph').map((q) => q.title));
     await user.click(within(starters).getByRole('button', { name: /Inventory by type and region/ }));
     expect(box).toHaveValue(GALLERY.find((q) => q.id === 'arg.inventory')!.query);
-    expect(within(starters).getByRole('button', { name: /Inventory by type and region/ })).toHaveAttribute('aria-current', 'true');
+    expect(within(starters).getByRole('button', { name: /Inventory by type and region/ })).toHaveAttribute(
+      'aria-current',
+      'true',
+    );
 
     await user.click(screen.getByRole('button', { name: 'Run' }));
     const grid = await screen.findByRole('grid', { name: 'Query results' });
     expect(runs()).toHaveLength(1);
-    expect(runs()[0]!.body).toEqual({ source: 'resourceGraph', query: GALLERY.find((q) => q.id === 'arg.inventory')!.query });
+    expect(runs()[0]!.body).toEqual({
+      source: 'resourceGraph',
+      query: GALLERY.find((q) => q.id === 'arg.inventory')!.query,
+    });
 
     const results = screen.getByRole('region', { name: 'Results' });
     // Header line: rows · duration · source (the table toolbar repeats the row count).
@@ -125,7 +142,9 @@ describe('Query Studio (/query)', () => {
     expect(within(grid).getByRole('columnheader', { name: /resources/ })).toBeInTheDocument();
     expect(within(grid).getAllByText('microsoft.compute/virtualmachines').length).toBeGreaterThan(0);
     // Column types are listed in the schema disclosure.
-    expect(within(results).getByRole('list', { name: 'Result columns and types' })).toHaveTextContent('resourceslong');
+    expect(within(results).getByRole('list', { name: 'Result columns and types' })).toHaveTextContent(
+      'resourceslong',
+    );
     expect(await axeViolations()).toEqual([]);
   });
 
@@ -136,8 +155,16 @@ describe('Query Studio (/query)', () => {
     await user.keyboard('{Control>}{Enter}{/Control}');
     await screen.findByRole('grid', { name: 'Query results' });
     expect(runs()).toHaveLength(1);
-    const stored = JSON.parse(localStorage.getItem(HISTORY_KEY) ?? '[]') as Array<{ query: string; rowCount: number; source: string }>;
-    expect(stored[0]).toMatchObject({ source: 'resourceGraph', query: "resources | where type =~ 'microsoft.web/sites'", rowCount: 12 });
+    const stored = JSON.parse(localStorage.getItem(HISTORY_KEY) ?? '[]') as Array<{
+      query: string;
+      rowCount: number;
+      source: string;
+    }>;
+    expect(stored[0]).toMatchObject({
+      source: 'resourceGraph',
+      query: "resources | where type =~ 'microsoft.web/sites'",
+      rowCount: 12,
+    });
 
     await typeQuery(user, 'resources | take 5');
     await user.click(screen.getByRole('tab', { name: 'History' }));
@@ -167,10 +194,18 @@ describe('Query Studio (/query)', () => {
     expect(box).toHaveAttribute('data-tables', expect.stringContaining('AzureActivity'));
     expect(screen.getByRole('radio', { name: 'Log Analytics' })).toHaveAttribute('aria-checked', 'true');
 
-    await user.click(within(screen.getByRole('list', { name: /Starter queries for Log Analytics/ })).getByRole('button', { name: /Failed Azure writes/ }));
+    await user.click(
+      within(screen.getByRole('list', { name: /Starter queries for Log Analytics/ })).getByRole('button', {
+        name: /Failed Azure writes/,
+      }),
+    );
     await user.click(screen.getByRole('button', { name: 'Run' }));
     const grid = await screen.findByRole('grid', { name: 'Query results' });
-    expect(runs()[0]!.body).toEqual({ source: 'logAnalytics', query: expect.stringContaining('AzureActivity'), timespan: 'P1D' });
+    expect(runs()[0]!.body).toEqual({
+      source: 'logAnalytics',
+      query: expect.stringContaining('AzureActivity'),
+      timespan: 'P1D',
+    });
     expect(within(grid).getByText('2026-10-15 13:41:07 UTC')).toBeInTheDocument();
 
     await user.click(screen.getByRole('combobox', { name: 'Workspace' }));
@@ -186,7 +221,11 @@ describe('Query Studio (/query)', () => {
     await user.click(await screen.findByRole('option', { name: 'Set in query' }));
     await user.click(screen.getByRole('button', { name: 'Run' }));
     await waitFor(() => expect(runs()).toHaveLength(2));
-    expect(runs()[1]!.body).toEqual({ source: 'logAnalytics', query: expect.any(String), workspace: QIDS.workspace });
+    expect(runs()[1]!.body).toEqual({
+      source: 'logAnalytics',
+      query: expect.any(String),
+      workspace: QIDS.workspace,
+    });
   });
 
   it('Defender advanced hunting shows the licence note from /api/me/capabilities', async () => {
@@ -194,14 +233,22 @@ describe('Query Studio (/query)', () => {
     await editor(/Defender advanced hunting query/);
     const note = await screen.findByText('Advanced hunting needs Microsoft Defender XDR');
     const callout = note.closest('div')!.parentElement!;
-    expect(callout).toHaveTextContent('Requires Microsoft Defender XDR / Defender for Endpoint (MTP or WINDEFATP). Queries return an error until the tenant has it');
+    expect(callout).toHaveTextContent(
+      'Requires Microsoft Defender XDR / Defender for Endpoint (MTP or WINDEFATP). Queries return an error until the tenant has it',
+    );
     // The SKU is already named in the reason, so it is not repeated.
     expect(callout).not.toHaveTextContent('Look for MTP');
     expect(await axeViolations()).toEqual([]);
   });
 
   it('says nothing about licences when Defender is licensed', async () => {
-    renderStudio({ path: '/query?source=advancedHunting', capabilities: { roles: { active: [], eligible: [] }, features: { defender: { available: true, sku: 'SPE_E5' } } } });
+    renderStudio({
+      path: '/query?source=advancedHunting',
+      capabilities: {
+        roles: { active: [], eligible: [] },
+        features: { defender: { available: true, sku: 'SPE_E5' } },
+      },
+    });
     await editor(/Defender advanced hunting query/);
     await waitFor(() => expect(screen.queryByText(/needs Microsoft Defender XDR/)).not.toBeInTheDocument());
   });
@@ -242,7 +289,9 @@ describe('Query Studio (/query)', () => {
     expect(screen.getByRole('combobox', { name: 'Y axis' })).toHaveTextContent('changes');
     expect(screen.getByRole('combobox', { name: 'Split by' })).toHaveTextContent('Caller');
     expect(screen.getByRole('radio', { name: 'Area' })).toHaveAttribute('aria-checked', 'true');
-    expect(screen.getByRole('figure', { name: 'changes by TimeGenerated, split by Caller' })).toBeInTheDocument();
+    expect(
+      screen.getByRole('figure', { name: 'changes by TimeGenerated, split by Caller' }),
+    ).toBeInTheDocument();
     expect(await axeViolations()).toEqual([]);
 
     // The chart view stays selected for the next run; a result without numbers says how to get some.
@@ -262,13 +311,20 @@ describe('Query Studio (/query)', () => {
     await user.click(await screen.findByRole('menuitem', { name: 'Report' }));
 
     const dialog = await screen.findByRole('dialog', { name: 'Save as report' });
-    expect(within(dialog).getByRole('textbox', { name: 'Title' })).toHaveValue('Inventory by type and region');
+    expect(within(dialog).getByRole('textbox', { name: 'Title' })).toHaveValue(
+      'Inventory by type and region',
+    );
     expect(await axeViolations()).toEqual([]);
     await user.click(within(dialog).getByRole('button', { name: 'Create report YAML' }));
 
     const ready = await screen.findByRole('dialog', { name: 'Your report file is ready' });
     const scaffold = calls.find((c) => c.url === '/api/query/scaffold')!;
-    expect(scaffold.body).toEqual({ as: 'report', source: 'resourceGraph', query: GALLERY.find((q) => q.id === 'arg.inventory')!.query, title: 'Inventory by type and region' });
+    expect(scaffold.body).toEqual({
+      as: 'report',
+      source: 'resourceGraph',
+      query: GALLERY.find((q) => q.id === 'arg.inventory')!.query,
+      title: 'Inventory by type and region',
+    });
     const path = 'portal/content/reports/azure/inventory-by-type-and-region.report.yaml';
     expect(within(ready).getAllByText(path).length).toBeGreaterThan(0);
     expect(within(ready).getByRole('region', { name: path })).toHaveTextContent('kind: report');
@@ -293,7 +349,9 @@ describe('Query Studio (/query)', () => {
     await user.click(screen.getByRole('button', { name: /Save as/ }));
     await user.click(await screen.findByRole('menuitem', { name: 'Schedule' }));
     const dialog = await screen.findByRole('dialog', { name: 'Save as schedule' });
-    expect(within(dialog).getByText(/subscription ids are configuration, so they are not saved in content/)).toBeInTheDocument();
+    expect(
+      within(dialog).getByText(/subscription ids are configuration, so they are not saved in content/),
+    ).toBeInTheDocument();
     await user.click(within(dialog).getByRole('button', { name: 'Create schedule YAML' }));
     const ready = await screen.findByRole('dialog', { name: 'Your schedule file is ready' });
     const body = calls.find((c) => c.url === '/api/query/scaffold')!.body!;
@@ -310,7 +368,9 @@ describe('Query Studio (/query)', () => {
     });
     expect(JSON.stringify(body)).not.toContain(QIDS.subProd);
     // The branch is named after the definition id the server chose.
-    expect(within(ready).getByRole('region', { name: 'Validate and commit' })).toHaveTextContent('git switch -c content/azure.inventory-by-type-and-region');
+    expect(within(ready).getByRole('region', { name: 'Validate and commit' })).toHaveTextContent(
+      'git switch -c content/azure.inventory-by-type-and-region',
+    );
   });
 
   it('requires a title before saving and never sends an empty query', async () => {
@@ -347,7 +407,11 @@ describe('Query Studio (/query)', () => {
       expect(await screen.findByRole('grid', { name: 'Query results' })).toBeInTheDocument();
       await user.click(screen.getByRole('tab', { name: 'History' }));
       // Kept in memory for this session even though it could not be stored.
-      expect(within(screen.getByRole('list', { name: 'Query history' })).getAllByRole('button', { name: /resources/ }).length).toBeGreaterThan(0);
+      expect(
+        within(screen.getByRole('list', { name: 'Query history' })).getAllByRole('button', {
+          name: /resources/,
+        }).length,
+      ).toBeGreaterThan(0);
     } finally {
       getItem.mockRestore();
       setItem.mockRestore();

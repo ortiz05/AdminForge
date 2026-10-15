@@ -11,7 +11,11 @@ import type { ListConfig } from './schema';
 import { toText as text } from '../../lib/text';
 
 /** A field path, or a template evaluated per row. */
-function useFieldOrTemplate(rows: Record<string, unknown>[], spec: string | undefined, scope: Record<string, unknown>) {
+function useFieldOrTemplate(
+  rows: Record<string, unknown>[],
+  spec: string | undefined,
+  scope: Record<string, unknown>,
+) {
   const templated = spec !== undefined && hasExpression(spec);
   const evaluated = useRowTemplates(rows, spec, scope, templated);
   return (row: Record<string, unknown>, i: number): unknown =>
@@ -57,7 +61,11 @@ export function ListWidget({ config, data, runtime }: WidgetProps<ListConfig>) {
       <ul className="flex flex-col pb-1.5" aria-label={name}>
         {rows.map((row, i) => {
           const st = config.status
-            ? mapStatus(getPath(row, config.status.field), config.status.map as StatusMap | undefined, config.status.default as StatusEntry | undefined)
+            ? mapStatus(
+                getPath(row, config.status.field),
+                config.status.map as StatusMap | undefined,
+                config.status.default as StatusEntry | undefined,
+              )
             : null;
           const p = text(primary(row, i)) || '—';
           const sRaw = secondary(row, i);
@@ -88,7 +96,10 @@ export function ListWidget({ config, data, runtime }: WidgetProps<ListConfig>) {
           return (
             <li key={text(row.id ?? i)}>
               {href ? (
-                <L href={href} className={`${cls} transition-colors duration-(--af-motion-fast) hover:bg-hover`}>
+                <L
+                  href={href}
+                  className={`${cls} transition-colors duration-(--af-motion-fast) hover:bg-hover`}
+                >
                   {content}
                 </L>
               ) : (

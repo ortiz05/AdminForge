@@ -28,16 +28,20 @@ export function createMsalAuthClient(cfg: Config, cache: TokenCacheStore, log?: 
   const credentials = (kind: AppKind) => {
     const clientId = kind === 'read' ? cfg.AF_READ_CLIENT_ID : cfg.AF_WRITE_CLIENT_ID;
     const clientSecret = kind === 'read' ? cfg.AF_READ_CLIENT_SECRET : cfg.AF_WRITE_CLIENT_SECRET;
-    if (!clientId || !clientSecret) throw new Error(`The ${kind} app is not configured (AF_${kind.toUpperCase()}_CLIENT_ID / _SECRET).`);
+    if (!clientId || !clientSecret)
+      throw new Error(`The ${kind} app is not configured (AF_${kind.toUpperCase()}_CLIENT_ID / _SECRET).`);
     return { clientId, clientSecret };
   };
 
-  const redirectUri = (kind: AppKind) => `${cfg.PUBLIC_BASE_URL}${kind === 'read' ? '/auth/callback' : '/auth/arm/callback'}`;
+  const redirectUri = (kind: AppKind) =>
+    `${cfg.PUBLIC_BASE_URL}${kind === 'read' ? '/auth/callback' : '/auth/arm/callback'}`;
 
   const app = (kind: AppKind, partitionKey?: string) =>
     new ConfidentialClientApplication({
       auth: { ...credentials(kind), authority, clientCapabilities: ['CP1'] },
-      cache: partitionKey ? { cachePlugin: new DistributedCachePlugin(cache, new FixedPartition(partitionKey)) } : undefined,
+      cache: partitionKey
+        ? { cachePlugin: new DistributedCachePlugin(cache, new FixedPartition(partitionKey)) }
+        : undefined,
       system: {
         loggerOptions: {
           piiLoggingEnabled: false,
@@ -85,7 +89,12 @@ export function createMsalAuthClient(cfg: Config, cache: TokenCacheStore, log?: 
       const account = await cca.getTokenCache().getAccountByHomeId(homeAccountId);
       if (!account) throw new ReauthRequired(kind, claims);
       try {
-        const result = await cca.acquireTokenSilent({ account, scopes, forceRefresh: forceRefresh ?? Boolean(claims), claims });
+        const result = await cca.acquireTokenSilent({
+          account,
+          scopes,
+          forceRefresh: forceRefresh ?? Boolean(claims),
+          claims,
+        });
         return result.accessToken;
       } catch (err) {
         if (err instanceof InteractionRequiredAuthError) throw new ReauthRequired(kind, claims);

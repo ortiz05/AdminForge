@@ -17,8 +17,20 @@ import { WidgetPanel } from '../../lib/WidgetPanel';
 import type { ProbeHealth, ProbeSummary, WidgetData, WidgetProps } from '../../types';
 import type { ProbeStatusConfig } from './schema';
 
-const TONE: Record<ProbeHealth, StatusTone> = { ok: 'ok', warn: 'warn', crit: 'crit', error: 'crit', unknown: 'neutral' };
-const LABEL: Record<ProbeHealth, string> = { ok: 'Passing', warn: 'Degraded', crit: 'Failing', error: 'Error', unknown: 'No result' };
+const TONE: Record<ProbeHealth, StatusTone> = {
+  ok: 'ok',
+  warn: 'warn',
+  crit: 'crit',
+  error: 'crit',
+  unknown: 'neutral',
+};
+const LABEL: Record<ProbeHealth, string> = {
+  ok: 'Passing',
+  warn: 'Degraded',
+  crit: 'Failing',
+  error: 'Error',
+  unknown: 'No result',
+};
 
 function metricText(p: ProbeSummary): string {
   if (p.metric == null) return '—';
@@ -45,23 +57,47 @@ function ProbeRow({ probe, now }: { probe: ProbeSummary; now: number }) {
         </StatusPill>
         <span className="min-w-0 flex-1 truncate font-medium text-fg">{probe.title}</span>
         {points.length > 1 && (
-          <Sparkline data={points} label={`${probe.title}, last ${points.length} results`} width={64} height={20} className="hidden shrink-0 sm:block" />
+          <Sparkline
+            data={points}
+            label={`${probe.title}, last ${points.length} results`}
+            width={64}
+            height={20}
+            className="hidden shrink-0 sm:block"
+          />
         )}
-        <span className="w-20 shrink-0 text-right font-mono text-xs tabular-nums text-fg-2">{metricText(probe)}</span>
+        <span className="w-20 shrink-0 text-right font-mono text-xs tabular-nums text-fg-2">
+          {metricText(probe)}
+        </span>
         <span className="hidden w-16 shrink-0 text-right text-xs text-fg-3 md:inline">
           {probe.lastRunAt ? formatRelative(probe.lastRunAt, now) : 'never'}
         </span>
-        <CaretDownIcon size={12} weight="bold" aria-hidden className={cn('shrink-0 text-fg-3 transition-transform duration-(--af-motion-fast)', open && 'rotate-180')} />
+        <CaretDownIcon
+          size={12}
+          weight="bold"
+          aria-hidden
+          className={cn(
+            'shrink-0 text-fg-3 transition-transform duration-(--af-motion-fast)',
+            open && 'rotate-180',
+          )}
+        />
       </button>
-      <div id={detailId} hidden={!open} className="border-t border-line bg-sunken px-(--af-pad-panel) py-3 text-sm">
+      <div
+        id={detailId}
+        hidden={!open}
+        className="border-t border-line bg-sunken px-(--af-pad-panel) py-3 text-sm"
+      >
         <dl className="grid grid-cols-1 gap-x-6 gap-y-2 sm:grid-cols-3">
           <div>
             <dt className="text-xs text-fg-3">Last run</dt>
-            <dd className="m-0 text-fg-2 tabular-nums">{probe.lastRunAt ? formatTimestamp(probe.lastRunAt) : 'Not run yet'}</dd>
+            <dd className="m-0 text-fg-2 tabular-nums">
+              {probe.lastRunAt ? formatTimestamp(probe.lastRunAt) : 'Not run yet'}
+            </dd>
           </div>
           <div>
             <dt className="text-xs text-fg-3">Took</dt>
-            <dd className="m-0 text-fg-2 tabular-nums">{probe.durationMs != null ? formatDuration(probe.durationMs) : '—'}</dd>
+            <dd className="m-0 text-fg-2 tabular-nums">
+              {probe.durationMs != null ? formatDuration(probe.durationMs) : '—'}
+            </dd>
           </div>
           <div>
             <dt className="text-xs text-fg-3">Probe</dt>
@@ -86,7 +122,8 @@ export function ProbeStatusWidget({ config, runtime }: WidgetProps<ProbeStatusCo
       return [...state.probes].sort((a, b) => (order.get(a.key) ?? 999) - (order.get(b.key) ?? 999));
     }
     return [...state.probes].sort(
-      (a, b) => STATUS_SEVERITY[TONE[b.status]] - STATUS_SEVERITY[TONE[a.status]] || a.title.localeCompare(b.title),
+      (a, b) =>
+        STATUS_SEVERITY[TONE[b.status]] - STATUS_SEVERITY[TONE[a.status]] || a.title.localeCompare(b.title),
     );
   }, [state.probes, config.probes]);
   const data: WidgetData = {

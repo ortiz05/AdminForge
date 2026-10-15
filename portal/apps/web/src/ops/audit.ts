@@ -62,8 +62,34 @@ const csvCell = (v: unknown) => {
 
 /** CSV of the events loaded so far (the server applies the filters; the API has no export endpoint yet). */
 export function auditCsv(events: AuditEvent[]): string {
-  const head = ['seq', 'ts', 'actorUpn', 'mode', 'action', 'targetType', 'targetId', 'result', 'correlationId', 'details'];
-  const rows = events.map((e) => [e.seq, e.ts, e.actorUpn, e.mode, e.action, e.targetType, e.targetId, e.result, e.correlationId, e.details].map(csvCell).join(','));
+  const head = [
+    'seq',
+    'ts',
+    'actorUpn',
+    'mode',
+    'action',
+    'targetType',
+    'targetId',
+    'result',
+    'correlationId',
+    'details',
+  ];
+  const rows = events.map((e) =>
+    [
+      e.seq,
+      e.ts,
+      e.actorUpn,
+      e.mode,
+      e.action,
+      e.targetType,
+      e.targetId,
+      e.result,
+      e.correlationId,
+      e.details,
+    ]
+      .map(csvCell)
+      .join(','),
+  );
   return [head.join(','), ...rows].join('\r\n');
 }
 

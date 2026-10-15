@@ -8,11 +8,31 @@ export default defineConfig({
     globals: true,
     projects: [
       { extends: true, test: { name: 'unit', include: ['unit/**/*.test.ts'], environment: 'node' } },
-      { extends: true, test: { name: 'component', include: ['component/**/*.test.tsx'], environment: 'jsdom', setupFiles: ['./component/setup.ts'] } },
-      { extends: true, test: { name: 'api', include: ['api/**/*.test.ts'], environment: 'node', setupFiles: ['./api/setup.ts'], fileParallelism: false } },
+      {
+        extends: true,
+        test: {
+          name: 'component',
+          include: ['component/**/*.test.tsx'],
+          environment: 'jsdom',
+          setupFiles: ['./component/setup.ts'],
+        },
+      },
+      {
+        extends: true,
+        test: {
+          name: 'api',
+          include: ['api/**/*.test.ts'],
+          environment: 'node',
+          setupFiles: ['./api/setup.ts'],
+          fileParallelism: false,
+        },
+      },
       { extends: true, test: { name: 'content', include: ['content/**/*.test.ts'], environment: 'node' } },
       { extends: true, test: { name: 'guards', include: ['guards/**/*.test.ts'], environment: 'node' } },
-      { extends: true, test: { name: 'live', include: ['live/**/*.test.ts'], environment: 'node', testTimeout: 60_000 } },
+      {
+        extends: true,
+        test: { name: 'live', include: ['live/**/*.test.ts'], environment: 'node', testTimeout: 60_000 },
+      },
     ],
   },
 });

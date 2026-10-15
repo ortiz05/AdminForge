@@ -1,13 +1,6 @@
 /** Services AdminForge talks to. Each maps to one Entra resource (audience). */
 export type ServiceId =
-  | 'graph'
-  | 'arm'
-  | 'logAnalytics'
-  | 'exchange'
-  | 'teams'
-  | 'sharepointAdmin'
-  | 'function'
-  | 'runner';
+  'graph' | 'arm' | 'logAnalytics' | 'exchange' | 'teams' | 'sharepointAdmin' | 'function' | 'runner';
 
 /** Session mode: read-only, or armed write access. */
 export type Mode = 'read' | 'write';

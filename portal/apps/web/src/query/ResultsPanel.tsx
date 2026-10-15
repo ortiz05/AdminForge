@@ -80,14 +80,23 @@ function Mono({ text }: { text: string }) {
   );
 }
 
-export function resultColumns(columns: ResultColumn[], rows: Array<Record<string, unknown>>): DataColumn<Row>[] {
+export function resultColumns(
+  columns: ResultColumn[],
+  rows: Array<Record<string, unknown>>,
+): DataColumn<Row>[] {
   return columns.map((c): DataColumn<Row> => {
     const kind = valueKind(c.type);
     const text = (row: Row) => cellText(row.r[c.name]);
     const base = { id: c.name, header: c.name, sortable: true };
     switch (kind) {
       case 'number':
-        return { ...base, kind: 'number', value: (row) => toNumber(row.r[c.name]), align: 'end', filter: 'range' };
+        return {
+          ...base,
+          kind: 'number',
+          value: (row) => toNumber(row.r[c.name]),
+          align: 'end',
+          filter: 'range',
+        };
       case 'datetime':
         return {
           ...base,
@@ -105,16 +114,33 @@ export function resultColumns(columns: ResultColumn[], rows: Array<Record<string
           },
         };
       case 'bool':
-        return { ...base, value: (row) => (row.r[c.name] === null || row.r[c.name] === undefined ? null : text(row)), filter: 'facet' };
+        return {
+          ...base,
+          value: (row) => (row.r[c.name] === null || row.r[c.name] === undefined ? null : text(row)),
+          filter: 'facet',
+        };
       case 'guid':
         return { ...base, kind: 'id', value: text };
       case 'dynamic':
       case 'timespan':
-        return { ...base, value: text, width: 'minmax(180px, 1.2fr)', cell: (row) => (text(row) ? <Mono text={text(row)} /> : <span className="text-fg-3">—</span>) };
+        return {
+          ...base,
+          value: text,
+          width: 'minmax(180px, 1.2fr)',
+          cell: (row) => (text(row) ? <Mono text={text(row)} /> : <span className="text-fg-3">—</span>),
+        };
       default: {
         if (looksLikeGuids(rows, c.name)) return { ...base, kind: 'id', value: text };
-        const armIds = rows.slice(0, 20).some((r) => typeof r[c.name] === 'string' && /^\/subscriptions\//i.test(r[c.name] as string));
-        if (armIds) return { ...base, value: text, width: 'minmax(220px, 1.6fr)', cell: (row) => (text(row) ? <Mono text={text(row)} /> : <span className="text-fg-3">—</span>) };
+        const armIds = rows
+          .slice(0, 20)
+          .some((r) => typeof r[c.name] === 'string' && /^\/subscriptions\//i.test(r[c.name] as string));
+        if (armIds)
+          return {
+            ...base,
+            value: text,
+            width: 'minmax(220px, 1.6fr)',
+            cell: (row) => (text(row) ? <Mono text={text(row)} /> : <span className="text-fg-3">—</span>),
+          };
         return { ...base, value: text };
       }
     }
@@ -125,7 +151,12 @@ function Schema({ columns }: { columns: ResultColumn[] }) {
   return (
     <details className="group px-(--af-pad-panel) pb-3">
       <summary className="inline-flex cursor-pointer items-center gap-1 rounded-sm text-xs text-fg-3 select-none hover:text-fg-2">
-        <CaretRightIcon size={12} weight="bold" aria-hidden className="transition-transform duration-(--af-motion-fast) group-open:rotate-90 motion-reduce:transition-none" />
+        <CaretRightIcon
+          size={12}
+          weight="bold"
+          aria-hidden
+          className="transition-transform duration-(--af-motion-fast) group-open:rotate-90 motion-reduce:transition-none"
+        />
         Schema · {columns.length} column{columns.length === 1 ? '' : 's'}
       </summary>
       <ul className="mt-2 flex flex-wrap gap-1.5" aria-label="Result columns and types">
@@ -145,15 +176,26 @@ function Schema({ columns }: { columns: ResultColumn[] }) {
 function ChartView({ result, hint }: { result: QueryResult; hint?: ChartHint }) {
   const names = new Set(result.columns.map((c) => c.name));
   const fromHint =
-    hint && names.has(hint.x) && names.has(hint.y) ? { x: hint.x, y: hint.y, kind: hint.kind, ...(hint.split && names.has(hint.split) ? { split: hint.split } : {}) } : null;
+    hint && names.has(hint.x) && names.has(hint.y)
+      ? {
+          x: hint.x,
+          y: hint.y,
+          kind: hint.kind,
+          ...(hint.split && names.has(hint.split) ? { split: hint.split } : {}),
+        }
+      : null;
   const [cfg, setCfg] = useState<ChartConfig | null>(fromHint ?? defaultChartConfig(result.columns));
   const numeric = result.columns.filter(isNumericColumn);
-  const data = useMemo(() => (cfg ? chartData(result.columns, result.rows, cfg, MAX_SERIES) : null), [cfg, result]);
+  const data = useMemo(
+    () => (cfg ? chartData(result.columns, result.rows, cfg, MAX_SERIES) : null),
+    [cfg, result],
+  );
 
   if (!cfg || !numeric.length)
     return (
       <EmptyState compact title="Nothing to chart" className="py-10">
-        The result has no numeric column. Aggregate first — for example <code className="font-mono text-xs">| summarize count() by type</code>.
+        The result has no numeric column. Aggregate first — for example{' '}
+        <code className="font-mono text-xs">| summarize count() by type</code>.
       </EmptyState>
     );
 
@@ -184,7 +226,9 @@ function ChartView({ result, hint }: { result: QueryResult; hint?: ChartHint }) 
           onValueChange={(v) => set({ split: v === NONE ? undefined : v })}
           options={[
             { value: NONE, label: 'No split' },
-            ...result.columns.filter((c) => c.name !== cfg.x && c.name !== cfg.y && !isNumericColumn(c)).map((c) => ({ value: c.name, label: c.name, description: c.type })),
+            ...result.columns
+              .filter((c) => c.name !== cfg.x && c.name !== cfg.y && !isNumericColumn(c))
+              .map((c) => ({ value: c.name, label: c.name, description: c.type })),
           ]}
         />
         <div className="flex flex-col gap-1.5">
@@ -217,7 +261,8 @@ function ChartView({ result, hint }: { result: QueryResult; hint?: ChartHint }) 
           {(xIsTime || data.droppedCategories > 0 || data.foldedSeries > 0) && (
             <p className="text-xs text-fg-3">
               {xIsTime && 'Times are UTC. '}
-              {data.droppedCategories > 0 && `Showing the first ${formatNumber(data.categories.length)} ${cfg.x} values; ${formatNumber(data.droppedCategories)} more are not drawn. `}
+              {data.droppedCategories > 0 &&
+                `Showing the first ${formatNumber(data.categories.length)} ${cfg.x} values; ${formatNumber(data.droppedCategories)} more are not drawn. `}
               {data.foldedSeries > 0 && `The smallest ${data.foldedSeries} series are combined as “Other”.`}
             </p>
           )}
@@ -231,7 +276,11 @@ function RunningState({ startedAt, onCancel }: { startedAt: number; onCancel: ()
   const now = useNow(1000);
   const secs = Math.max(0, Math.round((now - startedAt) / 1000));
   return (
-    <div className="flex flex-col gap-3 px-(--af-pad-panel) pb-(--af-pad-panel)" role="status" aria-live="polite">
+    <div
+      className="flex flex-col gap-3 px-(--af-pad-panel) pb-(--af-pad-panel)"
+      role="status"
+      aria-live="polite"
+    >
       <div className="flex items-center justify-between gap-3">
         <span className="text-sm text-fg-2">Running the query{secs >= 2 ? ` · ${secs} s` : '…'}</span>
         <Button size="sm" intent="ghost" onClick={onCancel}>
@@ -299,14 +348,28 @@ export function ResultsPanel({ state, chartHint, onRetry, onCancel }: ResultsPan
         title="Copy every row as tab-separated text (pastes into a spreadsheet)"
         onClick={() =>
           void copy(toTsv(result.columns, result.rows)).then(() =>
-            toast({ title: `Copied ${formatNumber(result.rows.length)} row${result.rows.length === 1 ? '' : 's'}`, tone: 'ok', duration: 2500 }),
+            toast({
+              title: `Copied ${formatNumber(result.rows.length)} row${result.rows.length === 1 ? '' : 's'}`,
+              tone: 'ok',
+              duration: 2500,
+            }),
           )
         }
       >
-        {copied ? <CheckIcon size={14} aria-hidden className="text-ok" /> : <CopyIcon size={14} aria-hidden />}
+        {copied ? (
+          <CheckIcon size={14} aria-hidden className="text-ok" />
+        ) : (
+          <CopyIcon size={14} aria-hidden />
+        )}
         Copy
       </Button>
-      <Button size="sm" intent="ghost" onClick={() => done && downloadText(toCsv(result.columns, result.rows), csvFileName(done.request.source))}>
+      <Button
+        size="sm"
+        intent="ghost"
+        onClick={() =>
+          done && downloadText(toCsv(result.columns, result.rows), csvFileName(done.request.source))
+        }
+      >
         <DownloadSimpleIcon size={14} aria-hidden />
         Export CSV
       </Button>
@@ -354,7 +417,11 @@ export function ResultsPanel({ state, chartHint, onRetry, onCancel }: ResultsPan
       {state.status === 'error' && (
         <div className="px-(--af-pad-panel) pb-(--af-pad-panel)">
           <ErrorState
-            title={state.error instanceof ApiRequestError && state.error.status === 400 ? 'The query didn’t run' : 'The query failed'}
+            title={
+              state.error instanceof ApiRequestError && state.error.status === 400
+                ? 'The query didn’t run'
+                : 'The query failed'
+            }
             message={(state.error as Error)?.message}
             hint={state.error instanceof ApiRequestError ? state.error.hint : undefined}
             code={state.error instanceof ApiRequestError ? state.error.code : undefined}
@@ -369,7 +436,8 @@ export function ResultsPanel({ state, chartHint, onRetry, onCancel }: ResultsPan
       )}
       {done && result && result.rows.length === 0 && (
         <EmptyState compact title="No rows" className="py-10">
-          The query ran in {formatDuration(result.ms)} and returned nothing. Widen the time range or relax a filter.
+          The query ran in {formatDuration(result.ms)} and returned nothing. Widen the time range or relax a
+          filter.
         </EmptyState>
       )}
       {done && result && result.rows.length > 0 && (
@@ -377,8 +445,10 @@ export function ResultsPanel({ state, chartHint, onRetry, onCancel }: ResultsPan
           {result.truncated && (
             <p className="mx-(--af-pad-panel) mb-3 rounded-(--af-input-radius) border border-warn/40 bg-warn-subtle px-3 py-2 text-sm text-fg-2">
               Only the first {formatNumber(result.rows.length)}
-              {result.rowCount > result.rows.length ? ` of ${formatNumber(result.rowCount)}` : ''} rows came back. Narrow the filters, or aggregate with{' '}
-              <code className="rounded-sm bg-sunken px-1 font-mono text-xs text-fg">summarize</code>, to see the whole picture.
+              {result.rowCount > result.rows.length ? ` of ${formatNumber(result.rowCount)}` : ''} rows came
+              back. Narrow the filters, or aggregate with{' '}
+              <code className="rounded-sm bg-sunken px-1 font-mono text-xs text-fg">summarize</code>, to see
+              the whole picture.
             </p>
           )}
           <Schema columns={result.columns} />

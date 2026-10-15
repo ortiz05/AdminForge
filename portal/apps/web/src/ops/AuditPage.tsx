@@ -21,7 +21,14 @@ import {
   type DataColumn,
 } from '@adminforge/ui';
 import { useMe } from '../lib/session';
-import { auditCsv, auditPage, auditVerifyQuery, resultTone, type AuditEvent, type AuditFilter } from './audit';
+import {
+  auditCsv,
+  auditPage,
+  auditVerifyQuery,
+  resultTone,
+  type AuditEvent,
+  type AuditFilter,
+} from './audit';
 import { Facts, isForbidden, QueryError, useDocumentTitle } from './ui';
 
 export interface AuditSearch extends AuditFilter {
@@ -45,7 +52,9 @@ function ChainStatus() {
     );
   const v = q.data;
   return v.ok ? (
-    <span title={`Every event's hash was recomputed from the one before it (${v.checked.toLocaleString('en-US')} events).`}>
+    <span
+      title={`Every event's hash was recomputed from the one before it (${v.checked.toLocaleString('en-US')} events).`}
+    >
       <StatusPill status="ok">Chain verified ✓ · {v.checked.toLocaleString('en-US')} events</StatusPill>
     </span>
   ) : (
@@ -69,15 +78,32 @@ function EventDrawer({ event, onClose }: { event: AuditEvent; onClose: () => voi
       <div className="flex flex-col gap-6">
         <Facts
           items={[
-            ['Result', <StatusPill key="r" status={tone} size="sm">{event.result}</StatusPill>],
+            [
+              'Result',
+              <StatusPill key="r" status={tone} size="sm">
+                {event.result}
+              </StatusPill>,
+            ],
             ['Who', event.actorUpn ?? 'System'],
-            ['Mode', event.mode === 'armed' || event.mode === 'write' ? 'Write access (armed)' : event.mode === 'automation' ? 'Automation identity' : (event.mode ?? '—')],
+            [
+              'Mode',
+              event.mode === 'armed' || event.mode === 'write'
+                ? 'Write access (armed)'
+                : event.mode === 'automation'
+                  ? 'Automation identity'
+                  : (event.mode ?? '—'),
+            ],
             ['Target', event.targetType ? `${event.targetType}` : null],
             [
               'Target ID',
               event.targetId ? (
                 event.targetType === 'run' ? (
-                  <Link key="t" to="/runs/$id" params={{ id: event.targetId }} className="font-mono text-xs text-accent hover:underline">
+                  <Link
+                    key="t"
+                    to="/runs/$id"
+                    params={{ id: event.targetId }}
+                    className="font-mono text-xs text-accent hover:underline"
+                  >
                     {event.targetId}
                   </Link>
                 ) : (
@@ -85,16 +111,31 @@ function EventDrawer({ event, onClose }: { event: AuditEvent; onClose: () => voi
                 )
               ) : null,
             ],
-            ['Correlation ID', event.correlationId ? <IdChip key="c" value={event.correlationId} label="Correlation ID" showLabel={false} /> : null],
-            ['Sequence', <span key="s" className="font-mono text-xs">{event.seq}</span>],
+            [
+              'Correlation ID',
+              event.correlationId ? (
+                <IdChip key="c" value={event.correlationId} label="Correlation ID" showLabel={false} />
+              ) : null,
+            ],
+            [
+              'Sequence',
+              <span key="s" className="font-mono text-xs">
+                {event.seq}
+              </span>,
+            ],
           ]}
         />
         {event.details !== null && event.details !== undefined && (
-          <CodeBlock title="details (redacted)" language="json" code={JSON.stringify(event.details, null, 2)} maxHeight={420} />
+          <CodeBlock
+            title="details (redacted)"
+            language="json"
+            code={JSON.stringify(event.details, null, 2)}
+            maxHeight={420}
+          />
         )}
         <p className="text-xs text-fg-3">
-          The correlation ID is also sent to Microsoft as client-request-id, so you can find this change in Entra and
-          Azure logs and quote it in support tickets.
+          The correlation ID is also sent to Microsoft as client-request-id, so you can find this change in
+          Entra and Azure logs and quote it in support tickets.
         </p>
       </div>
     </Drawer>
@@ -102,7 +143,15 @@ function EventDrawer({ event, onClose }: { event: AuditEvent; onClose: () => voi
 }
 
 /** Server-side filters; remounted (keyed) whenever the URL's filters change, so the draft always starts from them. */
-function FilterForm({ filter, onApply, onClear }: { filter: AuditFilter; onApply: (f: AuditFilter) => void; onClear?: () => void }) {
+function FilterForm({
+  filter,
+  onApply,
+  onClear,
+}: {
+  filter: AuditFilter;
+  onApply: (f: AuditFilter) => void;
+  onClear?: () => void;
+}) {
   const [draft, setDraft] = useState(filter);
   const dirty = JSON.stringify(draft) !== JSON.stringify(filter);
   return (
@@ -119,10 +168,35 @@ function FilterForm({ filter, onApply, onClear }: { filter: AuditFilter; onApply
       }}
       aria-label="Filter the audit log"
     >
-      <TextField label="Who" placeholder="name@example.com" value={draft.actor ?? ''} onChange={(e) => setDraft((d) => ({ ...d, actor: e.target.value }))} className="w-64" />
-      <TextField label="Action" placeholder="e.g. run.*" value={draft.action ?? ''} onChange={(e) => setDraft((d) => ({ ...d, action: e.target.value }))} className="w-56" inputClassName="font-mono" />
-      <TextField label="From" type="date" value={draft.from ?? ''} onChange={(e) => setDraft((d) => ({ ...d, from: e.target.value }))} className="w-44" />
-      <TextField label="To" type="date" value={draft.to ?? ''} onChange={(e) => setDraft((d) => ({ ...d, to: e.target.value }))} className="w-44" />
+      <TextField
+        label="Who"
+        placeholder="name@example.com"
+        value={draft.actor ?? ''}
+        onChange={(e) => setDraft((d) => ({ ...d, actor: e.target.value }))}
+        className="w-64"
+      />
+      <TextField
+        label="Action"
+        placeholder="e.g. run.*"
+        value={draft.action ?? ''}
+        onChange={(e) => setDraft((d) => ({ ...d, action: e.target.value }))}
+        className="w-56"
+        inputClassName="font-mono"
+      />
+      <TextField
+        label="From"
+        type="date"
+        value={draft.from ?? ''}
+        onChange={(e) => setDraft((d) => ({ ...d, from: e.target.value }))}
+        className="w-44"
+      />
+      <TextField
+        label="To"
+        type="date"
+        value={draft.to ?? ''}
+        onChange={(e) => setDraft((d) => ({ ...d, to: e.target.value }))}
+        className="w-44"
+      />
       <Button type="submit" intent={dirty ? 'primary' : 'secondary'}>
         Apply
       </Button>
@@ -131,7 +205,9 @@ function FilterForm({ filter, onApply, onClear }: { filter: AuditFilter; onApply
           Clear
         </Button>
       )}
-      <p className="ml-auto self-center text-xs text-fg-3">Filters run on the server; facets below narrow what’s loaded.</p>
+      <p className="ml-auto self-center text-xs text-fg-3">
+        Filters run on the server; facets below narrow what’s loaded.
+      </p>
     </form>
   );
 }
@@ -142,7 +218,12 @@ export function AuditPage({ search }: { search: AuditSearch }) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   useDocumentTitle('Audit');
-  const filter: AuditFilter = { actor: search.actor, action: search.action, from: search.from, to: search.to };
+  const filter: AuditFilter = {
+    actor: search.actor,
+    action: search.action,
+    from: search.from,
+    to: search.to,
+  };
 
   const q = useInfiniteQuery({
     queryKey: ['audit', 'list', filter] as const,
@@ -178,17 +259,34 @@ export function AuditPage({ search }: { search: AuditSearch }) {
         id: 'mode',
         header: 'Mode',
         kind: 'text',
-        value: (e) => (e.mode === 'armed' || e.mode === 'write' ? 'Write' : e.mode === 'automation' ? 'Automation' : e.mode ? 'Read' : '—'),
+        value: (e) =>
+          e.mode === 'armed' || e.mode === 'write'
+            ? 'Write'
+            : e.mode === 'automation'
+              ? 'Automation'
+              : e.mode
+                ? 'Read'
+                : '—',
         cell: (e) =>
           e.mode === 'armed' || e.mode === 'write' ? (
             <Badge tone="outline">Write</Badge>
           ) : (
-            <span className="text-fg-3">{e.mode === 'automation' ? 'Automation' : e.mode ? 'Read' : '—'}</span>
+            <span className="text-fg-3">
+              {e.mode === 'automation' ? 'Automation' : e.mode ? 'Read' : '—'}
+            </span>
           ),
         filter: 'facet',
         width: 'minmax(96px, 0.5fr)',
       },
-      { id: 'action', header: 'Action', kind: 'text', value: (e) => e.action, cell: (e) => <code className="truncate font-mono text-xs text-fg">{e.action}</code>, filter: 'facet', width: 'minmax(180px, 1.2fr)' },
+      {
+        id: 'action',
+        header: 'Action',
+        kind: 'text',
+        value: (e) => e.action,
+        cell: (e) => <code className="truncate font-mono text-xs text-fg">{e.action}</code>,
+        filter: 'facet',
+        width: 'minmax(180px, 1.2fr)',
+      },
       {
         id: 'target',
         header: 'Target',
@@ -217,7 +315,9 @@ export function AuditPage({ search }: { search: AuditSearch }) {
         header: 'Seq',
         kind: 'number',
         value: (e) => e.seq,
-        cell: (e) => <span className="w-full text-right font-mono text-xs text-fg-3 tabular-nums">{e.seq}</span>,
+        cell: (e) => (
+          <span className="w-full text-right font-mono text-xs text-fg-3 tabular-nums">{e.seq}</span>
+        ),
         width: 'minmax(84px, 0.5fr)',
       },
     ],
@@ -230,7 +330,8 @@ export function AuditPage({ search }: { search: AuditSearch }) {
         <PageHeader eyebrow="Admin" title="Audit" />
         <Panel>
           <EmptyState title="The audit log is for Portal Admins" icon={<SealCheckIcon size={20} />}>
-            Your account ({me.user.upn}) doesn’t have the Portal Admin role. Ask a Portal Admin for an export if you need one.
+            Your account ({me.user.upn}) doesn’t have the Portal Admin role. Ask a Portal Admin for an export
+            if you need one.
           </EmptyState>
         </Panel>
       </>
@@ -246,7 +347,10 @@ export function AuditPage({ search }: { search: AuditSearch }) {
         meta={<ChainStatus />}
         actions={
           <>
-            <Button intent="ghost" onClick={() => void queryClient.invalidateQueries({ queryKey: ['audit'] })}>
+            <Button
+              intent="ghost"
+              onClick={() => void queryClient.invalidateQueries({ queryKey: ['audit'] })}
+            >
               <ArrowClockwiseIcon size={15} aria-hidden />
               Refresh and re-verify
             </Button>
@@ -254,7 +358,9 @@ export function AuditPage({ search }: { search: AuditSearch }) {
               aria-disabled={rows.length === 0 || undefined}
               onClick={() => {
                 if (!rows.length) return;
-                const url = URL.createObjectURL(new Blob([auditCsv(rows)], { type: 'text/csv;charset=utf-8' }));
+                const url = URL.createObjectURL(
+                  new Blob([auditCsv(rows)], { type: 'text/csv;charset=utf-8' }),
+                );
                 const a = document.createElement('a');
                 a.href = url;
                 a.download = `adminforge-audit-${new Date().toISOString().slice(0, 10)}.csv`;
@@ -272,7 +378,11 @@ export function AuditPage({ search }: { search: AuditSearch }) {
         key={JSON.stringify(filter)}
         filter={filter}
         onApply={(f) => setSearch(f)}
-        onClear={anyFilter ? () => setSearch({ actor: undefined, action: undefined, from: undefined, to: undefined }) : undefined}
+        onClear={
+          anyFilter
+            ? () => setSearch({ actor: undefined, action: undefined, from: undefined, to: undefined })
+            : undefined
+        }
       />
       {err && !isForbidden(err) ? (
         <Panel>
@@ -286,7 +396,10 @@ export function AuditPage({ search }: { search: AuditSearch }) {
           getRowId={(e) => String(e.seq)}
           loading={q.isPending}
           error={null}
-          empty={{ title: anyFilter ? 'No events match these filters' : 'No audit events yet', description: anyFilter ? 'Widen the dates or clear the filters.' : undefined }}
+          empty={{
+            title: anyFilter ? 'No events match these filters' : 'No audit events yet',
+            description: anyFilter ? 'Widen the dates or clear the filters.' : undefined,
+          }}
           searchPlaceholder="Search loaded events…"
           initialSort={[{ id: 'seq', desc: true }]}
           onRowActivate={(e) => setSearch({ event: e.seq })}
@@ -296,11 +409,15 @@ export function AuditPage({ search }: { search: AuditSearch }) {
             if (q.hasNextPage && !q.isFetchingNextPage) void q.fetchNextPage();
           }}
           loadingMore={q.isFetchingNextPage}
-          rowCountLabel={(shown, loaded) => `${shown === loaded ? loaded.toLocaleString('en-US') : `${shown.toLocaleString('en-US')} of ${loaded.toLocaleString('en-US')}`} loaded${q.hasNextPage ? ' · scroll for older' : ''}`}
+          rowCountLabel={(shown, loaded) =>
+            `${shown === loaded ? loaded.toLocaleString('en-US') : `${shown.toLocaleString('en-US')} of ${loaded.toLocaleString('en-US')}`} loaded${q.hasNextPage ? ' · scroll for older' : ''}`
+          }
           maxHeight={640}
         />
       )}
-      {selected && <EventDrawer key={selected.seq} event={selected} onClose={() => setSearch({ event: undefined })} />}
+      {selected && (
+        <EventDrawer key={selected.seq} event={selected} onClose={() => setSearch({ event: undefined })} />
+      )}
     </>
   );
 }

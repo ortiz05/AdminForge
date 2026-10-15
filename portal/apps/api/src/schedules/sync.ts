@@ -29,7 +29,8 @@ export interface SyncPlan {
 const inactiveStatus = (def: Schedule) => def.status === 'draft' || def.status === 'retired';
 
 /** Whether a schedule may start enabled straight from content. */
-export const initiallyEnabled = (def: Schedule) => def.enabled && !isWriteCapable(def) && !inactiveStatus(def);
+export const initiallyEnabled = (def: Schedule) =>
+  def.enabled && !isWriteCapable(def) && !inactiveStatus(def);
 
 const nextFor = (def: Schedule, now: Date): Date | null => {
   try {
@@ -40,7 +41,11 @@ const nextFor = (def: Schedule, now: Date): Date | null => {
 };
 
 /** Pure: what to insert/update so the store matches content. */
-export function planSync(content: readonly ContentSchedule[], rows: readonly ScheduleRow[], now: Date): SyncPlan {
+export function planSync(
+  content: readonly ContentSchedule[],
+  rows: readonly ScheduleRow[],
+  now: Date,
+): SyncPlan {
   const byKey = new Map(rows.map((r) => [r.key, r]));
   const inContent = new Set(content.map((c) => c.key));
   const plan: SyncPlan = { inserts: [], updates: [] };
@@ -48,7 +53,14 @@ export function planSync(content: readonly ContentSchedule[], rows: readonly Sch
     const row = byKey.get(c.key);
     if (!row) {
       const enabled = initiallyEnabled(c.def);
-      plan.inserts.push({ key: c.key, source: 'content', definition: c.def, sha256: c.sha256, enabled, nextRunAt: enabled ? nextFor(c.def, now) : null });
+      plan.inserts.push({
+        key: c.key,
+        source: 'content',
+        definition: c.def,
+        sha256: c.sha256,
+        enabled,
+        nextRunAt: enabled ? nextFor(c.def, now) : null,
+      });
       continue;
     }
     if (row.source !== 'content') continue;
@@ -57,31 +69,57 @@ export function planSync(content: readonly ContentSchedule[], rows: readonly Sch
       // Content turns a schedule off only by changing `enabled: true` to `false` (an operator's choice otherwise stands).
       const turnedOff = row.definition.enabled !== false && c.def.enabled === false;
       const enabled = row.enabled && !turnedOff && !inactiveStatus(c.def) && !write;
-      const patch: SchedulePatch = { definition: c.def, sha256: c.sha256, enabled, nextRunAt: enabled ? nextFor(c.def, now) : null };
+      const patch: SchedulePatch = {
+        definition: c.def,
+        sha256: c.sha256,
+        enabled,
+        nextRunAt: enabled ? nextFor(c.def, now) : null,
+      };
       if (write) patch.approvedBy = null;
       plan.updates.push({ id: row.id, key: row.key, patch, expectSha256: row.sha256 });
     } else if (row.enabled && (!row.nextRunAt || Number.isNaN(row.nextRunAt.getTime()))) {
-      plan.updates.push({ id: row.id, key: row.key, patch: { nextRunAt: nextFor(c.def, now) }, expectSha256: row.sha256 });
+      plan.updates.push({
+        id: row.id,
+        key: row.key,
+        patch: { nextRunAt: nextFor(c.def, now) },
+        expectSha256: row.sha256,
+      });
     }
   }
   for (const row of rows)
     if (row.source === 'content' && !inContent.has(row.key) && row.enabled)
-      plan.updates.push({ id: row.id, key: row.key, patch: { enabled: false, nextRunAt: null }, expectSha256: row.sha256 });
+      plan.updates.push({
+        id: row.id,
+        key: row.key,
+        patch: { enabled: false, nextRunAt: null },
+        expectSha256: row.sha256,
+      });
   return plan;
 }
 
 /** Content schedules from the registry (latest non-retired version of each). */
-export async function contentSchedules(definitions: Pick<DefinitionSource, 'list'>): Promise<ContentSchedule[]> {
-  return (await definitions.list('schedule')).map((r) => ({ key: r.key, def: r.def as Schedule, sha256: r.sha256 }));
+export async function contentSchedules(
+  definitions: Pick<DefinitionSource, 'list'>,
+): Promise<ContentSchedule[]> {
+  return (await definitions.list('schedule')).map((r) => ({
+    key: r.key,
+    def: r.def as Schedule,
+    sha256: r.sha256,
+  }));
 }
 
 /** Applies the plan (conflicting concurrent changes are skipped; the next sync converges). Returns the keys changed. */
-export async function syncSchedules(store: ScheduleStore, content: readonly ContentSchedule[], now: Date): Promise<{ inserted: string[]; updated: string[] }> {
+export async function syncSchedules(
+  store: ScheduleStore,
+  content: readonly ContentSchedule[],
+  now: Date,
+): Promise<{ inserted: string[]; updated: string[] }> {
   const plan = planSync(content, await store.listSchedules(), now);
   const inserted: string[] = [];
   const updated: string[] = [];
   for (const row of plan.inserts) if (await store.insertSchedule(row)) inserted.push(row.key);
-  for (const u of plan.updates) if (await store.updateSchedule(u.id, u.patch, { sha256: u.expectSha256 })) updated.push(u.key);
+  for (const u of plan.updates)
+    if (await store.updateSchedule(u.id, u.patch, { sha256: u.expectSha256 })) updated.push(u.key);
   return { inserted, updated };
 }
 

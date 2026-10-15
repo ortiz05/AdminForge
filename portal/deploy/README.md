@@ -2,12 +2,12 @@
 
 AdminForge runs as four Node processes next to PostgreSQL (R5, R6):
 
-| Process | What it does | Entry |
-|---|---|---|
-| **api** | The BFF: sign-in, every `/api` route, serves the built web app | `portal/apps/api` → `dist/main.js` |
-| **worker** | Executes playbook and runbook runs from the queue (`ROLE=worker`) | `portal/apps/api` → `dist/worker.js` |
+| Process       | What it does                                                                                     | Entry                                    |
+| ------------- | ------------------------------------------------------------------------------------------------ | ---------------------------------------- |
+| **api**       | The BFF: sign-in, every `/api` route, serves the built web app                                   | `portal/apps/api` → `dist/main.js`       |
+| **worker**    | Executes playbook and runbook runs from the queue (`ROLE=worker`)                                | `portal/apps/api` → `dist/worker.js`     |
 | **scheduler** | Runs content schedules (probe sweeps, KQL checks, reports, playbooks) as the automation identity | `portal/apps/scheduler` → `dist/main.js` |
-| **runner** | PowerShell runner on loopback (Exchange, Teams, SharePoint) | `portal/apps/runner` → `dist/main.js` |
+| **runner**    | PowerShell runner on loopback (Exchange, Teams, SharePoint)                                      | `portal/apps/runner` → `dist/main.js`    |
 
 Every process reads its configuration from `~/.config/adminforge/dev.env` (choose another file with
 `ADMINFORGE_ENV=<name>` or `ADMINFORGE_ENV_FILE=<path>`). Nothing tenant-specific lives in the repository;

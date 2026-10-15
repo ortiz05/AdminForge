@@ -1,8 +1,24 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { RowAction } from '@adminforge/schemas';
 import type { Scope } from '@adminforge/expressions';
-import { ArrowSquareOutIcon, Button, CaretDownIcon, Icon, Menu, MenuContent, MenuItem, MenuTrigger } from '@adminforge/ui';
-import { ActionButton, evaluateTemplate, isExternal, launchPlaybook, playbookLabel, type WidgetRuntime } from '@adminforge/widgets';
+import {
+  ArrowSquareOutIcon,
+  Button,
+  CaretDownIcon,
+  Icon,
+  Menu,
+  MenuContent,
+  MenuItem,
+  MenuTrigger,
+} from '@adminforge/ui';
+import {
+  ActionButton,
+  evaluateTemplate,
+  isExternal,
+  launchPlaybook,
+  playbookLabel,
+  type WidgetRuntime,
+} from '@adminforge/widgets';
 
 /** Which actions apply now (their `when` holds), in declared order; undefined while evaluating. */
 function useVisibleActions(actions: readonly RowAction[], scope: Scope): RowAction[] | undefined {
@@ -12,7 +28,11 @@ function useVisibleActions(actions: readonly RowAction[], scope: Scope): RowActi
     let live = true;
     void Promise.all(
       key.actions.map((a) =>
-        a.when === undefined ? true : typeof a.when === 'boolean' ? a.when : evaluateTemplate(a.when, key.scope).then(Boolean, () => false),
+        a.when === undefined
+          ? true
+          : typeof a.when === 'boolean'
+            ? a.when
+            : evaluateTemplate(a.when, key.scope).then(Boolean, () => false),
       ),
     ).then((flags) => live && setState({ for: key, visible: key.actions.filter((_, i) => flags[i]) }));
     return () => {
@@ -28,7 +48,19 @@ const labelOf = (a: RowAction) => a.label ?? (a.playbook ? playbookLabel(a.playb
  * An entity's actions: the first few as buttons, the rest under "More actions" so a long list never crowds the
  * header (or the 460 px inspector). Playbooks open the playbook drawer; links open in a new tab.
  */
-export function ActionGroup({ actions, scope, runtime, visibleCount = 3, size = 'md' }: { actions: readonly RowAction[]; scope: Scope; runtime: WidgetRuntime; visibleCount?: number; size?: 'sm' | 'md' }) {
+export function ActionGroup({
+  actions,
+  scope,
+  runtime,
+  visibleCount = 3,
+  size = 'md',
+}: {
+  actions: readonly RowAction[];
+  scope: Scope;
+  runtime: WidgetRuntime;
+  visibleCount?: number;
+  size?: 'sm' | 'md';
+}) {
   const visible = useVisibleActions(actions, scope);
   if (!visible?.length) return null;
   const shown = visible.length <= visibleCount + 1 ? visible : visible.slice(0, visibleCount);
@@ -45,7 +77,13 @@ export function ActionGroup({ actions, scope, runtime, visibleCount = 3, size = 
   return (
     <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Actions">
       {shown.map((a, i) => (
-        <ActionButton key={`${a.playbook ?? a.href}-${i}`} action={{ ...a, when: undefined, label: labelOf(a) }} scope={scope} runtime={runtime} size={size} />
+        <ActionButton
+          key={`${a.playbook ?? a.href}-${i}`}
+          action={{ ...a, when: undefined, label: labelOf(a) }}
+          scope={scope}
+          runtime={runtime}
+          size={size}
+        />
       ))}
       {more.length > 0 && (
         <Menu>
@@ -60,7 +98,11 @@ export function ActionGroup({ actions, scope, runtime, visibleCount = 3, size = 
               <MenuItem
                 key={`${a.playbook ?? a.href}-${i}`}
                 icon={a.icon ? <Icon name={a.icon} size={15} /> : undefined}
-                shortcut={a.href && /^https?:/i.test(a.href) ? <ArrowSquareOutIcon size={12} aria-label="Opens in a new tab" /> : undefined}
+                shortcut={
+                  a.href && /^https?:/i.test(a.href) ? (
+                    <ArrowSquareOutIcon size={12} aria-label="Opens in a new tab" />
+                  ) : undefined
+                }
                 onSelect={() => run(a)}
               >
                 {labelOf(a)}

@@ -35,7 +35,10 @@ export function withIds(blocks: readonly unknown[], prefix = ''): Block[] {
 }
 
 /** Blocks shown now: an entity/settings page's active tab (or its layout), everything else its layout. */
-export function activeBlocks(def: PageDefinition, tab: string | undefined): { blocks: Block[]; tab?: string } {
+export function activeBlocks(
+  def: PageDefinition,
+  tab: string | undefined,
+): { blocks: Block[]; tab?: string } {
   const tabs = def.tabs ?? [];
   if (tabs.length && (def.template === 'entity' || def.template === 'settings' || !def.layout?.length)) {
     const t = tabs.find((x) => x.id === tab) ?? tabs[0]!;
@@ -54,8 +57,13 @@ export function tableColumns(blocks: readonly Block[]): Record<string, TableColu
   const out: Record<string, TableColumns> = {};
   blocks.forEach((b, i) => {
     if (b.widget !== 'table') return;
-    const cols = ((b as unknown as TableWidgetConfig).columns ?? []).filter((c) => c && typeof c.field === 'string');
-    out[blockId(b, i)] = { all: cols.map((c) => c.field), visible: cols.filter((c) => !c.hidden).map((c) => c.field) };
+    const cols = ((b as unknown as TableWidgetConfig).columns ?? []).filter(
+      (c) => c && typeof c.field === 'string',
+    );
+    out[blockId(b, i)] = {
+      all: cols.map((c) => c.field),
+      visible: cols.filter((c) => !c.hidden).map((c) => c.field),
+    };
   });
   return out;
 }
@@ -81,7 +89,10 @@ export function licenceState(def: PageDefinition, caps: Capabilities | undefined
 }
 
 /** "Identity" for `nav.section: identity` (falls back to the key, capitalised). */
-export function sectionLabel(def: PageDefinition, sections: Array<{ key: string; label: string }> | undefined): string | undefined {
+export function sectionLabel(
+  def: PageDefinition,
+  sections: Array<{ key: string; label: string }> | undefined,
+): string | undefined {
   const key = def.nav?.section;
   if (!key) return undefined;
   return sections?.find((s) => s.key === key)?.label ?? key.charAt(0).toUpperCase() + key.slice(1);

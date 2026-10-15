@@ -9,7 +9,8 @@ import { isRecord, type Parser } from '../lib/api';
 export const rec = (v: unknown): Record<string, unknown> => (isRecord(v) ? v : {});
 export const arr = (v: unknown): unknown[] => (Array.isArray(v) ? v : []);
 export const str = (v: unknown): string | undefined => (typeof v === 'string' ? v : undefined);
-export const num = (v: unknown): number | undefined => (typeof v === 'number' && Number.isFinite(v) ? v : undefined);
+export const num = (v: unknown): number | undefined =>
+  typeof v === 'number' && Number.isFinite(v) ? v : undefined;
 export const bool = (v: unknown): boolean | undefined => (typeof v === 'boolean' ? v : undefined);
 
 /** First string among several candidate fields. */
@@ -27,7 +28,10 @@ export function parser<T>(fn: (input: unknown) => T): Parser<T> {
 }
 
 /** `{ items, cursor? }` lists (runs, audit, schedule history). */
-export function listOf<T>(read: (raw: unknown) => T | null, key = 'items'): Parser<{ items: T[]; cursor: string | null }> {
+export function listOf<T>(
+  read: (raw: unknown) => T | null,
+  key = 'items',
+): Parser<{ items: T[]; cursor: string | null }> {
   return parser((input) => {
     const o = rec(input);
     const raw = Array.isArray(input) ? input : o[key];
@@ -40,7 +44,8 @@ export function listOf<T>(read: (raw: unknown) => T | null, key = 'items'): Pars
 /** `?a=1&b=2` from an object, skipping empty values. */
 export function query(params: Record<string, string | number | boolean | null | undefined>): string {
   const q = new URLSearchParams();
-  for (const [k, v] of Object.entries(params)) if (v !== undefined && v !== null && v !== '') q.set(k, String(v));
+  for (const [k, v] of Object.entries(params))
+    if (v !== undefined && v !== null && v !== '') q.set(k, String(v));
   const s = q.toString();
   return s ? `?${s}` : '';
 }

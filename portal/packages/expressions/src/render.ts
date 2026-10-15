@@ -2,7 +2,9 @@ import { evaluate, ExpressionError, type EvaluateOptions, type Scope } from './e
 import { hasTemplate, splitTemplate, TemplateError, wholeExpression } from './template';
 
 const isPlainObject = (v: unknown): v is Record<string, unknown> =>
-  !!v && typeof v === 'object' && (Object.getPrototypeOf(v) === Object.prototype || Object.getPrototypeOf(v) === null);
+  !!v &&
+  typeof v === 'object' &&
+  (Object.getPrototypeOf(v) === Object.prototype || Object.getPrototypeOf(v) === null);
 
 function interpolate(v: unknown): string {
   if (v === undefined || v === null) return '';
@@ -24,7 +26,8 @@ export async function renderString(str: string, scope: Scope, opts: EvaluateOpti
   const whole = wholeExpression(segments);
   if (whole !== undefined) return evaluate(whole, scope, opts);
   let out = '';
-  for (const seg of segments) out += seg.type === 'text' ? seg.value : interpolate(await evaluate(seg.source, scope, opts));
+  for (const seg of segments)
+    out += seg.type === 'text' ? seg.value : interpolate(await evaluate(seg.source, scope, opts));
   return out;
 }
 
@@ -55,6 +58,10 @@ async function render(value: unknown, scope: Scope, opts: EvaluateOptions, path:
  * Deep-renders strings inside objects and arrays. Keys whose value renders to `undefined` are dropped.
  * Errors are ExpressionError with `path` set to where the failing template sits.
  */
-export async function renderTemplate<T = unknown>(value: unknown, scope: Scope, opts: EvaluateOptions = {}): Promise<T> {
+export async function renderTemplate<T = unknown>(
+  value: unknown,
+  scope: Scope,
+  opts: EvaluateOptions = {},
+): Promise<T> {
   return (await render(value, scope, opts, '')) as T;
 }

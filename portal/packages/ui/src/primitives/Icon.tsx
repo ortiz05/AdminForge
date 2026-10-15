@@ -17,7 +17,11 @@ export function loadIcons(): Promise<Registry> {
 
 // Glyphs outside the curated set load one by one; the loader (and its ~1,500-entry map) is itself a lazy chunk.
 const extra = new Map<string, PhosphorIcon | null>();
-const extraKey = (name: string) => name.replace(/Icon$/, '').replace(/[^a-z0-9]/gi, '').toLowerCase();
+const extraKey = (name: string) =>
+  name
+    .replace(/Icon$/, '')
+    .replace(/[^a-z0-9]/gi, '')
+    .toLowerCase();
 function loadExtra(name: string): Promise<PhosphorIcon | null> {
   return import('./icon-loader')
     .then(async (m) => {
@@ -82,6 +86,17 @@ export function Icon({ name, size = 16, weight = 'regular', className, label }: 
     );
   // A glyph outside the curated set is loading: hold its space with the (invisible) neutral glyph.
   if (waiting)
-    return createElement(loaded.resolveIcon(undefined), { size, weight, className, ...a11y, style: { visibility: 'hidden' } });
-  return createElement(curated ?? other ?? loaded.resolveIcon(undefined), { size, weight, className, ...a11y });
+    return createElement(loaded.resolveIcon(undefined), {
+      size,
+      weight,
+      className,
+      ...a11y,
+      style: { visibility: 'hidden' },
+    });
+  return createElement(curated ?? other ?? loaded.resolveIcon(undefined), {
+    size,
+    weight,
+    className,
+    ...a11y,
+  });
 }

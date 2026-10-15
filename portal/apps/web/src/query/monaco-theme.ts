@@ -1,5 +1,12 @@
 import type { editor } from 'monaco-editor/editor/editor.api';
-import { contrastRatio, resolveHex, themeMeta, themes, type SemanticKey, type ThemeName } from '@adminforge/design-tokens';
+import {
+  contrastRatio,
+  resolveHex,
+  themeMeta,
+  themes,
+  type SemanticKey,
+  type ThemeName,
+} from '@adminforge/design-tokens';
 
 /**
  * Monaco themes derived from the design tokens — no colour is defined here. Values come from the live CSS custom
@@ -9,7 +16,11 @@ import { contrastRatio, resolveHex, themeMeta, themes, type SemanticKey, type Th
 
 const HEX = /^#[0-9a-f]{6}$/i;
 
-export function tokenHex(theme: ThemeName, key: SemanticKey, root: HTMLElement | null = typeof document === 'undefined' ? null : document.documentElement): string {
+export function tokenHex(
+  theme: ThemeName,
+  key: SemanticKey,
+  root: HTMLElement | null = typeof document === 'undefined' ? null : document.documentElement,
+): string {
   const live = root ? getComputedStyle(root).getPropertyValue(`--af-${key}`).trim() : '';
   if (HEX.test(live) && root?.dataset.theme === theme) return live.toUpperCase();
   try {
@@ -48,7 +59,8 @@ export const SYNTAX: Record<string, SemanticKey[]> = {
 export function monacoTheme(theme: ThemeName): editor.IStandaloneThemeData {
   const c = (key: SemanticKey) => tokenHex(theme, key);
   const background = c('sunken');
-  const readable = (keys: SemanticKey[]) => (keys.map(c).find((hex) => contrastRatio(hex, background) >= MIN_TEXT_CONTRAST) ?? c('fg')).slice(1);
+  const readable = (keys: SemanticKey[]) =>
+    (keys.map(c).find((hex) => contrastRatio(hex, background) >= MIN_TEXT_CONTRAST) ?? c('fg')).slice(1);
   const base = theme === 'contrast' ? 'hc-black' : themeMeta[theme].scheme === 'light' ? 'vs' : 'vs-dark';
   return {
     base,
@@ -99,7 +111,7 @@ export function monacoTheme(theme: ThemeName): editor.IStandaloneThemeData {
       'input.background': c('sunken'),
       'input.foreground': c('fg'),
       'input.border': c('line-strong'),
-      'focusBorder': c('focus'),
+      focusBorder: c('focus'),
       'scrollbarSlider.background': withAlpha(c('fg-3'), 0.3),
       'scrollbarSlider.hoverBackground': withAlpha(c('fg-3'), 0.45),
       'scrollbarSlider.activeBackground': withAlpha(c('fg-3'), 0.6),

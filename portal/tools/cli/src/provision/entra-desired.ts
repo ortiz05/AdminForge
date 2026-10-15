@@ -58,9 +58,18 @@ interface PermissionRequest {
  * Resolves permission names to ids using each resource service principal. Missing resources (unlicensed
  * workloads) and unknown names are reported as skipped, never fatal.
  */
-function resolvePermissions(app: string, requests: PermissionRequest[], resources: Resources, skipped: Skipped[]) {
+function resolvePermissions(
+  app: string,
+  requests: PermissionRequest[],
+  resources: Resources,
+  skipped: Skipped[],
+) {
   const rra: RequiredResourceAccess[] = [];
-  const resolved: Array<{ resource: ResourceKey; type: 'Scope' | 'Role'; items: Array<{ value: string; id: string }> }> = [];
+  const resolved: Array<{
+    resource: ResourceKey;
+    type: 'Scope' | 'Role';
+    items: Array<{ value: string; id: string }>;
+  }> = [];
   for (const req of requests) {
     const sp = resources[req.resource];
     const resourceName = RESOURCES[req.resource].name;
@@ -68,7 +77,11 @@ function resolvePermissions(app: string, requests: PermissionRequest[], resource
       const why = OPTIONAL_RESOURCES.has(req.resource)
         ? 'resource service principal not in this tenant (workload not licensed)'
         : 'resource service principal not found in this tenant';
-      skipped.push({ section: 'Consent grants', title: `${app} → ${resourceName}: ${req.values.join(' ')}`, reason: why });
+      skipped.push({
+        section: 'Consent grants',
+        title: `${app} → ${resourceName}: ${req.values.join(' ')}`,
+        reason: why,
+      });
       continue;
     }
     const items: Array<{ value: string; id: string }> = [];
@@ -76,7 +89,12 @@ function resolvePermissions(app: string, requests: PermissionRequest[], resource
       const found =
         req.type === 'Scope'
           ? sp.oauth2PermissionScopes.find((s) => s.value === value && s.isEnabled !== false)
-          : sp.appRoles.find((r) => r.value === value && r.isEnabled !== false && (r.allowedMemberTypes ?? ['Application']).includes('Application'));
+          : sp.appRoles.find(
+              (r) =>
+                r.value === value &&
+                r.isEnabled !== false &&
+                (r.allowedMemberTypes ?? ['Application']).includes('Application'),
+            );
       if (found) items.push({ value, id: found.id });
       else
         skipped.push({
@@ -87,14 +105,22 @@ function resolvePermissions(app: string, requests: PermissionRequest[], resource
     }
     if (!items.length) continue;
     resolved.push({ resource: req.resource, type: req.type, items });
-    rra.push({ resourceAppId: RESOURCES[req.resource].appId, resourceAccess: items.map((i) => ({ id: i.id, type: req.type })) });
+    rra.push({
+      resourceAppId: RESOURCES[req.resource].appId,
+      resourceAccess: items.map((i) => ({ id: i.id, type: req.type })),
+    });
   }
   return { rra, resolved };
 }
 
 const NO_IMPLICIT = { enableAccessTokenIssuance: false, enableIdTokenIssuance: false };
 
-function appBody(displayName: string, redirectUris: string[], rra: RequiredResourceAccess[], extra: Partial<ApplicationBody> = {}): ApplicationBody {
+function appBody(
+  displayName: string,
+  redirectUris: string[],
+  rra: RequiredResourceAccess[],
+  extra: Partial<ApplicationBody> = {},
+): ApplicationBody {
   return {
     displayName,
     signInAudience: 'AzureADMyOrg',
@@ -109,7 +135,9 @@ function appBody(displayName: string, redirectUris: string[], rra: RequiredResou
 
 /** Pure: the full desired Entra/Azure state for one environment label. */
 /** Permissions declared by content (`requires.scopes`), per app and service — see content/scopes.ts. */
-export type ContentScopes = Partial<Record<'read' | 'write' | 'automation', Partial<Record<string, Iterable<string>>>>>;
+export type ContentScopes = Partial<
+  Record<'read' | 'write' | 'automation', Partial<Record<string, Iterable<string>>>>
+>;
 
 const SERVICE_RESOURCE: Record<string, ResourceKey | undefined> = {
   graph: 'graph',
@@ -120,34 +148,57 @@ const SERVICE_RESOURCE: Record<string, ResourceKey | undefined> = {
 
 const union = (...lists: Array<Iterable<string> | undefined>) => {
   const seen = new Map<string, string>();
-  for (const list of lists) for (const v of list ?? []) if (!seen.has(v.toLowerCase())) seen.set(v.toLowerCase(), v);
+  for (const list of lists)
+    for (const v of list ?? []) if (!seen.has(v.toLowerCase())) seen.set(v.toLowerCase(), v);
   return [...seen.values()];
 };
 
 /** Read-only scope names (`X.Read.Y`, `X.ReadBasic.Y`) — dry runs of write playbooks execute their reads with the Read app. */
-const readOnly = (scopes: Iterable<string> | undefined) => [...(scopes ?? [])].filter((s) => /\.Read(Basic)?(\.|$)/.test(s) && !/ReadWrite/.test(s));
+const readOnly = (scopes: Iterable<string> | undefined) =>
+  [...(scopes ?? [])].filter((s) => /\.Read(Basic)?(\.|$)/.test(s) && !/ReadWrite/.test(s));
 
 /**
  * Desired Entra objects. Each app's permissions = the baseline catalog ∪ what published content declares
  * (`requires.scopes`), so provisioning and `adminforge validate --scopes` stay in sync (least privilege, verified).
  */
-export function buildDesiredEntra(settings: ProvisionSettings, resources: Resources, content: ContentScopes = {}): DesiredEntra {
+export function buildDesiredEntra(
+  settings: ProvisionSettings,
+  resources: Resources,
+  content: ContentScopes = {},
+): DesiredEntra {
   const { label, baseUrl } = settings;
   const skipped: Skipped[] = [];
   const apps: DesiredApp[] = [];
 
-  const delegatedApp = (key: AppKey, graphScopes: readonly string[], redirectPath: string | string[], extra: Partial<ApplicationBody>, more: PermissionRequest[]) => {
+  const delegatedApp = (
+    key: AppKey,
+    graphScopes: readonly string[],
+    redirectPath: string | string[],
+    extra: Partial<ApplicationBody>,
+    more: PermissionRequest[],
+  ) => {
     const names = appNames(label, key);
     const { rra, resolved } = resolvePermissions(
       names.displayName,
-      [{ resource: 'graph', values: graphScopes, type: 'Scope' }, { resource: 'arm', values: ['user_impersonation'], type: 'Scope' }, ...more],
+      [
+        { resource: 'graph', values: graphScopes, type: 'Scope' },
+        { resource: 'arm', values: ['user_impersonation'], type: 'Scope' },
+        ...more,
+      ],
       resources,
       skipped,
     );
     apps.push({
       key,
       uniqueName: names.uniqueName,
-      body: appBody(names.displayName, [baseUrl, ...(settings.extraBaseUrls ?? [])].flatMap((base) => [redirectPath].flat().map((path) => `${base}${path}`)), rra, extra),
+      body: appBody(
+        names.displayName,
+        [baseUrl, ...(settings.extraBaseUrls ?? [])].flatMap((base) =>
+          [redirectPath].flat().map((path) => `${base}${path}`),
+        ),
+        rra,
+        extra,
+      ),
       sp: { appRoleAssignmentRequired: true, tags: [ENTERPRISE_APP_TAG] },
       grants: resolved.map((r) => ({ resource: r.resource, scopes: r.items.map((i) => i.value) })),
       appPermissions: [],
@@ -155,11 +206,17 @@ export function buildDesiredEntra(settings: ProvisionSettings, resources: Resour
     });
   };
 
-  const extra = (app: 'read' | 'write' | 'automation', type: 'Scope' | 'Role', exclude: string[] = []): PermissionRequest[] =>
+  const extra = (
+    app: 'read' | 'write' | 'automation',
+    type: 'Scope' | 'Role',
+    exclude: string[] = [],
+  ): PermissionRequest[] =>
     Object.entries(content[app] ?? {}).flatMap(([service, values]) => {
       const resource = SERVICE_RESOURCE[service];
       const list = [...(values ?? [])];
-      return resource && resource !== 'graph' && !exclude.includes(service) && list.length ? [{ resource, values: list, type }] : [];
+      return resource && resource !== 'graph' && !exclude.includes(service) && list.length
+        ? [{ resource, values: list, type }]
+        : [];
     });
   const mergeByResource = (requests: PermissionRequest[]): PermissionRequest[] => {
     const byKey = new Map<string, PermissionRequest>();
@@ -206,14 +263,20 @@ export function buildDesiredEntra(settings: ProvisionSettings, resources: Resour
     union(WRITE_GRAPH_SCOPES, content.write?.graph),
     '/auth/arm/callback',
     {},
-    mergeByResource([{ resource: 'exchange', values: ['Exchange.Manage'], type: 'Scope' }, ...extra('write', 'Scope')]),
+    mergeByResource([
+      { resource: 'exchange', values: ['Exchange.Manage'], type: 'Scope' },
+      ...extra('write', 'Scope'),
+    ]),
   );
 
   {
     const names = appNames(label, 'automation');
     const { rra, resolved } = resolvePermissions(
       names.displayName,
-      mergeByResource([{ resource: 'graph', values: union(AUTOMATION_GRAPH_ROLES, content.automation?.graph), type: 'Role' }, ...extra('automation', 'Role')]),
+      mergeByResource([
+        { resource: 'graph', values: union(AUTOMATION_GRAPH_ROLES, content.automation?.graph), type: 'Role' },
+        ...extra('automation', 'Role'),
+      ]),
       resources,
       skipped,
     );
@@ -245,16 +308,34 @@ export function buildDesiredEntra(settings: ProvisionSettings, resources: Resour
   });
 
   const groupAssignments = [
-    ...PORTAL_ROLES.map((r) => ({ group: r.value, app: 'read' as const, appRoleId: appRoleId(label, r.value), roleName: r.value })),
-    { group: 'Portal.Operator' as const, app: 'write' as const, appRoleId: DEFAULT_ACCESS_ROLE_ID, roleName: 'Default access' },
+    ...PORTAL_ROLES.map((r) => ({
+      group: r.value,
+      app: 'read' as const,
+      appRoleId: appRoleId(label, r.value),
+      roleName: r.value,
+    })),
+    {
+      group: 'Portal.Operator' as const,
+      app: 'write' as const,
+      appRoleId: DEFAULT_ACCESS_ROLE_ID,
+      roleName: 'Default access',
+    },
   ];
 
   let arm: DesiredEntra['arm'];
   if (settings.subscriptionId) {
     const scope = `/subscriptions/${settings.subscriptionId}`;
-    arm = { scope, roleDefinitionId: `${scope}/providers/Microsoft.Authorization/roleDefinitions/${AZURE_READER_ROLE_ID}`, roleName: 'Reader' };
+    arm = {
+      scope,
+      roleDefinitionId: `${scope}/providers/Microsoft.Authorization/roleDefinitions/${AZURE_READER_ROLE_ID}`,
+      roleName: 'Reader',
+    };
   } else {
-    skipped.push({ section: 'Azure RBAC', title: `${appNames(label, 'automation').displayName} → Reader on subscription`, reason: 'AF_SUBSCRIPTION_ID is not set' });
+    skipped.push({
+      section: 'Azure RBAC',
+      title: `${appNames(label, 'automation').displayName} → Reader on subscription`,
+      reason: 'AF_SUBSCRIPTION_ID is not set',
+    });
   }
 
   return { settings, apps, groups, groupAssignments, arm, skipped };

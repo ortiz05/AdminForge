@@ -4,7 +4,11 @@ import { fakeFetch, type Fake } from './fake-fetch';
 const client = (responses: Fake[], extra = {}) => {
   const f = fakeFetch(responses);
   const sleep = vi.fn(async () => {});
-  return { f, sleep, http: createHttpClient({ getToken: async () => 'tok', fetch: f.fetch, sleep, maxRetries: 2, ...extra }) };
+  return {
+    f,
+    sleep,
+    http: createHttpClient({ getToken: async () => 'tok', fetch: f.fetch, sleep, maxRetries: 2, ...extra }),
+  };
 };
 
 describe('retryDelay', () => {
@@ -26,7 +30,11 @@ describe('retryDelay', () => {
 
 describe('http client', () => {
   it('turns network failures into ApiError after retrying idempotent requests', async () => {
-    const { http, f } = client([new TypeError('fetch failed'), new TypeError('fetch failed'), new TypeError('fetch failed')]);
+    const { http, f } = client([
+      new TypeError('fetch failed'),
+      new TypeError('fetch failed'),
+      new TypeError('fetch failed'),
+    ]);
     const err = await http.send({ url: 'https://graph.microsoft.com/v1.0/me' }).catch((e) => e);
     expect(err).toBeInstanceOf(ApiError);
     expect(err).toMatchObject({ status: 0, code: 'NetworkError' });
@@ -36,37 +44,60 @@ describe('http client', () => {
   });
   it('does not retry non-idempotent requests after a network failure', async () => {
     const { http, f } = client([new TypeError('socket hang up'), { status: 200, body: {} }]);
-    await expect(http.send({ method: 'POST', url: 'https://x.example/a', body: {} })).rejects.toMatchObject({ code: 'NetworkError' });
+    await expect(http.send({ method: 'POST', url: 'https://x.example/a', body: {} })).rejects.toMatchObject({
+      code: 'NetworkError',
+    });
     expect(f.calls).toHaveLength(1);
   });
   it('reports timeouts', async () => {
     const timeout = Object.assign(new Error('The operation timed out'), { name: 'TimeoutError' });
     const { http } = client([timeout], { maxRetries: 0 });
-    await expect(http.send({ url: 'https://x.example/a' })).rejects.toMatchObject({ status: 0, code: 'Timeout' });
+    await expect(http.send({ url: 'https://x.example/a' })).rejects.toMatchObject({
+      status: 0,
+      code: 'Timeout',
+    });
   });
   it('retries 503 with Retry-After even for writes (the request was not processed)', async () => {
     const { http, sleep } = client([{ status: 503, headers: { 'retry-after': '1' } }, { status: 204 }]);
-    await expect(http.send({ method: 'POST', url: 'https://x.example/a', body: {} })).resolves.toMatchObject({ status: 204 });
+    await expect(http.send({ method: 'POST', url: 'https://x.example/a', body: {} })).resolves.toMatchObject({
+      status: 204,
+    });
     expect(sleep).toHaveBeenCalledWith(1000);
   });
   it('keeps text when a JSON content type carries invalid JSON', async () => {
-    const { http } = client([{ status: 502, body: 'not json', headers: { 'content-type': 'application/json' } }], { maxRetries: 0 });
-    await expect(http.send({ url: 'https://x.example/a' })).rejects.toMatchObject({ status: 502, code: 'HTTP502' });
+    const { http } = client(
+      [{ status: 502, body: 'not json', headers: { 'content-type': 'application/json' } }],
+      { maxRetries: 0 },
+    );
+    await expect(http.send({ url: 'https://x.example/a' })).rejects.toMatchObject({
+      status: 502,
+      code: 'HTTP502',
+    });
   });
   it('uses OData-style and plain error bodies', async () => {
     const { http } = client([{ status: 400, body: { error: 'invalid_request', message: 'Bad thing' } }]);
-    await expect(http.send({ url: 'https://x.example/a' })).rejects.toMatchObject({ code: 'invalid_request', message: 'Bad thing' });
+    await expect(http.send({ url: 'https://x.example/a' })).rejects.toMatchObject({
+      code: 'invalid_request',
+      message: 'Bad thing',
+    });
   });
   it('lets the caller mark a POST idempotent', async () => {
     const { http, f } = client([{ status: 500 }, { status: 200, body: { ok: true } }]);
-    await expect(http.send({ method: 'POST', url: 'https://x.example/q', body: {}, idempotent: true })).resolves.toMatchObject({ data: { ok: true } });
+    await expect(
+      http.send({ method: 'POST', url: 'https://x.example/q', body: {}, idempotent: true }),
+    ).resolves.toMatchObject({ data: { ok: true } });
     expect(f.calls).toHaveLength(2);
   });
   it('propagates token-provider failures unchanged, without fetching or retrying', async () => {
     const f = fakeFetch([{ status: 200, body: {} }]);
     const sleep = vi.fn(async () => {});
     const tokenError = Object.assign(new Error('Sign in again to continue.'), { code: 'ReauthRequired' });
-    const http = createHttpClient({ getToken: async () => Promise.reject(tokenError), fetch: f.fetch, sleep, maxRetries: 4 });
+    const http = createHttpClient({
+      getToken: async () => Promise.reject(tokenError),
+      fetch: f.fetch,
+      sleep,
+      maxRetries: 4,
+    });
     const err = await http.send({ url: 'https://graph.microsoft.com/v1.0/me' }).catch((e) => e);
     expect(err).toBe(tokenError);
     expect(f.fn).not.toHaveBeenCalled();
@@ -84,7 +115,9 @@ describe('http client', () => {
     controller.abort();
     const abort = Object.assign(new Error('aborted'), { name: 'AbortError' });
     const { http, f } = client([abort, { status: 200, body: {} }]);
-    expect(await http.send({ url: 'https://x.example/a', signal: controller.signal }).catch((e) => e)).toBe(abort);
+    expect(await http.send({ url: 'https://x.example/a', signal: controller.signal }).catch((e) => e)).toBe(
+      abort,
+    );
     expect(f.calls).toHaveLength(1);
   });
   it('classifies transient errors', () => {

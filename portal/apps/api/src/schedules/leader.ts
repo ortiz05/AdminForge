@@ -92,7 +92,10 @@ export class LeaderElector {
       try {
         won = await this.lock.tryAcquire();
       } catch (err) {
-        this.opts.log?.warn({ err: { message: (err as Error).message } }, 'scheduler: leader election attempt failed');
+        this.opts.log?.warn(
+          { err: { message: (err as Error).message } },
+          'scheduler: leader election attempt failed',
+        );
       }
       if (won && this.running) {
         this.leader = true;
@@ -143,7 +146,11 @@ export function pgAdvisoryLock(url: string, name = SCHEDULER_LOCK_NAME): LeaderL
     if (client && !broken) return client;
     await drop();
     broken = false;
-    const c = new pg.Client({ connectionString: url, connectionTimeoutMillis: 5_000, application_name: 'adminforge-scheduler-lock' });
+    const c = new pg.Client({
+      connectionString: url,
+      connectionTimeoutMillis: 5_000,
+      application_name: 'adminforge-scheduler-lock',
+    });
     c.on('error', () => {
       broken = true;
     });
@@ -171,7 +178,8 @@ export function pgAdvisoryLock(url: string, name = SCHEDULER_LOCK_NAME): LeaderL
       }
     },
     async release() {
-      if (client && !broken) await client.query('select pg_advisory_unlock(hashtext($1))', [name]).catch(() => undefined);
+      if (client && !broken)
+        await client.query('select pg_advisory_unlock(hashtext($1))', [name]).catch(() => undefined);
       await drop();
     },
   };

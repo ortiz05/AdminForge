@@ -23,10 +23,18 @@ describe('describeCron', () => {
 describe('nextRuns', () => {
   const from = new Date('2026-10-15T14:00:00.000Z');
   it('computes upcoming runs in the schedule’s time zone', () => {
-    expect(nextRuns('0 7 * * 1', 'UTC', 2, from).map((d) => d.toISOString())).toEqual(['2026-10-19T07:00:00.000Z', '2026-10-26T07:00:00.000Z']);
+    expect(nextRuns('0 7 * * 1', 'UTC', 2, from).map((d) => d.toISOString())).toEqual([
+      '2026-10-19T07:00:00.000Z',
+      '2026-10-26T07:00:00.000Z',
+    ]);
     // 07:00 London is 06:00 UTC in summer time and 07:00 after the clocks go back (25 Oct 2026).
-    expect(nextRuns('0 7 * * 1', 'Europe/London', 2, from).map((d) => d.toISOString())).toEqual(['2026-10-19T06:00:00.000Z', '2026-10-26T07:00:00.000Z']);
+    expect(nextRuns('0 7 * * 1', 'Europe/London', 2, from).map((d) => d.toISOString())).toEqual([
+      '2026-10-19T06:00:00.000Z',
+      '2026-10-26T07:00:00.000Z',
+    ]);
   });
-  it('returns nothing for an invalid expression', () => expect(nextRuns('not cron', 'UTC', 3, from)).toEqual([]));
-  it('formats in the zone', () => expect(formatInZone('2026-10-19T06:00:00.000Z', 'Europe/London')).toBe('Mon 19 Oct, 07:00'));
+  it('returns nothing for an invalid expression', () =>
+    expect(nextRuns('not cron', 'UTC', 3, from)).toEqual([]));
+  it('formats in the zone', () =>
+    expect(formatInZone('2026-10-19T06:00:00.000Z', 'Europe/London')).toBe('Mon 19 Oct, 07:00'));
 });

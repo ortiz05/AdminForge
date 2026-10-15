@@ -6,8 +6,18 @@ export const actionBarFixtures = {
     config: {
       widget: 'actionBar',
       actions: [
-        { playbook: 'identity.disable-user', label: 'Disable sign-in', icon: 'prohibit', inputs: { userId: '${ params.id }' } },
-        { playbook: 'identity.reset-mfa', label: 'Reset MFA', inputs: { userId: '${ params.id }' }, when: '${ user.accountEnabled = true }' },
+        {
+          playbook: 'identity.disable-user',
+          label: 'Disable sign-in',
+          icon: 'prohibit',
+          inputs: { userId: '${ params.id }' },
+        },
+        {
+          playbook: 'identity.reset-mfa',
+          label: 'Reset MFA',
+          inputs: { userId: '${ params.id }' },
+          when: '${ user.accountEnabled = true }',
+        },
         { href: 'https://entra.microsoft.com/', label: 'Open in Entra admin center', external: true },
       ],
     } satisfies ActionBarConfig,

@@ -16,8 +16,15 @@ import { runKql, type KqlColumn } from '../probes/kql';
  */
 
 export const QUERY_MAX_ROWS = 5000;
-const GUID = z.string().regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i, 'Expected a GUID');
-const ISO_DURATION = z.string().regex(/^P(?!$)(\d+Y)?(\d+M)?(\d+W)?(\d+D)?(T(?=\d)(\d+H)?(\d+M)?(\d+(\.\d+)?S)?)?$/, 'Expected an ISO 8601 duration like PT1H or P7D');
+const GUID = z
+  .string()
+  .regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i, 'Expected a GUID');
+const ISO_DURATION = z
+  .string()
+  .regex(
+    /^P(?!$)(\d+Y)?(\d+M)?(\d+W)?(\d+D)?(T(?=\d)(\d+H)?(\d+M)?(\d+(\.\d+)?S)?)?$/,
+    'Expected an ISO 8601 duration like PT1H or P7D',
+  );
 
 export const QueryRequest = z
   .object({
@@ -31,8 +38,17 @@ export const QueryRequest = z
   })
   .superRefine((b, ctx) => {
     if ((b.subscriptions?.length || b.managementGroups?.length) && b.source !== 'resourceGraph')
-      ctx.addIssue({ code: 'custom', path: ['subscriptions'], message: 'subscriptions and managementGroups apply to resourceGraph only' });
-    if (b.workspace && b.source !== 'logAnalytics') ctx.addIssue({ code: 'custom', path: ['workspace'], message: 'workspace applies to logAnalytics only' });
+      ctx.addIssue({
+        code: 'custom',
+        path: ['subscriptions'],
+        message: 'subscriptions and managementGroups apply to resourceGraph only',
+      });
+    if (b.workspace && b.source !== 'logAnalytics')
+      ctx.addIssue({
+        code: 'custom',
+        path: ['workspace'],
+        message: 'workspace applies to logAnalytics only',
+      });
   });
 export type QueryRequest = z.infer<typeof QueryRequest>;
 
@@ -54,16 +70,32 @@ export interface QueryCaller {
 export const queryHash = (q: string) => createHash('sha256').update(q, 'utf8').digest('hex');
 
 export class QueryService {
-  constructor(private readonly deps: { outbound: OutboundExecutor; audit: AuditWriter; env: () => Record<string, unknown> }) {}
+  constructor(
+    private readonly deps: {
+      outbound: OutboundExecutor;
+      audit: AuditWriter;
+      env: () => Record<string, unknown>;
+    },
+  ) {}
 
   private actor(c: QueryCaller): Omit<AuditInput, 'action' | 'result'> {
-    return { actorOid: c.session.userOid, actorUpn: c.session.upn, sessionHash: c.session.idHash, mode: 'read', correlationId: c.correlationId, ip: c.ip };
+    return {
+      actorOid: c.session.userOid,
+      actorUpn: c.session.upn,
+      sessionHash: c.session.idHash,
+      mode: 'read',
+      correlationId: c.correlationId,
+      ip: c.ip,
+    };
   }
 
   async run(c: QueryCaller, body: QueryRequest, signal?: AbortSignal): Promise<QueryResponse> {
     requireRole(c.session, 'Portal.Reader', 'Query Studio');
     const started = performance.now();
-    const workspace = body.source === 'logAnalytics' ? (body.workspace ?? String(this.deps.env().AF_LOG_ANALYTICS_WORKSPACE_ID ?? '')) : undefined;
+    const workspace =
+      body.source === 'logAnalytics'
+        ? (body.workspace ?? String(this.deps.env().AF_LOG_ANALYTICS_WORKSPACE_ID ?? ''))
+        : undefined;
     const audit = (result: 'success' | 'failure', details: Record<string, unknown>) =>
       this.deps.audit.append({
         ...this.actor(c),
@@ -99,12 +131,20 @@ export class QueryService {
       );
       const ms = Math.round(performance.now() - started);
       await audit('success', { rowCount: r.rows.length, totalRows: r.totalRows, truncated: r.truncated, ms });
-      return { columns: r.columns, rows: r.rows, rowCount: r.rows.length, truncated: r.truncated, ms, provenance: r.provenance };
+      return {
+        columns: r.columns,
+        rows: r.rows,
+        rowCount: r.rows.length,
+        truncated: r.truncated,
+        ms,
+        provenance: r.provenance,
+      };
     } catch (err) {
       const e = outboundAppError(err);
-      await audit('failure', { error: e.code, ms: Math.round(performance.now() - started) }).catch(() => undefined);
+      await audit('failure', { error: e.code, ms: Math.round(performance.now() - started) }).catch(
+        () => undefined,
+      );
       throw e;
     }
   }
 }
-

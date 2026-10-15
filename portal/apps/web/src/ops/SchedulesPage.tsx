@@ -43,17 +43,34 @@ function Upcoming({ schedules, now }: { schedules: ScheduleItem[]; now: number }
     [schedules, now],
   );
   return (
-    <Panel eyebrow="Next 8 runs" title="Upcoming" description="Computed from each schedule’s cron in its own time zone.">
+    <Panel
+      eyebrow="Next 8 runs"
+      title="Upcoming"
+      description="Computed from each schedule’s cron in its own time zone."
+    >
       {upcoming.length === 0 ? (
-        <p className="text-sm text-fg-3">Nothing is scheduled. Enable a schedule to see its next runs here.</p>
+        <p className="text-sm text-fg-3">
+          Nothing is scheduled. Enable a schedule to see its next runs here.
+        </p>
       ) : (
         <ol className="gap-x-10 md:columns-2" aria-label="Upcoming runs">
           {upcoming.map(({ s, at }) => (
-            <li key={`${s.key}-${at.toISOString()}`} className="flex break-inside-avoid items-baseline justify-between gap-3 border-b border-line py-2">
-              <Link to="/schedules/$key" params={{ key: s.key }} className="min-w-0 truncate text-sm text-fg hover:underline">
+            <li
+              key={`${s.key}-${at.toISOString()}`}
+              className="flex break-inside-avoid items-baseline justify-between gap-3 border-b border-line py-2"
+            >
+              <Link
+                to="/schedules/$key"
+                params={{ key: s.key }}
+                className="min-w-0 truncate text-sm text-fg hover:underline"
+              >
                 {s.title}
               </Link>
-              <time dateTime={at.toISOString()} title={formatTimestamp(at)} className="shrink-0 font-mono text-xs text-fg-2 tabular-nums">
+              <time
+                dateTime={at.toISOString()}
+                title={formatTimestamp(at)}
+                className="shrink-0 font-mono text-xs text-fg-2 tabular-nums"
+              >
                 {formatInZone(at, s.timezone)} <span className="text-fg-3">· {formatRelative(at, now)}</span>
               </time>
             </li>
@@ -88,7 +105,12 @@ export function SchedulesPage() {
         value: (s) => ({ primary: s.title, secondary: s.key }),
         cell: (s) => (
           <span className="flex min-w-0 flex-col leading-tight">
-            <Link to="/schedules/$key" params={{ key: s.key }} className="truncate font-medium text-fg hover:underline" title={s.title}>
+            <Link
+              to="/schedules/$key"
+              params={{ key: s.key }}
+              className="truncate font-medium text-fg hover:underline"
+              title={s.title}
+            >
               {s.title}
             </Link>
             <span className="flex min-w-0 items-center gap-1.5 font-mono text-2xs text-fg-3">
@@ -118,8 +140,21 @@ export function SchedulesPage() {
         ),
         width: 'minmax(250px, 2fr)',
       },
-      { id: 'job', header: 'Job', kind: 'text', value: (s) => JOB_LABEL[s.job.kind] ?? s.job.kind, filter: 'facet', width: 'minmax(110px, 0.8fr)' },
-      { id: 'next', header: 'Next run', kind: 'relativeTime', value: (s) => nextRunOf(s, now), width: 'minmax(96px, 0.6fr)' },
+      {
+        id: 'job',
+        header: 'Job',
+        kind: 'text',
+        value: (s) => JOB_LABEL[s.job.kind] ?? s.job.kind,
+        filter: 'facet',
+        width: 'minmax(110px, 0.8fr)',
+      },
+      {
+        id: 'next',
+        header: 'Next run',
+        kind: 'relativeTime',
+        value: (s) => nextRunOf(s, now),
+        width: 'minmax(96px, 0.6fr)',
+      },
       {
         id: 'last',
         header: 'Last run',
@@ -133,7 +168,11 @@ export function SchedulesPage() {
                 {v.label}
               </StatusPill>
               {s.lastRunAt && (
-                <time dateTime={s.lastRunAt} title={formatTimestamp(s.lastRunAt)} className="truncate text-xs text-fg-3">
+                <time
+                  dateTime={s.lastRunAt}
+                  title={formatTimestamp(s.lastRunAt)}
+                  className="truncate text-xs text-fg-3"
+                >
                   {formatRelative(s.lastRunAt, now)}
                 </time>
               )}
@@ -175,19 +214,38 @@ export function SchedulesPage() {
         eyebrow="Automation"
         title="Schedules"
         description="Jobs that run on their own on this host: reports, synthetic tests, content health and approved playbooks."
-        actions={<IconButton label="Refresh" icon={<ArrowClockwiseIcon size={16} />} onClick={() => void q.refetch()} />}
+        actions={
+          <IconButton
+            label="Refresh"
+            icon={<ArrowClockwiseIcon size={16} />}
+            onClick={() => void q.refetch()}
+          />
+        }
       />
       <div className="flex flex-col gap-6">
-        <Callout tone="neutral" icon={<RobotIcon size={18} />} title="Schedules run as the automation identity, not as you">
+        <Callout
+          tone="neutral"
+          icon={<RobotIcon size={18} />}
+          title="Schedules run as the automation identity, not as you"
+        >
           Unattended runs use a separate app registration with application permissions. Each run is audited as
-          “scheduled by the person who enabled it, executed as the automation identity”. Schedules that can change the
-          tenant need a second person to approve before they turn on.
+          “scheduled by the person who enabled it, executed as the automation identity”. Schedules that can
+          change the tenant need a second person to approve before they turn on.
         </Callout>
         {failing.length > 0 && (
-          <Callout tone="crit" role="alert" title={`${failing.length} schedule${failing.length === 1 ? '' : 's'} failed on the last run`}>
+          <Callout
+            tone="crit"
+            role="alert"
+            title={`${failing.length} schedule${failing.length === 1 ? '' : 's'} failed on the last run`}
+          >
             <span className="flex flex-wrap gap-x-3 gap-y-1">
               {failing.map((s) => (
-                <Link key={s.key} to="/schedules/$key" params={{ key: s.key }} className="font-medium text-fg underline-offset-2 hover:underline">
+                <Link
+                  key={s.key}
+                  to="/schedules/$key"
+                  params={{ key: s.key }}
+                  className="font-medium text-fg underline-offset-2 hover:underline"
+                >
                   {s.title}
                 </Link>
               ))}
@@ -195,7 +253,13 @@ export function SchedulesPage() {
           </Callout>
         )}
         <KpiStrip label="Schedule summary" className="xl:grid-cols-4">
-          <Kpi variant="cell" label="Enabled" value={q.isPending ? null : enabled.length} hint={`of ${items.length}`} loading={q.isPending} />
+          <Kpi
+            variant="cell"
+            label="Enabled"
+            value={q.isPending ? null : enabled.length}
+            hint={`of ${items.length}`}
+            loading={q.isPending}
+          />
           <Kpi
             variant="cell"
             label="Next run"
@@ -207,10 +271,18 @@ export function SchedulesPage() {
             variant="cell"
             label="Failed last run"
             value={q.isPending ? null : failing.length}
-            status={failing.length ? { tone: 'crit', label: 'Needs a look' } : { tone: 'ok', label: 'All passing' }}
+            status={
+              failing.length ? { tone: 'crit', label: 'Needs a look' } : { tone: 'ok', label: 'All passing' }
+            }
             loading={q.isPending}
           />
-          <Kpi variant="cell" label="Awaiting approval" value={q.isPending ? null : pending.length} hint="to enable" loading={q.isPending} />
+          <Kpi
+            variant="cell"
+            label="Awaiting approval"
+            value={q.isPending ? null : pending.length}
+            hint="to enable"
+            loading={q.isPending}
+          />
         </KpiStrip>
         <div className="flex flex-col gap-6">
           <div className="min-w-0">

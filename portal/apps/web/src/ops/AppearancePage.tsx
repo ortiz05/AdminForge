@@ -58,7 +58,8 @@ function previewStyle(theme: ThemeName, d: Draft): CSSProperties {
     vars['--af-focus'] = accent;
   }
   for (const r of RADII) vars[`--af-radius-${r}`] = `calc(${scale.radius[r]} * ${d.radiusScale})`;
-  for (const f of ['2xs', 'xs', 'sm', 'md', 'lg', 'xl'] as const) vars[`--af-font-size-${f}`] = `calc(${scale.fontSize[f]} * ${d.fontScale})`;
+  for (const f of ['2xs', 'xs', 'sm', 'md', 'lg', 'xl'] as const)
+    vars[`--af-font-size-${f}`] = `calc(${scale.fontSize[f]} * ${d.fontScale})`;
   vars['--af-font-size-ui'] = `calc(${densities[d.density]['font-size-ui']} * ${d.fontScale})`;
   return vars as CSSProperties;
 }
@@ -76,16 +77,26 @@ function PreviewCard({ theme, draft }: { theme: ThemeName; draft: Draft }) {
     >
       <figcaption className="af-eyebrow flex items-center justify-between">
         {themeLabel(theme)}
-        {failing && <span className="font-body text-xs tracking-normal text-crit normal-case">Fails contrast</span>}
+        {failing && (
+          <span className="font-body text-xs tracking-normal text-crit normal-case">Fails contrast</span>
+        )}
       </figcaption>
-      <div className="flex flex-col gap-3 rounded-(--af-panel-radius) border border-line bg-panel p-3" style={{ fontSize: 'var(--af-font-size-ui)' }}>
+      <div
+        className="flex flex-col gap-3 rounded-(--af-panel-radius) border border-line bg-panel p-3"
+        style={{ fontSize: 'var(--af-font-size-ui)' }}
+      >
         <p className="font-semibold">Disable sign-in</p>
         <p className="text-sm text-fg-2">
-          Blocks sign-in for <span className="font-medium text-accent">a.lee@example.com</span> and revokes sessions.
+          Blocks sign-in for <span className="font-medium text-accent">a.lee@example.com</span> and revokes
+          sessions.
         </p>
         <div className="flex flex-wrap items-center gap-2">
-          <span className="inline-flex h-(--af-control-h) items-center rounded-(--af-button-radius) bg-accent px-3 font-semibold text-on-accent">Preview</span>
-          <span className="inline-flex h-(--af-control-h) items-center rounded-(--af-button-radius) border border-line bg-raised px-3 font-semibold">Cancel</span>
+          <span className="inline-flex h-(--af-control-h) items-center rounded-(--af-button-radius) bg-accent px-3 font-semibold text-on-accent">
+            Preview
+          </span>
+          <span className="inline-flex h-(--af-control-h) items-center rounded-(--af-button-radius) border border-line bg-raised px-3 font-semibold">
+            Cancel
+          </span>
           <StatusPill status="info" size="sm">
             Planned
           </StatusPill>
@@ -98,7 +109,15 @@ function PreviewCard({ theme, draft }: { theme: ThemeName; draft: Draft }) {
   );
 }
 
-function AccentRow({ theme, value, onChange }: { theme: ThemeName; value: string; onChange: (v: string) => void }) {
+function AccentRow({
+  theme,
+  value,
+  onChange,
+}: {
+  theme: ThemeName;
+  value: string;
+  onChange: (v: string) => void;
+}) {
   // While typing, the field shows what was typed; otherwise it follows the colour picker.
   const [typing, setTyping] = useState<string | null>(null);
   const text = typing ?? value;
@@ -139,11 +158,17 @@ function AccentRow({ theme, value, onChange }: { theme: ThemeName; value: string
           </Button>
         )}
       </div>
-      <ul className="flex flex-wrap gap-x-4 gap-y-1 text-xs" aria-label={`${themeLabel(theme)} contrast checks`}>
+      <ul
+        className="flex flex-wrap gap-x-4 gap-y-1 text-xs"
+        aria-label={`${themeLabel(theme)} contrast checks`}
+      >
         {checks.map((c) => {
           const Glyph = STATUS_ICON[c.ok ? 'ok' : 'crit'];
           return (
-            <li key={c.against} className={cn('inline-flex items-center gap-1', c.ok ? 'text-fg-2' : 'font-semibold text-crit')}>
+            <li
+              key={c.against}
+              className={cn('inline-flex items-center gap-1', c.ok ? 'text-fg-2' : 'font-semibold text-crit')}
+            >
               <Glyph size={12} weight="fill" aria-hidden className={c.ok ? 'text-ok' : 'text-crit'} />
               {c.ratio.toFixed(2)}:1 {c.against === 'button label' ? 'for button labels' : `on ${c.against}`}
               <span className="sr-only">{c.ok ? '(passes)' : `(fails, needs ${MIN_CONTRAST}:1)`}</span>
@@ -167,10 +192,15 @@ export function AppearancePage() {
   // Edits on top of the published state; null = nothing changed (also after publish or discard).
   const [edits, setEdits] = useState<Draft | null>(null);
   const draft = edits ?? published;
-  const setDraft = (update: (d: Draft | null) => Draft | null | undefined) => setEdits((e) => update(e ?? published) ?? null);
+  const setDraft = (update: (d: Draft | null) => Draft | null | undefined) =>
+    setEdits((e) => update(e ?? published) ?? null);
   const dirty = Boolean(draft && published && JSON.stringify(draft) !== JSON.stringify(published));
   const failures = draft
-    ? THEME_NAMES.flatMap((t) => accentChecks(t, draft.accents[t]).filter((c) => !c.ok).map((c) => ({ theme: t, ...c })))
+    ? THEME_NAMES.flatMap((t) =>
+        accentChecks(t, draft.accents[t])
+          .filter((c) => !c.ok)
+          .map((c) => ({ theme: t, ...c })),
+      )
     : [];
   const invalid = draft ? THEME_NAMES.some((t) => !isHex(draft.accents[t])) : false;
 
@@ -188,7 +218,8 @@ export function AppearancePage() {
         description: 'Everyone sees it on their next page load. The change is in the audit log.',
       });
     },
-    onError: (e) => toast({ tone: 'crit', title: 'Appearance wasn’t saved', description: (e as Error).message }),
+    onError: (e) =>
+      toast({ tone: 'crit', title: 'Appearance wasn’t saved', description: (e as Error).message }),
   });
 
   const publish = () => {
@@ -220,7 +251,12 @@ export function AppearancePage() {
             <Button intent="ghost" onClick={() => setEdits(null)} aria-disabled={!dirty || undefined}>
               Discard changes
             </Button>
-            <Button intent="primary" pending={save.isPending} aria-disabled={!dirty || failures.length > 0 || invalid || undefined} onClick={publish}>
+            <Button
+              intent="primary"
+              pending={save.isPending}
+              aria-disabled={!dirty || failures.length > 0 || invalid || undefined}
+              onClick={publish}
+            >
               Publish
             </Button>
           </>
@@ -228,7 +264,11 @@ export function AppearancePage() {
       />
       {q.isError ? (
         <Panel>
-          <QueryError title="Appearance settings didn’t load" error={q.error} onRetry={() => void q.refetch()} />
+          <QueryError
+            title="Appearance settings didn’t load"
+            error={q.error}
+            onRetry={() => void q.refetch()}
+          />
         </Panel>
       ) : !draft || !q.data ? (
         <div className="grid gap-6 xl:grid-cols-2" aria-busy="true">
@@ -239,12 +279,17 @@ export function AppearancePage() {
         <div className="grid items-start gap-6 xl:grid-cols-5">
           <div className="flex min-w-0 flex-col gap-6 xl:col-span-3">
             {failures.length > 0 && (
-              <Callout tone="crit" role="alert" title="This can’t be published: some text would be hard to read">
+              <Callout
+                tone="crit"
+                role="alert"
+                title="This can’t be published: some text would be hard to read"
+              >
                 <ul className="flex list-disc flex-col gap-0.5 pl-4">
                   {failures.map((f) => (
                     <li key={`${f.theme}-${f.against}`}>
-                      {themeLabel(f.theme)} accent is {f.ratio.toFixed(2)}:1 {f.against === 'button label' ? 'against its button label' : `on ${f.against}`} —
-                      it needs at least {MIN_CONTRAST}:1.
+                      {themeLabel(f.theme)} accent is {f.ratio.toFixed(2)}:1{' '}
+                      {f.against === 'button label' ? 'against its button label' : `on ${f.against}`} — it
+                      needs at least {MIN_CONTRAST}:1.
                     </li>
                   ))}
                 </ul>
@@ -255,10 +300,19 @@ export function AppearancePage() {
                 The previews show your draft. Publish to apply it for everyone.
               </Callout>
             )}
-            <Panel eyebrow="Colour" title="Accent per theme" description="Links, focus rings, selection and primary buttons. Ember (write mode) and status colours are fixed.">
+            <Panel
+              eyebrow="Colour"
+              title="Accent per theme"
+              description="Links, focus rings, selection and primary buttons. Ember (write mode) and status colours are fixed."
+            >
               <div className="flex flex-col gap-4">
                 {THEME_NAMES.map((t) => (
-                  <AccentRow key={t} theme={t} value={draft.accents[t]} onChange={(v) => setDraft((d) => d && { ...d, accents: { ...d.accents, [t]: v } })} />
+                  <AccentRow
+                    key={t}
+                    theme={t}
+                    value={draft.accents[t]}
+                    onChange={(v) => setDraft((d) => d && { ...d, accents: { ...d.accents, [t]: v } })}
+                  />
                 ))}
               </div>
             </Panel>
@@ -272,7 +326,10 @@ export function AppearancePage() {
                     aria-label="Corner radius"
                     value={String(draft.radiusScale)}
                     onValueChange={(v) => setDraft((d) => d && { ...d, radiusScale: Number(v) })}
-                    options={RADIUS_SCALES.map((r) => ({ value: String(r), label: r === 1 ? 'Default' : `${Math.round(r * 100)}%` }))}
+                    options={RADIUS_SCALES.map((r) => ({
+                      value: String(r),
+                      label: r === 1 ? 'Default' : `${Math.round(r * 100)}%`,
+                    }))}
                   />
                 </div>
                 <div className="flex flex-col gap-1.5">
@@ -290,7 +347,9 @@ export function AppearancePage() {
                 </div>
                 <Select
                   label="Base font size"
-                  value={String(FONT_SCALES.find((f) => Math.abs(f.value - draft.fontScale) < 0.001)?.value ?? 1)}
+                  value={String(
+                    FONT_SCALES.find((f) => Math.abs(f.value - draft.fontScale) < 0.001)?.value ?? 1,
+                  )}
                   onValueChange={(v) => setDraft((d) => d && { ...d, fontScale: Number(v) })}
                   options={FONT_SCALES.map((f) => ({ value: String(f.value), label: f.label }))}
                   className="max-w-56"
@@ -310,7 +369,10 @@ export function AppearancePage() {
                     {history.data.slice(0, 6).map((h) => {
                       const current = h.version === q.data!.version;
                       return (
-                        <li key={h.seq} className="flex items-center justify-between gap-3 border-t border-line py-2 first:border-t-0">
+                        <li
+                          key={h.seq}
+                          className="flex items-center justify-between gap-3 border-t border-line py-2 first:border-t-0"
+                        >
                           <span className="min-w-0 truncate text-fg-2">
                             <span className="font-mono text-xs text-fg">v{h.version ?? '?'}</span>
                             {h.by && ` · ${h.by}`} · {formatRelative(h.at, now)}
@@ -331,7 +393,10 @@ export function AppearancePage() {
                               intent="primary"
                               onConfirm={() =>
                                 save
-                                  .mutateAsync({ body: { version: q.data!.version, ...h.state }, label: `Rolled back to version ${h.version ?? '?'}` })
+                                  .mutateAsync({
+                                    body: { version: q.data!.version, ...h.state },
+                                    label: `Rolled back to version ${h.version ?? '?'}`,
+                                  })
                                   .then(() => undefined)
                               }
                             />
@@ -349,14 +414,22 @@ export function AppearancePage() {
                     confirmLabel="Reset and publish"
                     intent="primary"
                     onConfirm={() =>
-                      save.mutateAsync({ body: { version: q.data!.version, overrides: {} }, label: 'Appearance reset to defaults' }).then(() => undefined)
+                      save
+                        .mutateAsync({
+                          body: { version: q.data!.version, overrides: {} },
+                          label: 'Appearance reset to defaults',
+                        })
+                        .then(() => undefined)
                     }
                   />
                 </div>
               </div>
             </Panel>
           </div>
-          <section aria-label="Live preview" className="flex min-w-0 flex-col gap-4 xl:sticky xl:top-(--af-layout-rail-h) xl:col-span-2 xl:pt-1">
+          <section
+            aria-label="Live preview"
+            className="flex min-w-0 flex-col gap-4 xl:sticky xl:top-(--af-layout-rail-h) xl:col-span-2 xl:pt-1"
+          >
             <h2 className="af-eyebrow">Live preview</h2>
             {THEME_NAMES.map((t) => (
               <PreviewCard key={t} theme={t} draft={draft} />

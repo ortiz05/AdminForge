@@ -20,6 +20,15 @@ if (rel.startsWith('..')) process.exit(0);
 
 const problems = [];
 
+// 0. Keep formatting consistent: Prettier on code and docs Claude writes (content YAML and fixtures are not formatted).
+if (/\.(ts|tsx|js|mjs|json|css|md)$/.test(rel) && !/^(portal\/content|tests\/fixtures|docs\/plans)\//.test(rel)) {
+  try {
+    execFileSync('pnpm', ['-s', 'exec', 'prettier', '--write', '--log-level', 'warn', rel], { cwd: root, stdio: 'pipe', timeout: 60_000 });
+  } catch {
+    /* formatting is best effort; CI's format:check is authoritative */
+  }
+}
+
 // 1. Content definitions: schema, references, expressions, lint.
 if (/^portal\/content\/.+\.ya?ml$/.test(rel)) {
   try {
@@ -34,16 +43,22 @@ if (/^portal\/content\/.+\.ya?ml$/.test(rel)) {
 if (/^portal\/(apps\/web\/src|packages\/(ui|widgets)\/src)\/.+\.(tsx?|css)$/.test(rel)) {
   const RAW = /#[0-9a-fA-F]{6}\b|#[0-9a-fA-F]{3}\b(?![\w-])|\brgba?\(|\bhsla?\(|\boklch\(/;
   const ARB = /\b[a-z][a-z-]*-\[[^\]\s]+\]/;
-  readFileSync(path.join(root, rel), 'utf8').split('\n').forEach((line, i) => {
-    if (RAW.test(line)) problems.push(`${rel}:${i + 1}: raw colour — use a design token (bg-panel, text-fg-2, var(--af-…)).`);
-    if (ARB.test(line)) problems.push(`${rel}:${i + 1}: arbitrary Tailwind value — use a token or add one in design-tokens.`);
-  });
+  readFileSync(path.join(root, rel), 'utf8')
+    .split('\n')
+    .forEach((line, i) => {
+      if (RAW.test(line))
+        problems.push(`${rel}:${i + 1}: raw colour — use a design token (bg-panel, text-fg-2, var(--af-…)).`);
+      if (ARB.test(line))
+        problems.push(`${rel}:${i + 1}: arbitrary Tailwind value — use a token or add one in design-tokens.`);
+    });
 }
 
 // 3. Runner scripts: their sha256 is pinned in content; list references that are now stale.
 if (/^portal\/content\/scripts\/.+\.ps1$/.test(rel)) {
   const scriptPath = rel.replace(/^portal\/content\/scripts\//, '');
-  const sha = createHash('sha256').update(readFileSync(path.join(root, rel))).digest('hex');
+  const sha = createHash('sha256')
+    .update(readFileSync(path.join(root, rel)))
+    .digest('hex');
   const stale = [];
   const walk = (dir) => {
     for (const name of readdirSync(dir)) {
@@ -56,7 +71,10 @@ if (/^portal\/content\/scripts\/.+\.ps1$/.test(rel)) {
     }
   };
   walk(path.join(root, 'portal/content'));
-  if (stale.length) problems.push(`${rel} changed; its new sha256 is ${sha}. Update the pinned sha256 in:\n  ${stale.join('\n  ')}`);
+  if (stale.length)
+    problems.push(
+      `${rel} changed; its new sha256 is ${sha}. Update the pinned sha256 in:\n  ${stale.join('\n  ')}`,
+    );
 }
 
 if (problems.length) {

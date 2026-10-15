@@ -1,5 +1,11 @@
 import { screen, within } from '@testing-library/react';
-import { WIDGETS, keyValueFixtures, statusGridFixtures, type KeyValueConfig, type StatusGridConfig } from '@adminforge/widgets';
+import {
+  WIDGETS,
+  keyValueFixtures,
+  statusGridFixtures,
+  type KeyValueConfig,
+  type StatusGridConfig,
+} from '@adminforge/widgets';
 import { axeViolations } from '../axe';
 import { ready, renderWidget } from './helpers';
 
@@ -15,7 +21,10 @@ describe('keyValue widget', () => {
     const { container } = renderWidget(KeyValue, config, ready(keyValueFixtures.user.value));
     expect(term('Sign-in name')).toHaveTextContent('adele.vance@example.com');
     expect(within(term('Object id')).getByRole('button', { name: /Copy Object id/ })).toBeInTheDocument();
-    expect(within(term('Sign-in')).getByText('Allowed').closest('[data-status]')).toHaveAttribute('data-status', 'ok');
+    expect(within(term('Sign-in')).getByText('Allowed').closest('[data-status]')).toHaveAttribute(
+      'data-status',
+      'ok',
+    );
     expect(term('Synced from on-premises')).toHaveTextContent('No');
     expect(within(term('Created')).getByRole('time')).toHaveTextContent(/UTC/);
     expect(await axeViolations(container)).toEqual([]);
@@ -32,7 +41,11 @@ describe('keyValue widget', () => {
         { field: 'missing', label: 'Missing' },
       ],
     }) as KeyValueConfig;
-    renderWidget(KeyValue, c, ready({ tags: { env: 'prod', owner: 'ops' }, groups: ['A', 'B'], portal: 'https://portal.azure.com/' }));
+    renderWidget(
+      KeyValue,
+      c,
+      ready({ tags: { env: 'prod', owner: 'ops' }, groups: ['A', 'B'], portal: 'https://portal.azure.com/' }),
+    );
     expect(term('Tags')).toHaveTextContent('env: prod');
     expect(term('Tags')).toHaveTextContent('owner: ops');
     expect(term('Groups')).toHaveTextContent('AB');

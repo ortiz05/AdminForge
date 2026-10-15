@@ -34,8 +34,10 @@ type Row = Record<string, unknown>;
 /** Tags from an array (`['a', 'b']`) or an object (Azure tags `{ env: 'prod' }` → `env: prod`). */
 export function tagList(v: unknown): string[] {
   if (v == null || v === '') return [];
-  if (Array.isArray(v)) return v.map((x) => (x != null && typeof x === 'object' ? JSON.stringify(x) : String(x))).filter(Boolean);
-  if (typeof v === 'object') return Object.entries(v).map(([k, val]) => (val == null || val === '' ? k : `${k}: ${String(val)}`));
+  if (Array.isArray(v))
+    return v.map((x) => (x != null && typeof x === 'object' ? JSON.stringify(x) : String(x))).filter(Boolean);
+  if (typeof v === 'object')
+    return Object.entries(v).map(([k, val]) => (val == null || val === '' ? k : `${k}: ${String(val)}`));
   return [String(v)];
 }
 
@@ -51,7 +53,11 @@ const shortTimestamp = (v: unknown) => {
 function TimeCell({ value, kind }: { value: unknown; kind: 'date' | 'datetime' }) {
   if (value == null || value === '') return <span className={TABLE_MUTED_TEXT}>—</span>;
   return (
-    <time dateTime={str(value)} title={formatTimestamp(value as string)} className="truncate text-fg-2 tabular-nums">
+    <time
+      dateTime={str(value)}
+      title={formatTimestamp(value as string)}
+      className="truncate text-fg-2 tabular-nums"
+    >
       {kind === 'date' ? formatDate(value) : shortTimestamp(value)}
     </time>
   );
@@ -88,9 +94,10 @@ function LinkCell({ col, row, runtime }: { col: TableColumnConfig; row: Row; run
         type="button"
         className={`${cls} text-left`}
         onClick={() =>
-          void evaluateTemplate<Record<string, unknown>>(col.link!.params ?? {}, { ...runtime.scope, row }).then((p) =>
-            runtime.navigate(runtime.hrefFor(col.link!.page, p)),
-          )
+          void evaluateTemplate<Record<string, unknown>>(col.link!.params ?? {}, {
+            ...runtime.scope,
+            row,
+          }).then((p) => runtime.navigate(runtime.hrefFor(col.link!.page, p)))
         }
       >
         {text}
@@ -122,7 +129,10 @@ export function toDataColumn(col: TableColumnConfig, id: string, runtime: Widget
     align: col.align === 'end' ? ('end' as const) : undefined,
   };
   const filter = filterOf(col);
-  const withFilter = (kind: ColumnKind, extra: Pick<DataColumn<Row>, 'value'> & Partial<DataColumn<Row>>): DataColumn<Row> => ({
+  const withFilter = (
+    kind: ColumnKind,
+    extra: Pick<DataColumn<Row>, 'value'> & Partial<DataColumn<Row>>,
+  ): DataColumn<Row> => ({
     ...base,
     kind,
     ...(filter ? { filter } : {}),
@@ -135,7 +145,10 @@ export function toDataColumn(col: TableColumnConfig, id: string, runtime: Widget
           const primary = get(row);
           if (primary == null || primary === '') return null;
           const secondary = col.secondary ? getPath(row, col.secondary) : undefined;
-          return { primary: str(primary), ...(secondary != null && secondary !== '' ? { secondary: str(secondary) } : {}) };
+          return {
+            primary: str(primary),
+            ...(secondary != null && secondary !== '' ? { secondary: str(secondary) } : {}),
+          };
         },
       });
     case 'status':
@@ -158,7 +171,11 @@ export function toDataColumn(col: TableColumnConfig, id: string, runtime: Widget
         value: (row) => (typeof get(row) === 'number' ? get(row) : null),
         cell: (row) => {
           const v = get(row);
-          return typeof v === 'number' ? <NumberCell text={formatPercentValue(v)} /> : <span className={TABLE_MUTED_TEXT}>—</span>;
+          return typeof v === 'number' ? (
+            <NumberCell text={formatPercentValue(v)} />
+          ) : (
+            <span className={TABLE_MUTED_TEXT}>—</span>
+          );
         },
       });
     case 'bytes':
@@ -166,7 +183,11 @@ export function toDataColumn(col: TableColumnConfig, id: string, runtime: Widget
         value: (row) => (typeof get(row) === 'number' ? get(row) : null),
         cell: (row) => {
           const v = get(row);
-          return typeof v === 'number' ? <NumberCell text={formatBytes(v)} /> : <span className={TABLE_MUTED_TEXT}>—</span>;
+          return typeof v === 'number' ? (
+            <NumberCell text={formatBytes(v)} />
+          ) : (
+            <span className={TABLE_MUTED_TEXT}>—</span>
+          );
         },
       });
     case 'boolean':
@@ -210,12 +231,24 @@ export function toDataColumn(col: TableColumnConfig, id: string, runtime: Widget
         },
       });
     default:
-      return withFilter('text', { value: (row) => (get(row) == null || get(row) === '' ? null : str(get(row))) });
+      return withFilter('text', {
+        value: (row) => (get(row) == null || get(row) === '' ? null : str(get(row))),
+      });
   }
 }
 
 /** One menu per row: the row's actions whose `when` holds, evaluated when the menu opens. */
-function RowActionsMenu({ row, actions, runtime, label }: { row: Row; actions: RowAction[]; runtime: WidgetRuntime; label: string }) {
+function RowActionsMenu({
+  row,
+  actions,
+  runtime,
+  label,
+}: {
+  row: Row;
+  actions: RowAction[];
+  runtime: WidgetRuntime;
+  label: string;
+}) {
   const [visible, setVisible] = useState<RowAction[] | null>(null);
   const scope = { ...runtime.scope, row };
   const onOpenChange = (open: boolean) => {
@@ -260,7 +293,9 @@ function RowActionsMenu({ row, actions, runtime, label }: { row: Row; actions: R
                 key={`${a.playbook ?? a.href}-${i}`}
                 icon={a.icon ? <Icon name={a.icon} size={15} /> : undefined}
                 onSelect={() => run(a)}
-                shortcut={external ? <ArrowSquareOutIcon size={12} aria-label="Opens in a new tab" /> : undefined}
+                shortcut={
+                  external ? <ArrowSquareOutIcon size={12} aria-label="Opens in a new tab" /> : undefined
+                }
               >
                 {a.label ?? (a.playbook ? playbookLabel(a.playbook) : 'Open link')}
               </MenuItem>
@@ -276,7 +311,17 @@ function RowActionsMenu({ row, actions, runtime, label }: { row: Row; actions: R
 /** Display-only key on bulk items: the playbook drawer lists items by it and strips it before running. */
 export const ITEM_LABEL_KEY = '$label';
 
-function BulkActionButton({ action, rows, runtime, labelOf }: { action: BulkAction; rows: Row[]; runtime: WidgetRuntime; labelOf: (row: Row) => string }) {
+function BulkActionButton({
+  action,
+  rows,
+  runtime,
+  labelOf,
+}: {
+  action: BulkAction;
+  rows: Row[];
+  runtime: WidgetRuntime;
+  labelOf: (row: Row) => string;
+}) {
   const scope = useMemo(() => ({ ...runtime.scope, rows }), [runtime.scope, rows]);
   const visible = useWhen(action.when, scope);
   const [busy, setBusy] = useState(false);
@@ -288,7 +333,11 @@ function BulkActionButton({ action, rows, runtime, labelOf }: { action: BulkActi
     try {
       const items = await Promise.all(
         rows.map(async (row) => {
-          const inputs = await evaluateTemplate<Record<string, unknown>>(action.forEach.inputs, { ...runtime.scope, row, item: row });
+          const inputs = await evaluateTemplate<Record<string, unknown>>(action.forEach.inputs, {
+            ...runtime.scope,
+            row,
+            item: row,
+          });
           const label = labelOf(row);
           return label ? { ...inputs, [ITEM_LABEL_KEY]: label } : inputs;
         }),
@@ -303,7 +352,9 @@ function BulkActionButton({ action, rows, runtime, labelOf }: { action: BulkActi
       size="sm"
       intent="secondary"
       pending={busy}
-      locked={tooMany ? `Select at most ${formatNumber(max)} rows for ${action.label.toLowerCase()}.` : undefined}
+      locked={
+        tooMany ? `Select at most ${formatNumber(max)} rows for ${action.label.toLowerCase()}.` : undefined
+      }
       onClick={() => void launch()}
     >
       {action.icon && <Icon name={action.icon} size={14} />}
@@ -331,7 +382,13 @@ function BulkActions({
   return (
     <>
       {actions.map((a, i) => (
-        <BulkActionButton key={`${a.playbook}-${i}`} action={a} rows={stable} runtime={runtime} labelOf={labelOf} />
+        <BulkActionButton
+          key={`${a.playbook}-${i}`}
+          action={a}
+          rows={stable}
+          runtime={runtime}
+          labelOf={labelOf}
+        />
       ))}
     </>
   );
@@ -398,7 +455,9 @@ export function TableWidget({ config, data, runtime, instanceId, variant }: Widg
     return cols;
   }, [config.columns, config.rowActions, runtime]);
 
-  const firstText = config.columns.find((c) => !c.hidden && (c.kind === 'identity' || !c.kind || c.kind === 'text'));
+  const firstText = config.columns.find(
+    (c) => !c.hidden && (c.kind === 'identity' || !c.kind || c.kind === 'text'),
+  );
   const rowLabel = (row: Row) => str(getPath(row, firstText?.field ?? config.columns[0]!.field));
 
   // Inspector: Enter/click opens the entity page; the inspected row keeps a temper-blue edge.
@@ -406,9 +465,10 @@ export function TableWidget({ config, data, runtime, instanceId, variant }: Widg
   const onRowActivate =
     inspect && runtime.inspect
       ? (row: Row) =>
-          void evaluateTemplate<Record<string, unknown>>(inspect.params ?? {}, { ...runtime.scope, row }).then((params) =>
-            runtime.inspect!({ page: inspect.page, params }),
-          )
+          void evaluateTemplate<Record<string, unknown>>(inspect.params ?? {}, {
+            ...runtime.scope,
+            row,
+          }).then((params) => runtime.inspect!({ page: inspect.page, params }))
       : undefined;
   const activeRowId = useMemo(() => {
     const target = runtime.inspecting;
@@ -426,7 +486,9 @@ export function TableWidget({ config, data, runtime, instanceId, variant }: Widg
   const stored = runtime.tableView(instanceId);
   const defaultSort = config.sort ? [{ id: config.sort.field, desc: Boolean(config.sort.desc) }] : [];
   const controlled = Boolean(runtime.setTableView);
-  const view: DataTableView | undefined = controlled ? { ...stored, sorting: stored?.sorting ?? defaultSort } : undefined;
+  const view: DataTableView | undefined = controlled
+    ? { ...stored, sorting: stored?.sorting ?? defaultSort }
+    : undefined;
   const density = stored?.density;
   const onViewChange = controlled
     ? (next: DataTableView) => runtime.setTableView!(instanceId, { ...next, ...(density ? { density } : {}) })
@@ -437,7 +499,10 @@ export function TableWidget({ config, data, runtime, instanceId, variant }: Widg
 
   const empty = config.empty
     ? { title: config.empty.title, description: config.empty.body }
-    : { title: config.emptyText ?? 'Nothing to show', description: 'Try different filters or a broader search.' };
+    : {
+        title: config.emptyText ?? 'Nothing to show',
+        description: 'Try different filters or a broader search.',
+      };
 
   const label = config.title ?? 'Results';
   const loading = data.status === 'loading' || data.status === 'idle';
@@ -466,7 +531,13 @@ export function TableWidget({ config, data, runtime, instanceId, variant }: Widg
     ) : undefined;
 
   return (
-    <Panel title={config.title} description={config.description} flush footer={footer} aria-label={config.title ? undefined : label}>
+    <Panel
+      title={config.title}
+      description={config.description}
+      flush
+      footer={footer}
+      aria-label={config.title ? undefined : label}
+    >
       <DataTable
         label={label}
         data={rows}
@@ -475,7 +546,9 @@ export function TableWidget({ config, data, runtime, instanceId, variant }: Widg
         loading={loading}
         error={error}
         empty={empty}
-        selectable={config.selection === 'multi' || (config.selection !== 'none' && Boolean(config.bulkActions?.length))}
+        selectable={
+          config.selection === 'multi' || (config.selection !== 'none' && Boolean(config.bulkActions?.length))
+        }
         bulkActions={
           config.bulkActions?.length
             ? (selected) => (
@@ -514,4 +587,3 @@ export function TableWidget({ config, data, runtime, instanceId, variant }: Widg
     </Panel>
   );
 }
-

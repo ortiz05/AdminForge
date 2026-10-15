@@ -85,7 +85,11 @@ describe('leader election (advisory lock)', () => {
     let fail = true;
     const warnings: string[] = [];
     const e = new LeaderElector(
-      { tryAcquire: async () => (fail ? Promise.reject(new Error('connection refused')) : true), check: async () => true, release: async () => undefined },
+      {
+        tryAcquire: async () => (fail ? Promise.reject(new Error('connection refused')) : true),
+        check: async () => true,
+        release: async () => undefined,
+      },
       { intervalMs: 1_000, timers: clock, log: { warn: (_o, m) => warnings.push(m) } },
     );
     await e.start();

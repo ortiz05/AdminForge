@@ -18,9 +18,16 @@ import {
 type Log = { info?(obj: object, msg: string): void; warn(obj: object, msg: string): void };
 
 export const definitionNotFound = (kind: string, key: string, version?: string) =>
-  new AppError(404, 'definition_not_found', `No published ${kind} "${key}"${version ? ` version ${version}` : ''}.`, {
-    hint: version ? 'The version may never have been published.' : 'Check the id, or publish the content (adminforge publish).',
-  });
+  new AppError(
+    404,
+    'definition_not_found',
+    `No published ${kind} "${key}"${version ? ` version ${version}` : ''}.`,
+    {
+      hint: version
+        ? 'The version may never have been published.'
+        : 'Check the id, or publish the content (adminforge publish).',
+    },
+  );
 
 /**
  * Published definitions from Postgres with an in-process cache. `NOTIFY definitions_changed` (from any publisher, any
@@ -39,13 +46,18 @@ export class CachedDbSource implements DefinitionSource {
   ) {
     if (opts.listenUrl) {
       let first = true;
-      this.listener = new PgListener(opts.listenUrl, DEFINITIONS_CHANNEL, (payload) => this.invalidate(parseChange(payload)), {
-        log: opts.log,
-        onConnect: () => {
-          if (!first) this.invalidate({ all: true });
-          first = false;
+      this.listener = new PgListener(
+        opts.listenUrl,
+        DEFINITIONS_CHANNEL,
+        (payload) => this.invalidate(parseChange(payload)),
+        {
+          log: opts.log,
+          onConnect: () => {
+            if (!first) this.invalidate({ all: true });
+            first = false;
+          },
         },
-      });
+      );
       void this.listener.start();
     }
   }
@@ -53,7 +65,10 @@ export class CachedDbSource implements DefinitionSource {
   /** Drops cached entries and tells listeners (SSE, datasource cache). */
   invalidate(change: DefinitionsChanged): void {
     if (change.all || !change.keys) this.cache.clear();
-    else for (const k of change.keys) for (const ck of [...this.cache.keys()]) if (ck === k || ck.startsWith(`${k}@`)) this.cache.delete(ck);
+    else
+      for (const k of change.keys)
+        for (const ck of [...this.cache.keys()])
+          if (ck === k || ck.startsWith(`${k}@`)) this.cache.delete(ck);
     this.lists.clear();
     for (const l of this.listeners) l(change);
   }
@@ -74,7 +89,9 @@ export class CachedDbSource implements DefinitionSource {
   }
 
   get(kind: Kind, key: string, version?: string): Promise<DefinitionRecord | null> {
-    return this.memo(this.cache, `${recordKey(kind, key)}${version ? `@${version}` : ''}`, () => this.store.get(kind, key, version));
+    return this.memo(this.cache, `${recordKey(kind, key)}${version ? `@${version}` : ''}`, () =>
+      this.store.get(kind, key, version),
+    );
   }
 
   onChange(listener: ChangeListener): () => void {
@@ -95,7 +112,8 @@ export class CachedDbSource implements DefinitionSource {
 function parseChange(payload: string): DefinitionsChanged {
   try {
     const v = JSON.parse(payload) as DefinitionsChanged;
-    if (v && (v.all === true || Array.isArray(v.keys))) return v.all ? { all: true } : { keys: v.keys!.filter((k) => typeof k === 'string') };
+    if (v && (v.all === true || Array.isArray(v.keys)))
+      return v.all ? { all: true } : { keys: v.keys!.filter((k) => typeof k === 'string') };
   } catch {
     // fall through
   }
@@ -104,7 +122,11 @@ function parseChange(payload: string): DefinitionsChanged {
 
 /** Wraps a source with the DefinitionResolver port. */
 export function registryFrom(source: DefinitionSource, origin: 'fs' | 'db'): DefinitionRegistry {
-  const resolve = async <K extends Kind>(kind: K, key: string, version?: string): Promise<ResolvedDefinition<DefinitionOf<K>>> => {
+  const resolve = async <K extends Kind>(
+    kind: K,
+    key: string,
+    version?: string,
+  ): Promise<ResolvedDefinition<DefinitionOf<K>>> => {
     const r = await source.get(kind, key, version);
     if (!r) throw definitionNotFound(kind, key, version);
     return { def: r.def as DefinitionOf<K>, version: r.version, sha256: r.sha256 };
@@ -130,11 +152,22 @@ export function registryFrom(source: DefinitionSource, origin: 'fs' | 'db'): Def
 /** CONTENT_SOURCE=db without a database: the app still boots; content requests fail with a clear 503. */
 function unavailableSource(): DefinitionSource {
   const fail = async (): Promise<never> => {
-    throw new AppError(503, 'content_unavailable', 'Published content is not available: CONTENT_SOURCE=db but no database is connected.', {
-      hint: 'Set DATABASE_URL, or CONTENT_SOURCE=fs for development.',
-    });
+    throw new AppError(
+      503,
+      'content_unavailable',
+      'Published content is not available: CONTENT_SOURCE=db but no database is connected.',
+      {
+        hint: 'Set DATABASE_URL, or CONTENT_SOURCE=fs for development.',
+      },
+    );
   };
-  return { list: fail, get: fail, onChange: () => () => undefined, problems: () => [], close: async () => undefined };
+  return {
+    list: fail,
+    get: fail,
+    onChange: () => () => undefined,
+    problems: () => [],
+    close: async () => undefined,
+  };
 }
 
 /** CONTENT_SOURCE=fs → portal/content (hot reload when CONTENT_WATCH); db → published versions + LISTEN/NOTIFY. */
@@ -145,7 +178,10 @@ export function createDefinitionRegistry(
 ): DefinitionRegistry {
   if (config.CONTENT_SOURCE === 'db') {
     if (!database) return registryFrom(unavailableSource(), 'db');
-    return registryFrom(new CachedDbSource(new DbDefinitionStore(database.db), { listenUrl: config.DATABASE_URL, log }), 'db');
+    return registryFrom(
+      new CachedDbSource(new DbDefinitionStore(database.db), { listenUrl: config.DATABASE_URL, log }),
+      'db',
+    );
   }
   return registryFrom(new FsDefinitionSource(config.CONTENT_DIR, { watch: config.CONTENT_WATCH, log }), 'fs');
 }

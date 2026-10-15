@@ -11,28 +11,79 @@
 
 const GUID_RE = /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi;
 /** Local parts may contain an apostrophe (o'brien@…) but never start with one (`'user@…'` inside OData literals). */
-const EMAIL_RE = /(?<![A-Za-z0-9._%+#-])[A-Za-z0-9._%+#-][A-Za-z0-9._%+'#-]*@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}/g;
+const EMAIL_RE =
+  /(?<![A-Za-z0-9._%+#-])[A-Za-z0-9._%+#-][A-Za-z0-9._%+'#-]*@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}/g;
 const IPV4_RE = /\b(?:25[0-5]|2[0-4]\d|1?\d?\d)(?:\.(?:25[0-5]|2[0-4]\d|1?\d?\d)){3}\b/g;
 const TOKEN_PARAMS = /([?&](?:\$?skip[Tt]oken|skiptoken)=)([^&#]+)/g;
 
 /** Microsoft-owned hosts stay as they are (service URLs in nextLinks, portal links). */
-const MICROSOFT_DOMAIN = /(^|\.)(microsoft\.com|microsoftonline\.com|azure\.com|azure\.net|windows\.net|office\.com|office365\.com|outlook\.com|live\.com|microsoftazuread-sso\.com|cloud\.microsoft)$/i;
+const MICROSOFT_DOMAIN =
+  /(^|\.)(microsoft\.com|microsoftonline\.com|azure\.com|azure\.net|windows\.net|office\.com|office365\.com|outlook\.com|live\.com|microsoftazuread-sso\.com|cloud\.microsoft)$/i;
 /** Example values already synthetic. */
 const SYNTHETIC_DOMAIN = /(^|\.)(example\.(com|net|org)|example\d+\.com|exampleorg\d*\.onmicrosoft\.com)$/i;
 
 /** Keys whose string values are names or other identifying free text. */
 const NAME_KEYS = new Set([
-  'displayName', 'givenName', 'surname', 'mailNickname', 'jobTitle', 'department', 'companyName', 'officeLocation', 'streetAddress', 'city',
-  'state', 'postalCode', 'country', 'onPremisesSamAccountName', 'onPremisesDistinguishedName', 'onPremisesDomainName', 'employeeId', 'name',
-  'resourceGroup', 'computerName', 'hostName', 'deviceName', 'managedDeviceOwnerType', 'userDisplayName', 'appDisplayName', 'principalDisplayName',
-  'resourceDisplayName', 'createdBy', 'description',
+  'displayName',
+  'givenName',
+  'surname',
+  'mailNickname',
+  'jobTitle',
+  'department',
+  'companyName',
+  'officeLocation',
+  'streetAddress',
+  'city',
+  'state',
+  'postalCode',
+  'country',
+  'onPremisesSamAccountName',
+  'onPremisesDistinguishedName',
+  'onPremisesDomainName',
+  'employeeId',
+  'name',
+  'resourceGroup',
+  'computerName',
+  'hostName',
+  'deviceName',
+  'managedDeviceOwnerType',
+  'userDisplayName',
+  'appDisplayName',
+  'principalDisplayName',
+  'resourceDisplayName',
+  'createdBy',
+  'description',
 ]);
 const PHONE_KEYS = new Set(['mobilePhone', 'businessPhones', 'faxNumber', 'phoneNumber', 'phoneNumbers']);
 /** Names that are generic product words, never tenant data. */
-const KEEP_TEXT = new Set(['microsoft graph', 'office 365 exchange online', 'windows azure service management api', 'enabled', 'disabled', 'member', 'guest', 'user', 'unknown', 'none']);
+const KEEP_TEXT = new Set([
+  'microsoft graph',
+  'office 365 exchange online',
+  'windows azure service management api',
+  'enabled',
+  'disabled',
+  'member',
+  'guest',
+  'user',
+  'unknown',
+  'none',
+]);
 const KIND_OF: Record<string, string> = {
-  users: 'User', user: 'User', groups: 'Group', group: 'Group', devices: 'Device', device: 'Device', manageddevices: 'Device',
-  applications: 'App', application: 'App', serviceprincipals: 'App', serviceprincipal: 'App', organization: 'Org', sites: 'Site', site: 'Site', teams: 'Team',
+  users: 'User',
+  user: 'User',
+  groups: 'Group',
+  group: 'Group',
+  devices: 'Device',
+  device: 'Device',
+  manageddevices: 'Device',
+  applications: 'App',
+  application: 'App',
+  serviceprincipals: 'App',
+  serviceprincipal: 'App',
+  organization: 'Org',
+  sites: 'Site',
+  site: 'Site',
+  teams: 'Team',
 };
 
 export interface SanitizerOptions {
@@ -44,7 +95,8 @@ export interface SanitizerOptions {
   keepGuids?: string[];
 }
 
-const isPlain = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
+const isPlain = (v: unknown): v is Record<string, unknown> =>
+  !!v && typeof v === 'object' && !Array.isArray(v);
 const pad = (n: number) => String(n).padStart(12, '0');
 const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
@@ -91,7 +143,8 @@ export class Sanitizer {
         // The tenant name also appears in SharePoint hosts (contoso.sharepoint.com, contoso-my…, contoso-admin…).
         const tenant = key.slice(0, -'.onmicrosoft.com'.length);
         const synthetic = v.slice(0, -'.onmicrosoft.com'.length);
-        for (const suffix of ['.sharepoint.com', '-my.sharepoint.com', '-admin.sharepoint.com']) this.domains.set(`${tenant}${suffix}`, `${synthetic}${suffix}`);
+        for (const suffix of ['.sharepoint.com', '-my.sharepoint.com', '-admin.sharepoint.com'])
+          this.domains.set(`${tenant}${suffix}`, `${synthetic}${suffix}`);
       } else {
         const n = this.next('domain');
         v = n === 1 ? 'example.com' : `example${n}.com`;
@@ -108,7 +161,9 @@ export class Sanitizer {
       const at = key.lastIndexOf('@');
       const domain = this.domain(key.slice(at + 1));
       if (SYNTHETIC_DOMAIN.test(key.slice(at + 1))) return e;
-      v = key.includes('#ext#') ? `guest${this.next('guest')}#EXT#@${domain}` : `user${this.next('user')}@${domain}`;
+      v = key.includes('#ext#')
+        ? `guest${this.next('guest')}#EXT#@${domain}`
+        : `user${this.next('user')}@${domain}`;
       this.emails.set(key, v);
     }
     return v;
@@ -116,14 +171,29 @@ export class Sanitizer {
 
   private text(original: string, key: string, kind: string): void {
     const t = original.trim();
-    if (!t || KEEP_TEXT.has(t.toLowerCase()) || this.texts.has(t) || /^(Example|example-|rg-example-|user\d|guest\d)/.test(t) || /^[\d\s.:/-]+$/.test(t)) return;
+    if (
+      !t ||
+      KEEP_TEXT.has(t.toLowerCase()) ||
+      this.texts.has(t) ||
+      /^(Example|example-|rg-example-|user\d|guest\d)/.test(t) ||
+      /^[\d\s.:/-]+$/.test(t)
+    )
+      return;
     let v: string;
     if (key === 'displayName' && kind === 'Org') v = 'Example Org';
     else if (key === 'resourceGroup') v = `rg-example-${this.next('rg')}`;
-    else if ((key === 'name' || key === 'computerName' || key === 'hostName' || key === 'deviceName') && !/\s/.test(t)) v = `example-${this.next('res')}`;
+    else if (
+      (key === 'name' || key === 'computerName' || key === 'hostName' || key === 'deviceName') &&
+      !/\s/.test(t)
+    )
+      v = `example-${this.next('res')}`;
     else if (key === 'displayName') v = `Example ${kind} ${this.next(`dn:${kind}`)}`;
     else if (key === 'description') v = 'Example description';
-    else v = `Example ${key.replace(/([A-Z])/g, ' $1').toLowerCase().trim()} ${this.next(key)}`;
+    else
+      v = `Example ${key
+        .replace(/([A-Z])/g, ' $1')
+        .toLowerCase()
+        .trim()} ${this.next(key)}`;
     this.texts.set(t, v);
   }
 
@@ -169,9 +239,13 @@ export class Sanitizer {
       return;
     }
     if (!isPlain(value)) return;
-    const odata = typeof value['@odata.type'] === 'string' ? KIND_OF[value['@odata.type'].replace(/^#microsoft\.graph\./, '').toLowerCase()] : undefined;
+    const odata =
+      typeof value['@odata.type'] === 'string'
+        ? KIND_OF[value['@odata.type'].replace(/^#microsoft\.graph\./, '').toLowerCase()]
+        : undefined;
     const here = odata ?? kind;
-    if (Array.isArray(value.verifiedDomains)) for (const d of value.verifiedDomains as Array<{ name?: string }>) if (d?.name) this.domain(d.name);
+    if (Array.isArray(value.verifiedDomains))
+      for (const d of value.verifiedDomains as Array<{ name?: string }>) if (d?.name) this.domain(d.name);
     for (const [k, v] of Object.entries(value)) {
       if (PHONE_KEYS.has(k)) continue;
       this.collect(v, here, k);
@@ -190,8 +264,12 @@ export class Sanitizer {
   string(s: string): string {
     let out = s.replace(GUID_RE, (g) => this.guid(g));
     out = out.replace(EMAIL_RE, (e) => this.email(e));
-    out = out.replace(TOKEN_PARAMS, (_m, p: string, t: string) => `${p}${encodeURIComponent(this.token(decodeURIComponent(t)))}`);
-    for (const [from, to] of [...this.domains].sort((a, b) => b[0].length - a[0].length)) out = out.replace(new RegExp(`(?<![A-Za-z0-9-])${escapeRe(from)}(?![A-Za-z0-9-])`, 'gi'), to);
+    out = out.replace(
+      TOKEN_PARAMS,
+      (_m, p: string, t: string) => `${p}${encodeURIComponent(this.token(decodeURIComponent(t)))}`,
+    );
+    for (const [from, to] of [...this.domains].sort((a, b) => b[0].length - a[0].length))
+      out = out.replace(new RegExp(`(?<![A-Za-z0-9-])${escapeRe(from)}(?![A-Za-z0-9-])`, 'gi'), to);
     for (const [from, to] of [...this.texts].sort((a, b) => b[0].length - a[0].length)) {
       if (from.length >= 4) out = out.split(from).join(to);
       else if (out === from) out = to;
@@ -204,13 +282,15 @@ export class Sanitizer {
   apply<T>(value: T, key = ''): T {
     if (typeof value === 'string') {
       if (PHONE_KEYS.has(key)) return '+1 555 0100' as T;
-      if ((key === '$skipToken' || key === 'skipToken') && this.tokens.has(value)) return this.tokens.get(value) as T;
+      if ((key === '$skipToken' || key === 'skipToken') && this.tokens.has(value))
+        return this.tokens.get(value) as T;
       return this.string(value) as T;
     }
     if (Array.isArray(value)) return value.map((v) => this.apply(v, key)) as T;
     if (!isPlain(value)) return value;
     const out: Record<string, unknown> = {};
-    for (const [k, v] of Object.entries(value)) out[k] = PHONE_KEYS.has(k) && Array.isArray(v) ? v.map(() => '+1 555 0100') : this.apply(v, k);
+    for (const [k, v] of Object.entries(value))
+      out[k] = PHONE_KEYS.has(k) && Array.isArray(v) ? v.map(() => '+1 555 0100') : this.apply(v, k);
     return out as T;
   }
 

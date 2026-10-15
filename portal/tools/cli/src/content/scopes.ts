@@ -3,7 +3,14 @@ import type { LoadedDefinition, Scopes } from '@adminforge/schemas';
 import { RESOURCES } from '../provision/catalog';
 
 /** Services whose permissions `validate --scopes` compares (connections use their own audiences and are not checked). */
-export const SCOPE_SERVICES = ['graph', 'arm', 'logAnalytics', 'exchange', 'teams', 'sharepointAdmin'] as const;
+export const SCOPE_SERVICES = [
+  'graph',
+  'arm',
+  'logAnalytics',
+  'exchange',
+  'teams',
+  'sharepointAdmin',
+] as const;
 export type ScopeService = (typeof SCOPE_SERVICES)[number];
 export type ScopeApp = 'read' | 'write' | 'automation';
 
@@ -56,7 +63,9 @@ export function declaredScopes(defs: readonly LoadedDefinition[]): Declared {
   for (const d of defs) {
     add(appFor(d.def), d.def.requires?.scopes, d.file);
     // Datasource-level requirements belong to the same app as their page.
-    if ('datasources' in d.def) for (const ds of Object.values(d.def.datasources ?? {})) add(appFor(d.def), ds.requires?.scopes, d.file);
+    if ('datasources' in d.def)
+      for (const ds of Object.values(d.def.datasources ?? {}))
+        add(appFor(d.def), ds.requires?.scopes, d.file);
   }
   return { scopes, files, connections: [...connections].sort() };
 }
@@ -65,7 +74,11 @@ export function declaredScopes(defs: readonly LoadedDefinition[]): Declared {
 function satisfied(have: Set<string>, scope: string): boolean {
   const lower = new Set([...have].map((s) => s.toLowerCase()));
   const want = scope.toLowerCase();
-  return lower.has(want) || lower.has(want.replace('.read.', '.readwrite.')) || (want.endsWith('.read') && lower.has(`${want.slice(0, -5)}.readwrite`));
+  return (
+    lower.has(want) ||
+    lower.has(want.replace('.read.', '.readwrite.')) ||
+    (want.endsWith('.read') && lower.has(`${want.slice(0, -5)}.readwrite`))
+  );
 }
 
 export interface ScopeFinding {
@@ -88,10 +101,14 @@ export function compareScopes(declared: Declared, consented: ScopeSet): ScopeCom
     for (const service of SCOPE_SERVICES) {
       const want = declared.scopes[app][service] ?? new Set<string>();
       const have = consented[app][service] ?? new Set<string>();
-      for (const scope of [...want].sort()) if (!satisfied(have, scope)) missing.push({ app, service, scope, files: declared.files.get(`${app}:${service}:${scope}`) });
+      for (const scope of [...want].sort())
+        if (!satisfied(have, scope))
+          missing.push({ app, service, scope, files: declared.files.get(`${app}:${service}:${scope}`) });
       for (const scope of [...have].sort()) {
         if (OIDC.has(scope.toLowerCase())) continue;
-        const used = [...want].some((w) => w.toLowerCase() === scope.toLowerCase() || satisfied(new Set([scope]), w));
+        const used = [...want].some(
+          (w) => w.toLowerCase() === scope.toLowerCase() || satisfied(new Set([scope]), w),
+        );
         if (!used) unused.push({ app, service, scope });
       }
     }
@@ -111,13 +128,21 @@ const odata = (s: string) => `'${s.replace(/'/g, "''")}'`;
  * What Entra actually granted: tenant-wide delegated grants (oauth2PermissionGrants, AllPrincipals) for the Read and
  * Write apps, and application permissions (appRoleAssignments) for the automation identity. Read with the provisioner.
  */
-export async function consentedScopes(graph: GraphClient, apps: Partial<Record<ScopeApp, string>>): Promise<{ scopes: ScopeSet; notFound: ScopeApp[] }> {
+export async function consentedScopes(
+  graph: GraphClient,
+  apps: Partial<Record<ScopeApp, string>>,
+): Promise<{ scopes: ScopeSet; notFound: ScopeApp[] }> {
   const scopes = emptyScopeSet();
   const notFound: ScopeApp[] = [];
   const resources = new Map<string, Sp | null>();
   const resource = async (id: string) => {
     if (!resources.has(id)) {
-      const r = await graph.request<Sp>({ path: `/servicePrincipals/${encodeURIComponent(id)}`, query: { $select: 'id,appId,appRoles' } }).catch(() => null);
+      const r = await graph
+        .request<Sp>({
+          path: `/servicePrincipals/${encodeURIComponent(id)}`,
+          query: { $select: 'id,appId,appRoles' },
+        })
+        .catch(() => null);
       resources.set(id, r?.data ?? null);
     }
     return resources.get(id) ?? null;
@@ -125,14 +150,19 @@ export async function consentedScopes(graph: GraphClient, apps: Partial<Record<S
   for (const app of ['read', 'write', 'automation'] as const) {
     const appId = apps[app];
     if (!appId) continue;
-    const found = await graph.request<{ value: Sp[] }>({ path: '/servicePrincipals', query: { $filter: `appId eq ${odata(appId)}`, $select: 'id,appId' } });
+    const found = await graph.request<{ value: Sp[] }>({
+      path: '/servicePrincipals',
+      query: { $filter: `appId eq ${odata(appId)}`, $select: 'id,appId' },
+    });
     const sp = found.data.value?.[0];
     if (!sp) {
       notFound.push(app);
       continue;
     }
     if (app === 'automation') {
-      const assignments = await graph.all<{ resourceId: string; appRoleId: string }>({ path: `/servicePrincipals/${encodeURIComponent(sp.id)}/appRoleAssignments` });
+      const assignments = await graph.all<{ resourceId: string; appRoleId: string }>({
+        path: `/servicePrincipals/${encodeURIComponent(sp.id)}/appRoleAssignments`,
+      });
       for (const a of assignments) {
         const res = await resource(a.resourceId);
         const service = res ? SERVICE_BY_APP_ID.get(res.appId) : undefined;
@@ -140,12 +170,16 @@ export async function consentedScopes(graph: GraphClient, apps: Partial<Record<S
         if (service && value) (scopes.automation[service] ??= new Set()).add(value);
       }
     } else {
-      const grants = await graph.all<{ resourceId: string; scope?: string; consentType?: string }>({ path: '/oauth2PermissionGrants', query: { $filter: `clientId eq ${odata(sp.id)}` } });
+      const grants = await graph.all<{ resourceId: string; scope?: string; consentType?: string }>({
+        path: '/oauth2PermissionGrants',
+        query: { $filter: `clientId eq ${odata(sp.id)}` },
+      });
       for (const g of grants.filter((x) => x.consentType === 'AllPrincipals')) {
         const res = await resource(g.resourceId);
         const service = res ? SERVICE_BY_APP_ID.get(res.appId) : undefined;
         if (!service) continue;
-        for (const s of (g.scope ?? '').split(/\s+/).filter(Boolean)) (scopes[app][service] ??= new Set()).add(s);
+        for (const s of (g.scope ?? '').split(/\s+/).filter(Boolean))
+          (scopes[app][service] ??= new Set()).add(s);
       }
     }
   }

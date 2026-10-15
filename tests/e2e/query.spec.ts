@@ -14,20 +14,36 @@ const THEMES = ['steel', 'daylight'] as const;
 
 const NAV_WITH_QUERY: NavResponse = {
   sections: NAV.sections.map((s) =>
-    s.key === 'automation' ? { ...s, items: [...s.items, { key: 'query', label: 'Query Studio', href: '/query', icon: 'terminal' }] } : s,
+    s.key === 'automation'
+      ? {
+          ...s,
+          items: [...s.items, { key: 'query', label: 'Query Studio', href: '/query', icon: 'terminal' }],
+        }
+      : s,
   ),
 };
 
 const queryApi: MockHandler = ({ method, path, body }) => {
   if (method === 'GET' && path === '/api/nav') return { body: NAV_WITH_QUERY };
   if (method === 'GET' && path === '/api/me/capabilities') return { body: CAPABILITIES_NO_DEFENDER };
-  if (method === 'POST' && path.startsWith('/api/query')) return answerQuery(path, (body ?? {}) as Record<string, unknown>);
+  if (method === 'POST' && path.startsWith('/api/query'))
+    return answerQuery(path, (body ?? {}) as Record<string, unknown>);
   return undefined;
 };
 
 async function noAxeViolations(page: Page) {
-  const results = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa']).analyze();
-  expect(results.violations.map((v) => `${v.id}: ${v.help} (${v.nodes.map((n) => n.target.join(' ')).slice(0, 3).join(', ')})`)).toEqual([]);
+  const results = await new AxeBuilder({ page })
+    .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'])
+    .analyze();
+  expect(
+    results.violations.map(
+      (v) =>
+        `${v.id}: ${v.help} (${v.nodes
+          .map((n) => n.target.join(' '))
+          .slice(0, 3)
+          .join(', ')})`,
+    ),
+  ).toEqual([]);
 }
 
 /** The Monaco editor is ready: its text area exists and the first line is rendered. */
@@ -69,23 +85,42 @@ test('Monaco loads locally, highlights KQL, and Ctrl+Enter runs the query', asyn
   const { calls } = await mockApi(page, { handlers: [queryApi] });
   await page.goto('/query');
   await expect(page.getByRole('heading', { level: 1, name: 'Query Studio' })).toBeVisible();
-  await expect(page.getByRole('navigation', { name: 'Primary' }).getByRole('link', { name: 'Query Studio' })).toHaveAttribute('aria-current', 'page');
+  await expect(
+    page.getByRole('navigation', { name: 'Primary' }).getByRole('link', { name: 'Query Studio' }),
+  ).toHaveAttribute('aria-current', 'page');
 
-  await setEditorText(page, "resources\n| where type =~ 'microsoft.web/sites'\n| summarize count() by location");
+  await setEditorText(
+    page,
+    "resources\n| where type =~ 'microsoft.web/sites'\n| summarize count() by location",
+  );
   const editor = page.getByTestId('kql-editor');
   // Keywords, strings and functions get different token classes from plain identifiers.
   const keyword = editor.locator('.view-line span span', { hasText: /^\s*summarize\s*$/ });
   const str = editor.locator('.view-line span span', { hasText: /microsoft\.web\/sites/ });
   const ident = editor.locator('.view-line span span', { hasText: /^\s*location\s*$/ });
   await expect(keyword).toHaveCount(1);
-  const [kw, st, id] = await Promise.all([keyword.getAttribute('class'), str.getAttribute('class'), ident.getAttribute('class')]);
+  const [kw, st, id] = await Promise.all([
+    keyword.getAttribute('class'),
+    str.getAttribute('class'),
+    ident.getAttribute('class'),
+  ]);
   expect(new Set([kw, st, id]).size).toBe(3);
 
   await page.keyboard.press('ControlOrMeta+Enter');
   const grid = page.getByRole('grid', { name: 'Query results' });
   await expect(grid).toBeVisible();
-  const runs = calls.filter((c) => c.method === 'POST' && c.path === '/api/query' && !/resourcecontainers/.test(String((c.body as { query?: string }).query)));
-  expect(runs.map((c) => c.body)).toEqual([{ source: 'resourceGraph', query: "resources\n| where type =~ 'microsoft.web/sites'\n| summarize count() by location" }]);
+  const runs = calls.filter(
+    (c) =>
+      c.method === 'POST' &&
+      c.path === '/api/query' &&
+      !/resourcecontainers/.test(String((c.body as { query?: string }).query)),
+  );
+  expect(runs.map((c) => c.body)).toEqual([
+    {
+      source: 'resourceGraph',
+      query: "resources\n| where type =~ 'microsoft.web/sites'\n| summarize count() by location",
+    },
+  ]);
   expect(runs[0]!.csrf).toBe('e2e-csrf-token');
   // The run is shareable: source and query are in the URL.
   await expect(page).toHaveURL(/\/query\?source=resourceGraph&q=resources/);
@@ -107,7 +142,11 @@ test('Ctrl+Enter from a starter, CSV export downloads the rows', async ({ page }
   await page.getByRole('button', { name: 'Export CSV' }).click();
   const file = await download;
   expect(file.suggestedFilename()).toMatch(/^query-resourcegraph-\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}Z\.csv$/);
-  const text = await (await file.createReadStream()).toArray().then((chunks) => Buffer.concat(chunks).toString('utf8'));
+  const text = await (
+    await file.createReadStream()
+  )
+    .toArray()
+    .then((chunks) => Buffer.concat(chunks).toString('utf8'));
   expect(text.replace(/^\uFEFF/, '').split('\r\n')[0]).toBe('type,location,resources');
   expect(text).toContain('microsoft.compute/virtualmachines,eastus,48');
 });
@@ -171,11 +210,17 @@ for (const theme of THEMES) {
     await page.getByRole('button', { name: /Save as/ }).click();
     await page.getByRole('menuitem', { name: /Probe/ }).click();
     const dialog = page.getByRole('dialog', { name: 'Save as probe' });
-    await expect(dialog.getByRole('textbox', { name: 'Title' })).toHaveValue('Storage accounts open to the public');
+    await expect(dialog.getByRole('textbox', { name: 'Title' })).toHaveValue(
+      'Storage accounts open to the public',
+    );
     await dialog.getByRole('button', { name: 'Create probe YAML' }).click();
     const ready = page.getByRole('dialog', { name: 'Your probe file is ready' });
     await expect(ready.getByText('adding-a-probe')).toBeVisible();
-    expect(calls.find((c) => c.path === '/api/query/scaffold')?.body).toMatchObject({ as: 'probe', source: 'resourceGraph', title: 'Storage accounts open to the public' });
+    expect(calls.find((c) => c.path === '/api/query/scaffold')?.body).toMatchObject({
+      as: 'probe',
+      source: 'resourceGraph',
+      title: 'Storage accounts open to the public',
+    });
     await settle(page);
     await expect(page).toHaveScreenshot(`query-save-${theme}.png`);
     await noAxeViolations(page);

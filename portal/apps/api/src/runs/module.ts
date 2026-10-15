@@ -23,7 +23,11 @@ declare module 'fastify' {
   }
 }
 
-type Log = { info?(obj: object, msg: string): void; warn(obj: object, msg: string): void; error?(obj: object, msg: string): void };
+type Log = {
+  info?(obj: object, msg: string): void;
+  warn(obj: object, msg: string): void;
+  error?(obj: object, msg: string): void;
+};
 
 /** Overrides for tests and for the worker entry point. Everything defaults from AppContext + configuration. */
 export interface RunsOptions {
@@ -76,17 +80,33 @@ export function createRunsModule(ctx: AppContext, opts: RunsOptions = {}): RunsM
   const env = opts.env ?? ctx.contentEnv;
   const outbound = (): OutboundExecutor | null => opts.outbound ?? ctx.outbound ?? null;
 
-  const repo = opts.repository ?? (ctx.database ? new PgRunRepository(ctx.database, ctx.now) : new MemoryRunRepository(ctx.now));
-  const bus = new RunEventBus(ctx.database && ctx.config.DATABASE_URL && !(repo instanceof MemoryRunRepository) ? { listenUrl: ctx.config.DATABASE_URL, ...(log ? { log } : {}) } : {});
+  const repo =
+    opts.repository ??
+    (ctx.database ? new PgRunRepository(ctx.database, ctx.now) : new MemoryRunRepository(ctx.now));
+  const bus = new RunEventBus(
+    ctx.database && ctx.config.DATABASE_URL && !(repo instanceof MemoryRunRepository)
+      ? { listenUrl: ctx.config.DATABASE_URL, ...(log ? { log } : {}) }
+      : {},
+  );
   if (repo instanceof MemoryRunRepository) {
     repo.onNotify = (n) => {
       bus.dispatch(n);
       // Without Postgres there is no NOTIFY for the platform stream to relay: publish run.updated directly.
-      if (n.type === 'run' || n.type === 'step') ctx.events?.publish({ type: 'run.updated', data: n, ...(n.initiatorOid ? { userOid: n.initiatorOid } : {}) });
+      if (n.type === 'run' || n.type === 'step')
+        ctx.events?.publish({
+          type: 'run.updated',
+          data: n,
+          ...(n.initiatorOid ? { userOid: n.initiatorOid } : {}),
+        });
     };
   }
-  const queue = opts.queue ?? (ctx.database && ctx.config.DATABASE_URL ? new PgBossRunQueue(ctx.config.DATABASE_URL, log) : new InProcessRunQueue(log));
-  const consuming = opts.inProcessWorker ?? (queue.kind === 'memory' || (!testing && ctx.config.RUN_WORKER_IN_PROCESS));
+  const queue =
+    opts.queue ??
+    (ctx.database && ctx.config.DATABASE_URL
+      ? new PgBossRunQueue(ctx.config.DATABASE_URL, log)
+      : new InProcessRunQueue(log));
+  const consuming =
+    opts.inProcessWorker ?? (queue.kind === 'memory' || (!testing && ctx.config.RUN_WORKER_IN_PROCESS));
 
   let runner: RunnerPort | undefined;
   if (opts.runner !== undefined) runner = opts.runner ?? undefined;
@@ -96,7 +116,11 @@ export function createRunsModule(ctx: AppContext, opts: RunsOptions = {}): RunsM
         url: ctx.config.RUNNER_URL,
         key: ctx.config.RUNNER_SHARED_KEY,
         broker: ctx.broker,
-        tenant: { id: ctx.config.AF_TENANT_ID, domain: ctx.config.AF_PRIMARY_DOMAIN, spoTenantName: ctx.config.AF_SPO_TENANT_NAME },
+        tenant: {
+          id: ctx.config.AF_TENANT_ID,
+          domain: ctx.config.AF_PRIMARY_DOMAIN,
+          spoTenantName: ctx.config.AF_SPO_TENANT_NAME,
+        },
         fetch: ctx.fetch,
         now: ctx.now,
       });
@@ -120,7 +144,16 @@ export function createRunsModule(ctx: AppContext, opts: RunsOptions = {}): RunsM
   });
   const identity = new SessionIdentityResolver(repo, ctx.sessions, ctx.config, ctx.now);
   const holder: { engine?: Engine } = {};
-  const children = new RunChildRunner({ repo, store, identity, definitions, engine: () => holder.engine!, audit: ctx.audit, env, now: ctx.now });
+  const children = new RunChildRunner({
+    repo,
+    store,
+    identity,
+    definitions,
+    engine: () => holder.engine!,
+    audit: ctx.audit,
+    env,
+    now: ctx.now,
+  });
   const engine = (holder.engine = new Engine({
     store,
     identity,
@@ -133,7 +166,17 @@ export function createRunsModule(ctx: AppContext, opts: RunsOptions = {}): RunsM
     ...(opts.limits ? { limits: opts.limits } : {}),
     rolesOf: (actor) => (actor.oid ? (identity.roles.get(actor.oid) ?? []) : []),
   }));
-  const worker = new RunWorker({ repo, queue, engine, store, identity, definitions, bus, now: ctx.now, ...(log ? { log } : {}) });
+  const worker = new RunWorker({
+    repo,
+    queue,
+    engine,
+    store,
+    identity,
+    definitions,
+    bus,
+    now: ctx.now,
+    ...(log ? { log } : {}),
+  });
   const service = new RunService({ repo, queue, store, definitions, audit: ctx.audit, env, now: ctx.now });
 
   let started = false;

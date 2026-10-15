@@ -39,7 +39,10 @@ export function Callout({
 }) {
   const Glyph = STATUS_ICON[tone];
   return (
-    <div role={role} className={cn('flex gap-3 rounded-(--af-panel-radius) border px-4 py-3', CALLOUT_TONE[tone], className)}>
+    <div
+      role={role}
+      className={cn('flex gap-3 rounded-(--af-panel-radius) border px-4 py-3', CALLOUT_TONE[tone], className)}
+    >
       <span className={cn('mt-0.5 flex shrink-0', GLYPH_TONE[tone])} aria-hidden>
         {icon ?? <Glyph size={18} weight="fill" />}
       </span>
@@ -114,7 +117,11 @@ export function useDocumentTitle(title: string | undefined) {
 }
 
 /** "12 s", "4 min 10 s", "2 h 5 min" between two ISO times (or until now). */
-export function elapsed(from: string | null | undefined, to: string | null | undefined, now = Date.now()): string | null {
+export function elapsed(
+  from: string | null | undefined,
+  to: string | null | undefined,
+  now = Date.now(),
+): string | null {
   if (!from) return null;
   const ms = (to ? Date.parse(to) : now) - Date.parse(from);
   if (!Number.isFinite(ms) || ms < 0) return null;

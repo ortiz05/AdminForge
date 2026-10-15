@@ -35,13 +35,25 @@ export function PageSkeleton() {
 }
 
 /** Not found / no access / failed — each says what happened and what to do (§6.9). */
-export function DefinitionError({ pageKey, error, onRetry }: { pageKey: string; error: unknown; onRetry: () => void }) {
+export function DefinitionError({
+  pageKey,
+  error,
+  onRetry,
+}: {
+  pageKey: string;
+  error: unknown;
+  onRetry: () => void;
+}) {
   const { openPalette } = useShell();
   const e = error instanceof ApiRequestError ? error : undefined;
   if (e?.status === 404)
     return (
       <>
-        <PageHeader eyebrow="Not found" title="There’s no page at this address" description={<code className="text-fg-3">{pageKey}</code>} />
+        <PageHeader
+          eyebrow="Not found"
+          title="There’s no page at this address"
+          description={<code className="text-fg-3">{pageKey}</code>}
+        />
         <Panel>
           <EmptyState
             title="Check the link, or jump to a page"
@@ -52,7 +64,10 @@ export function DefinitionError({ pageKey, error, onRetry }: { pageKey: string; 
                   Open the command palette
                   <Kbd keys={[modKey(), 'K']} />
                 </Button>
-                <AppLink href="/" className="inline-flex h-(--af-control-h) items-center rounded-md px-3 font-semibold text-accent hover:bg-hover">
+                <AppLink
+                  href="/"
+                  className="inline-flex h-(--af-control-h) items-center rounded-md px-3 font-semibold text-accent hover:bg-hover"
+                >
                   Go to Overview
                 </AppLink>
               </>
@@ -66,7 +81,11 @@ export function DefinitionError({ pageKey, error, onRetry }: { pageKey: string; 
   if (e?.status === 403)
     return (
       <>
-        <PageHeader eyebrow="No access" title="You don’t have access to this page" description={<code className="text-fg-3">{pageKey}</code>} />
+        <PageHeader
+          eyebrow="No access"
+          title="You don’t have access to this page"
+          description={<code className="text-fg-3">{pageKey}</code>}
+        />
         <Panel>
           <EmptyState title={e.message} icon={<LockKeyIcon size={20} />}>
             {e.hint ?? 'Ask a Portal Admin to add you to the group for the role this page needs.'}
@@ -100,7 +119,8 @@ export function ContentPage({ pageKey }: { pageKey: string }) {
     (patch, opts) =>
       navigate({
         to: '.',
-        search: ((prev: SearchPatch) => (typeof patch === 'function' ? patch(prev) : { ...prev, ...patch })) as never,
+        search: ((prev: SearchPatch) =>
+          typeof patch === 'function' ? patch(prev) : { ...prev, ...patch }) as never,
         replace: opts?.replace,
       }),
     [navigate],
@@ -116,7 +136,8 @@ export function ContentPage({ pageKey }: { pageKey: string }) {
   }, [title]);
 
   if (q.isPending) return <PageSkeleton />;
-  if (q.isError) return <DefinitionError pageKey={pageKey} error={q.error} onRetry={() => void q.refetch()} />;
+  if (q.isError)
+    return <DefinitionError pageKey={pageKey} error={q.error} onRetry={() => void q.refetch()} />;
   return (
     <PageView
       key={`${q.data.id}@${q.data.version}`}

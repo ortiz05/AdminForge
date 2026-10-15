@@ -1,4 +1,10 @@
-import { redact, redactInputs, type AutomationDefinition, type PlanEntry, type StepRecord } from '@adminforge/engine';
+import {
+  redact,
+  redactInputs,
+  type AutomationDefinition,
+  type PlanEntry,
+  type StepRecord,
+} from '@adminforge/engine';
 import type { Params } from '@adminforge/schemas';
 import type { RunRow, RunSummary, RunView, StepView, TaskRow, TaskView } from './types';
 
@@ -43,19 +49,43 @@ export function latestRecords(steps: StepRecord[]): StepRecord[] {
 }
 
 /** The dry-run plan: entries of the latest record per path, in execution order. */
-export const runPlan = (steps: StepRecord[]): PlanEntry[] => latestRecords(steps).flatMap((s) => s.plan ?? []);
+export const runPlan = (steps: StepRecord[]): PlanEntry[] =>
+  latestRecords(steps).flatMap((s) => s.plan ?? []);
 
 function waitingOf(steps: StepRecord[]): RunView['waiting'] {
-  const w = latestRecords(steps).filter((s) => s.status === 'waiting').pop();
+  const w = latestRecords(steps)
+    .filter((s) => s.status === 'waiting')
+    .pop();
   if (!w) return null;
   const code = w.error?.code;
   const kind: NonNullable<RunView['waiting']>['kind'] =
-    w.type === 'approval' ? 'approval' : w.type === 'manual' ? 'manual' : w.type === 'wait' ? 'wait' : w.type === 'playbook' ? 'child' : code === 'not_armed' ? 'arm' : 'reauth';
+    w.type === 'approval'
+      ? 'approval'
+      : w.type === 'manual'
+        ? 'manual'
+        : w.type === 'wait'
+          ? 'wait'
+          : w.type === 'playbook'
+            ? 'child'
+            : code === 'not_armed'
+              ? 'arm'
+              : 'reauth';
   const wakeAt = (w.request as { wakeAt?: string | null } | null)?.wakeAt ?? null;
-  return { kind, path: w.path, stepId: w.stepId, since: iso(w.startedAt), ...(kind === 'wait' ? { wakeAt } : {}) };
+  return {
+    kind,
+    path: w.path,
+    stepId: w.stepId,
+    since: iso(w.startedAt),
+    ...(kind === 'wait' ? { wakeAt } : {}),
+  };
 }
 
-export function runView(row: RunRow, def: AutomationDefinition | null, steps: StepRecord[], params?: Params): RunView {
+export function runView(
+  row: RunRow,
+  def: AutomationDefinition | null,
+  steps: StepRecord[],
+  params?: Params,
+): RunView {
   return {
     ...runSummary(row, def?.title),
     definitionSha256: row.definitionSha256,
@@ -64,7 +94,13 @@ export function runView(row: RunRow, def: AutomationDefinition | null, steps: St
     outputs: row.outputs ? (redact(row.outputs) as Record<string, unknown>) : null,
     error: row.error,
     previewRunId: null,
-    waiting: row.status === 'succeeded' || row.status === 'failed' || row.status === 'cancelled' || row.status === 'compensated' ? null : waitingOf(steps),
+    waiting:
+      row.status === 'succeeded' ||
+      row.status === 'failed' ||
+      row.status === 'cancelled' ||
+      row.status === 'compensated'
+        ? null
+        : waitingOf(steps),
   };
 }
 

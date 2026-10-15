@@ -18,14 +18,19 @@ export class RunEventBus {
   constructor(opts: { listenUrl?: string; log?: Log } = {}) {
     if (opts.listenUrl) {
       let first = true;
-      this.listener = new PgListener(opts.listenUrl, RUN_EVENTS_CHANNEL, (payload) => this.onPayload(payload), {
-        log: opts.log,
-        onConnect: () => {
-          // Notifications sent while disconnected are lost: subscribers re-read from their last event id.
-          if (!first) for (const l of this.reconnectListeners) l();
-          first = false;
+      this.listener = new PgListener(
+        opts.listenUrl,
+        RUN_EVENTS_CHANNEL,
+        (payload) => this.onPayload(payload),
+        {
+          log: opts.log,
+          onConnect: () => {
+            // Notifications sent while disconnected are lost: subscribers re-read from their last event id.
+            if (!first) for (const l of this.reconnectListeners) l();
+            first = false;
+          },
         },
-      });
+      );
     }
   }
 

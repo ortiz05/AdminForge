@@ -3,7 +3,8 @@ import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { api, isRecord } from './api';
 
 /** GET /api/search?q= — pages, reports, playbooks, and directory/Azure objects for the command palette. */
-export type SearchType = 'page' | 'dashboard' | 'report' | 'playbook' | 'runbook' | 'user' | 'group' | 'device' | 'app' | 'resource';
+export type SearchType =
+  'page' | 'dashboard' | 'report' | 'playbook' | 'runbook' | 'user' | 'group' | 'device' | 'app' | 'resource';
 
 export interface SearchResult {
   type: SearchType;
@@ -14,7 +15,18 @@ export interface SearchResult {
   icon?: string;
 }
 
-const TYPES = new Set<string>(['page', 'dashboard', 'report', 'playbook', 'runbook', 'user', 'group', 'device', 'app', 'resource']);
+const TYPES = new Set<string>([
+  'page',
+  'dashboard',
+  'report',
+  'playbook',
+  'runbook',
+  'user',
+  'group',
+  'device',
+  'app',
+  'resource',
+]);
 
 function readSearch(input: unknown): SearchResult[] {
   const list = isRecord(input) && Array.isArray(input.results) ? input.results : [];
@@ -50,7 +62,12 @@ export const MIN_QUERY = 2;
 const DEBOUNCE_MS = 200;
 
 /** Debounced server search; `pending` covers both the debounce and the request. */
-export function useSearch(q: string): { results: SearchResult[]; pending: boolean; error: boolean; query: string } {
+export function useSearch(q: string): {
+  results: SearchResult[];
+  pending: boolean;
+  error: boolean;
+  query: string;
+} {
   const trimmed = q.trim();
   const [debounced, setDebounced] = useState(trimmed);
   useEffect(() => {
@@ -60,7 +77,8 @@ export function useSearch(q: string): { results: SearchResult[]; pending: boolea
   const enabled = debounced.length >= MIN_QUERY;
   const query = useQuery({
     queryKey: ['search', debounced] as const,
-    queryFn: ({ signal }) => api(`/api/search?q=${encodeURIComponent(debounced)}`, { schema: { parse: readSearch }, signal }),
+    queryFn: ({ signal }) =>
+      api(`/api/search?q=${encodeURIComponent(debounced)}`, { schema: { parse: readSearch }, signal }),
     enabled,
     staleTime: 30_000,
     retry: false,

@@ -11,7 +11,12 @@ export class IdentityUnavailable extends Error {
     readonly reason: 'not_armed' | 'reauth',
     message?: string,
   ) {
-    super(message ?? (reason === 'not_armed' ? 'Write access is not armed.' : 'The sign-in behind this run needs to be refreshed.'));
+    super(
+      message ??
+        (reason === 'not_armed'
+          ? 'Write access is not armed.'
+          : 'The sign-in behind this run needs to be refreshed.'),
+    );
     this.name = 'IdentityUnavailable';
   }
 
@@ -25,7 +30,13 @@ export class StepError extends Error {
   constructor(
     readonly code: string,
     message: string,
-    readonly opts: { transient?: boolean; status?: number; requestId?: string; retryAfterMs?: number; details?: Record<string, unknown> } = {},
+    readonly opts: {
+      transient?: boolean;
+      status?: number;
+      requestId?: string;
+      retryAfterMs?: number;
+      details?: Record<string, unknown>;
+    } = {},
   ) {
     super(message);
     this.name = 'StepError';
@@ -68,10 +79,21 @@ export function toRunError(err: unknown, at?: { stepId: string; path: string }):
     };
   }
   if (err instanceof ApiError) {
-    return { code: err.code || `HTTP${err.status}`, message: err.message, ...where, status: err.status, ...(err.requestId ? { requestId: err.requestId } : {}) };
+    return {
+      code: err.code || `HTTP${err.status}`,
+      message: err.message,
+      ...where,
+      status: err.status,
+      ...(err.requestId ? { requestId: err.requestId } : {}),
+    };
   }
   if (err instanceof ExpressionError) {
-    return { code: 'expression_error', message: err.message, ...where, ...(err.path ? { details: { field: err.path } } : {}) };
+    return {
+      code: 'expression_error',
+      message: err.message,
+      ...where,
+      ...(err.path ? { details: { field: err.path } } : {}),
+    };
   }
   const e = err as { code?: unknown; message?: unknown; status?: unknown; requestId?: unknown } | undefined;
   return {

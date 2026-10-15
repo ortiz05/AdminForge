@@ -5,7 +5,9 @@
 export class FakeEventSource {
   static instances: FakeEventSource[] = [];
   static last(urlPart: string): FakeEventSource | undefined {
-    return [...FakeEventSource.instances].reverse().find((s) => s.url.includes(urlPart) && s.readyState !== 2);
+    return [...FakeEventSource.instances]
+      .reverse()
+      .find((s) => s.url.includes(urlPart) && s.readyState !== 2);
   }
 
   readonly url: string;
@@ -41,7 +43,10 @@ export class FakeEventSource {
   emit(data: unknown, opts: { event?: string; id?: string } = {}) {
     if (this.readyState === 2) return;
     const type = opts.event ?? 'message';
-    const e = new MessageEvent(type, { data: typeof data === 'string' ? data : JSON.stringify(data), lastEventId: opts.id ?? '' });
+    const e = new MessageEvent(type, {
+      data: typeof data === 'string' ? data : JSON.stringify(data),
+      lastEventId: opts.id ?? '',
+    });
     if (type === 'message') this.onmessage?.(e);
     for (const fn of this.listeners.get(type) ?? []) fn(e);
   }

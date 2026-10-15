@@ -39,19 +39,29 @@ export interface MonitoringSearch {
   show?: 'all' | 'problems';
 }
 
-const TONE_TEXT = { ok: 'text-ok', warn: 'text-warn', crit: 'text-crit', info: 'text-info', neutral: 'text-fg-3' } as const;
+const TONE_TEXT = {
+  ok: 'text-ok',
+  warn: 'text-warn',
+  crit: 'text-crit',
+  info: 'text-info',
+  neutral: 'text-fg-3',
+} as const;
 const DAY_MS = 86_400_000;
 
 /** KQL checks report a column name as their unit (`nonCompliantResources`); show it as words. */
 export function humanUnit(unit: string | null | undefined): string | null {
   if (!unit) return null;
   if (/^(%|ms|s|days|rows|failures|GB|MB)$/.test(unit)) return unit;
-  return unit.replace(/([a-z0-9])([A-Z])/g, '$1 $2').replace(/[_-]+/g, ' ').toLowerCase();
+  return unit
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .replace(/[_-]+/g, ' ')
+    .toLowerCase();
 }
 
 export function formatMetric(value: number | null | undefined, rawUnit: string | null): string {
   if (value === null || value === undefined) return '—';
-  const n = Math.abs(value) >= 100 ? formatNumber(Math.round(value)) : formatNumber(Math.round(value * 10) / 10);
+  const n =
+    Math.abs(value) >= 100 ? formatNumber(Math.round(value)) : formatNumber(Math.round(value * 10) / 10);
   const unit = humanUnit(rawUnit);
   if (!unit) return n;
   if (unit === '%') return `${n}%`;
@@ -63,7 +73,10 @@ export function thresholdText(p: ProbeItem): string | null {
   const { warn, crit, unit, worse } = p.thresholds;
   if (warn === null && crit === null) return null;
   const op = worse === 'higher' ? '≥' : '≤';
-  return [warn !== null ? `warn ${op} ${formatMetric(warn, unit)}` : null, crit !== null ? `crit ${op} ${formatMetric(crit, unit)}` : null]
+  return [
+    warn !== null ? `warn ${op} ${formatMetric(warn, unit)}` : null,
+    crit !== null ? `crit ${op} ${formatMetric(crit, unit)}` : null,
+  ]
     .filter(Boolean)
     .join(' · ');
 }
@@ -85,7 +98,9 @@ function MetricValue({ value, unit }: { value: number | null | undefined; unit: 
   return (
     <span className="min-w-0 af-kpi-value text-2xl text-fg tabular-nums">
       {number}
-      {rest && value !== null && value !== undefined && <span className="ml-1.5 text-sm font-medium text-fg-3">{rest}</span>}
+      {rest && value !== null && value !== undefined && (
+        <span className="ml-1.5 text-sm font-medium text-fg-3">{rest}</span>
+      )}
     </span>
   );
 }
@@ -116,7 +131,13 @@ function ProbeTile({ p, now, onOpen }: { p: ProbeItem; now: number; onOpen: () =
       <span className="flex items-end justify-between gap-3">
         <MetricValue value={p.latest?.metric} unit={unit} />
         {metrics.length > 1 && (
-          <Sparkline data={metrics} label={`${p.title}: last ${metrics.length} results`} width={112} height={30} className="mb-0.5" />
+          <Sparkline
+            data={metrics}
+            label={`${p.title}: last ${metrics.length} results`}
+            width={112}
+            height={30}
+            className="mb-0.5"
+          />
         )}
       </span>
       <span className="flex flex-col gap-0.5 text-xs text-fg-3">
@@ -125,7 +146,9 @@ function ProbeTile({ p, now, onOpen }: { p: ProbeItem; now: number; onOpen: () =
           {p.latest ? `checked ${formatRelative(p.latest.ts, now)}` : 'not checked yet'}
           {rate ? ` · ${rate}` : ''}
         </span>
-        {p.latest?.message && status !== 'ok' && <span className={cn('truncate', TONE_TEXT[tone])}>{p.latest.message}</span>}
+        {p.latest?.message && status !== 'ok' && (
+          <span className={cn('truncate', TONE_TEXT[tone])}>{p.latest.message}</span>
+        )}
       </span>
     </button>
   );
@@ -139,7 +162,10 @@ function ProbeDetail({ p, onClose }: { p: ProbeItem; onClose: () => void }) {
   const points = (q.data?.items.length ? q.data.items : p.series).slice(-288);
   const unit = p.latest?.unit ?? p.thresholds.unit;
   const status = statusOf(p);
-  const failures = points.filter((x) => x.status === 'crit' || x.status === 'warn').slice(-8).reverse();
+  const failures = points
+    .filter((x) => x.status === 'crit' || x.status === 'warn')
+    .slice(-8)
+    .reverse();
   return (
     <Drawer
       open
@@ -160,9 +186,21 @@ function ProbeDetail({ p, onClose }: { p: ProbeItem; onClose: () => void }) {
         <Facts
           items={[
             ['Latest', formatMetric(p.latest?.metric, unit)],
-            ['Checked', p.latest ? <time key="t" dateTime={p.latest.ts} title={formatTimestamp(p.latest.ts)}>{formatRelative(p.latest.ts, now)}</time> : null],
+            [
+              'Checked',
+              p.latest ? (
+                <time key="t" dateTime={p.latest.ts} title={formatTimestamp(p.latest.ts)}>
+                  {formatRelative(p.latest.ts, now)}
+                </time>
+              ) : null,
+            ],
             ['Thresholds', thresholdText(p) ?? 'None — pass or fail only'],
-            ['Probe', <code key="k" className="font-mono text-xs">{p.key}</code>],
+            [
+              'Probe',
+              <code key="k" className="font-mono text-xs">
+                {p.key}
+              </code>,
+            ],
           ]}
         />
         {q.isError ? (
@@ -192,7 +230,12 @@ function ProbeDetail({ p, onClose }: { p: ProbeItem; onClose: () => void }) {
                 const Glyph = STATUS_ICON[PROBE_TONE[f.status]];
                 return (
                   <li key={f.ts} className="flex items-start gap-2">
-                    <Glyph size={14} weight="fill" aria-hidden className={cn('mt-0.5 shrink-0', TONE_TEXT[PROBE_TONE[f.status]])} />
+                    <Glyph
+                      size={14}
+                      weight="fill"
+                      aria-hidden
+                      className={cn('mt-0.5 shrink-0', TONE_TEXT[PROBE_TONE[f.status]])}
+                    />
                     <span className="flex min-w-0 flex-wrap items-baseline gap-x-3">
                       <time dateTime={f.ts} className="font-mono text-xs text-fg-3">
                         {formatTimestamp(f.ts).slice(5, 16)}
@@ -221,17 +264,29 @@ export function MonitoringPage({ search }: { search: MonitoringSearch }) {
   const probes = useMemo(() => q.data?.items ?? [], [q.data]);
   const counts = { ok: 0, warn: 0, crit: 0, unknown: 0 } as Record<ProbeStatus, number>;
   for (const p of probes) counts[statusOf(p)]++;
-  const visible = show === 'problems' ? probes.filter((p) => statusOf(p) === 'warn' || statusOf(p) === 'crit') : probes;
+  const visible =
+    show === 'problems' ? probes.filter((p) => statusOf(p) === 'warn' || statusOf(p) === 'crit') : probes;
   const groups = useMemo(() => {
     const by = new Map<string, ProbeItem[]>();
     for (const p of visible) by.set(p.kind, [...(by.get(p.kind) ?? []), p]);
     return [...by.entries()]
-      .map(([kind, items]) => ({ kind, items: items.sort((a, b) => severity(b) - severity(a) || a.title.localeCompare(b.title)) }))
-      .sort((a, b) => Math.max(...b.items.map(severity)) - Math.max(...a.items.map(severity)) || (PROBE_KIND_LABEL[a.kind] ?? a.kind).localeCompare(PROBE_KIND_LABEL[b.kind] ?? b.kind));
+      .map(([kind, items]) => ({
+        kind,
+        items: items.sort((a, b) => severity(b) - severity(a) || a.title.localeCompare(b.title)),
+      }))
+      .sort(
+        (a, b) =>
+          Math.max(...b.items.map(severity)) - Math.max(...a.items.map(severity)) ||
+          (PROBE_KIND_LABEL[a.kind] ?? a.kind).localeCompare(PROBE_KIND_LABEL[b.kind] ?? b.kind),
+      );
   }, [visible]);
   const selected = search.probe ? probes.find((p) => p.key === search.probe) : undefined;
   const setSearch = (patch: Partial<MonitoringSearch>) =>
-    void navigate({ to: '/monitoring', search: (prev: MonitoringSearch) => ({ ...prev, ...patch }), replace: true });
+    void navigate({
+      to: '/monitoring',
+      search: (prev: MonitoringSearch) => ({ ...prev, ...patch }),
+      replace: true,
+    });
 
   return (
     <>
@@ -250,16 +305,44 @@ export function MonitoringPage({ search }: { search: MonitoringSearch }) {
                 { value: 'problems', label: 'Problems' },
               ]}
             />
-            <IconButton label="Refresh" icon={<ArrowClockwiseIcon size={16} />} onClick={() => void q.refetch()} />
+            <IconButton
+              label="Refresh"
+              icon={<ArrowClockwiseIcon size={16} />}
+              onClick={() => void q.refetch()}
+            />
           </>
         }
       />
       <div className="flex flex-col gap-8">
         <KpiStrip label="Probe health" className="xl:grid-cols-4">
-          <Kpi variant="cell" label="Healthy" value={q.isPending ? null : counts.ok} status={{ tone: 'ok', label: `of ${probes.length} probes` }} loading={q.isPending} />
-          <Kpi variant="cell" label="Degraded" value={q.isPending ? null : counts.warn} status={{ tone: counts.warn ? 'warn' : 'neutral', label: 'over the warning threshold' }} loading={q.isPending} />
-          <Kpi variant="cell" label="Failing" value={q.isPending ? null : counts.crit} status={{ tone: counts.crit ? 'crit' : 'neutral', label: 'failed or over critical' }} loading={q.isPending} />
-          <Kpi variant="cell" label="No data" value={q.isPending ? null : counts.unknown} hint="not run yet or not scheduled" loading={q.isPending} />
+          <Kpi
+            variant="cell"
+            label="Healthy"
+            value={q.isPending ? null : counts.ok}
+            status={{ tone: 'ok', label: `of ${probes.length} probes` }}
+            loading={q.isPending}
+          />
+          <Kpi
+            variant="cell"
+            label="Degraded"
+            value={q.isPending ? null : counts.warn}
+            status={{ tone: counts.warn ? 'warn' : 'neutral', label: 'over the warning threshold' }}
+            loading={q.isPending}
+          />
+          <Kpi
+            variant="cell"
+            label="Failing"
+            value={q.isPending ? null : counts.crit}
+            status={{ tone: counts.crit ? 'crit' : 'neutral', label: 'failed or over critical' }}
+            loading={q.isPending}
+          />
+          <Kpi
+            variant="cell"
+            label="No data"
+            value={q.isPending ? null : counts.unknown}
+            hint="not run yet or not scheduled"
+            loading={q.isPending}
+          />
         </KpiStrip>
         {q.isError ? (
           <Panel>
@@ -274,7 +357,9 @@ export function MonitoringPage({ search }: { search: MonitoringSearch }) {
         ) : groups.length === 0 ? (
           <Panel>
             <EmptyState title={show === 'problems' ? 'Every probe is healthy' : 'No probes yet'}>
-              {show === 'problems' ? 'Nothing is degraded or failing right now.' : 'Add one with pnpm adminforge new probe, then schedule it.'}
+              {show === 'problems'
+                ? 'Nothing is degraded or failing right now.'
+                : 'Add one with pnpm adminforge new probe, then schedule it.'}
             </EmptyState>
           </Panel>
         ) : (
@@ -284,8 +369,15 @@ export function MonitoringPage({ search }: { search: MonitoringSearch }) {
               const worst = g.items[0] ? statusOf(g.items[0]) : 'unknown';
               const Glyph = STATUS_ICON[PROBE_TONE[worst]];
               return (
-                <section key={g.kind} aria-labelledby={`probes-${g.kind}`} className="mb-6 flex break-inside-avoid flex-col gap-3">
-                  <h2 id={`probes-${g.kind}`} className="flex items-center gap-2 text-sm font-semibold text-fg">
+                <section
+                  key={g.kind}
+                  aria-labelledby={`probes-${g.kind}`}
+                  className="mb-6 flex break-inside-avoid flex-col gap-3"
+                >
+                  <h2
+                    id={`probes-${g.kind}`}
+                    className="flex items-center gap-2 text-sm font-semibold text-fg"
+                  >
                     <Glyph size={15} weight="fill" aria-hidden className={TONE_TEXT[PROBE_TONE[worst]]} />
                     {PROBE_KIND_LABEL[g.kind] ?? g.kind}
                     <span className="font-normal text-fg-3">· {g.items.length}</span>
@@ -299,7 +391,9 @@ export function MonitoringPage({ search }: { search: MonitoringSearch }) {
           </div>
         )}
       </div>
-      {selected && <ProbeDetail key={selected.key} p={selected} onClose={() => setSearch({ probe: undefined })} />}
+      {selected && (
+        <ProbeDetail key={selected.key} p={selected} onClose={() => setSearch({ probe: undefined })} />
+      )}
     </>
   );
 }

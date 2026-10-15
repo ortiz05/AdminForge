@@ -25,7 +25,8 @@ export const ChartConfig = z
     xLabel: z.string().optional(),
   })
   .superRefine((c, ctx) => {
-    if (c.type === 'heatGrid' && !c.series) ctx.addIssue({ code: 'custom', path: ['series'], message: 'heatGrid needs `series` (the row field).' });
+    if (c.type === 'heatGrid' && !c.series)
+      ctx.addIssue({ code: 'custom', path: ['series'], message: 'heatGrid needs `series` (the row field).' });
     if ((c.type === 'donut' || c.type === 'heatGrid') && Array.isArray(c.y) && c.y.length > 1)
       ctx.addIssue({ code: 'custom', path: ['y'], message: `${c.type} takes one y field.` });
   });

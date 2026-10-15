@@ -33,20 +33,34 @@ describe('loadContentDir', () => {
     put('notes.md', '# not content');
     const r = await loadContentDir(dir);
     expect(r.errors).toEqual([]);
-    expect(r.definitions.map((d) => d.file)).toEqual(['navigation.yaml', 'pages/identity/users.page.yml', 'playbooks/identity/disable-user.playbook.yaml']);
+    expect(r.definitions.map((d) => d.file)).toEqual([
+      'navigation.yaml',
+      'pages/identity/users.page.yml',
+      'playbooks/identity/disable-user.playbook.yaml',
+    ]);
     expect(r.definitions[2]!.sha256).toBe(createHash('sha256').update(PLAYBOOK).digest('hex'));
   });
   it('collects schema errors from every file with lines', async () => {
     put('a.page.yaml', `${ENVELOPE('page', 'test.a')}template: list-detail\n`);
     put('b.probe.yaml', `${ENVELOPE('probe', 'test.b')}check: { kind: graph }\n`);
     const r = await loadContentDir(dir);
-    expect(r.errors.map(formatContentError)).toEqual(['a.page.yaml:1 layout: Add at least one widget to layout (or tabs).', 'b.probe.yaml:6 check.path: Invalid input: expected string, received undefined']);
+    expect(r.errors.map(formatContentError)).toEqual([
+      'a.page.yaml:1 layout: Add at least one widget to layout (or tabs).',
+      'b.probe.yaml:6 check.path: Invalid input: expected string, received undefined',
+    ]);
   });
   it('reports duplicate ids across files', async () => {
     put('a.playbook.yaml', READ_PB);
     put('b/again.playbook.yaml', READ_PB);
     const r = await loadContentDir(dir);
-    expect(r.errors).toEqual([{ file: 'b/again.playbook.yaml', path: 'id', line: 2, message: 'Duplicate id "identity.lookup" (also in a.playbook.yaml).' }]);
+    expect(r.errors).toEqual([
+      {
+        file: 'b/again.playbook.yaml',
+        path: 'id',
+        line: 2,
+        message: 'Duplicate id "identity.lookup" (also in a.playbook.yaml).',
+      },
+    ]);
   });
   it('can skip reference checks', async () => {
     put('p.page.yaml', page('identity.users', '    inspect: { page: identity.nope }\n'));
@@ -56,7 +70,8 @@ describe('loadContentDir', () => {
 });
 
 describe('validateReferences', () => {
-  const load = async () => (await loadContentDir(dir)).errors.map((e) => `${e.file}:${e.line} ${e.path}: ${e.message}`);
+  const load = async () =>
+    (await loadContentDir(dir)).errors.map((e) => `${e.file}:${e.line} ${e.path}: ${e.message}`);
 
   it('checks page links to pages, playbooks and their inputs', async () => {
     put('navigation.yaml', NAV);
@@ -89,7 +104,11 @@ describe('validateReferences', () => {
     put('conn.connection.yaml', CONN);
     put(
       'p.page.yaml',
-      page('identity.users', '', 'datasources:\n  a: { source: function, connection: integrations.hr-sync, operation: nope }\n  b: { source: function, connection: integrations.hr-sync, operation: sync }\n  c: { source: function, connection: integrations.other, operation: list }\n'),
+      page(
+        'identity.users',
+        '',
+        'datasources:\n  a: { source: function, connection: integrations.hr-sync, operation: nope }\n  b: { source: function, connection: integrations.hr-sync, operation: sync }\n  c: { source: function, connection: integrations.other, operation: list }\n',
+      ),
     );
     put(
       'pb.playbook.yaml',
@@ -105,13 +124,31 @@ describe('validateReferences', () => {
   it('checks child playbooks, schedules and probes', async () => {
     put('pb.playbook.yaml', PLAYBOOK);
     put('lookup.playbook.yaml', READ_PB);
-    put('parent.playbook.yaml', `${ENVELOPE('playbook', 'identity.parent')}risk: low\nmode: read\nsteps:\n  - { id: c, type: playbook, ref: identity.disable-user }\n`);
-    put('r.report.yaml', `${ENVELOPE('report', 'identity.r')}params:\n  days: { type: number }\nlayout: [{ widget: kpi }]\nexport: { formats: [csv] }\n`);
-    put('s1.schedule.yaml', `${ENVELOPE('schedule', 'reports.s1')}cron: "@daily"\njob: { kind: report, ref: identity.r, params: { weeks: 2 }, delivery: [{ type: file }] }\n`);
-    put('s2.schedule.yaml', `${ENVELOPE('schedule', 'reports.s2')}cron: "@daily"\njob: { kind: playbook, ref: identity.disable-user }\n`);
-    put('s3.schedule.yaml', `${ENVELOPE('schedule', 'reports.s3')}cron: "@daily"\njob: { kind: probe, ref: identity.lookup }\n`);
+    put(
+      'parent.playbook.yaml',
+      `${ENVELOPE('playbook', 'identity.parent')}risk: low\nmode: read\nsteps:\n  - { id: c, type: playbook, ref: identity.disable-user }\n`,
+    );
+    put(
+      'r.report.yaml',
+      `${ENVELOPE('report', 'identity.r')}params:\n  days: { type: number }\nlayout: [{ widget: kpi }]\nexport: { formats: [csv] }\n`,
+    );
+    put(
+      's1.schedule.yaml',
+      `${ENVELOPE('schedule', 'reports.s1')}cron: "@daily"\njob: { kind: report, ref: identity.r, params: { weeks: 2 }, delivery: [{ type: file }] }\n`,
+    );
+    put(
+      's2.schedule.yaml',
+      `${ENVELOPE('schedule', 'reports.s2')}cron: "@daily"\njob: { kind: playbook, ref: identity.disable-user }\n`,
+    );
+    put(
+      's3.schedule.yaml',
+      `${ENVELOPE('schedule', 'reports.s3')}cron: "@daily"\njob: { kind: probe, ref: identity.lookup }\n`,
+    );
     put('conn.connection.yaml', CONN);
-    put('fh.probe.yaml', `${ENVELOPE('probe', 'probes.fh')}check: { kind: functionHealth, connection: integrations.hr-sync }\n`);
+    put(
+      'fh.probe.yaml',
+      `${ENVELOPE('probe', 'probes.fh')}check: { kind: functionHealth, connection: integrations.hr-sync }\n`,
+    );
     expect(await load()).toEqual([
       'fh.probe.yaml:6 check.operation: Connection "integrations.hr-sync" has no health operation; set check.operation.',
       'parent.playbook.yaml:9 steps[0].ref: Child playbook "identity.disable-user" writes; set the top-level mode: write.',
@@ -123,8 +160,17 @@ describe('validateReferences', () => {
   it('accepts a consistent set', async () => {
     put('navigation.yaml', NAV);
     put('pb.playbook.yaml', PLAYBOOK);
-    put('users.page.yaml', page('identity.users', '    rowActions: [{ playbook: identity.disable-user, inputs: { userId: x } }]\n'));
-    put('s.schedule.yaml', `${ENVELOPE('schedule', 'reports.s')}cron: "@daily"\njob: { kind: playbook, ref: identity.disable-user, mode: write, approvedBy: [approval-1] }\n`);
+    put(
+      'users.page.yaml',
+      page(
+        'identity.users',
+        '    rowActions: [{ playbook: identity.disable-user, inputs: { userId: x } }]\n',
+      ),
+    );
+    put(
+      's.schedule.yaml',
+      `${ENVELOPE('schedule', 'reports.s')}cron: "@daily"\njob: { kind: playbook, ref: identity.disable-user, mode: write, approvedBy: [approval-1] }\n`,
+    );
     expect(await load()).toEqual([]);
   });
   it('works on in-memory definitions too', () => expect(validateReferences([])).toEqual([]));

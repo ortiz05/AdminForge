@@ -52,17 +52,27 @@ const TRIGGER: Record<string, string> = {
 function InputValue({ value, unit }: { value: unknown; unit?: string }) {
   if (value === undefined || value === null || value === '') return <span className="text-fg-3">—</span>;
   if (isSecretMask(value)) return <MaskedSecret value={value} />;
-  if (value === '[redacted]' || value === '***') return <span className="font-mono text-xs text-fg-3">redacted</span>;
-  if (typeof value === 'string' && GUID_RE.test(value)) return <IdChip value={value} showLabel={false} label="Id" />;
+  if (value === '[redacted]' || value === '***')
+    return <span className="font-mono text-xs text-fg-3">redacted</span>;
+  if (typeof value === 'string' && GUID_RE.test(value))
+    return <IdChip value={value} showLabel={false} label="Id" />;
   if (typeof value === 'boolean') return <span>{value ? 'Yes' : 'No'}</span>;
-  if (typeof value === 'number' && unit) return <span className="tabular-nums">{`${value.toLocaleString('en-US')} ${unit}`}</span>;
+  if (typeof value === 'number' && unit)
+    return <span className="tabular-nums">{`${value.toLocaleString('en-US')} ${unit}`}</span>;
   if (Array.isArray(value) && value.every((v) => typeof v === 'string'))
     return (
       <span className="flex flex-wrap gap-1">
-        {value.map((v) => (GUID_RE.test(v) ? <IdChip key={v} value={v} showLabel={false} label="Id" /> : <Badge key={v}>{v}</Badge>))}
+        {value.map((v) =>
+          GUID_RE.test(v) ? (
+            <IdChip key={v} value={v} showLabel={false} label="Id" />
+          ) : (
+            <Badge key={v}>{v}</Badge>
+          ),
+        )}
       </span>
     );
-  if (typeof value === 'object') return <code className="font-mono text-xs break-all">{JSON.stringify(value)}</code>;
+  if (typeof value === 'object')
+    return <code className="font-mono text-xs break-all">{JSON.stringify(value)}</code>;
   return <span className="break-words">{String(value)}</span>;
 }
 
@@ -83,7 +93,12 @@ function ParkedBanner({
   const run = detail.run;
   const steps = latestSteps(detail.steps);
   const waitingStep = run.waiting?.stepId ?? steps.find((s) => s.status === 'waiting')?.stepId;
-  const status = run.waiting?.kind === 'arm' ? 'awaiting_arm' : run.waiting?.kind === 'reauth' ? 'awaiting_reauth' : run.status;
+  const status =
+    run.waiting?.kind === 'arm'
+      ? 'awaiting_arm'
+      : run.waiting?.kind === 'reauth'
+        ? 'awaiting_reauth'
+        : run.status;
 
   switch (status) {
     case 'awaiting_arm':
@@ -124,16 +139,17 @@ function ParkedBanner({
             </>
           }
         >
-          Your session needs fresh credentials (sign-in frequency, Conditional Access, or revoked tokens). Sign in, then
-          resume.
+          Your session needs fresh credentials (sign-in frequency, Conditional Access, or revoked tokens).
+          Sign in, then resume.
         </Callout>
       );
     case 'needs_review': {
       const stuck = steps.find((s) => s.status === 'needs_review');
       return (
         <Callout tone="crit" title="Needs review: a step may or may not have happened">
-          {stuck ? `“${labelOf(index, stuck.stepId)}”` : 'A step'} can’t be retried safely and was in flight when the worker
-          stopped. Check the target in the Microsoft admin center before running anything again.
+          {stuck ? `“${labelOf(index, stuck.stepId)}”` : 'A step'} can’t be retried safely and was in flight
+          when the worker stopped. Check the target in the Microsoft admin center before running anything
+          again.
         </Callout>
       );
     }
@@ -143,7 +159,15 @@ function ParkedBanner({
 }
 
 /** Pending approval gates and manual steps of this run, decided right here. */
-function HumanTaskPanels({ detail, def, index }: { detail: RunDetail; def: Playbook | Runbook | null; index: StepIndex }) {
+function HumanTaskPanels({
+  detail,
+  def,
+  index,
+}: {
+  detail: RunDetail;
+  def: Playbook | Runbook | null;
+  index: StepIndex;
+}) {
   const run = detail.run;
   const pending = detail.tasks.filter((t) => t.status === 'pending');
   const approvals = pending
@@ -167,7 +191,11 @@ function HumanTaskPanels({ detail, def, index }: { detail: RunDetail; def: Playb
     .filter((x): x is NonNullable<typeof x> => !!x);
   const manual = pending.filter((t) => t.kind === 'manual');
   if (!approvals.length && !manual.length) return null;
-  const outline = def ? (def.kind === 'playbook' ? def.steps : def.sections.flatMap((s) => s.steps ?? [])) : [];
+  const outline = def
+    ? def.kind === 'playbook'
+      ? def.steps
+      : def.sections.flatMap((s) => s.steps ?? [])
+    : [];
   return (
     <div className="flex flex-col gap-3">
       {approvals.map((it) => (
@@ -183,7 +211,9 @@ function HumanTaskPanels({ detail, def, index }: { detail: RunDetail; def: Playb
             stepId={t.stepId}
             title={t.title && t.title !== run.title ? t.title : labelOf(index, leaf)}
             instructions={t.instructions ?? (spec && spec.type === 'manual' ? spec.instructions : '')}
-            checklist={t.checklist.length ? t.checklist : spec && spec.type === 'manual' ? (spec.checklist ?? []) : []}
+            checklist={
+              t.checklist.length ? t.checklist : spec && spec.type === 'manual' ? (spec.checklist ?? []) : []
+            }
           />
         );
       })}
@@ -200,7 +230,11 @@ export function RunPage({ id }: { id: string }) {
   const { query: q, detail, logs, live, secrets, notices, dismissSecret } = useRunLive(id);
   const run = detail?.run;
   const defQ = useQuery({
-    ...definitionQuery<Playbook | Runbook>(run?.kind ?? 'playbook', run?.key ?? '', run?.version ?? undefined),
+    ...definitionQuery<Playbook | Runbook>(
+      run?.kind ?? 'playbook',
+      run?.key ?? '',
+      run?.version ?? undefined,
+    ),
     enabled: Boolean(run && run.key !== 'unknown'),
     retry: false,
   });
@@ -214,11 +248,16 @@ export function RunPage({ id }: { id: string }) {
   const cancel = useMutation({
     mutationFn: () => api(`/api/runs/${encodeURIComponent(id)}/cancel`, { method: 'POST' }),
     onSuccess: () => {
-      toast({ tone: 'info', title: 'Run cancelled', description: 'Steps that already ran stay done; nothing new starts.' });
+      toast({
+        tone: 'info',
+        title: 'Run cancelled',
+        description: 'Steps that already ran stay done; nothing new starts.',
+      });
       refresh();
       void queryClient.invalidateQueries({ queryKey: activeRunsQueryKey });
     },
-    onError: (e) => toast({ tone: 'crit', title: 'The run wasn’t cancelled', description: (e as Error).message }),
+    onError: (e) =>
+      toast({ tone: 'crit', title: 'The run wasn’t cancelled', description: (e as Error).message }),
   });
   const resume = useMutation({
     mutationFn: () => api(`/api/runs/${encodeURIComponent(id)}/resume`, { method: 'POST' }),
@@ -226,7 +265,8 @@ export function RunPage({ id }: { id: string }) {
       toast({ tone: 'info', title: 'Run resumed' });
       refresh();
     },
-    onError: (e) => toast({ tone: 'crit', title: 'The run didn’t resume', description: (e as Error).message }),
+    onError: (e) =>
+      toast({ tone: 'crit', title: 'The run didn’t resume', description: (e as Error).message }),
   });
 
   const crumbs = [{ label: 'Runs', href: '/runs' }, { label: run?.title ?? 'Run' }];
@@ -235,7 +275,12 @@ export function RunPage({ id }: { id: string }) {
     const notFound = q.error instanceof ApiRequestError && q.error.status === 404;
     return (
       <>
-        <PageHeader breadcrumbs={crumbs} linkAs={RouterLink} eyebrow="Run" title={notFound ? 'Run not found' : 'Run'} />
+        <PageHeader
+          breadcrumbs={crumbs}
+          linkAs={RouterLink}
+          eyebrow="Run"
+          title={notFound ? 'Run not found' : 'Run'}
+        />
         <Panel>
           <QueryError
             title={notFound ? 'There’s no run with this id, or you can’t see it' : 'This run didn’t load'}
@@ -269,10 +314,14 @@ export function RunPage({ id }: { id: string }) {
 
   const terminal = isTerminal(run.status);
   const took = elapsed(run.startedAt ?? run.createdAt, run.endedAt, now);
-  const done = entries.filter((e) => ['succeeded', 'skipped', 'planned', 'failed', 'compensated'].includes(e.status)).length;
+  const done = entries.filter((e) =>
+    ['succeeded', 'skipped', 'planned', 'failed', 'compensated'].includes(e.status),
+  ).length;
   const failedAt = entries.findIndex((e) => e.status === 'failed' || e.status === 'needs_review');
   const description = [
-    run.identity === 'automation' ? 'Ran as the automation identity' : `Started by ${run.initiator.upn === me.user.upn ? 'you' : (run.initiator.upn ?? 'someone')}`,
+    run.identity === 'automation'
+      ? 'Ran as the automation identity'
+      : `Started by ${run.initiator.upn === me.user.upn ? 'you' : (run.initiator.upn ?? 'someone')}`,
     run.createdAt ? formatRelative(run.createdAt, now) : null,
     took ? (terminal ? `took ${took}` : `running for ${took}`) : null,
   ]
@@ -292,7 +341,10 @@ export function RunPage({ id }: { id: string }) {
             {run.dryRun && <Badge tone="accent">Dry run · nothing changed</Badge>}
             {live && (
               <span className="inline-flex items-center gap-1.5 text-xs text-fg-3">
-                <span className="size-1.5 animate-pulse rounded-pill bg-ok motion-reduce:animate-none" aria-hidden />
+                <span
+                  className="size-1.5 animate-pulse rounded-pill bg-ok motion-reduce:animate-none"
+                  aria-hidden
+                />
                 Live
               </span>
             )}
@@ -333,20 +385,50 @@ export function RunPage({ id }: { id: string }) {
               key={secretKey(s)}
               secret={s}
               childRun={s.runId !== run.id}
-              stepLabel={child ? `${child.title} · ${humanize(s.stepId)}` : s.runId === run.id ? labelOf(index, s.stepId) : humanize(s.stepId)}
+              stepLabel={
+                child
+                  ? `${child.title} · ${humanize(s.stepId)}`
+                  : s.runId === run.id
+                    ? labelOf(index, s.stepId)
+                    : humanize(s.stepId)
+              }
               onDismiss={() => dismissSecret(secretKey(s))}
             />
           );
         })}
-        <SecretNotices notices={notices.filter((n) => !secrets.some((s) => secretKey(s) === secretKey(n)))} labelFor={(stepId) => labelOf(index, stepId)} />
-        <ParkedBanner detail={detail} index={index} onResume={() => resume.mutate()} resuming={resume.isPending} />
+        <SecretNotices
+          notices={notices.filter((n) => !secrets.some((s) => secretKey(s) === secretKey(n)))}
+          labelFor={(stepId) => labelOf(index, stepId)}
+        />
+        <ParkedBanner
+          detail={detail}
+          index={index}
+          onResume={() => resume.mutate()}
+          resuming={resume.isPending}
+        />
         {run.error && run.status !== 'needs_review' && (
-          <Callout tone={run.status === 'compensated' ? 'warn' : 'crit'} role="alert" title={run.status === 'compensated' ? 'The run failed and its changes were rolled back' : 'The run failed'}>
+          <Callout
+            tone={run.status === 'compensated' ? 'warn' : 'crit'}
+            role="alert"
+            title={
+              run.status === 'compensated'
+                ? 'The run failed and its changes were rolled back'
+                : 'The run failed'
+            }
+          >
             <p>{run.error.message}</p>
             {run.error.hint && <p className="mt-1">{run.error.hint}</p>}
             <p className="mt-2 flex flex-wrap items-center gap-2">
-              {run.error.code && <Badge mono tone="outline">{run.error.code}</Badge>}
-              {run.error.status && <Badge mono tone="outline">HTTP {run.error.status}</Badge>}
+              {run.error.code && (
+                <Badge mono tone="outline">
+                  {run.error.code}
+                </Badge>
+              )}
+              {run.error.status && (
+                <Badge mono tone="outline">
+                  HTTP {run.error.status}
+                </Badge>
+              )}
               {run.error.requestId && <IdChip value={run.error.requestId} label="Microsoft request-id" />}
               {run.correlationId && <IdChip value={run.correlationId} label="Correlation ID" />}
             </p>
@@ -375,19 +457,38 @@ export function RunPage({ id }: { id: string }) {
               }
             >
               {entries.length ? (
-                <RunTimeline entries={entries} initiatorUpn={run.initiator.upn} label={`Steps of ${run.title}`} />
+                <RunTimeline
+                  entries={entries}
+                  initiatorUpn={run.initiator.upn}
+                  label={`Steps of ${run.title}`}
+                />
               ) : (
-                <p className="text-sm text-fg-3">{terminal ? 'This run recorded no steps.' : 'Waiting for the first step…'}</p>
+                <p className="text-sm text-fg-3">
+                  {terminal ? 'This run recorded no steps.' : 'Waiting for the first step…'}
+                </p>
               )}
             </Panel>
             {detail.children.length > 0 && (
-              <Panel eyebrow={run.trigger === 'bulk' ? 'Items' : 'Child runs'} title={`${detail.children.filter((c) => isTerminal(c.status)).length} of ${detail.children.length} finished`} flush>
+              <Panel
+                eyebrow={run.trigger === 'bulk' ? 'Items' : 'Child runs'}
+                title={`${detail.children.filter((c) => isTerminal(c.status)).length} of ${detail.children.length} finished`}
+                flush
+              >
                 <ul className="flex flex-col">
                   {detail.children.map((c, i) => (
-                    <li key={c.id} className="flex items-center justify-between gap-3 border-t border-line px-(--af-pad-panel) py-2.5 first:border-t-0">
+                    <li
+                      key={c.id}
+                      className="flex items-center justify-between gap-3 border-t border-line px-(--af-pad-panel) py-2.5 first:border-t-0"
+                    >
                       <span className="flex min-w-0 items-center gap-3">
-                        <span className="font-mono text-2xs text-fg-3 tabular-nums">{String(i + 1).padStart(2, '0')}</span>
-                        <Link to="/runs/$id" params={{ id: c.id }} className="truncate text-sm font-medium text-fg hover:underline">
+                        <span className="font-mono text-2xs text-fg-3 tabular-nums">
+                          {String(i + 1).padStart(2, '0')}
+                        </span>
+                        <Link
+                          to="/runs/$id"
+                          params={{ id: c.id }}
+                          className="truncate text-sm font-medium text-fg hover:underline"
+                        >
                           {c.title}
                         </Link>
                       </span>
@@ -416,18 +517,32 @@ export function RunPage({ id }: { id: string }) {
                   [
                     run.kind === 'runbook' ? 'Runbook' : 'Playbook',
                     run.kind === 'runbook' ? (
-                      <Link to="/runbooks/$key" params={{ key: run.key }} search={{ run: run.id }} className="font-mono text-xs text-accent hover:underline">
+                      <Link
+                        to="/runbooks/$key"
+                        params={{ key: run.key }}
+                        search={{ run: run.id }}
+                        className="font-mono text-xs text-accent hover:underline"
+                      >
                         {run.key}
                       </Link>
                     ) : (
-                      <Link to="/playbooks/$key" params={{ key: run.key }} className="font-mono text-xs text-accent hover:underline">
+                      <Link
+                        to="/playbooks/$key"
+                        params={{ key: run.key }}
+                        className="font-mono text-xs text-accent hover:underline"
+                      >
                         {run.key}
                       </Link>
                     ),
                   ],
                   ['Version', run.version ? <span className="font-mono text-xs">{run.version}</span> : null],
                   ['Run ID', <IdChip key="id" value={run.id} label="Run ID" showLabel={false} />],
-                  ['Correlation ID', run.correlationId ? <IdChip key="c" value={run.correlationId} label="Correlation ID" showLabel={false} /> : null],
+                  [
+                    'Correlation ID',
+                    run.correlationId ? (
+                      <IdChip key="c" value={run.correlationId} label="Correlation ID" showLabel={false} />
+                    ) : null,
+                  ],
                   [
                     'Runs as',
                     run.identity === 'automation' ? (
@@ -443,15 +558,29 @@ export function RunPage({ id }: { id: string }) {
                   [
                     'Started',
                     run.startedAt || run.createdAt ? (
-                      <time dateTime={(run.startedAt ?? run.createdAt)!}>{formatTimestamp((run.startedAt ?? run.createdAt)!)}</time>
+                      <time dateTime={(run.startedAt ?? run.createdAt)!}>
+                        {formatTimestamp((run.startedAt ?? run.createdAt)!)}
+                      </time>
                     ) : null,
                   ],
-                  ['Ended', run.endedAt ? <time dateTime={run.endedAt}>{formatTimestamp(run.endedAt)}</time> : terminal ? null : 'Still running'],
+                  [
+                    'Ended',
+                    run.endedAt ? (
+                      <time dateTime={run.endedAt}>{formatTimestamp(run.endedAt)}</time>
+                    ) : terminal ? null : (
+                      'Still running'
+                    ),
+                  ],
                   ...(run.parentRunId
                     ? ([
                         [
                           'Part of',
-                          <Link key="p" to="/runs/$id" params={{ id: run.parentRunId }} className="text-accent hover:underline">
+                          <Link
+                            key="p"
+                            to="/runs/$id"
+                            params={{ id: run.parentRunId }}
+                            className="text-accent hover:underline"
+                          >
                             Parent run
                           </Link>,
                         ],
@@ -465,7 +594,15 @@ export function RunPage({ id }: { id: string }) {
                 <Facts
                   items={Object.entries(run.inputs).map(([k, v]) => [
                     def?.inputs?.[k] ? inputLabel(k, def.inputs[k]!) : humanize(k),
-                    <InputValue key={k} value={v} unit={def?.inputs?.[k]?.type === 'number' ? (def.inputs[k] as { unit?: string }).unit : undefined} />,
+                    <InputValue
+                      key={k}
+                      value={v}
+                      unit={
+                        def?.inputs?.[k]?.type === 'number'
+                          ? (def.inputs[k] as { unit?: string }).unit
+                          : undefined
+                      }
+                    />,
                   ])}
                 />
               ) : (
@@ -482,7 +619,13 @@ export function RunPage({ id }: { id: string }) {
                         <MaskedSecret value={v} />
                       </div>
                     ) : v !== null && typeof v === 'object' ? (
-                      <CodeBlock key={k} title={humanize(k)} language="json" code={JSON.stringify(maskSecrets(v), null, 2)} maxHeight={240} />
+                      <CodeBlock
+                        key={k}
+                        title={humanize(k)}
+                        language="json"
+                        code={JSON.stringify(maskSecrets(v), null, 2)}
+                        maxHeight={240}
+                      />
                     ) : (
                       <div key={k} className="flex flex-col gap-0.5 text-sm">
                         <span className="text-xs text-fg-3">{humanize(k)}</span>

@@ -26,18 +26,32 @@ describe('health, headers, errors', () => {
   it('echoes a valid incoming x-correlation-id and ignores junk', async () => {
     const { app } = await makeApp(mockConfig());
     const id = '0f8fad5b-d9cb-469f-a165-70867728950e';
-    expect((await app.inject({ method: 'GET', url: '/healthz', headers: { 'x-correlation-id': id } })).headers['x-correlation-id']).toBe(id);
-    const junk = await app.inject({ method: 'GET', url: '/healthz', headers: { 'x-correlation-id': 'evil\nheader' } });
+    expect(
+      (await app.inject({ method: 'GET', url: '/healthz', headers: { 'x-correlation-id': id } })).headers[
+        'x-correlation-id'
+      ],
+    ).toBe(id);
+    const junk = await app.inject({
+      method: 'GET',
+      url: '/healthz',
+      headers: { 'x-correlation-id': 'evil\nheader' },
+    });
     expect(junk.headers['x-correlation-id']).not.toBe('evil\nheader');
     await app.close();
   });
 
   it('GET /readyz reports the store and fails with 503 when the DB is down', async () => {
     const mem = await makeApp(mockConfig());
-    expect((await mem.app.inject({ method: 'GET', url: '/readyz' })).json()).toEqual({ status: 'ok', checks: { db: 'memory' } });
+    expect((await mem.app.inject({ method: 'GET', url: '/readyz' })).json()).toEqual({
+      status: 'ok',
+      checks: { db: 'memory' },
+    });
     await mem.app.close();
 
-    const down = { ping: async () => Promise.reject(new Error('ECONNREFUSED')), close: async () => {} } as unknown as Database;
+    const down = {
+      ping: async () => Promise.reject(new Error('ECONNREFUSED')),
+      close: async () => {},
+    } as unknown as Database;
     const bad = await makeApp(mockConfig(), { database: down });
     const res = await bad.app.inject({ method: 'GET', url: '/readyz' });
     expect(res.statusCode).toBe(503);
@@ -54,26 +68,45 @@ describe('health, headers, errors', () => {
 
     const login = await app.inject({ method: 'GET', url: '/auth/login' });
     const cookie = (login.headers['set-cookie'] as string).split(';')[0]!;
-    const malformed = await app.inject({ method: 'PUT', url: '/api/me/prefs', headers: { cookie, 'content-type': 'application/json' }, payload: '{not json' });
+    const malformed = await app.inject({
+      method: 'PUT',
+      url: '/api/me/prefs',
+      headers: { cookie, 'content-type': 'application/json' },
+      payload: '{not json',
+    });
     expect(malformed.statusCode).toBe(400);
-    expect(ApiErrorBody.parse(malformed.json()).error.correlationId).toBe(malformed.headers['x-correlation-id']);
+    expect(ApiErrorBody.parse(malformed.json()).error.correlationId).toBe(
+      malformed.headers['x-correlation-id'],
+    );
 
     // An empty body with a JSON content type is "no body", not an error (bodiless POSTs from fetch wrappers).
     const me = await app.inject({ method: 'GET', url: '/api/me', headers: { cookie } });
-    const disarm = await app.inject({ method: 'POST', url: '/auth/disarm', headers: { cookie, 'content-type': 'application/json', 'x-adminforge-csrf': me.json().csrf }, payload: '' });
+    const disarm = await app.inject({
+      method: 'POST',
+      url: '/auth/disarm',
+      headers: { cookie, 'content-type': 'application/json', 'x-adminforge-csrf': me.json().csrf },
+      payload: '',
+    });
     expect(disarm.statusCode).toBe(200);
-    const poisoned = await app.inject({ method: 'PUT', url: '/api/me/prefs', headers: { cookie, 'content-type': 'application/json', 'x-adminforge-csrf': me.json().csrf }, payload: '{"__proto__":{"admin":true}}' });
+    const poisoned = await app.inject({
+      method: 'PUT',
+      url: '/api/me/prefs',
+      headers: { cookie, 'content-type': 'application/json', 'x-adminforge-csrf': me.json().csrf },
+      payload: '{"__proto__":{"admin":true}}',
+    });
     expect(poisoned.statusCode).toBe(400);
     await app.close();
   });
 
   it('rate limits with an ApiErrorBody (health checks exempt)', async () => {
     const { app } = await makeApp(mockConfig({ RATE_LIMIT_PER_MINUTE: '3' }));
-    for (let i = 0; i < 3; i++) expect((await app.inject({ method: 'GET', url: '/api/nav' })).statusCode).toBe(401);
+    for (let i = 0; i < 3; i++)
+      expect((await app.inject({ method: 'GET', url: '/api/nav' })).statusCode).toBe(401);
     const limited = await app.inject({ method: 'GET', url: '/api/nav' });
     expect(limited.statusCode).toBe(429);
     expect(ApiErrorBody.parse(limited.json()).error.code).toBe('rate_limited');
-    for (let i = 0; i < 5; i++) expect((await app.inject({ method: 'GET', url: '/healthz' })).statusCode).toBe(200);
+    for (let i = 0; i < 5; i++)
+      expect((await app.inject({ method: 'GET', url: '/healthz' })).statusCode).toBe(200);
     await app.close();
   });
 
@@ -82,7 +115,10 @@ describe('health, headers, errors', () => {
     beforeAll(() => {
       dir = mkdtempSync(path.join(tmpdir(), 'af-web-'));
       mkdirSync(path.join(dir, 'assets'));
-      writeFileSync(path.join(dir, 'index.html'), '<!doctype html><title>AdminForge</title><div id="root"></div>');
+      writeFileSync(
+        path.join(dir, 'index.html'),
+        '<!doctype html><title>AdminForge</title><div id="root"></div>',
+      );
       writeFileSync(path.join(dir, 'assets', 'app-abc123.js'), 'console.log(1)');
     });
     afterAll(() => rmSync(dir, { recursive: true, force: true }));

@@ -24,7 +24,11 @@ function Loaded({ loaded, search }: { loaded: LoadedDefinition<Playbook>; search
   const launch = useMemo(() => parseLaunch({ playbook: loaded.def.id, ...search })!, [loaded.def.id]);
   const setSearch = useCallback(
     (patch: SearchPatch) =>
-      void navigate({ to: '.', search: (prev: Record<string, unknown>) => ({ ...prev, ...patch }), replace: true }),
+      void navigate({
+        to: '.',
+        search: (prev: Record<string, unknown>) => ({ ...prev, ...patch }),
+        replace: true,
+      }),
     [navigate],
   );
   const flow = usePlaybookFlow({ def: loaded.def, version: loaded.version, launch, setSearch });
@@ -38,7 +42,12 @@ function Loaded({ loaded, search }: { loaded: LoadedDefinition<Playbook>; search
         description={loaded.def.summary}
         meta={<PlaybookMeta flow={flow} version={loaded.version} />}
       />
-      <Panel className="max-w-4xl" eyebrow={flow.writes ? 'Write playbook' : 'Read playbook'} title="Inputs, preview and run" footer={<PlaybookActions flow={flow} />}>
+      <Panel
+        className="max-w-4xl"
+        eyebrow={flow.writes ? 'Write playbook' : 'Read playbook'}
+        title="Inputs, preview and run"
+        footer={<PlaybookActions flow={flow} />}
+      >
         <PlaybookSections flow={flow} problems={launch.problems} />
       </Panel>
     </>

@@ -5,7 +5,14 @@ export type Purpose = 'provision' | 'portal' | 'schedules' | 'validation';
 export const PURPOSES: readonly Purpose[] = ['provision', 'portal', 'schedules', 'validation'];
 
 export const REQUIRED: Record<Purpose, readonly string[]> = {
-  provision: ['AF_TENANT_ID', 'AF_PRIMARY_DOMAIN', 'AF_PROVISIONER_CLIENT_ID', 'AF_PROVISIONER_CLIENT_SECRET', 'AF_ENV_LABEL', 'PUBLIC_BASE_URL'],
+  provision: [
+    'AF_TENANT_ID',
+    'AF_PRIMARY_DOMAIN',
+    'AF_PROVISIONER_CLIENT_ID',
+    'AF_PROVISIONER_CLIENT_SECRET',
+    'AF_ENV_LABEL',
+    'PUBLIC_BASE_URL',
+  ],
   portal: [
     'PUBLIC_BASE_URL',
     'AUTH_MODE',
@@ -21,11 +28,22 @@ export const REQUIRED: Record<Purpose, readonly string[]> = {
     'RUNNER_URL',
     'RUNNER_SHARED_KEY',
   ],
-  schedules: ['AF_TENANT_ID', 'AF_AUTOMATION_CLIENT_ID', 'AF_AUTOMATION_CLIENT_SECRET|AF_AUTOMATION_CERT_PATH'],
+  schedules: [
+    'AF_TENANT_ID',
+    'AF_AUTOMATION_CLIENT_ID',
+    'AF_AUTOMATION_CLIENT_SECRET|AF_AUTOMATION_CERT_PATH',
+  ],
   validation: ['AF_TENANT_ID', 'AF_PRIMARY_DOMAIN', 'AF_TEST_USER_UPN', 'AF_TEST_USER_PASSWORD'],
 };
 
-const GUID_KEYS = new Set(['AF_TENANT_ID', 'AF_SUBSCRIPTION_ID', 'AF_PROVISIONER_CLIENT_ID', 'AF_READ_CLIENT_ID', 'AF_WRITE_CLIENT_ID', 'AF_AUTOMATION_CLIENT_ID']);
+const GUID_KEYS = new Set([
+  'AF_TENANT_ID',
+  'AF_SUBSCRIPTION_ID',
+  'AF_PROVISIONER_CLIENT_ID',
+  'AF_READ_CLIENT_ID',
+  'AF_WRITE_CLIENT_ID',
+  'AF_AUTOMATION_CLIENT_ID',
+]);
 const GUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export type KeyState = 'set' | 'default' | 'missing' | 'invalid';
@@ -56,11 +74,14 @@ function validate(key: string, value: string): string | undefined {
       return 'expected a URL';
     }
   }
-  if (key === 'TOKEN_CACHE_KEY' && Buffer.from(value, 'base64').length !== 32) return 'expected 32 random bytes, base64';
+  if (key === 'TOKEN_CACHE_KEY' && Buffer.from(value, 'base64').length !== 32)
+    return 'expected 32 random bytes, base64';
   if (key === 'AUTH_MODE' && !['entra', 'mock'].includes(value)) return 'expected entra or mock';
   if (key === 'DATA_MODE' && !['live', 'fixtures'].includes(value)) return 'expected live or fixtures';
-  if (key === 'AF_ENV_LABEL' && !/^[a-z0-9][a-z0-9-]{0,19}$/.test(value)) return 'expected lowercase letters, digits, dashes (max 20)';
-  if (key === 'DATABASE_URL' && value.includes('CHANGE_ME')) return 'still contains the CHANGE_ME placeholder';
+  if (key === 'AF_ENV_LABEL' && !/^[a-z0-9][a-z0-9-]{0,19}$/.test(value))
+    return 'expected lowercase letters, digits, dashes (max 20)';
+  if (key === 'DATABASE_URL' && value.includes('CHANGE_ME'))
+    return 'still contains the CHANGE_ME placeholder';
   return undefined;
 }
 
@@ -68,7 +89,11 @@ function validate(key: string, value: string): string | undefined {
  * Pure: checks env-file values (overlaid by process env, as at run time) against config/example.env.
  * Keys with a non-empty default in example.env count as "default" when absent. Values are never returned.
  */
-export function checkEnv(exampleText: string, fileValues: Record<string, string>, processEnv: Record<string, string | undefined> = {}): EnvReport {
+export function checkEnv(
+  exampleText: string,
+  fileValues: Record<string, string>,
+  processEnv: Record<string, string | undefined> = {},
+): EnvReport {
   const example = parseEnv(exampleText);
   const keys: KeyReport[] = [];
   const byKey = new Map<string, KeyReport>();
@@ -80,7 +105,13 @@ export function checkEnv(exampleText: string, fileValues: Record<string, string>
     let report: KeyReport;
     if (value) {
       const problem = validate(key, value);
-      report = { key, state: problem ? 'invalid' : 'set', source: fromProcess ? 'process' : 'file', requiredFor, problem };
+      report = {
+        key,
+        state: problem ? 'invalid' : 'set',
+        source: fromProcess ? 'process' : 'file',
+        requiredFor,
+        problem,
+      };
     } else if (def) report = { key, state: 'default', requiredFor, problem: validate(key, def) };
     else report = { key, state: 'missing', requiredFor };
     if (report.state === 'default' && report.problem) report.state = 'invalid';
@@ -93,30 +124,49 @@ export function checkEnv(exampleText: string, fileValues: Record<string, string>
     return !!r && (r.state === 'set' || r.state === 'default');
   };
   const readiness = Object.fromEntries(
-    PURPOSES.map((p) => [p, REQUIRED[p].filter((alt) => !alt.split('|').some(ok)).map((alt) => alt.replace('|', ' or '))]),
+    PURPOSES.map((p) => [
+      p,
+      REQUIRED[p].filter((alt) => !alt.split('|').some(ok)).map((alt) => alt.replace('|', ' or ')),
+    ]),
   ) as Record<Purpose, string[]>;
   return { keys, unknown, readiness };
 }
 
-const LABEL: Record<KeyState, string> = { set: 'set', default: 'default', missing: 'missing', invalid: 'invalid' };
+const LABEL: Record<KeyState, string> = {
+  set: 'set',
+  default: 'default',
+  missing: 'missing',
+  invalid: 'invalid',
+};
 
 /** Lines for the terminal: key names and states only. */
-export function formatEnvReport(report: EnvReport, file: string, purposes: readonly Purpose[]): { lines: string[]; ok: boolean } {
+export function formatEnvReport(
+  report: EnvReport,
+  file: string,
+  purposes: readonly Purpose[],
+): { lines: string[]; ok: boolean } {
   const lines = [`Env file: ${file}`, ''];
   const width = Math.max(...report.keys.map((k) => k.key.length));
   for (const k of report.keys) {
     const required = k.requiredFor.length ? `required for ${k.requiredFor.join(', ')}` : 'optional';
-    const extra = [k.source === 'process' ? 'from process env' : '', k.problem ?? ''].filter(Boolean).join('; ');
-    lines.push(`  ${k.key.padEnd(width)}  ${LABEL[k.state].padEnd(8)} ${required}${extra ? ` — ${extra}` : ''}`);
+    const extra = [k.source === 'process' ? 'from process env' : '', k.problem ?? '']
+      .filter(Boolean)
+      .join('; ');
+    lines.push(
+      `  ${k.key.padEnd(width)}  ${LABEL[k.state].padEnd(8)} ${required}${extra ? ` — ${extra}` : ''}`,
+    );
   }
-  if (report.unknown.length) lines.push('', `Not in config/example.env (typo?): ${report.unknown.join(', ')}`);
+  if (report.unknown.length)
+    lines.push('', `Not in config/example.env (typo?): ${report.unknown.join(', ')}`);
   lines.push('', 'Readiness:');
   let ok = true;
   for (const p of PURPOSES) {
     const missing = report.readiness[p];
     const checked = purposes.includes(p);
     if (checked && missing.length) ok = false;
-    lines.push(`  ${missing.length ? '✗' : '✓'} ${p.padEnd(10)} ${missing.length ? `missing/invalid: ${missing.join(', ')}` : 'ready'}${checked ? '' : ' (not checked)'}`);
+    lines.push(
+      `  ${missing.length ? '✗' : '✓'} ${p.padEnd(10)} ${missing.length ? `missing/invalid: ${missing.join(', ')}` : 'ready'}${checked ? '' : ' (not checked)'}`,
+    );
   }
   return { lines, ok };
 }

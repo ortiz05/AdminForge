@@ -9,12 +9,27 @@ try {
     let def: { datasources?: Record<string, { source: string }>; version?: string } | undefined;
     for (const kind of ['page', 'dashboard', 'report']) {
       const r = await s.api<typeof def>('GET', `/api/definitions/${kind}/${key}`);
-      if (r.status === 200) { def = r.json; break; }
+      if (r.status === 200) {
+        def = r.json;
+        break;
+      }
     }
-    if (!def?.datasources) { console.log(key, 'no definition'); continue; }
-    const r = await s.api<{ results: Record<string, { error?: { code: string; message: string; hint?: string } }> }>('POST', '/api/datasources/execute-many', { page: key, version: def.version, datasources: Object.keys(def.datasources), params: {} });
+    if (!def?.datasources) {
+      console.log(key, 'no definition');
+      continue;
+    }
+    const r = await s.api<{
+      results: Record<string, { error?: { code: string; message: string; hint?: string } }>;
+    }>('POST', '/api/datasources/execute-many', {
+      page: key,
+      version: def.version,
+      datasources: Object.keys(def.datasources),
+      params: {},
+    });
     for (const [ds, res] of Object.entries(r.json?.results ?? {})) {
-      console.log(`${key}#${ds} [${def.datasources[ds]?.source}]: ${res.error ? `${res.error.code} — ${res.error.message.slice(0, 140)}` : 'ok'}`);
+      console.log(
+        `${key}#${ds} [${def.datasources[ds]?.source}]: ${res.error ? `${res.error.code} — ${res.error.message.slice(0, 140)}` : 'ok'}`,
+      );
     }
   }
 } finally {

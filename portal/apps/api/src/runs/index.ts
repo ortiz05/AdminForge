@@ -4,7 +4,14 @@
  */
 export * from './types';
 export { createRunsModule, type RunsModule, type RunsOptions } from './module';
-export { RunService, type Caller, type CreateRunInput, type BulkRunInput, type ScheduledRunInput, type ListRunsInput } from './service';
+export {
+  RunService,
+  type Caller,
+  type CreateRunInput,
+  type BulkRunInput,
+  type ScheduledRunInput,
+  type ListRunsInput,
+} from './service';
 export { RunWorker, pinnedDefinition, rootOf } from './run-worker';
 export { RunEventBus } from './events';
 export { InProcessRunQueue, PgBossRunQueue, RetryLater, RUN_QUEUE, type RunQueue } from './queue';

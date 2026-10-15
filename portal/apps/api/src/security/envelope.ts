@@ -17,13 +17,19 @@ export function seal(plaintext: string, key: Buffer, aad: string): string {
   const cipher = createCipheriv('aes-256-gcm', key, iv);
   cipher.setAAD(Buffer.from(aad, 'utf8'));
   const ct = Buffer.concat([cipher.update(plaintext, 'utf8'), cipher.final()]);
-  return [VERSION, iv.toString('base64url'), cipher.getAuthTag().toString('base64url'), ct.toString('base64url')].join('.');
+  return [
+    VERSION,
+    iv.toString('base64url'),
+    cipher.getAuthTag().toString('base64url'),
+    ct.toString('base64url'),
+  ].join('.');
 }
 
 export function open(sealed: string, key: Buffer, aad: string): string {
   assertKey(key);
   const [version, iv, tag, ct, ...rest] = sealed.split('.');
-  if (version !== VERSION || !iv || !tag || ct === undefined || rest.length) throw new Error('Unsupported envelope');
+  if (version !== VERSION || !iv || !tag || ct === undefined || rest.length)
+    throw new Error('Unsupported envelope');
   const decipher = createDecipheriv('aes-256-gcm', key, Buffer.from(iv, 'base64url'));
   decipher.setAAD(Buffer.from(aad, 'utf8'));
   decipher.setAuthTag(Buffer.from(tag, 'base64url'));

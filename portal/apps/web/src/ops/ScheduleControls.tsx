@@ -28,20 +28,31 @@ export function ScheduleToggle({ schedule, withLabel }: { schedule: ScheduleItem
         toast({
           tone: 'ok',
           title: `${schedule.title} enabled`,
-          description: next ? `Next run ${formatInZone(next, schedule.timezone)} (${schedule.timezone}).` : undefined,
+          description: next
+            ? `Next run ${formatInZone(next, schedule.timezone)} (${schedule.timezone}).`
+            : undefined,
         });
       } else {
-        toast({ tone: 'info', title: `${schedule.title} paused`, description: 'It won’t run again until you enable it.' });
+        toast({
+          tone: 'info',
+          title: `${schedule.title} paused`,
+          description: 'It won’t run again until you enable it.',
+        });
       }
       void queryClient.invalidateQueries({ queryKey: ['schedules'] });
       void queryClient.invalidateQueries({ queryKey: ['approvals'] });
     },
-    onError: (e) => toast({ tone: 'crit', title: 'The schedule didn’t change', description: (e as Error).message }),
+    onError: (e) =>
+      toast({ tone: 'crit', title: 'The schedule didn’t change', description: (e as Error).message }),
   });
 
   if (schedule.pendingApprovalId && !schedule.enabled)
     return (
-      <Link to="/approvals" className="rounded-pill" aria-label={`${schedule.title}: enabling is awaiting approval. Open approvals.`}>
+      <Link
+        to="/approvals"
+        className="rounded-pill"
+        aria-label={`${schedule.title}: enabling is awaiting approval. Open approvals.`}
+      >
         <StatusPill status="warn" size="sm">
           Awaiting approval
         </StatusPill>
@@ -54,7 +65,11 @@ export function ScheduleToggle({ schedule, withLabel }: { schedule: ScheduleItem
       <Switch
         aria-label={withLabel ? undefined : label}
         label={withLabel ? (schedule.enabled ? 'Enabled' : 'Disabled') : undefined}
-        description={withLabel && schedule.writeCapable && !schedule.enabled ? 'Enabling needs a second approver.' : undefined}
+        description={
+          withLabel && schedule.writeCapable && !schedule.enabled
+            ? 'Enabling needs a second approver.'
+            : undefined
+        }
         checked={schedule.enabled}
         disabled={mutation.isPending}
         onCheckedChange={(on) => {
@@ -85,11 +100,16 @@ export function RunNowButton({ schedule, size = 'sm' }: { schedule: ScheduleItem
   const mutation = useMutation({
     mutationFn: () => runScheduleNow(schedule.key),
     onSuccess: () => {
-      toast({ tone: 'info', title: `${schedule.title} started`, description: 'It runs as the automation identity; the result appears in its history.' });
+      toast({
+        tone: 'info',
+        title: `${schedule.title} started`,
+        description: 'It runs as the automation identity; the result appears in its history.',
+      });
       void queryClient.invalidateQueries({ queryKey: ['schedules'] });
       void queryClient.invalidateQueries({ queryKey: ['schedule-runs', schedule.key] });
     },
-    onError: (e) => toast({ tone: 'crit', title: `${schedule.title} didn’t start`, description: (e as Error).message }),
+    onError: (e) =>
+      toast({ tone: 'crit', title: `${schedule.title} didn’t start`, description: (e as Error).message }),
   });
   return (
     <>

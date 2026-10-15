@@ -16,7 +16,11 @@ const byId = <T>(id: string): T => {
 interface Report {
   requires: { scopes: { graph: string[] } };
   datasources: { guests: { transform: string } };
-  layout: Array<{ widget: string; id?: string; rowActions?: Array<{ playbook: string; inputs: Record<string, string> }> }>;
+  layout: Array<{
+    widget: string;
+    id?: string;
+    rowActions?: Array<{ playbook: string; inputs: Record<string, string> }>;
+  }>;
   export: { formats: string[] };
 }
 interface Schedule {
@@ -24,7 +28,12 @@ interface Schedule {
   timezone: string;
   enabled: boolean;
   identity: string;
-  job: { kind: string; ref: string; params: Record<string, unknown>; delivery: Array<{ type: string; format: string }> };
+  job: {
+    kind: string;
+    ref: string;
+    params: Record<string, unknown>;
+    delivery: Array<{ type: string; format: string }>;
+  };
   requires: { scopes: { graph: string[] }; licences: string[] };
 }
 interface Out {
@@ -52,26 +61,56 @@ const guest = (id: string, extra: Record<string, unknown>) => ({
 });
 // Directory objects as Graph returns them (`value` of GET /users after paging).
 const users = [
-  guest('g-old', { mail: 'old@partner.example', signInActivity: { lastSuccessfulSignInDateTime: '2026-06-14T06:15:00Z' } }), // 120 days
-  guest('g-recent', { mail: 'recent@partner.example', signInActivity: { lastSuccessfulSignInDateTime: '2026-10-02T09:00:00Z' } }),
-  guest('g-boundary', { mail: 'edge@partner.example', signInActivity: { lastSuccessfulSignInDateTime: '2026-07-14T06:15:00Z' } }), // exactly 90
-  guest('g-89', { mail: 'g89@partner.example', signInActivity: { lastSuccessfulSignInDateTime: '2026-07-15T06:15:00Z' } }),
+  guest('g-old', {
+    mail: 'old@partner.example',
+    signInActivity: { lastSuccessfulSignInDateTime: '2026-06-14T06:15:00Z' },
+  }), // 120 days
+  guest('g-recent', {
+    mail: 'recent@partner.example',
+    signInActivity: { lastSuccessfulSignInDateTime: '2026-10-02T09:00:00Z' },
+  }),
+  guest('g-boundary', {
+    mail: 'edge@partner.example',
+    signInActivity: { lastSuccessfulSignInDateTime: '2026-07-14T06:15:00Z' },
+  }), // exactly 90
+  guest('g-89', {
+    mail: 'g89@partner.example',
+    signInActivity: { lastSuccessfulSignInDateTime: '2026-07-15T06:15:00Z' },
+  }),
   guest('g-pending', {
     mail: 'invitee@vendor.example',
     externalUserState: 'PendingAcceptance',
     externalUserStateChangeDateTime: '2026-03-26T06:15:00Z', // invited 200 days ago, never redeemed
-    signInActivity: { lastSignInDateTime: null, lastNonInteractiveSignInDateTime: null, lastSuccessfulSignInDateTime: null },
+    signInActivity: {
+      lastSignInDateTime: null,
+      lastNonInteractiveSignInDateTime: null,
+      lastSuccessfulSignInDateTime: null,
+    },
   }),
   guest('g-never', { mail: 'never@contractor.example', createdDateTime: '2026-07-09T06:15:00Z' }), // accepted, no sign-in, 95 days old
-  guest('g-disabled', { mail: 'blocked@partner.example', accountEnabled: false, signInActivity: { lastSuccessfulSignInDateTime: '2025-12-16T06:15:00Z' } }),
+  guest('g-disabled', {
+    mail: 'blocked@partner.example',
+    accountEnabled: false,
+    signInActivity: { lastSuccessfulSignInDateTime: '2025-12-16T06:15:00Z' },
+  }),
   // Only the older interactive/non-interactive fields: a recent non-interactive sign-in still counts as activity.
   guest('g-noninteractive', {
     mail: 'app@partner.example',
-    signInActivity: { lastSignInDateTime: '2026-05-15T06:15:00Z', lastNonInteractiveSignInDateTime: '2026-10-07T06:15:00Z' },
+    signInActivity: {
+      lastSignInDateTime: '2026-05-15T06:15:00Z',
+      lastNonInteractiveSignInDateTime: '2026-10-07T06:15:00Z',
+    },
   }),
-  { id: 'm-member', userType: 'Member', accountEnabled: true, createdDateTime: '2025-01-01T00:00:00Z', signInActivity: { lastSuccessfulSignInDateTime: '2025-09-01T00:00:00Z' } },
+  {
+    id: 'm-member',
+    userType: 'Member',
+    accountEnabled: true,
+    createdDateTime: '2025-01-01T00:00:00Z',
+    signInActivity: { lastSuccessfulSignInDateTime: '2025-09-01T00:00:00Z' },
+  },
 ];
-const run = (params: Record<string, unknown>, value: unknown[] = users) => renderTemplate<Out>(report.datasources.guests.transform, { value: { value }, params, now });
+const run = (params: Record<string, unknown>, value: unknown[] = users) =>
+  renderTemplate<Out>(report.datasources.guests.transform, { value: { value }, params, now });
 
 describe('identity.inactive-guests transform', () => {
   it('lists enabled guests inactive for 90+ days, longest first, with unredeemed invitations', async () => {
@@ -88,23 +127,36 @@ describe('identity.inactive-guests transform', () => {
   });
 
   it('can leave out or isolate unredeemed invitations', async () => {
-    expect((await run({ days: 90, pending: 'Exclude' })).rows.map((r) => r.id)).toEqual(['g-old', 'g-never', 'g-boundary']);
+    expect((await run({ days: 90, pending: 'Exclude' })).rows.map((r) => r.id)).toEqual([
+      'g-old',
+      'g-never',
+      'g-boundary',
+    ]);
     expect((await run({ days: 90, pending: 'Only' })).rows.map((r) => r.id)).toEqual(['g-pending']);
   });
 
   it('handles a tenant without guests', async () => {
-    expect(await run({ days: 90, pending: 'Include' }, [])).toEqual({ rows: [], total: 0, pending: 0, domains: [], allGuests: 0 });
+    expect(await run({ days: 90, pending: 'Include' }, [])).toEqual({
+      rows: [],
+      total: 0,
+      pending: 0,
+      domains: [],
+      allGuests: 0,
+    });
   });
 });
 
 describe('identity.inactive-guests report', () => {
-  it('exports CSV and Excel', () => expect(report.export.formats).toEqual(expect.arrayContaining(['csv', 'xlsx'])));
+  it('exports CSV and Excel', () =>
+    expect(report.export.formats).toEqual(expect.arrayContaining(['csv', 'xlsx'])));
 
   it('offers Block sign-in on a row, bound to that guest', async () => {
     const table = report.layout.find((b) => b.widget === 'table' && b.id === 'guests');
     const action = table?.rowActions?.find((a) => a.playbook === 'identity.disable-user');
     expect(action).toBeDefined();
-    expect(await renderTemplate(action!.inputs, { row: { id: '00000000-0000-4000-8000-000000000107' } })).toEqual({ userId: '00000000-0000-4000-8000-000000000107' });
+    expect(
+      await renderTemplate(action!.inputs, { row: { id: '00000000-0000-4000-8000-000000000107' } }),
+    ).toEqual({ userId: '00000000-0000-4000-8000-000000000107' });
   });
 });
 

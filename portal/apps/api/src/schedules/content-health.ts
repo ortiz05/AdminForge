@@ -1,5 +1,13 @@
 import { lintExpressions, validateExpressions } from '@adminforge/expressions';
-import { formatContentError, KINDS, validateDefinition, validateReferences, type ContentError, type DefinitionEntry, type Scopes } from '@adminforge/schemas';
+import {
+  formatContentError,
+  KINDS,
+  validateDefinition,
+  validateReferences,
+  type ContentError,
+  type DefinitionEntry,
+  type Scopes,
+} from '@adminforge/schemas';
 import type { DefinitionSource } from '../definitions/types';
 import type { ExecutionIdentity, OutboundExecutor } from '../execution/types';
 
@@ -9,7 +17,13 @@ import type { ExecutionIdentity, OutboundExecutor } from '../execution/types';
  * schedules and probes declare with what the automation identity actually holds ("scope drift").
  */
 
-const CHECKED = ['graph', 'logAnalytics', 'exchange', 'sharepointAdmin', 'teams'] as const satisfies ReadonlyArray<keyof Scopes>;
+const CHECKED = [
+  'graph',
+  'logAnalytics',
+  'exchange',
+  'sharepointAdmin',
+  'teams',
+] as const satisfies ReadonlyArray<keyof Scopes>;
 
 /** Microsoft first-party resource app ids (the same in every tenant) for app-only permissions. */
 const RESOURCE_APP_IDS: Record<string, (typeof CHECKED)[number]> = {
@@ -46,26 +60,61 @@ const ACTIVE = (status: string | undefined) => status !== 'draft' && status !== 
 /** `X.ReadWrite.Y` also grants `X.Read.Y`. */
 const satisfied = (have: Set<string>, want: string) => {
   const w = want.toLowerCase();
-  return have.has(w) || have.has(w.replace('.read.', '.readwrite.')) || (w.endsWith('.read') && have.has(`${w.slice(0, -5)}.readwrite`));
+  return (
+    have.has(w) ||
+    have.has(w.replace('.read.', '.readwrite.')) ||
+    (w.endsWith('.read') && have.has(`${w.slice(0, -5)}.readwrite`))
+  );
 };
 
 /** The automation identity's app role assignments as `service:Permission` (lower-case), via Graph as the automation identity. */
-export async function grantedAppRoles(outbound: OutboundExecutor, clientId: string, opts: { correlationId?: string; signal?: AbortSignal } = {}): Promise<Set<string>> {
+export async function grantedAppRoles(
+  outbound: OutboundExecutor,
+  clientId: string,
+  opts: { correlationId?: string; signal?: AbortSignal } = {},
+): Promise<Set<string>> {
   const id: ExecutionIdentity = { kind: 'automation', mode: 'read' };
-  const sps = await outbound.execute<{ value?: Array<{ id: string }> }>(id, { service: 'graph', method: 'GET', path: '/servicePrincipals', query: { $filter: `appId eq '${clientId.replace(/'/g, "''")}'`, $select: 'id' } }, opts);
+  const sps = await outbound.execute<{ value?: Array<{ id: string }> }>(
+    id,
+    {
+      service: 'graph',
+      method: 'GET',
+      path: '/servicePrincipals',
+      query: { $filter: `appId eq '${clientId.replace(/'/g, "''")}'`, $select: 'id' },
+    },
+    opts,
+  );
   const sp = sps.data?.value?.[0];
   if (!sp) throw new Error('The automation identity has no service principal in this tenant.');
   const assignments = await outbound.execute<{ value?: Array<{ resourceId: string; appRoleId: string }> }>(
     id,
-    { service: 'graph', method: 'GET', path: `/servicePrincipals/${encodeURIComponent(sp.id)}/appRoleAssignments`, paging: 'all', maxItems: 2000 },
+    {
+      service: 'graph',
+      method: 'GET',
+      path: `/servicePrincipals/${encodeURIComponent(sp.id)}/appRoleAssignments`,
+      paging: 'all',
+      maxItems: 2000,
+    },
     opts,
   );
-  const resources = new Map<string, { appId?: string; appRoles?: Array<{ id: string; value?: string | null }> } | null>();
+  const resources = new Map<
+    string,
+    { appId?: string; appRoles?: Array<{ id: string; value?: string | null }> } | null
+  >();
   const out = new Set<string>();
   for (const a of assignments.data?.value ?? []) {
     if (!resources.has(a.resourceId)) {
       const r = await outbound
-        .execute<{ appId?: string; appRoles?: Array<{ id: string; value?: string | null }> }>(id, { service: 'graph', method: 'GET', path: `/servicePrincipals/${encodeURIComponent(a.resourceId)}`, query: { $select: 'appId,appRoles' } }, opts)
+        .execute<{ appId?: string; appRoles?: Array<{ id: string; value?: string | null }> }>(
+          id,
+          {
+            service: 'graph',
+            method: 'GET',
+            path: `/servicePrincipals/${encodeURIComponent(a.resourceId)}`,
+            query: { $select: 'appId,appRoles' },
+          },
+          opts,
+        )
         .then((x) => x.data)
         .catch(() => null);
       resources.set(a.resourceId, r);
@@ -116,19 +165,42 @@ export async function contentHealth(
         unlicensed.push(e.def.id);
         continue;
       }
-      for (const service of CHECKED) for (const s of e.def.requires?.scopes?.[service] ?? []) declared.set(`${service}:${s}`, [...(declared.get(`${service}:${s}`) ?? []), e.file]);
+      for (const service of CHECKED)
+        for (const s of e.def.requires?.scopes?.[service] ?? [])
+          declared.set(`${service}:${s}`, [...(declared.get(`${service}:${s}`) ?? []), e.file]);
     }
-    if (!opts.outbound || !opts.automationClientId) scopes = { checked: false, missing: [], unused: [], reason: 'The automation identity is not configured.' };
+    if (!opts.outbound || !opts.automationClientId)
+      scopes = {
+        checked: false,
+        missing: [],
+        unused: [],
+        reason: 'The automation identity is not configured.',
+      };
     else {
       try {
-        const granted = await grantedAppRoles(opts.outbound, opts.automationClientId, { correlationId: opts.correlationId, signal: opts.signal });
+        const granted = await grantedAppRoles(opts.outbound, opts.automationClientId, {
+          correlationId: opts.correlationId,
+          signal: opts.signal,
+        });
         const missing = [...declared.keys()].filter((k) => {
           const [service, scope] = k.split(':') as [string, string];
-          return !satisfied(new Set([...granted].filter((g) => g.startsWith(`${service}:`)).map((g) => g.slice(service.length + 1))), scope);
+          return !satisfied(
+            new Set(
+              [...granted].filter((g) => g.startsWith(`${service}:`)).map((g) => g.slice(service.length + 1)),
+            ),
+            scope,
+          );
         });
         const declaredLower = [...declared.keys()].map((k) => k.toLowerCase());
-        const unused = [...granted].filter((g) => !declaredLower.some((d) => d === g || d === g.replace('.readwrite.', '.read.')));
-        scopes = { checked: true, missing: missing.sort(), unused: unused.sort(), ...(unlicensed.length ? { unlicensed: unlicensed.sort() } : {}) };
+        const unused = [...granted].filter(
+          (g) => !declaredLower.some((d) => d === g || d === g.replace('.readwrite.', '.read.')),
+        );
+        scopes = {
+          checked: true,
+          missing: missing.sort(),
+          unused: unused.sort(),
+          ...(unlicensed.length ? { unlicensed: unlicensed.sort() } : {}),
+        };
       } catch (err) {
         scopes = { checked: false, missing: [], unused: [], reason: (err as Error).message };
       }

@@ -133,7 +133,18 @@ export function EntityPicker({
 
   const options: Array<{ key: string; result: SearchResult }> = [
     ...(pasted && !results.data?.some((r) => r.id.toLowerCase() === pasted.toLowerCase())
-      ? [{ key: `paste:${pasted}`, result: { type: kind, id: pasted, title: `Use ${pasted}`, subtitle: `Paste as ${noun} id`, href: null } }]
+      ? [
+          {
+            key: `paste:${pasted}`,
+            result: {
+              type: kind,
+              id: pasted,
+              title: `Use ${pasted}`,
+              subtitle: `Paste as ${noun} id`,
+              href: null,
+            },
+          },
+        ]
       : []),
     ...(results.data ?? []).filter((r) => !ids.includes(r.id)).map((r) => ({ key: r.id, result: r })),
   ];
@@ -193,7 +204,14 @@ export function EntityPicker({
       {({ id, describedBy, invalid }) => (
         <div className="flex flex-col gap-1.5">
           {ids.map((x) => (
-            <SelectedEntity key={x} kind={kind} id={x} known={known[x]} onRemove={() => remove(x)} label={label} />
+            <SelectedEntity
+              key={x}
+              kind={kind}
+              id={x}
+              known={known[x]}
+              onRemove={() => remove(x)}
+              label={label}
+            />
           ))}
           {showInput && (
             <Popover open={open && (q.length >= 2 || text.length > 0)} onOpenChange={setOpen}>
@@ -201,7 +219,11 @@ export function EntityPicker({
                 <div className="relative flex items-center">
                   <span className="pointer-events-none absolute left-2.5 flex text-fg-3">
                     {results.isFetching ? (
-                      <CircleNotchIcon size={14} className="animate-spin motion-reduce:animate-none" aria-hidden />
+                      <CircleNotchIcon
+                        size={14}
+                        className="animate-spin motion-reduce:animate-none"
+                        aria-hidden
+                      />
                     ) : (
                       <MagnifyingGlassIcon size={14} aria-hidden />
                     )}
@@ -219,7 +241,10 @@ export function EntityPicker({
                     autoComplete="off"
                     spellCheck={false}
                     value={text}
-                    placeholder={placeholder ?? (multiple && ids.length ? `Add another ${noun}…` : `Search ${noun}s by name or id…`)}
+                    placeholder={
+                      placeholder ??
+                      (multiple && ids.length ? `Add another ${noun}…` : `Search ${noun}s by name or id…`)
+                    }
                     onChange={(e) => {
                       setText(e.target.value);
                       setActive(0);
@@ -238,7 +263,12 @@ export function EntityPicker({
                   if (inputRef.current?.contains(e.target as Node)) e.preventDefault();
                 }}
               >
-                <ul id={listId} role="listbox" aria-label={`${label} results`} className="flex max-h-72 flex-col overflow-y-auto p-1">
+                <ul
+                  id={listId}
+                  role="listbox"
+                  aria-label={`${label} results`}
+                  className="flex max-h-72 flex-col overflow-y-auto p-1"
+                >
                   {options.map((o, i) => (
                     <li
                       key={o.key}
@@ -253,10 +283,17 @@ export function EntityPicker({
                         i === active ? 'bg-accent-subtle text-fg' : 'text-fg-2',
                       )}
                     >
-                      <span className={cn('truncate font-medium', o.key.startsWith('paste:') && 'font-mono text-xs')}>
+                      <span
+                        className={cn(
+                          'truncate font-medium',
+                          o.key.startsWith('paste:') && 'font-mono text-xs',
+                        )}
+                      >
                         {o.result.title}
                       </span>
-                      {o.result.subtitle && <span className="truncate text-xs text-fg-3">{o.result.subtitle}</span>}
+                      {o.result.subtitle && (
+                        <span className="truncate text-xs text-fg-3">{o.result.subtitle}</span>
+                      )}
                     </li>
                   ))}
                 </ul>

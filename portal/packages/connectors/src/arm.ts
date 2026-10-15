@@ -34,7 +34,8 @@ const TERMINAL = new Set(['succeeded', 'failed', 'canceled', 'cancelled']);
 
 /** Builds an ARM URL; throws when api-version is missing or the path is unsafe. */
 export function buildArmUrl(base: string, req: ArmRequest): string {
-  if (!req.apiVersion || !req.apiVersion.trim()) throw new Error(`ARM requests need an api-version (${req.method ?? 'GET'} ${req.path}).`);
+  if (!req.apiVersion || !req.apiVersion.trim())
+    throw new Error(`ARM requests need an api-version (${req.method ?? 'GET'} ${req.path}).`);
   assertSafePath(req.path, 'ARM');
   const { 'api-version': _ignored, ...rest } = req.query ?? {};
   return `${base}${req.path}?${buildQuery({ 'api-version': req.apiVersion, ...rest })}`;
@@ -46,20 +47,40 @@ export function createArmClient(opts: ArmClientOptions) {
   const sleep = opts.sleep ?? defaultSleep;
   const pollIntervalMs = opts.pollIntervalMs ?? 5000;
   const maxPollMs = opts.maxPollMs ?? 30 * 60_000;
-  const http = createHttpClient({ ...opts, correlationHeader: 'x-ms-client-request-id', requestIdHeader: 'x-ms-request-id' });
+  const http = createHttpClient({
+    ...opts,
+    correlationHeader: 'x-ms-client-request-id',
+    requestIdHeader: 'x-ms-request-id',
+  });
 
   const ensureArm = (url: string, what: string): string => {
-    if (!url.startsWith(`${base}/`)) throw new Error(`${what} points outside Azure Resource Manager; refusing to follow it.`);
+    if (!url.startsWith(`${base}/`))
+      throw new Error(`${what} points outside Azure Resource Manager; refusing to follow it.`);
     return url;
   };
 
   async function request<T>(req: ArmRequest, url = buildArmUrl(base, req)): Promise<ArmResult<T>> {
-    const isQuery = (req.method ?? 'GET').toUpperCase() === 'POST' && /\/providers\/Microsoft\.ResourceGraph\/resources$/i.test(req.path);
-    const r: HttpResult<T> = await http.send<T>({ method: req.method, url, headers: req.headers, body: req.body, ...(isQuery ? { idempotent: true } : {}) });
+    const isQuery =
+      (req.method ?? 'GET').toUpperCase() === 'POST' &&
+      /\/providers\/Microsoft\.ResourceGraph\/resources$/i.test(req.path);
+    const r: HttpResult<T> = await http.send<T>({
+      method: req.method,
+      url,
+      headers: req.headers,
+      body: req.body,
+      ...(isQuery ? { idempotent: true } : {}),
+    });
     return { data: r.data, status: r.status, requestId: r.requestId, ms: r.ms, headers: r.headers };
   }
 
-  const get = <T>(url: string) => http.send<T>({ method: 'GET', url }).then((r) => ({ data: r.data, status: r.status, requestId: r.requestId, ms: r.ms, headers: r.headers }));
+  const get = <T>(url: string) =>
+    http.send<T>({ method: 'GET', url }).then((r) => ({
+      data: r.data,
+      status: r.status,
+      requestId: r.requestId,
+      ms: r.ms,
+      headers: r.headers,
+    }));
 
   /** Follows `nextLink`; refuses links that leave ARM. */
   async function* pages<T>(req: ArmRequest, maxPages = 50): AsyncGenerator<T[]> {
@@ -95,10 +116,17 @@ export function createArmClient(opts: ArmClientOptions) {
     const started = Date.now();
     let retryAfter = initial.headers.get('retry-after');
     const wait = async () => {
-      if (Date.now() - started > maxPollMs) throw new ApiError(0, 'OperationTimedOut', `The Azure operation did not finish within ${Math.round(maxPollMs / 1000)} s.`, initial.requestId);
+      if (Date.now() - started > maxPollMs)
+        throw new ApiError(
+          0,
+          'OperationTimedOut',
+          `The Azure operation did not finish within ${Math.round(maxPollMs / 1000)} s.`,
+          initial.requestId,
+        );
       await sleep(retryAfter !== null ? retryDelay(retryAfter, 0) : pollIntervalMs);
     };
-    const provisioning = (d: unknown) => (d as { properties?: { provisioningState?: string } } | undefined)?.properties?.provisioningState;
+    const provisioning = (d: unknown) =>
+      (d as { properties?: { provisioningState?: string } } | undefined)?.properties?.provisioningState;
 
     if (asyncOp) {
       ensureArm(asyncOp, 'Azure-AsyncOperation');
@@ -109,7 +137,12 @@ export function createArmClient(opts: ArmClientOptions) {
         const status = (poll.data?.status ?? '').toLowerCase();
         if (!TERMINAL.has(status)) continue;
         if (status !== 'succeeded')
-          throw new ApiError(poll.status, poll.data?.error?.code ?? 'OperationFailed', poll.data?.error?.message ?? `The Azure operation ended as ${poll.data?.status}.`, poll.requestId);
+          throw new ApiError(
+            poll.status,
+            poll.data?.error?.code ?? 'OperationFailed',
+            poll.data?.error?.message ?? `The Azure operation ended as ${poll.data?.status}.`,
+            poll.requestId,
+          );
         if (method === 'PUT' || method === 'PATCH') return get<T>(resourceUrl);
         if (method === 'POST' && location) return get<T>(ensureArm(location, 'Location'));
         return poll as ArmResult<T>;
@@ -124,14 +157,25 @@ export function createArmClient(opts: ArmClientOptions) {
         if (poll.status !== 202) return poll;
       }
     }
-    if (method === 'PUT' && initial.status === 201 && provisioning(initial.data) && !TERMINAL.has(provisioning(initial.data)!.toLowerCase())) {
+    if (
+      method === 'PUT' &&
+      initial.status === 201 &&
+      provisioning(initial.data) &&
+      !TERMINAL.has(provisioning(initial.data)!.toLowerCase())
+    ) {
       for (;;) {
         await wait();
         const poll = await get<T>(resourceUrl);
         retryAfter = poll.headers.get('retry-after');
         const state = provisioning(poll.data)?.toLowerCase();
         if (!state || state === 'succeeded') return poll;
-        if (TERMINAL.has(state)) throw new ApiError(poll.status, 'OperationFailed', `The Azure resource ended in provisioning state ${provisioning(poll.data)}.`, poll.requestId);
+        if (TERMINAL.has(state))
+          throw new ApiError(
+            poll.status,
+            'OperationFailed',
+            `The Azure resource ended in provisioning state ${provisioning(poll.data)}.`,
+            poll.requestId,
+          );
       }
     }
     return initial as ArmResult<T>;

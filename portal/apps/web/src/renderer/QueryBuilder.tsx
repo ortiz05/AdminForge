@@ -1,5 +1,11 @@
 import { useId, useState } from 'react';
-import { advancedOpsFor, DEFAULT_ADVANCED_PARAM, type AdvancedField, type AdvancedOp, type FilterBar as FilterBarSpec } from '@adminforge/schemas';
+import {
+  advancedOpsFor,
+  DEFAULT_ADVANCED_PARAM,
+  type AdvancedField,
+  type AdvancedOp,
+  type FilterBar as FilterBarSpec,
+} from '@adminforge/schemas';
 import {
   Button,
   CaretDownIcon,
@@ -61,9 +67,14 @@ const OP_LABEL: Record<AdvancedOp, string> = {
 
 // ── Wire encoding ───────────────────────────────────────────────────────────────────────────────────
 
-const isObject = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
+const isObject = (v: unknown): v is Record<string, unknown> =>
+  typeof v === 'object' && v !== null && !Array.isArray(v);
 const joinOf = (g: Record<string, unknown>): 'all' | 'any' | undefined =>
-  Array.isArray(g.all) && Object.keys(g).length === 1 ? 'all' : Array.isArray(g.any) && Object.keys(g).length === 1 ? 'any' : undefined;
+  Array.isArray(g.all) && Object.keys(g).length === 1
+    ? 'all'
+    : Array.isArray(g.any) && Object.keys(g).length === 1
+      ? 'any'
+      : undefined;
 
 export function encodeFilter(filter: WireGroup): string {
   const bytes = new TextEncoder().encode(JSON.stringify(filter));
@@ -92,11 +103,15 @@ export function decodeFilter(raw: unknown): WireGroup | undefined {
   return isObject(value) && joinOf(value) ? (value as WireGroup) : undefined;
 }
 
-const clausesOf = (g: WireGroup | WireInner) => ('all' in g ? g.all : g.any) as Array<WireCondition | WireInner>;
+const clausesOf = (g: WireGroup | WireInner) =>
+  ('all' in g ? g.all : g.any) as Array<WireCondition | WireInner>;
 
 export function countConditions(g: WireGroup | undefined): number {
   if (!g) return 0;
-  return clausesOf(g).reduce((n, c) => n + (isObject(c) && joinOf(c) ? clausesOf(c as WireInner).length : 1), 0);
+  return clausesOf(g).reduce(
+    (n, c) => n + (isObject(c) && joinOf(c) ? clausesOf(c as WireInner).length : 1),
+    0,
+  );
 }
 
 // ── Draft (what the form edits) ─────────────────────────────────────────────────────────────────────
@@ -131,14 +146,24 @@ export function blankCondition(spec: AdvancedSpec, field?: AdvancedField): Draft
 function conditionFromWire(c: WireCondition): DraftCondition {
   const v = c.value;
   const list = Array.isArray(v) ? v : v === undefined || v === null ? [] : [v];
-  return { kind: 'condition', field: c.field, op: c.op, text: list.map(String).join(', '), picks: list.map(String) };
+  return {
+    kind: 'condition',
+    field: c.field,
+    op: c.op,
+    text: list.map(String).join(', '),
+    picks: list.map(String),
+  };
 }
 
 export function draftFromWire(spec: AdvancedSpec, g: WireGroup | undefined): Draft {
   if (!g) return { join: 'all', items: [blankCondition(spec)] };
   const items = clausesOf(g).map((c) =>
     isObject(c) && joinOf(c)
-      ? ({ kind: 'group', join: joinOf(c)!, items: clausesOf(c as WireInner).map((x) => conditionFromWire(x as WireCondition)) } as DraftGroup)
+      ? ({
+          kind: 'group',
+          join: joinOf(c)!,
+          items: clausesOf(c as WireInner).map((x) => conditionFromWire(x as WireCondition)),
+        } as DraftGroup)
       : conditionFromWire(c as WireCondition),
   );
   return { join: 'all' in g ? 'all' : 'any', items: items.length ? items : [blankCondition(spec)] };
@@ -159,12 +184,16 @@ export function typedValue(f: AdvancedField, raw: string): { value: Scalar } | {
     case 'boolean':
       return v === 'true' || v === 'false' ? { value: v === 'true' } : { problem: 'Choose yes or no.' };
     case 'date':
-      return ISO_DATE.test(v) || RELATIVE_DATE.test(v) ? { value: v } : { problem: 'Enter a date like 2026-01-31, or today, now, -30d.' };
+      return ISO_DATE.test(v) || RELATIVE_DATE.test(v)
+        ? { value: v }
+        : { problem: 'Enter a date like 2026-01-31, or today, now, -30d.' };
     case 'guid':
       return GUID.test(v) ? { value: v.toLowerCase() } : { problem: 'Enter a GUID.' };
     case 'enum': {
       const hit = (f.values ?? []).find((x) => String(x) === v);
-      return hit !== undefined ? { value: hit } : { problem: `Choose one of ${(f.values ?? []).join(', ')}.` };
+      return hit !== undefined
+        ? { value: hit }
+        : { problem: `Choose one of ${(f.values ?? []).join(', ')}.` };
     }
     default:
       if (!v) return { problem: 'Enter a value.' };
@@ -174,13 +203,22 @@ export function typedValue(f: AdvancedField, raw: string): { value: Scalar } | {
   }
 }
 
-function conditionToWire(spec: AdvancedSpec, c: DraftCondition): { condition: WireCondition } | { problem: string } {
+function conditionToWire(
+  spec: AdvancedSpec,
+  c: DraftCondition,
+): { condition: WireCondition } | { problem: string } {
   const f = fieldOf(spec, c.field);
   if (!f) return { problem: 'Choose a field.' };
   if (!opsOf(f).includes(c.op)) return { problem: `${f.label} doesn’t support “${OP_LABEL[c.op]}”.` };
   if (c.op === 'isEmpty') return { condition: { field: f.field, op: 'isEmpty' } };
   if (c.op === 'in') {
-    const raws = f.type === 'enum' || f.type === 'boolean' ? c.picks : c.text.split(',').map((x) => x.trim()).filter(Boolean);
+    const raws =
+      f.type === 'enum' || f.type === 'boolean'
+        ? c.picks
+        : c.text
+            .split(',')
+            .map((x) => x.trim())
+            .filter(Boolean);
     if (!raws.length) return { problem: 'Add at least one value.' };
     if (raws.length > MAX_IN_VALUES) return { problem: `Use at most ${MAX_IN_VALUES} values.` };
     const values: Scalar[] = [];
@@ -248,14 +286,24 @@ export function paramIssues(message: string, names: readonly string[]): Record<s
 }
 
 /** Server messages that name a condition ("createdDateTime ge: expects …") → that condition's key; the rest are general. */
-export function placeServerIssues(d: Draft, issues: readonly string[]): { byCondition: Record<string, string>; general: string[] } {
+export function placeServerIssues(
+  d: Draft,
+  issues: readonly string[],
+): { byCondition: Record<string, string>; general: string[] } {
   const byCondition: Record<string, string> = {};
   const general: string[] = [];
   const keys: Array<[string, DraftCondition]> = [];
-  d.items.forEach((it, i) => (it.kind === 'group' ? it.items.forEach((c, j) => keys.push([`${i}.${j}`, c])) : keys.push([String(i), it])));
+  d.items.forEach((it, i) =>
+    it.kind === 'group'
+      ? it.items.forEach((c, j) => keys.push([`${i}.${j}`, c]))
+      : keys.push([String(i), it]),
+  );
   for (const m of issues) {
     const hit = keys.find(([k, c]) => !byCondition[k] && m.startsWith(`${c.field} ${c.op}: `));
-    if (hit) byCondition[hit[0]] = m.slice(`${hit[1].field} ${hit[1].op}: `.length).replace(/^./, (x) => x.toUpperCase());
+    if (hit)
+      byCondition[hit[0]] = m
+        .slice(`${hit[1].field} ${hit[1].op}: `.length)
+        .replace(/^./, (x) => x.toUpperCase());
     else general.push(m);
   }
   return { byCondition, general };
@@ -263,7 +311,15 @@ export function placeServerIssues(d: Draft, issues: readonly string[]): { byCond
 
 // ── UI ──────────────────────────────────────────────────────────────────────────────────────────────
 
-function JoinSelect({ value, onChange, label }: { value: 'all' | 'any'; onChange: (v: 'all' | 'any') => void; label: string }) {
+function JoinSelect({
+  value,
+  onChange,
+  label,
+}: {
+  value: 'all' | 'any';
+  onChange: (v: 'all' | 'any') => void;
+  label: string;
+}) {
   return (
     <Select
       aria-label={label}
@@ -308,10 +364,15 @@ function ConditionRow({
   };
   const describedBy = problem ? problemId : undefined;
   let value;
-  if (c.op === 'isEmpty') value = <span className="flex h-(--af-control-h) flex-1 items-center text-sm text-fg-3">no value</span>;
+  if (c.op === 'isEmpty')
+    value = <span className="flex h-(--af-control-h) flex-1 items-center text-sm text-fg-3">no value</span>;
   else if ((f.type === 'enum' || f.type === 'boolean') && c.op === 'in')
     value = (
-      <div role="group" aria-label={`${label} values`} className="flex min-w-0 flex-1 flex-wrap gap-x-3 gap-y-1 py-1">
+      <div
+        role="group"
+        aria-label={`${label} values`}
+        className="flex min-w-0 flex-1 flex-wrap gap-x-3 gap-y-1 py-1"
+      >
         {(f.type === 'boolean' ? ['true', 'false'] : (f.values ?? []).map(String)).map((v) => (
           <Checkbox
             key={v}
@@ -365,7 +426,13 @@ function ConditionRow({
   return (
     <li className="flex flex-col gap-1">
       <div className="flex items-start gap-2">
-        <Select aria-label={`${label} field`} className="w-44" value={c.field} onValueChange={(v) => set({ field: v })} options={spec.fields.map((x) => ({ value: x.field, label: x.label }))} />
+        <Select
+          aria-label={`${label} field`}
+          className="w-44"
+          value={c.field}
+          onValueChange={(v) => set({ field: v })}
+          options={spec.fields.map((x) => ({ value: x.field, label: x.label }))}
+        />
         <Select
           aria-label={`${label} operator`}
           className="w-48"
@@ -374,7 +441,14 @@ function ConditionRow({
           options={opsOf(f).map((o) => ({ value: o, label: OP_LABEL[o] }))}
         />
         {value}
-        <IconButton label={`Remove ${label.toLowerCase()}`} icon={<TrashIcon size={14} />} size="sm" tooltip={false} onClick={onRemove} className="mt-0.5" />
+        <IconButton
+          label={`Remove ${label.toLowerCase()}`}
+          icon={<TrashIcon size={14} />}
+          size="sm"
+          tooltip={false}
+          onClick={onRemove}
+          className="mt-0.5"
+        />
       </div>
       {problem && (
         <p id={problemId} className="flex items-center gap-1 pl-1 text-xs text-crit">
@@ -406,7 +480,8 @@ export function QueryBuilder({ spec, filter, onApply, serverIssues = [] }: Query
   const total = draft.items.reduce((n, it) => n + (it.kind === 'group' ? it.items.length : 1), 0);
   const full = total >= MAX_CONDITIONS;
 
-  const setItem = (i: number, next: DraftCondition | DraftGroup) => setDraft((d) => ({ ...d, items: d.items.map((x, k) => (k === i ? next : x)) }));
+  const setItem = (i: number, next: DraftCondition | DraftGroup) =>
+    setDraft((d) => ({ ...d, items: d.items.map((x, k) => (k === i ? next : x)) }));
   const removeItem = (i: number) => setDraft((d) => ({ ...d, items: d.items.filter((_, k) => k !== i) }));
   const apply = () => {
     const r = draftToWire(spec, draft);
@@ -432,7 +507,11 @@ export function QueryBuilder({ spec, filter, onApply, serverIssues = [] }: Query
           size="sm"
           intent={count ? 'secondary' : 'ghost'}
           className={cn(count ? 'border-accent' : 'border-line', serverIssues.length > 0 && 'border-crit')}
-          aria-label={count ? `Advanced filter, ${count} ${count === 1 ? 'condition' : 'conditions'}` : 'Advanced filter'}
+          aria-label={
+            count
+              ? `Advanced filter, ${count} ${count === 1 ? 'condition' : 'conditions'}`
+              : 'Advanced filter'
+          }
         >
           <FunnelSimpleIcon size={13} aria-hidden className="text-fg-3" />
           Advanced
@@ -444,7 +523,10 @@ export function QueryBuilder({ spec, filter, onApply, serverIssues = [] }: Query
           <CaretDownIcon size={12} weight="bold" aria-hidden className="text-fg-3" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-180 max-w-(--radix-popover-content-available-width) p-3" aria-label="Advanced filter">
+      <PopoverContent
+        className="w-180 max-w-(--radix-popover-content-available-width) p-3"
+        aria-label="Advanced filter"
+      >
         <form
           className="flex flex-col gap-3"
           onSubmit={(e) => {
@@ -454,7 +536,10 @@ export function QueryBuilder({ spec, filter, onApply, serverIssues = [] }: Query
           noValidate
         >
           {serverIssues.length > 0 && (
-            <div role="alert" className="rounded-md border border-crit bg-crit-subtle px-3 py-2 text-sm text-fg">
+            <div
+              role="alert"
+              className="rounded-md border border-crit bg-crit-subtle px-3 py-2 text-sm text-fg"
+            >
               <p className="font-semibold">The service rejected this filter</p>
               <ul className="mt-1 list-disc pl-5 text-fg-2">
                 {serverIssues.map((m) => (
@@ -465,7 +550,11 @@ export function QueryBuilder({ spec, filter, onApply, serverIssues = [] }: Query
           )}
           <div className="flex items-center gap-2 text-sm text-fg-2">
             Rows match
-            <JoinSelect label="Match all or any conditions" value={draft.join} onChange={(join) => setDraft((d) => ({ ...d, join }))} />
+            <JoinSelect
+              label="Match all or any conditions"
+              value={draft.join}
+              onChange={(join) => setDraft((d) => ({ ...d, join }))}
+            />
             of these conditions
           </div>
           <ol className="flex flex-col gap-2" aria-label="Conditions">
@@ -475,7 +564,11 @@ export function QueryBuilder({ spec, filter, onApply, serverIssues = [] }: Query
                   <div className="mb-2 flex items-center justify-between gap-2">
                     <div className="flex items-center gap-2 text-sm text-fg-2">
                       Group: match
-                      <JoinSelect label={`Group ${i + 1}: match all or any`} value={item.join} onChange={(join) => setItem(i, { ...item, join })} />
+                      <JoinSelect
+                        label={`Group ${i + 1}: match all or any`}
+                        value={item.join}
+                        onChange={(join) => setItem(i, { ...item, join })}
+                      />
                       of
                     </div>
                     <Button size="sm" intent="ghost" onClick={() => removeItem(i)}>
@@ -490,12 +583,20 @@ export function QueryBuilder({ spec, filter, onApply, serverIssues = [] }: Query
                         c={c}
                         label={`Group ${i + 1} condition ${j + 1}`}
                         problem={problemFor(`${i}.${j}`)}
-                        onChange={(next) => setItem(i, { ...item, items: item.items.map((x, k) => (k === j ? next : x)) })}
+                        onChange={(next) =>
+                          setItem(i, { ...item, items: item.items.map((x, k) => (k === j ? next : x)) })
+                        }
                         onRemove={() => setItem(i, { ...item, items: item.items.filter((_, k) => k !== j) })}
                       />
                     ))}
                   </ol>
-                  <Button size="sm" intent="ghost" className="mt-2" disabled={full} onClick={() => setItem(i, { ...item, items: [...item.items, blankCondition(spec)] })}>
+                  <Button
+                    size="sm"
+                    intent="ghost"
+                    className="mt-2"
+                    disabled={full}
+                    onClick={() => setItem(i, { ...item, items: [...item.items, blankCondition(spec)] })}
+                  >
                     <PlusIcon size={13} aria-hidden />
                     Add condition to group
                   </Button>
@@ -520,7 +621,12 @@ export function QueryBuilder({ spec, filter, onApply, serverIssues = [] }: Query
           ))}
           <div className="flex items-center justify-between gap-2 border-t border-line pt-3">
             <div className="flex gap-1">
-              <Button size="sm" intent="ghost" disabled={full} onClick={() => setDraft((d) => ({ ...d, items: [...d.items, blankCondition(spec)] }))}>
+              <Button
+                size="sm"
+                intent="ghost"
+                disabled={full}
+                onClick={() => setDraft((d) => ({ ...d, items: [...d.items, blankCondition(spec)] }))}
+              >
                 <PlusIcon size={13} aria-hidden />
                 Add condition
               </Button>
@@ -528,7 +634,19 @@ export function QueryBuilder({ spec, filter, onApply, serverIssues = [] }: Query
                 size="sm"
                 intent="ghost"
                 disabled={full}
-                onClick={() => setDraft((d) => ({ ...d, items: [...d.items, { kind: 'group', join: d.join === 'all' ? 'any' : 'all', items: [blankCondition(spec)] }] }))}
+                onClick={() =>
+                  setDraft((d) => ({
+                    ...d,
+                    items: [
+                      ...d.items,
+                      {
+                        kind: 'group',
+                        join: d.join === 'all' ? 'any' : 'all',
+                        items: [blankCondition(spec)],
+                      },
+                    ],
+                  }))
+                }
               >
                 <PlusIcon size={13} aria-hidden />
                 Add group

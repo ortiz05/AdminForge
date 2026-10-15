@@ -17,16 +17,24 @@ export interface SecretSpec {
   paths: string[][];
 }
 
-export const isSecretMarker = (v: unknown): v is SecretMarker => !!v && typeof v === 'object' && (v as { $secret?: unknown }).$secret === true;
+export const isSecretMarker = (v: unknown): v is SecretMarker =>
+  !!v && typeof v === 'object' && (v as { $secret?: unknown }).$secret === true;
 
 /** The secret spec of a step (null when it declares none). */
-export function secretSpec(step: { secret?: boolean | undefined; secretOutputs?: string[] | undefined }): SecretSpec | null {
-  const paths = [...(step.secret ? [[] as string[]] : []), ...(step.secretOutputs ?? []).map((p) => p.split('.'))];
+export function secretSpec(step: {
+  secret?: boolean | undefined;
+  secretOutputs?: string[] | undefined;
+}): SecretSpec | null {
+  const paths = [
+    ...(step.secret ? [[] as string[]] : []),
+    ...(step.secretOutputs ?? []).map((p) => p.split('.')),
+  ];
   return paths.length ? { paths } : null;
 }
 
 export function secretHint(value: unknown): string {
-  if (typeof value === 'string') return value.length >= 20 ? `…${value.slice(-4)}` : `${value.length} characters`;
+  if (typeof value === 'string')
+    return value.length >= 20 ? `…${value.slice(-4)}` : `${value.length} characters`;
   if (Array.isArray(value)) return `${value.length} items`;
   if (value && typeof value === 'object') return 'object';
   return typeof value;
@@ -42,7 +50,8 @@ export interface ExtractedSecrets {
   hints: Record<string, string>;
 }
 
-const isPlainObject = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
+const isPlainObject = (v: unknown): v is Record<string, unknown> =>
+  !!v && typeof v === 'object' && !Array.isArray(v);
 
 /** Splits an output into its masked form and the secret values at the declared paths (null/undefined values are not secrets). */
 export function extractSecrets(output: unknown, spec: SecretSpec | null): ExtractedSecrets {
@@ -69,7 +78,8 @@ export function extractSecrets(output: unknown, spec: SecretSpec | null): Extrac
     const [head, ...rest] = segs as [string, ...string[]];
     if (Array.isArray(node)) {
       const indexes = head === '*' ? node.map((_, i) => i) : /^\d+$/.test(head) ? [Number(head)] : [];
-      for (const i of indexes) if (i < node.length) walk(node[i], rest, [...at, String(i)], (v) => (node[i] = v));
+      for (const i of indexes)
+        if (i < node.length) walk(node[i], rest, [...at, String(i)], (v) => (node[i] = v));
     } else if (isPlainObject(node)) {
       const keys = head === '*' ? Object.keys(node) : Object.hasOwn(node, head) ? [head] : [];
       for (const k of keys) walk(node[k], rest, [...at, k], (v) => (node[k] = v));

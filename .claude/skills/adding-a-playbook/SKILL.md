@@ -6,11 +6,13 @@ description: Use when asked to add or change an AdminForge action, playbook, run
 # Adding a playbook or runbook
 
 ## Overview
+
 Write actions are playbooks: YAML in `portal/content/playbooks/<section>/`, executed by `@adminforge/engine` with the
 engineer's delegated identity (Write app, only while armed). Runbooks (`runbooks/`) are guided procedures that mix
 Markdown sections, manual steps and executable steps.
 
 ## Steps
+
 1. **Reuse first.** `rg "^id:" portal/content/playbooks` — prefer extending an existing playbook (add a guard step,
    bump `version`) over a near-duplicate. Call another playbook with a `type: playbook` step.
 2. **Scaffold:** `pnpm adminforge new playbook <section>/<name>` (or `new runbook …`).
@@ -32,10 +34,11 @@ Markdown sections, manual steps and executable steps.
 11. **Validate live only on `AF-Test-*` objects** (see validating-against-a-tenant): dry run, then run, then compensate.
 
 ## Common mistakes
-| Mistake | Fix |
-|---|---|
-| Write step without `describe` / undeclared POST mode | Schema rejects it — describe what changes, in plain words |
-| No precondition read → acts on stale data | `graph` read + `assert` before the write |
-| Secret in `outputs` or logs | `secretOutputs`; it's delivered once to the initiator |
-| New write scope not on the Write app | Add to provisioning desired state, `pnpm adminforge provision entra`, record in docs |
-| Bulk flow as a custom loop | Page `bulkActions` with `forEach.inputs` — one child run per item |
+
+| Mistake                                              | Fix                                                                                  |
+| ---------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| Write step without `describe` / undeclared POST mode | Schema rejects it — describe what changes, in plain words                            |
+| No precondition read → acts on stale data            | `graph` read + `assert` before the write                                             |
+| Secret in `outputs` or logs                          | `secretOutputs`; it's delivered once to the initiator                                |
+| New write scope not on the Write app                 | Add to provisioning desired state, `pnpm adminforge provision entra`, record in docs |
+| Bulk flow as a custom loop                           | Page `bulkActions` with `forEach.inputs` — one child run per item                    |

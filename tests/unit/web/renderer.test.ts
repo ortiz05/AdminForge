@@ -1,8 +1,25 @@
 import type { Params } from '@adminforge/schemas';
-import { featureKeyFor, loadDatasource, type Capabilities, type PageDefinition } from '@adminforge/web/src/renderer/api';
+import {
+  featureKeyFor,
+  loadDatasource,
+  type Capabilities,
+  type PageDefinition,
+} from '@adminforge/web/src/renderer/api';
 import { fileNameFrom } from '@adminforge/web/src/renderer/ExportMenu';
-import { activeBlocks, licenceState, neededDatasources, tableColumns, withIds } from '@adminforge/web/src/renderer/page-model';
-import { coerceParam, isDefault, isNeutralOption, paramsToSearch, resolveParams } from '@adminforge/web/src/renderer/params';
+import {
+  activeBlocks,
+  licenceState,
+  neededDatasources,
+  tableColumns,
+  withIds,
+} from '@adminforge/web/src/renderer/page-model';
+import {
+  coerceParam,
+  isDefault,
+  isNeutralOption,
+  paramsToSearch,
+  resolveParams,
+} from '@adminforge/web/src/renderer/params';
 import {
   pageSearch,
   readInspect,
@@ -15,14 +32,30 @@ import {
   withoutInspect,
 } from '@adminforge/web/src/renderer/url-state';
 import { sameState } from '@adminforge/web/src/renderer/ViewsMenu';
-import { advancedParamOf, countConditions, decodeFilter, draftFromWire, draftToWire, encodeFilter, paramIssues, placeServerIssues } from '@adminforge/web/src/renderer/QueryBuilder';
+import {
+  advancedParamOf,
+  countConditions,
+  decodeFilter,
+  draftFromWire,
+  draftToWire,
+  encodeFilter,
+  paramIssues,
+  placeServerIssues,
+} from '@adminforge/web/src/renderer/QueryBuilder';
 import { contentKeyOf, splitHref } from '@adminforge/web/src/lib/links';
 import { requiresText } from '@adminforge/web/src/app/NavRail';
 
 const PARAMS: Params = {
   q: { type: 'string', default: '' },
   userType: { type: 'enum', values: ['All', 'Member', 'Guest'], default: 'All', facet: true },
-  days: { type: 'enum', values: [{ value: 30, label: '30 days' }, { value: 90, label: '90 days' }], default: 30 },
+  days: {
+    type: 'enum',
+    values: [
+      { value: 30, label: '30 days' },
+      { value: 90, label: '90 days' },
+    ],
+    default: 30,
+  },
   includeExpired: { type: 'boolean', default: true },
   top: { type: 'number', min: 1, max: 999 },
   id: { type: 'guid', hidden: true },
@@ -38,18 +71,32 @@ describe('page params ↔ URL', () => {
     expect(coerceParam(PARAMS.id!, 'not-a-guid')[1]).toMatch(/GUID/);
     expect(coerceParam(PARAMS.userType!, 'Robot')[1]).toMatch(/not one of/);
     expect(coerceParam(PARAMS.tags!, 'a,c')).toEqual([['a', 'c']]);
-    expect(coerceParam(PARAMS.when!, { from: '2026-10-01', to: '2026-10-02' })).toEqual([{ from: '2026-10-01', to: '2026-10-02' }]);
+    expect(coerceParam(PARAMS.when!, { from: '2026-10-01', to: '2026-10-02' })).toEqual([
+      { from: '2026-10-01', to: '2026-10-02' },
+    ]);
   });
 
   it('resolves display values (with literal defaults) apart from what is sent to the BFF', () => {
     const r = resolveParams(PARAMS, { userType: 'Guest', days: 'x', top: 50 });
-    expect(r.values).toMatchObject({ q: '', userType: 'Guest', days: 30, includeExpired: true, top: 50, when: 'P7D' });
+    expect(r.values).toMatchObject({
+      q: '',
+      userType: 'Guest',
+      days: 30,
+      includeExpired: true,
+      top: 50,
+      when: 'P7D',
+    });
     expect(r.send).toEqual({ userType: 'Guest', top: 50 });
     expect(Object.keys(r.issues)).toEqual(['days']);
   });
 
   it('drops defaults and blanks from the URL', () => {
-    expect(paramsToSearch(PARAMS, { userType: 'All', days: 90, q: '', tags: [] })).toEqual({ userType: undefined, days: 90, q: undefined, tags: undefined });
+    expect(paramsToSearch(PARAMS, { userType: 'All', days: 90, q: '', tags: [] })).toEqual({
+      userType: undefined,
+      days: 90,
+      q: undefined,
+      tags: undefined,
+    });
     expect(isDefault(PARAMS.days!, '30')).toBe(true);
     expect(isNeutralOption(PARAMS.userType!, 'All')).toBe(true);
     expect(isNeutralOption(PARAMS.days!, 30)).toBe(false);
@@ -57,16 +104,25 @@ describe('page params ↔ URL', () => {
 });
 
 describe('table state ↔ URL', () => {
-  const cols = { all: ['displayName', 'userType', 'jobTitle', 'id'], visible: ['displayName', 'userType', 'jobTitle'] };
+  const cols = {
+    all: ['displayName', 'userType', 'jobTitle', 'id'],
+    visible: ['displayName', 'userType', 'jobTitle'],
+  };
 
   it('round-trips sort, visible columns + order, density, search and client filters', () => {
     const view = {
-      sorting: [{ id: 'displayName', desc: true }, { id: 'userType', desc: false }],
+      sorting: [
+        { id: 'displayName', desc: true },
+        { id: 'userType', desc: false },
+      ],
       columnOrder: ['userType', 'displayName', 'jobTitle', 'id'],
       columnVisibility: { jobTitle: false, id: true },
       density: 'compact' as const,
       globalFilter: 'lee',
-      columnFilters: [{ id: 'userType', value: ['Guest'] }, { id: 'lastSignIn', value: 'older:90d' }],
+      columnFilters: [
+        { id: 'userType', value: ['Guest'] },
+        { id: 'lastSignIn', value: 'older:90d' },
+      ],
     };
     const patch = tableViewToSearch('users', view, cols);
     expect(patch).toEqual({
@@ -95,14 +151,27 @@ describe('table state ↔ URL', () => {
   });
 
   it('splits the search into page params, table keys and reserved keys', () => {
-    const search = { userType: 'Guest', 'users.sort': 'displayName', view: 'v1', tab: 'groups', inspect: 'page:identity.user', 'i.id': 'x', playbook: 'identity.disable-user' };
+    const search = {
+      userType: 'Guest',
+      'users.sort': 'displayName',
+      view: 'v1',
+      tab: 'groups',
+      inspect: 'page:identity.user',
+      'i.id': 'x',
+      playbook: 'identity.disable-user',
+    };
     expect(pageSearch(search)).toEqual({ userType: 'Guest' });
     expect(tableSearch(search)).toEqual({ 'users.sort': 'displayName' });
     expect(tableNamespaces(search)).toEqual(['users']);
   });
 
   it('sanitises the generic search object', () => {
-    const out = sanitizeSearch({ a: 'x'.repeat(70_000), b: [1, 'two', { no: true }], c: { from: 'a', to: 'b' }, d: null });
+    const out = sanitizeSearch({
+      a: 'x'.repeat(70_000),
+      b: [1, 'two', { no: true }],
+      c: { from: 'a', to: 'b' },
+      d: null,
+    });
     expect((out.a as string).length).toBe(64 * 1024);
     expect(out.b).toEqual([1, 'two']);
     expect(out.c).toEqual({ from: 'a', to: 'b' });
@@ -123,7 +192,15 @@ describe('inspector URL', () => {
 });
 
 const def = (over: Partial<PageDefinition>): PageDefinition =>
-  ({ kind: 'page', id: 'test.page', version: '1.0.0', title: 'Test', owner: 'x', template: 'list-detail', ...over }) as PageDefinition;
+  ({
+    kind: 'page',
+    id: 'test.page',
+    version: '1.0.0',
+    title: 'Test',
+    owner: 'x',
+    template: 'list-detail',
+    ...over,
+  }) as PageDefinition;
 
 describe('page model', () => {
   it('requests only the datasources the visible blocks and templates use', () => {
@@ -140,7 +217,12 @@ describe('page model', () => {
       { widget: 'kpi', data: 'counts.members', delta: 'delta.members', label: 'M' },
       { widget: 'table', data: 'users.value', columns: [{ field: 'a', label: 'A' }] },
     ];
-    expect(neededDatasources(d, [blocks, { title: '${ profile.displayName }' }])).toEqual(['users', 'counts', 'delta', 'profile']);
+    expect(neededDatasources(d, [blocks, { title: '${ profile.displayName }' }])).toEqual([
+      'users',
+      'counts',
+      'delta',
+      'profile',
+    ]);
   });
 
   it('picks the active tab and gives blocks stable ids', () => {
@@ -148,13 +230,28 @@ describe('page model', () => {
       template: 'entity',
       tabs: [
         { id: 'overview', label: 'Overview', layout: [{ widget: 'markdown', text: 'a' }] },
-        { id: 'groups', label: 'Groups', layout: [{ widget: 'table', data: 'g.value', columns: [{ field: 'displayName', label: 'Group' }, { field: 'id', label: 'Id', hidden: true }] }] },
+        {
+          id: 'groups',
+          label: 'Groups',
+          layout: [
+            {
+              widget: 'table',
+              data: 'g.value',
+              columns: [
+                { field: 'displayName', label: 'Group' },
+                { field: 'id', label: 'Id', hidden: true },
+              ],
+            },
+          ],
+        },
       ],
     });
     expect(activeBlocks(d, undefined).tab).toBe('overview');
     const groups = activeBlocks(d, 'groups');
     expect(groups.blocks[0]!.id).toBe('groups_table0');
-    expect(tableColumns(groups.blocks)).toEqual({ groups_table0: { all: ['displayName', 'id'], visible: ['displayName'] } });
+    expect(tableColumns(groups.blocks)).toEqual({
+      groups_table0: { all: ['displayName', 'id'], visible: ['displayName'] },
+    });
     expect(withIds([{ widget: 'kpi', id: 'mine' }])[0]!.id).toBe('mine');
   });
 
@@ -166,8 +263,12 @@ describe('page model', () => {
         pim: { available: null, label: 'PIM' },
       },
     };
-    expect(licenceState(def({ requires: { licences: ['intune'] } }), caps).missing.map((m) => m.key)).toEqual(['intune']);
-    expect(licenceState(def({ requires: { licences: ['INTUNE_A'] } }), caps).missing.map((m) => m.key)).toEqual(['intune']);
+    expect(licenceState(def({ requires: { licences: ['intune'] } }), caps).missing.map((m) => m.key)).toEqual(
+      ['intune'],
+    );
+    expect(
+      licenceState(def({ requires: { licences: ['INTUNE_A'] } }), caps).missing.map((m) => m.key),
+    ).toEqual(['intune']);
     expect(licenceState(def({ requires: { licences: ['intune', 'signInLogs'] } }), caps).missing).toEqual([]);
     expect(licenceState(def({ requires: { licences: ['pim'] } }), caps).missing).toEqual([]);
     expect(licenceState(def({ requires: { licences: ['SOMETHING_ELSE'] } }), caps).missing).toEqual([]);
@@ -185,7 +286,16 @@ describe('BFF calls', () => {
       return new Response(
         JSON.stringify({
           results: Object.fromEntries(
-            body.datasources.map((d) => [d, d === 'bad' ? { error: { code: 'forbidden', message: 'No.' } } : { data: { value: [d] }, provenance: { service: 'graph', path: `/${d}`, ms: 5 }, cursor: d === 'a' ? 'next' : undefined }]),
+            body.datasources.map((d) => [
+              d,
+              d === 'bad'
+                ? { error: { code: 'forbidden', message: 'No.' } }
+                : {
+                    data: { value: [d] },
+                    provenance: { service: 'graph', path: `/${d}`, ms: 5 },
+                    cursor: d === 'a' ? 'next' : undefined,
+                  },
+            ]),
           ),
         }),
         { status: 200, headers: { 'content-type': 'application/json' } },
@@ -198,7 +308,12 @@ describe('BFF calls', () => {
       loadDatasource('test.page', '1.0.0', { x: 1 }, 'bad'),
     ]);
     expect(fetch).toHaveBeenCalledTimes(1);
-    expect(JSON.parse(String(fetch.mock.calls[0]![1]!.body))).toEqual({ page: 'test.page', version: '1.0.0', datasources: ['a', 'b', 'bad'], params: { x: 1 } });
+    expect(JSON.parse(String(fetch.mock.calls[0]![1]!.body))).toEqual({
+      page: 'test.page',
+      version: '1.0.0',
+      datasources: ['a', 'b', 'bad'],
+      params: { x: 1 },
+    });
     expect(a).toMatchObject({ data: { value: ['a'] }, cursor: 'next', provenance: { path: '/a' } });
     expect(b.cursor).toBeUndefined();
     expect(bad.error).toMatchObject({ code: 'forbidden', message: 'No.' });
@@ -207,18 +322,26 @@ describe('BFF calls', () => {
 
 describe('small helpers', () => {
   it('reads export file names from Content-Disposition', () => {
-    expect(fileNameFrom(`attachment; filename="users.csv"; filename*=UTF-8''users%20(1).csv`)).toBe('users (1).csv');
+    expect(fileNameFrom(`attachment; filename="users.csv"; filename*=UTF-8''users%20(1).csv`)).toBe(
+      'users (1).csv',
+    );
     expect(fileNameFrom('attachment; filename="report.xlsx"')).toBe('report.xlsx');
     expect(fileNameFrom(null)).toBeUndefined();
   });
 
   it('compares saved-view states ignoring key order and blanks', () => {
     expect(sameState({ params: { a: 1, b: '' }, table: {} }, { params: { a: 1 }, table: {} })).toBe(true);
-    expect(sameState({ params: { a: 1 }, table: { 'u.sort': 'x' } }, { params: { a: 1 }, table: {} })).toBe(false);
+    expect(sameState({ params: { a: 1 }, table: { 'u.sort': 'x' } }, { params: { a: 1 }, table: {} })).toBe(
+      false,
+    );
   });
 
   it('splits hrefs and recognises content pages', () => {
-    expect(splitHref('/p/identity.users?userType=Guest&days=30#x')).toEqual({ pathname: '/p/identity.users', search: { userType: 'Guest', days: 30 }, hash: 'x' });
+    expect(splitHref('/p/identity.users?userType=Guest&days=30#x')).toEqual({
+      pathname: '/p/identity.users',
+      search: { userType: 'Guest', days: 30 },
+      hash: 'x',
+    });
     expect(contentKeyOf('/p/identity.users')).toBe('identity.users');
     expect(contentKeyOf('/runs')).toBeNull();
   });
@@ -235,15 +358,51 @@ describe('advanced filter (structured, compiled by the BFF)', () => {
   const spec = {
     dialect: 'odata' as const,
     fields: [
-      { field: 'department', label: 'Department', type: 'string' as const, operators: ['eq' as const, 'startsWith' as const, 'isEmpty' as const] },
-      { field: 'createdDateTime', label: 'Created', type: 'date' as const, operators: ['ge' as const, 'le' as const] },
-      { field: 'onPremisesSyncEnabled', label: 'Synced', type: 'boolean' as const, operators: ['eq' as const] },
-      { field: 'profileType', label: 'Profile type', type: 'enum' as const, values: ['RegisteredDevice', 'Printer'] },
-      { field: 'tagCount', label: 'Tags', type: 'number' as const, operators: ['eq' as const, 'lt' as const, 'gt' as const] },
-      { field: 'subscriptionId', label: 'Subscription', type: 'guid' as const, operators: ['eq' as const, 'in' as const] },
+      {
+        field: 'department',
+        label: 'Department',
+        type: 'string' as const,
+        operators: ['eq' as const, 'startsWith' as const, 'isEmpty' as const],
+      },
+      {
+        field: 'createdDateTime',
+        label: 'Created',
+        type: 'date' as const,
+        operators: ['ge' as const, 'le' as const],
+      },
+      {
+        field: 'onPremisesSyncEnabled',
+        label: 'Synced',
+        type: 'boolean' as const,
+        operators: ['eq' as const],
+      },
+      {
+        field: 'profileType',
+        label: 'Profile type',
+        type: 'enum' as const,
+        values: ['RegisteredDevice', 'Printer'],
+      },
+      {
+        field: 'tagCount',
+        label: 'Tags',
+        type: 'number' as const,
+        operators: ['eq' as const, 'lt' as const, 'gt' as const],
+      },
+      {
+        field: 'subscriptionId',
+        label: 'Subscription',
+        type: 'guid' as const,
+        operators: ['eq' as const, 'in' as const],
+      },
     ],
   };
-  const cond = (field: string, op: string, text = '', picks: string[] = []) => ({ kind: 'condition' as const, field, op: op as never, text, picks });
+  const cond = (field: string, op: string, text = '', picks: string[] = []) => ({
+    kind: 'condition' as const,
+    field,
+    op: op as never,
+    text,
+    picks,
+  });
 
   it('uses filters.advanced.param, defaulting to adv', () => {
     expect(advancedParamOf(spec)).toBe('adv');
@@ -258,8 +417,19 @@ describe('advanced filter (structured, compiled by the BFF)', () => {
         cond('createdDateTime', 'ge', '-30d'),
         cond('onPremisesSyncEnabled', 'eq', '', ['true']),
         cond('department', 'isEmpty'),
-        { kind: 'group', join: 'any', items: [cond('profileType', 'in', '', ['Printer', 'RegisteredDevice']), cond('tagCount', 'lt', '3')] },
-        cond('subscriptionId', 'in', '0A1B2C3D-0000-4000-8000-000000000001, 0a1b2c3d-0000-4000-8000-000000000002'),
+        {
+          kind: 'group',
+          join: 'any',
+          items: [
+            cond('profileType', 'in', '', ['Printer', 'RegisteredDevice']),
+            cond('tagCount', 'lt', '3'),
+          ],
+        },
+        cond(
+          'subscriptionId',
+          'in',
+          '0A1B2C3D-0000-4000-8000-000000000001, 0a1b2c3d-0000-4000-8000-000000000002',
+        ),
       ],
     });
     expect(r.problems).toEqual({ byCondition: {}, general: [] });
@@ -269,8 +439,17 @@ describe('advanced filter (structured, compiled by the BFF)', () => {
         { field: 'createdDateTime', op: 'ge', value: '-30d' },
         { field: 'onPremisesSyncEnabled', op: 'eq', value: true },
         { field: 'department', op: 'isEmpty' },
-        { any: [{ field: 'profileType', op: 'in', value: ['Printer', 'RegisteredDevice'] }, { field: 'tagCount', op: 'lt', value: 3 }] },
-        { field: 'subscriptionId', op: 'in', value: ['0a1b2c3d-0000-4000-8000-000000000001', '0a1b2c3d-0000-4000-8000-000000000002'] },
+        {
+          any: [
+            { field: 'profileType', op: 'in', value: ['Printer', 'RegisteredDevice'] },
+            { field: 'tagCount', op: 'lt', value: 3 },
+          ],
+        },
+        {
+          field: 'subscriptionId',
+          op: 'in',
+          value: ['0a1b2c3d-0000-4000-8000-000000000001', '0a1b2c3d-0000-4000-8000-000000000002'],
+        },
       ],
     });
   });
@@ -289,14 +468,31 @@ describe('advanced filter (structured, compiled by the BFF)', () => {
     expect(r.filter).toBeUndefined();
     expect(Object.keys(r.problems.byCondition)).toEqual(['0', '1', '2', '3', '4.0']);
     expect(r.problems.byCondition['3']).toMatch(/doesn’t support/);
-    const many = draftToWire(spec, { join: 'all', items: Array.from({ length: 21 }, () => cond('department', 'eq', 'a')) });
+    const many = draftToWire(spec, {
+      join: 'all',
+      items: Array.from({ length: 21 }, () => cond('department', 'eq', 'a')),
+    });
     expect(many.problems.general).toEqual(['Use at most 20 conditions.']);
-    const tooManyValues = draftToWire(spec, { join: 'all', items: [cond('subscriptionId', 'in', Array.from({ length: 51 }, () => '0a1b2c3d-0000-4000-8000-000000000001').join(','))] });
+    const tooManyValues = draftToWire(spec, {
+      join: 'all',
+      items: [
+        cond(
+          'subscriptionId',
+          'in',
+          Array.from({ length: 51 }, () => '0a1b2c3d-0000-4000-8000-000000000001').join(','),
+        ),
+      ],
+    });
     expect(tooManyValues.problems.byCondition['0']).toMatch(/at most 50/);
   });
 
   it('round-trips through the URL (base64url JSON) and back into the form', () => {
-    const filter = { any: [{ field: 'department', op: 'eq' as const, value: 'Ünïcode & co' }, { all: [{ field: 'tagCount', op: 'gt' as const, value: 2 }] }] };
+    const filter = {
+      any: [
+        { field: 'department', op: 'eq' as const, value: 'Ünïcode & co' },
+        { all: [{ field: 'tagCount', op: 'gt' as const, value: 2 }] },
+      ],
+    };
     const encoded = encodeFilter(filter);
     expect(encoded).toMatch(/^[A-Za-z0-9_-]+$/);
     expect(decodeFilter(encoded)).toEqual(filter);
@@ -306,7 +502,11 @@ describe('advanced filter (structured, compiled by the BFF)', () => {
     expect(countConditions(filter)).toBe(2);
     const draft = draftFromWire(spec, filter);
     expect(draft.join).toBe('any');
-    expect(draft.items[1]).toMatchObject({ kind: 'group', join: 'all', items: [{ field: 'tagCount', op: 'gt', text: '2' }] });
+    expect(draft.items[1]).toMatchObject({
+      kind: 'group',
+      join: 'all',
+      items: [{ field: 'tagCount', op: 'gt', text: '2' }],
+    });
     expect(draftToWire(spec, draft).filter).toEqual(filter);
   });
 
@@ -314,7 +514,11 @@ describe('advanced filter (structured, compiled by the BFF)', () => {
     const message =
       'Invalid parameters: adv: createdDateTime ge: expects an ISO date or today, now, -30d; adv: unknown field "x"; userType: is not one of All, Member, Guest; adv: is not a valid filter (root: bad; all.0: worse)';
     expect(paramIssues(message, ['userType', 'adv'])).toEqual({
-      adv: ['createdDateTime ge: expects an ISO date or today, now, -30d', 'unknown field "x"', 'is not a valid filter (root: bad; all.0: worse)'],
+      adv: [
+        'createdDateTime ge: expects an ISO date or today, now, -30d',
+        'unknown field "x"',
+        'is not a valid filter (root: bad; all.0: worse)',
+      ],
       userType: ['is not one of All, Member, Guest'],
     });
   });
@@ -326,10 +530,27 @@ describe('server issues next to their conditions', () => {
       join: 'all' as const,
       items: [
         { kind: 'condition' as const, field: 'department', op: 'eq' as const, text: 'x', picks: [] },
-        { kind: 'group' as const, join: 'any' as const, items: [{ kind: 'condition' as const, field: 'createdDateTime', op: 'ge' as const, text: 'soon', picks: [] }] },
+        {
+          kind: 'group' as const,
+          join: 'any' as const,
+          items: [
+            {
+              kind: 'condition' as const,
+              field: 'createdDateTime',
+              op: 'ge' as const,
+              text: 'soon',
+              picks: [],
+            },
+          ],
+        },
       ],
     };
-    expect(placeServerIssues(draft, ['createdDateTime ge: expects an ISO date or today, now, -30d', 'unknown field "nope"'])).toEqual({
+    expect(
+      placeServerIssues(draft, [
+        'createdDateTime ge: expects an ISO date or today, now, -30d',
+        'unknown field "nope"',
+      ]),
+    ).toEqual({
       byCondition: { '1.0': 'Expects an ISO date or today, now, -30d' },
       general: ['unknown field "nope"'],
     });

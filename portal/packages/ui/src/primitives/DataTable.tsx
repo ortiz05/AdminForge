@@ -491,7 +491,11 @@ const resolveUpdater = <V,>(updater: V | ((old: V) => V), old: V): V =>
   typeof updater === 'function' ? (updater as (old: V) => V)(old) : updater;
 
 /** Reads `--af-table-row-h` from the table itself, so a per-table density takes effect. */
-function useRowHeight(element: HTMLElement | null, density: TableDensity | undefined, fallback: number): number {
+function useRowHeight(
+  element: HTMLElement | null,
+  density: TableDensity | undefined,
+  fallback: number,
+): number {
   const htmlDensity = useHtmlAttribute('data-density');
   return useMemo(() => {
     if (typeof document === 'undefined') return fallback;
@@ -923,9 +927,7 @@ export function DataTable<T extends RowData>({
                           key={c.id}
                           checked={columnVisibility[c.id] !== false}
                           disabled={visibleColumns.length === 1 && columnVisibility[c.id] !== false}
-                          onCheckedChange={(on) =>
-                            setColumnVisibility((v) => ({ ...v, [c.id]: on }))
-                          }
+                          onCheckedChange={(on) => setColumnVisibility((v) => ({ ...v, [c.id]: on }))}
                           onSelect={(e) => e.preventDefault()}
                         >
                           {c.header}

@@ -2,9 +2,17 @@ import type { KpiConfig } from './schema';
 
 /** Story data for the kpi widget. */
 export const kpiFixtures = {
-  members: { config: { widget: 'kpi', data: 'counts.members', label: 'Members' } satisfies KpiConfig, value: 12408 },
+  members: {
+    config: { widget: 'kpi', data: 'counts.members', label: 'Members' } satisfies KpiConfig,
+    value: 12408,
+  },
   disabled: {
-    config: { widget: 'kpi', data: 'counts.disabled', label: 'Disabled', status: "${ value > 0 ? 'warn' : 'ok' }" } satisfies KpiConfig,
+    config: {
+      widget: 'kpi',
+      data: 'counts.disabled',
+      label: 'Disabled',
+      status: "${ value > 0 ? 'warn' : 'ok' }",
+    } satisfies KpiConfig,
     value: 23,
   },
   noMfa: {

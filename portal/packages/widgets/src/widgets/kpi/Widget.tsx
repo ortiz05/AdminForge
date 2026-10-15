@@ -31,7 +31,11 @@ export function KpiWidget({ config, data, runtime, variant = 'tile' }: WidgetPro
   const scope = useMemo(() => ({ ...runtime.scope, value }), [runtime.scope, value]);
   const ready = data.status === 'ready';
   const status = useTemplate<unknown>(config.status, scope, ready && config.status !== undefined);
-  const statusLabel = useTemplate<unknown>(config.statusLabel, scope, ready && config.statusLabel !== undefined);
+  const statusLabel = useTemplate<unknown>(
+    config.statusLabel,
+    scope,
+    ready && config.statusLabel !== undefined,
+  );
   const hint = useTemplate<unknown>(config.hint, scope, ready && config.hint !== undefined);
   const href = useTemplate<unknown>(config.href, scope, ready && config.href !== undefined);
 
@@ -41,7 +45,13 @@ export function KpiWidget({ config, data, runtime, variant = 'tile' }: WidgetPro
     data.status === 'error'
       ? { tone: 'neutral' as const, label: 'Unavailable' }
       : tone
-        ? { tone, label: typeof statusLabel.value === 'string' && statusLabel.value ? statusLabel.value : TONE_LABEL[tone] }
+        ? {
+            tone,
+            label:
+              typeof statusLabel.value === 'string' && statusLabel.value
+                ? statusLabel.value
+                : TONE_LABEL[tone],
+          }
         : undefined;
   const display =
     data.status === 'error'
@@ -55,7 +65,9 @@ export function KpiWidget({ config, data, runtime, variant = 'tile' }: WidgetPro
           : formatValue(value, config.format);
   const delta = ready && config.delta ? deltaOf(runtime.resolve(config.delta), config) : undefined;
   const trendRaw = ready && config.trend ? runtime.resolve(config.trend) : undefined;
-  const trend = Array.isArray(trendRaw) ? trendRaw.filter((n): n is number => typeof n === 'number') : undefined;
+  const trend = Array.isArray(trendRaw)
+    ? trendRaw.filter((n): n is number => typeof n === 'number')
+    : undefined;
 
   const kpi = (
     <Kpi
@@ -74,17 +86,17 @@ export function KpiWidget({ config, data, runtime, variant = 'tile' }: WidgetPro
       }
       loading={data.status === 'loading' || data.status === 'idle'}
       variant={variant === 'cell' ? 'cell' : 'tile'}
-      className={cn(variant !== 'cell' && 'h-full', config.href && 'transition-colors duration-(--af-motion-fast) group-hover:bg-hover')}
+      className={cn(
+        variant !== 'cell' && 'h-full',
+        config.href && 'transition-colors duration-(--af-motion-fast) group-hover:bg-hover',
+      )}
     />
   );
   const target = typeof href.value === 'string' && href.value ? href.value : undefined;
   if (!target) return kpi;
   const L = runtime.Link;
   return (
-    <L
-      href={target}
-      className="group block h-full -outline-offset-2"
-    >
+    <L href={target} className="group block h-full -outline-offset-2">
       <span className="sr-only">Open {config.label}: </span>
       {kpi}
     </L>

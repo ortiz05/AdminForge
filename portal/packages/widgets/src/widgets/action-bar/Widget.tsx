@@ -11,7 +11,13 @@ export function ActionBarWidget({ config, runtime }: WidgetProps<ActionBarConfig
     <div role="group" aria-label={config.title ?? 'Actions'} className="flex flex-wrap items-center gap-2">
       {config.title && <span className="af-eyebrow mr-2">{config.title}</span>}
       {config.actions.map((a, i) => (
-        <ActionButton key={`${a.playbook ?? a.href}-${i}`} action={a} scope={runtime.scope} runtime={runtime} intent="secondary" />
+        <ActionButton
+          key={`${a.playbook ?? a.href}-${i}`}
+          action={a}
+          scope={runtime.scope}
+          runtime={runtime}
+          intent="secondary"
+        />
       ))}
     </div>
   );

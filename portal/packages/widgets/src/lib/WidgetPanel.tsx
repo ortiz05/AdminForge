@@ -98,7 +98,9 @@ export function WidgetPanel({
       <EmptyState
         compact
         title={e?.title ?? emptyDefault.title}
-        action={e?.action && <ActionButton action={e.action} scope={runtime.scope} runtime={runtime} size="sm" />}
+        action={
+          e?.action && <ActionButton action={e.action} scope={runtime.scope} runtime={runtime} size="sm" />
+        }
       >
         {e?.body ?? emptyDefault.body}
       </EmptyState>

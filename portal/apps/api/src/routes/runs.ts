@@ -37,7 +37,13 @@ const Inputs = z.record(z.string(), z.unknown());
 /** "Preview then confirm": required for executions of playbooks with a confirm block (see RunService). */
 const Confirmation = { previewRunId: z.uuid().optional(), confirmation: z.string().max(500).optional() };
 
-export const CreateRunBody = z.object({ playbook: Key, version: Version.optional(), inputs: Inputs.default({}), dryRun: z.boolean().default(false), ...Confirmation });
+export const CreateRunBody = z.object({
+  playbook: Key,
+  version: Version.optional(),
+  inputs: Inputs.default({}),
+  dryRun: z.boolean().default(false),
+  ...Confirmation,
+});
 export const BulkRunBody = z.object({
   playbook: Key,
   version: Version.optional(),
@@ -48,8 +54,15 @@ export const BulkRunBody = z.object({
   stopOnError: z.boolean().optional(),
   ...Confirmation,
 });
-export const ApprovalBody = z.object({ decision: z.enum(['approve', 'reject']), comment: z.string().trim().max(2000).optional() });
-export const ManualBody = z.object({ confirmed: z.boolean(), notes: z.string().trim().max(4000).optional(), values: Inputs.optional() });
+export const ApprovalBody = z.object({
+  decision: z.enum(['approve', 'reject']),
+  comment: z.string().trim().max(2000).optional(),
+});
+export const ManualBody = z.object({
+  confirmed: z.boolean(),
+  notes: z.string().trim().max(4000).optional(),
+  values: Inputs.optional(),
+});
 
 const DateParam = z
   .string()
@@ -68,14 +81,22 @@ const ListQuery = z.object({
 
 function parseQuery<T extends z.ZodType>(schema: T, query: unknown): z.infer<T> {
   const r = schema.safeParse(query ?? {});
-  if (!r.success) throw new AppError(400, 'invalid_request', `The query is not valid. ${r.error.issues.map((i) => `${i.path.join('.') || 'query'}: ${i.message}`).join('; ')}`);
+  if (!r.success)
+    throw new AppError(
+      400,
+      'invalid_request',
+      `The query is not valid. ${r.error.issues.map((i) => `${i.path.join('.') || 'query'}: ${i.message}`).join('; ')}`,
+    );
   return r.data;
 }
 
 function statuses(raw: string | undefined): RunStatus[] | undefined {
   if (!raw) return undefined;
   const out = new Set<RunStatus>();
-  for (const s of raw.split(',').map((x) => x.trim()).filter(Boolean)) {
+  for (const s of raw
+    .split(',')
+    .map((x) => x.trim())
+    .filter(Boolean)) {
     if (s === 'active') RUN_STATUS_ACTIVE.forEach((x) => out.add(x));
     else if ((RUN_STATUSES as readonly string[]).includes(s)) out.add(s as RunStatus);
     else throw new AppError(400, 'invalid_request', `Unknown run status "${s}".`);
@@ -83,7 +104,11 @@ function statuses(raw: string | undefined): RunStatus[] | undefined {
   return [...out];
 }
 
-export const callerOf = (request: FastifyRequest): Caller => ({ session: requireSession(request), correlationId: request.id, ip: request.ip ?? null });
+export const callerOf = (request: FastifyRequest): Caller => ({
+  session: requireSession(request),
+  correlationId: request.id,
+  ip: request.ip ?? null,
+});
 
 export function runRoutes(api: FastifyInstance, _ctx: AppContext, runs: RunsModule) {
   const { service } = runs;
@@ -113,15 +138,20 @@ export function runRoutes(api: FastifyInstance, _ctx: AppContext, runs: RunsModu
     });
   });
 
-  api.get<{ Params: { id: string } }>('/runs/:id', async (request) => service.get(callerOf(request), request.params.id));
+  api.get<{ Params: { id: string } }>('/runs/:id', async (request) =>
+    service.get(callerOf(request), request.params.id),
+  );
 
-  api.get<{ Params: { id: string }; Querystring: { lastEventId?: string } }>('/runs/:id/events', async (request, reply) => {
-    const row = await service.assertViewable(callerOf(request), request.params.id);
-    const header = request.headers['last-event-id'];
-    const raw = (Array.isArray(header) ? header[0] : header) ?? request.query.lastEventId ?? '0';
-    const last = /^\d{1,15}$/.test(raw) ? Number(raw) : 0;
-    await streamRunEvents(request, reply, runs, row.id, last);
-  });
+  api.get<{ Params: { id: string }; Querystring: { lastEventId?: string } }>(
+    '/runs/:id/events',
+    async (request, reply) => {
+      const row = await service.assertViewable(callerOf(request), request.params.id);
+      const header = request.headers['last-event-id'];
+      const raw = (Array.isArray(header) ? header[0] : header) ?? request.query.lastEventId ?? '0';
+      const last = /^\d{1,15}$/.test(raw) ? Number(raw) : 0;
+      await streamRunEvents(request, reply, runs, row.id, last);
+    },
+  );
 
   // Show-once secret that was not delivered live: the first fetch by the initiator's session takes it. Consuming, so
   // the CSRF header is required even on GET (a cross-site navigation must not burn it).
@@ -131,9 +161,14 @@ export function runRoutes(api: FastifyInstance, _ctx: AppContext, runs: RunsModu
     const row = await service.assertViewable(caller, request.params.id);
     const secret = await runs.secrets.claim(row.id, request.params.stepPath, caller.session.idHash);
     if (!secret)
-      throw new AppError(404, 'secret_not_available', 'This secret is not available: it was already shown, it expired (5 minutes), or it belongs to another session.', {
-        hint: 'Secrets are shown once to the person who started the run. Run the playbook again to get a new one.',
-      });
+      throw new AppError(
+        404,
+        'secret_not_available',
+        'This secret is not available: it was already shown, it expired (5 minutes), or it belongs to another session.',
+        {
+          hint: 'Secrets are shown once to the person who started the run. Run the playbook again to get a new one.',
+        },
+      );
     return secret;
   });
 
@@ -148,10 +183,20 @@ export function runRoutes(api: FastifyInstance, _ctx: AppContext, runs: RunsModu
   });
 
   api.post<{ Params: { id: string; stepId: string } }>('/runs/:id/approvals/:stepId', async (request) =>
-    service.decideApproval(callerOf(request), request.params.id, request.params.stepId, parseBody(ApprovalBody, request.body)),
+    service.decideApproval(
+      callerOf(request),
+      request.params.id,
+      request.params.stepId,
+      parseBody(ApprovalBody, request.body),
+    ),
   );
 
   api.post<{ Params: { id: string; stepId: string } }>('/runs/:id/manual/:stepId', async (request) =>
-    service.confirmManual(callerOf(request), request.params.id, request.params.stepId, parseBody(ManualBody, request.body)),
+    service.confirmManual(
+      callerOf(request),
+      request.params.id,
+      request.params.stepId,
+      parseBody(ManualBody, request.body),
+    ),
   );
 }

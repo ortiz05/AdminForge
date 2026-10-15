@@ -11,7 +11,9 @@ export function healthRoutes(app: FastifyInstance, ctx: AppContext) {
     try {
       await ctx.database.ping();
     } catch {
-      throw new AppError(503, 'not_ready', 'The database is not reachable.', { hint: 'Check that Postgres is running (pnpm db:up) and DATABASE_URL is correct.' });
+      throw new AppError(503, 'not_ready', 'The database is not reachable.', {
+        hint: 'Check that Postgres is running (pnpm db:up) and DATABASE_URL is correct.',
+      });
     }
     return { status: 'ok', checks: { db: 'ok' } };
   });

@@ -10,7 +10,8 @@ export const APPEARANCE_CSS = '/api/appearance.css';
  */
 export function loadAppearanceStylesheet(version?: string | number): void {
   if (typeof document === 'undefined') return;
-  const href = version === undefined ? APPEARANCE_CSS : `${APPEARANCE_CSS}?v=${encodeURIComponent(String(version))}`;
+  const href =
+    version === undefined ? APPEARANCE_CSS : `${APPEARANCE_CSS}?v=${encodeURIComponent(String(version))}`;
   let link = document.getElementById(LINK_ID) as HTMLLinkElement | null;
   if (!link) {
     link = document.createElement('link');

@@ -5,7 +5,8 @@ import { armWriteAccess, openPortalSession } from '../lib/portal-session';
 
 const [playbook, inputsJson, ...rest] = process.argv.slice(2);
 const confirmFrom = rest[rest.indexOf('--confirm-from') + 1];
-if (!playbook || !inputsJson) throw new Error('usage: run-playbook.ts <playbook> <inputs-json> [--confirm-from step.field]');
+if (!playbook || !inputsJson)
+  throw new Error('usage: run-playbook.ts <playbook> <inputs-json> [--confirm-from step.field]');
 const inputs = JSON.parse(inputsJson) as Record<string, unknown>;
 const s = await openPortalSession({ forwardToApi: false });
 
@@ -13,13 +14,19 @@ const s = await openPortalSession({ forwardToApi: false });
 for (const [k, v] of Object.entries(inputs)) {
   const m = typeof v === 'string' ? /^@(user|group|device|app):(.+)$/.exec(v) : null;
   if (!m) continue;
-  const r = await s.api<{ results: Array<{ id?: string; title: string }> }>('GET', `/api/search?q=${encodeURIComponent(m[2]!)}&type=${m[1]}`);
+  const r = await s.api<{ results: Array<{ id?: string; title: string }> }>(
+    'GET',
+    `/api/search?q=${encodeURIComponent(m[2]!)}&type=${m[1]}`,
+  );
   const hit = r.json.results.find((x) => x.title === m[2]);
   if (!hit?.id) throw new Error(`could not resolve ${v}`);
   inputs[k] = hit.id;
 }
 
-type Run = { run: { status: string; error?: { message?: string } }; steps: Array<{ stepId: string; status: string; output?: Record<string, unknown> }> };
+type Run = {
+  run: { status: string; error?: { message?: string } };
+  steps: Array<{ stepId: string; status: string; output?: Record<string, unknown> }>;
+};
 const wait = async (id: string) => {
   for (let i = 0; i < 90; i++) {
     const r = await s.api<Run>('GET', `/api/runs/${id}`);
@@ -37,19 +44,30 @@ try {
     previewId = p.json.runId;
     preview = await wait(previewId);
     if (preview.run.status === 'succeeded') break;
-    console.log(`preview attempt ${attempt}: ${preview.run.status} — ${preview.run.error?.message ?? ''} (retrying in 10 s)`);
+    console.log(
+      `preview attempt ${attempt}: ${preview.run.status} — ${preview.run.error?.message ?? ''} (retrying in 10 s)`,
+    );
     await new Promise((res) => setTimeout(res, 10_000));
   }
   if (preview?.run.status !== 'succeeded') throw new Error('preview never succeeded');
   let confirmation: string | undefined;
   if (confirmFrom) {
     const [stepId, field] = confirmFrom.split('.');
-    confirmation = String(preview.steps.filter((x) => x.stepId === stepId && x.status === 'succeeded').at(-1)?.output?.[field!] ?? '');
+    confirmation = String(
+      preview.steps.filter((x) => x.stepId === stepId && x.status === 'succeeded').at(-1)?.output?.[field!] ??
+        '',
+    );
   }
-  const created = await s.api<{ runId: string; error?: { code: string; message: string } }>('POST', '/api/runs', { playbook, inputs, dryRun: false, previewRunId: previewId, ...(confirmation ? { confirmation } : {}) });
+  const created = await s.api<{ runId: string; error?: { code: string; message: string } }>(
+    'POST',
+    '/api/runs',
+    { playbook, inputs, dryRun: false, previewRunId: previewId, ...(confirmation ? { confirmation } : {}) },
+  );
   if (!created.json.runId) throw new Error(`run not created: ${created.status} ${created.json.error?.code}`);
   const done = await wait(created.json.runId);
-  console.log(`${playbook}: ${done.run.status}${done.run.error?.message ? ` — ${done.run.error.message}` : ''}`);
+  console.log(
+    `${playbook}: ${done.run.status}${done.run.error?.message ? ` — ${done.run.error.message}` : ''}`,
+  );
   await s.api('POST', '/auth/disarm');
 } finally {
   await s.close();

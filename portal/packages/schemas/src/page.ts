@@ -11,15 +11,35 @@ import { PageAction, WidgetBlock } from './widgets';
  */
 
 /** Query-builder operators (R9). */
-export const ADVANCED_OPS = ['eq', 'ne', 'gt', 'ge', 'lt', 'le', 'startsWith', 'contains', 'in', 'isEmpty'] as const;
+export const ADVANCED_OPS = [
+  'eq',
+  'ne',
+  'gt',
+  'ge',
+  'lt',
+  'le',
+  'startsWith',
+  'contains',
+  'in',
+  'isEmpty',
+] as const;
 export const AdvancedOp = z.enum(ADVANCED_OPS);
 export type AdvancedOp = z.infer<typeof AdvancedOp>;
 export const ADVANCED_FIELD_TYPES = ['string', 'number', 'boolean', 'date', 'guid', 'enum'] as const;
 
 /** Operators each field type may declare, and the defaults when `operators` is omitted. */
-export const ADVANCED_OPS_BY_TYPE: Record<(typeof ADVANCED_FIELD_TYPES)[number], { allowed: readonly AdvancedOp[]; defaults: readonly AdvancedOp[] }> = {
-  string: { allowed: ['eq', 'ne', 'gt', 'ge', 'lt', 'le', 'startsWith', 'contains', 'in', 'isEmpty'], defaults: ['eq', 'ne', 'startsWith', 'in'] },
-  number: { allowed: ['eq', 'ne', 'gt', 'ge', 'lt', 'le', 'in', 'isEmpty'], defaults: ['eq', 'ne', 'gt', 'ge', 'lt', 'le'] },
+export const ADVANCED_OPS_BY_TYPE: Record<
+  (typeof ADVANCED_FIELD_TYPES)[number],
+  { allowed: readonly AdvancedOp[]; defaults: readonly AdvancedOp[] }
+> = {
+  string: {
+    allowed: ['eq', 'ne', 'gt', 'ge', 'lt', 'le', 'startsWith', 'contains', 'in', 'isEmpty'],
+    defaults: ['eq', 'ne', 'startsWith', 'in'],
+  },
+  number: {
+    allowed: ['eq', 'ne', 'gt', 'ge', 'lt', 'le', 'in', 'isEmpty'],
+    defaults: ['eq', 'ne', 'gt', 'ge', 'lt', 'le'],
+  },
   boolean: { allowed: ['eq', 'ne', 'isEmpty'], defaults: ['eq'] },
   date: { allowed: ['eq', 'ne', 'gt', 'ge', 'lt', 'le', 'isEmpty'], defaults: ['ge', 'le'] },
   guid: { allowed: ['eq', 'ne', 'in', 'isEmpty'], defaults: ['eq', 'in'] },
@@ -38,17 +58,24 @@ export const AdvancedField = z.strictObject({
   /** Graph property path (`signInActivity/lastSignInDateTime`) or KQL column (`properties.state`); default: `field`. */
   property: z
     .string()
-    .regex(/^[A-Za-z_][A-Za-z0-9_]*([./][A-Za-z_][A-Za-z0-9_]*)*$/, 'Expected a property path like signInActivity/lastSignInDateTime or properties.state')
+    .regex(
+      /^[A-Za-z_][A-Za-z0-9_]*([./][A-Za-z_][A-Za-z0-9_]*)*$/,
+      'Expected a property path like signInActivity/lastSignInDateTime or properties.state',
+    )
     .optional(),
   /** enum: the allowed values. */
-  values: z.array(z.union([z.string(), z.number(), z.boolean()])).min(1).optional(),
+  values: z
+    .array(z.union([z.string(), z.number(), z.boolean()]))
+    .min(1)
+    .optional(),
   /** Allowed operators (default per type: see ADVANCED_OPS_BY_TYPE). */
   operators: z.array(AdvancedOp).min(1).optional(),
 });
 export type AdvancedField = z.infer<typeof AdvancedField>;
 
 /** Operators a declared field accepts. */
-export const advancedOpsFor = (f: Pick<AdvancedField, 'type' | 'operators'>): readonly AdvancedOp[] => f.operators ?? ADVANCED_OPS_BY_TYPE[f.type].defaults;
+export const advancedOpsFor = (f: Pick<AdvancedField, 'type' | 'operators'>): readonly AdvancedOp[] =>
+  f.operators ?? ADVANCED_OPS_BY_TYPE[f.type].defaults;
 
 /**
  * Filter bar (R9). Facets default to params with `facet: true`. `advanced` is the query builder: the client sends a
@@ -91,7 +118,15 @@ export const SavedViewsSpec = z.strictObject({
   enabled: z.boolean().default(true),
   shared: z.boolean().default(true),
   /** Built-in, read-only views. */
-  presets: z.array(z.strictObject({ name: z.string().min(1), params: z.record(z.string(), z.unknown()), columns: z.array(z.string()).optional() })).optional(),
+  presets: z
+    .array(
+      z.strictObject({
+        name: z.string().min(1),
+        params: z.record(z.string(), z.unknown()),
+        columns: z.array(z.string()).optional(),
+      }),
+    )
+    .optional(),
 });
 export type SavedViewsSpec = z.infer<typeof SavedViewsSpec>;
 
@@ -129,7 +164,10 @@ const pageShape = {
 };
 
 /** The query builder's raw value never reaches templates: not declared as a param, never referenced as one. */
-function checkAdvanced(def: { params?: Params; filters?: FilterBar } & Record<string, unknown>, ctx: z.RefinementCtx) {
+function checkAdvanced(
+  def: { params?: Params; filters?: FilterBar } & Record<string, unknown>,
+  ctx: z.RefinementCtx,
+) {
   const adv = def.filters?.advanced;
   if (!adv) return;
   const name = adv.param ?? DEFAULT_ADVANCED_PARAM;
@@ -140,7 +178,9 @@ function checkAdvanced(def: { params?: Params; filters?: FilterBar } & Record<st
       message: `"${name}" carries the query builder's filter: don't declare it under params. Use \${ advanced } (the server-compiled filter) in requests.`,
     });
   const { filters: _f, ...rest } = def;
-  const reads = new RegExp(`\\bparams\\s*\\.\\s*${name}\\b|\\bparams\\s*\\[\\s*['"]${name}['"]\\s*\\]|\\$lookup\\(\\s*params\\s*,\\s*['"]${name}['"]`);
+  const reads = new RegExp(
+    `\\bparams\\s*\\.\\s*${name}\\b|\\bparams\\s*\\[\\s*['"]${name}['"]\\s*\\]|\\$lookup\\(\\s*params\\s*,\\s*['"]${name}['"]`,
+  );
   const strings: string[] = [];
   const walk = (v: unknown): void => {
     if (typeof v === 'string') strings.push(v);
@@ -156,25 +196,58 @@ function checkAdvanced(def: { params?: Params; filters?: FilterBar } & Record<st
     });
   const seen = new Set<string>();
   adv.fields.forEach((f, i) => {
-    if (seen.has(f.field)) ctx.addIssue({ code: 'custom', path: ['filters', 'advanced', 'fields', i, 'field'], message: `Duplicate field "${f.field}".` });
+    if (seen.has(f.field))
+      ctx.addIssue({
+        code: 'custom',
+        path: ['filters', 'advanced', 'fields', i, 'field'],
+        message: `Duplicate field "${f.field}".`,
+      });
     seen.add(f.field);
-    if (f.type === 'enum' && !f.values?.length) ctx.addIssue({ code: 'custom', path: ['filters', 'advanced', 'fields', i, 'values'], message: 'enum fields need values.' });
+    if (f.type === 'enum' && !f.values?.length)
+      ctx.addIssue({
+        code: 'custom',
+        path: ['filters', 'advanced', 'fields', i, 'values'],
+        message: 'enum fields need values.',
+      });
     const allowed = ADVANCED_OPS_BY_TYPE[f.type].allowed;
     f.operators?.forEach((op, j) => {
       if (!allowed.includes(op))
-        ctx.addIssue({ code: 'custom', path: ['filters', 'advanced', 'fields', i, 'operators', j], message: `${op} does not apply to ${f.type} fields (use ${allowed.join(', ')}).` });
+        ctx.addIssue({
+          code: 'custom',
+          path: ['filters', 'advanced', 'fields', i, 'operators', j],
+          message: `${op} does not apply to ${f.type} fields (use ${allowed.join(', ')}).`,
+        });
     });
     if (adv.dialect === 'odata' && f.property?.includes('.'))
-      ctx.addIssue({ code: 'custom', path: ['filters', 'advanced', 'fields', i, 'property'], message: 'OData property paths use / (e.g. signInActivity/lastSignInDateTime).' });
+      ctx.addIssue({
+        code: 'custom',
+        path: ['filters', 'advanced', 'fields', i, 'property'],
+        message: 'OData property paths use / (e.g. signInActivity/lastSignInDateTime).',
+      });
     if (adv.dialect === 'kql' && f.property?.includes('/'))
-      ctx.addIssue({ code: 'custom', path: ['filters', 'advanced', 'fields', i, 'property'], message: 'KQL columns use . (e.g. properties.state).' });
+      ctx.addIssue({
+        code: 'custom',
+        path: ['filters', 'advanced', 'fields', i, 'property'],
+        message: 'KQL columns use . (e.g. properties.state).',
+      });
   });
 }
 
-function checkPage(def: { params?: Params; datasources?: Datasources; layout?: unknown[]; tabs?: unknown[]; filters?: FilterBar; export?: ExportSpec }, ctx: z.RefinementCtx) {
+function checkPage(
+  def: {
+    params?: Params;
+    datasources?: Datasources;
+    layout?: unknown[];
+    tabs?: unknown[];
+    filters?: FilterBar;
+    export?: ExportSpec;
+  },
+  ctx: z.RefinementCtx,
+) {
   const params = def.params ?? {};
   const need = (name: string | undefined, path: (string | number)[]) => {
-    if (name && !(name in params)) ctx.addIssue({ code: 'custom', path, message: `Unknown param "${name}". Declare it under params.` });
+    if (name && !(name in params))
+      ctx.addIssue({ code: 'custom', path, message: `Unknown param "${name}". Declare it under params.` });
   };
   need(def.filters?.search, ['filters', 'search']);
   def.filters?.facets?.forEach((f, i) => need(f, ['filters', 'facets', i]));
@@ -182,7 +255,12 @@ function checkPage(def: { params?: Params; datasources?: Datasources; layout?: u
   const exportDs = def.export?.data?.split(/[.[]/)[0];
   if (exportDs && !(exportDs in (def.datasources ?? {})))
     ctx.addIssue({ code: 'custom', path: ['export', 'data'], message: `Unknown datasource "${exportDs}".` });
-  if (!def.layout?.length && !def.tabs?.length) ctx.addIssue({ code: 'custom', path: ['layout'], message: 'Add at least one widget to layout (or tabs).' });
+  if (!def.layout?.length && !def.tabs?.length)
+    ctx.addIssue({
+      code: 'custom',
+      path: ['layout'],
+      message: 'Add at least one widget to layout (or tabs).',
+    });
 }
 
 export const Page = z

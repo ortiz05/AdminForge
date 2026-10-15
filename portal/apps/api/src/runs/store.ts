@@ -1,14 +1,36 @@
-import { isTerminal, type Actor, type AutomationDefinition, type Decision, type HumanTask, type RunEventInput, type RunPatch, type RunRecord, type RunStatus, type RunStore, type StepRecord, writesAfter } from '@adminforge/engine';
+import {
+  isTerminal,
+  type Actor,
+  type AutomationDefinition,
+  type Decision,
+  type HumanTask,
+  type RunEventInput,
+  type RunPatch,
+  type RunRecord,
+  type RunStatus,
+  type RunStore,
+  type StepRecord,
+  writesAfter,
+} from '@adminforge/engine';
 import type { AuditWriter } from '../audit/writer';
 import { toRecord, type RunNotification, type RunRepository, type RunRow, type TaskRow } from './types';
 
 /** Audit actor fields for something a run did (delegated: the engineer; automation: the automation identity). */
-export function runAuditActor(row: Pick<RunRow, 'identity' | 'initiatorOid' | 'initiatorUpn' | 'sessionHash'>, actor?: Actor | null) {
-  if (row.identity === 'automation') return { actorOid: 'automation', actorUpn: 'automation identity', sessionHash: null };
-  return { actorOid: actor?.oid ?? row.initiatorOid, actorUpn: actor?.upn ?? row.initiatorUpn, sessionHash: null };
+export function runAuditActor(
+  row: Pick<RunRow, 'identity' | 'initiatorOid' | 'initiatorUpn' | 'sessionHash'>,
+  actor?: Actor | null,
+) {
+  if (row.identity === 'automation')
+    return { actorOid: 'automation', actorUpn: 'automation identity', sessionHash: null };
+  return {
+    actorOid: actor?.oid ?? row.initiatorOid,
+    actorUpn: actor?.upn ?? row.initiatorUpn,
+    sessionHash: null,
+  };
 }
 
-const auditResult = (status: RunStatus) => (status === 'succeeded' || status === 'compensated' || status === 'cancelled' ? 'success' : 'failure');
+const auditResult = (status: RunStatus) =>
+  status === 'succeeded' || status === 'compensated' || status === 'cancelled' ? 'success' : 'failure';
 
 /** Maps a stored event to its notification / SSE type. */
 export function notificationType(e: Pick<RunEventInput, 'type' | 'data'>): RunNotification['type'] {
@@ -23,7 +45,21 @@ export function notificationType(e: Pick<RunEventInput, 'type' | 'data'>): RunNo
  */
 export class RepositoryRunStore implements RunStore {
   private readonly defs = new Map<string, AutomationDefinition>();
-  private readonly rows = new Map<string, Pick<RunRow, 'initiatorOid' | 'parentRunId' | 'identity' | 'initiatorUpn' | 'sessionHash' | 'definitionKey' | 'definitionVersion' | 'correlationId' | 'scheduleId'>>();
+  private readonly rows = new Map<
+    string,
+    Pick<
+      RunRow,
+      | 'initiatorOid'
+      | 'parentRunId'
+      | 'identity'
+      | 'initiatorUpn'
+      | 'sessionHash'
+      | 'definitionKey'
+      | 'definitionVersion'
+      | 'correlationId'
+      | 'scheduleId'
+    >
+  >();
 
   constructor(
     readonly repo: RunRepository,
@@ -79,8 +115,14 @@ export class RepositoryRunStore implements RunStore {
           status: patch.status,
           dryRun: row.dryRun,
           trigger: row.trigger,
-          ...(row.error ? { error: { code: row.error.code, message: row.error.message, stepId: row.error.stepId ?? null } } : {}),
-          ...(row.identity === 'automation' ? { scheduledBy: row.initiatorOid, executedAs: 'automation identity' } : {}),
+          ...(row.error
+            ? {
+                error: { code: row.error.code, message: row.error.message, stepId: row.error.stepId ?? null },
+              }
+            : {}),
+          ...(row.identity === 'automation'
+            ? { scheduledBy: row.initiatorOid, executedAs: 'automation identity' }
+            : {}),
         },
         result: auditResult(patch.status),
         correlationId: row.correlationId,
@@ -94,9 +136,17 @@ export class RepositoryRunStore implements RunStore {
     return this.repo.listSteps(runId);
   }
 
-  async saveStep(runId: string, record: StepRecord, meta: { actor: Actor | null; dryRun: boolean }): Promise<void> {
+  async saveStep(
+    runId: string,
+    record: StepRecord,
+    meta: { actor: Actor | null; dryRun: boolean },
+  ): Promise<void> {
     await this.repo.saveStep(runId, record);
-    const executedWrite = record.mode === 'write' && !meta.dryRun && (record.status === 'succeeded' || record.status === 'failed') && record.type !== 'playbook';
+    const executedWrite =
+      record.mode === 'write' &&
+      !meta.dryRun &&
+      (record.status === 'succeeded' || record.status === 'failed') &&
+      record.type !== 'playbook';
     if (!executedWrite) return;
     const row = await this.row(runId);
     if (!row) return;
@@ -117,8 +167,18 @@ export class RepositoryRunStore implements RunStore {
         request: record.request,
         status: record.status,
         requestId: record.msRequestId,
-        ...(record.error ? { error: { code: record.error.code, message: record.error.message, status: record.error.status ?? null } } : {}),
-        ...(row.identity === 'automation' ? { scheduledBy: row.initiatorOid, executedAs: 'automation identity' } : {}),
+        ...(record.error
+          ? {
+              error: {
+                code: record.error.code,
+                message: record.error.message,
+                status: record.error.status ?? null,
+              },
+            }
+          : {}),
+        ...(row.identity === 'automation'
+          ? { scheduledBy: row.initiatorOid, executedAs: 'automation identity' }
+          : {}),
       },
       result: record.status === 'succeeded' ? 'success' : 'failure',
       correlationId: row.correlationId,
@@ -164,22 +224,46 @@ export class RepositoryRunStore implements RunStore {
 export function decisionOf(task: TaskRow): Decision | null {
   const at = (task.decidedAt ?? new Date()).toISOString();
   const last = (kinds: string[]) => [...task.decisions].reverse().find((d) => kinds.includes(d.decision));
-  const actorOf = (d: { oid: string; upn: string | null }): Actor => ({ kind: 'delegated', oid: d.oid, upn: d.upn });
+  const actorOf = (d: { oid: string; upn: string | null }): Actor => ({
+    kind: 'delegated',
+    oid: d.oid,
+    upn: d.upn,
+  });
   if (task.policy.kind === 'approval') {
     if (task.status === 'approved') {
       const d = last(['approve'])!;
-      return { kind: 'approval', approved: true, actor: actorOf(d), comment: d.comment ?? null, decidedAt: at };
+      return {
+        kind: 'approval',
+        approved: true,
+        actor: actorOf(d),
+        comment: d.comment ?? null,
+        decidedAt: at,
+      };
     }
     if (task.status === 'rejected') {
       const d = last(['reject']);
-      return { kind: 'approval', approved: false, actor: d ? actorOf(d) : null, comment: d?.comment ?? null, decidedAt: at };
+      return {
+        kind: 'approval',
+        approved: false,
+        actor: d ? actorOf(d) : null,
+        comment: d?.comment ?? null,
+        decidedAt: at,
+      };
     }
-    if (task.status === 'expired') return { kind: 'approval', approved: false, actor: null, comment: null, decidedAt: at, expired: true };
+    if (task.status === 'expired')
+      return { kind: 'approval', approved: false, actor: null, comment: null, decidedAt: at, expired: true };
     return null;
   }
   if (task.status === 'approved' || task.status === 'rejected') {
     const d = last(['confirm', 'decline'])!;
-    return { kind: 'manual', confirmed: task.status === 'approved', actor: actorOf(d), notes: d.comment ?? null, values: d.values ?? {}, decidedAt: at };
+    return {
+      kind: 'manual',
+      confirmed: task.status === 'approved',
+      actor: actorOf(d),
+      notes: d.comment ?? null,
+      values: d.values ?? {},
+      decidedAt: at,
+    };
   }
   return null;
 }

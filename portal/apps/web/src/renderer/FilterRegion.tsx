@@ -16,8 +16,22 @@ import {
   filterBar,
 } from '@adminforge/ui';
 import type { Block } from './blocks';
-import { advancedParamOf, countConditions, encodeFilter, QueryBuilder, type AdvancedSpec, type WireGroup } from './QueryBuilder';
-import { DATE_RANGE_PRESETS, dateRangeLabel, enumOptions, isDefault, isNeutralOption, literalDefault } from './params';
+import {
+  advancedParamOf,
+  countConditions,
+  encodeFilter,
+  QueryBuilder,
+  type AdvancedSpec,
+  type WireGroup,
+} from './QueryBuilder';
+import {
+  DATE_RANGE_PRESETS,
+  dateRangeLabel,
+  enumOptions,
+  isDefault,
+  isNeutralOption,
+  literalDefault,
+} from './params';
 
 export interface FilterRegionProps {
   declared: Params;
@@ -35,10 +49,14 @@ export interface FilterRegionProps {
 }
 
 /** Which params a list/dashboard page shows in its filter bar: `filters.facets`, `facet: true`, column-bound params, date ranges. */
-export function filterParamsOf(def: { params?: Params; filters?: { search?: string; facets?: string[] } }, blocks: readonly Block[]): string[] {
+export function filterParamsOf(
+  def: { params?: Params; filters?: { search?: string; facets?: string[] } },
+  blocks: readonly Block[],
+): string[] {
   const params = def.params ?? {};
   const order: string[] = [...(def.filters?.facets ?? [])];
-  for (const [name, p] of Object.entries(params)) if ((p.facet || p.type === 'dateRange') && !p.hidden && !order.includes(name)) order.push(name);
+  for (const [name, p] of Object.entries(params))
+    if ((p.facet || p.type === 'dateRange') && !p.hidden && !order.includes(name)) order.push(name);
   for (const b of blocks) {
     if (b.widget !== 'table') continue;
     for (const c of (b as unknown as TableWidgetConfig).columns ?? []) {
@@ -51,10 +69,20 @@ export function filterParamsOf(def: { params?: Params; filters?: { search?: stri
 
 const labelOf = (name: string, p: Param) => p.label ?? name;
 
-function TriggerButton({ label, active, count, ...rest }: { label: string; active: boolean; count?: number } & React.ComponentProps<typeof Button>) {
+function TriggerButton({
+  label,
+  active,
+  count,
+  ...rest
+}: { label: string; active: boolean; count?: number } & React.ComponentProps<typeof Button>) {
   const s = filterBar();
   return (
-    <Button size="sm" intent={active ? 'secondary' : 'ghost'} className={active ? 'border-accent' : 'border-line'} {...rest}>
+    <Button
+      size="sm"
+      intent={active ? 'secondary' : 'ghost'}
+      className={active ? 'border-accent' : 'border-line'}
+      {...rest}
+    >
       {label}
       {count ? (
         <span className={s.facetCount()} aria-hidden>
@@ -67,16 +95,37 @@ function TriggerButton({ label, active, count, ...rest }: { label: string; activ
 }
 
 /** Enum param: pick one (single) or several (multiple). Neutral defaults ("All") are the unselected state. */
-function EnumFilter({ name, p, value, onChange }: { name: string; p: Extract<Param, { type: 'enum' }>; value: unknown; onChange: (v: unknown) => void }) {
+function EnumFilter({
+  name,
+  p,
+  value,
+  onChange,
+}: {
+  name: string;
+  p: Extract<Param, { type: 'enum' }>;
+  value: unknown;
+  onChange: (v: unknown) => void;
+}) {
   const options = enumOptions(p).filter((o) => !isNeutralOption(p, o.value));
-  const selected = p.multiple ? (Array.isArray(value) ? value : []) : value === undefined || isNeutralOption(p, value) ? [] : [value];
+  const selected = p.multiple
+    ? Array.isArray(value)
+      ? value
+      : []
+    : value === undefined || isNeutralOption(p, value)
+      ? []
+      : [value];
   const label = labelOf(name, p);
-  const active = selected.length > 0 && !(p.multiple ? false : isDefault(p, value) && isNeutralOption(p, value));
+  const active =
+    selected.length > 0 && !(p.multiple ? false : isDefault(p, value) && isNeutralOption(p, value));
   return (
     <Popover>
       <PopoverTrigger asChild>
         <TriggerButton
-          label={!p.multiple && active ? `${label}: ${options.find((o) => o.value === selected[0])?.label ?? String(selected[0])}` : label}
+          label={
+            !p.multiple && active
+              ? `${label}: ${options.find((o) => o.value === selected[0])?.label ?? String(selected[0])}`
+              : label
+          }
           active={active}
           count={p.multiple ? selected.length : undefined}
           aria-label={active ? `${label}, ${selected.length} selected` : label}
@@ -91,7 +140,8 @@ function EnumFilter({ name, p, value, onChange }: { name: string; p: Extract<Par
                 checked={selected.includes(o.value)}
                 className="min-w-0 flex-1"
                 onCheckedChange={(on) => {
-                  if (p.multiple) onChange(on ? [...selected, o.value] : selected.filter((v) => v !== o.value));
+                  if (p.multiple)
+                    onChange(on ? [...selected, o.value] : selected.filter((v) => v !== o.value));
                   else onChange(on ? o.value : undefined);
                 }}
               />
@@ -111,7 +161,17 @@ function EnumFilter({ name, p, value, onChange }: { name: string; p: Extract<Par
 }
 
 /** Text-ish param (string, guid, entity id): "Department ▾" → an input. Applied on Enter or after a pause. */
-function TextFilter({ name, p, value, onChange }: { name: string; p: Param; value: unknown; onChange: (v: unknown) => void }) {
+function TextFilter({
+  name,
+  p,
+  value,
+  onChange,
+}: {
+  name: string;
+  p: Param;
+  value: unknown;
+  onChange: (v: unknown) => void;
+}) {
   const label = labelOf(name, p);
   const [draft, setDraft] = useState(value == null ? '' : String(value));
   const [open, setOpen] = useState(false);
@@ -126,7 +186,11 @@ function TextFilter({ name, p, value, onChange }: { name: string; p: Param; valu
       }}
     >
       <PopoverTrigger asChild>
-        <TriggerButton label={active ? `${label}: ${String(value)}` : label} active={active} aria-label={active ? `${label}: ${String(value)}` : label} />
+        <TriggerButton
+          label={active ? `${label}: ${String(value)}` : label}
+          active={active}
+          aria-label={active ? `${label}: ${String(value)}` : label}
+        />
       </PopoverTrigger>
       <PopoverContent className="w-72 p-2" aria-label={`Filter by ${label.toLowerCase()}`}>
         <form
@@ -170,7 +234,17 @@ function TextFilter({ name, p, value, onChange }: { name: string; p: Param; valu
 const DEFAULT_PRESETS = ['P1D', 'P7D', 'P30D', 'P90D'];
 
 /** Date range: presets (from the param, or 24 h / 7 / 30 / 90 days) plus a custom from–to. */
-function DateRangeFilter({ name, p, value, onChange }: { name: string; p: Extract<Param, { type: 'dateRange' }>; value: unknown; onChange: (v: unknown) => void }) {
+function DateRangeFilter({
+  name,
+  p,
+  value,
+  onChange,
+}: {
+  name: string;
+  p: Extract<Param, { type: 'dateRange' }>;
+  value: unknown;
+  onChange: (v: unknown) => void;
+}) {
   const label = labelOf(name, p);
   const presets = p.presets?.length ? p.presets : DEFAULT_PRESETS;
   const custom = value && typeof value === 'object' ? (value as { from: string; to: string }) : undefined;
@@ -179,7 +253,12 @@ function DateRangeFilter({ name, p, value, onChange }: { name: string; p: Extrac
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <Button size="sm" intent="secondary" className="border-line" aria-label={`${label}: ${dateRangeLabel(value)}`}>
+        <Button
+          size="sm"
+          intent="secondary"
+          className="border-line"
+          aria-label={`${label}: ${dateRangeLabel(value)}`}
+        >
           <CalendarBlankIcon size={14} aria-hidden className="text-fg-3" />
           {dateRangeLabel(value)}
           <CaretDownIcon size={12} weight="bold" aria-hidden className="text-fg-3" />
@@ -220,7 +299,17 @@ function DateRangeFilter({ name, p, value, onChange }: { name: string; p: Extrac
   );
 }
 
-function BooleanFilter({ name, p, value, onChange }: { name: string; p: Param; value: unknown; onChange: (v: unknown) => void }) {
+function BooleanFilter({
+  name,
+  p,
+  value,
+  onChange,
+}: {
+  name: string;
+  p: Param;
+  value: unknown;
+  onChange: (v: unknown) => void;
+}) {
   const label = labelOf(name, p);
   const options = [
     { value: true, label: 'Yes' },
@@ -230,13 +319,21 @@ function BooleanFilter({ name, p, value, onChange }: { name: string; p: Param; v
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <TriggerButton label={typeof value === 'boolean' ? `${label}: ${value ? 'Yes' : 'No'}` : label} active={active} />
+        <TriggerButton
+          label={typeof value === 'boolean' ? `${label}: ${value ? 'Yes' : 'No'}` : label}
+          active={active}
+        />
       </PopoverTrigger>
       <PopoverContent className="w-56" aria-label={label}>
         <div role="group" aria-label={label} className="flex flex-col gap-0.5 p-1.5">
           {options.map((o) => (
             <div key={String(o.value)} className="flex items-center rounded-md px-1.5 py-1 hover:bg-hover">
-              <Checkbox label={o.label} checked={value === o.value} className="min-w-0 flex-1" onCheckedChange={(on) => onChange(on ? o.value : undefined)} />
+              <Checkbox
+                label={o.label}
+                checked={value === o.value}
+                className="min-w-0 flex-1"
+                onCheckedChange={(on) => onChange(on ? o.value : undefined)}
+              />
             </div>
           ))}
         </div>
@@ -261,7 +358,16 @@ function chipValue(p: Param, v: unknown): string {
  * filters for string params, a date-range picker. Every change goes to the URL and re-queries the BFF; tables refine
  * the loaded rows further with their own column filters.
  */
-export function FilterRegion({ declared, searchParam, filterParams, values, issues, onChange, advanced, children }: FilterRegionProps) {
+export function FilterRegion({
+  declared,
+  searchParam,
+  filterParams,
+  values,
+  issues,
+  onChange,
+  advanced,
+  children,
+}: FilterRegionProps) {
   const advParam = advanced ? advancedParamOf(advanced.spec) : undefined;
   const advCount = countConditions(advanced?.filter);
   // The URL carries the structured filter as base64url JSON; the server validates and compiles it.
@@ -269,7 +375,7 @@ export function FilterRegion({ declared, searchParam, filterParams, values, issu
     if (advParam) onChange({ [advParam]: filter ? encodeFilter(filter) : undefined });
   };
   const s = filterBar();
-  const serverSearch = searchParam ? (values[searchParam] as string | undefined) ?? '' : '';
+  const serverSearch = searchParam ? ((values[searchParam] as string | undefined) ?? '') : '';
   const [text, setText] = useState(serverSearch);
   const [syncedFrom, setSyncedFrom] = useState(serverSearch);
   if (syncedFrom !== serverSearch) {
@@ -281,7 +387,10 @@ export function FilterRegion({ declared, searchParam, filterParams, values, issu
   const onText = (v: string) => {
     setText(v);
     window.clearTimeout(timer.current);
-    timer.current = window.setTimeout(() => searchParam && onChange({ [searchParam]: v.trim() || undefined }), 350);
+    timer.current = window.setTimeout(
+      () => searchParam && onChange({ [searchParam]: v.trim() || undefined }),
+      350,
+    );
   };
 
   const chips = useMemo(
@@ -290,7 +399,11 @@ export function FilterRegion({ declared, searchParam, filterParams, values, issu
         const p = declared[name];
         const v = values[name];
         if (!p || v === undefined || v === '' || (Array.isArray(v) && !v.length)) return [];
-        if (isDefault(p, v) && (isNeutralOption(p, v) || p.type === 'dateRange' || literalDefault(p) !== undefined)) return [];
+        if (
+          isDefault(p, v) &&
+          (isNeutralOption(p, v) || p.type === 'dateRange' || literalDefault(p) !== undefined)
+        )
+          return [];
         return [{ name, label: labelOf(name, p), value: chipValue(p, v) }];
       }),
     [filterParams, declared, values],
@@ -330,12 +443,30 @@ export function FilterRegion({ declared, searchParam, filterParams, values, issu
           const p = declared[name];
           if (!p) return null;
           const set = (v: unknown) => onChange({ [name]: v });
-          if (p.type === 'enum') return <EnumFilter key={name} name={name} p={p} value={values[name]} onChange={set} />;
-          if (p.type === 'dateRange') return <DateRangeFilter key={name} name={name} p={p} value={values[name]} onChange={set} />;
-          if (p.type === 'boolean') return <BooleanFilter key={name} name={name} p={p} value={values[name]} onChange={set} />;
-          return <TextFilter key={`${name}:${String(values[name] ?? '')}`} name={name} p={p} value={values[name]} onChange={set} />;
+          if (p.type === 'enum')
+            return <EnumFilter key={name} name={name} p={p} value={values[name]} onChange={set} />;
+          if (p.type === 'dateRange')
+            return <DateRangeFilter key={name} name={name} p={p} value={values[name]} onChange={set} />;
+          if (p.type === 'boolean')
+            return <BooleanFilter key={name} name={name} p={p} value={values[name]} onChange={set} />;
+          return (
+            <TextFilter
+              key={`${name}:${String(values[name] ?? '')}`}
+              name={name}
+              p={p}
+              value={values[name]}
+              onChange={set}
+            />
+          );
         })}
-        {advanced && <QueryBuilder spec={advanced.spec} filter={advanced.filter} onApply={applyAdvanced} serverIssues={advanced.issues} />}
+        {advanced && (
+          <QueryBuilder
+            spec={advanced.spec}
+            filter={advanced.filter}
+            onApply={applyAdvanced}
+            serverIssues={advanced.issues}
+          />
+        )}
         {(chips.length > 0 || serverSearch || advCount > 0) && (
           <Button size="sm" intent="ghost" onClick={clearAll}>
             Clear
@@ -351,7 +482,12 @@ export function FilterRegion({ declared, searchParam, filterParams, values, issu
               <span className="truncate">
                 {advCount} {advCount === 1 ? 'condition' : 'conditions'}
               </span>
-              <button type="button" className={s.chipRemove()} aria-label="Remove advanced filter" onClick={() => applyAdvanced(undefined)}>
+              <button
+                type="button"
+                className={s.chipRemove()}
+                aria-label="Remove advanced filter"
+                onClick={() => applyAdvanced(undefined)}
+              >
                 <XIcon size={11} weight="bold" aria-hidden />
               </button>
             </li>
@@ -360,7 +496,12 @@ export function FilterRegion({ declared, searchParam, filterParams, values, issu
             <li key={c.name} className={s.chip()}>
               <span className={s.chipKey()}>{c.label}:</span>
               <span className="truncate">{c.value}</span>
-              <button type="button" className={s.chipRemove()} aria-label={`Remove filter ${c.label}: ${c.value}`} onClick={() => onChange({ [c.name]: undefined })}>
+              <button
+                type="button"
+                className={s.chipRemove()}
+                aria-label={`Remove filter ${c.label}: ${c.value}`}
+                onClick={() => onChange({ [c.name]: undefined })}
+              >
                 <XIcon size={11} weight="bold" aria-hidden />
               </button>
             </li>

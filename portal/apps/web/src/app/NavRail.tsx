@@ -1,6 +1,15 @@
 import { Link, useRouterState } from '@tanstack/react-router';
 import type { NavItem, NavSection } from '@adminforge/schemas';
-import { CaretDoubleLeftIcon, CaretDoubleRightIcon, cn, Icon, LockKeyIcon, Skeleton, Tooltip, tv } from '@adminforge/ui';
+import {
+  CaretDoubleLeftIcon,
+  CaretDoubleRightIcon,
+  cn,
+  Icon,
+  LockKeyIcon,
+  Skeleton,
+  Tooltip,
+  tv,
+} from '@adminforge/ui';
 import { contentKeyOf, splitHref } from '../lib/links';
 
 const nav = tv({
@@ -25,7 +34,8 @@ const nav = tv({
     /** "Requires Intune": the page still opens (and explains), so it's a quiet lock, not an alert. */
     requires:
       'inline-flex max-w-24 shrink-0 items-center gap-1 rounded-sm border border-line px-1 text-2xs font-medium text-fg-3 nav-collapsed:hidden',
-    requiresDot: 'absolute top-1 right-1 hidden size-3 items-center justify-center text-fg-3 nav-collapsed:flex',
+    requiresDot:
+      'absolute top-1 right-1 hidden size-3 items-center justify-center text-fg-3 nav-collapsed:flex',
     divider: 'mx-2 hidden h-px bg-line nav-collapsed:block',
     foot: 'border-t border-line p-2',
     toggle: [
@@ -56,7 +66,9 @@ const SHORT: Array<[RegExp, string]> = [
 export function requiresText(badge: string | undefined): string | null {
   const m = badge ? /^requires\s+(.+)$/i.exec(badge.trim()) : null;
   if (!m) return null;
-  const names = m[1]!.split(/\s+or\s+|,\s*/).map((part) => SHORT.find(([re]) => re.test(part.trim()))?.[1] ?? part.trim());
+  const names = m[1]!
+    .split(/\s+or\s+|,\s*/)
+    .map((part) => SHORT.find(([re]) => re.test(part.trim()))?.[1] ?? part.trim());
   return [...new Set(names)].join(' / ');
 }
 
@@ -118,7 +130,11 @@ function NavLink({
     </Link>
   );
   return (
-    <Tooltip content={requires ? `${item.label} · ${item.badge}` : item.label} side="right" disabled={!collapsed}>
+    <Tooltip
+      content={requires ? `${item.label} · ${item.badge}` : item.label}
+      side="right"
+      disabled={!collapsed}
+    >
       {link}
     </Tooltip>
   );

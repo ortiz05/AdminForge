@@ -6,10 +6,12 @@ description: Use when asked to add or change an AdminForge page, dashboard, enti
 # Adding a page or report
 
 ## Overview
+
 Pages, dashboards and reports are YAML in `portal/content/{pages,dashboards,reports}/<section>/`. The generic renderer
 (`/p/$key`) and datasource executor do the rest. **No React code for a new page.**
 
 ## Steps
+
 1. **Reuse first.** `rg -l "<topic>" portal/content` and `rg "^id:" portal/content/{pages,dashboards,reports}`. If a page
    already covers it, extend it and bump `version` (minor for additions).
 2. **Scaffold:** `pnpm adminforge new page <section>/<name> --template list-detail|dashboard|entity|report`
@@ -35,10 +37,11 @@ Pages, dashboards and reports are YAML in `portal/content/{pages,dashboards,repo
    `pnpm guard`, then look at it: `AUTH_MODE=mock DATA_MODE=fixtures pnpm dev` → `/p/<key>`.
 
 ## Common mistakes
-| Mistake | Fix |
-|---|---|
-| Fetch everything, filter in `transform` | Push filters to Graph/KQL; keep transforms tiny |
+
+| Mistake                                              | Fix                                                         |
+| ---------------------------------------------------- | ----------------------------------------------------------- |
+| Fetch everything, filter in `transform`              | Push filters to Graph/KQL; keep transforms tiny             |
 | Raw `&` concatenation of params into `$filter` / KQL | `$odata()` / `$kql()`; advanced filters via `${ advanced }` |
-| Hard-coded tenant ids/domains/SKUs | `${env.X}` with a key in `config/example.env` |
-| Missing fixture → blank page in mock mode | Add the fixture file for every datasource |
-| `signInActivity` etc. without `requires.licences` | Declare the licence; the renderer gates and explains |
+| Hard-coded tenant ids/domains/SKUs                   | `${env.X}` with a key in `config/example.env`               |
+| Missing fixture → blank page in mock mode            | Add the fixture file for every datasource                   |
+| `signInActivity` etc. without `requires.licences`    | Declare the licence; the renderer gates and explains        |

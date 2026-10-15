@@ -4,9 +4,12 @@ import { EntityPicker } from './EntityPicker';
 import { labelOf, visibleInputs, type FormValues } from './form';
 
 const asString = (v: unknown) => (v === undefined || v === null ? '' : String(v));
-const optionValue = (o: unknown) => (o && typeof o === 'object' && 'value' in o ? (o as { value: unknown }).value : o);
+const optionValue = (o: unknown) =>
+  o && typeof o === 'object' && 'value' in o ? (o as { value: unknown }).value : o;
 const optionLabel = (o: unknown) =>
-  o && typeof o === 'object' && 'label' in o ? String((o as { label: unknown }).label) : String(optionValue(o));
+  o && typeof o === 'object' && 'label' in o
+    ? String((o as { label: unknown }).label)
+    : String(optionValue(o));
 
 const FORMAT_HINT: Record<string, string> = {
   guid: 'An object id (GUID).',
@@ -56,7 +59,10 @@ function InputField({
       return p.multiline ? (
         <Textarea
           {...common}
-          hint={p.description ?? (p.minLength ? `At least ${p.minLength} characters. Recorded in the audit log.` : undefined)}
+          hint={
+            p.description ??
+            (p.minLength ? `At least ${p.minLength} characters. Recorded in the audit log.` : undefined)
+          }
           value={asString(value)}
           maxLength={p.maxLength}
           rows={3}
@@ -92,7 +98,9 @@ function InputField({
           inputMode={p.integer ? 'numeric' : 'decimal'}
           hint={
             p.description ??
-            ([p.min !== undefined ? `min ${p.min}` : null, p.max !== undefined ? `max ${p.max}` : null].filter(Boolean).join(' · ') ||
+            ([p.min !== undefined ? `min ${p.min}` : null, p.max !== undefined ? `max ${p.max}` : null]
+              .filter(Boolean)
+              .join(' · ') ||
               undefined)
           }
           min={p.min}
@@ -120,7 +128,12 @@ function InputField({
         return (
           <FieldShell label={label} hint={p.description} error={error} optional={optional}>
             {({ describedBy }) => (
-              <div role="group" aria-label={label} aria-describedby={describedBy} className="flex flex-col gap-1.5">
+              <div
+                role="group"
+                aria-label={label}
+                aria-describedby={describedBy}
+                className="flex flex-col gap-1.5"
+              >
                 {opts.map((o) => (
                   <Checkbox
                     key={o.value}

@@ -28,11 +28,17 @@ describe('Schedules, monitoring, audit, appearance, settings', () => {
   it('enabling a write-capable schedule asks for a second approver (202)', async () => {
     const { state } = renderApp({ path: '/schedules' });
     const grid = await screen.findByRole('grid', { name: 'Schedules' });
-    await userEvent.click(await within(grid).findByRole('switch', { name: 'Enable Disable stale guest accounts' }));
+    await userEvent.click(
+      await within(grid).findByRole('switch', { name: 'Enable Disable stale guest accounts' }),
+    );
     const dialog = await screen.findByRole('alertdialog', { name: /Ask for approval/ });
     expect(dialog).toHaveTextContent('runs unattended as the automation identity');
     await userEvent.click(within(dialog).getByRole('button', { name: 'Request approval' }));
-    await waitFor(() => expect(state.schedulePatches).toEqual([{ key: 'identity.disable-stale-guests', body: { enabled: true } }]));
+    await waitFor(() =>
+      expect(state.schedulePatches).toEqual([
+        { key: 'identity.disable-stale-guests', body: { enabled: true } },
+      ]),
+    );
     expect(await screen.findByText('Approval requested')).toBeInTheDocument();
     expect(await within(grid).findByText('Awaiting approval')).toBeInTheDocument();
   });
@@ -54,9 +60,13 @@ describe('Schedules, monitoring, audit, appearance, settings', () => {
     const main = await screen.findByRole('main');
     const groups = await within(main).findAllByRole('heading', { level: 2 });
     expect(groups[0]).toHaveTextContent('App credentials');
-    expect(within(main).getByRole('button', { name: /App credentials expiring: Failing, 3 days/ })).toBeInTheDocument();
+    expect(
+      within(main).getByRole('button', { name: /App credentials expiring: Failing, 3 days/ }),
+    ).toBeInTheDocument();
     expect(within(main).getByRole('button', { name: /Function app: HR sync: No data/ })).toBeInTheDocument();
-    expect(within(screen.getByRole('region', { name: 'Probe health' })).getByRole('group', { name: 'Degraded' })).toHaveTextContent('3');
+    expect(
+      within(screen.getByRole('region', { name: 'Probe health' })).getByRole('group', { name: 'Degraded' }),
+    ).toHaveTextContent('3');
     expect(await axeViolations()).toEqual([]);
   });
 
@@ -74,7 +84,10 @@ describe('Schedules, monitoring, audit, appearance, settings', () => {
     renderApp({
       session: ADMIN,
       path: '/audit',
-      handlers: [({ path }) => (path === '/api/audit/verify' ? { body: { ok: false, checked: 4210, brokenAt: 4211 } } : undefined)],
+      handlers: [
+        ({ path }) =>
+          path === '/api/audit/verify' ? { body: { ok: false, checked: 4210, brokenAt: 4211 } } : undefined,
+      ],
     });
     expect(await screen.findByText('Chain broken at #4211')).toBeInTheDocument();
   });
@@ -84,7 +97,9 @@ describe('Schedules, monitoring, audit, appearance, settings', () => {
     const hex = await screen.findByRole('textbox', { name: 'Daylight accent hex value' });
     await userEvent.clear(hex);
     await userEvent.type(hex, '#9AB8E8');
-    expect(await screen.findByText('This can’t be published: some text would be hard to read')).toBeInTheDocument();
+    expect(
+      await screen.findByText('This can’t be published: some text would be hard to read'),
+    ).toBeInTheDocument();
     const publish = screen.getByRole('button', { name: 'Publish' });
     expect(publish).toHaveAttribute('aria-disabled', 'true');
     await userEvent.click(publish);
@@ -94,7 +109,10 @@ describe('Schedules, monitoring, audit, appearance, settings', () => {
     await waitFor(() => expect(screen.queryByText(/can’t be published/)).not.toBeInTheDocument());
     await userEvent.click(publish);
     await waitFor(() => expect(state.appearancePuts).toHaveLength(1));
-    expect(state.appearancePuts[0]).toEqual({ version: 3, overrides: { steel: { accent: '#8FB4F0' }, daylight: { accent: '#234B86' } } });
+    expect(state.appearancePuts[0]).toEqual({
+      version: 3,
+      overrides: { steel: { accent: '#8FB4F0' }, daylight: { accent: '#234B86' } },
+    });
     expect(await axeViolations()).toEqual([]);
   });
 
@@ -104,7 +122,9 @@ describe('Schedules, monitoring, audit, appearance, settings', () => {
     await userEvent.click(await within(history).findByRole('button', { name: 'Roll back' }));
     const dialog = await screen.findByRole('alertdialog', { name: 'Roll back to version 2?' });
     await userEvent.click(within(dialog).getByRole('button', { name: 'Roll back' }));
-    await waitFor(() => expect(state.appearancePuts).toEqual([{ version: 3, overrides: {}, density: 'compact' }]));
+    await waitFor(() =>
+      expect(state.appearancePuts).toEqual([{ version: 3, overrides: {}, density: 'compact' }]),
+    );
   });
 
   it('/settings: facts and provisioned apps; non-admins get an explanation', async () => {

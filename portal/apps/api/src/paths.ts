@@ -7,7 +7,11 @@ import { repoRoot } from '@adminforge/config';
 export function apiPackageDir(from = path.dirname(fileURLToPath(import.meta.url))): string {
   for (let dir = from; ; dir = path.dirname(dir)) {
     const pkg = path.join(dir, 'package.json');
-    if (existsSync(pkg) && (JSON.parse(readFileSync(pkg, 'utf8')) as { name?: string }).name === '@adminforge/api') return dir;
+    if (
+      existsSync(pkg) &&
+      (JSON.parse(readFileSync(pkg, 'utf8')) as { name?: string }).name === '@adminforge/api'
+    )
+      return dir;
     if (path.dirname(dir) === dir) throw new Error('Cannot locate the @adminforge/api package directory');
   }
 }

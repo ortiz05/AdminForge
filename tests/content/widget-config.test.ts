@@ -11,7 +11,9 @@ const pages = loaded.definitions.filter((d) => ['page', 'dashboard', 'report'].i
 function blocksOf(def: PageLike) {
   return [
     ...(def.layout ?? []).map((b, i) => ({ b, where: `layout[${i}]` })),
-    ...(def.tabs ?? []).flatMap((t, ti) => t.layout.map((b, i) => ({ b, where: `tabs[${ti}].layout[${i}]` }))),
+    ...(def.tabs ?? []).flatMap((t, ti) =>
+      t.layout.map((b, i) => ({ b, where: `tabs[${ti}].layout[${i}]` })),
+    ),
   ];
 }
 

@@ -8,8 +8,13 @@ export const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)
 
 /** Files git would commit: tracked plus untracked-but-not-ignored. */
 export function committableFiles(): string[] {
-  const out = execFileSync('git', ['ls-files', '--cached', '--others', '--exclude-standard', '-z'], { cwd: repoRoot });
-  return out.toString('utf8').split('\0').filter((f) => f && existsSync(path.join(repoRoot, f)) && statSync(path.join(repoRoot, f)).isFile());
+  const out = execFileSync('git', ['ls-files', '--cached', '--others', '--exclude-standard', '-z'], {
+    cwd: repoRoot,
+  });
+  return out
+    .toString('utf8')
+    .split('\0')
+    .filter((f) => f && existsSync(path.join(repoRoot, f)) && statSync(path.join(repoRoot, f)).isFile());
 }
 
 export function readText(rel: string): string | undefined {
@@ -32,5 +37,9 @@ export function localEnvFiles(): string[] {
   const explicit = process.env.ADMINFORGE_ENV_FILE;
   if (explicit) return existsSync(explicit) ? [explicit] : [];
   const dir = path.join(homedir(), '.config', 'adminforge');
-  return existsSync(dir) ? readdirSync(dir).filter((f) => f.endsWith('.env')).map((f) => path.join(dir, f)) : [];
+  return existsSync(dir)
+    ? readdirSync(dir)
+        .filter((f) => f.endsWith('.env'))
+        .map((f) => path.join(dir, f))
+    : [];
 }

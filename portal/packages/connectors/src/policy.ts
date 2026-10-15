@@ -49,10 +49,14 @@ function cleanPath(path: string): string | undefined {
 function evaluateBatch(body: unknown): PolicyDecision {
   const requests = (body as { requests?: Array<{ method?: string; url?: string }> } | undefined)?.requests;
   if (!Array.isArray(requests)) return deny('Malformed $batch request.');
-  const unclean = requests.find((r) => typeof r.url !== 'string' || cleanPath(r.url.startsWith('/') ? r.url : `/${r.url}`) === undefined);
+  const unclean = requests.find(
+    (r) => typeof r.url !== 'string' || cleanPath(r.url.startsWith('/') ? r.url : `/${r.url}`) === undefined,
+  );
   if (unclean) return deny(`Refusing $batch: ${String(unclean.url)} is not a clean service path.`);
   const bad = requests.find((r) => !SAFE.has((r.method ?? 'GET').toUpperCase()));
-  return bad ? deny(`$batch includes ${bad.method} ${bad.url}, which changes data. Arm write access to continue.`) : ALLOW;
+  return bad
+    ? deny(`$batch includes ${bad.method} ${bad.url}, which changes data. Arm write access to continue.`)
+    : ALLOW;
 }
 
 /** What a read-only session may send. */
@@ -60,9 +64,12 @@ function evaluateRead(req: OutboundRequest, method: string, path: string): Polic
   if (req.service === 'exchange' || req.service === 'teams') {
     return req.cmdlet && /^Get-[A-Za-z]+$/.test(req.cmdlet)
       ? ALLOW
-      : deny(`Only Get-* cmdlets run in read-only mode (requested ${req.cmdlet ?? 'none'}). Arm write access to continue.`);
+      : deny(
+          `Only Get-* cmdlets run in read-only mode (requested ${req.cmdlet ?? 'none'}). Arm write access to continue.`,
+        );
   }
-  if (req.service === 'runner') return req.declaredWrite ? deny('This script changes data. Arm write access to continue.') : ALLOW;
+  if (req.service === 'runner')
+    return req.declaredWrite ? deny('This script changes data. Arm write access to continue.') : ALLOW;
   if (SAFE.has(method)) return ALLOW;
   if (req.service === 'function' && req.declaredRead && !req.declaredWrite) return ALLOW;
   if (method === 'POST' && (READ_POSTS[req.service] ?? []).some((re) => re.test(path)))

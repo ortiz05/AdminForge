@@ -70,7 +70,10 @@ export interface Evaluated<T> {
 
 /** Evaluates `template` against `scope` whenever either changes. Literals and simple paths are synchronous. */
 export function useTemplate<T = unknown>(template: unknown, scope: Scope, enabled = true): Evaluated<T> {
-  const sync = useMemo(() => (enabled ? tryResolveSync(template, scope) : { value: undefined, resolved: true }), [template, scope, enabled]);
+  const sync = useMemo(
+    () => (enabled ? tryResolveSync(template, scope) : { value: undefined, resolved: true }),
+    [template, scope, enabled],
+  );
   // The result is tagged with the inputs it was computed for, so a stale result never shows for new inputs.
   const key = useMemo(() => ({ template, scope }), [template, scope]);
   const [state, setState] = useState<{ for: unknown; value?: T; error?: Error }>({ for: null });
@@ -102,7 +105,12 @@ const rowScope = (base: Scope, row: unknown): Scope => ({
 });
 
 /** Evaluates one template per row (lists, timelines). Returns undefined until every row is done. */
-export function useRowTemplates(rows: readonly unknown[], template: unknown, base: Scope, enabled = true): unknown[] | undefined {
+export function useRowTemplates(
+  rows: readonly unknown[],
+  template: unknown,
+  base: Scope,
+  enabled = true,
+): unknown[] | undefined {
   const sync = useMemo(() => {
     if (!enabled || template === undefined) return rows.map(() => undefined);
     const out = rows.map((row) => resolveSync(template, rowScope(base, row)));

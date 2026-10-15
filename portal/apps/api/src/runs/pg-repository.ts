@@ -2,7 +2,20 @@ import type { HumanTask, RunEventInput, RunStatus, StepRecord } from '@adminforg
 import { and, asc, desc, eq, gt, gte, inArray, isNull, lt, lte, or, sql, type SQL } from 'drizzle-orm';
 import type { Database } from '../db/client';
 import { approvals, runs, runStepEvents, runSteps } from '../db/schema';
-import { RUN_EVENTS_CHANNEL, type EventRow, type NewRun, type RunFilter, type RunNotification, type RunRepository, type RunRow, type RunRowPatch, type TaskFilter, type TaskPolicy, type TaskRow, type TaskStatus } from './types';
+import {
+  RUN_EVENTS_CHANNEL,
+  type EventRow,
+  type NewRun,
+  type RunFilter,
+  type RunNotification,
+  type RunRepository,
+  type RunRow,
+  type RunRowPatch,
+  type TaskFilter,
+  type TaskPolicy,
+  type TaskRow,
+  type TaskStatus,
+} from './types';
 
 type RunsRow = typeof runs.$inferSelect;
 type StepsRow = typeof runSteps.$inferSelect;
@@ -121,7 +134,11 @@ export class PgRunRepository implements RunRepository {
   }
 
   async insertRunIfAbsent(run: NewRun): Promise<RunRow> {
-    const [row] = await this.db.insert(runs).values(this.values(run)).onConflictDoNothing({ target: runs.id }).returning();
+    const [row] = await this.db
+      .insert(runs)
+      .values(this.values(run))
+      .onConflictDoNothing({ target: runs.id })
+      .returning();
     if (row) return toRun(row);
     return (await this.getRun(run.id))!;
   }
@@ -150,7 +167,13 @@ export class PgRunRepository implements RunRepository {
     if (f.topLevel ?? f.parentRunId === undefined) conds.push(isNull(runs.parentRunId));
     if (f.from) conds.push(gte(runs.createdAt, f.from));
     if (f.to) conds.push(lte(runs.createdAt, f.to));
-    if (f.cursor) conds.push(or(lt(runs.createdAt, f.cursor.createdAt), and(eq(runs.createdAt, f.cursor.createdAt), lt(runs.id, f.cursor.id)))!);
+    if (f.cursor)
+      conds.push(
+        or(
+          lt(runs.createdAt, f.cursor.createdAt),
+          and(eq(runs.createdAt, f.cursor.createdAt), lt(runs.id, f.cursor.id)),
+        )!,
+      );
     const rows = await this.db
       .select()
       .from(runs)
@@ -213,7 +236,11 @@ export class PgRunRepository implements RunRepository {
   }
 
   async listSteps(runId: string): Promise<StepRecord[]> {
-    const rows = await this.db.select().from(runSteps).where(eq(runSteps.runId, runId)).orderBy(asc(runSteps.seq));
+    const rows = await this.db
+      .select()
+      .from(runSteps)
+      .where(eq(runSteps.runId, runId))
+      .orderBy(asc(runSteps.seq));
     return rows.map(toStep);
   }
 
@@ -221,7 +248,14 @@ export class PgRunRepository implements RunRepository {
     return this.db.transaction(async (tx) => {
       const [row] = await tx
         .insert(runStepEvents)
-        .values({ runId, stepSeq: event.stepSeq ?? null, ts: this.now(), type: event.type, level: event.level ?? null, data: event.data })
+        .values({
+          runId,
+          stepSeq: event.stepSeq ?? null,
+          ts: this.now(),
+          type: event.type,
+          level: event.level ?? null,
+          data: event.data,
+        })
         .returning();
       const payload = JSON.stringify({ ...notify, eventId: row!.id });
       await tx.execute(sql`select pg_notify(${RUN_EVENTS_CHANNEL}, ${payload})`);
@@ -241,11 +275,19 @@ export class PgRunRepository implements RunRepository {
 
   async upsertTask(runId: string, task: HumanTask, policy: TaskPolicy): Promise<TaskRow> {
     return this.db.transaction(async (tx) => {
-      await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`adminforge.task:${runId}|${task.path}`}))`);
+      await tx.execute(
+        sql`select pg_advisory_xact_lock(hashtext(${`adminforge.task:${runId}|${task.path}`}))`,
+      );
       const [existing] = await tx
         .select()
         .from(approvals)
-        .where(and(eq(approvals.subjectType, 'run'), eq(approvals.subjectId, runId), eq(approvals.stepId, task.path)))
+        .where(
+          and(
+            eq(approvals.subjectType, 'run'),
+            eq(approvals.subjectId, runId),
+            eq(approvals.stepId, task.path),
+          ),
+        )
         .limit(1);
       if (existing) return toTask(existing);
       const [row] = await tx
@@ -270,7 +312,9 @@ export class PgRunRepository implements RunRepository {
     const [row] = await this.db
       .select()
       .from(approvals)
-      .where(and(eq(approvals.subjectType, 'run'), eq(approvals.subjectId, runId), eq(approvals.stepId, path)))
+      .where(
+        and(eq(approvals.subjectType, 'run'), eq(approvals.subjectId, runId), eq(approvals.stepId, path)),
+      )
       .orderBy(desc(approvals.createdAt))
       .limit(1);
     return row ? toTask(row) : null;
@@ -282,7 +326,11 @@ export class PgRunRepository implements RunRepository {
     return row ? toTask(row) : null;
   }
 
-  async updateTask(id: string, patch: Partial<Pick<TaskRow, 'decisions' | 'status' | 'decidedAt'>>, expect?: TaskStatus): Promise<TaskRow | null> {
+  async updateTask(
+    id: string,
+    patch: Partial<Pick<TaskRow, 'decisions' | 'status' | 'decidedAt'>>,
+    expect?: TaskStatus,
+  ): Promise<TaskRow | null> {
     const where = expect ? and(eq(approvals.id, id), eq(approvals.status, expect)) : eq(approvals.id, id);
     const [row] = await this.db.update(approvals).set(patch).where(where).returning();
     return row ? toTask(row) : null;
@@ -297,14 +345,22 @@ export class PgRunRepository implements RunRepository {
       if (!f.runIds.length) return [];
       conds.push(inArray(approvals.subjectId, f.runIds));
     }
-    const rows = await this.db.select().from(approvals).where(and(...conds)).orderBy(asc(approvals.createdAt)).limit(500);
+    const rows = await this.db
+      .select()
+      .from(approvals)
+      .where(and(...conds))
+      .orderBy(asc(approvals.createdAt))
+      .limit(500);
     return rows.map(toTask);
   }
 
   async tryLock(runId: string) {
     const client = await this.database.pool.connect();
     try {
-      const res = await client.query<{ ok: boolean }>('select pg_try_advisory_lock($1, hashtext($2)) as ok', [RUN_LOCK_CLASS, runId]);
+      const res = await client.query<{ ok: boolean }>('select pg_try_advisory_lock($1, hashtext($2)) as ok', [
+        RUN_LOCK_CLASS,
+        runId,
+      ]);
       if (!res.rows[0]?.ok) {
         client.release();
         return null;

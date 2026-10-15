@@ -141,7 +141,8 @@ export const GALLERY: readonly StarterQuery[] = [
     id: 'la.signin-failures',
     source: 'logAnalytics',
     title: 'Sign-in failures by app',
-    description: 'Failed Entra sign-ins by application and reason. Needs sign-in logs exported (Entra ID P1).',
+    description:
+      'Failed Entra sign-ins by application and reason. Needs sign-in logs exported (Entra ID P1).',
     query: `SigninLogs
 | where ResultType != '0'
 | summarize failures = count(), users = dcount(UserPrincipalName) by AppDisplayName, ResultType, ResultDescription
@@ -279,4 +280,5 @@ export const GALLERY: readonly StarterQuery[] = [
 ];
 
 export const galleryFor = (source: QuerySource) => GALLERY.filter((q) => q.source === source);
-export const findStarter = (query: string, source: QuerySource) => GALLERY.find((q) => q.source === source && q.query.trim() === query.trim());
+export const findStarter = (query: string, source: QuerySource) =>
+  GALLERY.find((q) => q.source === source && q.query.trim() === query.trim());

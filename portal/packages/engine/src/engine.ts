@@ -1,9 +1,23 @@
 import type { Mode } from '@adminforge/connectors';
 import { renderTemplate, type Scope } from '@adminforge/expressions';
-import { flattenSteps, parseDuration, stepMode, type Compensation, type RetryPolicy, type Step } from '@adminforge/schemas';
+import {
+  flattenSteps,
+  parseDuration,
+  stepMode,
+  type Compensation,
+  type RetryPolicy,
+  type Step,
+} from '@adminforge/schemas';
 import { systemClock } from './clock';
 import { allSteps, checkDefinition, IMPLICIT_APPROVAL, implicitApprovalIndex } from './definition';
-import { IdentityUnavailable, isTransientError, retryAfterMs, RunCancelled, StepError, toRunError } from './errors';
+import {
+  IdentityUnavailable,
+  isTransientError,
+  retryAfterMs,
+  RunCancelled,
+  StepError,
+  toRunError,
+} from './errors';
 import { builtinHandlers, createGraphNotifier } from './handlers';
 import type {
   ChildRunner,
@@ -115,7 +129,14 @@ type ForEachStep = Extract<Step, { type: 'forEach' }>;
 
 const CONTROL = new Set(['branch', 'forEach', 'approval', 'manual', 'wait']);
 const REUSABLE: readonly StepStatus[] = ['succeeded', 'skipped', 'planned', 'failed', 'compensated'];
-const NON_TERMINAL: readonly RunStatus[] = ['queued', 'running', 'awaiting_approval', 'awaiting_input', 'awaiting_arm', 'awaiting_reauth'];
+const NON_TERMINAL: readonly RunStatus[] = [
+  'queued',
+  'running',
+  'awaiting_approval',
+  'awaiting_input',
+  'awaiting_arm',
+  'awaiting_reauth',
+];
 const MAX_BACKOFF_MS = 5 * 60_000;
 const DEFAULT_WAIT_INTERVAL_MS = 30_000;
 const DEFAULT_WAIT_TIMEOUT_MS = 3_600_000;
@@ -200,7 +221,12 @@ class Execution {
     this.top = { prefix: '', actor: this.run.initiator, locals: new Map(), parent: null, vars: {} };
 
     const tooBig = checkDefinition(this.def, this.limits);
-    if (tooBig) return this.finish({ kind: 'fail', error: { code: 'limit_exceeded', message: tooBig }, policy: 'fail' });
+    if (tooBig)
+      return this.finish({
+        kind: 'fail',
+        error: { code: 'limit_exceeded', message: tooBig },
+        policy: 'fail',
+      });
 
     if (this.run.error?.compensating) return this.finishCompensation(this.run.error);
     let flow: Flow;
@@ -252,7 +278,8 @@ class Execution {
         return this.end('succeeded', { outputs, error: null });
       }
       case 'park': {
-        if (flow.status === 'running') return { status: 'running', ...(flow.wakeAt ? { wakeAt: flow.wakeAt } : {}) };
+        if (flow.status === 'running')
+          return { status: 'running', ...(flow.wakeAt ? { wakeAt: flow.wakeAt } : {}) };
         const r = await this.store.updateRun(this.run.id, { status: flow.status }, ['running']);
         if (!r) return this.current();
         this.run = r;
@@ -268,7 +295,10 @@ class Execution {
     }
   }
 
-  private async end(status: RunStatus, patch: { outputs?: Record<string, unknown> | null; error?: RunError | null }): Promise<RunOutcome> {
+  private async end(
+    status: RunStatus,
+    patch: { outputs?: Record<string, unknown> | null; error?: RunError | null },
+  ): Promise<RunOutcome> {
     const from = status === 'cancelled' ? NON_TERMINAL : (['running'] as const);
     const r = await this.store.updateRun(this.run.id, { status, endedAt: this.clock.now(), ...patch }, from);
     if (!r) return this.current();
@@ -278,7 +308,10 @@ class Execution {
   }
 
   private async runEvent(status: RunStatus, error?: RunError, extra: Record<string, unknown> = {}) {
-    await this.store.appendEvent(this.run.id, { type: 'status', data: { scope: 'run', status, ...(error ? { error } : {}), ...extra } });
+    await this.store.appendEvent(this.run.id, {
+      type: 'status',
+      data: { scope: 'run', status, ...(error ? { error } : {}), ...extra },
+    });
   }
 
   // ───────────────────────────── scope & frames ─────────────────────────────
@@ -311,7 +344,12 @@ class Execution {
         initiator: { oid: this.run.initiator.oid, upn: this.run.initiator.upn },
         startedAt: this.run.startedAt ? iso(this.run.startedAt) : null,
       },
-      user: { kind: actor.kind, oid: actor.oid, upn: actor.upn, roles: this.engine.opts.rolesOf?.(actor, this.run) ?? [] },
+      user: {
+        kind: actor.kind,
+        oid: actor.oid,
+        upn: actor.upn,
+        roles: this.engine.opts.rolesOf?.(actor, this.run) ?? [],
+      },
       env: this.engine.opts.env ?? {},
       now: iso(this.clock.now()),
       ...this.vars(frame),
@@ -333,7 +371,14 @@ class Execution {
 
   // ───────────────────────────── records & events ─────────────────────────────
 
-  private newRecord(stepId: string, type: string, path: string, mode: Mode, actor: Actor | null, partial: Partial<StepRecord> = {}): StepRecord {
+  private newRecord(
+    stepId: string,
+    type: string,
+    path: string,
+    mode: Mode,
+    actor: Actor | null,
+    partial: Partial<StepRecord> = {},
+  ): StepRecord {
     return {
       seq: this.seq++,
       stepId,
@@ -361,7 +406,15 @@ class Execution {
     await this.store.appendEvent(this.run.id, {
       type: 'status',
       stepSeq: rec.seq,
-      data: { scope: 'step', path: rec.path, stepId: rec.stepId, type: rec.type, status: rec.status, attempt: rec.attempt, ...(rec.error ? { error: rec.error } : {}) },
+      data: {
+        scope: 'step',
+        path: rec.path,
+        stepId: rec.stepId,
+        type: rec.type,
+        status: rec.status,
+        attempt: rec.attempt,
+        ...(rec.error ? { error: rec.error } : {}),
+      },
     });
   }
 
@@ -381,7 +434,9 @@ class Execution {
     let total = 0;
     for (const r of this.records.values()) {
       if ((r.type !== 'approval' && r.type !== 'manual') || !r.startedAt) continue;
-      total += (r.endedAt ?? (r.status === 'waiting' ? new Date(now) : r.startedAt)).getTime() - r.startedAt.getTime();
+      total +=
+        (r.endedAt ?? (r.status === 'waiting' ? new Date(now) : r.startedAt)).getTime() -
+        r.startedAt.getTime();
     }
     return total;
   }
@@ -404,7 +459,14 @@ class Execution {
       }
     }
     if (this.remainingMs() <= 0) {
-      return { kind: 'fail', policy: 'fail', error: { code: 'run_timeout', message: `The run exceeded its time limit of ${Math.round(this.limits.maxRunMs / 60_000)} minutes.` } };
+      return {
+        kind: 'fail',
+        policy: 'fail',
+        error: {
+          code: 'run_timeout',
+          message: `The run exceeded its time limit of ${Math.round(this.limits.maxRunMs / 60_000)} minutes.`,
+        },
+      };
     }
     return null;
   }
@@ -456,7 +518,11 @@ class Execution {
   }
 
   /** Common prelude for every step: reuse a finished record, honour `when`. Returns a Flow when the step is done. */
-  private async prelude(step: Step, frame: Frame, mode: Mode): Promise<{ done: Flow } | { rec: StepRecord | undefined }> {
+  private async prelude(
+    step: Step,
+    frame: Frame,
+    mode: Mode,
+  ): Promise<{ done: Flow } | { rec: StepRecord | undefined }> {
     const path = frame.prefix + step.id;
     const rec = this.records.get(path);
     if (rec && (rec.status === 'skipped' || (rec.status === 'failed' && !CONTROL.has(step.type)))) {
@@ -466,13 +532,20 @@ class Execution {
     if (rec) return { rec };
     const w = await this.evalWhen(step, frame);
     if ('error' in w) {
-      const failed = this.newRecord(step.id, step.type, path, mode, frame.actor, { status: 'failed', error: w.error, endedAt: this.clock.now() });
+      const failed = this.newRecord(step.id, step.type, path, mode, frame.actor, {
+        status: 'failed',
+        error: w.error,
+        endedAt: this.clock.now(),
+      });
       await this.save(failed, frame.actor);
       this.setView(frame, step.id, this.viewOf(failed));
       return { done: this.policy(step, w.error) };
     }
     if (w.skip) {
-      const skipped = this.newRecord(step.id, step.type, path, mode, frame.actor, { status: 'skipped', endedAt: this.clock.now() });
+      const skipped = this.newRecord(step.id, step.type, path, mode, frame.actor, {
+        status: 'skipped',
+        endedAt: this.clock.now(),
+      });
       await this.save(skipped, frame.actor);
       this.setView(frame, step.id, this.viewOf(skipped));
       return { done: OK };
@@ -480,7 +553,15 @@ class Execution {
     return { rec: undefined };
   }
 
-  private context(stepId: string, path: string, mode: Mode, frame: Frame, signal: AbortSignal, seqRef: { seq: number | null }, spec: SecretSpec | null = null): StepContext {
+  private context(
+    stepId: string,
+    path: string,
+    mode: Mode,
+    frame: Frame,
+    signal: AbortSignal,
+    seqRef: { seq: number | null },
+    spec: SecretSpec | null = null,
+  ): StepContext {
     return {
       run: this.run,
       stepId,
@@ -494,10 +575,21 @@ class Execution {
       render: (value) => this.render(value, frame),
       signal,
       correlationId: this.run.correlationId,
-      ports: { outbound: this.engine.opts.outbound, notifier: this.notifier, ...(this.engine.opts.runner ? { runner: this.engine.opts.runner } : {}), ...(this.engine.opts.children ? { children: this.engine.opts.children } : {}) },
+      ports: {
+        outbound: this.engine.opts.outbound,
+        notifier: this.notifier,
+        ...(this.engine.opts.runner ? { runner: this.engine.opts.runner } : {}),
+        ...(this.engine.opts.children ? { children: this.engine.opts.children } : {}),
+      },
       limits: this.limits,
       // Streamed outputs (runner) of a secret step are masked like the step output.
-      emit: (e) => this.emit(seqRef.seq, spec && e.type === 'output' ? { ...e, data: { ...e.data, data: extractSecrets(e.data.data, spec).masked } } : e),
+      emit: (e) =>
+        this.emit(
+          seqRef.seq,
+          spec && e.type === 'output'
+            ? { ...e, data: { ...e.data, data: extractSecrets(e.data.data, spec).masked } }
+            : e,
+        ),
     };
   }
 
@@ -505,11 +597,18 @@ class Execution {
    * Masks a step's show-once secrets and hands the values to the SecretSink (never to the store). A failed hand-off
    * does not fail the step — the write already happened — but is recorded (without the value).
    */
-  private async secure(output: unknown, spec: SecretSpec | null, at: { stepId: string; path: string; seq: number; frame: Frame; deliver: boolean }): Promise<unknown> {
+  private async secure(
+    output: unknown,
+    spec: SecretSpec | null,
+    at: { stepId: string; path: string; seq: number; frame: Frame; deliver: boolean },
+  ): Promise<unknown> {
     const { masked, values, hints } = extractSecrets(output, spec);
     const fields = Object.keys(values);
     if (!fields.length || !at.deliver) return masked;
-    let outcome: Awaited<ReturnType<SecretSink['deliver']>> = { status: 'discarded', reason: 'No secret channel is configured.' };
+    let outcome: Awaited<ReturnType<SecretSink['deliver']>> = {
+      status: 'discarded',
+      reason: 'No secret channel is configured.',
+    };
     if (this.engine.opts.secrets) {
       try {
         outcome = await this.engine.opts.secrets.deliver(this.run, {
@@ -532,7 +631,18 @@ class Execution {
     await this.emit(at.seq, {
       type: 'log',
       level: outcome.status === 'discarded' ? 'warn' : 'info',
-      data: { message, path: at.path, secret: { runId: this.run.id, stepId: at.stepId, stepPath: at.path, fields, hints, status: outcome.status } },
+      data: {
+        message,
+        path: at.path,
+        secret: {
+          runId: this.run.id,
+          stepId: at.stepId,
+          stepPath: at.path,
+          fields,
+          hints,
+          status: outcome.status,
+        },
+      },
     });
     return masked;
   }
@@ -557,8 +667,20 @@ class Execution {
     if ('done' in pre) return pre.done;
     const rec = pre.rec;
     if (!handler) {
-      const error: RunError = { code: 'unknown_step_type', message: `No handler for step type ${step.type}.`, stepId: step.id, path };
-      await this.save(this.newRecord(step.id, step.type, path, mode, frame.actor, { status: 'failed', error, endedAt: this.clock.now() }), frame.actor);
+      const error: RunError = {
+        code: 'unknown_step_type',
+        message: `No handler for step type ${step.type}.`,
+        stepId: step.id,
+        path,
+      };
+      await this.save(
+        this.newRecord(step.id, step.type, path, mode, frame.actor, {
+          status: 'failed',
+          error,
+          endedAt: this.clock.now(),
+        }),
+        frame.actor,
+      );
       return this.policy(step, error);
     }
     if (rec) {
@@ -577,7 +699,15 @@ class Execution {
           await this.close(rec, frame.actor, { status: 'needs_review', error });
           return { kind: 'fail', error, policy: 'fail', needsReview: true };
         }
-        await this.close(rec, frame.actor, { status: 'retried', error: { code: 'interrupted', message: 'The worker stopped while this attempt was in flight.', stepId: step.id, path } });
+        await this.close(rec, frame.actor, {
+          status: 'retried',
+          error: {
+            code: 'interrupted',
+            message: 'The worker stopped while this attempt was in flight.',
+            stepId: step.id,
+            path,
+          },
+        });
       }
     }
 
@@ -624,45 +754,79 @@ class Execution {
     dryRunOutput: unknown;
     existing: StepRecord | undefined;
     compensation?: boolean;
-  }): Promise<{ kind: 'ok'; rec: StepRecord } | { kind: 'failed'; rec: StepRecord } | { kind: 'flow'; flow: Flow }> {
+  }): Promise<
+    { kind: 'ok'; rec: StepRecord } | { kind: 'failed'; rec: StepRecord } | { kind: 'flow'; flow: Flow }
+  > {
     const { frame, handler, path, mode } = a;
     const seqRef: { seq: number | null } = { seq: null };
     const spec = a.compensation ? null : secretSpec(a.body as { secret?: boolean; secretOutputs?: string[] });
     const fail = async (err: unknown, rec?: StepRecord) => {
       const error = toRunError(err, { stepId: a.stepId, path });
-      const r = rec ?? this.newRecord(a.stepId, a.type, path, mode, frame.actor, { attempt: a.existing ? a.existing.attempt + (a.existing.status === 'retried' ? 1 : 0) : 1 });
+      const r =
+        rec ??
+        this.newRecord(a.stepId, a.type, path, mode, frame.actor, {
+          attempt: a.existing ? a.existing.attempt + (a.existing.status === 'retried' ? 1 : 0) : 1,
+        });
       await this.close(r, frame.actor, { status: 'failed', error });
       return { kind: 'failed' as const, rec: r };
     };
 
     let prep: Prepared;
     try {
-      prep = await handler.prepare(a.body as never, this.context(a.stepId, path, mode, frame, this.ac.signal, seqRef));
+      prep = await handler.prepare(
+        a.body as never,
+        this.context(a.stepId, path, mode, frame, this.ac.signal, seqRef),
+      );
     } catch (err) {
       return fail(err);
     }
-    const intercepted = this.engine.opts.intercept?.({ id: a.stepId, type: a.type, mode }, path, { dryRun: this.dryRun, runId: this.run.id, compensation: a.compensation === true });
+    const intercepted = this.engine.opts.intercept?.({ id: a.stepId, type: a.type, mode }, path, {
+      dryRun: this.dryRun,
+      runId: this.run.id,
+      compensation: a.compensation === true,
+    });
     const describe = await this.describe(a.describe, frame);
 
     // Dry run: writes become plan entries. A write child playbook is planned as one entry and, when children are
     // dry-run too (default with a ChildRunner), followed by the child's own entries.
     const planned = this.dryRun && mode === 'write' && handler.external;
-    const entry: PlanEntry = { stepId: a.stepId, stepPath: path, describe, ...(prep.plan ?? { service: a.type, method: 'WRITE' }), ...(a.compensation ? { compensation: true } : {}) };
-    const delegate = handler.plansItself === true && !!this.engine.opts.children && (this.engine.opts.dryRunChildren ?? true);
+    const entry: PlanEntry = {
+      stepId: a.stepId,
+      stepPath: path,
+      describe,
+      ...(prep.plan ?? { service: a.type, method: 'WRITE' }),
+      ...(a.compensation ? { compensation: true } : {}),
+    };
+    const delegate =
+      handler.plansItself === true &&
+      !!this.engine.opts.children &&
+      (this.engine.opts.dryRunChildren ?? true);
     // A mocked child playbook (content tests) counts as a child that ran: its own tests cover its plan.
     const mockedChild = handler.plansItself === true && !!intercepted && 'output' in intercepted;
     const planSelf = planned && !mockedChild;
     if (planSelf && (!delegate || intercepted)) {
-      const rec = this.newRecord(a.stepId, a.type, path, mode, frame.actor, { request: prep.request, plan: [entry], ...(a.existing ? { seq: a.existing.seq } : {}) });
+      const rec = this.newRecord(a.stepId, a.type, path, mode, frame.actor, {
+        request: prep.request,
+        plan: [entry],
+        ...(a.existing ? { seq: a.existing.seq } : {}),
+      });
       if (intercepted && 'error' in intercepted) return fail(intercepted.error, rec);
       let output: unknown;
       try {
-        output = intercepted && 'output' in intercepted ? intercepted.output : a.dryRunOutput !== undefined ? await this.render(a.dryRunOutput, frame) : null;
+        output =
+          intercepted && 'output' in intercepted
+            ? intercepted.output
+            : a.dryRunOutput !== undefined
+              ? await this.render(a.dryRunOutput, frame)
+              : null;
       } catch (err) {
         return fail(err, rec);
       }
       // Dry runs produce no real secrets: mask whatever dryRunOutput/mocks say, deliver nothing.
-      await this.close(rec, frame.actor, { status: 'planned', output: extractSecrets(output ?? null, spec).masked ?? null });
+      await this.close(rec, frame.actor, {
+        status: 'planned',
+        output: extractSecrets(output ?? null, spec).masked ?? null,
+      });
       return { kind: 'ok', rec };
     }
 
@@ -678,10 +842,18 @@ class Execution {
       }
     }
 
-    let attempt = a.existing ? (a.existing.status === 'retried' ? a.existing.attempt + 1 : a.existing.attempt) : 1;
+    let attempt = a.existing
+      ? a.existing.status === 'retried'
+        ? a.existing.attempt + 1
+        : a.existing.attempt
+      : 1;
     let reuseSeq = a.existing?.status === 'waiting' ? a.existing.seq : undefined;
     for (;;) {
-      const rec = this.newRecord(a.stepId, a.type, path, mode, frame.actor, { attempt, request: prep.request, ...(reuseSeq !== undefined ? { seq: reuseSeq } : {}) });
+      const rec = this.newRecord(a.stepId, a.type, path, mode, frame.actor, {
+        attempt,
+        request: prep.request,
+        ...(reuseSeq !== undefined ? { seq: reuseSeq } : {}),
+      });
       reuseSeq = undefined;
       seqRef.seq = rec.seq;
       await this.save(rec, frame.actor);
@@ -697,21 +869,52 @@ class Execution {
           result = await this.withTimeout(a.timeout, stepAc, () => handler.execute(prep, ctx));
         }
         if (result.park) {
-          await this.close(rec, frame.actor, { status: 'waiting', plan: result.plan?.length ? result.plan : null, output: result.output ?? null, endedAt: null });
-          return { kind: 'flow', flow: { kind: 'park', status: result.park.status, ...(result.park.wakeAt ? { wakeAt: result.park.wakeAt } : {}) } };
+          await this.close(rec, frame.actor, {
+            status: 'waiting',
+            plan: result.plan?.length ? result.plan : null,
+            output: result.output ?? null,
+            endedAt: null,
+          });
+          return {
+            kind: 'flow',
+            flow: {
+              kind: 'park',
+              status: result.park.status,
+              ...(result.park.wakeAt ? { wakeAt: result.park.wakeAt } : {}),
+            },
+          };
         }
         if (result.error) {
           rec.plan = result.plan?.length ? result.plan : null;
           rec.output = extractSecrets(result.output ?? null, spec).masked ?? null;
-          throw new StepError(result.error.code, result.error.message, result.error.details ? { details: result.error.details } : {});
+          throw new StepError(
+            result.error.code,
+            result.error.message,
+            result.error.details ? { details: result.error.details } : {},
+          );
         }
         const plan = planSelf ? [entry, ...(result.plan ?? [])] : (result.plan ?? []);
-        const output = await this.secure(result.output ?? null, spec, { stepId: a.stepId, path, seq: rec.seq, frame, deliver: !this.dryRun });
-        await this.close(rec, frame.actor, { status: planSelf ? 'planned' : 'succeeded', output: output ?? null, plan: plan.length ? plan : null, msRequestId: result.requestId ?? null });
+        const output = await this.secure(result.output ?? null, spec, {
+          stepId: a.stepId,
+          path,
+          seq: rec.seq,
+          frame,
+          deliver: !this.dryRun,
+        });
+        await this.close(rec, frame.actor, {
+          status: planSelf ? 'planned' : 'succeeded',
+          output: output ?? null,
+          plan: plan.length ? plan : null,
+          msRequestId: result.requestId ?? null,
+        });
         return { kind: 'ok', rec };
       } catch (err) {
         if (err instanceof IdentityUnavailable) {
-          await this.close(rec, frame.actor, { status: 'waiting', error: { code: err.reason, message: err.message, stepId: a.stepId, path }, endedAt: null });
+          await this.close(rec, frame.actor, {
+            status: 'waiting',
+            error: { code: err.reason, message: err.message, stepId: a.stepId, path },
+            endedAt: null,
+          });
           await this.runEvent('running', undefined, { blockedOn: err.reason, path });
           return { kind: 'flow', flow: { kind: 'park', status: err.parkStatus } };
         }
@@ -723,7 +926,14 @@ class Execution {
         if (isTransientError(err) && a.retry && attempt <= a.retry.max) {
           await this.close(rec, frame.actor, { status: 'retried', error });
           const delay = backoff(a.retry, attempt, retryAfterMs(err));
-          await this.emit(rec.seq, { type: 'log', level: 'warn', data: { message: `Attempt ${attempt} failed (${error.code}: ${error.message}); retrying in ${Math.round(delay / 100) / 10}s.`, path } });
+          await this.emit(rec.seq, {
+            type: 'log',
+            level: 'warn',
+            data: {
+              message: `Attempt ${attempt} failed (${error.code}: ${error.message}); retrying in ${Math.round(delay / 100) / 10}s.`,
+              path,
+            },
+          });
           try {
             await this.clock.sleep(delay, this.ac.signal);
           } catch {
@@ -738,16 +948,36 @@ class Execution {
     }
   }
 
-  private async parkIdentity(a: { stepId: string; type: string; path: string; mode: Mode; frame: Frame; existing: StepRecord | undefined }, err: IdentityUnavailable) {
+  private async parkIdentity(
+    a: {
+      stepId: string;
+      type: string;
+      path: string;
+      mode: Mode;
+      frame: Frame;
+      existing: StepRecord | undefined;
+    },
+    err: IdentityUnavailable,
+  ) {
     const rec =
       a.existing?.status === 'waiting'
         ? a.existing
-        : this.newRecord(a.stepId, a.type, a.path, a.mode, a.frame.actor, { attempt: a.existing ? a.existing.attempt + 1 : 1 });
-    await this.close(rec, a.frame.actor, { status: 'waiting', error: { code: err.reason, message: err.message, stepId: a.stepId, path: a.path }, endedAt: null });
+        : this.newRecord(a.stepId, a.type, a.path, a.mode, a.frame.actor, {
+            attempt: a.existing ? a.existing.attempt + 1 : 1,
+          });
+    await this.close(rec, a.frame.actor, {
+      status: 'waiting',
+      error: { code: err.reason, message: err.message, stepId: a.stepId, path: a.path },
+      endedAt: null,
+    });
     return { kind: 'park' as const, status: err.parkStatus };
   }
 
-  private async withTimeout<T>(timeout: string | undefined, ac: AbortController, fn: () => Promise<T>): Promise<T> {
+  private async withTimeout<T>(
+    timeout: string | undefined,
+    ac: AbortController,
+    fn: () => Promise<T>,
+  ): Promise<T> {
     const own = timeout ? parseDuration(timeout) : Number.POSITIVE_INFINITY;
     const budget = Math.max(1, this.remainingMs());
     const ms = Math.min(own, budget);
@@ -758,7 +988,10 @@ class Execution {
           const err =
             own <= budget
               ? new StepError('timeout', `The step did not finish within ${timeout}.`)
-              : new StepError('run_timeout', `The run exceeded its time limit of ${Math.round(this.limits.maxRunMs / 60_000)} minutes.`);
+              : new StepError(
+                  'run_timeout',
+                  `The run exceeded its time limit of ${Math.round(this.limits.maxRunMs / 60_000)} minutes.`,
+                );
           ac.abort(err);
           reject(err);
         },
@@ -786,7 +1019,11 @@ class Execution {
         taken = truthy(await this.render(step.if, frame)) ? 'then' : 'else';
       } catch (err) {
         const error = toRunError(err, { stepId: step.id, path });
-        const failed = this.newRecord(step.id, step.type, path, 'read', frame.actor, { status: 'failed', error, endedAt: this.clock.now() });
+        const failed = this.newRecord(step.id, step.type, path, 'read', frame.actor, {
+          status: 'failed',
+          error,
+          endedAt: this.clock.now(),
+        });
         await this.save(failed, frame.actor);
         this.setView(frame, step.id, this.viewOf(failed));
         return this.policy(step, error);
@@ -796,7 +1033,11 @@ class Execution {
       for (const s of (taken === 'then' ? step.else : step.then) ?? []) {
         const p = frame.prefix + s.id;
         if (this.records.has(p)) continue;
-        const skipped = this.newRecord(s.id, s.type, p, stepMode(s), frame.actor, { status: 'skipped', endedAt: this.clock.now(), output: null });
+        const skipped = this.newRecord(s.id, s.type, p, stepMode(s), frame.actor, {
+          status: 'skipped',
+          endedAt: this.clock.now(),
+          output: null,
+        });
         await this.save(skipped, frame.actor);
         this.setView(frame, s.id, this.viewOf(skipped));
       }
@@ -804,12 +1045,14 @@ class Execution {
     // Always walk the taken list: finished inner steps are reused from their records, which restores their views.
     const flow = await this.runSteps(taken === 'then' ? step.then : (step.else ?? []), frame);
     if (flow.kind === 'ok') {
-      if (rec.status !== 'succeeded') await this.close(rec, frame.actor, { status: 'succeeded', output: { taken } });
+      if (rec.status !== 'succeeded')
+        await this.close(rec, frame.actor, { status: 'succeeded', output: { taken } });
       this.setView(frame, step.id, this.viewOf(rec));
       return OK;
     }
     if (flow.kind === 'fail') {
-      if (rec.status !== 'failed') await this.close(rec, frame.actor, { status: 'failed', error: flow.error, output: { taken } });
+      if (rec.status !== 'failed')
+        await this.close(rec, frame.actor, { status: 'failed', error: flow.error, output: { taken } });
       this.setView(frame, step.id, this.viewOf(rec));
       if (step.onError === 'continue' && flow.policy === 'fail' && !flow.needsReview) return OK;
       return step.onError === 'compensate' && !flow.needsReview ? { ...flow, policy: 'compensate' } : flow;
@@ -823,7 +1066,8 @@ class Execution {
     if ('done' in pre) return pre.done;
     let rec = pre.rec;
     let items: unknown[];
-    if (rec && Array.isArray((rec.request as { items?: unknown } | null)?.items)) items = (rec.request as { items: unknown[] }).items;
+    if (rec && Array.isArray((rec.request as { items?: unknown } | null)?.items))
+      items = (rec.request as { items: unknown[] }).items;
     else {
       let raw: unknown;
       try {
@@ -833,10 +1077,24 @@ class Execution {
       }
       if (raw === undefined || raw === null) items = [];
       else if (Array.isArray(raw)) items = raw;
-      else return this.failControl(step, frame, { code: 'invalid_items', message: 'forEach items must evaluate to a list.', stepId: step.id, path });
+      else
+        return this.failControl(step, frame, {
+          code: 'invalid_items',
+          message: 'forEach items must evaluate to a list.',
+          stepId: step.id,
+          path,
+        });
       const limit = Math.min(step.maxItems ?? this.limits.maxItems, this.limits.maxItems);
-      if (items.length > limit) return this.failControl(step, frame, { code: 'limit_exceeded', message: `forEach has ${items.length} items; the limit is ${limit}.`, stepId: step.id, path });
-      rec = this.newRecord(step.id, step.type, path, 'read', frame.actor, { request: { items, count: items.length } });
+      if (items.length > limit)
+        return this.failControl(step, frame, {
+          code: 'limit_exceeded',
+          message: `forEach has ${items.length} items; the limit is ${limit}.`,
+          stepId: step.id,
+          path,
+        });
+      rec = this.newRecord(step.id, step.type, path, 'read', frame.actor, {
+        request: { items, count: items.length },
+      });
       await this.save(rec, frame.actor);
     }
     const loopRec = rec;
@@ -851,7 +1109,13 @@ class Execution {
     let cancelled = false;
 
     const iterate = async (index: number) => {
-      const iframe: Frame = { prefix: `${path}[${index}].`, actor: { ...frame.actor }, locals: new Map(), parent: frame, vars: { [as]: items[index], index } };
+      const iframe: Frame = {
+        prefix: `${path}[${index}].`,
+        actor: { ...frame.actor },
+        locals: new Map(),
+        parent: frame,
+        vars: { [as]: items[index], index },
+      };
       const flow = await this.runSteps(step.steps, iframe);
       const outputs: Record<string, unknown> = {};
       let failed = false;
@@ -901,7 +1165,14 @@ class Execution {
       await this.close(loopRec, frame.actor, {
         status: anyFailed ? 'failed' : 'succeeded',
         output,
-        error: anyFailed ? { code: 'items_failed', message: `${output.filter((r) => r.status === 'failed').length} of ${items.length} items failed.`, stepId: step.id, path } : null,
+        error: anyFailed
+          ? {
+              code: 'items_failed',
+              message: `${output.filter((r) => r.status === 'failed').length} of ${items.length} items failed.`,
+              stepId: step.id,
+              path,
+            }
+          : null,
       });
     } else loopRec.output = output;
     this.setView(frame, step.id, this.viewOf(loopRec));
@@ -947,14 +1218,21 @@ class Execution {
     }
     if (!rec || rec.status !== 'waiting') {
       if (this.dryRun) {
-        const skipped = this.newRecord(step.id, 'approval', path, 'read', frame.actor, { status: 'skipped', output: { dryRun: true }, endedAt: this.clock.now() });
+        const skipped = this.newRecord(step.id, 'approval', path, 'read', frame.actor, {
+          status: 'skipped',
+          output: { dryRun: true },
+          endedAt: this.clock.now(),
+        });
         await this.save(skipped, frame.actor);
         this.setView(frame, step.id, this.viewOf(skipped));
         return OK;
       }
       const task = this.approvalTask(step, path, frame, await this.describe(step.message, frame));
       const { requestedBy: _r, ...request } = task;
-      const waiting = this.newRecord(step.id, 'approval', path, 'read', frame.actor, { status: 'waiting', request });
+      const waiting = this.newRecord(step.id, 'approval', path, 'read', frame.actor, {
+        status: 'waiting',
+        request,
+      });
       await this.save(waiting, frame.actor);
       await this.store.openTask(this.run.id, task);
       return { kind: 'park', status: 'awaiting_approval' };
@@ -962,25 +1240,52 @@ class Execution {
     const req = rec.request as Omit<Extract<HumanTask, { kind: 'approval' }>, 'requestedBy'>;
     await this.store.openTask(this.run.id, { ...req, kind: 'approval', requestedBy: frame.actor });
     const decision = await this.store.getDecision(this.run.id, path);
-    const expired = !decision && req.expiresAt !== null && this.clock.now().getTime() >= Date.parse(req.expiresAt);
-    if ((!decision || decision.kind !== 'approval') && !expired) return { kind: 'park', status: 'awaiting_approval' };
+    const expired =
+      !decision && req.expiresAt !== null && this.clock.now().getTime() >= Date.parse(req.expiresAt);
+    if ((!decision || decision.kind !== 'approval') && !expired)
+      return { kind: 'park', status: 'awaiting_approval' };
     if (decision?.kind === 'approval' && decision.approved) {
       await this.close(rec, decision.actor, {
         status: 'succeeded',
         actorOid: decision.actor.oid,
-        output: { decision: 'approved', approver: { oid: decision.actor.oid, upn: decision.actor.upn }, comment: decision.comment ?? null, decidedAt: decision.decidedAt },
+        output: {
+          decision: 'approved',
+          approver: { oid: decision.actor.oid, upn: decision.actor.upn },
+          comment: decision.comment ?? null,
+          decidedAt: decision.decidedAt,
+        },
       });
       this.adoptApprover(rec, frame);
       this.setView(frame, step.id, this.viewOf(rec));
       return OK;
     }
-    const isExpired = expired || (decision?.kind === 'approval' && !decision.approved && decision.expired === true);
+    const isExpired =
+      expired || (decision?.kind === 'approval' && !decision.approved && decision.expired === true);
     const by = decision?.kind === 'approval' ? decision.actor : null;
     const comment = decision?.kind === 'approval' ? decision.comment : null;
     const error: RunError = isExpired
-      ? { code: 'approval_expired', message: 'The approval request expired before anyone approved it.', stepId: step.id, path }
-      : { code: 'approval_rejected', message: `Rejected by ${by?.upn ?? 'an approver'}${comment ? `: ${comment}` : '.'}`, stepId: step.id, path };
-    await this.close(rec, by, { status: 'failed', error, actorOid: by?.oid ?? null, output: { decision: isExpired ? 'expired' : 'rejected', approver: by ? { oid: by.oid, upn: by.upn } : null, comment: comment ?? null } });
+      ? {
+          code: 'approval_expired',
+          message: 'The approval request expired before anyone approved it.',
+          stepId: step.id,
+          path,
+        }
+      : {
+          code: 'approval_rejected',
+          message: `Rejected by ${by?.upn ?? 'an approver'}${comment ? `: ${comment}` : '.'}`,
+          stepId: step.id,
+          path,
+        };
+    await this.close(rec, by, {
+      status: 'failed',
+      error,
+      actorOid: by?.oid ?? null,
+      output: {
+        decision: isExpired ? 'expired' : 'rejected',
+        approver: by ? { oid: by.oid, upn: by.upn } : null,
+        comment: comment ?? null,
+      },
+    });
     this.setView(frame, step.id, this.viewOf(rec));
     return this.policy(step, error);
   }
@@ -988,7 +1293,8 @@ class Execution {
   /** After an approval, later steps (in this frame) run as the approver — delegated runs only (ADR-010/011). */
   private adoptApprover(rec: StepRecord, frame: Frame) {
     if (this.run.identity !== 'delegated') return;
-    const approver = (rec.output as { approver?: { oid: string | null; upn: string | null } } | null)?.approver;
+    const approver = (rec.output as { approver?: { oid: string | null; upn: string | null } } | null)
+      ?.approver;
     if (approver?.oid) frame.actor = { kind: 'delegated', oid: approver.oid, upn: approver.upn ?? null };
   }
 
@@ -1006,32 +1312,52 @@ class Execution {
       path,
       stepId: step.id,
       instructions: (await this.describe(step.instructions, frame)) ?? '',
-      checklist: await Promise.all((step.checklist ?? []).map(async (c) => (await this.describe(c, frame)) ?? '')),
+      checklist: await Promise.all(
+        (step.checklist ?? []).map(async (c) => (await this.describe(c, frame)) ?? ''),
+      ),
       requestedBy: frame.actor,
     });
     if (!rec || rec.status !== 'waiting') {
       if (this.dryRun) {
-        const skipped = this.newRecord(step.id, 'manual', path, 'read', frame.actor, { status: 'skipped', output: { dryRun: true }, endedAt: this.clock.now() });
+        const skipped = this.newRecord(step.id, 'manual', path, 'read', frame.actor, {
+          status: 'skipped',
+          output: { dryRun: true },
+          endedAt: this.clock.now(),
+        });
         await this.save(skipped, frame.actor);
         this.setView(frame, step.id, this.viewOf(skipped));
         return OK;
       }
       const t = await task();
       const { requestedBy: _r, ...request } = t;
-      await this.save(this.newRecord(step.id, 'manual', path, 'read', frame.actor, { status: 'waiting', request }), frame.actor);
+      await this.save(
+        this.newRecord(step.id, 'manual', path, 'read', frame.actor, { status: 'waiting', request }),
+        frame.actor,
+      );
       await this.store.openTask(this.run.id, t);
       return { kind: 'park', status: 'awaiting_input' };
     }
     await this.store.openTask(this.run.id, await task());
     const decision = await this.store.getDecision(this.run.id, path);
     if (!decision || decision.kind !== 'manual') return { kind: 'park', status: 'awaiting_input' };
-    const output = { confirmed: decision.confirmed, notes: decision.notes ?? null, values: decision.values ?? {}, by: { oid: decision.actor.oid, upn: decision.actor.upn }, at: decision.decidedAt };
+    const output = {
+      confirmed: decision.confirmed,
+      notes: decision.notes ?? null,
+      values: decision.values ?? {},
+      by: { oid: decision.actor.oid, upn: decision.actor.upn },
+      at: decision.decidedAt,
+    };
     if (decision.confirmed) {
       await this.close(rec, decision.actor, { status: 'succeeded', output, actorOid: decision.actor.oid });
       this.setView(frame, step.id, this.viewOf(rec));
       return OK;
     }
-    const error: RunError = { code: 'manual_declined', message: `${decision.actor.upn ?? 'Someone'} did not confirm this step${decision.notes ? `: ${decision.notes}` : '.'}`, stepId: step.id, path };
+    const error: RunError = {
+      code: 'manual_declined',
+      message: `${decision.actor.upn ?? 'Someone'} did not confirm this step${decision.notes ? `: ${decision.notes}` : '.'}`,
+      stepId: step.id,
+      path,
+    };
     await this.close(rec, decision.actor, { status: 'failed', output, error, actorOid: decision.actor.oid });
     this.setView(frame, step.id, this.viewOf(rec));
     return this.policy(step, error);
@@ -1048,21 +1374,34 @@ class Execution {
     }
     const now = this.clock.now();
     if (this.dryRun) {
-      const skipped = this.newRecord(step.id, 'wait', path, 'read', frame.actor, { status: 'skipped', output: { dryRun: true }, endedAt: now });
+      const skipped = this.newRecord(step.id, 'wait', path, 'read', frame.actor, {
+        status: 'skipped',
+        output: { dryRun: true },
+        endedAt: now,
+      });
       await this.save(skipped, frame.actor);
       this.setView(frame, step.id, this.viewOf(skipped));
       return OK;
     }
     const startedAt = rec?.status === 'waiting' && rec.startedAt ? rec.startedAt : now;
     const succeed = async (r: StepRecord) => {
-      await this.close(r, frame.actor, { status: 'succeeded', output: { waitedMs: now.getTime() - startedAt.getTime() } });
+      await this.close(r, frame.actor, {
+        status: 'succeeded',
+        output: { waitedMs: now.getTime() - startedAt.getTime() },
+      });
       this.setView(frame, step.id, this.viewOf(r));
       return OK;
     };
     if (step.duration) {
-      const wakeAt = rec?.status === 'waiting' ? new Date((rec.request as { wakeAt: string }).wakeAt) : new Date(now.getTime() + parseDuration(step.duration));
+      const wakeAt =
+        rec?.status === 'waiting'
+          ? new Date((rec.request as { wakeAt: string }).wakeAt)
+          : new Date(now.getTime() + parseDuration(step.duration));
       if (!rec || rec.status !== 'waiting') {
-        rec = this.newRecord(step.id, 'wait', path, 'read', frame.actor, { status: 'waiting', request: { wakeAt: iso(wakeAt) } });
+        rec = this.newRecord(step.id, 'wait', path, 'read', frame.actor, {
+          status: 'waiting',
+          request: { wakeAt: iso(wakeAt) },
+        });
         await this.save(rec, frame.actor);
       }
       if (now.getTime() >= wakeAt.getTime()) return succeed(rec);
@@ -1075,14 +1414,25 @@ class Execution {
     } catch (err) {
       return this.failControl(step, frame, toRunError(err, { stepId: step.id, path }));
     }
-    const deadline = rec?.status === 'waiting' ? new Date((rec.request as { deadline: string }).deadline) : new Date(now.getTime() + (step.timeout ? parseDuration(step.timeout) : DEFAULT_WAIT_TIMEOUT_MS));
+    const deadline =
+      rec?.status === 'waiting'
+        ? new Date((rec.request as { deadline: string }).deadline)
+        : new Date(now.getTime() + (step.timeout ? parseDuration(step.timeout) : DEFAULT_WAIT_TIMEOUT_MS));
     if (!rec || rec.status !== 'waiting') {
-      rec = this.newRecord(step.id, 'wait', path, 'read', frame.actor, { status: 'waiting', request: { deadline: iso(deadline), wakeAt: null } });
+      rec = this.newRecord(step.id, 'wait', path, 'read', frame.actor, {
+        status: 'waiting',
+        request: { deadline: iso(deadline), wakeAt: null },
+      });
       if (!truthy(cond)) await this.save(rec, frame.actor);
     }
     if (truthy(cond)) return succeed(rec);
     if (now.getTime() >= deadline.getTime()) {
-      return this.failControl(step, frame, { code: 'wait_timeout', message: `The condition was still false after ${step.timeout ?? '1h'}.`, stepId: step.id, path });
+      return this.failControl(step, frame, {
+        code: 'wait_timeout',
+        message: `The condition was still false after ${step.timeout ?? '1h'}.`,
+        stepId: step.id,
+        path,
+      });
     }
     const interval = step.interval ? parseDuration(step.interval) : DEFAULT_WAIT_INTERVAL_MS;
     const wakeAt = new Date(Math.min(now.getTime() + interval, deadline.getTime()));
@@ -1097,9 +1447,12 @@ class Execution {
   private deriveActor(): Actor {
     let actor = this.run.initiator;
     if (this.run.identity !== 'delegated') return actor;
-    const approvals = [...this.records.values()].filter((r) => r.type === 'approval' && r.status === 'succeeded' && !r.path.includes('[')).sort((a, b) => a.seq - b.seq);
+    const approvals = [...this.records.values()]
+      .filter((r) => r.type === 'approval' && r.status === 'succeeded' && !r.path.includes('['))
+      .sort((a, b) => a.seq - b.seq);
     for (const r of approvals) {
-      const approver = (r.output as { approver?: { oid: string | null; upn: string | null } } | null)?.approver;
+      const approver = (r.output as { approver?: { oid: string | null; upn: string | null } } | null)
+        ?.approver;
       if (approver?.oid) actor = { kind: 'delegated', oid: approver.oid, upn: approver.upn ?? null };
     }
     return actor;
@@ -1122,11 +1475,18 @@ class Execution {
       const m = /^(.+)\[(\d+)\]$/.exec(seg);
       if (!m) break;
       const loopPath = frame.prefix + m[1];
-      const items = ((this.records.get(loopPath)?.request as { items?: unknown[] } | null)?.items ?? []) as unknown[];
+      const items = ((this.records.get(loopPath)?.request as { items?: unknown[] } | null)?.items ??
+        []) as unknown[];
       const loopStep = this.byId.get(m[1]!) as ForEachStep | undefined;
       const index = Number(m[2]);
       const prefix = `${loopPath}[${index}].`;
-      frame = { prefix, actor, locals: views(prefix), parent: frame, vars: { [loopStep?.as ?? 'item']: items[index], index } };
+      frame = {
+        prefix,
+        actor,
+        locals: views(prefix),
+        parent: frame,
+        vars: { [loopStep?.as ?? 'item']: items[index], index },
+      };
     }
     return frame;
   }
@@ -1139,7 +1499,12 @@ class Execution {
     await this.runEvent('running', undefined, { compensating: true });
     const actor = this.deriveActor();
     const candidates = [...this.records.values()]
-      .filter((rec) => (rec.status === 'succeeded' || rec.status === 'planned') && !rec.path.includes('#') && this.byId.get(rec.stepId)?.compensate)
+      .filter(
+        (rec) =>
+          (rec.status === 'succeeded' || rec.status === 'planned') &&
+          !rec.path.includes('#') &&
+          this.byId.get(rec.stepId)?.compensate,
+      )
       .sort((a, b) => b.seq - a.seq);
     const failures: Array<{ stepId: string; path: string; message: string }> = [];
     for (const rec of candidates) {
@@ -1153,7 +1518,11 @@ class Execution {
         continue;
       }
       if (crec?.status === 'failed') {
-        failures.push({ stepId: rec.stepId, path: rec.path, message: crec.error?.message ?? 'Compensation failed.' });
+        failures.push({
+          stepId: rec.stepId,
+          path: rec.path,
+          message: crec.error?.message ?? 'Compensation failed.',
+        });
         continue;
       }
       const handler = this.handlers[comp.type];
@@ -1174,7 +1543,12 @@ class Execution {
         frame,
         describe: comp.describe ?? (step.describe ? `Undo: ${step.describe}` : undefined),
         dryRunOutput: undefined,
-        existing: crec && (crec.status === 'waiting' || crec.status === 'retried' || crec.status === 'running') ? (crec.status === 'running' ? { ...crec, status: 'retried' } : crec) : undefined,
+        existing:
+          crec && (crec.status === 'waiting' || crec.status === 'retried' || crec.status === 'running')
+            ? crec.status === 'running'
+              ? { ...crec, status: 'retried' }
+              : crec
+            : undefined,
         compensation: true,
       });
       if (out.kind === 'flow') {
@@ -1183,12 +1557,20 @@ class Execution {
         continue;
       }
       if (out.kind === 'failed') {
-        failures.push({ stepId: rec.stepId, path: rec.path, message: out.rec.error?.message ?? 'Compensation failed.' });
+        failures.push({
+          stepId: rec.stepId,
+          path: rec.path,
+          message: out.rec.error?.message ?? 'Compensation failed.',
+        });
         continue;
       }
       await this.close(rec, actor, { status: 'compensated', endedAt: rec.endedAt });
     }
-    const error: RunError = { ...failure, compensating: false, ...(failures.length ? { compensationFailures: failures } : {}) };
+    const error: RunError = {
+      ...failure,
+      compensating: false,
+      ...(failures.length ? { compensationFailures: failures } : {}),
+    };
     return this.end(failures.length ? 'needs_review' : 'compensated', { error });
   }
 }

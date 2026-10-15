@@ -8,7 +8,15 @@ import { RunnerSpec } from './datasource';
  * --scopes` checks them against the automation identity. Write-capable jobs need two-person approval (`approvedBy`).
  */
 
-const CRON_NICKNAMES = new Set(['@yearly', '@annually', '@monthly', '@weekly', '@daily', '@midnight', '@hourly']);
+const CRON_NICKNAMES = new Set([
+  '@yearly',
+  '@annually',
+  '@monthly',
+  '@weekly',
+  '@daily',
+  '@midnight',
+  '@hourly',
+]);
 const MONTHS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
 const DAYS = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
 
@@ -51,7 +59,8 @@ function checkCronField(text: string, f: CronField): string | undefined {
     }
     const [range, step, extra] = part.split('/');
     if (extra !== undefined) return `invalid step in ${f.name} "${part}"`;
-    if (step !== undefined && !(/^\d+$/.test(step) && Number(step) >= 1 && Number(step) <= f.max)) return `invalid step in ${f.name} "${part}"`;
+    if (step !== undefined && !(/^\d+$/.test(step) && Number(step) >= 1 && Number(step) <= f.max))
+      return `invalid step in ${f.name} "${part}"`;
     if (range === '*') continue;
     const [a, b, more] = (range ?? '').split('-');
     if (more !== undefined) return `invalid range in ${f.name} "${part}"`;
@@ -95,7 +104,9 @@ export const Cron = z.string().superRefine((v, ctx) => {
   const err = validateCron(v);
   if (err) ctx.addIssue({ code: 'custom', message: err });
 });
-export const TimeZone = z.string().refine(isValidTimeZone, { message: 'Expected an IANA time zone like Europe/London or UTC' });
+export const TimeZone = z
+  .string()
+  .refine(isValidTimeZone, { message: 'Expected an IANA time zone like Europe/London or UTC' });
 
 /** Secret-bearing URLs (e.g. Teams workflow webhooks) are configuration, so only `${ env.X }` is accepted. */
 const EnvRef = Expr.meta({ description: 'An ${ env.X } reference; the value lives in local configuration' });
@@ -109,7 +120,10 @@ export const TeamsTarget = z
     channel: Template.optional(),
     message: Template.optional(),
   })
-  .refine((t) => !!t.webhook !== !!(t.team && t.channel), { message: 'Use either webhook or team + channel', path: ['webhook'] });
+  .refine((t) => !!t.webhook !== !!(t.team && t.channel), {
+    message: 'Use either webhook or team + channel',
+    path: ['webhook'],
+  });
 
 export const EmailTarget = z.strictObject({
   type: z.literal('email'),
@@ -131,7 +145,10 @@ export const Delivery = z.discriminatedUnion('type', [
     type: z.literal('file'),
     format: ExportFormat.default('xlsx'),
     /** Relative to the scheduler's reports directory; `{date}`/`{datetime}` placeholders are filled in. */
-    path: z.string().regex(/^(?!\/)(?!.*\.\.)[A-Za-z0-9_{}./-]+$/, 'Expected a relative path without ..').optional(),
+    path: z
+      .string()
+      .regex(/^(?!\/)(?!.*\.\.)[A-Za-z0-9_{}./-]+$/, 'Expected a relative path without ..')
+      .optional(),
     /** Keep the newest N files. */
     retain: z.number().int().min(1).max(1000).optional(),
   }),
@@ -177,15 +194,32 @@ export const ProbeJob = z
     /** Probes run at the same time within one sweep (default 4). */
     concurrency: z.number().int().min(1).max(16).optional(),
   })
-  .refine((j) => [j.ref, j.refs, j.select].filter((v) => v !== undefined).length === 1, { message: 'Use exactly one of ref, refs or select', path: ['ref'] });
+  .refine((j) => [j.ref, j.refs, j.select].filter((v) => v !== undefined).length === 1, {
+    message: 'Use exactly one of ref, refs or select',
+    path: ['ref'],
+  });
 export type ProbeJob = z.infer<typeof ProbeJob>;
 
-export const ScriptJob = z.strictObject({ kind: z.literal('script'), ...RunnerSpec, mode: Mode.default('read'), approvedBy: z.array(z.string().min(1)).optional() });
+export const ScriptJob = z.strictObject({
+  kind: z.literal('script'),
+  ...RunnerSpec,
+  mode: Mode.default('read'),
+  approvedBy: z.array(z.string().min(1)).optional(),
+});
 
 /** Re-validates published definitions against current schemas and (with `scopes`) the automation identity's permissions. */
-export const ContentHealthJob = z.strictObject({ kind: z.literal('contentHealth'), scopes: z.boolean().optional() });
+export const ContentHealthJob = z.strictObject({
+  kind: z.literal('contentHealth'),
+  scopes: z.boolean().optional(),
+});
 
-export const ScheduleJob = z.discriminatedUnion('kind', [ReportJob, PlaybookJob, ProbeJob, ScriptJob, ContentHealthJob]);
+export const ScheduleJob = z.discriminatedUnion('kind', [
+  ReportJob,
+  PlaybookJob,
+  ProbeJob,
+  ScriptJob,
+  ContentHealthJob,
+]);
 export type ScheduleJob = z.infer<typeof ScheduleJob>;
 
 export const Schedule = z
@@ -203,10 +237,19 @@ export const Schedule = z
     timeoutSeconds: z.number().int().min(1).max(14_400).optional(),
     /** What happens when a run is still going at the next tick. */
     overlap: z.enum(['skip', 'queue', 'allow']).default('skip'),
-    notify: z.strictObject({ onFailure: z.array(NotifyTargetSpec).optional(), onSuccess: z.array(NotifyTargetSpec).optional() }).optional(),
+    notify: z
+      .strictObject({
+        onFailure: z.array(NotifyTargetSpec).optional(),
+        onSuccess: z.array(NotifyTargetSpec).optional(),
+      })
+      .optional(),
   })
   .superRefine((def, ctx) => {
     if (def.job.kind === 'script' && def.job.mode === 'write' && !def.job.approvedBy?.length)
-      ctx.addIssue({ code: 'custom', path: ['job', 'approvedBy'], message: 'Write script schedules need approvedBy (two-person approval)' });
+      ctx.addIssue({
+        code: 'custom',
+        path: ['job', 'approvedBy'],
+        message: 'Write script schedules need approvedBy (two-person approval)',
+      });
   });
 export type Schedule = z.infer<typeof Schedule>;

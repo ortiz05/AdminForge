@@ -1,6 +1,16 @@
 import { useState } from 'react';
 import type { ExportSpec } from '@adminforge/schemas';
-import { Button, CaretDownIcon, DownloadSimpleIcon, Menu, MenuContent, MenuItem, MenuLabel, MenuTrigger, useToast } from '@adminforge/ui';
+import {
+  Button,
+  CaretDownIcon,
+  DownloadSimpleIcon,
+  Menu,
+  MenuContent,
+  MenuItem,
+  MenuLabel,
+  MenuTrigger,
+  useToast,
+} from '@adminforge/ui';
 import { ApiErrorBody } from '@adminforge/schemas';
 import { CSRF_HEADER } from '../lib/api';
 import { useMe } from '../lib/session';
@@ -33,7 +43,12 @@ export function fileNameFrom(disposition: string | null): string | undefined {
  * POST /api/reports/:key/export streams every row (all pages, server-side) as a file; the browser saves it.
  * Exports are audited by the BFF.
  */
-export async function downloadExport(key: string, body: ExportRequestBody, csrf: string, fallbackName: string): Promise<string> {
+export async function downloadExport(
+  key: string,
+  body: ExportRequestBody,
+  csrf: string,
+  fallbackName: string,
+): Promise<string> {
   const res = await fetch(`/api/reports/${encodeURIComponent(key)}/export`, {
     method: 'POST',
     credentials: 'same-origin',
@@ -81,7 +96,16 @@ export interface ExportMenuProps {
 }
 
 /** Export ▾ → CSV / Excel. Streams all rows server-side, not just the loaded ones. */
-export function ExportMenu({ pageKey, version, spec, params, columns, fallbackName, intent = 'secondary', label = 'Export' }: ExportMenuProps) {
+export function ExportMenu({
+  pageKey,
+  version,
+  spec,
+  params,
+  columns,
+  fallbackName,
+  intent = 'secondary',
+  label = 'Export',
+}: ExportMenuProps) {
   const me = useMe();
   const { toast } = useToast();
   const [busy, setBusy] = useState(false);
@@ -94,7 +118,11 @@ export function ExportMenu({ pageKey, version, spec, params, columns, fallbackNa
         me.csrf,
         fallbackName,
       );
-      toast({ tone: 'ok', title: `Exported ${name}`, description: 'All rows matching these filters. The export is recorded in the audit log.' });
+      toast({
+        tone: 'ok',
+        title: `Exported ${name}`,
+        description: 'All rows matching these filters. The export is recorded in the audit log.',
+      });
     } catch (e) {
       toast({ tone: 'crit', title: 'The export didn’t complete', description: (e as Error).message });
     } finally {
@@ -120,7 +148,12 @@ export function ExportMenu({ pageKey, version, spec, params, columns, fallbackNa
       <MenuContent className="w-60">
         <MenuLabel>All rows, as</MenuLabel>
         {spec.formats.map((f) => (
-          <MenuItem key={f} icon={<DownloadSimpleIcon size={15} />} shortcut={`.${EXT[f]}`} onSelect={() => void run(f)}>
+          <MenuItem
+            key={f}
+            icon={<DownloadSimpleIcon size={15} />}
+            shortcut={`.${EXT[f]}`}
+            onSelect={() => void run(f)}
+          >
             {FORMAT_LABEL[f]}
           </MenuItem>
         ))}

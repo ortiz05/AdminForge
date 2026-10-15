@@ -30,17 +30,27 @@ export function contentRoutes(api: FastifyInstance, ctx: AppContext) {
   eventRoutes(api, ctx);
   adminRoutes(api, ctx);
 
-  api.get<{ Querystring: { q?: string; type?: string } }>('/search', { config: { rateLimit: { max: 240, timeWindow: '1 minute' } } }, async (request) => {
-    const session = requireSession(request);
-    const type = request.query.type || undefined;
-    if (type && !(SEARCH_TYPES as readonly string[]).includes(type)) throw new AppError(400, 'invalid_request', `type must be one of ${SEARCH_TYPES.join(', ')}.`);
-    return search(
-      { definitions: ctx.definitions, outbound: ctx.outbound, timeoutMs: ctx.config.SEARCH_TIMEOUT_MS, fixtures: ctx.config.DATA_MODE === 'fixtures' },
-      session,
-      String(request.query.q ?? ''),
-      { type: type as SearchType | undefined, correlationId: request.id },
-    );
-  });
+  api.get<{ Querystring: { q?: string; type?: string } }>(
+    '/search',
+    { config: { rateLimit: { max: 240, timeWindow: '1 minute' } } },
+    async (request) => {
+      const session = requireSession(request);
+      const type = request.query.type || undefined;
+      if (type && !(SEARCH_TYPES as readonly string[]).includes(type))
+        throw new AppError(400, 'invalid_request', `type must be one of ${SEARCH_TYPES.join(', ')}.`);
+      return search(
+        {
+          definitions: ctx.definitions,
+          outbound: ctx.outbound,
+          timeoutMs: ctx.config.SEARCH_TIMEOUT_MS,
+          fixtures: ctx.config.DATA_MODE === 'fixtures',
+        },
+        session,
+        String(request.query.q ?? ''),
+        { type: type as SearchType | undefined, correlationId: request.id },
+      );
+    },
+  );
 
   api.get('/me/capabilities', async (request) => {
     const session = requireSession(request);

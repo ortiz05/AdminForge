@@ -18,7 +18,8 @@
     "format": "prettier --write .",
     "adminforge": "tsx portal/tools/cli/src/index.ts",
     "db:up": "docker compose --env-file \"${ADMINFORGE_ENV_FILE:-$HOME/.config/adminforge/dev.env}\" -f portal/deploy/docker-compose.dev.yml up -d --wait",
-    "db:down": "docker compose --env-file \"${ADMINFORGE_ENV_FILE:-$HOME/.config/adminforge/dev.env}\" -f portal/deploy/docker-compose.dev.yml down"
+    "db:down": "docker compose --env-file \"${ADMINFORGE_ENV_FILE:-$HOME/.config/adminforge/dev.env}\" -f portal/deploy/docker-compose.dev.yml down",
+    "format:check": "prettier --check ."
   },
   "devDependencies": {
     "@types/node": "^26.6.5",

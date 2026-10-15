@@ -2,3 +2,9 @@ pnpm-lock.yaml
 **/dist
 **/*.gen.ts
 docs/plans
+portal/content
+tests/fixtures
+tests/e2e/__screenshots__
+portal/apps/runner/modules
+**/generated
+*.ps1

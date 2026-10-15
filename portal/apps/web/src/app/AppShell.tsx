@@ -105,7 +105,11 @@ function SignedInShell({ me, children }: { me: MeResponse; children: ReactNode }
   const onArm = useCallback(async (request: ArmRequest) => {
     // Come back to the same page (and any open playbook drawer) after step-up.
     const returnTo = encodeURIComponent(`${window.location.pathname}${window.location.search}`);
-    const { redirect } = await api(`/auth/arm?returnTo=${returnTo}`, { method: 'POST', body: request, schema: RedirectResponse });
+    const { redirect } = await api(`/auth/arm?returnTo=${returnTo}`, {
+      method: 'POST',
+      body: request,
+      schema: RedirectResponse,
+    });
     browser.assign(redirect);
   }, []);
 

@@ -14,7 +14,12 @@ export const QIDS = {
   activity3: '623eb85e-dbb9-44f2-a937-65f9faa533e5',
 } as const;
 
-const provenance = (service: string, path: string, ms: number) => ({ service, path, ms, requestId: QIDS.correlation });
+const provenance = (service: string, path: string, ms: number) => ({
+  service,
+  path,
+  ms,
+  requestId: QIDS.correlation,
+});
 
 export const subscriptionsResult = () => ({
   columns: [
@@ -197,7 +202,8 @@ export const huntingResult = () => ({
 export const QUERY_ERROR = {
   error: {
     code: 'invalid_query',
-    message: "Resource Graph couldn't parse the query: 'summarise' is not a recognised operator (line 2, column 3).",
+    message:
+      "Resource Graph couldn't parse the query: 'summarise' is not a recognised operator (line 2, column 3).",
     hint: 'Check the operator name — KQL uses summarize — then run it again.',
     correlationId: QIDS.correlation,
   },
@@ -252,10 +258,12 @@ export function answerQuery(path: string, body: Record<string, unknown>): QueryR
   const q = String(body.query ?? '');
   if (/summarise/.test(q)) return { status: 400, body: QUERY_ERROR };
   if (body.source === 'resourceGraph') {
-    if (/resourcecontainers/.test(q) && /subscriptions/.test(q)) return { status: 200, body: subscriptionsResult() };
+    if (/resourcecontainers/.test(q) && /subscriptions/.test(q))
+      return { status: 200, body: subscriptionsResult() };
     if (/operationalinsights\/workspaces/.test(q)) return { status: 200, body: workspacesResult() };
     if (/bag_keys\(tags\)/.test(q)) return { status: 200, body: untaggedResult() };
-    if (/where name == 'nothing'/.test(q)) return { status: 200, body: { ...inventoryResult(), rows: [], rowCount: 0, ms: 95 } };
+    if (/where name == 'nothing'/.test(q))
+      return { status: 200, body: { ...inventoryResult(), rows: [], rowCount: 0, ms: 95 } };
     return { status: 200, body: inventoryResult() };
   }
   if (body.source === 'logAnalytics') {

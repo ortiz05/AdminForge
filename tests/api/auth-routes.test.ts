@@ -24,7 +24,10 @@ async function setup(overrides: Record<string, string> = {}): Promise<Setup> {
 
 /** Starts /auth/login and returns the state/nonce Entra would echo back. */
 async function startLogin(t: Setup, returnTo = '/p/identity.users') {
-  const res = await t.app.inject({ method: 'GET', url: `/auth/login?returnTo=${encodeURIComponent(returnTo)}` });
+  const res = await t.app.inject({
+    method: 'GET',
+    url: `/auth/login?returnTo=${encodeURIComponent(returnTo)}`,
+  });
   expect(res.statusCode).toBe(302);
   const url = new URL(res.headers.location as string);
   return { url, state: url.searchParams.get('state')!, nonce: url.searchParams.get('nonce')! };
@@ -56,13 +59,21 @@ describe('Entra sign-in routes (fake AuthClient)', () => {
     expect(nonce).toMatch(/^[A-Za-z0-9_-]{43}$/);
     expect(url.searchParams.get('code_challenge')).toMatch(/^[A-Za-z0-9_-]{43}$/);
     const record = t.preauth.rows.get(state)!;
-    expect(record).toMatchObject({ kind: 'read', nonce, returnTo: '/p/identity.groups?x=1', sessionIdHash: null });
+    expect(record).toMatchObject({
+      kind: 'read',
+      nonce,
+      returnTo: '/p/identity.groups?x=1',
+      sessionIdHash: null,
+    });
     expect(record.verifier).not.toBe(url.searchParams.get('code_challenge'));
     expect(record.expiresAt.getTime()).toBe(t.clock.t + 10 * MINUTE);
   });
 
   it('rejects an unknown state', async () => {
-    const res = await t.app.inject({ method: 'GET', url: `/auth/callback?code=good-code&state=${'x'.repeat(43)}` });
+    const res = await t.app.inject({
+      method: 'GET',
+      url: `/auth/callback?code=good-code&state=${'x'.repeat(43)}`,
+    });
     expect(res.statusCode).toBe(400);
     expect(ApiErrorBody.parse(res.json()).error).toMatchObject({
       code: 'invalid_state',
@@ -81,7 +92,9 @@ describe('Entra sign-in routes (fake AuthClient)', () => {
 
   it('state is single use', async () => {
     const { state } = await startLogin(t);
-    expect((await t.app.inject({ method: 'GET', url: `/auth/callback?code=good-code&state=${state}` })).statusCode).toBe(302);
+    expect(
+      (await t.app.inject({ method: 'GET', url: `/auth/callback?code=good-code&state=${state}` })).statusCode,
+    ).toBe(302);
     const replay = await t.app.inject({ method: 'GET', url: `/auth/callback?code=good-code&state=${state}` });
     expect(replay.statusCode).toBe(400);
     expect(replay.json().error.code).toBe('invalid_state');
@@ -101,7 +114,11 @@ describe('Entra sign-in routes (fake AuthClient)', () => {
       dataMode: 'live',
     });
     const [session] = [...t.sessions.rows.values()];
-    expect(t.auth.redeems[0]).toMatchObject({ kind: 'read', code: 'good-code', partitionKey: `read:${session!.idHash}` });
+    expect(t.auth.redeems[0]).toMatchObject({
+      kind: 'read',
+      code: 'good-code',
+      partitionKey: `read:${session!.idHash}`,
+    });
     expect(session!.readAccountId).toBe(`${USER_OID}.${TENANT_ID}`);
     expect(cookie.split('=')[1]).not.toBe(session!.idHash);
     expect(t.audit.rows.map((r) => [r.action, r.result])).toEqual([['session.signin', 'success']]);
@@ -116,7 +133,9 @@ describe('Entra sign-in routes (fake AuthClient)', () => {
     expect(cookieFrom(res)).toBeUndefined();
     expect(t.sessions.rows.size).toBe(0);
     expect(t.auth.forgets).toEqual([{ kind: 'read', partitionKey: t.auth.redeems[0]!.partitionKey }]);
-    expect(t.audit.rows.map((r) => [r.action, r.result, r.details?.reason])).toEqual([['session.signin', 'failure', 'invalid_nonce']]);
+    expect(t.audit.rows.map((r) => [r.action, r.result, r.details?.reason])).toEqual([
+      ['session.signin', 'failure', 'invalid_nonce'],
+    ]);
   });
 
   it('tenant mismatch → 400 wrong_tenant, no session', async () => {
@@ -139,10 +158,18 @@ describe('Entra sign-in routes (fake AuthClient)', () => {
 
   it('an Entra error redirect → 400 signin_failed with a short message', async () => {
     const { state } = await startLogin(t);
-    const description = encodeURIComponent('AADSTS50105: The signed in user is not assigned to a role.\r\nTrace ID: abc');
-    const res = await t.app.inject({ method: 'GET', url: `/auth/callback?error=access_denied&error_description=${description}&state=${state}` });
+    const description = encodeURIComponent(
+      'AADSTS50105: The signed in user is not assigned to a role.\r\nTrace ID: abc',
+    );
+    const res = await t.app.inject({
+      method: 'GET',
+      url: `/auth/callback?error=access_denied&error_description=${description}&state=${state}`,
+    });
     expect(res.statusCode).toBe(400);
-    expect(res.json().error).toMatchObject({ code: 'signin_failed', message: 'AADSTS50105: The signed in user is not assigned to a role.' });
+    expect(res.json().error).toMatchObject({
+      code: 'signin_failed',
+      message: 'AADSTS50105: The signed in user is not assigned to a role.',
+    });
   });
 
   it('a failed code redemption → 400 without a session', async () => {
@@ -155,7 +182,10 @@ describe('Entra sign-in routes (fake AuthClient)', () => {
 
   it('tenant profile falls back to AF_PRIMARY_DOMAIN when Graph is unavailable', async () => {
     const auth = new FakeAuthClient();
-    const t2 = await makeApp(entraConfig({ AF_PRIMARY_DOMAIN: 'example.net' }), { auth, fetch: async () => new Response('nope', { status: 503 }) });
+    const t2 = await makeApp(entraConfig({ AF_PRIMARY_DOMAIN: 'example.net' }), {
+      auth,
+      fetch: async () => new Response('nope', { status: 503 }),
+    });
     const s = await signIn({ ...t2, auth });
     expect(s.me.tenant).toEqual({ name: 'example.net', domain: 'example.net' });
     await t2.app.close();
@@ -164,11 +194,17 @@ describe('Entra sign-in routes (fake AuthClient)', () => {
   it('logout clears both cache partitions and returns the Entra end-session URL', async () => {
     const { cookie, csrf } = await signIn(t);
     const [session] = [...t.sessions.rows.values()];
-    const res = await t.app.inject({ method: 'POST', url: '/auth/logout', headers: { cookie, 'x-adminforge-csrf': csrf } });
+    const res = await t.app.inject({
+      method: 'POST',
+      url: '/auth/logout',
+      headers: { cookie, 'x-adminforge-csrf': csrf },
+    });
     expect(res.statusCode).toBe(200);
     const redirect = new URL(res.json().redirect);
     expect(redirect.origin).toBe('https://login.example.test');
-    expect(redirect.searchParams.get('post_logout_redirect_uri')).toBe('http://localhost:5173/auth/signed-out');
+    expect(redirect.searchParams.get('post_logout_redirect_uri')).toBe(
+      'http://localhost:5173/auth/signed-out',
+    );
     expect(t.auth.forgets).toEqual([
       { kind: 'read', partitionKey: `read:${session!.idHash}` },
       { kind: 'write', partitionKey: `write:${session!.idHash}` },
@@ -184,12 +220,23 @@ describe('Entra sign-in routes (fake AuthClient)', () => {
     };
     const res = await t.app.inject({ method: 'GET', url: '/api/overview', headers: { cookie } });
     expect(res.statusCode).toBe(401);
-    expect(ApiErrorBody.parse(res.json()).error).toMatchObject({ code: 'reauth', reauth: { url: '/auth/login?returnTo=%2F' }, login: '/auth/login?returnTo=%2F' });
+    expect(ApiErrorBody.parse(res.json()).error).toMatchObject({
+      code: 'reauth',
+      reauth: { url: '/auth/login?returnTo=%2F' },
+      login: '/auth/login?returnTo=%2F',
+    });
   });
 
   it('uses __Host-adminforge with Secure in production', async () => {
     const auth = new FakeAuthClient();
-    const prod = await makeApp(entraConfig({ NODE_ENV: 'production', PUBLIC_BASE_URL: 'https://adminforge.example.com', LOG_LEVEL: 'silent' }), { auth, fetch: async () => orgResponse() });
+    const prod = await makeApp(
+      entraConfig({
+        NODE_ENV: 'production',
+        PUBLIC_BASE_URL: 'https://adminforge.example.com',
+        LOG_LEVEL: 'silent',
+      }),
+      { auth, fetch: async () => orgResponse() },
+    );
     const { state } = await startLogin({ ...prod, auth });
     const res = await prod.app.inject({ method: 'GET', url: `/auth/callback?code=good-code&state=${state}` });
     const set = setCookieHeader(res, '__Host-adminforge')!;
@@ -209,13 +256,27 @@ describe('Entra arm / extend / disarm (fake AuthClient)', () => {
     await t.app.close();
   });
 
-  async function armStart(cookie: string, csrf: string, body = { minutes: 30, reason: 'Disable test user' }, query = '') {
-    return t.app.inject({ method: 'POST', url: `/auth/arm${query}`, headers: { cookie, 'x-adminforge-csrf': csrf }, payload: body });
+  async function armStart(
+    cookie: string,
+    csrf: string,
+    body = { minutes: 30, reason: 'Disable test user' },
+    query = '',
+  ) {
+    return t.app.inject({
+      method: 'POST',
+      url: `/auth/arm${query}`,
+      headers: { cookie, 'x-adminforge-csrf': csrf },
+      payload: body,
+    });
   }
 
   async function armCallback(cookie: string, redirect: string) {
     const state = new URL(redirect).searchParams.get('state')!;
-    return t.app.inject({ method: 'GET', url: `/auth/arm/callback?code=write-code&state=${state}`, headers: { cookie } });
+    return t.app.inject({
+      method: 'GET',
+      url: `/auth/arm/callback?code=write-code&state=${state}`,
+      headers: { cookie },
+    });
   }
 
   it('without WRITE_AUTH_CONTEXT: Write app URL with login_hint, prompt=login and max_age=0', async () => {
@@ -230,7 +291,11 @@ describe('Entra arm / extend / disarm (fake AuthClient)', () => {
     expect(url.searchParams.get('max_age')).toBe('0');
     expect(url.searchParams.get('claims')).toBeNull();
     const pending = t.preauth.rows.get(url.searchParams.get('state')!)!;
-    expect(pending).toMatchObject({ kind: 'write', returnTo: '/p/identity.users', details: { minutes: 30, reason: 'Disable test user' } });
+    expect(pending).toMatchObject({
+      kind: 'write',
+      returnTo: '/p/identity.users',
+      details: { minutes: 30, reason: 'Disable test user' },
+    });
   });
 
   it('with WRITE_AUTH_CONTEXT: requests acrs via claims and requires it at the callback', async () => {
@@ -288,7 +353,11 @@ describe('Entra arm / extend / disarm (fake AuthClient)', () => {
     expect((await getMe(t.app, cookie)).me!.mode).toBe('read');
     const [session] = [...t.sessions.rows.values()];
     expect(t.auth.forgets).toContainEqual({ kind: 'write', partitionKey: `write:${session!.idHash}` });
-    expect(t.audit.rows.at(-1)).toMatchObject({ action: 'session.armed', result: 'failure', details: { error: 'user_mismatch' } });
+    expect(t.audit.rows.at(-1)).toMatchObject({
+      action: 'session.armed',
+      result: 'failure',
+      details: { error: 'user_mismatch' },
+    });
   });
 
   it('arm callback from another session → 401 session_mismatch (no redemption)', async () => {
@@ -307,7 +376,16 @@ describe('Entra arm / extend / disarm (fake AuthClient)', () => {
     t.auth.claims = () => ({ roles: ['Portal.Reader'] });
     const reader = await signIn(t);
     expect(reader.me.canArm).toBe(false);
-    expect((await t.app.inject({ method: 'POST', url: '/auth/arm', headers: { cookie: reader.cookie }, payload: { minutes: 30, reason: 'Disable test user' } })).statusCode).toBe(403);
+    expect(
+      (
+        await t.app.inject({
+          method: 'POST',
+          url: '/auth/arm',
+          headers: { cookie: reader.cookie },
+          payload: { minutes: 30, reason: 'Disable test user' },
+        })
+      ).statusCode,
+    ).toBe(403);
     const forbidden = await armStart(reader.cookie, reader.csrf);
     expect(forbidden.statusCode).toBe(403);
     expect(forbidden.json().error.code).toBe('forbidden');
@@ -327,14 +405,24 @@ describe('Entra arm / extend / disarm (fake AuthClient)', () => {
     const res = await armStart(cookie, csrf);
     await armCallback(cookie, res.json().redirect);
     const h = { cookie, 'x-adminforge-csrf': csrf };
-    expect((await t.app.inject({ method: 'POST', url: '/auth/arm/extend', headers: h, payload: { minutes: 30 } })).statusCode).toBe(200);
-    expect((await t.app.inject({ method: 'POST', url: '/auth/arm/extend', headers: h, payload: {} })).statusCode).toBe(409);
+    expect(
+      (await t.app.inject({ method: 'POST', url: '/auth/arm/extend', headers: h, payload: { minutes: 30 } }))
+        .statusCode,
+    ).toBe(200);
+    expect(
+      (await t.app.inject({ method: 'POST', url: '/auth/arm/extend', headers: h, payload: {} })).statusCode,
+    ).toBe(409);
     const dis = await t.app.inject({ method: 'POST', url: '/auth/disarm', headers: h });
     expect(dis.statusCode).toBe(200);
     const [session] = [...t.sessions.rows.values()];
     expect(session!.writeAccountId).toBeNull();
     expect(t.auth.forgets.at(-1)).toEqual({ kind: 'write', partitionKey: `write:${session!.idHash}` });
-    expect(t.audit.rows.map((r) => r.action)).toEqual(['session.signin', 'session.armed', 'session.arm_extended', 'session.disarmed']);
+    expect(t.audit.rows.map((r) => r.action)).toEqual([
+      'session.signin',
+      'session.armed',
+      'session.arm_extended',
+      'session.disarmed',
+    ]);
     expect(await t.audit.verify()).toMatchObject({ ok: true });
   });
 });

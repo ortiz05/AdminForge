@@ -3,7 +3,9 @@ import { Scheduler } from '@adminforge/api/src/schedules/scheduler';
 import { FakeJobs, flush, harness, schedule } from './helpers';
 
 const MIN = 60_000;
-const WRITE_JOB = { job: { kind: 'playbook', ref: 'identity.disable-user', mode: 'write', approvedBy: ['approval-1'] } };
+const WRITE_JOB = {
+  job: { kind: 'playbook', ref: 'identity.disable-user', mode: 'write', approvedBy: ['approval-1'] },
+};
 
 async function started(h: ReturnType<typeof harness>) {
   await h.scheduler.start();
@@ -28,12 +30,35 @@ describe('scheduler', () => {
     await h.scheduler.drain();
     expect(h.jobs.calls).toHaveLength(1);
     const [run] = await runsOf(h, 'sweep.a');
-    expect(run).toMatchObject({ trigger: 'cron', status: 'succeeded', result: { ok: true }, startedAt: new Date('2026-10-15T12:15:00Z') });
-    expect(await h.store.getSchedule('sweep.a')).toMatchObject({ lastStatus: 'succeeded', lastRunAt: new Date('2026-10-15T12:15:00Z'), nextRunAt: new Date('2026-10-15T12:30:00Z') });
+    expect(run).toMatchObject({
+      trigger: 'cron',
+      status: 'succeeded',
+      result: { ok: true },
+      startedAt: new Date('2026-10-15T12:15:00Z'),
+    });
+    expect(await h.store.getSchedule('sweep.a')).toMatchObject({
+      lastStatus: 'succeeded',
+      lastRunAt: new Date('2026-10-15T12:15:00Z'),
+      nextRunAt: new Date('2026-10-15T12:30:00Z'),
+    });
     const audit = h.audit.rows.find((r) => r.action === 'schedule.run')!;
-    expect(audit).toMatchObject({ actorOid: 'automation', actorUpn: 'automation identity', mode: 'read', targetId: 'sweep.a', result: 'success' });
-    expect(audit.details).toMatchObject({ summary: 'Scheduled by content (owner: test-team), executed as automation identity.', trigger: 'cron', executedAs: 'automation identity', scheduleRunId: run!.id });
-    expect(h.published.filter((e) => e.type === 'schedule.updated').map((e) => e.data.status)).toEqual(['running', 'succeeded']);
+    expect(audit).toMatchObject({
+      actorOid: 'automation',
+      actorUpn: 'automation identity',
+      mode: 'read',
+      targetId: 'sweep.a',
+      result: 'success',
+    });
+    expect(audit.details).toMatchObject({
+      summary: 'Scheduled by content (owner: test-team), executed as automation identity.',
+      trigger: 'cron',
+      executedAs: 'automation identity',
+      scheduleRunId: run!.id,
+    });
+    expect(h.published.filter((e) => e.type === 'schedule.updated').map((e) => e.data.status)).toEqual([
+      'running',
+      'succeeded',
+    ]);
     await h.scheduler.stop();
   });
 
@@ -70,9 +95,14 @@ describe('scheduler', () => {
   });
 
   it('retries failures with backoff, then raises schedule.failed for each failure', async () => {
-    const jobs = new FakeJobs(() => ({ status: 'failed', error: { code: 'upstream_error', message: 'Graph returned 503' } }));
+    const jobs = new FakeJobs(() => ({
+      status: 'failed',
+      error: { code: 'upstream_error', message: 'Graph returned 503' },
+    }));
     const h = await started(harness({ jobs }));
-    h.defs.set(schedule('reports.r', { cron: '0 6 * * *', retry: { max: 2, backoff: 'exponential', delay: '1m' } }));
+    h.defs.set(
+      schedule('reports.r', { cron: '0 6 * * *', retry: { max: 2, backoff: 'exponential', delay: '1m' } }),
+    );
     await h.clock.advance(18 * 60 * MIN); // to 06:00 next day
     await h.scheduler.drain();
     expect((await runsOf(h, 'reports.r')).map((r) => [r.trigger, r.status])).toEqual([
@@ -94,7 +124,9 @@ describe('scheduler', () => {
     expect(runs[2]!.startedAt.getTime() - runs[1]!.endedAt!.getTime()).toBe(2 * MIN);
     expect(h.audit.rows.filter((r) => r.action === 'schedule.failed')).toHaveLength(3);
     const failed = h.published.filter((e) => e.type === 'schedule.failed');
-    expect(failed.map((e) => [e.data.key, (e.data.error as { code: string }).code, 'retryAt' in e.data])).toEqual([
+    expect(
+      failed.map((e) => [e.data.key, (e.data.error as { code: string }).code, 'retryAt' in e.data]),
+    ).toEqual([
       ['reports.r', 'upstream_error', true],
       ['reports.r', 'upstream_error', true],
       ['reports.r', 'upstream_error', false],
@@ -131,7 +163,10 @@ describe('scheduler', () => {
     const runs = await runsOf(h, 'ops.write');
     expect(runs.map((r) => [r.status, r.error?.code])).toEqual([['failed', 'approval_required']]);
     expect(h.jobs.calls).toHaveLength(0);
-    expect(h.audit.rows.find((r) => r.action === 'schedule.run')).toMatchObject({ mode: 'write', result: 'failure' });
+    expect(h.audit.rows.find((r) => r.action === 'schedule.run')).toMatchObject({
+      mode: 'write',
+      result: 'failure',
+    });
     await h.scheduler.stop();
   });
 
@@ -140,12 +175,25 @@ describe('scheduler', () => {
     h.defs.set(schedule('sweep.off', { enabled: false }));
     await h.clock.advance(1);
     const row = (await h.store.getSchedule('sweep.off'))!;
-    const queued = await h.store.insertRun({ scheduleId: row.id, scheduleKey: row.key, trigger: 'manual', status: 'queued', startedAt: h.clock.now(), result: { requestedBy: 'avery@example.com' } });
+    const queued = await h.store.insertRun({
+      scheduleId: row.id,
+      scheduleKey: row.key,
+      trigger: 'manual',
+      status: 'queued',
+      startedAt: h.clock.now(),
+      result: { requestedBy: 'avery@example.com' },
+    });
     h.scheduler.wake();
     await h.clock.advance(1);
     await h.scheduler.drain();
-    expect(await h.store.getRun(queued.id)).toMatchObject({ status: 'succeeded', trigger: 'manual', result: { ok: true, requestedBy: 'avery@example.com' } });
-    expect(h.audit.rows.find((r) => r.action === 'schedule.run')!.details).toMatchObject({ summary: 'Scheduled by avery@example.com, executed as automation identity.' });
+    expect(await h.store.getRun(queued.id)).toMatchObject({
+      status: 'succeeded',
+      trigger: 'manual',
+      result: { ok: true, requestedBy: 'avery@example.com' },
+    });
+    expect(h.audit.rows.find((r) => r.action === 'schedule.run')!.details).toMatchObject({
+      summary: 'Scheduled by avery@example.com, executed as automation identity.',
+    });
     await h.scheduler.stop();
   });
 
@@ -171,8 +219,20 @@ describe('scheduler', () => {
     h.defs.set(schedule('sweep.a', { timeoutSeconds: 300 }));
     await h.clock.advance(1);
     const row = (await h.store.getSchedule('sweep.a'))!;
-    const fresh = await h.store.insertRun({ scheduleId: row.id, scheduleKey: row.key, trigger: 'cron', status: 'running', startedAt: new Date(h.clock.t - 60_000) });
-    const dead = await h.store.insertRun({ scheduleId: row.id, scheduleKey: row.key, trigger: 'cron', status: 'running', startedAt: new Date(h.clock.t - 30 * MIN) });
+    const fresh = await h.store.insertRun({
+      scheduleId: row.id,
+      scheduleKey: row.key,
+      trigger: 'cron',
+      status: 'running',
+      startedAt: new Date(h.clock.t - 60_000),
+    });
+    const dead = await h.store.insertRun({
+      scheduleId: row.id,
+      scheduleKey: row.key,
+      trigger: 'cron',
+      status: 'running',
+      startedAt: new Date(h.clock.t - 30 * MIN),
+    });
     await h.scheduler.tick();
     expect(await h.store.getRun(dead.id)).toMatchObject({ status: 'failed', error: { code: 'interrupted' } });
     expect(await h.store.getRun(fresh.id)).toMatchObject({ status: 'running' });
@@ -203,7 +263,12 @@ describe('scheduler', () => {
     const h = harness({ jobs });
     const leader = new LeaderElector(
       { tryAcquire: async () => held, check: async () => held, release: async () => undefined },
-      { intervalMs: 5_000, timers: h.clock, onElected: () => sched.elected(), onDemoted: (r) => sched.demoted(r) },
+      {
+        intervalMs: 5_000,
+        timers: h.clock,
+        onElected: () => sched.elected(),
+        onDemoted: (r) => sched.demoted(r),
+      },
     );
     const sched: Scheduler = new Scheduler({
       store: h.store,
@@ -224,7 +289,9 @@ describe('scheduler', () => {
     await h.clock.advance(5_000);
     await sched.drain();
     expect(sched.isLeader).toBe(false);
-    expect((await runsOf(h, 'sweep.a')).map((r) => [r.status, r.error?.code])).toEqual([['failed', 'interrupted']]);
+    expect((await runsOf(h, 'sweep.a')).map((r) => [r.status, r.error?.code])).toEqual([
+      ['failed', 'interrupted'],
+    ]);
     // A standby (not leader) never fires.
     await h.clock.advance(60 * MIN);
     expect(jobs.calls).toHaveLength(1);
@@ -250,7 +317,11 @@ describe('scheduler', () => {
     const h = harness();
     h.defs.set(schedule('sweep.a', { enabled: false }));
     const run = await h.scheduler.runOnce('sweep.a', 'cli:operator');
-    expect(run).toMatchObject({ status: 'succeeded', trigger: 'manual', result: { requestedBy: 'cli:operator' } });
+    expect(run).toMatchObject({
+      status: 'succeeded',
+      trigger: 'manual',
+      result: { requestedBy: 'cli:operator' },
+    });
     await expect(h.scheduler.runOnce('sweep.nope', 'cli:operator')).rejects.toThrow(/No schedule/);
   });
 });

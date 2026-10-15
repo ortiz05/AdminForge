@@ -1,10 +1,28 @@
-import { contrastRatio, resolveHex, SEMANTIC_KEYS, THEME_NAMES, themes, type SemanticKey } from '@adminforge/design-tokens';
+import {
+  contrastRatio,
+  resolveHex,
+  SEMANTIC_KEYS,
+  THEME_NAMES,
+  themes,
+  type SemanticKey,
+} from '@adminforge/design-tokens';
 
 const SURFACES = ['canvas', 'panel', 'raised'] as const satisfies readonly SemanticKey[];
 const TEXT_TARGETS: Array<[SemanticKey, number]> = [
-  ['fg', 7], ['fg-2', 4.5], ['fg-3', 4.5], ['accent', 4.5], ['armed', 4.5], ['ok', 4.5], ['warn', 4.5], ['crit', 4.5],
+  ['fg', 7],
+  ['fg-2', 4.5],
+  ['fg-3', 4.5],
+  ['accent', 4.5],
+  ['armed', 4.5],
+  ['ok', 4.5],
+  ['warn', 4.5],
+  ['crit', 4.5],
 ];
-const FILLS: Array<[SemanticKey, SemanticKey]> = [['on-armed', 'armed'], ['on-accent', 'accent'], ['fg-inverse', 'crit']];
+const FILLS: Array<[SemanticKey, SemanticKey]> = [
+  ['on-armed', 'armed'],
+  ['on-accent', 'accent'],
+  ['fg-inverse', 'crit'],
+];
 
 describe.each(THEME_NAMES)('theme %s', (name) => {
   const hex = (key: SemanticKey) => resolveHex(themes[name][key]);
@@ -32,5 +50,6 @@ describe.each(THEME_NAMES)('theme %s', (name) => {
 });
 
 describe('resolveHex', () => {
-  it('throws on unknown references', () => expect(() => resolveHex('{steel.123}')).toThrow(/Unknown color reference/));
+  it('throws on unknown references', () =>
+    expect(() => resolveHex('{steel.123}')).toThrow(/Unknown color reference/));
 });

@@ -1,4 +1,10 @@
-import { ApiError, defaultSleep, type GraphClient, type HttpClient, type Sleep } from '@adminforge/connectors';
+import {
+  ApiError,
+  defaultSleep,
+  type GraphClient,
+  type HttpClient,
+  type Sleep,
+} from '@adminforge/connectors';
 import { ARM_BASE, findServicePrincipal, listArmAssignments } from './entra-io';
 import { findUser } from './identities-io';
 import { armRoleAssignmentName } from './ids';
@@ -25,7 +31,8 @@ export const API = {
   roleAssignments: '2022-04-01',
 } as const;
 
-const url = (path: string, apiVersion: string, extra = '') => `${ARM_BASE}${path}?api-version=${apiVersion}${extra}`;
+const url = (path: string, apiVersion: string, extra = '') =>
+  `${ARM_BASE}${path}?api-version=${apiVersion}${extra}`;
 const isNotFound = (err: unknown) => err instanceof ApiError && err.status === 404;
 
 async function getOrUndefined<T>(arm: HttpClient, u: string): Promise<T | undefined> {
@@ -43,20 +50,29 @@ export interface PrincipalInputs {
 }
 
 /** Object ids of the automation service principal and the validation user (provisioner identity, Graph). */
-export async function resolvePrincipals(graph: GraphClient, inputs: PrincipalInputs, labels: { automation: string }) {
+export async function resolvePrincipals(
+  graph: GraphClient,
+  inputs: PrincipalInputs,
+  labels: { automation: string },
+) {
   const principals: AzureTestState['principals'] = {};
   const missing: AzureTestState['missing'] = {};
-  if (!inputs.automationClientId) missing.automation = 'AF_AUTOMATION_CLIENT_ID is not set — run `pnpm adminforge provision entra` first';
+  if (!inputs.automationClientId)
+    missing.automation = 'AF_AUTOMATION_CLIENT_ID is not set — run `pnpm adminforge provision entra` first';
   else {
     const sp = await findServicePrincipal(graph, inputs.automationClientId);
     if (sp) principals.automation = sp.id;
-    else missing.automation = `${labels.automation} has no service principal — run \`pnpm adminforge provision entra\``;
+    else
+      missing.automation = `${labels.automation} has no service principal — run \`pnpm adminforge provision entra\``;
   }
-  if (!inputs.testerUpn) missing.tester = 'AF_TEST_USER_UPN is not set — run `pnpm adminforge provision test-identities` first';
+  if (!inputs.testerUpn)
+    missing.tester = 'AF_TEST_USER_UPN is not set — run `pnpm adminforge provision test-identities` first';
   else {
     const user = await findUser(graph, inputs.testerUpn);
     if (user) principals.tester = user.id;
-    else missing.tester = 'the validation user (AF_TEST_USER_UPN) does not exist — run `pnpm adminforge provision test-identities`';
+    else
+      missing.tester =
+        'the validation user (AF_TEST_USER_UPN) does not exist — run `pnpm adminforge provision test-identities`';
   }
   return { principals, missing };
 }
@@ -68,10 +84,20 @@ export async function fetchAzureTestState(
   desired: DesiredAzureTest,
   inputs: PrincipalInputs & { env: AzureTestState['env'] },
 ): Promise<AzureTestState> {
-  const resourceGroup = await getOrUndefined<ArmResourceGroup>(arm, url(desired.resourceGroup.id, API.resourceGroups));
-  const workspace = resourceGroup ? await getOrUndefined<ArmWorkspace>(arm, url(desired.workspace.id, API.workspaces)) : undefined;
-  const diagnostic = await getOrUndefined<ArmDiagnosticSetting>(arm, url(desired.diagnostic.id, API.diagnosticSettings));
-  const { principals, missing } = await resolvePrincipals(graph, inputs, { automation: desired.roles[0]!.principalLabel });
+  const resourceGroup = await getOrUndefined<ArmResourceGroup>(
+    arm,
+    url(desired.resourceGroup.id, API.resourceGroups),
+  );
+  const workspace = resourceGroup
+    ? await getOrUndefined<ArmWorkspace>(arm, url(desired.workspace.id, API.workspaces))
+    : undefined;
+  const diagnostic = await getOrUndefined<ArmDiagnosticSetting>(
+    arm,
+    url(desired.diagnostic.id, API.diagnosticSettings),
+  );
+  const { principals, missing } = await resolvePrincipals(graph, inputs, {
+    automation: desired.roles[0]!.principalLabel,
+  });
   const assignments: AzureTestState['assignments'] = {};
   const scopes = new Set(desired.roles.map((r) => r.scope));
   for (const scope of scopes) {
@@ -80,7 +106,8 @@ export async function fetchAzureTestState(
     const list: AzureTestState['assignments'][string] = [];
     for (const key of ['automation', 'tester'] as PrincipalKey[]) {
       const id = principals[key];
-      if (id && desired.roles.some((r) => r.principal === key && r.scope === scope)) list.push(...(await listArmAssignments(arm, scope, id)));
+      if (id && desired.roles.some((r) => r.principal === key && r.scope === scope))
+        list.push(...(await listArmAssignments(arm, scope, id)));
     }
     assignments[scope.toLowerCase()] = list;
   }
@@ -99,32 +126,53 @@ export interface AzureApplyContext {
   poll?: { attempts?: number; intervalMs?: number };
 }
 
-const isAlreadyExists = (err: unknown) => err instanceof ApiError && (err.status === 409 || /RoleAssignmentExists|already exists/i.test(`${err.code} ${err.message}`));
+const isAlreadyExists = (err: unknown) =>
+  err instanceof ApiError &&
+  (err.status === 409 || /RoleAssignmentExists|already exists/i.test(`${err.code} ${err.message}`));
 
 /** PUT the workspace, then wait until it has finished provisioning; returns it (with its customerId). */
 async function putWorkspace(desired: DesiredAzureTest, ctx: AzureApplyContext): Promise<ArmWorkspace> {
   const sleep = ctx.sleep ?? defaultSleep;
   const attempts = ctx.poll?.attempts ?? 40;
   const interval = ctx.poll?.intervalMs ?? 3000;
-  let ws = (await ctx.arm.send<ArmWorkspace>({ method: 'PUT', url: url(desired.workspace.id, API.workspaces), body: desired.workspace.body })).data;
+  let ws = (
+    await ctx.arm.send<ArmWorkspace>({
+      method: 'PUT',
+      url: url(desired.workspace.id, API.workspaces),
+      body: desired.workspace.body,
+    })
+  ).data;
   for (let i = 0; i < attempts && ws?.properties?.provisioningState !== 'Succeeded'; i++) {
-    if (ws?.properties?.provisioningState === 'Failed') throw new Error(`Workspace ${desired.workspace.name} failed to provision.`);
+    if (ws?.properties?.provisioningState === 'Failed')
+      throw new Error(`Workspace ${desired.workspace.name} failed to provision.`);
     await sleep(interval);
     ws = (await ctx.arm.send<ArmWorkspace>({ url: url(desired.workspace.id, API.workspaces) })).data;
   }
-  if (ws?.properties?.provisioningState !== 'Succeeded') throw new Error(`Workspace ${desired.workspace.name} is still provisioning; run the command again in a minute.`);
+  if (ws?.properties?.provisioningState !== 'Succeeded')
+    throw new Error(
+      `Workspace ${desired.workspace.name} is still provisioning; run the command again in a minute.`,
+    );
   return ws;
 }
 
 /** Executes the non-noop operations in order. Prints names only; ids go to the env file. */
-export async function applyAzureTestOps(ops: AzureTestOp[], desired: DesiredAzureTest, state: AzureTestState, ctx: AzureApplyContext): Promise<void> {
+export async function applyAzureTestOps(
+  ops: AzureTestOp[],
+  desired: DesiredAzureTest,
+  state: AzureTestState,
+  ctx: AzureApplyContext,
+): Promise<void> {
   const { arm, log } = ctx;
   let customerId = state.workspace?.properties?.customerId;
   for (const op of ops) {
     if (op.action === 'noop' || op.action === 'skip') continue;
     switch (op.kind) {
       case 'resourceGroup':
-        await arm.send({ method: 'PUT', url: url(desired.resourceGroup.id, API.resourceGroups), body: { location: desired.resourceGroup.location, tags: desired.resourceGroup.tags } });
+        await arm.send({
+          method: 'PUT',
+          url: url(desired.resourceGroup.id, API.resourceGroups),
+          body: { location: desired.resourceGroup.location, tags: desired.resourceGroup.tags },
+        });
         log(`  ✓ created ${op.title}`);
         break;
       case 'workspace': {
@@ -137,7 +185,12 @@ export async function applyAzureTestOps(ops: AzureTestOp[], desired: DesiredAzur
         await arm.send({
           method: 'PUT',
           url: url(desired.diagnostic.id, API.diagnosticSettings),
-          body: { properties: { workspaceId: desired.workspace.id, logs: desired.diagnostic.categories.map((category) => ({ category, enabled: true })) } },
+          body: {
+            properties: {
+              workspaceId: desired.workspace.id,
+              logs: desired.diagnostic.categories.map((category) => ({ category, enabled: true })),
+            },
+          },
         });
         log(`  ✓ ${op.action === 'create' ? 'created' : 'updated'} ${op.title}`);
         break;
@@ -151,14 +204,28 @@ export async function applyAzureTestOps(ops: AzureTestOp[], desired: DesiredAzur
             () =>
               arm.send({
                 method: 'PUT',
-                url: url(`${op.role.scope}/providers/Microsoft.Authorization/roleAssignments/${name}`, API.roleAssignments),
-                body: { properties: { roleDefinitionId: definition, principalId, principalType: op.role.principalType } },
+                url: url(
+                  `${op.role.scope}/providers/Microsoft.Authorization/roleAssignments/${name}`,
+                  API.roleAssignments,
+                ),
+                body: {
+                  properties: {
+                    roleDefinitionId: definition,
+                    principalId,
+                    principalType: op.role.principalType,
+                  },
+                },
               }),
             {
               attempts: 10,
               ...ctx.retry,
-              isRetryable: (e) => e instanceof ApiError && (e.code === 'PrincipalNotFound' || /does not exist in the directory/i.test(e.message)),
-              onRetry: (_e, n, ms) => log(`      … waiting ${Math.round(ms / 1000)}s for the principal to reach Azure RBAC (attempt ${n})`),
+              isRetryable: (e) =>
+                e instanceof ApiError &&
+                (e.code === 'PrincipalNotFound' || /does not exist in the directory/i.test(e.message)),
+              onRetry: (_e, n, ms) =>
+                log(
+                  `      … waiting ${Math.round(ms / 1000)}s for the principal to reach Azure RBAC (attempt ${n})`,
+                ),
             },
           );
         } catch (err) {
@@ -169,7 +236,8 @@ export async function applyAzureTestOps(ops: AzureTestOp[], desired: DesiredAzur
       }
       case 'env':
         if (op.key === ENV_WORKSPACE_ID) {
-          if (!customerId) throw new Error(`Internal: the workspace id of ${desired.workspace.name} is not known.`);
+          if (!customerId)
+            throw new Error(`Internal: the workspace id of ${desired.workspace.name} is not known.`);
           ctx.writeEnv({ [ENV_WORKSPACE_ID]: customerId });
         } else ctx.writeEnv({ [ENV_LOCATION]: desired.settings.location });
         log(`  ✓ wrote ${op.key} to the env file`);
@@ -209,19 +277,32 @@ export async function destroyAzureTest(
       throw err;
     }
   };
-  const result: DestroyResult = { diagnostic: 'absent', workspace: 'absent', resourceGroup: 'absent', subscriptionRoles: 0 };
+  const result: DestroyResult = {
+    diagnostic: 'absent',
+    workspace: 'absent',
+    resourceGroup: 'absent',
+    subscriptionRoles: 0,
+  };
 
   // ARM answers DELETE with 200/202 when something was deleted and 204 (or 404) when there was nothing to delete.
   const deleted = (r: Awaited<ReturnType<typeof del>>) => !!r && r.status !== 204;
   const d = await del(url(desired.diagnostic.id, API.diagnosticSettings));
   result.diagnostic = deleted(d) ? 'deleted' : 'absent';
-  ctx.log(`  ${result.diagnostic === 'deleted' ? '✓ deleted' : '= absent '} diagnostic setting ${desired.diagnostic.name}`);
+  ctx.log(
+    `  ${result.diagnostic === 'deleted' ? '✓ deleted' : '= absent '} diagnostic setting ${desired.diagnostic.name}`,
+  );
 
   for (const role of desired.roles.filter((r) => r.scope === desired.subscriptionScope)) {
     const principalId = principals[role.principal];
     if (!principalId) continue;
-    const name = armRoleAssignmentName(role.scope, roleDefinitionId(desired.subscriptionScope, role.roleGuid), principalId);
-    const r = await del(url(`${role.scope}/providers/Microsoft.Authorization/roleAssignments/${name}`, API.roleAssignments));
+    const name = armRoleAssignmentName(
+      role.scope,
+      roleDefinitionId(desired.subscriptionScope, role.roleGuid),
+      principalId,
+    );
+    const r = await del(
+      url(`${role.scope}/providers/Microsoft.Authorization/roleAssignments/${name}`, API.roleAssignments),
+    );
     if (deleted(r)) {
       result.subscriptionRoles++;
       ctx.log(`  ✓ removed ${role.principalLabel} → ${role.roleName} on ${role.scopeLabel}`);

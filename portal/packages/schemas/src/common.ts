@@ -11,17 +11,32 @@ import { PortalRole } from './api';
  */
 
 /** Content kinds. The file suffix matches the kind: `<name>.<kind>.yaml` (navigation is `navigation.yaml`). */
-export const KINDS = ['page', 'dashboard', 'report', 'playbook', 'runbook', 'schedule', 'probe', 'connection', 'navigation'] as const;
+export const KINDS = [
+  'page',
+  'dashboard',
+  'report',
+  'playbook',
+  'runbook',
+  'schedule',
+  'probe',
+  'connection',
+  'navigation',
+] as const;
 export const Kind = z.enum(KINDS);
 export type Kind = z.infer<typeof Kind>;
 
 /** Stable definition key `<section>.<name>` (lower-case kebab segments; portal-authored content uses a `local.` prefix). */
 export const DefinitionId = z
   .string()
-  .regex(/^[a-z][a-z0-9-]*(\.[a-z0-9][a-z0-9-]*)+$/, 'Use <section>.<name> in lower-case kebab segments, e.g. identity.disable-user');
+  .regex(
+    /^[a-z][a-z0-9-]*(\.[a-z0-9][a-z0-9-]*)+$/,
+    'Use <section>.<name> in lower-case kebab segments, e.g. identity.disable-user',
+  );
 
 /** Keys that JSONata reaches with dot paths (`params.q`, `steps.lookup.output`) must be plain identifiers. */
-export const Identifier = z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*$/, 'Use letters, digits and _ only (it is referenced from expressions)');
+export const Identifier = z
+  .string()
+  .regex(/^[A-Za-z_][A-Za-z0-9_]*$/, 'Use letters, digits and _ only (it is referenced from expressions)');
 
 export const SemVer = z
   .string({ error: 'Expected a semver string like 1.0.0 (quote it in YAML if needed)' })
@@ -57,17 +72,27 @@ export const SAFE_METHODS: readonly HttpMethod[] = ['GET', 'HEAD'];
 export const Mode = z.enum(['read', 'write']);
 export type Mode = z.infer<typeof Mode>;
 
-const DURATION_RE = /^(P(?!$)(\d+Y)?(\d+M)?(\d+W)?(\d+D)?(T(?=\d)(\d+H)?(\d+M)?(\d+(\.\d+)?S)?)?|\d+(ms|s|m|h|d))$/;
+const DURATION_RE =
+  /^(P(?!$)(\d+Y)?(\d+M)?(\d+W)?(\d+D)?(T(?=\d)(\d+H)?(\d+M)?(\d+(\.\d+)?S)?)?|\d+(ms|s|m|h|d))$/;
 
 /** ISO 8601 duration (`PT4H`, `P7D`) or shorthand (`500ms`, `30s`, `15m`, `4h`, `7d`). */
-export const Duration = z.string().regex(DURATION_RE, 'Expected a duration like PT15M, P7D, 30s, 15m, 4h or 7d');
+export const Duration = z
+  .string()
+  .regex(DURATION_RE, 'Expected a duration like PT15M, P7D, 30s, 15m, 4h or 7d');
 export type Duration = z.infer<typeof Duration>;
 
 /** Converts a Duration to milliseconds (months = 30 days, years = 365 days). Throws on invalid input. */
 export function parseDuration(value: string): number {
   const short = /^(\d+)(ms|s|m|h|d)$/.exec(value);
-  if (short) return Number(short[1]) * { ms: 1, s: 1_000, m: 60_000, h: 3_600_000, d: 86_400_000 }[short[2] as 'ms' | 's' | 'm' | 'h' | 'd'];
-  const iso = /^P(?!$)(?:(\d+)Y)?(?:(\d+)M)?(?:(\d+)W)?(?:(\d+)D)?(?:T(?=\d)(?:(\d+)H)?(?:(\d+)M)?(?:(\d+(?:\.\d+)?)S)?)?$/.exec(value);
+  if (short)
+    return (
+      Number(short[1]) *
+      { ms: 1, s: 1_000, m: 60_000, h: 3_600_000, d: 86_400_000 }[short[2] as 'ms' | 's' | 'm' | 'h' | 'd']
+    );
+  const iso =
+    /^P(?!$)(?:(\d+)Y)?(?:(\d+)M)?(?:(\d+)W)?(?:(\d+)D)?(?:T(?=\d)(?:(\d+)H)?(?:(\d+)M)?(?:(\d+(?:\.\d+)?)S)?)?$/.exec(
+      value,
+    );
   if (!iso) throw new Error(`Invalid duration: ${value}`);
   const [, y, mo, w, d, h, mi, s] = iso.map((p) => (p === undefined ? 0 : Number(p)));
   return ((((y! * 365 + mo! * 30 + w! * 7 + d!) * 24 + h!) * 60 + mi!) * 60 + s!) * 1000;
@@ -106,7 +131,9 @@ export const Requires = z.strictObject({
 export type Requires = z.infer<typeof Requires>;
 
 /** Phosphor icon name in kebab-case (e.g. `users`, `shield-check`). */
-export const IconName = z.string().regex(/^[a-z0-9]+(-[a-z0-9]+)*$/, 'Use a Phosphor icon name in kebab-case, e.g. shield-check');
+export const IconName = z
+  .string()
+  .regex(/^[a-z0-9]+(-[a-z0-9]+)*$/, 'Use a Phosphor icon name in kebab-case, e.g. shield-check');
 
 /** Retry policy for transient failures (429/5xx/network). Graph Retry-After is always honoured on top. */
 export const RetryPolicy = z.strictObject({

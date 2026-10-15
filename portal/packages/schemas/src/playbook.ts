@@ -1,7 +1,27 @@
 import { z } from 'zod';
 import { PortalRole } from './api';
-import { DefinitionId, Duration, Expr, HttpMethod, Identifier, Mode, NavPlacement, RetryPolicy, SemVer, Template, envelopeShape, exprOr } from './common';
-import { ArmRequestSpec, FunctionCallSpec, GraphRequestSpec, LogAnalyticsSpec, ResourceGraphSpec, RunnerSpec } from './datasource';
+import {
+  DefinitionId,
+  Duration,
+  Expr,
+  HttpMethod,
+  Identifier,
+  Mode,
+  NavPlacement,
+  RetryPolicy,
+  SemVer,
+  Template,
+  envelopeShape,
+  exprOr,
+} from './common';
+import {
+  ArmRequestSpec,
+  FunctionCallSpec,
+  GraphRequestSpec,
+  LogAnalyticsSpec,
+  ResourceGraphSpec,
+  RunnerSpec,
+} from './datasource';
 import { Params } from './params';
 
 /**
@@ -19,12 +39,18 @@ export const OnError = z.enum(['fail', 'continue', 'compensate']);
  */
 export const SecretPath = z
   .string()
-  .regex(/^(\*|[A-Za-z_$][\w$]*)(\.(\*|[A-Za-z_$][\w$]*|\d+))*$/, 'Use a dot path into the output, e.g. temporaryAccessPass or credentials.*.secretText');
+  .regex(
+    /^(\*|[A-Za-z_$][\w$]*)(\.(\*|[A-Za-z_$][\w$]*|\d+))*$/,
+    'Use a dot path into the output, e.g. temporaryAccessPass or credentials.*.secretText',
+  );
 
 /** Absolute https URL whose host is literal, so validate/engine can check it against the http allowlist. */
 const HttpUrl = z
   .string()
-  .regex(/^https:\/\/[A-Za-z0-9.-]+(:\d+)?(\/|$)/, 'http steps need an absolute https:// URL with a literal host (checked against the allowlist)');
+  .regex(
+    /^https:\/\/[A-Za-z0-9.-]+(:\d+)?(\/|$)/,
+    'http steps need an absolute https:// URL with a literal host (checked against the allowlist)',
+  );
 
 export const HttpRequestSpec = z.strictObject({
   method: HttpMethod.default('GET'),
@@ -78,13 +104,48 @@ export const ACTION_STEP_TYPES = Object.keys(actionBodies) as ActionType[];
 
 /** A compensating action, run in reverse order when a later step fails with `onError: compensate`. Always a write. */
 export const Compensation = z.discriminatedUnion('type', [
-  z.strictObject({ type: z.literal('graph'), describe: Template.optional(), retry: RetryPolicy.optional(), ...actionBodies.graph }),
-  z.strictObject({ type: z.literal('graphBatch'), describe: Template.optional(), retry: RetryPolicy.optional(), ...actionBodies.graphBatch }),
-  z.strictObject({ type: z.literal('arm'), describe: Template.optional(), retry: RetryPolicy.optional(), ...actionBodies.arm }),
-  z.strictObject({ type: z.literal('function'), describe: Template.optional(), retry: RetryPolicy.optional(), ...actionBodies.function }),
-  z.strictObject({ type: z.literal('runner'), describe: Template.optional(), retry: RetryPolicy.optional(), ...actionBodies.runner }),
-  z.strictObject({ type: z.literal('http'), describe: Template.optional(), retry: RetryPolicy.optional(), ...actionBodies.http }),
-  z.strictObject({ type: z.literal('playbook'), describe: Template.optional(), retry: RetryPolicy.optional(), ...actionBodies.playbook }),
+  z.strictObject({
+    type: z.literal('graph'),
+    describe: Template.optional(),
+    retry: RetryPolicy.optional(),
+    ...actionBodies.graph,
+  }),
+  z.strictObject({
+    type: z.literal('graphBatch'),
+    describe: Template.optional(),
+    retry: RetryPolicy.optional(),
+    ...actionBodies.graphBatch,
+  }),
+  z.strictObject({
+    type: z.literal('arm'),
+    describe: Template.optional(),
+    retry: RetryPolicy.optional(),
+    ...actionBodies.arm,
+  }),
+  z.strictObject({
+    type: z.literal('function'),
+    describe: Template.optional(),
+    retry: RetryPolicy.optional(),
+    ...actionBodies.function,
+  }),
+  z.strictObject({
+    type: z.literal('runner'),
+    describe: Template.optional(),
+    retry: RetryPolicy.optional(),
+    ...actionBodies.runner,
+  }),
+  z.strictObject({
+    type: z.literal('http'),
+    describe: Template.optional(),
+    retry: RetryPolicy.optional(),
+    ...actionBodies.http,
+  }),
+  z.strictObject({
+    type: z.literal('playbook'),
+    describe: Template.optional(),
+    retry: RetryPolicy.optional(),
+    ...actionBodies.playbook,
+  }),
 ]);
 export type Compensation = z.infer<typeof Compensation>;
 
@@ -117,21 +178,46 @@ const stepBase = {
 };
 
 export const GraphStep = z.strictObject({ ...stepBase, type: z.literal('graph'), ...actionBodies.graph });
-export const GraphBatchStep = z.strictObject({ ...stepBase, type: z.literal('graphBatch'), ...actionBodies.graphBatch });
+export const GraphBatchStep = z.strictObject({
+  ...stepBase,
+  type: z.literal('graphBatch'),
+  ...actionBodies.graphBatch,
+});
 export const ArmStep = z.strictObject({ ...stepBase, type: z.literal('arm'), ...actionBodies.arm });
-export const ResourceGraphStep = z.strictObject({ ...stepBase, type: z.literal('resourceGraph'), ...actionBodies.resourceGraph });
-export const LogAnalyticsStep = z.strictObject({ ...stepBase, type: z.literal('logAnalytics'), ...actionBodies.logAnalytics });
-export const FunctionStep = z.strictObject({ ...stepBase, type: z.literal('function'), ...actionBodies.function });
+export const ResourceGraphStep = z.strictObject({
+  ...stepBase,
+  type: z.literal('resourceGraph'),
+  ...actionBodies.resourceGraph,
+});
+export const LogAnalyticsStep = z.strictObject({
+  ...stepBase,
+  type: z.literal('logAnalytics'),
+  ...actionBodies.logAnalytics,
+});
+export const FunctionStep = z.strictObject({
+  ...stepBase,
+  type: z.literal('function'),
+  ...actionBodies.function,
+});
 export const RunnerStep = z.strictObject({ ...stepBase, type: z.literal('runner'), ...actionBodies.runner });
 export const HttpStep = z.strictObject({ ...stepBase, type: z.literal('http'), ...actionBodies.http });
 export const NotifyStep = z.strictObject({ ...stepBase, type: z.literal('notify'), ...actionBodies.notify });
-export const PlaybookStep = z.strictObject({ ...stepBase, type: z.literal('playbook'), ...actionBodies.playbook });
+export const PlaybookStep = z.strictObject({
+  ...stepBase,
+  type: z.literal('playbook'),
+  ...actionBodies.playbook,
+});
 
 /** Output = the expression's value. */
 export const TransformStep = z.strictObject({ ...stepBase, type: z.literal('transform'), expression: Expr });
 
 /** Fails the run (status failed, failedStep = this id) unless `that` is true. */
-export const AssertStep = z.strictObject({ ...stepBase, type: z.literal('assert'), that: Expr, message: Template });
+export const AssertStep = z.strictObject({
+  ...stepBase,
+  type: z.literal('assert'),
+  that: Expr,
+  message: Template,
+});
 
 /** Parks the run in `awaiting_approval`; later steps run as the approver (§7.8). */
 export const ApprovalStep = z.strictObject({
@@ -162,7 +248,10 @@ export const WaitStep = z
     /** Poll interval for `until` (default 30s). */
     interval: Duration.optional(),
   })
-  .refine((s) => !!s.duration !== !!s.until, { message: 'A wait step needs exactly one of duration or until', path: ['duration'] });
+  .refine((s) => !!s.duration !== !!s.until, {
+    message: 'A wait step needs exactly one of duration or until',
+    path: ['duration'],
+  });
 
 const branchHead = { ...stepBase, type: z.literal('branch'), if: Expr };
 const forEachHead = {
@@ -210,7 +299,10 @@ export type Step = LeafStep | BranchStep | ForEachStep;
 
 const lazyStep = z.lazy((): z.ZodType<Step> => Step);
 
-export const BranchStep = BranchHead.extend({ then: z.array(lazyStep).min(1), else: z.array(lazyStep).optional() });
+export const BranchStep = BranchHead.extend({
+  then: z.array(lazyStep).min(1),
+  else: z.array(lazyStep).optional(),
+});
 export const ForEachStep = ForEachHead.extend({ steps: z.array(lazyStep).min(1) });
 
 export const Step: z.ZodType<Step> = z.discriminatedUnion('type', [...leafSteps, BranchStep, ForEachStep]);
@@ -227,7 +319,10 @@ export const Confirm = z
     value: Template.optional(),
     message: Template.optional(),
   })
-  .refine((c) => c.type !== 'typed' || !!c.value, { message: 'Typed confirmation needs a value', path: ['value'] });
+  .refine((c) => c.type !== 'typed' || !!c.value, {
+    message: 'Typed confirmation needs a value',
+    path: ['value'],
+  });
 export type Confirm = z.infer<typeof Confirm>;
 
 export const Approval = z.strictObject({
@@ -238,7 +333,16 @@ export const Approval = z.strictObject({
 });
 export type Approval = z.infer<typeof Approval>;
 
-const RUN_STATUSES = ['succeeded', 'failed', 'cancelled', 'compensated', 'awaiting_approval', 'awaiting_input', 'awaiting_arm', 'awaiting_reauth'] as const;
+const RUN_STATUSES = [
+  'succeeded',
+  'failed',
+  'cancelled',
+  'compensated',
+  'awaiting_approval',
+  'awaiting_input',
+  'awaiting_arm',
+  'awaiting_reauth',
+] as const;
 export const RunStatus = z.enum(RUN_STATUSES);
 
 /** Dry-run test with mocked step outputs, run by `adminforge test`. */
@@ -248,10 +352,25 @@ export const PlaybookTest = z.strictObject({
   /** Step id → output used instead of calling the service. */
   mocks: z.record(z.string(), z.unknown()).optional(),
   /** Step id → simulated failure. */
-  errors: z.record(z.string(), z.strictObject({ status: z.number().int().optional(), code: z.string().optional(), message: z.string().optional() })).optional(),
+  errors: z
+    .record(
+      z.string(),
+      z.strictObject({
+        status: z.number().int().optional(),
+        code: z.string().optional(),
+        message: z.string().optional(),
+      }),
+    )
+    .optional(),
   /** Defaults to true (write steps are planned, not executed). */
   dryRun: z.boolean().optional(),
-  user: z.strictObject({ oid: z.string().optional(), upn: z.string().optional(), roles: z.array(z.string()).optional() }).optional(),
+  user: z
+    .strictObject({
+      oid: z.string().optional(),
+      upn: z.string().optional(),
+      roles: z.array(z.string()).optional(),
+    })
+    .optional(),
   expect: z.strictObject({
     status: RunStatus,
     failedStep: z.string().optional(),
@@ -259,7 +378,9 @@ export const PlaybookTest = z.strictObject({
     /** Ids of write steps expected in the dry-run plan, in order. */
     plan: z.array(z.string()).optional(),
     /** Step id → expected status. */
-    steps: z.record(z.string(), z.enum(['succeeded', 'failed', 'skipped', 'planned', 'compensated'])).optional(),
+    steps: z
+      .record(z.string(), z.enum(['succeeded', 'failed', 'skipped', 'planned', 'compensated']))
+      .optional(),
   }),
 });
 export type PlaybookTest = z.infer<typeof PlaybookTest>;
@@ -279,7 +400,11 @@ const automationShape = {
 };
 
 /** Calls `visit` for every step, depth-first, including steps nested in branch/forEach. */
-export function walkSteps(steps: readonly Step[], visit: (step: Step, path: (string | number)[]) => void, path: (string | number)[] = ['steps']): void {
+export function walkSteps(
+  steps: readonly Step[],
+  visit: (step: Step, path: (string | number)[]) => void,
+  path: (string | number)[] = ['steps'],
+): void {
   steps.forEach((step, i) => {
     const here = [...path, i];
     visit(step, here);
@@ -296,11 +421,13 @@ export const stepMode = (step: Step): Mode => step.mode ?? 'read';
 const requestMethod = (step: Step): string | undefined =>
   step.type === 'graph' || step.type === 'arm' || step.type === 'http' ? step.request.method : undefined;
 
-const STEP_OUTPUT_REF = /steps\.([A-Za-z_][A-Za-z0-9_]*)\.output((?:\s*\.\s*[A-Za-z_$][\w$]*|\s*\.\s*\d+|\[\s*\d+\s*\])*)/g;
+const STEP_OUTPUT_REF =
+  /steps\.([A-Za-z_][A-Za-z0-9_]*)\.output((?:\s*\.\s*[A-Za-z_$][\w$]*|\s*\.\s*\d+|\[\s*\d+\s*\])*)/g;
 const LOOKUP_REF = /\$lookup\(\s*steps\.([A-Za-z_][A-Za-z0-9_]*)\.output\s*,\s*["']([^"']+)["']/g;
 
 /** Output path segments referenced after `steps.<id>.output` (`.a.b`, `[0]`). */
-const refSegments = (tail: string) => [...tail.matchAll(/\.\s*([A-Za-z_$][\w$]*|\d+)|\[\s*(\d+)\s*\]/g)].map((m) => m[1] ?? m[2]!);
+const refSegments = (tail: string) =>
+  [...tail.matchAll(/\.\s*([A-Za-z_$][\w$]*|\d+)|\[\s*(\d+)\s*\]/g)].map((m) => m[1] ?? m[2]!);
 
 /** True when a reference to `ref` (segments under the output) can read the secret at `secret`. */
 function readsSecret(ref: string[], secret: string[]): boolean {
@@ -312,7 +439,11 @@ function readsSecret(ref: string[], secret: string[]): boolean {
  * Show-once secrets may not flow anywhere: no expression (later steps, outputs, confirm, compensations…) may read a
  * declared secret path, or any part of an output declared `secret: true`. The engine also masks them at run time.
  */
-function checkSecrets(def: Record<string, unknown>, groups: Array<{ steps: readonly Step[]; path: (string | number)[] }>, ctx: z.RefinementCtx): void {
+function checkSecrets(
+  def: Record<string, unknown>,
+  groups: Array<{ steps: readonly Step[]; path: (string | number)[] }>,
+  ctx: z.RefinementCtx,
+): void {
   const secrets = new Map<string, string[][]>();
   for (const { steps } of groups)
     walkSteps(steps, (step) => {
@@ -338,7 +469,9 @@ function checkSecrets(def: Record<string, unknown>, groups: Array<{ steps: reado
       return;
     }
     if (Array.isArray(value)) value.forEach((v, i) => visit(v, [...at, i]));
-    else if (value && typeof value === 'object') for (const [k, v] of Object.entries(value)) if (!(at.length === 0 && k === 'tests')) visit(v, [...at, k]);
+    else if (value && typeof value === 'object')
+      for (const [k, v] of Object.entries(value))
+        if (!(at.length === 0 && k === 'tests')) visit(v, [...at, k]);
   };
   visit(def, []);
 }
@@ -355,35 +488,78 @@ function checkAutomation(
       steps,
       (step, at) => {
         const where = at.join('.');
-        if (ids.has(step.id)) ctx.addIssue({ code: 'custom', path: [...at, 'id'], message: `Duplicate step id "${step.id}" (also at ${ids.get(step.id)}).` });
+        if (ids.has(step.id))
+          ctx.addIssue({
+            code: 'custom',
+            path: [...at, 'id'],
+            message: `Duplicate step id "${step.id}" (also at ${ids.get(step.id)}).`,
+          });
         else ids.set(step.id, where);
         const mode = stepMode(step);
         const method = requestMethod(step);
         if (method && ['PUT', 'PATCH', 'DELETE'].includes(method) && mode !== 'write')
-          ctx.addIssue({ code: 'custom', path: [...at, 'mode'], message: `${method} changes data: declare mode: write.` });
+          ctx.addIssue({
+            code: 'custom',
+            path: [...at, 'mode'],
+            message: `${method} changes data: declare mode: write.`,
+          });
         if (method === 'POST' && !step.mode)
-          ctx.addIssue({ code: 'custom', path: [...at, 'mode'], message: 'POST requests must declare mode: read or mode: write explicitly.' });
+          ctx.addIssue({
+            code: 'custom',
+            path: [...at, 'mode'],
+            message: 'POST requests must declare mode: read or mode: write explicitly.',
+          });
         if (step.type === 'notify' && mode !== 'write')
-          ctx.addIssue({ code: 'custom', path: [...at, 'mode'], message: 'notify sends a message as the user: declare mode: write.' });
+          ctx.addIssue({
+            code: 'custom',
+            path: [...at, 'mode'],
+            message: 'notify sends a message as the user: declare mode: write.',
+          });
         if (mode === 'write' && def.mode !== 'write')
-          ctx.addIssue({ code: 'custom', path: [...at, 'mode'], message: 'Write step in a read-only definition: set the top-level mode: write.' });
+          ctx.addIssue({
+            code: 'custom',
+            path: [...at, 'mode'],
+            message: 'Write step in a read-only definition: set the top-level mode: write.',
+          });
         if (mode === 'write' && !step.describe)
-          ctx.addIssue({ code: 'custom', path: [...at, 'describe'], message: 'Write steps need describe (shown in the dry-run plan).' });
+          ctx.addIssue({
+            code: 'custom',
+            path: [...at, 'describe'],
+            message: 'Write steps need describe (shown in the dry-run plan).',
+          });
         if (step.onError === 'compensate' && def.mode !== 'write')
-          ctx.addIssue({ code: 'custom', path: [...at, 'onError'], message: 'Compensation only applies to write definitions.' });
+          ctx.addIssue({
+            code: 'custom',
+            path: [...at, 'onError'],
+            message: 'Compensation only applies to write definitions.',
+          });
       },
       path,
     );
   }
   if ((def.risk === 'high' || def.risk === 'critical') && (!def.confirm || def.confirm.type === 'none'))
-    ctx.addIssue({ code: 'custom', path: ['confirm'], message: `risk: ${def.risk} needs a confirm block (click or typed).` });
+    ctx.addIssue({
+      code: 'custom',
+      path: ['confirm'],
+      message: `risk: ${def.risk} needs a confirm block (click or typed).`,
+    });
   if (def.risk === 'critical' && !def.approval?.required)
-    ctx.addIssue({ code: 'custom', path: ['approval'], message: 'risk: critical needs approval: { required: true }.' });
+    ctx.addIssue({
+      code: 'custom',
+      path: ['approval'],
+      message: 'risk: critical needs approval: { required: true }.',
+    });
   def.tests?.forEach((t, i) => {
     for (const key of [...Object.keys(t.mocks ?? {}), ...Object.keys(t.errors ?? {})])
-      if (!ids.has(key)) ctx.addIssue({ code: 'custom', path: ['tests', i, t.mocks && key in t.mocks ? 'mocks' : 'errors', key], message: `Unknown step id "${key}".` });
+      if (!ids.has(key))
+        ctx.addIssue({
+          code: 'custom',
+          path: ['tests', i, t.mocks && key in t.mocks ? 'mocks' : 'errors', key],
+          message: `Unknown step id "${key}".`,
+        });
     for (const key of [t.expect.failedStep, ...(t.expect.plan ?? []), ...Object.keys(t.expect.steps ?? {})])
-      if (key && !ids.has(key)) ctx.addIssue({ code: 'custom', path: ['tests', i, 'expect'], message: `Unknown step id "${key}".` });
+      if (key && !ids.has(key))
+        ctx.addIssue({ code: 'custom', path: ['tests', i, 'expect'], message: `Unknown step id "${key}".` });
   });
 }
 

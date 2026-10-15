@@ -68,7 +68,10 @@ export function createResourceGraphClient(opts: ArmClientOptions & { apiVersion?
   }
 
   /** Follows `$skipToken` page by page. */
-  async function* pages<T = Record<string, unknown>>(q: ResourceGraphQuery, maxPages = 50): AsyncGenerator<ResourceGraphPage<T>> {
+  async function* pages<T = Record<string, unknown>>(
+    q: ResourceGraphQuery,
+    maxPages = 50,
+  ): AsyncGenerator<ResourceGraphPage<T>> {
     let skipToken = q.skipToken;
     for (let i = 0; i < maxPages; i++) {
       const page: ResourceGraphPage<T> = await query<T>({ ...q, skipToken });

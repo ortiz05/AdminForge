@@ -55,12 +55,23 @@ export function Inspector() {
       modal={false}
       docked
       eyebrow={page ? `Inspector${pageTitle ? ` · ${pageTitle}` : ''}` : 'Inspector'}
-      title={page ? (entityTitle ?? pageTitle ?? 'Loading…') : target ? `${target.label} ${shorten(target.id)}` : 'Inspector'}
+      title={
+        page
+          ? (entityTitle ?? pageTitle ?? 'Loading…')
+          : target
+            ? `${target.label} ${shorten(target.id)}`
+            : 'Inspector'
+      }
       description={page ? undefined : 'Details open here without leaving the list.'}
     >
       {page && (
         <Suspense fallback={<SkeletonText lines={6} />}>
-          <InspectorPage key={`${page.page}:${JSON.stringify(page.params)}`} target={page} onTitle={onTitle} onPageTitle={onPageTitle} />
+          <InspectorPage
+            key={`${page.page}:${JSON.stringify(page.params)}`}
+            target={page}
+            onTitle={onTitle}
+            onPageTitle={onPageTitle}
+          />
         </Suspense>
       )}
       {target && (

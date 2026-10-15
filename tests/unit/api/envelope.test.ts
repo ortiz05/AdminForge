@@ -24,7 +24,9 @@ describe('envelope (AES-256-GCM)', () => {
 
   it('rejects the wrong key and unknown versions', () => {
     expect(() => open(seal('hello', key, 'p'), randomBytes(32), 'p')).toThrow();
-    expect(() => open(seal('hello', key, 'p').replace(/^1\./, '2.'), key, 'p')).toThrow(/Unsupported envelope/);
+    expect(() => open(seal('hello', key, 'p').replace(/^1\./, '2.'), key, 'p')).toThrow(
+      /Unsupported envelope/,
+    );
   });
 
   it('requires a 32-byte key', () => expect(() => seal('x', randomBytes(16), 'p')).toThrow(/32 bytes/));

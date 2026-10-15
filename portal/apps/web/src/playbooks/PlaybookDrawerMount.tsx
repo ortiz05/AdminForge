@@ -16,7 +16,15 @@ export function PlaybookDrawerMount() {
   return (
     <Suspense
       fallback={
-        <Drawer open onOpenChange={() => {}} modal={false} docked className="w-160" eyebrow="Playbook" title="Loading playbook…">
+        <Drawer
+          open
+          onOpenChange={() => {}}
+          modal={false}
+          docked
+          className="w-160"
+          eyebrow="Playbook"
+          title="Loading playbook…"
+        >
           <Skeleton className="h-16 w-full" shape="block" />
         </Drawer>
       }

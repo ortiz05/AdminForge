@@ -1,7 +1,13 @@
 import { useMemo } from 'react';
 import type { WidgetBlock } from '@adminforge/schemas';
 import { ErrorState, KpiStrip, Panel, ProvenanceFooter, cn, type Provenance } from '@adminforge/ui';
-import { getWidget, parseWidgetConfig, useWhen, type WidgetData, type WidgetRuntime } from '@adminforge/widgets';
+import {
+  getWidget,
+  parseWidgetConfig,
+  useWhen,
+  type WidgetData,
+  type WidgetRuntime,
+} from '@adminforge/widgets';
 import type { PageData } from './use-page-data';
 
 /** Literal class names so Tailwind sees them. */
@@ -33,11 +39,18 @@ const STRIP_COLS: Record<number, string> = {
 export type Block = WidgetBlock & { description?: string };
 
 /** Stable per-page id of a block: its `id`, or `<widget><index>`. Table ids key URL state. */
-export const blockId = (block: Block, index: number, prefix = '') => `${prefix}${block.id ?? `${block.widget}${index}`}`;
+export const blockId = (block: Block, index: number, prefix = '') =>
+  `${prefix}${block.id ?? `${block.widget}${index}`}`;
 
 const EMPTY: WidgetData = { status: 'ready', value: undefined };
 
-function ConfigProblem({ block, problems }: { block: Block; problems: Array<{ path: string; message: string }> }) {
+function ConfigProblem({
+  block,
+  problems,
+}: {
+  block: Block;
+  problems: Array<{ path: string; message: string }>;
+}) {
   return (
     <Panel aria-label={`${block.title ?? block.widget} configuration`}>
       <ErrorState
@@ -89,13 +102,29 @@ export function WidgetBlockView({ block, index, runtime, data, variant, idPrefix
   const widgetData = block.data ? data.resolve(block.data) : EMPTY;
   const Component = def.component;
   const content = (
-    <Component config={parsed.config} data={widgetData} runtime={runtime} instanceId={blockId(block, index, idPrefix)} variant={variant} />
+    <Component
+      config={parsed.config}
+      data={widgetData}
+      runtime={runtime}
+      instanceId={blockId(block, index, idPrefix)}
+      variant={variant}
+    />
   );
   return className ? <div className={className}>{content}</div> : content;
 }
 
 /** Consecutive KPIs share one strip; its foot names each distinct source once. */
-function KpiGroup({ items, runtime, data, compact }: { items: Array<{ block: Block; index: number }>; runtime: WidgetRuntime; data: PageData; compact: boolean }) {
+function KpiGroup({
+  items,
+  runtime,
+  data,
+  compact,
+}: {
+  items: Array<{ block: Block; index: number }>;
+  runtime: WidgetRuntime;
+  data: PageData;
+  compact: boolean;
+}) {
   const provenances = useMemo(() => {
     const seen = new Map<string, Provenance>();
     for (const { block } of items) {
@@ -112,9 +141,19 @@ function KpiGroup({ items, runtime, data, compact }: { items: Array<{ block: Blo
   const fillers = (n - (items.length % n)) % n;
   return (
     <div className="flex flex-col gap-1.5">
-      <KpiStrip label="Key figures" className={cn('grid-cols-2', compact ? 'md:grid-cols-2 xl:grid-cols-2' : STRIP_COLS[n])}>
+      <KpiStrip
+        label="Key figures"
+        className={cn('grid-cols-2', compact ? 'md:grid-cols-2 xl:grid-cols-2' : STRIP_COLS[n])}
+      >
         {items.map(({ block, index }) => (
-          <WidgetBlockView key={blockId(block, index)} block={block} index={index} runtime={runtime} data={data} variant="cell" />
+          <WidgetBlockView
+            key={blockId(block, index)}
+            block={block}
+            index={index}
+            runtime={runtime}
+            data={data}
+            variant="cell"
+          />
         ))}
         {Array.from({ length: fillers }, (_, i) => (
           <div key={`filler-${i}`} className="hidden bg-panel xl:block" aria-hidden />
@@ -131,7 +170,11 @@ function KpiGroup({ items, runtime, data, compact }: { items: Array<{ block: Blo
                 service={[...new Set(provenances.map((p) => p.service))].join(', ')}
                 path={`${provenances.length} endpoints`}
                 ms={Math.max(...provenances.map((p) => p.ms ?? 0))}
-                cachedAt={provenances.every((p) => p.cachedAt) ? provenances.map((p) => p.cachedAt!).sort()[0] : undefined}
+                cachedAt={
+                  provenances.every((p) => p.cachedAt)
+                    ? provenances.map((p) => p.cachedAt!).sort()[0]
+                    : undefined
+                }
               />
             </div>
           )}
@@ -141,7 +184,9 @@ function KpiGroup({ items, runtime, data, compact }: { items: Array<{ block: Blo
   );
 }
 
-type Group = { kind: 'kpis'; items: Array<{ block: Block; index: number }> } | { kind: 'block'; block: Block; index: number };
+type Group =
+  | { kind: 'kpis'; items: Array<{ block: Block; index: number }> }
+  | { kind: 'block'; block: Block; index: number };
 
 function group(blocks: readonly Block[]): Group[] {
   const out: Group[] = [];
@@ -189,7 +234,11 @@ export function WidgetGrid({
             idPrefix={idPrefix}
             variant={inspector ? 'inspector' : 'tile'}
             // A grid wrapper stretches the panel to the row's height, so neighbouring panels end level.
-            className={inspector ? 'grid min-w-0' : cn('grid min-w-0', SPAN[g.block.span ?? getWidget(g.block.widget)?.span ?? 12])}
+            className={
+              inspector
+                ? 'grid min-w-0'
+                : cn('grid min-w-0', SPAN[g.block.span ?? getWidget(g.block.widget)?.span ?? 12])
+            }
           />
         ),
       )}

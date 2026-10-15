@@ -1,6 +1,12 @@
 import { watch, type FSWatcher } from 'node:fs';
 import { loadContentDir, type ContentError, type Kind } from '@adminforge/schemas';
-import { recordKey, type ChangeListener, type DefinitionRecord, type DefinitionsChanged, type DefinitionSource } from './types';
+import {
+  recordKey,
+  type ChangeListener,
+  type DefinitionRecord,
+  type DefinitionsChanged,
+  type DefinitionSource,
+} from './types';
 
 export interface FsSourceOptions {
   /** Reload when files under the directory change (development). */
@@ -55,11 +61,31 @@ export class FsDefinitionSource implements DefinitionSource {
       if (r.file) byFile.set(r.file, r);
     };
     for (const d of definitions) {
-      add({ kind: d.def.kind, key: d.def.id, version: d.def.version, sha256: d.sha256, def: d.def, status: d.def.status === 'retired' ? 'retired' : 'published', source: 'fs', file: d.file });
+      add({
+        kind: d.def.kind,
+        key: d.def.id,
+        version: d.def.version,
+        sha256: d.sha256,
+        def: d.def,
+        status: d.def.status === 'retired' ? 'retired' : 'published',
+        source: 'fs',
+        file: d.file,
+      });
     }
     // Files that failed to parse keep their last good version.
-    if (prev) for (const file of new Set(errors.map((e) => e.file))) if (!byFile.has(file) && prev.byFile.has(file)) add(prev.byFile.get(file)!);
-    if (errors.length) this.opts.log?.warn({ problems: errors.length, first: errors.slice(0, 3).map((e) => `${e.file}${e.line ? `:${e.line}` : ''} ${e.path}: ${e.message}`) }, 'content has problems');
+    if (prev)
+      for (const file of new Set(errors.map((e) => e.file)))
+        if (!byFile.has(file) && prev.byFile.has(file)) add(prev.byFile.get(file)!);
+    if (errors.length)
+      this.opts.log?.warn(
+        {
+          problems: errors.length,
+          first: errors
+            .slice(0, 3)
+            .map((e) => `${e.file}${e.line ? `:${e.line}` : ''} ${e.path}: ${e.message}`),
+        },
+        'content has problems',
+      );
     return { records, byFile, errors };
   }
 
@@ -69,7 +95,10 @@ export class FsDefinitionSource implements DefinitionSource {
       this.watcher = watch(this.dir, { recursive: true }, (_event, filename) => {
         if (filename && !/\.ya?ml$/i.test(String(filename))) return;
         if (this.timer) clearTimeout(this.timer);
-        this.timer = setTimeout(() => void this.reload().catch((err) => this.opts.log?.warn({ err }, 'content reload failed')), this.opts.debounceMs ?? 150);
+        this.timer = setTimeout(
+          () => void this.reload().catch((err) => this.opts.log?.warn({ err }, 'content reload failed')),
+          this.opts.debounceMs ?? 150,
+        );
         this.timer.unref?.();
       });
       this.watcher.on('error', (err) => this.opts.log?.warn({ err }, 'content watcher failed'));

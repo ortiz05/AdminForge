@@ -26,7 +26,12 @@ function SecretField({ name, value, hint }: { name: string; value: string; hint?
     <div className="flex flex-col gap-1">
       <span className="text-xs font-medium text-fg-2">{label}</span>
       <div className="flex min-w-0 items-center gap-1 rounded-(--af-input-radius) border border-line-strong bg-sunken py-1 pr-1 pl-3">
-        <code className={cn('min-w-0 flex-1 truncate font-mono text-md text-fg', !revealed && 'tracking-widest text-fg-2')}>
+        <code
+          className={cn(
+            'min-w-0 flex-1 truncate font-mono text-md text-fg',
+            !revealed && 'tracking-widest text-fg-2',
+          )}
+        >
           <span aria-hidden={!revealed || undefined}>{revealed ? value : MASK}</span>
           {!revealed && <span className="sr-only">hidden</span>}
         </code>
@@ -88,7 +93,8 @@ export function SecretPanel({
           </h2>
           <p className="text-sm text-fg-2">
             From “{stepLabel}”{childRun ? ' (child run)' : ''}
-            {secret.producedAt ? ` · ${formatTimestamp(secret.producedAt)}` : ''}. Give it to the person over a verified channel.
+            {secret.producedAt ? ` · ${formatTimestamp(secret.producedAt)}` : ''}. Give it to the person over
+            a verified channel.
           </p>
         </div>
       </header>
@@ -99,7 +105,9 @@ export function SecretPanel({
       </div>
       {secret.note && <p className="text-sm text-fg-2">{secret.note}</p>}
       <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line pt-3">
-        <p className="text-xs text-fg-3">AdminForge doesn’t keep it: leaving this page or dismissing forgets it.</p>
+        <p className="text-xs text-fg-3">
+          AdminForge doesn’t keep it: leaving this page or dismissing forgets it.
+        </p>
         <Button onClick={onDismiss}>I’ve copied it — dismiss</Button>
       </div>
     </section>
@@ -114,15 +122,27 @@ const NOTICE_TEXT: Record<SecretNoticeState['status'], string> = {
 };
 
 /** A secret this page can't show (already shown, sent, discarded, or claimed elsewhere). */
-export function SecretNotices({ notices, labelFor }: { notices: SecretNoticeState[]; labelFor: (stepId: string) => string }) {
+export function SecretNotices({
+  notices,
+  labelFor,
+}: {
+  notices: SecretNoticeState[];
+  labelFor: (stepId: string) => string;
+}) {
   const shown = notices.filter((n) => n.status !== 'held' || n.error);
   if (!shown.length) return null;
   return (
     <div className="flex flex-col gap-2">
       {shown.map((n) => (
-        <Callout key={`${n.runId}:${n.stepPath}`} tone="neutral" title={`“${labelFor(n.stepId)}” produced a one-time secret`}>
+        <Callout
+          key={`${n.runId}:${n.stepPath}`}
+          tone="neutral"
+          title={`“${labelFor(n.stepId)}” produced a one-time secret`}
+        >
           {n.error ?? NOTICE_TEXT[n.status]}
-          {n.fields.length > 0 && <span className="mt-1 block text-xs text-fg-3">Fields: {n.fields.map(humanize).join(', ')}</span>}
+          {n.fields.length > 0 && (
+            <span className="mt-1 block text-xs text-fg-3">Fields: {n.fields.map(humanize).join(', ')}</span>
+          )}
         </Callout>
       ))}
     </div>
@@ -134,7 +154,10 @@ export function MaskedSecret({ value }: { value: unknown }) {
   if (!isSecretMask(value)) return null;
   return (
     <Tooltip content={SHOWN_ONCE_TOOLTIP}>
-      <span tabIndex={0} className="rounded-sm font-mono text-xs text-fg-2 outline-none focus-visible:ring-2 focus-visible:ring-focus">
+      <span
+        tabIndex={0}
+        className="rounded-sm font-mono text-xs text-fg-2 outline-none focus-visible:ring-2 focus-visible:ring-focus"
+      >
         {maskText(value)}
         <span className="sr-only"> ({SHOWN_ONCE_TOOLTIP})</span>
       </span>

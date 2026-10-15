@@ -3,7 +3,8 @@
  * (`${ { "a": 1 } }`) and strings containing braces (`${ "}" }`) work. `$${` is a literal `${`.
  */
 
-export type TemplateSegment = { type: 'text'; value: string } | { type: 'expr'; source: string; start: number; end: number };
+export type TemplateSegment =
+  { type: 'text'; value: string } | { type: 'expr'; source: string; start: number; end: number };
 
 export class TemplateError extends Error {
   constructor(

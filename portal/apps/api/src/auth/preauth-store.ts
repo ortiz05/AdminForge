@@ -54,7 +54,10 @@ export class PgPreauthStore implements PreauthStore {
   }
 
   async purge(now: Date): Promise<number> {
-    const removed = await this.db.delete(preauth).where(lt(preauth.expiresAt, now)).returning({ state: preauth.state });
+    const removed = await this.db
+      .delete(preauth)
+      .where(lt(preauth.expiresAt, now))
+      .returning({ state: preauth.state });
     return removed.length;
   }
 }

@@ -67,7 +67,15 @@ export class PgSessionStore implements SessionStore {
     await this.db.delete(sessions).where(eq(sessions.idHash, idHash));
   }
 
-  async purge({ now, idleMinutes, retainDays = 7 }: { now: Date; idleMinutes: number; retainDays?: number }): Promise<number> {
+  async purge({
+    now,
+    idleMinutes,
+    retainDays = 7,
+  }: {
+    now: Date;
+    idleMinutes: number;
+    retainDays?: number;
+  }): Promise<number> {
     const idleCutoff = new Date(now.getTime() - idleMinutes * 60_000);
     const unusable = or(lt(sessions.expiresAt, now), lt(sessions.lastSeenAt, idleCutoff));
     return this.db.transaction(async (tx) => {
@@ -87,7 +95,15 @@ export class PgSessionStore implements SessionStore {
       const retainCutoff = new Date(now.getTime() - retainDays * DAY_MS);
       const removed = await tx
         .delete(sessions)
-        .where(and(unusable, or(lt(sessions.expiresAt, retainCutoff), lt(sessions.lastSeenAt, new Date(idleCutoff.getTime() - retainDays * DAY_MS)))))
+        .where(
+          and(
+            unusable,
+            or(
+              lt(sessions.expiresAt, retainCutoff),
+              lt(sessions.lastSeenAt, new Date(idleCutoff.getTime() - retainDays * DAY_MS)),
+            ),
+          ),
+        )
         .returning({ idHash: sessions.idHash });
       return removed.length;
     });
@@ -120,7 +136,15 @@ export class MemorySessionStore implements SessionStore {
     this.rows.delete(idHash);
   }
 
-  async purge({ now, idleMinutes, retainDays = 7 }: { now: Date; idleMinutes: number; retainDays?: number }): Promise<number> {
+  async purge({
+    now,
+    idleMinutes,
+    retainDays = 7,
+  }: {
+    now: Date;
+    idleMinutes: number;
+    retainDays?: number;
+  }): Promise<number> {
     let removed = 0;
     const retainMs = retainDays * DAY_MS;
     for (const [id, s] of this.rows) {

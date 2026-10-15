@@ -18,46 +18,134 @@ describe.skipIf(!url)('scheduler on Postgres', () => {
     store = new PgScheduleStore(db.db);
   });
   beforeEach(async () => {
-    await db.pool.query("truncate schedules, schedule_runs, probe_results; delete from approvals where subject_type = 'schedule'");
+    await db.pool.query(
+      "truncate schedules, schedule_runs, probe_results; delete from approvals where subject_type = 'schedule'",
+    );
   });
   afterAll(async () => {
-    await db.pool.query("truncate schedules, schedule_runs, probe_results; delete from approvals where subject_type = 'schedule'");
+    await db.pool.query(
+      "truncate schedules, schedule_runs, probe_results; delete from approvals where subject_type = 'schedule'",
+    );
     await db.close();
   });
 
   it('syncs content into schedules and guards concurrent updates', async () => {
     const def = schedule('sweep.a');
-    expect(await syncSchedules(store, [{ key: 'sweep.a', def, sha256: 'sha-1' }], NOW)).toEqual({ inserted: ['sweep.a'], updated: [] });
+    expect(await syncSchedules(store, [{ key: 'sweep.a', def, sha256: 'sha-1' }], NOW)).toEqual({
+      inserted: ['sweep.a'],
+      updated: [],
+    });
     const row = (await store.getSchedule('sweep.a'))!;
-    expect(row).toMatchObject({ key: 'sweep.a', source: 'content', enabled: true, sha256: 'sha-1', nextRunAt: new Date('2026-10-15T12:15:00Z'), definition: { cron: '*/15 * * * *', job: { kind: 'probe', ref: 'probes.example' } } });
-    expect(await store.insertSchedule({ key: 'sweep.a', source: 'content', definition: def, sha256: 'other', enabled: false, nextRunAt: null })).toBeNull();
+    expect(row).toMatchObject({
+      key: 'sweep.a',
+      source: 'content',
+      enabled: true,
+      sha256: 'sha-1',
+      nextRunAt: new Date('2026-10-15T12:15:00Z'),
+      definition: { cron: '*/15 * * * *', job: { kind: 'probe', ref: 'probes.example' } },
+    });
+    expect(
+      await store.insertSchedule({
+        key: 'sweep.a',
+        source: 'content',
+        definition: def,
+        sha256: 'other',
+        enabled: false,
+        nextRunAt: null,
+      }),
+    ).toBeNull();
     // Optimistic claim of a due tick: only the first matching update wins.
-    expect(await store.updateSchedule(row.id, { nextRunAt: new Date('2026-10-15T12:30:00Z') }, { nextRunAt: row.nextRunAt })).toMatchObject({ nextRunAt: new Date('2026-10-15T12:30:00Z') });
-    expect(await store.updateSchedule(row.id, { nextRunAt: new Date('2026-10-15T12:45:00Z') }, { nextRunAt: row.nextRunAt })).toBeNull();
+    expect(
+      await store.updateSchedule(
+        row.id,
+        { nextRunAt: new Date('2026-10-15T12:30:00Z') },
+        { nextRunAt: row.nextRunAt },
+      ),
+    ).toMatchObject({ nextRunAt: new Date('2026-10-15T12:30:00Z') });
+    expect(
+      await store.updateSchedule(
+        row.id,
+        { nextRunAt: new Date('2026-10-15T12:45:00Z') },
+        { nextRunAt: row.nextRunAt },
+      ),
+    ).toBeNull();
     expect(await store.updateSchedule(row.id, { enabled: false }, { sha256: 'stale' })).toBeNull();
     expect((await store.getScheduleById(row.id))!.key).toBe('sweep.a');
   });
 
   it('stores runs, claims queued ones once, and pages history', async () => {
-    const row = (await store.insertSchedule({ key: 'sweep.b', source: 'content', definition: schedule('sweep.b'), sha256: 's', enabled: true, nextRunAt: NOW }))!;
+    const row = (await store.insertSchedule({
+      key: 'sweep.b',
+      source: 'content',
+      definition: schedule('sweep.b'),
+      sha256: 's',
+      enabled: true,
+      nextRunAt: NOW,
+    }))!;
     const runs = [];
-    for (let i = 0; i < 4; i++) runs.push(await store.insertRun({ scheduleId: row.id, scheduleKey: row.key, trigger: 'cron', status: 'succeeded', startedAt: new Date(Date.UTC(2026, 9, 15, i)), result: { i } }));
-    const queued = await store.insertRun({ scheduleId: row.id, scheduleKey: row.key, trigger: 'manual', status: 'queued', startedAt: NOW, result: { requestedBy: 'avery@example.com' } });
+    for (let i = 0; i < 4; i++)
+      runs.push(
+        await store.insertRun({
+          scheduleId: row.id,
+          scheduleKey: row.key,
+          trigger: 'cron',
+          status: 'succeeded',
+          startedAt: new Date(Date.UTC(2026, 9, 15, i)),
+          result: { i },
+        }),
+      );
+    const queued = await store.insertRun({
+      scheduleId: row.id,
+      scheduleKey: row.key,
+      trigger: 'manual',
+      status: 'queued',
+      startedAt: NOW,
+      result: { requestedBy: 'avery@example.com' },
+    });
     expect((await store.runsInStatus(['queued'])).map((r) => r.id)).toEqual([queued.id]);
-    expect(await store.updateRun(queued.id, { status: 'running', startedAt: NOW }, 'queued')).toMatchObject({ status: 'running', result: { requestedBy: 'avery@example.com' } });
+    expect(await store.updateRun(queued.id, { status: 'running', startedAt: NOW }, 'queued')).toMatchObject({
+      status: 'running',
+      result: { requestedBy: 'avery@example.com' },
+    });
     expect(await store.updateRun(queued.id, { status: 'running' }, 'queued')).toBeNull();
-    await store.updateRun(queued.id, { status: 'failed', endedAt: NOW, error: { code: 'upstream_error', message: 'x' } }, 'running');
+    await store.updateRun(
+      queued.id,
+      { status: 'failed', endedAt: NOW, error: { code: 'upstream_error', message: 'x' } },
+      'running',
+    );
     const page1 = await store.listRuns(row.id, { limit: 2 });
     expect(page1.map((r) => r.status)).toEqual(['failed', 'succeeded']);
-    const page2 = await store.listRuns(row.id, { limit: 10, before: { startedAt: page1[1]!.startedAt, id: page1[1]!.id } });
+    const page2 = await store.listRuns(row.id, {
+      limit: 10,
+      before: { startedAt: page1[1]!.startedAt, id: page1[1]!.id },
+    });
     expect(page2.map((r) => r.result?.i)).toEqual([2, 1, 0]);
     expect(await store.getRun(queued.id)).toMatchObject({ error: { code: 'upstream_error' } });
   });
 
   it('keeps probe results as a time series with details', async () => {
     const at = (h: number) => new Date(Date.UTC(2026, 9, 15, h));
-    for (const h of [8, 9, 10, 11]) await store.insertProbeResult({ probeKey: 'probes.a', ts: at(h), status: h === 11 ? 'warn' : 'ok', metric: h, durationMs: 5, message: `m${h}`, details: { rows: [{ h }] }, scheduleRunId: null });
-    await store.insertProbeResult({ probeKey: 'probes.b', ts: at(9), status: 'error', metric: null, durationMs: 1, message: 'not configured', details: null, scheduleRunId: null });
+    for (const h of [8, 9, 10, 11])
+      await store.insertProbeResult({
+        probeKey: 'probes.a',
+        ts: at(h),
+        status: h === 11 ? 'warn' : 'ok',
+        metric: h,
+        durationMs: 5,
+        message: `m${h}`,
+        details: { rows: [{ h }] },
+        scheduleRunId: null,
+      });
+    await store.insertProbeResult({
+      probeKey: 'probes.b',
+      ts: at(9),
+      status: 'error',
+      metric: null,
+      durationMs: 1,
+      message: 'not configured',
+      details: null,
+      scheduleRunId: null,
+    });
     expect((await store.latestProbeResults()).map((r) => [r.probeKey, r.status, r.metric])).toEqual([
       ['probes.a', 'warn', 11],
       ['probes.b', 'error', null],
@@ -68,15 +156,48 @@ describe.skipIf(!url)('scheduler on Postgres', () => {
       ['probes.a', 10, null],
       ['probes.b', null, null],
     ]);
-    expect((await store.probeResults('probes.a', at(10), 10)).map((r) => r.details)).toEqual([{ rows: [{ h: 11 }] }, { rows: [{ h: 10 }] }]);
+    expect((await store.probeResults('probes.a', at(10), 10)).map((r) => r.details)).toEqual([
+      { rows: [{ h: 11 }] },
+      { rows: [{ h: 10 }] },
+    ]);
   });
 
   it('keeps schedule approvals apart from run approvals', async () => {
-    const policy = { kind: 'approval', action: 'enable', approvers: ['Playbook.Approver'], minApprovals: 1, title: 't', message: 'm', definitionKey: 'ops.x', definitionVersion: '1.0.0', sha256: 's', requestedByUpn: 'avery@example.com', initiatorOid: 'a', writesAfter: false } satisfies ScheduleApprovalPolicy;
+    const policy = {
+      kind: 'approval',
+      action: 'enable',
+      approvers: ['Playbook.Approver'],
+      minApprovals: 1,
+      title: 't',
+      message: 'm',
+      definitionKey: 'ops.x',
+      definitionVersion: '1.0.0',
+      sha256: 's',
+      requestedByUpn: 'avery@example.com',
+      initiatorOid: 'a',
+      writesAfter: false,
+    } satisfies ScheduleApprovalPolicy;
     const a = await store.insertApproval({ subjectId: 'ops.x', policy, requestedBy: 'a', expiresAt: null });
-    expect(await store.getApproval(a.id)).toMatchObject({ subjectType: 'schedule', subjectId: 'ops.x', status: 'pending', decisions: [] });
-    expect((await store.listApprovals({ status: 'pending', subjectId: 'ops.x' })).map((x) => x.id)).toEqual([a.id]);
-    const decided = await store.updateApproval(a.id, { status: 'approved', decisions: [{ oid: 'b', upn: 'blake@example.com', decision: 'approve', comment: null, at: NOW.toISOString() }], decidedAt: NOW }, 'pending');
+    expect(await store.getApproval(a.id)).toMatchObject({
+      subjectType: 'schedule',
+      subjectId: 'ops.x',
+      status: 'pending',
+      decisions: [],
+    });
+    expect((await store.listApprovals({ status: 'pending', subjectId: 'ops.x' })).map((x) => x.id)).toEqual([
+      a.id,
+    ]);
+    const decided = await store.updateApproval(
+      a.id,
+      {
+        status: 'approved',
+        decisions: [
+          { oid: 'b', upn: 'blake@example.com', decision: 'approve', comment: null, at: NOW.toISOString() },
+        ],
+        decidedAt: NOW,
+      },
+      'pending',
+    );
     expect(decided).toMatchObject({ status: 'approved' });
     expect(await store.updateApproval(a.id, { status: 'rejected' }, 'pending')).toBeNull();
   });

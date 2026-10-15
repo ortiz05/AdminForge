@@ -21,8 +21,17 @@ export async function confirmationText(
   for (const s of preview.steps) steps[s.stepId] = { output: s.output };
   try {
     const { renderString } = await import('@adminforge/expressions');
-    const value = await renderString(template, { inputs: preview.run.inputs, steps, user, run: { id: preview.run.id } });
-    return typeof value === 'string' && value.trim() ? value.trim() : value != null && String(value).trim() ? String(value) : def.id;
+    const value = await renderString(template, {
+      inputs: preview.run.inputs,
+      steps,
+      user,
+      run: { id: preview.run.id },
+    });
+    return typeof value === 'string' && value.trim()
+      ? value.trim()
+      : value != null && String(value).trim()
+        ? String(value)
+        : def.id;
   } catch {
     return def.id;
   }

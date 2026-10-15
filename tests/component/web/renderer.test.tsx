@@ -40,21 +40,40 @@ function renderAt(path: string, { session = me(), caps, respond }: Options = {})
       const def = /^\/api\/definitions\/([a-z]+)\/(.+)$/.exec(u.pathname);
       if (def) {
         const hit = DEFINITIONS[`${def[1]}/${decodeURIComponent(def[2]!)}`];
-        return hit ? json(hit) : json({ error: { code: 'definition_not_found', message: 'No such definition.' } }, 404);
+        return hit
+          ? json(hit)
+          : json({ error: { code: 'definition_not_found', message: 'No such definition.' } }, 404);
       }
       if (u.pathname === '/api/datasources/execute-many') {
         const names = (body as { datasources: string[] }).datasources;
-        return json({ results: Object.fromEntries(names.map((n) => [n, RESULTS[n] ?? { error: { code: 'nope', message: `No result for ${n}` } }])) });
+        return json({
+          results: Object.fromEntries(
+            names.map((n) => [n, RESULTS[n] ?? { error: { code: 'nope', message: `No result for ${n}` } }]),
+          ),
+        });
       }
       if (u.pathname === '/api/datasources/execute') return json(NEXT_PAGE);
-      if (u.pathname === '/api/me/capabilities') return json(caps ?? { features: {}, roles: { active: [], eligible: [] } });
+      if (u.pathname === '/api/me/capabilities')
+        return json(caps ?? { features: {}, roles: { active: [], eligible: [] } });
       if (u.pathname === '/api/views' && method === 'GET') return json({ items: views });
       if (u.pathname === '/api/views' && method === 'POST') {
         const v = { id: `v${views.length + 1}`, mine: true, owner: 'me', ...(body as object) };
         views.push(v);
         return json(v, 201);
       }
-      if (u.pathname === '/api/search') return json({ query: u.searchParams.get('q'), results: [{ type: 'user', title: 'Adele Vance', subtitle: 'adele@example.com', href: `/p/test.person?id=${guid(1)}` }], sources: {} });
+      if (u.pathname === '/api/search')
+        return json({
+          query: u.searchParams.get('q'),
+          results: [
+            {
+              type: 'user',
+              title: 'Adele Vance',
+              subtitle: 'adele@example.com',
+              href: `/p/test.person?id=${guid(1)}`,
+            },
+          ],
+          sources: {},
+        });
       if (u.pathname === '/api/probes') return json({ items: [] });
       return json({ ok: true });
     }),
@@ -98,7 +117,12 @@ describe('content renderer (/p/$key)', () => {
     expect(within(filters).getByRole('searchbox', { name: 'Search' })).toBeInTheDocument();
     const many = executeMany(calls);
     expect(many).toHaveLength(1);
-    expect(many[0]!.body).toEqual({ page: 'test.users', version: '1.0.0', datasources: ['users', 'counts'], params: {} });
+    expect(many[0]!.body).toEqual({
+      page: 'test.users',
+      version: '1.0.0',
+      datasources: ['users', 'counts'],
+      params: {},
+    });
     expect(await axeViolations()).toEqual([]);
   });
 
@@ -110,8 +134,16 @@ describe('content renderer (/p/$key)', () => {
     await user.click(within(filters).getByRole('button', { name: 'Type' }));
     await user.click(await screen.findByRole('checkbox', { name: 'Guest' }));
     await waitFor(() => expect(search().userType).toBe('Guest'));
-    await waitFor(() => expect(executeMany(calls).some((c) => (c.body as { params: { userType?: string } }).params.userType === 'Guest')).toBe(true));
-    expect(within(screen.getByRole('list', { name: 'Active filters' })).getByText('Guest')).toBeInTheDocument();
+    await waitFor(() =>
+      expect(
+        executeMany(calls).some(
+          (c) => (c.body as { params: { userType?: string } }).params.userType === 'Guest',
+        ),
+      ).toBe(true),
+    );
+    expect(
+      within(screen.getByRole('list', { name: 'Active filters' })).getByText('Guest'),
+    ).toBeInTheDocument();
   });
 
   it('the advanced filter sends a structured filter (URL: base64url JSON; API: the object)', async () => {
@@ -127,7 +159,14 @@ describe('content renderer (/p/$key)', () => {
     const expected = { all: [{ field: 'department', op: 'startsWith', value: 'IT' }] };
     await waitFor(() => expect(typeof search().adv).toBe('string'));
     expect(decode(search().adv)).toEqual(expected);
-    await waitFor(() => expect(executeMany(calls).some((c) => JSON.stringify((c.body as { params: { adv?: unknown } }).params.adv) === JSON.stringify(expected))).toBe(true));
+    await waitFor(() =>
+      expect(
+        executeMany(calls).some(
+          (c) =>
+            JSON.stringify((c.body as { params: { adv?: unknown } }).params.adv) === JSON.stringify(expected),
+        ),
+      ).toBe(true),
+    );
     expect(screen.getByRole('list', { name: 'Active filters' })).toHaveTextContent('Advanced:1 condition');
   });
 
@@ -141,26 +180,48 @@ describe('content renderer (/p/$key)', () => {
     await user.click(await screen.findByRole('option', { name: 'Created' }));
     await user.type(within(builder).getByRole('textbox', { name: 'Condition 1 value' }), 'last week');
     await user.click(within(builder).getByRole('button', { name: 'Apply' }));
-    expect(await within(builder).findByText(/Enter a date like 2026-01-31, or today, now, -30d/)).toBeInTheDocument();
+    expect(
+      await within(builder).findByText(/Enter a date like 2026-01-31, or today, now, -30d/),
+    ).toBeInTheDocument();
     expect(search().adv).toBeUndefined();
     expect(await axeViolations()).toEqual([]);
   });
 
   it('a filter the BFF rejects (400 invalid_params) shows every problem in the builder', async () => {
     const user = userEvent.setup();
-    const bad = btoa(JSON.stringify({ all: [{ field: 'nope', op: 'eq', value: 'x' }] })).replace(/=+$/, '').replace(/\+/g, '-').replace(/\//g, '_');
+    const bad = btoa(JSON.stringify({ all: [{ field: 'nope', op: 'eq', value: 'x' }] }))
+      .replace(/=+$/, '')
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_');
     renderAt(`/p/test.users?adv=${bad}`, {
       respond: (url) =>
         url === '/api/datasources/execute-many'
-          ? json({ error: { code: 'invalid_params', message: 'Invalid parameters: adv: unknown field "nope"; adv: at most 20 conditions', hint: 'Check the filter values and try again.' } }, 400)
+          ? json(
+              {
+                error: {
+                  code: 'invalid_params',
+                  message: 'Invalid parameters: adv: unknown field "nope"; adv: at most 20 conditions',
+                  hint: 'Check the filter values and try again.',
+                },
+              },
+              400,
+            )
           : undefined,
     });
-    expect(await screen.findByText(/The advanced filter was rejected: unknown field "nope"; at most 20 conditions/)).toBeInTheDocument();
+    expect(
+      await screen.findByText(
+        /The advanced filter was rejected: unknown field "nope"; at most 20 conditions/,
+      ),
+    ).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: /Advanced filter, 1 condition/ }));
     const builder = await screen.findByRole('dialog', { name: 'Advanced filter' });
     const alert = within(builder).getByRole('alert');
     expect(alert).toHaveTextContent('The service rejected this filter');
-    expect(within(alert).getAllByRole('listitem').map((li) => li.textContent)).toEqual(['unknown field "nope"', 'at most 20 conditions']);
+    expect(
+      within(alert)
+        .getAllByRole('listitem')
+        .map((li) => li.textContent),
+    ).toEqual(['unknown field "nope"', 'at most 20 conditions']);
   });
 
   it('loads the next page of a cursor datasource with execute', async () => {
@@ -170,7 +231,13 @@ describe('content renderer (/p/$key)', () => {
     await within(grid).findByText('Adele Vance');
     // Near the end of three loaded rows the table asks for more; the button is there too.
     await waitFor(() => expect(calls.some((c) => c.url === '/api/datasources/execute')).toBe(true));
-    expect(calls.find((c) => c.url === '/api/datasources/execute')!.body).toEqual({ page: 'test.users', version: '1.0.0', datasource: 'users', params: {}, cursor: 'page-2' });
+    expect(calls.find((c) => c.url === '/api/datasources/execute')!.body).toEqual({
+      page: 'test.users',
+      version: '1.0.0',
+      datasource: 'users',
+      params: {},
+      cursor: 'page-2',
+    });
     expect(await within(grid).findByText('Lee Gu')).toBeInTheDocument();
     void user;
   });
@@ -181,7 +248,11 @@ describe('content renderer (/p/$key)', () => {
     const grid = await screen.findByRole('grid', { name: 'People' });
     await user.click(await within(grid).findByRole('checkbox', { name: 'Select Adele Vance' }));
     await user.click(within(grid).getByRole('checkbox', { name: 'Select Jordan Miller' }));
-    await user.click(within(screen.getByRole('region', { name: 'Bulk actions' })).getByRole('button', { name: 'Block sign-in' }));
+    await user.click(
+      within(screen.getByRole('region', { name: 'Bulk actions' })).getByRole('button', {
+        name: 'Block sign-in',
+      }),
+    );
     await waitFor(() => expect(search().playbook).toBe('identity.disable-user'));
     expect(decode(search().items)).toEqual([
       { userId: guid(1), $label: 'Adele Vance' },
@@ -236,7 +307,14 @@ describe('content renderer (/p/$key)', () => {
     const dialog = await screen.findByRole('dialog', { name: 'Save view' });
     await user.type(within(dialog).getByLabelText('Name'), 'My guests');
     await user.click(within(dialog).getByRole('button', { name: 'Save view' }));
-    await waitFor(() => expect(calls.find((c) => c.method === 'POST' && c.url === '/api/views')?.body).toEqual({ page: 'test.users', name: 'My guests', shared: false, state: { params: { userType: 'Guest' }, table: {} } }));
+    await waitFor(() =>
+      expect(calls.find((c) => c.method === 'POST' && c.url === '/api/views')?.body).toEqual({
+        page: 'test.users',
+        name: 'My guests',
+        shared: false,
+        state: { params: { userType: 'Guest' }, table: {} },
+      }),
+    );
     await waitFor(() => expect(search().view).toBe('v1'));
   });
 
@@ -247,7 +325,13 @@ describe('content renderer (/p/$key)', () => {
     const { calls } = renderAt('/p/test.expiry', {
       respond: (url) =>
         url.startsWith('/api/reports/')
-          ? new Response('app,days\n', { status: 200, headers: { 'content-type': 'text/csv', 'content-disposition': 'attachment; filename="expiry-30d.csv"' } })
+          ? new Response('app,days\n', {
+              status: 200,
+              headers: {
+                'content-type': 'text/csv',
+                'content-disposition': 'attachment; filename="expiry-30d.csv"',
+              },
+            })
           : undefined,
     });
     expect(await screen.findByRole('heading', { level: 1, name: 'Credential expiry' })).toBeInTheDocument();
@@ -255,16 +339,27 @@ describe('content renderer (/p/$key)', () => {
     expect(await screen.findByText('Example HR Sync')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: /Export report/ }));
     await waitFor(() => expect(calls.some((c) => c.url === '/api/reports/test.expiry/export')).toBe(true));
-    expect(calls.find((c) => c.url === '/api/reports/test.expiry/export')!.body).toMatchObject({ format: 'csv', params: {}, version: '1.0.0' });
+    expect(calls.find((c) => c.url === '/api/reports/test.expiry/export')!.body).toMatchObject({
+      format: 'csv',
+      params: {},
+      version: '1.0.0',
+    });
     expect(await screen.findByText('Exported expiry-30d.csv')).toBeInTheDocument();
   });
 
   it('a page whose licence is missing explains it and loads no data (live tenant)', async () => {
     const { calls } = renderAt('/p/test.devices', {
       session: me({ dataMode: 'live' }),
-      caps: { features: { intune: { available: false, label: 'Microsoft Intune', sku: 'Microsoft Intune Plan 1 (INTUNE_A)' } }, roles: { active: [], eligible: [] } },
+      caps: {
+        features: {
+          intune: { available: false, label: 'Microsoft Intune', sku: 'Microsoft Intune Plan 1 (INTUNE_A)' },
+        },
+        roles: { active: [], eligible: [] },
+      },
     });
-    expect(await screen.findByRole('heading', { name: 'Microsoft Intune isn’t licensed in this tenant' })).toBeInTheDocument();
+    expect(
+      await screen.findByRole('heading', { name: 'Microsoft Intune isn’t licensed in this tenant' }),
+    ).toBeInTheDocument();
     expect(screen.getByText('Microsoft Intune Plan 1 (INTUNE_A)')).toBeInTheDocument();
     expect(executeMany(calls)).toHaveLength(0);
     expect(await axeViolations()).toEqual([]);
@@ -272,7 +367,10 @@ describe('content renderer (/p/$key)', () => {
 
   it('mock mode keeps fixture data under a "Preview with sample data" banner', async () => {
     const { calls } = renderAt('/p/test.devices', {
-      caps: { features: { intune: { available: false, label: 'Microsoft Intune' } }, roles: { active: [], eligible: [] } },
+      caps: {
+        features: { intune: { available: false, label: 'Microsoft Intune' } },
+        roles: { active: [], eligible: [] },
+      },
     });
     expect(await screen.findByRole('note', { name: 'Preview with sample data' })).toBeInTheDocument();
     await waitFor(() => expect(executeMany(calls)).toHaveLength(1));
@@ -282,7 +380,11 @@ describe('content renderer (/p/$key)', () => {
     renderAt('/p/test.health');
     expect(await screen.findByRole('heading', { level: 1, name: 'Health' })).toBeInTheDocument();
     // Re-evaluated once the datasource arrives (the first render has no data yet).
-    await waitFor(() => expect(screen.getByText(/Services that need attention:/)).toHaveTextContent('Services that need attention: 1'));
+    await waitFor(() =>
+      expect(screen.getByText(/Services that need attention:/)).toHaveTextContent(
+        'Services that need attention: 1',
+      ),
+    );
     expect(screen.getByText(/Services that need attention:/).querySelector('strong')).toHaveTextContent('1');
     expect(await screen.findByText(/every 60 s/)).toBeInTheDocument();
     expect(screen.getByRole('list', { name: 'Service health' })).toHaveTextContent('Degraded');
@@ -290,7 +392,9 @@ describe('content renderer (/p/$key)', () => {
 
   it('an unknown key says so and offers the palette', async () => {
     renderAt('/p/test.missing');
-    expect(await screen.findByRole('heading', { level: 1, name: 'There’s no page at this address' })).toBeInTheDocument();
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'There’s no page at this address' }),
+    ).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Open the command palette/ })).toBeInTheDocument();
   });
 
@@ -302,7 +406,9 @@ describe('content renderer (/p/$key)', () => {
     const palette = await screen.findByRole('dialog', { name: 'Command palette' });
     await user.type(within(palette).getByRole('combobox'), 'adele');
     const group = await within(palette).findByRole('group', { name: 'Users' }, { timeout: 2000 });
-    expect(calls.filter((c) => c.url.startsWith('/api/search')).map((c) => c.url)).toEqual(['/api/search?q=adele']);
+    expect(calls.filter((c) => c.url.startsWith('/api/search')).map((c) => c.url)).toEqual([
+      '/api/search?q=adele',
+    ]);
     await user.click(within(group).getByRole('option', { name: /Adele Vance/ }));
     await waitFor(() => expect(router.state.location.pathname).toBe('/p/test.person'));
   });

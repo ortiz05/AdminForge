@@ -9,7 +9,14 @@ import { describeCron, nextRun } from './cron';
 import type { ScheduleEvents } from './events';
 import type { ScheduleStore } from './store';
 import { contentSchedules, contentSignature, syncSchedules } from './sync';
-import type { ApprovalStatus, RunCursor, ScheduleApprovalPolicy, ScheduleApprovalRow, ScheduleRow, ScheduleRunRow } from './types';
+import type {
+  ApprovalStatus,
+  RunCursor,
+  ScheduleApprovalPolicy,
+  ScheduleApprovalRow,
+  ScheduleRow,
+  ScheduleRunRow,
+} from './types';
 
 /**
  * Schedules as the API sees them (R6): list, enable/disable (two-person approval for write-capable schedules),
@@ -110,7 +117,14 @@ export class ScheduleService {
   ) {}
 
   private actor(c: Caller): Omit<AuditInput, 'action' | 'result'> {
-    return { actorOid: c.session.userOid, actorUpn: c.session.upn, sessionHash: c.session.idHash, mode: 'read', correlationId: c.correlationId, ip: c.ip };
+    return {
+      actorOid: c.session.userOid,
+      actorUpn: c.session.upn,
+      sessionHash: c.session.idHash,
+      mode: 'read',
+      correlationId: c.correlationId,
+      ip: c.ip,
+    };
   }
 
   /** Content → store (only when the content schedules changed since the last sync in this process). Returns the content keys. */
@@ -127,7 +141,8 @@ export class ScheduleService {
   private async row(key: string): Promise<{ row: ScheduleRow; inContent: boolean }> {
     const keys = await this.ensureSynced();
     const row = await this.deps.store.getSchedule(key);
-    if (!row || (row.source === 'content' && !keys.has(key))) throw new AppError(404, 'schedule_not_found', `No schedule "${key}".`);
+    if (!row || (row.source === 'content' && !keys.has(key)))
+      throw new AppError(404, 'schedule_not_found', `No schedule "${key}".`);
     return { row, inContent: keys.has(key) };
   }
 
@@ -146,7 +161,8 @@ export class ScheduleService {
     const now = this.deps.now();
     const out: ScheduleApprovalRow[] = [];
     for (const a of await this.deps.store.listApprovals({ status: 'pending' })) {
-      if (a.expiresAt && a.expiresAt.getTime() <= now.getTime()) await this.deps.store.updateApproval(a.id, { status: 'expired', decidedAt: now }, 'pending');
+      if (a.expiresAt && a.expiresAt.getTime() <= now.getTime())
+        await this.deps.store.updateApproval(a.id, { status: 'expired', decidedAt: now }, 'pending');
       else out.push(a);
     }
     return out;
@@ -184,7 +200,9 @@ export class ScheduleService {
     const keys = await this.ensureSynced();
     const now = this.deps.now();
     const pending = new Map((await this.pendingApprovals()).map((a) => [a.subjectId, a.id]));
-    const rows = (await this.deps.store.listSchedules()).filter((r) => r.source === 'portal' || keys.has(r.key));
+    const rows = (await this.deps.store.listSchedules()).filter(
+      (r) => r.source === 'portal' || keys.has(r.key),
+    );
     return { items: rows.map((r) => this.item(r, pending.get(r.key) ?? null, now)) };
   }
 
@@ -195,24 +213,45 @@ export class ScheduleService {
   }
 
   /** PATCH { enabled }: 200 when done; 202 { approvalId } when a write-capable schedule needs a second person. */
-  async setEnabled(c: Caller, key: string, enabled: boolean): Promise<{ statusCode: 200 | 202; body: Record<string, unknown> }> {
+  async setEnabled(
+    c: Caller,
+    key: string,
+    enabled: boolean,
+  ): Promise<{ statusCode: 200 | 202; body: Record<string, unknown> }> {
     requireRole(c.session, 'Portal.Operator', 'Enabling or disabling schedules');
     const { row } = await this.row(key);
     const def = row.definition;
     const now = this.deps.now();
     if (!enabled) {
-      if (row.enabled || row.approvedBy) await this.deps.store.updateSchedule(row.id, { enabled: false, nextRunAt: null, approvedBy: null });
-      for (const a of (await this.deps.store.listApprovals({ status: 'pending', subjectId: key })).filter((x) => x.subjectId === key))
+      if (row.enabled || row.approvedBy)
+        await this.deps.store.updateSchedule(row.id, { enabled: false, nextRunAt: null, approvedBy: null });
+      for (const a of (await this.deps.store.listApprovals({ status: 'pending', subjectId: key })).filter(
+        (x) => x.subjectId === key,
+      ))
         await this.deps.store.updateApproval(a.id, { status: 'cancelled', decidedAt: now }, 'pending');
-      await this.deps.audit.append({ ...this.actor(c), action: 'schedule.disabled', targetType: 'schedule', targetId: key, result: 'success', details: { version: def.version, sha256: row.sha256, wasEnabled: row.enabled } });
+      await this.deps.audit.append({
+        ...this.actor(c),
+        action: 'schedule.disabled',
+        targetType: 'schedule',
+        targetId: key,
+        result: 'success',
+        details: { version: def.version, sha256: row.sha256, wasEnabled: row.enabled },
+      });
       this.changed(key);
       return { statusCode: 200, body: { key, enabled: false } };
     }
     if (INACTIVE.has(def.status ?? 'active'))
-      throw new AppError(409, 'schedule_inactive', `Schedule ${key} is ${def.status}; it cannot be enabled.`, { hint: 'Set its status to active in content and publish it first.' });
+      throw new AppError(
+        409,
+        'schedule_inactive',
+        `Schedule ${key} is ${def.status}; it cannot be enabled.`,
+        { hint: 'Set its status to active in content and publish it first.' },
+      );
     if (row.enabled) return { statusCode: 200, body: { key, enabled: true } };
     if (isWriteCapable(def)) {
-      const existing = (await this.pendingApprovals()).find((a) => a.subjectId === key && a.policy.sha256 === row.sha256);
+      const existing = (await this.pendingApprovals()).find(
+        (a) => a.subjectId === key && a.policy.sha256 === row.sha256,
+      );
       if (existing) return { statusCode: 202, body: { approvalId: existing.id } };
       const policy: ScheduleApprovalPolicy = {
         kind: 'approval',
@@ -228,12 +267,34 @@ export class ScheduleService {
         initiatorOid: c.session.userOid,
         writesAfter: false,
       };
-      const a = await this.deps.store.insertApproval({ subjectId: key, policy, requestedBy: c.session.userOid, expiresAt: new Date(now.getTime() + APPROVAL_TTL_MS) });
-      await this.deps.audit.append({ ...this.actor(c), action: 'schedule.enable_requested', targetType: 'schedule', targetId: key, result: 'success', details: { approvalId: a.id, version: def.version, sha256: row.sha256, job: def.job.kind } });
+      const a = await this.deps.store.insertApproval({
+        subjectId: key,
+        policy,
+        requestedBy: c.session.userOid,
+        expiresAt: new Date(now.getTime() + APPROVAL_TTL_MS),
+      });
+      await this.deps.audit.append({
+        ...this.actor(c),
+        action: 'schedule.enable_requested',
+        targetType: 'schedule',
+        targetId: key,
+        result: 'success',
+        details: { approvalId: a.id, version: def.version, sha256: row.sha256, job: def.job.kind },
+      });
       return { statusCode: 202, body: { approvalId: a.id } };
     }
-    await this.deps.store.updateSchedule(row.id, { enabled: true, nextRunAt: nextRun(def.cron, def.timezone, now) });
-    await this.deps.audit.append({ ...this.actor(c), action: 'schedule.enabled', targetType: 'schedule', targetId: key, result: 'success', details: { version: def.version, sha256: row.sha256 } });
+    await this.deps.store.updateSchedule(row.id, {
+      enabled: true,
+      nextRunAt: nextRun(def.cron, def.timezone, now),
+    });
+    await this.deps.audit.append({
+      ...this.actor(c),
+      action: 'schedule.enabled',
+      targetType: 'schedule',
+      targetId: key,
+      result: 'success',
+      details: { version: def.version, sha256: row.sha256 },
+    });
     this.changed(key);
     return { statusCode: 200, body: { key, enabled: true } };
   }
@@ -249,7 +310,12 @@ export class ScheduleService {
     const { row } = await this.row(key);
     const def = row.definition;
     if (isWriteCapable(def) && !(row.enabled && row.approvedBy))
-      throw new AppError(403, 'approval_required', 'This schedule changes data; it can run only after enabling it was approved by a second person.', { hint: 'Enable it first; a Playbook.Approver who is not you approves the request.' });
+      throw new AppError(
+        403,
+        'approval_required',
+        'This schedule changes data; it can run only after enabling it was approved by a second person.',
+        { hint: 'Enable it first; a Playbook.Approver who is not you approves the request.' },
+      );
     const run = await this.deps.store.insertRun({
       scheduleId: row.id,
       scheduleKey: key,
@@ -258,14 +324,27 @@ export class ScheduleService {
       startedAt: this.deps.now(),
       result: { requestedBy: c.session.upn, requestedByOid: c.session.userOid },
     });
-    await this.deps.audit.append({ ...this.actor(c), action: 'schedule.run_requested', targetType: 'schedule', targetId: key, result: 'success', details: { scheduleRunId: run.id, job: def.job.kind, version: def.version } });
+    await this.deps.audit.append({
+      ...this.actor(c),
+      action: 'schedule.run_requested',
+      targetType: 'schedule',
+      targetId: key,
+      result: 'success',
+      details: { scheduleRunId: run.id, job: def.job.kind, version: def.version },
+    });
     this.deps.events.publish({ type: 'schedule.run_requested', data: { key, scheduleRunId: run.id } });
     return { scheduleRunId: run.id };
   }
 
-  async runs(key: string, opts: { cursor?: string; limit: number }): Promise<{ items: ScheduleRunItem[]; cursor?: string }> {
+  async runs(
+    key: string,
+    opts: { cursor?: string; limit: number },
+  ): Promise<{ items: ScheduleRunItem[]; cursor?: string }> {
     const { row } = await this.row(key);
-    const rows = await this.deps.store.listRuns(row.id, { limit: opts.limit + 1, ...(opts.cursor ? { before: decodeRunCursor(opts.cursor) } : {}) });
+    const rows = await this.deps.store.listRuns(row.id, {
+      limit: opts.limit + 1,
+      ...(opts.cursor ? { before: decodeRunCursor(opts.cursor) } : {}),
+    });
     const page = rows.slice(0, opts.limit);
     const items = await Promise.all(page.map((r) => this.runItem(r)));
     return { items, ...(rows.length > opts.limit ? { cursor: encodeRunCursor(page.at(-1)!) } : {}) };
@@ -274,8 +353,14 @@ export class ScheduleService {
   private async runItem(r: ScheduleRunRow): Promise<ScheduleRunItem> {
     let artifact: ScheduleRunItem['artifact'];
     if (r.artifactPath) {
-      const listed = (r.result?.artifacts as Array<{ path?: string; name?: string; size?: number }> | undefined)?.find((a) => a.path === r.artifactPath);
-      artifact = { name: listed?.name ?? r.artifactPath.replace('/', '-'), href: `/api/artifacts/${r.id}`, size: listed?.size ?? (await this.deps.artifacts.size(r.artifactPath)) };
+      const listed = (
+        r.result?.artifacts as Array<{ path?: string; name?: string; size?: number }> | undefined
+      )?.find((a) => a.path === r.artifactPath);
+      artifact = {
+        name: listed?.name ?? r.artifactPath.replace('/', '-'),
+        href: `/api/artifacts/${r.id}`,
+        size: listed?.size ?? (await this.deps.artifacts.size(r.artifactPath)),
+      };
     }
     return {
       id: r.id,
@@ -293,7 +378,12 @@ export class ScheduleService {
   async artifact(scheduleRunId: string): Promise<OpenedArtifact & { scheduleKey: string }> {
     const run = /^[0-9a-f-]{36}$/i.test(scheduleRunId) ? await this.deps.store.getRun(scheduleRunId) : null;
     const opened = run?.artifactPath ? await this.deps.artifacts.open(run.artifactPath) : null;
-    if (!run || !opened) throw new AppError(404, 'artifact_not_found', 'This run has no report file (or it was removed by retention).');
+    if (!run || !opened)
+      throw new AppError(
+        404,
+        'artifact_not_found',
+        'This run has no report file (or it was removed by retention).',
+      );
     return { ...opened, scheduleKey: run.scheduleKey };
   }
 
@@ -336,7 +426,9 @@ export class ScheduleService {
     requireRole(s, 'Playbook.Approver', 'The approval inbox');
     await this.pendingApprovals();
     const rows = await this.deps.store.listApprovals(status ? { status } : {});
-    return rows.filter((a) => a.policy.approvers.some((r) => s.roles.includes(r))).map((a) => this.view(s, a));
+    return rows
+      .filter((a) => a.policy.approvers.some((r) => s.roles.includes(r)))
+      .map((a) => this.view(s, a));
   }
 
   async getApproval(id: string): Promise<ScheduleApprovalRow | null> {
@@ -344,7 +436,11 @@ export class ScheduleService {
   }
 
   /** POST /api/approvals/:id for a schedule approval: approve enables the schedule (still the same definition). */
-  async decide(c: Caller, id: string, input: { decision: 'approve' | 'reject'; comment?: string }): Promise<{ status: ApprovalStatus; approvals: number; required: number }> {
+  async decide(
+    c: Caller,
+    id: string,
+    input: { decision: 'approve' | 'reject'; comment?: string },
+  ): Promise<{ status: ApprovalStatus; approvals: number; required: number }> {
     const s = c.session;
     requireRole(s, 'Playbook.Approver', 'Approving schedules');
     const a = await this.getApproval(id);
@@ -354,25 +450,55 @@ export class ScheduleService {
       await this.deps.store.updateApproval(a.id, { status: 'expired', decidedAt: now }, 'pending');
       throw new AppError(409, 'approval_expired', 'This approval request has expired. Ask for it again.');
     }
-    if (a.status !== 'pending') throw new AppError(409, 'already_decided', `This approval was already ${a.status}.`);
-    if (a.requestedBy === s.userOid) throw new AppError(403, 'own_request', 'You cannot approve your own request.', { hint: 'Ask another approver.' });
-    if (!a.policy.approvers.some((r) => s.roles.includes(r))) throw new AppError(403, 'forbidden', `This approval needs one of: ${a.policy.approvers.join(', ')}.`);
-    if (a.decisions.some((d) => d.oid === s.userOid)) throw new AppError(409, 'already_decided', 'You already decided on this approval.');
+    if (a.status !== 'pending')
+      throw new AppError(409, 'already_decided', `This approval was already ${a.status}.`);
+    if (a.requestedBy === s.userOid)
+      throw new AppError(403, 'own_request', 'You cannot approve your own request.', {
+        hint: 'Ask another approver.',
+      });
+    if (!a.policy.approvers.some((r) => s.roles.includes(r)))
+      throw new AppError(403, 'forbidden', `This approval needs one of: ${a.policy.approvers.join(', ')}.`);
+    if (a.decisions.some((d) => d.oid === s.userOid))
+      throw new AppError(409, 'already_decided', 'You already decided on this approval.');
 
     const row = await this.deps.store.getSchedule(a.subjectId);
-    const decisions = [...a.decisions, { oid: s.userOid, upn: s.upn, decision: input.decision, comment: input.comment ?? null, at: now.toISOString() }];
+    const decisions = [
+      ...a.decisions,
+      {
+        oid: s.userOid,
+        upn: s.upn,
+        decision: input.decision,
+        comment: input.comment ?? null,
+        at: now.toISOString(),
+      },
+    ];
     const approvals = decisions.filter((d) => d.decision === 'approve').length;
     const required = a.policy.minApprovals;
     if (input.decision === 'approve' && (!row || row.sha256 !== a.policy.sha256)) {
       await this.deps.store.updateApproval(a.id, { status: 'expired', decidedAt: now }, 'pending');
-      throw new AppError(409, 'definition_changed', 'The schedule changed after this was requested, so this approval no longer applies.', { hint: 'Ask the requester to enable it again.' });
+      throw new AppError(
+        409,
+        'definition_changed',
+        'The schedule changed after this was requested, so this approval no longer applies.',
+        { hint: 'Ask the requester to enable it again.' },
+      );
     }
-    const status: ApprovalStatus = input.decision === 'reject' ? 'rejected' : approvals >= required ? 'approved' : 'pending';
-    const updated = await this.deps.store.updateApproval(a.id, { decisions, status, decidedAt: status === 'pending' ? null : now }, 'pending');
-    if (!updated) throw new AppError(409, 'already_decided', 'Someone else decided on this approval at the same time.');
+    const status: ApprovalStatus =
+      input.decision === 'reject' ? 'rejected' : approvals >= required ? 'approved' : 'pending';
+    const updated = await this.deps.store.updateApproval(
+      a.id,
+      { decisions, status, decidedAt: status === 'pending' ? null : now },
+      'pending',
+    );
+    if (!updated)
+      throw new AppError(409, 'already_decided', 'Someone else decided on this approval at the same time.');
     if (status === 'approved' && row) {
       const def = row.definition;
-      await this.deps.store.updateSchedule(row.id, { enabled: true, approvedBy: s.upn, nextRunAt: nextRun(def.cron, def.timezone, now) }, { sha256: a.policy.sha256 });
+      await this.deps.store.updateSchedule(
+        row.id,
+        { enabled: true, approvedBy: s.upn, nextRunAt: nextRun(def.cron, def.timezone, now) },
+        { sha256: a.policy.sha256 },
+      );
       this.changed(row.key);
     }
     await this.deps.audit.append({

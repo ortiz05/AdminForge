@@ -1,5 +1,14 @@
 import { createHash } from 'node:crypto';
-import { isTerminal, StepError, validateInputs, type AutomationDefinition, type ChildRunner, type ChildRunRequest, type ChildRunResult, type Engine } from '@adminforge/engine';
+import {
+  isTerminal,
+  StepError,
+  validateInputs,
+  type AutomationDefinition,
+  type ChildRunner,
+  type ChildRunRequest,
+  type ChildRunResult,
+  type Engine,
+} from '@adminforge/engine';
 import type { AuditWriter } from '../audit/writer';
 import type { DefinitionResolver } from '../definitions/types';
 import type { SessionIdentityResolver } from './identity';
@@ -42,16 +51,28 @@ export class RunChildRunner implements ChildRunner {
     let def: AutomationDefinition;
     if (row) {
       const resolved = await this.resolve(req.ref, row.definitionVersion);
-      if (resolved.sha256 !== row.definitionSha256) throw new StepError('definition_changed', `${req.ref}@${row.definitionVersion} changed after this run started.`);
+      if (resolved.sha256 !== row.definitionSha256)
+        throw new StepError(
+          'definition_changed',
+          `${req.ref}@${row.definitionVersion} changed after this run started.`,
+        );
       def = resolved.def;
     } else {
       const resolved = await this.resolve(req.ref, req.version);
       def = resolved.def;
       if (def.status === 'retired') throw new StepError('definition_retired', `${req.ref} is retired.`);
       const v = await validateInputs(def.inputs, req.inputs, { now: this.deps.now(), env: this.deps.env() });
-      if (!v.ok) throw new StepError('invalid_inputs', `Inputs for ${req.ref}: ${v.errors.map((e) => `${e.field || 'inputs'}: ${e.message}`).join('; ')}`);
+      if (!v.ok)
+        throw new StepError(
+          'invalid_inputs',
+          `Inputs for ${req.ref}: ${v.errors.map((e) => `${e.field || 'inputs'}: ${e.message}`).join('; ')}`,
+        );
       const automation = parent.identity === 'automation';
-      const sessionHash = automation ? null : req.actor.oid === parent.initiatorOid ? parent.sessionHash : await this.deps.identity.sessionFor(parent.id, req.actor);
+      const sessionHash = automation
+        ? null
+        : req.actor.oid === parent.initiatorOid
+          ? parent.sessionHash
+          : await this.deps.identity.sessionFor(parent.id, req.actor);
       row = await repo.insertRunIfAbsent({
         id,
         kind: def.kind,
@@ -75,7 +96,14 @@ export class RunChildRunner implements ChildRunner {
         action: 'run.created',
         targetType: 'run',
         targetId: id,
-        details: { definition: def.id, version: resolved.version, dryRun: req.dryRun, trigger: 'child', parentRunId: parent.id, path: req.path },
+        details: {
+          definition: def.id,
+          version: resolved.version,
+          dryRun: req.dryRun,
+          trigger: 'child',
+          parentRunId: parent.id,
+          path: req.path,
+        },
         result: 'success',
         correlationId: parent.correlationId,
       });
@@ -83,9 +111,22 @@ export class RunChildRunner implements ChildRunner {
     if (!isTerminal(row.status)) {
       this.deps.store.bind(id, def);
       const out = await this.deps.engine().execute(id, def, { depth: req.depth, signal: req.signal });
-      return { runId: id, status: out.status, outputs: out.outputs ?? null, error: out.error ?? null, plan: await this.plan(id), ...(out.wakeAt ? { wakeAt: out.wakeAt } : {}) };
+      return {
+        runId: id,
+        status: out.status,
+        outputs: out.outputs ?? null,
+        error: out.error ?? null,
+        plan: await this.plan(id),
+        ...(out.wakeAt ? { wakeAt: out.wakeAt } : {}),
+      };
     }
-    return { runId: id, status: row.status, outputs: row.outputs, error: row.error, plan: await this.plan(id) };
+    return {
+      runId: id,
+      status: row.status,
+      outputs: row.outputs,
+      error: row.error,
+      plan: await this.plan(id),
+    };
   }
 
   private async plan(runId: string) {
@@ -96,7 +137,10 @@ export class RunChildRunner implements ChildRunner {
     try {
       return await this.deps.definitions().resolve('playbook', ref, version);
     } catch {
-      throw new StepError('child_not_found', `Playbook ${ref}${version ? `@${version}` : ''} is not published.`);
+      throw new StepError(
+        'child_not_found',
+        `Playbook ${ref}${version ? `@${version}` : ''} is not published.`,
+      );
     }
   }
 }

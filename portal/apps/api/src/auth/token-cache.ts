@@ -23,7 +23,11 @@ export interface TokenCacheLogger {
   warn(obj: object, msg: string): void;
 }
 
-export function createTokenCache(store: SealedBlobStore, key: Buffer, log?: TokenCacheLogger): TokenCacheStore {
+export function createTokenCache(
+  store: SealedBlobStore,
+  key: Buffer,
+  log?: TokenCacheLogger,
+): TokenCacheStore {
   return {
     async get(partitionKey) {
       const sealed = await store.get(partitionKey);
@@ -32,7 +36,10 @@ export function createTokenCache(store: SealedBlobStore, key: Buffer, log?: Toke
         return open(sealed, key, partitionKey);
       } catch {
         // Wrong key, rotated key, or tampering: treat as empty so the user simply signs in again.
-        log?.warn({ partition: partitionKey.split(':')[0] }, 'token cache blob could not be opened; ignoring it');
+        log?.warn(
+          { partition: partitionKey.split(':')[0] },
+          'token cache blob could not be opened; ignoring it',
+        );
         return '';
       }
     },
@@ -59,7 +66,11 @@ export class PgSealedBlobStore implements SealedBlobStore {
   constructor(private readonly db: Db) {}
 
   async get(partitionKey: string): Promise<string | null> {
-    const [row] = await this.db.select({ sealed: tokenCache.sealed }).from(tokenCache).where(eq(tokenCache.partitionKey, partitionKey)).limit(1);
+    const [row] = await this.db
+      .select({ sealed: tokenCache.sealed })
+      .from(tokenCache)
+      .where(eq(tokenCache.partitionKey, partitionKey))
+      .limit(1);
     return row?.sealed ?? null;
   }
 

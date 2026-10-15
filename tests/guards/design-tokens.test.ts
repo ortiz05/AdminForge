@@ -9,11 +9,19 @@ const files = committableFiles().filter((f) => SCOPES.test(f));
 
 describe('UI code uses design tokens only', () => {
   it('has no raw colours', () => {
-    const hits = files.flatMap((f) => (readText(f) ?? '').split('\n').flatMap((line, i) => (RAW_COLOR.test(line) ? [`${f}:${i + 1}: ${line.trim()}`] : [])));
+    const hits = files.flatMap((f) =>
+      (readText(f) ?? '')
+        .split('\n')
+        .flatMap((line, i) => (RAW_COLOR.test(line) ? [`${f}:${i + 1}: ${line.trim()}`] : [])),
+    );
     expect(hits).toEqual([]);
   });
   it('has no arbitrary Tailwind values', () => {
-    const hits = files.flatMap((f) => (readText(f) ?? '').split('\n').flatMap((line, i) => (ARBITRARY.test(line) ? [`${f}:${i + 1}: ${line.trim()}`] : [])));
+    const hits = files.flatMap((f) =>
+      (readText(f) ?? '')
+        .split('\n')
+        .flatMap((line, i) => (ARBITRARY.test(line) ? [`${f}:${i + 1}: ${line.trim()}`] : [])),
+    );
     expect(hits).toEqual([]);
   });
 });

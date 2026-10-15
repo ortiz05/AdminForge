@@ -39,16 +39,25 @@ export const TableColumn = z.looseObject({
   /** Second line for `identity` columns (e.g. userPrincipalName). */
   secondary: z.string().optional(),
   /** `status` columns: raw value → [tone, label]. */
-  map: z.record(z.string(), z.union([z.tuple([StatusTone, z.string()]), z.strictObject({ tone: StatusTone, label: z.string() })])).optional(),
+  map: z
+    .record(
+      z.string(),
+      z.union([z.tuple([StatusTone, z.string()]), z.strictObject({ tone: StatusTone, label: z.string() })]),
+    )
+    .optional(),
   sortable: z.boolean().optional(),
   /** Column filter; bind to a page param with `{ type, param }` to filter server-side, otherwise rows are filtered client-side. */
-  filter: z.union([ColumnFilterType, z.strictObject({ type: ColumnFilterType, param: Identifier.optional() })]).optional(),
+  filter: z
+    .union([ColumnFilterType, z.strictObject({ type: ColumnFilterType, param: Identifier.optional() })])
+    .optional(),
   /** Hidden by default (available in the column chooser and exports). */
   hidden: z.boolean().optional(),
   width: z.number().int().positive().optional(),
   align: z.enum(['start', 'center', 'end']).optional(),
   /** Cell link: page key + params (templated with `row`). */
-  link: z.strictObject({ page: DefinitionId, params: z.record(z.string(), z.unknown()).optional() }).optional(),
+  link: z
+    .strictObject({ page: DefinitionId, params: z.record(z.string(), z.unknown()).optional() })
+    .optional(),
 });
 export type TableColumn = z.infer<typeof TableColumn>;
 
@@ -64,7 +73,9 @@ export const RowAction = z
     /** Offer the action only when true (scope: `row`). */
     when: exprOr(z.boolean()).optional(),
   })
-  .refine((a) => (a.playbook ? !a.href : !!a.href), { message: 'A row action needs exactly one of playbook or href' });
+  .refine((a) => (a.playbook ? !a.href : !!a.href), {
+    message: 'A row action needs exactly one of playbook or href',
+  });
 export type RowAction = z.infer<typeof RowAction>;
 
 /**
@@ -135,7 +146,9 @@ export const WidgetBlock = WidgetBlockBase.superRefine((block, ctx) => {
   const schema = widgetSchemas.get(block.widget);
   if (!schema) return;
   const r = schema.safeParse(block);
-  if (!r.success) for (const issue of r.error.issues) ctx.addIssue({ code: 'custom', message: issue.message, path: [...issue.path] });
+  if (!r.success)
+    for (const issue of r.error.issues)
+      ctx.addIssue({ code: 'custom', message: issue.message, path: [...issue.path] });
 });
 export type WidgetBlock = z.infer<typeof WidgetBlockBase>;
 

@@ -7,13 +7,13 @@ schedules, and synthetic probes are declarative content you can change without r
 
 ## Repository layout
 
-| Path | Contents |
-|---|---|
-| `portal/` | Everything needed to run AdminForge: apps (web, api, scheduler, runner), packages, content, CLI, deploy files |
-| `tests/` | Every test and test-only dependency (unit, component, api, content, e2e, visual, live, guards, fixtures) |
-| `tooling/` | Developer tooling (lint) |
-| `config/example.env` | Every configuration key, documented. Real values live outside the repo. |
-| `docs/` | Plans, ADRs, decisions, licensing review, runbooks |
+| Path                 | Contents                                                                                                      |
+| -------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `portal/`            | Everything needed to run AdminForge: apps (web, api, scheduler, runner), packages, content, CLI, deploy files |
+| `tests/`             | Every test and test-only dependency (unit, component, api, content, e2e, visual, live, guards, fixtures)      |
+| `tooling/`           | Developer tooling (lint)                                                                                      |
+| `config/example.env` | Every configuration key, documented. Real values live outside the repo.                                       |
+| `docs/`              | Plans, ADRs, decisions, licensing review, runbooks                                                            |
 
 ## Quick start (this host)
 

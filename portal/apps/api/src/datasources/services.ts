@@ -41,7 +41,14 @@ type Log = { info?(obj: object, msg: string): void; warn(obj: object, msg: strin
 
 export function createContentServices(
   config: Config,
-  base: { database: Database | null; broker: TokenBroker | null; auth: AuthClient | null; audit: AuditWriter; fetch: typeof fetch; now: () => Date },
+  base: {
+    database: Database | null;
+    broker: TokenBroker | null;
+    auth: AuthClient | null;
+    audit: AuditWriter;
+    fetch: typeof fetch;
+    now: () => Date;
+  },
   deps: ContentDeps = {},
   log?: Log,
 ): ContentServices {
@@ -49,7 +56,8 @@ export function createContentServices(
   const cachedEnv = deps.contentEnv ? {} : contentEnv(config);
   const env = deps.contentEnv ?? (() => cachedEnv);
   const definitions = deps.definitions ?? createDefinitionRegistry(config, base.database, log);
-  const automation = deps.automation !== undefined ? deps.automation : createAutomationTokenProvider(config, { log });
+  const automation =
+    deps.automation !== undefined ? deps.automation : createAutomationTokenProvider(config, { log });
   // Secret-bearing reads (App Service app settings): values are stripped by the executor; the read is audited.
   const onSensitiveRead = async (r: SensitiveRead) => {
     const s = r.identity.kind === 'delegated' ? r.identity.session : null;
@@ -63,7 +71,12 @@ export function createContentServices(
       targetId: r.path,
       result: r.result,
       correlationId: r.correlationId,
-      details: { method: r.method, template: templatePath(r.path), ...(r.names !== undefined ? { names: r.names } : {}), valuesReturned: false },
+      details: {
+        method: r.method,
+        template: templatePath(r.path),
+        ...(r.names !== undefined ? { names: r.names } : {}),
+        valuesReturned: false,
+      },
     });
   };
   const outbound =
@@ -74,7 +87,8 @@ export function createContentServices(
       auth: base.auth,
       automation,
       // DATA_MODE=fixtures: synthetic responses from ADMINFORGE_FIXTURES_DIR, never Microsoft.
-      fetch: config.DATA_MODE === 'fixtures' ? createFixtureFetch(config.ADMINFORGE_FIXTURES_DIR) : base.fetch,
+      fetch:
+        config.DATA_MODE === 'fixtures' ? createFixtureFetch(config.ADMINFORGE_FIXTURES_DIR) : base.fetch,
       connection: async (key) => (await definitions.resolve('connection', key)).def as Connection,
       env,
       now: base.now,
@@ -86,11 +100,21 @@ export function createContentServices(
     config.DATA_MODE === 'fixtures'
       ? fixtureRunner(config.ADMINFORGE_FIXTURES_DIR)
       : config.NODE_ENV !== 'test' && config.RUNNER_URL && config.RUNNER_SHARED_KEY
-        ? liveRunner({ url: config.RUNNER_URL, key: config.RUNNER_SHARED_KEY, broker: base.broker, config, fetch: base.fetch, now: base.now, log })
+        ? liveRunner({
+            url: config.RUNNER_URL,
+            key: config.RUNNER_SHARED_KEY,
+            broker: base.broker,
+            config,
+            fetch: base.fetch,
+            now: base.now,
+            log,
+          })
         : undefined;
-  const datasources = deps.datasources ?? new DatasourceRunner({ definitions, outbound, runner, licences, env, now: base.now });
+  const datasources =
+    deps.datasources ?? new DatasourceRunner({ definitions, outbound, runner, licences, env, now: base.now });
   const events = deps.events ?? new EventBus();
-  if (!deps.events) events.wire({ definitions, databaseUrl: config.DATABASE_URL, database: base.database, log });
+  if (!deps.events)
+    events.wire({ definitions, databaseUrl: config.DATABASE_URL, database: base.database, log });
   return {
     definitions,
     outbound,

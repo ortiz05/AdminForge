@@ -6,7 +6,19 @@ import { DATE_RANGE_PRESETS, dateRangeLabel, enumOptions } from './params';
 const labelOf = (name: string, p: Param) => p.label ?? name;
 
 /** A text-like control that applies on blur or Enter (not per keystroke: each change re-runs the report). */
-function DeferredText({ name, p, value, onChange, type = 'text' }: { name: string; p: Param; value: unknown; onChange: (v: unknown) => void; type?: string }) {
+function DeferredText({
+  name,
+  p,
+  value,
+  onChange,
+  type = 'text',
+}: {
+  name: string;
+  p: Param;
+  value: unknown;
+  onChange: (v: unknown) => void;
+  type?: string;
+}) {
   const current = value == null ? '' : String(value);
   const [draft, setDraft] = useState(current);
   const [syncedFrom, setSyncedFrom] = useState(current);
@@ -34,7 +46,17 @@ function DeferredText({ name, p, value, onChange, type = 'text' }: { name: strin
   );
 }
 
-function Control({ name, p, value, onChange }: { name: string; p: Param; value: unknown; onChange: (v: unknown) => void }) {
+function Control({
+  name,
+  p,
+  value,
+  onChange,
+}: {
+  name: string;
+  p: Param;
+  value: unknown;
+  onChange: (v: unknown) => void;
+}) {
   const label = labelOf(name, p);
   switch (p.type) {
     case 'enum': {
@@ -53,7 +75,12 @@ function Control({ name, p, value, onChange }: { name: string; p: Param; value: 
     case 'boolean':
       return (
         <div className="flex h-full min-h-14 items-end pb-1.5">
-          <Switch label={label} description={p.description} checked={value === true} onCheckedChange={(on) => onChange(on)} />
+          <Switch
+            label={label}
+            description={p.description}
+            checked={value === true}
+            onCheckedChange={(on) => onChange(on)}
+          />
         </div>
       );
     case 'dateRange': {
@@ -74,7 +101,15 @@ function Control({ name, p, value, onChange }: { name: string; p: Param; value: 
     case 'number':
       return <DeferredText name={name} p={p} value={value} onChange={onChange} type="number" />;
     case 'date':
-      return <DeferredText name={name} p={p} value={typeof value === 'string' ? value.slice(0, 10) : value} onChange={onChange} type="date" />;
+      return (
+        <DeferredText
+          name={name}
+          p={p}
+          value={typeof value === 'string' ? value.slice(0, 10) : value}
+          onChange={onChange}
+          type="date"
+        />
+      );
     default:
       return <DeferredText name={name} p={p} value={value} onChange={onChange} />;
   }
@@ -97,7 +132,11 @@ export function ParamsForm({
   return (
     <Panel aria-label="Report parameters">
       <p className="af-eyebrow mb-3">Parameters</p>
-      <form className="flex flex-wrap items-start gap-x-6 gap-y-4" onSubmit={(e) => e.preventDefault()} aria-label="Report parameters">
+      <form
+        className="flex flex-wrap items-start gap-x-6 gap-y-4"
+        onSubmit={(e) => e.preventDefault()}
+        aria-label="Report parameters"
+      >
         {visible.map(([name, p]) => (
           <div key={name} className="flex flex-col gap-1">
             <Control name={name} p={p} value={values[name]} onChange={(v) => onChange({ [name]: v })} />

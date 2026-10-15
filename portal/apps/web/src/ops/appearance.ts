@@ -1,4 +1,11 @@
-import { contrastRatio, resolveHex, themeMeta, themes, THEME_NAMES, type ThemeName } from '@adminforge/design-tokens';
+import {
+  contrastRatio,
+  resolveHex,
+  themeMeta,
+  themes,
+  THEME_NAMES,
+  type ThemeName,
+} from '@adminforge/design-tokens';
 import { api } from '../lib/api';
 import { arr, num, parser, pick, rec } from '../runs/json';
 
@@ -59,7 +66,8 @@ export const AppearanceResponse = parser((input): AppearanceState => {
 
 export const appearanceQuery = {
   queryKey: ['admin', 'appearance'] as const,
-  queryFn: ({ signal }: { signal: AbortSignal }) => api('/api/admin/appearance', { schema: AppearanceResponse, signal }),
+  queryFn: ({ signal }: { signal: AbortSignal }) =>
+    api('/api/admin/appearance', { schema: AppearanceResponse, signal }),
 };
 
 export interface AppearanceBody {
@@ -153,7 +161,9 @@ export function draftFrom(s: Pick<AppearanceState, 'overrides' | 'density' | 'fo
     const v = s.overrides[t]?.accent;
     return typeof v === 'string' && isHex(v) ? v.toUpperCase() : defaultHex(t, 'accent');
   };
-  const radius = THEME_NAMES.map((t) => s.overrides[t]?.['radius-scale']).find((v): v is number => typeof v === 'number');
+  const radius = THEME_NAMES.map((t) => s.overrides[t]?.['radius-scale']).find(
+    (v): v is number => typeof v === 'number',
+  );
   return {
     accents: Object.fromEntries(THEME_NAMES.map((t) => [t, accent(t)])) as Record<ThemeName, string>,
     density: s.density ?? 'comfortable',
@@ -168,7 +178,8 @@ export function bodyFor(d: Draft, base: AppearanceState): AppearanceBody {
   for (const t of THEME_NAMES) {
     const { accent: _a, 'radius-scale': _r, ...kept } = base.overrides[t] ?? {};
     const next: Record<string, string | number> = { ...kept };
-    if (d.accents[t].toUpperCase() !== defaultHex(t, 'accent').toUpperCase()) next.accent = d.accents[t].toUpperCase();
+    if (d.accents[t].toUpperCase() !== defaultHex(t, 'accent').toUpperCase())
+      next.accent = d.accents[t].toUpperCase();
     if (d.radiusScale !== 1) next['radius-scale'] = d.radiusScale;
     if (Object.keys(next).length) overrides[t] = next;
   }

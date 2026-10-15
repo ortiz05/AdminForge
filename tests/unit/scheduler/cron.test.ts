@@ -5,23 +5,43 @@ const at = (s: string) => new Date(s);
 
 describe('nextRun', () => {
   it('computes the next tick in UTC', () => {
-    expect(nextRun('*/15 * * * *', 'UTC', at('2026-10-15T12:07:30Z'))?.toISOString()).toBe('2026-10-15T12:15:00.000Z');
-    expect(nextRun('7 * * * *', 'UTC', at('2026-10-15T12:07:00Z'))?.toISOString()).toBe('2026-10-15T13:07:00.000Z');
-    expect(nextRun('20 */6 * * *', 'UTC', at('2026-10-15T12:30:00Z'))?.toISOString()).toBe('2026-10-15T18:20:00.000Z');
-    expect(nextRun('@daily', 'UTC', at('2026-10-15T12:00:00Z'))?.toISOString()).toBe('2026-10-16T00:00:00.000Z');
+    expect(nextRun('*/15 * * * *', 'UTC', at('2026-10-15T12:07:30Z'))?.toISOString()).toBe(
+      '2026-10-15T12:15:00.000Z',
+    );
+    expect(nextRun('7 * * * *', 'UTC', at('2026-10-15T12:07:00Z'))?.toISOString()).toBe(
+      '2026-10-15T13:07:00.000Z',
+    );
+    expect(nextRun('20 */6 * * *', 'UTC', at('2026-10-15T12:30:00Z'))?.toISOString()).toBe(
+      '2026-10-15T18:20:00.000Z',
+    );
+    expect(nextRun('@daily', 'UTC', at('2026-10-15T12:00:00Z'))?.toISOString()).toBe(
+      '2026-10-16T00:00:00.000Z',
+    );
   });
   it('honours the schedule time zone, including DST changes', () => {
     // 07:00 Europe/London is 06:00 UTC in summer time and 07:00 UTC after the clocks go back (25 Oct 2026).
-    expect(nextRun('0 7 * * *', 'Europe/London', at('2026-10-15T12:00:00Z'))?.toISOString()).toBe('2026-10-16T06:00:00.000Z');
-    expect(nextRun('0 7 * * *', 'Europe/London', at('2026-10-25T00:00:00Z'))?.toISOString()).toBe('2026-10-25T07:00:00.000Z');
-    expect(nextRun('0 9 * * 1-5', 'America/New_York', at('2026-10-16T14:00:00Z'))?.toISOString()).toBe('2026-10-19T13:00:00.000Z');
+    expect(nextRun('0 7 * * *', 'Europe/London', at('2026-10-15T12:00:00Z'))?.toISOString()).toBe(
+      '2026-10-16T06:00:00.000Z',
+    );
+    expect(nextRun('0 7 * * *', 'Europe/London', at('2026-10-25T00:00:00Z'))?.toISOString()).toBe(
+      '2026-10-25T07:00:00.000Z',
+    );
+    expect(nextRun('0 9 * * 1-5', 'America/New_York', at('2026-10-16T14:00:00Z'))?.toISOString()).toBe(
+      '2026-10-19T13:00:00.000Z',
+    );
   });
   it('supports last-day and nth-weekday patterns', () => {
-    expect(nextRun('0 9 L * *', 'UTC', at('2026-10-15T00:00:00Z'))?.toISOString()).toBe('2026-10-31T09:00:00.000Z');
-    expect(nextRun('0 9 * * MON#1', 'UTC', at('2026-10-15T00:00:00Z'))?.toISOString()).toBe('2026-11-02T09:00:00.000Z');
+    expect(nextRun('0 9 L * *', 'UTC', at('2026-10-15T00:00:00Z'))?.toISOString()).toBe(
+      '2026-10-31T09:00:00.000Z',
+    );
+    expect(nextRun('0 9 * * MON#1', 'UTC', at('2026-10-15T00:00:00Z'))?.toISOString()).toBe(
+      '2026-11-02T09:00:00.000Z',
+    );
   });
   it('lists several runs', () =>
-    expect(nextRuns('0 */12 * * *', 'UTC', at('2026-10-15T01:00:00Z'), 3).map((d) => d.toISOString())).toEqual(['2026-10-15T12:00:00.000Z', '2026-10-16T00:00:00.000Z', '2026-10-16T12:00:00.000Z']));
+    expect(
+      nextRuns('0 */12 * * *', 'UTC', at('2026-10-15T01:00:00Z'), 3).map((d) => d.toISOString()),
+    ).toEqual(['2026-10-15T12:00:00.000Z', '2026-10-16T00:00:00.000Z', '2026-10-16T12:00:00.000Z']));
 });
 
 describe('describeCron', () => {
@@ -41,7 +61,9 @@ describe('describeCron', () => {
     ['@weekly', 'Every Sunday at 00:00'],
     ['0 0 7 * * 1', 'Every Monday at 07:00'],
   ])('%s → %s', (cron, text) => expect(describeCron(cron)).toBe(text));
-  it.each(['0 0 1 JAN,JUL ?', '0-30/10 8-18 1-15 * 0,6', '30 0 7 * * *'])('returns null for %s', (cron) => expect(describeCron(cron)).toBeNull());
+  it.each(['0 0 1 JAN,JUL ?', '0-30/10 8-18 1-15 * 0,6', '30 0 7 * * *'])('returns null for %s', (cron) =>
+    expect(describeCron(cron)).toBeNull(),
+  );
 });
 
 describe('retry delays', () => {

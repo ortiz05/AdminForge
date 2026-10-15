@@ -7,7 +7,11 @@ import { RetryLater, type RunQueue } from './queue';
 import type { RepositoryRunStore } from './store';
 import type { RunRepository, RunRow } from './types';
 
-type Log = { info?(obj: object, msg: string): void; warn(obj: object, msg: string): void; error?(obj: object, msg: string): void };
+type Log = {
+  info?(obj: object, msg: string): void;
+  warn(obj: object, msg: string): void;
+  error?(obj: object, msg: string): void;
+};
 
 const SWEEP_MS = 60_000;
 const STALE_MS = 10 * 60_000;
@@ -24,14 +28,25 @@ export async function rootOf(repo: RunRepository, row: RunRow): Promise<RunRow> 
 }
 
 /** The pinned definition of a run: exact version, sha256 verified; bulk runs get their synthesised wrapper. */
-export async function pinnedDefinition(definitions: DefinitionResolver, row: RunRow): Promise<AutomationDefinition> {
+export async function pinnedDefinition(
+  definitions: DefinitionResolver,
+  row: RunRow,
+): Promise<AutomationDefinition> {
   const resolved = await definitions.resolve(row.kind, row.definitionKey, row.definitionVersion);
   if (resolved.sha256 !== row.definitionSha256) {
-    throw Object.assign(new Error(`${row.definitionKey}@${row.definitionVersion} changed after this run was created (sha256 differs).`), { code: 'definition_changed' });
+    throw Object.assign(
+      new Error(
+        `${row.definitionKey}@${row.definitionVersion} changed after this run was created (sha256 differs).`,
+      ),
+      { code: 'definition_changed' },
+    );
   }
   if (row.trigger === 'bulk') {
     const opts = row.inputs as { concurrency?: number; stopOnError?: boolean };
-    return bulkDefinition(resolved.def as Playbook, { ...(opts.concurrency ? { concurrency: opts.concurrency } : {}), ...(opts.stopOnError ? { stopOnError: true } : {}) });
+    return bulkDefinition(resolved.def as Playbook, {
+      ...(opts.concurrency ? { concurrency: opts.concurrency } : {}),
+      ...(opts.stopOnError ? { stopOnError: true } : {}),
+    });
   }
   return resolved.def as AutomationDefinition;
 }
@@ -67,7 +82,13 @@ export class RunWorker {
     await this.deps.bus.start();
     await this.deps.queue.work((runId, signal) => this.process(runId, signal), { concurrency });
     if (opts.sweep !== false) {
-      this.timer = setInterval(() => void this.sweep().catch((err) => this.deps.log?.warn({ err: { message: (err as Error).message } }, 'run sweep failed')), SWEEP_MS);
+      this.timer = setInterval(
+        () =>
+          void this.sweep().catch((err) =>
+            this.deps.log?.warn({ err: { message: (err as Error).message } }, 'run sweep failed'),
+          ),
+        SWEEP_MS,
+      );
       this.timer.unref?.();
     }
   }
@@ -105,14 +126,25 @@ export class RunWorker {
       try {
         def = await pinnedDefinition(this.deps.definitions(), row);
       } catch (err) {
-        const code = (err as { code?: string }).code === 'definition_changed' ? 'definition_changed' : 'definition_unavailable';
-        await this.deps.store.updateRun(runId, { status: 'failed', endedAt: this.deps.now(), error: { code, message: (err as Error).message } }, ['queued', 'running', 'awaiting_approval', 'awaiting_input', 'awaiting_arm', 'awaiting_reauth']);
-        await this.deps.store.appendEvent(runId, { type: 'status', data: { scope: 'run', status: 'failed', error: { code, message: (err as Error).message } } });
+        const code =
+          (err as { code?: string }).code === 'definition_changed'
+            ? 'definition_changed'
+            : 'definition_unavailable';
+        await this.deps.store.updateRun(
+          runId,
+          { status: 'failed', endedAt: this.deps.now(), error: { code, message: (err as Error).message } },
+          ['queued', 'running', 'awaiting_approval', 'awaiting_input', 'awaiting_arm', 'awaiting_reauth'],
+        );
+        await this.deps.store.appendEvent(runId, {
+          type: 'status',
+          data: { scope: 'run', status: 'failed', error: { code, message: (err as Error).message } },
+        });
         return;
       }
       this.deps.store.bind(runId, def);
       // `user.roles` for the initiator's first steps.
-      if (row.identity === 'delegated') await this.deps.identity.liveSession(row.sessionHash).catch(() => null);
+      if (row.identity === 'delegated')
+        await this.deps.identity.liveSession(row.sessionHash).catch(() => null);
       const outcome = await this.deps.engine.execute(runId, def, { signal: ac.signal });
       if (outcome.wakeAt) await this.deps.queue.enqueue(runId, { startAfter: outcome.wakeAt });
     } finally {

@@ -43,15 +43,19 @@ export interface ConfigProblem {
 }
 
 /** Validates one block against its widget schema: `{ ok, config }` or the problems, with paths. */
-export function parseWidgetConfig(block: { widget: string } & Record<string, unknown>):
-  | { ok: true; config: unknown }
-  | { ok: false; problems: ConfigProblem[] } {
+export function parseWidgetConfig(
+  block: { widget: string } & Record<string, unknown>,
+): { ok: true; config: unknown } | { ok: false; problems: ConfigProblem[] } {
   const def = getWidget(block.widget);
-  if (!def) return { ok: false, problems: [{ path: 'widget', message: `Unknown widget type "${block.widget}".` }] };
+  if (!def)
+    return { ok: false, problems: [{ path: 'widget', message: `Unknown widget type "${block.widget}".` }] };
   const r = def.schema.safeParse(block);
   if (r.success) return { ok: true, config: r.data };
   return {
     ok: false,
-    problems: r.error.issues.map((i) => ({ path: i.path.map(String).join('.') || 'widget', message: i.message })),
+    problems: r.error.issues.map((i) => ({
+      path: i.path.map(String).join('.') || 'widget',
+      message: i.message,
+    })),
   };
 }

@@ -48,13 +48,37 @@ export function viewRoutes(api: FastifyInstance, ctx: AppContext) {
     const body = parseBody(CreateViewRequest, request.body);
     const page = await ctx.definitions.resolveAny(PAGE_KINDS, body.page);
     const spec = page.def.savedViews;
-    if (spec?.enabled === false) throw new AppError(400, 'views_disabled', `${body.page} does not offer saved views.`);
-    if (body.shared && spec?.shared === false) throw new AppError(400, 'views_not_shareable', `${body.page} does not allow shared views.`);
+    if (spec?.enabled === false)
+      throw new AppError(400, 'views_disabled', `${body.page} does not offer saved views.`);
+    if (body.shared && spec?.shared === false)
+      throw new AppError(400, 'views_not_shareable', `${body.page} does not allow shared views.`);
     const own = await ctx.views.own(body.page, session.userOid);
-    if (own.length >= MAX_VIEWS_PER_PAGE) throw new AppError(409, 'too_many_views', `You already have ${MAX_VIEWS_PER_PAGE} views on this page; delete one first.`);
-    if (own.some((v) => v.name.toLowerCase() === body.name.toLowerCase())) throw new AppError(409, 'view_exists', `You already have a view named "${body.name}".`);
-    const view = await ctx.views.create({ userOid: session.userOid, pageKey: body.page, name: body.name, state: body.state, shared: body.shared ?? false }, ctx.now());
-    await ctx.audit.append({ ...auditActor(ctx, request, session), action: 'view.created', targetType: 'view', targetId: view.id, result: 'success', details: { page: body.page, name: body.name, shared: view.shared } });
+    if (own.length >= MAX_VIEWS_PER_PAGE)
+      throw new AppError(
+        409,
+        'too_many_views',
+        `You already have ${MAX_VIEWS_PER_PAGE} views on this page; delete one first.`,
+      );
+    if (own.some((v) => v.name.toLowerCase() === body.name.toLowerCase()))
+      throw new AppError(409, 'view_exists', `You already have a view named "${body.name}".`);
+    const view = await ctx.views.create(
+      {
+        userOid: session.userOid,
+        pageKey: body.page,
+        name: body.name,
+        state: body.state,
+        shared: body.shared ?? false,
+      },
+      ctx.now(),
+    );
+    await ctx.audit.append({
+      ...auditActor(ctx, request, session),
+      action: 'view.created',
+      targetType: 'view',
+      targetId: view.id,
+      result: 'success',
+      details: { page: body.page, name: body.name, shared: view.shared },
+    });
     return reply.status(201).send(toView(view, session.userOid));
   });
 
@@ -62,15 +86,19 @@ export function viewRoutes(api: FastifyInstance, ctx: AppContext) {
     const session = requireSession(request);
     const body = parseBody(UpdateViewRequest, request.body);
     const view = await ctx.views.get(request.params.id);
-    if (!view || (view.userOid !== session.userOid && !view.shared)) throw new AppError(404, 'view_not_found', 'No such view.');
-    if (view.userOid !== session.userOid) throw new AppError(403, 'forbidden', 'Only the owner can change a view. Save a copy instead.');
+    if (!view || (view.userOid !== session.userOid && !view.shared))
+      throw new AppError(404, 'view_not_found', 'No such view.');
+    if (view.userOid !== session.userOid)
+      throw new AppError(403, 'forbidden', 'Only the owner can change a view. Save a copy instead.');
     if (body.shared) {
       const page = await ctx.definitions.resolveAny(PAGE_KINDS, view.pageKey).catch(() => null);
-      if (page?.def.savedViews?.shared === false) throw new AppError(400, 'views_not_shareable', `${view.pageKey} does not allow shared views.`);
+      if (page?.def.savedViews?.shared === false)
+        throw new AppError(400, 'views_not_shareable', `${view.pageKey} does not allow shared views.`);
     }
     if (body.name && body.name.toLowerCase() !== view.name.toLowerCase()) {
       const own = await ctx.views.own(view.pageKey, session.userOid);
-      if (own.some((v) => v.id !== view.id && v.name.toLowerCase() === body.name!.toLowerCase())) throw new AppError(409, 'view_exists', `You already have a view named "${body.name}".`);
+      if (own.some((v) => v.id !== view.id && v.name.toLowerCase() === body.name!.toLowerCase()))
+        throw new AppError(409, 'view_exists', `You already have a view named "${body.name}".`);
     }
     const updated = (await ctx.views.update(view.id, body, ctx.now()))!;
     await ctx.audit.append({
@@ -88,10 +116,19 @@ export function viewRoutes(api: FastifyInstance, ctx: AppContext) {
   api.delete<{ Params: { id: string } }>('/views/:id', async (request, reply) => {
     const session = requireSession(request);
     const view = await ctx.views.get(request.params.id);
-    if (!view || (view.userOid !== session.userOid && !view.shared)) throw new AppError(404, 'view_not_found', 'No such view.');
-    if (view.userOid !== session.userOid && !hasRole(session, 'Portal.Admin')) throw new AppError(403, 'forbidden', 'Only the owner (or a portal admin) can delete a shared view.');
+    if (!view || (view.userOid !== session.userOid && !view.shared))
+      throw new AppError(404, 'view_not_found', 'No such view.');
+    if (view.userOid !== session.userOid && !hasRole(session, 'Portal.Admin'))
+      throw new AppError(403, 'forbidden', 'Only the owner (or a portal admin) can delete a shared view.');
     await ctx.views.delete(view.id);
-    await ctx.audit.append({ ...auditActor(ctx, request, session), action: 'view.deleted', targetType: 'view', targetId: view.id, result: 'success', details: { page: view.pageKey, name: view.name, owner: view.userOid } });
+    await ctx.audit.append({
+      ...auditActor(ctx, request, session),
+      action: 'view.deleted',
+      targetType: 'view',
+      targetId: view.id,
+      result: 'success',
+      details: { page: view.pageKey, name: view.name, owner: view.userOid },
+    });
     return reply.status(204).send();
   });
 }

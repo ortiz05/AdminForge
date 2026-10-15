@@ -11,7 +11,11 @@ import type { MarkdownConfig } from './schema';
 export function MarkdownWidget({ config, runtime }: WidgetProps<MarkdownConfig>) {
   const { text, error } = useInterpolatedText(config.text, runtime.scope);
   return (
-    <Panel title={config.title} description={config.description} aria-label={config.title ? undefined : 'About this page'}>
+    <Panel
+      title={config.title}
+      description={config.description}
+      aria-label={config.title ? undefined : 'About this page'}
+    >
       {error ? (
         <p className="text-sm text-fg-3">This text couldn’t be filled in: {error.message}</p>
       ) : text === undefined ? (

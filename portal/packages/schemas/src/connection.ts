@@ -8,11 +8,21 @@ import { Expr, HttpMethod, Identifier, Mode, envelopeShape } from './common';
 
 const BaseUrl = z.union([
   Expr,
-  z.string().regex(/^(https:\/\/[^\s/]+|http:\/\/(localhost|127\.0\.0\.1)(:\d+)?)(\/[^\s]*)?$/, 'Expected an https:// URL (http only for localhost)'),
+  z
+    .string()
+    .regex(
+      /^(https:\/\/[^\s/]+|http:\/\/(localhost|127\.0\.0\.1)(:\d+)?)(\/[^\s]*)?$/,
+      'Expected an https:// URL (http only for localhost)',
+    ),
 ]);
 const Audience = z.union([
   Expr,
-  z.string().regex(/^(api:\/\/\S+|https:\/\/\S+|[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})$/, 'Expected api://…, https://… or an application id'),
+  z
+    .string()
+    .regex(
+      /^(api:\/\/\S+|https:\/\/\S+|[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})$/,
+      'Expected api://…, https://… or an application id',
+    ),
 ]);
 
 export const ConnectionOperation = z
@@ -45,7 +55,8 @@ export const Connection = z
     timeoutMs: z.number().int().min(100).max(230_000).optional(),
   })
   .superRefine((def, ctx) => {
-    if (Object.keys(def.operations).length === 0) ctx.addIssue({ code: 'custom', path: ['operations'], message: 'Declare at least one operation.' });
+    if (Object.keys(def.operations).length === 0)
+      ctx.addIssue({ code: 'custom', path: ['operations'], message: 'Declare at least one operation.' });
     if (def.health && !(def.health in def.operations))
       ctx.addIssue({ code: 'custom', path: ['health'], message: `Unknown operation "${def.health}".` });
   });

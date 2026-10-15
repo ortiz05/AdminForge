@@ -57,10 +57,20 @@ export function clientCredentialToken(opts: ClientCredentialOptions): TokenProvi
     };
     if (!res.ok || !body.access_token) {
       const aadsts = /AADSTS\d+/.exec(body.error_description ?? '')?.[0];
-      const firstLine = (body.error_description ?? '').split(/\r?\n/)[0]?.replace(/Trace ID:.*$/, '').trim();
-      throw new TokenError(body.error ?? `HTTP${res.status}`, aadsts, `Token request for ${opts.scope} failed: ${firstLine || body.error || res.status}`);
+      const firstLine = (body.error_description ?? '')
+        .split(/\r?\n/)[0]
+        ?.replace(/Trace ID:.*$/, '')
+        .trim();
+      throw new TokenError(
+        body.error ?? `HTTP${res.status}`,
+        aadsts,
+        `Token request for ${opts.scope} failed: ${firstLine || body.error || res.status}`,
+      );
     }
-    cached = { token: body.access_token, expiresAt: now() + Math.max(0, (body.expires_in ?? 3600) - 60) * 1000 };
+    cached = {
+      token: body.access_token,
+      expiresAt: now() + Math.max(0, (body.expires_in ?? 3600) - 60) * 1000,
+    };
     return cached.token;
   };
 }
@@ -90,7 +100,9 @@ export interface AuthorizeUrlInput {
 
 /** Authorization-code + PKCE (S256) request URL for a delegated sign-in. */
 export function buildAuthorizeUrl(i: AuthorizeUrlInput): string {
-  const url = new URL(`${i.authority ?? 'https://login.microsoftonline.com'}/${encodeURIComponent(i.tenantId)}/oauth2/v2.0/authorize`);
+  const url = new URL(
+    `${i.authority ?? 'https://login.microsoftonline.com'}/${encodeURIComponent(i.tenantId)}/oauth2/v2.0/authorize`,
+  );
   url.search = new URLSearchParams({
     client_id: i.clientId,
     response_type: 'code',
@@ -108,7 +120,10 @@ export function buildAuthorizeUrl(i: AuthorizeUrlInput): string {
 export const pkceChallenge = (verifier: string) => createHash('sha256').update(verifier).digest('base64url');
 
 /** Pure: problems with an authorize URL (empty = well-formed). Never echoes the URL itself. */
-export function checkAuthorizeUrl(raw: string, expect: { tenantId: string; clientId: string; redirectUri: string }): string[] {
+export function checkAuthorizeUrl(
+  raw: string,
+  expect: { tenantId: string; clientId: string; redirectUri: string },
+): string[] {
   const problems: string[] = [];
   let url: URL;
   try {
@@ -118,12 +133,15 @@ export function checkAuthorizeUrl(raw: string, expect: { tenantId: string; clien
   }
   const p = url.searchParams;
   if (url.protocol !== 'https:') problems.push('authority is not https');
-  if (url.pathname !== `/${expect.tenantId}/oauth2/v2.0/authorize`) problems.push('path is not /<tenant>/oauth2/v2.0/authorize');
+  if (url.pathname !== `/${expect.tenantId}/oauth2/v2.0/authorize`)
+    problems.push('path is not /<tenant>/oauth2/v2.0/authorize');
   if (p.get('client_id') !== expect.clientId) problems.push('client_id does not match the Read app');
   if (p.get('response_type') !== 'code') problems.push('response_type is not code');
-  if (p.get('redirect_uri') !== expect.redirectUri) problems.push('redirect_uri does not match the registered callback');
+  if (p.get('redirect_uri') !== expect.redirectUri)
+    problems.push('redirect_uri does not match the registered callback');
   if (!(p.get('scope') ?? '').split(' ').includes('openid')) problems.push('scope lacks openid');
-  if (p.get('code_challenge_method') !== 'S256' || !/^[A-Za-z0-9_-]{43}$/.test(p.get('code_challenge') ?? '')) problems.push('PKCE S256 challenge missing or malformed');
+  if (p.get('code_challenge_method') !== 'S256' || !/^[A-Za-z0-9_-]{43}$/.test(p.get('code_challenge') ?? ''))
+    problems.push('PKCE S256 challenge missing or malformed');
   if (!p.get('state')) problems.push('state missing');
   return problems;
 }

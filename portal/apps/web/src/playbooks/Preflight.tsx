@@ -8,7 +8,8 @@ import { serviceLabel } from '../runs/PlanView';
 import { capabilitiesQuery, type Capabilities } from './contracts';
 
 /** Generic Entra PIM "My roles → activate" blade (not tenant-specific). */
-export const PIM_ACTIVATE_URL = 'https://entra.microsoft.com/#view/Microsoft_Azure_PIMCommon/ActivationMenuBlade/~/aadmigratedroles';
+export const PIM_ACTIVATE_URL =
+  'https://entra.microsoft.com/#view/Microsoft_Azure_PIMCommon/ActivationMenuBlade/~/aadmigratedroles';
 
 const RISK_TEXT: Record<Playbook['risk'], { tone: StatusTone; label: string }> = {
   low: { tone: 'info', label: 'Low risk' },
@@ -28,14 +29,24 @@ export function RiskBanner({ def, bulkCount }: { def: Playbook | Runbook; bulkCo
   const risk = RISK_TEXT[def.risk];
   const lines: string[] = [];
   if (bulkCount) {
-    lines.push(`Runs once per item (${bulkCount} item${bulkCount === 1 ? '' : 's'}), only while write access is armed.`);
-    lines.push('Each item runs the playbook’s own checks before it changes anything; follow every item on the run page.');
+    lines.push(
+      `Runs once per item (${bulkCount} item${bulkCount === 1 ? '' : 's'}), only while write access is armed.`,
+    );
+    lines.push(
+      'Each item runs the playbook’s own checks before it changes anything; follow every item on the run page.',
+    );
   } else {
     lines.push('Runs only while write access is armed.');
-    lines.push('Preview it first: the dry run reads for real and lists every change before anything happens.');
+    lines.push(
+      'Preview it first: the dry run reads for real and lists every change before anything happens.',
+    );
   }
   if (def.confirm?.type === 'typed')
-    lines.push(bulkCount ? 'You’ll type the number of items to confirm.' : (def.confirm.message ?? 'You’ll type a confirmation before it runs.'));
+    lines.push(
+      bulkCount
+        ? 'You’ll type the number of items to confirm.'
+        : (def.confirm.message ?? 'You’ll type a confirmation before it runs.'),
+    );
   else if (def.confirm?.type === 'click') lines.push('You’ll confirm before it runs.');
   if (def.approval?.required)
     lines.push(
@@ -54,7 +65,17 @@ export function RiskBanner({ def, bulkCount }: { def: Playbook | Runbook; bulkCo
 
 type Check = { tone: StatusTone; text: string };
 
-function Row({ label, sub, check, children }: { label: string; sub?: string; check?: Check; children?: ReactNode }) {
+function Row({
+  label,
+  sub,
+  check,
+  children,
+}: {
+  label: string;
+  sub?: string;
+  check?: Check;
+  children?: ReactNode;
+}) {
   const Glyph = check ? STATUS_ICON[check.tone] : null;
   return (
     <li className="flex flex-col gap-1 border-t border-line px-3 py-2 first:border-t-0">
@@ -67,7 +88,13 @@ function Row({ label, sub, check, children }: { label: string; sub?: string; che
           <span
             className={cn(
               'inline-flex shrink-0 items-center gap-1 text-xs font-medium',
-              { ok: 'text-ok', warn: 'text-warn', crit: 'text-crit', info: 'text-info', neutral: 'text-fg-3' }[check.tone],
+              {
+                ok: 'text-ok',
+                warn: 'text-warn',
+                crit: 'text-crit',
+                info: 'text-info',
+                neutral: 'text-fg-3',
+              }[check.tone],
             )}
           >
             <Glyph size={13} weight="fill" aria-hidden />
@@ -80,12 +107,17 @@ function Row({ label, sub, check, children }: { label: string; sub?: string; che
   );
 }
 
-function entraRoleCheck(role: string, caps: Capabilities | undefined, loading: boolean): Check & { eligible?: boolean } {
+function entraRoleCheck(
+  role: string,
+  caps: Capabilities | undefined,
+  loading: boolean,
+): Check & { eligible?: boolean } {
   if (loading) return { tone: 'neutral', text: 'Checking…' };
   if (!caps || caps.active === null) return { tone: 'neutral', text: 'Couldn’t check' };
   const same = (r: { displayName: string }) => r.displayName.toLowerCase() === role.toLowerCase();
   if (caps.active.some(same)) return { tone: 'ok', text: 'Active' };
-  if (caps.active.some((r) => r.displayName === 'Global Administrator')) return { tone: 'ok', text: 'Covered by Global Administrator' };
+  if (caps.active.some((r) => r.displayName === 'Global Administrator'))
+    return { tone: 'ok', text: 'Covered by Global Administrator' };
   if (caps.eligible?.some(same)) return { tone: 'warn', text: 'Eligible — activate in PIM', eligible: true };
   return { tone: 'crit', text: 'Not assigned' };
 }
@@ -103,7 +135,10 @@ export function Requirements({ requires, writes }: { requires: Requires | undefi
   const scopes = Object.entries(requires.scopes ?? {}).filter(
     (e): e is [string, string[]] => Array.isArray(e[1]) && e[1].length > 0,
   );
-  const entraChecks = entra.map((r) => ({ role: r, check: entraRoleCheck(r, caps.data, caps.isPending && needsCaps) }));
+  const entraChecks = entra.map((r) => ({
+    role: r,
+    check: entraRoleCheck(r, caps.data, caps.isPending && needsCaps),
+  }));
   const eligible = entraChecks.filter((c) => c.check.eligible);
 
   if (!portal.length && !entra.length && !licences.length && !scopes.length) return null;
@@ -144,7 +179,11 @@ export function Requirements({ requires, writes }: { requires: Requires | undefi
           );
         })}
         {scopes.map(([service, list]) => (
-          <Row key={service} label={serviceLabel(service === 'connections' ? 'function' : service)} sub={writes ? 'Permissions this uses' : 'Permissions'}>
+          <Row
+            key={service}
+            label={serviceLabel(service === 'connections' ? 'function' : service)}
+            sub={writes ? 'Permissions this uses' : 'Permissions'}
+          >
             <span className="flex flex-wrap gap-1">
               {list.map((s) => (
                 <Badge key={s} mono>
@@ -172,8 +211,8 @@ export function Requirements({ requires, writes }: { requires: Requires | undefi
             </a>
           }
         >
-          You hold the role as eligible. Activate it, then preview again — new permissions can take a few minutes to
-          apply across Microsoft services.
+          You hold the role as eligible. Activate it, then preview again — new permissions can take a few
+          minutes to apply across Microsoft services.
         </Callout>
       )}
     </section>

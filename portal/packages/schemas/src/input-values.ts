@@ -12,7 +12,8 @@ import type { Param, Params } from './params';
 
 const GUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
-const HOSTNAME_RE = /^(?=.{1,253}$)([A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)(\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*$/;
+const HOSTNAME_RE =
+  /^(?=.{1,253}$)([A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)(\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*$/;
 const RELATIVE_RE = /^(today|now|[+-]\d+[hdwmy])$/;
 const ISO_DURATION_RE = /^P(?!$)(\d+Y)?(\d+M)?(\d+W)?(\d+D)?(T(?=\d)(\d+H)?(\d+M)?(\d+(\.\d+)?S)?)?$/;
 const MAX_STRING = 10_000;
@@ -38,17 +39,25 @@ export function isInputRequired(p: Param): boolean {
 
 /** Blank → undefined, so "not given" is one case. */
 export function isBlankInput(v: unknown): boolean {
-  return v === undefined || v === null || (typeof v === 'string' && v.trim() === '') || (Array.isArray(v) && v.length === 0);
+  return (
+    v === undefined ||
+    v === null ||
+    (typeof v === 'string' && v.trim() === '') ||
+    (Array.isArray(v) && v.length === 0)
+  );
 }
 
-const optionValue = (o: unknown) => (o && typeof o === 'object' && 'value' in o ? (o as { value: unknown }).value : o);
+const optionValue = (o: unknown) =>
+  o && typeof o === 'object' && 'value' in o ? (o as { value: unknown }).value : o;
 
 function stringValue(p: Extract<Param, { type: 'string' }>): z.ZodType {
   return z.string({ error: 'Expected text.' }).superRefine((raw, ctx) => {
     const v = raw.trim();
     const fail = (message: string) => ctx.addIssue({ code: 'custom', message });
-    if (raw.length > (p.maxLength ?? MAX_STRING)) return fail(`Must be at most ${p.maxLength ?? MAX_STRING} characters.`);
-    if (p.minLength !== undefined && v.length < p.minLength) return fail(`Must be at least ${p.minLength} characters.`);
+    if (raw.length > (p.maxLength ?? MAX_STRING))
+      return fail(`Must be at most ${p.maxLength ?? MAX_STRING} characters.`);
+    if (p.minLength !== undefined && v.length < p.minLength)
+      return fail(`Must be at least ${p.minLength} characters.`);
     if (p.pattern !== undefined) {
       let re: RegExp | undefined;
       try {
@@ -60,7 +69,8 @@ function stringValue(p: Extract<Param, { type: 'string' }>): z.ZodType {
     }
     if (p.format === 'guid' && !GUID_RE.test(v)) fail('Expected a GUID.');
     if (p.format === 'email' && !EMAIL_RE.test(v)) fail('Expected an email address.');
-    if (p.format === 'upn' && !EMAIL_RE.test(v)) fail('Expected a user principal name like name@example.com.');
+    if (p.format === 'upn' && !EMAIL_RE.test(v))
+      fail('Expected a user principal name like name@example.com.');
     if (p.format === 'url' && !/^https?:\/\/[^\s]+$/.test(v)) fail('Expected an http(s) URL.');
     if (p.format === 'hostname' && !HOSTNAME_RE.test(v)) fail('Expected a host name.');
   });
@@ -84,21 +94,28 @@ function enumValue(p: Extract<Param, { type: 'enum' }>): z.ZodType {
   if (p.multiple)
     return z.array(z.unknown(), { error: 'Choose one or more values.' }).superRefine((list, ctx) => {
       const bad = list.filter((x) => !ok(x));
-      if (bad.length) ctx.addIssue({ code: 'custom', message: `Not an allowed value: ${bad.map(String).join(', ')}.` });
+      if (bad.length)
+        ctx.addIssue({ code: 'custom', message: `Not an allowed value: ${bad.map(String).join(', ')}.` });
     });
   return z.unknown().refine(ok, `Expected one of: ${allowed.map(String).join(', ')}.`);
 }
 
 const dateValue = z
   .string({ error: 'Expected a date.' })
-  .refine((v) => RELATIVE_RE.test(v) || !Number.isNaN(Date.parse(v)), 'Expected an ISO date like 2026-01-31.');
+  .refine(
+    (v) => RELATIVE_RE.test(v) || !Number.isNaN(Date.parse(v)),
+    'Expected an ISO date like 2026-01-31.',
+  );
 
 const dateRangeValue = z.union(
   [
     z.string().regex(ISO_DURATION_RE),
     z
       .object({ from: z.string(), to: z.string() })
-      .refine((r) => !Number.isNaN(Date.parse(r.from)) && !Number.isNaN(Date.parse(r.to)), 'Expected ISO dates in from/to.')
+      .refine(
+        (r) => !Number.isNaN(Date.parse(r.from)) && !Number.isNaN(Date.parse(r.to)),
+        'Expected ISO dates in from/to.',
+      )
       .refine((r) => Date.parse(r.from) <= Date.parse(r.to), 'from must not be after to.'),
   ],
   { error: 'Expected { from, to } or an ISO duration like P7D.' },
@@ -113,9 +130,12 @@ function entityId(type: EntityParamType): z.ZodType<string> {
     .superRefine((s, ctx) => {
       const fail = (message: string) => ctx.addIssue({ code: 'custom', message });
       if (type === 'subscription' && !GUID_RE.test(s)) fail('Expected a subscription id (GUID).');
-      if (type === 'resource' && !/^\/subscriptions\/[^/]+\//i.test(s)) fail('Expected an Azure resource id (/subscriptions/…).');
-      if ((type === 'group' || type === 'device' || type === 'app') && !GUID_RE.test(s)) fail(`Expected a ${type} object id (GUID).`);
-      if (type === 'user' && !GUID_RE.test(s) && !EMAIL_RE.test(s)) fail('Expected a user object id (GUID) or user principal name.');
+      if (type === 'resource' && !/^\/subscriptions\/[^/]+\//i.test(s))
+        fail('Expected an Azure resource id (/subscriptions/…).');
+      if ((type === 'group' || type === 'device' || type === 'app') && !GUID_RE.test(s))
+        fail(`Expected a ${type} object id (GUID).`);
+      if (type === 'user' && !GUID_RE.test(s) && !EMAIL_RE.test(s))
+        fail('Expected a user object id (GUID) or user principal name.');
     });
 }
 
@@ -127,7 +147,10 @@ export function inputValueSchema(p: Param): z.ZodType {
     case 'number':
       return numberValue(p);
     case 'boolean':
-      return z.preprocess((v) => (v === 'true' ? true : v === 'false' ? false : v), z.boolean({ error: 'Expected true or false.' }));
+      return z.preprocess(
+        (v) => (v === 'true' ? true : v === 'false' ? false : v),
+        z.boolean({ error: 'Expected true or false.' }),
+      );
     case 'enum':
       return enumValue(p);
     case 'date':
@@ -154,7 +177,10 @@ export interface InputsSchemaOptions {
  * An object schema for a whole run form. Unknown keys are dropped (the server refuses them), blank values become
  * `undefined`, and a missing required value fails with "<label> is required." on that field.
  */
-export function inputsSchema(params: Params | undefined, opts: InputsSchemaOptions = {}): z.ZodType<Record<string, unknown>> {
+export function inputsSchema(
+  params: Params | undefined,
+  opts: InputsSchemaOptions = {},
+): z.ZodType<Record<string, unknown>> {
   const shape: Record<string, z.ZodType> = {};
   for (const [name, p] of Object.entries(params ?? {})) {
     if (opts.omit?.includes(name)) continue;

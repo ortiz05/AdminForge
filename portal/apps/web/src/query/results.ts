@@ -55,7 +55,10 @@ export function toCsv(columns: ResultColumn[], rows: Array<Record<string, unknow
 /** Tab-separated text for pasting into a spreadsheet or a ticket. Tabs and newlines inside cells become spaces. */
 export function toTsv(columns: ResultColumn[], rows: Array<Record<string, unknown>>): string {
   const clean = (s: string) => s.replace(/[\t\r\n]+/g, ' ');
-  return [columns.map((c) => clean(c.name)).join('\t'), ...rows.map((r) => columns.map((c) => clean(cellText(r[c.name]))).join('\t'))].join('\n');
+  return [
+    columns.map((c) => clean(c.name)).join('\t'),
+    ...rows.map((r) => columns.map((c) => clean(cellText(r[c.name]))).join('\t')),
+  ].join('\n');
 }
 
 /** `query-resourcegraph-2026-10-15T14-03-22Z.csv` */
@@ -115,7 +118,12 @@ export function categoryLabel(v: unknown, kind: ValueKind): string {
  * stay dates. (Labels are already sorted "YYYY-MM-DD HH:MM" strings.)
  */
 export function shortenTimes(labels: string[], kind: ValueKind): string[] {
-  if (kind !== 'datetime' || labels.length < 2 || !labels.every((l) => /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/.test(l))) return labels;
+  if (
+    kind !== 'datetime' ||
+    labels.length < 2 ||
+    !labels.every((l) => /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/.test(l))
+  )
+    return labels;
   const day = (l: string) => l.slice(0, 10);
   if (labels.every((l) => day(l) === day(labels[0]!))) return labels.map((l) => l.slice(11));
   if (labels.every((l) => l.slice(0, 4) === labels[0]!.slice(0, 4))) return labels.map((l) => l.slice(5));
@@ -126,10 +134,21 @@ export function shortenTimes(labels: string[], kind: ValueKind): string[] {
 export function defaultChartConfig(columns: ResultColumn[]): ChartConfig | null {
   const y = columns.find(isNumericColumn);
   if (!y) return null;
-  const x = columns.find((c) => valueKind(c.type) === 'datetime') ?? columns.find((c) => c !== y && !isNumericColumn(c)) ?? columns.find((c) => c !== y);
+  const x =
+    columns.find((c) => valueKind(c.type) === 'datetime') ??
+    columns.find((c) => c !== y && !isNumericColumn(c)) ??
+    columns.find((c) => c !== y);
   if (!x) return null;
-  const split = valueKind(x.type) === 'datetime' ? columns.find((c) => c !== x && valueKind(c.type) === 'text') : undefined;
-  return { x: x.name, y: y.name, ...(split ? { split: split.name } : {}), kind: valueKind(x.type) === 'datetime' ? 'line' : 'bar' };
+  const split =
+    valueKind(x.type) === 'datetime'
+      ? columns.find((c) => c !== x && valueKind(c.type) === 'text')
+      : undefined;
+  return {
+    x: x.name,
+    y: y.name,
+    ...(split ? { split: split.name } : {}),
+    kind: valueKind(x.type) === 'datetime' ? 'line' : 'bar',
+  };
 }
 
 /**
@@ -137,7 +156,12 @@ export function defaultChartConfig(columns: ResultColumn[]): ChartConfig | null 
  * Datetime categories are sorted; others keep the query's order. At most `maxSeries` series: the largest by total,
  * the rest folded into "Other" (never more hues than the validated palette).
  */
-export function chartData(columns: ResultColumn[], rows: Array<Record<string, unknown>>, cfg: ChartConfig, maxSeries = 6): ChartData {
+export function chartData(
+  columns: ResultColumn[],
+  rows: Array<Record<string, unknown>>,
+  cfg: ChartConfig,
+  maxSeries = 6,
+): ChartData {
   const xCol = columns.find((c) => c.name === cfg.x);
   const xKind = xCol ? valueKind(xCol.type) : 'text';
   const order: string[] = [];
@@ -181,5 +205,10 @@ export function chartData(columns: ResultColumn[], rows: Array<Record<string, un
       }),
     });
   }
-  return { categories, series, droppedCategories: order.length - categories.length, foldedSeries: folded.length };
+  return {
+    categories,
+    series,
+    droppedCategories: order.length - categories.length,
+    foldedSeries: folded.length,
+  };
 }

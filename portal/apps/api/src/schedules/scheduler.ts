@@ -20,7 +20,11 @@ import type { RunErrorInfo, ScheduleRow, ScheduleRunRow, ScheduleRunStatus, Sche
  * identity"; failures also raise `schedule.failed` (audit + event). Runs are bounded by `timeoutSeconds`.
  */
 
-type Log = { info?(obj: object, msg: string): void; warn(obj: object, msg: string): void; error?(obj: object, msg: string): void };
+type Log = {
+  info?(obj: object, msg: string): void;
+  warn(obj: object, msg: string): void;
+  error?(obj: object, msg: string): void;
+};
 
 export interface SchedulerOptions {
   store: ScheduleStore;
@@ -47,10 +51,22 @@ export const DEFAULT_TIMEOUT_SECONDS = 900;
 const REAP_GRACE_MS = 120_000;
 const MAX_RETRY_DELAY_MS = 6 * 3_600_000;
 /** Failures a retry cannot fix. */
-const PERMANENT = new Set(['approval_required', 'script_not_supported', 'no_probes', 'content_unhealthy', 'export_not_supported', 'definition_not_found', 'runs_unavailable', 'two_person_required']);
+const PERMANENT = new Set([
+  'approval_required',
+  'script_not_supported',
+  'no_probes',
+  'content_unhealthy',
+  'export_not_supported',
+  'definition_not_found',
+  'runs_unavailable',
+  'two_person_required',
+]);
 
 class RunAborted extends Error {
-  constructor(readonly code: 'timeout' | 'interrupted', message: string) {
+  constructor(
+    readonly code: 'timeout' | 'interrupted',
+    message: string,
+  ) {
     super(message);
     this.name = 'RunAborted';
   }
@@ -124,7 +140,10 @@ export class Scheduler {
     this.leading = false;
     if (this.timer) this.timers.clearTimeout(this.timer);
     this.timer = null;
-    for (const a of this.active.values()) a.controller.abort(new RunAborted('interrupted', `The scheduler stopped before this run finished (${reason}).`));
+    for (const a of this.active.values())
+      a.controller.abort(
+        new RunAborted('interrupted', `The scheduler stopped before this run finished (${reason}).`),
+      );
     await Promise.allSettled([...this.active.values()].map((a) => a.done));
   }
 
@@ -172,7 +191,17 @@ export class Scheduler {
     const byId = new Map(schedules.map((s) => [s.id, s]));
     const running = await this.o.store.runsInStatus(['running']);
     await this.reap(running, byId, now);
-    const busy = new Set([...running.filter((r) => this.active.has(r.id) || now.getTime() - r.startedAt.getTime() <= timeoutMsOf(byId.get(r.scheduleId)?.definition ?? ({} as Schedule)) + REAP_GRACE_MS).map((r) => r.scheduleId), ...[...this.active.values()].map((a) => a.scheduleId)]);
+    const busy = new Set([
+      ...running
+        .filter(
+          (r) =>
+            this.active.has(r.id) ||
+            now.getTime() - r.startedAt.getTime() <=
+              timeoutMsOf(byId.get(r.scheduleId)?.definition ?? ({} as Schedule)) + REAP_GRACE_MS,
+        )
+        .map((r) => r.scheduleId),
+      ...[...this.active.values()].map((a) => a.scheduleId),
+    ]);
 
     for (const s of schedules) {
       if (!this.leading) return;
@@ -181,27 +210,55 @@ export class Scheduler {
       try {
         next = nextRun(s.definition.cron, s.definition.timezone, now);
       } catch (err) {
-        this.o.log?.warn({ schedule: s.key, err: { message: (err as Error).message } }, 'scheduler: invalid cron');
+        this.o.log?.warn(
+          { schedule: s.key, err: { message: (err as Error).message } },
+          'scheduler: invalid cron',
+        );
       }
-      const claimed = await this.o.store.updateSchedule(s.id, { nextRunAt: next }, { nextRunAt: s.nextRunAt });
+      const claimed = await this.o.store.updateSchedule(
+        s.id,
+        { nextRunAt: next },
+        { nextRunAt: s.nextRunAt },
+      );
       if (!claimed) continue;
       if (now.getTime() - s.nextRunAt.getTime() > (this.o.misfireGraceMs ?? 3_600_000)) {
-        this.o.log?.warn({ schedule: s.key, due: s.nextRunAt.toISOString() }, 'scheduler: missed run skipped (scheduler was not running)');
+        this.o.log?.warn(
+          { schedule: s.key, due: s.nextRunAt.toISOString() },
+          'scheduler: missed run skipped (scheduler was not running)',
+        );
         continue;
       }
       await this.fire(claimed, 'cron', now, busy);
     }
 
-    const queued = (await this.o.store.runsInStatus(['queued'])).filter((q) => q.startedAt.getTime() <= now.getTime());
+    const queued = (await this.o.store.runsInStatus(['queued'])).filter(
+      (q) => q.startedAt.getTime() <= now.getTime(),
+    );
     for (const q of queued) {
       if (!this.leading || this.active.size >= this.concurrency) break;
       const s = byId.get(q.scheduleId) ?? (await this.o.store.getScheduleById(q.scheduleId));
       if (!s) {
-        await this.o.store.updateRun(q.id, { status: 'failed', endedAt: now, error: { code: 'schedule_not_found', message: 'The schedule no longer exists.' } }, 'queued');
+        await this.o.store.updateRun(
+          q.id,
+          {
+            status: 'failed',
+            endedAt: now,
+            error: { code: 'schedule_not_found', message: 'The schedule no longer exists.' },
+          },
+          'queued',
+        );
         continue;
       }
       if (q.trigger !== 'manual' && !s.enabled) {
-        await this.o.store.updateRun(q.id, { status: 'skipped', endedAt: now, result: { ...q.result, reason: 'The schedule was disabled before this run started.' } }, 'queued');
+        await this.o.store.updateRun(
+          q.id,
+          {
+            status: 'skipped',
+            endedAt: now,
+            result: { ...q.result, reason: 'The schedule was disabled before this run started.' },
+          },
+          'queued',
+        );
         continue;
       }
       if (s.definition.overlap !== 'allow' && busy.has(s.id)) continue;
@@ -221,7 +278,11 @@ export class Scheduler {
     const r = await syncSchedules(this.o.store, content, now);
     if (r.inserted.length || r.updated.length || sig !== this.signature) {
       this.signature = sig;
-      if (r.inserted.length || r.updated.length) this.o.log?.info?.({ inserted: r.inserted.length, updated: r.updated.length }, 'scheduler: schedules synced from content');
+      if (r.inserted.length || r.updated.length)
+        this.o.log?.info?.(
+          { inserted: r.inserted.length, updated: r.updated.length },
+          'scheduler: schedules synced from content',
+        );
     }
   }
 
@@ -234,8 +295,12 @@ export class Scheduler {
       if (now.getTime() - r.startedAt.getTime() <= limit) continue;
       const error = { code: 'interrupted', message: 'The scheduler stopped before this run finished.' };
       if (await this.o.store.updateRun(r.id, { status: 'failed', endedAt: now, error }, 'running')) {
-        if (s && s.lastStatus === 'running') await this.o.store.updateSchedule(s.id, { lastStatus: 'failed' });
-        this.o.log?.warn({ schedule: r.scheduleKey, scheduleRunId: r.id }, 'scheduler: reaped an interrupted run');
+        if (s && s.lastStatus === 'running')
+          await this.o.store.updateSchedule(s.id, { lastStatus: 'failed' });
+        this.o.log?.warn(
+          { schedule: r.scheduleKey, scheduleRunId: r.id },
+          'scheduler: reaped an interrupted run',
+        );
       }
     }
   }
@@ -245,7 +310,13 @@ export class Scheduler {
     const overlap = s.definition.overlap ?? 'skip';
     if (busy.has(s.id) && overlap !== 'allow') {
       if (overlap === 'queue') {
-        await this.o.store.insertRun({ scheduleId: s.id, scheduleKey: s.key, trigger, status: 'queued', startedAt: now });
+        await this.o.store.insertRun({
+          scheduleId: s.id,
+          scheduleKey: s.key,
+          trigger,
+          status: 'queued',
+          startedAt: now,
+        });
         return;
       }
       const run = await this.o.store.insertRun({
@@ -261,10 +332,22 @@ export class Scheduler {
       return;
     }
     if (this.active.size >= this.concurrency) {
-      await this.o.store.insertRun({ scheduleId: s.id, scheduleKey: s.key, trigger, status: 'queued', startedAt: now });
+      await this.o.store.insertRun({
+        scheduleId: s.id,
+        scheduleKey: s.key,
+        trigger,
+        status: 'queued',
+        startedAt: now,
+      });
       return;
     }
-    const run = await this.o.store.insertRun({ scheduleId: s.id, scheduleKey: s.key, trigger, status: 'running', startedAt: now });
+    const run = await this.o.store.insertRun({
+      scheduleId: s.id,
+      scheduleKey: s.key,
+      trigger,
+      status: 'running',
+      startedAt: now,
+    });
     busy.add(s.id);
     this.launch(s, run);
   }
@@ -272,10 +355,21 @@ export class Scheduler {
   private launch(s: ScheduleRow, run: ScheduleRunRow) {
     const controller = new AbortController();
     const timeoutSeconds = s.definition.timeoutSeconds ?? DEFAULT_TIMEOUT_SECONDS;
-    const timer = this.timers.setTimeout(() => controller.abort(new RunAborted('timeout', `Stopped after the ${timeoutSeconds} s time limit (timeoutSeconds).`)), timeoutSeconds * 1000);
+    const timer = this.timers.setTimeout(
+      () =>
+        controller.abort(
+          new RunAborted('timeout', `Stopped after the ${timeoutSeconds} s time limit (timeoutSeconds).`),
+        ),
+      timeoutSeconds * 1000,
+    );
     const done = this.execute(s, run, controller.signal)
       .then(() => undefined)
-      .catch((err: unknown) => this.o.log?.error?.({ err: { message: (err as Error).message }, schedule: s.key }, 'scheduler: run bookkeeping failed'))
+      .catch((err: unknown) =>
+        this.o.log?.error?.(
+          { err: { message: (err as Error).message }, schedule: s.key },
+          'scheduler: run bookkeeping failed',
+        ),
+      )
       .finally(() => {
         this.timers.clearTimeout(timer);
         this.active.delete(run.id);
@@ -285,15 +379,25 @@ export class Scheduler {
   }
 
   /** Executes one run to completion and records it (row, schedule status, audit, events, retry). */
-  private async execute(s: ScheduleRow, run: ScheduleRunRow, signal: AbortSignal): Promise<ScheduleRunRow | null> {
+  private async execute(
+    s: ScheduleRow,
+    run: ScheduleRunRow,
+    signal: AbortSignal,
+  ): Promise<ScheduleRunRow | null> {
     const def = s.definition;
     const requestedBy = typeof run.result?.requestedBy === 'string' ? run.result.requestedBy : null;
     const attempt = typeof run.result?.attempt === 'number' ? run.result.attempt : 0;
-    const scheduledBy = run.trigger === 'manual' && requestedBy ? requestedBy : (s.createdBy ?? `content (owner: ${def.owner})`);
+    const scheduledBy =
+      run.trigger === 'manual' && requestedBy
+        ? requestedBy
+        : (s.createdBy ?? `content (owner: ${def.owner})`);
     const correlationId = randomUUID();
     const started = this.o.now();
     await this.o.store.updateSchedule(s.id, { lastRunAt: run.startedAt, lastStatus: 'running' });
-    this.o.events.publish({ type: 'schedule.updated', data: { key: s.key, scheduleRunId: run.id, status: 'running' } });
+    this.o.events.publish({
+      type: 'schedule.updated',
+      data: { key: s.key, scheduleRunId: run.id, status: 'running' },
+    });
 
     let status: ScheduleRunStatus;
     let error: RunErrorInfo | null;
@@ -302,11 +406,20 @@ export class Scheduler {
     let artifactPath: string | null = null;
     try {
       if (isWriteCapable(def) && !s.approvedBy)
-        throw new AppError(403, 'approval_required', 'This schedule changes data and runs only after a second person approved enabling it.');
+        throw new AppError(
+          403,
+          'approval_required',
+          'This schedule changes data and runs only after a second person approved enabling it.',
+        );
       if (signal.aborted) throw signal.reason;
-      const abort = new Promise<never>((_, reject) => signal.addEventListener('abort', () => reject(signal.reason), { once: true }));
+      const abort = new Promise<never>((_, reject) =>
+        signal.addEventListener('abort', () => reject(signal.reason), { once: true }),
+      );
       abort.catch(() => undefined);
-      const r = await Promise.race([this.o.jobs.run({ schedule: s, def, run, signal, correlationId, scheduledBy }), abort]);
+      const r = await Promise.race([
+        this.o.jobs.run({ schedule: s, def, run, signal, correlationId, scheduledBy }),
+        abort,
+      ]);
       status = r.status ?? 'succeeded';
       result = r.result ?? null;
       runId = r.runId ?? null;
@@ -326,15 +439,36 @@ export class Scheduler {
     const ended = this.o.now();
     const keep = { ...(requestedBy ? { requestedBy } : {}), ...(attempt ? { attempt } : {}) };
     const finalResult = result || Object.keys(keep).length ? { ...result, ...keep } : null;
-    const row = await this.o.store.updateRun(run.id, { status, endedAt: ended, result: finalResult, error, runId, artifactPath }, 'running');
+    const row = await this.o.store.updateRun(
+      run.id,
+      { status, endedAt: ended, result: finalResult, error, runId, artifactPath },
+      'running',
+    );
     await this.o.store.updateSchedule(s.id, { lastStatus: status });
-    await this.auditRun(s, { ...run, result: finalResult, runId, artifactPath }, status, ended.getTime() - started.getTime(), error, scheduledBy, correlationId);
+    await this.auditRun(
+      s,
+      { ...run, result: finalResult, runId, artifactPath },
+      status,
+      ended.getTime() - started.getTime(),
+      error,
+      scheduledBy,
+      correlationId,
+    );
     this.o.events.publish({ type: 'schedule.updated', data: { key: s.key, scheduleRunId: run.id, status } });
-    if (status === 'failed' || status === 'timeout') await this.failed(s, run, status, error!, attempt, correlationId);
+    if (status === 'failed' || status === 'timeout')
+      await this.failed(s, run, status, error!, attempt, correlationId);
     return row;
   }
 
-  private async auditRun(s: ScheduleRow, run: ScheduleRunRow, status: ScheduleRunStatus, durationMs: number, error: RunErrorInfo | null, scheduledBy: string | null, correlationId = randomUUID()) {
+  private async auditRun(
+    s: ScheduleRow,
+    run: ScheduleRunRow,
+    status: ScheduleRunStatus,
+    durationMs: number,
+    error: RunErrorInfo | null,
+    scheduledBy: string | null,
+    correlationId = randomUUID(),
+  ) {
     const def = s.definition;
     const by = scheduledBy ?? s.createdBy ?? `content (owner: ${def.owner})`;
     await this.o.audit
@@ -364,14 +498,24 @@ export class Scheduler {
           ...(error ? { error: error.code } : {}),
         },
       })
-      .catch((err: unknown) => this.o.log?.error?.({ err: { message: (err as Error).message } }, 'scheduler: audit failed'));
+      .catch((err: unknown) =>
+        this.o.log?.error?.({ err: { message: (err as Error).message } }, 'scheduler: audit failed'),
+      );
   }
 
   /** Failure notification (audit + event), then a retry when the policy allows. */
-  private async failed(s: ScheduleRow, run: ScheduleRunRow, status: ScheduleRunStatus, error: RunErrorInfo, attempt: number, correlationId: string) {
+  private async failed(
+    s: ScheduleRow,
+    run: ScheduleRunRow,
+    status: ScheduleRunStatus,
+    error: RunErrorInfo,
+    attempt: number,
+    correlationId: string,
+  ) {
     const def = s.definition;
     const retry = def.retry;
-    const willRetry = !!retry && attempt < retry.max && !PERMANENT.has(error.code) && error.code !== 'interrupted';
+    const willRetry =
+      !!retry && attempt < retry.max && !PERMANENT.has(error.code) && error.code !== 'interrupted';
     const retryAt = willRetry ? new Date(this.o.now().getTime() + retryDelayMs(retry!, attempt + 1)) : null;
     await this.o.audit
       .append({
@@ -383,12 +527,26 @@ export class Scheduler {
         targetId: s.key,
         result: 'failure',
         correlationId,
-        details: { scheduleRunId: run.id, status, error, attempt, ...(retryAt ? { retryAt: retryAt.toISOString() } : {}), notify: def.notify?.onFailure?.map((n) => n.type) ?? [] },
+        details: {
+          scheduleRunId: run.id,
+          status,
+          error,
+          attempt,
+          ...(retryAt ? { retryAt: retryAt.toISOString() } : {}),
+          notify: def.notify?.onFailure?.map((n) => n.type) ?? [],
+        },
       })
       .catch(() => undefined);
     this.o.events.publish({
       type: 'schedule.failed',
-      data: { key: s.key, title: def.title, scheduleRunId: run.id, status, error: { code: error.code, message: error.message.slice(0, 500) }, ...(retryAt ? { retryAt: retryAt.toISOString() } : {}) },
+      data: {
+        key: s.key,
+        title: def.title,
+        scheduleRunId: run.id,
+        status,
+        error: { code: error.code, message: error.message.slice(0, 500) },
+        ...(retryAt ? { retryAt: retryAt.toISOString() } : {}),
+      },
     });
     if (retryAt)
       await this.o.store.insertRun({
@@ -397,7 +555,11 @@ export class Scheduler {
         trigger: 'retry',
         status: 'queued',
         startedAt: retryAt,
-        result: { attempt: attempt + 1, retryOf: run.id, ...(typeof run.result?.requestedBy === 'string' ? { requestedBy: run.result.requestedBy } : {}) },
+        result: {
+          attempt: attempt + 1,
+          retryOf: run.id,
+          ...(typeof run.result?.requestedBy === 'string' ? { requestedBy: run.result.requestedBy } : {}),
+        },
       });
   }
 
@@ -406,8 +568,10 @@ export class Scheduler {
     let delay = this.o.maxIdleMs ?? 30_000;
     try {
       const now = this.o.now().getTime();
-      for (const s of await this.o.store.listSchedules()) if (s.enabled && s.nextRunAt) delay = Math.min(delay, s.nextRunAt.getTime() - now);
-      for (const q of await this.o.store.runsInStatus(['queued'])) delay = Math.min(delay, q.startedAt.getTime() - now);
+      for (const s of await this.o.store.listSchedules())
+        if (s.enabled && s.nextRunAt) delay = Math.min(delay, s.nextRunAt.getTime() - now);
+      for (const q of await this.o.store.runsInStatus(['queued']))
+        delay = Math.min(delay, q.startedAt.getTime() - now);
     } catch {
       // keep the idle delay
     }
@@ -430,10 +594,23 @@ export class Scheduler {
     await syncSchedules(this.o.store, await contentSchedules(this.o.definitions), now);
     const s = await this.o.store.getSchedule(key);
     if (!s) throw new AppError(404, 'schedule_not_found', `No schedule "${key}".`);
-    const run = await this.o.store.insertRun({ scheduleId: s.id, scheduleKey: s.key, trigger: 'manual', status: 'running', startedAt: now, result: { requestedBy } });
+    const run = await this.o.store.insertRun({
+      scheduleId: s.id,
+      scheduleKey: s.key,
+      trigger: 'manual',
+      status: 'running',
+      startedAt: now,
+      result: { requestedBy },
+    });
     const controller = new AbortController();
     const timeoutSeconds = s.definition.timeoutSeconds ?? DEFAULT_TIMEOUT_SECONDS;
-    const timer = this.timers.setTimeout(() => controller.abort(new RunAborted('timeout', `Stopped after the ${timeoutSeconds} s time limit (timeoutSeconds).`)), timeoutSeconds * 1000);
+    const timer = this.timers.setTimeout(
+      () =>
+        controller.abort(
+          new RunAborted('timeout', `Stopped after the ${timeoutSeconds} s time limit (timeoutSeconds).`),
+        ),
+      timeoutSeconds * 1000,
+    );
     try {
       return (await this.execute(s, run, controller.signal)) ?? (await this.o.store.getRun(run.id))!;
     } finally {
@@ -463,7 +640,10 @@ export class Scheduler {
     const pending = [...this.active.values()].map((a) => a.done);
     if (pending.length) {
       let t: unknown;
-      const graceful = await Promise.race([Promise.allSettled(pending).then(() => true), new Promise<boolean>((r) => (t = setTimeout(() => r(false), graceMs)))]);
+      const graceful = await Promise.race([
+        Promise.allSettled(pending).then(() => true),
+        new Promise<boolean>((r) => (t = setTimeout(() => r(false), graceMs))),
+      ]);
       clearTimeout(t as NodeJS.Timeout);
       if (!graceful) await this.demoted('shutting down');
     }

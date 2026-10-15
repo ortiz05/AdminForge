@@ -55,13 +55,27 @@ export const ApiErrorBody = z.object({
 export type ApiErrorBody = z.infer<typeof ApiErrorBody>;
 
 /** GET /api/nav */
-export const NavItem = z.object({ key: z.string(), label: z.string(), href: z.string(), icon: z.string().optional(), badge: z.string().optional() });
-export const NavSection = z.object({ key: z.string(), label: z.string(), icon: z.string(), items: z.array(NavItem) });
+export const NavItem = z.object({
+  key: z.string(),
+  label: z.string(),
+  href: z.string(),
+  icon: z.string().optional(),
+  badge: z.string().optional(),
+});
+export const NavSection = z.object({
+  key: z.string(),
+  label: z.string(),
+  icon: z.string(),
+  items: z.array(NavItem),
+});
 export const NavResponse = z.object({ sections: z.array(NavSection) });
 export type NavItem = z.infer<typeof NavItem>;
 export type NavSection = z.infer<typeof NavSection>;
 export type NavResponse = z.infer<typeof NavResponse>;
 
 /** POST /auth/arm (body) — reason and duration are audited. */
-export const ArmRequest = z.object({ minutes: z.number().int().min(5).max(480), reason: z.string().trim().min(5).max(500) });
+export const ArmRequest = z.object({
+  minutes: z.number().int().min(5).max(480),
+  reason: z.string().trim().min(5).max(500),
+});
 export type ArmRequest = z.infer<typeof ArmRequest>;

@@ -10,5 +10,10 @@ export default defineConfig({
   workers: 1,
   outputDir: `${process.env.AF_LIVE_OUT ?? '/tmp/adminforge-live'}/results`,
   reporter: [['list']],
-  use: { baseURL: env.PUBLIC_BASE_URL ?? 'http://localhost:5173', channel: 'chrome', headless: true, viewport: { width: 1440, height: 900 } },
+  use: {
+    baseURL: env.PUBLIC_BASE_URL ?? 'http://localhost:5173',
+    channel: 'chrome',
+    headless: true,
+    viewport: { width: 1440, height: 900 },
+  },
 });

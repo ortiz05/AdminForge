@@ -41,7 +41,9 @@ export function queryRoutes(api: FastifyInstance, ctx: AppContext) {
       ['the automation identity client id', c.AF_AUTOMATION_CLIENT_ID],
       ['the SharePoint tenant name', c.AF_SPO_TENANT_NAME],
     ];
-    return list.filter((x): x is [string, string] => typeof x[1] === 'string' && x[1].trim() !== '').map(([kind, value]) => ({ kind, value }));
+    return list
+      .filter((x): x is [string, string] => typeof x[1] === 'string' && x[1].trim() !== '')
+      .map(([kind, value]) => ({ kind, value }));
   };
 
   api.post('/query/scaffold', async (request) => {

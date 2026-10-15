@@ -6,11 +6,13 @@ description: Use when an AdminForge page needs a visualisation or interaction th
 # Adding a widget
 
 ## Overview
+
 Widgets are generic building blocks in `portal/packages/widgets/src/<type>/` (`schema.ts`, `Widget.tsx`, `fixtures.ts`,
 `index.ts`). The schema is registered for server-side validation; the component uses only `@adminforge/ui` primitives
 and design tokens. **First check whether a config option on an existing widget is enough** — prefer that.
 
 ## Steps
+
 1. Copy the closest widget folder; name the type in camelCase.
 2. `schema.ts`: zod config (keep it declarative; expressions only as `${…}` strings evaluated with the row/value/params
    scope). Register it in the package index so `registerWidgetSchema` runs in both web and API.
@@ -22,8 +24,9 @@ and design tokens. **First check whether a config option on an existing widget i
 6. Check: widgets/web typecheck, component tests, `pnpm guard` (tokens), and screenshot it in steel and daylight.
 
 ## Common mistakes
-| Mistake | Fix |
-|---|---|
-| Page-specific widget (`usersHeatmap`) | Generic widget + config |
-| Raw colours / arbitrary Tailwind | Tokens only; add tokens in design-tokens if truly needed |
-| Using `armed`/ember for emphasis | Ember means write mode only |
+
+| Mistake                               | Fix                                                      |
+| ------------------------------------- | -------------------------------------------------------- |
+| Page-specific widget (`usersHeatmap`) | Generic widget + config                                  |
+| Raw colours / arbitrary Tailwind      | Tokens only; add tokens in design-tokens if truly needed |
+| Using `armed`/ember for emphasis      | Ember means write mode only                              |

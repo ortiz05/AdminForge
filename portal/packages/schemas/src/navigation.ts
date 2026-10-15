@@ -41,11 +41,21 @@ export const Navigation = z
   .superRefine((def, ctx) => {
     const seen = new Set<string>();
     def.sections.forEach((s, i) => {
-      if (seen.has(s.key)) ctx.addIssue({ code: 'custom', path: ['sections', i, 'key'], message: `Duplicate section key "${s.key}".` });
+      if (seen.has(s.key))
+        ctx.addIssue({
+          code: 'custom',
+          path: ['sections', i, 'key'],
+          message: `Duplicate section key "${s.key}".`,
+        });
       seen.add(s.key);
       const items = new Set<string>();
       s.items?.forEach((it, j) => {
-        if (items.has(it.key)) ctx.addIssue({ code: 'custom', path: ['sections', i, 'items', j, 'key'], message: `Duplicate item key "${it.key}".` });
+        if (items.has(it.key))
+          ctx.addIssue({
+            code: 'custom',
+            path: ['sections', i, 'items', j, 'key'],
+            message: `Duplicate item key "${it.key}".`,
+          });
         items.add(it.key);
       });
     });

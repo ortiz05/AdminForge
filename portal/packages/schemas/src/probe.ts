@@ -7,7 +7,10 @@ import { Guid } from './params';
  * (the top-level `kind` is always `probe`). `thresholds` apply to the check's primary metric (see PROBE_METRICS).
  */
 
-const Status = z.union([z.number().int().min(100).max(599), z.array(z.number().int().min(100).max(599)).min(1)]);
+const Status = z.union([
+  z.number().int().min(100).max(599),
+  z.array(z.number().int().min(100).max(599)).min(1),
+]);
 
 export const ProbeExpect = z.strictObject({
   /** Expected status code(s); default 2xx. */
@@ -38,7 +41,9 @@ export const GraphCheck = z.strictObject({
 export const ArmCheck = z.strictObject({
   kind: z.literal('arm'),
   path: z.string().regex(/^\//),
-  apiVersion: z.string().regex(/^\d{4}-\d{2}-\d{2}(-preview)?$/, 'Expected an ARM api-version like 2022-12-01'),
+  apiVersion: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}(-preview)?$/, 'Expected an ARM api-version like 2022-12-01'),
   query: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])).optional(),
   expect: ProbeExpect.optional(),
 });
@@ -62,7 +67,12 @@ export const DnsResolveCheck = z.strictObject({
   kind: z.literal('dnsResolve'),
   name: Host,
   type: z.enum(['A', 'AAAA', 'CNAME', 'MX', 'TXT', 'NS', 'SRV', 'CAA']).default('A'),
-  expect: z.strictObject({ contains: z.array(z.string()).optional(), minAnswers: z.number().int().min(1).optional() }).optional(),
+  expect: z
+    .strictObject({
+      contains: z.array(z.string()).optional(),
+      minAnswers: z.number().int().min(1).optional(),
+    })
+    .optional(),
   /** Resolver IP (default: the host's resolver). */
   resolver: z.string().optional(),
 });
@@ -80,7 +90,10 @@ export const AppCredentialExpiryCheck = z.strictObject({
   include: z.array(z.enum(['secrets', 'certificates'])).optional(),
 });
 /** A skuPartNumber literal (ENTERPRISEPACK, SPE_E3) or a whole `${ env.X }` expression, so tenants keep their SKUs in configuration. */
-const SkuPartNumber = z.union([z.string().regex(/^[A-Za-z0-9_.+-]+$/, 'Expected a skuPartNumber like SPE_E3, or ${ env.X }'), Expr]);
+const SkuPartNumber = z.union([
+  z.string().regex(/^[A-Za-z0-9_.+-]+$/, 'Expected a skuPartNumber like SPE_E3, or ${ env.X }'),
+  Expr,
+]);
 
 export const LicenseThresholdCheck = z.strictObject({
   kind: z.literal('licenseThreshold'),
@@ -108,7 +121,12 @@ export const KqlSource = z.enum(KQL_SOURCES);
 export type KqlSource = z.infer<typeof KqlSource>;
 
 /** ISO 8601 duration only (`PT1H`, `P7D`): what Log Analytics and advanced hunting accept as a timespan. */
-const IsoDuration = z.string().regex(/^P(?!$)(\d+Y)?(\d+M)?(\d+W)?(\d+D)?(T(?=\d)(\d+H)?(\d+M)?(\d+(\.\d+)?S)?)?$/, 'Expected an ISO 8601 duration like PT1H or P7D');
+const IsoDuration = z
+  .string()
+  .regex(
+    /^P(?!$)(\d+Y)?(\d+M)?(\d+W)?(\d+D)?(T(?=\d)(\d+H)?(\d+M)?(\d+(\.\d+)?S)?)?$/,
+    'Expected an ISO 8601 duration like PT1H or P7D',
+  );
 
 /** `rowCount` = number of rows returned; `{ column, aggregate }` = one number from a column of the result. */
 export const KqlMetric = z.union([
@@ -163,7 +181,10 @@ export type ProbeCheck = z.infer<typeof ProbeCheck>;
 export type ProbeCheckKind = ProbeCheck['kind'];
 
 /** Primary metric per check kind and which direction is worse — how `thresholds` are applied. */
-export const PROBE_METRICS: Record<ProbeCheckKind, { metric: string; unit: string; worse: 'higher' | 'lower' }> = {
+export const PROBE_METRICS: Record<
+  ProbeCheckKind,
+  { metric: string; unit: string; worse: 'higher' | 'lower' }
+> = {
   http: { metric: 'latency', unit: 'ms', worse: 'higher' },
   graph: { metric: 'latency', unit: 'ms', worse: 'higher' },
   arm: { metric: 'latency', unit: 'ms', worse: 'higher' },
@@ -194,24 +215,43 @@ export const Probe = z
     if (t?.warn !== undefined && t.crit !== undefined) {
       const worse = PROBE_METRICS[def.check.kind].worse;
       if (worse === 'higher' ? t.warn > t.crit : t.warn < t.crit)
-        ctx.addIssue({ code: 'custom', path: ['thresholds'], message: `For ${def.check.kind}, ${worse} is worse: warn must be ${worse === 'higher' ? '≤' : '≥'} crit.` });
+        ctx.addIssue({
+          code: 'custom',
+          path: ['thresholds'],
+          message: `For ${def.check.kind}, ${worse} is worse: warn must be ${worse === 'higher' ? '≤' : '≥'} crit.`,
+        });
     }
     const c = def.check;
     if ((c.kind === 'certExpiry' || c.kind === 'appCredentialExpiry') && c.critDays > c.warnDays)
       ctx.addIssue({ code: 'custom', path: ['check', 'critDays'], message: 'critDays must be ≤ warnDays.' });
     if (c.kind === 'tokenAcquisition' && !!c.service === !!c.connection)
-      ctx.addIssue({ code: 'custom', path: ['check', 'service'], message: 'Use exactly one of service or connection.' });
+      ctx.addIssue({
+        code: 'custom',
+        path: ['check', 'service'],
+        message: 'Use exactly one of service or connection.',
+      });
     if (c.kind === 'kql') {
-      const only = (field: 'subscriptions' | 'managementGroups' | 'workspace' | 'timespan', sources: readonly KqlSource[]) => {
+      const only = (
+        field: 'subscriptions' | 'managementGroups' | 'workspace' | 'timespan',
+        sources: readonly KqlSource[],
+      ) => {
         if (c[field] !== undefined && !sources.includes(c.source))
-          ctx.addIssue({ code: 'custom', path: ['check', field], message: `${field} applies to source ${sources.join(' or ')}, not ${c.source}.` });
+          ctx.addIssue({
+            code: 'custom',
+            path: ['check', field],
+            message: `${field} applies to source ${sources.join(' or ')}, not ${c.source}.`,
+          });
       };
       only('subscriptions', ['resourceGraph']);
       only('managementGroups', ['resourceGraph']);
       only('workspace', ['logAnalytics']);
       only('timespan', ['logAnalytics', 'advancedHunting']);
       if (c.subscriptions !== undefined && c.managementGroups !== undefined)
-        ctx.addIssue({ code: 'custom', path: ['check', 'managementGroups'], message: 'Use subscriptions or managementGroups, not both.' });
+        ctx.addIssue({
+          code: 'custom',
+          path: ['check', 'managementGroups'],
+          message: 'Use subscriptions or managementGroups, not both.',
+        });
     }
   });
 export type Probe = z.infer<typeof Probe>;

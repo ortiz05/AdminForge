@@ -7,16 +7,39 @@ describe('engine: run lifecycle', () => {
     const def = playbook(
       [
         read('lookup', `/users/\${ $encode(inputs.userId) }`),
-        { id: 'shape', type: 'transform', expression: '${ { "upn": steps.lookup.output.upn, "by": user.upn, "run": run.id } }' },
-        write('disable', { request: { method: 'PATCH', path: '/users/${ $encode(inputs.userId) }', body: { accountEnabled: false } } }),
+        {
+          id: 'shape',
+          type: 'transform',
+          expression: '${ { "upn": steps.lookup.output.upn, "by": user.upn, "run": run.id } }',
+        },
+        write('disable', {
+          request: {
+            method: 'PATCH',
+            path: '/users/${ $encode(inputs.userId) }',
+            body: { accountEnabled: false },
+          },
+        }),
       ],
-      { inputs: { userId: { type: 'string', format: 'guid' } }, outputs: { summary: '${ "Disabled " & steps.shape.output.upn }' } },
+      {
+        inputs: { userId: { type: 'string', format: 'guid' } },
+        outputs: { summary: '${ "Disabled " & steps.shape.output.upn }' },
+      },
     );
-    const h = harness(def, { inputs: { userId: USER_ID }, respond: (c) => (c.method === 'GET' ? { upn: 'a.lee@example.com' } : null) });
+    const h = harness(def, {
+      inputs: { userId: USER_ID },
+      respond: (c) => (c.method === 'GET' ? { upn: 'a.lee@example.com' } : null),
+    });
     const out = await h.exec();
     expect(out).toMatchObject({ status: 'succeeded', outputs: { summary: 'Disabled a.lee@example.com' } });
-    expect(h.outbound.calls.map((c) => `${c.call.method} ${c.call.path}`)).toEqual([`GET /users/${USER_ID}`, `PATCH /users/${USER_ID}`]);
-    expect(h.outbound.calls[1]!.call).toMatchObject({ service: 'graph', declaredWrite: true, body: { accountEnabled: false } });
+    expect(h.outbound.calls.map((c) => `${c.call.method} ${c.call.path}`)).toEqual([
+      `GET /users/${USER_ID}`,
+      `PATCH /users/${USER_ID}`,
+    ]);
+    expect(h.outbound.calls[1]!.call).toMatchObject({
+      service: 'graph',
+      declaredWrite: true,
+      body: { accountEnabled: false },
+    });
     expect(h.outbound.calls[0]!.call.declaredWrite).toBeUndefined();
     expect(h.record('shape')?.output).toEqual({ upn: 'a.lee@example.com', by: INITIATOR.upn, run: 'run-1' });
     expect(h.runEvents()).toEqual(['running', 'succeeded']);
@@ -29,7 +52,11 @@ describe('engine: run lifecycle', () => {
       ['shape', 'succeeded', INITIATOR.oid],
       ['disable', 'succeeded', INITIATOR.oid],
     ]);
-    expect(h.record('disable')).toMatchObject({ msRequestId: 'req-2', mode: 'write', request: { method: 'PATCH', path: `/users/${USER_ID}` } });
+    expect(h.record('disable')).toMatchObject({
+      msRequestId: 'req-2',
+      mode: 'write',
+      request: { method: 'PATCH', path: `/users/${USER_ID}` },
+    });
   });
 
   it('checkpoints every step: running is saved before the call, the result after', async () => {
@@ -42,7 +69,10 @@ describe('engine: run lifecycle', () => {
     };
     await h.exec();
     expect(seenRunning).toBe(true);
-    expect(h.store.saves.filter((s) => s.record.path === 'a').map((s) => s.record.status)).toEqual(['running', 'succeeded']);
+    expect(h.store.saves.filter((s) => s.record.path === 'a').map((s) => s.record.status)).toEqual([
+      'running',
+      'succeeded',
+    ]);
   });
 
   it('is idempotent on terminal runs and refuses unknown runs', async () => {
@@ -95,11 +125,14 @@ describe('engine: run lifecycle', () => {
   });
 
   it('skips steps whose when is false and exposes their status', async () => {
-    const def = playbook([
-      read('a', '/a', { when: false }),
-      read('b', '/b', { when: '${ inputs.go }' }),
-      { id: 'c', type: 'transform', expression: '${ [steps.a.status, steps.b.status] }' },
-    ], { inputs: { go: { type: 'boolean' } } });
+    const def = playbook(
+      [
+        read('a', '/a', { when: false }),
+        read('b', '/b', { when: '${ inputs.go }' }),
+        { id: 'c', type: 'transform', expression: '${ [steps.a.status, steps.b.status] }' },
+      ],
+      { inputs: { go: { type: 'boolean' } } },
+    );
     const h = harness(def, { inputs: { go: false } });
     await h.exec();
     expect(h.status('a')).toBe('skipped');
@@ -109,11 +142,24 @@ describe('engine: run lifecycle', () => {
   });
 
   it('fails the run on an assertion with failedStep and message', async () => {
-    const def = playbook([read('lookup'), { id: 'guard', type: 'assert', that: '${ steps.lookup.output.enabled = true }', message: '${ steps.lookup.output.upn & " is already disabled." }' }, write('disable')]);
+    const def = playbook([
+      read('lookup'),
+      {
+        id: 'guard',
+        type: 'assert',
+        that: '${ steps.lookup.output.enabled = true }',
+        message: '${ steps.lookup.output.upn & " is already disabled." }',
+      },
+      write('disable'),
+    ]);
     const h = harness(def, { respond: () => ({ enabled: false, upn: 'x@example.com' }) });
     const out = await h.exec();
     expect(out.status).toBe('failed');
-    expect(out.error).toMatchObject({ code: 'assertion_failed', stepId: 'guard', message: 'x@example.com is already disabled.' });
+    expect(out.error).toMatchObject({
+      code: 'assertion_failed',
+      stepId: 'guard',
+      message: 'x@example.com is already disabled.',
+    });
     expect(h.status('disable')).toBeUndefined();
   });
 
@@ -124,7 +170,11 @@ describe('engine: run lifecycle', () => {
   });
 
   it('fails the run when the definition exceeds the step limit', async () => {
-    const steps = Array.from({ length: DEFAULT_LIMITS.maxSteps + 1 }, (_, i) => ({ id: `t${i}`, type: 'transform', expression: '${ 1 }' }));
+    const steps = Array.from({ length: DEFAULT_LIMITS.maxSteps + 1 }, (_, i) => ({
+      id: `t${i}`,
+      type: 'transform',
+      expression: '${ 1 }',
+    }));
     const out = await harness(playbook(steps)).exec();
     expect(out).toMatchObject({ status: 'failed', error: { code: 'limit_exceeded' } });
   });
@@ -158,10 +208,24 @@ describe('engine: run lifecycle', () => {
   });
 
   it('exposes env, now and user in expressions', async () => {
-    const def = playbook([{ id: 'x', type: 'transform', expression: '${ [env.AF_PRIMARY_DOMAIN, now, user.oid, user.roles[0], $count(user.roles)] }' }]);
-    const h = harness(def, { engine: { env: { AF_PRIMARY_DOMAIN: 'example.com' }, rolesOf: () => ['Portal.Operator'] } });
+    const def = playbook([
+      {
+        id: 'x',
+        type: 'transform',
+        expression: '${ [env.AF_PRIMARY_DOMAIN, now, user.oid, user.roles[0], $count(user.roles)] }',
+      },
+    ]);
+    const h = harness(def, {
+      engine: { env: { AF_PRIMARY_DOMAIN: 'example.com' }, rolesOf: () => ['Portal.Operator'] },
+    });
     await h.exec();
-    expect(h.record('x')?.output).toEqual(['example.com', h.clock.now().toISOString(), INITIATOR.oid, 'Portal.Operator', 1]);
+    expect(h.record('x')?.output).toEqual([
+      'example.com',
+      h.clock.now().toISOString(),
+      INITIATOR.oid,
+      'Portal.Operator',
+      1,
+    ]);
   });
 
   it('classifies statuses', () => {
@@ -178,6 +242,11 @@ describe('engine: run lifecycle', () => {
       },
     });
     const out = await h.exec();
-    expect(out.error).toMatchObject({ code: 'Request_ResourceNotFound', status: 404, requestId: 'req-404', stepId: 'a' });
+    expect(out.error).toMatchObject({
+      code: 'Request_ResourceNotFound',
+      status: 404,
+      requestId: 'req-404',
+      stepId: 'a',
+    });
   });
 });

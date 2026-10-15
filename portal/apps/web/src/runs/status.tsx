@@ -1,4 +1,11 @@
-import { CircleNotchIcon, cn, HourglassMediumIcon, STATUS_ICON, statusPill, type StatusTone } from '@adminforge/ui';
+import {
+  CircleNotchIcon,
+  cn,
+  HourglassMediumIcon,
+  STATUS_ICON,
+  statusPill,
+  type StatusTone,
+} from '@adminforge/ui';
 import type { RunStatus, StepStatus } from './contracts';
 
 /** Run states in words engineers use, with the tone that carries them (never colour alone: glyph + label). */
@@ -38,7 +45,8 @@ const TONE_TEXT: Record<StatusTone, string> = {
   neutral: 'text-fg-3',
 };
 
-const isWaiting = (status: string) => status === 'waiting' || status === 'queued' || status.startsWith('awaiting_');
+const isWaiting = (status: string) =>
+  status === 'waiting' || status === 'queued' || status.startsWith('awaiting_');
 
 /**
  * State glyph: running spins (still under reduced motion: it just stops), waiting is an hourglass, everything else
@@ -59,7 +67,14 @@ export function StatusGlyph({
 }) {
   const cls = cn('shrink-0', colored && TONE_TEXT[tone], className);
   if (status === 'running')
-    return <CircleNotchIcon size={size} weight="bold" aria-hidden className={cn(cls, 'animate-spin motion-reduce:animate-none')} />;
+    return (
+      <CircleNotchIcon
+        size={size}
+        weight="bold"
+        aria-hidden
+        className={cn(cls, 'animate-spin motion-reduce:animate-none')}
+      />
+    );
   if (isWaiting(status)) return <HourglassMediumIcon size={size} weight="fill" aria-hidden className={cls} />;
   const Glyph = STATUS_ICON[tone];
   return <Glyph size={size} weight="fill" aria-hidden className={cls} />;

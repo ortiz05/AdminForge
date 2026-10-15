@@ -1,7 +1,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate, useRouterState } from '@tanstack/react-router';
-import { Badge, Button, PageHeader, Panel, Tabs, TabsContent, TabsList, TabsTrigger, cn } from '@adminforge/ui';
+import {
+  Badge,
+  Button,
+  PageHeader,
+  Panel,
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+  cn,
+} from '@adminforge/ui';
 import {
   LicenceGatePanel,
   contentHref,
@@ -17,22 +27,47 @@ import {
 import { AppLink, useNavigateHref } from '../lib/links';
 import { useMe, useNav } from '../lib/session';
 import { playbookSearch } from '../playbooks/url';
-import { capabilitiesQuery, probesQuery, toProbeSummary, toWidgetError, viewsQuery, type PageDefinition } from './api';
+import {
+  capabilitiesQuery,
+  probesQuery,
+  toProbeSummary,
+  toWidgetError,
+  viewsQuery,
+  type PageDefinition,
+} from './api';
 import { ActionGroup } from './ActionGroup';
 import { WidgetGrid, type Block } from './blocks';
 import { ExportMenu } from './ExportMenu';
 import { FilterRegion, filterParamsOf } from './FilterRegion';
-import { activeBlocks, licenceState, neededDatasources, sectionLabel, tableColumns, withIds, type TableColumns } from './page-model';
+import {
+  activeBlocks,
+  licenceState,
+  neededDatasources,
+  sectionLabel,
+  tableColumns,
+  withIds,
+  type TableColumns,
+} from './page-model';
 import { EntityHeader, RefreshControl } from './PageParts';
 import { ParamsForm } from './ParamsForm';
 import { advancedParamOf, decodeFilter, paramIssues } from './QueryBuilder';
 import { paramsToSearch, resolveParams } from './params';
 import { usePageData } from './use-page-data';
-import { pageSearch, readInspect, readTableView, tableSearch, tableViewToSearch, withInspect } from './url-state';
+import {
+  pageSearch,
+  readInspect,
+  readTableView,
+  tableSearch,
+  tableViewToSearch,
+  withInspect,
+} from './url-state';
 import { presetId, readDefaultView, sameState, ViewsMenu, viewStateOf, type ViewState } from './ViewsMenu';
 
 export type SearchPatch = Record<string, unknown>;
-export type SearchUpdate = (patch: SearchPatch | ((prev: SearchPatch) => SearchPatch), opts?: { replace?: boolean }) => Promise<void>;
+export type SearchUpdate = (
+  patch: SearchPatch | ((prev: SearchPatch) => SearchPatch),
+  opts?: { replace?: boolean },
+) => Promise<void>;
 
 export interface PageViewProps {
   def: PageDefinition;
@@ -54,14 +89,24 @@ function useProbesHook(): WidgetRuntime['useProbes'] {
   return useCallback(function useProbes(keys: string[] | undefined): ProbesState {
     const q = useQuery({ ...probesQuery, select: (d) => d.items });
     if (q.isPending) return NO_PROBES;
-    if (q.isError) return { status: 'error', probes: [], error: toWidgetError(q.error), retry: () => void q.refetch() };
+    if (q.isError)
+      return { status: 'error', probes: [], error: toWidgetError(q.error), retry: () => void q.refetch() };
     const all = (q.data ?? []).map(toProbeSummary);
-    return { status: 'ready', probes: keys ? all.filter((p) => keys.includes(p.key)) : all, retry: () => void q.refetch() };
+    return {
+      status: 'ready',
+      probes: keys ? all.filter((p) => keys.includes(p.key)) : all,
+      retry: () => void q.refetch(),
+    };
   }, []);
 }
 
 /** URL-backed table state with an immediate local overlay (typing in a filter shouldn't wait for the router). */
-function useTableViews(search: SearchPatch, update: SearchUpdate, columns: Record<string, TableColumns>, enabled: boolean) {
+function useTableViews(
+  search: SearchPatch,
+  update: SearchUpdate,
+  columns: Record<string, TableColumns>,
+  enabled: boolean,
+) {
   const [pending, setPending] = useState<Record<string, TableViewState>>({});
   const timers = useRef<Record<string, number>>({});
   useEffect(() => {
@@ -110,17 +155,28 @@ export function PageView({ def, search, update, inspector, viewId, onTitle }: Pa
   // send it as the JSON object and the BFF validates and compiles it. (`client` dialect builders aren't offered.)
   const advSpec = def.filters?.advanced?.dialect === 'client' ? undefined : def.filters?.advanced;
   const advParam = advSpec ? advancedParamOf(advSpec) : undefined;
-  const advFilter = useMemo(() => (advParam ? decodeFilter(search[advParam]) : undefined), [advParam, search]);
+  const advFilter = useMemo(
+    () => (advParam ? decodeFilter(search[advParam]) : undefined),
+    [advParam, search],
+  );
   const send = useMemo(
     () => (advParam && advFilter ? { ...params.send, [advParam]: advFilter } : params.send),
     [params.send, advParam, advFilter],
   );
-  const { blocks, tab } = useMemo(() => activeBlocks(def, typeof search.tab === 'string' ? search.tab : undefined), [def, search.tab]);
-  const headerBlocks = useMemo(() => (def.tabs?.length && def.layout?.length && template === 'entity' ? withIds(def.layout, 'head_') : []), [def, template]);
+  const { blocks, tab } = useMemo(
+    () => activeBlocks(def, typeof search.tab === 'string' ? search.tab : undefined),
+    [def, search.tab],
+  );
+  const headerBlocks = useMemo(
+    () =>
+      def.tabs?.length && def.layout?.length && template === 'entity' ? withIds(def.layout, 'head_') : [],
+    [def, template],
+  );
   const allBlocks = useMemo(() => [...headerBlocks, ...blocks], [headerBlocks, blocks]);
 
   // Licences: only asked for when the page could be gated.
-  const gateRelevant = Boolean(def.requires?.licences?.length) || allBlocks.some((b) => b.widget === 'licenceGate');
+  const gateRelevant =
+    Boolean(def.requires?.licences?.length) || allBlocks.some((b) => b.widget === 'licenceGate');
   const caps = useQuery({ ...capabilitiesQuery, enabled: gateRelevant });
   const licence = licenceState(def, caps.data);
   const preview = licence.missing.length > 0 && me.dataMode === 'fixtures';
@@ -145,7 +201,10 @@ export function PageView({ def, search, update, inspector, viewId, onTitle }: Pa
     return out;
   }, [params.issues, serverIssues, advParam, def.params]);
   const advanced = useMemo(
-    () => (advSpec ? { spec: advSpec, filter: advFilter, issues: advParam ? (serverIssues[advParam] ?? []) : [] } : undefined),
+    () =>
+      advSpec
+        ? { spec: advSpec, filter: advFilter, issues: advParam ? (serverIssues[advParam] ?? []) : [] }
+        : undefined,
     [advSpec, advFilter, advParam, serverIssues],
   );
 
@@ -177,7 +236,10 @@ export function PageView({ def, search, update, inspector, viewId, onTitle }: Pa
       navigate: navigateHref,
       hrefFor: contentHref,
       openPlaybook: (launch: PlaybookLaunch) =>
-        void navigate({ to: '.', search: ((prev: SearchPatch) => ({ ...prev, ...playbookSearch(launch) })) as never }),
+        void navigate({
+          to: '.',
+          search: ((prev: SearchPatch) => ({ ...prev, ...playbookSearch(launch) })) as never,
+        }),
       inspect: (target: InspectTarget) =>
         void navigate({ to: '.', search: ((prev: SearchPatch) => withInspect(prev, target)) as never }),
       inspecting,
@@ -188,7 +250,20 @@ export function PageView({ def, search, update, inspector, viewId, onTitle }: Pa
       dataMode: me.dataMode,
       useProbes,
     }),
-    [def.id, def.filters?.search, scope, data.scopeData, navigate, navigateHref, inspecting, tableViews.get, tableViews.set, caps.data, me.dataMode, useProbes],
+    [
+      def.id,
+      def.filters?.search,
+      scope,
+      data.scopeData,
+      navigate,
+      navigateHref,
+      inspecting,
+      tableViews.get,
+      tableViews.set,
+      caps.data,
+      me.dataMode,
+      useProbes,
+    ],
   );
 
   const setParams = useCallback(
@@ -197,14 +272,17 @@ export function PageView({ def, search, update, inspector, viewId, onTitle }: Pa
   );
 
   // ── Saved views ──────────────────────────────────────────────────────────────────────────────────
-  const viewsEnabled = !inspector && (def.savedViews?.enabled ?? (template === 'list-detail' || template === 'report'));
+  const viewsEnabled =
+    !inspector && (def.savedViews?.enabled ?? (template === 'list-detail' || template === 'report'));
   const firstTable = Object.keys(columns)[0];
   const presets = useMemo(
     () =>
       (def.savedViews?.presets ?? []).map((p) => ({
         name: p.name,
         state: {
-          params: Object.fromEntries(Object.entries(paramsToSearch(def.params, p.params)).filter(([, v]) => v !== undefined)),
+          params: Object.fromEntries(
+            Object.entries(paramsToSearch(def.params, p.params)).filter(([, v]) => v !== undefined),
+          ),
           table: p.columns && firstTable ? { [`${firstTable}.cols`]: p.columns.join(',') } : {},
         } satisfies ViewState,
       })),
@@ -239,7 +317,8 @@ export function PageView({ def, search, update, inspector, viewId, onTitle }: Pa
   useEffect(() => {
     if (!viewsEnabled || triedDefault.current) return;
     const id = readDefaultView(def.id);
-    const pristine = !viewId && !Object.keys(currentState.params).length && !Object.keys(currentState.table).length;
+    const pristine =
+      !viewId && !Object.keys(currentState.params).length && !Object.keys(currentState.table).length;
     if (!id || !pristine) {
       triedDefault.current = true;
       return;
@@ -266,7 +345,9 @@ export function PageView({ def, search, update, inspector, viewId, onTitle }: Pa
     if (!exportTable) return undefined;
     const view = tableViews.get(exportTable);
     const cols = columns[exportTable]!;
-    const order = view?.columnOrder?.length ? [...view.columnOrder, ...cols.all.filter((c) => !view.columnOrder!.includes(c))] : cols.all;
+    const order = view?.columnOrder?.length
+      ? [...view.columnOrder, ...cols.all.filter((c) => !view.columnOrder!.includes(c))]
+      : cols.all;
     const vis = view?.columnVisibility;
     return order.filter((c) => cols.all.includes(c) && (vis?.[c] ?? cols.visible.includes(c)));
   }, [exportTable, tableViews, columns]);
@@ -285,10 +366,27 @@ export function PageView({ def, search, update, inspector, viewId, onTitle }: Pa
 
   // ── Layout ───────────────────────────────────────────────────────────────────────────────────────
   const section = sectionLabel(def, nav.data?.sections);
-  const filterParams = useMemo(() => (template === 'report' ? [] : filterParamsOf(def, allBlocks)), [template, def, allBlocks]);
-  const refresh = <RefreshControl updatedAt={data.updatedAt} fetching={data.fetching} onRefresh={data.refresh} every={def.refresh} />;
+  const filterParams = useMemo(
+    () => (template === 'report' ? [] : filterParamsOf(def, allBlocks)),
+    [template, def, allBlocks],
+  );
+  const refresh = (
+    <RefreshControl
+      updatedAt={data.updatedAt}
+      fetching={data.fetching}
+      onRefresh={data.refresh}
+      every={def.refresh}
+    />
+  );
   const exportMenu = def.export && !inspector && (
-    <ExportMenu pageKey={def.id} version={def.version} spec={def.export} params={send} columns={exportColumns} fallbackName={fileName} />
+    <ExportMenu
+      pageKey={def.id}
+      version={def.version}
+      spec={def.export}
+      params={send}
+      columns={exportColumns}
+      fallbackName={fileName}
+    />
   );
   const viewsMenu = viewsEnabled && (
     <ViewsMenu
@@ -302,7 +400,9 @@ export function PageView({ def, search, update, inspector, viewId, onTitle }: Pa
   );
   const statusBadge =
     def.status && def.status !== 'active' ? (
-      <Badge tone={def.status === 'deprecated' ? 'warn' : 'outline'}>{def.status === 'preview' ? 'Preview' : def.status === 'deprecated' ? 'Deprecated' : def.status}</Badge>
+      <Badge tone={def.status === 'deprecated' ? 'warn' : 'outline'}>
+        {def.status === 'preview' ? 'Preview' : def.status === 'deprecated' ? 'Deprecated' : def.status}
+      </Badge>
     ) : undefined;
 
   const gate = licence.missing.length > 0 && (
@@ -311,8 +411,13 @@ export function PageView({ def, search, update, inspector, viewId, onTitle }: Pa
 
   // The page-level gate already explains these features; drop licenceGate blocks that would repeat it.
   const gatedKeys = new Set(licence.missing.map((m) => m.key));
-  const notGated = (b: readonly Block[]) => b.filter((x) => !(x.widget === 'licenceGate' && gatedKeys.has(String((x as { feature?: unknown }).feature))));
-  const grid = (b: readonly Block[]) => <WidgetGrid blocks={notGated(b)} runtime={runtime} data={data} inspector={inspector} />;
+  const notGated = (b: readonly Block[]) =>
+    b.filter(
+      (x) => !(x.widget === 'licenceGate' && gatedKeys.has(String((x as { feature?: unknown }).feature))),
+    );
+  const grid = (b: readonly Block[]) => (
+    <WidgetGrid blocks={notGated(b)} runtime={runtime} data={data} inspector={inspector} />
+  );
 
   // Entity: identity header, page actions, optional blocks above tabs, then tabs.
   if (template === 'entity') {
@@ -320,7 +425,14 @@ export function PageView({ def, search, update, inspector, viewId, onTitle }: Pa
     const setTab = (t: string) => void update({ tab: t === tabs[0]?.id ? undefined : t }, { replace: true });
     return (
       <div className="flex flex-col gap-(--af-gap-grid)">
-        <EntityHeader def={def} runtime={runtime} loading={!data.settled} section={section} inspector={inspector} onTitle={onTitle} />
+        <EntityHeader
+          def={def}
+          runtime={runtime}
+          loading={!data.settled}
+          section={section}
+          inspector={inspector}
+          onTitle={onTitle}
+        />
         {gate}
         {!blocked && headerBlocks.length > 0 && grid(headerBlocks)}
         {!blocked &&
@@ -340,7 +452,10 @@ export function PageView({ def, search, update, inspector, viewId, onTitle }: Pa
           ))}
         {inspector && (
           <div className="flex justify-end border-t border-line pt-3">
-            <AppLink href={contentHref(def.id, params.send)} className="text-sm font-medium text-accent underline-offset-2 hover:underline">
+            <AppLink
+              href={contentHref(def.id, params.send)}
+              className="text-sm font-medium text-accent underline-offset-2 hover:underline"
+            >
               Open full page
             </AppLink>
           </div>
@@ -359,12 +474,14 @@ export function PageView({ def, search, update, inspector, viewId, onTitle }: Pa
       actions={
         // A gated page has no data to refresh, save or export.
         !blocked && (
-        <>
-          {refresh}
-          {viewsMenu}
-          {template !== 'report' && exportMenu}
-          {def.actions?.length ? <ActionGroup actions={def.actions} scope={scope} runtime={runtime} /> : null}
-        </>
+          <>
+            {refresh}
+            {viewsMenu}
+            {template !== 'report' && exportMenu}
+            {def.actions?.length ? (
+              <ActionGroup actions={def.actions} scope={scope} runtime={runtime} />
+            ) : null}
+          </>
         )
       }
     />
@@ -379,7 +496,12 @@ export function PageView({ def, search, update, inspector, viewId, onTitle }: Pa
         {gate}
         {!blocked && (
           <>
-            <ParamsForm declared={def.params ?? {}} values={params.values} issues={filterIssues} onChange={setParams} />
+            <ParamsForm
+              declared={def.params ?? {}}
+              values={params.values}
+              issues={filterIssues}
+              onChange={setParams}
+            />
             {summary.length > 0 && grid(summary)}
             {tables.length > 0 && grid(tables)}
             {def.export && (
@@ -388,7 +510,8 @@ export function PageView({ def, search, update, inspector, viewId, onTitle }: Pa
                   <div className="flex flex-col gap-0.5">
                     <p className="font-semibold text-fg">Export this report</p>
                     <p className="text-sm text-fg-2">
-                      Every row for these parameters — not just the rows loaded above. The export is recorded in the audit log.
+                      Every row for these parameters — not just the rows loaded above. The export is recorded
+                      in the audit log.
                     </p>
                   </div>
                   <ExportMenu
@@ -424,8 +547,13 @@ export function PageView({ def, search, update, inspector, viewId, onTitle }: Pa
                   <Button
                     intent="ghost"
                     aria-current={t.id === tab ? 'page' : undefined}
-                    className={cn('w-full justify-start', t.id === tab && 'af-nav-active bg-selected text-fg')}
-                    onClick={() => void update({ tab: t.id === tabs[0]!.id ? undefined : t.id }, { replace: true })}
+                    className={cn(
+                      'w-full justify-start',
+                      t.id === tab && 'af-nav-active bg-selected text-fg',
+                    )}
+                    onClick={() =>
+                      void update({ tab: t.id === tabs[0]!.id ? undefined : t.id }, { replace: true })
+                    }
                   >
                     {t.label}
                   </Button>
@@ -459,4 +587,3 @@ export function PageView({ def, search, update, inspector, viewId, onTitle }: Pa
     </div>
   );
 }
-

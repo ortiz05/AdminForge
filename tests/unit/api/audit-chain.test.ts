@@ -1,12 +1,21 @@
 import { canonical, chainHash, GENESIS, verifyChain } from '@adminforge/api/src/audit/chain';
 import { MemoryAuditWriter, toAuditEvent } from '@adminforge/api/src/audit/writer';
 
-const ev = (action: string) => ({ ts: '2026-10-15T12:00:00.000Z', actorOid: 'u1', action, result: 'success', correlationId: 'c', details: { b: 2, a: 1 } as Record<string, number> });
+const ev = (action: string) => ({
+  ts: '2026-10-15T12:00:00.000Z',
+  actorOid: 'u1',
+  action,
+  result: 'success',
+  correlationId: 'c',
+  details: { b: 2, a: 1 } as Record<string, number>,
+});
 
 describe('audit chain', () => {
   it('canonicalises with sorted keys and no undefined', () => {
     expect(canonical({ b: 1, a: { d: undefined, c: [2, 1] } })).toBe('{"a":{"c":[2,1]},"b":1}');
-    expect(canonical({ x: null, d: new Date('2026-10-15T00:00:00.000Z') })).toBe('{"d":"2026-10-15T00:00:00.000Z","x":null}');
+    expect(canonical({ x: null, d: new Date('2026-10-15T00:00:00.000Z') })).toBe(
+      '{"d":"2026-10-15T00:00:00.000Z","x":null}',
+    );
   });
 
   it('verifies an intact chain and finds the first tampered row', () => {
@@ -34,7 +43,10 @@ describe('audit chain', () => {
   });
 
   it('hashes every column, with nulls for absent ones, so persisted rows re-verify', () => {
-    const event = toAuditEvent({ action: 'x', result: 'success', correlationId: 'c', details: { keep: 1, drop: undefined } }, new Date('2026-10-15T12:00:00.000Z'));
+    const event = toAuditEvent(
+      { action: 'x', result: 'success', correlationId: 'c', details: { keep: 1, drop: undefined } },
+      new Date('2026-10-15T12:00:00.000Z'),
+    );
     expect(event).toEqual({
       ts: '2026-10-15T12:00:00.000Z',
       actorOid: null,
@@ -53,8 +65,18 @@ describe('audit chain', () => {
 
   it('MemoryAuditWriter appends a verifiable chain and notices tampering', async () => {
     const writer = new MemoryAuditWriter(() => new Date('2026-10-15T12:00:00.000Z'));
-    const first = await writer.append({ action: 'session.signin', result: 'success', correlationId: 'c1', actorOid: 'u1' });
-    const second = await writer.append({ action: 'session.armed', result: 'success', correlationId: 'c2', details: { minutes: 30 } });
+    const first = await writer.append({
+      action: 'session.signin',
+      result: 'success',
+      correlationId: 'c1',
+      actorOid: 'u1',
+    });
+    const second = await writer.append({
+      action: 'session.armed',
+      result: 'success',
+      correlationId: 'c2',
+      details: { minutes: 30 },
+    });
     expect(first.prevHash).toBe(GENESIS);
     expect(second.prevHash).toBe(first.hash);
     expect(await writer.verify()).toEqual({ ok: true, count: 2 });

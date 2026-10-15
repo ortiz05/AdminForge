@@ -1,7 +1,14 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { clientDefinition, compareSemVer, FsDefinitionSource, notifyPayload, registryFrom, type DefinitionsChanged } from '@adminforge/api/src/definitions';
+import {
+  clientDefinition,
+  compareSemVer,
+  FsDefinitionSource,
+  notifyPayload,
+  registryFrom,
+  type DefinitionsChanged,
+} from '@adminforge/api/src/definitions';
 import type { Connection, Definition } from '@adminforge/schemas';
 
 const page = (id: string, version = '1.0.0', extra = '') => `kind: page
@@ -50,10 +57,18 @@ describe('FsDefinitionSource + DefinitionResolver', () => {
     const r = await reg.resolve('page', 'a.one');
     expect(r).toMatchObject({ version: '1.0.0', def: { id: 'a.one', kind: 'page' } });
     expect(r.sha256).toMatch(/^[0-9a-f]{64}$/);
-    await expect(reg.resolve('page', 'a.old')).rejects.toMatchObject({ status: 404, code: 'definition_not_found' });
+    await expect(reg.resolve('page', 'a.old')).rejects.toMatchObject({
+      status: 404,
+      code: 'definition_not_found',
+    });
     expect((await reg.resolve('page', 'a.old', '2.0.0')).version).toBe('2.0.0');
-    await expect(reg.resolve('page', 'a.one', '9.9.9')).rejects.toMatchObject({ code: 'definition_not_found' });
-    expect(await reg.resolveAny(['page', 'dashboard', 'report'], 'a.one')).toMatchObject({ kind: 'page', version: '1.0.0' });
+    await expect(reg.resolve('page', 'a.one', '9.9.9')).rejects.toMatchObject({
+      code: 'definition_not_found',
+    });
+    expect(await reg.resolveAny(['page', 'dashboard', 'report'], 'a.one')).toMatchObject({
+      kind: 'page',
+      version: '1.0.0',
+    });
     await reg.close();
   });
 
@@ -91,7 +106,9 @@ describe('FsDefinitionSource + DefinitionResolver', () => {
   });
 
   it('compareSemVer', () => {
-    expect(['1.10.0', '1.2.0', '1.2.0-beta.2', '1.2.0-beta.10', '0.9.9', '1.2.0-alpha'].sort(compareSemVer)).toEqual(['0.9.9', '1.2.0-alpha', '1.2.0-beta.2', '1.2.0-beta.10', '1.2.0', '1.10.0']);
+    expect(
+      ['1.10.0', '1.2.0', '1.2.0-beta.2', '1.2.0-beta.10', '0.9.9', '1.2.0-alpha'].sort(compareSemVer),
+    ).toEqual(['0.9.9', '1.2.0-alpha', '1.2.0-beta.2', '1.2.0-beta.10', '1.2.0', '1.10.0']);
     expect(compareSemVer('1.0.0+build.1', '1.0.0')).toBe(0);
   });
 
@@ -113,12 +130,18 @@ describe('FsDefinitionSource + DefinitionResolver', () => {
     expect(out).not.toHaveProperty('baseUrl');
     expect(out).not.toHaveProperty('audience');
     expect(out.operations).toEqual({ get: { method: 'GET', path: '/x', mode: 'read' } });
-    const sched = clientDefinition({ kind: 'schedule', id: 's.x', notify: { onFailure: [{ type: 'teams', webhook: '${ env.AF_HOOK }' }] } } as unknown as Definition);
+    const sched = clientDefinition({
+      kind: 'schedule',
+      id: 's.x',
+      notify: { onFailure: [{ type: 'teams', webhook: '${ env.AF_HOOK }' }] },
+    } as unknown as Definition);
     expect(JSON.stringify(sched)).not.toContain('webhook');
   });
 
   it('NOTIFY payloads fall back to {all:true} when too large', () => {
     expect(JSON.parse(notifyPayload(['page:a.b']))).toEqual({ keys: ['page:a.b'] });
-    expect(JSON.parse(notifyPayload(Array.from({ length: 2000 }, (_, i) => `page:section.page-${i}`)))).toEqual({ all: true });
+    expect(
+      JSON.parse(notifyPayload(Array.from({ length: 2000 }, (_, i) => `page:section.page-${i}`))),
+    ).toEqual({ all: true });
   });
 });

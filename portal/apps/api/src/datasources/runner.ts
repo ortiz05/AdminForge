@@ -27,7 +27,11 @@ export function liveRunner(opts: {
       url: opts.url,
       key: opts.key,
       broker: opts.broker,
-      tenant: { id: opts.config.AF_TENANT_ID, domain: opts.config.AF_PRIMARY_DOMAIN, spoTenantName: opts.config.AF_SPO_TENANT_NAME },
+      tenant: {
+        id: opts.config.AF_TENANT_ID,
+        domain: opts.config.AF_PRIMARY_DOMAIN,
+        spoTenantName: opts.config.AF_SPO_TENANT_NAME,
+      },
       fetch: opts.fetch,
       now: opts.now,
     });
@@ -39,14 +43,25 @@ export function liveRunner(opts: {
     async run(identity, job, { correlationId, signal }) {
       const outputs: unknown[] = [];
       const resolved: ResolvedIdentity = {
-        actor: identity.kind === 'delegated' ? { kind: 'delegated', oid: identity.session.userOid, upn: identity.session.upn } : { kind: 'automation', oid: null, upn: null },
+        actor:
+          identity.kind === 'delegated'
+            ? { kind: 'delegated', oid: identity.session.userOid, upn: identity.session.upn }
+            : { kind: 'automation', oid: null, upn: null },
         mode: identity.mode,
         handle: identity,
       };
       try {
         const res = await port.run(
           resolved,
-          { jobId: `ds-${correlationId}-${randomUUID()}`, script: job.script, sha256: job.sha256, parameters: job.parameters, services: job.services, timeoutSeconds: job.timeoutSeconds, mode: job.mode },
+          {
+            jobId: `ds-${correlationId}-${randomUUID()}`,
+            script: job.script,
+            sha256: job.sha256,
+            parameters: job.parameters,
+            services: job.services,
+            timeoutSeconds: job.timeoutSeconds,
+            mode: job.mode,
+          },
           {
             signal: signal ?? new AbortController().signal,
             onEvent: (e) => {
@@ -55,14 +70,25 @@ export function liveRunner(opts: {
           },
         );
         if (res.status !== 'succeeded')
-          throw new AppError(502, `runner_${res.status}`, res.error?.message ?? `The PowerShell script ${res.status === 'timeout' ? 'timed out' : res.status}.`, {
-            hint: res.status === 'timeout' ? `Scripts run for at most ${job.timeoutSeconds} s.` : 'See the runner logs for the script error.',
-          });
+          throw new AppError(
+            502,
+            `runner_${res.status}`,
+            res.error?.message ??
+              `The PowerShell script ${res.status === 'timeout' ? 'timed out' : res.status}.`,
+            {
+              hint:
+                res.status === 'timeout'
+                  ? `Scripts run for at most ${job.timeoutSeconds} s.`
+                  : 'See the runner logs for the script error.',
+            },
+          );
         return { data: outputs };
       } catch (err) {
-        if (err instanceof IdentityUnavailable) throw err.reason === 'not_armed' ? new NotArmed(err.message) : new ReauthRequired('read');
+        if (err instanceof IdentityUnavailable)
+          throw err.reason === 'not_armed' ? new NotArmed(err.message) : new ReauthRequired('read');
         if (err instanceof StepError) {
-          const status = err.opts.status && err.opts.status >= 400 && err.opts.status < 600 ? err.opts.status : 502;
+          const status =
+            err.opts.status && err.opts.status >= 400 && err.opts.status < 600 ? err.opts.status : 502;
           throw new AppError(status, err.code, err.message);
         }
         throw err;

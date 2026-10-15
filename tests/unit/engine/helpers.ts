@@ -16,20 +16,54 @@ import type { Mode } from '@adminforge/connectors';
 import { Playbook, Runbook } from '@adminforge/schemas';
 
 // Synthetic identities only.
-export const INITIATOR: Actor = { kind: 'delegated', oid: '00000000-0000-4000-8000-0000000000a1', upn: 'avery@example.com' };
-export const APPROVER: Actor = { kind: 'delegated', oid: '00000000-0000-4000-8000-0000000000b2', upn: 'blake@example.com' };
+export const INITIATOR: Actor = {
+  kind: 'delegated',
+  oid: '00000000-0000-4000-8000-0000000000a1',
+  upn: 'avery@example.com',
+};
+export const APPROVER: Actor = {
+  kind: 'delegated',
+  oid: '00000000-0000-4000-8000-0000000000b2',
+  upn: 'blake@example.com',
+};
 export const USER_ID = '00000000-0000-4000-8000-000000000001';
 
 /** A valid playbook (parsed by the real schema, so defaults apply and mistakes in tests fail loudly). */
 export function playbook(steps: unknown[], extra: Record<string, unknown> = {}): Playbook {
-  return Playbook.parse({ kind: 'playbook', id: 'test.playbook', version: '1.0.0', title: 'Test playbook', owner: 'tests', risk: 'low', mode: 'write', steps, ...extra });
+  return Playbook.parse({
+    kind: 'playbook',
+    id: 'test.playbook',
+    version: '1.0.0',
+    title: 'Test playbook',
+    owner: 'tests',
+    risk: 'low',
+    mode: 'write',
+    steps,
+    ...extra,
+  });
 }
 
 export function runbook(sections: unknown[], extra: Record<string, unknown> = {}): Runbook {
-  return Runbook.parse({ kind: 'runbook', id: 'test.runbook', version: '1.0.0', title: 'Test runbook', owner: 'tests', risk: 'low', mode: 'write', sections, ...extra });
+  return Runbook.parse({
+    kind: 'runbook',
+    id: 'test.runbook',
+    version: '1.0.0',
+    title: 'Test runbook',
+    owner: 'tests',
+    risk: 'low',
+    mode: 'write',
+    sections,
+    ...extra,
+  });
 }
 
-export const read = (id: string, path = `/users/${id}`, extra: Record<string, unknown> = {}) => ({ id, type: 'graph', mode: 'read', request: { method: 'GET', path }, ...extra });
+export const read = (id: string, path = `/users/${id}`, extra: Record<string, unknown> = {}) => ({
+  id,
+  type: 'graph',
+  mode: 'read',
+  request: { method: 'GET', path },
+  ...extra,
+});
 export const write = (id: string, extra: Record<string, unknown> = {}) => ({
   id,
   type: 'graph',
@@ -47,7 +81,11 @@ export class FakeOutbound implements OutboundPort {
   inFlight = 0;
   maxInFlight = 0;
   constructor(public respond: Responder = (c) => ({ path: c.path })) {}
-  async call(identity: ResolvedIdentity, call: ServiceCall, opts: { correlationId: string; signal: AbortSignal }) {
+  async call(
+    identity: ResolvedIdentity,
+    call: ServiceCall,
+    opts: { correlationId: string; signal: AbortSignal },
+  ) {
     this.calls.push({ call, identity });
     this.inFlight++;
     this.maxInFlight = Math.max(this.maxInFlight, this.inFlight);
@@ -99,7 +137,15 @@ export function harness(def: Playbook | Runbook, o: HarnessOptions = {}) {
   const identity = new FakeIdentity().signIn(INITIATOR, o.armed ?? true);
   const outbound = new FakeOutbound(o.respond);
   const engine = new Engine({ store, clock, identity, outbound, ...o.engine });
-  store.create({ id: 'run-1', kind: def.kind, definitionKey: def.id, dryRun: o.dryRun ?? false, inputs: o.inputs ?? {}, initiator: INITIATOR, ...o.run });
+  store.create({
+    id: 'run-1',
+    kind: def.kind,
+    definitionKey: def.id,
+    dryRun: o.dryRun ?? false,
+    inputs: o.inputs ?? {},
+    initiator: INITIATOR,
+    ...o.run,
+  });
   const latest = () => store.latest('run-1');
   return {
     clock,
@@ -114,11 +160,24 @@ export function harness(def: Playbook | Runbook, o: HarnessOptions = {}) {
     record: (path: string): StepRecord | undefined => latest().get(path),
     all: () => store.listSteps('run-1'),
     plan: async () => (await store.listSteps('run-1')).flatMap((r) => r.plan ?? []),
-    runEvents: () => store.events.filter((e) => e.type === 'status' && e.data.scope === 'run').map((e) => e.data.status),
+    runEvents: () =>
+      store.events.filter((e) => e.type === 'status' && e.data.scope === 'run').map((e) => e.data.status),
     approve: (path: string, by: Actor = APPROVER, comment?: string) =>
-      store.decide('run-1', path, { kind: 'approval', approved: true, actor: by, comment: comment ?? null, decidedAt: clock.now().toISOString() }),
+      store.decide('run-1', path, {
+        kind: 'approval',
+        approved: true,
+        actor: by,
+        comment: comment ?? null,
+        decidedAt: clock.now().toISOString(),
+      }),
     reject: (path: string, by: Actor = APPROVER, comment?: string) =>
-      store.decide('run-1', path, { kind: 'approval', approved: false, actor: by, comment: comment ?? null, decidedAt: clock.now().toISOString() }),
+      store.decide('run-1', path, {
+        kind: 'approval',
+        approved: false,
+        actor: by,
+        comment: comment ?? null,
+        decidedAt: clock.now().toISOString(),
+      }),
   };
 }
 

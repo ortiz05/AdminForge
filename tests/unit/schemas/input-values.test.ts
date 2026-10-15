@@ -12,7 +12,9 @@ const params = {
 
 const parse = (values: Record<string, unknown>, omit?: string[]) => {
   const r = inputsSchema(params, { omit }).safeParse(values);
-  return r.success ? { ok: true as const, data: r.data } : { ok: false as const, errors: inputErrors(r.error) };
+  return r.success
+    ? { ok: true as const, data: r.data }
+    : { ok: false as const, errors: inputErrors(r.error) };
 };
 
 describe('inputsSchema (client-side run form validation)', () => {
@@ -58,7 +60,12 @@ describe('inputsSchema (client-side run form validation)', () => {
   });
 
   it('enforces maxItems and allowed enum values', () => {
-    const r = parse({ userId: '3f2a8c1e-5b7d-4e19-9a6c-2d8e4f1b9c1d', reason: 'long enough reason', users: ['a@b.co', 'c@d.co', 'e@f.co'], level: 'medium' });
+    const r = parse({
+      userId: '3f2a8c1e-5b7d-4e19-9a6c-2d8e4f1b9c1d',
+      reason: 'long enough reason',
+      users: ['a@b.co', 'c@d.co', 'e@f.co'],
+      level: 'medium',
+    });
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.errors).toEqual({ users: 'At most 2 items.', level: 'Expected one of: low, high.' });
   });

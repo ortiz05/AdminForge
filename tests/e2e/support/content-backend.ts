@@ -47,7 +47,8 @@ export function backendUrl(): Promise<string> {
   return base;
 }
 
-export const BACKEND_PATHS = /^\/api\/(definitions|datasources|reports|views|search|nav|me\/capabilities)(\/|$|\?)/;
+export const BACKEND_PATHS =
+  /^\/api\/(definitions|datasources|reports|views|search|nav|me\/capabilities)(\/|$|\?)/;
 
 /** Answers one browser request from the backend process. */
 export async function forward(route: Route): Promise<void> {
@@ -78,7 +79,11 @@ export async function routeContentBackend(page: Page, opts: BackendOptions = {})
     async (route) => {
       const url = new URL(route.request().url());
       const raw = route.request().postData();
-      opts.calls?.push({ method: route.request().method(), path: `${url.pathname}${url.search}`, body: raw ? JSON.parse(raw) : undefined });
+      opts.calls?.push({
+        method: route.request().method(),
+        path: `${url.pathname}${url.search}`,
+        body: raw ? JSON.parse(raw) : undefined,
+      });
       if (opts.override && (await opts.override(route, url))) return;
       await forward(route);
     },

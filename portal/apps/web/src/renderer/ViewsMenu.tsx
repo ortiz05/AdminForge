@@ -59,13 +59,22 @@ export const presetId = (name: string) => `preset:${name}`;
 /** Order-insensitive comparison of two view states. */
 export function sameState(a: ViewState, b: ViewState): boolean {
   const norm = (o: Record<string, unknown>) =>
-    JSON.stringify(Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined && v !== '').sort(([x], [y]) => x.localeCompare(y))));
+    JSON.stringify(
+      Object.fromEntries(
+        Object.entries(o)
+          .filter(([, v]) => v !== undefined && v !== '')
+          .sort(([x], [y]) => x.localeCompare(y)),
+      ),
+    );
   return norm(a.params) === norm(b.params) && norm(a.table) === norm(b.table);
 }
 
 export function viewStateOf(v: SavedViewItem): ViewState {
   const s = v.state as Partial<ViewState>;
-  return { params: s.params && typeof s.params === 'object' ? s.params : {}, table: s.table && typeof s.table === 'object' ? s.table : {} };
+  return {
+    params: s.params && typeof s.params === 'object' ? s.params : {},
+    table: s.table && typeof s.table === 'object' ? s.table : {},
+  };
 }
 
 export interface ViewsMenuProps {
@@ -97,20 +106,36 @@ export function ViewsMenu({ page, spec, presets, current, activeId, onApply }: V
   const mine = list.filter((v) => v.mine);
   const shared = list.filter((v) => !v.mine && v.shared);
   const active = activeId ? list.find((v) => v.id === activeId) : undefined;
-  const activePreset = activeId?.startsWith('preset:') ? presets.find((p) => presetId(p.name) === activeId) : undefined;
+  const activePreset = activeId?.startsWith('preset:')
+    ? presets.find((p) => presetId(p.name) === activeId)
+    : undefined;
   const activeState = active ? viewStateOf(active) : activePreset?.state;
   const modified = Boolean(activeState && !sameState(activeState, current));
   const activeName = active?.name ?? activePreset?.name;
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ['views', page] });
   const failed = (title: string) => (e: unknown) =>
-    toast({ tone: 'crit', title, description: e instanceof ApiRequestError ? `${e.message}${e.hint ? ` ${e.hint}` : ''}` : (e as Error).message });
+    toast({
+      tone: 'crit',
+      title,
+      description:
+        e instanceof ApiRequestError ? `${e.message}${e.hint ? ` ${e.hint}` : ''}` : (e as Error).message,
+    });
 
   const save = useMutation({
-    mutationFn: () => createView(page, { name: name.trim(), state: current as unknown as Record<string, unknown>, shared: shareable && share }),
+    mutationFn: () =>
+      createView(page, {
+        name: name.trim(),
+        state: current as unknown as Record<string, unknown>,
+        shared: shareable && share,
+      }),
     onSuccess: (v) => {
       void invalidate();
       setSaveOpen(false);
-      toast({ tone: 'ok', title: `Saved view “${v.name}”`, description: v.shared ? 'Everyone with access to this page can use it.' : undefined });
+      toast({
+        tone: 'ok',
+        title: `Saved view “${v.name}”`,
+        description: v.shared ? 'Everyone with access to this page can use it.' : undefined,
+      });
       onApply(v.id, current);
     },
     onError: failed('The view wasn’t saved'),
@@ -121,7 +146,11 @@ export function ViewsMenu({ page, spec, presets, current, activeId, onApply }: V
       void invalidate();
       toast({
         tone: 'ok',
-        title: body.state ? `Updated view “${v.name}”` : v.shared ? `“${v.name}” is now shared` : `“${v.name}” is private again`,
+        title: body.state
+          ? `Updated view “${v.name}”`
+          : v.shared
+            ? `“${v.name}” is now shared`
+            : `“${v.name}” is private again`,
       });
     },
     onError: failed('The view wasn’t changed'),
@@ -144,13 +173,22 @@ export function ViewsMenu({ page, spec, presets, current, activeId, onApply }: V
   const setDefault = (id: string | undefined) => {
     writeDefaultView(page, id);
     setDefaultId(id);
-    toast({ tone: 'ok', title: id ? `“${activeName}” opens by default on this page` : 'This page opens with its standard view' });
+    toast({
+      tone: 'ok',
+      title: id ? `“${activeName}” opens by default on this page` : 'This page opens with its standard view',
+    });
   };
 
   const item = (id: string, label: string, state: ViewState, hint?: string) => (
     <MenuItem
       key={id}
-      icon={activeId === id ? <CheckIcon size={14} weight="bold" className="text-accent" /> : <span className="inline-block size-3.5" />}
+      icon={
+        activeId === id ? (
+          <CheckIcon size={14} weight="bold" className="text-accent" />
+        ) : (
+          <span className="inline-block size-3.5" />
+        )
+      }
       shortcut={defaultId === id ? <StarIcon size={12} weight="fill" aria-label="Default" /> : hint}
       onSelect={() => onApply(id, state)}
     >
@@ -162,7 +200,10 @@ export function ViewsMenu({ page, spec, presets, current, activeId, onApply }: V
     <>
       <Menu>
         <MenuTrigger asChild>
-          <Button intent="secondary" aria-label={`Saved views: ${activeName ?? 'standard view'}${modified ? ', modified' : ''}`}>
+          <Button
+            intent="secondary"
+            aria-label={`Saved views: ${activeName ?? 'standard view'}${modified ? ', modified' : ''}`}
+          >
             <BookmarkSimpleIcon size={16} aria-hidden className="text-fg-3" />
             <span className="max-w-44 truncate">{activeName ?? 'Views'}</span>
             {modified && <span className="text-xs font-normal text-fg-3">· modified</span>}
@@ -201,12 +242,18 @@ export function ViewsMenu({ page, spec, presets, current, activeId, onApply }: V
             Save as new view…
           </MenuItem>
           {active?.mine && modified && (
-            <MenuItem icon={<FloppyDiskIcon size={15} />} onSelect={() => patch.mutate({ state: current as unknown as Record<string, unknown> })}>
+            <MenuItem
+              icon={<FloppyDiskIcon size={15} />}
+              onSelect={() => patch.mutate({ state: current as unknown as Record<string, unknown> })}
+            >
               Update “{active.name}”
             </MenuItem>
           )}
           {active?.mine && shareable && (
-            <MenuItem icon={<ShareNetworkIcon size={15} />} onSelect={() => patch.mutate({ shared: !active.shared })}>
+            <MenuItem
+              icon={<ShareNetworkIcon size={15} />}
+              onSelect={() => patch.mutate({ shared: !active.shared })}
+            >
               {active.shared ? 'Stop sharing' : 'Share with everyone'}
             </MenuItem>
           )}
@@ -215,7 +262,9 @@ export function ViewsMenu({ page, spec, presets, current, activeId, onApply }: V
               icon={<StarIcon size={15} />}
               onSelect={() => setDefault(defaultId === activeId || activeId === '' ? undefined : activeId)}
             >
-              {defaultId === activeId || activeId === '' ? 'Use the standard view by default' : 'Open this view by default'}
+              {defaultId === activeId || activeId === ''
+                ? 'Use the standard view by default'
+                : 'Open this view by default'}
             </MenuItem>
           )}
           {active?.mine && (
@@ -237,7 +286,12 @@ export function ViewsMenu({ page, spec, presets, current, activeId, onApply }: V
             <Button intent="ghost" onClick={() => setSaveOpen(false)}>
               Cancel
             </Button>
-            <Button intent="primary" pending={save.isPending} disabled={!name.trim()} onClick={() => save.mutate()}>
+            <Button
+              intent="primary"
+              pending={save.isPending}
+              disabled={!name.trim()}
+              onClick={() => save.mutate()}
+            >
               Save view
             </Button>
           </>
@@ -250,7 +304,14 @@ export function ViewsMenu({ page, spec, presets, current, activeId, onApply }: V
             if (name.trim()) save.mutate();
           }}
         >
-          <TextField label="Name" autoFocus maxLength={80} placeholder="e.g. Guests without sign-in" value={name} onChange={(e) => setName(e.target.value)} />
+          <TextField
+            label="Name"
+            autoFocus
+            maxLength={80}
+            placeholder="e.g. Guests without sign-in"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+          />
           {shareable && (
             <Switch
               label="Share with everyone"
@@ -267,7 +328,11 @@ export function ViewsMenu({ page, spec, presets, current, activeId, onApply }: V
           open={deleteOpen}
           onOpenChange={setDeleteOpen}
           title={`Delete view “${active.name}”?`}
-          description={active.shared ? 'It’s shared, so it disappears for everyone who uses it.' : 'Only the view is deleted; no data changes.'}
+          description={
+            active.shared
+              ? 'It’s shared, so it disappears for everyone who uses it.'
+              : 'Only the view is deleted; no data changes.'
+          }
           confirmLabel="Delete view"
           onConfirm={() => remove.mutateAsync().then(() => undefined)}
         />

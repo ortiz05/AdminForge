@@ -1,6 +1,11 @@
 import { render } from '@testing-library/react';
 import type { ComponentType } from 'react';
-import { createWidgetRuntime, type WidgetData, type WidgetProps, type WidgetRuntime } from '@adminforge/widgets';
+import {
+  createWidgetRuntime,
+  type WidgetData,
+  type WidgetProps,
+  type WidgetRuntime,
+} from '@adminforge/widgets';
 
 /** Ready data with a provenance line (`graph · /users · …`). */
 export function ready(value: unknown, extra: Partial<WidgetData> = {}): WidgetData {

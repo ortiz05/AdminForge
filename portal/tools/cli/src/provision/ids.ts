@@ -18,8 +18,11 @@ export function uuidV5(name: string, namespace: string = ADMINFORGE_NAMESPACE): 
 }
 
 /** App role id for a portal role in one environment. */
-export const appRoleId = (label: string, roleValue: string) => uuidV5(`adminforge:${label}:app-role:${roleValue}`);
+export const appRoleId = (label: string, roleValue: string) =>
+  uuidV5(`adminforge:${label}:app-role:${roleValue}`);
 
 /** Name (GUID) of an Azure role assignment; includes the principal so a re-created identity gets a new assignment. */
 export const armRoleAssignmentName = (scope: string, roleDefinitionId: string, principalId: string) =>
-  uuidV5(`adminforge:arm-role-assignment:${scope.toLowerCase()}:${roleDefinitionId.toLowerCase()}:${principalId.toLowerCase()}`);
+  uuidV5(
+    `adminforge:arm-role-assignment:${scope.toLowerCase()}:${roleDefinitionId.toLowerCase()}:${principalId.toLowerCase()}`,
+  );

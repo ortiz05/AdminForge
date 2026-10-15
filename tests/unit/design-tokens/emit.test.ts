@@ -1,4 +1,10 @@
-import { emitCss, emitEchartsTheme, emitTailwindTheme, resolveRefs, SEMANTIC_KEYS } from '@adminforge/design-tokens';
+import {
+  emitCss,
+  emitEchartsTheme,
+  emitTailwindTheme,
+  resolveRefs,
+  SEMANTIC_KEYS,
+} from '@adminforge/design-tokens';
 
 describe('emitCss', () => {
   const css = emitCss();
@@ -14,12 +20,15 @@ describe('emitCss', () => {
     expect(css).toContain('--af-motion-slow: 320ms;');
   });
   it('re-resolves component tokens inside themed subtrees', () => {
-    expect(css).toMatch(/:root, \[data-theme\], \[data-density\] \{[^}]*--af-table-row-h: var\(--af-row-h\);/);
+    expect(css).toMatch(
+      /:root, \[data-theme\], \[data-density\] \{[^}]*--af-table-row-h: var\(--af-row-h\);/,
+    );
   });
 });
 
 describe('resolveRefs', () => {
-  it('rejects unknown references', () => expect(() => resolveRefs('{nope.1}')).toThrow(/Unknown color reference/));
+  it('rejects unknown references', () =>
+    expect(() => resolveRefs('{nope.1}')).toThrow(/Unknown color reference/));
 });
 
 describe('emitTailwindTheme', () => {
@@ -34,7 +43,14 @@ describe('emitTailwindTheme', () => {
 
 describe('emitEchartsTheme', () => {
   it('resolves chart colors to hex in fixed order', () => {
-    expect(emitEchartsTheme('steel').color).toEqual(['#4A8AD8', '#C9692A', '#1F9C7E', '#9775E2', '#CB527F', '#AD8826']);
+    expect(emitEchartsTheme('steel').color).toEqual([
+      '#4A8AD8',
+      '#C9692A',
+      '#1F9C7E',
+      '#9775E2',
+      '#CB527F',
+      '#AD8826',
+    ]);
     expect(emitEchartsTheme('daylight').color[0]).toBe('#2A6CC0');
   });
 });

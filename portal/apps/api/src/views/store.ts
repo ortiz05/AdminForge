@@ -30,8 +30,12 @@ export interface ViewStore {
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const byName = (a: ViewRecord, b: ViewRecord) => a.name.localeCompare(b.name) || a.createdAt.getTime() - b.createdAt.getTime();
-const toRecord = (r: typeof savedViews.$inferSelect): ViewRecord => ({ ...r, state: (r.state ?? {}) as Record<string, unknown> });
+const byName = (a: ViewRecord, b: ViewRecord) =>
+  a.name.localeCompare(b.name) || a.createdAt.getTime() - b.createdAt.getTime();
+const toRecord = (r: typeof savedViews.$inferSelect): ViewRecord => ({
+  ...r,
+  state: (r.state ?? {}) as Record<string, unknown>,
+});
 
 export class PgViewStore implements ViewStore {
   constructor(private readonly db: Db) {}
@@ -40,13 +44,21 @@ export class PgViewStore implements ViewStore {
     const rows = await this.db
       .select()
       .from(savedViews)
-      .where(and(eq(savedViews.pageKey, pageKey), or(eq(savedViews.userOid, userOid), eq(savedViews.shared, true))))
+      .where(
+        and(
+          eq(savedViews.pageKey, pageKey),
+          or(eq(savedViews.userOid, userOid), eq(savedViews.shared, true)),
+        ),
+      )
       .orderBy(asc(savedViews.name), asc(savedViews.createdAt));
     return rows.map(toRecord);
   }
 
   async own(pageKey: string, userOid: string): Promise<ViewRecord[]> {
-    const rows = await this.db.select().from(savedViews).where(and(eq(savedViews.pageKey, pageKey), eq(savedViews.userOid, userOid)));
+    const rows = await this.db
+      .select()
+      .from(savedViews)
+      .where(and(eq(savedViews.pageKey, pageKey), eq(savedViews.userOid, userOid)));
     return rows.map(toRecord);
   }
 
@@ -81,7 +93,10 @@ export class PgViewStore implements ViewStore {
 
   /** Test helper: rows for a page (any user). */
   async countFor(pageKey: string): Promise<number> {
-    const [r] = await this.db.select({ n: sql<number>`count(*)::int` }).from(savedViews).where(eq(savedViews.pageKey, pageKey));
+    const [r] = await this.db
+      .select({ n: sql<number>`count(*)::int` })
+      .from(savedViews)
+      .where(eq(savedViews.pageKey, pageKey));
     return r?.n ?? 0;
   }
 }
@@ -91,10 +106,15 @@ export class MemoryViewStore implements ViewStore {
   readonly rows = new Map<string, ViewRecord>();
 
   async list(pageKey: string, userOid: string): Promise<ViewRecord[]> {
-    return [...this.rows.values()].filter((v) => v.pageKey === pageKey && (v.userOid === userOid || v.shared)).sort(byName).map((v) => structuredClone(v));
+    return [...this.rows.values()]
+      .filter((v) => v.pageKey === pageKey && (v.userOid === userOid || v.shared))
+      .sort(byName)
+      .map((v) => structuredClone(v));
   }
   async own(pageKey: string, userOid: string): Promise<ViewRecord[]> {
-    return [...this.rows.values()].filter((v) => v.pageKey === pageKey && v.userOid === userOid).map((v) => structuredClone(v));
+    return [...this.rows.values()]
+      .filter((v) => v.pageKey === pageKey && v.userOid === userOid)
+      .map((v) => structuredClone(v));
   }
   async get(id: string): Promise<ViewRecord | null> {
     const v = this.rows.get(id);

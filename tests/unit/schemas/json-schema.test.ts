@@ -8,7 +8,9 @@ describe('JSON Schema export', () => {
   });
   it('marks envelope fields required and keeps defaults optional', () => {
     const pb = schemas.playbook as { required: string[]; properties: Record<string, unknown> };
-    expect(pb.required).toEqual(expect.arrayContaining(['kind', 'id', 'version', 'title', 'owner', 'risk', 'mode', 'steps']));
+    expect(pb.required).toEqual(
+      expect.arrayContaining(['kind', 'id', 'version', 'title', 'owner', 'risk', 'mode', 'steps']),
+    );
     expect((schemas.schedule as { required: string[] }).required).not.toContain('timezone');
   });
   it('represents recursive steps with $ref definitions', () => {
@@ -16,5 +18,6 @@ describe('JSON Schema export', () => {
     expect(text).toContain('"$ref":"#/definitions/');
     expect(Object.keys((schemas.playbook as { definitions: object }).definitions).length).toBeGreaterThan(0);
   });
-  it('keeps patterns for editor validation', () => expect(JSON.stringify(schemas.page)).toContain('^[a-z][a-z0-9-]*(\\\\.[a-z0-9][a-z0-9-]*)+$'));
+  it('keeps patterns for editor validation', () =>
+    expect(JSON.stringify(schemas.page)).toContain('^[a-z][a-z0-9-]*(\\\\.[a-z0-9][a-z0-9-]*)+$'));
 });

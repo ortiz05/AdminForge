@@ -8,8 +8,7 @@ import type { SessionRecord } from '../auth/session-store';
  * - automation: the app-only automation identity — unattended schedules on this host (ADR-011).
  */
 export type ExecutionIdentity =
-  | { kind: 'delegated'; session: SessionRecord; mode: Mode }
-  | { kind: 'automation'; mode: Mode };
+  { kind: 'delegated'; session: SessionRecord; mode: Mode } | { kind: 'automation'; mode: Mode };
 
 /** A fully rendered call to a Microsoft API or a configured connection. Built only from published content. */
 export interface ServiceCall {
@@ -62,5 +61,9 @@ export interface ServiceCallResult<T = unknown> {
  * Implemented in ./outbound.ts; used by the datasource executor, the playbook engine, and the scheduler.
  */
 export interface OutboundExecutor {
-  execute<T = unknown>(identity: ExecutionIdentity, call: ServiceCall, opts?: { correlationId?: string; signal?: AbortSignal }): Promise<ServiceCallResult<T>>;
+  execute<T = unknown>(
+    identity: ExecutionIdentity,
+    call: ServiceCall,
+    opts?: { correlationId?: string; signal?: AbortSignal },
+  ): Promise<ServiceCallResult<T>>;
 }

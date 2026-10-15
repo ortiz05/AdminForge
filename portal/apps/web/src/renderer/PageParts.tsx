@@ -15,7 +15,17 @@ import { ActionGroup } from './ActionGroup';
 import { AppLink } from '../lib/links';
 
 /** "Updated 30 s ago" + Refresh; says when the page refreshes itself. */
-export function RefreshControl({ updatedAt, fetching, onRefresh, every }: { updatedAt: number; fetching: boolean; onRefresh: () => void; every?: number }) {
+export function RefreshControl({
+  updatedAt,
+  fetching,
+  onRefresh,
+  every,
+}: {
+  updatedAt: number;
+  fetching: boolean;
+  onRefresh: () => void;
+  every?: number;
+}) {
   const now = useNow(15_000);
   return (
     <div className="flex items-center gap-1.5">
@@ -64,20 +74,26 @@ export function EntityHeader({
   const titleText = asText(title.value);
   useEffect(() => onTitle?.(titleText || undefined), [titleText, onTitle]);
 
-  const tone = TONES.has(asText(status.value)) ? (asText(status.value) as keyof typeof TONE_LABEL) : undefined;
+  const tone = TONES.has(asText(status.value))
+    ? (asText(status.value) as keyof typeof TONE_LABEL)
+    : undefined;
   const idEntries = Object.entries(ids.value ?? {}).filter(([, v]) => asText(v));
   const meta = (
     <>
-      {tone && (
-        <StatusPill status={tone}>{asText(statusLabel.value) || TONE_LABEL[tone]}</StatusPill>
-      )}
+      {tone && <StatusPill status={tone}>{asText(statusLabel.value) || TONE_LABEL[tone]}</StatusPill>}
       {idEntries.map(([label, v]) => (
         <IdChip key={label} value={asText(v)} label={label} />
       ))}
     </>
   );
   const actions = def.actions?.length ? (
-    <ActionGroup actions={def.actions} scope={runtime.scope} runtime={runtime} visibleCount={inspector ? 2 : 3} size={inspector ? 'sm' : 'md'} />
+    <ActionGroup
+      actions={def.actions}
+      scope={runtime.scope}
+      runtime={runtime}
+      visibleCount={inspector ? 2 : 3}
+      size={inspector ? 'sm' : 'md'}
+    />
   ) : undefined;
   const shownTitle = loading && !titleText ? <Skeleton className="h-7 w-64" /> : titleText || def.title;
 

@@ -13,7 +13,18 @@ const connection: FunctionConnection = {
 const client = (responses: Fake[], extra = {}) => {
   const f = fakeFetch(responses);
   const getToken = vi.fn(async () => 'fn-tok');
-  return { f, getToken, fn: createFunctionClient({ connection, getToken, fetch: f.fetch, sleep: async () => {}, correlationId: 'corr-fn', ...extra }) };
+  return {
+    f,
+    getToken,
+    fn: createFunctionClient({
+      connection,
+      getToken,
+      fetch: f.fetch,
+      sleep: async () => {},
+      correlationId: 'corr-fn',
+      ...extra,
+    }),
+  };
 };
 
 describe('function client', () => {
@@ -21,8 +32,13 @@ describe('function client', () => {
     const { fn, f, getToken } = client([{ status: 200, body: [{ id: 'e1' }] }]);
     const r = await fn.call('listEmployees', { query: { department: 'Finance & Ops' } });
     expect(r).toMatchObject({ data: [{ id: 'e1' }], status: 200, mode: 'read' });
-    expect(f.calls[0]!.url).toBe('https://func-hr-sync.example.com/api/employees?department=Finance%20%26%20Ops');
-    expect(headersOf(f.calls[0]!)).toMatchObject({ Authorization: 'Bearer fn-tok', 'x-ms-client-request-id': 'corr-fn' });
+    expect(f.calls[0]!.url).toBe(
+      'https://func-hr-sync.example.com/api/employees?department=Finance%20%26%20Ops',
+    );
+    expect(headersOf(f.calls[0]!)).toMatchObject({
+      Authorization: 'Bearer fn-tok',
+      'x-ms-client-request-id': 'corr-fn',
+    });
     expect(getToken).toHaveBeenCalled();
   });
   it('refuses operations outside the allowlist', async () => {
@@ -50,8 +66,20 @@ describe('function client', () => {
   it('resolves calls for policy checks', () => {
     const { fn } = client([]);
     const r = fn.resolve('search');
-    expect(r).toEqual({ method: 'POST', url: 'https://func-hr-sync.example.com/api/employees/search', path: '/api/employees/search', mode: 'read' });
-    expect(evaluate('read', { service: 'function', method: r.method, path: r.path, declaredRead: r.mode === 'read' }).allowed).toBe(true);
+    expect(r).toEqual({
+      method: 'POST',
+      url: 'https://func-hr-sync.example.com/api/employees/search',
+      path: '/api/employees/search',
+      mode: 'read',
+    });
+    expect(
+      evaluate('read', {
+        service: 'function',
+        method: r.method,
+        path: r.path,
+        declaredRead: r.mode === 'read',
+      }).allowed,
+    ).toBe(true);
   });
   it('retries read POSTs marked idempotent', async () => {
     const { fn, f } = client([{ status: 503 }, { status: 200, body: [] }]);
@@ -59,7 +87,17 @@ describe('function client', () => {
     expect(f.calls).toHaveLength(2);
   });
   it('requires an https base URL (http only for localhost)', () => {
-    expect(() => createFunctionClient({ connection: { ...connection, baseUrl: 'http://func.example.com' }, getToken: async () => 't' })).toThrow(/https/);
-    expect(() => createFunctionClient({ connection: { ...connection, baseUrl: 'http://localhost:7071' }, getToken: async () => 't' })).not.toThrow();
+    expect(() =>
+      createFunctionClient({
+        connection: { ...connection, baseUrl: 'http://func.example.com' },
+        getToken: async () => 't',
+      }),
+    ).toThrow(/https/);
+    expect(() =>
+      createFunctionClient({
+        connection: { ...connection, baseUrl: 'http://localhost:7071' },
+        getToken: async () => 't',
+      }),
+    ).not.toThrow();
   });
 });

@@ -1,9 +1,12 @@
 import { safeReturnTo } from '@adminforge/api/src/auth/return-to';
 
 describe('safeReturnTo', () => {
-  it.each(['/', '/identity/users?x=1', '/p/identity.users', '/p/identity.users?q=avery%40example.com#top'])('keeps %s', (v) => {
-    expect(safeReturnTo(v)).toBe(v);
-  });
+  it.each(['/', '/identity/users?x=1', '/p/identity.users', '/p/identity.users?q=avery%40example.com#top'])(
+    'keeps %s',
+    (v) => {
+      expect(safeReturnTo(v)).toBe(v);
+    },
+  );
 
   it.each([
     '//evil.com',

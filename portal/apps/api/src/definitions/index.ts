@@ -4,7 +4,14 @@
  */
 export * from './types';
 export { FsDefinitionSource, type FsSourceOptions } from './fs-source';
-export { DbDefinitionStore, DEFINITIONS_CHANNEL, notifyPayload, type PublishEntry, type PublishItem, type PublishResult } from './db-store';
+export {
+  DbDefinitionStore,
+  DEFINITIONS_CHANNEL,
+  notifyPayload,
+  type PublishEntry,
+  type PublishItem,
+  type PublishResult,
+} from './db-store';
 export { PgListener } from './notify';
 export { CachedDbSource, createDefinitionRegistry, definitionNotFound, registryFrom } from './registry';
 export { clientDefinition } from './client-safe';

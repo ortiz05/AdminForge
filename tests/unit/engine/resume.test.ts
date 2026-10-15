@@ -1,7 +1,9 @@
 import { IdentityUnavailable, VirtualClock, type StepRecord } from '@adminforge/engine';
 import { deferred, harness, INITIATOR, playbook, read, tick, write } from './helpers';
 
-const crashRecord = (r: Partial<StepRecord> & Pick<StepRecord, 'seq' | 'stepId' | 'path' | 'status'>): StepRecord => ({
+const crashRecord = (
+  r: Partial<StepRecord> & Pick<StepRecord, 'seq' | 'stepId' | 'path' | 'status'>,
+): StepRecord => ({
   type: 'graph',
   attempt: 1,
   actorOid: INITIATOR.oid,
@@ -56,7 +58,18 @@ describe('engine: checkpoint resume after a crash', () => {
   it('does not repeat completed steps', async () => {
     const def = playbook([write('one'), write('two')]);
     const h = harness(def);
-    await h.store.saveStep('run-1', crashRecord({ seq: 1, stepId: 'one', path: 'one', status: 'succeeded', output: { done: 1 }, endedAt: new Date() }), { actor: INITIATOR, dryRun: false });
+    await h.store.saveStep(
+      'run-1',
+      crashRecord({
+        seq: 1,
+        stepId: 'one',
+        path: 'one',
+        status: 'succeeded',
+        output: { done: 1 },
+        endedAt: new Date(),
+      }),
+      { actor: INITIATOR, dryRun: false },
+    );
     await h.store.updateRun('run-1', { status: 'running', startedAt: h.clock.now() });
     expect((await h.exec()).status).toBe('succeeded');
     expect(h.outbound.paths()).toEqual(['/things/two']);
@@ -65,7 +78,10 @@ describe('engine: checkpoint resume after a crash', () => {
 
   it('an in-flight idempotent step is retried as a new attempt', async () => {
     const h = harness(playbook([write('one')]));
-    await h.store.saveStep('run-1', crashRecord({ seq: 1, stepId: 'one', path: 'one', status: 'running' }), { actor: INITIATOR, dryRun: false });
+    await h.store.saveStep('run-1', crashRecord({ seq: 1, stepId: 'one', path: 'one', status: 'running' }), {
+      actor: INITIATOR,
+      dryRun: false,
+    });
     await h.store.updateRun('run-1', { status: 'running', startedAt: h.clock.now() });
     expect((await h.exec()).status).toBe('succeeded');
     expect((await h.all()).map((r) => [r.seq, r.attempt, r.status, r.error?.code ?? null])).toEqual([
@@ -76,7 +92,10 @@ describe('engine: checkpoint resume after a crash', () => {
 
   it('an in-flight idempotent: false step becomes needs_review and is not retried', async () => {
     const h = harness(playbook([write('tap', { idempotent: false }), write('next')]));
-    await h.store.saveStep('run-1', crashRecord({ seq: 1, stepId: 'tap', path: 'tap', status: 'running' }), { actor: INITIATOR, dryRun: false });
+    await h.store.saveStep('run-1', crashRecord({ seq: 1, stepId: 'tap', path: 'tap', status: 'running' }), {
+      actor: INITIATOR,
+      dryRun: false,
+    });
     await h.store.updateRun('run-1', { status: 'running', startedAt: h.clock.now() });
     const out = await h.exec();
     expect(out).toMatchObject({ status: 'needs_review', error: { code: 'needs_review', stepId: 'tap' } });
@@ -86,7 +105,10 @@ describe('engine: checkpoint resume after a crash', () => {
 
   it('re-runs read steps whose stored output was truncated (writes are never re-run)', async () => {
     const big = 'x'.repeat(300 * 1024);
-    const def = playbook([read('list'), { id: 'n', type: 'transform', expression: '${ $length(steps.list.output.blob) }' }]);
+    const def = playbook([
+      read('list'),
+      { id: 'n', type: 'transform', expression: '${ $length(steps.list.output.blob) }' },
+    ]);
     const h = harness(def, { respond: () => ({ blob: big }) });
     expect((await h.exec()).status).toBe('succeeded');
     const stored = (await h.all()).find((r) => r.path === 'list' && r.status === 'succeeded')!;
@@ -108,7 +130,11 @@ describe('engine: checkpoint resume after a crash', () => {
     // A crash leaves the record running (simulate: the cancelled attempt never got saved).
     const recs = await h.all();
     const two = recs.find((r) => r.path === 'two')!;
-    await h.store.saveStep('run-1', { ...two, status: 'running', endedAt: null }, { actor: INITIATOR, dryRun: false });
+    await h.store.saveStep(
+      'run-1',
+      { ...two, status: 'running', endedAt: null },
+      { actor: INITIATOR, dryRun: false },
+    );
     await h.store.updateRun('run-1', { status: 'running', endedAt: null });
     h.outbound.respond = () => null;
     expect((await h.exec()).status).toBe('succeeded');
@@ -132,7 +158,10 @@ describe('engine: step timeouts', () => {
         }),
     });
     const out = await h.exec();
-    expect(out).toMatchObject({ status: 'failed', error: { code: 'timeout', stepId: 'slow', message: 'The step did not finish within 30s.' } });
+    expect(out).toMatchObject({
+      status: 'failed',
+      error: { code: 'timeout', stepId: 'slow', message: 'The step did not finish within 30s.' },
+    });
     expect(aborted).toBe(true);
     expect(clock.pendingTimers).toBe(0);
   });

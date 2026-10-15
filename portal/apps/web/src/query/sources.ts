@@ -39,7 +39,8 @@ export const SOURCE_META: Record<QuerySource, SourceMeta> = {
   logAnalytics: {
     label: 'Log Analytics',
     short: 'Log Analytics',
-    about: 'Azure Monitor Logs in one workspace: activity log, sign-in and audit logs, agents, Function Apps.',
+    about:
+      'Azure Monitor Logs in one workspace: activity log, sign-in and audit logs, agents, Function Apps.',
     timespan: true,
     tables: [
       'AzureActivity',
@@ -101,4 +102,5 @@ export const TIMESPANS = [
 export type Timespan = (typeof TIMESPANS)[number]['value'];
 export const DEFAULT_TIMESPAN: Timespan = 'P1D';
 export const isTimespan = (v: unknown): v is Timespan => TIMESPANS.some((t) => t.value === v);
-export const timespanLabel = (v: string | undefined) => TIMESPANS.find((t) => t.value === v)?.label ?? 'Set in query';
+export const timespanLabel = (v: string | undefined) =>
+  TIMESPANS.find((t) => t.value === v)?.label ?? 'Set in query';

@@ -1,5 +1,12 @@
 import { screen, within } from '@testing-library/react';
-import { FIXTURE_NOW, WIDGETS, listFixtures, timelineFixtures, type ListConfig, type TimelineConfig } from '@adminforge/widgets';
+import {
+  FIXTURE_NOW,
+  WIDGETS,
+  listFixtures,
+  timelineFixtures,
+  type ListConfig,
+  type TimelineConfig,
+} from '@adminforge/widgets';
 import { axeViolations } from '../axe';
 import { failed, ready, renderWidget } from './helpers';
 
@@ -21,7 +28,10 @@ describe('list widget', () => {
     expect(links[0]).toHaveAttribute('href', '/p/security.incident?id=inc-1042');
     expect(links[0]).toHaveTextContent('Impossible travel for adele.vance@example.com');
     expect(links[0]).toHaveTextContent('High');
-    expect(within(links[0]!).getByText('High').closest('[data-status]')).toHaveAttribute('data-status', 'crit');
+    expect(within(links[0]!).getByText('High').closest('[data-status]')).toHaveAttribute(
+      'data-status',
+      'crit',
+    );
     expect(links[0]).toHaveTextContent('25 min ago');
     expect(await axeViolations(container)).toEqual([]);
   });
@@ -34,8 +44,24 @@ describe('list widget', () => {
   });
 
   it('strips HTML that arrives in data (message center bodies)', () => {
-    const config = WIDGETS.list!.schema.parse({ widget: 'list', title: 'Messages', data: 'm.value', primary: 'title', secondary: 'body' }) as ListConfig;
-    const { container } = renderWidget(List, config, ready([{ id: '1', title: 'Plan for change', body: '<p>Retire <b>connectors</b></p><script>alert(1)</script>' }]));
+    const config = WIDGETS.list!.schema.parse({
+      widget: 'list',
+      title: 'Messages',
+      data: 'm.value',
+      primary: 'title',
+      secondary: 'body',
+    }) as ListConfig;
+    const { container } = renderWidget(
+      List,
+      config,
+      ready([
+        {
+          id: '1',
+          title: 'Plan for change',
+          body: '<p>Retire <b>connectors</b></p><script>alert(1)</script>',
+        },
+      ]),
+    );
     expect(container.querySelector('script, b')).toBeNull();
     expect(screen.getByText('Retire connectors')).toBeInTheDocument();
   });

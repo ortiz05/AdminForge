@@ -1,5 +1,14 @@
 import { ApiErrorBody, MeResponse, NavResponse, PORTAL_ROLES } from '@adminforge/schemas';
-import { cookieFrom, getMe, makeApp, MINUTE, mockConfig, mockLogin, setCookieHeader, type TestApp } from './helpers';
+import {
+  cookieFrom,
+  getMe,
+  makeApp,
+  MINUTE,
+  mockConfig,
+  mockLogin,
+  setCookieHeader,
+  type TestApp,
+} from './helpers';
 
 describe('sessions, mock sign-in, /api/me, CSRF', () => {
   let t: TestApp;
@@ -20,7 +29,10 @@ describe('sessions, mock sign-in, /api/me, CSRF', () => {
   });
 
   it('mock login sets an HttpOnly SameSite=Lax dev cookie and redirects to a safe returnTo', async () => {
-    const res = await t.app.inject({ method: 'GET', url: '/auth/login?returnTo=%2Fp%2Fidentity.users%3Fq%3D1' });
+    const res = await t.app.inject({
+      method: 'GET',
+      url: '/auth/login?returnTo=%2Fp%2Fidentity.users%3Fq%3D1',
+    });
     expect(res.statusCode).toBe(302);
     expect(res.headers.location).toBe('/p/identity.users?q=1');
     const set = setCookieHeader(res)!;
@@ -74,7 +86,12 @@ describe('sessions, mock sign-in, /api/me, CSRF', () => {
   it('PUT /api/me/prefs requires the CSRF header, validates, merges, and audits', async () => {
     const { cookie, csrf } = await mockLogin(t.app);
     const put = (body: unknown, headers: Record<string, string> = {}) =>
-      t.app.inject({ method: 'PUT', url: '/api/me/prefs', headers: { cookie, ...headers }, payload: body as object });
+      t.app.inject({
+        method: 'PUT',
+        url: '/api/me/prefs',
+        headers: { cookie, ...headers },
+        payload: body as object,
+      });
 
     const missing = await put({ theme: 'daylight' });
     expect(missing.statusCode).toBe(403);
@@ -84,7 +101,11 @@ describe('sessions, mock sign-in, /api/me, CSRF', () => {
     const ok = await put({ theme: 'daylight', density: 'compact' }, { 'x-adminforge-csrf': csrf });
     expect(ok.statusCode).toBe(200);
     expect(ok.json()).toEqual({ prefs: { theme: 'daylight', density: 'compact' } });
-    expect((await put({ navCollapsed: true }, { 'x-adminforge-csrf': csrf })).json().prefs).toEqual({ theme: 'daylight', density: 'compact', navCollapsed: true });
+    expect((await put({ navCollapsed: true }, { 'x-adminforge-csrf': csrf })).json().prefs).toEqual({
+      theme: 'daylight',
+      density: 'compact',
+      navCollapsed: true,
+    });
 
     const bad = await put({ theme: 'pink' }, { 'x-adminforge-csrf': csrf });
     expect(bad.statusCode).toBe(400);
@@ -94,7 +115,10 @@ describe('sessions, mock sign-in, /api/me, CSRF', () => {
     const { me } = await getMe(t.app, cookie);
     expect(me!.prefs).toEqual({ theme: 'daylight', density: 'compact', navCollapsed: true });
     const prefsEvents = t.audit.rows.filter((r) => r.action === 'prefs.updated');
-    expect(prefsEvents.map((e) => e.details)).toEqual([{ changed: ['theme', 'density'] }, { changed: ['navCollapsed'] }]);
+    expect(prefsEvents.map((e) => e.details)).toEqual([
+      { changed: ['theme', 'density'] },
+      { changed: ['navCollapsed'] },
+    ]);
   });
 
   it('GET /api/nav returns sections built from content; Admin only for Portal.Admin', async () => {
@@ -103,14 +127,25 @@ describe('sessions, mock sign-in, /api/me, CSRF', () => {
     const nav = NavResponse.parse(res.json());
     // Section order comes from portal/content/navigation.yaml; empty sections are dropped (content grows over time).
     expect(nav.sections[0]).toMatchObject({ key: 'overview', items: [{ key: 'overview', href: '/' }] });
-    expect(nav.sections.map((s) => s.key)).toEqual(expect.arrayContaining(['overview', 'identity', 'automation', 'reports', 'admin']));
+    expect(nav.sections.map((s) => s.key)).toEqual(
+      expect.arrayContaining(['overview', 'identity', 'automation', 'reports', 'admin']),
+    );
     expect(nav.sections.every((s) => s.items.length > 0)).toBe(true);
     const identity = nav.sections.find((s) => s.key === 'identity')!;
-    expect(identity.items).toContainEqual(expect.objectContaining({ key: 'identity.users', label: 'Users', href: '/p/identity.users' }));
+    expect(identity.items).toContainEqual(
+      expect.objectContaining({ key: 'identity.users', label: 'Users', href: '/p/identity.users' }),
+    );
     expect(nav.sections.flatMap((s) => s.items).every((i) => i.href.startsWith('/'))).toBe(true);
 
-    await t.app.inject({ method: 'POST', url: '/auth/mock/state', headers: { cookie, 'x-adminforge-csrf': csrf }, payload: { roles: ['Portal.Reader'] } });
-    const reader = NavResponse.parse((await t.app.inject({ method: 'GET', url: '/api/nav', headers: { cookie } })).json());
+    await t.app.inject({
+      method: 'POST',
+      url: '/auth/mock/state',
+      headers: { cookie, 'x-adminforge-csrf': csrf },
+      payload: { roles: ['Portal.Reader'] },
+    });
+    const reader = NavResponse.parse(
+      (await t.app.inject({ method: 'GET', url: '/api/nav', headers: { cookie } })).json(),
+    );
     expect(reader.sections.some((s) => s.key === 'admin')).toBe(false);
   });
 
@@ -135,15 +170,30 @@ describe('sessions, mock sign-in, /api/me, CSRF', () => {
 
     it('caps the armed window at WRITE_SESSION_MAX_MINUTES', async () => {
       const { cookie, csrf } = await mockLogin(t.app);
-      await t.app.inject({ method: 'POST', url: '/auth/arm', headers: { cookie, 'x-adminforge-csrf': csrf }, payload: { minutes: 240, reason: 'Long maintenance' } });
+      await t.app.inject({
+        method: 'POST',
+        url: '/auth/arm',
+        headers: { cookie, 'x-adminforge-csrf': csrf },
+        payload: { minutes: 240, reason: 'Long maintenance' },
+      });
       const { me } = await getMe(t.app, cookie);
       expect(Date.parse(me!.armedUntil!)).toBe(t.clock.t + 60 * MINUTE);
     });
 
     it('refuses to arm without Portal.Operator', async () => {
       const { cookie, csrf } = await mockLogin(t.app);
-      await t.app.inject({ method: 'POST', url: '/auth/mock/state', headers: { cookie, 'x-adminforge-csrf': csrf }, payload: { roles: ['Portal.Reader'] } });
-      const res = await t.app.inject({ method: 'POST', url: '/auth/arm', headers: { cookie, 'x-adminforge-csrf': csrf }, payload: { minutes: 30, reason: 'Should not work' } });
+      await t.app.inject({
+        method: 'POST',
+        url: '/auth/mock/state',
+        headers: { cookie, 'x-adminforge-csrf': csrf },
+        payload: { roles: ['Portal.Reader'] },
+      });
+      const res = await t.app.inject({
+        method: 'POST',
+        url: '/auth/arm',
+        headers: { cookie, 'x-adminforge-csrf': csrf },
+        payload: { minutes: 30, reason: 'Should not work' },
+      });
       expect(res.statusCode).toBe(403);
       expect(res.json().error.code).toBe('forbidden');
     });
@@ -151,12 +201,20 @@ describe('sessions, mock sign-in, /api/me, CSRF', () => {
     it('extends once, then refuses; disarm ends write access', async () => {
       const { cookie, csrf } = await mockLogin(t.app);
       const h = { cookie, 'x-adminforge-csrf': csrf };
-      await t.app.inject({ method: 'POST', url: '/auth/arm', headers: h, payload: { minutes: 15, reason: 'Group cleanup' } });
+      await t.app.inject({
+        method: 'POST',
+        url: '/auth/arm',
+        headers: h,
+        payload: { minutes: 15, reason: 'Group cleanup' },
+      });
       t.clock.advance(10 * MINUTE);
 
       const ext = await t.app.inject({ method: 'POST', url: '/auth/arm/extend', headers: h, payload: {} });
       expect(ext.statusCode).toBe(200);
-      expect(ext.json()).toEqual({ armedUntil: new Date(t.clock.t + 60 * MINUTE).toISOString(), armExtended: true });
+      expect(ext.json()).toEqual({
+        armedUntil: new Date(t.clock.t + 60 * MINUTE).toISOString(),
+        armExtended: true,
+      });
       expect((await getMe(t.app, cookie)).me!.armExtended).toBe(true);
 
       const again = await t.app.inject({ method: 'POST', url: '/auth/arm/extend', headers: h, payload: {} });
@@ -166,20 +224,42 @@ describe('sessions, mock sign-in, /api/me, CSRF', () => {
       const dis = await t.app.inject({ method: 'POST', url: '/auth/disarm', headers: h });
       expect(dis.statusCode).toBe(200);
       expect(dis.json()).toEqual({ mode: 'read', armedUntil: null });
-      expect((await getMe(t.app, cookie)).me).toMatchObject({ mode: 'read', armedUntil: null, armExtended: false });
-      expect((await t.app.inject({ method: 'POST', url: '/auth/arm/extend', headers: h, payload: {} })).json().error.code).toBe('not_armed');
-      expect(t.audit.rows.map((r) => r.action)).toEqual(['session.signin', 'session.armed', 'session.arm_extended', 'session.disarmed']);
+      expect((await getMe(t.app, cookie)).me).toMatchObject({
+        mode: 'read',
+        armedUntil: null,
+        armExtended: false,
+      });
+      expect(
+        (await t.app.inject({ method: 'POST', url: '/auth/arm/extend', headers: h, payload: {} })).json()
+          .error.code,
+      ).toBe('not_armed');
+      expect(t.audit.rows.map((r) => r.action)).toEqual([
+        'session.signin',
+        'session.armed',
+        'session.arm_extended',
+        'session.disarmed',
+      ]);
     });
 
     it('extend and disarm require the CSRF header', async () => {
       const { cookie } = await mockLogin(t.app);
-      expect((await t.app.inject({ method: 'POST', url: '/auth/arm/extend', headers: { cookie }, payload: {} })).statusCode).toBe(403);
-      expect((await t.app.inject({ method: 'POST', url: '/auth/disarm', headers: { cookie } })).statusCode).toBe(403);
+      expect(
+        (await t.app.inject({ method: 'POST', url: '/auth/arm/extend', headers: { cookie }, payload: {} }))
+          .statusCode,
+      ).toBe(403);
+      expect(
+        (await t.app.inject({ method: 'POST', url: '/auth/disarm', headers: { cookie } })).statusCode,
+      ).toBe(403);
     });
 
     it('write access ends at its expiry and the expiry is audited', async () => {
       const { cookie, csrf } = await mockLogin(t.app);
-      await t.app.inject({ method: 'POST', url: '/auth/arm', headers: { cookie, 'x-adminforge-csrf': csrf }, payload: { minutes: 5, reason: 'Quick change' } });
+      await t.app.inject({
+        method: 'POST',
+        url: '/auth/arm',
+        headers: { cookie, 'x-adminforge-csrf': csrf },
+        payload: { minutes: 5, reason: 'Quick change' },
+      });
       t.clock.advance(6 * MINUTE);
       expect((await getMe(t.app, cookie)).me).toMatchObject({ mode: 'read', armedUntil: null });
       expect(t.audit.rows.at(-1)!.action).toBe('session.arm_expired');
@@ -193,7 +273,9 @@ describe('sessions, mock sign-in, /api/me, CSRF', () => {
       t.app.inject({ method: 'POST', url: '/auth/mock/state', headers: { cookie, ...headers }, payload });
     expect((await post({ armedMinutes: 10 }, {})).statusCode).toBe(403);
 
-    const armed = MeResponse.parse((await post({ roles: ['Portal.Reader', 'Portal.Operator'], armedMinutes: 4.5 })).json());
+    const armed = MeResponse.parse(
+      (await post({ roles: ['Portal.Reader', 'Portal.Operator'], armedMinutes: 4.5 })).json(),
+    );
     expect(armed).toMatchObject({ roles: ['Portal.Reader', 'Portal.Operator'], mode: 'armed' });
     expect(Date.parse(armed.armedUntil!)).toBe(t.clock.t + 4.5 * MINUTE);
 
@@ -229,15 +311,23 @@ describe('sessions, mock sign-in, /api/me, CSRF', () => {
 
   it('logout needs CSRF, clears the cookie and session, audits, and returns a redirect', async () => {
     const { cookie, csrf } = await mockLogin(t.app);
-    expect((await t.app.inject({ method: 'POST', url: '/auth/logout', headers: { cookie } })).statusCode).toBe(403);
-    const res = await t.app.inject({ method: 'POST', url: '/auth/logout', headers: { cookie, 'x-adminforge-csrf': csrf } });
+    expect(
+      (await t.app.inject({ method: 'POST', url: '/auth/logout', headers: { cookie } })).statusCode,
+    ).toBe(403);
+    const res = await t.app.inject({
+      method: 'POST',
+      url: '/auth/logout',
+      headers: { cookie, 'x-adminforge-csrf': csrf },
+    });
     expect(res.statusCode).toBe(200);
     expect(res.json()).toEqual({ redirect: '/signed-out' });
     expect(setCookieHeader(res)).toMatch(/^adminforge-dev=;/);
     expect((await getMe(t.app, cookie)).res.statusCode).toBe(401);
     expect(t.audit.rows.at(-1)!.action).toBe('session.signout');
     // Without a session, logout is a harmless no-op.
-    expect((await t.app.inject({ method: 'POST', url: '/auth/logout' })).json()).toEqual({ redirect: '/signed-out' });
+    expect((await t.app.inject({ method: 'POST', url: '/auth/logout' })).json()).toEqual({
+      redirect: '/signed-out',
+    });
   });
 
   it('a new sign-in replaces the previous session', async () => {

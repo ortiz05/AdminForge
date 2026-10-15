@@ -27,13 +27,21 @@ export function LogView({ logs, steps, live }: { logs: LogLine[]; steps: RunStep
     const bySeq = new Map(steps.map((x) => [x.seq, x.stepId]));
     return (l: LogLine) => l.stepId ?? (l.stepSeq !== null ? bySeq.get(l.stepSeq) : undefined) ?? null;
   }, [steps]);
-  const stepIds = useMemo(() => [...new Set(logs.map(stepOf).filter((x): x is string => !!x))], [logs, stepOf]);
+  const stepIds = useMemo(
+    () => [...new Set(logs.map(stepOf).filter((x): x is string => !!x))],
+    [logs, stepOf],
+  );
   const shown = logs.filter(
     (l) =>
       (step === 'all' || stepOf(l) === step) &&
       (level === 'all' || (level === 'warn' ? l.level === 'warn' || l.level === 'error' : l.level === level)),
   );
-  const text = shown.map((l) => `${time(l.ts)} ${l.level.toUpperCase().padEnd(5)} ${stepOf(l) ? `[${stepOf(l)}] ` : ''}${l.message}`).join('\n');
+  const text = shown
+    .map(
+      (l) =>
+        `${time(l.ts)} ${l.level.toUpperCase().padEnd(5)} ${stepOf(l) ? `[${stepOf(l)}] ` : ''}${l.message}`,
+    )
+    .join('\n');
 
   useEffect(() => {
     const el = scroller.current;
@@ -53,7 +61,10 @@ export function LogView({ logs, steps, live }: { logs: LogLine[]; steps: RunStep
             value={step}
             onValueChange={setStep}
             triggerClassName="h-7 min-w-32 text-xs"
-            options={[{ value: 'all', label: 'All steps' }, ...stepIds.map((id) => ({ value: id, label: id }))]}
+            options={[
+              { value: 'all', label: 'All steps' },
+              ...stepIds.map((id) => ({ value: id, label: id })),
+            ]}
           />
           <Select
             aria-label="Minimum level"
@@ -87,12 +98,20 @@ export function LogView({ logs, steps, live }: { logs: LogLine[]; steps: RunStep
         className={s.pre({ className: 'max-h-80 min-h-24' })}
       >
         {shown.length === 0 ? (
-          <p className="text-fg-3">{logs.length ? 'No lines match these filters.' : live ? 'Waiting for output…' : 'This run wrote no log lines.'}</p>
+          <p className="text-fg-3">
+            {logs.length
+              ? 'No lines match these filters.'
+              : live
+                ? 'Waiting for output…'
+                : 'This run wrote no log lines.'}
+          </p>
         ) : (
           shown.map((l) => (
             <div key={l.id} className="flex gap-3 whitespace-pre-wrap">
               <span className="shrink-0 text-fg-3 tabular-nums">{time(l.ts)}</span>
-              <span className={`w-11 shrink-0 font-semibold ${LEVEL_CLASS[l.level]}`}>{l.level.toUpperCase()}</span>
+              <span className={`w-11 shrink-0 font-semibold ${LEVEL_CLASS[l.level]}`}>
+                {l.level.toUpperCase()}
+              </span>
               {stepOf(l) && <span className="shrink-0 text-accent">[{stepOf(l)}]</span>}
               <span className="min-w-0 break-words text-fg-2">{l.message}</span>
             </div>

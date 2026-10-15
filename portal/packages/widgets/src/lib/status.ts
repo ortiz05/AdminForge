@@ -9,7 +9,8 @@ export interface Status {
   label: string;
 }
 
-export const isTone = (v: unknown): v is StatusTone => typeof v === 'string' && (STATUS_TONES as readonly string[]).includes(v);
+export const isTone = (v: unknown): v is StatusTone =>
+  typeof v === 'string' && (STATUS_TONES as readonly string[]).includes(v);
 
 /** Default words for a bare tone (KPI status expressions return just the tone). */
 export const TONE_LABEL: Record<StatusTone, string> = {
@@ -25,7 +26,8 @@ export function toStatus(entry: StatusEntry): Status {
 }
 
 /** Raw value → map key: booleans and numbers by their text, null/undefined as "null". */
-export const statusKey = (v: unknown): string => (v === undefined || v === null ? 'null' : typeof v === 'object' ? JSON.stringify(v) : String(v));
+export const statusKey = (v: unknown): string =>
+  v === undefined || v === null ? 'null' : typeof v === 'object' ? JSON.stringify(v) : String(v);
 
 /**
  * Turns a raw value into status + label (always both — never colour alone). Unmapped values use `fallback`,

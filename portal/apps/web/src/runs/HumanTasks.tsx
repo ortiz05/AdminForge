@@ -40,7 +40,15 @@ const SUBJECT_LABEL: Record<ApprovalItem['subjectType'], string> = {
  * with a comment. Approving a run's remaining write steps makes the approver the identity those steps run as, so
  * it needs write access — the button stays locked in read mode with the reason, and Arm is one click away.
  */
-export function ApprovalCard({ item, compact, headingLevel = 3 }: { item: ApprovalItem; compact?: boolean; headingLevel?: 2 | 3 }) {
+export function ApprovalCard({
+  item,
+  compact,
+  headingLevel = 3,
+}: {
+  item: ApprovalItem;
+  compact?: boolean;
+  headingLevel?: 2 | 3;
+}) {
   const Heading = headingLevel === 2 ? 'h2' : 'h3';
   const me = useMe();
   const { arm, openArmDialog } = useShell();
@@ -50,7 +58,8 @@ export function ApprovalCard({ item, compact, headingLevel = 3 }: { item: Approv
   const [comment, setComment] = useState('');
   const [rejecting, setRejecting] = useState(false);
   const own = item.requestedBy.toLowerCase() === me.user.upn.toLowerCase();
-  const canDecide = item.canDecide ?? (me.roles.includes('Playbook.Approver') || me.roles.includes('Portal.Admin'));
+  const canDecide =
+    item.canDecide ?? (me.roles.includes('Playbook.Approver') || me.roles.includes('Portal.Admin'));
   const expired = item.expiresAt ? Date.parse(item.expiresAt) <= now : false;
 
   const mutation = useMutation({
@@ -111,7 +120,11 @@ export function ApprovalCard({ item, compact, headingLevel = 3 }: { item: Approv
             {item.expiresAt && (
               <>
                 {' · '}
-                <time dateTime={item.expiresAt} title={formatTimestamp(item.expiresAt)} className={expired ? 'text-crit' : undefined}>
+                <time
+                  dateTime={item.expiresAt}
+                  title={formatTimestamp(item.expiresAt)}
+                  className={expired ? 'text-crit' : undefined}
+                >
                   {expired ? 'expired' : `expires ${formatRelative(item.expiresAt, now)}`}
                 </time>
               </>
@@ -120,7 +133,11 @@ export function ApprovalCard({ item, compact, headingLevel = 3 }: { item: Approv
         </div>
         <span className="flex flex-wrap items-center gap-1.5">
           {item.subjectType === 'run' && !compact && (
-            <Link to="/runs/$id" params={{ id: item.subjectId }} className="mr-1 text-xs font-semibold text-accent hover:underline">
+            <Link
+              to="/runs/$id"
+              params={{ id: item.subjectId }}
+              className="mr-1 text-xs font-semibold text-accent hover:underline"
+            >
               Open run
             </Link>
           )}
@@ -160,7 +177,11 @@ export function ApprovalCard({ item, compact, headingLevel = 3 }: { item: Approv
               rows={2}
               maxLength={1000}
               hint="Recorded in the audit log with your decision."
-              error={rejecting && !comment.trim() ? 'Say why you’re rejecting, so the requester knows what to change.' : undefined}
+              error={
+                rejecting && !comment.trim()
+                  ? 'Say why you’re rejecting, so the requester knows what to change.'
+                  : undefined
+              }
             />
           )}
           {item.requiresArm && !arm.armed && (
@@ -177,8 +198,8 @@ export function ApprovalCard({ item, compact, headingLevel = 3 }: { item: Approv
                 ) : undefined
               }
             >
-              The steps after this approval change the tenant and run as you, the approver. Arm write access, then
-              approve. Rejecting doesn’t need it.
+              The steps after this approval change the tenant and run as you, the approver. Arm write access,
+              then approve. Rejecting doesn’t need it.
             </Callout>
           )}
           {mutation.isError && (
@@ -238,7 +259,10 @@ export function ManualStepCard({
         body: { confirmed, notes: notes.trim() || undefined },
       }),
     onSuccess: (_d, confirmed) => {
-      toast({ tone: confirmed ? 'ok' : 'warn', title: confirmed ? `Done: ${title}` : `Marked as not done: ${title}` });
+      toast({
+        tone: confirmed ? 'ok' : 'warn',
+        title: confirmed ? `Done: ${title}` : `Marked as not done: ${title}`,
+      });
       void queryClient.invalidateQueries({ queryKey: ['runs'] });
     },
   });
@@ -265,7 +289,11 @@ export function ManualStepCard({
         rows={2}
         value={notes}
         onChange={(e) => setNotes(e.target.value)}
-        hint={blocked ? 'Say what stopped you; the run records it.' : 'Recorded with the step (ticket numbers, what you saw).'}
+        hint={
+          blocked
+            ? 'Say what stopped you; the run records it.'
+            : 'Recorded with the step (ticket numbers, what you saw).'
+        }
       />
       {mutation.isError && (
         <Callout tone="crit" role="alert" title="That wasn’t recorded">

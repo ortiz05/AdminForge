@@ -8,9 +8,11 @@ import type { Params } from '@adminforge/schemas';
 
 export const REDACTED = '[redacted]';
 
-const SENSITIVE_KEY = /pass(word|phrase)?$|secret|token|credential(?!s?Type)|^key$|apikey|authorization|cookie|signature|private|^pin$|otp$|temporaryAccessPass/i;
+const SENSITIVE_KEY =
+  /pass(word|phrase)?$|secret|token|credential(?!s?Type)|^key$|apikey|authorization|cookie|signature|private|^pin$|otp$|temporaryAccessPass/i;
 
-const isPlainObject = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v) && !(v instanceof Date);
+const isPlainObject = (v: unknown): v is Record<string, unknown> =>
+  !!v && typeof v === 'object' && !Array.isArray(v) && !(v instanceof Date);
 
 /** Deep copy with sensitive keys and `secrets` values replaced by `[redacted]`. */
 export function redact(value: unknown, secrets: readonly string[] = []): unknown {
@@ -21,7 +23,11 @@ export function redact(value: unknown, secrets: readonly string[] = []): unknown
     if (Array.isArray(v)) return v.map((x) => walk(x, depth + 1));
     if (isPlainObject(v)) {
       const out: Record<string, unknown> = {};
-      for (const [k, x] of Object.entries(v)) out[k] = SENSITIVE_KEY.test(k) && x !== null && x !== undefined && typeof x !== 'boolean' ? REDACTED : walk(x, depth + 1);
+      for (const [k, x] of Object.entries(v))
+        out[k] =
+          SENSITIVE_KEY.test(k) && x !== null && x !== undefined && typeof x !== 'boolean'
+            ? REDACTED
+            : walk(x, depth + 1);
       return out;
     }
     return v;
@@ -43,7 +49,10 @@ export function secretInputValues(params: Params | undefined, inputs: Record<str
 }
 
 /** Inputs for display/audit: `redact: true` params replaced, sensitive keys redacted. */
-export function redactInputs(params: Params | undefined, inputs: Record<string, unknown>): Record<string, unknown> {
+export function redactInputs(
+  params: Params | undefined,
+  inputs: Record<string, unknown>,
+): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(inputs)) out[k] = params?.[k]?.redact ? REDACTED : v;
   return redact(out) as Record<string, unknown>;

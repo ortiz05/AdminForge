@@ -30,9 +30,17 @@ export const OverviewResponse = z.object({
     name: z.string(),
     domains: z.array(z.object({ name: z.string(), isDefault: z.boolean(), isInitial: z.boolean() })),
   }),
-  counts: z.object({ users: z.number().nullable(), groups: z.number().nullable(), apps: z.number().nullable(), devices: z.number().nullable() }),
+  counts: z.object({
+    users: z.number().nullable(),
+    groups: z.number().nullable(),
+    apps: z.number().nullable(),
+    devices: z.number().nullable(),
+  }),
   skus: z.array(z.object({ sku: z.string(), used: z.number(), total: z.number() })),
-  health: z.union([z.object({ items: z.array(z.object({ service: z.string(), status: z.string() })) }), z.object({ error: SectionError })]),
+  health: z.union([
+    z.object({ items: z.array(z.object({ service: z.string(), status: z.string() })) }),
+    z.object({ error: SectionError }),
+  ]),
   errors: z.record(z.string(), SectionError).optional(),
   provenance: z.record(z.string(), ProvenanceSchema),
 });
@@ -50,7 +58,11 @@ const BATCH: Array<{ id: SectionId; url: string; path: string; headers?: Record<
   { id: 'apps', url: '/applications/$count', path: '/applications/$count', headers: EVENTUAL },
   { id: 'devices', url: '/devices/$count', path: '/devices/$count', headers: EVENTUAL },
   { id: 'skus', url: '/subscribedSkus', path: '/subscribedSkus' },
-  { id: 'health', url: '/admin/serviceAnnouncement/healthOverviews?$select=service,status', path: '/admin/serviceAnnouncement/healthOverviews' },
+  {
+    id: 'health',
+    url: '/admin/serviceAnnouncement/healthOverviews?$select=service,status',
+    path: '/admin/serviceAnnouncement/healthOverviews',
+  },
 ];
 
 /** What to ask for when Graph says 401/403 for a section. */
@@ -61,7 +73,8 @@ const PERMISSION_HINTS: Record<SectionId, string> = {
   apps: 'Needs Application.Read.All on the Read app.',
   devices: 'Needs Device.Read.All (or Directory.Read.All) on the Read app.',
   skus: 'Needs Organization.Read.All (or LicenseAssignment.Read.All) on the Read app.',
-  health: 'Needs ServiceHealth.Read.All on the Read app and an admin role that can read service health (e.g. Global Reader or Service Support Administrator).',
+  health:
+    'Needs ServiceHealth.Read.All on the Read app and an admin role that can read service health (e.g. Global Reader or Service Support Administrator).',
 };
 
 interface BatchResponse {
@@ -95,7 +108,11 @@ export function parseCount(body: unknown): number | null {
     const decoded = Buffer.from(s, 'base64').toString('utf8').trim();
     if (/^\d+$/.test(decoded)) return Number(decoded);
   }
-  if (body && typeof body === 'object' && typeof (body as Record<string, unknown>)['@odata.count'] === 'number') {
+  if (
+    body &&
+    typeof body === 'object' &&
+    typeof (body as Record<string, unknown>)['@odata.count'] === 'number'
+  ) {
     return (body as Record<string, number>)['@odata.count']!;
   }
   return null;
@@ -112,7 +129,11 @@ interface GraphSku {
   prepaidUnits?: { enabled?: number };
 }
 
-export function mapOverview(responses: BatchResponse[], prov: { ms: number; requestId?: string }, session: Pick<SessionRecord, 'tenantId' | 'tenantName'>): OverviewResponse {
+export function mapOverview(
+  responses: BatchResponse[],
+  prov: { ms: number; requestId?: string },
+  session: Pick<SessionRecord, 'tenantId' | 'tenantName'>,
+): OverviewResponse {
   const byId = new Map(responses.map((r) => [r.id, r]));
   const errors: Record<string, SectionError> = {};
   const ok = (id: SectionId) => {
@@ -132,7 +153,11 @@ export function mapOverview(responses: BatchResponse[], prov: { ms: number; requ
     ? {
         id: o.id,
         name: o.displayName ?? session.tenantName,
-        domains: (o.verifiedDomains ?? []).map((d) => ({ name: d.name, isDefault: Boolean(d.isDefault), isInitial: Boolean(d.isInitial) })),
+        domains: (o.verifiedDomains ?? []).map((d) => ({
+          name: d.name,
+          isDefault: Boolean(d.isDefault),
+          isInitial: Boolean(d.isInitial),
+        })),
       }
     : { id: session.tenantId, name: session.tenantName, domains: [] };
 
@@ -140,22 +165,47 @@ export function mapOverview(responses: BatchResponse[], prov: { ms: number; requ
     const body = ok(id);
     if (body === undefined) return null;
     const n = parseCount(body);
-    if (n === null) errors[id] = { code: 'unexpected_response', message: 'Graph returned a count AdminForge could not read.', hint: 'Try again shortly.' };
+    if (n === null)
+      errors[id] = {
+        code: 'unexpected_response',
+        message: 'Graph returned a count AdminForge could not read.',
+        hint: 'Try again shortly.',
+      };
     return n;
   };
-  const counts = { users: count('users'), groups: count('groups'), apps: count('apps'), devices: count('devices') };
+  const counts = {
+    users: count('users'),
+    groups: count('groups'),
+    apps: count('apps'),
+    devices: count('devices'),
+  };
 
   const skuBody = ok('skus') as { value?: GraphSku[] } | undefined;
-  const skus = (skuBody?.value ?? []).map((s) => ({ sku: s.skuPartNumber ?? 'unknown', used: s.consumedUnits ?? 0, total: s.prepaidUnits?.enabled ?? 0 }));
+  const skus = (skuBody?.value ?? []).map((s) => ({
+    sku: s.skuPartNumber ?? 'unknown',
+    used: s.consumedUnits ?? 0,
+    total: s.prepaidUnits?.enabled ?? 0,
+  }));
 
   const healthBody = ok('health') as { value?: Array<{ service?: string; status?: string }> } | undefined;
   const health = errors.health
     ? { error: errors.health }
-    : { items: (healthBody?.value ?? []).map((h) => ({ service: h.service ?? 'unknown', status: h.status ?? 'unknown' })) };
+    : {
+        items: (healthBody?.value ?? []).map((h) => ({
+          service: h.service ?? 'unknown',
+          status: h.status ?? 'unknown',
+        })),
+      };
   delete errors.health;
 
   const provenance: Record<string, Provenance> = {};
-  for (const b of BATCH) provenance[b.id] = { service: 'graph', path: b.path, ms: prov.ms, ...(prov.requestId ? { requestId: prov.requestId } : {}) };
+  for (const b of BATCH)
+    provenance[b.id] = {
+      service: 'graph',
+      path: b.path,
+      ms: prov.ms,
+      ...(prov.requestId ? { requestId: prov.requestId } : {}),
+    };
 
   return { org, counts, skus, health, ...(Object.keys(errors).length ? { errors } : {}), provenance };
 }
@@ -166,23 +216,42 @@ async function loadFixture(ctx: AppContext): Promise<OverviewResponse> {
   try {
     text = await readFile(file, 'utf8');
   } catch {
-    throw new AppError(500, 'fixture_missing', 'The overview fixture is missing.', { hint: 'Set ADMINFORGE_FIXTURES_DIR to the tests/fixtures directory.' });
+    throw new AppError(500, 'fixture_missing', 'The overview fixture is missing.', {
+      hint: 'Set ADMINFORGE_FIXTURES_DIR to the tests/fixtures directory.',
+    });
   }
   return OverviewResponse.parse(JSON.parse(text));
 }
 
-async function loadLive(ctx: AppContext, request: FastifyRequest, session: SessionRecord): Promise<OverviewResponse> {
+async function loadLive(
+  ctx: AppContext,
+  request: FastifyRequest,
+  session: SessionRecord,
+): Promise<OverviewResponse> {
   if (!ctx.broker) {
-    throw new AppError(409, 'live_data_unavailable', 'Live data needs Entra sign-in.', { hint: 'Use DATA_MODE=fixtures with AUTH_MODE=mock.' });
+    throw new AppError(409, 'live_data_unavailable', 'Live data needs Entra sign-in.', {
+      hint: 'Use DATA_MODE=fixtures with AUTH_MODE=mock.',
+    });
   }
   const body = {
-    requests: BATCH.map((b) => ({ id: b.id, method: 'GET', url: b.url, ...(b.headers ? { headers: b.headers } : {}) })),
+    requests: BATCH.map((b) => ({
+      id: b.id,
+      method: 'GET',
+      url: b.url,
+      ...(b.headers ? { headers: b.headers } : {}),
+    })),
   };
   const decision = evaluate('read', { service: 'graph', method: 'POST', path: '/$batch', body });
   if (!decision.allowed) throw new AppError(403, 'policy_denied', decision.reason);
 
   const result = await ctx.broker.withToken(session, 'graph', 'read', (getToken) =>
-    createGraphClient({ getToken, fetch: ctx.fetch, correlationId: request.id, timeoutMs: 20_000, maxRetries: 2 }).request<{ responses: BatchResponse[] }>({
+    createGraphClient({
+      getToken,
+      fetch: ctx.fetch,
+      correlationId: request.id,
+      timeoutMs: 20_000,
+      maxRetries: 2,
+    }).request<{ responses: BatchResponse[] }>({
       method: 'POST',
       path: '/$batch',
       body,

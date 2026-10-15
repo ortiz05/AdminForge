@@ -1,5 +1,14 @@
 import type { RunStore } from './ports';
-import type { Actor, Decision, HumanTask, RunEventInput, RunPatch, RunRecord, RunStatus, StepRecord } from './types';
+import type {
+  Actor,
+  Decision,
+  HumanTask,
+  RunEventInput,
+  RunPatch,
+  RunRecord,
+  RunStatus,
+  StepRecord,
+} from './types';
 
 export interface StoredEvent extends RunEventInput {
   id: number;
@@ -66,11 +75,20 @@ export class MemoryRunStore implements RunStore {
     return [...(this.steps.get(runId)?.values() ?? [])].sort((a, b) => a.seq - b.seq).map(clone);
   }
 
-  async saveStep(runId: string, record: StepRecord, meta: { actor: Actor | null; dryRun: boolean }): Promise<void> {
+  async saveStep(
+    runId: string,
+    record: StepRecord,
+    meta: { actor: Actor | null; dryRun: boolean },
+  ): Promise<void> {
     let m = this.steps.get(runId);
     if (!m) this.steps.set(runId, (m = new Map()));
     m.set(record.seq, clone(record));
-    this.saves.push({ runId, record: clone(record), actor: meta.actor ? clone(meta.actor) : null, dryRun: meta.dryRun });
+    this.saves.push({
+      runId,
+      record: clone(record),
+      actor: meta.actor ? clone(meta.actor) : null,
+      dryRun: meta.dryRun,
+    });
   }
 
   async appendEvent(runId: string, event: RunEventInput): Promise<void> {
@@ -95,7 +113,8 @@ export class MemoryRunStore implements RunStore {
   /** Latest record per path. */
   latest(runId: string): Map<string, StepRecord> {
     const out = new Map<string, StepRecord>();
-    for (const r of [...(this.steps.get(runId)?.values() ?? [])].sort((a, b) => a.seq - b.seq)) out.set(r.path, clone(r));
+    for (const r of [...(this.steps.get(runId)?.values() ?? [])].sort((a, b) => a.seq - b.seq))
+      out.set(r.path, clone(r));
     return out;
   }
 }

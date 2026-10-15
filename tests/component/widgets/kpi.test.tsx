@@ -8,7 +8,11 @@ const cfg = (c: KpiConfig) => WIDGETS.kpi!.schema.parse(c) as KpiConfig;
 
 describe('kpi widget', () => {
   it('shows the label and the number', async () => {
-    const { container } = renderWidget(Kpi, cfg(kpiFixtures.members.config), ready(kpiFixtures.members.value));
+    const { container } = renderWidget(
+      Kpi,
+      cfg(kpiFixtures.members.config),
+      ready(kpiFixtures.members.value),
+    );
     const tile = screen.getByRole('group', { name: 'Members' });
     expect(tile).toHaveTextContent('12,408');
     expect(await axeViolations(container)).toEqual([]);
@@ -20,7 +24,11 @@ describe('kpi widget', () => {
   });
 
   it('evaluates a status expression into icon + words', async () => {
-    const { container } = renderWidget(Kpi, cfg(kpiFixtures.disabled.config), ready(kpiFixtures.disabled.value));
+    const { container } = renderWidget(
+      Kpi,
+      cfg(kpiFixtures.disabled.config),
+      ready(kpiFixtures.disabled.value),
+    );
     const tile = screen.getByRole('group', { name: 'Disabled' });
     expect(await within(tile).findByText('Needs review')).toBeInTheDocument();
     expect(tile.querySelector('svg')).not.toBeNull();
@@ -37,7 +45,12 @@ describe('kpi widget', () => {
 
   it('formats percent fractions ×100 and shows a signed delta from another datasource path', async () => {
     const { runtime } = spyRuntime({ data: { mfa: { ratio: 0.042, delta: -0.006 } } });
-    const { container } = renderWidget(Kpi, cfg(kpiFixtures.noMfa.config), ready(kpiFixtures.noMfa.value), runtime);
+    const { container } = renderWidget(
+      Kpi,
+      cfg(kpiFixtures.noMfa.config),
+      ready(kpiFixtures.noMfa.value),
+      runtime,
+    );
     const link = screen.getByRole('link', { name: /Open Without MFA/ });
     expect(link).toHaveAttribute('href', '/p/identity.users?mfa=none');
     expect(link).toHaveTextContent('4.2%');
@@ -56,5 +69,4 @@ describe('kpi widget', () => {
     expect(tile).toHaveTextContent('Unavailable');
     expect(tile).toHaveTextContent('Microsoft Graph refused this request (403).');
   });
-
 });

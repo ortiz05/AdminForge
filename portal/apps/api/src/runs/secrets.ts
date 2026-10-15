@@ -58,7 +58,15 @@ export interface SecretStream {
 type Log = { warn(obj: object, msg: string): void };
 
 const keyOf = (runId: string, stepPath: string) => `${runId}|${stepPath}`;
-const message = (h: Held): SecretMessage => ({ type: 'secret', runId: h.runId, stepId: h.stepId, stepPath: h.stepPath, values: h.values, hints: h.hints, producedAt: h.producedAt });
+const message = (h: Held): SecretMessage => ({
+  type: 'secret',
+  runId: h.runId,
+  stepId: h.stepId,
+  stepPath: h.stepPath,
+  values: h.values,
+  hints: h.hints,
+  producedAt: h.producedAt,
+});
 
 export class SecretBroker {
   private readonly held = new Map<string, { secret: Held; timer: NodeJS.Timeout }>();
@@ -84,7 +92,14 @@ export class SecretBroker {
   ) {
     this.transport = deps.database && deps.listenUrl ? 'notify' : 'memory';
     this.listener =
-      this.transport === 'notify' && deps.serve ? new PgListener(deps.listenUrl!, SECRETS_CHANNEL, (p) => void this.onNotify(p), deps.log ? { log: deps.log } : {}) : null;
+      this.transport === 'notify' && deps.serve
+        ? new PgListener(
+            deps.listenUrl!,
+            SECRETS_CHANNEL,
+            (p) => void this.onNotify(p),
+            deps.log ? { log: deps.log } : {},
+          )
+        : null;
   }
 
   start(): Promise<void> {
@@ -112,7 +127,8 @@ export class SecretBroker {
         const row = await this.deps.repo.getRun(run.id);
         if (!row) return { status: 'discarded', reason: 'The run no longer exists.' };
         const root = await rootOf(this.deps.repo, row);
-        if (root.identity !== 'delegated' || !root.sessionHash) return { status: 'discarded', reason: 'Nobody is signed in to receive it (scheduled run).' };
+        if (root.identity !== 'delegated' || !root.sessionHash)
+          return { status: 'discarded', reason: 'Nobody is signed in to receive it (scheduled run).' };
         const held: Held = {
           runId: row.id,
           rootRunId: root.id,
@@ -143,7 +159,9 @@ export class SecretBroker {
 
   /** Delivers to matching live streams, else holds it for one fetch. */
   async handoff(h: Held): Promise<'delivered' | 'held'> {
-    const targets = [...this.streams].filter((s) => s.sessionHash === h.sessionHash && (s.runId === h.runId || s.runId === h.rootRunId));
+    const targets = [...this.streams].filter(
+      (s) => s.sessionHash === h.sessionHash && (s.runId === h.runId || s.runId === h.rootRunId),
+    );
     let sent = 0;
     for (const t of targets) {
       try {
@@ -190,7 +208,12 @@ export class SecretBroker {
         action: 'run.secret.expired',
         targetType: 'run',
         targetId: h.runId,
-        details: { stepId: h.stepId, stepPath: h.stepPath, fields: Object.keys(h.values), reason: 'Not fetched within 5 minutes; discarded.' },
+        details: {
+          stepId: h.stepId,
+          stepPath: h.stepPath,
+          fields: Object.keys(h.values),
+          reason: 'Not fetched within 5 minutes; discarded.',
+        },
         result: 'failure',
         correlationId: h.correlationId,
       })
@@ -206,11 +229,18 @@ export class SecretBroker {
       action: 'run.secret.revealed',
       targetType: 'run',
       targetId: h.runId,
-      details: { stepId: h.stepId, stepPath: h.stepPath, fields: Object.keys(h.values), channel, ...(channel === 'stream' ? { streams: count } : {}) },
+      details: {
+        stepId: h.stepId,
+        stepPath: h.stepPath,
+        fields: Object.keys(h.values),
+        channel,
+        ...(channel === 'stream' ? { streams: count } : {}),
+      },
       result: 'success',
       correlationId: h.correlationId,
     });
-    if (this.transport === 'notify') await this.notify({ t: 'revealed', k: keyOf(h.runId, h.stepPath) }).catch(() => undefined);
+    if (this.transport === 'notify')
+      await this.notify({ t: 'revealed', k: keyOf(h.runId, h.stepPath) }).catch(() => undefined);
   }
 
   private aad = (k: string) => `adminforge.run-secret:${k}`;
@@ -218,12 +248,16 @@ export class SecretBroker {
   private async publish(h: Held) {
     const k = keyOf(h.runId, h.stepPath);
     const payload = { t: 'secret', k, s: seal(JSON.stringify(h), this.deps.key, this.aad(k)) };
-    if (Buffer.byteLength(JSON.stringify(payload)) > MAX_NOTIFY_BYTES) throw new Error('The secret output is too large to hand over.');
+    if (Buffer.byteLength(JSON.stringify(payload)) > MAX_NOTIFY_BYTES)
+      throw new Error('The secret output is too large to hand over.');
     await this.notify(payload);
   }
 
   private async notify(payload: Record<string, unknown>) {
-    await this.deps.database!.pool.query('select pg_notify($1, $2)', [SECRETS_CHANNEL, JSON.stringify(payload)]);
+    await this.deps.database!.pool.query('select pg_notify($1, $2)', [
+      SECRETS_CHANNEL,
+      JSON.stringify(payload),
+    ]);
   }
 
   private async onNotify(raw: string) {
@@ -247,10 +281,15 @@ export class SecretBroker {
     try {
       h = JSON.parse(open(p.s, this.deps.key, this.aad(p.k))) as Held;
     } catch (err) {
-      this.deps.log?.warn({ err: { message: (err as Error).message } }, 'run secret could not be opened (TOKEN_CACHE_KEY differs between processes?)');
+      this.deps.log?.warn(
+        { err: { message: (err as Error).message } },
+        'run secret could not be opened (TOKEN_CACHE_KEY differs between processes?)',
+      );
       return;
     }
     if (keyOf(h.runId, h.stepPath) !== p.k) return;
-    await this.handoff(h).catch((err) => this.deps.log?.warn({ err: { message: (err as Error).message } }, 'run secret hand-off failed'));
+    await this.handoff(h).catch((err) =>
+      this.deps.log?.warn({ err: { message: (err as Error).message } }, 'run secret hand-off failed'),
+    );
   }
 }

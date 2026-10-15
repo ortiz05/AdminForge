@@ -1,6 +1,18 @@
 import type { Mode } from '@adminforge/connectors';
 import type { Scope } from '@adminforge/expressions';
-import type { Actor, Decision, HumanTask, Limits, PlanEntry, RunError, RunEventInput, RunPatch, RunRecord, RunStatus, StepRecord } from './types';
+import type {
+  Actor,
+  Decision,
+  HumanTask,
+  Limits,
+  PlanEntry,
+  RunError,
+  RunEventInput,
+  RunPatch,
+  RunRecord,
+  RunStatus,
+  StepRecord,
+} from './types';
 
 /**
  * Ports: everything the engine needs from the outside world. The engine itself does no I/O.
@@ -82,7 +94,11 @@ export interface ServiceResult {
 
 /** Wraps the API's OutboundExecutor (policy → token → connector). */
 export interface OutboundPort {
-  call(identity: ResolvedIdentity, call: ServiceCall, opts: { correlationId: string; signal: AbortSignal }): Promise<ServiceResult>;
+  call(
+    identity: ResolvedIdentity,
+    call: ServiceCall,
+    opts: { correlationId: string; signal: AbortSignal },
+  ): Promise<ServiceResult>;
 }
 
 export interface RunnerJob {
@@ -110,7 +126,11 @@ export interface RunnerResult {
 
 /** The PowerShell runner (`POST /v1/jobs`, NDJSON events). */
 export interface RunnerPort {
-  run(identity: ResolvedIdentity, job: RunnerJob, opts: { signal: AbortSignal; onEvent: (e: RunnerStreamEvent) => Promise<void> | void }): Promise<RunnerResult>;
+  run(
+    identity: ResolvedIdentity,
+    job: RunnerJob,
+    opts: { signal: AbortSignal; onEvent: (e: RunnerStreamEvent) => Promise<void> | void },
+  ): Promise<RunnerResult>;
 }
 
 export interface NotifyMessage {
@@ -122,7 +142,11 @@ export interface NotifyMessage {
 
 /** Sends `notify` steps as the actor (Graph mail / Teams). The engine ships a Graph implementation over OutboundPort. */
 export interface Notifier {
-  send(identity: ResolvedIdentity, message: NotifyMessage, opts: { correlationId: string; signal: AbortSignal }): Promise<{ requestId?: string }>;
+  send(
+    identity: ResolvedIdentity,
+    message: NotifyMessage,
+    opts: { correlationId: string; signal: AbortSignal },
+  ): Promise<{ requestId?: string }>;
 }
 
 export interface ChildRunRequest {
@@ -172,7 +196,10 @@ export interface SecretDelivery {
 
 /** Where secrets go: the API shows them once to the person who started the run (live stream, or one fetch within 5 minutes). */
 export interface SecretSink {
-  deliver(run: RunRecord, secret: SecretDelivery): Promise<{ status: 'delivered' | 'held' | 'sent' | 'discarded'; reason?: string }>;
+  deliver(
+    run: RunRecord,
+    secret: SecretDelivery,
+  ): Promise<{ status: 'delivered' | 'held' | 'sent' | 'discarded'; reason?: string }>;
 }
 
 export interface StepPorts {

@@ -11,7 +11,12 @@ export const keyValueFixtures = {
       fields: [
         { field: 'userPrincipalName', label: 'Sign-in name' },
         { field: 'id', label: 'Object id', kind: 'id' },
-        { field: 'accountEnabled', label: 'Sign-in', kind: 'status', map: { true: ['ok', 'Allowed'], false: ['crit', 'Blocked'] } },
+        {
+          field: 'accountEnabled',
+          label: 'Sign-in',
+          kind: 'status',
+          map: { true: ['ok', 'Allowed'], false: ['crit', 'Blocked'] },
+        },
         { field: 'department', label: 'Department' },
         { field: 'onPremisesSyncEnabled', label: 'Synced from on-premises', kind: 'boolean' },
         { field: 'createdDateTime', label: 'Created', kind: 'datetime' },

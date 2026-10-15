@@ -1,6 +1,12 @@
 import { z } from 'zod';
 import { Template } from '@adminforge/schemas';
-import { DataRef, FieldOrTemplate, StatusEntrySchema, StatusMapSchema, blockShape } from '../../lib/schema-common';
+import {
+  DataRef,
+  FieldOrTemplate,
+  StatusEntrySchema,
+  StatusMapSchema,
+  blockShape,
+} from '../../lib/schema-common';
 
 /** A grid of named things and their state (service health, probes) (docs/widgets.md › statusGrid). */
 export const StatusGridConfig = z.looseObject({

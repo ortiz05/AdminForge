@@ -302,24 +302,88 @@ layout:
 
 const G = (n: number) => `30000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 export const TEST_USERS = [
-  { id: G(1), displayName: 'Avery Engineer', userPrincipalName: 'avery@example.com', accountEnabled: true, userType: 'Member', department: 'IT' },
-  { id: G(2), displayName: 'Blake Analyst', userPrincipalName: 'blake@example.com', accountEnabled: false, userType: 'Member', department: 'Finance' },
-  { id: G(3), displayName: 'Casey Guest', userPrincipalName: 'casey@example.net', accountEnabled: true, userType: 'Guest', department: null },
+  {
+    id: G(1),
+    displayName: 'Avery Engineer',
+    userPrincipalName: 'avery@example.com',
+    accountEnabled: true,
+    userType: 'Member',
+    department: 'IT',
+  },
+  {
+    id: G(2),
+    displayName: 'Blake Analyst',
+    userPrincipalName: 'blake@example.com',
+    accountEnabled: false,
+    userType: 'Member',
+    department: 'Finance',
+  },
+  {
+    id: G(3),
+    displayName: 'Casey Guest',
+    userPrincipalName: 'casey@example.net',
+    accountEnabled: true,
+    userType: 'Guest',
+    department: null,
+  },
 ];
 
 const FIXTURES: Record<string, unknown> = {
-  'graph/v1.0/users/GET.json': { '@odata.count': 4, value: TEST_USERS, '@odata.nextLink': 'https://graph.microsoft.com/v1.0/users?$skiptoken=page2' },
-  'graph/v1.0/users/GET__$skiptoken=page2.json': { value: [{ id: G(4), displayName: 'Dana =SUM(A1)', userPrincipalName: 'dana@example.com', accountEnabled: true, userType: 'Member', department: 'Sales, EMEA' }] },
-  "graph/v1.0/users/$count/GET__$filter=usertype_eq__member_.json": 3,
-  "graph/v1.0/users/$count/GET__$filter=usertype_eq__guest_.json": { $fixture: { status: 403, body: { error: { code: 'Authorization_RequestDenied', message: 'Insufficient privileges to complete the operation.' } } } },
-  'graph/v1.0/applications/GET.json': {
+  'graph/v1.0/users/GET.json': {
+    '@odata.count': 4,
+    value: TEST_USERS,
+    '@odata.nextLink': 'https://graph.microsoft.com/v1.0/users?$skiptoken=page2',
+  },
+  'graph/v1.0/users/GET__$skiptoken=page2.json': {
     value: [
-      { id: G(11), displayName: 'Example HR Sync', passwordCredentials: [{ keyId: G(21), endDateTime: '2026-11-01T00:00:00Z' }, { keyId: G(22), endDateTime: '2027-01-01T00:00:00Z' }] },
-      { id: G(12), displayName: 'Example Portal', passwordCredentials: [{ keyId: G(23), endDateTime: '2026-10-20T00:00:00Z' }] },
+      {
+        id: G(4),
+        displayName: 'Dana =SUM(A1)',
+        userPrincipalName: 'dana@example.com',
+        accountEnabled: true,
+        userType: 'Member',
+        department: 'Sales, EMEA',
+      },
     ],
   },
-  'graph/v1.0/groups/GET.json': { value: [{ id: G(31), displayName: 'Avery Fans', mail: 'fans@example.com' }, { id: G(32), displayName: 'Other Group', mail: null }] },
-  'graph/v1.0/devices/GET.json': { value: [{ id: G(41), displayName: 'AVERY-LAPTOP', operatingSystem: 'Windows' }] },
+  'graph/v1.0/users/$count/GET__$filter=usertype_eq__member_.json': 3,
+  'graph/v1.0/users/$count/GET__$filter=usertype_eq__guest_.json': {
+    $fixture: {
+      status: 403,
+      body: {
+        error: {
+          code: 'Authorization_RequestDenied',
+          message: 'Insufficient privileges to complete the operation.',
+        },
+      },
+    },
+  },
+  'graph/v1.0/applications/GET.json': {
+    value: [
+      {
+        id: G(11),
+        displayName: 'Example HR Sync',
+        passwordCredentials: [
+          { keyId: G(21), endDateTime: '2026-11-01T00:00:00Z' },
+          { keyId: G(22), endDateTime: '2027-01-01T00:00:00Z' },
+        ],
+      },
+      {
+        id: G(12),
+        displayName: 'Example Portal',
+        passwordCredentials: [{ keyId: G(23), endDateTime: '2026-10-20T00:00:00Z' }],
+      },
+    ],
+  },
+  'graph/v1.0/groups/GET.json': {
+    value: [
+      { id: G(31), displayName: 'Avery Fans', mail: 'fans@example.com' },
+      { id: G(32), displayName: 'Other Group', mail: null },
+    ],
+  },
+  'graph/v1.0/devices/GET.json': {
+    value: [{ id: G(41), displayName: 'AVERY-LAPTOP', operatingSystem: 'Windows' }],
+  },
   'graph/v1.0/subscribedskus/GET.json': {
     value: [
       {
@@ -327,15 +391,47 @@ const FIXTURES: Record<string, unknown> = {
         capabilityStatus: 'Enabled',
         consumedUnits: 10,
         prepaidUnits: { enabled: 20 },
-        servicePlans: ['AAD_PREMIUM', 'INTUNE_A', 'EXCHANGE_S_ENTERPRISE', 'TEAMS1', 'SHAREPOINTENTERPRISE'].map((p) => ({ servicePlanName: p, provisioningStatus: 'Success' })),
+        servicePlans: [
+          'AAD_PREMIUM',
+          'INTUNE_A',
+          'EXCHANGE_S_ENTERPRISE',
+          'TEAMS1',
+          'SHAREPOINTENTERPRISE',
+        ].map((p) => ({ servicePlanName: p, provisioningStatus: 'Success' })),
       },
-      { skuPartNumber: 'EMS', capabilityStatus: 'Suspended', consumedUnits: 0, prepaidUnits: { enabled: 0 }, servicePlans: [{ servicePlanName: 'AAD_PREMIUM_P2', provisioningStatus: 'Success' }] },
+      {
+        skuPartNumber: 'EMS',
+        capabilityStatus: 'Suspended',
+        consumedUnits: 0,
+        prepaidUnits: { enabled: 0 },
+        servicePlans: [{ servicePlanName: 'AAD_PREMIUM_P2', provisioningStatus: 'Success' }],
+      },
     ],
   },
-  'graph/v1.0/rolemanagement/directory/roleassignmentscheduleinstances/GET.json': { $fixture: { status: 403, body: { error: { code: 'AadPremiumLicenseRequired', message: 'The tenant needs an AAD Premium 2 license.' } } } },
-  'graph/v1.0/rolemanagement/directory/roleeligibilityscheduleinstances/GET.json': { $fixture: { status: 403, body: { error: { code: 'AadPremiumLicenseRequired', message: 'The tenant needs an AAD Premium 2 license.' } } } },
+  'graph/v1.0/rolemanagement/directory/roleassignmentscheduleinstances/GET.json': {
+    $fixture: {
+      status: 403,
+      body: {
+        error: { code: 'AadPremiumLicenseRequired', message: 'The tenant needs an AAD Premium 2 license.' },
+      },
+    },
+  },
+  'graph/v1.0/rolemanagement/directory/roleeligibilityscheduleinstances/GET.json': {
+    $fixture: {
+      status: 403,
+      body: {
+        error: { code: 'AadPremiumLicenseRequired', message: 'The tenant needs an AAD Premium 2 license.' },
+      },
+    },
+  },
   'graph/v1.0/rolemanagement/directory/roleassignments/GET.json': {
-    value: [{ roleDefinitionId: 'f2ef992c-3afb-46b9-b7cf-a126ee74c451', directoryScopeId: '/', roleDefinition: { displayName: 'Global Reader' } }],
+    value: [
+      {
+        roleDefinitionId: 'f2ef992c-3afb-46b9-b7cf-a126ee74c451',
+        directoryScopeId: '/',
+        roleDefinition: { displayName: 'Global Reader' },
+      },
+    ],
   },
   'runner/exchange/Get-Test.ps1.json': {
     $fixture: {
@@ -343,20 +439,47 @@ const FIXTURES: Record<string, unknown> = {
       body: [{ name: 'box-1' }, { name: 'box-2' }],
     },
   },
-  'arm/subscriptions/00000000-0000-4000-8000-0000000000a1/resourcegroups/rg-example/providers/microsoft.web/sites/func-example/config/appsettings/list/POST.json': {
-    id: '/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example/providers/Microsoft.Web/sites/func-example/config/appsettings',
-    properties: { FUNCTIONS_WORKER_RUNTIME: 'node', STORAGE_CONNECTION: 'DefaultEndpointsProtocol=https;AccountName=example;AccountKey=c2VjcmV0' },
-  },
+  'arm/subscriptions/00000000-0000-4000-8000-0000000000a1/resourcegroups/rg-example/providers/microsoft.web/sites/func-example/config/appsettings/list/POST.json':
+    {
+      id: '/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example/providers/Microsoft.Web/sites/func-example/config/appsettings',
+      properties: {
+        FUNCTIONS_WORKER_RUNTIME: 'node',
+        STORAGE_CONNECTION: 'DefaultEndpointsProtocol=https;AccountName=example;AccountKey=c2VjcmV0',
+      },
+    },
   'graph/v1.0/users/30000000-0000-4000-8000-000000000001/memberof/GET.json': { value: [{ id: 'g1' }] },
   'resourceGraph/POST.json': {
     $fixture: {
-      variants: [{ match: { bodyIncludes: '// af:deps.chain#inventory' }, body: { totalRecords: 1, data: [{ id: '/subscriptions/x/resourceGroups/rg/providers/Microsoft.Web/sites/from-variant', name: 'from-variant' }] } }],
+      variants: [
+        {
+          match: { bodyIncludes: '// af:deps.chain#inventory' },
+          body: {
+            totalRecords: 1,
+            data: [
+              {
+                id: '/subscriptions/x/resourceGroups/rg/providers/Microsoft.Web/sites/from-variant',
+                name: 'from-variant',
+              },
+            ],
+          },
+        },
+      ],
       body: {
-    totalRecords: 2,
-    data: [
-      { id: '/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example/providers/Microsoft.Web/sites/avery-func', name: 'avery-func', type: 'microsoft.web/sites', resourceGroup: 'rg-example' },
-      { id: '/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example/providers/Microsoft.Storage/storageAccounts/stother', name: 'stother', type: 'microsoft.storage/storageaccounts', resourceGroup: 'rg-example' },
-    ],
+        totalRecords: 2,
+        data: [
+          {
+            id: '/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example/providers/Microsoft.Web/sites/avery-func',
+            name: 'avery-func',
+            type: 'microsoft.web/sites',
+            resourceGroup: 'rg-example',
+          },
+          {
+            id: '/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example/providers/Microsoft.Storage/storageAccounts/stother',
+            name: 'stother',
+            type: 'microsoft.storage/storageaccounts',
+            resourceGroup: 'rg-example',
+          },
+        ],
       },
     },
   },
@@ -391,7 +514,8 @@ export function setupContent(): ContentEnv {
   content('pages/deps/backwards.page.yaml', BACKWARDS);
   content('pages/deps/inventory.page.yaml', INVENTORY);
   const fx = write(fixturesDir);
-  for (const [rel, body] of Object.entries(FIXTURES)) fx(rel, typeof body === 'number' ? String(body) : JSON.stringify(body));
+  for (const [rel, body] of Object.entries(FIXTURES))
+    fx(rel, typeof body === 'number' ? String(body) : JSON.stringify(body));
   return {
     contentDir,
     fixturesDir,
@@ -407,13 +531,21 @@ export async function fixturesApp(env: ContentEnv, overrides: Record<string, str
 }
 
 /** Entra (fake AuthClient) + live data answered by `route`; returns a signed-in cookie. */
-export async function liveApp(env: ContentEnv, route: (url: string, init: RequestInit) => Response | Promise<Response>) {
+export async function liveApp(
+  env: ContentEnv,
+  route: (url: string, init: RequestInit) => Response | Promise<Response>,
+) {
   const auth = new FakeAuthClient();
   const calls: Array<{ url: string; method: string; headers: Record<string, string>; body?: unknown }> = [];
   const fetch: typeof globalThis.fetch = async (input, init = {}) => {
     const url = String(input);
     if (url.includes('/organization') && !url.includes('$batch')) return orgResponse();
-    calls.push({ url, method: (init.method ?? 'GET').toUpperCase(), headers: init.headers as Record<string, string>, body: init.body ? JSON.parse(String(init.body)) : undefined });
+    calls.push({
+      url,
+      method: (init.method ?? 'GET').toUpperCase(),
+      headers: init.headers as Record<string, string>,
+      body: init.body ? JSON.parse(String(init.body)) : undefined,
+    });
     return route(url, init);
   };
   const t = await makeApp(entraConfig(env.overrides), { auth, fetch });

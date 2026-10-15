@@ -26,7 +26,12 @@ function inline(text: string, keyBase: string): ReactNode[] {
           {tok.slice(1, -1)}
         </code>,
       );
-    else if (tok.startsWith('**')) out.push(<strong key={key} className="font-semibold text-fg">{tok.slice(2, -2)}</strong>);
+    else if (tok.startsWith('**'))
+      out.push(
+        <strong key={key} className="font-semibold text-fg">
+          {tok.slice(2, -2)}
+        </strong>,
+      );
     else if (tok.startsWith('*')) out.push(<em key={key}>{tok.slice(1, -1)}</em>);
     else {
       const lm = /^\[([^\]]+)\]\(([^)\s]+)\)$/.exec(tok)!;
@@ -115,7 +120,8 @@ export function Markdown({ source, className }: { source: string; className?: st
         const k = `b${i}`;
         switch (b.kind) {
           case 'h': {
-            const cls = b.level <= 2 ? 'af-display text-md font-semibold text-fg' : 'text-sm font-semibold text-fg';
+            const cls =
+              b.level <= 2 ? 'af-display text-md font-semibold text-fg' : 'text-sm font-semibold text-fg';
             return b.level <= 2 ? (
               <h3 key={k} className={cls}>
                 {inline(b.text, k)}
@@ -130,7 +136,10 @@ export function Markdown({ source, className }: { source: string; className?: st
           case 'ol': {
             const List = b.kind;
             return (
-              <List key={k} className={cn('flex flex-col gap-1 pl-5', b.kind === 'ul' ? 'list-disc' : 'list-decimal')}>
+              <List
+                key={k}
+                className={cn('flex flex-col gap-1 pl-5', b.kind === 'ul' ? 'list-disc' : 'list-decimal')}
+              >
                 {b.items.map((it, j) => (
                   <li key={j}>{inline(it, `${k}-${j}`)}</li>
                 ))}
@@ -145,7 +154,11 @@ export function Markdown({ source, className }: { source: string; className?: st
             );
           case 'code':
             return (
-              <pre key={k} className="overflow-auto rounded-md border border-line bg-sunken p-3 font-mono text-xs text-fg-2" data-language={b.lang || undefined}>
+              <pre
+                key={k}
+                className="overflow-auto rounded-md border border-line bg-sunken p-3 font-mono text-xs text-fg-2"
+                data-language={b.lang || undefined}
+              >
                 <code>{b.text}</code>
               </pre>
             );

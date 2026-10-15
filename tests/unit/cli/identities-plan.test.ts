@@ -1,18 +1,36 @@
 import { randomUUID } from 'node:crypto';
-import { buildDesiredIdentities, planIdentities, type IdentityState } from '@adminforge/cli/src/provision/identities-plan';
+import {
+  buildDesiredIdentities,
+  planIdentities,
+  type IdentityState,
+} from '@adminforge/cli/src/provision/identities-plan';
 
 const desired = buildDesiredIdentities({ label: 'test', domain: 'example.com' });
-const portalGroups = Object.fromEntries(desired.testerGroups.map((r) => [r, { id: randomUUID(), displayName: r }]));
+const portalGroups = Object.fromEntries(
+  desired.testerGroups.map((r) => [r, { id: randomUUID(), displayName: r }]),
+);
 
-const empty = (): IdentityState => ({ testerGroupIds: [], testerRoleIds: [], portalGroups, targets: {}, env: {} });
+const empty = (): IdentityState => ({
+  testerGroupIds: [],
+  testerRoleIds: [],
+  portalGroups,
+  targets: {},
+  env: {},
+});
 
 function converged(): IdentityState {
   return {
     tester: { id: randomUUID(), userPrincipalName: desired.tester.upn },
     testerGroupIds: Object.values(portalGroups).map((g) => g.id),
-    testerRoleIds: ['fe930be7-5e62-47db-91af-98c3a49a38b1', 'fdd7a751-b60b-444a-984c-02652fe8fa1c', 'f2ef992c-3afb-46b9-b7cf-a126ee74c451'],
+    testerRoleIds: [
+      'fe930be7-5e62-47db-91af-98c3a49a38b1',
+      'fdd7a751-b60b-444a-984c-02652fe8fa1c',
+      'f2ef992c-3afb-46b9-b7cf-a126ee74c451',
+    ],
     portalGroups: { ...portalGroups },
-    targets: Object.fromEntries(desired.targets.map((t) => [t.upn, { id: randomUUID(), userPrincipalName: t.upn }])),
+    targets: Object.fromEntries(
+      desired.targets.map((t) => [t.upn, { id: randomUUID(), userPrincipalName: t.upn }]),
+    ),
     testGroup: { id: randomUUID(), displayName: 'AF-Test-Group-01' },
     env: { upn: desired.tester.upn, password: 'stored' },
   };
@@ -20,14 +38,29 @@ function converged(): IdentityState {
 
 describe('buildDesiredIdentities', () => {
   it('defaults the tester UPN to af-tester@<domain> and names the AF-Test-* targets', () => {
-    expect(desired.tester).toEqual({ upn: 'af-tester@example.com', displayName: 'AF Tester', mailNickname: 'af-tester' });
-    expect(desired.targets.map((t) => t.upn)).toEqual(['af-test-user-01@example.com', 'af-test-user-02@example.com', 'af-test-user-03@example.com']);
-    expect(desired.testGroup.body).toMatchObject({ displayName: 'AF-Test-Group-01', securityEnabled: true, mailEnabled: false });
+    expect(desired.tester).toEqual({
+      upn: 'af-tester@example.com',
+      displayName: 'AF Tester',
+      mailNickname: 'af-tester',
+    });
+    expect(desired.targets.map((t) => t.upn)).toEqual([
+      'af-test-user-01@example.com',
+      'af-test-user-02@example.com',
+      'af-test-user-03@example.com',
+    ]);
+    expect(desired.testGroup.body).toMatchObject({
+      displayName: 'AF-Test-Group-01',
+      securityEnabled: true,
+      mailEnabled: false,
+    });
     expect(desired.testerRoles).toEqual(['User Administrator', 'Groups Administrator', 'Global Reader']);
   });
 
   it('honours an explicit AF_TEST_USER_UPN', () => {
-    expect(buildDesiredIdentities({ label: 'x', domain: 'example.com', testerUpn: 'qa.bot@example.com' }).tester.mailNickname).toBe('qa.bot');
+    expect(
+      buildDesiredIdentities({ label: 'x', domain: 'example.com', testerUpn: 'qa.bot@example.com' }).tester
+        .mailNickname,
+    ).toBe('qa.bot');
   });
 });
 
@@ -44,7 +77,11 @@ describe('planIdentities', () => {
   it('resets the tester password when it is not in the env file', () => {
     const s = converged();
     s.env.password = undefined;
-    expect(planIdentities(desired, s)[0]).toMatchObject({ kind: 'tester', mode: 'resetPassword', action: 'update' });
+    expect(planIdentities(desired, s)[0]).toMatchObject({
+      kind: 'tester',
+      mode: 'resetPassword',
+      action: 'update',
+    });
   });
 
   it('adds a missing membership and role, and skips groups that provisioning has not created', () => {

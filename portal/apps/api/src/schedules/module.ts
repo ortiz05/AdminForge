@@ -18,7 +18,11 @@ declare module 'fastify' {
   }
 }
 
-type Log = { info?(obj: object, msg: string): void; warn(obj: object, msg: string): void; error?(obj: object, msg: string): void };
+type Log = {
+  info?(obj: object, msg: string): void;
+  warn(obj: object, msg: string): void;
+  error?(obj: object, msg: string): void;
+};
 
 export interface SchedulesOptions {
   store?: ScheduleStore;
@@ -54,10 +58,20 @@ export interface SchedulesModule {
  * API service, probe views and — in the scheduler service, or the API with SCHEDULER_IN_PROCESS=true — the scheduler
  * itself behind leader election.
  */
-export function createSchedulesModule(ctx: AppContext, runs: RunsModule | null, opts: SchedulesOptions = {}): SchedulesModule {
+export function createSchedulesModule(
+  ctx: AppContext,
+  runs: RunsModule | null,
+  opts: SchedulesOptions = {},
+): SchedulesModule {
   const log = opts.log;
-  const store = opts.store ?? (ctx.database ? new PgScheduleStore(ctx.database.db) : new MemoryScheduleStore(ctx.now));
-  const events = new ScheduleEvents({ bus: ctx.events, database: ctx.database, listenUrl: ctx.database ? ctx.config.DATABASE_URL : null, ...(log ? { log } : {}) });
+  const store =
+    opts.store ?? (ctx.database ? new PgScheduleStore(ctx.database.db) : new MemoryScheduleStore(ctx.now));
+  const events = new ScheduleEvents({
+    bus: ctx.events,
+    database: ctx.database,
+    listenUrl: ctx.database ? ctx.config.DATABASE_URL : null,
+    ...(log ? { log } : {}),
+  });
   const artifacts = new ArtifactStore(ctx.config.ADMINFORGE_ARTIFACTS_DIR);
   const probeDeps: ProbeDeps = {
     outbound: ctx.outbound,
@@ -84,15 +98,32 @@ export function createSchedulesModule(ctx: AppContext, runs: RunsModule | null, 
       exportMaxRows: ctx.config.EXPORT_MAX_ROWS,
       now: ctx.now,
       ...(opts.sleep ? { sleep: opts.sleep } : {}),
-      onProbe: (o) => events.publish({ type: 'probe.updated', data: { key: o.probeKey, status: o.status, metric: o.metric, ts: o.ts.toISOString() } }),
+      onProbe: (o) =>
+        events.publish({
+          type: 'probe.updated',
+          data: { key: o.probeKey, status: o.status, metric: o.metric, ts: o.ts.toISOString() },
+        }),
     });
-  const service = new ScheduleService({ store, definitions: ctx.definitions, audit: ctx.audit, events, artifacts, now: ctx.now });
+  const service = new ScheduleService({
+    store,
+    definitions: ctx.definitions,
+    audit: ctx.audit,
+    events,
+    artifacts,
+    now: ctx.now,
+  });
   const probes = new ProbeViews({ store, definitions: ctx.definitions, now: ctx.now });
 
-  const inProcess = opts.inProcess ?? (ctx.config.SCHEDULER_IN_PROCESS || (!ctx.database && ctx.config.NODE_ENV !== 'test'));
+  const inProcess =
+    opts.inProcess ?? (ctx.config.SCHEDULER_IN_PROCESS || (!ctx.database && ctx.config.NODE_ENV !== 'test'));
   let scheduler: Scheduler | null = null;
   if (inProcess) {
-    const lock = opts.lock !== undefined ? opts.lock : ctx.database && ctx.config.DATABASE_URL ? pgAdvisoryLock(ctx.config.DATABASE_URL) : null;
+    const lock =
+      opts.lock !== undefined
+        ? opts.lock
+        : ctx.database && ctx.config.DATABASE_URL
+          ? pgAdvisoryLock(ctx.config.DATABASE_URL)
+          : null;
     const leader = lock
       ? new LeaderElector(lock, {
           intervalMs: opts.leaderIntervalMs ?? 5_000,

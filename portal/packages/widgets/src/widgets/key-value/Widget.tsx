@@ -12,7 +12,17 @@ import type { KeyValueConfig, KeyValueFieldConfig } from './schema';
 
 const Dash = () => <span className="text-fg-3">—</span>;
 
-function LinkValue({ field, value, row, runtime }: { field: KeyValueFieldConfig; value: unknown; row: unknown; runtime: WidgetRuntime }) {
+function LinkValue({
+  field,
+  value,
+  row,
+  runtime,
+}: {
+  field: KeyValueFieldConfig;
+  value: unknown;
+  row: unknown;
+  runtime: WidgetRuntime;
+}) {
   const scope = useMemo(() => ({ ...runtime.scope, row, value }), [runtime.scope, row, value]);
   const href = useTemplate<unknown>(field.href ?? (typeof value === 'string' ? value : undefined), scope);
   const target = typeof href.value === 'string' ? href.value : undefined;
@@ -35,7 +45,17 @@ function LinkValue({ field, value, row, runtime }: { field: KeyValueFieldConfig;
   );
 }
 
-function FieldValue({ field, row, runtime, now }: { field: KeyValueFieldConfig; row: unknown; runtime: WidgetRuntime; now: number }): ReactNode {
+function FieldValue({
+  field,
+  row,
+  runtime,
+  now,
+}: {
+  field: KeyValueFieldConfig;
+  row: unknown;
+  runtime: WidgetRuntime;
+  now: number;
+}): ReactNode {
   const value = getPath(row, field.field);
   const blank = value === undefined || value === null || value === '';
   switch (field.kind) {
@@ -80,11 +100,19 @@ function FieldValue({ field, row, runtime, now }: { field: KeyValueFieldConfig; 
     case 'link':
       return <LinkValue field={field} value={value} row={row} runtime={runtime} />;
     case 'code':
-      return blank ? <Dash /> : <code className="font-mono text-xs break-all text-fg-2">{String(value)}</code>;
+      return blank ? (
+        <Dash />
+      ) : (
+        <code className="font-mono text-xs break-all text-fg-2">{String(value)}</code>
+      );
     case 'number':
     case 'bytes':
     case 'percent':
-      return blank ? <Dash /> : <span className="font-mono tabular-nums">{formatValue(value, field.format ?? field.kind)}</span>;
+      return blank ? (
+        <Dash />
+      ) : (
+        <span className="font-mono tabular-nums">{formatValue(value, field.format ?? field.kind)}</span>
+      );
     default:
       return blank ? <Dash /> : <span className="break-words">{formatValue(value, field.format, now)}</span>;
   }
@@ -104,20 +132,31 @@ export function KeyValueWidget({ config, data, runtime, variant }: WidgetProps<K
       runtime={runtime}
       name={config.title ?? 'Details'}
       isEmpty={!row}
-      emptyDefault={{ title: 'No details to show', body: 'The object may have been deleted, or you may not have access to it.' }}
+      emptyDefault={{
+        title: 'No details to show',
+        body: 'The object may have been deleted, or you may not have access to it.',
+      }}
     >
       {/* Hairlines between rows; the first row's top line is clipped so the list starts clean. */}
       <div className="overflow-hidden">
-      <dl className={cn('-mt-px grid grid-cols-1 gap-x-8', COLS[cols])}>
-        {config.fields.map((f) => (
-          <div key={f.field + f.label} className={cn('flex min-w-0 border-t border-line py-2.5', variant === 'inspector' ? 'flex-row items-baseline gap-3' : 'flex-col gap-1')}>
-            <dt className={cn('text-xs font-medium text-fg-3', variant === 'inspector' && 'w-36 shrink-0')}>{f.label}</dt>
-            <dd className="m-0 min-w-0 text-fg">
-              <FieldValue field={f} row={row} runtime={runtime} now={now} />
-            </dd>
-          </div>
-        ))}
-      </dl>
+        <dl className={cn('-mt-px grid grid-cols-1 gap-x-8', COLS[cols])}>
+          {config.fields.map((f) => (
+            <div
+              key={f.field + f.label}
+              className={cn(
+                'flex min-w-0 border-t border-line py-2.5',
+                variant === 'inspector' ? 'flex-row items-baseline gap-3' : 'flex-col gap-1',
+              )}
+            >
+              <dt className={cn('text-xs font-medium text-fg-3', variant === 'inspector' && 'w-36 shrink-0')}>
+                {f.label}
+              </dt>
+              <dd className="m-0 min-w-0 text-fg">
+                <FieldValue field={f} row={row} runtime={runtime} now={now} />
+              </dd>
+            </div>
+          ))}
+        </dl>
       </div>
     </WidgetPanel>
   );

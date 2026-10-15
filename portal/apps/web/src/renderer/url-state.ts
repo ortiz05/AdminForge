@@ -18,7 +18,14 @@ import type { TableViewState } from '@adminforge/widgets';
  */
 
 export const RESERVED = new Set(['view', 'tab', 'inspect', 'itab', 'playbook', 'inputs', 'items', 'preview']);
-export { INSPECT_PREFIX, readInspect, sanitizeSearch, withInspect, withoutInspect, type InspectState } from './inspect-url';
+export {
+  INSPECT_PREFIX,
+  readInspect,
+  sanitizeSearch,
+  withInspect,
+  withoutInspect,
+  type InspectState,
+} from './inspect-url';
 import { INSPECT_PREFIX } from './inspect-url';
 
 const TABLE_KEYS = ['sort', 'cols', 'density', 'q', 'f'] as const;
@@ -33,13 +40,18 @@ export function pageSearch(search: Record<string, unknown>): Record<string, unkn
 /** Table-state part of the search. */
 export function tableSearch(search: Record<string, unknown>): Record<string, unknown> {
   const out: Record<string, unknown> = {};
-  for (const [k, v] of Object.entries(search)) if (k.includes('.') && !k.startsWith(INSPECT_PREFIX)) out[k] = v;
+  for (const [k, v] of Object.entries(search))
+    if (k.includes('.') && !k.startsWith(INSPECT_PREFIX)) out[k] = v;
   return out;
 }
 
 const str = (v: unknown) => (typeof v === 'string' ? v : v == null ? '' : String(v));
 
-export function readTableView(search: Record<string, unknown>, ns: string, columnIds?: readonly string[]): TableViewState | undefined {
+export function readTableView(
+  search: Record<string, unknown>,
+  ns: string,
+  columnIds?: readonly string[],
+): TableViewState | undefined {
   const sort = str(search[`${ns}.sort`]);
   const cols = str(search[`${ns}.cols`]);
   const density = search[`${ns}.density`];
@@ -55,7 +67,8 @@ export function readTableView(search: Record<string, unknown>, ns: string, colum
   if (cols) {
     const order = cols.split(',').filter(Boolean);
     view.columnOrder = order;
-    if (columnIds) view.columnVisibility = Object.fromEntries(columnIds.map((id) => [id, order.includes(id)]));
+    if (columnIds)
+      view.columnVisibility = Object.fromEntries(columnIds.map((id) => [id, order.includes(id)]));
   }
   if (density === 'compact' || density === 'comfortable') view.density = density;
   if (q) view.globalFilter = q;
@@ -76,7 +89,9 @@ export function tableViewToSearch(
   const sort = (view.sorting ?? []).map((s) => `${s.desc ? '-' : ''}${s.id}`).join(',');
   const visibility = view.columnVisibility ?? {};
   const isVisible = (id: string) => visibility[id] ?? defaults.visible.includes(id);
-  const order = view.columnOrder?.length ? [...view.columnOrder, ...defaults.all.filter((id) => !view.columnOrder!.includes(id))] : [...defaults.all];
+  const order = view.columnOrder?.length
+    ? [...view.columnOrder, ...defaults.all.filter((id) => !view.columnOrder!.includes(id))]
+    : [...defaults.all];
   const cols = order.filter((id) => defaults.all.includes(id) && isVisible(id));
   const defaultCols = defaults.all.filter((id) => defaults.visible.includes(id));
   const filters = Object.fromEntries((view.columnFilters ?? []).map((f) => [f.id, f.value]));
@@ -94,8 +109,8 @@ export function tableNamespaces(search: Record<string, unknown>): string[] {
   const out = new Set<string>();
   for (const k of Object.keys(search)) {
     const i = k.lastIndexOf('.');
-    if (i > 0 && (TABLE_KEYS as readonly string[]).includes(k.slice(i + 1)) && !k.startsWith(INSPECT_PREFIX)) out.add(k.slice(0, i));
+    if (i > 0 && (TABLE_KEYS as readonly string[]).includes(k.slice(i + 1)) && !k.startsWith(INSPECT_PREFIX))
+      out.add(k.slice(0, i));
   }
   return [...out];
 }
-

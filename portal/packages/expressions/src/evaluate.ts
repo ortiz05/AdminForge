@@ -53,7 +53,8 @@ function toExpressionError(err: unknown, expr: string, timeoutMs: number): Expre
   if (err instanceof ExpressionError) return err;
   const e = (err ?? {}) as JsonataFailure;
   if (e.code === 'D1012') return new ExpressionTimeoutError(expr, timeoutMs);
-  if (e.code === 'D1011') return new ExpressionError('Expression is nested or recursing too deeply', expr, e.code, e.position);
+  if (e.code === 'D1011')
+    return new ExpressionError('Expression is nested or recursing too deeply', expr, e.code, e.position);
   return new ExpressionError(e.message ?? String(err), expr, e.code, e.position);
 }
 
@@ -122,7 +123,11 @@ function plain(v: unknown): unknown {
 }
 
 /** Evaluates a JSONata expression (without `${ }`) against the scope. Async; timeboxed. */
-export async function evaluate(expr: string, scope: Scope = {}, opts: EvaluateOptions = {}): Promise<unknown> {
+export async function evaluate(
+  expr: string,
+  scope: Scope = {},
+  opts: EvaluateOptions = {},
+): Promise<unknown> {
   const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const compiled = compile(expr, opts);
   let timer: ReturnType<typeof setTimeout> | undefined;

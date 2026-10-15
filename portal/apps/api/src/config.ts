@@ -11,7 +11,12 @@ const ALL_ROLES = PORTAL_ROLES.join(',');
 /** Comma-separated portal roles (MOCK_ROLES). */
 const RoleList = z
   .string()
-  .transform((s) => s.split(',').map((r) => r.trim()).filter(Boolean))
+  .transform((s) =>
+    s
+      .split(',')
+      .map((r) => r.trim())
+      .filter(Boolean),
+  )
   .pipe(z.array(z.enum(PORTAL_ROLES)).min(1, 'at least one portal role is required'));
 
 const Schema = z
@@ -34,8 +39,18 @@ const Schema = z
 
     DATABASE_URL: z.string().optional(),
     TOKEN_CACHE_KEY: z.string().optional(),
-    SESSION_IDLE_MINUTES: z.coerce.number().int().min(1).max(24 * 60).default(60),
-    SESSION_ABSOLUTE_HOURS: z.coerce.number().int().min(1).max(7 * 24).default(12),
+    SESSION_IDLE_MINUTES: z.coerce
+      .number()
+      .int()
+      .min(1)
+      .max(24 * 60)
+      .default(60),
+    SESSION_ABSOLUTE_HOURS: z.coerce
+      .number()
+      .int()
+      .min(1)
+      .max(7 * 24)
+      .default(12),
     WRITE_SESSION_MAX_MINUTES: z.coerce.number().int().min(5).max(480).default(60),
     WRITE_AUTH_CONTEXT: z
       .string()
@@ -87,43 +102,78 @@ const Schema = z
       if (!env[key]) ctx.addIssue({ code: 'custom', path: [key], message: `${key} is required ${why}` });
     };
     if (env.AUTH_MODE === 'entra') {
-      for (const key of ['AF_TENANT_ID', 'AF_READ_CLIENT_ID', 'AF_READ_CLIENT_SECRET', 'TOKEN_CACHE_KEY', 'DATABASE_URL'] as const) {
+      for (const key of [
+        'AF_TENANT_ID',
+        'AF_READ_CLIENT_ID',
+        'AF_READ_CLIENT_SECRET',
+        'TOKEN_CACHE_KEY',
+        'DATABASE_URL',
+      ] as const) {
         need(key, 'when AUTH_MODE=entra');
       }
     }
     if (env.NODE_ENV === 'production') {
       if (env.AUTH_MODE === 'mock') {
-        ctx.addIssue({ code: 'custom', path: ['AUTH_MODE'], message: 'mock auth is not allowed in production' });
+        ctx.addIssue({
+          code: 'custom',
+          path: ['AUTH_MODE'],
+          message: 'mock auth is not allowed in production',
+        });
       }
       need('DATABASE_URL', 'in production');
       const url = new URL(env.PUBLIC_BASE_URL);
       if (url.protocol !== 'https:' && url.hostname !== 'localhost') {
-        ctx.addIssue({ code: 'custom', path: ['PUBLIC_BASE_URL'], message: 'must be https in production (the session cookie is Secure)' });
+        ctx.addIssue({
+          code: 'custom',
+          path: ['PUBLIC_BASE_URL'],
+          message: 'must be https in production (the session cookie is Secure)',
+        });
       }
     }
     if (env.TOKEN_CACHE_KEY && Buffer.from(env.TOKEN_CACHE_KEY, 'base64').length !== 32) {
-      ctx.addIssue({ code: 'custom', path: ['TOKEN_CACHE_KEY'], message: 'TOKEN_CACHE_KEY must be 32 random bytes, base64 (openssl rand -base64 32)' });
+      ctx.addIssue({
+        code: 'custom',
+        path: ['TOKEN_CACHE_KEY'],
+        message: 'TOKEN_CACHE_KEY must be 32 random bytes, base64 (openssl rand -base64 32)',
+      });
     }
     if (Boolean(env.AF_WRITE_CLIENT_ID) !== Boolean(env.AF_WRITE_CLIENT_SECRET)) {
-      ctx.addIssue({ code: 'custom', path: ['AF_WRITE_CLIENT_ID'], message: 'AF_WRITE_CLIENT_ID and AF_WRITE_CLIENT_SECRET must be set together' });
+      ctx.addIssue({
+        code: 'custom',
+        path: ['AF_WRITE_CLIENT_ID'],
+        message: 'AF_WRITE_CLIENT_ID and AF_WRITE_CLIENT_SECRET must be set together',
+      });
     }
     if (env.AF_AUTOMATION_CLIENT_ID && !env.AF_AUTOMATION_CLIENT_SECRET && !env.AF_AUTOMATION_CERT_PATH) {
-      ctx.addIssue({ code: 'custom', path: ['AF_AUTOMATION_CLIENT_ID'], message: 'AF_AUTOMATION_CLIENT_ID needs AF_AUTOMATION_CERT_PATH or AF_AUTOMATION_CLIENT_SECRET' });
+      ctx.addIssue({
+        code: 'custom',
+        path: ['AF_AUTOMATION_CLIENT_ID'],
+        message: 'AF_AUTOMATION_CLIENT_ID needs AF_AUTOMATION_CERT_PATH or AF_AUTOMATION_CLIENT_SECRET',
+      });
     }
-    if ((env.CONTENT_SOURCE ?? (env.NODE_ENV === 'production' ? 'db' : 'fs')) === 'db') need('DATABASE_URL', 'when CONTENT_SOURCE=db');
+    if ((env.CONTENT_SOURCE ?? (env.NODE_ENV === 'production' ? 'db' : 'fs')) === 'db')
+      need('DATABASE_URL', 'when CONTENT_SOURCE=db');
   })
   .transform((env) => {
     const root = workspaceRoot();
     return {
       ...env,
       API_HOST: env.API_HOST ?? (env.NODE_ENV === 'production' ? '0.0.0.0' : '127.0.0.1'),
-      ADMINFORGE_FIXTURES_DIR: path.resolve(env.ADMINFORGE_FIXTURES_DIR ?? path.join(root, 'tests', 'fixtures')),
+      ADMINFORGE_FIXTURES_DIR: path.resolve(
+        env.ADMINFORGE_FIXTURES_DIR ?? path.join(root, 'tests', 'fixtures'),
+      ),
       WEB_DIST_DIR: path.resolve(env.WEB_DIST_DIR ?? path.join(root, 'portal', 'apps', 'web', 'dist')),
       MOCK_ROLES: env.MOCK_ROLES as PortalRole[],
-      CONTENT_SOURCE: env.CONTENT_SOURCE ?? (env.NODE_ENV === 'production' ? ('db' as const) : ('fs' as const)),
+      CONTENT_SOURCE:
+        env.CONTENT_SOURCE ?? (env.NODE_ENV === 'production' ? ('db' as const) : ('fs' as const)),
       CONTENT_DIR: path.resolve(env.CONTENT_DIR ?? path.join(root, 'portal', 'content')),
       CONTENT_WATCH: env.CONTENT_WATCH ?? env.NODE_ENV === 'development',
-      ADMINFORGE_ARTIFACTS_DIR: path.resolve((env.ADMINFORGE_ARTIFACTS_DIR ?? '~/.local/share/adminforge/artifacts').replace(/^~(?=$|[\\/])/, homedir())),
+      ADMINFORGE_ARTIFACTS_DIR: path.resolve(
+        (env.ADMINFORGE_ARTIFACTS_DIR ?? '~/.local/share/adminforge/artifacts').replace(
+          /^~(?=$|[\\/])/,
+          homedir(),
+        ),
+      ),
     };
   });
 
@@ -154,6 +204,7 @@ export function tokenCacheKey(config: Config): Buffer | undefined {
   return config.TOKEN_CACHE_KEY ? Buffer.from(config.TOKEN_CACHE_KEY, 'base64') : undefined;
 }
 
-export const writeAppConfigured = (config: Config) => Boolean(config.AF_WRITE_CLIENT_ID && config.AF_WRITE_CLIENT_SECRET);
+export const writeAppConfigured = (config: Config) =>
+  Boolean(config.AF_WRITE_CLIENT_ID && config.AF_WRITE_CLIENT_SECRET);
 
 export const webDistAvailable = (config: Config) => existsSync(path.join(config.WEB_DIST_DIR, 'index.html'));

@@ -34,22 +34,38 @@ export class StaticDefinitions implements DefinitionResolver {
     return this;
   }
   async resolve(kind: Kind, key: string, version?: string) {
-    const hit = (this.defs.get(key) ?? []).filter((d) => d.kind === kind && (!version || d.version === version)).at(-1);
+    const hit = (this.defs.get(key) ?? [])
+      .filter((d) => d.kind === kind && (!version || d.version === version))
+      .at(-1);
     if (!hit) throw new AppError(404, 'definition_not_found', `No published ${kind} "${key}".`);
     return { def: hit.def, version: hit.version, sha256: hit.sha256 } as never;
   }
 }
 
-export type OutboundCall = { call: ServiceCall; kind: ExecutionIdentity['kind']; mode: string; user: string | null };
+export type OutboundCall = {
+  call: ServiceCall;
+  kind: ExecutionIdentity['kind'];
+  mode: string;
+  user: string | null;
+};
 
 /** Records calls with who made them; `respond` returns data or throws. */
 export class FakeExecutor implements OutboundExecutor {
   readonly calls: OutboundCall[] = [];
   constructor(public respond: (call: ServiceCall) => unknown = () => ({ ok: true })) {}
   async execute<T>(identity: ExecutionIdentity, call: ServiceCall) {
-    this.calls.push({ call, kind: identity.kind, mode: identity.mode, user: identity.kind === 'delegated' ? identity.session.upn : null });
+    this.calls.push({
+      call,
+      kind: identity.kind,
+      mode: identity.mode,
+      user: identity.kind === 'delegated' ? identity.session.upn : null,
+    });
     const data = (await this.respond(call)) as T;
-    return { data, status: 200, provenance: { service: call.service, path: call.path, ms: 1, requestId: `req-${this.calls.length}` } };
+    return {
+      data,
+      status: 200,
+      provenance: { service: call.service, path: call.path, ms: 1, requestId: `req-${this.calls.length}` },
+    };
   }
 }
 
@@ -118,10 +134,17 @@ export async function runsApp(o: RunsAppOptions) {
       record,
       headers,
       arm: async (on = true) => {
-        await sessions.update(record.idHash, on ? { writeAccountId: 'mock-write', writeExpiresAt: new Date(clock.now().getTime() + 60 * 60_000) } : { writeAccountId: null, writeExpiresAt: null });
+        await sessions.update(
+          record.idHash,
+          on
+            ? { writeAccountId: 'mock-write', writeExpiresAt: new Date(clock.now().getTime() + 60 * 60_000) }
+            : { writeAccountId: null, writeExpiresAt: null },
+        );
       },
-      get: (url: string, extra: Record<string, string> = {}) => app.inject({ method: 'GET', url, headers: { ...headers, ...extra } }),
-      post: (url: string, payload: unknown = {}) => app.inject({ method: 'POST', url, headers, payload: payload as Record<string, unknown> }),
+      get: (url: string, extra: Record<string, string> = {}) =>
+        app.inject({ method: 'GET', url, headers: { ...headers, ...extra } }),
+      post: (url: string, payload: unknown = {}) =>
+        app.inject({ method: 'POST', url, headers, payload: payload as Record<string, unknown> }),
     };
   }
 
@@ -142,4 +165,10 @@ export async function runsApp(o: RunsAppOptions) {
   };
 }
 
-export const ALL_ROLES = ['Portal.Reader', 'Portal.Operator', 'Playbook.Author', 'Playbook.Approver', 'Portal.Admin'];
+export const ALL_ROLES = [
+  'Portal.Reader',
+  'Portal.Operator',
+  'Playbook.Author',
+  'Playbook.Approver',
+  'Portal.Admin',
+];

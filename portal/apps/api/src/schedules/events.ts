@@ -13,7 +13,8 @@ import type { EventBus } from '../events/bus';
 
 export const SCHEDULE_EVENTS_CHANNEL = 'schedule_events';
 
-export type ScheduleEventType = 'schedule.failed' | 'schedule.updated' | 'probe.updated' | 'schedule.run_requested' | 'schedules.changed';
+export type ScheduleEventType =
+  'schedule.failed' | 'schedule.updated' | 'probe.updated' | 'schedule.run_requested' | 'schedules.changed';
 export interface ScheduleEvent {
   type: ScheduleEventType;
   data: Record<string, unknown>;
@@ -30,7 +31,12 @@ export class ScheduleEvents {
   private listener: PgListener | null = null;
 
   constructor(
-    private readonly opts: { bus?: EventBus | null; database?: Database | null; listenUrl?: string | null; log?: Log } = {},
+    private readonly opts: {
+      bus?: EventBus | null;
+      database?: Database | null;
+      listenUrl?: string | null;
+      log?: Log;
+    } = {},
   ) {}
 
   /** Subscribes to events from this process and (once started) from others. */
@@ -56,8 +62,17 @@ export class ScheduleEvents {
     if (!db) return;
     let payload = JSON.stringify({ ...e, origin: this.origin });
     // NOTIFY payloads are limited to 8000 bytes.
-    if (payload.length > 7900) payload = JSON.stringify({ type: e.type, data: { truncated: true, key: e.data.key ?? null }, origin: this.origin });
-    db.pool.query('select pg_notify($1, $2)', [SCHEDULE_EVENTS_CHANNEL, payload]).catch((err: unknown) => this.opts.log?.warn({ err: { message: (err as Error).message } }, 'schedule event NOTIFY failed'));
+    if (payload.length > 7900)
+      payload = JSON.stringify({
+        type: e.type,
+        data: { truncated: true, key: e.data.key ?? null },
+        origin: this.origin,
+      });
+    db.pool
+      .query('select pg_notify($1, $2)', [SCHEDULE_EVENTS_CHANNEL, payload])
+      .catch((err: unknown) =>
+        this.opts.log?.warn({ err: { message: (err as Error).message } }, 'schedule event NOTIFY failed'),
+      );
   }
 
   /** LISTEN for other processes' events (needs a database URL). */

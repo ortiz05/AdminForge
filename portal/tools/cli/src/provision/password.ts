@@ -10,7 +10,10 @@ const SYMBOLS = '!%*+-.:=?@^_~';
  * Strong random password meeting Entra complexity (all four character classes), from a CSPRNG.
  * `pick` is injectable for tests; the default uses crypto.randomInt.
  */
-export function generatePassword(length = 28, pick: (max: number) => number = (max) => randomInt(max)): string {
+export function generatePassword(
+  length = 28,
+  pick: (max: number) => number = (max) => randomInt(max),
+): string {
   if (length < 16) throw new Error('Password length must be at least 16');
   const all = UPPER + LOWER + DIGITS + SYMBOLS;
   const chars = [UPPER, LOWER, DIGITS, SYMBOLS].map((set) => set[pick(set.length)]!);

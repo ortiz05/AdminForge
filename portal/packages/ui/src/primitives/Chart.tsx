@@ -78,7 +78,12 @@ export function Chart({
       aria: { enabled: true, label: { description: title } },
       ...(horizontal && kind === 'bar'
         ? {
-            yAxis: { type: 'category' as const, data: categories, inverse: true, axisLabel: { width: 180, overflow: 'truncate' as const } },
+            yAxis: {
+              type: 'category' as const,
+              data: categories,
+              inverse: true,
+              axisLabel: { width: 180, overflow: 'truncate' as const },
+            },
             xAxis: { type: 'value' as const, axisLabel: { formatter: (v: number) => axisFormat(v) } },
           }
         : {

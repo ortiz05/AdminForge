@@ -21,12 +21,15 @@ describe('common building blocks', () => {
     expect(() => parseDuration(text)).toThrow(/Invalid duration/);
   });
   it('accepts semver with prerelease and build', () => {
-    for (const v of ['0.1.0', '1.2.3-beta.1', '1.0.0+sha.abc']) expect(SemVer.safeParse(v).success).toBe(true);
+    for (const v of ['0.1.0', '1.2.3-beta.1', '1.0.0+sha.abc'])
+      expect(SemVer.safeParse(v).success).toBe(true);
     for (const v of ['1.0', '01.0.0', 'v1.0.0']) expect(SemVer.safeParse(v).success).toBe(false);
   });
   it('accepts <section>.<name> ids (including local. drafts)', () => {
-    for (const id of ['identity.users', 'local.identity.my-page', 'azure.function-apps']) expect(DefinitionId.safeParse(id).success).toBe(true);
-    for (const id of ['users', 'Identity.users', 'identity.', 'identity.my_page']) expect(DefinitionId.safeParse(id).success).toBe(false);
+    for (const id of ['identity.users', 'local.identity.my-page', 'azure.function-apps'])
+      expect(DefinitionId.safeParse(id).success).toBe(true);
+    for (const id of ['users', 'Identity.users', 'identity.', 'identity.my_page'])
+      expect(DefinitionId.safeParse(id).success).toBe(false);
   });
   it('formats paths', () => {
     expect(formatPath(['steps', 2, 'request', 'path'])).toBe('steps[2].request.path');

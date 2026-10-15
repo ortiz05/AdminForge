@@ -17,14 +17,16 @@ export function missingLocalKeys(current: Record<string, string>): Record<string
   if (!password && has('DATABASE_URL')) {
     try {
       const url = new URL(current.DATABASE_URL!);
-      if (url.hostname === '127.0.0.1' && url.port === '55432' && url.password) password = decodeURIComponent(url.password);
+      if (url.hostname === '127.0.0.1' && url.port === '55432' && url.password)
+        password = decodeURIComponent(url.password);
     } catch {
       // Not a URL we manage; leave it alone and generate a fresh password for the container.
     }
   }
   if (!password) password = randomBytes(24).toString('base64url');
   if (!has('POSTGRES_PASSWORD')) add.POSTGRES_PASSWORD = password;
-  if (!has('DATABASE_URL')) add.DATABASE_URL = `postgres://adminforge:${encodeURIComponent(password)}@127.0.0.1:55432/adminforge`;
+  if (!has('DATABASE_URL'))
+    add.DATABASE_URL = `postgres://adminforge:${encodeURIComponent(password)}@127.0.0.1:55432/adminforge`;
   if (!has('TOKEN_CACHE_KEY')) add.TOKEN_CACHE_KEY = randomBytes(32).toString('base64');
 
   const defaults: Record<string, string> = {

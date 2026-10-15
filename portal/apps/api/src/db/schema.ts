@@ -1,5 +1,18 @@
 import { sql } from 'drizzle-orm';
-import { bigserial, boolean, doublePrecision, index, integer, jsonb, pgTable, primaryKey, text, timestamp, unique, uuid } from 'drizzle-orm/pg-core';
+import {
+  bigserial,
+  boolean,
+  doublePrecision,
+  index,
+  integer,
+  jsonb,
+  pgTable,
+  primaryKey,
+  text,
+  timestamp,
+  unique,
+  uuid,
+} from 'drizzle-orm/pg-core';
 
 const ts = (name: string) => timestamp(name, { withTimezone: true, mode: 'date' });
 
@@ -14,7 +27,10 @@ export const sessions = pgTable(
     tenantId: text('tenant_id').notNull(),
     tenantName: text('tenant_name').notNull(),
     tenantDomain: text('tenant_domain').notNull(),
-    roles: text('roles').array().notNull().default(sql`'{}'::text[]`),
+    roles: text('roles')
+      .array()
+      .notNull()
+      .default(sql`'{}'::text[]`),
     csrf: text('csrf').notNull(),
     readAccountId: text('read_account_id'),
     writeAccountId: text('write_account_id'),
@@ -74,7 +90,11 @@ export const auditEvents = pgTable(
     prevHash: text('prev_hash').notNull(),
     hash: text('hash').notNull(),
   },
-  (t) => [index('audit_actor_idx').on(t.actorOid), index('audit_action_idx').on(t.action), index('audit_ts_idx').on(t.ts)],
+  (t) => [
+    index('audit_actor_idx').on(t.actorOid),
+    index('audit_action_idx').on(t.action),
+    index('audit_ts_idx').on(t.ts),
+  ],
 );
 
 /** Per-user preferences (theme, density, nav state, pins, recents). */
@@ -112,7 +132,10 @@ export const definitions = pgTable(
     createdAt: ts('created_at').notNull().defaultNow(),
     publishedAt: ts('published_at'),
   },
-  (t) => [unique('definitions_kind_key_version').on(t.kind, t.key, t.version), index('definitions_lookup_idx').on(t.kind, t.key, t.status)],
+  (t) => [
+    unique('definitions_kind_key_version').on(t.kind, t.key, t.version),
+    index('definitions_lookup_idx').on(t.kind, t.key, t.status),
+  ],
 );
 
 /** Saved list/report views (params, columns, filters), personal or shared. */
@@ -162,7 +185,11 @@ export const runs = pgTable(
     endedAt: ts('ended_at'),
     updatedAt: ts('updated_at').notNull().defaultNow(),
   },
-  (t) => [index('runs_initiator_idx').on(t.initiatorOid, t.createdAt), index('runs_status_idx').on(t.status), index('runs_definition_idx').on(t.definitionKey)],
+  (t) => [
+    index('runs_initiator_idx').on(t.initiatorOid, t.createdAt),
+    index('runs_status_idx').on(t.status),
+    index('runs_definition_idx').on(t.definitionKey),
+  ],
 );
 
 /** One row per step attempt, in execution order. Requests and outputs are redacted/truncated. */
@@ -224,29 +251,29 @@ export const approvals = pgTable(
     createdAt: ts('created_at').notNull().defaultNow(),
     decidedAt: ts('decided_at'),
   },
-  (t) => [index('approvals_subject_idx').on(t.subjectType, t.subjectId), index('approvals_status_idx').on(t.status)],
+  (t) => [
+    index('approvals_subject_idx').on(t.subjectType, t.subjectId),
+    index('approvals_status_idx').on(t.status),
+  ],
 );
 
 /** Schedules executed on this host by the scheduler (R6, ADR-011). */
-export const schedules = pgTable(
-  'schedules',
-  {
-    id: uuid('id').primaryKey().defaultRandom(),
-    key: text('key').notNull().unique(),
-    /** content (portal/content/schedules) | portal (created in the UI / Forge assistant) */
-    source: text('source').notNull(),
-    definition: jsonb('definition').notNull(),
-    sha256: text('sha256').notNull(),
-    enabled: boolean('enabled').notNull().default(false),
-    createdBy: text('created_by'),
-    approvedBy: text('approved_by'),
-    nextRunAt: ts('next_run_at'),
-    lastRunAt: ts('last_run_at'),
-    lastStatus: text('last_status'),
-    createdAt: ts('created_at').notNull().defaultNow(),
-    updatedAt: ts('updated_at').notNull().defaultNow(),
-  },
-);
+export const schedules = pgTable('schedules', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  key: text('key').notNull().unique(),
+  /** content (portal/content/schedules) | portal (created in the UI / Forge assistant) */
+  source: text('source').notNull(),
+  definition: jsonb('definition').notNull(),
+  sha256: text('sha256').notNull(),
+  enabled: boolean('enabled').notNull().default(false),
+  createdBy: text('created_by'),
+  approvedBy: text('approved_by'),
+  nextRunAt: ts('next_run_at'),
+  lastRunAt: ts('last_run_at'),
+  lastStatus: text('last_status'),
+  createdAt: ts('created_at').notNull().defaultNow(),
+  updatedAt: ts('updated_at').notNull().defaultNow(),
+});
 
 /** Every execution of a schedule (cron or "run now"). */
 export const scheduleRuns = pgTable(

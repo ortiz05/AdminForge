@@ -50,7 +50,13 @@ function dayOfWeek(token: string): number | undefined {
 /** "Monday", "weekdays", "Monday and Thursday", "Monday to Wednesday" — or undefined when not a simple list/range. */
 function describeDays(field: string): string | undefined {
   if (field === '1-5' || field.toUpperCase() === 'MON-FRI') return 'weekdays';
-  if (field === '0,6' || field === '6,0' || field.toUpperCase() === 'SAT,SUN' || field.toUpperCase() === 'SUN,SAT') return 'Saturday and Sunday';
+  if (
+    field === '0,6' ||
+    field === '6,0' ||
+    field.toUpperCase() === 'SAT,SUN' ||
+    field.toUpperCase() === 'SUN,SAT'
+  )
+    return 'Saturday and Sunday';
   const range = /^([A-Za-z0-9]+)-([A-Za-z0-9]+)$/.exec(field);
   if (range) {
     const a = dayOfWeek(range[1]!);
@@ -63,7 +69,8 @@ function describeDays(field: string): string | undefined {
   return names.length === 1 ? names[0] : `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`;
 }
 
-const ordinal = (n: number) => `${n}${n % 10 === 1 && n !== 11 ? 'st' : n % 10 === 2 && n !== 12 ? 'nd' : n % 10 === 3 && n !== 13 ? 'rd' : 'th'}`;
+const ordinal = (n: number) =>
+  `${n}${n % 10 === 1 && n !== 11 ? 'st' : n % 10 === 2 && n !== 12 ? 'nd' : n % 10 === 3 && n !== 13 ? 'rd' : 'th'}`;
 
 /**
  * Plain-language preview of a cron pattern ("Every 15 minutes", "Every Monday at 07:00", "Every 6 hours at minute 20").

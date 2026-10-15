@@ -1,6 +1,18 @@
 import { randomUUID } from 'node:crypto';
 import type { HumanTask, RunEventInput, RunStatus, StepRecord } from '@adminforge/engine';
-import type { EventRow, NewRun, RunFilter, RunNotification, RunRepository, RunRow, RunRowPatch, TaskFilter, TaskPolicy, TaskRow, TaskStatus } from './types';
+import type {
+  EventRow,
+  NewRun,
+  RunFilter,
+  RunNotification,
+  RunRepository,
+  RunRow,
+  RunRowPatch,
+  TaskFilter,
+  TaskPolicy,
+  TaskRow,
+  TaskStatus,
+} from './types';
 
 const clone = <T>(v: T): T => structuredClone(v);
 
@@ -25,7 +37,16 @@ export class MemoryRunRepository implements RunRepository {
     const existing = this.runs.get(run.id);
     if (existing) return clone(existing);
     const now = this.now();
-    const row: RunRow = { ...clone(run), status: run.status ?? 'queued', outputs: null, error: null, createdAt: now, startedAt: null, endedAt: null, updatedAt: now };
+    const row: RunRow = {
+      ...clone(run),
+      status: run.status ?? 'queued',
+      outputs: null,
+      error: null,
+      createdAt: now,
+      startedAt: null,
+      endedAt: null,
+      updatedAt: now,
+    };
     this.runs.set(row.id, row);
     return clone(row);
   }
@@ -55,7 +76,9 @@ export class MemoryRunRepository implements RunRepository {
           (!topLevel || r.parentRunId === null) &&
           (!f.from || r.createdAt >= f.from) &&
           (!f.to || r.createdAt <= f.to) &&
-          (!f.cursor || r.createdAt < f.cursor.createdAt || (r.createdAt.getTime() === f.cursor.createdAt.getTime() && r.id < f.cursor.id)),
+          (!f.cursor ||
+            r.createdAt < f.cursor.createdAt ||
+            (r.createdAt.getTime() === f.cursor.createdAt.getTime() && r.id < f.cursor.id)),
       )
       .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime() || (a.id < b.id ? 1 : -1))
       .slice(0, f.limit)
@@ -76,7 +99,10 @@ export class MemoryRunRepository implements RunRepository {
   }
 
   async staleRuns(statuses: readonly RunStatus[], before: Date, limit: number): Promise<RunRow[]> {
-    return [...this.runs.values()].filter((r) => statuses.includes(r.status) && r.updatedAt < before).slice(0, limit).map(clone);
+    return [...this.runs.values()]
+      .filter((r) => statuses.includes(r.status) && r.updatedAt < before)
+      .slice(0, limit)
+      .map(clone);
   }
 
   async saveStep(runId: string, record: StepRecord): Promise<void> {
@@ -97,7 +123,10 @@ export class MemoryRunRepository implements RunRepository {
   }
 
   async listEvents(runId: string, afterId: number, limit: number): Promise<EventRow[]> {
-    return this.events.filter((e) => e.runId === runId && e.id > afterId).slice(0, limit).map(clone);
+    return this.events
+      .filter((e) => e.runId === runId && e.id > afterId)
+      .slice(0, limit)
+      .map(clone);
   }
 
   private key = (runId: string, path: string) => `${runId}|${path}`;
@@ -133,7 +162,11 @@ export class MemoryRunRepository implements RunRepository {
     return null;
   }
 
-  async updateTask(id: string, patch: Partial<Pick<TaskRow, 'decisions' | 'status' | 'decidedAt'>>, expect?: TaskStatus): Promise<TaskRow | null> {
+  async updateTask(
+    id: string,
+    patch: Partial<Pick<TaskRow, 'decisions' | 'status' | 'decidedAt'>>,
+    expect?: TaskStatus,
+  ): Promise<TaskRow | null> {
     for (const [k, t] of this.tasks) {
       if (t.id !== id) continue;
       if (expect && t.status !== expect) return null;
@@ -146,7 +179,13 @@ export class MemoryRunRepository implements RunRepository {
 
   async listTasks(f: TaskFilter): Promise<TaskRow[]> {
     return [...this.tasks.values()]
-      .filter((t) => (!f.status || t.status === f.status) && (!f.kind || t.policy.kind === f.kind) && (!f.runId || t.subjectId === f.runId) && (!f.runIds || f.runIds.includes(t.subjectId)))
+      .filter(
+        (t) =>
+          (!f.status || t.status === f.status) &&
+          (!f.kind || t.policy.kind === f.kind) &&
+          (!f.runId || t.subjectId === f.runId) &&
+          (!f.runIds || f.runIds.includes(t.subjectId)),
+      )
       .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())
       .map(clone);
   }

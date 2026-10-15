@@ -1,8 +1,22 @@
 import { useState, type FormEvent } from 'react';
 import { useMutation } from '@tanstack/react-query';
-import { Button, CodeBlock, Dialog, DialogClose, DownloadSimpleIcon, ErrorState, TextField } from '@adminforge/ui';
+import {
+  Button,
+  CodeBlock,
+  Dialog,
+  DialogClose,
+  DownloadSimpleIcon,
+  ErrorState,
+  TextField,
+} from '@adminforge/ui';
 import { ApiRequestError } from '../lib/api';
-import { scaffoldQuery, type QueryRequest, type ResultColumn, type SaveKind, type ScaffoldResult } from './contracts';
+import {
+  scaffoldQuery,
+  type QueryRequest,
+  type ResultColumn,
+  type SaveKind,
+  type ScaffoldResult,
+} from './contracts';
 import { downloadText } from './results';
 import { SOURCE_META } from './sources';
 
@@ -24,7 +38,11 @@ const KIND_TEXT: Record<SaveKind, { noun: string; what: string; skill: string }>
   },
 };
 
-export const SAVE_LABEL: Record<SaveKind, string> = { report: 'Save as report', probe: 'Save as probe', schedule: 'Save as schedule' };
+export const SAVE_LABEL: Record<SaveKind, string> = {
+  report: 'Save as report',
+  probe: 'Save as probe',
+  schedule: 'Save as schedule',
+};
 
 /** `portal/content/reports/azure/untagged.report.yaml` → `untagged`. */
 export const slugOf = (path: string) =>
@@ -44,16 +62,22 @@ function Steps({ kind, file, title }: { kind: SaveKind; file: ScaffoldResult; ti
   return (
     <ol className="flex list-decimal flex-col gap-3 pl-5 text-sm text-fg-2 marker:text-fg-3">
       <li>
-        Save the YAML above as <code className="font-mono text-xs break-all text-fg">{file.path}</code> in your clone of the AdminForge repository.
+        Save the YAML above as <code className="font-mono text-xs break-all text-fg">{file.path}</code> in
+        your clone of the AdminForge repository.
       </li>
       <li>
         <div className="flex flex-col gap-2">
-          <span>Validate it against the schemas, expressions and permissions, then commit it on a branch and open a pull request:</span>
+          <span>
+            Validate it against the schemas, expressions and permissions, then commit it on a branch and open
+            a pull request:
+          </span>
           <CodeBlock code={commands} title="Validate and commit" language="shell" wrap />
         </div>
       </li>
       <li>
-        After the pull request is merged, publish it with <code className="font-mono text-xs text-fg">pnpm adminforge publish</code>. Nothing is live until then.
+        After the pull request is merged, publish it with{' '}
+        <code className="font-mono text-xs text-fg">pnpm adminforge publish</code>. Nothing is live until
+        then.
       </li>
     </ol>
   );
@@ -80,10 +104,15 @@ export function SaveDialog({ kind, request, columns, defaultTitle, onClose }: Sa
         query: request.query,
         title: title.trim(),
         ...(request.timespan ? { timespan: request.timespan } : {}),
-        ...(columns?.length ? { columns: columns.slice(0, 60).map((c) => ({ name: c.name, type: c.type })) } : {}),
+        ...(columns?.length
+          ? { columns: columns.slice(0, 60).map((c) => ({ name: c.name, type: c.type })) }
+          : {}),
       }),
   });
-  const scoped = request.source === 'resourceGraph' ? Boolean(request.subscriptions?.length) : request.source === 'logAnalytics' && Boolean(request.workspace);
+  const scoped =
+    request.source === 'resourceGraph'
+      ? Boolean(request.subscriptions?.length)
+      : request.source === 'logAnalytics' && Boolean(request.workspace);
   const text = KIND_TEXT[kind];
   const titleError = touched && !title.trim() ? 'Give it a title.' : undefined;
   const file = scaffold.data;
@@ -105,7 +134,16 @@ export function SaveDialog({ kind, request, columns, defaultTitle, onClose }: Sa
       footer={
         file ? (
           <>
-            <Button intent="ghost" onClick={() => downloadText(file.yaml, file.path.split('/').pop() ?? `${slugOf(file.path)}.yaml`, 'application/yaml;charset=utf-8')}>
+            <Button
+              intent="ghost"
+              onClick={() =>
+                downloadText(
+                  file.yaml,
+                  file.path.split('/').pop() ?? `${slugOf(file.path)}.yaml`,
+                  'application/yaml;charset=utf-8',
+                )
+              }
+            >
               <DownloadSimpleIcon size={15} aria-hidden />
               Download file
             </Button>
@@ -130,8 +168,9 @@ export function SaveDialog({ kind, request, columns, defaultTitle, onClose }: Sa
           <CodeBlock code={file.yaml} title={file.path} language="yaml" maxHeight={240} />
           <Steps kind={kind} file={file} title={title.trim()} />
           <p className="rounded-(--af-input-radius) border border-line bg-raised px-3 py-2.5 text-sm text-fg-2">
-            Working in Claude Code? Ask it to use the <code className="font-mono text-xs text-fg">{text.skill}</code> skill: it reviews the file against the
-            content rules, adds fixtures and tests, and runs the checks for you.
+            Working in Claude Code? Ask it to use the{' '}
+            <code className="font-mono text-xs text-fg">{text.skill}</code> skill: it reviews the file against
+            the content rules, adds fixtures and tests, and runs the checks for you.
           </p>
         </div>
       ) : (
@@ -162,7 +201,9 @@ export function SaveDialog({ kind, request, columns, defaultTitle, onClose }: Sa
               message={(scaffold.error as Error).message}
               hint={scaffold.error instanceof ApiRequestError ? scaffold.error.hint : undefined}
               code={scaffold.error instanceof ApiRequestError ? scaffold.error.code : undefined}
-              correlationId={scaffold.error instanceof ApiRequestError ? scaffold.error.correlationId : undefined}
+              correlationId={
+                scaffold.error instanceof ApiRequestError ? scaffold.error.correlationId : undefined
+              }
             />
           )}
         </form>

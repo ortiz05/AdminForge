@@ -3,9 +3,20 @@ import path from 'node:path';
 import { OverviewResponse } from '@adminforge/api/src/routes/overview';
 import { ApiErrorBody } from '@adminforge/schemas';
 import { repoRoot } from '../lib/repo';
-import { cookieFrom, entraConfig, FakeAuthClient, getMe, json, makeApp, mockConfig, mockLogin, orgResponse } from './helpers';
+import {
+  cookieFrom,
+  entraConfig,
+  FakeAuthClient,
+  getMe,
+  json,
+  makeApp,
+  mockConfig,
+  mockLogin,
+  orgResponse,
+} from './helpers';
 
-const fixture = (name: string) => JSON.parse(readFileSync(path.join(repoRoot, 'tests/fixtures/graph', name), 'utf8'));
+const fixture = (name: string) =>
+  JSON.parse(readFileSync(path.join(repoRoot, 'tests/fixtures/graph', name), 'utf8'));
 
 interface Captured {
   url: string;
@@ -20,7 +31,11 @@ async function liveApp(batch: (call: number) => Response) {
   const fetch: typeof globalThis.fetch = async (input, init) => {
     const url = String(input);
     if (url.includes('/$batch')) {
-      calls.push({ url, headers: init!.headers as Record<string, string>, body: JSON.parse(String(init!.body)) });
+      calls.push({
+        url,
+        headers: init!.headers as Record<string, string>,
+        body: JSON.parse(String(init!.body)),
+      });
       return batch(calls.length);
     }
     return orgResponse();
@@ -81,7 +96,9 @@ describe('GET /api/overview', () => {
       '/admin/serviceAnnouncement/healthOverviews?$select=service,status',
     ]);
     expect(call!.body.requests.every((r) => r.method === 'GET')).toBe(true);
-    expect(call!.body.requests.filter((r) => r.headers?.ConsistencyLevel === 'eventual').map((r) => r.id)).toEqual(['users', 'groups', 'apps', 'devices']);
+    expect(
+      call!.body.requests.filter((r) => r.headers?.ConsistencyLevel === 'eventual').map((r) => r.id),
+    ).toEqual(['users', 'groups', 'apps', 'devices']);
 
     expect(body.org).toEqual({
       id: '00000000-0000-4000-8000-00000000e0e0',
@@ -96,27 +113,56 @@ describe('GET /api/overview', () => {
       { sku: 'SPE_E5', used: 1104, total: 1200 },
       { sku: 'EMS', used: 62, total: 100 },
     ]);
-    expect(body.health).toEqual({ items: [{ service: 'Exchange Online', status: 'serviceOperational' }, { service: 'Microsoft Teams', status: 'serviceDegradation' }] });
+    expect(body.health).toEqual({
+      items: [
+        { service: 'Exchange Online', status: 'serviceOperational' },
+        { service: 'Microsoft Teams', status: 'serviceDegradation' },
+      ],
+    });
     expect(body.errors).toBeUndefined();
-    expect(body.provenance.health).toMatchObject({ service: 'graph', path: '/admin/serviceAnnouncement/healthOverviews', requestId: 'req-batch-1' });
-    expect(Object.keys(body.provenance).sort()).toEqual(['apps', 'devices', 'groups', 'health', 'org', 'skus', 'users']);
+    expect(body.provenance.health).toMatchObject({
+      service: 'graph',
+      path: '/admin/serviceAnnouncement/healthOverviews',
+      requestId: 'req-batch-1',
+    });
+    expect(Object.keys(body.provenance).sort()).toEqual([
+      'apps',
+      'devices',
+      'groups',
+      'health',
+      'org',
+      'skus',
+      'users',
+    ]);
     await t.app.close();
   });
 
   it('partial failure: forbidden sections carry a hint instead of failing the page', async () => {
-    const batch = fixture('overview-batch.json') as { responses: Array<{ id: string; status: number; body: unknown }> };
+    const batch = fixture('overview-batch.json') as {
+      responses: Array<{ id: string; status: number; body: unknown }>;
+    };
     const forbidden = (message: string) => ({ status: 403, body: { error: { code: 'Forbidden', message } } });
     for (const r of batch.responses) {
-      if (r.id === 'health') Object.assign(r, forbidden('Insufficient privileges to complete the operation.'));
-      if (r.id === 'devices') Object.assign(r, forbidden('Insufficient privileges to complete the operation.'));
-      if (r.id === 'skus') Object.assign(r, { status: 503, body: { error: { code: 'serviceUnavailable', message: 'Try later' } } });
+      if (r.id === 'health')
+        Object.assign(r, forbidden('Insufficient privileges to complete the operation.'));
+      if (r.id === 'devices')
+        Object.assign(r, forbidden('Insufficient privileges to complete the operation.'));
+      if (r.id === 'skus')
+        Object.assign(r, {
+          status: 503,
+          body: { error: { code: 'serviceUnavailable', message: 'Try later' } },
+        });
     }
     const t = await liveApp(() => json(batch));
     const res = await t.app.inject({ method: 'GET', url: '/api/overview', headers: { cookie: t.cookie } });
     expect(res.statusCode).toBe(200);
     const body = OverviewResponse.parse(res.json());
     expect(body.health).toEqual({
-      error: { code: 'Forbidden', message: 'Insufficient privileges to complete the operation.', hint: expect.stringContaining('ServiceHealth.Read.All') },
+      error: {
+        code: 'Forbidden',
+        message: 'Insufficient privileges to complete the operation.',
+        hint: expect.stringContaining('ServiceHealth.Read.All'),
+      },
     });
     expect(body.counts).toEqual({ users: 1284, groups: 342, apps: 87, devices: null });
     expect(body.errors!.devices!.hint).toContain('Device.Read.All');
@@ -127,11 +173,20 @@ describe('GET /api/overview', () => {
   });
 
   it('licence errors say so', async () => {
-    const batch = fixture('overview-batch.json') as { responses: Array<{ id: string; status: number; body: unknown }> };
+    const batch = fixture('overview-batch.json') as {
+      responses: Array<{ id: string; status: number; body: unknown }>;
+    };
     const health = batch.responses.find((r) => r.id === 'health')!;
-    Object.assign(health, { status: 403, body: { error: { code: 'Forbidden', message: 'Tenant does not have a SKU required for this operation.' } } });
+    Object.assign(health, {
+      status: 403,
+      body: {
+        error: { code: 'Forbidden', message: 'Tenant does not have a SKU required for this operation.' },
+      },
+    });
     const t = await liveApp(() => json(batch));
-    const body = OverviewResponse.parse((await t.app.inject({ method: 'GET', url: '/api/overview', headers: { cookie: t.cookie } })).json());
+    const body = OverviewResponse.parse(
+      (await t.app.inject({ method: 'GET', url: '/api/overview', headers: { cookie: t.cookie } })).json(),
+    );
     expect('error' in body.health && body.health.error.hint).toMatch(/licences/);
     await t.app.close();
   });
@@ -140,19 +195,38 @@ describe('GET /api/overview', () => {
     const claims = JSON.stringify({ access_token: { nbf: { essential: true, value: '1700000000' } } });
     const challenge = `Bearer realm="", error="insufficient_claims", claims="${Buffer.from(claims).toString('base64')}"`;
     const t = await liveApp((n) =>
-      n === 1 ? json({ error: { code: 'InvalidAuthenticationToken', message: 'Continuous access evaluation resulted in challenge' } }, 401, { 'www-authenticate': challenge }) : json(fixture('overview-batch.json')),
+      n === 1
+        ? json(
+            {
+              error: {
+                code: 'InvalidAuthenticationToken',
+                message: 'Continuous access evaluation resulted in challenge',
+              },
+            },
+            401,
+            { 'www-authenticate': challenge },
+          )
+        : json(fixture('overview-batch.json')),
     );
     const res = await t.app.inject({ method: 'GET', url: '/api/overview', headers: { cookie: t.cookie } });
     expect(res.statusCode).toBe(200);
     expect(t.calls[1]!.headers.Authorization).toBe('Bearer token-read-claims');
-    expect(t.auth.tokens.at(-1)).toMatchObject({ kind: 'read', claims, scopes: ['https://graph.microsoft.com/.default'] });
+    expect(t.auth.tokens.at(-1)).toMatchObject({
+      kind: 'read',
+      claims,
+      scopes: ['https://graph.microsoft.com/.default'],
+    });
     await t.app.close();
   });
 
   it('CAE: when the claims can only be met interactively → 401 reauth URL carrying the claims', async () => {
     const claims = JSON.stringify({ access_token: { nbf: { essential: true, value: '1700000000' } } });
     const challenge = `Bearer error="insufficient_claims", claims="${Buffer.from(claims).toString('base64')}"`;
-    const t = await liveApp(() => json({ error: { code: 'InvalidAuthenticationToken', message: 'challenge' } }, 401, { 'www-authenticate': challenge }));
+    const t = await liveApp(() =>
+      json({ error: { code: 'InvalidAuthenticationToken', message: 'challenge' } }, 401, {
+        'www-authenticate': challenge,
+      }),
+    );
     const res = await t.app.inject({ method: 'GET', url: '/api/overview', headers: { cookie: t.cookie } });
     expect(res.statusCode).toBe(401);
     const err = ApiErrorBody.parse(res.json()).error;
@@ -169,10 +243,18 @@ describe('GET /api/overview', () => {
   });
 
   it('a whole-batch failure maps to an upstream ApiErrorBody', async () => {
-    const t = await liveApp(() => json({ error: { code: 'Authorization_RequestDenied', message: 'Denied' } }, 403, { 'request-id': 'req-x' }));
+    const t = await liveApp(() =>
+      json({ error: { code: 'Authorization_RequestDenied', message: 'Denied' } }, 403, {
+        'request-id': 'req-x',
+      }),
+    );
     const res = await t.app.inject({ method: 'GET', url: '/api/overview', headers: { cookie: t.cookie } });
     expect(res.statusCode).toBe(403);
-    expect(ApiErrorBody.parse(res.json()).error).toMatchObject({ code: 'upstream_forbidden', message: 'Denied', hint: 'Microsoft request-id req-x' });
+    expect(ApiErrorBody.parse(res.json()).error).toMatchObject({
+      code: 'upstream_forbidden',
+      message: 'Denied',
+      hint: 'Microsoft request-id req-x',
+    });
     expect((await getMe(t.app, t.cookie)).res.statusCode).toBe(200);
     await t.app.close();
   });

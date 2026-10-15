@@ -38,9 +38,11 @@ export function parseBody<T extends z.ZodType>(schema: T, body: unknown): z.infe
 
 function upstreamError(err: ApiError): AppError {
   const extras = { hint: err.requestId ? `Microsoft request-id ${err.requestId}` : undefined };
-  if (err.status === 401 || err.status === 403) return new AppError(403, 'upstream_forbidden', err.message, extras);
+  if (err.status === 401 || err.status === 403)
+    return new AppError(403, 'upstream_forbidden', err.message, extras);
   if (err.status === 404) return new AppError(404, 'upstream_not_found', err.message, extras);
-  if (err.status === 429) return new AppError(429, 'throttled', 'Microsoft throttled this request. Try again shortly.', extras);
+  if (err.status === 429)
+    return new AppError(429, 'throttled', 'Microsoft throttled this request. Try again shortly.', extras);
   return new AppError(502, 'upstream_error', err.message, extras);
 }
 
@@ -55,7 +57,10 @@ export function toAppError(err: unknown): AppError {
       });
     }
     const url = loginUrl('/', err.claims);
-    return new AppError(401, 'reauth', 'Your sign-in needs to be refreshed.', { login: url, reauth: { url } });
+    return new AppError(401, 'reauth', 'Your sign-in needs to be refreshed.', {
+      login: url,
+      reauth: { url },
+    });
   }
   if (err instanceof NotArmed) {
     return new AppError(403, 'not_armed', err.message, { hint: 'Arm write access to continue.' });

@@ -2,9 +2,16 @@ import { isMap, isScalar, isSeq, LineCounter, parseDocument, type Node as YamlNo
 import type { z } from 'zod';
 import { formatPath, KINDS } from './common';
 import { schemaForKind, type Definition } from './definition';
-import { validateReferences, type ContentError, type DefinitionEntry, type Locate, type PathSegment } from './references';
+import {
+  validateReferences,
+  type ContentError,
+  type DefinitionEntry,
+  type Locate,
+  type PathSegment,
+} from './references';
 
-export type ParseResult = { ok: true; def: Definition; locate: Locate } | { ok: false; errors: ContentError[] };
+export type ParseResult =
+  { ok: true; def: Definition; locate: Locate } | { ok: false; errors: ContentError[] };
 
 export interface LoadedDefinition extends DefinitionEntry {
   /** Path relative to the content dir, with forward slashes. */
@@ -25,13 +32,16 @@ const FILE_KIND = /(?:^|[/\\])[^/\\]+\.([a-z]+)\.ya?ml$/;
 
 /** Builds a path → line lookup over a parsed YAML document. */
 function locator(doc: ReturnType<typeof parseDocument>, lc: LineCounter): Locate {
-  const lineOf = (node: YamlNode | null | undefined) => (node?.range ? lc.linePos(node.range[0]).line : undefined);
+  const lineOf = (node: YamlNode | null | undefined) =>
+    node?.range ? lc.linePos(node.range[0]).line : undefined;
   return (path) => {
     let node = doc.contents as YamlNode | null;
     let line = lineOf(node);
     for (const seg of path) {
       if (isMap(node)) {
-        const pair = node.items.find((p) => (isScalar(p.key) ? String(p.key.value) === String(seg) : p.key === seg));
+        const pair = node.items.find((p) =>
+          isScalar(p.key) ? String(p.key.value) === String(seg) : p.key === seg,
+        );
         if (!pair) break;
         line = lineOf(pair.key as YamlNode) ?? line;
         node = pair.value as YamlNode | null;
@@ -54,15 +64,35 @@ function issueToError(file: string, issue: z.core.$ZodIssue, locate: Locate): Co
 }
 
 function validateObject(raw: unknown, file: string, locate: Locate): ParseResult {
-  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return { ok: false, errors: [{ file, path: '', line: 1, message: 'Expected a mapping (key: value) at the top level.' }] };
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw))
+    return {
+      ok: false,
+      errors: [{ file, path: '', line: 1, message: 'Expected a mapping (key: value) at the top level.' }],
+    };
   const kind = (raw as { kind?: unknown }).kind;
   if (typeof kind !== 'string' || !KIND_SET.has(kind))
-    return { ok: false, errors: [{ file, path: 'kind', line: locate(['kind']), message: `kind must be one of: ${KINDS.join(', ')}` }] };
+    return {
+      ok: false,
+      errors: [
+        { file, path: 'kind', line: locate(['kind']), message: `kind must be one of: ${KINDS.join(', ')}` },
+      ],
+    };
   const fileKind = FILE_KIND.exec(file)?.[1];
   if (fileKind && KIND_SET.has(fileKind) && fileKind !== kind)
-    return { ok: false, errors: [{ file, path: 'kind', line: locate(['kind']), message: `File name says ${fileKind} but kind is ${kind}.` }] };
+    return {
+      ok: false,
+      errors: [
+        {
+          file,
+          path: 'kind',
+          line: locate(['kind']),
+          message: `File name says ${fileKind} but kind is ${kind}.`,
+        },
+      ],
+    };
   const result = schemaForKind(kind)!.safeParse(raw);
-  if (!result.success) return { ok: false, errors: result.error.issues.map((i) => issueToError(file, i, locate)) };
+  if (!result.success)
+    return { ok: false, errors: result.error.issues.map((i) => issueToError(file, i, locate)) };
   return { ok: true, def: result.data as Definition, locate };
 }
 
@@ -79,7 +109,9 @@ export function parseDefinition(text: string, file: string): ParseResult {
       errors: doc.errors.map((e) => {
         const line = lc.linePos(e.pos[0]).line || undefined;
         const src = line ? (lines[line - 1] ?? '') : '';
-        const hint = src.includes('${') ? ' Quote values that contain ${ … } together with ": ", " #", or flow characters ({ } [ ] ,).' : '';
+        const hint = src.includes('${')
+          ? ' Quote values that contain ${ … } together with ": ", " #", or flow characters ({ } [ ] ,).'
+          : '';
         return { file, path: '', line, message: `YAML: ${e.message.split('\n')[0]}${hint}` };
       }),
     };
@@ -129,7 +161,13 @@ export async function loadContentDir(dir: string, opts: { references?: boolean }
     const rel = path.relative(dir, full).split(path.sep).join('/');
     const text = await readFile(full, 'utf8');
     const r = parseDefinition(text, rel);
-    if (r.ok) definitions.push({ file: rel, def: r.def, locate: r.locate, sha256: createHash('sha256').update(text).digest('hex') });
+    if (r.ok)
+      definitions.push({
+        file: rel,
+        def: r.def,
+        locate: r.locate,
+        sha256: createHash('sha256').update(text).digest('hex'),
+      });
     else errors.push(...r.errors);
   }
   if (opts.references !== false) errors.push(...validateReferences(definitions));

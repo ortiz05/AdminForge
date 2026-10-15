@@ -16,21 +16,20 @@ describe('table widget', () => {
   it('renders typed columns, hidden columns stay hidden, and the provenance footer', async () => {
     const { container } = renderWidget(Table, config, ready(users().value));
     // The first header holds the select-all checkbox (selection: multi).
-    expect(within(grid()).getAllByRole('columnheader').map((h) => h.textContent)).toEqual([
-      '',
-      'Name',
-      'Status',
-      'Type',
-      'Department',
-      'Last sign-in',
-      'Actions',
-    ]);
+    expect(
+      within(grid())
+        .getAllByRole('columnheader')
+        .map((h) => h.textContent),
+    ).toEqual(['', 'Name', 'Status', 'Type', 'Department', 'Last sign-in', 'Actions']);
     expect(bodyRows()).toHaveLength(5);
     const adele = bodyRows()[0]!;
     expect(adele).toHaveTextContent('Adele Vance');
     expect(adele).toHaveTextContent('adele.vance@example.com');
     expect(within(adele).getByText('Enabled').closest('[data-status]')).toHaveAttribute('data-status', 'ok');
-    expect(within(bodyRows()[1]!).getByText('Disabled').closest('[data-status]')).toHaveAttribute('data-status', 'crit');
+    expect(within(bodyRows()[1]!).getByText('Disabled').closest('[data-status]')).toHaveAttribute(
+      'data-status',
+      'crit',
+    );
     // Blank values render an em dash.
     expect(within(bodyRows()[3]!).getAllByText('—').length).toBeGreaterThan(0);
     expect(screen.getByText('5 rows')).toBeInTheDocument();
@@ -51,7 +50,12 @@ describe('table widget', () => {
 
     await user.click(screen.getByRole('button', { name: 'Actions for Adele Vance' }));
     await user.click(await screen.findByRole('menuitem', { name: 'Disable sign-in' }));
-    await waitFor(() => expect(openPlaybook).toHaveBeenCalledWith({ playbook: 'identity.disable-user', inputs: { userId: rows[0]!.id } }));
+    await waitFor(() =>
+      expect(openPlaybook).toHaveBeenCalledWith({
+        playbook: 'identity.disable-user',
+        inputs: { userId: rows[0]!.id },
+      }),
+    );
   });
 
   it('an href row action opens external links in a new tab', async () => {
@@ -60,7 +64,13 @@ describe('table widget', () => {
     renderWidget(Table, config, ready(rows));
     await user.click(screen.getByRole('button', { name: 'Actions for Adele Vance' }));
     await user.click(await screen.findByRole('menuitem', { name: /Open in Entra admin center/ }));
-    await waitFor(() => expect(open).toHaveBeenCalledWith(`https://entra.microsoft.com/#view/users/${rows[0]!.id}`, '_blank', 'noopener,noreferrer'));
+    await waitFor(() =>
+      expect(open).toHaveBeenCalledWith(
+        `https://entra.microsoft.com/#view/users/${rows[0]!.id}`,
+        '_blank',
+        'noopener,noreferrer',
+      ),
+    );
     open.mockRestore();
   });
 
@@ -81,7 +91,10 @@ describe('table widget', () => {
     expect(await axeViolations(container)).toEqual([]);
     await user.click(button);
     await waitFor(() => expect(openPlaybook).toHaveBeenCalledTimes(1));
-    const launch = openPlaybook.mock.calls[0]![0] as { playbook: string; items: Array<Record<string, unknown>> };
+    const launch = openPlaybook.mock.calls[0]![0] as {
+      playbook: string;
+      items: Array<Record<string, unknown>>;
+    };
     expect(launch.playbook).toBe('identity.disable-user');
     expect(launch.items.map((i) => i.userId).sort()).toEqual([rows[0]!.id, rows[1]!.id, rows[4]!.id].sort());
   });
@@ -102,11 +115,15 @@ describe('table widget', () => {
 
   it('clicking a row opens the inspector with rendered params; the inspected row is marked', async () => {
     const user = userEvent.setup();
-    const { runtime, inspect } = spyRuntime({ inspecting: { page: 'identity.user', params: { id: rows[2]!.id } } });
+    const { runtime, inspect } = spyRuntime({
+      inspecting: { page: 'identity.user', params: { id: rows[2]!.id } },
+    });
     renderWidget(Table, config, ready(rows), runtime);
     expect(bodyRows()[2]).toHaveClass('af-row-active');
     await user.click(within(bodyRows()[1]!).getByText('HR'));
-    await waitFor(() => expect(inspect).toHaveBeenCalledWith({ page: 'identity.user', params: { id: rows[1]!.id } }));
+    await waitFor(() =>
+      expect(inspect).toHaveBeenCalledWith({ page: 'identity.user', params: { id: rows[1]!.id } }),
+    );
   });
 
   it('controlled view: sorting reports through setTableView with the table instance id', async () => {
@@ -119,7 +136,10 @@ describe('table widget', () => {
     const { container } = renderWidget(Table, config, ready(rows), runtime, { instanceId: 'users' });
     expect(container.querySelector('[data-density="compact"]')).not.toBeNull();
     await user.click(within(grid()).getByRole('button', { name: 'Department' }));
-    expect(setTableView).toHaveBeenCalledWith('users', expect.objectContaining({ sorting: [{ id: 'department', desc: false }], density: 'compact' }));
+    expect(setTableView).toHaveBeenCalledWith(
+      'users',
+      expect.objectContaining({ sorting: [{ id: 'department', desc: false }], density: 'compact' }),
+    );
   });
 
   it('cursor paging: Load more in the footer, and duplicate rows across pages are dropped', async () => {
@@ -156,7 +176,10 @@ describe('table widget', () => {
   });
 
   it('content `empty` copy wins over the default', () => {
-    const withEmpty = WIDGETS.table!.schema.parse({ ...tableFixtures.users.config, empty: { title: 'No guests yet', body: 'Invite one from Entra.' } }) as TableConfig;
+    const withEmpty = WIDGETS.table!.schema.parse({
+      ...tableFixtures.users.config,
+      empty: { title: 'No guests yet', body: 'Invite one from Entra.' },
+    }) as TableConfig;
     renderWidget(Table, withEmpty, ready([]));
     expect(screen.getByText('No guests yet')).toBeInTheDocument();
     expect(screen.getByText('Invite one from Entra.')).toBeInTheDocument();
@@ -175,7 +198,11 @@ describe('table widget', () => {
         { field: 'size', label: 'Size', kind: 'bytes' },
       ],
     }) as TableConfig;
-    renderWidget(Table, typed, ready([{ id: 'a', name: 'vm-01', tags: { env: 'prod' }, locked: false, used: 0.5, size: 1536 }]));
+    renderWidget(
+      Table,
+      typed,
+      ready([{ id: 'a', name: 'vm-01', tags: { env: 'prod' }, locked: false, used: 0.5, size: 1536 }]),
+    );
     const row = bodyRows()[0]!;
     expect(within(row).getByText('env: prod')).toBeInTheDocument();
     expect(within(row).getByText('No')).toBeInTheDocument();

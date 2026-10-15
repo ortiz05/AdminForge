@@ -40,14 +40,20 @@ function fakeAuth(impl?: (i: { kind: string; claims?: string }) => Promise<strin
   return { auth, calls };
 }
 
-const armed = () => session({ writeAccountId: 'write-acct', writeExpiresAt: new Date(NOW.getTime() + 600_000) });
+const armed = () =>
+  session({ writeAccountId: 'write-acct', writeExpiresAt: new Date(NOW.getTime() + 600_000) });
 
 describe('TokenBroker', () => {
   it('read tokens come from the Read account in partition read:<sidHash>', async () => {
     const { auth, calls } = fakeAuth();
     const broker = new TokenBroker(auth, {}, () => NOW);
     expect(await broker.get(session(), 'graph', 'read')).toBe('tok-read');
-    expect(calls[0]).toEqual({ kind: 'read', partitionKey: 'read:abc123', homeAccountId: 'read-acct', scopes: ['https://graph.microsoft.com/.default'] });
+    expect(calls[0]).toEqual({
+      kind: 'read',
+      partitionKey: 'read:abc123',
+      homeAccountId: 'read-acct',
+      scopes: ['https://graph.microsoft.com/.default'],
+    });
     await broker.get(session(), 'arm', 'read');
     expect(calls[1]!.scopes).toEqual(['https://management.azure.com/.default']);
   });
@@ -59,20 +65,40 @@ describe('TokenBroker', () => {
     const expired = session({ writeAccountId: 'w', writeExpiresAt: new Date(NOW.getTime() - 1) });
     await expect(broker.get(expired, 'graph', 'write')).rejects.toBeInstanceOf(NotArmed);
     expect(await broker.get(armed(), 'exchange', 'write')).toBe('tok-write');
-    expect(calls[0]).toMatchObject({ kind: 'write', partitionKey: 'write:abc123', homeAccountId: 'write-acct', scopes: ['https://outlook.office365.com/.default'] });
+    expect(calls[0]).toMatchObject({
+      kind: 'write',
+      partitionKey: 'write:abc123',
+      homeAccountId: 'write-acct',
+      scopes: ['https://outlook.office365.com/.default'],
+    });
   });
 
   it('SharePoint admin needs AF_SPO_TENANT_NAME', async () => {
     const { auth } = fakeAuth();
-    await expect(new TokenBroker(auth, {}, () => NOW).get(session(), 'sharepointAdmin', 'read')).rejects.toMatchObject({ status: 503, code: 'service_not_configured' });
-    expect(resourceScopes({ AF_SPO_TENANT_NAME: 'contoso' }).sharepointAdmin).toEqual(['https://contoso-admin.sharepoint.com/.default']);
-    expect(Object.keys(resourceScopes({})).sort()).toEqual(['arm', 'exchange', 'graph', 'logAnalytics', 'sharepointAdmin', 'teams']);
+    await expect(
+      new TokenBroker(auth, {}, () => NOW).get(session(), 'sharepointAdmin', 'read'),
+    ).rejects.toMatchObject({ status: 503, code: 'service_not_configured' });
+    expect(resourceScopes({ AF_SPO_TENANT_NAME: 'contoso' }).sharepointAdmin).toEqual([
+      'https://contoso-admin.sharepoint.com/.default',
+    ]);
+    expect(Object.keys(resourceScopes({})).sort()).toEqual([
+      'arm',
+      'exchange',
+      'graph',
+      'logAnalytics',
+      'sharepointAdmin',
+      'teams',
+    ]);
   });
 
   it('maps NotArmed and ReauthRequired to ApiErrorBody shapes', () => {
     expect(toAppError(new NotArmed())).toMatchObject({ status: 403, code: 'not_armed' });
     const read = toAppError(new ReauthRequired('read'));
-    expect(read).toMatchObject({ status: 401, code: 'reauth', extras: { login: '/auth/login?returnTo=%2F', reauth: { url: '/auth/login?returnTo=%2F' } } });
+    expect(read).toMatchObject({
+      status: 401,
+      code: 'reauth',
+      extras: { login: '/auth/login?returnTo=%2F', reauth: { url: '/auth/login?returnTo=%2F' } },
+    });
     const write = toAppError(new ReauthRequired('write'));
     expect(write).toMatchObject({ status: 403, code: 'rearm', extras: { reauth: { url: '/auth/arm' } } });
     const withClaims = toAppError(new ReauthRequired('read', '{"access_token":{}}')) as AppError;
@@ -87,7 +113,14 @@ describe('TokenBroker', () => {
     let n = 0;
     const result = await broker.withToken(session(), 'graph', 'read', async (getToken) => {
       n++;
-      if (n === 1) throw new ApiError(401, 'InvalidAuthenticationToken', 'challenge', 'r1', Buffer.from(claims).toString('base64'));
+      if (n === 1)
+        throw new ApiError(
+          401,
+          'InvalidAuthenticationToken',
+          'challenge',
+          'r1',
+          Buffer.from(claims).toString('base64'),
+        );
       return getToken();
     });
     expect(result).toBe('tok-read');
@@ -98,8 +131,17 @@ describe('TokenBroker', () => {
     const claims = '{"access_token":{"xms_cc":{"values":["CP1"]}}}';
     const { auth } = fakeAuth();
     const broker = new TokenBroker(auth, {}, () => NOW);
-    const challenge = () => new ApiError(401, 'InvalidAuthenticationToken', 'challenge', undefined, Buffer.from(claims).toString('base64'));
-    const err = await broker.withToken(session(), 'graph', 'read', async () => Promise.reject(challenge())).catch((e: unknown) => e);
+    const challenge = () =>
+      new ApiError(
+        401,
+        'InvalidAuthenticationToken',
+        'challenge',
+        undefined,
+        Buffer.from(claims).toString('base64'),
+      );
+    const err = await broker
+      .withToken(session(), 'graph', 'read', async () => Promise.reject(challenge()))
+      .catch((e: unknown) => e);
     expect(err).toBeInstanceOf(ReauthRequired);
     expect(err).toMatchObject({ kind: 'read', claims });
   });
@@ -123,7 +165,11 @@ describe('TokenBroker', () => {
   it('other upstream errors are not retried', async () => {
     const { auth, calls } = fakeAuth();
     const broker = new TokenBroker(auth, {}, () => NOW);
-    await expect(broker.withToken(session(), 'graph', 'read', async () => Promise.reject(new ApiError(403, 'Forbidden', 'no')))).rejects.toMatchObject({ status: 403 });
+    await expect(
+      broker.withToken(session(), 'graph', 'read', async () =>
+        Promise.reject(new ApiError(403, 'Forbidden', 'no')),
+      ),
+    ).rejects.toMatchObject({ status: 403 });
     expect(calls).toHaveLength(1);
   });
 

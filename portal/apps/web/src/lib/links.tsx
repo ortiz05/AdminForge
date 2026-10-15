@@ -5,7 +5,11 @@ import type { LinkComponent } from '@adminforge/ui';
 export const isExternalHref = (href: string) => /^(https?:|mailto:)/i.test(href);
 
 /** `/p/identity.users?userType=Guest` → path + parsed search (values typed the way the router reads them). */
-export function splitHref(href: string): { pathname: string; search: Record<string, unknown>; hash?: string } {
+export function splitHref(href: string): {
+  pathname: string;
+  search: Record<string, unknown>;
+  hash?: string;
+} {
   const [beforeHash = '', hash] = href.split('#', 2);
   const q = beforeHash.indexOf('?');
   const pathname = q >= 0 ? beforeHash.slice(0, q) : beforeHash;

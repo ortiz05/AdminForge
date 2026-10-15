@@ -38,9 +38,22 @@ export interface AuthUrlInput {
 export interface AuthClient {
   authUrl(input: AuthUrlInput): Promise<string>;
   /** Redeems an authorization code; the token cache is written to `partitionKey`. */
-  redeem(input: { kind: AppKind; code: string; verifier: string; nonce: string; partitionKey: string }): Promise<{ homeAccountId: string; claims: IdClaims }>;
+  redeem(input: {
+    kind: AppKind;
+    code: string;
+    verifier: string;
+    nonce: string;
+    partitionKey: string;
+  }): Promise<{ homeAccountId: string; claims: IdClaims }>;
   /** Silent token for `scopes` from the partition's cache (refreshing when needed). */
-  token(input: { kind: AppKind; partitionKey: string; homeAccountId: string; scopes: string[]; forceRefresh?: boolean; claims?: string }): Promise<string>;
+  token(input: {
+    kind: AppKind;
+    partitionKey: string;
+    homeAccountId: string;
+    scopes: string[];
+    forceRefresh?: boolean;
+    claims?: string;
+  }): Promise<string>;
   /** Drops everything cached for the partition. */
   forget(input: { kind: AppKind; partitionKey: string }): Promise<void>;
   /** Entra end-session URL. */

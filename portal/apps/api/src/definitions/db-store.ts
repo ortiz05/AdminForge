@@ -56,7 +56,11 @@ interface Meta {
 }
 
 /** Highest-precedence version among rows of one key. */
-const latestOf = <T extends { version: string }>(rows: T[]): T | undefined => rows.reduce<T | undefined>((best, r) => (!best || compareSemVer(r.version, best.version) > 0 ? r : best), undefined);
+const latestOf = <T extends { version: string }>(rows: T[]): T | undefined =>
+  rows.reduce<T | undefined>(
+    (best, r) => (!best || compareSemVer(r.version, best.version) > 0 ? r : best),
+    undefined,
+  );
 
 type Row = typeof definitions.$inferSelect;
 
@@ -93,27 +97,53 @@ export class DbDefinitionStore {
       const kind = e.def.kind;
       const key = e.def.id;
       const version = e.def.version;
-      const base = { kind, key, version, status: e.def.status === 'retired' ? ('retired' as const) : ('published' as const), ...(e.file ? { file: e.file } : {}) };
+      const base = {
+        kind,
+        key,
+        version,
+        status: e.def.status === 'retired' ? ('retired' as const) : ('published' as const),
+        ...(e.file ? { file: e.file } : {}),
+      };
       const id = `${recordKey(kind, key)}@${version}`;
-      if (seen.has(id)) return { ...base, action: 'refused' as const, reason: 'The same kind, id and version appears twice in this publish.' };
+      if (seen.has(id))
+        return {
+          ...base,
+          action: 'refused' as const,
+          reason: 'The same kind, id and version appears twice in this publish.',
+        };
       seen.add(id);
       const rows = byKey.get(recordKey(kind, key)) ?? [];
       const same = rows.find((r) => r.version === version);
       if (same) {
         return same.sha256 === e.sha256
           ? { ...base, action: 'unchanged' as const }
-          : { ...base, action: 'refused' as const, reason: `Version ${version} is already published with different content. Bump the version.` };
+          : {
+              ...base,
+              action: 'refused' as const,
+              reason: `Version ${version} is already published with different content. Bump the version.`,
+            };
       }
       const latest = latestOf(rows.filter((r) => LIVE.includes(r.status)));
       if (latest && compareSemVer(version, latest.version) < 0)
-        return { ...base, action: 'refused' as const, reason: `Version ${version} is older than the published ${latest.version}. Use a higher version.` };
+        return {
+          ...base,
+          action: 'refused' as const,
+          reason: `Version ${version} is older than the published ${latest.version}. Use a higher version.`,
+        };
       return { ...base, action: 'create' as const };
     });
   }
 
   private async meta(db: Pick<Db, 'select'>, keys?: string[]): Promise<Meta[]> {
     const q = db
-      .select({ id: definitions.id, kind: definitions.kind, key: definitions.key, version: definitions.version, sha256: definitions.sha256, status: definitions.status })
+      .select({
+        id: definitions.id,
+        kind: definitions.kind,
+        key: definitions.key,
+        version: definitions.version,
+        sha256: definitions.sha256,
+        status: definitions.status,
+      })
       .from(definitions);
     return keys ? q.where(inArray(definitions.key, keys)) : q;
   }
@@ -121,7 +151,10 @@ export class DbDefinitionStore {
   /** What `publish` would do, without writing. */
   async plan(entries: PublishEntry[]): Promise<PublishItem[]> {
     if (!entries.length) return [];
-    return DbDefinitionStore.plan(entries, await this.meta(this.db, [...new Set(entries.map((e) => e.def.id))]));
+    return DbDefinitionStore.plan(
+      entries,
+      await this.meta(this.db, [...new Set(entries.map((e) => e.def.id))]),
+    );
   }
 
   async publish(entries: PublishEntry[], opts: { dryRun?: boolean } = {}): Promise<PublishResult> {
@@ -140,7 +173,10 @@ export class DbDefinitionStore {
     return this.db.transaction(async (tx) => {
       // One publisher at a time across processes (CLI, CI, the portal editor).
       await tx.execute(sql`select pg_advisory_xact_lock(hashtext('adminforge.definitions_publish'))`);
-      const items = DbDefinitionStore.plan(entries, await this.meta(tx, [...new Set(entries.map((e) => e.def.id))]));
+      const items = DbDefinitionStore.plan(
+        entries,
+        await this.meta(tx, [...new Set(entries.map((e) => e.def.id))]),
+      );
       if (items.some((i) => i.action === 'refused')) return summary(items, false, false);
       const now = this.now();
       const creates = entries.filter((_, i) => items[i]!.action === 'create');
@@ -172,7 +208,14 @@ export class DbDefinitionStore {
       const [row] = await this.db
         .select()
         .from(definitions)
-        .where(and(eq(definitions.kind, kind), eq(definitions.key, key), eq(definitions.version, version), inArray(definitions.status, LIVE)))
+        .where(
+          and(
+            eq(definitions.kind, kind),
+            eq(definitions.key, key),
+            eq(definitions.version, version),
+            inArray(definitions.status, LIVE),
+          ),
+        )
         .limit(1);
       return row ? toRecord(row) : null;
     }
@@ -189,25 +232,54 @@ export class DbDefinitionStore {
   /** Latest non-retired version of every key (optionally one kind). */
   async list(kind?: Kind): Promise<DefinitionRecord[]> {
     const metas = await this.db
-      .select({ id: definitions.id, kind: definitions.kind, key: definitions.key, version: definitions.version, status: definitions.status })
+      .select({
+        id: definitions.id,
+        kind: definitions.kind,
+        key: definitions.key,
+        version: definitions.version,
+        status: definitions.status,
+      })
       .from(definitions)
-      .where(kind ? and(eq(definitions.kind, kind), inArray(definitions.status, LIVE)) : inArray(definitions.status, LIVE));
+      .where(
+        kind
+          ? and(eq(definitions.kind, kind), inArray(definitions.status, LIVE))
+          : inArray(definitions.status, LIVE),
+      );
     const groups = new Map<string, typeof metas>();
-    for (const m of metas) groups.set(recordKey(m.kind, m.key), [...(groups.get(recordKey(m.kind, m.key)) ?? []), m]);
-    const ids = [...groups.values()].map((g) => latestOf(g)!).filter((m) => m.status !== 'retired').map((m) => m.id);
+    for (const m of metas)
+      groups.set(recordKey(m.kind, m.key), [...(groups.get(recordKey(m.kind, m.key)) ?? []), m]);
+    const ids = [...groups.values()]
+      .map((g) => latestOf(g)!)
+      .filter((m) => m.status !== 'retired')
+      .map((m) => m.id);
     if (!ids.length) return [];
     const rows = await this.db.select().from(definitions).where(inArray(definitions.id, ids));
-    return rows.map(toRecord).sort((a, b) => recordKey(a.kind, a.key).localeCompare(recordKey(b.kind, b.key)));
+    return rows
+      .map(toRecord)
+      .sort((a, b) => recordKey(a.kind, a.key).localeCompare(recordKey(b.kind, b.key)));
   }
 
   /** Every version of one key, newest first (history views). */
-  async versions(kind: Kind, key: string): Promise<Array<Pick<DefinitionRecord, 'version' | 'sha256' | 'status' | 'source' | 'publishedAt'>>> {
+  async versions(
+    kind: Kind,
+    key: string,
+  ): Promise<Array<Pick<DefinitionRecord, 'version' | 'sha256' | 'status' | 'source' | 'publishedAt'>>> {
     const rows = await this.db
-      .select({ version: definitions.version, sha256: definitions.sha256, status: definitions.status, source: definitions.source, publishedAt: definitions.publishedAt })
+      .select({
+        version: definitions.version,
+        sha256: definitions.sha256,
+        status: definitions.status,
+        source: definitions.source,
+        publishedAt: definitions.publishedAt,
+      })
       .from(definitions)
       .where(and(eq(definitions.kind, kind), eq(definitions.key, key), inArray(definitions.status, LIVE)));
     return rows
-      .map((r) => ({ ...r, status: r.status === 'retired' ? ('retired' as const) : ('published' as const), source: r.source === 'portal' ? ('portal' as const) : ('git' as const) }))
+      .map((r) => ({
+        ...r,
+        status: r.status === 'retired' ? ('retired' as const) : ('published' as const),
+        source: r.source === 'portal' ? ('portal' as const) : ('git' as const),
+      }))
       .sort((a, b) => compareSemVer(b.version, a.version));
   }
 }

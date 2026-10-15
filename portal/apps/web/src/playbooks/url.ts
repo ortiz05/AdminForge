@@ -115,7 +115,8 @@ export function parseLaunch(search: Record<string, unknown>): ParsedLaunch | nul
     else problems.push('The selected items in the link could not be read.');
   }
 
-  const preview = typeof search.preview === 'string' && /^[\w-]{1,64}$/.test(search.preview) ? search.preview : null;
+  const preview =
+    typeof search.preview === 'string' && /^[\w-]{1,64}$/.test(search.preview) ? search.preview : null;
   return { key, keyValid, inputs, items, preview, problems };
 }
 

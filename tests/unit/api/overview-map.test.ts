@@ -14,25 +14,42 @@ describe('overview mapping', () => {
   });
 
   it('hints name the missing permission, licence, or transient cause', () => {
-    expect(sectionError('users', 403, { error: { code: 'Authorization_RequestDenied', message: 'Insufficient privileges' } })).toEqual({
+    expect(
+      sectionError('users', 403, {
+        error: { code: 'Authorization_RequestDenied', message: 'Insufficient privileges' },
+      }),
+    ).toEqual({
       code: 'Authorization_RequestDenied',
       message: 'Insufficient privileges',
       hint: 'Needs User.Read.All on the Read app.',
     });
-    expect(sectionError('skus', 403, { error: { message: 'The tenant has no licence for this.' } }).hint).toMatch(/^Your tenant's licences/);
-    expect(sectionError('health', 429, undefined)).toMatchObject({ code: 'HTTP429', hint: expect.stringMatching(/throttled/) });
+    expect(
+      sectionError('skus', 403, { error: { message: 'The tenant has no licence for this.' } }).hint,
+    ).toMatch(/^Your tenant's licences/);
+    expect(sectionError('health', 429, undefined)).toMatchObject({
+      code: 'HTTP429',
+      hint: expect.stringMatching(/throttled/),
+    });
     expect(sectionError('org', 500, undefined).hint).toMatch(/temporary problem/);
   });
 
   it('falls back to the session tenant when /organization fails and omits errors when all succeed', () => {
-    const failed = mapOverview([{ id: 'org', status: 403, body: { error: { code: 'Forbidden', message: 'no' } } }], { ms: 5 }, { tenantId: 't-1', tenantName: 'Example Org' });
+    const failed = mapOverview(
+      [{ id: 'org', status: 403, body: { error: { code: 'Forbidden', message: 'no' } } }],
+      { ms: 5 },
+      { tenantId: 't-1', tenantName: 'Example Org' },
+    );
     expect(failed.org).toEqual({ id: 't-1', name: 'Example Org', domains: [] });
     expect(failed.errors?.org?.hint).toMatch(/Organization\.Read\.All/);
     expect(failed.errors?.users?.code).toBe('missing');
 
     const ok = mapOverview(
       [
-        { id: 'org', status: 200, body: { value: [{ id: 'o', displayName: 'Example Org', verifiedDomains: [] }] } },
+        {
+          id: 'org',
+          status: 200,
+          body: { value: [{ id: 'o', displayName: 'Example Org', verifiedDomains: [] }] },
+        },
         { id: 'users', status: 200, body: 1 },
         { id: 'groups', status: 200, body: 2 },
         { id: 'apps', status: 200, body: 3 },

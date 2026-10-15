@@ -3,7 +3,15 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fixtureKey, type GraphClient } from '@adminforge/connectors';
 import { collectExpressions, lintExpressions, validateExpressions } from '@adminforge/expressions';
-import { formatContentError, loadContentDir, parseDefinition, validateReferences, type Definition, type LoadedDefinition, type Navigation } from '@adminforge/schemas';
+import {
+  formatContentError,
+  loadContentDir,
+  parseDefinition,
+  validateReferences,
+  type Definition,
+  type LoadedDefinition,
+  type Navigation,
+} from '@adminforge/schemas';
 import {
   createAutomationTokenProvider,
   createDatabase,
@@ -17,7 +25,14 @@ import {
   type PublishResult,
 } from '../content/api-bridge';
 import { kindFromPath, Sanitizer } from '../content/sanitize';
-import { PAGE_TEMPLATES, scaffold, SCAFFOLD_KINDS, type PageTemplate, type Scaffold, type ScaffoldKind } from '../content/scaffold';
+import {
+  PAGE_TEMPLATES,
+  scaffold,
+  SCAFFOLD_KINDS,
+  type PageTemplate,
+  type Scaffold,
+  type ScaffoldKind,
+} from '../content/scaffold';
 import { compareScopes, consentedScopes, declaredScopes, type ScopeApp } from '../content/scopes';
 import { AZURE_READER_ROLE_ID, DIRECTORY_ROLES, RESOURCES } from '../provision/catalog';
 import type { Out } from '../provision/render';
@@ -44,7 +59,11 @@ export interface ContentCliContext {
   engine?: EngineModule | null;
 }
 
-export function contentContext(env: Record<string, string | undefined>, out: Out, repoRoot: string): ContentCliContext {
+export function contentContext(
+  env: Record<string, string | undefined>,
+  out: Out,
+  repoRoot: string,
+): ContentCliContext {
   return {
     env,
     out,
@@ -54,7 +73,8 @@ export function contentContext(env: Record<string, string | undefined>, out: Out
   };
 }
 
-const rel = (ctx: ContentCliContext, file: string) => path.relative(ctx.repoRoot, file).split(path.sep).join('/');
+const rel = (ctx: ContentCliContext, file: string) =>
+  path.relative(ctx.repoRoot, file).split(path.sep).join('/');
 
 // ── validate ──────────────────────────────────────────────────────────────────
 
@@ -65,50 +85,89 @@ export interface ValidateReport {
 }
 
 /** Schema, references, expression compilation, `$filter`/`$search` lint, env keys, `$schema` paths. Pure (no network). */
-export async function checkContent(ctx: Pick<ContentCliContext, 'contentDir' | 'repoRoot'>): Promise<ValidateReport & { loaded: LoadedDefinition[] }> {
+export async function checkContent(
+  ctx: Pick<ContentCliContext, 'contentDir' | 'repoRoot'>,
+): Promise<ValidateReport & { loaded: LoadedDefinition[] }> {
   const { definitions, errors } = await loadContentDir(ctx.contentDir);
   const errs = errors.map(formatContentError);
   const warnings: string[] = [];
   const exampleFile = path.join(ctx.repoRoot, 'config', 'example.env');
-  const declaredEnv = new Set(existsSync(exampleFile) ? (readFileSync(exampleFile, 'utf8').match(/^[A-Z0-9_]+(?==)/gm) ?? []) : []);
+  const declaredEnv = new Set(
+    existsSync(exampleFile) ? (readFileSync(exampleFile, 'utf8').match(/^[A-Z0-9_]+(?==)/gm) ?? []) : [],
+  );
   const schemasDir = path.join(ctx.repoRoot, 'portal', 'packages', 'schemas', 'generated');
   for (const d of definitions) {
     const at = (segments: Array<string | number>) => `${d.file}:${d.locate(segments) ?? '?'}`;
     for (const i of validateExpressions(d.def)) errs.push(`${at(i.segments)} ${i.path}: ${i.message}`);
     for (const w of lintExpressions(d.def)) errs.push(`${at(w.segments)} ${w.path}: ${w.message}`);
     for (const e of collectExpressions(d.def))
-      for (const m of e.source.matchAll(/\benv\.([A-Za-z0-9_]+)/g)) if (!declaredEnv.has(m[1]!)) errs.push(`${d.file} ${e.path}: env.${m[1]} is not declared in config/example.env.`);
+      for (const m of e.source.matchAll(/\benv\.([A-Za-z0-9_]+)/g))
+        if (!declaredEnv.has(m[1]!))
+          errs.push(`${d.file} ${e.path}: env.${m[1]} is not declared in config/example.env.`);
     const ref = (d.def as { $schema?: string }).$schema;
-    if (ref && path.resolve(path.dirname(path.join(ctx.contentDir, d.file)), ref) !== path.join(schemasDir, `${d.def.kind}.schema.json`))
-      warnings.push(`${d.file}:${d.locate(['$schema']) ?? 1} $schema should point at portal/packages/schemas/generated/${d.def.kind}.schema.json.`);
-    if (JSON.stringify(d.def).includes('"beta":true')) warnings.push(`${d.file}: uses Microsoft Graph beta (preview) endpoints.`);
+    if (
+      ref &&
+      path.resolve(path.dirname(path.join(ctx.contentDir, d.file)), ref) !==
+        path.join(schemasDir, `${d.def.kind}.schema.json`)
+    )
+      warnings.push(
+        `${d.file}:${d.locate(['$schema']) ?? 1} $schema should point at portal/packages/schemas/generated/${d.def.kind}.schema.json.`,
+      );
+    if (JSON.stringify(d.def).includes('"beta":true'))
+      warnings.push(`${d.file}: uses Microsoft Graph beta (preview) endpoints.`);
   }
   return { definitions: definitions.length, errors: errs, warnings, loaded: definitions };
 }
 
-const APP_LABEL: Record<ScopeApp, string> = { read: 'Read app', write: 'Write app', automation: 'Automation identity' };
+const APP_LABEL: Record<ScopeApp, string> = {
+  read: 'Read app',
+  write: 'Write app',
+  automation: 'Automation identity',
+};
 
 /** `adminforge validate [--scopes]` — true when there are no errors (warnings and unused scopes don't fail). */
-export async function validateContent(ctx: ContentCliContext, opts: { scopes?: boolean } = {}): Promise<boolean> {
+export async function validateContent(
+  ctx: ContentCliContext,
+  opts: { scopes?: boolean } = {},
+): Promise<boolean> {
   const report = await checkContent(ctx);
   for (const e of report.errors) ctx.out(`✗ ${e}`);
   for (const w of report.warnings) ctx.out(`⚠ ${w}`);
   let ok = report.errors.length === 0;
-  ctx.out(ok ? `✓ ${report.definitions} definitions valid (schema, references, expressions, lint, env keys).` : `✗ ${report.errors.length} problem(s) in ${rel(ctx, ctx.contentDir)}.`);
+  ctx.out(
+    ok
+      ? `✓ ${report.definitions} definitions valid (schema, references, expressions, lint, env keys).`
+      : `✗ ${report.errors.length} problem(s) in ${rel(ctx, ctx.contentDir)}.`,
+  );
   if (!opts.scopes) return ok;
 
   const declared = declaredScopes(report.loaded);
-  const apps: Partial<Record<ScopeApp, string>> = { read: ctx.env.AF_READ_CLIENT_ID, write: ctx.env.AF_WRITE_CLIENT_ID, automation: ctx.env.AF_AUTOMATION_CLIENT_ID };
-  const graph = ctx.graph ?? provisionerClients({ env: ctx.env, writeEnv: () => undefined, out: ctx.out, fetch: ctx.fetch }, provisionSettings(ctx.env)).graph;
+  const apps: Partial<Record<ScopeApp, string>> = {
+    read: ctx.env.AF_READ_CLIENT_ID,
+    write: ctx.env.AF_WRITE_CLIENT_ID,
+    automation: ctx.env.AF_AUTOMATION_CLIENT_ID,
+  };
+  const graph =
+    ctx.graph ??
+    provisionerClients(
+      { env: ctx.env, writeEnv: () => undefined, out: ctx.out, fetch: ctx.fetch },
+      provisionSettings(ctx.env),
+    ).graph;
   const { scopes: consented, notFound } = await consentedScopes(graph, apps);
   const { missing, unused } = compareScopes(declared, consented);
   ctx.out('');
   ctx.out('Scopes declared by content vs. granted in Entra:');
-  for (const app of ['read', 'write', 'automation'] as const) if (!apps[app]) ctx.out(`  ⚠ ${APP_LABEL[app]}: client id not set in the env file; not checked.`);
-  for (const app of notFound) ctx.out(`  ✗ ${APP_LABEL[app]}: no service principal found for the configured client id.`);
-  for (const m of missing) ctx.out(`  ✗ missing  ${APP_LABEL[m.app]} · ${m.service} · ${m.scope}${m.files?.length ? `  (${m.files.slice(0, 3).join(', ')}${m.files.length > 3 ? ', …' : ''})` : ''}`);
+  for (const app of ['read', 'write', 'automation'] as const)
+    if (!apps[app]) ctx.out(`  ⚠ ${APP_LABEL[app]}: client id not set in the env file; not checked.`);
+  for (const app of notFound)
+    ctx.out(`  ✗ ${APP_LABEL[app]}: no service principal found for the configured client id.`);
+  for (const m of missing)
+    ctx.out(
+      `  ✗ missing  ${APP_LABEL[m.app]} · ${m.service} · ${m.scope}${m.files?.length ? `  (${m.files.slice(0, 3).join(', ')}${m.files.length > 3 ? ', …' : ''})` : ''}`,
+    );
   for (const u of unused) ctx.out(`  · unused   ${APP_LABEL[u.app]} · ${u.service} · ${u.scope}`);
-  if (declared.connections.length) ctx.out(`  · not checked (own audiences): connections ${declared.connections.join(', ')}`);
+  if (declared.connections.length)
+    ctx.out(`  · not checked (own audiences): connections ${declared.connections.join(', ')}`);
   if (!missing.length && !notFound.length) ctx.out('  ✓ every declared scope is granted.');
   ok &&= missing.length === 0 && notFound.length === 0;
   return ok;
@@ -120,7 +179,10 @@ export async function validateContent(ctx: ContentCliContext, opts: { scopes?: b
 export interface EngineModule {
   runPlaybookTests(
     def: Definition,
-    opts?: { resolveChild?: (ref: string, version?: string) => Definition | null; env?: Record<string, unknown> },
+    opts?: {
+      resolveChild?: (ref: string, version?: string) => Definition | null;
+      env?: Record<string, unknown>;
+    },
   ): Promise<Array<{ name: string; passed: boolean; failures: string[]; status: string }>>;
 }
 
@@ -145,7 +207,10 @@ export async function testContent(ctx: ContentCliContext, opts: { pattern?: stri
   for (const e of errors) ctx.out(`⚠ ${formatContentError(e)}`);
   const byId = new Map(definitions.map((d) => [d.def.id, d.def]));
   const targets = definitions.filter(
-    (d) => (d.def.kind === 'playbook' || d.def.kind === 'runbook') && d.def.tests?.length && (!opts.pattern || d.def.id.includes(opts.pattern) || d.file.includes(opts.pattern)),
+    (d) =>
+      (d.def.kind === 'playbook' || d.def.kind === 'runbook') &&
+      d.def.tests?.length &&
+      (!opts.pattern || d.def.id.includes(opts.pattern) || d.file.includes(opts.pattern)),
   );
   let passed = 0;
   let failed = 0;
@@ -161,24 +226,36 @@ export async function testContent(ctx: ContentCliContext, opts: { pattern?: stri
     for (const r of results) {
       if (r.passed) passed++;
       else failed++;
-      ctx.out(`${r.passed ? '✓' : '✗'} ${d.def.id} › ${r.name}${r.passed ? '' : ` — ${r.failures.join('; ')}`}`);
+      ctx.out(
+        `${r.passed ? '✓' : '✗'} ${d.def.id} › ${r.name}${r.passed ? '' : ` — ${r.failures.join('; ')}`}`,
+      );
     }
   }
-  ctx.out(`${failed ? '✗' : '✓'} ${passed} passed, ${failed} failed (${targets.length} definitions with tests${opts.pattern ? ` matching "${opts.pattern}"` : ''}).`);
+  ctx.out(
+    `${failed ? '✗' : '✓'} ${passed} passed, ${failed} failed (${targets.length} definitions with tests${opts.pattern ? ` matching "${opts.pattern}"` : ''}).`,
+  );
   return failed === 0;
 }
 
 // ── publish ───────────────────────────────────────────────────────────────────
 
 /** `adminforge publish [--dry-run]` — new versions to Postgres (idempotent by sha256), then NOTIFY definitions_changed. */
-export async function publishContent(ctx: ContentCliContext, opts: { dryRun?: boolean } = {}): Promise<PublishResult | null> {
+export async function publishContent(
+  ctx: ContentCliContext,
+  opts: { dryRun?: boolean } = {},
+): Promise<PublishResult | null> {
   const { definitions, errors } = await loadContentDir(ctx.contentDir);
   if (errors.length) {
     for (const e of errors) ctx.out(`✗ ${formatContentError(e)}`);
     ctx.out('✗ Nothing published: fix the content first (adminforge validate).');
     return null;
   }
-  const entries: PublishEntry[] = definitions.map((d) => ({ def: d.def, sha256: d.sha256, source: 'git', file: d.file }));
+  const entries: PublishEntry[] = definitions.map((d) => ({
+    def: d.def,
+    sha256: d.sha256,
+    source: 'git',
+    file: d.file,
+  }));
   let target: { store: Pick<DbDefinitionStore, 'publish'>; close: () => Promise<void> };
   if (ctx.openStore) target = await ctx.openStore();
   else {
@@ -192,7 +269,9 @@ export async function publishContent(ctx: ContentCliContext, opts: { dryRun?: bo
     for (const i of result.items) {
       if (i.action === 'unchanged') continue;
       const mark = i.action === 'create' ? (i.status === 'retired' ? '− retire' : '+ publish') : '✗ refused';
-      ctx.out(`${mark}  ${i.kind} ${i.key} ${i.version}${i.reason ? ` — ${i.reason}` : ''}${i.file ? `  (${i.file})` : ''}`);
+      ctx.out(
+        `${mark}  ${i.kind} ${i.key} ${i.version}${i.reason ? ` — ${i.reason}` : ''}${i.file ? `  (${i.file})` : ''}`,
+      );
     }
     const verb = opts.dryRun ? 'would publish' : result.applied ? 'published' : 'nothing published';
     ctx.out(
@@ -207,9 +286,16 @@ export async function publishContent(ctx: ContentCliContext, opts: { dryRun?: bo
 // ── new ───────────────────────────────────────────────────────────────────────
 
 /** `adminforge new <kind> <section/name> [--template …]` — valid YAML with $schema, plus a fixture stub. */
-export async function newDefinition(ctx: ContentCliContext, kind: string, target: string, opts: { template?: string; owner?: string; force?: boolean } = {}): Promise<Scaffold> {
-  if (!Object.hasOwn(SCAFFOLD_KINDS, kind)) throw new ConfigError(`Unknown kind "${kind}". Use one of: ${Object.keys(SCAFFOLD_KINDS).join(', ')}.`);
-  if (opts.template && !(PAGE_TEMPLATES as readonly string[]).includes(opts.template)) throw new ConfigError(`Unknown template "${opts.template}". Use one of: ${PAGE_TEMPLATES.join(', ')}.`);
+export async function newDefinition(
+  ctx: ContentCliContext,
+  kind: string,
+  target: string,
+  opts: { template?: string; owner?: string; force?: boolean } = {},
+): Promise<Scaffold> {
+  if (!Object.hasOwn(SCAFFOLD_KINDS, kind))
+    throw new ConfigError(`Unknown kind "${kind}". Use one of: ${Object.keys(SCAFFOLD_KINDS).join(', ')}.`);
+  if (opts.template && !(PAGE_TEMPLATES as readonly string[]).includes(opts.template))
+    throw new ConfigError(`Unknown template "${opts.template}". Use one of: ${PAGE_TEMPLATES.join(', ')}.`);
   const existing = await loadContentDir(ctx.contentDir, { references: false });
   const nav = existing.definitions.find((d) => d.def.kind === 'navigation')?.def as Navigation | undefined;
   let s: Scaffold;
@@ -226,13 +312,26 @@ export async function newDefinition(ctx: ContentCliContext, kind: string, target
   } catch (err) {
     throw new ConfigError((err as Error).message);
   }
-  if (existsSync(s.file) && !opts.force) throw new ConfigError(`${rel(ctx, s.file)} already exists (use --force to overwrite).`);
+  if (existsSync(s.file) && !opts.force)
+    throw new ConfigError(`${rel(ctx, s.file)} already exists (use --force to overwrite).`);
   const file = path.relative(ctx.contentDir, s.file).split(path.sep).join('/');
   const parsed = parseDefinition(s.yaml, file);
-  if (!parsed.ok) throw new Error(`Scaffold for ${kind} is invalid (a CLI bug):\n${parsed.errors.map(formatContentError).join('\n')}`);
-  if (existing.definitions.some((d) => d.def.id === s.id && d.file !== file)) throw new ConfigError(`The id ${s.id} is already used by ${existing.definitions.find((d) => d.def.id === s.id)!.file}.`);
-  const refErrors = validateReferences([...existing.definitions.filter((d) => d.file !== file), { file, def: parsed.def, locate: parsed.locate }]).filter((e) => e.file === file);
-  if (refErrors.length) throw new Error(`Scaffold for ${kind} has reference errors (a CLI bug):\n${refErrors.map(formatContentError).join('\n')}`);
+  if (!parsed.ok)
+    throw new Error(
+      `Scaffold for ${kind} is invalid (a CLI bug):\n${parsed.errors.map(formatContentError).join('\n')}`,
+    );
+  if (existing.definitions.some((d) => d.def.id === s.id && d.file !== file))
+    throw new ConfigError(
+      `The id ${s.id} is already used by ${existing.definitions.find((d) => d.def.id === s.id)!.file}.`,
+    );
+  const refErrors = validateReferences([
+    ...existing.definitions.filter((d) => d.file !== file),
+    { file, def: parsed.def, locate: parsed.locate },
+  ]).filter((e) => e.file === file);
+  if (refErrors.length)
+    throw new Error(
+      `Scaffold for ${kind} has reference errors (a CLI bug):\n${refErrors.map(formatContentError).join('\n')}`,
+    );
   mkdirSync(path.dirname(s.file), { recursive: true });
   writeFileSync(s.file, s.yaml);
   ctx.out(`✓ created ${rel(ctx, s.file)}  (${kind} ${s.id}${s.template ? `, template ${s.template}` : ''})`);
@@ -268,8 +367,15 @@ export function forbiddenValues(env: Record<string, string | undefined>): string
   const out = new Set<string>();
   for (const [key, value] of Object.entries(env)) {
     if (!value || !/^[A-Z][A-Z0-9_]*$/.test(key)) continue;
-    if (!/^(AF_|DATABASE_URL|POSTGRES_|TOKEN_CACHE_KEY|RUNNER_|ANTHROPIC_|PUBLIC_BASE_URL)/.test(key)) continue;
-    if (value.length >= 8 && !/^(true|false|\d+|https?:\/\/localhost(:\d+)?\/?|https?:\/\/127\.0\.0\.1(:\d+)?\/?|postgres:\/\/.*@127\.0\.0\.1.*)$/i.test(value)) out.add(value);
+    if (!/^(AF_|DATABASE_URL|POSTGRES_|TOKEN_CACHE_KEY|RUNNER_|ANTHROPIC_|PUBLIC_BASE_URL)/.test(key))
+      continue;
+    if (
+      value.length >= 8 &&
+      !/^(true|false|\d+|https?:\/\/localhost(:\d+)?\/?|https?:\/\/127\.0\.0\.1(:\d+)?\/?|postgres:\/\/.*@127\.0\.0\.1.*)$/i.test(
+        value,
+      )
+    )
+      out.add(value);
     if (/DOMAIN/.test(key)) out.add(value.toLowerCase());
   }
   return [...out];
@@ -290,24 +396,53 @@ function decodeBody(text: string, contentType: string): unknown {
 /** Graph $batch → one fixture per sub-request (the fixture fetch answers $batch from those). */
 function expand(ex: Recorded & { requestBody?: string }): Recorded[] {
   const u = new URL(ex.url);
-  if (u.hostname !== 'graph.microsoft.com' || ex.method !== 'POST' || !/\/\$batch$/.test(u.pathname)) return [ex];
+  if (u.hostname !== 'graph.microsoft.com' || ex.method !== 'POST' || !/\/\$batch$/.test(u.pathname))
+    return [ex];
   const version = u.pathname.split('/').filter(Boolean)[0] ?? 'v1.0';
-  const reqs = (JSON.parse(ex.requestBody || '{}') as { requests?: Array<{ id: string; method?: string; url: string }> }).requests ?? [];
-  const resps = (ex.body as { responses?: Array<{ id: string; status: number; headers?: Record<string, string>; body?: unknown }> } | undefined)?.responses ?? [];
+  const reqs =
+    (JSON.parse(ex.requestBody || '{}') as { requests?: Array<{ id: string; method?: string; url: string }> })
+      .requests ?? [];
+  const resps =
+    (
+      ex.body as
+        | {
+            responses?: Array<{
+              id: string;
+              status: number;
+              headers?: Record<string, string>;
+              body?: unknown;
+            }>;
+          }
+        | undefined
+    )?.responses ?? [];
   return reqs.flatMap((r) => {
     const resp = resps.find((x) => x.id === r.id);
     if (!resp) return [];
     let body = resp.body;
-    const type = Object.entries(resp.headers ?? {}).find(([k]) => k.toLowerCase() === 'content-type')?.[1] ?? '';
+    const type =
+      Object.entries(resp.headers ?? {}).find(([k]) => k.toLowerCase() === 'content-type')?.[1] ?? '';
     if (typeof body === 'string' && /^text\/plain/i.test(type)) {
       const text = Buffer.from(body, 'base64').toString('utf8');
       body = /^\d+$/.test(text.trim()) ? Number(text) : text;
     }
-    return [{ method: (r.method ?? 'GET').toUpperCase(), url: `https://graph.microsoft.com/${version}${r.url.startsWith('/') ? '' : '/'}${r.url}`, status: resp.status, body }];
+    return [
+      {
+        method: (r.method ?? 'GET').toUpperCase(),
+        url: `https://graph.microsoft.com/${version}${r.url.startsWith('/') ? '' : '/'}${r.url}`,
+        status: resp.status,
+        body,
+      },
+    ];
   });
 }
 
-const KEEP_GUIDS = [...Object.values(RESOURCES).map((r) => r.appId), ...Object.values(DIRECTORY_ROLES), AZURE_READER_ROLE_ID, '48ac35b8-9aa8-4d74-927d-1f4a14a0b239', '00000003-0000-0ff1-ce00-000000000000'];
+const KEEP_GUIDS = [
+  ...Object.values(RESOURCES).map((r) => r.appId),
+  ...Object.values(DIRECTORY_ROLES),
+  AZURE_READER_ROLE_ID,
+  '48ac35b8-9aa8-4d74-927d-1f4a14a0b239',
+  '00000003-0000-0ff1-ce00-000000000000',
+];
 
 /**
  * `adminforge fixtures record <page> [--datasource x] [--param k=v]` — reads the page's datasources live as the automation
@@ -315,7 +450,11 @@ const KEEP_GUIDS = [...Object.values(RESOURCES).map((r) => r.appId), ...Object.v
  * files that DATA_MODE=fixtures serves. Existing files are kept unless --force; output that still contains a value from
  * the local env file is refused.
  */
-export async function recordFixtures(ctx: ContentCliContext, pageKey: string, opts: { datasource?: string; params?: string[]; force?: boolean; dryRun?: boolean } = {}): Promise<boolean> {
+export async function recordFixtures(
+  ctx: ContentCliContext,
+  pageKey: string,
+  opts: { datasource?: string; params?: string[]; force?: boolean; dryRun?: boolean } = {},
+): Promise<boolean> {
   const params: Record<string, unknown> = {};
   for (const p of opts.params ?? []) {
     const i = p.indexOf('=');
@@ -331,7 +470,10 @@ export async function recordFixtures(ctx: ContentCliContext, pageKey: string, op
           AF_AUTOMATION_CLIENT_SECRET: ctx.env.AF_AUTOMATION_CLIENT_SECRET,
           AF_AUTOMATION_CERT_PATH: ctx.env.AF_AUTOMATION_CERT_PATH,
         });
-  if (!automation) throw new ConfigError('The automation identity is not configured (AF_TENANT_ID, AF_AUTOMATION_CLIENT_ID and AF_AUTOMATION_CERT_PATH or _SECRET).');
+  if (!automation)
+    throw new ConfigError(
+      'The automation identity is not configured (AF_TENANT_ID, AF_AUTOMATION_CLIENT_ID and AF_AUTOMATION_CERT_PATH or _SECRET).',
+    );
 
   const recorded: Array<Recorded & { requestBody?: string }> = [];
   const base = ctx.fetch ?? fetch;
@@ -349,11 +491,20 @@ export async function recordFixtures(ctx: ContentCliContext, pageKey: string, op
     return res;
   };
 
-  const env = Object.fromEntries(Object.entries(ctx.env).filter(([k, v]) => /^AF_[A-Z0-9_]+$/.test(k) && v && !EXCLUDED_ENV.test(k))) as Record<string, string>;
+  const env = Object.fromEntries(
+    Object.entries(ctx.env).filter(([k, v]) => /^AF_[A-Z0-9_]+$/.test(k) && v && !EXCLUDED_ENV.test(k)),
+  ) as Record<string, string>;
   const registry = registryFrom(new FsDefinitionSource(ctx.contentDir), 'fs');
   const now = ctx.now ?? (() => new Date());
   const outbound = createOutboundExecutor({
-    config: { DATA_MODE: 'live', AF_SPO_TENANT_NAME: ctx.env.AF_SPO_TENANT_NAME, OUTBOUND_CONCURRENCY: 4, OUTBOUND_USER_CONCURRENCY: 4, OUTBOUND_TIMEOUT_MS: 60_000, TOKEN_CACHE_KEY: undefined },
+    config: {
+      DATA_MODE: 'live',
+      AF_SPO_TENANT_NAME: ctx.env.AF_SPO_TENANT_NAME,
+      OUTBOUND_CONCURRENCY: 4,
+      OUTBOUND_USER_CONCURRENCY: 4,
+      OUTBOUND_TIMEOUT_MS: 60_000,
+      TOKEN_CACHE_KEY: undefined,
+    },
     broker: null,
     auth: null,
     automation: { clientId: 'automation', credential: 'secret', token: (scope) => automation.token(scope) },
@@ -377,11 +528,21 @@ export async function recordFixtures(ctx: ContentCliContext, pageKey: string, op
       }
       const before = recorded.length;
       try {
-        await runner.run({ identity: { kind: 'automation', mode: 'read' }, user, page, datasource: name, params: values, correlationId: randomUUID(), noCache: true });
+        await runner.run({
+          identity: { kind: 'automation', mode: 'read' },
+          user,
+          page,
+          datasource: name,
+          params: values,
+          correlationId: randomUUID(),
+          noCache: true,
+        });
         ctx.out(`✓ ${name}: ${recorded.length - before} response(s) recorded.`);
       } catch (err) {
         const e = err as { code?: string; status?: number; message?: string };
-        ctx.out(`✗ ${name}: ${e.status ?? ''} ${e.code ?? 'error'} (responses recorded so far are still written)`);
+        ctx.out(
+          `✗ ${name}: ${e.status ?? ''} ${e.code ?? 'error'} (responses recorded so far are still written)`,
+        );
         ok = false;
       }
     }
@@ -390,7 +551,11 @@ export async function recordFixtures(ctx: ContentCliContext, pageKey: string, op
   }
 
   const items = recorded.flatMap(expand);
-  const sanitizer = new Sanitizer({ forbidden: forbiddenValues(ctx.env), domains: [ctx.env.AF_PRIMARY_DOMAIN ?? ''].filter(Boolean), keepGuids: KEEP_GUIDS });
+  const sanitizer = new Sanitizer({
+    forbidden: forbiddenValues(ctx.env),
+    domains: [ctx.env.AF_PRIMARY_DOMAIN ?? ''].filter(Boolean),
+    keepGuids: KEEP_GUIDS,
+  });
   for (const it of items) {
     sanitizer.collectUrl(it.url);
     sanitizer.collect(it.body, kindFromPath(new URL(it.url).pathname));
@@ -399,13 +564,18 @@ export async function recordFixtures(ctx: ContentCliContext, pageKey: string, op
   for (const it of items) {
     const url = sanitizer.url(it.url);
     const body = sanitizer.apply(it.body);
-    const content = it.status >= 200 && it.status < 300 && body !== undefined ? body : { $fixture: { status: it.status, ...(body !== undefined ? { body } : {}) } };
+    const content =
+      it.status >= 200 && it.status < 300 && body !== undefined
+        ? body
+        : { $fixture: { status: it.status, ...(body !== undefined ? { body } : {}) } };
     const text = `${JSON.stringify(content, null, 2)}\n`;
     const leaks = sanitizer.leaks(`${url}\n${text}`);
     const key = fixtureKey(it.method, url);
     const specific = key.candidates[0]!;
     if (leaks.length) {
-      ctx.out(`✗ refused ${specific}: it would still contain ${leaks.length} value(s) from the local env file.`);
+      ctx.out(
+        `✗ refused ${specific}: it would still contain ${leaks.length} value(s) from the local env file.`,
+      );
       ok = false;
       continue;
     }
@@ -415,7 +585,10 @@ export async function recordFixtures(ctx: ContentCliContext, pageKey: string, op
       const exists = existsSync(file);
       // The generic fallback (<METHOD>.json) is only created, never overwritten.
       if (exists && (i > 0 || !opts.force)) {
-        if (i === 0) ctx.out(`· kept ${rel(ctx, file)} (exists; --force overwrites${relPath.endsWith('/POST.json') ? '; POST fixtures are shared — add a variant by hand' : ''})`);
+        if (i === 0)
+          ctx.out(
+            `· kept ${rel(ctx, file)} (exists; --force overwrites${relPath.endsWith('/POST.json') ? '; POST fixtures are shared — add a variant by hand' : ''})`,
+          );
         continue;
       }
       if (opts.dryRun) ctx.out(`· would write ${rel(ctx, file)}`);
@@ -427,6 +600,8 @@ export async function recordFixtures(ctx: ContentCliContext, pageKey: string, op
       }
     }
   }
-  ctx.out(`${ok ? '✓' : '⚠'} ${items.length} response(s) sanitized, ${written} file(s) ${opts.dryRun ? 'not written (dry run)' : 'written'}.`);
+  ctx.out(
+    `${ok ? '✓' : '⚠'} ${items.length} response(s) sanitized, ${written} file(s) ${opts.dryRun ? 'not written (dry run)' : 'written'}.`,
+  );
   return ok;
 }

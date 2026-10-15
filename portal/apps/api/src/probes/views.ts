@@ -11,7 +11,13 @@ export interface ProbeItem {
   key: string;
   title: string;
   kind: string;
-  latest: { status: ProbeStatus; metric: number | null; unit: string; ts: string; message: string | null } | null;
+  latest: {
+    status: ProbeStatus;
+    metric: number | null;
+    unit: string;
+    ts: string;
+    message: string | null;
+  } | null;
   series: Array<{ ts: string; metric: number | null; status: ProbeStatus }>;
   thresholds: { warn: number | null; crit: number | null; unit: string; worse: 'higher' | 'lower' };
 }
@@ -33,7 +39,13 @@ export const RESULTS_LIMIT = 500;
 const MAX_RANGE_MS = 31 * 86_400_000;
 
 export class ProbeViews {
-  constructor(private readonly deps: { store: ScheduleStore; definitions: Pick<DefinitionSource, 'list' | 'get'>; now: () => Date }) {}
+  constructor(
+    private readonly deps: {
+      store: ScheduleStore;
+      definitions: Pick<DefinitionSource, 'list' | 'get'>;
+      now: () => Date;
+    },
+  ) {}
 
   async list(): Promise<{ items: ProbeItem[] }> {
     const now = this.deps.now();
@@ -54,8 +66,12 @@ export class ProbeViews {
           key: rec.key,
           title: probe.title,
           kind: probe.check.kind,
-          latest: l ? { status: l.status, metric: l.metric, unit: t.unit, ts: l.ts.toISOString(), message: l.message } : null,
-          series: (seriesBy.get(rec.key) ?? []).sort((a, b) => a.ts.getTime() - b.ts.getTime()).map((p) => ({ ts: p.ts.toISOString(), metric: p.metric, status: p.status })),
+          latest: l
+            ? { status: l.status, metric: l.metric, unit: t.unit, ts: l.ts.toISOString(), message: l.message }
+            : null,
+          series: (seriesBy.get(rec.key) ?? [])
+            .sort((a, b) => a.ts.getTime() - b.ts.getTime())
+            .map((p) => ({ ts: p.ts.toISOString(), metric: p.metric, status: p.status })),
           thresholds: { warn: t.warn, crit: t.crit, unit: t.unit, worse: t.worse },
         };
       })
@@ -69,7 +85,8 @@ export class ProbeViews {
     let from = new Date(now.getTime() - SERIES_WINDOW_MS);
     if (since) {
       const d = new Date(since);
-      if (Number.isNaN(d.getTime())) throw new AppError(400, 'invalid_request', 'since must be an ISO date-time.');
+      if (Number.isNaN(d.getTime()))
+        throw new AppError(400, 'invalid_request', 'since must be an ISO date-time.');
       from = new Date(Math.max(d.getTime(), now.getTime() - MAX_RANGE_MS));
     }
     const rec = await this.deps.definitions.get('probe', key);

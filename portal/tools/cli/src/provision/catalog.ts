@@ -89,11 +89,27 @@ export const AUTOMATION_GRAPH_ROLES = [
 
 /** Portal roles (§5.3) — app roles on the Read app, each backed by a security group. */
 export const PORTAL_ROLES = [
-  { value: 'Portal.Reader', displayName: 'Portal reader', description: 'View pages, dashboards, and reports; dry-run playbooks.' },
-  { value: 'Portal.Operator', displayName: 'Portal operator', description: 'Arm write access and run write playbooks.' },
+  {
+    value: 'Portal.Reader',
+    displayName: 'Portal reader',
+    description: 'View pages, dashboards, and reports; dry-run playbooks.',
+  },
+  {
+    value: 'Portal.Operator',
+    displayName: 'Portal operator',
+    description: 'Arm write access and run write playbooks.',
+  },
   { value: 'Playbook.Author', displayName: 'Playbook author', description: 'Draft and test content.' },
-  { value: 'Playbook.Approver', displayName: 'Playbook approver', description: 'Approve runs and publishing of write-capable content.' },
-  { value: 'Portal.Admin', displayName: 'Portal admin', description: 'Appearance, connections, audit export, scope drift.' },
+  {
+    value: 'Playbook.Approver',
+    displayName: 'Playbook approver',
+    description: 'Approve runs and publishing of write-capable content.',
+  },
+  {
+    value: 'Portal.Admin',
+    displayName: 'Portal admin',
+    description: 'Appearance, connections, audit export, scope drift.',
+  },
 ] as const;
 export type PortalRole = (typeof PORTAL_ROLES)[number]['value'];
 

@@ -55,7 +55,15 @@ export function readSecretMessage(raw: unknown): SecretMessage | null {
     if (typeof x === 'string' || typeof x === 'number') values[k] = String(x);
   if (!runId || !stepPath || Object.keys(values).length === 0) return null;
   const { hints, note } = readHints(o.hints);
-  return { runId, stepId: pick(o, 'stepId') ?? stepPath, stepPath, values, hints, note, producedAt: pick(o, 'producedAt') ?? null };
+  return {
+    runId,
+    stepId: pick(o, 'stepId') ?? stepPath,
+    stepPath,
+    values,
+    hints,
+    note,
+    producedAt: pick(o, 'producedAt') ?? null,
+  };
 }
 
 export function readSecretNotice(raw: unknown): SecretNotice | null {
@@ -63,7 +71,12 @@ export function readSecretNotice(raw: unknown): SecretNotice | null {
   const runId = pick(o, 'runId');
   const stepPath = pick(o, 'stepPath', 'path') ?? pick(o, 'stepId');
   const status = o.status;
-  if (!runId || !stepPath || (status !== 'delivered' && status !== 'held' && status !== 'sent' && status !== 'discarded')) return null;
+  if (
+    !runId ||
+    !stepPath ||
+    (status !== 'delivered' && status !== 'held' && status !== 'sent' && status !== 'discarded')
+  )
+    return null;
   return {
     runId,
     stepId: pick(o, 'stepId') ?? stepPath,
@@ -78,26 +91,33 @@ const claimed = new Set<string>();
 
 export type ClaimResult = { ok: true; secret: SecretMessage } | { ok: false; gone: boolean; message: string };
 
-export async function claimHeldSecret(notice: Pick<SecretNotice, 'runId' | 'stepPath'>): Promise<ClaimResult | null> {
+export async function claimHeldSecret(
+  notice: Pick<SecretNotice, 'runId' | 'stepPath'>,
+): Promise<ClaimResult | null> {
   const key = secretKey(notice);
   if (claimed.has(key)) return null;
   claimed.add(key);
   try {
-    const secret = await api(`/api/runs/${encodeURIComponent(notice.runId)}/secret/${encodeURIComponent(notice.stepPath)}`, {
-      csrf: true,
-      schema: parser((input) => {
-        const s = readSecretMessage({ runId: notice.runId, stepPath: notice.stepPath, ...rec(input) });
-        if (!s) throw new TypeError('Expected { values }');
-        return s;
-      }),
-    });
+    const secret = await api(
+      `/api/runs/${encodeURIComponent(notice.runId)}/secret/${encodeURIComponent(notice.stepPath)}`,
+      {
+        csrf: true,
+        schema: parser((input) => {
+          const s = readSecretMessage({ runId: notice.runId, stepPath: notice.stepPath, ...rec(input) });
+          if (!s) throw new TypeError('Expected { values }');
+          return s;
+        }),
+      },
+    );
     return { ok: true, secret };
   } catch (e) {
     const gone = e instanceof ApiRequestError && (e.status === 404 || e.code === 'secret_not_available');
     return {
       ok: false,
       gone,
-      message: gone ? 'This secret was already shown or has expired.' : ((e as Error).message ?? 'The secret could not be fetched.'),
+      message: gone
+        ? 'This secret was already shown or has expired.'
+        : ((e as Error).message ?? 'The secret could not be fetched.'),
     };
   }
 }
@@ -123,7 +143,8 @@ export const maskText = (v: SecretMask) => `•••• ${str(v.hint) ?? ''}`.t
 export function maskSecrets(value: unknown): unknown {
   if (isSecretMask(value)) return maskText(value);
   if (Array.isArray(value)) return value.map(maskSecrets);
-  if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, maskSecrets(v)]));
+  if (value && typeof value === 'object')
+    return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, maskSecrets(v)]));
   return value;
 }
 

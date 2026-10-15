@@ -8,7 +8,10 @@ import type { MockHandler } from '../../../e2e/support/mock-api';
 import { automationApi, type AutomationOptions } from '../../../e2e/support/mock-automation';
 
 const json = (body: unknown, status = 200) =>
-  new Response(status === 204 ? null : JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
+  new Response(status === 204 ? null : JSON.stringify(body), {
+    status,
+    headers: { 'content-type': 'application/json' },
+  });
 
 export interface Call {
   method: string;
@@ -39,7 +42,10 @@ export function renderApp({
       calls.push({ method, url: `${url.pathname}${url.search}`, body, csrf });
       for (const h of [...handlers, auto.handler]) {
         const r = h({ method, path: url.pathname, url, body, csrf });
-        if (r) return r.text !== undefined ? new Response(r.text, { status: r.status ?? 200 }) : json(r.body ?? {}, r.status ?? 200);
+        if (r)
+          return r.text !== undefined
+            ? new Response(r.text, { status: r.status ?? 200 })
+            : json(r.body ?? {}, r.status ?? 200);
       }
       if (url.pathname === '/api/me') return json(session);
       if (url.pathname === '/api/nav') return json(NAV);

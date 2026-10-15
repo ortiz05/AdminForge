@@ -22,8 +22,19 @@ export const RUN_STATUSES = [
 ] as const;
 export type RunStatus = (typeof RUN_STATUSES)[number];
 
-export const TERMINAL_STATUSES: readonly RunStatus[] = ['succeeded', 'failed', 'cancelled', 'compensated', 'needs_review'];
-export const PARKED_STATUSES: readonly RunStatus[] = ['awaiting_approval', 'awaiting_input', 'awaiting_arm', 'awaiting_reauth'];
+export const TERMINAL_STATUSES: readonly RunStatus[] = [
+  'succeeded',
+  'failed',
+  'cancelled',
+  'compensated',
+  'needs_review',
+];
+export const PARKED_STATUSES: readonly RunStatus[] = [
+  'awaiting_approval',
+  'awaiting_input',
+  'awaiting_arm',
+  'awaiting_reauth',
+];
 
 export const isTerminal = (s: string) => (TERMINAL_STATUSES as readonly string[]).includes(s);
 export const isParked = (s: string) => (PARKED_STATUSES as readonly string[]).includes(s);
@@ -151,7 +162,12 @@ export interface RunTask {
   writesAfter: boolean | null;
   /** Server's verdict on whether the caller may decide (role, not the initiator, not decided yet). */
   canDecide: boolean | null;
-  decisions: Array<{ approved: boolean; actor: string | null; comment: string | null; decidedAt: string | null }>;
+  decisions: Array<{
+    approved: boolean;
+    actor: string | null;
+    comment: string | null;
+    decidedAt: string | null;
+  }>;
 }
 
 /** What a parked run waits for (`run.waiting`). */
@@ -223,7 +239,9 @@ function readProgress(v: unknown): RunProgress | null {
   const p = rec(v);
   const done = num(p.done) ?? num(p.completed);
   const total = num(p.total);
-  return done !== undefined && total !== undefined && total > 0 ? { done, total, failed: num(p.failed) } : null;
+  return done !== undefined && total !== undefined && total > 0
+    ? { done, total, failed: num(p.failed) }
+    : null;
 }
 
 export function readRunSummary(raw: unknown): RunSummary | null {
@@ -274,7 +292,11 @@ export function readStep(raw: unknown, i: number): RunStep | null {
   const o = rec(raw);
   const stepId = pick(o, 'stepId', 'id');
   if (!stepId) return null;
-  const plan = Array.isArray(o.plan) ? arr(o.plan).map(readPlanEntry).filter((p): p is PlanEntry => !!p) : null;
+  const plan = Array.isArray(o.plan)
+    ? arr(o.plan)
+        .map(readPlanEntry)
+        .filter((p): p is PlanEntry => !!p)
+    : null;
   return {
     seq: num(o.seq) ?? i,
     stepId,
@@ -309,7 +331,8 @@ export function readTask(raw: unknown): RunTask | null {
   const stepId = pick(o, 'stepId') ?? pick(policy, 'path', 'stepId');
   if (!id || !stepId) return null;
   const st = o.status;
-  const status = st === 'approved' || st === 'rejected' || st === 'expired' || st === 'cancelled' ? st : 'pending';
+  const status =
+    st === 'approved' || st === 'rejected' || st === 'expired' || st === 'cancelled' ? st : 'pending';
   return {
     id,
     kind: (o.kind ?? policy.kind) === 'manual' ? 'manual' : 'approval',
@@ -344,7 +367,9 @@ function readWaiting(v: unknown): RunWaiting | null {
   const path = pick(o, 'path');
   if (!kind || !path) return null;
   return {
-    kind: (['approval', 'manual', 'arm', 'reauth', 'wait', 'child'].includes(kind) ? kind : 'wait') as RunWaiting['kind'],
+    kind: (['approval', 'manual', 'arm', 'reauth', 'wait', 'child'].includes(kind)
+      ? kind
+      : 'wait') as RunWaiting['kind'],
     path,
     stepId: pick(o, 'stepId') ?? path,
     since: pick(o, 'since') ?? null,
@@ -389,7 +414,10 @@ export function readRunDetail(input: unknown): RunDetail {
     run: {
       ...summary,
       inputs: rec(runRaw.inputs),
-      outputs: runRaw.outputs && typeof runRaw.outputs === 'object' ? (runRaw.outputs as Record<string, unknown>) : null,
+      outputs:
+        runRaw.outputs && typeof runRaw.outputs === 'object'
+          ? (runRaw.outputs as Record<string, unknown>)
+          : null,
       error: readError(runRaw.error),
       correlationId: pick(runRaw, 'correlationId') ?? null,
       confirm: readConfirm(runRaw.confirm ?? o.confirm),
@@ -428,10 +456,14 @@ export function latestSteps(steps: RunStep[]): RunStep[] {
 }
 
 /** Display name of a step: its name, what it does, or its id. */
-export const stepLabel = (s: Pick<RunStep, 'name' | 'describe' | 'stepId'>) => s.name ?? s.describe ?? s.stepId;
+export const stepLabel = (s: Pick<RunStep, 'name' | 'describe' | 'stepId'>) =>
+  s.name ?? s.describe ?? s.stepId;
 
 /** Name / describe of each step id in a definition (run records only carry ids). */
-export type StepIndex = Map<string, { name: string | null; describe: string | null; type: string; mode: 'read' | 'write' }>;
+export type StepIndex = Map<
+  string,
+  { name: string | null; describe: string | null; type: string; mode: 'read' | 'write' }
+>;
 
 /** Label for a step id using the definition when it's known. */
 export function labelOf(index: StepIndex | null | undefined, stepId: string): string {

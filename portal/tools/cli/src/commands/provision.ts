@@ -4,7 +4,14 @@ import { repoRoot } from '@adminforge/config';
 import { loadContentDir } from '@adminforge/schemas';
 import { declaredScopes } from '../content/scopes';
 import { RESOURCES, OPTIONAL_RESOURCES, RESOURCE_KEYS } from '../provision/catalog';
-import { buildAuthorizeUrl, checkAuthorizeUrl, clientCredentialToken, pkceChallenge, tokenRoles, TokenError } from '../provision/auth';
+import {
+  buildAuthorizeUrl,
+  checkAuthorizeUrl,
+  clientCredentialToken,
+  pkceChallenge,
+  tokenRoles,
+  TokenError,
+} from '../provision/auth';
 import { buildDesiredEntra, type ContentScopes } from '../provision/entra-desired';
 import { applyEntraOps, fetchEntraState, fetchResources } from '../provision/entra-io';
 import { planEntra } from '../provision/entra-plan';
@@ -13,7 +20,16 @@ import { applyIdentityOps, fetchIdentityState, readSecurityDefaults } from '../p
 import type { DesiredEntra, EntraOp, EntraState, ProvisionSettings } from '../provision/model';
 import { counts, renderPlan, renderStatus, summaryLine } from '../provision/render';
 import { azureTestStatus } from '../provision/azure-test-command';
-import { appClients, ConfigError, envSubset, GRAPH_SCOPE, provisionerClients, provisionSettings, type CliContext, type Clients } from './context';
+import {
+  appClients,
+  ConfigError,
+  envSubset,
+  GRAPH_SCOPE,
+  provisionerClients,
+  provisionSettings,
+  type CliContext,
+  type Clients,
+} from './context';
 
 export interface EntraRun {
   settings: ProvisionSettings;
@@ -23,13 +39,19 @@ export interface EntraRun {
 }
 
 /** Permissions declared by portal/content (requires.scopes) — provisioning grants exactly these on top of the baseline. */
-export async function contentScopes(contentDir = path.join(repoRoot, 'portal', 'content')): Promise<ContentScopes> {
+export async function contentScopes(
+  contentDir = path.join(repoRoot, 'portal', 'content'),
+): Promise<ContentScopes> {
   const { definitions } = await loadContentDir(contentDir);
   return declaredScopes(definitions).scopes;
 }
 
 /** Read-only: fetch → desired → plan. */
-export async function planEntraRun(ctx: CliContext, clients: Clients, settings = provisionSettings(ctx.env)): Promise<EntraRun> {
+export async function planEntraRun(
+  ctx: CliContext,
+  clients: Clients,
+  settings = provisionSettings(ctx.env),
+): Promise<EntraRun> {
   const resources = await fetchResources(clients.graph);
   const desired = buildDesiredEntra(settings, resources, ctx.contentScopes ?? (await contentScopes()));
   const state = await fetchEntraState(clients.graph, clients.arm, desired, resources, envSubset(ctx.env));
@@ -48,11 +70,15 @@ function printBlocked(ctx: CliContext, ops: Array<{ action: string; title: strin
 export async function provisionEntra(ctx: CliContext, opts: { dryRun?: boolean } = {}): Promise<EntraRun> {
   const settings = provisionSettings(ctx.env);
   const clients = provisionerClients(ctx, settings);
-  ctx.out(`AdminForge provision entra — environment "${settings.label}", redirect base ${settings.baseUrl}${opts.dryRun ? ' (dry run)' : ''}`);
+  ctx.out(
+    `AdminForge provision entra — environment "${settings.label}", redirect base ${settings.baseUrl}${opts.dryRun ? ' (dry run)' : ''}`,
+  );
   const run = await planEntraRun(ctx, clients, settings);
   for (const key of RESOURCE_KEYS)
     if (!run.state.resources[key])
-      ctx.out(`  ⚠ ${RESOURCES[key].name} service principal not found in the tenant${OPTIONAL_RESOURCES.has(key) ? ' (workload not licensed)' : ''}; its permissions are skipped.`);
+      ctx.out(
+        `  ⚠ ${RESOURCES[key].name} service principal not found in the tenant${OPTIONAL_RESOURCES.has(key) ? ' (workload not licensed)' : ''}; its permissions are skipped.`,
+      );
   ctx.out('');
   ctx.out('Plan:');
   renderPlan(run.ops, ctx.out);
@@ -66,7 +92,14 @@ export async function provisionEntra(ctx: CliContext, opts: { dryRun?: boolean }
   } else {
     ctx.out('');
     ctx.out('Applying:');
-    await applyEntraOps(run.ops, run.state, { graph: clients.graph, arm: clients.arm, writeEnv: ctx.writeEnv, log: ctx.out, retry: { sleep: ctx.sleep, ...ctx.retry }, now: ctx.now });
+    await applyEntraOps(run.ops, run.state, {
+      graph: clients.graph,
+      arm: clients.arm,
+      writeEnv: ctx.writeEnv,
+      log: ctx.out,
+      retry: { sleep: ctx.sleep, ...ctx.retry },
+      now: ctx.now,
+    });
     ctx.out('');
     ctx.out(`Done: ${c.create} created, ${c.update} updated, ${c.noop} unchanged, ${c.skip} skipped.`);
   }
@@ -81,8 +114,15 @@ export interface IdentitiesRun {
 
 async function identityPlan(ctx: CliContext, clients: Clients, settings: ProvisionSettings) {
   if (!settings.primaryDomain) throw new ConfigError('AF_PRIMARY_DOMAIN must be set in the env file.');
-  const desired = buildDesiredIdentities({ label: settings.label, domain: settings.primaryDomain, testerUpn: ctx.env.AF_TEST_USER_UPN });
-  const env = { upn: ctx.env.AF_TEST_USER_UPN || undefined, password: ctx.env.AF_TEST_USER_PASSWORD || undefined };
+  const desired = buildDesiredIdentities({
+    label: settings.label,
+    domain: settings.primaryDomain,
+    testerUpn: ctx.env.AF_TEST_USER_UPN,
+  });
+  const env = {
+    upn: ctx.env.AF_TEST_USER_UPN || undefined,
+    password: ctx.env.AF_TEST_USER_PASSWORD || undefined,
+  };
   const state = await fetchIdentityState(clients.graph, desired, env);
   return { desired, state, ops: planIdentities(desired, state) };
 }
@@ -105,10 +145,15 @@ const securityDefaultsLine = (v: boolean | 'unknown') =>
       : 'Security Defaults: disabled';
 
 /** `adminforge provision test-identities [--dry-run]` */
-export async function provisionTestIdentities(ctx: CliContext, opts: { dryRun?: boolean } = {}): Promise<IdentitiesRun> {
+export async function provisionTestIdentities(
+  ctx: CliContext,
+  opts: { dryRun?: boolean } = {},
+): Promise<IdentitiesRun> {
   const settings = provisionSettings(ctx.env);
   const clients = provisionerClients(ctx, settings);
-  ctx.out(`AdminForge provision test-identities — environment "${settings.label}"${opts.dryRun ? ' (dry run)' : ''}`);
+  ctx.out(
+    `AdminForge provision test-identities — environment "${settings.label}"${opts.dryRun ? ' (dry run)' : ''}`,
+  );
   const { state, ops } = await identityPlan(ctx, clients, settings);
   ctx.out('');
   ctx.out('Plan:');
@@ -119,7 +164,12 @@ export async function provisionTestIdentities(ctx: CliContext, opts: { dryRun?: 
   else if (c.create + c.update === 0) ctx.out('Nothing to do: everything is already in the desired state.');
   else {
     ctx.out('Applying:');
-    await applyIdentityOps(ops, state, { graph: clients.graph, writeEnv: ctx.writeEnv, log: ctx.out, retry: { sleep: ctx.sleep, ...ctx.retry } });
+    await applyIdentityOps(ops, state, {
+      graph: clients.graph,
+      writeEnv: ctx.writeEnv,
+      log: ctx.out,
+      retry: { sleep: ctx.sleep, ...ctx.retry },
+    });
     ctx.out('');
     ctx.out(`Done: ${c.create} created, ${c.update} updated, ${c.noop} unchanged, ${c.skip} skipped.`);
   }
@@ -150,7 +200,9 @@ export async function provisionStatus(ctx: CliContext): Promise<StatusResult> {
   if (settings.primaryDomain) {
     identityOps = (await identityPlan(ctx, clients, settings)).ops;
     renderStatus(identityOps, ctx.out);
-    failures.push(...identityOps.filter((o) => o.action === 'create' || o.action === 'update').map((o) => o.title));
+    failures.push(
+      ...identityOps.filter((o) => o.action === 'create' || o.action === 'update').map((o) => o.title),
+    );
   } else ctx.out('  ⚠ Test identities — AF_PRIMARY_DOMAIN is not set');
 
   ctx.out('  Token checks');
@@ -167,11 +219,21 @@ export async function provisionStatus(ctx: CliContext): Promise<StatusResult> {
     const secret = ctx.env[desiredApp.env.secret];
     const name = desiredApp.body.displayName;
     if (!id || !secret) {
-      check(false, `${name}: client credentials in env file`, `${desiredApp.env.clientId} / ${desiredApp.env.secret} missing`);
+      check(
+        false,
+        `${name}: client credentials in env file`,
+        `${desiredApp.env.clientId} / ${desiredApp.env.secret} missing`,
+      );
       continue;
     }
     try {
-      const token = await clientCredentialToken({ tenantId: settings.tenantId, clientId: id, clientSecret: secret, scope: GRAPH_SCOPE, fetch: ctx.fetch })();
+      const token = await clientCredentialToken({
+        tenantId: settings.tenantId,
+        clientId: id,
+        clientSecret: secret,
+        scope: GRAPH_SCOPE,
+        fetch: ctx.fetch,
+      })();
       if (app !== 'automation') {
         check(true, `${name}: stored client secret is accepted by Entra`);
         continue;
@@ -179,9 +241,17 @@ export async function provisionStatus(ctx: CliContext): Promise<StatusResult> {
       const roles = tokenRoles(token);
       const expected = desiredApp.appPermissions.flatMap((p) => p.roles.map((r) => r.value));
       const missing = expected.filter((r) => !roles.includes(r));
-      check(missing.length === 0, `${name}: app-only token carries ${roles.length}/${expected.length} expected roles`, missing.length ? `missing: ${missing.join(', ')}` : `roles: ${roles.join(', ')}`);
+      check(
+        missing.length === 0,
+        `${name}: app-only token carries ${roles.length}/${expected.length} expected roles`,
+        missing.length ? `missing: ${missing.join(', ')}` : `roles: ${roles.join(', ')}`,
+      );
     } catch (err) {
-      check(false, `${name}: client-credentials token`, err instanceof TokenError ? `${err.aadsts ?? err.error}` : String(err));
+      check(
+        false,
+        `${name}: client-credentials token`,
+        err instanceof TokenError ? `${err.aadsts ?? err.error}` : String(err),
+      );
     }
   }
 
@@ -199,14 +269,24 @@ export async function provisionStatus(ctx: CliContext): Promise<StatusResult> {
     const problems = checkAuthorizeUrl(url, { tenantId: settings.tenantId, clientId: readId, redirectUri });
     const readApp = run.state.apps.read;
     if (readApp?.appId !== readId) problems.push('AF_READ_CLIENT_ID is not the Read app registration');
-    if (!(readApp?.web?.redirectUris ?? []).includes(redirectUri)) problems.push('redirect_uri is not registered on the Read app');
-    check(problems.length === 0, 'Read app authorize URL is well-formed (auth code + PKCE S256; client_id and redirect_uri match the registration)', problems.join('; ') || undefined);
+    if (!(readApp?.web?.redirectUris ?? []).includes(redirectUri))
+      problems.push('redirect_uri is not registered on the Read app');
+    check(
+      problems.length === 0,
+      'Read app authorize URL is well-formed (auth code + PKCE S256; client_id and redirect_uri match the registration)',
+      problems.join('; ') || undefined,
+    );
     try {
       // Entra only validates client_id/redirect_uri after a user identifies, so check the endpoint against OIDC discovery.
-      const res = await doFetch(`https://login.microsoftonline.com/${settings.tenantId}/v2.0/.well-known/openid-configuration`);
+      const res = await doFetch(
+        `https://login.microsoftonline.com/${settings.tenantId}/v2.0/.well-known/openid-configuration`,
+      );
       const discovery = (await res.json()) as { authorization_endpoint?: string };
       const u = new URL(url);
-      check(discovery.authorization_endpoint === `${u.origin}${u.pathname}`, 'Authorize endpoint matches the tenant OIDC discovery document');
+      check(
+        discovery.authorization_endpoint === `${u.origin}${u.pathname}`,
+        'Authorize endpoint matches the tenant OIDC discovery document',
+      );
     } catch (err) {
       check(false, 'Authorize endpoint matches the tenant OIDC discovery document', String(err));
     }
@@ -220,6 +300,10 @@ export async function provisionStatus(ctx: CliContext): Promise<StatusResult> {
   ctx.out(`  ${sd === true ? '⚠' : 'ℹ'} ${securityDefaultsLine(sd)}`);
   printBlocked(ctx, [...run.ops, ...identityOps]);
   ctx.out('');
-  ctx.out(failures.length ? `${failures.length} item(s) not in the desired state. Run \`pnpm adminforge provision entra\` / \`provision test-identities\` / \`provision azure-test\`.` : `All provisioned items are in the desired state (${summaryLine([...run.ops, ...identityOps, ...azure.ops])}).`);
+  ctx.out(
+    failures.length
+      ? `${failures.length} item(s) not in the desired state. Run \`pnpm adminforge provision entra\` / \`provision test-identities\` / \`provision azure-test\`.`
+      : `All provisioned items are in the desired state (${summaryLine([...run.ops, ...identityOps, ...azure.ops])}).`,
+  );
   return { ok: failures.length === 0, failures };
 }

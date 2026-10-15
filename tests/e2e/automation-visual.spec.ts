@@ -31,7 +31,18 @@ test.beforeEach(async ({ page }) => {
 
 for (const theme of THEMES) {
   test(`playbook drawer · write · preview · ${theme}`, async ({ page }) => {
-    await open(page, theme, playbookHref({ playbook: 'identity.disable-user', inputs: { userId: IDS.aLee, reason: 'INC-4821 account compromised' } }, '/runs'), me());
+    await open(
+      page,
+      theme,
+      playbookHref(
+        {
+          playbook: 'identity.disable-user',
+          inputs: { userId: IDS.aLee, reason: 'INC-4821 account compromised' },
+        },
+        '/runs',
+      ),
+      me(),
+    );
     const drawer = page.getByRole('dialog', { name: 'Disable sign-in' });
     await drawer.getByRole('button', { name: 'Preview (dry run)' }).click();
     await expect(drawer.getByRole('region', { name: 'What this run will change' })).toBeVisible();
@@ -40,7 +51,12 @@ for (const theme of THEMES) {
   });
 
   test(`playbook drawer · read · outputs · ${theme}`, async ({ page }) => {
-    await open(page, theme, playbookHref({ playbook: 'diagnostics.user-sign-in-check', inputs: { userId: IDS.mChen } }, '/runs'), me());
+    await open(
+      page,
+      theme,
+      playbookHref({ playbook: 'diagnostics.user-sign-in-check', inputs: { userId: IDS.mChen } }, '/runs'),
+      me(),
+    );
     const drawer = page.getByRole('dialog', { name: 'Check a user’s sign-ins' });
     await drawer.getByRole('button', { name: 'Preview (dry run)' }).click();
     await expect(drawer.getByRole('region', { name: 'Outputs' })).toBeVisible();
@@ -88,7 +104,9 @@ for (const theme of THEMES) {
 
   test(`schedules · ${theme}`, async ({ page }) => {
     await open(page, theme, '/schedules');
-    await expect(page.getByRole('grid', { name: 'Schedules' }).getByText('Every Monday at 07:00 UTC')).toBeVisible();
+    await expect(
+      page.getByRole('grid', { name: 'Schedules' }).getByText('Every Monday at 07:00 UTC'),
+    ).toBeVisible();
     await shoot(page, `schedules-${theme}.png`);
   });
 
@@ -106,7 +124,9 @@ for (const theme of THEMES) {
 
   test(`monitoring detail · ${theme}`, async ({ page }) => {
     await open(page, theme, '/monitoring?probe=probes.token-exchange');
-    await expect(page.getByRole('dialog', { name: 'Token: Exchange Online' }).locator('figure svg').first()).toBeVisible();
+    await expect(
+      page.getByRole('dialog', { name: 'Token: Exchange Online' }).locator('figure svg').first(),
+    ).toBeVisible();
     await shoot(page, `monitoring-detail-${theme}.png`, { full: false });
   });
 
@@ -136,19 +156,43 @@ test('playbook drawer · armed · bulk · steel', async ({ page }) => {
     { userId: IDS.mChen, $label: 'Ming Chen' },
     { userId: IDS.jDoe, $label: 'Jordan Doe' },
   ];
-  await open(page, 'steel', playbookHref({ playbook: 'identity.revoke-sessions', items, inputs: { reason: 'Quarterly leaver sweep' } }, '/runs'), armedMe());
-  await expect(page.getByRole('dialog', { name: 'Revoke sessions' }).getByRole('table', { name: 'Inputs per item' })).toBeVisible();
+  await open(
+    page,
+    'steel',
+    playbookHref(
+      { playbook: 'identity.revoke-sessions', items, inputs: { reason: 'Quarterly leaver sweep' } },
+      '/runs',
+    ),
+    armedMe(),
+  );
+  await expect(
+    page.getByRole('dialog', { name: 'Revoke sessions' }).getByRole('table', { name: 'Inputs per item' }),
+  ).toBeVisible();
   await expect(page.getByText(/Armed · 47:12/)).toBeVisible();
   await shoot(page, 'playbook-drawer-bulk-armed-steel.png', { full: false });
 });
 
 test('playbook drawer · armed · typed confirmation · steel', async ({ page }) => {
-  await open(page, 'steel', playbookHref({ playbook: 'identity.disable-user', inputs: { userId: IDS.aLee, reason: 'INC-4821 account compromised' } }, '/runs'), armedMe());
+  await open(
+    page,
+    'steel',
+    playbookHref(
+      {
+        playbook: 'identity.disable-user',
+        inputs: { userId: IDS.aLee, reason: 'INC-4821 account compromised' },
+      },
+      '/runs',
+    ),
+    armedMe(),
+  );
   const drawer = page.getByRole('dialog', { name: 'Disable sign-in' });
   await drawer.getByRole('button', { name: 'Preview (dry run)' }).click();
   await expect(drawer.getByRole('region', { name: 'What this run will change' })).toBeVisible();
   await drawer.getByRole('button', { name: 'Disable sign-in', exact: true }).click();
   await expect(page.getByRole('dialog', { name: 'Disable sign-in?' })).toBeVisible();
-  await page.getByRole('dialog', { name: 'Disable sign-in?' }).getByLabel(/to confirm/).fill('a.lee@exam');
+  await page
+    .getByRole('dialog', { name: 'Disable sign-in?' })
+    .getByLabel(/to confirm/)
+    .fill('a.lee@exam');
   await shoot(page, 'playbook-confirm-armed-steel.png', { full: false });
 });

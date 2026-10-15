@@ -37,39 +37,53 @@ function roleDiffers(want: AppRole, have: AppRole | undefined): boolean {
 }
 
 const rraKeys = (rra: ApplicationBody['requiredResourceAccess'] | undefined) =>
-  (rra ?? []).flatMap((r) => r.resourceAccess.map((a) => `${r.resourceAppId.toLowerCase()}|${a.id.toLowerCase()}|${a.type}`));
+  (rra ?? []).flatMap((r) =>
+    r.resourceAccess.map((a) => `${r.resourceAppId.toLowerCase()}|${a.id.toLowerCase()}|${a.type}`),
+  );
 
 /** Pure: names of the properties of `current` that differ from `desired`. */
 export function diffApplication(desired: ApplicationBody, current: GraphApplication): string[] {
   const changes: string[] = [];
   if (current.displayName !== desired.displayName) changes.push('displayName');
   if (current.signInAudience !== desired.signInAudience) changes.push('signInAudience');
-  if ((current.groupMembershipClaims ?? 'None') !== (desired.groupMembershipClaims ?? 'None')) changes.push('groupMembershipClaims');
+  if ((current.groupMembershipClaims ?? 'None') !== (desired.groupMembershipClaims ?? 'None'))
+    changes.push('groupMembershipClaims');
   if (!sameSet(current.web?.redirectUris ?? [], desired.web.redirectUris)) changes.push('redirectUris');
   const implicit = current.web?.implicitGrantSettings;
   if (
-    (implicit?.enableAccessTokenIssuance ?? false) !== desired.web.implicitGrantSettings.enableAccessTokenIssuance ||
+    (implicit?.enableAccessTokenIssuance ?? false) !==
+      desired.web.implicitGrantSettings.enableAccessTokenIssuance ||
     (implicit?.enableIdTokenIssuance ?? false) !== desired.web.implicitGrantSettings.enableIdTokenIssuance
   )
     changes.push('implicitGrantSettings');
   const haveRoles = new Map((current.appRoles ?? []).map((r) => [r.id.toLowerCase(), r]));
-  if (desired.appRoles.some((r) => roleDiffers(r, haveRoles.get(r.id.toLowerCase())))) changes.push('appRoles');
+  if (desired.appRoles.some((r) => roleDiffers(r, haveRoles.get(r.id.toLowerCase()))))
+    changes.push('appRoles');
   const claimNames = (c: GraphApplication['optionalClaims']) => (c?.idToken ?? []).map((x) => x.name);
-  if (!sameSet(claimNames(current.optionalClaims), claimNames(desired.optionalClaims))) changes.push('optionalClaims');
-  if (!sameSet(rraKeys(current.requiredResourceAccess), rraKeys(desired.requiredResourceAccess))) changes.push('requiredResourceAccess');
+  if (!sameSet(claimNames(current.optionalClaims), claimNames(desired.optionalClaims)))
+    changes.push('optionalClaims');
+  if (!sameSet(rraKeys(current.requiredResourceAccess), rraKeys(desired.requiredResourceAccess)))
+    changes.push('requiredResourceAccess');
   return changes;
 }
 
 /** The PATCH body for an update: desired state, keeping any app roles AdminForge does not manage. */
-export function mergeApplicationBody(desired: ApplicationBody, current: GraphApplication | undefined): ApplicationBody {
+export function mergeApplicationBody(
+  desired: ApplicationBody,
+  current: GraphApplication | undefined,
+): ApplicationBody {
   const ours = new Set(desired.appRoles.map((r) => r.id.toLowerCase()));
   const theirs = (current?.appRoles ?? []).filter((r) => !ours.has(r.id.toLowerCase()));
   return { ...desired, appRoles: [...desired.appRoles, ...theirs] };
 }
 
-export function diffServicePrincipal(desired: ServicePrincipalBody, current: GraphServicePrincipal): string[] {
+export function diffServicePrincipal(
+  desired: ServicePrincipalBody,
+  current: GraphServicePrincipal,
+): string[] {
   const changes: string[] = [];
-  if ((current.appRoleAssignmentRequired ?? false) !== desired.appRoleAssignmentRequired) changes.push('appRoleAssignmentRequired');
+  if ((current.appRoleAssignmentRequired ?? false) !== desired.appRoleAssignmentRequired)
+    changes.push('appRoleAssignmentRequired');
   if (desired.tags.some((t) => !(current.tags ?? []).includes(t))) changes.push('tags');
   return changes;
 }
@@ -86,16 +100,21 @@ export function diffGroup(desired: GroupBody, current: GraphGroup): string[] {
 export function storedSecretIsLive(app: GraphApplication, secret: string | undefined, now: Date): boolean {
   if (!secret) return false;
   return (app.passwordCredentials ?? []).some(
-    (c) => !!c.hint && secret.startsWith(c.hint) && (!c.endDateTime || new Date(c.endDateTime).getTime() > now.getTime()),
+    (c) =>
+      !!c.hint &&
+      secret.startsWith(c.hint) &&
+      (!c.endDateTime || new Date(c.endDateTime).getTime() > now.getTime()),
   );
 }
 
 const scopeDelta = (want: string[], have: string[]) => {
   const lw = new Set(lowerSet(want));
   const lh = new Set(lowerSet(have));
-  return [...want.filter((w) => !lh.has(w.toLowerCase())).map((w) => `+${w}`), ...have.filter((h) => !lw.has(h.toLowerCase())).map((h) => `-${h}`)];
+  return [
+    ...want.filter((w) => !lh.has(w.toLowerCase())).map((w) => `+${w}`),
+    ...have.filter((h) => !lw.has(h.toLowerCase())).map((h) => `-${h}`),
+  ];
 };
-
 
 export const secretDisplayName = (label: string) => `adminforge-${label}-local`;
 
@@ -106,7 +125,16 @@ function planApp(desired: DesiredApp, state: EntraState, label: string, now: Dat
   const title = desired.body.displayName;
   const base = { app: desired.key };
 
-  if (!app) ops.push({ ...base, kind: 'application', action: 'create', section: 'Applications', title, uniqueName: desired.uniqueName, body: desired.body });
+  if (!app)
+    ops.push({
+      ...base,
+      kind: 'application',
+      action: 'create',
+      section: 'Applications',
+      title,
+      uniqueName: desired.uniqueName,
+      body: desired.body,
+    });
   else {
     const changes = diffApplication(desired.body, app);
     ops.push({
@@ -122,10 +150,28 @@ function planApp(desired: DesiredApp, state: EntraState, label: string, now: Dat
   }
 
   const spDetail = `assignment required: ${desired.sp.appRoleAssignmentRequired ? 'yes' : 'no'}`;
-  if (!sp) ops.push({ ...base, kind: 'servicePrincipal', action: 'create', section: 'Service principals', title, body: desired.sp, detail: spDetail });
+  if (!sp)
+    ops.push({
+      ...base,
+      kind: 'servicePrincipal',
+      action: 'create',
+      section: 'Service principals',
+      title,
+      body: desired.sp,
+      detail: spDetail,
+    });
   else {
     const changes = diffServicePrincipal(desired.sp, sp);
-    ops.push({ ...base, kind: 'servicePrincipal', action: changes.length ? 'update' : 'noop', section: 'Service principals', title, changes, body: desired.sp, detail: spDetail });
+    ops.push({
+      ...base,
+      kind: 'servicePrincipal',
+      action: changes.length ? 'update' : 'noop',
+      section: 'Service principals',
+      title,
+      changes,
+      body: desired.sp,
+      detail: spDetail,
+    });
   }
 
   const envId = state.env[desired.env.clientId];
@@ -145,7 +191,8 @@ function planApp(desired: DesiredApp, state: EntraState, label: string, now: Dat
   if (!app) why = 'new app';
   else if (!secret) why = 'not in env file';
   else if (envId !== app.appId) why = 'env file secret belongs to a different client id';
-  else if (!storedSecretIsLive(app, secret, now)) why = 'stored secret is not a live credential on the app (deleted or expired)';
+  else if (!storedSecretIsLive(app, secret, now))
+    why = 'stored secret is not a live credential on the app (deleted or expired)';
   ops.push({
     ...base,
     kind: 'secret',
@@ -166,7 +213,8 @@ export function planEntra(desired: DesiredEntra, state: EntraState, now: Date = 
   const ops: EntraOp[] = [];
   const appOps = desired.apps.map((a) => planApp(a, state, label, now));
   // Objects first (apps, then SPs), then local credentials, so ids exist before anything references them.
-  for (const section of ['Applications', 'Service principals', 'Local credentials'] as const) for (const list of appOps) ops.push(...list.filter((o) => o.section === section));
+  for (const section of ['Applications', 'Service principals', 'Local credentials'] as const)
+    for (const list of appOps) ops.push(...list.filter((o) => o.section === section));
 
   for (const g of desired.groups) {
     const current = state.groups[g.role];
@@ -190,10 +238,21 @@ export function planEntra(desired: DesiredEntra, state: EntraState, now: Date = 
       const scope = grant.scopes.join(' ');
       const title = `${app.body.displayName} → ${RESOURCES[grant.resource].name}`;
       const existing = sp
-        ? (state.grants[app.key] ?? []).find((g) => g.resourceId === resourceSp.id && g.consentType === 'AllPrincipals')
+        ? (state.grants[app.key] ?? []).find(
+            (g) => g.resourceId === resourceSp.id && g.consentType === 'AllPrincipals',
+          )
         : undefined;
       if (!existing) {
-        ops.push({ kind: 'grant', action: 'create', section: 'Consent grants', title, detail: scope, app: app.key, resource: grant.resource, scope });
+        ops.push({
+          kind: 'grant',
+          action: 'create',
+          section: 'Consent grants',
+          title,
+          detail: scope,
+          app: app.key,
+          resource: grant.resource,
+          scope,
+        });
         continue;
       }
       const delta = scopeDelta(grant.scopes, splitScope(existing.scope));
@@ -215,7 +274,12 @@ export function planEntra(desired: DesiredEntra, state: EntraState, now: Date = 
   for (const a of desired.groupAssignments) {
     const group = state.groups[a.group];
     const sp = state.sps[a.app];
-    const exists = !!group && !!sp && (state.assignedTo[a.app] ?? []).some((x) => x.principalId === group.id && x.appRoleId.toLowerCase() === a.appRoleId.toLowerCase());
+    const exists =
+      !!group &&
+      !!sp &&
+      (state.assignedTo[a.app] ?? []).some(
+        (x) => x.principalId === group.id && x.appRoleId.toLowerCase() === a.appRoleId.toLowerCase(),
+      );
     ops.push({
       kind: 'appRoleAssignment',
       action: exists ? 'noop' : 'create',
@@ -232,7 +296,11 @@ export function planEntra(desired: DesiredEntra, state: EntraState, now: Date = 
     for (const perm of app.appPermissions) {
       const resourceSp = state.resources[perm.resource]!;
       for (const role of perm.roles) {
-        const exists = !!sp && (state.appPermissions[app.key] ?? []).some((x) => x.resourceId === resourceSp.id && x.appRoleId.toLowerCase() === role.id.toLowerCase());
+        const exists =
+          !!sp &&
+          (state.appPermissions[app.key] ?? []).some(
+            (x) => x.resourceId === resourceSp.id && x.appRoleId.toLowerCase() === role.id.toLowerCase(),
+          );
         ops.push({
           kind: 'appRoleAssignment',
           action: exists ? 'noop' : 'create',
@@ -258,10 +326,20 @@ export function planEntra(desired: DesiredEntra, state: EntraState, now: Date = 
           r.properties.roleDefinitionId.toLowerCase().endsWith(suffix) &&
           r.properties.scope.toLowerCase() === desired.arm!.scope.toLowerCase(),
       );
-    if (sp && state.arm.error) ops.push({ kind: 'skipped', action: 'skip', section: 'Azure RBAC', title, changes: [state.arm.error] });
-    else ops.push({ kind: 'armRoleAssignment', action: exists ? 'noop' : 'create', section: 'Azure RBAC', title, scope: desired.arm.scope, roleDefinitionId: desired.arm.roleDefinitionId });
+    if (sp && state.arm.error)
+      ops.push({ kind: 'skipped', action: 'skip', section: 'Azure RBAC', title, changes: [state.arm.error] });
+    else
+      ops.push({
+        kind: 'armRoleAssignment',
+        action: exists ? 'noop' : 'create',
+        section: 'Azure RBAC',
+        title,
+        scope: desired.arm.scope,
+        roleDefinitionId: desired.arm.roleDefinitionId,
+      });
   }
 
-  for (const s of desired.skipped) ops.push({ kind: 'skipped', action: 'skip', section: s.section, title: s.title, changes: [s.reason] });
+  for (const s of desired.skipped)
+    ops.push({ kind: 'skipped', action: 'skip', section: s.section, title: s.title, changes: [s.reason] });
   return ops;
 }

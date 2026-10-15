@@ -15,20 +15,30 @@ export function StatusGridWidget({ config, data, runtime, variant }: WidgetProps
     const all = asRows(data.value).map((row) => ({
       row,
       label: text(getPath(row, config.label)),
-      status: mapStatus(getPath(row, config.status), config.map as StatusMap | undefined, config.default as StatusEntry | undefined) ?? {
+      status: mapStatus(
+        getPath(row, config.status),
+        config.map as StatusMap | undefined,
+        config.default as StatusEntry | undefined,
+      ) ?? {
         tone: 'neutral' as const,
         label: 'Unknown',
       },
     }));
     if (config.sort === 'none') return all;
-    return all.sort((a, b) => STATUS_SEVERITY[b.status.tone] - STATUS_SEVERITY[a.status.tone] || a.label.localeCompare(b.label));
+    return all.sort(
+      (a, b) =>
+        STATUS_SEVERITY[b.status.tone] - STATUS_SEVERITY[a.status.tone] || a.label.localeCompare(b.label),
+    );
   }, [data.value, config.label, config.status, config.map, config.default, config.sort]);
   const plainRows = useMemo(() => rows.map((r) => r.row), [rows]);
   const detailTemplated = config.detail !== undefined && hasExpression(config.detail);
   const details = useRowTemplates(plainRows, config.detail, runtime.scope, detailTemplated);
   const hrefs = useRowTemplates(plainRows, config.href, runtime.scope, config.href !== undefined);
   const L = runtime.Link;
-  const counts = rows.reduce<Record<string, number>>((acc, r) => ({ ...acc, [r.status.tone]: (acc[r.status.tone] ?? 0) + 1 }), {});
+  const counts = rows.reduce<Record<string, number>>(
+    (acc, r) => ({ ...acc, [r.status.tone]: (acc[r.status.tone] ?? 0) + 1 }),
+    {},
+  );
   const attention = (counts.crit ?? 0) + (counts.warn ?? 0);
 
   return (
@@ -38,7 +48,10 @@ export function StatusGridWidget({ config, data, runtime, variant }: WidgetProps
       runtime={runtime}
       name={config.title ?? 'Status'}
       isEmpty={rows.length === 0}
-      emptyDefault={{ title: 'Nothing reported yet', body: 'States appear here once the source reports any.' }}
+      emptyDefault={{
+        title: 'Nothing reported yet',
+        body: 'States appear here once the source reports any.',
+      }}
       actions={
         data.status === 'ready' &&
         rows.length > 0 && (
@@ -56,14 +69,16 @@ export function StatusGridWidget({ config, data, runtime, variant }: WidgetProps
       }
     >
       <ul
-        className={cn(
-          'grid grid-cols-1 gap-2 sm:grid-cols-2',
-          variant !== 'inspector' && 'xl:grid-cols-3',
-        )}
+        className={cn('grid grid-cols-1 gap-2 sm:grid-cols-2', variant !== 'inspector' && 'xl:grid-cols-3')}
         aria-label={config.title ?? 'Status'}
       >
         {rows.map((r, i) => {
-          const detail = config.detail === undefined ? undefined : detailTemplated ? details?.[i] : getPath(r.row, config.detail);
+          const detail =
+            config.detail === undefined
+              ? undefined
+              : detailTemplated
+                ? details?.[i]
+                : getPath(r.row, config.detail);
           const href = typeof hrefs?.[i] === 'string' ? (hrefs[i] as string) : undefined;
           const inner = (
             <>
@@ -74,15 +89,24 @@ export function StatusGridWidget({ config, data, runtime, variant }: WidgetProps
                 <StatusPill status={r.status.tone} size="sm" className="shrink-0">
                   {r.status.label}
                 </StatusPill>
-                {detail != null && detail !== '' && <span className="truncate text-xs text-fg-3">{String(detail)}</span>}
+                {detail != null && detail !== '' && (
+                  <span className="truncate text-xs text-fg-3">{String(detail)}</span>
+                )}
               </span>
             </>
           );
-          const cls = 'flex h-full min-w-0 flex-col justify-center gap-1.5 rounded-md border border-line bg-panel px-3 py-2.5';
+          const cls =
+            'flex h-full min-w-0 flex-col justify-center gap-1.5 rounded-md border border-line bg-panel px-3 py-2.5';
           return (
             <li key={`${r.label}-${i}`}>
               {href ? (
-                <L href={href} className={cn(cls, 'transition-colors duration-(--af-motion-fast) hover:border-line-strong hover:bg-hover')}>
+                <L
+                  href={href}
+                  className={cn(
+                    cls,
+                    'transition-colors duration-(--af-motion-fast) hover:border-line-strong hover:bg-hover',
+                  )}
+                >
                   {inner}
                 </L>
               ) : (

@@ -1,7 +1,15 @@
 import { useEffect, useMemo, useState } from 'react';
 import { evaluate, splitTemplate, type Scope } from '@adminforge/expressions';
 
-const ENTITIES: Record<string, string> = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ', '#39': "'" };
+const ENTITIES: Record<string, string> = {
+  amp: '&',
+  lt: '<',
+  gt: '>',
+  quot: '"',
+  apos: "'",
+  nbsp: ' ',
+  '#39': "'",
+};
 
 const looksLikeHtml = (s: string) => /<\/?[a-z][a-z0-9]*(\s[^>]*)?\/?>/i.test(s);
 
@@ -40,7 +48,8 @@ export function toText(v: unknown): string {
 
 async function interpolate(source: string, scope: Scope): Promise<string> {
   let out = '';
-  for (const seg of splitTemplate(source)) out += seg.type === 'text' ? seg.value : toText(await evaluate(seg.source, scope));
+  for (const seg of splitTemplate(source))
+    out += seg.type === 'text' ? seg.value : toText(await evaluate(seg.source, scope));
   return out;
 }
 
@@ -48,7 +57,10 @@ async function interpolate(source: string, scope: Scope): Promise<string> {
  * Templated text (`markdown.text`): literal parts stay as written (they are Markdown), values from `${ … }` are
  * converted to plain text first, so HTML coming from data can never become markup.
  */
-export function useInterpolatedText(source: string, scope: Scope): { text: string | undefined; error?: Error } {
+export function useInterpolatedText(
+  source: string,
+  scope: Scope,
+): { text: string | undefined; error?: Error } {
   const templated = source.includes('${');
   const key = useMemo(() => ({ source, scope }), [source, scope]);
   const [state, setState] = useState<{ for: unknown; text?: string; error?: Error }>({ for: null });

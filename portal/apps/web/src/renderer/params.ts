@@ -6,7 +6,8 @@ import type { Param, Params } from '@adminforge/schemas';
  * the default are written back, so links stay short.
  */
 
-export type ParamValue = string | number | boolean | Array<string | number | boolean> | { from: string; to: string };
+export type ParamValue =
+  string | number | boolean | Array<string | number | boolean> | { from: string; to: string };
 
 export interface ResolvedParams {
   /** Values for display and expression scope (`params`): URL value, else a literal default. */
@@ -21,7 +22,9 @@ const GUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const isExpr = (v: unknown) => typeof v === 'string' && v.includes('${');
 
 export const enumOptions = (p: Extract<Param, { type: 'enum' }>) =>
-  p.values.map((o) => (typeof o === 'object' ? { value: o.value, label: o.label } : { value: o, label: String(o) }));
+  p.values.map((o) =>
+    typeof o === 'object' ? { value: o.value, label: o.label } : { value: o, label: String(o) },
+  );
 
 function matchEnum(p: Extract<Param, { type: 'enum' }>, v: unknown): string | number | boolean | undefined {
   for (const o of enumOptions(p)) if (o.value === v || String(o.value) === String(v)) return o.value;
@@ -41,7 +44,8 @@ export function coerceParam(p: Param, raw: unknown): [unknown, string?] {
   switch (p.type) {
     case 'string': {
       const s = String(raw);
-      if (p.maxLength && s.length > p.maxLength) return [undefined, `is longer than ${p.maxLength} characters`];
+      if (p.maxLength && s.length > p.maxLength)
+        return [undefined, `is longer than ${p.maxLength} characters`];
       return [s];
     }
     case 'number': {
@@ -71,7 +75,12 @@ export function coerceParam(p: Param, raw: unknown): [unknown, string?] {
     case 'dateRange':
       if (typeof raw === 'string' && /^P/.test(raw)) return [raw];
       if (typeof raw === 'object' && raw && typeof (raw as { from?: unknown }).from === 'string')
-        return [{ from: (raw as { from: string }).from, to: String((raw as { to?: unknown }).to ?? '') || new Date().toISOString() }];
+        return [
+          {
+            from: (raw as { from: string }).from,
+            to: String((raw as { to?: unknown }).to ?? '') || new Date().toISOString(),
+          },
+        ];
       return [undefined, 'is not a duration like P7D or a { from, to } range'];
     default: {
       // Entity pickers (user, group, device, app, resource, subscription).
@@ -112,7 +121,10 @@ export function isDefault(p: Param, value: unknown): boolean {
  * Search patch for new param values: defaults and blanks are removed from the URL. Keys that aren't declared params
  * (the query builder's filter) pass through as given.
  */
-export function paramsToSearch(declared: Params | undefined, patch: Record<string, unknown>): Record<string, unknown> {
+export function paramsToSearch(
+  declared: Params | undefined,
+  patch: Record<string, unknown>,
+): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   for (const [name, value] of Object.entries(patch)) {
     const p = declared?.[name];

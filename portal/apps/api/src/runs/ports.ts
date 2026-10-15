@@ -1,5 +1,11 @@
 import { decodeRunnerKey, RUNNER_MAX_TIMEOUT_SECONDS, signRunnerRequest } from '@adminforge/runner';
-import { IdentityUnavailable, StepError, type OutboundPort, type RunnerPort, type RunnerResult } from '@adminforge/engine';
+import {
+  IdentityUnavailable,
+  StepError,
+  type OutboundPort,
+  type RunnerPort,
+  type RunnerResult,
+} from '@adminforge/engine';
 import type { BrokerService, TokenBroker } from '../auth/token-broker';
 import { NotArmed, ReauthRequired } from '../auth/types';
 import { AppError } from '../errors';
@@ -8,7 +14,13 @@ import type { ExecutionIdentity, OutboundExecutor, ServiceCall } from '../execut
 /** Token/session failures from the API become engine parks (awaiting_arm / awaiting_reauth). */
 function identityError(err: unknown): IdentityUnavailable | undefined {
   if (err instanceof NotArmed) return new IdentityUnavailable('not_armed', err.message);
-  if (err instanceof ReauthRequired) return new IdentityUnavailable(err.kind === 'write' ? 'not_armed' : 'reauth', err.kind === 'write' ? 'Write access needs to be re-armed.' : 'The sign-in behind this run needs to be refreshed.');
+  if (err instanceof ReauthRequired)
+    return new IdentityUnavailable(
+      err.kind === 'write' ? 'not_armed' : 'reauth',
+      err.kind === 'write'
+        ? 'Write access needs to be re-armed.'
+        : 'The sign-in behind this run needs to be refreshed.',
+    );
   return undefined;
 }
 
@@ -23,11 +35,23 @@ export function createOutboundPort(executor: () => OutboundExecutor | null): Out
   return {
     async call(identity, call, opts) {
       const exec = executor();
-      if (!exec) throw new StepError('outbound_unavailable', 'Outbound calls are not available in this process.');
-      if (call.service === 'http') throw new StepError('http_not_supported', 'http steps are not enabled on this installation yet (no host allowlist is configured).');
+      if (!exec)
+        throw new StepError('outbound_unavailable', 'Outbound calls are not available in this process.');
+      if (call.service === 'http')
+        throw new StepError(
+          'http_not_supported',
+          'http steps are not enabled on this installation yet (no host allowlist is configured).',
+        );
       try {
-        const res = await exec.execute(identity.handle as ExecutionIdentity, call as ServiceCall, { correlationId: opts.correlationId, signal: opts.signal });
-        return { data: res.data, status: res.status, ...(res.provenance.requestId ? { requestId: res.provenance.requestId } : {}) };
+        const res = await exec.execute(identity.handle as ExecutionIdentity, call as ServiceCall, {
+          correlationId: opts.correlationId,
+          signal: opts.signal,
+        });
+        return {
+          data: res.data,
+          status: res.status,
+          ...(res.provenance.requestId ? { requestId: res.provenance.requestId } : {}),
+        };
       } catch (err) {
         const park = identityError(err);
         if (park) throw park;
@@ -88,12 +112,25 @@ export function createRunnerPort(opts: RunnerPortOptions): RunnerPort {
   return {
     async run(identity, job, { signal, onEvent }): Promise<RunnerResult> {
       const exec = identity.handle as ExecutionIdentity;
-      if (exec.kind !== 'delegated') throw new StepError('runner_unsupported', 'Scheduled (automation) runs cannot run PowerShell scripts yet.');
-      if (!opts.tenant.id || !opts.tenant.domain) throw new StepError('runner_unavailable', 'AF_TENANT_ID and AF_PRIMARY_DOMAIN must be configured for PowerShell steps.');
-      if (!opts.broker) throw new StepError('runner_unavailable', 'PowerShell steps need Entra sign-in (not available with mock sign-in).');
+      if (exec.kind !== 'delegated')
+        throw new StepError(
+          'runner_unsupported',
+          'Scheduled (automation) runs cannot run PowerShell scripts yet.',
+        );
+      if (!opts.tenant.id || !opts.tenant.domain)
+        throw new StepError(
+          'runner_unavailable',
+          'AF_TENANT_ID and AF_PRIMARY_DOMAIN must be configured for PowerShell steps.',
+        );
+      if (!opts.broker)
+        throw new StepError(
+          'runner_unavailable',
+          'PowerShell steps need Entra sign-in (not available with mock sign-in).',
+        );
       const tokens: Record<string, string> = {};
       for (const service of job.services) {
-        if (!RUNNER_SERVICES.has(service)) throw new StepError('invalid_request', `Unknown runner service ${service}.`);
+        if (!RUNNER_SERVICES.has(service))
+          throw new StepError('invalid_request', `Unknown runner service ${service}.`);
         try {
           tokens[service] = await opts.broker.get(exec.session, service as BrokerService, job.mode);
         } catch (err) {
@@ -109,10 +146,22 @@ export function createRunnerPort(opts: RunnerPortOptions): RunnerPort {
         inputs: job.parameters,
         mode: job.mode,
         tokens,
-        tenant: { id: opts.tenant.id, domain: opts.tenant.domain, ...(opts.tenant.spoTenantName ? { spoTenantName: opts.tenant.spoTenantName } : {}) },
-        ...(job.timeoutSeconds ? { timeoutSeconds: Math.min(job.timeoutSeconds, RUNNER_MAX_TIMEOUT_SECONDS) } : {}),
+        tenant: {
+          id: opts.tenant.id,
+          domain: opts.tenant.domain,
+          ...(opts.tenant.spoTenantName ? { spoTenantName: opts.tenant.spoTenantName } : {}),
+        },
+        ...(job.timeoutSeconds
+          ? { timeoutSeconds: Math.min(job.timeoutSeconds, RUNNER_MAX_TIMEOUT_SECONDS) }
+          : {}),
       });
-      const signed = signRunnerRequest({ key, method: 'POST', path: '/v1/jobs', body, timestamp: Math.floor(now().getTime() / 1000) });
+      const signed = signRunnerRequest({
+        key,
+        method: 'POST',
+        path: '/v1/jobs',
+        body,
+        timestamp: Math.floor(now().getTime() / 1000),
+      });
       let res: Response;
       try {
         res = await doFetch(new URL('/v1/jobs', opts.url), {
@@ -123,7 +172,11 @@ export function createRunnerPort(opts: RunnerPortOptions): RunnerPort {
         });
       } catch (err) {
         if (signal.aborted) throw err;
-        throw new StepError('runner_unreachable', `The PowerShell runner is not reachable: ${(err as Error).message}`, { transient: true });
+        throw new StepError(
+          'runner_unreachable',
+          `The PowerShell runner is not reachable: ${(err as Error).message}`,
+          { transient: true },
+        );
       }
       if (res.status !== 200 || !res.body) {
         let code = 'runner_error';
@@ -135,22 +188,45 @@ export function createRunnerPort(opts: RunnerPortOptions): RunnerPort {
         } catch {
           // non-JSON
         }
-        throw new StepError(`runner_${code}`.replace(/^runner_runner_/, 'runner_'), message, { status: res.status, transient: res.status === 429 || res.status === 503 });
+        throw new StepError(`runner_${code}`.replace(/^runner_runner_/, 'runner_'), message, {
+          status: res.status,
+          transient: res.status === 429 || res.status === 503,
+        });
       }
       const outputs: unknown[] = [];
       let error: RunnerResult['error'];
       let status: RunnerResult['status'] = 'failed';
       for await (const raw of ndjson(res.body)) {
         const e = raw as { type?: string; [k: string]: unknown };
-        if (e.type === 'log') await onEvent({ type: 'log', level: (['debug', 'info', 'warn', 'error'].includes(String(e.level)) ? e.level : 'info') as 'info', message: String(e.message ?? '') });
-        else if (e.type === 'progress') await onEvent({ type: 'progress', percent: Number(e.percent) || 0, message: String(e.message ?? '') });
+        if (e.type === 'log')
+          await onEvent({
+            type: 'log',
+            level: (['debug', 'info', 'warn', 'error'].includes(String(e.level))
+              ? e.level
+              : 'info') as 'info',
+            message: String(e.message ?? ''),
+          });
+        else if (e.type === 'progress')
+          await onEvent({
+            type: 'progress',
+            percent: Number(e.percent) || 0,
+            message: String(e.message ?? ''),
+          });
         else if (e.type === 'output') {
           outputs.push(e.data ?? null);
           await onEvent({ type: 'output', data: e.data ?? null });
-        } else if (e.type === 'error') error = { message: String(e.message ?? 'Script failed'), category: String(e.category ?? 'script') };
-        else if (e.type === 'done') status = (['succeeded', 'failed', 'timeout', 'cancelled'].includes(String(e.status)) ? e.status : 'failed') as RunnerResult['status'];
+        } else if (e.type === 'error')
+          error = { message: String(e.message ?? 'Script failed'), category: String(e.category ?? 'script') };
+        else if (e.type === 'done')
+          status = (
+            ['succeeded', 'failed', 'timeout', 'cancelled'].includes(String(e.status)) ? e.status : 'failed'
+          ) as RunnerResult['status'];
       }
-      return { status, output: outputs.length <= 1 ? (outputs[0] ?? null) : outputs, ...(error ? { error } : {}) };
+      return {
+        status,
+        output: outputs.length <= 1 ? (outputs[0] ?? null) : outputs,
+        ...(error ? { error } : {}),
+      };
     },
   };
 }

@@ -23,7 +23,10 @@ export default function InspectorPage({ target, onTitle, onPageTitle }: Inspecto
   const q = useQuery(definitionQuery(target.page));
   const navigate = useNavigate();
   const itab = useRouterState({ select: (s) => (s.location.search as SearchPatch).itab });
-  const search = useMemo(() => ({ ...target.params, ...(typeof itab === 'string' ? { tab: itab } : {}) }), [target.params, itab]);
+  const search = useMemo(
+    () => ({ ...target.params, ...(typeof itab === 'string' ? { tab: itab } : {}) }),
+    [target.params, itab],
+  );
   const pageTitle = q.data?.title;
   useEffect(() => onPageTitle(pageTitle), [pageTitle, onPageTitle]);
 
@@ -33,11 +36,13 @@ export default function InspectorPage({ target, onTitle, onPageTitle }: Inspecto
         to: '.',
         search: ((prev: SearchPatch) => {
           const mine: SearchPatch = {};
-          for (const [k, v] of Object.entries(prev)) if (k.startsWith(INSPECT_PREFIX)) mine[k.slice(INSPECT_PREFIX.length)] = v;
+          for (const [k, v] of Object.entries(prev))
+            if (k.startsWith(INSPECT_PREFIX)) mine[k.slice(INSPECT_PREFIX.length)] = v;
           if (typeof prev.itab === 'string') mine.tab = prev.itab;
           const next = typeof patch === 'function' ? patch(mine) : { ...mine, ...patch };
           const out: SearchPatch = {};
-          for (const [k, v] of Object.entries(prev)) if (!k.startsWith(INSPECT_PREFIX) && k !== 'itab') out[k] = v;
+          for (const [k, v] of Object.entries(prev))
+            if (!k.startsWith(INSPECT_PREFIX) && k !== 'itab') out[k] = v;
           for (const [k, v] of Object.entries(next)) {
             if (k.includes('.')) continue; // table state stays local in the inspector
             if (k === 'tab') out.itab = v;
@@ -64,5 +69,14 @@ export default function InspectorPage({ target, onTitle, onPageTitle }: Inspecto
       />
     );
   }
-  return <PageView key={`${q.data.id}@${q.data.version}`} def={q.data} search={search} update={update} inspector onTitle={onTitle} />;
+  return (
+    <PageView
+      key={`${q.data.id}@${q.data.version}`}
+      def={q.data}
+      search={search}
+      update={update}
+      inspector
+      onTitle={onTitle}
+    />
+  );
 }

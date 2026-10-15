@@ -2,7 +2,13 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useQueries, useQueryClient } from '@tanstack/react-query';
 import { getPath, splitDataRef, type WidgetData, type WidgetError } from '@adminforge/widgets';
 import { ApiRequestError } from '../lib/api';
-import { loadDatasource, loadNextPage, toWidgetError, type DatasourceOutcome, type PageDefinition } from './api';
+import {
+  loadDatasource,
+  loadNextPage,
+  toWidgetError,
+  type DatasourceOutcome,
+  type PageDefinition,
+} from './api';
 
 interface ExtraPages {
   /** dataUpdatedAt of the first page these follow (a refresh starts over). */
@@ -29,7 +35,12 @@ export interface PageData {
   failure?: ApiRequestError;
 }
 
-const stable = (v: unknown) => JSON.stringify(v, (_k, val) => (val && typeof val === 'object' && !Array.isArray(val) ? Object.fromEntries(Object.entries(val).sort(([a], [b]) => a.localeCompare(b))) : val));
+const stable = (v: unknown) =>
+  JSON.stringify(v, (_k, val) =>
+    val && typeof val === 'object' && !Array.isArray(val)
+      ? Object.fromEntries(Object.entries(val).sort(([a], [b]) => a.localeCompare(b)))
+      : val,
+  );
 
 /** Concatenates array values at `path` across loaded pages (cursor paging); otherwise the first page's value. */
 function merged(pages: unknown[], path: string): unknown {
@@ -50,14 +61,20 @@ const IDLE: WidgetData = { status: 'idle', value: undefined };
  * as one execute-many call; `paging: cursor` datasources load further pages with execute. `refresh` re-runs them
  * all; `def.refresh` (seconds) does so on a timer while the tab is visible.
  */
-export function usePageData(def: PageDefinition, send: Record<string, unknown>, needed: readonly string[], enabled: boolean): PageData {
+export function usePageData(
+  def: PageDefinition,
+  send: Record<string, unknown>,
+  needed: readonly string[],
+  enabled: boolean,
+): PageData {
   const queryClient = useQueryClient();
   const paramsKey = stable(send);
   // `send` is recreated per render; queries are keyed (and requested) by its content.
   const queries = useQueries({
     queries: needed.map((ds) => ({
       queryKey: ['ds', def.id, def.version, ds, paramsKey] as const,
-      queryFn: () => loadDatasource(def.id, def.version, JSON.parse(paramsKey) as Record<string, unknown>, ds),
+      queryFn: () =>
+        loadDatasource(def.id, def.version, JSON.parse(paramsKey) as Record<string, unknown>, ds),
       enabled,
       staleTime: 30_000,
     })),
@@ -77,7 +94,9 @@ export function usePageData(def: PageDefinition, send: Record<string, unknown>, 
 
   const refetch = useCallback(
     (ds?: string) => {
-      void queryClient.invalidateQueries({ queryKey: ds ? ['ds', def.id, def.version, ds] : ['ds', def.id, def.version] });
+      void queryClient.invalidateQueries({
+        queryKey: ds ? ['ds', def.id, def.version, ds] : ['ds', def.id, def.version],
+      });
     },
     [queryClient, def.id, def.version],
   );
@@ -96,7 +115,10 @@ export function usePageData(def: PageDefinition, send: Record<string, unknown>, 
             const prev = e[ds];
             if (!prev || prev.basedOn !== basedOn) return e;
             if (next.error) return { ...e, [ds]: { ...prev, loading: false, error: next.error } };
-            return { ...e, [ds]: { basedOn, pages: [...prev.pages, next.data], cursor: next.cursor, loading: false } };
+            return {
+              ...e,
+              [ds]: { basedOn, pages: [...prev.pages, next.data], cursor: next.cursor, loading: false },
+            };
           }),
         (err: unknown) =>
           setExtra((e) => {
@@ -129,15 +151,45 @@ export function usePageData(def: PageDefinition, send: Record<string, unknown>, 
       const { root, rest } = splitDataRef(ref);
       const q = byName.get(root);
       let out: WidgetData;
-      if (!q) out = enabled ? { status: 'error', value: undefined, error: { code: 'unknown_datasource', message: `This page has no datasource called “${root}”.`, hint: 'Fix the widget’s `data` in the page definition.' } } : IDLE;
+      if (!q)
+        out = enabled
+          ? {
+              status: 'error',
+              value: undefined,
+              error: {
+                code: 'unknown_datasource',
+                message: `This page has no datasource called “${root}”.`,
+                hint: 'Fix the widget’s `data` in the page definition.',
+              },
+            }
+          : IDLE;
       else if (q.isPending) out = enabled ? { status: 'loading', value: undefined } : IDLE;
-      else if (q.isError) out = { status: 'error', value: undefined, error: toWidgetError(q.error), retry: () => refetch(root) };
+      else if (q.isError)
+        out = {
+          status: 'error',
+          value: undefined,
+          error: toWidgetError(q.error),
+          retry: () => refetch(root),
+        };
       else {
         const first = q.data!;
         const sub = rest.split(/[.[]/)[0] ?? '';
-        if (first.error) out = { status: 'error', value: undefined, error: first.error, provenance: null, retry: () => refetch(root) };
+        if (first.error)
+          out = {
+            status: 'error',
+            value: undefined,
+            error: first.error,
+            provenance: null,
+            retry: () => refetch(root),
+          };
         else if (sub && first.partial?.[sub])
-          out = { status: 'error', value: undefined, error: first.partial[sub], provenance: first.provenance, retry: () => refetch(root) };
+          out = {
+            status: 'error',
+            value: undefined,
+            error: first.partial[sub],
+            provenance: first.provenance,
+            retry: () => refetch(root),
+          };
         else {
           const more = extra[root];
           const live = more && more.basedOn === q.dataUpdatedAt ? more : undefined;

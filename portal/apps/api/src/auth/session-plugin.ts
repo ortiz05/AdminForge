@@ -18,9 +18,12 @@ const TOUCH_INTERVAL_MS = 60_000;
 /** Only API and auth routes look at the session (static files and health checks don't). */
 const SESSION_PATHS = /^\/(api|auth)(\/|$|\?)/;
 
-export const sessionCookieName = (cfg: Pick<Config, 'NODE_ENV'>) => (cfg.NODE_ENV === 'production' ? '__Host-adminforge' : 'adminforge-dev');
+export const sessionCookieName = (cfg: Pick<Config, 'NODE_ENV'>) =>
+  cfg.NODE_ENV === 'production' ? '__Host-adminforge' : 'adminforge-dev';
 
-export function sessionCookieOptions(cfg: Pick<Config, 'NODE_ENV' | 'PUBLIC_BASE_URL' | 'SESSION_ABSOLUTE_HOURS'>): CookieSerializeOptions {
+export function sessionCookieOptions(
+  cfg: Pick<Config, 'NODE_ENV' | 'PUBLIC_BASE_URL' | 'SESSION_ABSOLUTE_HOURS'>,
+): CookieSerializeOptions {
   return {
     httpOnly: true,
     sameSite: 'lax',
@@ -36,11 +39,30 @@ export function clearSessionCookie(ctx: AppContext, reply: FastifyReply) {
   reply.clearCookie(sessionCookieName(ctx.config), opts);
 }
 
-export type NewSession = Omit<SessionRecord, 'idHash' | 'csrf' | 'createdAt' | 'lastSeenAt' | 'expiresAt' | 'ip' | 'userAgent' | 'writeExtended' | 'writeReason' | 'writeAccountId' | 'writeExpiresAt'> &
+export type NewSession = Omit<
+  SessionRecord,
+  | 'idHash'
+  | 'csrf'
+  | 'createdAt'
+  | 'lastSeenAt'
+  | 'expiresAt'
+  | 'ip'
+  | 'userAgent'
+  | 'writeExtended'
+  | 'writeReason'
+  | 'writeAccountId'
+  | 'writeExpiresAt'
+> &
   Partial<Pick<SessionRecord, 'writeAccountId' | 'writeExpiresAt' | 'writeReason'>>;
 
 /** Creates a session with a fresh random id (never reusing one the browser presented) and sets the cookie. */
-export async function startSession(ctx: AppContext, request: FastifyRequest, reply: FastifyReply, data: NewSession, sid = randomToken()): Promise<SessionRecord> {
+export async function startSession(
+  ctx: AppContext,
+  request: FastifyRequest,
+  reply: FastifyReply,
+  data: NewSession,
+  sid = randomToken(),
+): Promise<SessionRecord> {
   const now = ctx.now();
   const record: SessionRecord = {
     writeAccountId: null,
@@ -78,8 +100,21 @@ async function forgetPartition(ctx: AppContext, kind: 'read' | 'write', idHash: 
 /** Drops write access: clears the Write-app account and its cache partition. */
 export async function dropWriteAccess(ctx: AppContext, session: SessionRecord): Promise<SessionRecord> {
   await forgetPartition(ctx, 'write', session.idHash);
-  const updated = await ctx.sessions.update(session.idHash, { writeAccountId: null, writeExpiresAt: null, writeExtended: false, writeReason: null });
-  return updated ?? { ...session, writeAccountId: null, writeExpiresAt: null, writeExtended: false, writeReason: null };
+  const updated = await ctx.sessions.update(session.idHash, {
+    writeAccountId: null,
+    writeExpiresAt: null,
+    writeExtended: false,
+    writeReason: null,
+  });
+  return (
+    updated ?? {
+      ...session,
+      writeAccountId: null,
+      writeExpiresAt: null,
+      writeExtended: false,
+      writeReason: null,
+    }
+  );
 }
 
 /**
@@ -104,7 +139,10 @@ export function registerSessions(app: FastifyInstance, ctx: AppContext) {
       return;
     }
     const now = ctx.now();
-    if (now.getTime() >= session.expiresAt.getTime() || now.getTime() - session.lastSeenAt.getTime() > idleMs) {
+    if (
+      now.getTime() >= session.expiresAt.getTime() ||
+      now.getTime() - session.lastSeenAt.getTime() > idleMs
+    ) {
       await endSession(ctx, session);
       clearSessionCookie(ctx, reply);
       return;

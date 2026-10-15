@@ -25,7 +25,11 @@ const parse = (c: unknown) => WIDGETS.chart!.schema.parse(c) as ChartConfig;
 describe('chart widget', () => {
   it('line: one series per y field, a legend, the provenance line and a Table toggle with exact values', async () => {
     const user = userEvent.setup();
-    const { container } = renderWidget(Chart, parse(chartFixtures.signIns.config), ready(chartFixtures.signIns.rows));
+    const { container } = renderWidget(
+      Chart,
+      parse(chartFixtures.signIns.config),
+      ready(chartFixtures.signIns.rows),
+    );
     const figure = screen.getByRole('figure', { name: 'Sign-ins' });
     expect(within(figure).getByRole('list', { name: 'Legend' })).toHaveTextContent('Succeeded');
     expect(within(figure).getByRole('list', { name: 'Legend' })).toHaveTextContent('Failed');
@@ -39,7 +43,11 @@ describe('chart widget', () => {
 
   it('donut: legend carries name, value and share; table view lists every slice', async () => {
     const user = userEvent.setup();
-    const { container } = renderWidget(Chart, parse(chartFixtures.byPlatform.config), ready(chartFixtures.byPlatform.rows));
+    const { container } = renderWidget(
+      Chart,
+      parse(chartFixtures.byPlatform.config),
+      ready(chartFixtures.byPlatform.rows),
+    );
     const figure = screen.getByRole('figure', { name: 'Devices by platform' });
     expect(within(figure).getByRole('img', { name: /Windows 3,120/ })).toBeInTheDocument();
     const legend = within(figure).getByRole('list', { name: 'Legend' });
@@ -53,9 +61,17 @@ describe('chart widget', () => {
 
   it('heat grid is a real table; percent values format ×100', async () => {
     const config = parse({ ...chartFixtures.failuresByHour.config, format: 'percent' });
-    const { container } = renderWidget(Chart, config, ready(chartFixtures.failuresByHour.rows.map((r) => ({ ...r, count: r.count / 100 }))));
+    const { container } = renderWidget(
+      Chart,
+      config,
+      ready(chartFixtures.failuresByHour.rows.map((r) => ({ ...r, count: r.count / 100 }))),
+    );
     const table = screen.getByRole('table', { name: 'Failed sign-ins by hour' });
-    expect(within(table).getAllByRole('rowheader').map((h) => h.textContent)).toEqual(['Mon', 'Tue', 'Wed']);
+    expect(
+      within(table)
+        .getAllByRole('rowheader')
+        .map((h) => h.textContent),
+    ).toEqual(['Mon', 'Tue', 'Wed']);
     expect(table).toHaveTextContent('22%');
     expect(await axeViolations(container)).toEqual([]);
   });
@@ -79,7 +95,14 @@ describe('chart widget', () => {
 
 describe('chart data preparation', () => {
   it('splits rows into series by a field and keeps x order', () => {
-    const config = parse({ widget: 'chart', type: 'stackedBar', data: 'a.value', x: 'product', series: 'severity', y: 'count' });
+    const config = parse({
+      widget: 'chart',
+      type: 'stackedBar',
+      data: 'a.value',
+      x: 'product',
+      series: 'severity',
+      y: 'count',
+    });
     const out = prepareSeries(
       [
         { product: 'Office 365', severity: 'High', count: 2 },
@@ -96,7 +119,13 @@ describe('chart data preparation', () => {
   });
 
   it('formats ISO date categories as short UTC dates', () => {
-    const out = prepareSeries([{ d: '2026-10-14', n: 1 }, { d: '2026-10-15', n: 2 }], parse({ widget: 'chart', type: 'line', data: 'a.value', x: 'd', y: 'n' }));
+    const out = prepareSeries(
+      [
+        { d: '2026-10-14', n: 1 },
+        { d: '2026-10-15', n: 2 },
+      ],
+      parse({ widget: 'chart', type: 'line', data: 'a.value', x: 'd', y: 'n' }),
+    );
     expect(out.categories).toEqual(['14 Oct', '15 Oct']);
   });
 

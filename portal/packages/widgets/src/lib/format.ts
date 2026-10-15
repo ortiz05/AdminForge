@@ -1,7 +1,23 @@
-import { formatDuration, formatNumber, formatPercent, formatRelative, formatTimestamp, toDate } from '@adminforge/ui';
+import {
+  formatDuration,
+  formatNumber,
+  formatPercent,
+  formatRelative,
+  formatTimestamp,
+  toDate,
+} from '@adminforge/ui';
 
 /** Formats shared by kpi, list, keyValue, chart and table (docs/widgets.md). */
-export const VALUE_FORMATS = ['number', 'percent', 'bytes', 'duration', 'date', 'datetime', 'relativeTime', 'text'] as const;
+export const VALUE_FORMATS = [
+  'number',
+  'percent',
+  'bytes',
+  'duration',
+  'date',
+  'datetime',
+  'relativeTime',
+  'text',
+] as const;
 export type ValueFormat = (typeof VALUE_FORMATS)[number];
 
 const BYTE_UNITS = ['B', 'KB', 'MB', 'GB', 'TB', 'PB'];
@@ -41,7 +57,11 @@ export function formatPercentValue(v: number): string {
 }
 
 /** One display string for a value. Blank values render as an em dash. */
-export function formatValue(value: unknown, format: ValueFormat | undefined, now: number = Date.now()): string {
+export function formatValue(
+  value: unknown,
+  format: ValueFormat | undefined,
+  now: number = Date.now(),
+): string {
   if (value === undefined || value === null || value === '') return '—';
   switch (format) {
     case 'number':
@@ -79,9 +99,7 @@ export function formatCategory(value: unknown, withTime = false): string {
     const d = new Date(value);
     if (!Number.isNaN(d.getTime())) {
       const day = d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' });
-      return withTime
-        ? `${day} ${d.toISOString().slice(11, 16)}`
-        : day;
+      return withTime ? `${day} ${d.toISOString().slice(11, 16)}` : day;
     }
   }
   return value == null || value === '' ? '—' : String(value);

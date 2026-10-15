@@ -16,7 +16,15 @@ export const AZURE_TEST_DEFAULT_LOCATION = 'eastus';
 export const DAILY_CAP_GB = 0.1;
 export const RETENTION_DAYS = 30;
 export const WORKSPACE_SKU = 'PerGB2018';
-export const ACTIVITY_LOG_CATEGORIES = ['Administrative', 'Policy', 'Security', 'ServiceHealth', 'Alert', 'Recommendation', 'ResourceHealth'] as const;
+export const ACTIVITY_LOG_CATEGORIES = [
+  'Administrative',
+  'Policy',
+  'Security',
+  'ServiceHealth',
+  'Alert',
+  'Recommendation',
+  'ResourceHealth',
+] as const;
 
 export const ENV_WORKSPACE_ID = 'AF_LOG_ANALYTICS_WORKSPACE_ID';
 export const ENV_LOCATION = 'AF_TEST_LOCATION';
@@ -90,7 +98,10 @@ export interface ArmWorkspace {
 export interface ArmDiagnosticSetting {
   id?: string;
   name?: string;
-  properties?: { workspaceId?: string | null; logs?: Array<{ category?: string | null; categoryGroup?: string | null; enabled?: boolean }> };
+  properties?: {
+    workspaceId?: string | null;
+    logs?: Array<{ category?: string | null; categoryGroup?: string | null; enabled?: boolean }>;
+  };
 }
 
 export interface AzureTestState {
@@ -127,7 +138,8 @@ export type AzureTestOp =
 const lower = (s: string | undefined | null) => (s ?? '').toLowerCase();
 const normLocation = (s: string | undefined) => lower(s).replace(/\s+/g, '');
 
-export const roleDefinitionId = (subscriptionScope: string, roleGuid: string) => `${subscriptionScope}/providers/Microsoft.Authorization/roleDefinitions/${roleGuid}`;
+export const roleDefinitionId = (subscriptionScope: string, roleGuid: string) =>
+  `${subscriptionScope}/providers/Microsoft.Authorization/roleDefinitions/${roleGuid}`;
 
 /** Pure: the desired Azure test environment for one label. */
 export function buildDesiredAzureTest(settings: AzureTestSettings): DesiredAzureTest {
@@ -138,7 +150,11 @@ export function buildDesiredAzureTest(settings: AzureTestSettings): DesiredAzure
   const rgId = `${sub}/resourceGroups/${rgName}`;
   const wsName = `af-test-law-${label}`;
   const wsId = `${rgId}/providers/Microsoft.OperationalInsights/workspaces/${wsName}`;
-  const tags = { 'adminforge-env': label, 'adminforge-purpose': 'kql-validation', 'managed-by': 'adminforge-cli' };
+  const tags = {
+    'adminforge-env': label,
+    'adminforge-purpose': 'kql-validation',
+    'managed-by': 'adminforge-cli',
+  };
   const automation = `${appNames(label, 'automation').displayName}`;
   const tester = 'Validation user (AF_TEST_USER_UPN)';
   return {
@@ -160,11 +176,39 @@ export function buildDesiredAzureTest(settings: AzureTestSettings): DesiredAzure
         },
       },
     },
-    diagnostic: { name: `adminforge-${label}`, id: `${sub}/providers/Microsoft.Insights/diagnosticSettings/adminforge-${label}`, categories: ACTIVITY_LOG_CATEGORIES },
+    diagnostic: {
+      name: `adminforge-${label}`,
+      id: `${sub}/providers/Microsoft.Insights/diagnosticSettings/adminforge-${label}`,
+      categories: ACTIVITY_LOG_CATEGORIES,
+    },
     roles: [
-      { principal: 'automation', principalLabel: automation, principalType: 'ServicePrincipal', roleName: 'Log Analytics Reader', roleGuid: LOG_ANALYTICS_READER_ROLE_ID, scope: wsId, scopeLabel: `workspace ${wsName}` },
-      { principal: 'tester', principalLabel: tester, principalType: 'User', roleName: 'Reader', roleGuid: AZURE_READER_ROLE_ID, scope: sub, scopeLabel: 'subscription (AF_SUBSCRIPTION_ID)' },
-      { principal: 'tester', principalLabel: tester, principalType: 'User', roleName: 'Log Analytics Reader', roleGuid: LOG_ANALYTICS_READER_ROLE_ID, scope: wsId, scopeLabel: `workspace ${wsName}` },
+      {
+        principal: 'automation',
+        principalLabel: automation,
+        principalType: 'ServicePrincipal',
+        roleName: 'Log Analytics Reader',
+        roleGuid: LOG_ANALYTICS_READER_ROLE_ID,
+        scope: wsId,
+        scopeLabel: `workspace ${wsName}`,
+      },
+      {
+        principal: 'tester',
+        principalLabel: tester,
+        principalType: 'User',
+        roleName: 'Reader',
+        roleGuid: AZURE_READER_ROLE_ID,
+        scope: sub,
+        scopeLabel: 'subscription (AF_SUBSCRIPTION_ID)',
+      },
+      {
+        principal: 'tester',
+        principalLabel: tester,
+        principalType: 'User',
+        roleName: 'Log Analytics Reader',
+        roleGuid: LOG_ANALYTICS_READER_ROLE_ID,
+        scope: wsId,
+        scopeLabel: `workspace ${wsName}`,
+      },
     ],
   };
 }
@@ -175,7 +219,10 @@ export function hasAssignment(state: AzureTestState, role: DesiredRole): boolean
   if (!principalId) return false;
   const suffix = `/roledefinitions/${role.roleGuid}`;
   return (state.assignments[lower(role.scope)] ?? []).some(
-    (a) => lower(a.properties.principalId) === lower(principalId) && lower(a.properties.roleDefinitionId).endsWith(suffix) && lower(a.properties.scope) === lower(role.scope),
+    (a) =>
+      lower(a.properties.principalId) === lower(principalId) &&
+      lower(a.properties.roleDefinitionId).endsWith(suffix) &&
+      lower(a.properties.scope) === lower(role.scope),
   );
 }
 
@@ -183,17 +230,25 @@ function workspaceDrift(desired: DesiredAzureTest, ws: ArmWorkspace): string[] {
   const p = ws.properties ?? {};
   const want = desired.workspace.body.properties;
   const out: string[] = [];
-  if (lower(p.sku?.name) !== lower(want.sku.name)) out.push(`pricing tier ${p.sku?.name ?? 'unknown'} → ${want.sku.name}`);
-  if (p.retentionInDays !== want.retentionInDays) out.push(`retention ${p.retentionInDays ?? '?'} → ${want.retentionInDays} days`);
+  if (lower(p.sku?.name) !== lower(want.sku.name))
+    out.push(`pricing tier ${p.sku?.name ?? 'unknown'} → ${want.sku.name}`);
+  if (p.retentionInDays !== want.retentionInDays)
+    out.push(`retention ${p.retentionInDays ?? '?'} → ${want.retentionInDays} days`);
   const cap = p.workspaceCapping?.dailyQuotaGb;
-  if (cap === undefined || Math.abs(cap - want.workspaceCapping.dailyQuotaGb) > 1e-9) out.push(`daily cap ${cap === undefined || cap < 0 ? 'none' : `${cap} GB`} → ${want.workspaceCapping.dailyQuotaGb} GB`);
+  if (cap === undefined || Math.abs(cap - want.workspaceCapping.dailyQuotaGb) > 1e-9)
+    out.push(
+      `daily cap ${cap === undefined || cap < 0 ? 'none' : `${cap} GB`} → ${want.workspaceCapping.dailyQuotaGb} GB`,
+    );
   return out;
 }
 
 function diagnosticDrift(desired: DesiredAzureTest, diag: ArmDiagnosticSetting): string[] {
   const out: string[] = [];
-  if (lower(diag.properties?.workspaceId) !== lower(desired.workspace.id)) out.push('sends to a different workspace');
-  const enabled = new Set((diag.properties?.logs ?? []).filter((l) => l.enabled).map((l) => lower(l.category)));
+  if (lower(diag.properties?.workspaceId) !== lower(desired.workspace.id))
+    out.push('sends to a different workspace');
+  const enabled = new Set(
+    (diag.properties?.logs ?? []).filter((l) => l.enabled).map((l) => lower(l.category)),
+  );
   const missing = desired.diagnostic.categories.filter((c) => !enabled.has(lower(c)));
   if (missing.length) out.push(`categories missing: ${missing.join(', ')}`);
   return out;
@@ -206,43 +261,81 @@ export function planAzureTest(desired: DesiredAzureTest, state: AzureTestState):
   const ws = desired.workspace;
   const loc = desired.settings.location;
 
-  if (!state.resourceGroup) ops.push({ kind: 'resourceGroup', action: 'create', section: 'Azure test environment', title: `Resource group ${rg.name} (${loc})` });
+  if (!state.resourceGroup)
+    ops.push({
+      kind: 'resourceGroup',
+      action: 'create',
+      section: 'Azure test environment',
+      title: `Resource group ${rg.name} (${loc})`,
+    });
   else
     ops.push({
       kind: 'resourceGroup',
       action: 'noop',
       section: 'Azure test environment',
       title: `Resource group ${rg.name} (${state.resourceGroup.location})`,
-      ...(normLocation(state.resourceGroup.location) !== loc ? { detail: `exists in ${state.resourceGroup.location}; a resource group cannot move (AF_TEST_LOCATION is ${loc})` } : {}),
+      ...(normLocation(state.resourceGroup.location) !== loc
+        ? {
+            detail: `exists in ${state.resourceGroup.location}; a resource group cannot move (AF_TEST_LOCATION is ${loc})`,
+          }
+        : {}),
     });
 
   const wsTitle = `Log Analytics workspace ${ws.name} (${WORKSPACE_SKU}, ${RETENTION_DAYS}-day retention, daily cap ${DAILY_CAP_GB} GB)`;
-  if (!state.workspace) ops.push({ kind: 'workspace', action: 'create', section: 'Azure test environment', title: wsTitle });
+  if (!state.workspace)
+    ops.push({ kind: 'workspace', action: 'create', section: 'Azure test environment', title: wsTitle });
   else if (normLocation(state.workspace.location) !== normLocation(ws.body.location))
     ops.push({
       kind: 'skipped',
       action: 'skip',
       section: 'Azure test environment',
       title: wsTitle,
-      changes: [`exists in ${state.workspace.location}, not ${ws.body.location}; run with --destroy first to move it`],
+      changes: [
+        `exists in ${state.workspace.location}, not ${ws.body.location}; run with --destroy first to move it`,
+      ],
     });
   else {
     const drift = workspaceDrift(desired, state.workspace);
-    ops.push({ kind: 'workspace', action: drift.length ? 'update' : 'noop', section: 'Azure test environment', title: wsTitle, ...(drift.length ? { changes: drift } : {}) });
+    ops.push({
+      kind: 'workspace',
+      action: drift.length ? 'update' : 'noop',
+      section: 'Azure test environment',
+      title: wsTitle,
+      ...(drift.length ? { changes: drift } : {}),
+    });
   }
 
   const diagTitle = `Subscription activity log → ${ws.name} (diagnostic setting ${desired.diagnostic.name}: ${desired.diagnostic.categories.join(', ')})`;
-  if (!state.diagnostic) ops.push({ kind: 'diagnosticSetting', action: 'create', section: 'Activity log export', title: diagTitle });
+  if (!state.diagnostic)
+    ops.push({
+      kind: 'diagnosticSetting',
+      action: 'create',
+      section: 'Activity log export',
+      title: diagTitle,
+    });
   else {
     const drift = diagnosticDrift(desired, state.diagnostic);
-    ops.push({ kind: 'diagnosticSetting', action: drift.length ? 'update' : 'noop', section: 'Activity log export', title: diagTitle, ...(drift.length ? { changes: drift } : {}) });
+    ops.push({
+      kind: 'diagnosticSetting',
+      action: drift.length ? 'update' : 'noop',
+      section: 'Activity log export',
+      title: diagTitle,
+      ...(drift.length ? { changes: drift } : {}),
+    });
   }
 
   for (const role of desired.roles) {
     const title = `${role.principalLabel} → ${role.roleName} on ${role.scopeLabel}`;
     const why = state.missing[role.principal];
     if (why) ops.push({ kind: 'skipped', action: 'skip', section: 'Azure RBAC', title, changes: [why] });
-    else ops.push({ kind: 'roleAssignment', action: hasAssignment(state, role) ? 'noop' : 'create', section: 'Azure RBAC', title, role });
+    else
+      ops.push({
+        kind: 'roleAssignment',
+        action: hasAssignment(state, role) ? 'noop' : 'create',
+        section: 'Azure RBAC',
+        title,
+        role,
+      });
   }
 
   const customerId = state.workspace?.properties?.customerId;
@@ -269,4 +362,5 @@ export function planAzureTest(desired: DesiredAzureTest, state: AzureTestState):
 }
 
 /** True when nothing of the test environment exists yet (status shows one hint instead of a list of ✗). */
-export const notProvisioned = (state: AzureTestState) => !state.resourceGroup && !state.workspace && !state.diagnostic && !state.env.workspaceId;
+export const notProvisioned = (state: AzureTestState) =>
+  !state.resourceGroup && !state.workspace && !state.diagnostic && !state.env.workspaceId;

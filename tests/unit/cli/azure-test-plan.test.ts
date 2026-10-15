@@ -15,37 +15,70 @@ const AUTOMATION = randomUUID();
 const TESTER = randomUUID();
 const CUSTOMER = randomUUID();
 
-const desired = (location = 'eastus') => buildDesiredAzureTest({ label: 'test', subscriptionId: SUB, location });
+const desired = (location = 'eastus') =>
+  buildDesiredAzureTest({ label: 'test', subscriptionId: SUB, location });
 
-const empty = (): AzureTestState => ({ principals: { automation: AUTOMATION, tester: TESTER }, missing: {}, assignments: {}, env: {} });
+const empty = (): AzureTestState => ({
+  principals: { automation: AUTOMATION, tester: TESTER },
+  missing: {},
+  assignments: {},
+  env: {},
+});
 
 /** The state right after a successful run. */
 function provisioned(d: DesiredAzureTest): AzureTestState {
   const assignment = (scope: string, principalId: string, role: string) => ({
     id: `${scope}/providers/Microsoft.Authorization/roleAssignments/${randomUUID()}`,
     name: randomUUID(),
-    properties: { scope, principalId, roleDefinitionId: `${d.subscriptionScope}/providers/Microsoft.Authorization/roleDefinitions/${role}` },
+    properties: {
+      scope,
+      principalId,
+      roleDefinitionId: `${d.subscriptionScope}/providers/Microsoft.Authorization/roleDefinitions/${role}`,
+    },
   });
   return {
-    resourceGroup: { id: d.resourceGroup.id, name: d.resourceGroup.name, location: 'eastus', tags: d.resourceGroup.tags },
+    resourceGroup: {
+      id: d.resourceGroup.id,
+      name: d.resourceGroup.name,
+      location: 'eastus',
+      tags: d.resourceGroup.tags,
+    },
     workspace: {
       id: d.workspace.id,
       name: d.workspace.name,
       location: 'eastus',
-      properties: { customerId: CUSTOMER, provisioningState: 'Succeeded', sku: { name: 'PerGB2018' }, retentionInDays: 30, workspaceCapping: { dailyQuotaGb: 0.1 } },
+      properties: {
+        customerId: CUSTOMER,
+        provisioningState: 'Succeeded',
+        sku: { name: 'PerGB2018' },
+        retentionInDays: 30,
+        workspaceCapping: { dailyQuotaGb: 0.1 },
+      },
     },
-    diagnostic: { name: d.diagnostic.name, properties: { workspaceId: d.workspace.id, logs: ACTIVITY_LOG_CATEGORIES.map((category) => ({ category, enabled: true })) } },
+    diagnostic: {
+      name: d.diagnostic.name,
+      properties: {
+        workspaceId: d.workspace.id,
+        logs: ACTIVITY_LOG_CATEGORIES.map((category) => ({ category, enabled: true })),
+      },
+    },
     principals: { automation: AUTOMATION, tester: TESTER },
     missing: {},
     assignments: {
-      [d.workspace.id.toLowerCase()]: [assignment(d.workspace.id, AUTOMATION, LOG_ANALYTICS_READER_ROLE_ID), assignment(d.workspace.id, TESTER, LOG_ANALYTICS_READER_ROLE_ID)],
-      [d.subscriptionScope.toLowerCase()]: [assignment(d.subscriptionScope, TESTER, 'acdd72a7-3385-48ef-bd42-f606fba81ae7')],
+      [d.workspace.id.toLowerCase()]: [
+        assignment(d.workspace.id, AUTOMATION, LOG_ANALYTICS_READER_ROLE_ID),
+        assignment(d.workspace.id, TESTER, LOG_ANALYTICS_READER_ROLE_ID),
+      ],
+      [d.subscriptionScope.toLowerCase()]: [
+        assignment(d.subscriptionScope, TESTER, 'acdd72a7-3385-48ef-bd42-f606fba81ae7'),
+      ],
     },
     env: { workspaceId: CUSTOMER, location: 'eastus' },
   };
 }
 
-const summary = (ops: Array<{ action: string; section: string; title: string }>) => ops.map((o) => `${o.action} ${o.section}: ${o.title}`);
+const summary = (ops: Array<{ action: string; section: string; title: string }>) =>
+  ops.map((o) => `${o.action} ${o.section}: ${o.title}`);
 
 describe('azure-test desired state', () => {
   it('names everything from the label and bounds the cost', () => {
@@ -65,9 +98,22 @@ describe('azure-test desired state', () => {
     expect(d.diagnostic).toEqual({
       name: 'adminforge-test',
       id: `/subscriptions/${SUB}/providers/Microsoft.Insights/diagnosticSettings/adminforge-test`,
-      categories: ['Administrative', 'Policy', 'Security', 'ServiceHealth', 'Alert', 'Recommendation', 'ResourceHealth'],
+      categories: [
+        'Administrative',
+        'Policy',
+        'Security',
+        'ServiceHealth',
+        'Alert',
+        'Recommendation',
+        'ResourceHealth',
+      ],
     });
-    expect(d.roles.map((r) => `${r.principal} ${r.roleName} ${r.scope === d.workspace.id ? 'workspace' : r.scope === d.subscriptionScope ? 'subscription' : r.scope}`)).toEqual([
+    expect(
+      d.roles.map(
+        (r) =>
+          `${r.principal} ${r.roleName} ${r.scope === d.workspace.id ? 'workspace' : r.scope === d.subscriptionScope ? 'subscription' : r.scope}`,
+      ),
+    ).toEqual([
       'automation Log Analytics Reader workspace',
       'tester Reader subscription',
       'tester Log Analytics Reader workspace',
@@ -125,8 +171,17 @@ describe('azure-test plan', () => {
     const ws = d.workspace.id.toLowerCase();
     // Tester's workspace assignment is for another role; automation's moved to the resource group (inherited only).
     s.assignments[ws] = [
-      { ...s.assignments[ws]![1]!, properties: { ...s.assignments[ws]![1]!.properties, roleDefinitionId: `${d.subscriptionScope}/providers/Microsoft.Authorization/roleDefinitions/${randomUUID()}` } },
-      { ...s.assignments[ws]![0]!, properties: { ...s.assignments[ws]![0]!.properties, scope: d.resourceGroup.id } },
+      {
+        ...s.assignments[ws]![1]!,
+        properties: {
+          ...s.assignments[ws]![1]!.properties,
+          roleDefinitionId: `${d.subscriptionScope}/providers/Microsoft.Authorization/roleDefinitions/${randomUUID()}`,
+        },
+      },
+      {
+        ...s.assignments[ws]![0]!,
+        properties: { ...s.assignments[ws]![0]!.properties, scope: d.resourceGroup.id },
+      },
     ];
     expect(summary(planAzureTest(d, s).filter((o) => o.action === 'create'))).toEqual([
       'create Azure RBAC: AdminForge Automation [test] → Log Analytics Reader on workspace af-test-law-test',
@@ -138,11 +193,19 @@ describe('azure-test plan', () => {
     const d = desired();
     const s = empty();
     s.principals = { automation: AUTOMATION };
-    s.missing = { tester: 'AF_TEST_USER_UPN is not set — run `pnpm adminforge provision test-identities` first' };
+    s.missing = {
+      tester: 'AF_TEST_USER_UPN is not set — run `pnpm adminforge provision test-identities` first',
+    };
     const skipped = planAzureTest(d, s).filter((o) => o.action === 'skip');
     expect(skipped.map((o) => [o.title, o.changes])).toEqual([
-      ['Validation user (AF_TEST_USER_UPN) → Reader on subscription (AF_SUBSCRIPTION_ID)', ['AF_TEST_USER_UPN is not set — run `pnpm adminforge provision test-identities` first']],
-      ['Validation user (AF_TEST_USER_UPN) → Log Analytics Reader on workspace af-test-law-test', ['AF_TEST_USER_UPN is not set — run `pnpm adminforge provision test-identities` first']],
+      [
+        'Validation user (AF_TEST_USER_UPN) → Reader on subscription (AF_SUBSCRIPTION_ID)',
+        ['AF_TEST_USER_UPN is not set — run `pnpm adminforge provision test-identities` first'],
+      ],
+      [
+        'Validation user (AF_TEST_USER_UPN) → Log Analytics Reader on workspace af-test-law-test',
+        ['AF_TEST_USER_UPN is not set — run `pnpm adminforge provision test-identities` first'],
+      ],
     ]);
   });
 
@@ -150,8 +213,19 @@ describe('azure-test plan', () => {
     const d = desired('westus2');
     const s = provisioned(desired());
     const ops = planAzureTest(d, s);
-    expect(ops[0]).toMatchObject({ kind: 'resourceGroup', action: 'noop', detail: expect.stringContaining('cannot move') });
-    expect(ops[1]).toMatchObject({ kind: 'skipped', action: 'skip', changes: [expect.stringContaining('--destroy')] });
-    expect(ops.find((o) => o.kind === 'env' && o.title.startsWith('AF_TEST_LOCATION'))).toMatchObject({ action: 'update', value: 'westus2' });
+    expect(ops[0]).toMatchObject({
+      kind: 'resourceGroup',
+      action: 'noop',
+      detail: expect.stringContaining('cannot move'),
+    });
+    expect(ops[1]).toMatchObject({
+      kind: 'skipped',
+      action: 'skip',
+      changes: [expect.stringContaining('--destroy')],
+    });
+    expect(ops.find((o) => o.kind === 'env' && o.title.startsWith('AF_TEST_LOCATION'))).toMatchObject({
+      action: 'update',
+      value: 'westus2',
+    });
   });
 });

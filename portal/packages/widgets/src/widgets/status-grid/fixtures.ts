@@ -9,7 +9,11 @@ export const statusGridFixtures = {
       data: 'health.value',
       label: 'service',
       status: 'status',
-      map: { serviceOperational: ['ok', 'Healthy'], serviceDegradation: ['warn', 'Degraded'], serviceInterruption: ['crit', 'Interrupted'] },
+      map: {
+        serviceOperational: ['ok', 'Healthy'],
+        serviceDegradation: ['warn', 'Degraded'],
+        serviceInterruption: ['crit', 'Interrupted'],
+      },
       default: ['info', 'Advisory'],
     } satisfies StatusGridConfig,
     rows: [

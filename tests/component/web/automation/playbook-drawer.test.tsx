@@ -7,7 +7,8 @@ import { armedMe, FIXED_NOW } from '../../../e2e/fixtures/session';
 import { axeViolations } from '../../axe';
 import { renderApp } from './render';
 
-const disableLink = (inputs: Record<string, unknown>) => playbookHref({ playbook: 'identity.disable-user', inputs }, '/');
+const disableLink = (inputs: Record<string, unknown>) =>
+  playbookHref({ playbook: 'identity.disable-user', inputs }, '/');
 
 describe('Playbook drawer', () => {
   beforeEach(() => {
@@ -34,7 +35,9 @@ describe('Playbook drawer', () => {
     expect(run).toHaveAccessibleDescription(/Arm write access to use this\./);
     expect(within(drawer).getByText('Needs write access.')).toBeInTheDocument();
     // Requirements: the portal role is held; User Administrator is only eligible.
-    expect(await within(drawer).findByText('Activate User Administrator in PIM to use this')).toBeInTheDocument();
+    expect(
+      await within(drawer).findByText('Activate User Administrator in PIM to use this'),
+    ).toBeInTheDocument();
     expect(within(drawer).getByText('You have it')).toBeInTheDocument();
     expect(await axeViolations()).toEqual([]);
   });
@@ -67,7 +70,9 @@ describe('Playbook drawer', () => {
     expect(within(plan).getByText('Set accountEnabled to false')).toBeInTheDocument();
     expect(within(plan).getByText(`/users/${IDS.aLee}/revokeSignInSessions`)).toBeInTheDocument();
     await userEvent.click(within(plan).getByRole('button', { name: 'Show request body' }));
-    expect(within(plan).getByRole('region', { name: 'Request body (redacted)' })).toHaveTextContent('"accountEnabled": false');
+    expect(within(plan).getByRole('region', { name: 'Request body (redacted)' })).toHaveTextContent(
+      '"accountEnabled": false',
+    );
     const checks = within(drawer).getByRole('region', { name: 'Checks that ran' });
     expect(within(checks).getByText('Look up the user')).toBeInTheDocument();
     expect(within(checks).getByText('Check the account is enabled')).toBeInTheDocument();
@@ -90,11 +95,19 @@ describe('Playbook drawer', () => {
     await userEvent.type(within(confirm).getByLabelText(/to confirm/), 'a.lee@example.com');
     await userEvent.click(go);
     await waitFor(() => expect(router.state.location.pathname).toBe(`/runs/${IDS.liveRun}`));
-    expect(state.runPosts[1]).toMatchObject({ dryRun: false, version: '1.0.0', previewRunId: IDS.previewRun, confirmation: 'a.lee@example.com' });
+    expect(state.runPosts[1]).toMatchObject({
+      dryRun: false,
+      version: '1.0.0',
+      previewRunId: IDS.previewRun,
+      confirmation: 'a.lee@example.com',
+    });
   });
 
   it('preview then confirm: shows when the preview expires; any edit invalidates it', async () => {
-    renderApp({ session: armedMe(), path: disableLink({ userId: IDS.aLee, reason: 'INC-4821 account compromised' }) });
+    renderApp({
+      session: armedMe(),
+      path: disableLink({ userId: IDS.aLee, reason: 'INC-4821 account compromised' }),
+    });
     const drawer = await screen.findByRole('dialog', { name: 'Disable sign-in' });
     const run = within(drawer).getByRole('button', { name: 'Disable sign-in' });
     expect(run).toHaveAttribute('aria-disabled', 'true');
@@ -124,11 +137,15 @@ describe('Playbook drawer', () => {
     const confirm = await screen.findByRole('dialog', { name: 'Disable sign-in?' });
     await userEvent.type(within(confirm).getByLabelText(/to confirm/), 'a.lee@example.com');
     await userEvent.click(within(confirm).getByRole('button', { name: 'Disable sign-in' }));
-    expect(await within(confirm).findByText('That doesn’t match. Type the sign-in name exactly as shown.')).toBeInTheDocument();
+    expect(
+      await within(confirm).findByText('That doesn’t match. Type the sign-in name exactly as shown.'),
+    ).toBeInTheDocument();
     expect(within(confirm).getByLabelText(/to confirm/)).toHaveAttribute('aria-invalid', 'true');
     expect(await axeViolations()).toEqual([]);
     await userEvent.click(within(confirm).getByRole('button', { name: 'Disable sign-in' }));
-    await waitFor(() => expect(state.runPosts.filter((p) => !(p as { dryRun: boolean }).dryRun)).toHaveLength(2));
+    await waitFor(() =>
+      expect(state.runPosts.filter((p) => !(p as { dryRun: boolean }).dryRun)).toHaveLength(2),
+    );
   });
 
   it('preview then confirm: Run with an expired preview previews again first, then asks to confirm', async () => {
@@ -147,7 +164,11 @@ describe('Playbook drawer', () => {
   });
 
   it('preview then confirm: a 409 closes the confirmation and the drawer offers Preview again', async () => {
-    renderApp({ session: armedMe(), automation: { refuseStaleOnce: true }, path: disableLink({ userId: IDS.aLee, reason: 'INC-4821 account compromised' }) });
+    renderApp({
+      session: armedMe(),
+      automation: { refuseStaleOnce: true },
+      path: disableLink({ userId: IDS.aLee, reason: 'INC-4821 account compromised' }),
+    });
     const drawer = await screen.findByRole('dialog', { name: 'Disable sign-in' });
     await userEvent.click(within(drawer).getByRole('button', { name: 'Preview (dry run)' }));
     await within(drawer).findByRole('region', { name: 'What this run will change' });
@@ -155,8 +176,12 @@ describe('Playbook drawer', () => {
     const confirm = await screen.findByRole('dialog', { name: 'Disable sign-in?' });
     await userEvent.type(within(confirm).getByLabelText(/to confirm/), 'a.lee@example.com');
     await userEvent.click(within(confirm).getByRole('button', { name: 'Disable sign-in' }));
-    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Disable sign-in?' })).not.toBeInTheDocument());
-    expect(await within(drawer).findByText('The preview is more than 15 minutes old, or its inputs changed.')).toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog', { name: 'Disable sign-in?' })).not.toBeInTheDocument(),
+    );
+    expect(
+      await within(drawer).findByText('The preview is more than 15 minutes old, or its inputs changed.'),
+    ).toBeInTheDocument();
     expect(within(drawer).getAllByRole('button', { name: 'Preview again' }).length).toBeGreaterThan(0);
     // Run now previews again first and asks for the confirmation again.
     await userEvent.click(within(drawer).getByRole('button', { name: 'Disable sign-in' }));
@@ -168,7 +193,13 @@ describe('Playbook drawer', () => {
       { userId: IDS.aLee, $label: 'Adele Lee' },
       { userId: IDS.mChen, $label: 'Ming Chen' },
     ];
-    const { state } = renderApp({ session: armedMe(), path: playbookHref({ playbook: 'identity.disable-user', items, inputs: { reason: 'Leaver sweep HR-2240' } }, '/') });
+    const { state } = renderApp({
+      session: armedMe(),
+      path: playbookHref(
+        { playbook: 'identity.disable-user', items, inputs: { reason: 'Leaver sweep HR-2240' } },
+        '/',
+      ),
+    });
     const drawer = await screen.findByRole('dialog', { name: 'Disable sign-in' });
     await userEvent.click(within(drawer).getByRole('button', { name: 'Preview (dry run)' }));
     expect(await within(drawer).findByText('2 of 2 ready')).toBeInTheDocument();
@@ -186,7 +217,10 @@ describe('Playbook drawer', () => {
       { userId: IDS.aLee, $label: 'Adele Lee' },
       { userId: IDS.mChen, $label: 'Ming Chen' },
     ];
-    const { state } = renderApp({ session: armedMe(), path: playbookHref({ playbook: 'identity.revoke-sessions', items }, '/') });
+    const { state } = renderApp({
+      session: armedMe(),
+      path: playbookHref({ playbook: 'identity.revoke-sessions', items }, '/'),
+    });
     const drawer = await screen.findByRole('dialog', { name: 'Revoke sessions' });
     const table = within(drawer).getByRole('table', { name: 'Inputs per item' });
     expect(within(table).getAllByRole('row')).toHaveLength(3);

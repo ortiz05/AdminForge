@@ -30,7 +30,10 @@ export function Disclosure({
           size={11}
           weight="bold"
           aria-hidden
-          className={cn('transition-transform duration-(--af-motion-fast) motion-reduce:transition-none', open && 'rotate-90')}
+          className={cn(
+            'transition-transform duration-(--af-motion-fast) motion-reduce:transition-none',
+            open && 'rotate-90',
+          )}
         />
         {open ? (openLabel ?? label) : label}
       </button>

@@ -1,7 +1,8 @@
 import { splitTemplate, TemplateError, wholeExpression } from '@adminforge/expressions';
 
 describe('splitTemplate', () => {
-  it('returns plain text unchanged', () => expect(splitTemplate('Users')).toEqual([{ type: 'text', value: 'Users' }]));
+  it('returns plain text unchanged', () =>
+    expect(splitTemplate('Users')).toEqual([{ type: 'text', value: 'Users' }]));
   it('splits text and expressions', () =>
     expect(splitTemplate('/users/${ $encode(inputs.userId) }/revoke')).toEqual([
       { type: 'text', value: '/users/' },
@@ -14,16 +15,25 @@ describe('splitTemplate', () => {
       { type: 'text', value: '!' },
     ]));
   it('ignores braces inside string literals of every quote style', () => {
-    expect(splitTemplate(`\${ "}" & '{' & \`a}b\` }`)[0]).toMatchObject({ type: 'expr', source: `"}" & '{' & \`a}b\`` });
+    expect(splitTemplate(`\${ "}" & '{' & \`a}b\` }`)[0]).toMatchObject({
+      type: 'expr',
+      source: `"}" & '{' & \`a}b\``,
+    });
     expect(splitTemplate('${ "a \\"}\\" b" }')[0]).toMatchObject({ source: '"a \\"}\\" b"' });
   });
-  it('ignores braces inside comments', () => expect(splitTemplate('${ /* } */ 1 }')[0]).toMatchObject({ source: '/* } */ 1' }));
+  it('ignores braces inside comments', () =>
+    expect(splitTemplate('${ /* } */ 1 }')[0]).toMatchObject({ source: '/* } */ 1' }));
   it('handles several expressions', () =>
-    expect(splitTemplate('${a}-${b}').map((s) => (s.type === 'expr' ? s.source : s.value))).toEqual(['a', '-', 'b']));
-  it('treats $${ as a literal ${', () => expect(splitTemplate('cost: $${x} and ${ y }')).toEqual([
-    { type: 'text', value: 'cost: ${x} and ' },
-    { type: 'expr', source: 'y', start: 16, end: 22 },
-  ]));
+    expect(splitTemplate('${a}-${b}').map((s) => (s.type === 'expr' ? s.source : s.value))).toEqual([
+      'a',
+      '-',
+      'b',
+    ]));
+  it('treats $${ as a literal ${', () =>
+    expect(splitTemplate('cost: $${x} and ${ y }')).toEqual([
+      { type: 'text', value: 'cost: ${x} and ' },
+      { type: 'expr', source: 'y', start: 16, end: 22 },
+    ]));
   it.each([
     ['${ a', /Unterminated \$\{ … \} starting at position 0/],
     ['x ${ "a }', /Unterminated string literal/],

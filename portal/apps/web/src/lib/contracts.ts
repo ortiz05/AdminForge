@@ -7,7 +7,8 @@ import type { ApiErrorBody, MeResponse, NavResponse } from '@adminforge/schemas'
  */
 export class ContractError extends Error {}
 
-const isObject = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
+const isObject = (v: unknown): v is Record<string, unknown> =>
+  typeof v === 'object' && v !== null && !Array.isArray(v);
 const isString = (v: unknown): v is string => typeof v === 'string';
 
 function expect(cond: boolean, what: string): asserts cond {
@@ -53,8 +54,12 @@ export const navContract = {
   parse(data: unknown): NavResponse {
     expect(isObject(data) && Array.isArray(data.sections), 'nav.sections');
     for (const s of data.sections as unknown[]) {
-      expect(isObject(s) && isString(s.key) && isString(s.label) && isString(s.icon) && Array.isArray(s.items), 'nav.section');
-      for (const i of s.items as unknown[]) expect(isObject(i) && isString(i.key) && isString(i.label) && isString(i.href), 'nav.item');
+      expect(
+        isObject(s) && isString(s.key) && isString(s.label) && isString(s.icon) && Array.isArray(s.items),
+        'nav.section',
+      );
+      for (const i of s.items as unknown[])
+        expect(isObject(i) && isString(i.key) && isString(i.label) && isString(i.href), 'nav.item');
     }
     return data as NavResponse;
   },

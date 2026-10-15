@@ -1,5 +1,9 @@
 import { randomBytes } from 'node:crypto';
-import { createTokenCache, FixedPartition, MemorySealedBlobStore } from '@adminforge/api/src/auth/token-cache';
+import {
+  createTokenCache,
+  FixedPartition,
+  MemorySealedBlobStore,
+} from '@adminforge/api/src/auth/token-cache';
 
 describe('sealed MSAL token cache', () => {
   it('seals at rest, opens only under the same partition and key', async () => {

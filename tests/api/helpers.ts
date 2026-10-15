@@ -23,7 +23,13 @@ export const USER_OID = '44444444-5555-4666-8777-888888888888';
 export const TEST_KEY = Buffer.alloc(32, 7).toString('base64');
 
 export function mockConfig(overrides: Record<string, string> = {}): Config {
-  return loadConfig({ NODE_ENV: 'test', PUBLIC_BASE_URL: 'http://localhost:5173', AUTH_MODE: 'mock', DATA_MODE: 'fixtures', ...overrides });
+  return loadConfig({
+    NODE_ENV: 'test',
+    PUBLIC_BASE_URL: 'http://localhost:5173',
+    AUTH_MODE: 'mock',
+    DATA_MODE: 'fixtures',
+    ...overrides,
+  });
 }
 
 export function entraConfig(overrides: Record<string, string> = {}): Config {
@@ -70,7 +76,17 @@ export async function makeApp(config: Config, extra: Pick<AppDeps, 'auth' | 'fet
   const audit = new MemoryAuditWriter(clock.now);
   const prefs = new MemoryPrefsStore();
   const tokenCache = createTokenCache(tokenBlobs, Buffer.from(TEST_KEY, 'base64'));
-  const app = await buildApp(config, { database: null, now: clock.now, sessions, preauth, audit, prefs, tokenCache, fetch: noNetwork, ...extra });
+  const app = await buildApp(config, {
+    database: null,
+    now: clock.now,
+    sessions,
+    preauth,
+    audit,
+    prefs,
+    tokenCache,
+    fetch: noNetwork,
+    ...extra,
+  });
   return { app, clock, tokenBlobs, sessions, preauth, audit, prefs, tokenCache };
 }
 
@@ -106,14 +122,26 @@ export async function mockLogin(app: App) {
 export class FakeAuthClient implements AuthClient {
   authUrls: AuthUrlInput[] = [];
   redeems: Array<{ kind: string; code: string; verifier: string; nonce: string; partitionKey: string }> = [];
-  tokens: Array<{ kind: string; partitionKey: string; homeAccountId: string; scopes: string[]; claims?: string; forceRefresh?: boolean }> = [];
+  tokens: Array<{
+    kind: string;
+    partitionKey: string;
+    homeAccountId: string;
+    scopes: string[];
+    claims?: string;
+    forceRefresh?: boolean;
+  }> = [];
   forgets: Array<{ kind: string; partitionKey: string }> = [];
   claims: (kind: 'read' | 'write') => Partial<IdClaims> = () => ({});
   tokenImpl?: (input: { kind: string; claims?: string }) => Promise<string>;
 
   async authUrl(input: AuthUrlInput) {
     this.authUrls.push(input);
-    const q = new URLSearchParams({ app: input.kind, state: input.state, nonce: input.nonce, code_challenge: input.challenge });
+    const q = new URLSearchParams({
+      app: input.kind,
+      state: input.state,
+      nonce: input.nonce,
+      code_challenge: input.challenge,
+    });
     if (input.loginHint) q.set('login_hint', input.loginHint);
     if (input.claims) q.set('claims', input.claims);
     if (input.prompt) q.set('prompt', input.prompt);
@@ -121,7 +149,13 @@ export class FakeAuthClient implements AuthClient {
     return `https://login.example.test/authorize?${q.toString()}`;
   }
 
-  async redeem(input: { kind: 'read' | 'write'; code: string; verifier: string; nonce: string; partitionKey: string }) {
+  async redeem(input: {
+    kind: 'read' | 'write';
+    code: string;
+    verifier: string;
+    nonce: string;
+    partitionKey: string;
+  }) {
     this.redeems.push(input);
     if (input.code === 'bad-code') throw new Error('invalid_grant');
     const claims: IdClaims = {
@@ -136,7 +170,14 @@ export class FakeAuthClient implements AuthClient {
     return { homeAccountId: `${claims.oid}.${claims.tid}`, claims };
   }
 
-  async token(input: { kind: 'read' | 'write'; partitionKey: string; homeAccountId: string; scopes: string[]; claims?: string; forceRefresh?: boolean }) {
+  async token(input: {
+    kind: 'read' | 'write';
+    partitionKey: string;
+    homeAccountId: string;
+    scopes: string[];
+    claims?: string;
+    forceRefresh?: boolean;
+  }) {
     this.tokens.push(input);
     return this.tokenImpl ? this.tokenImpl(input) : `token-${input.kind}${input.claims ? '-claims' : ''}`;
   }
@@ -152,9 +193,16 @@ export class FakeAuthClient implements AuthClient {
 
 /** JSON Response helper for fake fetches. */
 export function json(body: unknown, status = 200, headers: Record<string, string> = {}): Response {
-  return new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json', ...headers } });
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { 'content-type': 'application/json', ...headers },
+  });
 }
 
 /** Org lookup done at sign-in. */
 export const orgResponse = () =>
-  json({ value: [{ displayName: 'Example Org', verifiedDomains: [{ name: 'example.com', isDefault: true }] }] }, 200, { 'request-id': 'req-org' });
+  json(
+    { value: [{ displayName: 'Example Org', verifiedDomains: [{ name: 'example.com', isDefault: true }] }] },
+    200,
+    { 'request-id': 'req-org' },
+  );

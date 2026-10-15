@@ -21,7 +21,17 @@ export const DEFINITION_SCHEMAS = {
 } as const satisfies Record<Kind, z.ZodType>;
 
 /** Any content definition, discriminated on `kind`. */
-export const Definition = z.discriminatedUnion('kind', [Page, Dashboard, Report, Playbook, Runbook, Schedule, Probe, Connection, Navigation]);
+export const Definition = z.discriminatedUnion('kind', [
+  Page,
+  Dashboard,
+  Report,
+  Playbook,
+  Runbook,
+  Schedule,
+  Probe,
+  Connection,
+  Navigation,
+]);
 export type Definition = z.infer<typeof Definition>;
 export type DefinitionOf<K extends Kind> = Extract<Definition, { kind: K }>;
 
@@ -32,6 +42,7 @@ export function schemaForKind(kind: string): z.ZodType | undefined {
 /** Content that can contain write steps and therefore needs two-person publishing. */
 export function isWriteCapable(def: Definition): boolean {
   if (def.kind === 'playbook' || def.kind === 'runbook') return def.mode === 'write';
-  if (def.kind === 'schedule') return (def.job.kind === 'playbook' || def.job.kind === 'script') && def.job.mode === 'write';
+  if (def.kind === 'schedule')
+    return (def.job.kind === 'playbook' || def.job.kind === 'script') && def.job.mode === 'write';
   return false;
 }

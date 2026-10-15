@@ -18,11 +18,26 @@ import type { ChartConfig } from './schema';
 
 /** Categorical slots in fixed order (never generated hues). */
 const SWATCH = ['bg-chart-1', 'bg-chart-2', 'bg-chart-3', 'bg-chart-4', 'bg-chart-5', 'bg-chart-6'] as const;
-const STROKE = ['stroke-chart-1', 'stroke-chart-2', 'stroke-chart-3', 'stroke-chart-4', 'stroke-chart-5', 'stroke-chart-6'] as const;
+const STROKE = [
+  'stroke-chart-1',
+  'stroke-chart-2',
+  'stroke-chart-3',
+  'stroke-chart-4',
+  'stroke-chart-5',
+  'stroke-chart-6',
+] as const;
 /** Heat buckets: one hue (temper blue), five steps; empty cells sit on the sunken surface. */
 const HEAT = ['bg-accent/10', 'bg-accent/25', 'bg-accent/45', 'bg-accent/65', 'bg-accent/90'] as const;
 
-function ViewToggle({ title, view, onChange }: { title: string; view: string; onChange: (v: 'chart' | 'table') => void }) {
+function ViewToggle({
+  title,
+  view,
+  onChange,
+}: {
+  title: string;
+  view: string;
+  onChange: (v: 'chart' | 'table') => void;
+}) {
   return (
     <SegmentedControl
       size="sm"
@@ -80,7 +95,15 @@ function ValuesTable({
 }
 
 /** Donut (≤ 6 slices) with a legend that carries name, value and share — the colour is never the only cue. */
-export function Donut({ title, slices, format }: { title: string; slices: Slice[]; format: (v: number) => string }) {
+export function Donut({
+  title,
+  slices,
+  format,
+}: {
+  title: string;
+  slices: Slice[];
+  format: (v: number) => string;
+}) {
   const [view, setView] = useState<'chart' | 'table'>('chart');
   const total = slices.reduce((a, s) => a + s.value, 0);
   const R = 52;
@@ -136,7 +159,9 @@ export function Donut({ title, slices, format }: { title: string; slices: Slice[
                 <span className={s.swatch({ className: SWATCH[i % SWATCH.length] })} aria-hidden />
                 <span className="min-w-0 flex-1 truncate text-fg-2">{sl.name}</span>
                 <span className="font-mono text-xs tabular-nums text-fg">{format(sl.value)}</span>
-                <span className="w-10 text-right font-mono text-xs tabular-nums text-fg-3">{pct(sl.value)}</span>
+                <span className="w-10 text-right font-mono text-xs tabular-nums text-fg-3">
+                  {pct(sl.value)}
+                </span>
               </li>
             ))}
           </ul>
@@ -152,10 +177,19 @@ export function Donut({ title, slices, format }: { title: string; slices: Slice[
   );
 }
 
-const bucket = (v: number, max: number) => (max <= 0 ? 0 : Math.min(HEAT.length - 1, Math.floor((v / max) * HEAT.length)));
+const bucket = (v: number, max: number) =>
+  max <= 0 ? 0 : Math.min(HEAT.length - 1, Math.floor((v / max) * HEAT.length));
 
 /** Heat grid as a real table (rows × columns), shaded in one hue; exact values in each cell and the table view. */
-export function HeatGrid({ title, grid, format }: { title: string; grid: HeatGridData; format: (v: number) => string }) {
+export function HeatGrid({
+  title,
+  grid,
+  format,
+}: {
+  title: string;
+  grid: HeatGridData;
+  format: (v: number) => string;
+}) {
   const [view, setView] = useState<'chart' | 'table'>('chart');
   return (
     <figure className="m-0 flex flex-col gap-3" aria-label={title}>
@@ -177,7 +211,11 @@ export function HeatGrid({ title, grid, format }: { title: string; grid: HeatGri
               <tr>
                 <td />
                 {grid.columns.map((c, i) => (
-                  <th key={`${c}-${i}`} scope="col" className="px-1 pb-1 text-center font-medium whitespace-nowrap text-fg-3">
+                  <th
+                    key={`${c}-${i}`}
+                    scope="col"
+                    className="px-1 pb-1 text-center font-medium whitespace-nowrap text-fg-3"
+                  >
                     {c}
                   </th>
                 ))}
@@ -213,7 +251,10 @@ export function HeatGrid({ title, grid, format }: { title: string; grid: HeatGri
         <ValuesTable
           title={title}
           head={['', ...grid.columns]}
-          rows={grid.rows.map((r) => ({ name: r.name, cells: r.values.map((v) => (v == null ? '—' : format(v))) }))}
+          rows={grid.rows.map((r) => ({
+            name: r.name,
+            cells: r.values.map((v) => (v == null ? '—' : format(v))),
+          }))}
         />
       )}
     </figure>
@@ -224,7 +265,10 @@ export function HeatGrid({ title, grid, format }: { title: string; grid: HeatGri
 export function ChartWidget({ config, data, runtime }: WidgetProps<ChartConfig>) {
   const rows = useMemo(() => asRows(data.value), [data.value]);
   const title = config.title ?? 'Chart';
-  const format = useMemo(() => (v: number) => (config.format ? formatValue(v, config.format) : formatNumber(v)), [config.format]);
+  const format = useMemo(
+    () => (v: number) => (config.format ? formatValue(v, config.format) : formatNumber(v)),
+    [config.format],
+  );
   const height = (config.rows ?? 2) * 120;
 
   let body;

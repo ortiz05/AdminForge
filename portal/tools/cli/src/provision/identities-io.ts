@@ -7,11 +7,17 @@ import { generatePassword } from './password';
 import { withReplicationRetry, type RetryOptions } from './retry';
 
 const USER_SELECT = 'id,userPrincipalName,displayName,accountEnabled';
-const notYetVisible = (what: string) => new ApiError(404, 'Request_ResourceNotFound', `${what} is not visible yet (directory replication)`);
+const notYetVisible = (what: string) =>
+  new ApiError(404, 'Request_ResourceNotFound', `${what} is not visible yet (directory replication)`);
 
 export async function findUser(graph: GraphClient, upn: string): Promise<GraphUser | undefined> {
   try {
-    return (await graph.request<GraphUser>({ path: `/users/${encodeURIComponent(upn)}`, query: { $select: USER_SELECT } })).data;
+    return (
+      await graph.request<GraphUser>({
+        path: `/users/${encodeURIComponent(upn)}`,
+        query: { $select: USER_SELECT },
+      })
+    ).data;
   } catch (err) {
     if (err instanceof ApiError && err.status === 404) return undefined;
     throw err;
@@ -19,11 +25,18 @@ export async function findUser(graph: GraphClient, upn: string): Promise<GraphUs
 }
 
 /** Reads everything the test-identities plan compares against. Read-only. */
-export async function fetchIdentityState(graph: GraphClient, desired: DesiredIdentities, env: IdentityState['env']): Promise<IdentityState> {
+export async function fetchIdentityState(
+  graph: GraphClient,
+  desired: DesiredIdentities,
+  env: IdentityState['env'],
+): Promise<IdentityState> {
   const state: IdentityState = { testerGroupIds: [], testerRoleIds: [], portalGroups: {}, targets: {}, env };
   state.tester = await findUser(graph, desired.tester.upn);
   if (state.tester) {
-    const memberOf = await graph.all<{ id: string }>({ path: `/users/${state.tester.id}/memberOf`, query: { $select: 'id' } });
+    const memberOf = await graph.all<{ id: string }>({
+      path: `/users/${state.tester.id}/memberOf`,
+      query: { $select: 'id' },
+    });
     state.testerGroupIds = memberOf.map((m) => m.id);
     const roles = await graph.all<{ roleDefinitionId: string; directoryScopeId: string }>({
       path: '/roleManagement/directory/roleAssignments',
@@ -44,7 +57,9 @@ export async function fetchIdentityState(graph: GraphClient, desired: DesiredIde
 export async function readSecurityDefaults(graphs: GraphClient[]): Promise<boolean | 'unknown'> {
   for (const graph of graphs) {
     try {
-      const { data } = await graph.request<{ isEnabled?: boolean }>({ path: '/policies/identitySecurityDefaultsEnforcementPolicy' });
+      const { data } = await graph.request<{ isEnabled?: boolean }>({
+        path: '/policies/identitySecurityDefaultsEnforcementPolicy',
+      });
       if (typeof data.isEnabled === 'boolean') return data.isEnabled;
     } catch (err) {
       if (!(err instanceof ApiError) || (err.status !== 403 && err.status !== 401)) throw err;
@@ -62,18 +77,32 @@ export interface IdentityApplyContext {
 }
 
 const isAlreadyExists = (err: unknown) =>
-  err instanceof ApiError && (err.status === 409 || /already exist|conflicting object|same value for property/i.test(`${err.code} ${err.message}`));
+  err instanceof ApiError &&
+  (err.status === 409 ||
+    /already exist|conflicting object|same value for property/i.test(`${err.code} ${err.message}`));
 
 /** Executes the non-noop operations in order. The tester's password goes to the env file only. */
-export async function applyIdentityOps(ops: IdentityOp[], state: IdentityState, ctx: IdentityApplyContext): Promise<void> {
+export async function applyIdentityOps(
+  ops: IdentityOp[],
+  state: IdentityState,
+  ctx: IdentityApplyContext,
+): Promise<void> {
   const { graph, log } = ctx;
   const password = ctx.password ?? (() => generatePassword());
   const retry = <T>(fn: () => Promise<T>) =>
-    withReplicationRetry(fn, { ...ctx.retry, onRetry: (_e, n, ms) => log(`      … waiting ${Math.round(ms / 1000)}s for directory replication (attempt ${n})`) });
+    withReplicationRetry(fn, {
+      ...ctx.retry,
+      onRetry: (_e, n, ms) =>
+        log(`      … waiting ${Math.round(ms / 1000)}s for directory replication (attempt ${n})`),
+    });
   let testerId = state.tester?.id;
   const groupId = (role: keyof IdentityState['portalGroups']) => state.portalGroups[role]?.id;
 
-  const createUser = async (spec: { upn: string; displayName: string; mailNickname: string }, pwd: string, neverExpire: boolean) =>
+  const createUser = async (
+    spec: { upn: string; displayName: string; mailNickname: string },
+    pwd: string,
+    neverExpire: boolean,
+  ) =>
     (
       await graph.request<GraphUser>({
         method: 'POST',
@@ -103,13 +132,25 @@ export async function applyIdentityOps(ops: IdentityOp[], state: IdentityState, 
           } catch (err) {
             // Exists already (a stale read missed it): fall through to setting its password.
             if (!isAlreadyExists(err)) throw err;
-            testerId = (await retry(async () => (await findUser(graph, op.user.upn)) ?? Promise.reject(notYetVisible(op.user.upn)))).id;
+            testerId = (
+              await retry(
+                async () =>
+                  (await findUser(graph, op.user.upn)) ?? Promise.reject(notYetVisible(op.user.upn)),
+              )
+            ).id;
           }
         }
         if (!created) {
           const id = testerId!;
           await retry(() =>
-            graph.request({ method: 'PATCH', path: `/users/${id}`, body: { passwordProfile: { password: pwd, forceChangePasswordNextSignIn: false }, passwordPolicies: 'DisablePasswordExpiration' } }),
+            graph.request({
+              method: 'PATCH',
+              path: `/users/${id}`,
+              body: {
+                passwordProfile: { password: pwd, forceChangePasswordNextSignIn: false },
+                passwordPolicies: 'DisablePasswordExpiration',
+              },
+            }),
           );
           log(`  ✓ set a new password for: ${op.title}`);
         }
@@ -122,7 +163,11 @@ export async function applyIdentityOps(ops: IdentityOp[], state: IdentityState, 
         const uid = testerId!;
         try {
           await retry(() =>
-            graph.request({ method: 'POST', path: `/groups/${gid}/members/$ref`, body: { '@odata.id': `https://graph.microsoft.com/v1.0/directoryObjects/${uid}` } }),
+            graph.request({
+              method: 'POST',
+              path: `/groups/${gid}/members/$ref`,
+              body: { '@odata.id': `https://graph.microsoft.com/v1.0/directoryObjects/${uid}` },
+            }),
           );
         } catch (err) {
           if (!isAlreadyExists(err)) throw err;
@@ -134,7 +179,11 @@ export async function applyIdentityOps(ops: IdentityOp[], state: IdentityState, 
         const uid = testerId!;
         try {
           await retry(() =>
-            graph.request({ method: 'POST', path: '/roleManagement/directory/roleAssignments', body: { principalId: uid, roleDefinitionId: op.roleDefinitionId, directoryScopeId: '/' } }),
+            graph.request({
+              method: 'POST',
+              path: '/roleManagement/directory/roleAssignments',
+              body: { principalId: uid, roleDefinitionId: op.roleDefinitionId, directoryScopeId: '/' },
+            }),
           );
         } catch (err) {
           if (!isAlreadyExists(err)) throw err;
@@ -155,11 +204,25 @@ export async function applyIdentityOps(ops: IdentityOp[], state: IdentityState, 
       case 'testGroup': {
         await retry(async () => {
           try {
-            await graph.request<GraphGroup>({ method: 'PATCH', path: `/groups(uniqueName=${odata(op.uniqueName)})`, body: op.body, headers: { Prefer: 'create-if-missing' } });
+            await graph.request<GraphGroup>({
+              method: 'PATCH',
+              path: `/groups(uniqueName=${odata(op.uniqueName)})`,
+              body: op.body,
+              headers: { Prefer: 'create-if-missing' },
+            });
           } catch (err) {
             if (isAlreadyExists(err)) return;
-            if (!(err instanceof ApiError) || ![400, 405, 501].includes(err.status) || !/segment|not supported|alternate key|Prefer/i.test(err.message)) throw err;
-            await graph.request({ method: 'POST', path: '/groups', body: { ...op.body, uniqueName: op.uniqueName } });
+            if (
+              !(err instanceof ApiError) ||
+              ![400, 405, 501].includes(err.status) ||
+              !/segment|not supported|alternate key|Prefer/i.test(err.message)
+            )
+              throw err;
+            await graph.request({
+              method: 'POST',
+              path: '/groups',
+              body: { ...op.body, uniqueName: op.uniqueName },
+            });
           }
         });
         log(`  ✓ created group: ${op.title}`);

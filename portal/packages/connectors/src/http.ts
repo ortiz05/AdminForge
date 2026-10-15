@@ -80,11 +80,20 @@ function parseBody(text: string, contentType: string): unknown {
   return /^\d+$/.test(text.trim()) ? Number(text) : text;
 }
 
-function errorFrom(status: number, statusText: string, data: unknown, headers: Headers, requestId?: string): ApiError {
+function errorFrom(
+  status: number,
+  statusText: string,
+  data: unknown,
+  headers: Headers,
+  requestId?: string,
+): ApiError {
   const body = data as { error?: { code?: string; message?: string } | string; message?: string } | undefined;
   const err = typeof body?.error === 'object' ? body.error : undefined;
   const code = err?.code ?? (typeof body?.error === 'string' ? body.error : `HTTP${status}`);
-  const message = err?.message ?? (typeof body?.message === 'string' ? body.message : undefined) ?? (statusText || `HTTP ${status}`);
+  const message =
+    err?.message ??
+    (typeof body?.message === 'string' ? body.message : undefined) ??
+    (statusText || `HTTP ${status}`);
   const claims = /claims="([^"]+)"/.exec(headers.get('www-authenticate') ?? '')?.[1];
   return new ApiError(status, code, message, requestId, claims);
 }
@@ -103,8 +112,13 @@ function networkError(err: unknown, url: string): ApiError {
       return 'the service';
     }
   })();
-  if (name === 'TimeoutError') return new ApiError(0, 'Timeout', `No response from ${host} before the timeout.`);
-  return new ApiError(0, 'NetworkError', `Could not reach ${host}: ${(err as Error)?.message ?? String(err)}`);
+  if (name === 'TimeoutError')
+    return new ApiError(0, 'Timeout', `No response from ${host} before the timeout.`);
+  return new ApiError(
+    0,
+    'NetworkError',
+    `Could not reach ${host}: ${(err as Error)?.message ?? String(err)}`,
+  );
 }
 
 /** Authenticated JSON client with retries (Retry-After honoured), timeouts, and normalised errors. */
@@ -121,7 +135,9 @@ export function createHttpClient(opts: HttpClientOptions) {
       const started = performance.now();
       // Token failures (re-auth needed, not armed, …) propagate unchanged and are never retried here.
       const token = await opts.getToken();
-      const signals = [req.signal, opts.timeoutMs ? AbortSignal.timeout(opts.timeoutMs) : undefined].filter((s): s is AbortSignal => !!s);
+      const signals = [req.signal, opts.timeoutMs ? AbortSignal.timeout(opts.timeoutMs) : undefined].filter(
+        (s): s is AbortSignal => !!s,
+      );
       let res: Response;
       try {
         res = await doFetch(req.url, {
@@ -130,7 +146,9 @@ export function createHttpClient(opts: HttpClientOptions) {
             Authorization: `Bearer ${token}`,
             Accept: 'application/json',
             ...(req.body !== undefined ? { 'Content-Type': 'application/json' } : {}),
-            ...(opts.correlationId && opts.correlationHeader ? { [opts.correlationHeader]: opts.correlationId } : {}),
+            ...(opts.correlationId && opts.correlationHeader
+              ? { [opts.correlationHeader]: opts.correlationId }
+              : {}),
             ...req.headers,
           },
           body: req.body !== undefined ? JSON.stringify(req.body) : undefined,
@@ -147,7 +165,10 @@ export function createHttpClient(opts: HttpClientOptions) {
       }
       const requestId = res.headers.get(reqIdHeader) ?? res.headers.get('x-ms-request-id') ?? undefined;
       const retryAfter = res.headers.get('retry-after');
-      const retryable = res.status === 429 || (res.status === 503 && retryAfter !== null) || (idempotent && SERVER_RETRYABLE.has(res.status));
+      const retryable =
+        res.status === 429 ||
+        (res.status === 503 && retryAfter !== null) ||
+        (idempotent && SERVER_RETRYABLE.has(res.status));
       if (retryable && attempt < maxRetries) {
         await res.body?.cancel().catch(() => undefined);
         await sleep(retryDelay(retryAfter, attempt));

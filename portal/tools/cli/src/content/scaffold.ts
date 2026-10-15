@@ -48,13 +48,20 @@ export const titleOf = (name: string) => name.charAt(0).toUpperCase() + name.sli
 export function parseTarget(target: string): { section: string; name: string } {
   const parts = target.replace(/\.(ya?ml)$/, '').split('/');
   if (parts.length !== 2 || !KEBAB.test(parts[0]!) || !KEBAB.test(parts[1]!))
-    throw new Error(`Expected <section>/<name> in lower-case kebab case (e.g. identity/stale-guests), got "${target}".`);
+    throw new Error(
+      `Expected <section>/<name> in lower-case kebab case (e.g. identity/stale-guests), got "${target}".`,
+    );
   return { section: parts[0]!, name: parts[1]! };
 }
 
-const navLine = (show: boolean, section: string, title: string, icon: string) => (show ? `nav: { section: ${section}, label: ${title}, icon: ${icon}, order: 100 }\n` : '');
+const navLine = (show: boolean, section: string, title: string, icon: string) =>
+  show ? `nav: { section: ${section}, label: ${title}, icon: ${icon}, order: 100 }\n` : '';
 
-function pageYaml(kind: 'page' | 'dashboard' | 'report', template: PageTemplate, h: { header: string; nav: (icon: string) => string; name: string }): { body: string; fixture?: Scaffold['fixture'] } {
+function pageYaml(
+  kind: 'page' | 'dashboard' | 'report',
+  template: PageTemplate,
+  h: { header: string; nav: (icon: string) => string; name: string },
+): { body: string; fixture?: Scaffold['fixture'] } {
   const graph = 'https://graph.microsoft.com/v1.0';
   if (template === 'entity') {
     return {
@@ -97,7 +104,15 @@ tabs:
       fixture: {
         method: 'GET',
         url: `${graph}/groups/${SAMPLE_ID}`,
-        body: { id: SAMPLE_ID, displayName: 'Example Group 1', description: 'Synthetic fixture', mail: null, securityEnabled: true, groupTypes: [], createdDateTime: '2026-01-15T12:00:00Z' },
+        body: {
+          id: SAMPLE_ID,
+          displayName: 'Example Group 1',
+          description: 'Synthetic fixture',
+          mail: null,
+          securityEnabled: true,
+          groupTypes: [],
+          createdDateTime: '2026-01-15T12:00:00Z',
+        },
       },
     };
   }
@@ -245,7 +260,10 @@ export function scaffold(input: ScaffoldInput): Scaffold {
   const id = `${section}.${name}`;
   const kind = input.kind;
   const file = path.join(input.contentDir, SCAFFOLD_KINDS[kind], section, `${name}.${kind}.yaml`);
-  const schemaRef = path.relative(path.dirname(file), path.join(input.schemasDir, `${kind}.schema.json`)).split(path.sep).join('/');
+  const schemaRef = path
+    .relative(path.dirname(file), path.join(input.schemasDir, `${kind}.schema.json`))
+    .split(path.sep)
+    .join('/');
   const title = titleOf(name);
   const owner = input.owner ?? `${section}-team`;
   const header = `$schema: ${schemaRef}
@@ -262,7 +280,8 @@ tags: [${section}]
 
   if (kind === 'page' || kind === 'dashboard' || kind === 'report') {
     const template: PageTemplate = input.template ?? (kind === 'page' ? 'list-detail' : kind);
-    if (kind === 'dashboard' && template !== 'dashboard') throw new Error('Dashboards use --template dashboard.');
+    if (kind === 'dashboard' && template !== 'dashboard')
+      throw new Error('Dashboards use --template dashboard.');
     if (kind === 'report' && template !== 'report') throw new Error('Reports use --template report.');
     const { body, fixture } = pageYaml(kind, template, { header, nav, name });
     return { id, file, yaml: body, fixture, template, navAdded: hasNav && template !== 'entity' };
@@ -274,7 +293,16 @@ tags: [${section}]
       id,
       file,
       navAdded: false,
-      fixture: { method: 'GET', url: `https://graph.microsoft.com/v1.0/users/${SAMPLE_ID}`, body: { id: SAMPLE_ID, displayName: 'Example User 1', userPrincipalName: 'user1@example.com', accountEnabled: true } },
+      fixture: {
+        method: 'GET',
+        url: `https://graph.microsoft.com/v1.0/users/${SAMPLE_ID}`,
+        body: {
+          id: SAMPLE_ID,
+          displayName: 'Example User 1',
+          userPrincipalName: 'user1@example.com',
+          accountEnabled: true,
+        },
+      },
       yaml: `${header}risk: low
 mode: read
 requires:
@@ -341,7 +369,11 @@ sections:
       id,
       file,
       navAdded: false,
-      fixture: { method: 'GET', url: 'https://func-example.example.com/api/health', body: { status: 'Healthy' } },
+      fixture: {
+        method: 'GET',
+        url: 'https://func-example.example.com/api/health',
+        body: { status: 'Healthy' },
+      },
       yaml: `${header}# Endpoint and audience are placeholders: reference env keys (declared in config/example.env) for real values.
 baseUrl: https://func-example.example.com/api
 audience: api://${SAMPLE_ID}

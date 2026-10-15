@@ -22,7 +22,12 @@ import { renderString } from '@adminforge/expressions';
 import type { Connection, Requires } from '@adminforge/schemas';
 import { appOnlyScope, type AutomationTokenProvider } from '../auth/automation';
 import { isArmed, type SessionRecord } from '../auth/session-store';
-import { decodeClaimsChallenge, resourceScopes, type BrokerService, type TokenBroker } from '../auth/token-broker';
+import {
+  decodeClaimsChallenge,
+  resourceScopes,
+  type BrokerService,
+  type TokenBroker,
+} from '../auth/token-broker';
 import { NotArmed, partitionKey, ReauthRequired, type AuthClient } from '../auth/types';
 import type { Config } from '../config';
 import { AppError, toAppError } from '../errors';
@@ -51,7 +56,12 @@ const PS_SERVICES = new Set<ServiceId>(['exchange', 'teams', 'sharepointAdmin', 
 
 export type OutboundConfig = Pick<
   Config,
-  'DATA_MODE' | 'AF_SPO_TENANT_NAME' | 'OUTBOUND_CONCURRENCY' | 'OUTBOUND_USER_CONCURRENCY' | 'OUTBOUND_TIMEOUT_MS' | 'TOKEN_CACHE_KEY'
+  | 'DATA_MODE'
+  | 'AF_SPO_TENANT_NAME'
+  | 'OUTBOUND_CONCURRENCY'
+  | 'OUTBOUND_USER_CONCURRENCY'
+  | 'OUTBOUND_TIMEOUT_MS'
+  | 'TOKEN_CACHE_KEY'
 >;
 
 export interface OutboundDeps {
@@ -90,13 +100,17 @@ export interface SensitiveRead {
 }
 
 /** App Service app settings: allowed in read mode (policy) but only names ever leave the executor. */
-const APP_SETTINGS_LIST = /\/providers\/Microsoft\.Web\/sites\/[^/]+(\/slots\/[^/]+)?\/config\/appsettings\/list$/i;
+const APP_SETTINGS_LIST =
+  /\/providers\/Microsoft\.Web\/sites\/[^/]+(\/slots\/[^/]+)?\/config\/appsettings\/list$/i;
 
 /** `{ properties: { NAME: value } }` → `{ properties: { NAME: null } }` — values never reach transforms, runs or browsers. */
 export function settingNamesOnly(data: unknown): unknown {
   if (!data || typeof data !== 'object' || Array.isArray(data)) return data;
   const d = data as Record<string, unknown>;
-  const props = d.properties && typeof d.properties === 'object' && !Array.isArray(d.properties) ? (d.properties as Record<string, unknown>) : {};
+  const props =
+    d.properties && typeof d.properties === 'object' && !Array.isArray(d.properties)
+      ? (d.properties as Record<string, unknown>)
+      : {};
   return { ...d, properties: Object.fromEntries(Object.keys(props).map((k) => [k, null])) };
 }
 
@@ -105,7 +119,11 @@ export function settingNamesOnly(data: unknown): unknown {
 /** Refused by the request policy (ADR-003). Never retried. */
 export class PolicyDenied extends AppError {
   constructor(reason: string) {
-    super(403, 'policy_denied', reason, { hint: /Arm write access/.test(reason) ? 'Arm write access, then run it from a published playbook.' : undefined });
+    super(403, 'policy_denied', reason, {
+      hint: /Arm write access/.test(reason)
+        ? 'Arm write access, then run it from a published playbook.'
+        : undefined,
+    });
     this.name = 'PolicyDenied';
   }
 }
@@ -132,52 +150,100 @@ export class OutboundError extends ApiError {
 export function outboundAppError(err: unknown): AppError {
   if (err instanceof OutboundError) {
     const s = err.status;
-    const [status, code] =
-      err.licence ? [403, 'licence_required']
-      : s === 401 || s === 403 ? [403, 'upstream_forbidden']
-      : s === 404 ? [404, 'upstream_not_found']
-      : s === 429 ? [429, 'throttled']
-      : s === 400 ? [400, 'upstream_bad_request']
-      : s === 0 ? [504, 'upstream_unreachable']
-      : [502, 'upstream_error'];
+    const [status, code] = err.licence
+      ? [403, 'licence_required']
+      : s === 401 || s === 403
+        ? [403, 'upstream_forbidden']
+        : s === 404
+          ? [404, 'upstream_not_found']
+          : s === 429
+            ? [429, 'throttled']
+            : s === 400
+              ? [400, 'upstream_bad_request']
+              : s === 0
+                ? [504, 'upstream_unreachable']
+                : [502, 'upstream_error'];
     return new AppError(status as number, code as string, err.message, { hint: err.hint });
   }
   return toAppError(err);
 }
 
-const LICENCE_CODES = /AadPremiumLicenseRequired|RequestFromNonPremiumTenant|NotLicensed|LicenseNotFound|Tenant_?License/i;
-const LICENCE_TEXT = /licen[cs]e|subscription (?:is )?required|premium|\bP[12]\b|sku|not provisioned|tenant does not have/i;
+const LICENCE_CODES =
+  /AadPremiumLicenseRequired|RequestFromNonPremiumTenant|NotLicensed|LicenseNotFound|Tenant_?License/i;
+const LICENCE_TEXT =
+  /licen[cs]e|subscription (?:is )?required|premium|\bP[12]\b|sku|not provisioned|tenant does not have/i;
 
 /** The hint for a failed call: missing scopes, roles or licences for 401/403, throttling/temporary failures otherwise. */
-export function errorHint(err: ApiError, service: ServiceId, identity: Pick<ExecutionIdentity, 'kind' | 'mode'>, requires?: Requires, connection?: string): { hint: string; licence: boolean } {
+export function errorHint(
+  err: ApiError,
+  service: ServiceId,
+  identity: Pick<ExecutionIdentity, 'kind' | 'mode'>,
+  requires?: Requires,
+  connection?: string,
+): { hint: string; licence: boolean } {
   const ref = err.requestId ? ` Microsoft request-id ${err.requestId}.` : '';
   const licence =
-    ((err.status === 401 || err.status === 403 || err.status === 400) && (LICENCE_CODES.test(err.code) || LICENCE_TEXT.test(err.message))) ||
+    ((err.status === 401 || err.status === 403 || err.status === 400) &&
+      (LICENCE_CODES.test(err.code) || LICENCE_TEXT.test(err.message))) ||
     // Microsoft 365 usage reports answer 404 UnknownTenantId for tenants without Microsoft 365 workloads.
-    (err.status === 404 && (/^UnknownTenantId$/i.test(err.code) || /"code"\s*:\s*"UnknownTenantId"/.test(err.message)));
+    (err.status === 404 &&
+      (/^UnknownTenantId$/i.test(err.code) || /"code"\s*:\s*"UnknownTenantId"/.test(err.message)));
   if (licence) {
     const need = requires?.licences?.length ? ` It requires ${requires.licences.join(' or ')}.` : '';
     return { hint: `Your tenant's licences don't include this feature.${need}${ref}`, licence: true };
   }
   if (err.status === 401 || err.status === 403) {
-    const scopes = service === 'function' ? (connection ? requires?.scopes?.connections?.[connection] : undefined) : (requires?.scopes as Record<string, string[] | undefined> | undefined)?.[service];
+    const scopes =
+      service === 'function'
+        ? connection
+          ? requires?.scopes?.connections?.[connection]
+          : undefined
+        : (requires?.scopes as Record<string, string[] | undefined> | undefined)?.[service];
     const parts: string[] = [];
     if (service === 'arm') {
       const roles = requires?.azureRoles?.length ? requires.azureRoles.join(' or ') : 'Reader';
-      parts.push(identity.kind === 'automation' ? `The automation identity needs the Azure role ${roles} on the target scope.` : `Needs the Azure role ${roles} on the target scope (your account's Azure RBAC).`);
+      parts.push(
+        identity.kind === 'automation'
+          ? `The automation identity needs the Azure role ${roles} on the target scope.`
+          : `Needs the Azure role ${roles} on the target scope (your account's Azure RBAC).`,
+      );
     } else if (identity.kind === 'automation') {
-      parts.push(scopes?.length ? `The automation identity needs the application permission ${scopes.join(', ')} (check with adminforge validate --scopes).` : 'The automation identity lacks an application permission for this call (check with adminforge validate --scopes).');
+      parts.push(
+        scopes?.length
+          ? `The automation identity needs the application permission ${scopes.join(', ')} (check with adminforge validate --scopes).`
+          : 'The automation identity lacks an application permission for this call (check with adminforge validate --scopes).',
+      );
     } else {
       const app = identity.mode === 'write' ? 'Write' : 'Read';
-      parts.push(scopes?.length ? `Needs ${scopes.join(', ')} consented to the AdminForge ${app} app.` : `The AdminForge ${app} app or your account lacks permission for this call.`);
+      parts.push(
+        scopes?.length
+          ? `Needs ${scopes.join(', ')} consented to the AdminForge ${app} app.`
+          : `The AdminForge ${app} app or your account lacks permission for this call.`,
+      );
     }
-    if (identity.kind === 'delegated' && requires?.entraRoles?.length) parts.push(`You also need an Entra role such as ${requires.entraRoles.join(' or ')} — activate it in PIM if you are eligible.`);
+    if (identity.kind === 'delegated' && requires?.entraRoles?.length)
+      parts.push(
+        `You also need an Entra role such as ${requires.entraRoles.join(' or ')} — activate it in PIM if you are eligible.`,
+      );
     return { hint: `${parts.join(' ')}${ref}`, licence: false };
   }
-  if (err.status === 404) return { hint: `Not found: the object may have been deleted, or the feature is not available in this tenant.${ref}`, licence: false };
-  if (err.status === 429) return { hint: `Microsoft throttled this request. Try again in a minute.${ref}`, licence: false };
-  if (err.status === 400) return { hint: `Microsoft rejected the request; check the filter and search values.${ref}`, licence: false };
-  if (err.status === 0) return { hint: 'Could not reach the service (network problem or timeout). Try again shortly.', licence: false };
+  if (err.status === 404)
+    return {
+      hint: `Not found: the object may have been deleted, or the feature is not available in this tenant.${ref}`,
+      licence: false,
+    };
+  if (err.status === 429)
+    return { hint: `Microsoft throttled this request. Try again in a minute.${ref}`, licence: false };
+  if (err.status === 400)
+    return {
+      hint: `Microsoft rejected the request; check the filter and search values.${ref}`,
+      licence: false,
+    };
+  if (err.status === 0)
+    return {
+      hint: 'Could not reach the service (network problem or timeout). Try again shortly.',
+      licence: false,
+    };
   return { hint: `The service had a temporary problem. Try again shortly.${ref}`, licence: false };
 }
 
@@ -197,7 +263,9 @@ export function templatePath(path: string): string {
   const out: string[] = [];
   for (let i = 0; i < segments.length; i++) {
     const seg = segments[i]!;
-    const d = safeDecode(seg).replace(/\('([^']*)'\)/g, "('{id}')").replace(/=\s*'[^']*'/g, "='{id}'");
+    const d = safeDecode(seg)
+      .replace(/\('([^']*)'\)/g, "('{id}')")
+      .replace(/=\s*'[^']*'/g, "='{id}'");
     const prev = segments[i - 1]?.toLowerCase();
     if (GUID.test(d)) out.push(prev === 'subscriptions' ? '{subscriptionId}' : '{id}');
     else if (d.includes('@')) out.push('{upn}');
@@ -209,7 +277,8 @@ export function templatePath(path: string): string {
   const p = out.findIndex((s) => s.toLowerCase() === 'providers');
   if (p >= 0 && /^\{subscriptionId\}$|^\{resourceGroup\}$/.test(out[p - 1] ?? '')) {
     // `config/<appsettings|web|…>` children have fixed, non-identifying names.
-    for (let i = p + 3; i < out.length; i += 2) if (!out[i]!.startsWith('{') && out[i] && out[i - 1]!.toLowerCase() !== 'config') out[i] = '{name}';
+    for (let i = p + 3; i < out.length; i += 2)
+      if (!out[i]!.startsWith('{') && out[i] && out[i - 1]!.toLowerCase() !== 'config') out[i] = '{name}';
   }
   return out.join('/');
 }
@@ -233,7 +302,11 @@ class CursorSeal {
     const expected = Buffer.from(this.mac(binding, value));
     const given = Buffer.from(mac ?? '');
     if (!payload || given.length !== expected.length || !timingSafeEqual(given, expected))
-      throw new AppError(400, 'invalid_cursor', 'The paging cursor is not valid for this data. Reload the list.');
+      throw new AppError(
+        400,
+        'invalid_cursor',
+        'The paging cursor is not valid for this data. Reload the list.',
+      );
     return value;
   }
 }
@@ -324,9 +397,13 @@ interface BatchItem {
  * `$batch` bodies may use Graph's wire format (`url`) or AdminForge's request spec (`path` + `query`); both become
  * the wire format for the policy check and BatchItems for the (auto-chunked) connector call.
  */
-function normaliseBatch(body: unknown, beta: boolean | undefined): { wire: { requests: Array<Record<string, unknown>> }; items: BatchItem[] } {
+function normaliseBatch(
+  body: unknown,
+  beta: boolean | undefined,
+): { wire: { requests: Array<Record<string, unknown>> }; items: BatchItem[] } {
   const requests = (body as { requests?: unknown } | undefined)?.requests;
-  if (!Array.isArray(requests) || requests.length === 0) throw new AppError(400, 'invalid_request', '$batch needs a non-empty requests array.');
+  if (!Array.isArray(requests) || requests.length === 0)
+    throw new AppError(400, 'invalid_request', '$batch needs a non-empty requests array.');
   const items: BatchItem[] = requests.map((raw, i) => {
     const r = raw as Record<string, unknown>;
     const id = typeof r.id === 'string' && r.id ? r.id : String(i + 1);
@@ -337,12 +414,30 @@ function normaliseBatch(body: unknown, beta: boolean | undefined): { wire: { req
       const u = new URL(`https://graph.invalid${r.url.startsWith('/') ? '' : '/'}${r.url}`);
       const query: Record<string, string> = {};
       for (const [k, v] of u.searchParams) query[k] = v;
-      return { id, method, path: u.pathname.replace(/^\/(v1\.0|beta)(?=\/)/, ''), query, headers, body: r.body, beta: itemBeta };
+      return {
+        id,
+        method,
+        path: u.pathname.replace(/^\/(v1\.0|beta)(?=\/)/, ''),
+        query,
+        headers,
+        body: r.body,
+        beta: itemBeta,
+      };
     }
-    if (typeof r.path !== 'string') throw new AppError(400, 'invalid_request', `$batch request ${id} needs a url or a path.`);
-    return { id, method, path: r.path, query: r.query as BatchItem['query'], headers, body: r.body, beta: itemBeta };
+    if (typeof r.path !== 'string')
+      throw new AppError(400, 'invalid_request', `$batch request ${id} needs a url or a path.`);
+    return {
+      id,
+      method,
+      path: r.path,
+      query: r.query as BatchItem['query'],
+      headers,
+      body: r.body,
+      beta: itemBeta,
+    };
   });
-  if (new Set(items.map((i) => i.id)).size !== items.length) throw new AppError(400, 'invalid_request', '$batch request ids must be unique.');
+  if (new Set(items.map((i) => i.id)).size !== items.length)
+    throw new AppError(400, 'invalid_request', '$batch request ids must be unique.');
   const wire = {
     requests: items.map((i) => {
       let url: string;
@@ -351,7 +446,13 @@ function normaliseBatch(body: unknown, beta: boolean | undefined): { wire: { req
       } catch {
         url = i.path;
       }
-      return { id: i.id, method: i.method ?? 'GET', url, ...(i.headers ? { headers: i.headers } : {}), ...(i.body !== undefined ? { body: i.body } : {}) };
+      return {
+        id: i.id,
+        method: i.method ?? 'GET',
+        url,
+        ...(i.headers ? { headers: i.headers } : {}),
+        ...(i.body !== undefined ? { body: i.body } : {}),
+      };
     }),
   };
   return { wire, items };
@@ -374,13 +475,17 @@ interface ResolvedFunction {
 
 const asText = async (value: string, env: Record<string, unknown>, what: string): Promise<string> => {
   const out = await renderString(value, { env });
-  if (typeof out !== 'string' || !out) throw new AppError(503, 'connection_not_configured', `The connection's ${what} is not configured.`, { hint: 'Set the env key it references in the AdminForge env file.' });
+  if (typeof out !== 'string' || !out)
+    throw new AppError(503, 'connection_not_configured', `The connection's ${what} is not configured.`, {
+      hint: 'Set the env key it references in the AdminForge env file.',
+    });
   return out;
 };
 
 // ── The executor ────────────────────────────────────────────────────────────
 
-const identityKey = (identity: ExecutionIdentity) => (identity.kind === 'automation' ? 'automation' : identity.session.userOid);
+const identityKey = (identity: ExecutionIdentity) =>
+  identity.kind === 'automation' ? 'automation' : identity.session.userOid;
 
 type Query = Record<string, string | number | boolean | undefined | null>;
 
@@ -422,9 +527,18 @@ export class Outbound implements OutboundExecutor {
     return this.limiter.activeFor(service);
   }
 
-  async execute<T = unknown>(identity: ExecutionIdentity, call: ServiceCall, opts: { correlationId?: string; signal?: AbortSignal } = {}): Promise<ServiceCallResult<T>> {
+  async execute<T = unknown>(
+    identity: ExecutionIdentity,
+    call: ServiceCall,
+    opts: { correlationId?: string; signal?: AbortSignal } = {},
+  ): Promise<ServiceCallResult<T>> {
     const service = call.service;
-    if (PS_SERVICES.has(service)) throw new AppError(501, 'not_supported', `${service} work runs through the PowerShell runner, not as a REST call.`);
+    if (PS_SERVICES.has(service))
+      throw new AppError(
+        501,
+        'not_supported',
+        `${service} work runs through the PowerShell runner, not as a REST call.`,
+      );
     const correlationId = opts.correlationId ?? randomUUID();
 
     let method = (call.method || 'GET').toUpperCase();
@@ -460,24 +574,74 @@ export class Outbound implements OutboundExecutor {
       const out = await this.limiter.run(
         service,
         identityKey(identity),
-        () => this.withToken(identity, service, fn, (getToken) => this.dispatch({ identity, call, method, path, body, batch, fn, getToken, correlationId, signal: opts.signal })),
+        () =>
+          this.withToken(identity, service, fn, (getToken) =>
+            this.dispatch({
+              identity,
+              call,
+              method,
+              path,
+              body,
+              batch,
+              fn,
+              getToken,
+              correlationId,
+              signal: opts.signal,
+            }),
+          ),
         opts.signal,
       );
       if (sensitive) {
         out.data = settingNamesOnly(out.data);
-        const names = Object.keys(((out.data as { properties?: object } | undefined)?.properties ?? {}) as object).length;
-        await this.deps.onSensitiveRead?.({ identity, service, method, path, correlationId, result: 'success', names });
+        const names = Object.keys(
+          ((out.data as { properties?: object } | undefined)?.properties ?? {}) as object,
+        ).length;
+        await this.deps.onSensitiveRead?.({
+          identity,
+          service,
+          method,
+          path,
+          correlationId,
+          result: 'success',
+          names,
+        });
       }
-      const provenance: Provenance = { service, path: out.path ?? template, ms: Math.round(performance.now() - started), ...(out.requestId ? { requestId: out.requestId } : {}) };
-      return { data: out.data as T, status: out.status, provenance, ...(out.nextCursor ? { nextCursor: out.nextCursor } : {}) };
+      const provenance: Provenance = {
+        service,
+        path: out.path ?? template,
+        ms: Math.round(performance.now() - started),
+        ...(out.requestId ? { requestId: out.requestId } : {}),
+      };
+      return {
+        data: out.data as T,
+        status: out.status,
+        provenance,
+        ...(out.nextCursor ? { nextCursor: out.nextCursor } : {}),
+      };
     } catch (err) {
-      if (sensitive) await Promise.resolve(this.deps.onSensitiveRead?.({ identity, service, method, path, correlationId, result: 'failure' })).catch(() => undefined);
+      if (sensitive)
+        await Promise.resolve(
+          this.deps.onSensitiveRead?.({ identity, service, method, path, correlationId, result: 'failure' }),
+        ).catch(() => undefined);
       if (err instanceof ApiError && !(err instanceof OutboundError)) {
-        const provenance: Provenance = { service, path: template, ms: Math.round(performance.now() - started), ...(err.requestId ? { requestId: err.requestId } : {}) };
+        const provenance: Provenance = {
+          service,
+          path: template,
+          ms: Math.round(performance.now() - started),
+          ...(err.requestId ? { requestId: err.requestId } : {}),
+        };
         const { hint, licence } = errorHint(err, service, identity, call.requires, call.connection);
         throw new OutboundError(err, service, hint, licence, provenance);
       }
-      if (err instanceof Error && !(err instanceof AppError) && !(err instanceof ReauthRequired) && !(err instanceof NotArmed) && /^(Invalid .* path|ARM requests need|Log Analytics|Resource Graph query|Operation ".*" needs|Connection .* has no|nextLink points|Invalid value for path)/.test(err.message)) {
+      if (
+        err instanceof Error &&
+        !(err instanceof AppError) &&
+        !(err instanceof ReauthRequired) &&
+        !(err instanceof NotArmed) &&
+        /^(Invalid .* path|ARM requests need|Log Analytics|Resource Graph query|Operation ".*" needs|Connection .* has no|nextLink points|Invalid value for path)/.test(
+          err.message,
+        )
+      ) {
         throw new AppError(400, 'invalid_request', err.message);
       }
       throw err;
@@ -486,7 +650,12 @@ export class Outbound implements OutboundExecutor {
 
   // ── Tokens ──
 
-  private async withToken<T>(identity: ExecutionIdentity, service: ServiceId, fn: ResolvedFunction | undefined, run: (getToken: TokenProvider) => Promise<T>): Promise<T> {
+  private async withToken<T>(
+    identity: ExecutionIdentity,
+    service: ServiceId,
+    fn: ResolvedFunction | undefined,
+    run: (getToken: TokenProvider) => Promise<T>,
+  ): Promise<T> {
     if (this.deps.config.DATA_MODE === 'fixtures') return run(async () => 'fixture-token');
     if (identity.kind === 'automation') {
       const automation = this.deps.automation;
@@ -494,15 +663,25 @@ export class Outbound implements OutboundExecutor {
         throw new AppError(503, 'automation_not_configured', 'The automation identity is not configured.', {
           hint: 'Set AF_AUTOMATION_CLIENT_ID and AF_AUTOMATION_CERT_PATH (or AF_AUTOMATION_CLIENT_SECRET) in the env file.',
         });
-      const scope = fn ? appOnlyScope(fn.audience) : resourceScopes(this.deps.config)[service as BrokerService]?.[0];
-      if (!scope) throw new AppError(503, 'service_not_configured', `${service} is not configured for this installation.`);
+      const scope = fn
+        ? appOnlyScope(fn.audience)
+        : resourceScopes(this.deps.config)[service as BrokerService]?.[0];
+      if (!scope)
+        throw new AppError(
+          503,
+          'service_not_configured',
+          `${service} is not configured for this installation.`,
+        );
       return withClaimsRetry((claims) => run(() => automation.token(scope, claims ? { claims } : {})));
     }
     const { session, mode } = identity;
     if (fn) {
       const auth = this.deps.auth;
       if (!auth) throw liveDataUnavailable();
-      return withClaimsRetry((claims) => run(() => delegatedToken(auth, session, mode, fn.scopes, this.now, claims)), mode);
+      return withClaimsRetry(
+        (claims) => run(() => delegatedToken(auth, session, mode, fn.scopes, this.now, claims)),
+        mode,
+      );
     }
     const broker = this.deps.broker;
     if (!broker) throw liveDataUnavailable();
@@ -531,7 +710,9 @@ export class Outbound implements OutboundExecutor {
       case 'graph':
         return this.graph(d);
       case 'arm':
-        return d.method === 'POST' && d.path.toLowerCase() === RESOURCE_GRAPH_PATH.toLowerCase() ? this.resourceGraph(d) : this.arm(d);
+        return d.method === 'POST' && d.path.toLowerCase() === RESOURCE_GRAPH_PATH.toLowerCase()
+          ? this.resourceGraph(d)
+          : this.arm(d);
       case 'logAnalytics':
         return this.logAnalytics(d);
       case 'function':
@@ -550,12 +731,33 @@ export class Outbound implements OutboundExecutor {
     const { call } = d;
     if (d.batch) {
       const out = await client.batch(d.batch);
-      return { status: 200, data: { responses: d.batch.map((i) => ({ id: i.id, status: out[i.id]?.status ?? 0, body: out[i.id]?.body })) } };
+      return {
+        status: 200,
+        data: {
+          responses: d.batch.map((i) => ({
+            id: i.id,
+            status: out[i.id]?.status ?? 0,
+            body: out[i.id]?.body,
+          })),
+        },
+      };
     }
-    const req: GraphRequest = { method: d.method, path: d.path, query: call.query, headers: call.headers, body: d.body, beta: call.beta };
+    const req: GraphRequest = {
+      method: d.method,
+      path: d.path,
+      query: call.query,
+      headers: call.headers,
+      body: d.body,
+      beta: call.beta,
+    };
     const base = `${GRAPH_BASE}/${call.beta ? 'beta' : 'v1.0'}/`;
     const checkLink = (url: string) => {
-      if (!url.startsWith(base)) throw new AppError(502, 'upstream_error', 'Microsoft Graph returned a nextLink outside Graph; refusing to follow it.');
+      if (!url.startsWith(base))
+        throw new AppError(
+          502,
+          'upstream_error',
+          'Microsoft Graph returned a nextLink outside Graph; refusing to follow it.',
+        );
       return url;
     };
     const paging = call.paging ?? 'none';
@@ -565,36 +767,76 @@ export class Outbound implements OutboundExecutor {
       let url: string | undefined = buildUrl(GRAPH_BASE, req);
       let first: { status: number; requestId?: string; count?: unknown } | undefined;
       for (let page = 0; url && value.length < max && page < MAX_PAGES; page++) {
-        const r: { data: { value?: unknown[]; '@odata.nextLink'?: string; '@odata.count'?: unknown }; status: number; requestId?: string } = await client.request(req, url);
+        const r: {
+          data: { value?: unknown[]; '@odata.nextLink'?: string; '@odata.count'?: unknown };
+          status: number;
+          requestId?: string;
+        } = await client.request(req, url);
         first ??= { status: r.status, requestId: r.requestId, count: r.data?.['@odata.count'] };
         value.push(...(r.data?.value ?? []));
         url = r.data?.['@odata.nextLink'];
         if (url) checkLink(url);
       }
-      return { status: first?.status ?? 200, requestId: first?.requestId, data: { value: value.slice(0, max), ...(first?.count !== undefined ? { '@odata.count': first.count } : {}) } };
+      return {
+        status: first?.status ?? 200,
+        requestId: first?.requestId,
+        data: {
+          value: value.slice(0, max),
+          ...(first?.count !== undefined ? { '@odata.count': first.count } : {}),
+        },
+      };
     }
     let url: string;
-    if (typeof paging === 'object' && paging.cursor) url = checkLink(this.cursors.open(this.binding(d), paging.cursor));
+    if (typeof paging === 'object' && paging.cursor)
+      url = checkLink(this.cursors.open(this.binding(d), paging.cursor));
     else {
       const query: Query = { ...call.query };
-      if (typeof paging === 'object' && paging.pageSize && query.$top === undefined) query.$top = paging.pageSize;
+      if (typeof paging === 'object' && paging.pageSize && query.$top === undefined)
+        query.$top = paging.pageSize;
       url = buildUrl(GRAPH_BASE, { ...req, query });
     }
     const r = await client.request<Record<string, unknown> | undefined>(req, url);
     if (typeof paging === 'object' && r.data && typeof r.data === 'object' && !Array.isArray(r.data)) {
       const { '@odata.nextLink': next, ...rest } = r.data;
-      return { status: r.status, requestId: r.requestId, data: rest, ...(typeof next === 'string' ? { nextCursor: this.cursors.seal(this.binding(d), checkLink(next)) } : {}) };
+      return {
+        status: r.status,
+        requestId: r.requestId,
+        data: rest,
+        ...(typeof next === 'string'
+          ? { nextCursor: this.cursors.seal(this.binding(d), checkLink(next)) }
+          : {}),
+      };
     }
     return { status: r.status, requestId: r.requestId, data: r.data };
   }
 
   private async arm(d: Dispatch): Promise<Dispatched> {
     const { call } = d;
-    if (!call.apiVersion) throw new AppError(400, 'invalid_request', `ARM calls need an apiVersion (${d.method} ${templatePath(d.path)}).`);
-    const client = createArmClient({ ...this.client(d), ...(call.pollTimeoutMs ? { maxPollMs: call.pollTimeoutMs } : {}) });
-    const req = { method: d.method, path: d.path, apiVersion: call.apiVersion, query: call.query, headers: call.headers, body: d.body };
+    if (!call.apiVersion)
+      throw new AppError(
+        400,
+        'invalid_request',
+        `ARM calls need an apiVersion (${d.method} ${templatePath(d.path)}).`,
+      );
+    const client = createArmClient({
+      ...this.client(d),
+      ...(call.pollTimeoutMs ? { maxPollMs: call.pollTimeoutMs } : {}),
+    });
+    const req = {
+      method: d.method,
+      path: d.path,
+      apiVersion: call.apiVersion,
+      query: call.query,
+      headers: call.headers,
+      body: d.body,
+    };
     const checkLink = (url: string) => {
-      if (!url.startsWith(`${ARM_BASE}/`)) throw new AppError(502, 'upstream_error', 'Azure Resource Manager returned a nextLink outside ARM; refusing to follow it.');
+      if (!url.startsWith(`${ARM_BASE}/`))
+        throw new AppError(
+          502,
+          'upstream_error',
+          'Azure Resource Manager returned a nextLink outside ARM; refusing to follow it.',
+        );
       return url;
     };
     const paging = call.paging ?? 'none';
@@ -611,10 +853,20 @@ export class Outbound implements OutboundExecutor {
     }
     if (typeof paging === 'object') {
       const r = paging.cursor
-        ? await client.request<Record<string, unknown> | undefined>(req, checkLink(this.cursors.open(this.binding(d), paging.cursor)))
+        ? await client.request<Record<string, unknown> | undefined>(
+            req,
+            checkLink(this.cursors.open(this.binding(d), paging.cursor)),
+          )
         : await client.request<Record<string, unknown> | undefined>(req);
       const { nextLink, ...rest } = (r.data ?? {}) as Record<string, unknown>;
-      return { status: r.status, requestId: r.requestId, data: rest, ...(typeof nextLink === 'string' && nextLink ? { nextCursor: this.cursors.seal(this.binding(d), checkLink(nextLink)) } : {}) };
+      return {
+        status: r.status,
+        requestId: r.requestId,
+        data: rest,
+        ...(typeof nextLink === 'string' && nextLink
+          ? { nextCursor: this.cursors.seal(this.binding(d), checkLink(nextLink)) }
+          : {}),
+      };
     }
     const write = d.method !== 'GET' && d.method !== 'HEAD';
     const r = write && call.poll !== false ? await client.requestAndWait(req) : await client.request(req);
@@ -624,8 +876,12 @@ export class Outbound implements OutboundExecutor {
   private async resourceGraph(d: Dispatch): Promise<Dispatched> {
     const { call } = d;
     const b = (d.body ?? {}) as { query?: string; subscriptions?: string[]; managementGroups?: string[] };
-    if (typeof b.query !== 'string' || !b.query.trim()) throw new AppError(400, 'invalid_request', 'Resource Graph calls need a query.');
-    const rg = createResourceGraphClient({ ...this.client(d), apiVersion: call.apiVersion ?? RESOURCE_GRAPH_API_VERSION });
+    if (typeof b.query !== 'string' || !b.query.trim())
+      throw new AppError(400, 'invalid_request', 'Resource Graph calls need a query.');
+    const rg = createResourceGraphClient({
+      ...this.client(d),
+      apiVersion: call.apiVersion ?? RESOURCE_GRAPH_API_VERSION,
+    });
     const q = { query: b.query, subscriptions: b.subscriptions, managementGroups: b.managementGroups };
     const paging = call.paging ?? 'none';
     const binding = this.binding(d, createHash('sha256').update(JSON.stringify(q)).digest('hex'));
@@ -638,21 +894,39 @@ export class Outbound implements OutboundExecutor {
         value.push(...page.rows);
         if (value.length >= max) break;
       }
-      return { status: 200, requestId: first?.requestId, data: { value: value.slice(0, max), totalRecords: first?.totalRecords ?? value.length } };
+      return {
+        status: 200,
+        requestId: first?.requestId,
+        data: { value: value.slice(0, max), totalRecords: first?.totalRecords ?? value.length },
+      };
     }
     const cursor = typeof paging === 'object' ? paging : undefined;
-    const page = await rg.query({ ...q, top: cursor?.pageSize, skipToken: cursor?.cursor ? this.cursors.open(binding, cursor.cursor) : undefined });
+    const page = await rg.query({
+      ...q,
+      top: cursor?.pageSize,
+      skipToken: cursor?.cursor ? this.cursors.open(binding, cursor.cursor) : undefined,
+    });
     return {
       status: 200,
       requestId: page.requestId,
-      data: { value: page.rows, totalRecords: page.totalRecords, count: page.count, resultTruncated: page.resultTruncated ?? false },
+      data: {
+        value: page.rows,
+        totalRecords: page.totalRecords,
+        count: page.count,
+        resultTruncated: page.resultTruncated ?? false,
+      },
       ...(cursor && page.skipToken ? { nextCursor: this.cursors.seal(binding, page.skipToken) } : {}),
     };
   }
 
   private async logAnalytics(d: Dispatch): Promise<Dispatched> {
     const m = /^\/v1\/workspaces\/([^/]+)\/query$/i.exec(d.path);
-    if (!m) throw new AppError(400, 'invalid_request', 'Log Analytics calls must POST /v1/workspaces/{workspaceId}/query.');
+    if (!m)
+      throw new AppError(
+        400,
+        'invalid_request',
+        'Log Analytics calls must POST /v1/workspaces/{workspaceId}/query.',
+      );
     const b = (d.body ?? {}) as { query?: string; timespan?: string };
     const la = createLogAnalyticsClient(this.client(d));
     const r = await la.query({ workspace: safeDecode(m[1]!), query: b.query ?? '', timespan: b.timespan });
@@ -668,61 +942,116 @@ export class Outbound implements OutboundExecutor {
     const fn = d.fn!;
     const allowWrite = fn.mode === 'write' && d.call.declaredWrite === true && d.identity.mode === 'write';
     const client = createFunctionClient({ ...this.client(d), connection: fn.connection, allowWrite });
-    const r = await client.call(fn.operation, { pathParams: d.call.pathParams, query: d.call.query, headers: d.call.headers, body: d.body });
+    const r = await client.call(fn.operation, {
+      pathParams: d.call.pathParams,
+      query: d.call.query,
+      headers: d.call.headers,
+      body: d.body,
+    });
     return { status: r.status, requestId: r.requestId, data: r.data };
   }
 
   private async resolveFunction(call: ServiceCall): Promise<ResolvedFunction> {
     if (!call.connection) throw new AppError(400, 'invalid_request', 'function calls need a connection.');
-    if (!this.deps.connection) throw new AppError(503, 'connection_not_configured', 'Connections are not available in this process.');
+    if (!this.deps.connection)
+      throw new AppError(503, 'connection_not_configured', 'Connections are not available in this process.');
     const def = await this.deps.connection(call.connection);
     const name = call.operation ?? (call.path && !call.path.startsWith('/') ? call.path : undefined);
-    if (!name || !Object.hasOwn(def.operations, name)) throw new AppError(400, 'invalid_request', `Connection ${call.connection} has no operation "${name ?? ''}".`);
+    if (!name || !Object.hasOwn(def.operations, name))
+      throw new AppError(
+        400,
+        'invalid_request',
+        `Connection ${call.connection} has no operation "${name ?? ''}".`,
+      );
     const env = this.deps.env?.() ?? {};
     const baseUrl = await asText(def.baseUrl, env, 'baseUrl');
     const audience = (await asText(def.audience, env, 'audience')).replace(/\/+$/, '');
     const operations: FunctionConnection['operations'] = {};
-    for (const [k, op] of Object.entries(def.operations)) operations[k] = { method: op.method, path: op.path, mode: op.mode, ...(op.idempotent !== undefined ? { idempotent: op.idempotent } : {}) };
+    for (const [k, op] of Object.entries(def.operations))
+      operations[k] = {
+        method: op.method,
+        path: op.path,
+        mode: op.mode,
+        ...(op.idempotent !== undefined ? { idempotent: op.idempotent } : {}),
+      };
     const connection: FunctionConnection = { id: call.connection, baseUrl, operations };
     let resolved: { method: string; path: string; mode: Mode };
     try {
-      resolved = createFunctionClient({ getToken: async () => '', connection }).resolve(name, { pathParams: call.pathParams });
+      resolved = createFunctionClient({ getToken: async () => '', connection }).resolve(name, {
+        pathParams: call.pathParams,
+      });
     } catch (err) {
       throw new AppError(400, 'invalid_request', (err as Error).message);
     }
-    const scopes = (def.scopes?.length ? def.scopes : ['user_impersonation']).map((s) => (s.includes('/') ? s : `${audience}/${s}`));
-    return { connection, operation: name, method: resolved.method, path: resolved.path, template: def.operations[name]!.path, mode: resolved.mode, audience, scopes };
+    const scopes = (def.scopes?.length ? def.scopes : ['user_impersonation']).map((s) =>
+      s.includes('/') ? s : `${audience}/${s}`,
+    );
+    return {
+      connection,
+      operation: name,
+      method: resolved.method,
+      path: resolved.path,
+      template: def.operations[name]!.path,
+      mode: resolved.mode,
+      audience,
+      scopes,
+    };
   }
 }
 
 const liveDataUnavailable = () =>
-  new AppError(409, 'live_data_unavailable', 'Live data needs Entra sign-in.', { hint: 'Use DATA_MODE=fixtures with AUTH_MODE=mock.' });
+  new AppError(409, 'live_data_unavailable', 'Live data needs Entra sign-in.', {
+    hint: 'Use DATA_MODE=fixtures with AUTH_MODE=mock.',
+  });
 
 /** Runs `attempt`; a 401 with a CAE claims challenge is retried once with a token minted for those claims. */
 async function withClaimsRetry<T>(attempt: (claims?: string) => Promise<T>, mode?: Mode): Promise<T> {
   try {
     return await attempt();
   } catch (err) {
-    const claims = err instanceof ApiError && err.status === 401 && err.claims ? decodeClaimsChallenge(err.claims) : undefined;
+    const claims =
+      err instanceof ApiError && err.status === 401 && err.claims
+        ? decodeClaimsChallenge(err.claims)
+        : undefined;
     if (!claims) throw err;
     try {
       return await attempt(claims);
     } catch (retryErr) {
-      if (mode && retryErr instanceof ApiError && retryErr.status === 401 && retryErr.claims) throw new ReauthRequired(mode === 'write' ? 'write' : 'read', claims);
+      if (mode && retryErr instanceof ApiError && retryErr.status === 401 && retryErr.claims)
+        throw new ReauthRequired(mode === 'write' ? 'write' : 'read', claims);
       throw retryErr;
     }
   }
 }
 
 /** Delegated token for a connection audience from the session's Read (or, armed, Write) account. */
-async function delegatedToken(auth: AuthClient, session: SessionRecord, mode: Mode, scopes: string[], now: () => Date, claims?: string): Promise<string> {
+async function delegatedToken(
+  auth: AuthClient,
+  session: SessionRecord,
+  mode: Mode,
+  scopes: string[],
+  now: () => Date,
+  claims?: string,
+): Promise<string> {
   const extra = claims ? { claims } : {};
   if (mode === 'write') {
     if (!isArmed(session, now())) throw new NotArmed();
-    return auth.token({ kind: 'write', partitionKey: partitionKey('write', session.idHash), homeAccountId: session.writeAccountId!, scopes, ...extra });
+    return auth.token({
+      kind: 'write',
+      partitionKey: partitionKey('write', session.idHash),
+      homeAccountId: session.writeAccountId!,
+      scopes,
+      ...extra,
+    });
   }
   if (!session.readAccountId) throw new ReauthRequired('read', claims);
-  return auth.token({ kind: 'read', partitionKey: partitionKey('read', session.idHash), homeAccountId: session.readAccountId, scopes, ...extra });
+  return auth.token({
+    kind: 'read',
+    partitionKey: partitionKey('read', session.idHash),
+    homeAccountId: session.readAccountId,
+    scopes,
+    ...extra,
+  });
 }
 
 export function createOutboundExecutor(deps: OutboundDeps): Outbound {

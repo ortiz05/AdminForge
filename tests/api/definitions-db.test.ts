@@ -1,7 +1,15 @@
 import { createHash } from 'node:crypto';
 import { PgSettingsStore } from '@adminforge/api/src/admin/settings-store';
 import { createDatabase, type Database } from '@adminforge/api/src/db/client';
-import { CachedDbSource, DbDefinitionStore, DEFINITIONS_CHANNEL, PgListener, registryFrom, type DefinitionsChanged, type PublishEntry } from '@adminforge/api/src/definitions';
+import {
+  CachedDbSource,
+  DbDefinitionStore,
+  DEFINITIONS_CHANNEL,
+  PgListener,
+  registryFrom,
+  type DefinitionsChanged,
+  type PublishEntry,
+} from '@adminforge/api/src/definitions';
 import { EventBus, type PortalEvent } from '@adminforge/api/src/events/bus';
 import { DefinitionResponse, validateDefinition } from '@adminforge/schemas';
 import { testDatabaseUrl } from './db';
@@ -24,7 +32,11 @@ function entry(name: string, version: string, opts: { title?: string; status?: s
   };
   const r = validateDefinition(raw);
   if (!r.ok) throw new Error(JSON.stringify(r.errors));
-  return { def: r.def, sha256: createHash('sha256').update(JSON.stringify(raw)).digest('hex'), file: `pages/${ns}/${name}.page.yaml` };
+  return {
+    def: r.def,
+    sha256: createHash('sha256').update(JSON.stringify(raw)).digest('hex'),
+    file: `pages/${ns}/${name}.page.yaml`,
+  };
 }
 
 const until = async (cond: () => boolean | Promise<boolean>, ms = 5000) => {
@@ -52,18 +64,28 @@ describe.skipIf(!url)('published definitions (Postgres)', () => {
     const a1 = entry('a', '1.0.0');
     const first = await store.publish([a1, entry('b', '1.0.0')]);
     expect(first).toMatchObject({ created: 2, unchanged: 0, refused: 0, applied: true, notified: true });
-    expect(await store.publish([a1])).toMatchObject({ created: 0, unchanged: 1, applied: true, notified: false });
+    expect(await store.publish([a1])).toMatchObject({
+      created: 0,
+      unchanged: 1,
+      applied: true,
+      notified: false,
+    });
 
     const changed = { ...entry('a', '1.0.0', { title: 'Changed' }) };
     const refused = await store.publish([changed, entry('c', '1.0.0')]);
     expect(refused).toMatchObject({ refused: 1, applied: false, notified: false });
-    expect(refused.items.find((i) => i.key === `${ns}.a`)!.reason).toMatch(/already published with different content/);
+    expect(refused.items.find((i) => i.key === `${ns}.a`)!.reason).toMatch(
+      /already published with different content/,
+    );
     // All-or-nothing: c was not written.
     expect(await store.get('page', `${ns}.c`)).toBeNull();
 
     expect((await store.publish([entry('a', '1.1.0', { title: 'A 1.1' })])).created).toBe(1);
     const older = await store.publish([entry('a', '1.0.5')]);
-    expect(older.items[0]).toMatchObject({ action: 'refused', reason: expect.stringMatching(/older than the published 1\.1\.0/) });
+    expect(older.items[0]).toMatchObject({
+      action: 'refused',
+      reason: expect.stringMatching(/older than the published 1\.1\.0/),
+    });
 
     const dry = await store.publish([entry('d', '1.0.0')], { dryRun: true });
     expect(dry).toMatchObject({ created: 1, applied: false });
@@ -79,7 +101,11 @@ describe.skipIf(!url)('published definitions (Postgres)', () => {
     expect((await store.get('page', `${ns}.a`, '1.1.0'))!.status).toBe('published');
     const keys = (await store.list('page')).map((r) => r.key).filter((k) => k.startsWith(`${ns}.`));
     expect(keys).toEqual([`${ns}.b`]);
-    expect((await store.versions('page', `${ns}.a`)).map((v) => v.version)).toEqual(['2.0.0', '1.1.0', '1.0.0']);
+    expect((await store.versions('page', `${ns}.a`)).map((v) => v.version)).toEqual([
+      '2.0.0',
+      '1.1.0',
+      '1.0.0',
+    ]);
   });
 
   it('NOTIFY definitions_changed reaches every listener and invalidates the cached source', async () => {
@@ -103,14 +129,29 @@ describe.skipIf(!url)('published definitions (Postgres)', () => {
   });
 
   it('CONTENT_SOURCE=db: the API serves the published version and picks up a new publish via NOTIFY', async () => {
-    const t = await makeApp(mockConfig({ CONTENT_SOURCE: 'db', DATABASE_URL: url! }), { database: createDatabase(url!) });
+    const t = await makeApp(mockConfig({ CONTENT_SOURCE: 'db', DATABASE_URL: url! }), {
+      database: createDatabase(url!),
+    });
     const { cookie } = await mockLogin(t.app);
-    const get = async () => DefinitionResponse.parse((await t.app.inject({ method: 'GET', url: `/api/definitions/page/${ns}.b`, headers: { cookie } })).json());
+    const get = async () =>
+      DefinitionResponse.parse(
+        (
+          await t.app.inject({ method: 'GET', url: `/api/definitions/page/${ns}.b`, headers: { cookie } })
+        ).json(),
+      );
     expect((await get()).version).toBe('1.2.0');
     await new Promise((r) => setTimeout(r, 300));
     await store.publish([entry('b', '1.3.0')]);
     await until(async () => (await get()).version === '1.3.0');
-    expect((await t.app.inject({ method: 'GET', url: `/api/definitions/page/${ns}.b?version=1.0.0`, headers: { cookie } })).statusCode).toBe(200);
+    expect(
+      (
+        await t.app.inject({
+          method: 'GET',
+          url: `/api/definitions/page/${ns}.b?version=1.0.0`,
+          headers: { cookie },
+        })
+      ).statusCode,
+    ).toBe(200);
     // app.close() also closes the database it was given.
     await t.app.close();
   });
@@ -118,11 +159,22 @@ describe.skipIf(!url)('published definitions (Postgres)', () => {
   it('PgSettingsStore: versions increase; a stale expected version is refused', async () => {
     const settings = new PgSettingsStore(database.db);
     const now = new Date('2026-10-15T12:00:00.000Z');
-    const first = await settings.put('test.appearance', { a: 1 }, { updatedBy: 'u', now, expectedVersion: 0 });
+    const first = await settings.put(
+      'test.appearance',
+      { a: 1 },
+      { updatedBy: 'u', now, expectedVersion: 0 },
+    );
     expect(first).toMatchObject({ version: 1, value: { a: 1 } });
-    expect(await settings.put('test.appearance', { a: 2 }, { updatedBy: 'u', now, expectedVersion: 0 })).toBeNull();
-    expect(await settings.put('test.appearance', { a: 2 }, { updatedBy: 'u', now })).toMatchObject({ version: 2 });
-    expect(await settings.get<{ a: number }>('test.appearance')).toMatchObject({ version: 2, value: { a: 2 } });
+    expect(
+      await settings.put('test.appearance', { a: 2 }, { updatedBy: 'u', now, expectedVersion: 0 }),
+    ).toBeNull();
+    expect(await settings.put('test.appearance', { a: 2 }, { updatedBy: 'u', now })).toMatchObject({
+      version: 2,
+    });
+    expect(await settings.get<{ a: number }>('test.appearance')).toMatchObject({
+      version: 2,
+      value: { a: 2 },
+    });
   });
 
   it('NOTIFY run_events is relayed as run.updated to the initiator only (run/step, not log lines)', async () => {
@@ -132,12 +184,17 @@ describe.skipIf(!url)('published definitions (Postgres)', () => {
     const got: PortalEvent[] = [];
     bus.subscribe((e) => got.push(e));
     await new Promise((r) => setTimeout(r, 400));
-    const notify = (p: object) => database.pool.query('select pg_notify($1, $2)', ['run_events', JSON.stringify(p)]);
+    const notify = (p: object) =>
+      database.pool.query('select pg_notify($1, $2)', ['run_events', JSON.stringify(p)]);
     await notify({ v: 1, runId: `${ns}-r1`, type: 'log', initiatorOid: 'u1' });
     await notify({ v: 1, runId: `${ns}-r1`, type: 'run', status: 'running', initiatorOid: 'u1' });
     await notify({ v: 1, runId: `${ns}-r2`, type: 'step', status: 'succeeded' });
     await until(() => got.filter((e) => e.type === 'run.updated').length >= 2);
-    expect(got.filter((e) => e.type === 'run.updated').map((e) => [(e.data as { runId: string }).runId, e.userOid])).toEqual([
+    expect(
+      got
+        .filter((e) => e.type === 'run.updated')
+        .map((e) => [(e.data as { runId: string }).runId, e.userOid]),
+    ).toEqual([
       [`${ns}-r1`, 'u1'],
       [`${ns}-r2`, undefined],
     ]);

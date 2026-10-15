@@ -20,7 +20,15 @@ export {
 
 // Building blocks the page renderer shares with widgets.
 export { ActionButton, launchPlaybook, playbookLabel, isExternal } from './lib/actions';
-export { evaluateTemplate, hasExpression, simplePath, tryResolveSync, useRowTemplates, useTemplate, useWhen } from './lib/expr';
+export {
+  evaluateTemplate,
+  hasExpression,
+  simplePath,
+  tryResolveSync,
+  useRowTemplates,
+  useTemplate,
+  useWhen,
+} from './lib/expr';
 export { VALUE_FORMATS, formatBytes, formatValue, type ValueFormat } from './lib/format';
 export { asRows, getPath, humanize, splitDataRef } from './lib/path';
 export { mapStatus, TONE_LABEL, type Status, type StatusMap } from './lib/status';

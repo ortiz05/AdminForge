@@ -2,7 +2,19 @@ import { IMPLICIT_APPROVAL, writesAfter } from '@adminforge/engine';
 import { APPROVER, harness, INITIATOR, playbook, read, write } from './helpers';
 
 describe('engine: approvals (ADR-010)', () => {
-  const def = playbook([read('lookup'), { id: 'approve', type: 'approval', message: '${ "Approve disabling " & steps.lookup.output.upn }', approvers: ['Playbook.Approver'], minApprovals: 1, expiresIn: 'PT4H' }, write('disable'), write('revoke')]);
+  const def = playbook([
+    read('lookup'),
+    {
+      id: 'approve',
+      type: 'approval',
+      message: '${ "Approve disabling " & steps.lookup.output.upn }',
+      approvers: ['Playbook.Approver'],
+      minApprovals: 1,
+      expiresIn: 'PT4H',
+    },
+    write('disable'),
+    write('revoke'),
+  ]);
 
   it('parks awaiting_approval with a task, then runs later steps as the approver', async () => {
     const h = harness(def, { respond: (c) => (c.method === 'GET' ? { upn: 'a.lee@example.com' } : null) });
@@ -28,15 +40,32 @@ describe('engine: approvals (ADR-010)', () => {
 
     h.approve('approve', APPROVER, 'ok by me');
     expect((await h.exec()).status).toBe('succeeded');
-    expect(h.record('approve')).toMatchObject({ status: 'succeeded', actorOid: APPROVER.oid, output: { decision: 'approved', approver: { oid: APPROVER.oid, upn: APPROVER.upn }, comment: 'ok by me' } });
+    expect(h.record('approve')).toMatchObject({
+      status: 'succeeded',
+      actorOid: APPROVER.oid,
+      output: {
+        decision: 'approved',
+        approver: { oid: APPROVER.oid, upn: APPROVER.upn },
+        comment: 'ok by me',
+      },
+    });
     expect(h.outbound.calls.map((c) => [c.call.path, c.identity.actor.oid])).toEqual([
       ['/users/lookup', INITIATOR.oid],
       ['/things/disable', APPROVER.oid],
       ['/things/revoke', APPROVER.oid],
     ]);
     expect(h.record('disable')?.actorOid).toBe(APPROVER.oid);
-    expect(h.store.saves.find((s) => s.record.path === 'disable' && s.record.status === 'succeeded')?.actor).toEqual(APPROVER);
-    expect(h.runEvents()).toEqual(['running', 'awaiting_approval', 'running', 'awaiting_approval', 'running', 'succeeded']);
+    expect(
+      h.store.saves.find((s) => s.record.path === 'disable' && s.record.status === 'succeeded')?.actor,
+    ).toEqual(APPROVER);
+    expect(h.runEvents()).toEqual([
+      'running',
+      'awaiting_approval',
+      'running',
+      'awaiting_approval',
+      'running',
+      'succeeded',
+    ]);
   });
 
   it('parks awaiting_arm when the approver is not armed, and resumes as the approver once armed', async () => {
@@ -72,7 +101,14 @@ describe('engine: approvals (ADR-010)', () => {
     await h.exec();
     h.reject('approve', APPROVER, 'not today');
     const out = await h.exec();
-    expect(out).toMatchObject({ status: 'failed', error: { code: 'approval_rejected', stepId: 'approve', message: `Rejected by ${APPROVER.upn}: not today` } });
+    expect(out).toMatchObject({
+      status: 'failed',
+      error: {
+        code: 'approval_rejected',
+        stepId: 'approve',
+        message: `Rejected by ${APPROVER.upn}: not today`,
+      },
+    });
     expect(h.status('disable')).toBeUndefined();
   });
 
@@ -93,7 +129,12 @@ describe('engine: approvals (ADR-010)', () => {
   });
 
   it('automation runs keep the automation identity after an approval (ADR-011)', async () => {
-    const h = harness(playbook([{ id: 'approve', type: 'approval' }, write('w')]), { run: { identity: 'automation', initiator: { kind: 'automation', oid: 'automation', upn: 'automation identity' } } });
+    const h = harness(playbook([{ id: 'approve', type: 'approval' }, write('w')]), {
+      run: {
+        identity: 'automation',
+        initiator: { kind: 'automation', oid: 'automation', upn: 'automation identity' },
+      },
+    });
     await h.exec();
     h.approve('approve');
     expect((await h.exec()).status).toBe('succeeded');
@@ -101,18 +142,30 @@ describe('engine: approvals (ADR-010)', () => {
   });
 
   it('approval: { required: true } adds an implicit gate before the first write', async () => {
-    const gated = playbook([read('lookup'), write('w')], { risk: 'critical', confirm: { type: 'click' }, approval: { required: true, minApprovals: 2 } });
+    const gated = playbook([read('lookup'), write('w')], {
+      risk: 'critical',
+      confirm: { type: 'click' },
+      approval: { required: true, minApprovals: 2 },
+    });
     const h = harness(gated);
     expect((await h.exec()).status).toBe('awaiting_approval');
     expect(h.status('lookup')).toBe('succeeded');
     expect(h.status(IMPLICIT_APPROVAL)).toBe('waiting');
-    expect([...h.store.tasks.values()][0]).toMatchObject({ path: IMPLICIT_APPROVAL, minApprovals: 2, approvers: ['Playbook.Approver'] });
+    expect([...h.store.tasks.values()][0]).toMatchObject({
+      path: IMPLICIT_APPROVAL,
+      minApprovals: 2,
+      approvers: ['Playbook.Approver'],
+    });
     h.identity.signIn(APPROVER, true);
     h.approve(IMPLICIT_APPROVAL);
     expect((await h.exec()).status).toBe('succeeded');
     expect(h.outbound.calls.at(-1)!.identity.actor.oid).toBe(APPROVER.oid);
     // An explicit approval before the first write replaces the implicit gate.
-    const explicit = playbook([{ id: 'ok', type: 'approval' }, write('w')], { risk: 'critical', confirm: { type: 'click' }, approval: { required: true } });
+    const explicit = playbook([{ id: 'ok', type: 'approval' }, write('w')], {
+      risk: 'critical',
+      confirm: { type: 'click' },
+      approval: { required: true },
+    });
     const e = harness(explicit);
     await e.exec();
     expect([...e.store.tasks.values()].map((t) => t.path)).toEqual(['ok']);
@@ -120,32 +173,91 @@ describe('engine: approvals (ADR-010)', () => {
 
   it('writesAfter tells the API whether an approver must be armed', () => {
     expect(writesAfter(def, 'approve')).toBe(true);
-    expect(writesAfter(playbook([write('w'), { id: 'last', type: 'approval' }, read('r')]), 'last')).toBe(false);
-    expect(writesAfter(playbook([{ id: 'loop', type: 'forEach', items: '${ [1] }', steps: [write('w'), { id: 'a', type: 'approval' }] }]), 'loop[0].a')).toBe(true);
-    expect(writesAfter(playbook([write('w')], { risk: 'critical', confirm: { type: 'click' }, approval: { required: true } }), IMPLICIT_APPROVAL)).toBe(true);
+    expect(writesAfter(playbook([write('w'), { id: 'last', type: 'approval' }, read('r')]), 'last')).toBe(
+      false,
+    );
+    expect(
+      writesAfter(
+        playbook([
+          {
+            id: 'loop',
+            type: 'forEach',
+            items: '${ [1] }',
+            steps: [write('w'), { id: 'a', type: 'approval' }],
+          },
+        ]),
+        'loop[0].a',
+      ),
+    ).toBe(true);
+    expect(
+      writesAfter(
+        playbook([write('w')], {
+          risk: 'critical',
+          confirm: { type: 'click' },
+          approval: { required: true },
+        }),
+        IMPLICIT_APPROVAL,
+      ),
+    ).toBe(true);
   });
 });
 
 describe('engine: manual steps', () => {
-  const def = playbook([{ id: 'check', type: 'manual', instructions: 'Call ${ inputs.who }', checklist: ['Verify identity'], inputs: { ticket: { type: 'string' } } }, { id: 'echo', type: 'transform', expression: '${ steps.check.output.values.ticket }' }], {
-    inputs: { who: { type: 'string' } },
-  });
+  const def = playbook(
+    [
+      {
+        id: 'check',
+        type: 'manual',
+        instructions: 'Call ${ inputs.who }',
+        checklist: ['Verify identity'],
+        inputs: { ticket: { type: 'string' } },
+      },
+      { id: 'echo', type: 'transform', expression: '${ steps.check.output.values.ticket }' },
+    ],
+    {
+      inputs: { who: { type: 'string' } },
+    },
+  );
 
   it('parks awaiting_input, then continues with the confirmed values', async () => {
     const h = harness(def, { inputs: { who: 'the user' } });
     expect((await h.exec()).status).toBe('awaiting_input');
-    expect([...h.store.tasks.values()][0]).toMatchObject({ kind: 'manual', instructions: 'Call the user', checklist: ['Verify identity'] });
-    h.store.decide('run-1', 'check', { kind: 'manual', confirmed: true, actor: INITIATOR, notes: 'done', values: { ticket: 'INC-1' }, decidedAt: h.clock.now().toISOString() });
+    expect([...h.store.tasks.values()][0]).toMatchObject({
+      kind: 'manual',
+      instructions: 'Call the user',
+      checklist: ['Verify identity'],
+    });
+    h.store.decide('run-1', 'check', {
+      kind: 'manual',
+      confirmed: true,
+      actor: INITIATOR,
+      notes: 'done',
+      values: { ticket: 'INC-1' },
+      decidedAt: h.clock.now().toISOString(),
+    });
     expect((await h.exec()).status).toBe('succeeded');
     expect(h.record('echo')?.output).toBe('INC-1');
-    expect(h.record('check')?.output).toMatchObject({ confirmed: true, notes: 'done', by: { oid: INITIATOR.oid } });
+    expect(h.record('check')?.output).toMatchObject({
+      confirmed: true,
+      notes: 'done',
+      by: { oid: INITIATOR.oid },
+    });
   });
 
   it('declining fails the step (manual_declined)', async () => {
     const h = harness(def, { inputs: { who: 'x' } });
     await h.exec();
-    h.store.decide('run-1', 'check', { kind: 'manual', confirmed: false, actor: INITIATOR, notes: 'no answer', decidedAt: h.clock.now().toISOString() });
-    expect((await h.exec()).error).toMatchObject({ code: 'manual_declined', message: `${INITIATOR.upn} did not confirm this step: no answer` });
+    h.store.decide('run-1', 'check', {
+      kind: 'manual',
+      confirmed: false,
+      actor: INITIATOR,
+      notes: 'no answer',
+      decidedAt: h.clock.now().toISOString(),
+    });
+    expect((await h.exec()).error).toMatchObject({
+      code: 'manual_declined',
+      message: `${INITIATOR.upn} did not confirm this step: no answer`,
+    });
   });
 });
 
@@ -164,9 +276,15 @@ describe('engine: wait steps', () => {
 
   it('until: polls the condition every interval and times out', async () => {
     let ready = false;
-    const def = playbook([{ id: 'poll', type: 'wait', until: '${ steps.probe.output.ready }', interval: '1m', timeout: '5m' }, read('after')]);
+    const def = playbook([
+      { id: 'poll', type: 'wait', until: '${ steps.probe.output.ready }', interval: '1m', timeout: '5m' },
+      read('after'),
+    ]);
     // The condition reads a previous step; emulate it with a transform fed by a variable.
-    const withProbe = playbook([{ id: 'probe', type: 'graph', mode: 'read', request: { method: 'GET', path: '/state' } }, ...def.steps]);
+    const withProbe = playbook([
+      { id: 'probe', type: 'graph', mode: 'read', request: { method: 'GET', path: '/state' } },
+      ...def.steps,
+    ]);
     const h = harness(withProbe, { respond: (c) => (c.path === '/state' ? { ready } : null) });
     let out = await h.exec();
     expect(out.wakeAt).toEqual(new Date(h.clock.now().getTime() + 60_000));

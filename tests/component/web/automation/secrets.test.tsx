@@ -26,14 +26,27 @@ describe('Show-once secrets on the run page', () => {
     const writeText = vi.fn(async () => {});
     Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
     renderApp({ path: `/runs/${IDS.tapRun}` });
-    expect(await screen.findByRole('heading', { level: 1, name: 'Issue Temporary Access Pass' })).toBeInTheDocument();
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Issue Temporary Access Pass' }),
+    ).toBeInTheDocument();
     // Masked in stored outputs, with the explanation.
     expect(screen.getAllByText(/•••• one-time use · valid 60 min/).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Shown once to the person who ran this/).length).toBeGreaterThan(0);
 
     const es = await stream(IDS.tapRun);
     // The stream already used ids for other events; the secret has none and must not be dropped as a duplicate.
-    act(() => es.emit({ id: 1, type: 'log', ts: '2026-10-15T14:00:00Z', stepSeq: 2, data: { level: 'info', message: 'issued', path: 'issue' } }, { id: '1' }));
+    act(() =>
+      es.emit(
+        {
+          id: 1,
+          type: 'log',
+          ts: '2026-10-15T14:00:00Z',
+          stepSeq: 2,
+          data: { level: 'info', message: 'issued', path: 'issue' },
+        },
+        { id: '1' },
+      ),
+    );
     act(() => es.emit(secretMessage(), { id: '1' }));
     const panel = await screen.findByRole('region', { name: 'Copy now — it won’t be shown again' });
     expect(within(panel).getByText(/From “Issue the Temporary Access Pass”/)).toBeInTheDocument();
@@ -43,12 +56,17 @@ describe('Show-once secrets on the run page', () => {
 
     await userEvent.click(within(panel).getByRole('button', { name: 'Show Temporary access pass' }));
     expect(within(panel).getByText(TAP_VALUE)).toBeInTheDocument();
-    expect(within(panel).getByRole('button', { name: 'Hide Temporary access pass' })).toHaveAttribute('aria-pressed', 'true');
+    expect(within(panel).getByRole('button', { name: 'Hide Temporary access pass' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
     await userEvent.click(within(panel).getByRole('button', { name: 'Copy Temporary access pass' }));
     expect(writeText).toHaveBeenCalledWith(TAP_VALUE);
 
     await userEvent.click(within(panel).getByRole('button', { name: 'I’ve copied it — dismiss' }));
-    expect(screen.queryByRole('region', { name: 'Copy now — it won’t be shown again' })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('region', { name: 'Copy now — it won’t be shown again' }),
+    ).not.toBeInTheDocument();
     expect(screen.queryByText(TAP_VALUE)).not.toBeInTheDocument();
     // Nothing persisted outside memory.
     expect(JSON.stringify(localStorage)).not.toContain(TAP_VALUE);
@@ -61,16 +79,44 @@ describe('Show-once secrets on the run page', () => {
     const es = await stream(IDS.onboardRun);
     act(() => es.emit(secretMessage(IDS.onboardChild, CHILD_TAP_VALUE)));
     const panel = await screen.findByRole('region', { name: 'Copy now — it won’t be shown again' });
-    expect(within(panel).getByText(/From “Issue Temporary Access Pass · Issue” \(child run\)/)).toBeInTheDocument();
+    expect(
+      within(panel).getByText(/From “Issue Temporary Access Pass · Issue” \(child run\)/),
+    ).toBeInTheDocument();
   });
 
   it('a replayed "held" notice claims the secret once, with the CSRF header', async () => {
     const { calls } = renderApp({ path: `/runs/${IDS.onboardRun}` });
     await screen.findByRole('heading', { level: 1, name: 'Onboard a new starter' });
     const es = await stream(IDS.onboardRun);
-    const held = { runId: IDS.onboardChild, stepId: 'issue', stepPath: 'issue', fields: ['temporaryAccessPass'], status: 'held' };
-    act(() => es.emit({ id: 1, type: 'log', stepSeq: 2, data: { level: 'info', message: 'held', path: 'tap', secret: held } }, { id: '1' }));
-    act(() => es.emit({ id: 2, type: 'log', stepSeq: 2, data: { level: 'info', message: 'held again', path: 'tap', secret: held } }, { id: '2' }));
+    const held = {
+      runId: IDS.onboardChild,
+      stepId: 'issue',
+      stepPath: 'issue',
+      fields: ['temporaryAccessPass'],
+      status: 'held',
+    };
+    act(() =>
+      es.emit(
+        {
+          id: 1,
+          type: 'log',
+          stepSeq: 2,
+          data: { level: 'info', message: 'held', path: 'tap', secret: held },
+        },
+        { id: '1' },
+      ),
+    );
+    act(() =>
+      es.emit(
+        {
+          id: 2,
+          type: 'log',
+          stepSeq: 2,
+          data: { level: 'info', message: 'held again', path: 'tap', secret: held },
+        },
+        { id: '2' },
+      ),
+    );
     const panel = await screen.findByRole('region', { name: 'Copy now — it won’t be shown again' });
     await userEvent.click(within(panel).getByRole('button', { name: 'Show Temporary access pass' }));
     expect(within(panel).getByText(CHILD_TAP_VALUE)).toBeInTheDocument();
@@ -85,17 +131,43 @@ describe('Show-once secrets on the run page', () => {
       handlers: [
         ({ path }) =>
           path.endsWith('/secret/issue')
-            ? { status: 404, body: { error: { code: 'secret_not_available', message: 'This secret was already shown or has expired.' } } }
+            ? {
+                status: 404,
+                body: {
+                  error: {
+                    code: 'secret_not_available',
+                    message: 'This secret was already shown or has expired.',
+                  },
+                },
+              }
             : undefined,
       ],
     });
     await screen.findByRole('heading', { level: 1, name: 'Onboard a new starter' });
     const es = await stream(IDS.onboardRun);
     act(() =>
-      es.emit({ id: 1, type: 'log', data: { message: 'held', secret: { runId: IDS.onboardChild, stepId: 'issue', stepPath: 'issue', fields: ['temporaryAccessPass'], status: 'held' } } }, { id: '1' }),
+      es.emit(
+        {
+          id: 1,
+          type: 'log',
+          data: {
+            message: 'held',
+            secret: {
+              runId: IDS.onboardChild,
+              stepId: 'issue',
+              stepPath: 'issue',
+              fields: ['temporaryAccessPass'],
+              status: 'held',
+            },
+          },
+        },
+        { id: '1' },
+      ),
     );
     expect(await screen.findByText('This secret was already shown or has expired.')).toBeInTheDocument();
-    expect(screen.queryByRole('region', { name: 'Copy now — it won’t be shown again' })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('region', { name: 'Copy now — it won’t be shown again' }),
+    ).not.toBeInTheDocument();
     expect(await axeViolations()).toEqual([]);
   });
 
@@ -104,9 +176,27 @@ describe('Show-once secrets on the run page', () => {
     await screen.findByRole('heading', { level: 1, name: 'Issue Temporary Access Pass' });
     const es = await stream(IDS.tapRun);
     act(() =>
-      es.emit({ id: 3, type: 'log', data: { message: 'issued', secret: { runId: IDS.tapRun, stepId: 'issue', stepPath: 'issue', fields: ['temporaryAccessPass'], status: 'delivered' } } }, { id: '3' }),
+      es.emit(
+        {
+          id: 3,
+          type: 'log',
+          data: {
+            message: 'issued',
+            secret: {
+              runId: IDS.tapRun,
+              stepId: 'issue',
+              stepPath: 'issue',
+              fields: ['temporaryAccessPass'],
+              status: 'delivered',
+            },
+          },
+        },
+        { id: '3' },
+      ),
     );
-    expect(await screen.findByText(/shown once to the person who ran this and isn’t available any more/)).toBeInTheDocument();
+    expect(
+      await screen.findByText(/shown once to the person who ran this and isn’t available any more/),
+    ).toBeInTheDocument();
     expect(calls.some((c) => c.url.includes('/secret/'))).toBe(false);
   });
 });

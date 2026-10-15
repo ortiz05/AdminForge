@@ -1,4 +1,11 @@
-import { clearCompileCache, compile, compileCacheSize, evaluate, ExpressionError, ExpressionTimeoutError } from '@adminforge/expressions';
+import {
+  clearCompileCache,
+  compile,
+  compileCacheSize,
+  evaluate,
+  ExpressionError,
+  ExpressionTimeoutError,
+} from '@adminforge/expressions';
 
 describe('evaluate', () => {
   it('evaluates against the scope (async)', async () => {
@@ -7,11 +14,18 @@ describe('evaluate', () => {
     expect(await p).toBe('Guest');
   });
   it('returns plain arrays and objects (no JSONata sequence flags)', async () => {
-    const r = await evaluate('items[n > 1].{ "id": id }', { items: [{ n: 1, id: 'a' }, { n: 2, id: 'b' }, { n: 3, id: 'c' }] });
+    const r = await evaluate('items[n > 1].{ "id": id }', {
+      items: [
+        { n: 1, id: 'a' },
+        { n: 2, id: 'b' },
+        { n: 3, id: 'c' },
+      ],
+    });
     expect(r).toEqual([{ id: 'b' }, { id: 'c' }]);
     expect(Object.keys(r as object)).toEqual(['0', '1']);
   });
-  it('returns undefined for missing paths', async () => expect(await evaluate('params.nope', { params: {} })).toBeUndefined());
+  it('returns undefined for missing paths', async () =>
+    expect(await evaluate('params.nope', { params: {} })).toBeUndefined());
   it('names the expression in errors', async () => {
     const err = (await evaluate('$number("abc") + 1').catch((e: unknown) => e)) as ExpressionError;
     expect(err).toBeInstanceOf(ExpressionError);
@@ -30,13 +44,19 @@ describe('evaluate', () => {
   });
   it('times out runaway expressions after 250 ms', async () => {
     const started = Date.now();
-    const err = (await evaluate('($loop := function($n) { $loop($n + 1) }; $loop(0))').catch((e: unknown) => e)) as ExpressionError;
+    const err = (await evaluate('($loop := function($n) { $loop($n + 1) }; $loop(0))').catch(
+      (e: unknown) => e,
+    )) as ExpressionError;
     expect(err).toBeInstanceOf(ExpressionTimeoutError);
     expect(err.message).toMatch(/timed out after 250 ms/);
     expect(Date.now() - started).toBeLessThan(2000);
   });
   it('honours a custom timeout', async () => {
-    const err = (await evaluate('($loop := function($n) { $loop($n + 1) }; $loop(0))', {}, { timeoutMs: 20 }).catch((e: unknown) => e)) as ExpressionError;
+    const err = (await evaluate(
+      '($loop := function($n) { $loop($n + 1) }; $loop(0))',
+      {},
+      { timeoutMs: 20 },
+    ).catch((e: unknown) => e)) as ExpressionError;
     expect(err).toBeInstanceOf(ExpressionTimeoutError);
     expect(err.message).toMatch(/after 20 ms/);
   });

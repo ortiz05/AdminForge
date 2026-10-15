@@ -1,6 +1,14 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { WIDGETS, actionBarFixtures, markdownFixtures, parseBlocks, safeHref, type ActionBarConfig, type MarkdownConfig } from '@adminforge/widgets';
+import {
+  WIDGETS,
+  actionBarFixtures,
+  markdownFixtures,
+  parseBlocks,
+  safeHref,
+  type ActionBarConfig,
+  type MarkdownConfig,
+} from '@adminforge/widgets';
 import { axeViolations } from '../axe';
 import { ready, renderWidget, spyRuntime } from './helpers';
 
@@ -18,7 +26,10 @@ describe('markdown widget', () => {
     expect(within(panel).getByText('guest', { selector: 'em' })).toBeInTheDocument();
     expect(within(panel).getByText('Disable sign-in', { selector: 'code' })).toBeInTheDocument();
     expect(within(panel).getAllByRole('listitem')).toHaveLength(2);
-    expect(within(panel).getByRole('link', { name: 'offboarding runbook' })).toHaveAttribute('href', '/runbooks/identity.offboarding');
+    expect(within(panel).getByRole('link', { name: 'offboarding runbook' })).toHaveAttribute(
+      'href',
+      '/runbooks/identity.offboarding',
+    );
     const external = within(panel).getByRole('link', { name: /Entra docs/ });
     expect(external).toHaveAttribute('target', '_blank');
     expect(external).toHaveAttribute('rel', 'noreferrer');
@@ -35,16 +46,30 @@ describe('markdown widget', () => {
 
   it('templated text: values from data are inserted as plain text with HTML stripped', async () => {
     const { runtime } = spyRuntime({
-      data: { post: { title: 'Plan for change', body: '<p>Retire <b>legacy</b> connectors &amp; bots.</p><script>alert(1)</script>' } },
+      data: {
+        post: {
+          title: 'Plan for change',
+          body: '<p>Retire <b>legacy</b> connectors &amp; bots.</p><script>alert(1)</script>',
+        },
+      },
     });
-    const { container } = renderWidget(Markdown, md({ widget: 'markdown', title: 'Message', text: '## ${ post.title }\n\n${ post.body }' }), ready(undefined), runtime);
+    const { container } = renderWidget(
+      Markdown,
+      md({ widget: 'markdown', title: 'Message', text: '## ${ post.title }\n\n${ post.body }' }),
+      ready(undefined),
+      runtime,
+    );
     expect(await screen.findByRole('heading', { level: 3, name: 'Plan for change' })).toBeInTheDocument();
     expect(screen.getByText('Retire legacy connectors & bots.')).toBeInTheDocument();
     expect(container.querySelector('script, b')).toBeNull();
   });
 
   it('keeps relative heading depth without skipping levels', () => {
-    renderWidget(Markdown, md({ widget: 'markdown', title: 'Guide', text: '## Steps\n\n### First\n\ntext' }), ready(undefined));
+    renderWidget(
+      Markdown,
+      md({ widget: 'markdown', title: 'Guide', text: '## Steps\n\n### First\n\ntext' }),
+      ready(undefined),
+    );
     expect(screen.getByRole('heading', { level: 3, name: 'Steps' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { level: 4, name: 'First' })).toBeInTheDocument();
   });
@@ -61,7 +86,10 @@ describe('markdown widget', () => {
     expect(safeHref('data:text/html,x')).toBeNull();
     expect(safeHref('//evil.example.com')).toBeNull();
     expect(safeHref('/p/identity.users')).toEqual({ href: '/p/identity.users', external: false });
-    expect(safeHref('https://learn.microsoft.com/')).toEqual({ href: 'https://learn.microsoft.com/', external: true });
+    expect(safeHref('https://learn.microsoft.com/')).toEqual({
+      href: 'https://learn.microsoft.com/',
+      external: true,
+    });
   });
 });
 
@@ -77,7 +105,10 @@ describe('actionBar widget', () => {
     const group = screen.getByRole('group', { name: 'Actions' });
     await user.click(within(group).getByRole('button', { name: 'Disable sign-in' }));
     await waitFor(() =>
-      expect(openPlaybook).toHaveBeenCalledWith({ playbook: 'identity.disable-user', inputs: { userId: '0a1b2c3d-0000-4000-8000-000000000001' } }),
+      expect(openPlaybook).toHaveBeenCalledWith({
+        playbook: 'identity.disable-user',
+        inputs: { userId: '0a1b2c3d-0000-4000-8000-000000000001' },
+      }),
     );
     // `when: user.accountEnabled = true` is false here.
     await new Promise((r) => setTimeout(r, 30));

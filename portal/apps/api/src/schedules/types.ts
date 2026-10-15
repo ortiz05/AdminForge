@@ -26,14 +26,37 @@ export interface ScheduleRow {
   updatedAt: Date;
 }
 
-export type NewSchedule = Pick<ScheduleRow, 'key' | 'source' | 'definition' | 'sha256' | 'enabled' | 'nextRunAt'> & Partial<Pick<ScheduleRow, 'createdBy' | 'approvedBy'>>;
-export type SchedulePatch = Partial<Pick<ScheduleRow, 'definition' | 'sha256' | 'enabled' | 'approvedBy' | 'nextRunAt' | 'lastRunAt' | 'lastStatus' | 'createdBy'>>;
+export type NewSchedule = Pick<
+  ScheduleRow,
+  'key' | 'source' | 'definition' | 'sha256' | 'enabled' | 'nextRunAt'
+> &
+  Partial<Pick<ScheduleRow, 'createdBy' | 'approvedBy'>>;
+export type SchedulePatch = Partial<
+  Pick<
+    ScheduleRow,
+    | 'definition'
+    | 'sha256'
+    | 'enabled'
+    | 'approvedBy'
+    | 'nextRunAt'
+    | 'lastRunAt'
+    | 'lastStatus'
+    | 'createdBy'
+  >
+>;
 
 /**
  * `queued` = waiting for the scheduler (run now, retries, `overlap: queue`; `startedAt` is when it becomes due);
  * `running` → `succeeded` | `failed` | `timeout`; `skipped` = not run because the previous run was still going.
  */
-export const SCHEDULE_RUN_STATUSES = ['queued', 'running', 'succeeded', 'failed', 'timeout', 'skipped'] as const;
+export const SCHEDULE_RUN_STATUSES = [
+  'queued',
+  'running',
+  'succeeded',
+  'failed',
+  'timeout',
+  'skipped',
+] as const;
 export type ScheduleRunStatus = (typeof SCHEDULE_RUN_STATUSES)[number];
 export type ScheduleTrigger = 'cron' | 'manual' | 'retry';
 
@@ -61,8 +84,12 @@ export interface ScheduleRunRow {
 }
 
 export type NewScheduleRun = Pick<ScheduleRunRow, 'scheduleId' | 'scheduleKey' | 'trigger' | 'status'> &
-  Partial<Pick<ScheduleRunRow, 'id' | 'runId' | 'result' | 'error' | 'artifactPath' | 'startedAt' | 'endedAt'>>;
-export type ScheduleRunPatch = Partial<Pick<ScheduleRunRow, 'status' | 'runId' | 'result' | 'error' | 'artifactPath' | 'startedAt' | 'endedAt'>>;
+  Partial<
+    Pick<ScheduleRunRow, 'id' | 'runId' | 'result' | 'error' | 'artifactPath' | 'startedAt' | 'endedAt'>
+  >;
+export type ScheduleRunPatch = Partial<
+  Pick<ScheduleRunRow, 'status' | 'runId' | 'result' | 'error' | 'artifactPath' | 'startedAt' | 'endedAt'>
+>;
 
 export type ProbeStatus = 'ok' | 'warn' | 'crit' | 'error';
 
@@ -123,7 +150,10 @@ export interface ScheduleApprovalRow {
   decidedAt: Date | null;
 }
 
-export type NewScheduleApproval = Pick<ScheduleApprovalRow, 'subjectId' | 'policy' | 'requestedBy' | 'expiresAt'>;
+export type NewScheduleApproval = Pick<
+  ScheduleApprovalRow,
+  'subjectId' | 'policy' | 'requestedBy' | 'expiresAt'
+>;
 export type ScheduleApprovalPatch = Partial<Pick<ScheduleApprovalRow, 'decisions' | 'status' | 'decidedAt'>>;
 
 /** Keyset cursor for run history (newest first). */

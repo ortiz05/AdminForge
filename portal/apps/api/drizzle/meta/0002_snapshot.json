@@ -387,11 +387,7 @@
         "definitions_kind_key_version": {
           "name": "definitions_kind_key_version",
           "nullsNotDistinct": false,
-          "columns": [
-            "kind",
-            "key",
-            "version"
-          ]
+          "columns": ["kind", "key", "version"]
         }
       },
       "policies": {},
@@ -757,10 +753,7 @@
       "compositePrimaryKeys": {
         "run_steps_run_id_seq_pk": {
           "name": "run_steps_run_id_seq_pk",
-          "columns": [
-            "run_id",
-            "seq"
-          ]
+          "columns": ["run_id", "seq"]
         }
       },
       "uniqueConstraints": {},
@@ -1256,9 +1249,7 @@
         "schedules_key_unique": {
           "name": "schedules_key_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "key"
-          ]
+          "columns": ["key"]
         }
       },
       "policies": {},

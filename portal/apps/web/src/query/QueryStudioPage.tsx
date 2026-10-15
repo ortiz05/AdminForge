@@ -1,4 +1,15 @@
-import { Component, lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
+import {
+  Component,
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type ReactNode,
+} from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import {
@@ -54,7 +65,11 @@ const DEFAULT_WS = 'default';
 const CUSTOM_WS = 'custom';
 /** Longest query that is put in the URL after a run (longer ones stay in history only). */
 const URL_QUERY_MAX = 2000;
-const SAVE_MENU: Record<SaveKind, string> = { report: 'Report', probe: 'Probe (configuration check)', schedule: 'Schedule' };
+const SAVE_MENU: Record<SaveKind, string> = {
+  report: 'Report',
+  probe: 'Probe (configuration check)',
+  schedule: 'Schedule',
+};
 
 /** If Monaco fails to load (blocked chunk, old browser), the studio still works with a plain text area. */
 class EditorBoundary extends Component<{ fallback: ReactNode; children: ReactNode }, { failed: boolean }> {
@@ -67,7 +82,15 @@ class EditorBoundary extends Component<{ fallback: ReactNode; children: ReactNod
   }
 }
 
-function PlainEditor({ value, onChange, label }: { value: string; onChange: (v: string) => void; label: string }) {
+function PlainEditor({
+  value,
+  onChange,
+  label,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  label: string;
+}) {
   return (
     <Textarea
       label={label}
@@ -85,7 +108,12 @@ function PlainEditor({ value, onChange, label }: { value: string; onChange: (v: 
 function SubscriptionPicker({ value, onChange }: { value: string[]; onChange: (v: string[]) => void }) {
   const subs = useQuery(subscriptionsQuery);
   const options = subs.data ?? [];
-  const label = value.length === 0 ? 'All subscriptions' : value.length === 1 ? (options.find((o) => o.value === value[0])?.label ?? '1 subscription') : `${value.length} subscriptions`;
+  const label =
+    value.length === 0
+      ? 'All subscriptions'
+      : value.length === 1
+        ? (options.find((o) => o.value === value[0])?.label ?? '1 subscription')
+        : `${value.length} subscriptions`;
   const toggle = (id: string, on: boolean) => onChange(on ? [...value, id] : value.filter((v) => v !== id));
   return (
     <div className="flex flex-col gap-1.5">
@@ -94,7 +122,10 @@ function SubscriptionPicker({ value, onChange }: { value: string[]; onChange: (v
       </span>
       <Menu>
         <MenuTrigger asChild>
-          <Button className="w-56 justify-between font-normal" aria-labelledby="query-scope-label query-scope-value">
+          <Button
+            className="w-56 justify-between font-normal"
+            aria-labelledby="query-scope-label query-scope-value"
+          >
             <span id="query-scope-value" className="truncate">
               {label}
             </span>
@@ -102,13 +133,28 @@ function SubscriptionPicker({ value, onChange }: { value: string[]; onChange: (v
           </Button>
         </MenuTrigger>
         <MenuContent align="start" className="max-h-80 w-72 overflow-y-auto">
-          <MenuCheckboxItem checked={value.length === 0} onCheckedChange={() => onChange([])} onSelect={(e) => e.preventDefault()}>
+          <MenuCheckboxItem
+            checked={value.length === 0}
+            onCheckedChange={() => onChange([])}
+            onSelect={(e) => e.preventDefault()}
+          >
             All subscriptions you can read
           </MenuCheckboxItem>
           <MenuSeparator />
-          <MenuLabel>{subs.isPending ? 'Loading subscriptions…' : subs.isError ? 'Subscriptions could not be listed' : 'Only these subscriptions'}</MenuLabel>
+          <MenuLabel>
+            {subs.isPending
+              ? 'Loading subscriptions…'
+              : subs.isError
+                ? 'Subscriptions could not be listed'
+                : 'Only these subscriptions'}
+          </MenuLabel>
           {options.map((o) => (
-            <MenuCheckboxItem key={o.value} checked={value.includes(o.value)} onCheckedChange={(on) => toggle(o.value, on)} onSelect={(e) => e.preventDefault()}>
+            <MenuCheckboxItem
+              key={o.value}
+              checked={value.includes(o.value)}
+              onCheckedChange={(on) => toggle(o.value, on)}
+              onSelect={(e) => e.preventDefault()}
+            >
               <span className="flex min-w-0 flex-col">
                 <span className="truncate">{o.label}</span>
                 <span className="truncate font-mono text-2xs text-fg-3">{o.value}</span>
@@ -121,7 +167,17 @@ function SubscriptionPicker({ value, onChange }: { value: string[]; onChange: (v
   );
 }
 
-function WorkspacePicker({ value, custom, onChange, onCustomChange }: { value: string; custom: string; onChange: (v: string) => void; onCustomChange: (v: string) => void }) {
+function WorkspacePicker({
+  value,
+  custom,
+  onChange,
+  onCustomChange,
+}: {
+  value: string;
+  custom: string;
+  onChange: (v: string) => void;
+  onCustomChange: (v: string) => void;
+}) {
   const ws = useQuery(workspacesQuery);
   const options = [
     { value: DEFAULT_WS, label: 'Default workspace', description: 'Configured for this AdminForge' },
@@ -154,10 +210,16 @@ function DefenderNote() {
   if (f.isPending || f.isError || !f.data) return null;
   if (!f.data.available)
     return (
-      <Callout tone="warn" title="Advanced hunting needs Microsoft Defender XDR" className="mx-(--af-pad-panel) mb-3">
+      <Callout
+        tone="warn"
+        title="Advanced hunting needs Microsoft Defender XDR"
+        className="mx-(--af-pad-panel) mb-3"
+      >
         {sentence(f.data.reason ?? 'This tenant has no Defender licence that includes advanced hunting')}
-        {f.data.sku && !f.data.reason?.includes(f.data.sku) ? ` Look for ${f.data.sku} in the tenant’s licences.` : ''} Queries return an error until
-        the tenant has it; the starter queries still show what you can ask.
+        {f.data.sku && !f.data.reason?.includes(f.data.sku)
+          ? ` Look for ${f.data.sku} in the tenant’s licences.`
+          : ''}{' '}
+        Queries return an error until the tenant has it; the starter queries still show what you can ask.
       </Callout>
     );
   if (f.data.reason)
@@ -176,7 +238,10 @@ export function QueryStudioPage({ search }: { search: QuerySearch }) {
   const initialSource: QuerySource = search.source ?? 'resourceGraph';
   const [source, setSource] = useState<QuerySource>(initialSource);
   const [drafts, setDrafts] = useState<Record<QuerySource, string>>(() => {
-    const d = Object.fromEntries(SOURCES.map((s) => [s, SOURCE_META[s].starter])) as Record<QuerySource, string>;
+    const d = Object.fromEntries(SOURCES.map((s) => [s, SOURCE_META[s].starter])) as Record<
+      QuerySource,
+      string
+    >;
     if (search.q) d[initialSource] = search.q;
     return d;
   });
@@ -205,7 +270,8 @@ export function QueryStudioPage({ search }: { search: QuerySearch }) {
       if (src === 'resourceGraph' && subscriptions.length) req.subscriptions = subscriptions;
       if (src === 'logAnalytics') {
         if (workspace === CUSTOM_WS) {
-          if (!GUID.test(customWorkspace.trim())) return 'Enter the workspace id (a GUID) or choose a workspace.';
+          if (!GUID.test(customWorkspace.trim()))
+            return 'Enter the workspace id (a GUID) or choose a workspace.';
           req.workspace = customWorkspace.trim().toLowerCase();
         } else if (workspace !== DEFAULT_WS) req.workspace = workspace;
       }
@@ -244,7 +310,10 @@ export function QueryStudioPage({ search }: { search: QuerySearch }) {
         recordRun({ ...entry, ranAt: finishedAt, rowCount: result.rows.length, ms: result.ms });
         void navigate({
           to: '/query',
-          search: { source: request.source, ...(request.query.length <= URL_QUERY_MAX ? { q: request.query } : {}) },
+          search: {
+            source: request.source,
+            ...(request.query.length <= URL_QUERY_MAX ? { q: request.query } : {}),
+          },
           replace: true,
         });
       },
@@ -300,7 +369,10 @@ export function QueryStudioPage({ search }: { search: QuerySearch }) {
     return typeof built === 'string' ? null : built;
   }, [buildRequest, query]);
   const starter = findStarter(query, source);
-  const resultColumns = useMemo(() => (run.status === 'done' ? run.result.columns.map((c) => c.name) : undefined), [run]);
+  const resultColumns = useMemo(
+    () => (run.status === 'done' ? run.result.columns.map((c) => c.name) : undefined),
+    [run],
+  );
   const running = run.status === 'running';
   const mod = modKey();
   const editorLabel = `${meta.label} query. Press ${mod === '⌘' ? 'Command' : 'Control'} Enter to run.`;
@@ -356,9 +428,16 @@ export function QueryStudioPage({ search }: { search: QuerySearch }) {
                     options={SOURCES.map((s) => ({ value: s, label: SOURCE_META[s].short }))}
                   />
                 </div>
-                {source === 'resourceGraph' && <SubscriptionPicker value={subscriptions} onChange={setSubscriptions} />}
+                {source === 'resourceGraph' && (
+                  <SubscriptionPicker value={subscriptions} onChange={setSubscriptions} />
+                )}
                 {source === 'logAnalytics' && (
-                  <WorkspacePicker value={workspace} custom={customWorkspace} onChange={setWorkspace} onCustomChange={setCustomWorkspace} />
+                  <WorkspacePicker
+                    value={workspace}
+                    custom={customWorkspace}
+                    onChange={setWorkspace}
+                    onCustomChange={setCustomWorkspace}
+                  />
                 )}
                 {meta.timespan && (
                   <Select
@@ -370,7 +449,13 @@ export function QueryStudioPage({ search }: { search: QuerySearch }) {
                   />
                 )}
               </div>
-              <Button intent="primary" className="shrink-0" onClick={execute} pending={running} aria-keyshortcuts="Control+Enter Meta+Enter">
+              <Button
+                intent="primary"
+                className="shrink-0"
+                onClick={execute}
+                pending={running}
+                aria-keyshortcuts="Control+Enter Meta+Enter"
+              >
                 {!running && <PlayIcon size={14} weight="fill" aria-hidden />}
                 {running ? 'Running…' : 'Run'}
               </Button>
@@ -383,7 +468,9 @@ export function QueryStudioPage({ search }: { search: QuerySearch }) {
             )}
 
             <div className="bg-sunken">
-              <EditorBoundary fallback={<PlainEditor value={query} onChange={setQuery} label={editorLabel} />}>
+              <EditorBoundary
+                fallback={<PlainEditor value={query} onChange={setQuery} label={editorLabel} />}
+              >
                 <Suspense fallback={<Skeleton shape="block" className="h-42 rounded-none" />}>
                   <KqlEditor
                     value={query}
@@ -411,7 +498,10 @@ export function QueryStudioPage({ search }: { search: QuerySearch }) {
               </span>
             </div>
             {formError && (
-              <p role="alert" className="border-t border-line px-(--af-pad-panel) py-2.5 text-sm font-medium text-crit">
+              <p
+                role="alert"
+                className="border-t border-line px-(--af-pad-panel) py-2.5 text-sm font-medium text-crit"
+              >
                 {formError}
               </p>
             )}
@@ -420,14 +510,25 @@ export function QueryStudioPage({ search }: { search: QuerySearch }) {
           <ResultsPanel state={run} chartHint={chartHint} onRetry={execute} onCancel={cancel} />
         </div>
 
-        <Sidebar source={source} current={query} onPickStarter={pickStarter} onPickHistory={pickHistory} tab={tab} onTabChange={setTab} />
+        <Sidebar
+          source={source}
+          current={query}
+          onPickStarter={pickStarter}
+          onPickHistory={pickHistory}
+          tab={tab}
+          onTabChange={setTab}
+        />
       </div>
 
       {saving && saveRequest && (
         <SaveDialog
           kind={saving}
           request={saveRequest}
-          columns={run.status === 'done' && run.request.source === source && run.request.query === query ? run.result.columns : undefined}
+          columns={
+            run.status === 'done' && run.request.source === source && run.request.query === query
+              ? run.result.columns
+              : undefined
+          }
           defaultTitle={starter?.title ?? ''}
           onClose={() => setSaving(null)}
         />

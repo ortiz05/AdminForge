@@ -59,8 +59,15 @@ export class EventBus {
   }
 
   /** Relays definition changes and (with a database URL) the runs worker's `run_events` notifications. */
-  wire(opts: { definitions: DefinitionSource; databaseUrl?: string | null; database?: Database | null; log?: { warn(obj: object, msg: string): void } }): void {
-    this.unsubscribe = opts.definitions.onChange((change) => this.publish({ type: 'definitions.changed', data: change }));
+  wire(opts: {
+    definitions: DefinitionSource;
+    databaseUrl?: string | null;
+    database?: Database | null;
+    log?: { warn(obj: object, msg: string): void };
+  }): void {
+    this.unsubscribe = opts.definitions.onChange((change) =>
+      this.publish({ type: 'definitions.changed', data: change }),
+    );
     if (opts.databaseUrl && opts.database) {
       this.runListener = new PgListener(
         opts.databaseUrl,

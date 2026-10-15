@@ -23,7 +23,11 @@ const TENANT = '0f1e2d3c-4b5a-4968-8776-655443322110';
 
 describe('checkEnv', () => {
   it('classifies keys as set / default / missing / invalid', () => {
-    const r = checkEnv(EXAMPLE, { AF_TENANT_ID: TENANT, AF_SUBSCRIPTION_ID: 'not-a-guid', TOKEN_CACHE_KEY: Buffer.alloc(32, 1).toString('base64') });
+    const r = checkEnv(EXAMPLE, {
+      AF_TENANT_ID: TENANT,
+      AF_SUBSCRIPTION_ID: 'not-a-guid',
+      TOKEN_CACHE_KEY: Buffer.alloc(32, 1).toString('base64'),
+    });
     const state = Object.fromEntries(r.keys.map((k) => [k.key, k.state]));
     expect(state).toMatchObject({
       AF_TENANT_ID: 'set',
@@ -37,9 +41,17 @@ describe('checkEnv', () => {
   });
 
   it('reports readiness per purpose; alternatives (secret or certificate) satisfy a requirement', () => {
-    const r = checkEnv(EXAMPLE, { AF_TENANT_ID: TENANT, AF_AUTOMATION_CLIENT_ID: TENANT, AF_AUTOMATION_CERT_PATH: '/x.pem' });
+    const r = checkEnv(EXAMPLE, {
+      AF_TENANT_ID: TENANT,
+      AF_AUTOMATION_CLIENT_ID: TENANT,
+      AF_AUTOMATION_CERT_PATH: '/x.pem',
+    });
     expect(r.readiness.schedules).toEqual([]);
-    expect(r.readiness.provision).toEqual(['AF_PRIMARY_DOMAIN', 'AF_PROVISIONER_CLIENT_ID', 'AF_PROVISIONER_CLIENT_SECRET']);
+    expect(r.readiness.provision).toEqual([
+      'AF_PRIMARY_DOMAIN',
+      'AF_PROVISIONER_CLIENT_ID',
+      'AF_PROVISIONER_CLIENT_SECRET',
+    ]);
   });
 
   it('overlays process env and says so, and lists undocumented keys', () => {
@@ -50,7 +62,11 @@ describe('checkEnv', () => {
 
   it('never prints values, only key names and states', () => {
     const secret = 'S3cr3t-Value-Never-Printed';
-    const r = checkEnv(EXAMPLE, { AF_TENANT_ID: TENANT, AF_PROVISIONER_CLIENT_SECRET: secret, AF_PRIMARY_DOMAIN: 'example.com' });
+    const r = checkEnv(EXAMPLE, {
+      AF_TENANT_ID: TENANT,
+      AF_PROVISIONER_CLIENT_SECRET: secret,
+      AF_PRIMARY_DOMAIN: 'example.com',
+    });
     const { lines, ok } = formatEnvReport(r, '/home/x/.config/adminforge/dev.env', ['provision']);
     const text = lines.join('\n');
     expect(text).not.toContain(secret);

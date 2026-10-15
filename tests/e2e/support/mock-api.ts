@@ -101,14 +101,23 @@ export async function mockApi(page: Page, opts: MockOptions = {}) {
           return json(route, { ok: true });
         case 'POST /auth/arm': {
           // Mock sign-in arms at once and comes back to where the user was (returnTo), like the mock BFF.
-          session = { ...session, mode: 'armed', armedUntil: new Date(FIXED_NOW + (47 * 60 + 12) * 1000).toISOString(), armExtended: false };
+          session = {
+            ...session,
+            mode: 'armed',
+            armedUntil: new Date(FIXED_NOW + (47 * 60 + 12) * 1000).toISOString(),
+            armExtended: false,
+          };
           return json(route, { redirect: url.searchParams.get('returnTo') ?? '/?armed=1' });
         }
         case 'GET /api/runs':
           return json(route, { items: [] });
         case 'GET /api/events':
           // One-shot stream; the long retry keeps EventSource from reconnecting during a test.
-          return route.fulfill({ status: 200, contentType: 'text/event-stream', body: 'retry: 600000\n\nevent: ready\ndata: {"mode":"read"}\n\n' });
+          return route.fulfill({
+            status: 200,
+            contentType: 'text/event-stream',
+            body: 'retry: 600000\n\nevent: ready\ndata: {"mode":"read"}\n\n',
+          });
         case 'GET /api/appearance.css':
           return route.fulfill({ status: 200, contentType: 'text/css', body: '/* no overrides */\n' });
         case 'POST /auth/logout':

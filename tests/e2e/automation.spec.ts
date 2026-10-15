@@ -15,8 +15,18 @@ const APPROVER = me({ roles: ['Portal.Reader', 'Portal.Operator', 'Playbook.Appr
 const ADMIN = me({ roles: ['Portal.Reader', 'Portal.Operator', 'Playbook.Approver', 'Portal.Admin'] });
 
 async function noAxeViolations(page: Page) {
-  const results = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa']).analyze();
-  expect(results.violations.map((v) => `${v.id}: ${v.help} (${v.nodes.map((n) => n.target.join(' ')).slice(0, 3).join(', ')})`)).toEqual([]);
+  const results = await new AxeBuilder({ page })
+    .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'])
+    .analyze();
+  expect(
+    results.violations.map(
+      (v) =>
+        `${v.id}: ${v.help} (${v.nodes
+          .map((n) => n.target.join(' '))
+          .slice(0, 3)
+          .join(', ')})`,
+    ),
+  ).toEqual([]);
 }
 
 test.beforeEach(async ({ page }) => {
@@ -27,7 +37,9 @@ test.beforeEach(async ({ page }) => {
 test('read playbook from a link: prefilled form → dry run → plan and outputs', async ({ page }) => {
   const auto = automationApi();
   await mockApi(page, { handlers: [auto.handler] });
-  await page.goto(playbookHref({ playbook: 'diagnostics.user-sign-in-check', inputs: { userId: IDS.mChen } }, '/'));
+  await page.goto(
+    playbookHref({ playbook: 'diagnostics.user-sign-in-check', inputs: { userId: IDS.mChen } }, '/'),
+  );
 
   const drawer = page.getByRole('dialog', { name: 'Check a user’s sign-ins' });
   await expect(drawer).toBeVisible();
@@ -49,11 +61,19 @@ test('read playbook from a link: prefilled form → dry run → plan and outputs
   await noAxeViolations(page);
 });
 
-test('write playbook: locked in read mode → preview → arm → typed confirmation → live run timeline', async ({ page }) => {
+test('write playbook: locked in read mode → preview → arm → typed confirmation → live run timeline', async ({
+  page,
+}) => {
   const auto = automationApi();
   const { calls } = await mockApi(page, { handlers: [auto.handler] });
   await page.goto(
-    playbookHref({ playbook: 'identity.disable-user', inputs: { userId: IDS.aLee, reason: 'INC-4821 account compromised' } }, '/runs'),
+    playbookHref(
+      {
+        playbook: 'identity.disable-user',
+        inputs: { userId: IDS.aLee, reason: 'INC-4821 account compromised' },
+      },
+      '/runs',
+    ),
   );
 
   const drawer = page.getByRole('dialog', { name: 'Disable sign-in' });
@@ -111,7 +131,9 @@ test('write playbook: locked in read mode → preview → arm → typed confirma
   await noAxeViolations(page);
 });
 
-test('bulk run: items from a selection, shared inputs asked once, one child run per item', async ({ page }) => {
+test('bulk run: items from a selection, shared inputs asked once, one child run per item', async ({
+  page,
+}) => {
   const auto = automationApi();
   await mockApi(page, { me: armedMe(), handlers: [auto.handler] });
   const items = [
@@ -200,7 +222,9 @@ test('runbook: the guided document confirms a manual checklist step', async ({ p
   });
 });
 
-test('schedules: cadence in words, pause, enable a write-capable job (approval), run now, history', async ({ page }) => {
+test('schedules: cadence in words, pause, enable a write-capable job (approval), run now, history', async ({
+  page,
+}) => {
   const auto = automationApi();
   await mockApi(page, { handlers: [auto.handler] });
   await page.goto('/schedules');
@@ -213,7 +237,10 @@ test('schedules: cadence in words, pause, enable a write-capable job (approval),
 
   await grid.getByRole('switch', { name: 'Disable Weekly app credential expiry report' }).click();
   await expect(page.getByText('Weekly app credential expiry report paused')).toBeVisible();
-  expect(auto.state.schedulePatches[0]).toEqual({ key: 'reports.app-credential-expiry', body: { enabled: false } });
+  expect(auto.state.schedulePatches[0]).toEqual({
+    key: 'reports.app-credential-expiry',
+    body: { enabled: false },
+  });
 
   await grid.getByRole('switch', { name: 'Enable Disable stale guest accounts' }).click();
   const ask = page.getByRole('alertdialog', { name: /Ask for approval/ });
@@ -226,10 +253,17 @@ test('schedules: cadence in words, pause, enable a write-capable job (approval),
   expect(auto.state.scheduleRuns).toEqual(['reports.licence-usage-monthly']);
 
   await grid.getByRole('link', { name: 'Weekly app credential expiry report' }).click();
-  await expect(page.getByRole('heading', { level: 1, name: 'Weekly app credential expiry report' })).toBeVisible();
+  await expect(
+    page.getByRole('heading', { level: 1, name: 'Weekly app credential expiry report' }),
+  ).toBeVisible();
   const history = page.getByRole('table', { name: /Runs of Weekly app credential expiry report/ });
-  await expect(history.getByRole('link', { name: /app-credential-expiry-2026-10-12\.xlsx/ })).toHaveAttribute('href', /artifacts\/sr-1/);
-  await expect(history.getByText('Microsoft Graph throttled the request (429) after 3 retries.')).toBeVisible();
+  await expect(history.getByRole('link', { name: /app-credential-expiry-2026-10-12\.xlsx/ })).toHaveAttribute(
+    'href',
+    /artifacts\/sr-1/,
+  );
+  await expect(
+    history.getByText('Microsoft Graph throttled the request (429) after 3 retries.'),
+  ).toBeVisible();
   // Paused above, so no next runs are scheduled.
   await expect(page.getByText('Disabled: no runs scheduled.')).toBeVisible();
   await noAxeViolations(page);
@@ -244,7 +278,9 @@ test('synthetic monitoring: grouped probe tiles, worst first, detail chart', asy
   await expect(page.getByRole('button', { name: /Microsoft Graph reachability: Healthy/ })).toBeVisible();
   await page.getByRole('button', { name: /Portal TLS certificate: Degraded/ }).click();
   const drawer = page.getByRole('dialog', { name: 'Portal TLS certificate' });
-  await expect(drawer.getByText('Certificate for portal.example.com expires in 12 days.').first()).toBeVisible();
+  await expect(
+    drawer.getByText('Certificate for portal.example.com expires in 12 days.').first(),
+  ).toBeVisible();
   await expect(drawer.getByRole('figure', { name: /Portal TLS certificate, last 24 hours/ })).toBeVisible();
   await expect(page).toHaveURL(/probe=probes\.portal-tls-certificate/);
   await page.keyboard.press('Escape');
@@ -312,7 +348,10 @@ test('run dock lists my active runs and opens one', async ({ page }) => {
   await expect(page).toHaveURL(new RegExp(`/runs/${IDS.approvalRun}$`));
 });
 
-test('show-once secret: live message → masked panel → reveal, copy, dismiss; outputs stay masked', async ({ page, context }) => {
+test('show-once secret: live message → masked panel → reveal, copy, dismiss; outputs stay masked', async ({
+  page,
+  context,
+}) => {
   await context.grantPermissions(['clipboard-read', 'clipboard-write']);
   const auto = automationApi();
   await mockApi(page, { handlers: [auto.handler] });
@@ -328,11 +367,15 @@ test('show-once secret: live message → masked panel → reveal, copy, dismiss;
   await panel.getByRole('button', { name: 'I’ve copied it — dismiss' }).click();
   await expect(panel).toHaveCount(0);
   await expect(page.getByText(TAP_VALUE)).toHaveCount(0);
-  await expect(page.getByRole('region', { name: 'Result' }).getByText(/•••• one-time use · valid 60 min/)).toBeVisible();
+  await expect(
+    page.getByRole('region', { name: 'Result' }).getByText(/•••• one-time use · valid 60 min/),
+  ).toBeVisible();
   expect(await page.evaluate(() => JSON.stringify(localStorage) + location.href)).not.toContain(TAP_VALUE);
 });
 
-test('show-once secret: a held child secret is claimed once (CSRF), then reported as gone', async ({ page }) => {
+test('show-once secret: a held child secret is claimed once (CSRF), then reported as gone', async ({
+  page,
+}) => {
   const auto = automationApi();
   await mockApi(page, { handlers: [auto.handler] });
   await page.goto(`/runs/${IDS.onboardRun}`);
@@ -340,7 +383,9 @@ test('show-once secret: a held child secret is claimed once (CSRF), then reporte
   await expect(panel.getByText(/\(child run\)/)).toBeVisible();
   await panel.getByRole('button', { name: 'Show Temporary access pass' }).click();
   await expect(panel.getByText(CHILD_TAP_VALUE)).toBeVisible();
-  expect(auto.state.secretClaims).toEqual([{ path: `/api/runs/${IDS.onboardChild}/secret/issue`, csrf: true }]);
+  expect(auto.state.secretClaims).toEqual([
+    { path: `/api/runs/${IDS.onboardChild}/secret/issue`, csrf: true },
+  ]);
 
   await page.reload();
   await expect(page.getByText('This secret was already shown or has expired.')).toBeVisible();
@@ -348,7 +393,9 @@ test('show-once secret: a held child secret is claimed once (CSRF), then reporte
   expect(auto.state.secretClaims).toHaveLength(2);
 });
 
-test('runbook link prefill: plain params named like inputs are validated and fill the start form', async ({ page }) => {
+test('runbook link prefill: plain params named like inputs are validated and fill the start form', async ({
+  page,
+}) => {
   const auto = automationApi();
   await mockApi(page, { handlers: [auto.handler] });
   await page.goto(`/runbooks/identity.offboard-leaver?userId=${IDS.jDoe}&ticket=HR-2231`);
@@ -356,13 +403,28 @@ test('runbook link prefill: plain params named like inputs are validated and fil
   await expect(page.getByRole('textbox', { name: 'HR ticket' })).toHaveValue('HR-2231');
   await page.getByRole('button', { name: 'Start runbook' }).click();
   await expect(page).toHaveURL(new RegExp(`run=${IDS.runbookRun}`));
-  expect(auto.state.runPosts[0]).toEqual({ playbook: 'identity.offboard-leaver', version: '2.1.0', inputs: { userId: IDS.jDoe, ticket: 'HR-2231' }, dryRun: false });
+  expect(auto.state.runPosts[0]).toEqual({
+    playbook: 'identity.offboard-leaver',
+    version: '2.1.0',
+    inputs: { userId: IDS.jDoe, ticket: 'HR-2231' },
+    dryRun: false,
+  });
 });
 
-test('preview then confirm: edits invalidate the preview; a stale preview is refreshed on Run; the server’s mismatch shows under the field', async ({ page }) => {
+test('preview then confirm: edits invalidate the preview; a stale preview is refreshed on Run; the server’s mismatch shows under the field', async ({
+  page,
+}) => {
   const auto = automationApi({ stalePreview: true, mismatchOnce: true });
   await mockApi(page, { me: armedMe(), handlers: [auto.handler] });
-  await page.goto(playbookHref({ playbook: 'identity.disable-user', inputs: { userId: IDS.aLee, reason: 'INC-4821 account compromised' } }, '/runs'));
+  await page.goto(
+    playbookHref(
+      {
+        playbook: 'identity.disable-user',
+        inputs: { userId: IDS.aLee, reason: 'INC-4821 account compromised' },
+      },
+      '/runs',
+    ),
+  );
   const drawer = page.getByRole('dialog', { name: 'Disable sign-in' });
   const run = drawer.getByRole('button', { name: 'Disable sign-in', exact: true });
 
@@ -382,17 +444,32 @@ test('preview then confirm: edits invalidate the preview; a stale preview is ref
   const confirm = page.getByRole('dialog', { name: 'Disable sign-in?' });
   await confirm.getByLabel(/to confirm/).fill('a.lee@example.com');
   await confirm.getByRole('button', { name: 'Disable sign-in' }).click();
-  await expect(confirm.getByText('That doesn’t match. Type the sign-in name exactly as shown.')).toBeVisible();
+  await expect(
+    confirm.getByText('That doesn’t match. Type the sign-in name exactly as shown.'),
+  ).toBeVisible();
   await confirm.getByRole('button', { name: 'Disable sign-in' }).click();
   await expect(page).toHaveURL(new RegExp(`/runs/${IDS.liveRun}$`));
   expect(auto.state.runPosts.filter((p) => (p as { dryRun: boolean }).dryRun)).toHaveLength(2);
-  expect(auto.state.runPosts.at(-1)).toMatchObject({ previewRunId: IDS.previewRun2, confirmation: 'a.lee@example.com' });
+  expect(auto.state.runPosts.at(-1)).toMatchObject({
+    previewRunId: IDS.previewRun2,
+    confirmation: 'a.lee@example.com',
+  });
 });
 
-test('preview then confirm: Run with an expired preview previews again, then asks to confirm', async ({ page }) => {
+test('preview then confirm: Run with an expired preview previews again, then asks to confirm', async ({
+  page,
+}) => {
   const auto = automationApi({ stalePreview: true });
   await mockApi(page, { me: armedMe(), handlers: [auto.handler] });
-  await page.goto(playbookHref({ playbook: 'identity.disable-user', inputs: { userId: IDS.aLee, reason: 'INC-4821 account compromised' } }, '/runs'));
+  await page.goto(
+    playbookHref(
+      {
+        playbook: 'identity.disable-user',
+        inputs: { userId: IDS.aLee, reason: 'INC-4821 account compromised' },
+      },
+      '/runs',
+    ),
+  );
   const drawer = page.getByRole('dialog', { name: 'Disable sign-in' });
   await drawer.getByRole('button', { name: 'Preview (dry run)' }).click();
   await expect(drawer.getByText('This preview expired')).toBeVisible();
@@ -406,10 +483,20 @@ test('preview then confirm: Run with an expired preview previews again, then ask
   expect(auto.state.runPosts.at(-1)).toMatchObject({ previewRunId: IDS.previewRun2 });
 });
 
-test('preview then confirm: a 409 from the server closes the confirmation and offers Preview again', async ({ page }) => {
+test('preview then confirm: a 409 from the server closes the confirmation and offers Preview again', async ({
+  page,
+}) => {
   const auto = automationApi({ refuseStaleOnce: true });
   await mockApi(page, { me: armedMe(), handlers: [auto.handler] });
-  await page.goto(playbookHref({ playbook: 'identity.disable-user', inputs: { userId: IDS.aLee, reason: 'INC-4821 account compromised' } }, '/runs'));
+  await page.goto(
+    playbookHref(
+      {
+        playbook: 'identity.disable-user',
+        inputs: { userId: IDS.aLee, reason: 'INC-4821 account compromised' },
+      },
+      '/runs',
+    ),
+  );
   const drawer = page.getByRole('dialog', { name: 'Disable sign-in' });
   await drawer.getByRole('button', { name: 'Preview (dry run)' }).click();
   await drawer.getByRole('button', { name: 'Disable sign-in', exact: true }).click();
@@ -417,13 +504,24 @@ test('preview then confirm: a 409 from the server closes the confirmation and of
   await confirm.getByLabel(/to confirm/).fill('a.lee@example.com');
   await confirm.getByRole('button', { name: 'Disable sign-in' }).click();
   await expect(confirm).toHaveCount(0);
-  await expect(drawer.getByText('The preview is more than 15 minutes old, or its inputs changed.')).toBeVisible();
+  await expect(
+    drawer.getByText('The preview is more than 15 minutes old, or its inputs changed.'),
+  ).toBeVisible();
   await drawer.getByRole('button', { name: 'Preview again' }).first().click();
   await drawer.getByRole('button', { name: 'Disable sign-in', exact: true }).click();
-  await page.getByRole('dialog', { name: 'Disable sign-in?' }).getByLabel(/to confirm/).fill('a.lee@example.com');
-  await page.getByRole('dialog', { name: 'Disable sign-in?' }).getByRole('button', { name: 'Disable sign-in' }).click();
+  await page
+    .getByRole('dialog', { name: 'Disable sign-in?' })
+    .getByLabel(/to confirm/)
+    .fill('a.lee@example.com');
+  await page
+    .getByRole('dialog', { name: 'Disable sign-in?' })
+    .getByRole('button', { name: 'Disable sign-in' })
+    .click();
   await expect(page).toHaveURL(new RegExp(`/runs/${IDS.liveRun}$`));
-  expect(auto.state.runPosts.at(-1)).toMatchObject({ previewRunId: IDS.previewRun2, confirmation: 'a.lee@example.com' });
+  expect(auto.state.runPosts.at(-1)).toMatchObject({
+    previewRunId: IDS.previewRun2,
+    confirmation: 'a.lee@example.com',
+  });
 });
 
 test('bulk with typed confirmation: bulk dry run, then type the number of items', async ({ page }) => {
@@ -433,13 +531,23 @@ test('bulk with typed confirmation: bulk dry run, then type the number of items'
     { userId: IDS.aLee, $label: 'Adele Lee' },
     { userId: IDS.mChen, $label: 'Ming Chen' },
   ];
-  await page.goto(playbookHref({ playbook: 'identity.disable-user', items, inputs: { reason: 'Leaver sweep HR-2240' } }, '/runs'));
+  await page.goto(
+    playbookHref(
+      { playbook: 'identity.disable-user', items, inputs: { reason: 'Leaver sweep HR-2240' } },
+      '/runs',
+    ),
+  );
   const drawer = page.getByRole('dialog', { name: 'Disable sign-in' });
   const run = drawer.getByRole('button', { name: 'Disable sign-in · 2 items' });
   await expect(run).toHaveAttribute('aria-disabled', 'true');
   await drawer.getByRole('button', { name: 'Preview (dry run)' }).click();
-  await expect(drawer.getByRole('region', { name: 'Items in the preview' }).getByText('2 of 2 ready')).toBeVisible();
-  expect(auto.state.bulkPosts[0]).toMatchObject({ dryRun: true, items: [{ userId: IDS.aLee }, { userId: IDS.mChen }] });
+  await expect(
+    drawer.getByRole('region', { name: 'Items in the preview' }).getByText('2 of 2 ready'),
+  ).toBeVisible();
+  expect(auto.state.bulkPosts[0]).toMatchObject({
+    dryRun: true,
+    items: [{ userId: IDS.aLee }, { userId: IDS.mChen }],
+  });
   await run.click();
   const confirm = page.getByRole('dialog', { name: 'Disable sign-in for 2 items?' });
   await expect(confirm.getByText(/to confirm changing 2 objects/)).toBeVisible();

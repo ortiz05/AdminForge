@@ -12,7 +12,8 @@ import { api, isRecord, type Parser } from '../lib/api';
 
 export const SOURCES = ['resourceGraph', 'logAnalytics', 'advancedHunting'] as const;
 export type QuerySource = (typeof SOURCES)[number];
-export const isSource = (v: unknown): v is QuerySource => typeof v === 'string' && (SOURCES as readonly string[]).includes(v);
+export const isSource = (v: unknown): v is QuerySource =>
+  typeof v === 'string' && (SOURCES as readonly string[]).includes(v);
 
 export interface QueryRequest {
   source: QuerySource;
@@ -77,7 +78,9 @@ export const QueryResultParser: Parser<QueryResult> = {
     if (!isRecord(input)) return fail('a query result object');
     const columns = Array.isArray(input.columns)
       ? input.columns.flatMap((c): ResultColumn[] =>
-          isRecord(c) && typeof c.name === 'string' ? [{ name: c.name, type: typeof c.type === 'string' ? c.type.toLowerCase() : 'string' }] : [],
+          isRecord(c) && typeof c.name === 'string'
+            ? [{ name: c.name, type: typeof c.type === 'string' ? c.type.toLowerCase() : 'string' }]
+            : [],
         )
       : fail('{ columns: [] }');
     const rows = readRows(input.rows, columns);
@@ -126,12 +129,18 @@ export interface ScaffoldResult {
 
 export const ScaffoldParser: Parser<ScaffoldResult> = {
   parse(input) {
-    if (!isRecord(input) || typeof input.yaml !== 'string' || typeof input.path !== 'string') return fail('{ yaml, path }');
-    return { yaml: input.yaml, path: input.path, ...(typeof input.key === 'string' ? { key: input.key } : {}) };
+    if (!isRecord(input) || typeof input.yaml !== 'string' || typeof input.path !== 'string')
+      return fail('{ yaml, path }');
+    return {
+      yaml: input.yaml,
+      path: input.path,
+      ...(typeof input.key === 'string' ? { key: input.key } : {}),
+    };
   },
 };
 
-export const scaffoldQuery = (req: ScaffoldRequest) => api('/api/query/scaffold', { method: 'POST', body: req, schema: ScaffoldParser });
+export const scaffoldQuery = (req: ScaffoldRequest) =>
+  api('/api/query/scaffold', { method: 'POST', body: req, schema: ScaffoldParser });
 
 // ── Defender licence (capabilities) ───────────────────────────────────────────
 
@@ -186,7 +195,9 @@ export const subscriptionsQuery = queryOptions({
   queryFn: async ({ signal }): Promise<ScopeOption[]> => {
     const r = await runQuery({ source: 'resourceGraph', query: SUBSCRIPTIONS_KQL }, signal);
     return r.rows.flatMap((row) =>
-      typeof row.subscriptionId === 'string' ? [{ value: row.subscriptionId, label: typeof row.name === 'string' ? row.name : row.subscriptionId }] : [],
+      typeof row.subscriptionId === 'string'
+        ? [{ value: row.subscriptionId, label: typeof row.name === 'string' ? row.name : row.subscriptionId }]
+        : [],
     );
   },
   staleTime: 10 * 60_000,

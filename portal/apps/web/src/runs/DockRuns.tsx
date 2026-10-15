@@ -16,7 +16,8 @@ export const IDLE_TEXT = 'No runs in this session. Playbooks you start appear he
 
 function progressText(run: RunSummary): string {
   const parts: string[] = [];
-  if (run.progress) parts.push(`step ${Math.min(run.progress.done + 1, run.progress.total)}/${run.progress.total}`);
+  if (run.progress)
+    parts.push(`step ${Math.min(run.progress.done + 1, run.progress.total)}/${run.progress.total}`);
   if (run.currentStep) parts.push(run.currentStep);
   return parts.join(' · ');
 }
@@ -78,7 +79,10 @@ export default function DockRuns() {
       fetching.current.add(id);
       void api(`/api/runs/${encodeURIComponent(id)}`, { schema: RunDetailResponse })
         .then((d) =>
-          setRecent((all) => ({ ...all, [id]: { ...run, ...d.run, endedAt: d.run.endedAt ?? new Date().toISOString() } })),
+          setRecent((all) => ({
+            ...all,
+            [id]: { ...run, ...d.run, endedAt: d.run.endedAt ?? new Date().toISOString() },
+          })),
         )
         .catch(() => undefined);
     }
@@ -87,7 +91,9 @@ export default function DockRuns() {
 
   const live = items ?? [];
   const finished = Object.values(recent)
-    .filter((r) => !live.some((l) => l.id === r.id) && !(r.endedAt && now - Date.parse(r.endedAt) > RECENT_MS))
+    .filter(
+      (r) => !live.some((l) => l.id === r.id) && !(r.endedAt && now - Date.parse(r.endedAt) > RECENT_MS),
+    )
     .sort((a, b) => Date.parse(b.endedAt ?? '') - Date.parse(a.endedAt ?? ''));
   const all = [...live, ...finished];
   const shown = all.slice(0, MAX_CHIPS);
@@ -115,7 +121,11 @@ export default function DockRuns() {
           ))}
           {more > 0 && (
             <li className="shrink-0">
-              <Link to="/runs" search={{ scope: 'mine' }} className="rounded-md px-2 py-1 text-fg-3 hover:bg-hover hover:text-fg">
+              <Link
+                to="/runs"
+                search={{ scope: 'mine' }}
+                className="rounded-md px-2 py-1 text-fg-3 hover:bg-hover hover:text-fg"
+              >
                 +{more} more
               </Link>
             </li>

@@ -22,10 +22,19 @@ export type PageDefinition = PageLike & { version: string; sha256?: string };
 const KINDS: PageKind[] = ['page', 'dashboard', 'report'];
 
 function readDefinition(input: unknown): PageDefinition {
-  const body = isRecord(input) && isRecord(input.definition) ? { ...input.definition, version: input.version ?? input.definition.version } : input;
-  if (!isRecord(body) || typeof body.id !== 'string' || typeof body.kind !== 'string' || typeof body.version !== 'string')
+  const body =
+    isRecord(input) && isRecord(input.definition)
+      ? { ...input.definition, version: input.version ?? input.definition.version }
+      : input;
+  if (
+    !isRecord(body) ||
+    typeof body.id !== 'string' ||
+    typeof body.kind !== 'string' ||
+    typeof body.version !== 'string'
+  )
     throw new TypeError('Expected a definition with kind, id and version');
-  if (!KINDS.includes(body.kind as PageKind)) throw new TypeError(`Expected a page, dashboard or report, got ${String(body.kind)}`);
+  if (!KINDS.includes(body.kind as PageKind))
+    throw new TypeError(`Expected a page, dashboard or report, got ${String(body.kind)}`);
   return body as unknown as PageDefinition;
 }
 
@@ -40,13 +49,20 @@ export async function fetchDefinition(key: string, signal?: AbortSignal): Promis
     if (!notFound(e)) throw e;
   }
   const settled = await Promise.allSettled(
-    (['dashboard', 'report'] as const).map((k) => api(path(k), { schema: { parse: readDefinition }, signal })),
+    (['dashboard', 'report'] as const).map((k) =>
+      api(path(k), { schema: { parse: readDefinition }, signal }),
+    ),
   );
   const hit = settled.find((s) => s.status === 'fulfilled');
   if (hit) return (hit as PromiseFulfilledResult<PageDefinition>).value;
   const real = settled.find((s) => s.status === 'rejected' && !notFound(s.reason));
   if (real) throw (real as PromiseRejectedResult).reason;
-  throw new ApiRequestError(404, 'definition_not_found', `There is no page, dashboard or report called “${key}”.`, 'Check the link, or find the page with the command palette.');
+  throw new ApiRequestError(
+    404,
+    'definition_not_found',
+    `There is no page, dashboard or report called “${key}”.`,
+    'Check the link, or find the page with the command palette.',
+  );
 }
 
 export const definitionQuery = (key: string) =>
@@ -70,7 +86,8 @@ export interface DatasourceOutcome {
 }
 
 function readOutcome(raw: unknown): DatasourceOutcome {
-  if (!isRecord(raw)) return { data: null, provenance: null, error: { message: 'The data source returned nothing.' } };
+  if (!isRecord(raw))
+    return { data: null, provenance: null, error: { message: 'The data source returned nothing.' } };
   if (isRecord(raw.error))
     return {
       data: null,
@@ -99,9 +116,17 @@ interface Pending {
  * Batches datasource loads that start in the same tick into one execute-many call — widgets ask per datasource
  * (so each is cached and refreshed on its own) while the page still makes a single round trip.
  */
-const batches = new Map<string, { page: string; version: string; params: Record<string, unknown>; pending: Map<string, Pending[]> }>();
+const batches = new Map<
+  string,
+  { page: string; version: string; params: Record<string, unknown>; pending: Map<string, Pending[]> }
+>();
 
-export function loadDatasource(page: string, version: string, params: Record<string, unknown>, datasource: string): Promise<DatasourceOutcome> {
+export function loadDatasource(
+  page: string,
+  version: string,
+  params: Record<string, unknown>,
+  datasource: string,
+): Promise<DatasourceOutcome> {
   const key = `${page}\u0000${version}\u0000${JSON.stringify(params)}`;
   let batch = batches.get(key);
   if (!batch) {
@@ -125,9 +150,14 @@ async function flush(key: string) {
       body: { page: batch.page, version: batch.version, datasources: names, params: batch.params },
     });
     for (const name of names) {
-      const outcome = res.results && name in res.results
-        ? readOutcome(res.results[name])
-        : { data: null, provenance: null, error: { code: 'missing_result', message: `The server returned no result for “${name}”.` } };
+      const outcome =
+        res.results && name in res.results
+          ? readOutcome(res.results[name])
+          : {
+              data: null,
+              provenance: null,
+              error: { code: 'missing_result', message: `The server returned no result for “${name}”.` },
+            };
       for (const w of batch.pending.get(name)!) w.resolve(outcome);
     }
   } catch (e) {
@@ -136,14 +166,24 @@ async function flush(key: string) {
 }
 
 /** Next page of a `paging: cursor` datasource. */
-export async function loadNextPage(page: string, version: string, params: Record<string, unknown>, datasource: string, cursor: string): Promise<DatasourceOutcome> {
-  const res = await api('/api/datasources/execute', { method: 'POST', body: { page, version, datasource, params, cursor } });
+export async function loadNextPage(
+  page: string,
+  version: string,
+  params: Record<string, unknown>,
+  datasource: string,
+  cursor: string,
+): Promise<DatasourceOutcome> {
+  const res = await api('/api/datasources/execute', {
+    method: 'POST',
+    body: { page, version, datasource, params, cursor },
+  });
   return readOutcome(res);
 }
 
 /** ApiRequestError → the widgets' error shape. */
 export function toWidgetError(e: unknown): WidgetError {
-  if (e instanceof ApiRequestError) return { code: e.code, message: e.message, hint: e.hint, correlationId: e.correlationId };
+  if (e instanceof ApiRequestError)
+    return { code: e.code, message: e.message, hint: e.hint, correlationId: e.correlationId };
   return { message: e instanceof Error ? e.message : 'The request failed.' };
 }
 
@@ -159,13 +199,20 @@ function readCapabilities(raw: unknown): Capabilities {
   for (const [key, f] of Object.entries(src)) {
     if (!isRecord(f)) continue;
     // `available` (contract) or `enabled` (null = licences unreadable).
-    const available = typeof f.available === 'boolean' ? f.available : typeof f.enabled === 'boolean' ? f.enabled : null;
+    const available =
+      typeof f.available === 'boolean' ? f.available : typeof f.enabled === 'boolean' ? f.enabled : null;
     features[key] = {
       available,
       label: typeof f.label === 'string' ? f.label : key,
       ...(typeof f.reason === 'string' ? { reason: f.reason } : {}),
-      ...(typeof f.sku === 'string' ? { sku: f.sku } : typeof f.requires === 'string' ? { sku: f.requires } : {}),
-      ...(Array.isArray(f.servicePlans) ? { servicePlans: f.servicePlans.filter((p): p is string => typeof p === 'string') } : {}),
+      ...(typeof f.sku === 'string'
+        ? { sku: f.sku }
+        : typeof f.requires === 'string'
+          ? { sku: f.requires }
+          : {}),
+      ...(Array.isArray(f.servicePlans)
+        ? { servicePlans: f.servicePlans.filter((p): p is string => typeof p === 'string') }
+        : {}),
     };
   }
   return { features };
@@ -219,7 +266,13 @@ export interface SavedViewItem {
 }
 
 function readViews(raw: unknown): SavedViewItem[] {
-  const list = Array.isArray(raw) ? raw : isRecord(raw) && Array.isArray(raw.items) ? raw.items : isRecord(raw) && Array.isArray(raw.views) ? raw.views : [];
+  const list = Array.isArray(raw)
+    ? raw
+    : isRecord(raw) && Array.isArray(raw.items)
+      ? raw.items
+      : isRecord(raw) && Array.isArray(raw.views)
+        ? raw.views
+        : [];
   return list.filter(isRecord).map((v) => ({
     id: String(v.id),
     name: String(v.name ?? 'Untitled view'),
@@ -233,16 +286,21 @@ function readViews(raw: unknown): SavedViewItem[] {
 export const viewsQuery = (page: string) =>
   queryOptions({
     queryKey: ['views', page] as const,
-    queryFn: ({ signal }) => api(`/api/views?page=${encodeURIComponent(page)}`, { schema: { parse: readViews }, signal }),
+    queryFn: ({ signal }) =>
+      api(`/api/views?page=${encodeURIComponent(page)}`, { schema: { parse: readViews }, signal }),
     staleTime: 60_000,
   });
 
 const readView = (raw: unknown) => readViews([raw])[0]!;
 
-export const createView = (page: string, body: { name: string; state: Record<string, unknown>; shared: boolean }) =>
-  api('/api/views', { method: 'POST', body: { page, ...body }, schema: { parse: readView } });
+export const createView = (
+  page: string,
+  body: { name: string; state: Record<string, unknown>; shared: boolean },
+) => api('/api/views', { method: 'POST', body: { page, ...body }, schema: { parse: readView } });
 
-export const updateView = (id: string, body: Partial<{ name: string; state: Record<string, unknown>; shared: boolean }>) =>
-  api(`/api/views/${encodeURIComponent(id)}`, { method: 'PATCH', body, schema: { parse: readView } });
+export const updateView = (
+  id: string,
+  body: Partial<{ name: string; state: Record<string, unknown>; shared: boolean }>,
+) => api(`/api/views/${encodeURIComponent(id)}`, { method: 'PATCH', body, schema: { parse: readView } });
 
 export const deleteView = (id: string) => api(`/api/views/${encodeURIComponent(id)}`, { method: 'DELETE' });

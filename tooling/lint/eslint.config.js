@@ -9,15 +9,32 @@ const ARBITRARY = '\\b[a-z-]+-\\[[^\\]]+\\]';
 const tokenRules = {
   'no-restricted-syntax': [
     'error',
-    { selector: `Literal[value=/${RAW_COLOR}/]`, message: 'Use a design token (bg-panel, text-fg, var(--af-…)) instead of a raw colour.' },
-    { selector: `Literal[value=/${ARBITRARY}/]`, message: 'Arbitrary Tailwind values bypass the design system. Use or add a token.' },
-    { selector: `TemplateElement[value.raw=/${ARBITRARY}/]`, message: 'Arbitrary Tailwind values bypass the design system. Use or add a token.' },
+    {
+      selector: `Literal[value=/${RAW_COLOR}/]`,
+      message: 'Use a design token (bg-panel, text-fg, var(--af-…)) instead of a raw colour.',
+    },
+    {
+      selector: `Literal[value=/${ARBITRARY}/]`,
+      message: 'Arbitrary Tailwind values bypass the design system. Use or add a token.',
+    },
+    {
+      selector: `TemplateElement[value.raw=/${ARBITRARY}/]`,
+      message: 'Arbitrary Tailwind values bypass the design system. Use or add a token.',
+    },
   ],
 };
 
 export default tseslint.config(
   {
-    ignores: ['**/node_modules/**', '**/dist/**', '**/*.gen.ts', '**/coverage/**', '**/playwright-report/**', '**/test-results/**', 'docs/**'],
+    ignores: [
+      '**/node_modules/**',
+      '**/dist/**',
+      '**/*.gen.ts',
+      '**/coverage/**',
+      '**/playwright-report/**',
+      '**/test-results/**',
+      'docs/**',
+    ],
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,

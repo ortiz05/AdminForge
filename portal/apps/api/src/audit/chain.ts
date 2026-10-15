@@ -24,7 +24,10 @@ export function chainHash(prevHash: string, event: Record<string, unknown>): str
 export type ChainRow = Record<string, unknown> & { prevHash: string; hash: string };
 
 /** Re-walks a chain in order; reports the index of the first row that doesn't verify. */
-export function verifyChain(rows: ChainRow[], genesis = GENESIS): { ok: true } | { ok: false; brokenAt: number } {
+export function verifyChain(
+  rows: ChainRow[],
+  genesis = GENESIS,
+): { ok: true } | { ok: false; brokenAt: number } {
   let prev = genesis;
   for (const [i, { prevHash, hash, ...event }] of rows.entries()) {
     if (prevHash !== prev || chainHash(prev, event) !== hash) return { ok: false, brokenAt: i };

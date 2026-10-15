@@ -28,11 +28,19 @@ export interface ScheduleStore {
   /** null when the key already exists. */
   insertSchedule(row: NewSchedule): Promise<ScheduleRow | null>;
   /** Applies the patch when the row still matches `expect` (sha256 / nextRunAt); null otherwise. */
-  updateSchedule(id: string, patch: SchedulePatch, expect?: { sha256?: string; nextRunAt?: Date | null }): Promise<ScheduleRow | null>;
+  updateSchedule(
+    id: string,
+    patch: SchedulePatch,
+    expect?: { sha256?: string; nextRunAt?: Date | null },
+  ): Promise<ScheduleRow | null>;
 
   insertRun(row: NewScheduleRun): Promise<ScheduleRunRow>;
   /** Applies the patch when the row is still in `expectStatus` (if given); null otherwise. */
-  updateRun(id: string, patch: ScheduleRunPatch, expectStatus?: ScheduleRunStatus): Promise<ScheduleRunRow | null>;
+  updateRun(
+    id: string,
+    patch: ScheduleRunPatch,
+    expectStatus?: ScheduleRunStatus,
+  ): Promise<ScheduleRunRow | null>;
   getRun(id: string): Promise<ScheduleRunRow | null>;
   /** Newest first; `before` = keyset cursor. */
   listRuns(scheduleId: string, opts: { limit: number; before?: RunCursor }): Promise<ScheduleRunRow[]>;
@@ -50,11 +58,16 @@ export interface ScheduleStore {
   insertApproval(row: NewScheduleApproval): Promise<ScheduleApprovalRow>;
   getApproval(id: string): Promise<ScheduleApprovalRow | null>;
   listApprovals(filter: { status?: ApprovalStatus; subjectId?: string }): Promise<ScheduleApprovalRow[]>;
-  updateApproval(id: string, patch: ScheduleApprovalPatch, expectStatus?: ApprovalStatus): Promise<ScheduleApprovalRow | null>;
+  updateApproval(
+    id: string,
+    patch: ScheduleApprovalPatch,
+    expectStatus?: ApprovalStatus,
+  ): Promise<ScheduleApprovalRow | null>;
 }
 
 const clone = <T>(v: T): T => structuredClone(v);
-const newer = (a: { startedAt: Date; id: string }, b: { startedAt: Date; id: string }) => b.startedAt.getTime() - a.startedAt.getTime() || (a.id < b.id ? 1 : a.id > b.id ? -1 : 0);
+const newer = (a: { startedAt: Date; id: string }, b: { startedAt: Date; id: string }) =>
+  b.startedAt.getTime() - a.startedAt.getTime() || (a.id < b.id ? 1 : a.id > b.id ? -1 : 0);
 
 /** In-memory store (tests, DB-less mock mode). */
 export class MemoryScheduleStore implements ScheduleStore {
@@ -80,21 +93,47 @@ export class MemoryScheduleStore implements ScheduleStore {
   async insertSchedule(row: NewSchedule) {
     if ([...this.schedules.values()].some((s) => s.key === row.key)) return null;
     const now = this.now();
-    const full: ScheduleRow = { id: randomUUID(), createdBy: null, approvedBy: null, lastRunAt: null, lastStatus: null, createdAt: now, updatedAt: now, ...clone(row) };
+    const full: ScheduleRow = {
+      id: randomUUID(),
+      createdBy: null,
+      approvedBy: null,
+      lastRunAt: null,
+      lastStatus: null,
+      createdAt: now,
+      updatedAt: now,
+      ...clone(row),
+    };
     this.schedules.set(full.id, full);
     return clone(full);
   }
-  async updateSchedule(id: string, patch: SchedulePatch, expect: { sha256?: string; nextRunAt?: Date | null } = {}) {
+  async updateSchedule(
+    id: string,
+    patch: SchedulePatch,
+    expect: { sha256?: string; nextRunAt?: Date | null } = {},
+  ) {
     const r = this.schedules.get(id);
     if (!r) return null;
     if (expect.sha256 !== undefined && r.sha256 !== expect.sha256) return null;
-    if (expect.nextRunAt !== undefined && (r.nextRunAt?.getTime() ?? null) !== (expect.nextRunAt?.getTime() ?? null)) return null;
+    if (
+      expect.nextRunAt !== undefined &&
+      (r.nextRunAt?.getTime() ?? null) !== (expect.nextRunAt?.getTime() ?? null)
+    )
+      return null;
     Object.assign(r, clone(patch), { updatedAt: this.now() });
     return clone(r);
   }
 
   async insertRun(row: NewScheduleRun) {
-    const full: ScheduleRunRow = { id: row.id ?? randomUUID(), runId: null, result: null, error: null, artifactPath: null, startedAt: this.now(), endedAt: null, ...clone(row) };
+    const full: ScheduleRunRow = {
+      id: row.id ?? randomUUID(),
+      runId: null,
+      result: null,
+      error: null,
+      artifactPath: null,
+      startedAt: this.now(),
+      endedAt: null,
+      ...clone(row),
+    };
     this.runs.set(full.id, full);
     return clone(full);
   }
@@ -116,7 +155,10 @@ export class MemoryScheduleStore implements ScheduleStore {
       .map(clone);
   }
   async runsInStatus(statuses: ScheduleRunStatus[]) {
-    return [...this.runs.values()].filter((r) => statuses.includes(r.status)).sort((a, b) => a.startedAt.getTime() - b.startedAt.getTime()).map(clone);
+    return [...this.runs.values()]
+      .filter((r) => statuses.includes(r.status))
+      .sort((a, b) => a.startedAt.getTime() - b.startedAt.getTime())
+      .map(clone);
   }
 
   async insertProbeResult(row: NewProbeResult) {
@@ -149,7 +191,15 @@ export class MemoryScheduleStore implements ScheduleStore {
   }
 
   async insertApproval(row: NewScheduleApproval) {
-    const full: ScheduleApprovalRow = { id: randomUUID(), subjectType: 'schedule', decisions: [], status: 'pending', createdAt: this.now(), decidedAt: null, ...clone(row) };
+    const full: ScheduleApprovalRow = {
+      id: randomUUID(),
+      subjectType: 'schedule',
+      decisions: [],
+      status: 'pending',
+      createdAt: this.now(),
+      decidedAt: null,
+      ...clone(row),
+    };
     this.approvals.set(full.id, full);
     return clone(full);
   }
@@ -159,7 +209,11 @@ export class MemoryScheduleStore implements ScheduleStore {
   }
   async listApprovals(filter: { status?: ApprovalStatus; subjectId?: string }) {
     return [...this.approvals.values()]
-      .filter((a) => (!filter.status || a.status === filter.status) && (!filter.subjectId || a.subjectId === filter.subjectId))
+      .filter(
+        (a) =>
+          (!filter.status || a.status === filter.status) &&
+          (!filter.subjectId || a.subjectId === filter.subjectId),
+      )
       .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
       .map(clone);
   }

@@ -23,7 +23,10 @@ const pretty = (v: unknown) => (typeof v === 'string' ? v : JSON.stringify(v, nu
 function PlanItem({ entry, index }: { entry: PlanEntry; index: number }) {
   const [open, setOpen] = useState(false);
   const target = entry.url ?? entry.path ?? '';
-  const hasBody = entry.body !== undefined && entry.body !== null && !(typeof entry.body === 'object' && Object.keys(entry.body as object).length === 0);
+  const hasBody =
+    entry.body !== undefined &&
+    entry.body !== null &&
+    !(typeof entry.body === 'object' && Object.keys(entry.body as object).length === 0);
   const bodyId = `plan-body-${entry.stepPath.replace(/[^\w-]/g, '_')}`;
   return (
     <li className="flex gap-3 border-t border-line px-4 py-3 first:border-t-0">
@@ -68,7 +71,12 @@ function PlanItem({ entry, index }: { entry: PlanEntry; index: number }) {
             </button>
             {open && (
               <div id={bodyId} className="mt-2">
-                <CodeBlock code={pretty(entry.body)} title="Request body (redacted)" language="json" maxHeight={240} />
+                <CodeBlock
+                  code={pretty(entry.body)}
+                  title="Request body (redacted)"
+                  language="json"
+                  maxHeight={240}
+                />
               </div>
             )}
           </div>

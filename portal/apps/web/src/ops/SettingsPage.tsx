@@ -33,7 +33,12 @@ interface AppStatus {
 
 export interface SettingsResponse {
   tenant: { name: string | null; domain: string | null };
-  environment: { label: string | null; nodeEnv: string | null; publicBaseUrl: string | null; version: string | null };
+  environment: {
+    label: string | null;
+    nodeEnv: string | null;
+    publicBaseUrl: string | null;
+    version: string | null;
+  };
   authMode: 'entra' | 'mock';
   dataMode: 'live' | 'fixtures';
   contentSource: 'fs' | 'db';
@@ -47,10 +52,26 @@ export interface SettingsResponse {
 }
 
 const APPS: Array<{ key: string; label: string; purpose: string }> = [
-  { key: 'read', label: 'AdminForge (Read)', purpose: 'Sign-in and every read, with the engineer’s own delegated permissions.' },
-  { key: 'write', label: 'AdminForge (Write)', purpose: 'Write access while armed; targeted by the step-up Conditional Access policy.' },
-  { key: 'automation', label: 'Automation identity', purpose: 'Schedules and probes, with application permissions (certificate preferred).' },
-  { key: 'runner', label: 'Runner API', purpose: 'Lets the BFF call the PowerShell runner for Exchange, Teams and SharePoint.' },
+  {
+    key: 'read',
+    label: 'AdminForge (Read)',
+    purpose: 'Sign-in and every read, with the engineer’s own delegated permissions.',
+  },
+  {
+    key: 'write',
+    label: 'AdminForge (Write)',
+    purpose: 'Write access while armed; targeted by the step-up Conditional Access policy.',
+  },
+  {
+    key: 'automation',
+    label: 'Automation identity',
+    purpose: 'Schedules and probes, with application permissions (certificate preferred).',
+  },
+  {
+    key: 'runner',
+    label: 'Runner API',
+    purpose: 'Lets the BFF call the PowerShell runner for Exchange, Teams and SharePoint.',
+  },
 ];
 
 /** `true` / `false`, or `{ present, clientId?, credential? }`. */
@@ -58,7 +79,11 @@ const readApp = (v: unknown): AppStatus | null => {
   if (typeof v === 'boolean') return { present: v, clientId: null, credential: null };
   if (v === undefined || v === null) return null;
   const o = rec(v);
-  return { present: bool(o.present) ?? bool(o.configured) ?? false, clientId: pick(o, 'clientId') ?? null, credential: pick(o, 'credential') ?? null };
+  return {
+    present: bool(o.present) ?? bool(o.configured) ?? false,
+    clientId: pick(o, 'clientId') ?? null,
+    credential: pick(o, 'credential') ?? null,
+  };
 };
 
 const SettingsParser = parser((input): SettingsResponse => {
@@ -70,7 +95,10 @@ const SettingsParser = parser((input): SettingsResponse => {
   const authMode = pick(o, 'authMode') ?? pick(auth, 'mode');
   if (!authMode) throw new TypeError('Expected { authMode }');
   return {
-    tenant: { name: pick(rec(o.tenant), 'name') ?? null, domain: pick(rec(o.tenant), 'domain') ?? pick(auth, 'primaryDomain') ?? null },
+    tenant: {
+      name: pick(rec(o.tenant), 'name') ?? null,
+      domain: pick(rec(o.tenant), 'domain') ?? pick(auth, 'primaryDomain') ?? null,
+    },
     environment: {
       label: pick(env, 'label') ?? null,
       nodeEnv: pick(env, 'nodeEnv') ?? null,
@@ -80,7 +108,11 @@ const SettingsParser = parser((input): SettingsResponse => {
     authMode: authMode === 'mock' ? 'mock' : 'entra',
     dataMode: (pick(o, 'dataMode') ?? pick(rec(o.data), 'mode')) === 'fixtures' ? 'fixtures' : 'live',
     contentSource: (pick(o, 'contentSource') ?? pick(content, 'source')) === 'db' ? 'db' : 'fs',
-    content: { watch: bool(content.watch) ?? null, definitions: num(content.definitions) ?? null, problems: num(content.problems) ?? null },
+    content: {
+      watch: bool(content.watch) ?? null,
+      definitions: num(content.definitions) ?? null,
+      problems: num(content.problems) ?? null,
+    },
     writeSessionMaxMinutes: num(o.writeSessionMaxMinutes) ?? num(rec(o.writeSession).maxMinutes) ?? null,
     writeAuthContext: pick(o, 'writeAuthContext') ?? pick(auth, 'writeAuthContext') ?? null,
     sessionIdleMinutes: num(o.sessionIdleMinutes) ?? num(rec(o.writeSession).idleMinutes) ?? null,
@@ -93,7 +125,15 @@ const SettingsParser = parser((input): SettingsResponse => {
   };
 });
 
-function Present({ ok, yes = 'Configured', no = 'Not configured' }: { ok: boolean | null; yes?: string; no?: string }) {
+function Present({
+  ok,
+  yes = 'Configured',
+  no = 'Not configured',
+}: {
+  ok: boolean | null;
+  yes?: string;
+  no?: string;
+}) {
   if (ok === null) return <span className="text-fg-3">Unknown</span>;
   const Glyph = STATUS_ICON[ok ? 'ok' : 'crit'];
   return (
@@ -153,45 +193,108 @@ export function SettingsPage() {
         <div className="flex flex-col gap-6">
           {s.authMode === 'mock' && (
             <Callout tone="warn" title="Mock sign-in is on">
-              Anyone who reaches this host signs in as the mock engineer. Use it only for local development; production
-              refuses to start with AUTH_MODE=mock.
+              Anyone who reaches this host signs in as the mock engineer. Use it only for local development;
+              production refuses to start with AUTH_MODE=mock.
             </Callout>
           )}
           {missingApps.length > 0 && (
             <Callout tone="warn" title={`Not provisioned: ${missingApps.map((a) => a.label).join(', ')}`}>
-              Run <code className="font-mono text-xs">pnpm adminforge provision entra</code> to create the app registrations; it
-              writes their ids to your local env file.
+              Run <code className="font-mono text-xs">pnpm adminforge provision entra</code> to create the app
+              registrations; it writes their ids to your local env file.
             </Callout>
           )}
           <div className="grid items-start gap-6 xl:grid-cols-2">
             <Panel eyebrow="Identity" title="Sign-in and write access">
               <Facts
                 items={[
-                  ['Tenant', s.tenant.name ? `${s.tenant.name}${s.tenant.domain ? ` · ${s.tenant.domain}` : ''}` : s.tenant.domain],
-                  ['Auth mode', s.authMode === 'mock' ? <StatusPill key="m" status="warn" size="sm">Mock sign-in</StatusPill> : 'Microsoft Entra ID'],
-                  ['Write session cap', s.writeSessionMaxMinutes ? `${s.writeSessionMaxMinutes} minutes` : null],
+                  [
+                    'Tenant',
+                    s.tenant.name
+                      ? `${s.tenant.name}${s.tenant.domain ? ` · ${s.tenant.domain}` : ''}`
+                      : s.tenant.domain,
+                  ],
+                  [
+                    'Auth mode',
+                    s.authMode === 'mock' ? (
+                      <StatusPill key="m" status="warn" size="sm">
+                        Mock sign-in
+                      </StatusPill>
+                    ) : (
+                      'Microsoft Entra ID'
+                    ),
+                  ],
+                  [
+                    'Write session cap',
+                    s.writeSessionMaxMinutes ? `${s.writeSessionMaxMinutes} minutes` : null,
+                  ],
                   ...(s.writeAuthContext !== null
-                    ? ([['Step-up context', <code key="c" className="font-mono text-xs">{s.writeAuthContext}</code>]] as Array<[string, ReactNode]>)
+                    ? ([
+                        [
+                          'Step-up context',
+                          <code key="c" className="font-mono text-xs">
+                            {s.writeAuthContext}
+                          </code>,
+                        ],
+                      ] as Array<[string, ReactNode]>)
                     : []),
-                  ...(s.sessionIdleMinutes !== null ? ([['Idle sign-out', `${s.sessionIdleMinutes} minutes`]] as Array<[string, ReactNode]>) : []),
-                  ...(s.sessionAbsoluteHours !== null ? ([['Session lifetime', `${s.sessionAbsoluteHours} hours`]] as Array<[string, ReactNode]>) : []),
+                  ...(s.sessionIdleMinutes !== null
+                    ? ([['Idle sign-out', `${s.sessionIdleMinutes} minutes`]] as Array<[string, ReactNode]>)
+                    : []),
+                  ...(s.sessionAbsoluteHours !== null
+                    ? ([['Session lifetime', `${s.sessionAbsoluteHours} hours`]] as Array<
+                        [string, ReactNode]
+                      >)
+                    : []),
                 ]}
               />
             </Panel>
             <Panel eyebrow="Data" title="Where data and content come from">
               <Facts
                 items={[
-                  ['Data mode', s.dataMode === 'fixtures' ? <StatusPill key="d" status="warn" size="sm">Fixtures (synthetic)</StatusPill> : 'Live Microsoft APIs'],
-                  ['Content source', s.contentSource === 'fs' ? 'portal/content on disk' : 'Published versions in PostgreSQL'],
-                  ...(s.content.watch !== null ? ([['Hot reload', s.content.watch ? 'On' : 'Off']] as Array<[string, ReactNode]>) : []),
+                  [
+                    'Data mode',
+                    s.dataMode === 'fixtures' ? (
+                      <StatusPill key="d" status="warn" size="sm">
+                        Fixtures (synthetic)
+                      </StatusPill>
+                    ) : (
+                      'Live Microsoft APIs'
+                    ),
+                  ],
+                  [
+                    'Content source',
+                    s.contentSource === 'fs' ? 'portal/content on disk' : 'Published versions in PostgreSQL',
+                  ],
+                  ...(s.content.watch !== null
+                    ? ([['Hot reload', s.content.watch ? 'On' : 'Off']] as Array<[string, ReactNode]>)
+                    : []),
                   ...(s.content.definitions !== null
-                    ? ([['Definitions loaded', s.content.definitions.toLocaleString('en-US')]] as Array<[string, ReactNode]>)
+                    ? ([['Definitions loaded', s.content.definitions.toLocaleString('en-US')]] as Array<
+                        [string, ReactNode]
+                      >)
                     : []),
                   ...(s.content.problems !== null
-                    ? ([['Content problems', s.content.problems ? <span key="p" className="font-medium text-crit">{s.content.problems}</span> : 'None']] as Array<[string, ReactNode]>)
+                    ? ([
+                        [
+                          'Content problems',
+                          s.content.problems ? (
+                            <span key="p" className="font-medium text-crit">
+                              {s.content.problems}
+                            </span>
+                          ) : (
+                            'None'
+                          ),
+                        ],
+                      ] as Array<[string, ReactNode]>)
                     : []),
-                  ...(s.database.configured !== null ? ([['Database', <Present key="db" ok={s.database.configured} />]] as Array<[string, ReactNode]>) : []),
-                  ...(s.environment.version ? ([['Version', s.environment.version]] as Array<[string, ReactNode]>) : []),
+                  ...(s.database.configured !== null
+                    ? ([['Database', <Present key="db" ok={s.database.configured} />]] as Array<
+                        [string, ReactNode]
+                      >)
+                    : []),
+                  ...(s.environment.version
+                    ? ([['Version', s.environment.version]] as Array<[string, ReactNode]>)
+                    : []),
                 ]}
               />
             </Panel>
@@ -199,7 +302,10 @@ export function SettingsPage() {
           <Panel eyebrow="App registrations" title="Provisioned apps" flush>
             <ul className="flex flex-col">
               {s.apps.map((a) => (
-                <li key={a.key} className="flex flex-wrap items-center gap-x-6 gap-y-2 border-t border-line px-(--af-pad-panel) py-3 first:border-t-0">
+                <li
+                  key={a.key}
+                  className="flex flex-wrap items-center gap-x-6 gap-y-2 border-t border-line px-(--af-pad-panel) py-3 first:border-t-0"
+                >
                   <span className="flex min-w-60 flex-1 flex-col">
                     <span className="font-medium text-fg">{a.label}</span>
                     <span className="text-xs text-fg-3">{a.purpose}</span>

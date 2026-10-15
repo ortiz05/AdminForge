@@ -29,21 +29,34 @@ export interface DefinitionSummary {
 }
 
 const HREF_KINDS = new Set(['page', 'dashboard', 'report', 'playbook', 'runbook']);
-const allowed = (roles: string[], def: Definition) => !def.requires?.portalRoles?.length || def.requires.portalRoles.some((r) => hasRole({ roles }, r));
+const allowed = (roles: string[], def: Definition) =>
+  !def.requires?.portalRoles?.length || def.requires.portalRoles.some((r) => hasRole({ roles }, r));
 
 export function definitionRoutes(api: FastifyInstance, ctx: AppContext) {
   /** The client-safe definition plus `version` and `sha256` (pin these when starting a run). */
-  api.get<{ Params: { kind: string; key: string }; Querystring: { version?: string } }>('/definitions/:kind/:key', async (request) => {
-    const session = requireSession(request);
-    const kind = Kind.safeParse(request.params.kind);
-    if (!kind.success) throw new AppError(404, 'definition_not_found', `Unknown definition kind "${request.params.kind}".`);
-    const version = typeof request.query.version === 'string' && request.query.version ? request.query.version : undefined;
-    const rec = await ctx.definitions.get(kind.data, request.params.key, version);
-    if (!rec) throw definitionNotFound(kind.data, request.params.key, version);
-    if (!allowed(session.roles, rec.def))
-      throw new AppError(403, 'forbidden', `This ${rec.kind} needs one of the roles ${rec.def.requires!.portalRoles!.join(', ')}.`, { hint: 'Ask a portal administrator for access.' });
-    return { ...clientDefinition(rec.def), version: rec.version, sha256: rec.sha256 };
-  });
+  api.get<{ Params: { kind: string; key: string }; Querystring: { version?: string } }>(
+    '/definitions/:kind/:key',
+    async (request) => {
+      const session = requireSession(request);
+      const kind = Kind.safeParse(request.params.kind);
+      if (!kind.success)
+        throw new AppError(404, 'definition_not_found', `Unknown definition kind "${request.params.kind}".`);
+      const version =
+        typeof request.query.version === 'string' && request.query.version
+          ? request.query.version
+          : undefined;
+      const rec = await ctx.definitions.get(kind.data, request.params.key, version);
+      if (!rec) throw definitionNotFound(kind.data, request.params.key, version);
+      if (!allowed(session.roles, rec.def))
+        throw new AppError(
+          403,
+          'forbidden',
+          `This ${rec.kind} needs one of the roles ${rec.def.requires!.portalRoles!.join(', ')}.`,
+          { hint: 'Ask a portal administrator for access.' },
+        );
+      return { ...clientDefinition(rec.def), version: rec.version, sha256: rec.sha256 };
+    },
+  );
 
   /** Latest version of every definition (optionally one kind) the user's roles allow. */
   api.get<{ Querystring: { kind?: string } }>('/definitions', async (request) => {

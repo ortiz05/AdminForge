@@ -18,7 +18,11 @@ export class PgPrefsStore implements PrefsStore {
   constructor(private readonly db: Db) {}
 
   async get(userOid: string): Promise<UserPrefs> {
-    const [row] = await this.db.select({ prefs: userPrefs.prefs }).from(userPrefs).where(eq(userPrefs.userOid, userOid)).limit(1);
+    const [row] = await this.db
+      .select({ prefs: userPrefs.prefs })
+      .from(userPrefs)
+      .where(eq(userPrefs.userOid, userOid))
+      .limit(1);
     return sanitize(row?.prefs);
   }
 

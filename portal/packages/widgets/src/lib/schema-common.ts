@@ -5,7 +5,10 @@ import { VALUE_FORMATS } from './format';
 /** `<datasource>` or `<datasource>.<path>`. */
 export const DataRef = z
   .string()
-  .regex(/^[A-Za-z_][A-Za-z0-9_]*([.[][^\s]*)?$/, 'Expected a datasource reference like users.value or counts.members');
+  .regex(
+    /^[A-Za-z_][A-Za-z0-9_]*([.[][^\s]*)?$/,
+    'Expected a datasource reference like users.value or counts.members',
+  );
 
 export const ValueFormat = z.enum(VALUE_FORMATS);
 
@@ -39,7 +42,9 @@ export const ActionSpec = z
     icon: IconName.optional(),
     when: exprOr(z.boolean()).optional(),
   })
-  .refine((a) => Boolean(a.playbook) !== Boolean(a.href), { message: 'An action needs exactly one of playbook or href' });
+  .refine((a) => Boolean(a.playbook) !== Boolean(a.href), {
+    message: 'An action needs exactly one of playbook or href',
+  });
 export type ActionSpec = z.infer<typeof ActionSpec>;
 
 /** `{ title, body?, action? }` shown when the data is empty (§6.9: invite action). */

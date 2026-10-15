@@ -21,11 +21,27 @@ async function currentAppearance(ctx: AppContext) {
 
 /** Audit log, appearance overrides and installation settings (§9). Portal.Admin except /appearance.css. */
 export function adminRoutes(api: FastifyInstance, ctx: AppContext) {
-  api.get<{ Querystring: { actor?: string; action?: string; from?: string; to?: string; cursor?: string; limit?: string } }>('/audit', async (request) => {
+  api.get<{
+    Querystring: {
+      actor?: string;
+      action?: string;
+      from?: string;
+      to?: string;
+      cursor?: string;
+      limit?: string;
+    };
+  }>('/audit', async (request) => {
     requireRole(requireSession(request), 'Portal.Admin', 'Reading the audit log');
     const q = request.query;
     const limit = q.limit && /^\d+$/.test(q.limit) ? Number(q.limit) : undefined;
-    return queryAudit(ctx.database, ctx.audit, { actor: q.actor || undefined, action: q.action || undefined, from: isoDate(q.from, 'from'), to: isoDate(q.to, 'to'), cursor: q.cursor, limit });
+    return queryAudit(ctx.database, ctx.audit, {
+      actor: q.actor || undefined,
+      action: q.action || undefined,
+      from: isoDate(q.from, 'from'),
+      to: isoDate(q.to, 'to'),
+      cursor: q.cursor,
+      limit,
+    });
   });
 
   api.get('/audit/verify', async (request) => {
@@ -44,10 +60,21 @@ export function adminRoutes(api: FastifyInstance, ctx: AppContext) {
     requireRole(session, 'Portal.Admin', 'Changing the appearance');
     const { version, ...value } = validateAppearance(request.body);
     const before = await currentAppearance(ctx);
-    const saved = await ctx.settings.put(APPEARANCE_KEY, value, { updatedBy: session.userOid, now: ctx.now(), expectedVersion: version });
-    if (!saved) throw new AppError(409, 'conflict', 'Someone else changed the appearance meanwhile. Reload and apply your change again.');
+    const saved = await ctx.settings.put(APPEARANCE_KEY, value, {
+      updatedBy: session.userOid,
+      now: ctx.now(),
+      expectedVersion: version,
+    });
+    if (!saved)
+      throw new AppError(
+        409,
+        'conflict',
+        'Someone else changed the appearance meanwhile. Reload and apply your change again.',
+      );
     const changedThemes = Object.keys({ ...before.overrides, ...value.overrides }).filter(
-      (t) => JSON.stringify(before.overrides[t as keyof typeof before.overrides] ?? {}) !== JSON.stringify(value.overrides[t as keyof typeof value.overrides] ?? {}),
+      (t) =>
+        JSON.stringify(before.overrides[t as keyof typeof before.overrides] ?? {}) !==
+        JSON.stringify(value.overrides[t as keyof typeof value.overrides] ?? {}),
     );
     await ctx.audit.append({
       ...auditActor(ctx, request, session),
@@ -55,7 +82,13 @@ export function adminRoutes(api: FastifyInstance, ctx: AppContext) {
       targetType: 'settings',
       targetId: APPEARANCE_KEY,
       result: 'success',
-      details: { version: saved.version, themes: changedThemes, density: value.density ?? null, fontScale: value.fontScale ?? null, overrides: value.overrides },
+      details: {
+        version: saved.version,
+        themes: changedThemes,
+        density: value.density ?? null,
+        fontScale: value.fontScale ?? null,
+        overrides: value.overrides,
+      },
     });
     ctx.events.publish({ type: 'appearance.changed', data: { version: saved.version } });
     return { version: saved.version, ...value };
@@ -80,7 +113,11 @@ export function adminRoutes(api: FastifyInstance, ctx: AppContext) {
       dataMode: c.DATA_MODE,
       contentSource: c.CONTENT_SOURCE,
       writeSessionMaxMinutes: c.WRITE_SESSION_MAX_MINUTES,
-      apps: { read: Boolean(c.AF_READ_CLIENT_ID && c.AF_READ_CLIENT_SECRET), write: writeAppConfigured(c), automation: ctx.automation !== null },
+      apps: {
+        read: Boolean(c.AF_READ_CLIENT_ID && c.AF_READ_CLIENT_SECRET),
+        write: writeAppConfigured(c),
+        automation: ctx.automation !== null,
+      },
       tenant: { name: session.tenantName, domain: session.tenantDomain },
     };
   });

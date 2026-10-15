@@ -25,7 +25,12 @@ export interface RunsSearch {
   definition?: string;
 }
 
-const TRIGGER: Record<string, string> = { interactive: 'Portal', bulk: 'Bulk', schedule: 'Schedule', child: 'Child run' };
+const TRIGGER: Record<string, string> = {
+  interactive: 'Portal',
+  bulk: 'Bulk',
+  schedule: 'Schedule',
+  child: 'Child run',
+};
 
 function durationMs(r: RunSummary, now: number): number | null {
   const from = r.startedAt ?? r.createdAt;
@@ -50,7 +55,11 @@ export function RunsPage({ search }: { search: RunsSearch }) {
   const navigate = useNavigate();
   const now = useNow(10_000);
   useDocumentTitle('Runs');
-  const filter: RunsFilter = { scope: search.scope ?? 'mine', status: search.status, playbook: search.definition };
+  const filter: RunsFilter = {
+    scope: search.scope ?? 'mine',
+    status: search.status,
+    playbook: search.definition,
+  };
   const q = useInfiniteQuery({
     queryKey: ['runs', 'list', filter] as const,
     queryFn: ({ pageParam, signal }) => fetchRunsPage(filter, pageParam, signal),
@@ -86,7 +95,14 @@ export function RunsPage({ search }: { search: RunsSearch }) {
         cell: (r) => <RunStatusPill status={r.status} size="sm" />,
         width: 'minmax(160px, 1fr)',
       },
-      { id: 'playbook', header: 'Playbook', kind: 'text', value: (r) => r.key, filter: 'facet', hidden: true },
+      {
+        id: 'playbook',
+        header: 'Playbook',
+        kind: 'text',
+        value: (r) => r.key,
+        filter: 'facet',
+        hidden: true,
+      },
       {
         id: 'initiator',
         header: 'Started by',
@@ -95,8 +111,21 @@ export function RunsPage({ search }: { search: RunsSearch }) {
         filter: 'facet',
         width: 'minmax(180px, 1.2fr)',
       },
-      { id: 'trigger', header: 'Trigger', kind: 'text', value: (r) => TRIGGER[r.trigger] ?? r.trigger, filter: 'facet', width: 'minmax(100px, 0.6fr)' },
-      { id: 'started', header: 'Started', kind: 'relativeTime', value: (r) => r.startedAt ?? r.createdAt, width: 'minmax(110px, 0.7fr)' },
+      {
+        id: 'trigger',
+        header: 'Trigger',
+        kind: 'text',
+        value: (r) => TRIGGER[r.trigger] ?? r.trigger,
+        filter: 'facet',
+        width: 'minmax(100px, 0.6fr)',
+      },
+      {
+        id: 'started',
+        header: 'Started',
+        kind: 'relativeTime',
+        value: (r) => r.startedAt ?? r.createdAt,
+        width: 'minmax(110px, 0.7fr)',
+      },
       {
         id: 'duration',
         header: 'Duration',
@@ -140,7 +169,11 @@ export function RunsPage({ search }: { search: RunsSearch }) {
                 { value: 'all', label: 'Everyone’s' },
               ]}
             />
-            <IconButton label="Refresh" icon={<ArrowClockwiseIcon size={16} />} onClick={() => void q.refetch()} />
+            <IconButton
+              label="Refresh"
+              icon={<ArrowClockwiseIcon size={16} />}
+              onClick={() => void q.refetch()}
+            />
           </>
         }
       />
@@ -148,8 +181,16 @@ export function RunsPage({ search }: { search: RunsSearch }) {
         <p className="-mt-3 mb-4 flex flex-wrap items-center gap-2 text-sm text-fg-2">
           Showing
           {filter.status && <Badge tone="outline">status: {filter.status}</Badge>}
-          {filter.playbook && <Badge tone="outline" mono>{filter.playbook}</Badge>}
-          <Button size="sm" intent="ghost" onClick={() => setSearch({ status: undefined, definition: undefined })}>
+          {filter.playbook && (
+            <Badge tone="outline" mono>
+              {filter.playbook}
+            </Badge>
+          )}
+          <Button
+            size="sm"
+            intent="ghost"
+            onClick={() => setSearch({ status: undefined, definition: undefined })}
+          >
             Show all
           </Button>
         </p>
@@ -174,7 +215,8 @@ export function RunsPage({ search }: { search: RunsSearch }) {
         }
         empty={{
           title: filter.scope === 'mine' ? 'You haven’t started any runs yet' : 'No runs yet',
-          description: 'Launch a playbook from a page, a row action, or the command palette — its run appears here.',
+          description:
+            'Launch a playbook from a page, a row action, or the command palette — its run appears here.',
         }}
         searchPlaceholder="Search runs…"
         initialSort={[{ id: 'started', desc: true }]}

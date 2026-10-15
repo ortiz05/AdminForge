@@ -1,4 +1,13 @@
-import type { Actor, HumanTask, PlanEntry, RunError, RunEventInput, RunRecord, RunStatus, StepRecord } from '@adminforge/engine';
+import type {
+  Actor,
+  HumanTask,
+  PlanEntry,
+  RunError,
+  RunEventInput,
+  RunRecord,
+  RunStatus,
+  StepRecord,
+} from '@adminforge/engine';
 
 /**
  * Storage + API shapes for runs (§8 `runs`, `run_steps`, `run_step_events`, `approvals`). The engine sees RunRecord;
@@ -32,9 +41,14 @@ export interface RunRow {
   updatedAt: Date;
 }
 
-export type NewRun = Omit<RunRow, 'createdAt' | 'updatedAt' | 'startedAt' | 'endedAt' | 'outputs' | 'error' | 'status'> & { status?: RunStatus };
+export type NewRun = Omit<
+  RunRow,
+  'createdAt' | 'updatedAt' | 'startedAt' | 'endedAt' | 'outputs' | 'error' | 'status'
+> & { status?: RunStatus };
 
-export type RunRowPatch = Partial<Pick<RunRow, 'status' | 'outputs' | 'error' | 'startedAt' | 'endedAt' | 'sessionHash'>>;
+export type RunRowPatch = Partial<
+  Pick<RunRow, 'status' | 'outputs' | 'error' | 'startedAt' | 'endedAt' | 'sessionHash'>
+>;
 
 export interface EventRow extends RunEventInput {
   id: number;
@@ -131,7 +145,11 @@ export interface RunRepository {
   getTask(runId: string, path: string): Promise<TaskRow | null>;
   getTaskById(id: string): Promise<TaskRow | null>;
   /** CAS on status when `expect` is given. */
-  updateTask(id: string, patch: Partial<Pick<TaskRow, 'decisions' | 'status' | 'decidedAt'>>, expect?: TaskStatus): Promise<TaskRow | null>;
+  updateTask(
+    id: string,
+    patch: Partial<Pick<TaskRow, 'decisions' | 'status' | 'decidedAt'>>,
+    expect?: TaskStatus,
+  ): Promise<TaskRow | null>;
   listTasks(filter: TaskFilter): Promise<TaskRow[]>;
 
   /** Exclusive per-run execution lock (advisory lock in Postgres). Null when another worker holds it. */
@@ -156,7 +174,14 @@ export interface RunNotification {
 export const RUN_EVENTS_CHANNEL = 'run_events';
 
 /** `status=active` in GET /api/runs: every non-terminal state. */
-export const RUN_STATUS_ACTIVE: RunStatus[] = ['queued', 'running', 'awaiting_approval', 'awaiting_input', 'awaiting_arm', 'awaiting_reauth'];
+export const RUN_STATUS_ACTIVE: RunStatus[] = [
+  'queued',
+  'running',
+  'awaiting_approval',
+  'awaiting_input',
+  'awaiting_arm',
+  'awaiting_reauth',
+];
 
 // ── API views (the web UI codes against these) ───────────────────────────────
 
@@ -189,7 +214,13 @@ export interface RunView extends RunSummary {
   /** The dry run this execution was confirmed from (playbooks with a confirm block), else null. */
   previewRunId: string | null;
   /** What the run is parked on, when it is. */
-  waiting: { kind: 'approval' | 'manual' | 'arm' | 'reauth' | 'wait' | 'child'; path: string; stepId: string; since: string | null; wakeAt?: string | null } | null;
+  waiting: {
+    kind: 'approval' | 'manual' | 'arm' | 'reauth' | 'wait' | 'child';
+    path: string;
+    stepId: string;
+    since: string | null;
+    wakeAt?: string | null;
+  } | null;
 }
 
 export interface StepView {
@@ -238,7 +269,9 @@ export interface RunDetail {
 }
 
 export const toActor = (row: Pick<RunRow, 'identity' | 'initiatorOid' | 'initiatorUpn'>): Actor =>
-  row.identity === 'automation' ? { kind: 'automation', oid: row.initiatorOid, upn: row.initiatorUpn } : { kind: 'delegated', oid: row.initiatorOid, upn: row.initiatorUpn };
+  row.identity === 'automation'
+    ? { kind: 'automation', oid: row.initiatorOid, upn: row.initiatorUpn }
+    : { kind: 'delegated', oid: row.initiatorOid, upn: row.initiatorUpn };
 
 export function toRecord(row: RunRow): RunRecord {
   return {
@@ -251,7 +284,10 @@ export function toRecord(row: RunRow): RunRecord {
     dryRun: row.dryRun,
     identity: row.identity,
     trigger: row.trigger,
-    initiator: row.identity === 'automation' ? { kind: 'automation', oid: 'automation', upn: 'automation identity' } : toActor(row),
+    initiator:
+      row.identity === 'automation'
+        ? { kind: 'automation', oid: 'automation', upn: 'automation identity' }
+        : toActor(row),
     inputs: row.inputs,
     outputs: row.outputs,
     error: row.error,

@@ -4,7 +4,19 @@ import { WIDGET_TYPES, WIDGETS, getWidget, parseWidgetConfig } from '@adminforge
 describe('widget registry', () => {
   it('has exactly the documented widget types (docs/widgets.md)', () => {
     expect([...WIDGET_TYPES].sort()).toEqual(
-      ['actionBar', 'chart', 'keyValue', 'kpi', 'licenceGate', 'list', 'markdown', 'probeStatus', 'statusGrid', 'table', 'timeline'].sort(),
+      [
+        'actionBar',
+        'chart',
+        'keyValue',
+        'kpi',
+        'licenceGate',
+        'list',
+        'markdown',
+        'probeStatus',
+        'statusGrid',
+        'table',
+        'timeline',
+      ].sort(),
     );
     expect(Object.keys(WIDGETS).sort()).toEqual([...WIDGET_TYPES].sort());
     for (const t of WIDGET_TYPES) {
@@ -34,13 +46,28 @@ describe('widget registry', () => {
     expect(kpi.ok).toBe(false);
     expect(!kpi.ok && kpi.problems.map((p) => p.path)).toContain('label');
 
-    const chart = parseWidgetConfig({ widget: 'chart', type: 'heatGrid', data: 'x.value', x: 'hour', y: 'count' });
-    expect(!chart.ok && chart.problems).toEqual(expect.arrayContaining([expect.objectContaining({ path: 'series' })]));
+    const chart = parseWidgetConfig({
+      widget: 'chart',
+      type: 'heatGrid',
+      data: 'x.value',
+      x: 'hour',
+      y: 'count',
+    });
+    expect(!chart.ok && chart.problems).toEqual(
+      expect.arrayContaining([expect.objectContaining({ path: 'series' })]),
+    );
 
-    const kv = parseWidgetConfig({ widget: 'keyValue', data: 'user', fields: [{ field: 'id', label: 'Id', kind: 'guidish' }] });
+    const kv = parseWidgetConfig({
+      widget: 'keyValue',
+      data: 'user',
+      fields: [{ field: 'id', label: 'Id', kind: 'guidish' }],
+    });
     expect(!kv.ok && kv.problems.map((p) => p.path)).toContain('fields.0.kind');
 
-    const action = parseWidgetConfig({ widget: 'actionBar', actions: [{ label: 'Both', playbook: 'identity.x', href: '/p/x.y' }] });
+    const action = parseWidgetConfig({
+      widget: 'actionBar',
+      actions: [{ label: 'Both', playbook: 'identity.x', href: '/p/x.y' }],
+    });
     expect(!action.ok && action.problems[0]!.message).toMatch(/exactly one of playbook or href/);
   });
 });

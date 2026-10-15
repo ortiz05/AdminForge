@@ -40,7 +40,17 @@ export interface CommandPaletteProps {
 }
 
 /** One server search hit: in-app pages navigate, Microsoft portal deep links open in a new tab. */
-function ResultItem({ r, icon, search, onGo }: { r: SearchResult; icon: string; search: string; onGo: (href: string) => void }) {
+function ResultItem({
+  r,
+  icon,
+  search,
+  onGo,
+}: {
+  r: SearchResult;
+  icon: string;
+  search: string;
+  onGo: (href: string) => void;
+}) {
   return (
     <CommandItem
       value={`search ${r.type} ${r.href} ${r.title}`}
@@ -155,7 +165,12 @@ export function CommandPalette({ open, onOpenChange, sections, canArm }: Command
       })}
       {found.error && results.length === 0 && (
         <CommandGroup heading="Directory and Azure">
-          <CommandItem value={`search status ${search}`} keywords={[search]} disabled icon={<MagnifyingGlassIcon size={16} />}>
+          <CommandItem
+            value={`search status ${search}`}
+            keywords={[search]}
+            disabled
+            icon={<MagnifyingGlassIcon size={16} />}
+          >
             Directory search didn’t respond — pages and actions still work
           </CommandItem>
         </CommandGroup>

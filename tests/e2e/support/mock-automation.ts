@@ -35,7 +35,10 @@ const previewRefusal = (code: string, message: string): MockReply => ({
   status: 409,
   body: { error: { code, message, hint: 'Nothing ran. Preview again, then confirm.' } },
 });
-const notFound = (what: string): MockReply => ({ status: 404, body: { error: { code: 'not_found', message: `No mock for ${what}` } } });
+const notFound = (what: string): MockReply => ({
+  status: 404,
+  body: { error: { code: 'not_found', message: `No mock for ${what}` } },
+});
 const sse = (text: string): MockReply => ({ text, contentType: 'text/event-stream' });
 
 export interface AutomationOptions {
@@ -50,7 +53,10 @@ export interface AutomationOptions {
 }
 
 /** Typed confirmations the mock server expects ("preview then confirm"). */
-const EXPECTED_CONFIRMATION: Record<string, string> = { 'identity.disable-user': 'a.lee@example.com', 'identity.issue-tap': 'm.chen@example.com' };
+const EXPECTED_CONFIRMATION: Record<string, string> = {
+  'identity.disable-user': 'a.lee@example.com',
+  'identity.issue-tap': 'm.chen@example.com',
+};
 
 /**
  * Stateful mock of the automation APIs (runs, approvals, schedules, probes, audit, appearance, settings) for
@@ -112,48 +118,105 @@ export function automationApi(opts: AutomationOptions = {}) {
 
     if (method === 'GET' && (m = /^\/api\/definitions\/(\w+)\/([^/]+)$/.exec(path))) {
       const def = DEFINITIONS[`${m[1]}:${decodeURIComponent(m[2]!)}`];
-      return def ? { body: def } : { status: 404, body: { error: { code: 'definition_not_found', message: `No published ${m[1]} "${m[2]}".` } } };
+      return def
+        ? { body: def }
+        : {
+            status: 404,
+            body: { error: { code: 'definition_not_found', message: `No published ${m[1]} "${m[2]}".` } },
+          };
     }
     if (method === 'GET' && path === '/api/me/capabilities') return { body: capabilities };
-    if (method === 'GET' && path === '/api/search') return { body: searchResults(q.get('q') ?? '', q.get('type')) };
+    if (method === 'GET' && path === '/api/search')
+      return { body: searchResults(q.get('q') ?? '', q.get('type')) };
 
     // Runs
     if (method === 'POST' && path === '/api/runs') {
       state.runPosts.push(body);
       const b = body as { playbook: string; dryRun?: boolean; previewRunId?: string; confirmation?: string };
-      if (b.playbook === 'diagnostics.user-sign-in-check') return { status: 202, body: { runId: IDS.readRun, status: 'queued' } };
-      if (b.playbook === 'identity.offboard-leaver') return { status: 202, body: { runId: IDS.runbookRun, status: 'queued' } };
-      if (b.dryRun) return { status: 202, body: { runId: state.previews++ === 0 ? IDS.previewRun : IDS.previewRun2, status: 'queued' } };
+      if (b.playbook === 'diagnostics.user-sign-in-check')
+        return { status: 202, body: { runId: IDS.readRun, status: 'queued' } };
+      if (b.playbook === 'identity.offboard-leaver')
+        return { status: 202, body: { runId: IDS.runbookRun, status: 'queued' } };
+      if (b.dryRun)
+        return {
+          status: 202,
+          body: { runId: state.previews++ === 0 ? IDS.previewRun : IDS.previewRun2, status: 'queued' },
+        };
       // "Preview then confirm": write runs carry the dry run and, for typed confirmation, what was typed.
       const expected = EXPECTED_CONFIRMATION[b.playbook];
       if (expected) {
-        if (!b.previewRunId) return previewRefusal('preview_required', 'Preview this playbook before running it.');
+        if (!b.previewRunId)
+          return previewRefusal('preview_required', 'Preview this playbook before running it.');
         if (state.refusals.stale) {
           state.refusals.stale = false;
-          return previewRefusal('preview_stale', 'The preview is more than 15 minutes old, or its inputs changed.');
+          return previewRefusal(
+            'preview_stale',
+            'The preview is more than 15 minutes old, or its inputs changed.',
+          );
         }
         if (state.refusals.mismatch || b.confirmation !== expected) {
           state.refusals.mismatch = false;
-          return { status: 422, body: { error: { code: 'confirmation_mismatch', message: 'That doesn’t match. Type the sign-in name exactly as shown.' } } };
+          return {
+            status: 422,
+            body: {
+              error: {
+                code: 'confirmation_mismatch',
+                message: 'That doesn’t match. Type the sign-in name exactly as shown.',
+              },
+            },
+          };
         }
       }
       return { status: 202, body: { runId: IDS.liveRun, status: 'queued' } };
     }
     if (method === 'POST' && path === '/api/runs/bulk') {
       state.bulkPosts.push(body);
-      const b = body as { playbook: string; items: unknown[]; dryRun?: boolean; previewRunId?: string; confirmation?: string };
-      if (b.dryRun) return { status: 202, body: { runId: IDS.bulkPreview, status: 'queued', items: b.items.length } };
+      const b = body as {
+        playbook: string;
+        items: unknown[];
+        dryRun?: boolean;
+        previewRunId?: string;
+        confirmation?: string;
+      };
+      if (b.dryRun)
+        return { status: 202, body: { runId: IDS.bulkPreview, status: 'queued', items: b.items.length } };
       if (EXPECTED_CONFIRMATION[b.playbook]) {
-        if (!b.previewRunId) return previewRefusal('preview_required', 'Preview this playbook before running it.');
+        if (!b.previewRunId)
+          return previewRefusal('preview_required', 'Preview this playbook before running it.');
         if (b.confirmation !== String(b.items.length))
-          return { status: 422, body: { error: { code: 'confirmation_mismatch', message: `Type ${b.items.length} to confirm changing ${b.items.length} objects.` } } };
+          return {
+            status: 422,
+            body: {
+              error: {
+                code: 'confirmation_mismatch',
+                message: `Type ${b.items.length} to confirm changing ${b.items.length} objects.`,
+              },
+            },
+          };
       }
       return { status: 202, body: { runId: IDS.bulkRun, status: 'queued', items: b.items.length } };
     }
     if (method === 'GET' && path === '/api/runs') {
       const list = runsList().items as unknown as Array<{ status: string; initiatorUpn: string | null }>;
-      if (q.get('status') === 'active') return { body: { items: list.filter((r) => !['succeeded', 'failed', 'cancelled', 'compensated', 'needs_review'].includes(r.status)).slice(0, 3) } };
-      return { body: { items: q.get('scope') === 'all' ? list : list.filter((r) => r.initiatorUpn === 'mock.engineer@example.com' || r.initiatorUpn === null) } };
+      if (q.get('status') === 'active')
+        return {
+          body: {
+            items: list
+              .filter(
+                (r) =>
+                  !['succeeded', 'failed', 'cancelled', 'compensated', 'needs_review'].includes(r.status),
+              )
+              .slice(0, 3),
+          },
+        };
+      return {
+        body: {
+          items:
+            q.get('scope') === 'all'
+              ? list
+              : list.filter((r) => r.initiatorUpn === 'mock.engineer@example.com' || r.initiatorUpn === null),
+        },
+      };
     }
     if (method === 'GET' && (m = /^\/api\/runs\/([^/]+)\/events$/.exec(path))) {
       // Like the API, every connection replays the run's events from the start (no Last-Event-ID on a new stream).
@@ -168,7 +231,12 @@ export function automationApi(opts: AutomationOptions = {}) {
     if (method === 'GET' && (m = /^\/api\/runs\/([^/]+)\/secret\/([^/]+)$/.exec(path))) {
       state.secretClaims.push({ path, csrf: Boolean(csrf) });
       if (state.secretClaimed || m[1] !== IDS.onboardChild)
-        return { status: 404, body: { error: { code: 'secret_not_available', message: 'This secret was already shown or has expired.' } } };
+        return {
+          status: 404,
+          body: {
+            error: { code: 'secret_not_available', message: 'This secret was already shown or has expired.' },
+          },
+        };
       state.secretClaimed = true;
       const { type: _t, ...rest } = secretMessage(IDS.onboardChild, CHILD_TAP_VALUE);
       return { body: rest };
@@ -176,20 +244,37 @@ export function automationApi(opts: AutomationOptions = {}) {
     if (method === 'GET' && (m = /^\/api\/runs\/([^/]+)$/.exec(path))) return runDetail(m[1]!);
     if (method === 'POST' && (m = /^\/api\/runs\/([^/]+)\/(cancel|resume)$/.exec(path))) {
       if (m[2] === 'cancel') state.cancelled.push(m[1]!);
-      return { status: m[2] === 'resume' ? 202 : 200, body: { runId: m[1], status: m[2] === 'cancel' ? 'cancelled' : 'running' } };
+      return {
+        status: m[2] === 'resume' ? 202 : 200,
+        body: { runId: m[1], status: m[2] === 'cancel' ? 'cancelled' : 'running' },
+      };
     }
     if (method === 'POST' && /^\/api\/runs\/[^/]+\/approvals\/[^/]+$/.test(path)) {
       state.decisions.push({ path, body });
-      return { body: { status: (body as { decision: string }).decision === 'approve' ? 'approved' : 'rejected', approvals: 1, required: 1 } };
+      return {
+        body: {
+          status: (body as { decision: string }).decision === 'approve' ? 'approved' : 'rejected',
+          approvals: 1,
+          required: 1,
+        },
+      };
     }
     if (method === 'POST' && /^\/api\/runs\/[^/]+\/manual\/[^/]+$/.test(path)) {
       state.manual.push({ path, body });
       return { body: { status: 'confirmed' } };
     }
     if (method === 'GET' && path === '/api/approvals') {
-      if (opts.approvalsStatus) return { status: opts.approvalsStatus, body: { error: { code: 'forbidden', message: 'The approval inbox needs the Playbook.Approver role.' } } };
+      if (opts.approvalsStatus)
+        return {
+          status: opts.approvalsStatus,
+          body: {
+            error: { code: 'forbidden', message: 'The approval inbox needs the Playbook.Approver role.' },
+          },
+        };
       const decided = state.decisions.length > 0;
-      return { body: { items: (q.get('status') ?? 'pending') === 'pending' && !decided ? [approvalTask()] : [] } };
+      return {
+        body: { items: (q.get('status') ?? 'pending') === 'pending' && !decided ? [approvalTask()] : [] },
+      };
     }
 
     // Schedules and probes
@@ -217,7 +302,8 @@ export function automationApi(opts: AutomationOptions = {}) {
       state.scheduleRuns.push(decodeURIComponent(m[1]!));
       return { status: 202, body: { scheduleRunId: 'sr-new' } };
     }
-    if (method === 'GET' && (m = /^\/api\/schedules\/([^/]+)\/runs$/.exec(path))) return { body: scheduleRuns(decodeURIComponent(m[1]!)) };
+    if (method === 'GET' && (m = /^\/api\/schedules\/([^/]+)\/runs$/.exec(path)))
+      return { body: scheduleRuns(decodeURIComponent(m[1]!)) };
     if (method === 'GET' && path === '/api/probes') return { body: probes() };
     if (method === 'GET' && (m = /^\/api\/probes\/([^/]+)\/results$/.exec(path))) {
       const p = probes().items.find((x) => x.key === decodeURIComponent(m![1]!));
@@ -227,13 +313,22 @@ export function automationApi(opts: AutomationOptions = {}) {
     // Admin
     if (method === 'GET' && path === '/api/audit') {
       if (q.get('action') === 'appearance.updated')
-        return { body: { items: auditEvents().items.filter((e) => (e as { action?: string }).action === 'appearance.updated') } };
+        return {
+          body: {
+            items: auditEvents().items.filter(
+              (e) => (e as { action?: string }).action === 'appearance.updated',
+            ),
+          },
+        };
       if (q.get('cursor')) return { body: auditEventsOlder() };
-      const items = auditEvents().items.filter((e) => !q.get('actor') || (e.actorUpn ?? '').includes(q.get('actor')!));
+      const items = auditEvents().items.filter(
+        (e) => !q.get('actor') || (e.actorUpn ?? '').includes(q.get('actor')!),
+      );
       return { body: { items, ...(q.get('actor') ? {} : { cursor: auditEvents().cursor }) } };
     }
     if (method === 'GET' && path === '/api/audit/verify') return { body: auditVerify };
-    if (method === 'GET' && path === '/api/admin/appearance') return { body: { ...appearance(), version: state.appearanceVersion } };
+    if (method === 'GET' && path === '/api/admin/appearance')
+      return { body: { ...appearance(), version: state.appearanceVersion } };
     if (method === 'PUT' && path === '/api/admin/appearance') {
       state.appearancePuts.push(body);
       state.appearanceVersion += 1;

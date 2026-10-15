@@ -1,4 +1,10 @@
-import { advancedOpsFor, DEFAULT_ADVANCED_PARAM, type AdvancedField, type AdvancedOp, type FilterBar } from '@adminforge/schemas';
+import {
+  advancedOpsFor,
+  DEFAULT_ADVANCED_PARAM,
+  type AdvancedField,
+  type AdvancedOp,
+  type FilterBar,
+} from '@adminforge/schemas';
 import { z } from 'zod';
 import { resolveDate, type ParamIssue } from './params';
 
@@ -28,10 +34,16 @@ const Condition = z.strictObject({
   op: z.string().min(1).max(20),
   value: z.union([Scalar, z.array(Scalar).max(MAX_IN_VALUES), z.null()]).optional(),
 });
-const Inner = z.union([z.strictObject({ all: z.array(Condition).max(MAX_CONDITIONS) }), z.strictObject({ any: z.array(Condition).max(MAX_CONDITIONS) })]);
+const Inner = z.union([
+  z.strictObject({ all: z.array(Condition).max(MAX_CONDITIONS) }),
+  z.strictObject({ any: z.array(Condition).max(MAX_CONDITIONS) }),
+]);
 const Clause = z.union([Condition, Inner]);
 /** Root group: conditions and at most one level of nested groups (nesting ≤ 2). */
-export const AdvancedFilterInput = z.union([z.strictObject({ all: z.array(Clause).max(MAX_CONDITIONS) }), z.strictObject({ any: z.array(Clause).max(MAX_CONDITIONS) })]);
+export const AdvancedFilterInput = z.union([
+  z.strictObject({ all: z.array(Clause).max(MAX_CONDITIONS) }),
+  z.strictObject({ any: z.array(Clause).max(MAX_CONDITIONS) }),
+]);
 export type AdvancedFilterInput = z.infer<typeof AdvancedFilterInput>;
 
 export type AdvancedValue = string | number | boolean | Array<string | number | boolean> | null;
@@ -64,11 +76,20 @@ export function decodeAdvanced(raw: unknown): unknown {
   return JSON.parse(Buffer.from(text, 'base64url').toString('utf8'));
 }
 
-function checkValue(f: AdvancedField, op: AdvancedOp, value: unknown, now: Date): { ok: true; value: AdvancedValue } | { ok: false; message: string } {
+function checkValue(
+  f: AdvancedField,
+  op: AdvancedOp,
+  value: unknown,
+  now: Date,
+): { ok: true; value: AdvancedValue } | { ok: false; message: string } {
   const bad = (message: string) => ({ ok: false as const, message: `${f.field} ${op}: ${message}` });
-  if (op === 'isEmpty') return value === undefined || value === null || value === true ? { ok: true, value: null } : bad('takes no value');
+  if (op === 'isEmpty')
+    return value === undefined || value === null || value === true
+      ? { ok: true, value: null }
+      : bad('takes no value');
   if (op === 'in') {
-    if (!Array.isArray(value) || value.length === 0) return bad(`expects a list of 1–${MAX_IN_VALUES} values`);
+    if (!Array.isArray(value) || value.length === 0)
+      return bad(`expects a list of 1–${MAX_IN_VALUES} values`);
     const out: Array<string | number | boolean> = [];
     for (const v of value) {
       const one = checkValue(f, 'eq', v, now);
@@ -85,7 +106,9 @@ function checkValue(f: AdvancedField, op: AdvancedOp, value: unknown, now: Date)
       if (CONTROL.test(value)) return bad('control characters are not allowed');
       return { ok: true, value };
     case 'number':
-      return typeof value === 'number' && Number.isFinite(value) ? { ok: true, value } : bad('expects a number');
+      return typeof value === 'number' && Number.isFinite(value)
+        ? { ok: true, value }
+        : bad('expects a number');
     case 'boolean':
       return typeof value === 'boolean' ? { ok: true, value } : bad('expects true or false');
     case 'date': {
@@ -93,10 +116,14 @@ function checkValue(f: AdvancedField, op: AdvancedOp, value: unknown, now: Date)
       return d ? { ok: true, value: d } : bad('expects an ISO date or today, now, -30d');
     }
     case 'guid':
-      return typeof value === 'string' && GUID.test(value.trim()) ? { ok: true, value: value.trim().toLowerCase() } : bad('expects a GUID');
+      return typeof value === 'string' && GUID.test(value.trim())
+        ? { ok: true, value: value.trim().toLowerCase() }
+        : bad('expects a GUID');
     case 'enum': {
       const hit = (f.values ?? []).find((v) => v === value || String(v) === String(value));
-      return hit !== undefined ? { ok: true, value: hit } : bad(`expects one of ${(f.values ?? []).join(', ')}`);
+      return hit !== undefined
+        ? { ok: true, value: hit }
+        : bad(`expects one of ${(f.values ?? []).join(', ')}`);
     }
   }
 }
@@ -105,18 +132,32 @@ function checkValue(f: AdvancedField, op: AdvancedOp, value: unknown, now: Date)
  * Validates the raw filter against the page's declared fields: unknown fields or operators, wrong value types,
  * nesting deeper than 2 and more than 20 conditions are rejected (AdvancedFilterError with every problem).
  */
-export function parseAdvanced(spec: NonNullable<FilterBar['advanced']>, raw: unknown, now: Date): AdvancedGroup | undefined {
+export function parseAdvanced(
+  spec: NonNullable<FilterBar['advanced']>,
+  raw: unknown,
+  now: Date,
+): AdvancedGroup | undefined {
   const param = spec.param ?? DEFAULT_ADVANCED_PARAM;
   let decoded: unknown;
   try {
     decoded = decodeAdvanced(raw);
   } catch {
-    throw new AdvancedFilterError([{ param, message: 'must be the query builder filter as JSON ({ "all" | "any": [...] })' }]);
+    throw new AdvancedFilterError([
+      { param, message: 'must be the query builder filter as JSON ({ "all" | "any": [...] })' },
+    ]);
   }
   if (decoded === undefined) return undefined;
   const parsed = AdvancedFilterInput.safeParse(decoded);
   if (!parsed.success) {
-    throw new AdvancedFilterError([{ param, message: `is not a valid filter (${parsed.error.issues.slice(0, 3).map((i) => `${i.path.join('.') || 'root'}: ${i.message}`).join('; ')})` }]);
+    throw new AdvancedFilterError([
+      {
+        param,
+        message: `is not a valid filter (${parsed.error.issues
+          .slice(0, 3)
+          .map((i) => `${i.path.join('.') || 'root'}: ${i.message}`)
+          .join('; ')})`,
+      },
+    ]);
   }
   const fields = new Map(spec.fields.map((f) => [f.field, f]));
   const issues: ParamIssue[] = [];
@@ -139,7 +180,10 @@ export function parseAdvanced(spec: NonNullable<FilterBar['advanced']>, raw: unk
       }
       const ops = advancedOpsFor(f);
       if (!(ops as readonly string[]).includes(c.op)) {
-        issues.push({ param, message: `${f.field} does not support "${c.op.slice(0, 20)}" (use ${ops.join(', ')})` });
+        issues.push({
+          param,
+          message: `${f.field} does not support "${c.op.slice(0, 20)}" (use ${ops.join(', ')})`,
+        });
         continue;
       }
       const v = checkValue(f, c.op as AdvancedOp, c.value, now);
@@ -158,13 +202,17 @@ export function parseAdvanced(spec: NonNullable<FilterBar['advanced']>, raw: unk
 
 /** OData string literal: O'Brien → 'O''Brien' (same quoting as $odata()). */
 export const odataString = (s: string) => `'${s.replaceAll("'", "''")}'`;
-/** KQL string literal: backslash and quote escaped, control characters dropped. */
+/** Control characters (U+0000–U+001F, U+007F) are dropped from KQL literals. */
 // eslint-disable-next-line no-control-regex
-export const kqlString = (s: string) => `'${s.replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'`;
+const KQL_CONTROL_CHARS = /[\u0000-\u001f\u007f]/g;
+/** KQL string literal: backslash and quote escaped, control characters dropped. */
+export const kqlString = (s: string) =>
+  `'${s.replace(KQL_CONTROL_CHARS, ' ').replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'`;
 
 const property = (f: AdvancedField, dialect: 'odata' | 'kql') => {
   const p = f.property ?? f.field;
-  if (!(dialect === 'odata' ? OData_PROPERTY : KQL_PROPERTY).test(p)) throw new Error(`Field ${f.field} cannot be compiled to ${dialect} (property ${p}).`);
+  if (!(dialect === 'odata' ? OData_PROPERTY : KQL_PROPERTY).test(p))
+    throw new Error(`Field ${f.field} cannot be compiled to ${dialect} (property ${p}).`);
   return p;
 };
 
@@ -184,7 +232,14 @@ function kqlLiteral(f: AdvancedField, v: string | number | boolean): string {
   return kqlString(String(v));
 }
 
-const ODATA_CMP: Partial<Record<AdvancedOp, string>> = { eq: 'eq', ne: 'ne', gt: 'gt', ge: 'ge', lt: 'lt', le: 'le' };
+const ODATA_CMP: Partial<Record<AdvancedOp, string>> = {
+  eq: 'eq',
+  ne: 'ne',
+  gt: 'gt',
+  ge: 'ge',
+  lt: 'lt',
+  le: 'le',
+};
 
 function odataCondition(c: AdvancedCondition): string {
   const p = property(c.field, 'odata');
@@ -204,7 +259,10 @@ function odataCondition(c: AdvancedCondition): string {
 }
 
 const KQL_CMP: Partial<Record<AdvancedOp, string>> = { gt: '>', ge: '>=', lt: '<', le: '<=' };
-const textual = (f: AdvancedField) => f.type === 'string' || f.type === 'guid' || (f.type === 'enum' && (f.values ?? []).every((v) => typeof v === 'string'));
+const textual = (f: AdvancedField) =>
+  f.type === 'string' ||
+  f.type === 'guid' ||
+  (f.type === 'enum' && (f.values ?? []).every((v) => typeof v === 'string'));
 
 function kqlCondition(c: AdvancedCondition): string {
   const p = property(c.field, 'kql');
@@ -250,11 +308,14 @@ export function dialectFor(source: string): 'odata' | 'kql' | undefined {
 }
 
 /** The request param that carries the builder's filter for a page (undefined when the page has no query builder). */
-export const advancedParamOf = (filters: FilterBar | undefined): string | undefined => (filters?.advanced ? (filters.advanced.param ?? DEFAULT_ADVANCED_PARAM) : undefined);
+export const advancedParamOf = (filters: FilterBar | undefined): string | undefined =>
+  filters?.advanced ? (filters.advanced.param ?? DEFAULT_ADVANCED_PARAM) : undefined;
 
 /** The validated filter in wire form (audit records, saved state). */
 export function describeAdvanced(g: AdvancedGroup): AdvancedFilterInput {
   const one = (x: AdvancedGroup | AdvancedCondition): unknown =>
-    isGroup(x) ? { [x.join === 'and' ? 'all' : 'any']: x.clauses.map(one) } : { field: x.field.field, op: x.op, ...(x.value !== null ? { value: x.value } : {}) };
+    isGroup(x)
+      ? { [x.join === 'and' ? 'all' : 'any']: x.clauses.map(one) }
+      : { field: x.field.field, op: x.op, ...(x.value !== null ? { value: x.value } : {}) };
   return one(g) as AdvancedFilterInput;
 }

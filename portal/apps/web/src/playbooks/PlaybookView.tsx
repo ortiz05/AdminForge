@@ -32,9 +32,11 @@ const GUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 
 function Value({ value }: { value: unknown }) {
   if (value === undefined || value === null || value === '') return <span className="text-fg-3">—</span>;
-  if (typeof value === 'string' && GUID_RE.test(value)) return <IdChip value={value} showLabel={false} label="Id" />;
+  if (typeof value === 'string' && GUID_RE.test(value))
+    return <IdChip value={value} showLabel={false} label="Id" />;
   if (Array.isArray(value)) return <span className="font-mono text-xs">{value.map(String).join(', ')}</span>;
-  if (typeof value === 'object') return <code className="font-mono text-xs break-all">{JSON.stringify(value)}</code>;
+  if (typeof value === 'object')
+    return <code className="font-mono text-xs break-all">{JSON.stringify(value)}</code>;
   return <span className="break-all">{String(value)}</span>;
 }
 
@@ -92,7 +94,8 @@ function BulkItems({ flow }: { flow: PlaybookFlow }) {
       )}
       {keys.length > 0 && (
         <p className="text-xs text-fg-3">
-          {keys.map((k) => labelOf(k, flow.params[k]!)).join(', ')} come{keys.length === 1 ? 's' : ''} from each item.
+          {keys.map((k) => labelOf(k, flow.params[k]!)).join(', ')} come{keys.length === 1 ? 's' : ''} from
+          each item.
           {Object.keys(flow.params).some((k) => !keys.includes(k) && !flow.params[k]!.hidden)
             ? ' The inputs below apply to every item.'
             : ''}
@@ -159,7 +162,13 @@ export function Outputs({ outputs, now }: { outputs: Record<string, unknown>; no
         />
       )}
       {objects.map(([k, v]) => (
-        <CodeBlock key={k} title={humanize(k)} language="json" code={JSON.stringify(maskSecrets(v), null, 2)} maxHeight={220} />
+        <CodeBlock
+          key={k}
+          title={humanize(k)}
+          language="json"
+          code={JSON.stringify(maskSecrets(v), null, 2)}
+          maxHeight={220}
+        />
       ))}
     </section>
   );
@@ -173,12 +182,16 @@ function BulkPreview({ detail }: { detail: RunDetail }) {
       <div className="flex items-baseline justify-between">
         <h3 className="af-eyebrow">Items</h3>
         <span className="text-xs text-fg-3">
-          {detail.children.length - failing.length} of {detail.children.length} ready{failing.length ? ` · ${failing.length} would stop` : ''}
+          {detail.children.length - failing.length} of {detail.children.length} ready
+          {failing.length ? ` · ${failing.length} would stop` : ''}
         </span>
       </div>
       <ul className="overflow-hidden rounded-(--af-panel-radius) border border-line bg-panel text-sm">
         {detail.children.map((c) => (
-          <li key={c.id} className="flex items-center justify-between gap-3 border-t border-line px-3 py-2 first:border-t-0">
+          <li
+            key={c.id}
+            className="flex items-center justify-between gap-3 border-t border-line px-3 py-2 first:border-t-0"
+          >
             <span className="min-w-0 truncate text-fg">{c.title}</span>
             <RunStatusPill status={c.status} size="sm" />
           </li>
@@ -195,20 +208,31 @@ function PreviewSection({ flow }: { flow: PlaybookFlow }) {
   const shown = Boolean(flow.preview.id || flow.preview.pending);
   useEffect(() => {
     if (!shown) return;
-    const reduce = typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const reduce =
+      typeof window.matchMedia === 'function' &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     ref.current?.scrollIntoView?.({ block: 'start', behavior: reduce ? 'auto' : 'smooth' });
   }, [shown, flow.preview.id]);
   if (!shown) return null;
   const failedStep = detail?.run.error?.stepId;
   const index = stepIndex(flow.def);
   return (
-    <section ref={ref} aria-label="Preview" aria-busy={!flow.preview.done || undefined} className="flex flex-col gap-4 border-t border-line pt-5">
+    <section
+      ref={ref}
+      aria-label="Preview"
+      aria-busy={!flow.preview.done || undefined}
+      className="flex flex-col gap-4 border-t border-line pt-5"
+    >
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="af-display text-md font-semibold text-fg">
           Preview <span className="font-normal text-fg-3">· dry run</span>
         </h2>
         <span className="flex items-center gap-2 text-xs text-fg-3">
-          {detail ? <RunStatusPill status={detail.run.status} size="sm" /> : <Skeleton className="h-5 w-20" />}
+          {detail ? (
+            <RunStatusPill status={detail.run.status} size="sm" />
+          ) : (
+            <Skeleton className="h-5 w-20" />
+          )}
           {detail?.run.endedAt && <span>{formatRelative(detail.run.endedAt, now)}</span>}
         </span>
       </div>
@@ -219,7 +243,11 @@ function PreviewSection({ flow }: { flow: PlaybookFlow }) {
       ) : !detail || !flow.preview.done ? (
         <div className="flex flex-col gap-2" role="status">
           <p className="text-sm text-fg-2">Running the read steps and planning the changes…</p>
-          {detail ? <ReadChecks detail={detail} index={index} /> : <Skeleton className="h-16 w-full" shape="block" />}
+          {detail ? (
+            <ReadChecks detail={detail} index={index} />
+          ) : (
+            <Skeleton className="h-16 w-full" shape="block" />
+          )}
         </div>
       ) : (
         <>
@@ -237,30 +265,32 @@ function PreviewSection({ flow }: { flow: PlaybookFlow }) {
               {detail.run.error?.hint && <p className="mt-1">{detail.run.error.hint}</p>}
             </Callout>
           )}
-          {detail.run.status === 'succeeded' && flow.writes && (flow.preview.rejection || !flow.preview.fresh || flow.preview.stale) && (
-            <Callout
-              tone="warn"
-              role="status"
-              title={
-                flow.preview.rejection
-                  ? flow.preview.rejection.message
+          {detail.run.status === 'succeeded' &&
+            flow.writes &&
+            (flow.preview.rejection || !flow.preview.fresh || flow.preview.stale) && (
+              <Callout
+                tone="warn"
+                role="status"
+                title={
+                  flow.preview.rejection
+                    ? flow.preview.rejection.message
+                    : !flow.preview.fresh
+                      ? 'Inputs changed — preview again'
+                      : 'This preview expired'
+                }
+                action={
+                  <Button size="sm" pending={flow.preview.pending} onClick={() => flow.preview.start()}>
+                    Preview again
+                  </Button>
+                }
+              >
+                {flow.preview.rejection
+                  ? (flow.preview.rejection.hint ?? 'Nothing ran. Preview again, then confirm.')
                   : !flow.preview.fresh
-                    ? 'Inputs changed — preview again'
-                    : 'This preview expired'
-              }
-              action={
-                <Button size="sm" pending={flow.preview.pending} onClick={() => flow.preview.start()}>
-                  Preview again
-                </Button>
-              }
-            >
-              {flow.preview.rejection
-                ? (flow.preview.rejection.hint ?? 'Nothing ran. Preview again, then confirm.')
-                : !flow.preview.fresh
-                  ? 'The plan below is for the earlier inputs. Nothing runs until you preview the current ones.'
-                  : 'Previews are good for 15 minutes. Run previews again first, then asks you to confirm.'}
-            </Callout>
-          )}
+                    ? 'The plan below is for the earlier inputs. Nothing runs until you preview the current ones.'
+                    : 'Previews are good for 15 minutes. Run previews again first, then asks you to confirm.'}
+              </Callout>
+            )}
           {detail.run.status === 'succeeded' && <PlanView plan={detail.plan} />}
           {flow.bulk && detail.children.length > 0 && <BulkPreview detail={detail} />}
           <ReadChecks detail={detail} index={index} />
@@ -277,10 +307,14 @@ export function PlaybookSections({ flow, problems }: { flow: PlaybookFlow; probl
   const notes = [
     ...problems,
     ...(flow.unknownInputs.length
-      ? [`The link included inputs this playbook doesn’t take (${flow.unknownInputs.join(', ')}); they were left out.`]
+      ? [
+          `The link included inputs this playbook doesn’t take (${flow.unknownInputs.join(', ')}); they were left out.`,
+        ]
       : []),
   ];
-  const sharedCount = Object.entries(flow.params).filter(([k, p]) => !p.hidden && !flow.perItemKeys.includes(k)).length;
+  const sharedCount = Object.entries(flow.params).filter(
+    ([k, p]) => !p.hidden && !flow.perItemKeys.includes(k),
+  ).length;
   return (
     <div className="flex flex-col gap-6">
       {notes.length > 0 && (
@@ -311,7 +345,9 @@ export function PlaybookSections({ flow, problems }: { flow: PlaybookFlow; probl
       {flow.failure && (
         <Callout tone="crit" role="alert" title="AdminForge couldn’t start that">
           <p>{(flow.failure as Error).message}</p>
-          {flow.failure instanceof ApiRequestError && flow.failure.hint && <p className="mt-1">{flow.failure.hint}</p>}
+          {flow.failure instanceof ApiRequestError && flow.failure.hint && (
+            <p className="mt-1">{flow.failure.hint}</p>
+          )}
           {flow.failure instanceof ApiRequestError && flow.failure.correlationId && (
             <p className="mt-2">
               <IdChip value={flow.failure.correlationId} label="Correlation ID" />
@@ -363,7 +399,12 @@ function RunConfirmDialog({ flow, label }: { flow: PlaybookFlow; label: string }
           <Button intent="ghost" onClick={flow.closeConfirm} aria-disabled={pending || undefined}>
             Cancel
           </Button>
-          <Button intent="armed" pending={pending} aria-disabled={!matches || undefined} onClick={() => void submit()}>
+          <Button
+            intent="armed"
+            pending={pending}
+            aria-disabled={!matches || undefined}
+            onClick={() => void submit()}
+          >
             {label}
           </Button>
         </>
@@ -388,7 +429,8 @@ function RunConfirmDialog({ flow, label }: { flow: PlaybookFlow; label: string }
           <TextField
             label={
               <>
-                Type <code className="rounded-sm bg-sunken px-1 py-0.5 text-fg">{confirm.text}</code> to confirm
+                Type <code className="rounded-sm bg-sunken px-1 py-0.5 text-fg">{confirm.text}</code> to
+                confirm
                 {flow.bulk ? ` changing ${count} object${count === 1 ? '' : 's'}` : ''}
               </>
             }
@@ -429,7 +471,11 @@ export function PlaybookActions({ flow, align = 'end' }: { flow: PlaybookFlow; a
   const { openArmDialog } = useShell();
   const { def } = flow;
   const statusId = useId();
-  const runLabel = flow.bulk ? `${def.title} · ${flow.items?.length ?? 0} items` : flow.writes ? def.title : 'Run';
+  const runLabel = flow.bulk
+    ? `${def.title} · ${flow.items?.length ?? 0} items`
+    : flow.writes
+      ? def.title
+      : 'Run';
   const needsArm = flow.writes && !flow.armed;
   const ready = flow.preview.ok && flow.preview.fresh && !flow.preview.rejection;
   const expiry = flow.writes && ready ? expiryText(flow.preview.expiresInMs) : null;
@@ -448,7 +494,9 @@ export function PlaybookActions({ flow, align = 'end' }: { flow: PlaybookFlow; a
   const blockedNow = Boolean(flow.run.blocked) && flow.valid && (!flow.writes || flow.armed);
 
   return (
-    <div className={`flex w-full flex-wrap items-center gap-2 ${align === 'between' ? 'justify-between' : 'justify-end'}`}>
+    <div
+      className={`flex w-full flex-wrap items-center gap-2 ${align === 'between' ? 'justify-between' : 'justify-end'}`}
+    >
       <p className="mr-auto min-w-0 flex-1 basis-48 text-xs text-fg-3">
         <span role="status" id={statusId}>
           {status}

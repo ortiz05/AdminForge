@@ -24,16 +24,34 @@ describe('playbook launch links', () => {
   });
 
   it('builds search params and hrefs for pages, row and bulk actions', () => {
-    expect(playbookSearch({ playbook: 'identity.disable-user' })).toEqual({ playbook: 'identity.disable-user', inputs: undefined, items: undefined, preview: undefined });
-    const href = playbookHref({ playbook: 'identity.revoke-sessions', inputs: { reason: 'x' }, items: [{ userId: 'a' }] }, '/p/identity.users');
+    expect(playbookSearch({ playbook: 'identity.disable-user' })).toEqual({
+      playbook: 'identity.disable-user',
+      inputs: undefined,
+      items: undefined,
+      preview: undefined,
+    });
+    const href = playbookHref(
+      { playbook: 'identity.revoke-sessions', inputs: { reason: 'x' }, items: [{ userId: 'a' }] },
+      '/p/identity.users',
+    );
     expect(href.startsWith('/p/identity.users?playbook=identity.revoke-sessions&inputs=')).toBe(true);
     const parsed = parseLaunch(Object.fromEntries(new URL(href, 'http://x').searchParams));
-    expect(parsed).toMatchObject({ key: 'identity.revoke-sessions', keyValid: true, inputs: { reason: 'x' }, items: [{ userId: 'a' }], problems: [] });
+    expect(parsed).toMatchObject({
+      key: 'identity.revoke-sessions',
+      keyValid: true,
+      inputs: { reason: 'x' },
+      items: [{ userId: 'a' }],
+      problems: [],
+    });
   });
 
   it('parseLaunch explains what was wrong instead of failing', () => {
     expect(parseLaunch({})).toBeNull();
-    const bad = parseLaunch({ playbook: 'Not A Key', inputs: 'garbage', items: encodeParam({ not: 'an array' }) })!;
+    const bad = parseLaunch({
+      playbook: 'Not A Key',
+      inputs: 'garbage',
+      items: encodeParam({ not: 'an array' }),
+    })!;
     expect(bad.keyValid).toBe(false);
     expect(bad.problems).toHaveLength(3);
     expect(bad.inputs).toEqual({});
@@ -42,7 +60,9 @@ describe('playbook launch links', () => {
   });
 
   it('closing keeps every other param; item labels are display-only', () => {
-    expect(withoutPlaybook({ inspect: 'user:1', playbook: 'a.b', inputs: 'x', items: 'y', preview: 'z' })).toEqual({
+    expect(
+      withoutPlaybook({ inspect: 'user:1', playbook: 'a.b', inputs: 'x', items: 'y', preview: 'z' }),
+    ).toEqual({
       inspect: 'user:1',
       playbook: undefined,
       inputs: undefined,

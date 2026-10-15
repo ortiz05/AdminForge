@@ -67,19 +67,42 @@ const toRoles = (body: unknown): DirectoryRoleInfo[] =>
  * active roles (PIM schedule instances, falling back to plain role assignments without P2), PIM-eligible roles
  * (degrade to null without P2), and tenant licences from subscribedSkus → feature map with the enabling SKU.
  */
-export async function loadCapabilities(outbound: OutboundExecutor, session: SessionRecord, correlationId: string): Promise<CapabilitiesResponse> {
+export async function loadCapabilities(
+  outbound: OutboundExecutor,
+  session: SessionRecord,
+  correlationId: string,
+): Promise<CapabilitiesResponse> {
   const who = `principalId eq ${odataLiteral(session.userOid)}`;
   const expand = 'roleDefinition($select=displayName)';
   const requests = [
-    { id: 'active', path: '/roleManagement/directory/roleAssignmentScheduleInstances', query: { $filter: who, $expand: expand } },
-    { id: 'eligible', path: '/roleManagement/directory/roleEligibilityScheduleInstances', query: { $filter: who, $expand: expand } },
-    { id: 'assignments', path: '/roleManagement/directory/roleAssignments', query: { $filter: who, $expand: expand } },
+    {
+      id: 'active',
+      path: '/roleManagement/directory/roleAssignmentScheduleInstances',
+      query: { $filter: who, $expand: expand },
+    },
+    {
+      id: 'eligible',
+      path: '/roleManagement/directory/roleEligibilityScheduleInstances',
+      query: { $filter: who, $expand: expand },
+    },
+    {
+      id: 'assignments',
+      path: '/roleManagement/directory/roleAssignments',
+      query: { $filter: who, $expand: expand },
+    },
     { id: 'skus', path: '/subscribedSkus' },
   ];
   const identity = { kind: 'delegated' as const, session, mode: 'read' as const };
   const res = await outbound.execute<{ responses: Array<{ id: string; status: number; body: unknown }> }>(
     identity,
-    { service: 'graph', method: 'POST', path: '/$batch', body: { requests }, pathTemplate: '/$batch', requires: { licences: ['AAD_PREMIUM_P2'] } },
+    {
+      service: 'graph',
+      method: 'POST',
+      path: '/$batch',
+      body: { requests },
+      pathTemplate: '/$batch',
+      requires: { licences: ['AAD_PREMIUM_P2'] },
+    },
     { correlationId },
   );
   const byId = new Map(res.data.responses.map((r) => [r.id, r]));
@@ -91,9 +114,19 @@ export async function loadCapabilities(outbound: OutboundExecutor, session: Sess
   const fail = (id: string, licenceHint?: string): ErrorInfo => {
     const r = byId.get(id);
     const e = (r?.body as { error?: { code?: string; message?: string } } | undefined)?.error;
-    const err = new ApiError(r?.status ?? 0, e?.code ?? `HTTP${r?.status ?? 0}`, e?.message ?? 'No response.');
-    const { hint, licence } = errorHint(err, 'graph', identity, { scopes: { graph: ['RoleManagement.Read.Directory'] } });
-    return { code: licence ? 'licence_required' : err.code, message: err.message, hint: licence && licenceHint ? licenceHint : hint };
+    const err = new ApiError(
+      r?.status ?? 0,
+      e?.code ?? `HTTP${r?.status ?? 0}`,
+      e?.message ?? 'No response.',
+    );
+    const { hint, licence } = errorHint(err, 'graph', identity, {
+      scopes: { graph: ['RoleManagement.Read.Directory'] },
+    });
+    return {
+      code: licence ? 'licence_required' : err.code,
+      message: err.message,
+      hint: licence && licenceHint ? licenceHint : hint,
+    };
   };
 
   const skuBody = ok('skus');
@@ -113,12 +146,21 @@ export async function loadCapabilities(outbound: OutboundExecutor, session: Sess
   let eligible: DirectoryRoleInfo[] = [];
   const eligibleAvailable = ok('eligible') !== undefined;
   if (eligibleAvailable) eligible = toRoles(ok('eligible'));
-  else errors.eligible = fail('eligible', 'PIM eligibility needs Microsoft Entra ID P2 (AAD_PREMIUM_P2) in the tenant.');
+  else
+    errors.eligible = fail(
+      'eligible',
+      'PIM eligibility needs Microsoft Entra ID P2 (AAD_PREMIUM_P2) in the tenant.',
+    );
 
   return {
     roles: { active, eligible, eligibleAvailable, activeSource },
     features: featureStates(licences),
-    skus: (licences?.skus ?? []).map(({ skuPartNumber, capabilityStatus, enabled, consumed }) => ({ skuPartNumber, capabilityStatus, enabled, consumed })),
+    skus: (licences?.skus ?? []).map(({ skuPartNumber, capabilityStatus, enabled, consumed }) => ({
+      skuPartNumber,
+      capabilityStatus,
+      enabled,
+      consumed,
+    })),
     ...(Object.keys(errors).length ? { errors } : {}),
     provenance: res.provenance,
   };

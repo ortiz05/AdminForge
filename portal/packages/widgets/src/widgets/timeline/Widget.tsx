@@ -13,7 +13,10 @@ import { toText as text } from '../../lib/text';
 export function TimelineWidget({ config, data, runtime }: WidgetProps<TimelineConfig>) {
   const rows = useMemo(() => {
     const all = asRows(data.value).filter((r) => getPath(r, config.ts) != null);
-    all.sort((a, b) => new Date(text(getPath(b, config.ts))).getTime() - new Date(text(getPath(a, config.ts))).getTime());
+    all.sort(
+      (a, b) =>
+        new Date(text(getPath(b, config.ts))).getTime() - new Date(text(getPath(a, config.ts))).getTime(),
+    );
     return all.slice(0, config.limit ?? 20);
   }, [data.value, config.ts, config.limit]);
   const titleTemplated = hasExpression(config.title);
@@ -23,10 +26,19 @@ export function TimelineWidget({ config, data, runtime }: WidgetProps<TimelineCo
 
   const items: TimelineItem[] = rows.map((row, i) => {
     const st = config.status
-      ? mapStatus(getPath(row, config.status.field), config.status.map as StatusMap | undefined, config.status.default as StatusEntry | undefined)
+      ? mapStatus(
+          getPath(row, config.status.field),
+          config.status.map as StatusMap | undefined,
+          config.status.default as StatusEntry | undefined,
+        )
       : null;
     const title = titleTemplated ? text(titles?.[i]) : text(getPath(row, config.title));
-    const detail = config.detail === undefined ? '' : detailTemplated ? text(details?.[i]) : text(getPath(row, config.detail));
+    const detail =
+      config.detail === undefined
+        ? ''
+        : detailTemplated
+          ? text(details?.[i])
+          : text(getPath(row, config.detail));
     return {
       id: text(row.id ?? `${text(getPath(row, config.ts))}-${i}`),
       title: title || '—',
@@ -44,7 +56,10 @@ export function TimelineWidget({ config, data, runtime }: WidgetProps<TimelineCo
       runtime={runtime}
       name={config.heading ?? 'Activity'}
       isEmpty={rows.length === 0}
-      emptyDefault={{ title: 'No activity in this period', body: 'Widen the time range to see older events.' }}
+      emptyDefault={{
+        title: 'No activity in this period',
+        body: 'Widen the time range to see older events.',
+      }}
       skeleton={
         <div className="flex flex-col gap-4">
           {Array.from({ length: 4 }, (_, i) => (

@@ -52,13 +52,18 @@ const server = createServer((req, res) => {
       .inject({
         method: (req.method ?? 'GET') as 'GET',
         url: req.url ?? '/',
-        headers: { cookie, 'x-adminforge-csrf': csrf, ...(body ? { 'content-type': 'application/json' } : {}) },
+        headers: {
+          cookie,
+          'x-adminforge-csrf': csrf,
+          ...(body ? { 'content-type': 'application/json' } : {}),
+        },
         payload: body,
       })
       .then((r) => {
         const type = String(r.headers['content-type'] ?? '');
         const headers: Record<string, string> = {};
-        for (const h of ['content-type', 'content-disposition', 'x-correlation-id']) if (r.headers[h] !== undefined) headers[h] = String(r.headers[h]);
+        for (const h of ['content-type', 'content-disposition', 'x-correlation-id'])
+          if (r.headers[h] !== undefined) headers[h] = String(r.headers[h]);
         res.writeHead(r.statusCode, headers);
         res.end(type.includes('application/json') ? JSON.stringify(normalise(r.json())) : r.rawPayload);
       })

@@ -52,7 +52,12 @@ export function stepIndex(def: Playbook | Runbook | null | undefined): StepIndex
   const groups = def.kind === 'playbook' ? [def.steps] : def.sections.map((s) => s.steps ?? []);
   for (const steps of groups)
     walkSteps(steps, (s) =>
-      index.set(s.id, { name: s.name ?? null, describe: s.describe ?? null, type: s.type, mode: s.mode ?? 'read' }),
+      index.set(s.id, {
+        name: s.name ?? null,
+        describe: s.describe ?? null,
+        type: s.type,
+        mode: s.mode ?? 'read',
+      }),
     );
   return index;
 }
@@ -71,7 +76,8 @@ export function buildTimeline(detail: RunDetail, def?: Playbook | Runbook | null
     nested.set(k, [...(nested.get(k) ?? []), r]);
   }
   const index = stepIndex(def);
-  const nameOf = (r: RunStep) => r.name ?? index.get(r.stepId)?.name ?? index.get(r.stepId)?.describe ?? r.describe ?? r.stepId;
+  const nameOf = (r: RunStep) =>
+    r.name ?? index.get(r.stepId)?.name ?? index.get(r.stepId)?.describe ?? r.describe ?? r.stepId;
   const fromRecord = (r: RunStep): TimelineEntry => ({
     key: r.path,
     label: r.path.includes('#compensate') ? `Roll back: ${nameOf(r)}` : nameOf(r),
@@ -89,7 +95,11 @@ export function buildTimeline(detail: RunDetail, def?: Playbook | Runbook | null
     const r = top.find((x) => x.stepId === s.id && !x.path.includes('#'));
     if (r) {
       used.add(r.path);
-      return { ...fromRecord(r), label: s.name ?? s.describe ?? s.id, describe: s.describe ?? r.describe ?? null };
+      return {
+        ...fromRecord(r),
+        label: s.name ?? s.describe ?? s.id,
+        describe: s.describe ?? r.describe ?? null,
+      };
     }
     return {
       key: s.id,
@@ -111,7 +121,9 @@ const hasOutput = (v: unknown) =>
   v !== undefined && v !== null && !(typeof v === 'object' && Object.keys(v as object).length === 0);
 
 function Children({ items }: { items: RunStep[] }) {
-  const done = items.filter((c) => ['succeeded', 'failed', 'skipped', 'cancelled', 'compensated'].includes(c.status)).length;
+  const done = items.filter((c) =>
+    ['succeeded', 'failed', 'skipped', 'cancelled', 'compensated'].includes(c.status),
+  ).length;
   const failed = items.filter((c) => c.status === 'failed').length;
   const shown = items.slice(0, 50);
   return (
@@ -124,7 +136,10 @@ function Children({ items }: { items: RunStep[] }) {
           const view = STEP_STATUS_VIEW[c.status];
           const index = /\[(\d+)\]/.exec(c.path)?.[1];
           return (
-            <li key={c.path} className="flex items-center gap-2 border-t border-line bg-sunken px-2.5 py-1.5 first:border-t-0">
+            <li
+              key={c.path}
+              className="flex items-center gap-2 border-t border-line bg-sunken px-2.5 py-1.5 first:border-t-0"
+            >
               <StatusGlyph status={c.status} tone={view.tone} size={13} colored />
               <span className="min-w-0 flex-1 truncate text-fg-2">
                 Item {index !== undefined ? Number(index) + 1 : i + 1}
@@ -132,7 +147,11 @@ function Children({ items }: { items: RunStep[] }) {
                 {c.error && <span className="ml-2 text-crit">{c.error.message}</span>}
               </span>
               {c.childRunId && (
-                <Link to="/runs/$id" params={{ id: c.childRunId }} className="shrink-0 text-xs font-medium text-accent hover:underline">
+                <Link
+                  to="/runs/$id"
+                  params={{ id: c.childRunId }}
+                  className="shrink-0 text-xs font-medium text-accent hover:underline"
+                >
                   Open run
                 </Link>
               )}
@@ -140,7 +159,9 @@ function Children({ items }: { items: RunStep[] }) {
           );
         })}
       </ul>
-      {items.length > shown.length && <p className="text-xs text-fg-3">+{items.length - shown.length} more</p>}
+      {items.length > shown.length && (
+        <p className="text-xs text-fg-3">+{items.length - shown.length} more</p>
+      )}
     </div>
   );
 }
@@ -192,7 +213,9 @@ export function RunTimeline({
               <div className="flex flex-wrap items-center gap-1.5 pt-0.5 text-xs">
                 <Badge mono>{TYPE_LABEL[e.type] ?? e.type}</Badge>
                 {e.mode === 'write' && <Badge tone="outline">Changes tenant</Badge>}
-                {e.status !== 'pending' && e.status !== 'running' && <span className="text-fg-3">{view.label}</span>}
+                {e.status !== 'pending' && e.status !== 'running' && (
+                  <span className="text-fg-3">{view.label}</span>
+                )}
                 {r && r.attempt > 1 && <span className="text-fg-3">attempt {r.attempt}</span>}
                 {r?.actorUpn && initiatorUpn && r.actorUpn !== initiatorUpn && (
                   <span className="text-fg-3">as {r.actorUpn}</span>
@@ -203,10 +226,15 @@ export function RunTimeline({
                 <p className="text-sm font-medium text-warn">{WAITING_TEXT[e.type] ?? 'Waiting.'}</p>
               )}
               {r?.error && (
-                <div className="mt-1 flex flex-col gap-0.5 text-sm" role={e.status === 'failed' ? 'alert' : undefined}>
+                <div
+                  className="mt-1 flex flex-col gap-0.5 text-sm"
+                  role={e.status === 'failed' ? 'alert' : undefined}
+                >
                   <p className="font-medium text-crit">
                     {r.error.message}
-                    {r.error.status ? <span className="ml-1.5 font-mono text-xs">({r.error.status})</span> : null}
+                    {r.error.status ? (
+                      <span className="ml-1.5 font-mono text-xs">({r.error.status})</span>
+                    ) : null}
                   </p>
                   {r.error.hint && <p className="text-fg-2">{r.error.hint}</p>}
                   {r.error.requestId && (
@@ -216,13 +244,22 @@ export function RunTimeline({
               )}
               {e.children.length > 0 && <Children items={e.children} />}
               {r?.childRunId && e.children.length === 0 && (
-                <Link to="/runs/$id" params={{ id: r.childRunId }} className="mt-1 text-sm font-medium text-accent hover:underline">
+                <Link
+                  to="/runs/$id"
+                  params={{ id: r.childRunId }}
+                  className="mt-1 text-sm font-medium text-accent hover:underline"
+                >
                   Open child run
                 </Link>
               )}
               {r && hasOutput(r.output) && e.children.length === 0 && (
                 <Disclosure label="Show output" openLabel="Hide output" className="mt-1">
-                  <CodeBlock code={pretty(r.output)} title={`${e.key} output`} language="json" maxHeight={260} />
+                  <CodeBlock
+                    code={pretty(r.output)}
+                    title={`${e.key} output`}
+                    language="json"
+                    maxHeight={260}
+                  />
                 </Disclosure>
               )}
             </div>

@@ -22,7 +22,10 @@ export async function launchPlaybook(
   scope: Scope,
 ): Promise<void> {
   const rendered = inputs ? await evaluateTemplate<Record<string, unknown>>(inputs, scope) : undefined;
-  runtime.openPlaybook({ playbook, ...(rendered && Object.keys(rendered).length ? { inputs: rendered } : {}) });
+  runtime.openPlaybook({
+    playbook,
+    ...(rendered && Object.keys(rendered).length ? { inputs: rendered } : {}),
+  });
 }
 
 export interface ActionButtonProps {
@@ -38,7 +41,14 @@ export interface ActionButtonProps {
  * A content action: launches a playbook (the drawer handles preflight and write access) or follows a link.
  * Hidden while its `when` is false. Buttons say exactly what happens (§6.9) — the label comes from content.
  */
-export function ActionButton({ action, scope, runtime, size = 'md', intent = 'secondary', className }: ActionButtonProps) {
+export function ActionButton({
+  action,
+  scope,
+  runtime,
+  size = 'md',
+  intent = 'secondary',
+  className,
+}: ActionButtonProps) {
   const visible = useWhen(action.when, scope);
   const href = useTemplate<string>(action.href, scope, Boolean(action.href));
   const [busy, setBusy] = useState(false);

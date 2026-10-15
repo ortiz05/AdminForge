@@ -1,7 +1,8 @@
 import { flattenSteps, Step, stepMode, walkSteps, type Playbook, type Runbook } from '@adminforge/schemas';
 import { brief, ENVELOPE, errors, ok, yaml } from './helpers';
 
-const head = (risk = 'low', mode = 'write') => `${ENVELOPE('playbook', 'identity.example')}risk: ${risk}\nmode: ${mode}\n`;
+const head = (risk = 'low', mode = 'write') =>
+  `${ENVELOPE('playbook', 'identity.example')}risk: ${risk}\nmode: ${mode}\n`;
 // head() is 7 lines; `steps:` is line 8, the first step's `- id` line 9.
 
 describe('playbook', () => {
@@ -61,24 +62,96 @@ describe('playbook', () => {
     );
     const ids: string[] = [];
     walkSteps(def.steps, (s) => ids.push(s.id));
-    expect(ids).toEqual(['lookup', 'counts', 'rgs', 'arc', 'logs', 'hr', 'ps', 'hook', 'shape', 'check', 'maybe', 'approve', 'confirm', 'each', 'disable', 'pause', 'until', 'tell', 'child']);
+    expect(ids).toEqual([
+      'lookup',
+      'counts',
+      'rgs',
+      'arc',
+      'logs',
+      'hr',
+      'ps',
+      'hook',
+      'shape',
+      'check',
+      'maybe',
+      'approve',
+      'confirm',
+      'each',
+      'disable',
+      'pause',
+      'until',
+      'tell',
+      'child',
+    ]);
     expect(stepMode(def.steps[0]!)).toBe('read');
     const each = def.steps.find((s) => s.type === 'forEach');
-    expect(each?.type === 'forEach' && each.steps[0]!.type === 'graph' && each.steps[0]!.compensate?.type).toBe('graph');
+    expect(
+      each?.type === 'forEach' && each.steps[0]!.type === 'graph' && each.steps[0]!.compensate?.type,
+    ).toBe('graph');
   });
 
   it.each([
-    ['forEach concurrency above 10', "- { id: e, type: forEach, items: '${ [1] }', concurrency: 11, steps: [{ id: t, type: transform, expression: '${ 1 }' }] }", 'steps[0].concurrency@9', /<=10/],
-    ['forEach over 1000 items', "- { id: e, type: forEach, items: '${ [1] }', maxItems: 1001, steps: [{ id: t, type: transform, expression: '${ 1 }' }] }", 'steps[0].maxItems@9', /<=1000/],
+    [
+      'forEach concurrency above 10',
+      "- { id: e, type: forEach, items: '${ [1] }', concurrency: 11, steps: [{ id: t, type: transform, expression: '${ 1 }' }] }",
+      'steps[0].concurrency@9',
+      /<=10/,
+    ],
+    [
+      'forEach over 1000 items',
+      "- { id: e, type: forEach, items: '${ [1] }', maxItems: 1001, steps: [{ id: t, type: transform, expression: '${ 1 }' }] }",
+      'steps[0].maxItems@9',
+      /<=1000/,
+    ],
     ['an unknown step type', '- { id: x, type: sql }', 'steps[0].type@9', /Expected 'graph' \| 'graphBatch'/],
-    ['a step id with a dash', '- { id: my-step, type: transform, expression: "${ 1 }" }', 'steps[0].id@9', /letters, digits and _/],
-    ['PATCH without mode: write', '- { id: x, type: graph, request: { method: PATCH, path: /users/1, body: {} } }', 'steps[0].mode@9', /PATCH changes data/],
-    ['POST without an explicit mode', '- { id: x, type: graph, request: { method: POST, path: /users/1/revokeSignInSessions } }', 'steps[0].mode@9', /explicitly/],
-    ['a write step without describe', '- { id: x, type: graph, mode: write, request: { method: DELETE, path: /groups/1 } }', 'steps[0].describe@9', /need describe/],
-    ['notify without mode: write', '- { id: x, type: notify, channel: email, to: a@example.com, message: hi }', 'steps[0].mode@9', /notify sends a message/],
-    ['an http step with an expression host', "- { id: x, type: http, request: { url: 'https://${ env.HOST }/x' } }", 'steps[0].request.url@9', /literal host/],
-    ['a wait step with both duration and until', "- { id: x, type: wait, duration: 5s, until: '${ true }' }", 'steps[0].duration@9', /exactly one of duration or until/],
-    ['an assert without ${ }', '- { id: x, type: assert, that: a = b, message: m }', 'steps[0].that@9', /single \$\{ … \} expression/],
+    [
+      'a step id with a dash',
+      '- { id: my-step, type: transform, expression: "${ 1 }" }',
+      'steps[0].id@9',
+      /letters, digits and _/,
+    ],
+    [
+      'PATCH without mode: write',
+      '- { id: x, type: graph, request: { method: PATCH, path: /users/1, body: {} } }',
+      'steps[0].mode@9',
+      /PATCH changes data/,
+    ],
+    [
+      'POST without an explicit mode',
+      '- { id: x, type: graph, request: { method: POST, path: /users/1/revokeSignInSessions } }',
+      'steps[0].mode@9',
+      /explicitly/,
+    ],
+    [
+      'a write step without describe',
+      '- { id: x, type: graph, mode: write, request: { method: DELETE, path: /groups/1 } }',
+      'steps[0].describe@9',
+      /need describe/,
+    ],
+    [
+      'notify without mode: write',
+      '- { id: x, type: notify, channel: email, to: a@example.com, message: hi }',
+      'steps[0].mode@9',
+      /notify sends a message/,
+    ],
+    [
+      'an http step with an expression host',
+      "- { id: x, type: http, request: { url: 'https://${ env.HOST }/x' } }",
+      'steps[0].request.url@9',
+      /literal host/,
+    ],
+    [
+      'a wait step with both duration and until',
+      "- { id: x, type: wait, duration: 5s, until: '${ true }' }",
+      'steps[0].duration@9',
+      /exactly one of duration or until/,
+    ],
+    [
+      'an assert without ${ }',
+      '- { id: x, type: assert, that: a = b, message: m }',
+      'steps[0].that@9',
+      /single \$\{ … \} expression/,
+    ],
   ])('rejects %s', (_label, step, at, message) => {
     const e = errors(`${head()}steps:\n  ${step}\n`);
     expect(brief(e)).toEqual([at]);
@@ -89,19 +162,36 @@ describe('playbook', () => {
     const e = errors(
       `${head()}steps:\n  - { id: a, type: transform, expression: "\${ 1 }" }\n  - id: b\n    type: branch\n    if: "\${ true }"\n    then:\n      - { id: a, type: transform, expression: "\${ 2 }" }\n`,
     );
-    expect(e).toEqual([{ file: 'test.yaml', path: 'steps[1].then[0].id', line: 14, message: 'Duplicate step id "a" (also at steps.0).' }]);
+    expect(e).toEqual([
+      {
+        file: 'test.yaml',
+        path: 'steps[1].then[0].id',
+        line: 14,
+        message: 'Duplicate step id "a" (also at steps.0).',
+      },
+    ]);
   });
   it('rejects write steps in a read-only playbook', () =>
-    expect(errors(`${head('low', 'read')}steps:\n  - { id: x, type: graph, mode: write, describe: d, request: { method: PATCH, path: /users/1 } }\n`)[0]!.message).toMatch(/top-level mode: write/));
+    expect(
+      errors(
+        `${head('low', 'read')}steps:\n  - { id: x, type: graph, mode: write, describe: d, request: { method: PATCH, path: /users/1 } }\n`,
+      )[0]!.message,
+    ).toMatch(/top-level mode: write/));
   it('requires confirmation at high risk and approval at critical risk', () => {
     const step = 'steps:\n  - { id: x, type: transform, expression: "${ 1 }" }\n';
     expect(brief(errors(head('high') + step))).toEqual(['confirm@1']);
     expect(brief(errors(head('critical') + step))).toEqual(['confirm@1', 'approval@1']);
-    expect(ok(`${head('critical')}confirm: { type: typed, value: "\${ inputs.upn }" }\napproval: { required: true, approvers: [Playbook.Approver], minApprovals: 2, expiresIn: PT4H }\n${step}`)).toBeTruthy();
+    expect(
+      ok(
+        `${head('critical')}confirm: { type: typed, value: "\${ inputs.upn }" }\napproval: { required: true, approvers: [Playbook.Approver], minApprovals: 2, expiresIn: PT4H }\n${step}`,
+      ),
+    ).toBeTruthy();
     expect(brief(errors(`${head('high')}confirm: { type: typed }\n${step}`))).toEqual(['confirm.value@8']);
   });
   it('checks that tests refer to real steps', () => {
-    const e = errors(`${head()}steps:\n  - { id: x, type: transform, expression: "\${ 1 }" }\ntests:\n  - { name: t, mocks: { y: 1 }, expect: { status: failed, failedStep: z } }\n`);
+    const e = errors(
+      `${head()}steps:\n  - { id: x, type: transform, expression: "\${ 1 }" }\ntests:\n  - { name: t, mocks: { y: 1 }, expect: { status: failed, failedStep: z } }\n`,
+    );
     expect(e.map((x) => [x.path, x.message])).toEqual([
       ['tests[0].mocks.y', 'Unknown step id "y".'],
       ['tests[0].expect', 'Unknown step id "z".'],
@@ -110,7 +200,14 @@ describe('playbook', () => {
   });
   it('requires at least one step', () => expect(brief(errors(`${head()}steps: []\n`))).toEqual(['steps@8']));
   it('parses steps on their own', () => {
-    expect(Step.safeParse({ id: 'a', type: 'forEach', items: '${ [1] }', steps: [{ id: 'b', type: 'wait', duration: '1s' }] }).success).toBe(true);
+    expect(
+      Step.safeParse({
+        id: 'a',
+        type: 'forEach',
+        items: '${ [1] }',
+        steps: [{ id: 'b', type: 'wait', duration: '1s' }],
+      }).success,
+    ).toBe(true);
     expect(Step.safeParse({ id: 'a', type: 'forEach', items: '${ [1] }', steps: [] }).success).toBe(false);
   });
 });
@@ -144,8 +241,16 @@ describe('runbook', () => {
     expect(flattenSteps(def).map((s) => s.id)).toEqual(['confirmed', 'disable']);
   });
   it('checks step ids across sections and rejects top-level steps', () => {
-    const dup = errors(`${rb}sections:\n  - { id: a, title: A, steps: [{ id: s, type: wait, duration: 1s }] }\n  - { id: b, title: B, steps: [{ id: s, type: wait, duration: 1s }] }\n`);
-    expect(dup[0]).toMatchObject({ path: 'sections[1].steps[0].id', line: 11, message: expect.stringMatching(/Duplicate step id "s"/) });
-    expect(errors(`${rb}sections: [{ id: a, title: A }]\nsteps: []\n`)[0]!.message).toBe('Unrecognized key: "steps"');
+    const dup = errors(
+      `${rb}sections:\n  - { id: a, title: A, steps: [{ id: s, type: wait, duration: 1s }] }\n  - { id: b, title: B, steps: [{ id: s, type: wait, duration: 1s }] }\n`,
+    );
+    expect(dup[0]).toMatchObject({
+      path: 'sections[1].steps[0].id',
+      line: 11,
+      message: expect.stringMatching(/Duplicate step id "s"/),
+    });
+    expect(errors(`${rb}sections: [{ id: a, title: A }]\nsteps: []\n`)[0]!.message).toBe(
+      'Unrecognized key: "steps"',
+    );
   });
 });

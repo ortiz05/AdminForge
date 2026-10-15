@@ -1,6 +1,10 @@
 import { randomUUID } from 'node:crypto';
 import type { CliContext } from '@adminforge/cli/src/commands/context';
-import { azureTestStatus, destroyAzureTestRun, provisionAzureTest } from '@adminforge/cli/src/provision/azure-test-command';
+import {
+  azureTestStatus,
+  destroyAzureTestRun,
+  provisionAzureTest,
+} from '@adminforge/cli/src/provision/azure-test-command';
 import { provisionerClients, provisionSettings } from '@adminforge/cli/src/commands/context';
 import { createAzureFake, type AzureFakeOptions } from './azure-test-fake';
 
@@ -10,7 +14,14 @@ const AUTOMATION = { clientId: randomUUID(), secret: 'automation-secret-never-pr
 
 function setup(opts: Partial<AzureFakeOptions> = {}, envOverrides: Record<string, string | undefined> = {}) {
   const subscriptionId = randomUUID();
-  const cloud = createAzureFake({ tenantId: TENANT, subscriptionId, provisioner: PROVISIONER, automation: AUTOMATION, testerUpn: 'af-tester@example.com', ...opts });
+  const cloud = createAzureFake({
+    tenantId: TENANT,
+    subscriptionId,
+    provisioner: PROVISIONER,
+    automation: AUTOMATION,
+    testerUpn: 'af-tester@example.com',
+    ...opts,
+  });
   const env: Record<string, string | undefined> = {
     AF_TENANT_ID: TENANT,
     AF_PROVISIONER_CLIENT_ID: PROVISIONER.clientId,
@@ -37,8 +48,12 @@ function setup(opts: Partial<AzureFakeOptions> = {}, envOverrides: Record<string
   return { cloud, env, written, lines, ctx, subscriptionId };
 }
 
-const changed = <T extends { action: string }>(ops: T[]) => ops.filter((o) => o.action === 'create' || o.action === 'update');
-const writes = (calls: string[]) => calls.filter((c) => !c.startsWith('GET ') && !c.includes('/oauth2/v2.0/token') && !c.includes('api.loganalytics.io'));
+const changed = <T extends { action: string }>(ops: T[]) =>
+  ops.filter((o) => o.action === 'create' || o.action === 'update');
+const writes = (calls: string[]) =>
+  calls.filter(
+    (c) => !c.startsWith('GET ') && !c.includes('/oauth2/v2.0/token') && !c.includes('api.loganalytics.io'),
+  );
 
 describe('adminforge provision azure-test (against a fake ARM / Graph / Log Analytics)', () => {
   it('--dry-run reads only and changes nothing', async () => {
@@ -51,21 +66,54 @@ describe('adminforge provision azure-test (against a fake ARM / Graph / Log Anal
   });
 
   it('creates the environment, waits out replication and provisioning, writes the env file, verifies as the automation identity, then is a no-op', async () => {
-    const { cloud, ctx, env, written, lines, subscriptionId } = setup({ principalNotFound: 2, creatingPolls: 2, laForbidden: 2, activityRows: 7 });
+    const { cloud, ctx, env, written, lines, subscriptionId } = setup({
+      principalNotFound: 2,
+      creatingPolls: 2,
+      laForbidden: 2,
+      activityRows: 7,
+    });
     const run = await provisionAzureTest(ctx);
 
     const [rg] = [...cloud.resourceGroups.values()];
-    expect(rg).toMatchObject({ name: 'AF-Test-test', location: 'eastus', tags: { 'adminforge-env': 'test', 'managed-by': 'adminforge-cli' } });
-    const [ws] = [...cloud.workspaces.values()] as Array<{ name: string; properties: Record<string, unknown> }>;
+    expect(rg).toMatchObject({
+      name: 'AF-Test-test',
+      location: 'eastus',
+      tags: { 'adminforge-env': 'test', 'managed-by': 'adminforge-cli' },
+    });
+    const [ws] = [...cloud.workspaces.values()] as Array<{
+      name: string;
+      properties: Record<string, unknown>;
+    }>;
     expect(ws!.name).toBe('af-test-law-test');
-    expect(ws!.properties).toMatchObject({ sku: { name: 'PerGB2018' }, retentionInDays: 30, workspaceCapping: { dailyQuotaGb: 0.1 } });
-    const [diag] = [...cloud.diagnostics.values()] as Array<{ name: string; properties: { workspaceId: string; logs: Array<{ category: string; enabled: boolean }> } }>;
+    expect(ws!.properties).toMatchObject({
+      sku: { name: 'PerGB2018' },
+      retentionInDays: 30,
+      workspaceCapping: { dailyQuotaGb: 0.1 },
+    });
+    const [diag] = [...cloud.diagnostics.values()] as Array<{
+      name: string;
+      properties: { workspaceId: string; logs: Array<{ category: string; enabled: boolean }> };
+    }>;
     expect(diag!.name).toBe('adminforge-test');
     expect(diag!.properties.workspaceId).toMatch(/\/workspaces\/af-test-law-test$/);
-    expect(diag!.properties.logs.map((l) => l.category)).toEqual(['Administrative', 'Policy', 'Security', 'ServiceHealth', 'Alert', 'Recommendation', 'ResourceHealth']);
+    expect(diag!.properties.logs.map((l) => l.category)).toEqual([
+      'Administrative',
+      'Policy',
+      'Security',
+      'ServiceHealth',
+      'Alert',
+      'Recommendation',
+      'ResourceHealth',
+    ]);
 
     // Deterministic assignment names, the right principal types, and the right scopes.
-    expect(cloud.assignments.map((a) => [a.properties.principalType, String(a.properties.roleDefinitionId).split('/').pop(), String(a.properties.scope).split('/').pop()])).toEqual([
+    expect(
+      cloud.assignments.map((a) => [
+        a.properties.principalType,
+        String(a.properties.roleDefinitionId).split('/').pop(),
+        String(a.properties.scope).split('/').pop(),
+      ]),
+    ).toEqual([
       ['ServicePrincipal', '73c42c96-874c-492b-b04d-ab87d138a893', 'af-test-law-test'],
       ['User', 'acdd72a7-3385-48ef-bd42-f606fba81ae7', subscriptionId],
       ['User', '73c42c96-874c-492b-b04d-ab87d138a893', 'af-test-law-test'],
@@ -86,7 +134,17 @@ describe('adminforge provision azure-test (against a fake ARM / Graph / Log Anal
     expect(output).toContain('✓ Automation identity can query af-test-law-test');
     expect(output).toContain('AzureActivity: 7 rows in the last 24 hours');
     // Names only: no tenant, subscription, object or workspace ids, no UPN, no secrets.
-    for (const secret of [TENANT, subscriptionId, customerId, cloud.automationSp.id, cloud.tester.id, 'af-tester@example.com', PROVISIONER.secret, AUTOMATION.secret, AUTOMATION.clientId])
+    for (const secret of [
+      TENANT,
+      subscriptionId,
+      customerId,
+      cloud.automationSp.id,
+      cloud.tester.id,
+      'af-tester@example.com',
+      PROVISIONER.secret,
+      AUTOMATION.secret,
+      AUTOMATION.clientId,
+    ])
       expect(output).not.toContain(secret);
     expect(env.AF_LOG_ANALYTICS_WORKSPACE_ID).toBe(customerId);
 
@@ -110,8 +168,12 @@ describe('adminforge provision azure-test (against a fake ARM / Graph / Log Anal
     const customerId = ws.properties.customerId;
     ws.properties.workspaceCapping = { dailyQuotaGb: -1 };
     const run = await provisionAzureTest(ctx, { verify: false });
-    expect(changed(run.ops).map((o) => [o.action, o.changes])).toEqual([['update', ['daily cap none → 0.1 GB']]]);
-    expect(([...cloud.workspaces.values()][0] as { properties: Record<string, unknown> }).properties).toMatchObject({ customerId, workspaceCapping: { dailyQuotaGb: 0.1 } });
+    expect(changed(run.ops).map((o) => [o.action, o.changes])).toEqual([
+      ['update', ['daily cap none → 0.1 GB']],
+    ]);
+    expect(
+      ([...cloud.workspaces.values()][0] as { properties: Record<string, unknown> }).properties,
+    ).toMatchObject({ customerId, workspaceCapping: { dailyQuotaGb: 0.1 } });
   });
 
   it('skips the validation user without AF_TEST_USER_UPN and still provisions the rest', async () => {
@@ -154,20 +216,39 @@ describe('adminforge provision azure-test (against a fake ARM / Graph / Log Anal
     expect(lines.join('\n')).toContain('Nothing was deleted.');
     await expect(destroyAzureTestRun(ctx, {})).rejects.toThrow(/--yes/);
 
-    const result = await destroyAzureTestRun(ctx, { confirm: async (q) => (expect(q).toContain('AF-Test-test'), 'AF-Test-test'), poll: { intervalMs: 0 } });
-    expect(result).toEqual({ diagnostic: 'deleted', workspace: 'deleted', resourceGroup: 'deleted', subscriptionRoles: 1 });
-    expect(cloud.calls).toContainEqual(expect.stringMatching(/^DELETE management\.azure\.com.*\/workspaces\/af-test-law-test$/));
+    const result = await destroyAzureTestRun(ctx, {
+      confirm: async (q) => (expect(q).toContain('AF-Test-test'), 'AF-Test-test'),
+      poll: { intervalMs: 0 },
+    });
+    expect(result).toEqual({
+      diagnostic: 'deleted',
+      workspace: 'deleted',
+      resourceGroup: 'deleted',
+      subscriptionRoles: 1,
+    });
+    expect(cloud.calls).toContainEqual(
+      expect.stringMatching(/^DELETE management\.azure\.com.*\/workspaces\/af-test-law-test$/),
+    );
     expect(cloud.resourceGroups.size).toBe(0);
     expect(cloud.diagnostics.size).toBe(0);
     expect(cloud.assignments).toEqual([]);
     expect(env.AF_LOG_ANALYTICS_WORKSPACE_ID).toBe('');
 
     // Idempotent: a second destroy finds nothing.
-    expect(await destroyAzureTestRun(ctx, { yes: true })).toEqual({ diagnostic: 'absent', workspace: 'absent', resourceGroup: 'absent', subscriptionRoles: 0 });
+    expect(await destroyAzureTestRun(ctx, { yes: true })).toEqual({
+      diagnostic: 'absent',
+      workspace: 'absent',
+      resourceGroup: 'absent',
+      subscriptionRoles: 0,
+    });
   });
 
   it('refuses a missing subscription or a bad location with a config error', async () => {
-    await expect(provisionAzureTest(setup({}, { AF_SUBSCRIPTION_ID: '' }).ctx)).rejects.toThrow(/AF_SUBSCRIPTION_ID/);
-    await expect(provisionAzureTest(setup({}, { AF_TEST_LOCATION: 'east us; drop' }).ctx)).rejects.toThrow(/AF_TEST_LOCATION/);
+    await expect(provisionAzureTest(setup({}, { AF_SUBSCRIPTION_ID: '' }).ctx)).rejects.toThrow(
+      /AF_SUBSCRIPTION_ID/,
+    );
+    await expect(provisionAzureTest(setup({}, { AF_TEST_LOCATION: 'east us; drop' }).ctx)).rejects.toThrow(
+      /AF_TEST_LOCATION/,
+    );
   });
 });

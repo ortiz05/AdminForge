@@ -14,8 +14,18 @@ import { growViewportToPage, mockApi, setPrefs, settle } from './support/mock-ap
 const THEMES = ['steel', 'daylight'] as const;
 
 async function expectNoAxeViolations(page: Page) {
-  const results = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa']).analyze();
-  expect(results.violations.map((v) => `${v.id}: ${v.help} (${v.nodes.map((n) => n.target.join(' ')).slice(0, 3).join(', ')})`)).toEqual([]);
+  const results = await new AxeBuilder({ page })
+    .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'])
+    .analyze();
+  expect(
+    results.violations.map(
+      (v) =>
+        `${v.id}: ${v.help} (${v.nodes
+          .map((n) => n.target.join(' '))
+          .slice(0, 3)
+          .join(', ')})`,
+    ),
+  ).toEqual([]);
 }
 
 /** base64url JSON → value (what the playbook drawer decodes). */
@@ -25,7 +35,11 @@ function decode(param: string | null): unknown {
   return JSON.parse(Buffer.from(b64 + '='.repeat((4 - (b64.length % 4)) % 4), 'base64').toString('utf8'));
 }
 
-async function open(page: Page, path: string, opts: { theme?: string; live?: boolean; backend?: BackendOptions } = {}) {
+async function open(
+  page: Page,
+  path: string,
+  opts: { theme?: string; live?: boolean; backend?: BackendOptions } = {},
+) {
   await page.clock.setFixedTime(FIXED_NOW);
   await mockApi(page, opts.live ? { me: me({ dataMode: 'live' }) } : {});
   await routeContentBackend(page, {
@@ -55,11 +69,22 @@ test.describe('identity.users (list-detail)', () => {
     await expect(usersGrid(page).getByRole('row').nth(1)).toContainText('Avery Engineer');
 
     // Facet (server-side param).
-    await page.getByRole('search', { name: 'Filters' }).getByRole('button', { name: 'Type', exact: true }).click();
+    await page
+      .getByRole('search', { name: 'Filters' })
+      .getByRole('button', { name: 'Type', exact: true })
+      .click();
     await page.getByRole('checkbox', { name: 'Guest' }).click();
     await page.keyboard.press('Escape');
     await expect(page).toHaveURL(/userType=Guest/);
-    await expect.poll(() => calls.some((c) => c.path === '/api/datasources/execute-many' && (c.body as { params: Record<string, unknown> }).params.userType === 'Guest')).toBe(true);
+    await expect
+      .poll(() =>
+        calls.some(
+          (c) =>
+            c.path === '/api/datasources/execute-many' &&
+            (c.body as { params: Record<string, unknown> }).params.userType === 'Guest',
+        ),
+      )
+      .toBe(true);
     await expect(page.getByRole('list', { name: 'Active filters' })).toContainText('Type:Guest');
 
     // Server search box (debounced) → q.
@@ -67,11 +92,16 @@ test.describe('identity.users (list-detail)', () => {
     await expect(page).toHaveURL(/q=casey/);
 
     // Clear → back to the definition defaults (nothing in the URL).
-    await page.getByRole('search', { name: 'Filters' }).getByRole('button', { name: 'Clear', exact: true }).click();
+    await page
+      .getByRole('search', { name: 'Filters' })
+      .getByRole('button', { name: 'Clear', exact: true })
+      .click();
     await expect(page).not.toHaveURL(/userType=|q=/);
   });
 
-  test('the advanced filter goes to the BFF as a structured filter (base64url JSON in the URL)', async ({ page }) => {
+  test('the advanced filter goes to the BFF as a structured filter (base64url JSON in the URL)', async ({
+    page,
+  }) => {
     const calls: NonNullable<BackendOptions['calls']> = [];
     await open(page, '/p/identity.users', { backend: { calls } });
     await expect(usersGrid(page).getByRole('row').nth(1)).toBeVisible();
@@ -93,12 +123,27 @@ test.describe('identity.users (list-detail)', () => {
     };
     await expect(page).toHaveURL(/[?&]adv=[A-Za-z0-9_-]+/);
     expect(decode(new URL(page.url()).searchParams.get('adv'))).toEqual(expected);
-    await expect.poll(() => calls.some((c) => c.path === '/api/datasources/execute-many' && JSON.stringify((c.body as { params: { adv?: unknown } }).params.adv) === JSON.stringify(expected))).toBe(true);
+    await expect
+      .poll(() =>
+        calls.some(
+          (c) =>
+            c.path === '/api/datasources/execute-many' &&
+            JSON.stringify((c.body as { params: { adv?: unknown } }).params.adv) === JSON.stringify(expected),
+        ),
+      )
+      .toBe(true);
     await expect(page.getByRole('list', { name: 'Active filters' })).toContainText('2 conditions');
   });
 
   test('a filter the BFF rejects shows its problems in the builder', async ({ page }) => {
-    const bad = Buffer.from(JSON.stringify({ all: [{ field: 'nope', op: 'eq', value: 'x' }, { field: 'createdDateTime', op: 'ge', value: 'yesterday-ish' }] })).toString('base64url');
+    const bad = Buffer.from(
+      JSON.stringify({
+        all: [
+          { field: 'nope', op: 'eq', value: 'x' },
+          { field: 'createdDateTime', op: 'ge', value: 'yesterday-ish' },
+        ],
+      }),
+    ).toString('base64url');
     await open(page, `/p/identity.users?adv=${bad}`);
     await expect(page.getByText(/The advanced filter was rejected: .*unknown field "nope"/)).toBeVisible();
     await page.getByRole('button', { name: /Advanced filter, 2 conditions/ }).click();
@@ -107,7 +152,9 @@ test.describe('identity.users (list-detail)', () => {
     await expect(alert).toContainText('createdDateTime ge: expects an ISO date');
   });
 
-  test('table state (sort, columns, client filters) lives in the URL and survives a reload', async ({ page }) => {
+  test('table state (sort, columns, client filters) lives in the URL and survives a reload', async ({
+    page,
+  }) => {
     await open(page, '/p/identity.users');
     const grid = usersGrid(page);
     await expect(grid.getByRole('row').nth(1)).toBeVisible();
@@ -132,7 +179,10 @@ test.describe('identity.users (list-detail)', () => {
     await rowBoxes.nth(1).click();
     const bar = page.getByRole('region', { name: 'Bulk actions' });
     await expect(bar).toContainText('2 selected');
-    await bar.getByRole('button', { name: /sign-in/ }).first().click();
+    await bar
+      .getByRole('button', { name: /sign-in/ })
+      .first()
+      .click();
     await expect(page).toHaveURL(/playbook=identity\./);
     const items = decode(new URL(page.url()).searchParams.get('items')) as Array<Record<string, unknown>>;
     expect(items).toHaveLength(2);
@@ -142,11 +192,15 @@ test.describe('identity.users (list-detail)', () => {
 
   test('a row action launches its playbook with rendered inputs', async ({ page }) => {
     await open(page, '/p/identity.users');
-    const first = usersGrid(page).getByRole('button', { name: /^Actions for / }).first();
+    const first = usersGrid(page)
+      .getByRole('button', { name: /^Actions for / })
+      .first();
     await first.click();
     await page.getByRole('menuitem', { name: /Revoke sessions/ }).click();
     await expect(page).toHaveURL(/playbook=identity\.revoke-sessions/);
-    expect(decode(new URL(page.url()).searchParams.get('inputs'))).toMatchObject({ userId: expect.stringMatching(/^[0-9a-f-]{36}$/) });
+    expect(decode(new URL(page.url()).searchParams.get('inputs'))).toMatchObject({
+      userId: expect.stringMatching(/^[0-9a-f-]{36}$/),
+    });
   });
 
   test('saved views: save, reopen, and the standard view', async ({ page }) => {
@@ -161,7 +215,12 @@ test.describe('identity.users (list-detail)', () => {
     await dialog.getByRole('button', { name: 'Save view' }).click();
     await expect(page.getByText('Saved view “Guests to review”')).toBeVisible();
     const post = calls.find((c) => c.method === 'POST' && c.path === '/api/views');
-    expect(post?.body).toMatchObject({ page: 'identity.users', name: 'Guests to review', shared: true, state: { params: { userType: 'Guest' } } });
+    expect(post?.body).toMatchObject({
+      page: 'identity.users',
+      name: 'Guests to review',
+      shared: true,
+      state: { params: { userType: 'Guest' } },
+    });
     await expect(page).toHaveURL(/view=/);
 
     // Back to the standard view, then reopen the saved one from the menu.
@@ -193,7 +252,10 @@ test.describe('identity.users (list-detail)', () => {
     test(`visual · users · ${theme}`, async ({ page }) => {
       await open(page, '/p/identity.users', { theme });
       await expect(usersGrid(page).getByRole('row').nth(6)).toBeVisible();
-      await usersGrid(page).getByRole('checkbox', { name: /^Select (?!all rows)/ }).nth(1).click();
+      await usersGrid(page)
+        .getByRole('checkbox', { name: /^Select (?!all rows)/ })
+        .nth(1)
+        .click();
       await settle(page);
       await growViewportToPage(page);
       await expect(page).toHaveScreenshot(`renderer-users-${theme}.png`);
@@ -225,7 +287,12 @@ test.describe('inspector (entity page in the drawer)', () => {
     test(`visual · inspector · ${theme}`, async ({ page }) => {
       await open(page, '/p/identity.users', { theme });
       const row = usersGrid(page).getByRole('row').nth(1);
-      const name = (await row.getByRole('gridcell').nth(1).locator('span span').first().textContent())!.trim();
+      const name = (await row
+        .getByRole('gridcell')
+        .nth(1)
+        .locator('span span')
+        .first()
+        .textContent())!.trim();
       await row.click();
       const drawer = page.getByRole('dialog', { name });
       await expect(drawer).toBeVisible();
@@ -256,9 +323,16 @@ test.describe('dashboard', () => {
   test('probe dashboard renders probe results and the markdown guidance', async ({ page }) => {
     await open(page, '/p/automation.monitoring');
     await expect(page.getByRole('heading', { level: 1, name: 'Synthetic monitoring' })).toBeVisible();
-    await expect(page.getByRole('list', { name: 'Token acquisition (automation identity)' })).toContainText('Failing');
-    await page.getByRole('list', { name: 'Token acquisition (automation identity)' }).getByRole('button', { name: /Token acquisition · Exchange Online/ }).click();
-    await expect(page.getByRole('list', { name: 'Token acquisition (automation identity)' }).getByText(/AADSTS7000215/)).toBeVisible();
+    await expect(page.getByRole('list', { name: 'Token acquisition (automation identity)' })).toContainText(
+      'Failing',
+    );
+    await page
+      .getByRole('list', { name: 'Token acquisition (automation identity)' })
+      .getByRole('button', { name: /Token acquisition · Exchange Online/ })
+      .click();
+    await expect(
+      page.getByRole('list', { name: 'Token acquisition (automation identity)' }).getByText(/AADSTS7000215/),
+    ).toBeVisible();
   });
 });
 
@@ -270,7 +344,15 @@ test.describe('report', () => {
     await page.getByRole('combobox', { name: 'Expiring within' }).click();
     await page.getByRole('option', { name: '90 days' }).click();
     await expect(page).toHaveURL(/days=90/);
-    await expect.poll(() => calls.some((c) => c.path === '/api/datasources/execute-many' && (c.body as { params: { days?: number } }).params.days === 90)).toBe(true);
+    await expect
+      .poll(() =>
+        calls.some(
+          (c) =>
+            c.path === '/api/datasources/execute-many' &&
+            (c.body as { params: { days?: number } }).params.days === 90,
+        ),
+      )
+      .toBe(true);
     const download = page.waitForEvent('download');
     await page.getByRole('button', { name: 'Export report' }).click();
     await page.getByRole('menuitem', { name: /Excel/ }).click();
@@ -298,7 +380,9 @@ test.describe('licence gate', () => {
     },
   };
 
-  test('live tenant without Intune: the page explains what is missing and loads no data', async ({ page }) => {
+  test('live tenant without Intune: the page explains what is missing and loads no data', async ({
+    page,
+  }) => {
     const calls: NonNullable<BackendOptions['calls']> = [];
     await open(page, '/p/endpoint.devices', { live: true, backend: { ...noIntune, calls } });
     const gate = page.getByRole('region', { name: /Microsoft Intune isn’t licensed/ });
@@ -332,7 +416,10 @@ test.describe('navigation and palette', () => {
     await page.keyboard.type('avery');
     const palette = page.getByRole('dialog', { name: 'Command palette' });
     await expect(palette.getByRole('group', { name: 'Users' })).toContainText('Avery Engineer');
-    await palette.getByRole('option', { name: /Avery Engineer/ }).first().click();
+    await palette
+      .getByRole('option', { name: /Avery Engineer/ })
+      .first()
+      .click();
     await expect(page).toHaveURL(/identity\.user/);
   });
 
@@ -342,14 +429,19 @@ test.describe('navigation and palette', () => {
         override: async (route, url) => {
           if (url.pathname !== '/api/nav') return false;
           const res = await fetch(`${await backendUrl()}/api/nav`);
-          const nav = (await res.json()) as { sections: Array<{ key: string; items: Array<{ key: string; badge?: string }> }> };
-          for (const s of nav.sections) for (const i of s.items) if (s.key === 'endpoint') i.badge = 'Requires INTUNE_A or EMS';
+          const nav = (await res.json()) as {
+            sections: Array<{ key: string; items: Array<{ key: string; badge?: string }> }>;
+          };
+          for (const s of nav.sections)
+            for (const i of s.items) if (s.key === 'endpoint') i.badge = 'Requires INTUNE_A or EMS';
           await route.fulfill({ json: nav });
           return true;
         },
       },
     });
-    const link = page.getByRole('navigation', { name: 'Primary' }).getByRole('link', { name: /Managed devices/ });
+    const link = page
+      .getByRole('navigation', { name: 'Primary' })
+      .getByRole('link', { name: /Managed devices/ });
     await expect(link).toContainText('Intune');
     await expect(link).toHaveAccessibleName(/Requires INTUNE_A or EMS/);
   });

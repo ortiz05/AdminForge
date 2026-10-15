@@ -74,7 +74,9 @@ const eventOf = ({ seq: _seq, prevHash: _p, hash: _h, ...event }: AuditRow): Aud
 
 function verifyRows(rows: AuditRow[]) {
   const res = verifyChain(rows.map((r) => ({ ...eventOf(r), prevHash: r.prevHash, hash: r.hash })));
-  return res.ok ? { ok: true as const, count: rows.length } : { ok: false as const, brokenAt: res.brokenAt, seq: rows[res.brokenAt]!.seq };
+  return res.ok
+    ? { ok: true as const, count: rows.length }
+    : { ok: false as const, brokenAt: res.brokenAt, seq: rows[res.brokenAt]!.seq };
 }
 
 /** Lock key shared by every writer of the chain (pg_advisory_xact_lock). */
@@ -91,7 +93,11 @@ export class PgAuditWriter implements AuditWriter {
     return this.db.transaction(async (tx) => {
       // Serialises appenders across processes so prev_hash always points at the true tail.
       await tx.execute(AUDIT_LOCK);
-      const [last] = await tx.select({ hash: auditEvents.hash }).from(auditEvents).orderBy(desc(auditEvents.seq)).limit(1);
+      const [last] = await tx
+        .select({ hash: auditEvents.hash })
+        .from(auditEvents)
+        .orderBy(desc(auditEvents.seq))
+        .limit(1);
       const prevHash = last?.hash ?? GENESIS;
       const hash = chainHash(prevHash, { ...event });
       const [row] = await tx
@@ -122,7 +128,12 @@ export class MemoryAuditWriter implements AuditWriter {
   async append(input: AuditInput): Promise<AuditRow> {
     const event = toAuditEvent(input, this.now());
     const prevHash = this.rows.at(-1)?.hash ?? GENESIS;
-    const row: AuditRow = { ...event, seq: this.rows.length + 1, prevHash, hash: chainHash(prevHash, { ...event }) };
+    const row: AuditRow = {
+      ...event,
+      seq: this.rows.length + 1,
+      prevHash,
+      hash: chainHash(prevHash, { ...event }),
+    };
     this.rows.push(row);
     return structuredClone(row);
   }

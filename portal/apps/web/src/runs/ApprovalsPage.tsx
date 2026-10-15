@@ -42,14 +42,24 @@ export function ApprovalsPage({ search }: { search: ApprovalsSearch }) {
             <SegmentedControl
               aria-label="Show approvals"
               value={status}
-              onValueChange={(v) => void navigate({ to: '/approvals', search: { status: v as ApprovalsSearch['status'] }, replace: true })}
+              onValueChange={(v) =>
+                void navigate({
+                  to: '/approvals',
+                  search: { status: v as ApprovalsSearch['status'] },
+                  replace: true,
+                })
+              }
               options={[
                 { value: 'pending', label: 'Waiting' },
                 { value: 'approved', label: 'Approved' },
                 { value: 'rejected', label: 'Rejected' },
               ]}
             />
-            <IconButton label="Refresh" icon={<ArrowClockwiseIcon size={16} />} onClick={() => void q.refetch()} />
+            <IconButton
+              label="Refresh"
+              icon={<ArrowClockwiseIcon size={16} />}
+              onClick={() => void q.refetch()}
+            />
           </>
         }
       />
@@ -61,7 +71,8 @@ export function ApprovalsPage({ search }: { search: ApprovalsSearch }) {
       {q.isError && isForbidden(q.error) ? (
         <Panel>
           <EmptyState title="The approval inbox is for Playbook Approvers" icon={<SealCheckIcon size={20} />}>
-            Runs you start that need approval show who can decide on the run page. Ask a Portal Admin if you should approve.
+            Runs you start that need approval show who can decide on the run page. Ask a Portal Admin if you
+            should approve.
           </EmptyState>
         </Panel>
       ) : q.isError ? (
@@ -75,7 +86,10 @@ export function ApprovalsPage({ search }: { search: ApprovalsSearch }) {
         </div>
       ) : items.length === 0 ? (
         <Panel>
-          <EmptyState title={status === 'pending' ? 'Nothing is waiting for a decision' : `No ${status} requests`} icon={<SealCheckIcon size={20} />}>
+          <EmptyState
+            title={status === 'pending' ? 'Nothing is waiting for a decision' : `No ${status} requests`}
+            icon={<SealCheckIcon size={20} />}
+          >
             {status === 'pending'
               ? 'When a run reaches an approval step, or someone enables a write-capable schedule, it shows up here.'
               : 'Decisions appear here once they are made.'}

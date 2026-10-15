@@ -48,7 +48,10 @@ export class PgListener {
       this.schedule();
     };
     client.on('error', (err) => {
-      this.opts.log?.warn({ err: { message: err.message } }, `LISTEN ${this.channel}: connection error; reconnecting`);
+      this.opts.log?.warn(
+        { err: { message: err.message } },
+        `LISTEN ${this.channel}: connection error; reconnecting`,
+      );
       retry();
     });
     client.on('end', () => {
@@ -68,7 +71,10 @@ export class PgListener {
       this.attempt = 0;
       this.opts.onConnect?.();
     } catch (err) {
-      this.opts.log?.warn({ err: { message: (err as Error).message } }, `LISTEN ${this.channel}: cannot connect; retrying`);
+      this.opts.log?.warn(
+        { err: { message: (err as Error).message } },
+        `LISTEN ${this.channel}: cannot connect; retrying`,
+      );
       retry();
     }
   }

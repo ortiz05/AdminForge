@@ -31,7 +31,11 @@ export interface ResolvedDefinition<D extends Definition = Definition> {
  * `version` omitted → the latest published (non-retired) version. Throws AppError 404 `definition_not_found`.
  */
 export interface DefinitionResolver {
-  resolve<K extends Kind>(kind: K, key: string, version?: string): Promise<ResolvedDefinition<DefinitionOf<K>>>;
+  resolve<K extends Kind>(
+    kind: K,
+    key: string,
+    version?: string,
+  ): Promise<ResolvedDefinition<DefinitionOf<K>>>;
 }
 
 /** Payload of `definitions_changed` (NOTIFY) and the SSE `definitions.changed` event. Keys are `kind:key`. */
@@ -57,7 +61,11 @@ export interface DefinitionSource {
 export interface DefinitionRegistry extends DefinitionSource, DefinitionResolver {
   readonly origin: 'fs' | 'db';
   /** First match across kinds (pages: page | dashboard | report). */
-  resolveAny<K extends Kind>(kinds: readonly K[], key: string, version?: string): Promise<ResolvedDefinition<DefinitionOf<K>> & { kind: K }>;
+  resolveAny<K extends Kind>(
+    kinds: readonly K[],
+    key: string,
+    version?: string,
+  ): Promise<ResolvedDefinition<DefinitionOf<K>> & { kind: K }>;
 }
 
 export const recordKey = (kind: string, key: string) => `${kind}:${key}`;

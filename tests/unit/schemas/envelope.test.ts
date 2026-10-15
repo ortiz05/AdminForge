@@ -19,7 +19,9 @@ describe('envelope', () => {
   it('accepts a minimal definition and applies defaults', () => {
     const def = ok(PB);
     expect(def).toMatchObject({ kind: 'playbook', id: 'identity.example', version: '1.0.0' });
-    expect(def.kind === 'playbook' && def.steps[0]!.type === 'graph' && def.steps[0]!.request.method).toBe('GET');
+    expect(def.kind === 'playbook' && def.steps[0]!.type === 'graph' && def.steps[0]!.request.method).toBe(
+      'GET',
+    );
   });
   it('allows $schema, summary, tags, status and requires', () =>
     expect(
@@ -36,7 +38,10 @@ describe('envelope', () => {
     ['status: published', 'status@24', /Invalid option/],
   ])('rejects %s', (line, at, message) => {
     const key = line.split(':')[0]!;
-    const text = key === 'status' ? `${PB.trimEnd()}\n${'\n'.repeat(12)}${line}\n` : PB.replace(new RegExp(`^${key}: .*$`, 'm'), line);
+    const text =
+      key === 'status'
+        ? `${PB.trimEnd()}\n${'\n'.repeat(12)}${line}\n`
+        : PB.replace(new RegExp(`^${key}: .*$`, 'm'), line);
     const e = errors(text);
     expect(brief(e)).toEqual([at]);
     expect(e[0]!.message).toMatch(message);
@@ -55,13 +60,24 @@ describe('envelope', () => {
     expect(e[0]!.message).toMatch(/starting with \//);
   });
   it('rejects unknown portal roles', () =>
-    expect(brief(errors(`${PB}requires:\n  portalRoles: [Portal.Superuser]\n`))).toEqual(['requires.portalRoles[0]@13']));
+    expect(brief(errors(`${PB}requires:\n  portalRoles: [Portal.Superuser]\n`))).toEqual([
+      'requires.portalRoles[0]@13',
+    ]));
   it('names the allowed kinds', () => {
     const e = errors(PB.replace('kind: playbook', 'kind: widget'));
-    expect(e).toEqual([{ file: 'test.yaml', path: 'kind', line: 1, message: expect.stringMatching(/kind must be one of: page, dashboard, report, playbook/) }]);
+    expect(e).toEqual([
+      {
+        file: 'test.yaml',
+        path: 'kind',
+        line: 1,
+        message: expect.stringMatching(/kind must be one of: page, dashboard, report, playbook/),
+      },
+    ]);
   });
   it('checks the file name suffix against kind', () =>
-    expect(errors(PB, 'playbooks/identity/example.page.yaml')[0]!.message).toBe('File name says page but kind is playbook.'));
+    expect(errors(PB, 'playbooks/identity/example.page.yaml')[0]!.message).toBe(
+      'File name says page but kind is playbook.',
+    ));
   it('reports YAML syntax errors with line and a quoting hint for expressions', () => {
     const e = errors(yaml`
       kind: page
@@ -71,13 +87,29 @@ describe('envelope', () => {
     expect(e[0]!.line).toBe(3);
     expect(e[0]!.message).toMatch(/^YAML: .*Quote values that contain \$\{ … \}/);
   });
-  it('rejects duplicate keys', () => expect(errors(`${PB}title: Again\n`)[0]!.message).toMatch(/YAML: Map keys must be unique/));
-  it('rejects a document that is not a mapping', () => expect(errors('- a\n- b\n')[0]!.message).toMatch(/Expected a mapping/));
+  it('rejects duplicate keys', () =>
+    expect(errors(`${PB}title: Again\n`)[0]!.message).toMatch(/YAML: Map keys must be unique/));
+  it('rejects a document that is not a mapping', () =>
+    expect(errors('- a\n- b\n')[0]!.message).toMatch(/Expected a mapping/));
   it('formats errors as file:line path: message', () =>
-    expect(formatContentError({ file: 'a/b.page.yaml', line: 3, path: 'id', message: 'Bad' })).toBe('a/b.page.yaml:3 id: Bad'));
+    expect(formatContentError({ file: 'a/b.page.yaml', line: 3, path: 'id', message: 'Bad' })).toBe(
+      'a/b.page.yaml:3 id: Bad',
+    ));
   it('validates plain objects without line numbers', () => {
-    const r = validateDefinition({ kind: 'navigation', id: 'portal.navigation', version: '1.0.0', title: 'Nav', owner: 'x', sections: [] });
-    expect(r).toEqual({ ok: false, errors: [{ file: '<object>', path: 'sections', line: undefined, message: expect.stringMatching(/>=1 items/) }] });
+    const r = validateDefinition({
+      kind: 'navigation',
+      id: 'portal.navigation',
+      version: '1.0.0',
+      title: 'Nav',
+      owner: 'x',
+      sections: [],
+    });
+    expect(r).toEqual({
+      ok: false,
+      errors: [
+        { file: '<object>', path: 'sections', line: undefined, message: expect.stringMatching(/>=1 items/) },
+      ],
+    });
   });
   it('exposes a locate() for later checks', () => {
     const r = parseDefinition(PB, 'x.yaml');

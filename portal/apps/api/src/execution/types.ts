@@ -1,4 +1,5 @@
 import type { Mode, Provenance, ServiceId } from '@adminforge/connectors';
+import type { Requires } from '@adminforge/schemas';
 import type { SessionRecord } from '../auth/session-store';
 
 /**
@@ -32,6 +33,19 @@ export interface ServiceCall {
   /** Paging: `none` (single response), `all` (collect up to maxItems), or a cursor page. */
   paging?: 'none' | 'all' | { cursor?: string; pageSize?: number };
   maxItems?: number;
+
+  // ── Additive (outbound.ts) ──────────────────────────────────────────────────
+  /** function: named operation of the connection (falls back to `path` when it is a bare operation name). */
+  operation?: string;
+  /** function: values for `{name}` placeholders in the operation path. */
+  pathParams?: Record<string, unknown>;
+  /** ARM writes: wait for long-running operations (default true for non-GET). */
+  poll?: boolean;
+  pollTimeoutMs?: number;
+  /** Provenance path template, e.g. "/users/{id}" (default: ids in `path` are replaced automatically). */
+  pathTemplate?: string;
+  /** The definition's requirements, used to name missing scopes/roles/licences in 403 hints. */
+  requires?: Requires;
 }
 
 export interface ServiceCallResult<T = unknown> {

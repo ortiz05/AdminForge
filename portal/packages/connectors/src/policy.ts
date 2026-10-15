@@ -22,9 +22,16 @@ const SAFE = new Set(['GET', 'HEAD']);
 
 /** POST endpoints that only read. */
 const READ_POSTS: Partial<Record<ServiceId, RegExp[]>> = {
-  graph: [/^\/\$batch$/, /^\/security\/runHuntingQuery$/, /^\/users\/[^/]+\/(getMemberGroups|getMemberObjects|checkMemberGroups)$/],
+  graph: [
+    /^\/\$batch$/,
+    /^\/security\/runHuntingQuery$/,
+    /^\/users\/[^/]+\/(getMemberGroups|getMemberObjects|checkMemberGroups)$/,
+    /^\/directoryObjects\/getByIds$/,
+  ],
   arm: [
     /^\/providers\/Microsoft\.ResourceGraph\/resources$/i,
+    // App settings names only: the API's outbound executor strips the values before anything else sees them (and audits the read).
+    /\/providers\/Microsoft\.Web\/sites\/[^/]+(\/slots\/[^/]+)?\/config\/appsettings\/list$/i,
     /\/providers\/Microsoft\.Authorization\/permissions$/i,
     /\/providers\/Microsoft\.Insights\/metrics$/i,
   ],

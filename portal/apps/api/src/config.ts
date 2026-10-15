@@ -53,6 +53,28 @@ const Schema = z
     AF_READ_CLIENT_SECRET: z.string().optional(),
     AF_WRITE_CLIENT_ID: z.guid().optional(),
     AF_WRITE_CLIENT_SECRET: z.string().optional(),
+
+    // ── Automation identity, content registry, outbound calls (definitions/datasources) ──
+    AF_AUTOMATION_CLIENT_ID: z.guid().optional(),
+    AF_AUTOMATION_CLIENT_SECRET: z.string().optional(),
+    /** PEM with certificate + private key; preferred over the secret. */
+    AF_AUTOMATION_CERT_PATH: z.string().optional(),
+    /** fs = portal/content from disk (hot reload); db = published versions in Postgres. Default: db in production, else fs. */
+    CONTENT_SOURCE: z.enum(['fs', 'db']).optional(),
+    CONTENT_DIR: z.string().optional(),
+    /** Watch CONTENT_DIR and reload on change (default: on in development). */
+    CONTENT_WATCH: z.stringbool().optional(),
+    OUTBOUND_CONCURRENCY: z.coerce.number().int().min(1).max(256).default(16),
+    OUTBOUND_USER_CONCURRENCY: z.coerce.number().int().min(1).max(64).default(6),
+    OUTBOUND_TIMEOUT_MS: z.coerce.number().int().min(1000).max(300_000).default(30_000),
+    SEARCH_TIMEOUT_MS: z.coerce.number().int().min(250).max(30_000).default(2500),
+    EXPORT_MAX_ROWS: z.coerce.number().int().min(1).max(1_000_000).default(100_000),
+    // PowerShell runner on this host (apps/runner); both unset = PowerShell steps/datasources disabled.
+    RUNNER_URL: z.url().optional(),
+    RUNNER_SHARED_KEY: z.string().min(40).optional(),
+    // Consume run jobs inside the API process (single-process installs); otherwise run `ROLE=worker`.
+    RUN_WORKER_IN_PROCESS: z.stringbool().default(false),
+    RUN_WORKER_CONCURRENCY: z.coerce.number().int().min(1).max(64).default(4),
   })
   .superRefine((env, ctx) => {
     const need = (key: keyof typeof env, why: string) => {
@@ -79,6 +101,10 @@ const Schema = z
     if (Boolean(env.AF_WRITE_CLIENT_ID) !== Boolean(env.AF_WRITE_CLIENT_SECRET)) {
       ctx.addIssue({ code: 'custom', path: ['AF_WRITE_CLIENT_ID'], message: 'AF_WRITE_CLIENT_ID and AF_WRITE_CLIENT_SECRET must be set together' });
     }
+    if (env.AF_AUTOMATION_CLIENT_ID && !env.AF_AUTOMATION_CLIENT_SECRET && !env.AF_AUTOMATION_CERT_PATH) {
+      ctx.addIssue({ code: 'custom', path: ['AF_AUTOMATION_CLIENT_ID'], message: 'AF_AUTOMATION_CLIENT_ID needs AF_AUTOMATION_CERT_PATH or AF_AUTOMATION_CLIENT_SECRET' });
+    }
+    if ((env.CONTENT_SOURCE ?? (env.NODE_ENV === 'production' ? 'db' : 'fs')) === 'db') need('DATABASE_URL', 'when CONTENT_SOURCE=db');
   })
   .transform((env) => {
     const root = workspaceRoot();
@@ -88,6 +114,9 @@ const Schema = z
       ADMINFORGE_FIXTURES_DIR: path.resolve(env.ADMINFORGE_FIXTURES_DIR ?? path.join(root, 'tests', 'fixtures')),
       WEB_DIST_DIR: path.resolve(env.WEB_DIST_DIR ?? path.join(root, 'portal', 'apps', 'web', 'dist')),
       MOCK_ROLES: env.MOCK_ROLES as PortalRole[],
+      CONTENT_SOURCE: env.CONTENT_SOURCE ?? (env.NODE_ENV === 'production' ? ('db' as const) : ('fs' as const)),
+      CONTENT_DIR: path.resolve(env.CONTENT_DIR ?? path.join(root, 'portal', 'content')),
+      CONTENT_WATCH: env.CONTENT_WATCH ?? env.NODE_ENV === 'development',
     };
   });
 

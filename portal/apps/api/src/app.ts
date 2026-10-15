@@ -12,10 +12,14 @@ import { registerSessions } from './auth/session-plugin';
 import { webDistAvailable, type Config } from './config';
 import { createContext, type AppContext, type AppDeps } from './context';
 import { AppError, registerErrorHandler, sendError, unauthenticated } from './errors';
+import { contentRoutes } from './routes/content';
 import { healthRoutes } from './routes/health';
 import { meRoutes } from './routes/me';
 import { navRoutes } from './routes/nav';
 import { overviewRoutes } from './routes/overview';
+import { approvalRoutes } from './routes/approvals';
+import { runRoutes } from './routes/runs';
+import { createRunsModule } from './runs/module';
 import { assertCsrf, isSafeMethod } from './security/csrf';
 
 declare module 'fastify' {
@@ -83,6 +87,11 @@ export async function buildApp(config: Config, deps: AppDeps = {}): Promise<Fast
   app.addHook('onClose', async () => {
     await ctx.database?.close();
   });
+  // Runs (playbook engine): RunService + queue; the worker also runs here with RUN_WORKER_IN_PROCESS=true or without a database.
+  const runs = createRunsModule(ctx, { ...deps.runs, log: app.log });
+  app.decorate('runs', runs);
+  app.addHook('onReady', () => runs.start());
+  app.addHook('preClose', () => runs.stop());
 
   registerErrorHandler(app);
 
@@ -153,6 +162,11 @@ export async function buildApp(config: Config, deps: AppDeps = {}): Promise<Fast
       meRoutes(api, ctx);
       navRoutes(api, ctx);
       overviewRoutes(api, ctx);
+      // Content & platform: definitions, datasources, search, capabilities, views, export, events, audit, appearance.
+      contentRoutes(api, ctx);
+      // Runs & approvals (playbook engine).
+      runRoutes(api, ctx, runs);
+      approvalRoutes(api, ctx, runs);
     },
     { prefix: '/api' },
   );

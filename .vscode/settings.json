@@ -1,0 +1,40 @@
+{
+  "yaml.schemas": {
+    "./portal/packages/schemas/generated/page.schema.json": [
+      "portal/content/**/*.page.yaml",
+      "portal/content/**/*.page.yml"
+    ],
+    "./portal/packages/schemas/generated/dashboard.schema.json": [
+      "portal/content/**/*.dashboard.yaml",
+      "portal/content/**/*.dashboard.yml"
+    ],
+    "./portal/packages/schemas/generated/report.schema.json": [
+      "portal/content/**/*.report.yaml",
+      "portal/content/**/*.report.yml"
+    ],
+    "./portal/packages/schemas/generated/playbook.schema.json": [
+      "portal/content/**/*.playbook.yaml",
+      "portal/content/**/*.playbook.yml"
+    ],
+    "./portal/packages/schemas/generated/runbook.schema.json": [
+      "portal/content/**/*.runbook.yaml",
+      "portal/content/**/*.runbook.yml"
+    ],
+    "./portal/packages/schemas/generated/schedule.schema.json": [
+      "portal/content/**/*.schedule.yaml",
+      "portal/content/**/*.schedule.yml"
+    ],
+    "./portal/packages/schemas/generated/probe.schema.json": [
+      "portal/content/**/*.probe.yaml",
+      "portal/content/**/*.probe.yml"
+    ],
+    "./portal/packages/schemas/generated/connection.schema.json": [
+      "portal/content/**/*.connection.yaml",
+      "portal/content/**/*.connection.yml"
+    ],
+    "./portal/packages/schemas/generated/navigation.schema.json": [
+      "portal/content/navigation.yaml"
+    ]
+  },
+  "yaml.validate": true
+}

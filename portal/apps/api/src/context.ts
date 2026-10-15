@@ -8,10 +8,16 @@ import { createTokenCache, MemorySealedBlobStore, PgSealedBlobStore, type TokenC
 import type { AuthClient } from './auth/types';
 import { tokenCacheKey, type Config } from './config';
 import { createDatabase, type Database } from './db/client';
+import { createContentServices, type ContentServices } from './datasources/services';
 import { MemoryPrefsStore, PgPrefsStore, type PrefsStore } from './prefs/prefs-store';
+import type { RunsOptions } from './runs/module';
 
-/** Everything route handlers need. Built once per app; tests swap pieces via AppDeps. */
-export interface AppContext {
+/**
+ * Everything route handlers need. Built once per app; tests swap pieces via AppDeps.
+ * ContentServices adds: definitions (DefinitionResolver), outbound (OutboundExecutor), automation, licences,
+ * datasources, events, views, settings, contentEnv.
+ */
+export interface AppContext extends ContentServices {
   config: Config;
   now: () => Date;
   database: Database | null;
@@ -27,7 +33,8 @@ export interface AppContext {
   fetch: typeof fetch;
 }
 
-export type AppDeps = Partial<Omit<AppContext, 'config' | 'broker'>>;
+/** `runs` overrides the runs module's repository/queue/ports (tests, worker entry point). */
+export type AppDeps = Partial<Omit<AppContext, 'config' | 'broker'>> & { runs?: RunsOptions };
 
 export function createContext(config: Config, deps: AppDeps = {}, log?: MsalLogger): AppContext {
   const now = deps.now ?? (() => new Date());
@@ -37,17 +44,21 @@ export function createContext(config: Config, deps: AppDeps = {}, log?: MsalLogg
   const key = tokenCacheKey(config) ?? randomBytes(32);
   const tokenCache = deps.tokenCache ?? createTokenCache(db ? new PgSealedBlobStore(db) : new MemorySealedBlobStore(), key, log);
   const auth = deps.auth !== undefined ? deps.auth : config.AUTH_MODE === 'entra' ? createMsalAuthClient(config, tokenCache, log) : null;
+  const broker = auth ? new TokenBroker(auth, config, now) : null;
+  const audit = deps.audit ?? (db ? new PgAuditWriter(db, now) : new MemoryAuditWriter(now));
+  const content = createContentServices(config, { database, broker, auth, audit, fetch: deps.fetch ?? fetch, now }, deps, log);
   return {
+    ...content,
     config,
     now,
     database,
     sessions: deps.sessions ?? (db ? new PgSessionStore(db) : new MemorySessionStore()),
     preauth: deps.preauth ?? (db ? new PgPreauthStore(db) : new MemoryPreauthStore()),
     tokenCache,
-    audit: deps.audit ?? (db ? new PgAuditWriter(db, now) : new MemoryAuditWriter(now)),
+    audit,
     prefs: deps.prefs ?? (db ? new PgPrefsStore(db) : new MemoryPrefsStore()),
     auth,
-    broker: auth ? new TokenBroker(auth, config, now) : null,
+    broker,
     fetch: deps.fetch ?? fetch,
   };
 }

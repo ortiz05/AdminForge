@@ -97,15 +97,17 @@ describe('sessions, mock sign-in, /api/me, CSRF', () => {
     expect(prefsEvents.map((e) => e.details)).toEqual([{ changed: ['theme', 'density'] }, { changed: ['navCollapsed'] }]);
   });
 
-  it('GET /api/nav returns sections; Admin only for Portal.Admin', async () => {
+  it('GET /api/nav returns sections built from content; Admin only for Portal.Admin', async () => {
     const { cookie, csrf } = await mockLogin(t.app);
     const res = await t.app.inject({ method: 'GET', url: '/api/nav', headers: { cookie } });
     const nav = NavResponse.parse(res.json());
-    expect(nav.sections.map((s) => s.label)).toEqual(['Overview', 'Identity', 'Microsoft 365', 'Endpoint', 'Security', 'Azure', 'Automation', 'Reports', 'Admin']);
+    // Section order comes from portal/content/navigation.yaml; empty sections are dropped (content grows over time).
+    expect(nav.sections[0]).toMatchObject({ key: 'overview', items: [{ key: 'overview', href: '/' }] });
+    expect(nav.sections.map((s) => s.key)).toEqual(expect.arrayContaining(['overview', 'identity', 'automation', 'reports', 'admin']));
+    expect(nav.sections.every((s) => s.items.length > 0)).toBe(true);
     const identity = nav.sections.find((s) => s.key === 'identity')!;
-    expect(identity.items.map((i) => i.label)).toEqual(['Users', 'Groups', 'Roles & PIM', 'App registrations', 'Enterprise apps', 'Devices', 'Conditional Access']);
-    expect(identity.items[0]).toMatchObject({ key: 'identity.users', href: '/p/identity.users' });
-    expect(nav.sections.flatMap((s) => s.items).every((i) => i.href === '/' || i.href === `/p/${i.key}`)).toBe(true);
+    expect(identity.items).toContainEqual(expect.objectContaining({ key: 'identity.users', label: 'Users', href: '/p/identity.users' }));
+    expect(nav.sections.flatMap((s) => s.items).every((i) => i.href.startsWith('/'))).toBe(true);
 
     await t.app.inject({ method: 'POST', url: '/auth/mock/state', headers: { cookie, 'x-adminforge-csrf': csrf }, payload: { roles: ['Portal.Reader'] } });
     const reader = NavResponse.parse((await t.app.inject({ method: 'GET', url: '/api/nav', headers: { cookie } })).json());

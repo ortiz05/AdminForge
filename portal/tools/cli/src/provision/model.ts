@@ -12,6 +12,8 @@ export interface ProvisionSettings {
   label: string;
   /** PUBLIC_BASE_URL without a trailing slash; base for redirect URIs. */
   baseUrl: string;
+  /** Further origins that serve this environment (AF_REDIRECT_BASE_URLS), e.g. the host deployment next to the dev server. */
+  extraBaseUrls?: string[];
   tenantId: string;
   subscriptionId?: string;
   primaryDomain?: string;

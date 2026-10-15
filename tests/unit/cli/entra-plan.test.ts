@@ -233,3 +233,15 @@ describe('buildDesiredEntra with content-declared scopes', () => {
     expect(desired.skipped.some((x) => /Teams/.test(x.title))).toBe(true);
   });
 });
+
+describe('extra redirect base URLs', () => {
+  it('registers callback, signed-out and arm callback for every base', () => {
+    const desired = buildDesiredEntra({ ...settings, extraBaseUrls: ['http://localhost:3300'] }, resources());
+    const uris = (key: string) => desired.apps.find((a) => a.key === key)!.body.web!.redirectUris;
+    expect(uris('read')).toEqual([
+      'http://localhost:5173/auth/callback', 'http://localhost:5173/auth/signed-out',
+      'http://localhost:3300/auth/callback', 'http://localhost:3300/auth/signed-out',
+    ]);
+    expect(uris('write')).toEqual(['http://localhost:5173/auth/arm/callback', 'http://localhost:3300/auth/arm/callback']);
+  });
+});

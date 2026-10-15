@@ -45,7 +45,18 @@ export function provisionSettings(env: CliContext['env']): ProvisionSettings {
   }
   const subscriptionId = env.AF_SUBSCRIPTION_ID || undefined;
   if (subscriptionId && !isGuid(subscriptionId)) throw new ConfigError('AF_SUBSCRIPTION_ID is not a GUID.');
-  return { label, baseUrl, tenantId, subscriptionId, primaryDomain: env.AF_PRIMARY_DOMAIN || undefined };
+  const extraBaseUrls = (env.AF_REDIRECT_BASE_URLS ?? '')
+    .split(',')
+    .map((u) => u.trim().replace(/\/+$/, ''))
+    .filter(Boolean);
+  for (const u of extraBaseUrls) {
+    try {
+      new URL(u);
+    } catch {
+      throw new ConfigError('AF_REDIRECT_BASE_URLS must be a comma-separated list of URLs.');
+    }
+  }
+  return { label, baseUrl, extraBaseUrls, tenantId, subscriptionId, primaryDomain: env.AF_PRIMARY_DOMAIN || undefined };
 }
 
 export interface Clients {

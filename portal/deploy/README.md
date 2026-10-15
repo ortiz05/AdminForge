@@ -41,6 +41,28 @@ systemctl --user enable --now adminforge-api adminforge-worker adminforge-schedu
 loginctl enable-linger "$USER"      # keep them running when you are not logged in
 ```
 
+### Production overrides (this host)
+
+The dev server (`pnpm dev`) uses `PUBLIC_BASE_URL`/`API_PORT` from the env file. The services run the production
+build on their own origin; give them a drop-in so both can coexist (and add that origin to
+`AF_REDIRECT_BASE_URLS`, then `pnpm adminforge provision entra`, so Entra accepts its redirects):
+
+```ini
+# ~/.config/systemd/user/adminforge-{api,worker,scheduler}.service.d/override.conf
+[Service]
+Environment=PATH=<node bin dir>:%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+Environment=NODE_ENV=production
+Environment=API_PORT=3300
+Environment=PUBLIC_BASE_URL=http://localhost:3300
+Environment=CONTENT_SOURCE=db
+Environment=RUN_WORKER_IN_PROCESS=false
+Environment=SCHEDULER_IN_PROCESS=false
+```
+
+Production reads definitions from Postgres: run `pnpm adminforge publish` after content changes (CI does this on merge).
+`http://localhost` works because browsers treat it as a secure context; any other host name needs TLS in front
+(e.g. Caddy with `reverse_proxy localhost:3300`), because the session cookie is `__Host-` and `Secure`.
+
 Run the `sed` from the repository root (it points `WorkingDirectory` at your checkout). If `node` comes from
 nvm or fnm, add its `bin` directory to the `Environment=PATH=…` line (`systemctl --user edit adminforge-scheduler`).
 

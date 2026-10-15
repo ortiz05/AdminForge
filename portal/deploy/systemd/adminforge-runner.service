@@ -10,6 +10,11 @@ Type=simple
 WorkingDirectory=%h/AdminForge/portal/apps/runner
 ExecStart=/usr/bin/env node dist/main.js
 Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+# The runner reads only process.env (it never parses the env file itself).
+EnvironmentFile=%h/.config/adminforge/dev.env
+Environment=PWSH_PATH=%h/.local/bin/pwsh
+# Az.Accounts probes the desktop keyring at import (no D-Bus in user services): import it on demand instead.
+Environment=RUNNER_PRELOAD_MODULES=graph,exchange,teams,sharepoint
 TimeoutStopSec=30
 Restart=on-failure
 RestartSec=5

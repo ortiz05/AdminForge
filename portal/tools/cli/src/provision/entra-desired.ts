@@ -147,7 +147,7 @@ export function buildDesiredEntra(settings: ProvisionSettings, resources: Resour
     apps.push({
       key,
       uniqueName: names.uniqueName,
-      body: appBody(names.displayName, [redirectPath].flat().map((path) => `${baseUrl}${path}`), rra, extra),
+      body: appBody(names.displayName, [baseUrl, ...(settings.extraBaseUrls ?? [])].flatMap((base) => [redirectPath].flat().map((path) => `${base}${path}`)), rra, extra),
       sp: { appRoleAssignmentRequired: true, tags: [ENTERPRISE_APP_TAG] },
       grants: resolved.map((r) => ({ resource: r.resource, scopes: r.items.map((i) => i.value) })),
       appPermissions: [],

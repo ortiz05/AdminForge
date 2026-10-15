@@ -1,14 +1,14 @@
 $schema: ../../packages/schemas/generated/probe.schema.json
 kind: probe
 id: probes.dns-spf
-version: 1.0.1
+version: 1.0.2
 title: SPF record for the primary domain
-summary: Resolves the TXT records of AF_PRIMARY_DOMAIN and expects an SPF record that includes Exchange Online.
+summary: Resolves the TXT records of AF_MAIL_DOMAIN and expects an SPF record that includes Exchange Online.
 owner: m365-team
 tags: [synthetic, m365, exchange, dns, email-security, sweep-1h]
 check:
   kind: dnsResolve
-  name: ${ env.AF_PRIMARY_DOMAIN }
+  name: ${ env.AF_MAIL_DOMAIN }
   type: TXT
   expect:
     contains: [include:spf.protection.outlook.com]

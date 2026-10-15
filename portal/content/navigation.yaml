@@ -37,6 +37,7 @@ sections:
     order: 70
     items:
       - { key: runs, label: Runs, href: /runs, icon: list-checks, order: 10 }
+      - { key: approvals, label: Approvals, href: /approvals, icon: seal-check, order: 15 }
       - { key: schedules, label: Schedules, href: /schedules, icon: calendar-check, order: 20 }
       - { key: monitoring, label: Synthetic monitoring, href: /monitoring, icon: pulse, order: 30 }
       - { key: query, label: Query Studio, href: /query, icon: terminal, order: 40 }
@@ -50,5 +51,6 @@ sections:
     order: 90
     roles: [Portal.Admin]
     items:
-      - { key: audit, label: Audit, href: /admin/audit, icon: scroll, order: 10 }
-      - { key: appearance, label: Appearance, href: /admin/appearance, icon: palette, order: 20 }
+      - { key: audit, label: Audit, href: /audit, icon: scroll, order: 10 }
+      - { key: appearance, label: Appearance, href: /appearance, icon: palette, order: 20 }
+      - { key: settings, label: Settings, href: /settings, icon: gear-six, order: 30 }

@@ -256,6 +256,7 @@ export const PROBE_KIND_LABEL: Record<string, string> = {
   appCredentialExpiry: 'App credentials',
   licenseThreshold: 'Licence seats',
   signInHealth: 'Sign-in health',
+  kql: 'Configuration checks (KQL)',
 };
 
 export const PROBE_TONE: Record<ProbeStatus, StatusTone> = { ok: 'ok', warn: 'warn', crit: 'crit', unknown: 'neutral' };

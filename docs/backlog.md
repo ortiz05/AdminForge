@@ -13,13 +13,13 @@ Gaps found while building. Each item names where it lands. Items move to a phase
 - [ ] Playbook `tests` can set `now` and `env`.
 - [ ] Column kind naming: align `id` (docs/widgets.md) vs `guid` (schema) — accept both.
 - [ ] `widgets.md`: document `timeline.heading`, `empty.action` with playbook inputs.
-- [ ] Probe schedules: `job.refs` (list) or a tag selector (`job.select: { tags: [hourly] }`) so one schedule sweeps many probes (today: one schedule per probe).
+- [x] Probe schedules: `job.refs` (list) or a tag selector (`job.select: { tags: [hourly] }`) so one schedule sweeps many probes (today: one schedule per probe).
 - [ ] ARM `apiVersion` from an expression or a per-resource-type lookup, enabling a generic "get resource by id".
-- [ ] Expression helpers `$kql(s)` (KQL string literal quoting — R12) and `$uuid()` (fresh GUID, e.g. role assignment names).
+- [x] Expression helpers `$kql(s)` (KQL string literal quoting — R12) and `$uuid()` (fresh GUID, e.g. role assignment names).
 - [ ] Datasource fan-out (one call per row of another datasource) and simple joins.
 - [ ] `logQuery` widget + Query Studio page (`/query`) with save-as report/probe/schedule — R12.
-- [ ] `kql` probe/check kind over Resource Graph, Log Analytics, advanced hunting — R12.
-- [ ] Licence-threshold probe `sku` from `${env.X}` so SKUs aren't literals.
+- [x] `kql` probe/check kind over Resource Graph, Log Analytics, advanced hunting — R12.
+- [x] Licence-threshold probe `sku` from `${env.X}` so SKUs aren't literals.
 - [ ] Approval policy for bulk runs: one approval for the whole bulk run (today each child run asks).
 - [ ] `POST /api/runs/:id/input/:stepId` for input steps (today manual steps accept `values`).
 
@@ -33,13 +33,14 @@ Gaps found while building. Each item names where it lands. Items move to a phase
 - [ ] Runner HMAC already binds method + path; consider mTLS if the runner ever leaves loopback.
 
 ## Platform
+- [ ] Probe "not configured" state: a probe whose required env key is empty should report `skipped` (not `error`) — e.g. DNS probes without `AF_MAIL_DOMAIN`.
 - [ ] Run datasource `transform`s off the API event loop (worker_threads pool) with a larger budget (today 250 ms on the main thread — large tenants, e.g. >2–4k guests, time out).
 - [ ] Enforce formatting: Prettier check in CI and pre-commit for TS/JSON/CSS/YAML (format the repo once).
 - [ ] Read-mode allowlist: Graph `POST /directoryObjects/getByIds`; ARM `…/config/appsettings/list` with values stripped server-side.
 - [ ] Example connection `connections/hr-sync`: env keys for base URL + audience.
-- [ ] Default Log Analytics workspace key (`AF_LOG_ANALYTICS_WORKSPACE_ID`).
+- [x] Default Log Analytics workspace key (`AF_LOG_ANALYTICS_WORKSPACE_ID`).
 
 ## Navigation / product
-- [ ] Decide between the content "Probe dashboard" and the coded `/monitoring` page (keep one entry in nav).
+- [x] Decide between the content "Probe dashboard" and the coded `/monitoring` page (keep one entry in nav).
 - [ ] Merge `security.compromised-account-response` and `identity.compromised-account` runbooks.
 - [ ] Weekly inactive-users schedule once `identity.inactive-users` report exists.

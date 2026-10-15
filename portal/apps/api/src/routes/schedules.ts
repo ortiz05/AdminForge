@@ -80,7 +80,7 @@ export function scheduleRoutes(api: FastifyInstance, ctx: AppContext, schedules:
     async (request, reply) => {
       const session = requireSession(request);
       requireRole(session, 'Portal.Reader', 'Downloading scheduled reports');
-      const file = await svc.artifact(request.params.scheduleRunId);
+      const file = await svc.artifact(request.params.scheduleRunId, session);
       await ctx.audit
         .append({
           ...auditActor(ctx, request, session),

@@ -10,6 +10,7 @@ import { LeaderElector, pgAdvisoryLock, type LeaderLock, type Timers } from './l
 import { PgScheduleStore } from './pg-store';
 import { Scheduler } from './scheduler';
 import { ScheduleService } from './service';
+import { automationFingerprint } from '../runs/fingerprint';
 import { MemoryScheduleStore, type ScheduleStore } from './store';
 
 declare module 'fastify' {
@@ -111,6 +112,8 @@ export function createSchedulesModule(
     events,
     artifacts,
     now: ctx.now,
+    fingerprint: (ref) =>
+      automationFingerprint((r, v) => ctx.definitions.resolveAny(['playbook', 'runbook'], r, v), ref),
   });
   const probes = new ProbeViews({ store, definitions: ctx.definitions, now: ctx.now });
 

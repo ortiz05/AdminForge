@@ -132,6 +132,13 @@ const ARM: Record<string, ProblemCopy> = {
     next: 'Arm again and enter your credentials when Microsoft asks.',
     primary: 'back',
   },
+  step_up_unverified: {
+    title: 'AdminForge couldn’t confirm your verification',
+    body: `Microsoft’s response didn’t say when you last verified, so write access stayed off. ${STILL_READ_ONLY}`,
+    next: 'Ask a portal administrator to update the AdminForge Write app, then arm again.',
+    admin: 'Run `pnpm adminforge provision entra`. It adds the auth_time claim to the Write app.',
+    primary: 'back',
+  },
   consent_required: {
     title: 'Write access isn’t approved in your organisation yet',
     body: `Microsoft Entra needs an administrator to approve the AdminForge Write app. ${STILL_READ_ONLY}`,

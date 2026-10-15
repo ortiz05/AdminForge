@@ -1,6 +1,6 @@
 #!/usr/bin/env -S npx tsx
 import { ApiError } from '@adminforge/connectors';
-import { envFilePath, loadEnv, repoRoot, updateEnvFile } from '@adminforge/config';
+import { loadEnv, repoRoot, writeEnvKeys } from '@adminforge/config';
 import { createInterface } from 'node:readline/promises';
 import { Command } from 'commander';
 import {
@@ -19,12 +19,12 @@ import { TokenError } from './provision/auth';
 
 /** Real-world context: env file outside the repo (R2), stdout, global fetch. */
 function liveContext(): CliContext {
-  const env = loadEnv();
-  const file = envFilePath();
+  // The CLI is admin tooling: it also reads <env>.admin.env (provisioner and live-test credentials).
+  const env = loadEnv(process.env, { admin: true });
   return {
     env,
     writeEnv: (updates) => {
-      updateEnvFile(updates, file);
+      writeEnvKeys(updates);
       Object.assign(env, updates);
     },
     out: (line) => console.log(line),

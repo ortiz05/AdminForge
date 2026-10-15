@@ -20,7 +20,7 @@ export interface PortalSession {
 export async function openPortalSession(
   opts: { apiOrigin?: string; forwardToApi?: boolean } = {},
 ): Promise<PortalSession> {
-  const env = loadEnv();
+  const env = loadEnv(process.env, { admin: true });
   const base = env.PUBLIC_BASE_URL ?? 'http://localhost:5173';
   // Cookies are host-scoped (ports ignored): talk to the API on the same host name as PUBLIC_BASE_URL.
   const apiOrigin =
@@ -68,7 +68,7 @@ export async function armWriteAccess(
   minutes = 15,
   reason = 'Automated live validation',
 ): Promise<void> {
-  const env = loadEnv();
+  const env = loadEnv(process.env, { admin: true });
   const { status, json } = await s.api<{ redirect: string }>('POST', '/auth/arm', { minutes, reason });
   if (status !== 200) throw new Error(`Arm request failed: ${status} ${JSON.stringify(json)}`);
   await s.page.goto(json.redirect);

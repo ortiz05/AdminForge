@@ -24,6 +24,11 @@ describe('safeReturnTo', () => {
     '/x\nSet-Cookie: a=b',
     '/x\u0000',
     `/${'a'.repeat(3000)}`,
+    // Dot segments that normalise to a scheme-relative URL (open redirect).
+    '/.//evil.com',
+    '/a/..//evil.com',
+    '/%2e//evil.com',
+    '/./%2e//evil.com/phish',
   ])('rejects %j', (v) => {
     expect(safeReturnTo(v)).toBe('/');
   });

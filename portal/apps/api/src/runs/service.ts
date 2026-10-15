@@ -22,6 +22,7 @@ import { AppError } from '../errors';
 import type { RunQueue } from './queue';
 import { pinnedDefinition, rootOf } from './run-worker';
 import { decisionOf } from './store';
+import { automationFingerprint } from './fingerprint';
 import {
   RUN_STATUS_ACTIVE as NON_TERMINAL,
   type NewRun,
@@ -70,7 +71,14 @@ export interface BulkRunInput extends ConfirmationInput {
 
 export interface ScheduledRunInput {
   /** The schedule that fires the run (id from `schedules`, key, who created/approved it). */
-  schedule: { id?: string | null; key: string; createdBy?: string | null; approvedBy?: string[] | null };
+  schedule: {
+    id?: string | null;
+    key: string;
+    createdBy?: string | null;
+    approvedBy?: string[] | null;
+    /** Fingerprint of the playbook (and children) the second person approved (runs/fingerprint.ts). */
+    approvedTarget?: string | null;
+  };
   /** Playbook key, or { ref, version }. */
   playbook: string | { ref: string; version?: string };
   inputs?: Record<string, unknown>;
@@ -186,6 +194,36 @@ export class RunService {
     throw last ?? new AppError(404, 'definition_not_found', `No published playbook "${key}".`);
   }
 
+  /**
+   * People run the current version only: an older version (superseded or retired) may lack approvals or confirmations
+   * added since. A client still holding an older version gets a 409 telling it to reload.
+   */
+  async resolveCurrent(
+    key: string,
+    version?: string,
+    kinds: ReadonlyArray<'playbook' | 'runbook'> = ['playbook', 'runbook'],
+  ) {
+    let current: Awaited<ReturnType<RunService['resolve']>>;
+    try {
+      current = await this.resolve(key, undefined, kinds);
+    } catch (err) {
+      // No current version: retired (an exact older version may still resolve) or never published.
+      if (version && err instanceof AppError && err.status === 404) {
+        const old = await this.resolve(key, version, kinds);
+        throw new AppError(409, 'definition_retired', `${old.def.title} is retired and can no longer run.`);
+      }
+      throw err;
+    }
+    if (version && version !== current.version)
+      throw new AppError(
+        409,
+        'version_superseded',
+        `${current.def.title} was updated (version ${current.version}) since this page loaded.`,
+        { hint: 'Reload the page to use the current version, then preview and run it again.' },
+      );
+    return current;
+  }
+
   private checkRunnable(def: AutomationDefinition) {
     if (def.status === 'retired')
       throw new AppError(409, 'definition_retired', `${def.title} is retired and can no longer run.`);
@@ -193,16 +231,20 @@ export class RunService {
     if (tooBig) throw new AppError(422, 'limit_exceeded', tooBig);
   }
 
-  /** §5.3: any portal role may dry-run; executing a write playbook needs Portal.Operator plus the definition's roles. */
+  /**
+   * §5.3: previews (dry runs) need the definition's own roles, since their read steps really run; executing a write
+   * playbook also needs Portal.Operator.
+   */
   authorize(session: SessionRecord, def: AutomationDefinition, dryRun: boolean) {
     if (!hasAny(session, PORTAL_ROLES))
-      throw new AppError(403, 'forbidden', 'Running playbooks needs a portal role.', {
-        hint: 'Ask a portal administrator to add you to the Readers group.',
+      throw new AppError(403, 'forbidden', 'Running playbooks needs an AdminForge role.', {
+        hint: 'Ask a portal administrator to add you to the AdminForge Reader group.',
       });
+    for (const role of def.requires?.portalRoles ?? [])
+      requireRole(session, role, `${dryRun ? 'Previewing' : 'Running'} ${def.title}`);
     if (dryRun) return;
     if (def.mode === 'write' || hasWriteSteps(def))
       requireRole(session, 'Portal.Operator', `Running ${def.title}`);
-    for (const role of def.requires?.portalRoles ?? []) requireRole(session, role, `Running ${def.title}`);
   }
 
   private async validate(
@@ -411,7 +453,7 @@ export class RunService {
 
   async create(caller: Caller, input: CreateRunInput): Promise<RunRow> {
     const dryRun = input.dryRun === true;
-    const pinned = await this.resolve(input.playbook, input.version);
+    const pinned = await this.resolveCurrent(input.playbook, input.version);
     const def = pinned.def;
     this.checkRunnable(def);
     this.authorize(caller.session, def, dryRun);
@@ -474,7 +516,7 @@ export class RunService {
    */
   async createBulk(caller: Caller, input: BulkRunInput): Promise<RunRow> {
     const dryRun = input.dryRun === true;
-    const pinned = await this.resolve(input.playbook, input.version, ['playbook']);
+    const pinned = await this.resolveCurrent(input.playbook, input.version, ['playbook']);
     const def = pinned.def;
     this.checkRunnable(def);
     this.authorize(caller.session, def, dryRun);
@@ -572,6 +614,31 @@ export class RunService {
         'two_person_required',
         `Schedule ${input.schedule.key} runs a write playbook and needs a second person's approval before it can run.`,
       );
+    if (writes && !dryRun) {
+      // The approval covered specific playbook versions: anything published since needs a new approval.
+      const current = await automationFingerprint((r, v) => this.resolve(r, v), ref);
+      if (input.schedule.approvedTarget !== current) {
+        await this.deps.audit.append({
+          actorOid: 'automation',
+          actorUpn: 'automation identity',
+          mode: 'read',
+          action: 'schedule.approval_outdated',
+          correlationId: input.correlationId ?? randomUUID(),
+          targetType: 'schedule',
+          targetId: input.schedule.key,
+          result: 'denied',
+          details: { playbook: ref.ref, version: pinned.version, sha256: pinned.sha256 },
+        });
+        throw new AppError(
+          409,
+          'approval_outdated',
+          `${def.title} changed after schedule ${input.schedule.key} was approved, so it didn't run.`,
+          {
+            hint: 'The schedule has been switched off. Enable it again; a second person must approve the current version.',
+          },
+        );
+      }
+    }
     const inputs = await this.validate(def, input.inputs);
     const correlationId = input.correlationId ?? randomUUID();
     const row = await this.deps.repo.insertRun(

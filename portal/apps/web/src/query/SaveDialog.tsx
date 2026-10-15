@@ -24,17 +24,17 @@ const KIND_TEXT: Record<SaveKind, { noun: string; what: string; skill: string }>
   report: {
     noun: 'report',
     what: 'A report page with this query as its datasource, a results table and CSV/XLSX export. It runs with each viewer’s own access.',
-    skill: 'adding-a-report',
+    skill: 'adding-a-page-or-report',
   },
   probe: {
     noun: 'probe',
     what: 'A configuration check (kind kql) that runs unattended as the automation identity. The row count is its metric; the offending rows are kept for drill-down.',
-    skill: 'adding-a-probe',
+    skill: 'adding-a-schedule-or-probe',
   },
   schedule: {
     noun: 'schedule',
     what: 'A scheduled run of this query as the automation identity that delivers the results as a report. Enabling it needs review.',
-    skill: 'adding-a-schedule',
+    skill: 'adding-a-schedule-or-probe',
   },
 };
 

@@ -4,7 +4,7 @@ import { chromium } from '@playwright/test';
 import { loadEnv } from '@adminforge/config';
 import { signInWithEntra } from '../lib/entra-login';
 
-const env = loadEnv();
+const env = loadEnv(process.env, { admin: true });
 const redirect = `${env.PUBLIC_BASE_URL ?? 'http://localhost:5173'}/auth/callback`;
 const url = new URL(`https://login.microsoftonline.com/${env.AF_TENANT_ID}/oauth2/v2.0/authorize`);
 url.search = new URLSearchParams({

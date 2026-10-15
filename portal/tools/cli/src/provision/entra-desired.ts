@@ -262,7 +262,17 @@ export function buildDesiredEntra(
     'write',
     union(WRITE_GRAPH_SCOPES, content.write?.graph),
     '/auth/arm/callback',
-    {},
+    {
+      // auth_time proves the step-up was a fresh sign-in; acrs carries a satisfied Conditional Access auth context.
+      optionalClaims: {
+        idToken: [
+          { name: 'auth_time', source: null, essential: false, additionalProperties: [] },
+          { name: 'acrs', source: null, essential: false, additionalProperties: [] },
+        ],
+        accessToken: [],
+        saml2Token: [],
+      },
+    },
     mergeByResource([
       { resource: 'exchange', values: ['Exchange.Manage'], type: 'Scope' },
       ...extra('write', 'Scope'),

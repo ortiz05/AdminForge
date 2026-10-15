@@ -16,8 +16,19 @@ const WRITE_JOB = {
   job: { kind: 'playbook', ref: 'identity.disable-user', mode: 'write', approvedBy: ['approval-1'] },
 };
 
+/** The playbook the write schedule runs: approvals cover its fingerprint (runs/fingerprint.ts). */
+const disableUser = (version = '1.0.0') => ({
+  kind: 'playbook' as const,
+  id: 'identity.disable-user',
+  version,
+  title: 'Disable sign-in',
+  mode: 'write',
+  steps: [],
+});
+
 function content() {
   return new FakeDefinitions()
+    .set(disableUser())
     .set(
       schedule('sweep.every-15-minutes', {
         job: { kind: 'probe', select: { tags: ['sweep-15m'] } },
@@ -302,7 +313,9 @@ describe('schedules API', () => {
 
   it('downloads a run report file (path-safe, audited)', async () => {
     const t = await schedulesApp({ defs: content() });
-    const reader = await t.login(READER, ['Portal.Reader']);
+    // Scheduled reports hold data collected with application permissions: Operators by default (SCHEDULED_DATA_ROLES).
+    const readerOnly = await t.login(AVERY, ['Portal.Reader']);
+    const reader = await t.login(READER, ['Portal.Reader', 'Portal.Operator']);
     await reader.get('/api/schedules');
     const row = (await t.schedules.store.getSchedule('reports.weekly'))!;
     mkdirSync(path.join(t.artifactsDir, 'reports.weekly'), { recursive: true });
@@ -337,6 +350,9 @@ describe('schedules API', () => {
       href: `/api/artifacts/${ok.id}`,
       size: 11,
     });
+    const denied = await readerOnly.get(`/api/artifacts/${ok.id}`);
+    expect(denied.statusCode).toBe(403);
+    expect(denied.json().error.message).toMatch(/Portal\.Operator/);
     const file = await reader.get(`/api/artifacts/${ok.id}`);
     expect(file.statusCode).toBe(200);
     expect(file.headers['content-type']).toBe('text/csv; charset=utf-8');

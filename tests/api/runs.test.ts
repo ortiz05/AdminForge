@@ -1,4 +1,5 @@
 import { ApiError } from '@adminforge/connectors';
+import { automationFingerprint } from '@adminforge/api/src/runs/fingerprint';
 import { mockConfig } from './helpers';
 import {
   ALL_ROLES,
@@ -756,8 +757,11 @@ describe('RunService.createScheduledRun (ADR-011)', () => {
     await expect(
       t.runs.service.createScheduledRun({ schedule, playbook: 'test.disable', inputs: { userId: USER } }),
     ).rejects.toMatchObject({ status: 403, code: 'two_person_required' });
+    const approvedTarget = await automationFingerprint((r, v) => t.runs.service.resolve(r, v), {
+      ref: 'test.disable',
+    });
     const row = await t.runs.service.createScheduledRun({
-      schedule: { ...schedule, approvedBy: [BLAKE.oid] },
+      schedule: { ...schedule, approvedBy: [BLAKE.oid], approvedTarget },
       playbook: { ref: 'test.disable', version: '1.0.0' },
       inputs: { userId: USER },
     });

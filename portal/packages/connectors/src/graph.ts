@@ -28,7 +28,13 @@ const DOT_SEGMENT = /^(\.|%2e){1,2}$/i;
 /** Rejects paths that are not rooted, or that contain dot segments (also percent-encoded) or encoded slashes. */
 export function assertSafePath(path: string, label = 'Graph'): void {
   const segments = path.split('/');
-  if (!path.startsWith('/') || segments.some((s) => DOT_SEGMENT.test(s)) || /%2f|%5c|\\/i.test(path))
+  // `?`/`#` belong in `query`: inside the path they would be checked by the policy differently than they are sent.
+  if (
+    !path.startsWith('/') ||
+    segments.some((s) => DOT_SEGMENT.test(s)) ||
+    /%2f|%5c|\\/i.test(path) ||
+    /[?#]/.test(path)
+  )
     throw new Error(`Invalid ${label} path: ${path}`);
 }
 

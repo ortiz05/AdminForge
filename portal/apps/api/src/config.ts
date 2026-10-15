@@ -158,7 +158,8 @@ const Schema = z
     const root = workspaceRoot();
     return {
       ...env,
-      API_HOST: env.API_HOST ?? (env.NODE_ENV === 'production' ? '0.0.0.0' : '127.0.0.1'),
+      // Loopback unless asked otherwise: on a host the API sits behind Caddy (TLS); a container sets 0.0.0.0.
+      API_HOST: env.API_HOST ?? '127.0.0.1',
       ADMINFORGE_FIXTURES_DIR: path.resolve(
         env.ADMINFORGE_FIXTURES_DIR ?? path.join(root, 'tests', 'fixtures'),
       ),

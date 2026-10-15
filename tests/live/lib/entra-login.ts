@@ -1,5 +1,5 @@
 import type { Page } from '@playwright/test';
-import { updateEnvFile } from '@adminforge/config';
+import { writeEnvKeys } from '@adminforge/config';
 import { freshTotp } from './totp';
 
 export interface TestUserCredentials {
@@ -96,7 +96,7 @@ export async function signInWithEntra(
         .click();
       await page.waitForTimeout(3000);
       registeredTotp = secret;
-      updateEnvFile({ AF_TEST_USER_TOTP_SECRET: secret });
+      writeEnvKeys({ AF_TEST_USER_TOTP_SECRET: secret });
     } else if (
       /Success|was successfully registered|Default sign-in method|Authenticator app added/i.test(body) &&
       /mysignins/.test(page.url())

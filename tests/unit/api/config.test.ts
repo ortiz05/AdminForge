@@ -51,7 +51,16 @@ describe('loadConfig', () => {
       PUBLIC_BASE_URL: 'https://adminforge.example.com/',
     });
     expect(prod.PUBLIC_BASE_URL).toBe('https://adminforge.example.com');
-    expect(prod.API_HOST).toBe('0.0.0.0');
+    // Loopback by default even in production (Caddy fronts it); containers opt in to 0.0.0.0.
+    expect(prod.API_HOST).toBe('127.0.0.1');
+    expect(
+      loadConfig({
+        ...entra,
+        NODE_ENV: 'production',
+        PUBLIC_BASE_URL: 'https://x.example.com',
+        API_HOST: '0.0.0.0',
+      }).API_HOST,
+    ).toBe('0.0.0.0');
   });
 
   it('never echoes values (secrets) in errors', () => {

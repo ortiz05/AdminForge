@@ -52,6 +52,8 @@ export interface HttpClientOptions {
   /** Header that carries Microsoft's request id in responses. */
   requestIdHeader?: string;
   timeoutMs?: number;
+  /** 'error' refuses redirects (connections to your own APIs: a bearer token must never follow one elsewhere). */
+  redirect?: 'follow' | 'error' | 'manual';
 }
 
 const SERVER_RETRYABLE = new Set([500, 502, 503, 504]);
@@ -142,6 +144,7 @@ export function createHttpClient(opts: HttpClientOptions) {
       try {
         res = await doFetch(req.url, {
           method,
+          ...(opts.redirect ? { redirect: opts.redirect } : {}),
           headers: {
             Authorization: `Bearer ${token}`,
             Accept: 'application/json',

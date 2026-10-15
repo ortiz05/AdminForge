@@ -22,6 +22,13 @@
       "when": 1792033013119,
       "tag": "0002_runs_definitions_schedules",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1792047611036,
+      "tag": "0003_schedule_approved_target",
+      "breakpoints": true
     }
   ]
 }

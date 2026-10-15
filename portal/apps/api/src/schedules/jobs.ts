@@ -280,17 +280,33 @@ export function createJobRunner(deps: JobDeps): JobRunner {
   ): Promise<JobResult> {
     if (!deps.runs)
       throw new AppError(503, 'runs_unavailable', 'Playbook runs are not available in this process.');
-    const approvedBy = [
-      ...(job.approvedBy ?? []),
-      ...(ctx.schedule.approvedBy ? [ctx.schedule.approvedBy] : []),
-    ];
-    const row = await deps.runs.service.createScheduledRun({
-      schedule: { id: ctx.schedule.id, key: ctx.schedule.key, createdBy: ctx.scheduledBy, approvedBy },
-      playbook: job.ref,
-      inputs: job.inputs,
-      dryRun: job.dryRun,
-      correlationId: ctx.correlationId,
-    });
+    // Only the in-app two-person approval counts; `job.approvedBy` in content is a review note, not proof.
+    let row;
+    try {
+      row = await deps.runs.service.createScheduledRun({
+        schedule: {
+          id: ctx.schedule.id,
+          key: ctx.schedule.key,
+          createdBy: ctx.scheduledBy,
+          approvedBy: ctx.schedule.approvedBy ? [ctx.schedule.approvedBy] : [],
+          approvedTarget: ctx.schedule.approvedTarget,
+        },
+        playbook: job.ref,
+        inputs: job.inputs,
+        dryRun: job.dryRun,
+        correlationId: ctx.correlationId,
+      });
+    } catch (err) {
+      // The playbook changed since approval: switch the schedule off so it needs a fresh two-person approval.
+      if (err instanceof AppError && err.code === 'approval_outdated')
+        await deps.store.updateSchedule(ctx.schedule.id, {
+          enabled: false,
+          approvedBy: null,
+          approvedTarget: null,
+          nextRunAt: null,
+        });
+      throw err;
+    }
     // Follow the run until it ends or waits for a person; the schedule's timeout bounds the wait (the run continues).
     let status = row.status;
     for (;;) {

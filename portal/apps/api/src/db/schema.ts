@@ -268,6 +268,8 @@ export const schedules = pgTable('schedules', {
   enabled: boolean('enabled').notNull().default(false),
   createdBy: text('created_by'),
   approvedBy: text('approved_by'),
+  /** Fingerprint of the playbook (and its child playbooks) the approval covered; a changed playbook voids it. */
+  approvedTarget: text('approved_target'),
   nextRunAt: ts('next_run_at'),
   lastRunAt: ts('last_run_at'),
   lastStatus: text('last_status'),

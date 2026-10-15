@@ -21,6 +21,9 @@ import { partitionKey } from './types';
 
 export const ARM_RATE_LIMIT = { max: 10, timeWindow: '1 minute' };
 
+/** Without WRITE_AUTH_CONTEXT, the Write app sign-in must have happened within this many seconds. */
+export const STEP_UP_MAX_AGE_SECONDS = 300;
+
 /** Body of POST /auth/arm/extend. Without `minutes` the extension is WRITE_SESSION_MAX_MINUTES. */
 export const ExtendRequest = z.object({ minutes: z.number().int().min(5).max(480).optional() });
 
@@ -255,12 +258,28 @@ export function entraArmRoutes(app: FastifyInstance, ctx: AppContext) {
         );
       }
       const now = ctx.now();
-      if (!cfg.WRITE_AUTH_CONTEXT && claims.auth_time && now.getTime() / 1000 - claims.auth_time > 600) {
-        throw await reject(
-          new AppError(403, 'step_up_stale', 'Write access needs a fresh verification.', {
-            hint: 'Microsoft reused an earlier sign-in. Arm again and enter your credentials when asked.',
-          }),
-        );
+      if (!cfg.WRITE_AUTH_CONTEXT) {
+        // Without an auth context the only proof of step-up is a recent auth_time: prompt=login travels in a URL the
+        // browser controls, so a stripped prompt (silent SSO) must not arm. Missing auth_time fails closed.
+        if (typeof claims.auth_time !== 'number') {
+          throw await reject(
+            new AppError(
+              403,
+              'step_up_unverified',
+              'AdminForge couldn’t confirm that you verified just now.',
+              {
+                hint: 'An administrator needs to run `adminforge provision entra` (it adds the auth_time claim to the Write app).',
+              },
+            ),
+          );
+        }
+        if (now.getTime() / 1000 - claims.auth_time > STEP_UP_MAX_AGE_SECONDS) {
+          throw await reject(
+            new AppError(403, 'step_up_stale', 'Write access needs a fresh verification.', {
+              hint: 'Microsoft reused an earlier sign-in. Arm again and enter your credentials when asked.',
+            }),
+          );
+        }
       }
 
       const minutes = armMinutes(ctx, requested);

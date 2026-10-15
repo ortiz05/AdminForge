@@ -76,6 +76,7 @@ export async function makeApp(config: Config, extra: Pick<AppDeps, 'auth' | 'fet
   const audit = new MemoryAuditWriter(clock.now);
   const prefs = new MemoryPrefsStore();
   const tokenCache = createTokenCache(tokenBlobs, Buffer.from(TEST_KEY, 'base64'));
+  if (extra.auth instanceof FakeAuthClient) extra.auth.now = clock.now;
   const app = await buildApp(config, {
     database: null,
     now: clock.now,
@@ -132,6 +133,8 @@ export class FakeAuthClient implements AuthClient {
   }> = [];
   forgets: Array<{ kind: string; partitionKey: string }> = [];
   claims: (kind: 'read' | 'write') => Partial<IdClaims> = () => ({});
+  /** The app's clock (wired by makeApp): ID tokens carry auth_time = now, as after a fresh interactive sign-in. */
+  now: () => Date = () => new Date();
   tokenImpl?: (input: { kind: string; claims?: string }) => Promise<string>;
 
   async authUrl(input: AuthUrlInput) {
@@ -165,6 +168,7 @@ export class FakeAuthClient implements AuthClient {
       name: 'Avery Engineer',
       preferred_username: 'avery@example.com',
       roles: ['Portal.Reader', 'Portal.Operator', 'Not.A.Portal.Role'],
+      auth_time: Math.floor(this.now().getTime() / 1000),
       ...this.claims(input.kind),
     };
     return { homeAccountId: `${claims.oid}.${claims.tid}`, claims };

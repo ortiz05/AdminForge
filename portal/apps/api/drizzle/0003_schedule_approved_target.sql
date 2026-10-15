@@ -1,0 +1,1 @@
+ALTER TABLE "schedules" ADD COLUMN "approved_target" text;

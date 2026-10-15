@@ -2,8 +2,8 @@ const BASE = 'http://return-to.invalid';
 
 /**
  * Only same-origin, path-absolute targets survive; everything else becomes `fallback`.
- * Rejects scheme-relative (`//evil`), backslash tricks (`/\evil`), absolute URLs, control
- * characters, and `/auth/*` (which would loop back into sign-in).
+ * Rejects scheme-relative (`//evil`, also after dot-segment normalisation), backslash tricks (`/\evil`),
+ * absolute URLs, control characters, and `/auth/*` (which would loop back into sign-in).
  */
 export function safeReturnTo(value: unknown, fallback = '/'): string {
   if (typeof value !== 'string' || value.length === 0 || value.length > 2048) return fallback;
@@ -17,6 +17,8 @@ export function safeReturnTo(value: unknown, fallback = '/'): string {
     return fallback;
   }
   if (url.origin !== BASE) return fallback;
+  // Dot segments are resolved by URL: '/.//evil.com' normalises to '//evil.com', which a browser reads as a host.
+  if (url.pathname.startsWith('//')) return fallback;
   if (url.pathname === '/auth' || url.pathname.startsWith('/auth/')) return fallback;
   return `${url.pathname}${url.search}${url.hash}`;
 }

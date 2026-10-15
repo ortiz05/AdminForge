@@ -75,7 +75,10 @@ export function planSync(
         enabled,
         nextRunAt: enabled ? nextFor(c.def, now) : null,
       };
-      if (write) patch.approvedBy = null;
+      if (write) {
+        patch.approvedBy = null;
+        patch.approvedTarget = null;
+      }
       plan.updates.push({ id: row.id, key: row.key, patch, expectSha256: row.sha256 });
     } else if (row.enabled && (!row.nextRunAt || Number.isNaN(row.nextRunAt.getTime()))) {
       plan.updates.push({

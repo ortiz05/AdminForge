@@ -1,9 +1,13 @@
-import { isWriteCapable, type Schedule } from '@adminforge/schemas';
+import { isWriteCapable, type PortalRole, type Schedule } from '@adminforge/schemas';
+
+/** Who may see data a schedule collected with application permissions, unless its `requires.portalRoles` says otherwise. */
+export const SCHEDULED_DATA_ROLES: readonly PortalRole[] = ['Portal.Operator'];
 import type { AuditInput, AuditWriter } from '../audit/writer';
 import { hasRole, requireRole } from '../auth/guards';
 import type { SessionRecord } from '../auth/session-store';
 import type { ArtifactStore, OpenedArtifact } from '../artifacts/store';
 import type { DefinitionSource } from '../definitions/types';
+import type { PlaybookRef } from '../runs/fingerprint';
 import { AppError } from '../errors';
 import { describeCron, nextRun } from './cron';
 import type { ScheduleEvents } from './events';
@@ -113,8 +117,16 @@ export class ScheduleService {
       events: ScheduleEvents;
       artifacts: ArtifactStore;
       now: () => Date;
+      /** Fingerprint of a playbook job's playbook and its children (runs/fingerprint.ts); absent → no playbook runs. */
+      fingerprint?: (ref: PlaybookRef) => Promise<string>;
     },
   ) {}
+
+  /** What an enable approval covers besides the schedule itself: the playbook a playbook job runs. */
+  private async targetFingerprint(def: Schedule): Promise<string | undefined> {
+    if (def.job.kind !== 'playbook' || !this.deps.fingerprint) return undefined;
+    return this.deps.fingerprint({ ref: def.job.ref });
+  }
 
   private actor(c: Caller): Omit<AuditInput, 'action' | 'result'> {
     return {
@@ -249,8 +261,12 @@ export class ScheduleService {
       );
     if (row.enabled) return { statusCode: 200, body: { key, enabled: true } };
     if (isWriteCapable(def)) {
+      const targetFingerprint = await this.targetFingerprint(def);
       const existing = (await this.pendingApprovals()).find(
-        (a) => a.subjectId === key && a.policy.sha256 === row.sha256,
+        (a) =>
+          a.subjectId === key &&
+          a.policy.sha256 === row.sha256 &&
+          a.policy.targetFingerprint === targetFingerprint,
       );
       if (existing) return { statusCode: 202, body: { approvalId: existing.id } };
       const policy: ScheduleApprovalPolicy = {
@@ -263,6 +279,7 @@ export class ScheduleService {
         definitionKey: key,
         definitionVersion: def.version,
         sha256: row.sha256,
+        ...(targetFingerprint ? { targetFingerprint } : {}),
         requestedByUpn: c.session.upn,
         initiatorOid: c.session.userOid,
         writesAfter: false,
@@ -375,8 +392,12 @@ export class ScheduleService {
   }
 
   /** The report file of a run (path-safe); 404 when there is none. */
-  async artifact(scheduleRunId: string): Promise<OpenedArtifact & { scheduleKey: string }> {
+  async artifact(
+    scheduleRunId: string,
+    session: SessionRecord,
+  ): Promise<OpenedArtifact & { scheduleKey: string }> {
     const run = /^[0-9a-f-]{36}$/i.test(scheduleRunId) ? await this.deps.store.getRun(scheduleRunId) : null;
+    if (run) await this.assertArtifactAccess(session, run.scheduleKey);
     const opened = run?.artifactPath ? await this.deps.artifacts.open(run.artifactPath) : null;
     if (!run || !opened)
       throw new AppError(
@@ -385,6 +406,24 @@ export class ScheduleService {
         'This run has no report file (or it was removed by retention).',
       );
     return { ...opened, scheduleKey: run.scheduleKey };
+  }
+
+  /**
+   * Scheduled reports are collected with the automation identity's application permissions, which can see more than
+   * a viewer's own Entra roles. Downloading one needs the schedule's `requires.portalRoles` (default: Operator) and the
+   * report's own `requires.portalRoles`.
+   */
+  private async assertArtifactAccess(session: SessionRecord, scheduleKey: string) {
+    const action = 'Downloading this scheduled report';
+    const schedule = (await this.deps.store.getSchedule(scheduleKey))?.definition;
+    for (const role of schedule?.requires?.portalRoles ?? SCHEDULED_DATA_ROLES)
+      requireRole(session, role, action);
+    if (schedule?.job.kind === 'report') {
+      const ref = schedule.job.ref;
+      const report = (await this.deps.definitions.list('report')).find((d) => d.key === ref)?.def as
+        { requires?: { portalRoles?: PortalRole[] } } | undefined;
+      for (const role of report?.requires?.portalRoles ?? []) requireRole(session, role, action);
+    }
   }
 
   // ── Approvals (enable write-capable schedules: two-person rule) ──
@@ -483,6 +522,19 @@ export class ScheduleService {
         { hint: 'Ask the requester to enable it again.' },
       );
     }
+    if (
+      input.decision === 'approve' &&
+      row &&
+      (await this.targetFingerprint(row.definition)) !== a.policy.targetFingerprint
+    ) {
+      await this.deps.store.updateApproval(a.id, { status: 'expired', decidedAt: now }, 'pending');
+      throw new AppError(
+        409,
+        'definition_changed',
+        'The playbook this schedule runs changed after this was requested, so this approval no longer applies.',
+        { hint: 'Ask the requester to enable it again, so you approve the current version.' },
+      );
+    }
     const status: ApprovalStatus =
       input.decision === 'reject' ? 'rejected' : approvals >= required ? 'approved' : 'pending';
     const updated = await this.deps.store.updateApproval(
@@ -496,7 +548,12 @@ export class ScheduleService {
       const def = row.definition;
       await this.deps.store.updateSchedule(
         row.id,
-        { enabled: true, approvedBy: s.upn, nextRunAt: nextRun(def.cron, def.timezone, now) },
+        {
+          enabled: true,
+          approvedBy: s.upn,
+          approvedTarget: a.policy.targetFingerprint ?? null,
+          nextRunAt: nextRun(def.cron, def.timezone, now),
+        },
         { sha256: a.policy.sha256 },
       );
       this.changed(row.key);

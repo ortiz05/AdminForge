@@ -577,7 +577,7 @@ describe('probe checks', () => {
       expect(outbound.calls[0]!.call).toMatchObject({
         service: 'logAnalytics',
         path: '/v1/workspaces/00000000-0000-4000-8000-00000000aaaa/query',
-        body: { query: 'AzureActivity', timespan: 'PT1H' },
+        body: { query: expect.stringMatching(/^AzureActivity\n\| take \d+$/), timespan: 'PT1H' },
       });
     });
     it('reports a missing workspace cleanly', async () => {
@@ -621,7 +621,7 @@ describe('probe checks', () => {
         service: 'graph',
         method: 'POST',
         path: '/security/runHuntingQuery',
-        body: { Query: 'CloudAppEvents | take 1', Timespan: 'P1D' },
+        body: { Query: expect.stringMatching(/^CloudAppEvents \| take 1\n\| take \d+$/), Timespan: 'P1D' },
       });
     });
     it('reports a broken query as an error, not a failing check', async () => {

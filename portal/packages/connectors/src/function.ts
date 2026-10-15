@@ -60,6 +60,7 @@ export function createFunctionClient(opts: FunctionClientOptions) {
   const base = connection.baseUrl.replace(/\/+$/, '');
   const http = createHttpClient({
     ...opts,
+    redirect: 'error',
     correlationHeader: opts.correlationHeader ?? 'x-ms-client-request-id',
     requestIdHeader: 'x-ms-request-id',
   });

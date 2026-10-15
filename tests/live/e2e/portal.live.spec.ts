@@ -5,7 +5,7 @@ import { signInWithEntra } from '../lib/entra-login';
 
 // Live sweep: sign in as the validation user, render every area, run read playbooks (dry run), arm, and run
 // reversible writes against AF-Test-* objects only. Prints statuses and counts — never tenant identifiers.
-const env = loadEnv();
+const env = loadEnv(process.env, { admin: true });
 const creds = {
   upn: env.AF_TEST_USER_UPN!,
   password: env.AF_TEST_USER_PASSWORD!,

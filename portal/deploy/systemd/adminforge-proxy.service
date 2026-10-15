@@ -7,7 +7,6 @@ Wants=network-online.target
 [Service]
 Type=simple
 ExecStart=%h/.local/bin/caddy run --config %h/.config/adminforge/Caddyfile --adapter caddyfile
-ExecReload=%h/.local/bin/caddy reload --config %h/.config/adminforge/Caddyfile --adapter caddyfile
 Restart=on-failure
 RestartSec=5
 NoNewPrivileges=true

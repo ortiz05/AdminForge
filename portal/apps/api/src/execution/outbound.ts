@@ -117,6 +117,35 @@ export function settingNamesOnly(data: unknown): unknown {
 // ── Errors ────────────────────────────────────────────────────────────────────
 
 /** Refused by the request policy (ADR-003). Never retried. */
+/** Microsoft first-party resources (by host or well-known application id): never a connection's audience. */
+const MICROSOFT_RESOURCE_HOSTS =
+  /(^|\.)(microsoft\.com|microsoftonline\.com|windows\.net|azure\.com|azure\.net|office\.com|office365\.com|sharepoint\.com|loganalytics\.io|dynamics\.com|powerbi\.com|microsoftazuread-sso\.com)$/i;
+const MICROSOFT_RESOURCE_APP_IDS = new Set([
+  '00000003-0000-0000-c000-000000000000', // Microsoft Graph
+  '00000002-0000-0000-c000-000000000000', // Azure AD Graph
+  '797f4846-ba00-4fd7-ba43-dac1f8f63013', // Azure Resource Manager
+  'ca7f3f0b-7d91-482c-8e09-c5d840d0eac5', // Log Analytics API
+  '00000002-0000-0ff1-ce00-000000000000', // Exchange Online
+  '00000003-0000-0ff1-ce00-000000000000', // SharePoint Online
+  'cfa8b339-82a2-471a-a3c9-0fc0be7a4093', // Azure Key Vault
+  'e406a681-f3d4-42a8-90b6-c2b029497af1', // Azure Storage
+  '022907d3-0f1b-48f7-badc-1ba6abab6d66', // Azure SQL Database
+  'fc780465-2017-40d4-a0c5-307022471b92', // Microsoft Defender for Endpoint
+  '8ee8fdad-f234-4243-8f3b-15c294843740', // Microsoft 365 Defender
+  'c5393580-f805-4401-95e8-94b7a6ef2fc2', // Office 365 Management APIs
+  '48ac35b8-9aa8-4d74-927d-1f4a14a0b239', // Skype and Teams Tenant Admin API
+]);
+
+export function isMicrosoftResource(audience: string): boolean {
+  if (MICROSOFT_RESOURCE_APP_IDS.has(audience.toLowerCase())) return true;
+  if (!/^https:\/\//i.test(audience)) return false;
+  try {
+    return MICROSOFT_RESOURCE_HOSTS.test(new URL(audience).hostname);
+  } catch {
+    return true;
+  }
+}
+
 export class PolicyDenied extends AppError {
   constructor(reason: string) {
     super(403, 'policy_denied', reason, {
@@ -966,6 +995,17 @@ export class Outbound implements OutboundExecutor {
     const env = this.deps.env?.() ?? {};
     const baseUrl = await asText(def.baseUrl, env, 'baseUrl');
     const audience = (await asText(def.audience, env, 'audience')).replace(/\/+$/, '');
+    // A token for a Microsoft service (Graph, ARM, Exchange…) sent to a connection's own host would hand that host
+    // the caller's (or the automation identity's) access: connections may only target your own app registrations.
+    if (isMicrosoftResource(audience))
+      throw new AppError(
+        400,
+        'connection_audience_not_allowed',
+        `Connection ${call.connection} asks for a token for a Microsoft service (${audience}).`,
+        {
+          hint: 'Connections call your own APIs: set audience to your app registration (api://… or its application id). Use graph/arm steps for Microsoft services.',
+        },
+      );
     const operations: FunctionConnection['operations'] = {};
     for (const [k, op] of Object.entries(def.operations))
       operations[k] = {

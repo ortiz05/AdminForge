@@ -1,4 +1,4 @@
-import { FakeDefinitions, probe, READER, schedulesApp } from './schedules-helpers';
+import { AVERY, FakeDefinitions, probe, READER, schedulesApp } from './schedules-helpers';
 
 function content() {
   return new FakeDefinitions()
@@ -117,7 +117,13 @@ describe('probes API', () => {
         details: { rows: [{ name: `sa${h}` }] },
         scheduleRunId: '00000000-0000-4000-8000-0000000000aa',
       });
-    const reader = await t.login(READER, ['Portal.Reader']);
+    // Result rows come from application permissions: Operators see them, Readers see status and metric only.
+    const readerOnly = await t.login(AVERY, ['Portal.Reader']);
+    const hidden = (
+      await readerOnly.get('/api/probes/probes.storage-public-blob-access/results?since=2026-10-15T08:00:00Z')
+    ).json();
+    expect(hidden.items[0]).toMatchObject({ metric: 11, status: 'warn', details: null, detailsHidden: true });
+    const reader = await t.login(READER, ['Portal.Reader', 'Portal.Operator']);
     const res = (
       await reader.get('/api/probes/probes.storage-public-blob-access/results?since=2026-10-15T08:00:00Z')
     ).json();

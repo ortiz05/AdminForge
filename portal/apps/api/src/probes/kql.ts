@@ -41,6 +41,16 @@ export interface KqlResult {
 const GUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:?\d{2})$/;
 
+/**
+ * Asks the service for at most `max + 1` rows (one extra shows truncation). Without it Log Analytics and hunting
+ * return up to their own limits (tens of MB), which the API would buffer and parse before trimming. A query that ends
+ * in `render` is left alone (nothing may follow it).
+ */
+export function withRowLimit(query: string, max: number): string {
+  if (/\|\s*render\b/i.test(query)) return query;
+  return `${query.replace(/;\s*$/, '')}\n| take ${max + 1}`;
+}
+
 export const workspaceNotConfigured = () =>
   new AppError(503, 'workspace_not_configured', 'No Log Analytics workspace is configured.', {
     hint: 'Set AF_LOG_ANALYTICS_WORKSPACE_ID (the workspace customer id) in the AdminForge env file, or name a workspace.',
@@ -131,7 +141,7 @@ export async function runKql(
         service: 'logAnalytics',
         method: 'POST',
         path: `/v1/workspaces/${ws.toLowerCase()}/query`,
-        body: { query: req.query, ...(req.timespan ? { timespan: req.timespan } : {}) },
+        body: { query: withRowLimit(req.query, max), ...(req.timespan ? { timespan: req.timespan } : {}) },
         pathTemplate: '/v1/workspaces/{workspace}/query',
       },
       opts,
@@ -156,7 +166,7 @@ export async function runKql(
       service: 'graph',
       method: 'POST',
       path: '/security/runHuntingQuery',
-      body: { Query: req.query, ...(req.timespan ? { Timespan: req.timespan } : {}) },
+      body: { Query: withRowLimit(req.query, max), ...(req.timespan ? { Timespan: req.timespan } : {}) },
       pathTemplate: '/security/runHuntingQuery',
     },
     opts,

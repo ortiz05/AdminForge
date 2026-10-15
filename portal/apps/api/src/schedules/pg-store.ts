@@ -34,6 +34,7 @@ const toSchedule = (r: SchedulesRow): ScheduleRow => ({
   enabled: r.enabled,
   createdBy: r.createdBy,
   approvedBy: r.approvedBy,
+  approvedTarget: r.approvedTarget,
   nextRunAt: r.nextRunAt,
   lastRunAt: r.lastRunAt,
   lastStatus: r.lastStatus,
@@ -103,7 +104,12 @@ export class PgScheduleStore implements ScheduleStore {
   async insertSchedule(row: NewSchedule) {
     const [r] = await this.db
       .insert(schedules)
-      .values({ ...row, createdBy: row.createdBy ?? null, approvedBy: row.approvedBy ?? null })
+      .values({
+        ...row,
+        createdBy: row.createdBy ?? null,
+        approvedBy: row.approvedBy ?? null,
+        approvedTarget: row.approvedTarget ?? null,
+      })
       .onConflictDoNothing({ target: schedules.key })
       .returning();
     return r ? toSchedule(r) : null;

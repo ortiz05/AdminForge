@@ -3,13 +3,52 @@ import { homedir } from 'node:os';
 import path from 'node:path';
 
 /**
- * AdminForge configuration lives OUTSIDE the repository (R2):
- *   $ADMINFORGE_ENV_FILE, or ~/.config/adminforge/$ADMINFORGE_ENV.env (default env "dev").
- * process.env always wins over the file, so containers and CI can inject values directly.
+ * AdminForge configuration lives OUTSIDE the repository (R2), in layers (lowest first):
+ *   1. $ADMINFORGE_ENV_FILE, or ~/.config/adminforge/$ADMINFORGE_ENV.env (default env "dev") — runtime config;
+ *   2. <same name>.admin.env — provisioner and live-test credentials, read only by admin tooling (CLI, live tests),
+ *      never by the services;
+ *   3. <same name>.$ADMINFORGE_ENV_OVERLAY.env — per-deployment overrides (e.g. "host": the services' own database).
+ * process.env always wins over the files, so containers and CI can inject values directly.
  */
 export function envFilePath(env: NodeJS.ProcessEnv = process.env): string {
   if (env.ADMINFORGE_ENV_FILE) return path.resolve(env.ADMINFORGE_ENV_FILE);
   return path.join(homedir(), '.config', 'adminforge', `${env.ADMINFORGE_ENV ?? 'dev'}.env`);
+}
+
+const sibling = (file: string, suffix: string) => file.replace(/(\.env)?$/, `.${suffix}.env`);
+
+/** Provisioner and live-test credentials: kept out of the services' configuration. */
+export const ADMIN_ENV_KEYS = [
+  'AF_PROVISIONER_CLIENT_ID',
+  'AF_PROVISIONER_CLIENT_SECRET',
+  'AF_TEST_USER_UPN',
+  'AF_TEST_USER_PASSWORD',
+  'AF_TEST_USER_TOTP_SECRET',
+] as const;
+
+const isAdminKey = (key: string) => (ADMIN_ENV_KEYS as readonly string[]).includes(key);
+
+/** The admin-only file next to the env file. */
+export const adminEnvFilePath = (env: NodeJS.ProcessEnv = process.env) => sibling(envFilePath(env), 'admin');
+
+/** The overlay file for $ADMINFORGE_ENV_OVERLAY, if one is named (letters, digits and dashes only). */
+export function overlayEnvFilePath(env: NodeJS.ProcessEnv = process.env): string | undefined {
+  const overlay = env.ADMINFORGE_ENV_OVERLAY;
+  if (!overlay) return undefined;
+  if (!/^[a-z0-9-]{1,32}$/.test(overlay))
+    throw new Error('ADMINFORGE_ENV_OVERLAY must be lower-case letters, digits and dashes.');
+  return sibling(envFilePath(env), overlay);
+}
+
+export interface LoadEnvOptions {
+  /** Also read <env>.admin.env (provisioner and live-test credentials). Admin tooling only. */
+  admin?: boolean;
+}
+
+/** The files `loadEnv` reads, lowest precedence first (missing files are skipped). */
+export function envFiles(env: NodeJS.ProcessEnv = process.env, opts: LoadEnvOptions = {}): string[] {
+  const overlay = overlayEnvFilePath(env);
+  return [envFilePath(env), ...(opts.admin ? [adminEnvFilePath(env)] : []), ...(overlay ? [overlay] : [])];
 }
 
 export function parseEnv(text: string): Record<string, string> {
@@ -27,11 +66,17 @@ export function parseEnv(text: string): Record<string, string> {
   return out;
 }
 
-/** File values overlaid by process.env. Missing file → process.env only. */
-export function loadEnv(env: NodeJS.ProcessEnv = process.env): Record<string, string | undefined> {
-  const file = envFilePath(env);
-  const fromFile = existsSync(file) ? parseEnv(readFileSync(file, 'utf8')) : {};
-  return { ...fromFile, ...env };
+/** The layered files (see envFilePath) overlaid by process.env. Missing files → process.env only. */
+export function loadEnv(
+  env: NodeJS.ProcessEnv = process.env,
+  opts: LoadEnvOptions = {},
+): Record<string, string | undefined> {
+  const fromFiles: Record<string, string> = {};
+  for (const file of envFiles(env, opts))
+    if (existsSync(file)) Object.assign(fromFiles, parseEnv(readFileSync(file, 'utf8')));
+  // Without `admin`, admin keys never leak in from a base file that still holds them (older layout).
+  if (!opts.admin) for (const key of ADMIN_ENV_KEYS) delete fromFiles[key];
+  return { ...fromFiles, ...env };
 }
 
 /** Upserts keys in the env file (creating it 0600 if needed), preserving comments and order. */
@@ -52,6 +97,14 @@ export function updateEnvFile(updates: Record<string, string>, file = envFilePat
   for (const [k, v] of pending) next.push(`${k}=${v}`);
   writeFileSync(file, `${next.join('\n')}\n`, { mode: 0o600 });
   chmodSync(file, 0o600);
+}
+
+/** Upserts keys where they belong: admin keys in <env>.admin.env, everything else in the env file. */
+export function writeEnvKeys(updates: Record<string, string>, env: NodeJS.ProcessEnv = process.env): void {
+  const admin = Object.fromEntries(Object.entries(updates).filter(([k]) => isAdminKey(k)));
+  const runtime = Object.fromEntries(Object.entries(updates).filter(([k]) => !isAdminKey(k)));
+  if (Object.keys(runtime).length) updateEnvFile(runtime, envFilePath(env));
+  if (Object.keys(admin).length) updateEnvFile(admin, adminEnvFilePath(env));
 }
 
 /** Repo root, resolved from this file (portal/packages/config/src). */

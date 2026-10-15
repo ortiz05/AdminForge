@@ -36,7 +36,7 @@ import type {
   StepInterceptor,
   StepResult,
 } from './ports';
-import { storableOutput } from './redact';
+import { redact, secretInputValues, storableOutput } from './redact';
 import { extractSecrets, secretSpec, type SecretSpec } from './secrets';
 import {
   DEFAULT_LIMITS,
@@ -183,6 +183,8 @@ class Execution {
   private lastCancelCheck = 0;
   private top!: Frame;
   private readonly depth: number;
+  /** Values of inputs declared `redact: true`: masked wherever they would be stored or emitted. */
+  private readonly secrets: string[];
 
   constructor(
     private readonly engine: Engine,
@@ -198,6 +200,7 @@ class Execution {
     this.limits = engine.limits;
     this.dryRun = run.dryRun;
     this.depth = opts.depth ?? 0;
+    this.secrets = secretInputValues(def.inputs, run.inputs ?? {});
     for (const r of [...records].sort((a, b) => a.seq - b.seq)) {
       this.records.set(r.path, r);
       this.seq = Math.max(this.seq, r.seq + 1);
@@ -401,7 +404,15 @@ class Execution {
 
   private async save(rec: StepRecord, actor: Actor | null) {
     this.records.set(rec.path, rec);
-    const stored: StepRecord = { ...rec, output: storableOutput(rec.output, this.limits.maxOutputBytes) };
+    // Redacted copy for the store (and from there the run view and audit); the in-memory record keeps real values.
+    const mask = <T>(v: T): T => (this.secrets.length && v != null ? (redact(v, this.secrets) as T) : v);
+    const stored: StepRecord = {
+      ...rec,
+      request: mask(rec.request),
+      plan: mask(rec.plan),
+      error: mask(rec.error),
+      output: storableOutput(mask(rec.output), this.limits.maxOutputBytes),
+    };
     await this.store.saveStep(this.run.id, stored, { actor, dryRun: this.dryRun });
     await this.store.appendEvent(this.run.id, {
       type: 'status',
@@ -419,7 +430,8 @@ class Execution {
   }
 
   private async emit(seq: number | null, event: Omit<RunEventInput, 'stepSeq'>) {
-    await this.store.appendEvent(this.run.id, { ...event, stepSeq: seq });
+    const data = this.secrets.length && event.data != null ? redact(event.data, this.secrets) : event.data;
+    await this.store.appendEvent(this.run.id, { ...event, data, stepSeq: seq } as RunEventInput);
   }
 
   private async close(rec: StepRecord, actor: Actor | null, patch: Partial<StepRecord>) {

@@ -19,6 +19,8 @@ export interface ScheduleRow {
   createdBy: string | null;
   /** Who approved enabling a write-capable schedule (second person, UPN). */
   approvedBy: string | null;
+  /** Playbook fingerprint the approval covered (runs/fingerprint.ts); runs refuse a playbook that no longer matches. */
+  approvedTarget: string | null;
   nextRunAt: Date | null;
   lastRunAt: Date | null;
   lastStatus: string | null;
@@ -30,7 +32,7 @@ export type NewSchedule = Pick<
   ScheduleRow,
   'key' | 'source' | 'definition' | 'sha256' | 'enabled' | 'nextRunAt'
 > &
-  Partial<Pick<ScheduleRow, 'createdBy' | 'approvedBy'>>;
+  Partial<Pick<ScheduleRow, 'createdBy' | 'approvedBy' | 'approvedTarget'>>;
 export type SchedulePatch = Partial<
   Pick<
     ScheduleRow,
@@ -38,6 +40,7 @@ export type SchedulePatch = Partial<
     | 'sha256'
     | 'enabled'
     | 'approvedBy'
+    | 'approvedTarget'
     | 'nextRunAt'
     | 'lastRunAt'
     | 'lastStatus'
@@ -129,6 +132,8 @@ export interface ScheduleApprovalPolicy {
   definitionVersion: string;
   /** The approval is for exactly this definition; a changed schedule needs a new approval. */
   sha256: string;
+  /** Playbook jobs: fingerprint of the playbook and its children at request time (a changed playbook voids it). */
+  targetFingerprint?: string;
   requestedByUpn: string;
   initiatorOid: string;
   /** Approving changes no tenant data, so the approver need not arm write access. */

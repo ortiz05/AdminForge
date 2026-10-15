@@ -3,7 +3,7 @@ import { loadEnv } from '@adminforge/config';
 
 // Live validation against a running AdminForge stack and a real tenant (never in CI).
 // Start the stack first (see .claude/skills/validating-against-a-tenant). Output stays outside the repo.
-const env = loadEnv();
+const env = loadEnv(process.env, { admin: true });
 export default defineConfig({
   testDir: '.',
   timeout: 240_000,

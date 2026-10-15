@@ -104,7 +104,8 @@ describe('Query Studio API', () => {
     expect(outbound.calls[0]!.call).toMatchObject({
       service: 'logAnalytics',
       path: `/v1/workspaces/${WORKSPACE}/query`,
-      body: { query: 'AzureActivity | count', timespan: 'PT1H' },
+      // The service is asked for max+1 rows only (withRowLimit).
+      body: { query: expect.stringMatching(/^AzureActivity \| count\n\| take \d+$/), timespan: 'PT1H' },
     });
     const ah = await user.post('/api/query', { source: 'advancedHunting', query: 'DeviceInfo | take 1' });
     expect(ah.json()).toMatchObject({
@@ -115,7 +116,7 @@ describe('Query Studio API', () => {
       service: 'graph',
       method: 'POST',
       path: '/security/runHuntingQuery',
-      body: { Query: 'DeviceInfo | take 1' },
+      body: { Query: expect.stringMatching(/^DeviceInfo \| take 1\n\| take \d+$/) },
     });
     // No workspace given and none configured: a clear 503.
     const none = await user.post('/api/query', { source: 'logAnalytics', query: 'AzureActivity' });

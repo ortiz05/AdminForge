@@ -1,5 +1,6 @@
 import { mockConfig } from './helpers';
 import { ALL_ROLES, AVERY, BLAKE, FakeExecutor, runsApp, StaticDefinitions } from './runs-helpers';
+import { automationFingerprint } from '@adminforge/api/src/runs/fingerprint';
 
 const TAP = 'Tap-Secret-4242-Value';
 const USER = '00000000-0000-4000-8000-000000000001';
@@ -254,8 +255,11 @@ describe('show-once secrets: fetch once', () => {
       lifetimeInMinutes: 60,
     });
 
+    const approvedTarget = await automationFingerprint((r, v) => t.runs.service.resolve(r, v), {
+      ref: 'test.tap',
+    });
     const row = await t.runs.service.createScheduledRun({
-      schedule: { key: 'test.nightly', createdBy: AVERY.oid, approvedBy: [BLAKE.oid] },
+      schedule: { key: 'test.nightly', createdBy: AVERY.oid, approvedBy: [BLAKE.oid], approvedTarget },
       playbook: 'test.tap',
       inputs: { userId: USER },
     });

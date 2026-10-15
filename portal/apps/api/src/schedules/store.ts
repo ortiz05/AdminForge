@@ -97,6 +97,7 @@ export class MemoryScheduleStore implements ScheduleStore {
       id: randomUUID(),
       createdBy: null,
       approvedBy: null,
+      approvedTarget: null,
       lastRunAt: null,
       lastStatus: null,
       createdAt: now,

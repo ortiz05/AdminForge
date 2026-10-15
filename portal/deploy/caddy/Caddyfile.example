@@ -3,6 +3,9 @@
 # so every non-localhost origin must be HTTPS. Add the origin to AF_REDIRECT_BASE_URLS and run
 # `pnpm adminforge provision entra`; set PUBLIC_BASE_URL of the api/worker/scheduler services to it.
 {
+	# No admin API: it is unauthenticated, and any local process could rewrite the proxy through it.
+	# Config changes take effect with `systemctl --user restart adminforge-proxy`.
+	admin off
 	# No root: don't try to install the local CA into the system trust store or bind :80/:443.
 	skip_install_trust
 	auto_https disable_redirects

@@ -2,3 +2,8 @@ export * from './types';
 export * from './policy';
 export * from './http';
 export * from './graph';
+export * from './arm';
+export * from './resource-graph';
+export * from './log-analytics';
+export * from './function';
+export * from './fixtures';

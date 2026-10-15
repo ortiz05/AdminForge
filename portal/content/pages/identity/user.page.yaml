@@ -1,0 +1,79 @@
+$schema: ../../../packages/schemas/generated/page.schema.json
+kind: page
+id: identity.user
+version: 1.0.0
+title: User
+summary: One user account — profile, status and group memberships.
+owner: identity-team
+tags: [identity, users]
+template: entity
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    graph: [User.Read.All, Directory.Read.All]
+
+params:
+  id: { type: guid, label: User, required: true, hidden: true }
+
+datasources:
+  user:
+    source: graph
+    request:
+      path: /users/${ $encode($guid(params.id)) }
+      query:
+        $select: id,displayName,userPrincipalName,mail,accountEnabled,userType,department,jobTitle,createdDateTime,onPremisesSyncEnabled
+    cache: { ttl: 30 }
+  groups:
+    source: graph
+    request:
+      path: /users/${ $encode($guid(params.id)) }/memberOf/microsoft.graph.group
+      query:
+        $select: id,displayName,groupTypes,securityEnabled,mailEnabled
+        $top: 100
+    paging: cursor
+    cache: { ttl: 60 }
+
+header:
+  title: ${ user.displayName }
+  subtitle: ${ user.userPrincipalName }
+  status: "${ user.accountEnabled ? 'ok' : 'crit' }"
+  statusLabel: "${ user.accountEnabled ? 'Sign-in enabled' : 'Sign-in disabled' }"
+  ids:
+    Object id: ${ user.id }
+
+actions:
+  - playbook: identity.disable-user
+    label: Disable sign-in
+    icon: prohibit
+    inputs:
+      userId: ${ params.id }
+    when: ${ user.accountEnabled = true }
+
+tabs:
+  - id: overview
+    label: Overview
+    layout:
+      - widget: keyValue
+        span: 12
+        data: user
+        fields:
+          - { field: userPrincipalName, label: Sign-in name }
+          - { field: mail, label: Email }
+          - { field: userType, label: Type }
+          - { field: department, label: Department }
+          - { field: jobTitle, label: Job title }
+          - { field: onPremisesSyncEnabled, label: Synced from on-premises, kind: boolean }
+          - { field: createdDateTime, label: Created, kind: datetime }
+  - id: groups
+    label: Groups
+    layout:
+      - widget: table
+        span: 12
+        data: groups.value
+        rowKey: id
+        columns:
+          - { field: displayName, label: Group }
+          - { field: securityEnabled, label: Security, kind: boolean }
+          - { field: mailEnabled, label: Mail-enabled, kind: boolean }
+          - { field: groupTypes, label: Types, kind: tags }
+          - { field: id, label: Object id, kind: guid, hidden: true }

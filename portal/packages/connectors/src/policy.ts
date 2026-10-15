@@ -3,10 +3,13 @@ import type { Mode, ServiceId } from './types';
 export interface OutboundRequest {
   service: ServiceId;
   method: string;
+  /** Path relative to the service root (Graph: without /v1.0; Log Analytics: /v1/workspaces/…). */
   path: string;
   body?: unknown;
   /** Set by the executor only for steps that a *published* definition marks `mode: write`. */
   declaredWrite?: boolean;
+  /** Set by the executor only for `function` calls to operations a published connection declares `mode: read`. */
+  declaredRead?: boolean;
   /** Exchange/Teams cmdlet name for admin-API calls. */
   cmdlet?: string;
 }
@@ -28,27 +31,25 @@ const READ_POSTS: Partial<Record<ServiceId, RegExp[]>> = {
   logAnalytics: [/^\/v1\/workspaces\/[0-9a-f-]{36}\/query$/i],
 };
 
-const isReadPost = (r: OutboundRequest) =>
-  r.method.toUpperCase() === 'POST' && (READ_POSTS[r.service] ?? []).some((re) => re.test(r.path));
+/** Path without query/fragment; undefined when it is not a clean rooted path (dot segments, encoded separators). */
+function cleanPath(path: string): string | undefined {
+  const p = path.split(/[?#]/)[0] ?? '';
+  if (!p.startsWith('/') || /\\|%2f|%5c/i.test(p)) return undefined;
+  if (p.split('/').some((s) => /^(\.|%2e){1,2}$/i.test(s))) return undefined;
+  return p;
+}
 
 function evaluateBatch(body: unknown): PolicyDecision {
   const requests = (body as { requests?: Array<{ method?: string; url?: string }> } | undefined)?.requests;
   if (!Array.isArray(requests)) return deny('Malformed $batch request.');
+  const unclean = requests.find((r) => typeof r.url !== 'string' || cleanPath(r.url.startsWith('/') ? r.url : `/${r.url}`) === undefined);
+  if (unclean) return deny(`Refusing $batch: ${String(unclean.url)} is not a clean service path.`);
   const bad = requests.find((r) => !SAFE.has((r.method ?? 'GET').toUpperCase()));
   return bad ? deny(`$batch includes ${bad.method} ${bad.url}, which changes data. Arm write access to continue.`) : ALLOW;
 }
 
-/**
- * Default-deny request policy (ADR-003).
- * Read mode: only safe methods and allowlisted read-only POSTs leave the API.
- * Write mode: anything safe, plus writes declared by published content.
- */
-export function evaluate(mode: Mode, req: OutboundRequest): PolicyDecision {
-  const method = req.method.toUpperCase();
-  if (mode === 'write') {
-    if (SAFE.has(method) || isReadPost(req) || req.declaredWrite) return ALLOW;
-    return deny('Write requests must come from a published playbook or action.');
-  }
+/** What a read-only session may send. */
+function evaluateRead(req: OutboundRequest, method: string, path: string): PolicyDecision {
   if (req.service === 'exchange' || req.service === 'teams') {
     return req.cmdlet && /^Get-[A-Za-z]+$/.test(req.cmdlet)
       ? ALLOW
@@ -56,6 +57,25 @@ export function evaluate(mode: Mode, req: OutboundRequest): PolicyDecision {
   }
   if (req.service === 'runner') return req.declaredWrite ? deny('This script changes data. Arm write access to continue.') : ALLOW;
   if (SAFE.has(method)) return ALLOW;
-  if (isReadPost(req)) return req.service === 'graph' && req.path === '/$batch' ? evaluateBatch(req.body) : ALLOW;
-  return deny(`${method} ${req.path} changes data. Arm write access to continue.`);
+  if (req.service === 'function' && req.declaredRead && !req.declaredWrite) return ALLOW;
+  if (method === 'POST' && (READ_POSTS[req.service] ?? []).some((re) => re.test(path)))
+    return req.service === 'graph' && path === '/$batch' ? evaluateBatch(req.body) : ALLOW;
+  return deny(`${method} ${path} changes data. Arm write access to continue.`);
+}
+
+/**
+ * Default-deny request policy (ADR-003).
+ * Read mode: only safe methods and allowlisted read-only POSTs leave the API ($batch sub-requests are checked one by one).
+ * Write mode: everything read mode allows, plus writes declared by published content.
+ */
+export function evaluate(mode: Mode, req: OutboundRequest): PolicyDecision {
+  const method = req.method.toUpperCase();
+  const path = cleanPath(req.path);
+  if (path === undefined) return deny(`Refusing ${method} ${req.path}: not a clean service path.`);
+  if (mode === 'write') {
+    if (req.declaredWrite) return ALLOW;
+    const read = evaluateRead(req, method, path);
+    return read.allowed ? ALLOW : deny('Write requests must come from a published playbook or action.');
+  }
+  return evaluateRead(req, method, path);
 }

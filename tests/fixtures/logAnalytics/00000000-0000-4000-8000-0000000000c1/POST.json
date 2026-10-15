@@ -1,0 +1,41 @@
+{
+  "$fixture": {
+    "variants": [
+      {
+        "match": { "bodyIncludes": "SigninLogs" },
+        "body": {
+          "tables": [
+            {
+              "name": "PrimaryResult",
+              "columns": [
+                { "name": "Total", "type": "long" },
+                { "name": "Failures", "type": "long" },
+                { "name": "FailureRate", "type": "real" }
+              ],
+              "rows": [[1200, 18, 1.5]]
+            }
+          ]
+        }
+      }
+    ],
+    "body": {
+      "tables": [
+        {
+          "name": "PrimaryResult",
+          "columns": [
+            { "name": "TimeGenerated", "type": "datetime" },
+            { "name": "AppRoleName", "type": "string" },
+            { "name": "Requests", "type": "long" },
+            { "name": "Failures", "type": "long" },
+            { "name": "Healthy", "type": "bool" },
+            { "name": "TopError", "type": "dynamic" }
+          ],
+          "rows": [
+            ["2026-01-10T00:00:00Z", "func-example", 5120, 12, true, "{\"code\":\"Timeout\",\"count\":7}"],
+            ["2026-01-10T01:00:00Z", "func-example", 4980, 40, false, "{\"code\":\"HostUnavailable\",\"count\":31}"]
+          ]
+        }
+      ]
+    }
+  }
+}

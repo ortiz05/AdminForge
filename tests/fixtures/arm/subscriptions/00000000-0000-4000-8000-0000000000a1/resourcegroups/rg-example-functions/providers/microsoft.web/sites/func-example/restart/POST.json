@@ -1,0 +1,1 @@
+{ "$fixture": { "status": 200, "headers": { "x-ms-ratelimit-remaining-subscription-writes": "1199" } } }

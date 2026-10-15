@@ -1,0 +1,19 @@
+{
+  "value": [
+    {
+      "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-functions",
+      "name": "rg-example-functions",
+      "type": "Microsoft.Resources/resourceGroups",
+      "location": "westeurope",
+      "tags": { "env": "prod", "owner": "platform-team" },
+      "properties": { "provisioningState": "Succeeded" }
+    },
+    {
+      "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-network",
+      "name": "rg-example-network",
+      "type": "Microsoft.Resources/resourceGroups",
+      "location": "westeurope",
+      "properties": { "provisioningState": "Succeeded" }
+    }
+  ]
+}

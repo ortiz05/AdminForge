@@ -1,0 +1,85 @@
+$schema: ../../../packages/schemas/generated/playbook.schema.json
+kind: playbook
+id: identity.disable-user
+version: 1.0.0
+title: Disable sign-in
+summary: Blocks sign-in and revokes all sessions for one user.
+owner: identity-team
+tags: [identity, incident]
+risk: high
+mode: write
+requires:
+  portalRoles: [Portal.Operator]
+  scopes:
+    graph: [User.Read.All, User.EnableDisableAccount.All, User.RevokeSessions.All]
+  entraRoles: [User Administrator]
+confirm:
+  type: typed
+  value: ${ steps.lookup.output.userPrincipalName }
+  message: Type the user's sign-in name to confirm.
+approval:
+  required: false
+
+inputs:
+  userId: { type: string, format: guid, label: User, picker: user }
+  reason: { type: string, label: Reason, minLength: 10, multiline: true }
+
+steps:
+  - id: lookup
+    type: graph
+    mode: read
+    describe: Look up the user
+    request:
+      method: GET
+      path: /users/${ $encode($guid(inputs.userId)) }
+      query:
+        $select: id,displayName,userPrincipalName,accountEnabled
+
+  - id: guard
+    type: assert
+    that: ${ steps.lookup.output.accountEnabled = true }
+    message: ${ steps.lookup.output.userPrincipalName & ' is already disabled.' }
+
+  - id: disable
+    type: graph
+    mode: write
+    describe: Set accountEnabled to false
+    request:
+      method: PATCH
+      path: /users/${ $encode($guid(inputs.userId)) }
+      body: { accountEnabled: false }
+    compensate:
+      type: graph
+      describe: Re-enable sign-in
+      request:
+        method: PATCH
+        path: /users/${ $encode($guid(inputs.userId)) }
+        body: { accountEnabled: true }
+
+  - id: revoke
+    type: graph
+    mode: write
+    describe: Revoke refresh tokens and session cookies
+    onError: compensate
+    request:
+      method: POST
+      path: /users/${ $encode($guid(inputs.userId)) }/revokeSignInSessions
+    dryRunOutput: { value: true }
+
+outputs:
+  summary: ${ 'Sign-in disabled and sessions revoked for ' & steps.lookup.output.userPrincipalName }
+
+tests:   # run by `adminforge test` (dry run with mocked step outputs)
+  - name: refuses an already-disabled user
+    inputs: { userId: 00000000-0000-4000-8000-000000000001, reason: incident 4411 test }
+    mocks:
+      lookup: { id: 00000000-0000-4000-8000-000000000001, accountEnabled: false, userPrincipalName: x.disabled@example.com }
+    expect: { status: failed, failedStep: guard }
+  - name: plans disable and revoke for an enabled user
+    inputs: { userId: 00000000-0000-4000-8000-000000000002, reason: incident 4412 test }
+    mocks:
+      lookup: { id: 00000000-0000-4000-8000-000000000002, accountEnabled: true, userPrincipalName: a.lee@example.com }
+    expect:
+      status: succeeded
+      plan: [disable, revoke]
+      outputs: { summary: Sign-in disabled and sessions revoked for a.lee@example.com }

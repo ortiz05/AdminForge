@@ -1,0 +1,124 @@
+$schema: ../../../packages/schemas/generated/page.schema.json
+kind: page
+id: identity.users
+version: 1.0.0
+title: Users
+summary: Member and guest accounts in the tenant.
+owner: identity-team
+tags: [identity, users]
+template: list-detail
+nav: { section: identity, label: Users, icon: users, order: 10 }
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    graph: [User.Read.All, AuditLog.Read.All]
+  entraRoles: [Directory Readers]
+
+params:
+  q: { type: string, default: "", label: Search, placeholder: Name or sign-in name }
+  userType: { type: enum, values: [All, Member, Guest], default: All, label: Type, facet: true }
+  enabled: { type: enum, values: [Any, Enabled, Disabled], default: Any, label: Status, facet: true }
+  department: { type: string, label: Department, facet: true }
+
+filters:
+  search: q
+  facets: [userType, enabled, department]
+
+savedViews:
+  enabled: true
+  shared: true
+  presets:
+    - { name: Guests, params: { userType: Guest } }
+    - { name: Disabled accounts, params: { enabled: Disabled } }
+
+datasources:
+  users:
+    source: graph
+    request:
+      method: GET
+      path: /users
+      headers: { ConsistencyLevel: eventual }
+      query:
+        $select: id,displayName,userPrincipalName,accountEnabled,userType,department,jobTitle,createdDateTime,signInActivity
+        $count: true
+        $top: 100
+        # Every user-supplied value goes through $odata() / $odataSearch(); empty clauses drop out.
+        $filter: >-
+          ${ $join([
+               params.userType != 'All' ? "userType eq " & $odata(params.userType),
+               params.enabled = 'Enabled' ? "accountEnabled eq true",
+               params.enabled = 'Disabled' ? "accountEnabled eq false",
+               params.department ? "department eq " & $odata(params.department)
+             ][$], ' and ') }
+        $search: >-
+          ${ params.q ? '"displayName:' & $odataSearch(params.q) & '" OR "userPrincipalName:' & $odataSearch(params.q) & '"' }
+    paging: cursor
+    cache: { ttl: 60 }
+  counts:
+    source: graphBatch
+    requests:
+      members: { path: /users/$count, query: { $filter: "userType eq 'Member'" }, headers: { ConsistencyLevel: eventual } }
+      guests: { path: /users/$count, query: { $filter: "userType eq 'Guest'" }, headers: { ConsistencyLevel: eventual } }
+      disabled: { path: /users/$count, query: { $filter: "accountEnabled eq false" }, headers: { ConsistencyLevel: eventual } }
+    cache: { ttl: 300 }
+
+layout:
+  - widget: kpi
+    data: counts.members
+    label: Members
+  - widget: kpi
+    data: counts.guests
+    label: Guests
+  - widget: kpi
+    data: counts.disabled
+    label: Disabled
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+  - widget: table
+    id: users
+    span: 12
+    data: users.value
+    rowKey: id
+    selection: multi
+    columns:
+      - { field: displayName, label: Name, kind: identity, secondary: userPrincipalName }
+      - field: accountEnabled
+        label: Status
+        kind: status
+        map: { "true": [ok, Enabled], "false": [crit, Disabled] }
+        filter: { type: facet, param: enabled }
+      - { field: userType, label: Type, filter: { type: facet, param: userType } }
+      - { field: department, label: Department, filter: { type: text, param: department } }
+      - { field: jobTitle, label: Job title, hidden: true }
+      - { field: signInActivity.lastSignInDateTime, label: Last sign-in, kind: relativeTime, filter: date }
+      - { field: createdDateTime, label: Created, kind: date, hidden: true }
+      - { field: id, label: Object id, kind: guid, hidden: true }
+    inspect:
+      page: identity.user
+      params:
+        id: ${ row.id }
+    rowActions:
+      - playbook: identity.disable-user
+        label: Disable sign-in
+        icon: prohibit
+        inputs:
+          userId: ${ row.id }
+        when: ${ row.accountEnabled = true }
+      - label: Open in Entra admin center
+        icon: arrow-square-out
+        href: "https://entra.microsoft.com/#view/Microsoft_AAD_UsersAndTenants/UserProfileMenuBlade/~/overview/userId/${ $encode(row.id) }"
+    bulkActions:
+      - playbook: identity.disable-user
+        label: Disable sign-in
+        icon: prohibit
+        forEach:
+          inputs:
+            userId: ${ row.id }
+          concurrency: 5
+        maxItems: 100
+        when: ${ $count(rows[accountEnabled = true]) > 0 }
+
+export:
+  formats: [csv, xlsx]
+  fileName: users
+  data: users.value
+  columns: visible

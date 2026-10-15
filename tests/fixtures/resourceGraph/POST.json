@@ -1,0 +1,53 @@
+{
+  "$fixture": {
+    "variants": [
+      {
+        "match": { "bodyIncludes": "microsoft.hybridcompute/machines" },
+        "body": {
+          "totalRecords": 2,
+          "count": 2,
+          "resultTruncated": "false",
+          "data": [
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-arc/providers/Microsoft.HybridCompute/machines/srv-example-01",
+              "name": "srv-example-01",
+              "location": "westeurope",
+              "osType": "windows",
+              "status": "Connected",
+              "agentVersion": "1.48.02881.1941",
+              "lastStatusChange": "2026-01-09T22:10:00Z"
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-arc/providers/Microsoft.HybridCompute/machines/srv-example-02",
+              "name": "srv-example-02",
+              "location": "westeurope",
+              "osType": "linux",
+              "status": "Disconnected",
+              "agentVersion": "1.45.02800.1101",
+              "lastStatusChange": "2026-01-02T08:00:00Z"
+            }
+          ]
+        }
+      },
+      {
+        "match": { "bodyIncludes": "resourcecontainers" },
+        "body": {
+          "totalRecords": 1,
+          "count": 1,
+          "resultTruncated": "false",
+          "data": [{ "name": "rg-example-functions", "type": "microsoft.resources/subscriptions/resourcegroups", "location": "westeurope" }]
+        }
+      }
+    ],
+    "body": {
+      "totalRecords": 3,
+      "count": 2,
+      "resultTruncated": "false",
+      "$skipToken": "page2",
+      "data": [
+        { "name": "func-example", "type": "microsoft.web/sites", "location": "westeurope", "resourceGroup": "rg-example-functions" },
+        { "name": "stexample001", "type": "microsoft.storage/storageaccounts", "location": "westeurope", "resourceGroup": "rg-example-functions" }
+      ]
+    }
+  }
+}

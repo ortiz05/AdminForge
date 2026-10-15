@@ -1,0 +1,53 @@
+$schema: ../packages/schemas/generated/navigation.schema.json
+kind: navigation
+id: portal.navigation
+version: 1.0.0
+title: Navigation
+summary: Section order, labels and icons for the navigation rail. Pages join a section through nav.section.
+owner: portal-admins
+
+sections:
+  - key: overview
+    label: Overview
+    icon: house
+    order: 10
+  - key: identity
+    label: Identity
+    icon: identification-card
+    order: 20
+  - key: m365
+    label: Microsoft 365
+    icon: squares-four
+    order: 30
+  - key: endpoint
+    label: Endpoint
+    icon: devices
+    order: 40
+  - key: security
+    label: Security
+    icon: shield-check
+    order: 50
+  - key: azure
+    label: Azure
+    icon: cloud
+    order: 60
+  - key: automation
+    label: Automation
+    icon: lightning
+    order: 70
+    items:
+      - { key: runs, label: Runs, href: /runs, icon: list-checks, order: 10 }
+      - { key: schedules, label: Schedules, href: /schedules, icon: calendar-check, order: 20 }
+      - { key: monitoring, label: Synthetic monitoring, href: /monitoring, icon: pulse, order: 30 }
+  - key: reports
+    label: Reports
+    icon: chart-bar
+    order: 80
+  - key: admin
+    label: Admin
+    icon: gear-six
+    order: 90
+    roles: [Portal.Admin]
+    items:
+      - { key: audit, label: Audit, href: /admin/audit, icon: scroll, order: 10 }
+      - { key: appearance, label: Appearance, href: /admin/appearance, icon: palette, order: 20 }

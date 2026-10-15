@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { DefinitionId, Duration, Expr, Identifier, envelopeShape, exprOr } from './common';
 import { Guid } from './params';
+import { RESOURCE_GRAPH_UNION_MESSAGE, startsWithUnion } from './datasource';
 
 /**
  * Probes are synthetic tests (R6) run by the scheduler (and on demand). The check type lives in `check.kind`
@@ -248,6 +249,8 @@ export const Probe = z
             message: `${field} applies to source ${sources.join(' or ')}, not ${c.source}.`,
           });
       };
+      if (c.source === 'resourceGraph' && startsWithUnion(c.query))
+        ctx.addIssue({ code: 'custom', path: ['check', 'query'], message: RESOURCE_GRAPH_UNION_MESSAGE });
       only('subscriptions', ['resourceGraph']);
       only('managementGroups', ['resourceGraph']);
       only('workspace', ['logAnalytics']);

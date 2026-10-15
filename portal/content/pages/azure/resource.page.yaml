@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/page.schema.json
 kind: page
 id: azure.resource
-version: 1.0.0
+version: 1.1.0
 title: Azure resource
 summary: One Azure resource or resource group — properties, tags, who has access and recent activity.
 owner: azure-team
@@ -31,8 +31,11 @@ datasources:
     source: resourceGraph
     query: |
       // af:azure.resource#resource
-      union resources, resourcecontainers
+      // Resource Graph has no leading `union a, b`: pipe one table into the other (resource groups and
+      // subscriptions are in resourcecontainers).
+      resources
       | where tolower(id) == '${ $lowercase($replace(params.id, /[^A-Za-z0-9._()\/-]/, '')) }'
+      | union (resourcecontainers | where tolower(id) == '${ $lowercase($replace(params.id, /[^A-Za-z0-9._()\/-]/, '')) }')
       | project id, name, type, kind, location, resourceGroup, subscriptionId, tags, sku, identity, managedBy, plan, zones, properties
       | take 1
     transform: >-

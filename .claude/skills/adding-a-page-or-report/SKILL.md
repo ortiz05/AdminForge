@@ -20,6 +20,9 @@ Pages, dashboards and reports are YAML in `portal/content/{pages,dashboards,repo
    - Filter **server-side** (`$filter`, `$select`, `$top`, KQL `where`), not in `transform` — transforms run on the API
      thread with a 250 ms budget and fail on large tenants.
    - Tenant-wide questions that would need many Graph calls → **KQL** (`resourceGraph`, `logAnalytics`).
+   - Resource Graph can't start a query with `union a, b`; pipe instead: `resources | where … | union
+(resourcecontainers | where …)` (resource groups and subscriptions live in `resourcecontainers`).
+     `adminforge validate` rejects the leading form.
    - User input: `$odata()`, `$odataSearch()`, `$kql()`, `$encode()`. Advanced filters: declare
      `filters.advanced.fields` and use `${ advanced }`; never read the raw param. Dialect `odata` (Graph) and `kql`
      (Resource Graph / Log Analytics) compile into the request; for sources with no query language (`runner`,

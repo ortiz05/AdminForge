@@ -43,9 +43,17 @@ export type ArmRequestSpec = z.infer<typeof ArmRequestSpec>;
 /** Subscriptions / management groups: literal ids or one expression returning a list. */
 const IdList = exprOr(z.array(z.string().min(1)));
 
+/** Resource Graph has no leading `union a, b` (it fails with "Failed to resolve table expression"). */
+export const startsWithUnion = (kql: string) => /^\s*union\b/i.test(kql.replace(/^\s*\/\/.*$/gm, ''));
+export const RESOURCE_GRAPH_UNION_MESSAGE =
+  "Resource Graph can't start a query with union: pipe one table into the other, e.g. resources | union (resourcecontainers | where …).";
+
 export const ResourceGraphSpec = {
   /** KQL over Resource Graph tables (resources, resourcecontainers, …). */
-  query: z.string().min(1),
+  query: z
+    .string()
+    .min(1)
+    .refine((q) => !startsWithUnion(q), RESOURCE_GRAPH_UNION_MESSAGE),
   subscriptions: IdList.optional(),
   managementGroups: IdList.optional(),
 };

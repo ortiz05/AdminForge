@@ -1,0 +1,220 @@
+/*
+ * AdminForge base layer. Page defaults, type roles, focus, motion.
+ * Every value is a design token (--af-*); the guard tests reject raw colours here.
+ */
+
+/* Radix exposes state as data attributes; these variants keep class lists free of arbitrary selectors. */
+@custom-variant state-open (&[data-state='open']);
+@custom-variant state-closed (&[data-state='closed']);
+@custom-variant state-checked (&[data-state='checked']);
+@custom-variant state-indeterminate (&[data-state='indeterminate']);
+@custom-variant state-on (&[data-state='on']);
+@custom-variant state-active (&[data-state='active']);
+@custom-variant side-top (&[data-side='top']);
+@custom-variant side-bottom (&[data-side='bottom']);
+/* Write mode: only the session chrome reacts to it (see shell.css). */
+@custom-variant armed (&:where([data-mode='armed'] *));
+@custom-variant nav-collapsed (&:where([data-nav='collapsed'] *));
+@custom-variant compact (&:where([data-density='compact'] *));
+
+@layer base {
+  html {
+    background: var(--af-canvas);
+    color: var(--af-fg);
+    font-family: var(--af-font-body);
+    font-size: var(--af-font-size-ui);
+    line-height: var(--af-line-height-normal);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    scrollbar-color: var(--af-line-strong) transparent;
+  }
+  body {
+    margin: 0;
+    min-height: 100dvh;
+    background: var(--af-canvas);
+  }
+  :focus-visible {
+    outline: 2px solid var(--af-focus);
+    outline-offset: 2px;
+  }
+  ::selection {
+    background: var(--af-accent-subtle);
+    color: var(--af-fg);
+  }
+  code,
+  kbd,
+  samp,
+  pre {
+    font-family: var(--af-font-mono);
+    font-size: 0.95em;
+  }
+  button,
+  [role='button'] {
+    cursor: pointer;
+  }
+  :disabled,
+  [aria-disabled='true'] {
+    cursor: not-allowed;
+  }
+  input::placeholder,
+  textarea::placeholder {
+    color: var(--af-fg-3);
+    opacity: 1;
+  }
+}
+
+@layer components {
+  /* Equipment-label eyebrow: Archivo condensed, uppercase, tracked. */
+  .af-eyebrow {
+    font: var(--af-label-font);
+    font-stretch: var(--af-label-stretch);
+    letter-spacing: var(--af-tracking-label);
+    text-transform: uppercase;
+    color: var(--af-fg-3);
+  }
+  .af-page-title {
+    font: var(--af-page-title-font);
+    font-stretch: var(--af-display-stretch);
+    letter-spacing: var(--af-tracking-tight);
+    color: var(--af-fg);
+  }
+  .af-display {
+    font-family: var(--af-font-display);
+    font-stretch: var(--af-display-stretch);
+    letter-spacing: var(--af-tracking-tight);
+  }
+  .af-kpi-value {
+    font: var(--af-kpi-value-font);
+    font-stretch: var(--af-display-stretch);
+    letter-spacing: var(--af-tracking-tight);
+  }
+  .af-wordmark {
+    font-family: var(--af-font-display);
+    font-stretch: var(--af-brand-stretch);
+    letter-spacing: var(--af-tracking-tight);
+    line-height: 1;
+  }
+
+  /* The row currently shown in the inspector: a temper-blue edge. */
+  .af-row-active {
+    box-shadow: inset 2px 0 0 var(--af-accent);
+  }
+
+  /* Skeleton shimmer: a soft sweep of the text colour over the hover surface; still under reduced motion. */
+  .af-skeleton {
+    background-color: var(--af-hover);
+    background-image: linear-gradient(
+      90deg,
+      transparent 0%,
+      color-mix(in oklab, var(--af-fg) 7%, transparent) 50%,
+      transparent 100%
+    );
+    background-size: 200% 100%;
+    background-repeat: no-repeat;
+    animation: af-shimmer 1.6s var(--af-motion-ease) infinite;
+  }
+
+  /* Floating layers: state feedback only, never decoration. */
+  .af-pop[data-state='open'],
+  .af-pop[data-state='delayed-open'],
+  .af-pop[data-state='instant-open'] {
+    animation: af-pop-in var(--af-motion-fast) var(--af-motion-ease);
+  }
+  .af-pop[data-state='closed'] {
+    animation: af-fade-out var(--af-motion-fast) var(--af-motion-ease);
+  }
+  .af-scrim[data-state='open'] {
+    animation: af-fade-in var(--af-motion-base) var(--af-motion-ease);
+  }
+  .af-scrim[data-state='closed'] {
+    animation: af-fade-out var(--af-motion-fast) var(--af-motion-ease);
+  }
+  .af-sheet[data-state='open'] {
+    animation: af-sheet-in var(--af-motion-base) var(--af-motion-ease);
+  }
+  .af-sheet[data-state='closed'] {
+    animation: af-sheet-out var(--af-motion-fast) var(--af-motion-ease);
+  }
+  .af-toast[data-state='open'] {
+    animation: af-toast-in var(--af-motion-base) var(--af-motion-ease);
+  }
+  .af-toast[data-state='closed'] {
+    animation: af-fade-out var(--af-motion-fast) var(--af-motion-ease);
+  }
+  .af-toast[data-swipe='move'] {
+    transform: translateX(var(--radix-toast-swipe-move-x));
+  }
+  .af-toast[data-swipe='end'] {
+    animation: af-toast-out var(--af-motion-fast) var(--af-motion-ease);
+  }
+}
+
+@keyframes af-shimmer {
+  from {
+    background-position: 150% 0;
+  }
+  to {
+    background-position: -50% 0;
+  }
+}
+@keyframes af-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes af-fade-out {
+  to {
+    opacity: 0;
+  }
+}
+@keyframes af-pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(2px) scale(0.98);
+  }
+}
+@keyframes af-sheet-in {
+  from {
+    transform: translateX(16px);
+    opacity: 0;
+  }
+}
+@keyframes af-sheet-out {
+  to {
+    transform: translateX(16px);
+    opacity: 0;
+  }
+}
+@keyframes af-toast-in {
+  from {
+    transform: translateY(8px);
+    opacity: 0;
+  }
+}
+@keyframes af-toast-out {
+  to {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .af-skeleton {
+    animation: none;
+  }
+}
+
+@media (forced-colors: active) {
+  :focus-visible {
+    outline-color: Highlight;
+  }
+}

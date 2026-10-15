@@ -1,0 +1,272 @@
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import { useRouterState } from '@tanstack/react-router';
+import type { ArmRequest, MeResponse } from '@adminforge/schemas';
+import { Brand, Button, ErrorState, Skeleton, useMediaQuery, useToast } from '@adminforge/ui';
+import { api, ApiRequestError, ExtendResponse, RedirectResponse } from '../lib/api';
+import { browser } from '../lib/browser';
+import { hydratePrefs, pushRecent, updatePrefs, usePrefs } from '../lib/prefs';
+import { meQuery, SessionContext, useNav, useSession } from '../lib/session';
+import { useArmState, WARN_BEFORE_MS } from './arm';
+import { ArmControl } from './ArmControl';
+import { CommandPalette } from './CommandPalette';
+import { DevToolbar } from './DevToolbar';
+import { Inspector } from './Inspector';
+import { NavRail } from './NavRail';
+import { RunDock } from './RunDock';
+import { SessionRail } from './SessionRail';
+import { ShellContext, type ShellApi } from './shell-context';
+import { UserMenu } from './UserMenu';
+
+function Splash({ message }: { message: string }) {
+  return (
+    <div className="flex min-h-dvh flex-col items-center justify-center gap-5" aria-busy="true">
+      <Brand size="lg" />
+      <div className="flex w-48 flex-col items-center gap-2">
+        <Skeleton className="h-1 w-full rounded-pill" />
+        <p className="text-sm text-fg-3" role="status">
+          {message}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+const timeOf = (iso: string) => new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+function SignedInShell({ me, children }: { me: MeResponse; children: ReactNode }) {
+  const queryClient = useQueryClient();
+  const nav = useNav();
+  const prefs = usePrefs();
+  const { toast } = useToast();
+  const arm = useArmState(me);
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const narrow = useMediaQuery('(max-width: 1023px)');
+  const collapsed = Boolean(prefs.navCollapsed) || narrow;
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const [armDialogOpen, setArmDialogOpen] = useState(false);
+
+  // Server preferences win once per session load.
+  const hydrated = useRef(false);
+  useEffect(() => {
+    if (hydrated.current) return;
+    hydrated.current = true;
+    hydratePrefs(me.prefs);
+  }, [me.prefs]);
+
+  // <html> attributes the tokens and shell.css key off.
+  useEffect(() => {
+    document.documentElement.dataset.nav = collapsed ? 'collapsed' : 'expanded';
+  }, [collapsed]);
+  useEffect(() => {
+    document.documentElement.dataset.mode = arm.armed ? 'armed' : 'read';
+    return () => {
+      document.documentElement.dataset.mode = 'read';
+    };
+  }, [arm.armed]);
+
+  const refreshMe = useCallback(
+    () => queryClient.invalidateQueries({ queryKey: meQuery.queryKey }),
+    [queryClient],
+  );
+
+  const extend = useCallback(async () => {
+    try {
+      const { armedUntil } = await api('/auth/arm/extend', { method: 'POST', schema: ExtendResponse });
+      queryClient.setQueryData(meQuery.queryKey, (old) =>
+        old ? { ...old, armedUntil, armExtended: true } : old,
+      );
+      toast({ tone: 'ok', title: `Write access extended until ${timeOf(armedUntil)}` });
+    } catch (e) {
+      toast({ tone: 'crit', title: 'Write access was not extended', description: (e as Error).message });
+    }
+  }, [queryClient, toast]);
+
+  const disarm = useCallback(async () => {
+    try {
+      await api('/auth/disarm', { method: 'POST' });
+      queryClient.setQueryData(meQuery.queryKey, (old) =>
+        old ? { ...old, mode: 'read' as const, armedUntil: null } : old,
+      );
+      toast({ tone: 'info', title: 'Write access ended', description: 'You’re back in read-only mode.' });
+      void refreshMe();
+    } catch (e) {
+      toast({
+        tone: 'crit',
+        title: 'Write access is still on',
+        description: `${(e as Error).message} Try Disarm again, or sign out.`,
+      });
+    }
+  }, [queryClient, refreshMe, toast]);
+
+  const onArm = useCallback(async (request: ArmRequest) => {
+    const { redirect } = await api('/auth/arm', { method: 'POST', body: request, schema: RedirectResponse });
+    browser.assign(redirect);
+  }, []);
+
+  const signOut = useCallback(async () => {
+    try {
+      const { redirect } = await api('/auth/logout', { method: 'POST', schema: RedirectResponse });
+      browser.assign(redirect);
+    } catch (e) {
+      toast({ tone: 'crit', title: 'Sign-out did not complete', description: (e as Error).message });
+    }
+  }, [toast]);
+
+  // Five minutes left: one toast offering Extend. At expiry the UI disarms and re-reads the session.
+  const warned = useRef(false);
+  const wasArmed = useRef(arm.armed);
+  const nearExpiry = arm.armed && arm.remainingMs <= WARN_BEFORE_MS;
+  useEffect(() => {
+    if (!arm.armed) warned.current = false;
+    if (nearExpiry && !warned.current) {
+      warned.current = true;
+      toast({
+        tone: 'warn',
+        title: 'Write access ends in 5 minutes',
+        description: arm.canExtend
+          ? 'Extend once without signing in again.'
+          : 'Arm again when it ends if you still need it.',
+        action: arm.canExtend ? { label: 'Extend', onClick: () => void extend() } : undefined,
+        duration: 60_000,
+      });
+    }
+    if (wasArmed.current && !arm.armed && me.mode === 'armed') {
+      toast({
+        tone: 'info',
+        title: 'Write access ended',
+        description: 'The time you chose ran out. You’re read-only again.',
+      });
+      void refreshMe();
+    }
+    wasArmed.current = arm.armed;
+  }, [arm.armed, arm.canExtend, nearExpiry, me.mode, extend, refreshMe, toast]);
+
+  // Ctrl/⌘K anywhere.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && !e.altKey && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setPaletteOpen((o) => !o);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
+  // Remember visited content pages for the palette's Recent group.
+  const knownHrefs = useMemo(
+    () => new Set((nav.data?.sections ?? []).flatMap((s) => s.items.map((i) => i.href))),
+    [nav.data],
+  );
+  useEffect(() => {
+    if (pathname !== '/' && knownHrefs.has(pathname)) pushRecent(pathname);
+  }, [pathname, knownHrefs]);
+
+  const shell: ShellApi = useMemo(
+    () => ({
+      arm,
+      openArmDialog: () => setArmDialogOpen(true),
+      openPalette: () => setPaletteOpen(true),
+      extend,
+      disarm,
+      signOut,
+    }),
+    [arm, extend, disarm, signOut],
+  );
+
+  return (
+    <SessionContext.Provider value={me}>
+      <ShellContext.Provider value={shell}>
+        <a
+          href="#main"
+          className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-(--af-z-palette) focus:rounded-md focus:bg-accent focus:px-3 focus:py-2 focus:font-semibold focus:text-on-accent"
+        >
+          Skip to content
+        </a>
+        <SessionRail
+          me={me}
+          onOpenPalette={() => setPaletteOpen(true)}
+          armControl={
+            <ArmControl
+              canArm={me.canArm}
+              authMode={me.authMode}
+              arm={arm}
+              tenantName={me.tenant.name}
+              dialogOpen={armDialogOpen}
+              onDialogOpenChange={setArmDialogOpen}
+              onArm={onArm}
+              onExtend={extend}
+              onDisarm={disarm}
+            />
+          }
+          userMenu={<UserMenu me={me} onSignOut={() => void signOut()} />}
+        />
+        <NavRail
+          sections={nav.data?.sections}
+          loading={nav.isPending}
+          collapsed={collapsed}
+          onToggle={() => updatePrefs({ navCollapsed: !collapsed })}
+        />
+        <main
+          id="main"
+          tabIndex={-1}
+          className="min-h-dvh pt-(--af-layout-rail-h) pb-(--af-layout-dock-h) pl-(--af-layout-nav-w) outline-none transition-all duration-(--af-motion-base) nav-collapsed:pl-(--af-layout-nav-w-collapsed)"
+        >
+          <div className="mx-auto w-full max-w-(--af-layout-content-max) px-8 pt-7 pb-12">
+            {nav.isError && (
+              <div className="mb-6">
+                <ErrorState
+                  compact
+                  title="Navigation didn’t load"
+                  message={(nav.error as Error).message}
+                  code={nav.error instanceof ApiRequestError ? nav.error.code : undefined}
+                  correlationId={nav.error instanceof ApiRequestError ? nav.error.correlationId : undefined}
+                  action={
+                    <Button size="sm" onClick={() => void nav.refetch()}>
+                      Try again
+                    </Button>
+                  }
+                />
+              </div>
+            )}
+            {children}
+          </div>
+        </main>
+        <RunDock trailing={<DevToolbar me={me} />} />
+        <Inspector />
+        <CommandPalette
+          open={paletteOpen}
+          onOpenChange={setPaletteOpen}
+          sections={nav.data?.sections}
+          canArm={me.canArm}
+        />
+      </ShellContext.Provider>
+    </SessionContext.Provider>
+  );
+}
+
+/** Gate: nothing renders until GET /api/me answers; a 401 is already on its way to sign-in. */
+export function AppShell({ children }: { children: ReactNode }) {
+  const session = useSession();
+  if (session.isPending) return <Splash message="Checking your session…" />;
+  if (session.isError) {
+    const err = session.error;
+    if (err instanceof ApiRequestError && err.status === 401)
+      return <Splash message="Taking you to sign-in…" />;
+    return (
+      <div className="flex min-h-dvh flex-col items-center justify-center gap-8 p-8">
+        <Brand size="lg" />
+        <ErrorState
+          title="AdminForge couldn’t load your session"
+          message={err.message}
+          hint={err instanceof ApiRequestError ? err.hint : undefined}
+          code={err instanceof ApiRequestError ? err.code : undefined}
+          correlationId={err instanceof ApiRequestError ? err.correlationId : undefined}
+          action={<Button onClick={() => void session.refetch()}>Try again</Button>}
+        />
+      </div>
+    );
+  }
+  return <SignedInShell me={session.data}>{children}</SignedInShell>;
+}

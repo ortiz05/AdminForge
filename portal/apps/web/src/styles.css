@@ -1,0 +1,15 @@
+@import 'tailwindcss';
+
+/* Self-hosted fonts (font-src 'self'). Archivo ships its width axis (62–125 %) in wdth.css. */
+@import '@fontsource-variable/archivo/wdth.css';
+@import '@fontsource-variable/atkinson-hyperlegible-next';
+@import '@fontsource-variable/atkinson-hyperlegible-mono';
+
+/* Tokens → CSS variables → the only Tailwind theme that exists. */
+@import '@adminforge/design-tokens/tokens.css';
+@import '@adminforge/design-tokens/tailwind-theme.css';
+@import '@adminforge/ui/styles/base.css';
+@import '@adminforge/ui/styles/shell.css';
+
+@source '../../../packages/ui/src';
+@source '../../../packages/widgets/src';

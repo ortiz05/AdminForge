@@ -1,0 +1,102 @@
+/*
+ * Session chrome and the armed state — the one orchestrated moment in AdminForge.
+ * Read mode: calm steel. Armed: the rail fills left → right with ember and a faint 45° texture,
+ * and a 2 px ember ring frames the viewport for as long as write tokens are held.
+ */
+@layer components {
+  .af-rail {
+    position: relative;
+    height: var(--af-layout-rail-h);
+    background: var(--af-panel);
+    color: var(--af-fg);
+    border-bottom: 1px solid var(--af-line);
+    isolation: isolate;
+    transition:
+      color var(--af-motion-slow) var(--af-motion-ease),
+      border-color var(--af-motion-slow) var(--af-motion-ease);
+  }
+  .af-rail::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    background: var(--af-armed-texture), var(--af-armed);
+    transform: scaleX(0);
+    transform-origin: left;
+    transition: transform var(--af-motion-slow) var(--af-motion-ease);
+  }
+  html[data-mode='armed'] .af-rail {
+    color: var(--af-on-armed);
+    border-bottom-color: var(--af-armed);
+  }
+  html[data-mode='armed'] .af-rail::before {
+    transform: scaleX(1);
+  }
+
+  /* Viewport ring: above every layer (dialogs included) but never interactive. */
+  body::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    box-shadow: var(--af-armed-ring);
+    z-index: calc(var(--af-z-palette) + 1);
+    opacity: 0;
+    visibility: hidden;
+    transition:
+      opacity var(--af-motion-slow) var(--af-motion-ease),
+      visibility 0s linear var(--af-motion-slow);
+  }
+  html[data-mode='armed'] body::after {
+    opacity: 1;
+    visibility: visible;
+    transition: opacity var(--af-motion-slow) var(--af-motion-ease) var(--af-motion-fast);
+  }
+
+  /* Locked write actions gain an ember dot once armed. */
+  .af-armed-dot {
+    display: none;
+  }
+  html[data-mode='armed'] .af-armed-dot {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: var(--af-radius-pill);
+    background: var(--af-armed);
+  }
+
+  /* Active navigation item: a temper-blue edge, not a fill. */
+  .af-nav-active {
+    position: relative;
+  }
+  .af-nav-active::before {
+    content: '';
+    position: absolute;
+    left: calc(var(--af-space-2) * -1);
+    top: 50%;
+    width: 2px;
+    height: 60%;
+    transform: translateY(-50%);
+    border-radius: var(--af-radius-pill);
+    background: var(--af-accent);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .af-rail,
+  .af-rail::before,
+  body::after {
+    transition: none !important;
+  }
+}
+
+@media (forced-colors: active) {
+  html[data-mode='armed'] .af-rail {
+    border-bottom: 3px solid Mark;
+  }
+  html[data-mode='armed'] body::after {
+    box-shadow: none;
+    outline: 3px solid Mark;
+    outline-offset: -3px;
+  }
+}

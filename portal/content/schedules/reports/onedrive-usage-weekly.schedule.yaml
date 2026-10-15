@@ -1,0 +1,36 @@
+$schema: ../../../packages/schemas/generated/schedule.schema.json
+kind: schedule
+id: reports.onedrive-usage-weekly
+version: 1.0.0
+title: Weekly OneDrive storage and activity report
+summary: >-
+  Every Monday at 07:30 UTC, writes OneDrive accounts with no activity for 90 days (often leavers) or at 90 % of
+  their storage limit as XLSX and emails it to the report recipients.
+owner: m365-team
+tags: [m365, onedrive, storage, offboarding, report]
+cron: "30 7 * * 1"
+timezone: UTC
+enabled: true
+identity: automation
+job:
+  kind: report
+  ref: m365.onedrive-usage
+  params: { view: attention, days: 90, threshold: 90 }
+  delivery:
+    - type: file
+      format: xlsx
+      path: m365/onedrive-usage/{date}.xlsx
+      retain: 26
+    # Recipients are configuration (never content); without AF_MAIL_SENDER / AF_REPORT_RECIPIENTS the run notes
+    # "not configured" and the file is still kept.
+    - type: email
+      to: ["${ env.AF_REPORT_RECIPIENTS }"]
+      format: xlsx
+retry: { max: 2, backoff: exponential, delay: 5m }
+timeoutSeconds: 1800
+overlap: skip
+requires:
+  # Application permissions held by the automation identity (ADR-011).
+  scopes:
+    graph: [Reports.Read.All]
+  licences: [sharepoint]

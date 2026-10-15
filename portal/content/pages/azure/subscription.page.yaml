@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/page.schema.json
 kind: page
 id: azure.subscription
-version: 1.0.0
+version: 1.0.1
 title: Subscription
 summary: One Azure subscription — state, resource groups, what it contains, who has access and which Defender for Cloud plans are on.
 owner: azure-team
@@ -57,14 +57,16 @@ datasources:
     cache: { ttl: 300 }
   access:
     source: resourceGraph
+    # Resource Graph returns computed booleans as 1/0 (tostring() gives True/False): flags are projected as
+    # 'true'/'false' text with iff() for the status maps and facets.
     query: |
       // af:azure.subscription#access
       authorizationresources
       | where type =~ 'microsoft.authorization/roleassignments'
-      | extend scope = tolower(tostring(properties.scope)), principalId = tostring(properties.principalId), principalType = tostring(properties.principalType), roleDefinitionGuid = tolower(extract('([0-9a-fA-F-]{36})$', 1, tostring(properties.roleDefinitionId))), createdOn = todatetime(properties.createdOn), hasCondition = isnotempty(tostring(properties.condition))
+      | extend scope = tolower(tostring(properties.scope)), principalId = tostring(properties.principalId), principalType = tostring(properties.principalType), roleDefinitionGuid = tolower(extract('([0-9a-fA-F-]{36})$', 1, tostring(properties.roleDefinitionId))), createdOn = todatetime(properties.createdOn), hasCondition = iff(isnotempty(tostring(properties.condition)), 'true', 'false')
       | where scope == '/subscriptions/${ $guid(params.id) }'
       | join kind=leftouter (authorizationresources | where type =~ 'microsoft.authorization/roledefinitions' | extend roleDefinitionGuid = tolower(name), roleName = tostring(properties.roleName), roleType = tostring(properties.type) | summarize roleName = any(roleName), roleType = any(roleType) by roleDefinitionGuid) on roleDefinitionGuid
-      | extend privileged = roleName in~ ('Owner', 'User Access Administrator', 'Role Based Access Control Administrator')
+      | extend privileged = iff(roleName in~ ('Owner', 'User Access Administrator', 'Role Based Access Control Administrator'), 'true', 'false')
       | project id, roleName, roleType, principalId, principalType, privileged, hasCondition, createdOn
       | order by privileged desc, roleName asc
     cache: { ttl: 120 }
@@ -207,7 +209,7 @@ tabs:
             filter: facet
           - { field: principalId, label: Principal, kind: guid }
           - { field: principalType, label: Principal type, filter: facet }
-          - { field: hasCondition, label: Condition, kind: boolean }
+          - { field: hasCondition, label: Condition, kind: status, map: { "true": [info, Conditional], "false": [neutral, None] }, filter: facet }
           - { field: createdOn, label: Assigned, kind: date, filter: date }
         rowActions:
           - playbook: azure.remove-role-assignment

@@ -1,0 +1,155 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#servicePrincipals('00000000-0000-4000-8000-000000000409')/appRoleAssignedTo",
+  "value": [
+    {
+      "id": "ara-graph-0001",
+      "principalId": "00000000-0000-4000-8000-000000000401",
+      "principalDisplayName": "Example HR Sync",
+      "principalType": "ServicePrincipal",
+      "appRoleId": "df021288-bdef-4463-88db-98f22de89214",
+      "resourceDisplayName": "Microsoft Graph",
+      "resourceId": "00000000-0000-4000-8000-000000000409",
+      "createdDateTime": "2025-02-03T09:00:00Z"
+    },
+    {
+      "id": "ara-graph-0002",
+      "principalId": "00000000-0000-4000-8000-000000000401",
+      "principalDisplayName": "Example HR Sync",
+      "principalType": "ServicePrincipal",
+      "appRoleId": "5b567255-7703-4780-807c-7be8301ae99b",
+      "resourceDisplayName": "Microsoft Graph",
+      "resourceId": "00000000-0000-4000-8000-000000000409",
+      "createdDateTime": "2025-02-03T09:00:00Z"
+    },
+    {
+      "id": "ara-graph-0003",
+      "principalId": "00000000-0000-4000-8000-000000000402",
+      "principalDisplayName": "Example Portal",
+      "principalType": "ServicePrincipal",
+      "appRoleId": "b633e1c5-b582-4048-a93e-9f11b44c7e96",
+      "resourceDisplayName": "Microsoft Graph",
+      "resourceId": "00000000-0000-4000-8000-000000000409",
+      "createdDateTime": "2025-06-11T14:20:00Z"
+    },
+    {
+      "id": "ara-graph-0004",
+      "principalId": "00000000-0000-4000-8000-000000000403",
+      "principalDisplayName": "Example Reporting",
+      "principalType": "ServicePrincipal",
+      "appRoleId": "230c1aed-a721-4c5d-9cb4-a90514e508ef",
+      "resourceDisplayName": "Microsoft Graph",
+      "resourceId": "00000000-0000-4000-8000-000000000409",
+      "createdDateTime": "2025-03-18T10:05:00Z"
+    },
+    {
+      "id": "ara-graph-0005",
+      "principalId": "00000000-0000-4000-8000-000000000403",
+      "principalDisplayName": "Example Reporting",
+      "principalType": "ServicePrincipal",
+      "appRoleId": "b0afded3-3588-46d8-8b3d-9842eff778da",
+      "resourceDisplayName": "Microsoft Graph",
+      "resourceId": "00000000-0000-4000-8000-000000000409",
+      "createdDateTime": "2025-03-18T10:05:00Z"
+    },
+    {
+      "id": "ara-graph-0006",
+      "principalId": "00000000-0000-4000-8000-000000000404",
+      "principalDisplayName": "PDF Converter Online",
+      "principalType": "ServicePrincipal",
+      "appRoleId": "75359482-378d-4052-8f01-80520e7db3cd",
+      "resourceDisplayName": "Microsoft Graph",
+      "resourceId": "00000000-0000-4000-8000-000000000409",
+      "createdDateTime": "2026-08-27T16:42:00Z"
+    },
+    {
+      "id": "ara-graph-0007",
+      "principalId": "00000000-0000-4000-8000-000000000404",
+      "principalDisplayName": "PDF Converter Online",
+      "principalType": "ServicePrincipal",
+      "appRoleId": "810c84a8-4a9e-49e6-bf7d-12d183f40d01",
+      "resourceDisplayName": "Microsoft Graph",
+      "resourceId": "00000000-0000-4000-8000-000000000409",
+      "createdDateTime": "2026-08-27T16:42:00Z"
+    },
+    {
+      "id": "ara-graph-0008",
+      "principalId": "00000000-0000-4000-8000-000000000405",
+      "principalDisplayName": "Payroll Online",
+      "principalType": "ServicePrincipal",
+      "appRoleId": "df021288-bdef-4463-88db-98f22de89214",
+      "resourceDisplayName": "Microsoft Graph",
+      "resourceId": "00000000-0000-4000-8000-000000000409",
+      "createdDateTime": "2025-11-04T08:30:00Z"
+    },
+    {
+      "id": "ara-graph-0009",
+      "principalId": "00000000-0000-4000-8000-000000000406",
+      "principalDisplayName": "Example Data Pipeline",
+      "principalType": "ServicePrincipal",
+      "appRoleId": "332a536c-c7ef-4017-ab91-336970924f0d",
+      "resourceDisplayName": "Microsoft Graph",
+      "resourceId": "00000000-0000-4000-8000-000000000409",
+      "createdDateTime": "2025-09-22T12:00:00Z"
+    },
+    {
+      "id": "ara-graph-0010",
+      "principalId": "00000000-0000-4000-8000-000000000406",
+      "principalDisplayName": "Example Data Pipeline",
+      "principalType": "ServicePrincipal",
+      "appRoleId": "7ab1d382-f21e-4acd-a863-ba3e13f7da61",
+      "resourceDisplayName": "Microsoft Graph",
+      "resourceId": "00000000-0000-4000-8000-000000000409",
+      "createdDateTime": "2025-09-22T12:00:00Z"
+    },
+    {
+      "id": "ara-graph-0011",
+      "principalId": "00000000-0000-4000-8000-000000000407",
+      "principalDisplayName": "Legacy Automation",
+      "principalType": "ServicePrincipal",
+      "appRoleId": "9e3f62cf-ca93-4989-b6ce-bf83c28f9fe8",
+      "resourceDisplayName": "Microsoft Graph",
+      "resourceId": "00000000-0000-4000-8000-000000000409",
+      "createdDateTime": "2023-05-15T07:45:00Z"
+    },
+    {
+      "id": "ara-graph-0012",
+      "principalId": "00000000-0000-4000-8000-000000000407",
+      "principalDisplayName": "Legacy Automation",
+      "principalType": "ServicePrincipal",
+      "appRoleId": "1bfefb4e-e0b5-418b-a88f-73c46d2cc8e9",
+      "resourceDisplayName": "Microsoft Graph",
+      "resourceId": "00000000-0000-4000-8000-000000000409",
+      "createdDateTime": "2023-05-15T07:45:00Z"
+    },
+    {
+      "id": "ara-graph-0013",
+      "principalId": "00000000-0000-4000-8000-000000000407",
+      "principalDisplayName": "Legacy Automation",
+      "principalType": "ServicePrincipal",
+      "appRoleId": "19dbc75e-c2e2-444c-a770-ec69d8559fc7",
+      "resourceDisplayName": "Microsoft Graph",
+      "resourceId": "00000000-0000-4000-8000-000000000409",
+      "createdDateTime": "2023-05-15T07:45:00Z"
+    },
+    {
+      "id": "ara-graph-0014",
+      "principalId": "00000000-0000-4000-8000-00000000040a",
+      "principalDisplayName": "func-example",
+      "principalType": "ServicePrincipal",
+      "appRoleId": "5b567255-7703-4780-807c-7be8301ae99b",
+      "resourceDisplayName": "Microsoft Graph",
+      "resourceId": "00000000-0000-4000-8000-000000000409",
+      "createdDateTime": "2026-01-12T11:10:00Z"
+    },
+    {
+      "id": "ara-graph-0015",
+      "principalId": "00000000-0000-4000-8000-00000000040a",
+      "principalDisplayName": "func-example",
+      "principalType": "ServicePrincipal",
+      "appRoleId": "e2a3a72e-5f79-4c64-b1b1-878b674786c9",
+      "resourceDisplayName": "Microsoft Graph",
+      "resourceId": "00000000-0000-4000-8000-000000000409",
+      "createdDateTime": "2026-01-12T11:10:00Z"
+    }
+  ]
+}

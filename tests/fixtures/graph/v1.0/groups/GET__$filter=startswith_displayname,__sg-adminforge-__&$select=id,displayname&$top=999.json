@@ -1,0 +1,13 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#groups(id,displayName)",
+  "value": [
+    {
+      "id": "00000000-0000-4000-8000-0000000002fe",
+      "displayName": "SG-AdminForge-dev-Portal.Reader"
+    },
+    {
+      "id": "00000000-0000-4000-8000-0000000002ff",
+      "displayName": "SG-AdminForge-dev-Portal.Operator"
+    }
+  ]
+}

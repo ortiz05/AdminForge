@@ -1,0 +1,37 @@
+$schema: ../../../packages/schemas/generated/schedule.schema.json
+kind: schedule
+id: reports.privileged-rbac-assignments-weekly
+version: 1.0.0
+title: Weekly privileged Azure role assignments report
+summary: >-
+  Every Monday at 05:25 UTC, writes Owner, User Access Administrator and Role Based Access Control Administrator
+  assignments at subscription scope and above, flagging guests, external accounts, deleted identities, root-scope and
+  direct user assignments, as XLSX — a year of history for access reviews.
+  Email goes to AF_REPORT_RECIPIENTS when it and AF_MAIL_SENDER are configured.
+owner: azure-team
+tags: [azure, rbac, access, report]
+cron: "25 5 * * 1"
+timezone: UTC
+enabled: true
+identity: automation
+job:
+  kind: report
+  ref: azure.privileged-rbac-assignments
+  # Pinned rather than left to the report's defaults so the archive stays comparable from run to run.
+  params: { includeContributor: false, principalType: All }
+  delivery:
+    - type: file
+      format: xlsx
+      path: azure/privileged-rbac-assignments/{date}.xlsx
+      retain: 52
+    - type: email
+      to: ["${ env.AF_REPORT_RECIPIENTS }"]
+      format: xlsx
+retry: { max: 2, backoff: exponential, delay: 5m }
+timeoutSeconds: 1800
+overlap: skip
+requires:
+  # Reader for the assignments; Directory.Read.All (application) to resolve each principal with getByIds.
+  scopes:
+    graph: [Directory.Read.All]
+  azureRoles: [Reader]

@@ -1,0 +1,37 @@
+$schema: ../../../packages/schemas/generated/schedule.schema.json
+kind: schedule
+id: reports.alerts-summary-weekly
+version: 1.0.0
+title: Weekly Defender alerts summary
+summary: >-
+  Every Monday at 07:50 UTC, writes every Defender and Entra ID Protection alert of the last 7 days (severity,
+  status, product, owner, time to resolve) as XLSX and emails it to the report recipients for the weekly security
+  review.
+owner: security-team
+tags: [security, defender, alerts, report]
+cron: "50 7 * * 1"
+timezone: UTC
+enabled: true
+identity: automation
+job:
+  kind: report
+  ref: security.alerts-summary
+  params: { days: 7, severity: all, status: any }
+  delivery:
+    - type: file
+      format: xlsx
+      path: security/alerts-summary/{date}.xlsx
+      retain: 52
+    # Recipients are configuration (never content); without AF_MAIL_SENDER / AF_REPORT_RECIPIENTS the run notes
+    # "not configured" and the file is still kept.
+    - type: email
+      to: ["${ env.AF_REPORT_RECIPIENTS }"]
+      format: xlsx
+retry: { max: 2, backoff: exponential, delay: 5m }
+timeoutSeconds: 1800
+overlap: skip
+requires:
+  # Application permissions held by the automation identity (ADR-011).
+  scopes:
+    graph: [SecurityAlert.Read.All]
+  licences: [defender]

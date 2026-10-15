@@ -1,0 +1,28 @@
+$schema: ../../packages/schemas/generated/probe.schema.json
+kind: probe
+id: probes.defender-new-high-severity-alerts
+version: 1.0.0
+title: No untriaged high-severity Defender alerts
+summary: >-
+  Critical while a high-severity Microsoft Defender XDR or Entra ID Protection alert is still New (nobody has started
+  on it). Open Security → Alerts with "New high severity" to triage it; the Defender alerts summary report has the
+  weekly picture. Needs a Defender licence; without one there are no alerts and the probe stays healthy.
+owner: security-team
+tags: [synthetic, security, defender, alerts, sweep-15m]
+check:
+  kind: graph
+  path: /security/alerts_v2
+  query:
+    $filter: status eq 'new' and severity eq 'high'
+    $top: 1
+  expect:
+    status: 200
+    # An empty list means nothing is waiting; any new high-severity alert makes the probe critical.
+    bodyContains: '"value":[]'
+thresholds: { warn: 3000, crit: 8000 }
+intervalHint: PT15M
+timeoutMs: 20000
+requires:
+  scopes:
+    graph: [SecurityAlert.Read.All]
+  licences: [defender]

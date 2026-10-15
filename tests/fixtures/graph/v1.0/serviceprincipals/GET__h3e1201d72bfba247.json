@@ -1,0 +1,116 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#servicePrincipals(id,appId,displayName,passwordCredentials,keyCredentials,preferredSingleSignOnMode,servicePrincipalType,appOwnerOrganizationId)",
+  "value": [
+    {
+      "id": "00000000-0000-4000-8000-000000000401",
+      "appId": "00000000-0000-4000-8001-000000000301",
+      "displayName": "Example HR Sync",
+      "servicePrincipalType": "Application",
+      "appOwnerOrganizationId": "00000000-0000-4000-8000-00000000e0e0",
+      "preferredSingleSignOnMode": null,
+      "passwordCredentials": [],
+      "keyCredentials": []
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000403",
+      "appId": "00000000-0000-4000-8001-000000000303",
+      "displayName": "Example Reporting",
+      "servicePrincipalType": "Application",
+      "appOwnerOrganizationId": "00000000-0000-4000-8000-00000000e0e0",
+      "preferredSingleSignOnMode": null,
+      "passwordCredentials": [
+        {
+          "keyId": "00000000-0000-4000-8000-0000000c4031",
+          "displayName": "backup",
+          "startDateTime": "2026-10-10T21:14:00Z",
+          "endDateTime": "2028-10-10T21:14:00Z",
+          "hint": "bac"
+        }
+      ],
+      "keyCredentials": []
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000405",
+      "appId": "00000000-0000-4000-8001-000000000405",
+      "displayName": "Payroll Online",
+      "servicePrincipalType": "Application",
+      "appOwnerOrganizationId": "00000000-0000-4000-8000-00000000e0f1",
+      "preferredSingleSignOnMode": "saml",
+      "passwordCredentials": [
+        {
+          "keyId": "00000000-0000-4000-8000-0000000c4051",
+          "displayName": "CN=Payroll Online SSO",
+          "startDateTime": "2025-04-01T00:00:00Z",
+          "endDateTime": "2028-04-01T00:00:00Z",
+          "hint": "CN="
+        }
+      ],
+      "keyCredentials": [
+        {
+          "keyId": "00000000-0000-4000-8000-0000000c4052",
+          "displayName": "CN=Payroll Online SSO",
+          "type": "AsymmetricX509Cert",
+          "usage": "Sign",
+          "startDateTime": "2025-04-01T00:00:00Z",
+          "endDateTime": "2028-04-01T00:00:00Z"
+        },
+        {
+          "keyId": "00000000-0000-4000-8000-0000000c4053",
+          "displayName": "CN=Payroll Online SSO",
+          "type": "AsymmetricX509Cert",
+          "usage": "Verify",
+          "startDateTime": "2025-04-01T00:00:00Z",
+          "endDateTime": "2028-04-01T00:00:00Z"
+        }
+      ]
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000408",
+      "appId": "00000002-0000-0ff1-ce00-000000000000",
+      "displayName": "Office 365 Exchange Online",
+      "servicePrincipalType": "Application",
+      "appOwnerOrganizationId": "f8cdef31-a31e-4b4a-93e4-5f571e91255a",
+      "preferredSingleSignOnMode": null,
+      "passwordCredentials": [],
+      "keyCredentials": [
+        {
+          "keyId": "00000000-0000-4000-8000-0000000c4081",
+          "displayName": "",
+          "type": "AsymmetricX509Cert",
+          "usage": "Verify",
+          "startDateTime": "2026-10-12T03:02:00Z",
+          "endDateTime": "2027-10-12T03:02:00Z"
+        }
+      ]
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000409",
+      "appId": "00000003-0000-0000-c000-000000000000",
+      "displayName": "Microsoft Graph",
+      "servicePrincipalType": "Application",
+      "appOwnerOrganizationId": "f8cdef31-a31e-4b4a-93e4-5f571e91255a",
+      "preferredSingleSignOnMode": null,
+      "passwordCredentials": [],
+      "keyCredentials": []
+    },
+    {
+      "id": "00000000-0000-4000-8000-00000000040a",
+      "appId": "00000000-0000-4000-8001-00000000040a",
+      "displayName": "func-example",
+      "servicePrincipalType": "ManagedIdentity",
+      "appOwnerOrganizationId": null,
+      "preferredSingleSignOnMode": null,
+      "passwordCredentials": [],
+      "keyCredentials": [
+        {
+          "keyId": "00000000-0000-4000-8000-0000000c0040",
+          "displayName": "CN=managed",
+          "type": "AsymmetricX509Cert",
+          "usage": "Verify",
+          "startDateTime": "2026-09-01T00:00:00Z",
+          "endDateTime": "2027-01-01T00:00:00Z"
+        }
+      ]
+    }
+  ]
+}

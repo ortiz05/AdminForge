@@ -1,0 +1,222 @@
+$schema: ../../../packages/schemas/generated/report.schema.json
+kind: report
+id: azure.app-service-security
+version: 1.0.0
+title: App Service security settings
+summary: Web apps and Function Apps that accept plain HTTP, allow TLS below 1.2, allow unencrypted FTP, have remote debugging on or run a language version past (or near) its end of support — each setting per app, from the site configuration in Resource Graph.
+owner: azure-team
+tags: [azure, app-service, functions, security, tls, resource-graph]
+nav: { section: reports, label: App Service security settings, icon: globe-simple, order: 195 }
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    arm: [user_impersonation]
+  azureRoles: [Reader]
+
+params:
+  appKind:
+    type: enum
+    label: Apps
+    facet: true
+    default: any
+    values:
+      - { value: any, label: Web apps and Function Apps }
+      - { value: web, label: Web apps }
+      - { value: function, label: Function Apps }
+  findingsOnly: { type: boolean, default: true, label: Only apps with findings, facet: true }
+  subscriptionId: { type: string, format: guid, label: Subscription, picker: subscription, facet: true }
+
+datasources:
+  apps:
+    source: resourceGraph
+    # The language version comes from the site configuration (linuxFxVersion on Linux; netFrameworkVersion, PHP, Python,
+    # Node or Java version on Windows). Support dates as of October 2026 — review the list when a version leaves support:
+    # .NET ≤ 7, Node ≤ 20, Python ≤ 3.9, PHP ≤ 8.1, Tomcat ≤ 8.5, Ruby: ended; .NET 8 and 9 (Nov 2026), Python 3.10
+    # (Oct 2026), PHP 8.2 (Dec 2026): ending within three months. Function Apps on Windows keep their language in app
+    # settings, which Resource Graph doesn't hold ("Not reported").
+    query: |
+      // af:azure.app-service-security#rows
+      resources
+      | where type =~ 'microsoft.web/sites'
+      ${ params.appKind = 'function' ? "| where kind contains 'functionapp'" : params.appKind = 'web' ? "| where kind !contains 'functionapp'" : '' }
+      ${ params.subscriptionId ? "| where subscriptionId == '" & $guid(params.subscriptionId) & "'" }
+      | extend lid = tolower(id), appKind = iff(kind contains 'functionapp', 'Function App', 'Web app'), state = tostring(properties.state), httpsOnly = coalesce(tobool(properties.httpsOnly), false), publicNetworkAccess = iff(isempty(tostring(properties.publicNetworkAccess)), 'Enabled', tostring(properties.publicNetworkAccess)), defaultHostName = tostring(properties.defaultHostName), isLinux = kind contains 'linux'
+      | join kind=leftouter (
+          appserviceresources
+          | where type =~ 'microsoft.web/sites/config'
+          | extend siteId = tolower(tostring(split(id, '/config/')[0])), minTlsVersion = tostring(properties.minTlsVersion), ftpsState = tostring(properties.ftpsState), remoteDebugging = coalesce(tobool(properties.remoteDebuggingEnabled), false), linuxFx = toupper(tostring(properties.linuxFxVersion)), netFx = tolower(tostring(properties.netFrameworkVersion)), phpVersion = tostring(properties.phpVersion), pythonVersion = tostring(properties.pythonVersion), nodeVersion = tostring(properties.nodeVersion), javaVersion = tostring(properties.javaVersion), javaContainer = toupper(tostring(properties.javaContainer)), javaContainerVersion = tostring(properties.javaContainerVersion)
+          | project siteId, minTlsVersion, ftpsState, remoteDebugging, linuxFx, netFx, phpVersion, pythonVersion, nodeVersion, javaVersion, javaContainer, javaContainerVersion
+        ) on $left.lid == $right.siteId
+      | extend runtime = case(
+          appKind == 'Function App' and not(isLinux), '',
+          isnotempty(linuxFx) and linuxFx !startswith 'DOCKER' and linuxFx !startswith 'COMPOSE', linuxFx,
+          linuxFx startswith 'DOCKER' or linuxFx startswith 'COMPOSE', 'CONTAINER',
+          javaContainer == 'TOMCAT' and isnotempty(javaContainerVersion), strcat('TOMCAT|', javaContainerVersion),
+          isnotempty(javaVersion), strcat('JAVA|', javaVersion),
+          isnotempty(phpVersion) and phpVersion !~ 'OFF', strcat('PHP|', phpVersion),
+          isnotempty(pythonVersion), strcat('PYTHON|', pythonVersion),
+          isnotempty(nodeVersion), strcat('NODE|', replace_string(nodeVersion, '~', '')),
+          netFx matches regex @'^v([5-9]|1[0-9])\.', strcat('DOTNET|', substring(netFx, 1)),
+          netFx startswith 'v4', 'DOTNETFRAMEWORK|4.8',
+          '')
+      | extend stack = tostring(split(runtime, '|')[0]), major = toint(extract(@'\|[^0-9]*([0-9]+)', 1, runtime)), minor = toint(extract(@'\|[^0-9]*[0-9]+\.([0-9]+)', 1, runtime))
+      | extend runtimeSupport = case(
+          isempty(runtime), 'Not reported',
+          runtime == 'CONTAINER', 'Container',
+          stack in ('DOTNET', 'DOTNETCORE', 'DOTNET-ISOLATED') and major <= 7, 'Ended',
+          stack in ('DOTNET', 'DOTNETCORE', 'DOTNET-ISOLATED') and major in (8, 9), 'Ending soon',
+          stack == 'NODE' and major <= 20, 'Ended',
+          stack == 'PYTHON' and major == 3 and minor <= 9, 'Ended',
+          stack == 'PYTHON' and major == 3 and minor == 10, 'Ending soon',
+          stack == 'PHP' and (major < 8 or (major == 8 and minor <= 1)), 'Ended',
+          stack == 'PHP' and major == 8 and minor == 2, 'Ending soon',
+          stack == 'TOMCAT' and major <= 8, 'Ended',
+          stack == 'RUBY', 'Ended',
+          'Supported')
+      | extend findings = iff(httpsOnly, 0, 1) + iff(minTlsVersion in ('1.0', '1.1'), 1, 0) + iff(ftpsState =~ 'AllAllowed', 1, 0) + iff(remoteDebugging, 1, 0) + iff(runtimeSupport == 'Ended', 1, 0)
+      ${ params.findingsOnly = false ? '' : "| where findings > 0 or runtimeSupport == 'Ending soon'" }
+      | join kind=leftouter (resourcecontainers | where type =~ 'microsoft.resources/subscriptions' | project subscriptionId, subscriptionName = name) on subscriptionId
+      | project id, name, appKind, defaultHostName, state, httpsOnly = iff(httpsOnly, 'true', 'false'), minTlsVersion, ftpsState, remoteDebugging = iff(remoteDebugging, 'true', 'false'), runtime, runtimeSupport, publicNetworkAccess, findings, resourceGroup, subscriptionId, subscriptionName, location, tags
+      | order by findings desc, name asc
+    paging: all
+    maxItems: 20000
+    cache: { ttl: 300 }
+  summary:
+    source: resourceGraph
+    # Same filters as the rows, counted in Resource Graph: no row transform, so large tenants stay within the
+    # 250 ms transform budget and exports stream the rows as they are.
+    query: |
+      // af:azure.app-service-security#summary
+      resources
+      | where type =~ 'microsoft.web/sites'
+      ${ params.appKind = 'function' ? "| where kind contains 'functionapp'" : params.appKind = 'web' ? "| where kind !contains 'functionapp'" : '' }
+      ${ params.subscriptionId ? "| where subscriptionId == '" & $guid(params.subscriptionId) & "'" }
+      | extend lid = tolower(id), appKind = iff(kind contains 'functionapp', 'Function App', 'Web app'), state = tostring(properties.state), httpsOnly = coalesce(tobool(properties.httpsOnly), false), publicNetworkAccess = iff(isempty(tostring(properties.publicNetworkAccess)), 'Enabled', tostring(properties.publicNetworkAccess)), defaultHostName = tostring(properties.defaultHostName), isLinux = kind contains 'linux'
+      | join kind=leftouter (
+          appserviceresources
+          | where type =~ 'microsoft.web/sites/config'
+          | extend siteId = tolower(tostring(split(id, '/config/')[0])), minTlsVersion = tostring(properties.minTlsVersion), ftpsState = tostring(properties.ftpsState), remoteDebugging = coalesce(tobool(properties.remoteDebuggingEnabled), false), linuxFx = toupper(tostring(properties.linuxFxVersion)), netFx = tolower(tostring(properties.netFrameworkVersion)), phpVersion = tostring(properties.phpVersion), pythonVersion = tostring(properties.pythonVersion), nodeVersion = tostring(properties.nodeVersion), javaVersion = tostring(properties.javaVersion), javaContainer = toupper(tostring(properties.javaContainer)), javaContainerVersion = tostring(properties.javaContainerVersion)
+          | project siteId, minTlsVersion, ftpsState, remoteDebugging, linuxFx, netFx, phpVersion, pythonVersion, nodeVersion, javaVersion, javaContainer, javaContainerVersion
+        ) on $left.lid == $right.siteId
+      | extend runtime = case(
+          appKind == 'Function App' and not(isLinux), '',
+          isnotempty(linuxFx) and linuxFx !startswith 'DOCKER' and linuxFx !startswith 'COMPOSE', linuxFx,
+          linuxFx startswith 'DOCKER' or linuxFx startswith 'COMPOSE', 'CONTAINER',
+          javaContainer == 'TOMCAT' and isnotempty(javaContainerVersion), strcat('TOMCAT|', javaContainerVersion),
+          isnotempty(javaVersion), strcat('JAVA|', javaVersion),
+          isnotempty(phpVersion) and phpVersion !~ 'OFF', strcat('PHP|', phpVersion),
+          isnotempty(pythonVersion), strcat('PYTHON|', pythonVersion),
+          isnotempty(nodeVersion), strcat('NODE|', replace_string(nodeVersion, '~', '')),
+          netFx matches regex @'^v([5-9]|1[0-9])\.', strcat('DOTNET|', substring(netFx, 1)),
+          netFx startswith 'v4', 'DOTNETFRAMEWORK|4.8',
+          '')
+      | extend stack = tostring(split(runtime, '|')[0]), major = toint(extract(@'\|[^0-9]*([0-9]+)', 1, runtime)), minor = toint(extract(@'\|[^0-9]*[0-9]+\.([0-9]+)', 1, runtime))
+      | extend runtimeSupport = case(
+          isempty(runtime), 'Not reported',
+          runtime == 'CONTAINER', 'Container',
+          stack in ('DOTNET', 'DOTNETCORE', 'DOTNET-ISOLATED') and major <= 7, 'Ended',
+          stack in ('DOTNET', 'DOTNETCORE', 'DOTNET-ISOLATED') and major in (8, 9), 'Ending soon',
+          stack == 'NODE' and major <= 20, 'Ended',
+          stack == 'PYTHON' and major == 3 and minor <= 9, 'Ended',
+          stack == 'PYTHON' and major == 3 and minor == 10, 'Ending soon',
+          stack == 'PHP' and (major < 8 or (major == 8 and minor <= 1)), 'Ended',
+          stack == 'PHP' and major == 8 and minor == 2, 'Ending soon',
+          stack == 'TOMCAT' and major <= 8, 'Ended',
+          stack == 'RUBY', 'Ended',
+          'Supported')
+      | extend findings = iff(httpsOnly, 0, 1) + iff(minTlsVersion in ('1.0', '1.1'), 1, 0) + iff(ftpsState =~ 'AllAllowed', 1, 0) + iff(remoteDebugging, 1, 0) + iff(runtimeSupport == 'Ended', 1, 0)
+      ${ params.findingsOnly = false ? '' : "| where findings > 0 or runtimeSupport == 'Ending soon'" }
+      | summarize total = count(), transport = countif(not(httpsOnly) or minTlsVersion in ('1.0', '1.1')), ftp = countif(ftpsState =~ 'AllAllowed'), eol = countif(runtimeSupport == 'Ended'), endingSoon = countif(runtimeSupport == 'Ending soon')
+    transform: "${ value.value[0] }"
+    cache: { ttl: 300 }
+
+layout:
+  - widget: kpi
+    data: summary.transport
+    label: Plain HTTP or TLS below 1.2
+    format: number
+    status: "${ value > 0 ? 'crit' : 'ok' }"
+  - widget: kpi
+    data: summary.ftp
+    label: Unencrypted FTP allowed
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+  - widget: kpi
+    data: summary.eol
+    label: Language version out of support
+    format: number
+    status: "${ value > 0 ? 'crit' : 'ok' }"
+  - widget: kpi
+    data: summary.endingSoon
+    label: Support ending soon
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+  - widget: table
+    id: apps
+    span: 12
+    data: apps.value
+    rowKey: id
+    selection: multi
+    columns:
+      - { field: name, label: App, kind: identity, secondary: defaultHostName, sortable: true }
+      - { field: appKind, label: Kind, filter: facet }
+      - { field: findings, label: Findings, kind: number, sortable: true, filter: range }
+      - field: httpsOnly
+        label: HTTPS
+        kind: status
+        map: { "true": [ok, HTTPS only], "false": [crit, HTTP allowed] }
+        filter: facet
+      - { field: minTlsVersion, label: Minimum TLS, filter: facet }
+      - field: ftpsState
+        label: FTP
+        kind: status
+        map: { AllAllowed: [warn, FTP and FTPS], FtpsOnly: [ok, FTPS only], Disabled: [ok, "Off"] }
+        filter: facet
+      - field: remoteDebugging
+        label: Remote debugging
+        kind: status
+        map: { "true": [warn, "On"], "false": [ok, "Off"] }
+        filter: facet
+      - { field: runtime, label: Language version, filter: facet }
+      - field: runtimeSupport
+        label: Support
+        kind: status
+        map: { Ended: [crit, Out of support], Ending soon: [warn, Ending soon], Supported: [ok, Supported], Container: [neutral, Container], Not reported: [neutral, Not reported] }
+        filter: facet
+      - { field: publicNetworkAccess, label: Public access, filter: facet, hidden: true }
+      - { field: state, label: State, filter: facet, hidden: true }
+      - { field: resourceGroup, label: Resource group, filter: facet }
+      - { field: subscriptionName, label: Subscription, filter: facet }
+      - { field: location, label: Location, hidden: true }
+      - { field: tags, label: Tags, kind: tags, hidden: true }
+      - { field: subscriptionId, label: Subscription id, kind: guid, hidden: true }
+      - { field: id, label: Resource id, kind: code, hidden: true }
+    inspect:
+      page: azure.resource
+      params:
+        id: ${ row.id }
+    rowActions:
+      - label: Open Configuration in Azure portal
+        icon: arrow-square-out
+        href: https://portal.azure.com/#resource${ row.id }/configuration
+      - label: Language support timelines
+        icon: book-open
+        href: https://learn.microsoft.com/azure/app-service/language-support-policy
+    bulkActions:
+      - playbook: azure.add-tags
+        label: Add or update a tag
+        icon: tag
+        forEach:
+          inputs:
+            resourceId: ${ row.id }
+          concurrency: 5
+        maxItems: 500
+    empty:
+      title: Every app is configured well
+      body: No web app or Function App in the subscriptions you can read allows plain HTTP, old TLS, unencrypted FTP or remote debugging, or runs a language version that is out of support.
+
+export:
+  formats: [csv, xlsx]
+  fileName: azure-app-service-security
+  data: apps.value
+  columns: all

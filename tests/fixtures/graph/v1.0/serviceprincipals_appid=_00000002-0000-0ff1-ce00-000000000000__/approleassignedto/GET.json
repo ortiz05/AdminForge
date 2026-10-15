@@ -1,0 +1,15 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#servicePrincipals('00000000-0000-4000-8000-000000000408')/appRoleAssignedTo",
+  "value": [
+    {
+      "id": "ara-exo-0001",
+      "principalId": "00000000-0000-4000-8000-000000000407",
+      "principalDisplayName": "Legacy Automation",
+      "principalType": "ServicePrincipal",
+      "appRoleId": "dc890d15-9560-4a4c-9b7f-a736ec74ec40",
+      "resourceDisplayName": "Office 365 Exchange Online",
+      "resourceId": "00000000-0000-4000-8000-000000000408",
+      "createdDateTime": "2023-05-15T07:50:00Z"
+    }
+  ]
+}

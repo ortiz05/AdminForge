@@ -1,0 +1,226 @@
+$schema: ../../../packages/schemas/generated/report.schema.json
+kind: report
+id: identity.consent-grants
+version: 1.0.0
+title: Delegated permission grants
+summary: >-
+  OAuth delegated permission grants — admin consent on behalf of all users and consent individual users gave
+  themselves — with the app, its publisher, the API, the permissions and who consented. Grants that reach mail, files,
+  sites, chats or the directory, or let an app act fully as the user, are flagged so you can revoke what nobody can
+  justify.
+owner: identity-team
+tags: [identity, apps, consent, permissions, security, report, review]
+nav: { section: reports, label: Delegated permission grants, icon: handshake, order: 17 }
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    graph: [Directory.Read.All]
+  entraRoles: [Global Reader]
+
+params:
+  consent:
+    type: enum
+    label: Consent
+    facet: true
+    default: Any
+    values:
+      - { value: Any, label: Admin or user }
+      - { value: Admin, label: Admin consent (all users) }
+      - { value: User, label: User consent }
+  risk:
+    type: enum
+    label: Permissions
+    facet: true
+    default: risky
+    values:
+      - { value: risky, label: High-impact grants only }
+      - { value: all, label: All grants }
+
+# Grants carry object ids only; apps, APIs and consenting users are resolved in one getByIds call (up to 1,000 ids —
+# apps and APIs first). A static datasource joins the three, so the table still renders when there are no grants.
+datasources:
+  grants:
+    source: graph
+    request:
+      path: /oauth2PermissionGrants
+      query:
+        $top: 999
+    paging: all
+    maxItems: 50000
+    cache: { ttl: 900 }
+  org:
+    source: graph
+    request:
+      path: /organization
+      query:
+        $select: id
+    cache: { ttl: 3600 }
+  objects:
+    source: graph
+    when: ${ $count(ds.grants.value) > 0 }
+    request:
+      method: POST
+      path: /directoryObjects/getByIds
+      body:
+        ids: >-
+          ${ $append([], [$append($distinct($append(ds.grants.value.clientId, ds.grants.value.resourceId)), $distinct(ds.grants.value.principalId[$ != null]))][[0..999]]) }
+        types: [servicePrincipal, user]
+    cache: { ttl: 900 }
+  report:
+    source: static
+    data: >-
+      ${ { "grants": ds.grants.value, "objects": ds.objects.value, "org": ds.org.value[0].id } }
+    # critical = directory/role/app/policy control or full mailbox/site access as the user; high = content (mail,
+    # files, sites, chats, calendars), anything that writes, sends, or impersonates the user on an API.
+    transform: >-
+      ${ (
+        $critical := ['Directory.ReadWrite.All', 'Directory.AccessAsUser.All', 'RoleManagement.ReadWrite.Directory',
+          'Application.ReadWrite.All', 'AppRoleAssignment.ReadWrite.All', 'DelegatedPermissionGrant.ReadWrite.All',
+          'Policy.ReadWrite.ConditionalAccess', 'Policy.ReadWrite.AuthenticationMethod', 'Policy.ReadWrite.PermissionGrant',
+          'Policy.ReadWrite.Authorization', 'UserAuthenticationMethod.ReadWrite.All', 'full_access_as_user',
+          'EWS.AccessAsUser.All', 'Sites.FullControl.All', 'Exchange.Manage'];
+        $high := function($s) {
+          $contains($s, 'ReadWrite') or $contains($s, '.Send') or $contains($s, 'AccessAsUser') or $s = 'user_impersonation'
+          or $contains($s, /^(Mail|Files|Sites|Notes|Chat|ChannelMessage|MailboxSettings|Calendars|Contacts|OnlineMeeting\w*|EAS|IMAP|POP|SMTP)\./)
+        };
+        $microsoft := ['f8cdef31-a31e-4b4a-93e4-5f571e91255a', '72f988bf-86f1-41af-91ab-2d7cd011db47'];
+        $byId := $merge([[value.objects].{ id: $ }]);
+        $org := value.org;
+        $own := [$append([env.AF_READ_CLIENT_ID, env.AF_WRITE_CLIENT_ID, env.AF_AUTOMATION_CLIENT_ID],
+          env.AF_PROTECTED_APP_IDS ? [$split(env.AF_PROTECTED_APP_IDS, ',').$trim($)] : [])[$ != '']];
+        $all := [value.grants.(
+          $scopes := scope ? [$split($trim(scope), ' ')[$ != '']] : [];
+          $crit := [$scopes[$ in $critical]];
+          $hi := [$scopes[$not($ in $critical) and $high($)]];
+          $client := $lookup($byId, clientId);
+          $owner := $client.appOwnerOrganizationId;
+          $who := principalId ? $lookup($byId, principalId) : null;
+          $origin := $owner in $microsoft ? 'Microsoft'
+                     : $owner and $owner = $org ? 'This organisation'
+                     : $client ? 'Other organisation' : 'Unknown';
+          {
+            "id": id,
+            "clientId": clientId,
+            "app": $client.displayName ? $client.displayName : clientId,
+            "appId": $client.appId,
+            "publisher": $client.verifiedPublisher.displayName ? $client.verifiedPublisher.displayName
+                         : $origin = 'Other organisation' ? 'Unverified publisher' : null,
+            "origin": $origin,
+            "api": $lookup($byId, resourceId).displayName ? $lookup($byId, resourceId).displayName : resourceId,
+            "resourceId": resourceId,
+            "consent": consentType = 'AllPrincipals' ? 'Admin' : 'User',
+            "principalId": principalId,
+            "user": principalId ? ($who.displayName ? $who.displayName : principalId) : 'All users',
+            "userPrincipalName": $who.userPrincipalName,
+            "risky": $append($crit, $hi),
+            "scopes": $scopes,
+            "tier": $count($crit) > 0 ? 'critical' : $count($hi) > 0 ? 'high' : 'low',
+            "adminforge": $client.appId in $own
+          }
+        )];
+        $rank := { "critical": 0, "high": 1, "low": 2 };
+        $shown := $all[
+          ($$.params.consent = 'Any' or consent = $$.params.consent)
+          and ($$.params.risk = 'all' or tier != 'low')
+        ];
+        {
+          "rows": [$shown^($lookup($rank, tier), consent, app)],
+          "critical": $count($all[tier = 'critical']),
+          "adminRisky": $count($all[consent = 'Admin' and tier != 'low']),
+          "userRisky": $count($all[consent = 'User' and tier != 'low']),
+          "apps": $count($distinct($all[tier != 'low'].clientId)),
+          "truncated": $count($distinct($append($all.clientId, $all.resourceId))) + $count($distinct($all.principalId[$ != null])) > 1000
+        }
+      ) }
+
+layout:
+  - widget: kpi
+    id: critical
+    data: report.critical
+    label: Grants with critical permissions
+    format: number
+    status: "${ value > 0 ? 'crit' : 'ok' }"
+  - widget: kpi
+    id: adminRisky
+    data: report.adminRisky
+    label: High-impact admin consents
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+  - widget: kpi
+    id: userRisky
+    data: report.userRisky
+    label: High-impact user consents
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+  - widget: kpi
+    id: apps
+    data: report.apps
+    label: Apps with high-impact grants
+    format: number
+  - widget: markdown
+    id: guidance
+    span: 12
+    text: |
+      Admin consent applies to **every user**; user consent only to the user who gave it. Revoking a grant stops new
+      tokens with those permissions (tokens already issued last until they expire). To stop users consenting to risky
+      apps, allow user consent only for verified publishers and low-impact permissions and turn on the admin consent
+      workflow — see the **Identity settings baseline** report.
+  - widget: markdown
+    id: truncated
+    span: 12
+    when: ${ report.truncated = true }
+    text: |
+      **Partial names.** More apps, APIs and users are involved than one lookup covers (1,000); some show as ids.
+  - widget: table
+    id: grants
+    span: 12
+    data: report.rows
+    rowKey: id
+    columns:
+      - { field: app, label: App, kind: identity, secondary: publisher, sortable: true }
+      - field: origin
+        label: Publisher
+        kind: status
+        map: { "This organisation": [neutral, This organisation], "Other organisation": [warn, Third party], Microsoft: [neutral, Microsoft], Unknown: [neutral, Unknown] }
+        filter: facet
+      - field: consent
+        label: Consent
+        kind: status
+        map: { Admin: [info, Admin (all users)], User: [neutral, User] }
+        filter: { type: facet, param: consent }
+      - { field: user, label: Consented for, kind: identity, secondary: userPrincipalName }
+      - { field: api, label: API, filter: facet }
+      - field: tier
+        label: Impact
+        kind: status
+        map: { critical: [crit, Critical], high: [warn, High], low: [ok, Low] }
+        filter: facet
+      - { field: risky, label: High-impact permissions, kind: tags }
+      - { field: scopes, label: All permissions, kind: tags, hidden: true }
+      - { field: adminforge, label: AdminForge app, kind: boolean, hidden: true }
+      - { field: appId, label: Application (client) id, kind: guid, hidden: true }
+      - { field: clientId, label: App object id, kind: guid, hidden: true }
+      - { field: principalId, label: User object id, kind: guid, hidden: true }
+      - { field: id, label: Grant id, hidden: true }
+    inspect:
+      page: identity.enterprise-app
+      params:
+        id: ${ row.clientId }
+        appId: ${ row.appId }
+    rowActions:
+      - playbook: identity.revoke-consent-grant
+        label: Revoke grant
+        icon: prohibit
+        inputs:
+          grantId: ${ row.id }
+        when: ${ row.adminforge != true }
+      - { label: Open user, icon: user, href: "/p/identity.user?id=${ $encode(row.principalId) }", when: "${ $boolean(row.principalId) }" }
+    empty:
+      title: No grants match
+      body: No delegated permission grant matches the filters (try All grants).
+
+export:
+  formats: [csv, xlsx]
+  fileName: delegated-permission-grants
+  data: report.rows
+  columns: all

@@ -1,0 +1,25 @@
+$schema: ../../packages/schemas/generated/probe.schema.json
+kind: probe
+id: probes.global-admins-too-few
+version: 1.0.0
+title: Global Administrators (at least two)
+summary: >-
+  Counts the user accounts that hold the Global Administrator role directly and is critical when fewer than two do,
+  so the tenant never depends on a single person's account (keep one of them an emergency-access account). Service
+  principals don't count.
+owner: identity-team
+tags: [identity, privileged, roles, sweep-6h]
+check:
+  kind: graphCount
+  path: /directoryRoles(roleTemplateId='62e90394-69f5-4237-9190-012177145e10')/members
+  query:
+    $select: id,displayName,userPrincipalName
+  items: "${ value[`@odata.type` = '#microsoft.graph.user'] }"
+  worse: lower
+  fields: [displayName, userPrincipalName]
+thresholds: { crit: 1 }
+intervalHint: PT6H
+timeoutMs: 20000
+requires:
+  scopes:
+    graph: [RoleManagement.Read.Directory]

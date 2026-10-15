@@ -3,6 +3,91 @@
     "variants": [
       {
         "match": {
+          "bodyIncludes": [
+            "\"recipientTypeDetails\":[\"SharedMailbox\"]",
+            "\"includeAccountState\":true"
+          ]
+        },
+        "body": [
+          {
+            "total": 5,
+            "truncated": false,
+            "byType": [
+              {
+                "type": "SharedMailbox",
+                "count": 5
+              }
+            ],
+            "hiddenFromAddressLists": 1,
+            "litigationHold": 1,
+            "archiveEnabled": 1,
+            "mailboxes": [
+              {
+                "displayName": "Reception",
+                "userPrincipalName": "reception@example.com",
+                "primarySmtpAddress": "reception@example.com",
+                "recipientTypeDetails": "SharedMailbox",
+                "whenCreated": "2024-08-06T09:00:00Z",
+                "hiddenFromAddressListsEnabled": false,
+                "litigationHoldEnabled": false,
+                "archiveStatus": "None",
+                "externalDirectoryObjectId": "10000000-0000-4000-8000-000000000c01",
+                "accountDisabled": false
+              },
+              {
+                "displayName": "Finance Invoices",
+                "userPrincipalName": "invoices@example.com",
+                "primarySmtpAddress": "invoices@example.com",
+                "recipientTypeDetails": "SharedMailbox",
+                "whenCreated": "2025-01-13T09:00:00Z",
+                "hiddenFromAddressListsEnabled": false,
+                "litigationHoldEnabled": false,
+                "archiveStatus": "Active",
+                "externalDirectoryObjectId": "10000000-0000-4000-8000-000000000c02",
+                "accountDisabled": true
+              },
+              {
+                "displayName": "Customer Support",
+                "userPrincipalName": "support@example.com",
+                "primarySmtpAddress": "support@example.com",
+                "recipientTypeDetails": "SharedMailbox",
+                "whenCreated": "2024-10-25T09:00:00Z",
+                "hiddenFromAddressListsEnabled": false,
+                "litigationHoldEnabled": false,
+                "archiveStatus": "None",
+                "externalDirectoryObjectId": "10000000-0000-4000-8000-000000000c03",
+                "accountDisabled": false
+              },
+              {
+                "displayName": "HR Confidential",
+                "userPrincipalName": "hr-confidential@example.com",
+                "primarySmtpAddress": "hr-confidential@example.com",
+                "recipientTypeDetails": "SharedMailbox",
+                "whenCreated": "2025-08-31T09:00:00Z",
+                "hiddenFromAddressListsEnabled": true,
+                "litigationHoldEnabled": true,
+                "archiveStatus": "None",
+                "externalDirectoryObjectId": "10000000-0000-4000-8000-000000000c04",
+                "accountDisabled": true
+              },
+              {
+                "displayName": "Events Booking",
+                "userPrincipalName": "events@example.com",
+                "primarySmtpAddress": "events@example.com",
+                "recipientTypeDetails": "SharedMailbox",
+                "whenCreated": "2026-09-02T09:00:00Z",
+                "hiddenFromAddressListsEnabled": false,
+                "litigationHoldEnabled": false,
+                "archiveStatus": "None",
+                "externalDirectoryObjectId": "10000000-0000-4000-8000-000000000c05",
+                "accountDisabled": null
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "match": {
           "bodyIncludes": "\"recipientTypeDetails\":[\"SharedMailbox\"]"
         },
         "body": [

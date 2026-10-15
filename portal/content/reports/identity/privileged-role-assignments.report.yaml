@@ -1,11 +1,12 @@
 $schema: ../../../packages/schemas/generated/report.schema.json
 kind: report
 id: identity.privileged-role-assignments
-version: 1.1.0
+version: 1.2.0
 title: Privileged role assignments
 summary: >-
   Every active and eligible assignment of a privileged Microsoft Entra role — who, which role, standing or eligible,
-  through a group or directly, and until when. The evidence for a privileged access review.
+  through a group or directly, and until when — with account findings on each holder (synced from Active Directory,
+  guest, blocked, licensed daily-use account). The evidence for a privileged access review.
 owner: identity-team
 tags: [identity, roles, privileged-access, report, review]
 nav: { section: reports, label: Privileged role assignments, icon: crown, order: 14 }
@@ -51,6 +52,8 @@ datasources:
         $row := function($a, $how, $start, $end, $via) {
           (
             $d := $def($a.roleDefinitionId);
+            $p := $a.principal;
+            $isUser := $kind($p) = 'User';
             {
               "key": $how & '|' & $a.id,
               "role": $d.displayName ? $d.displayName : $a.roleDefinitionId,
@@ -65,7 +68,15 @@ datasources:
               "scope": $a.directoryScopeId = '/' ? 'Directory' : $a.directoryScopeId,
               "start": $start,
               "end": $end,
-              "permanent": $not($boolean($end))
+              "permanent": $not($boolean($end)),
+              "source": $isUser ? ($p.onPremisesSyncEnabled = true ? 'Synced' : 'Cloud') : null,
+              "accountEnabled": $p.accountEnabled,
+              "findings": $isUser ? [
+                $p.onPremisesSyncEnabled = true ? 'Synced from AD',
+                $p.userType = 'Guest' ? 'Guest account',
+                $p.accountEnabled = false ? 'Sign-in blocked',
+                $count($p.assignedLicenses) > 0 ? 'Licensed (daily-use account?)'
+              ] : []
             }
           )
         };
@@ -87,6 +98,7 @@ datasources:
           "eligible": $count($all[privileged and assignment = 'Eligible']),
           "globalAdmins": $count($all[roleId = '62e90394-69f5-4237-9190-012177145e10' and assignment != 'Eligible']),
           "servicePrincipals": $count($all[privileged and principalType = 'Service principal']),
+          "accountFindings": $count($distinct($all[privileged and principalType = 'User' and (source = 'Synced' or 'Guest account' in findings or 'Sign-in blocked' in findings)].principalId)),
           "pimAvailable": $exists(value.eligible.value),
           "truncated": $exists(value.active.`@odata.nextLink`) or $exists(value.eligible.`@odata.nextLink`)
         }
@@ -114,6 +126,12 @@ layout:
     id: servicePrincipals
     data: assignments.servicePrincipals
     label: Service principals holding privileged roles
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+  - widget: kpi
+    id: accountFindings
+    data: assignments.accountFindings
+    label: Privileged users that are synced, guests or blocked
     format: number
     status: "${ value > 0 ? 'warn' : 'ok' }"
   - widget: licenceGate
@@ -148,6 +166,9 @@ layout:
         map: { Standing: [warn, Standing], Activated: [info, Activated (PIM)], Eligible: [ok, Eligible] }
         filter: { type: facet, param: assignment }
       - { field: via, label: Via, filter: facet }
+      - { field: findings, label: Account findings, kind: tags }
+      - { field: source, label: Source, filter: facet, hidden: true }
+      - { field: accountEnabled, label: Sign-in, kind: status, map: { "true": [ok, Allowed], "false": [warn, Blocked] }, hidden: true }
       - { field: scope, label: Scope }
       - { field: start, label: Start, kind: date }
       - { field: end, label: End, kind: date }

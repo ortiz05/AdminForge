@@ -1,0 +1,121 @@
+$schema: ../../../packages/schemas/generated/report.schema.json
+kind: report
+id: azure.policy-compliance
+version: 1.0.0
+title: Azure Policy compliance by assignment
+summary: Azure Policy compliance per assignment and policy — how many resources are non-compliant, compliant or exempt, the effect, the initiative it belongs to and whether the assignment is enforced — from the latest policy states in Resource Graph.
+owner: azure-team
+tags: [azure, policy, governance, compliance, resource-graph]
+nav: { section: reports, label: Azure Policy compliance, icon: list-checks, order: 193 }
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    arm: [user_impersonation]
+  azureRoles: [Reader]
+
+params:
+  nonCompliantOnly: { type: boolean, default: true, label: Policies with non-compliant resources only, facet: true }
+  subscriptionId: { type: string, format: guid, label: Subscription, picker: subscription, facet: true }
+
+datasources:
+  policies:
+    source: resourceGraph
+    # Three joins (Resource Graph's maximum): assignment, definition and initiative names. Built-in definitions can be
+    # listed once per subscription, so each name lookup is summarised by id first. No row transform (exports stream).
+    query: |
+      // af:azure.policy-compliance#rows
+      policyresources
+      | where type =~ 'microsoft.policyinsights/policystates'
+      ${ params.subscriptionId ? "| where subscriptionId == '" & $guid(params.subscriptionId) & "'" }
+      | extend complianceState = tostring(properties.complianceState), assignmentId = tolower(tostring(properties.policyAssignmentId)), definitionId = tolower(tostring(properties.policyDefinitionId)), initiativeId = tolower(tostring(properties.policySetDefinitionId)), effect = tolower(tostring(properties.policyDefinitionAction)), assignmentScope = tostring(properties.policyAssignmentScope), resourceId = tolower(tostring(properties.resourceId))
+      | summarize nonCompliant = dcountif(resourceId, complianceState =~ 'NonCompliant'), compliant = dcountif(resourceId, complianceState =~ 'Compliant'), exempt = dcountif(resourceId, complianceState =~ 'Exempt'), resources = dcount(resourceId), subscriptions = dcount(subscriptionId) by assignmentId, definitionId, initiativeId, effect, assignmentScope
+      ${ params.nonCompliantOnly = false ? '' : '| where nonCompliant > 0' }
+      | join kind=leftouter (policyresources | where type =~ 'microsoft.authorization/policyassignments' | extend assignmentId = tolower(id) | summarize assignmentName = any(tostring(properties.displayName)), enforcementMode = any(tostring(properties.enforcementMode)) by assignmentId) on assignmentId
+      | join kind=leftouter (policyresources | where type =~ 'microsoft.authorization/policydefinitions' | extend definitionId = tolower(id) | summarize policyName = any(tostring(properties.displayName)), policyCategory = any(tostring(properties.metadata.category)) by definitionId) on definitionId
+      | join kind=leftouter (policyresources | where type =~ 'microsoft.authorization/policysetdefinitions' | extend initiativeId = tolower(id) | summarize initiativeName = any(tostring(properties.displayName)) by initiativeId) on initiativeId
+      | extend key = strcat(assignmentId, '|', definitionId, '|', effect), compliance = iff(compliant + nonCompliant > 0, round(todouble(compliant) / (compliant + nonCompliant), 4), real(null))
+      | extend assignmentName = iff(isempty(assignmentName), tostring(split(assignmentId, '/')[-1]), assignmentName), policyName = iff(isempty(policyName), tostring(split(definitionId, '/')[-1]), policyName), enforcementMode = iff(isempty(enforcementMode), 'Default', enforcementMode)
+      | project key, assignmentName, policyName, initiativeName, policyCategory, effect, nonCompliant, compliant, exempt, resources, compliance, subscriptions, enforcementMode, assignmentScope, assignmentId, definitionId, initiativeId
+      | order by nonCompliant desc, assignmentName asc, policyName asc
+    paging: all
+    maxItems: 50000
+    cache: { ttl: 600 }
+  summary:
+    source: resourceGraph
+    query: |
+      // af:azure.policy-compliance#summary
+      policyresources
+      | where type =~ 'microsoft.policyinsights/policystates'
+      ${ params.subscriptionId ? "| where subscriptionId == '" & $guid(params.subscriptionId) & "'" }
+      | extend complianceState = tostring(properties.complianceState), resourceId = tolower(tostring(properties.resourceId)), assignmentId = tolower(tostring(properties.policyAssignmentId))
+      | summarize nonCompliantResources = dcountif(resourceId, complianceState =~ 'NonCompliant'), resources = dcount(resourceId), assignments = dcountif(assignmentId, complianceState =~ 'NonCompliant')
+    transform: >-
+      ${ (
+        $r := value.value[0];
+        {
+          'nonCompliantResources': $r.nonCompliantResources ? $r.nonCompliantResources : 0,
+          'resources': $r.resources ? $r.resources : 0,
+          'assignments': $r.assignments ? $r.assignments : 0,
+          'compliance': $r.resources > 0 ? $round(1 - $r.nonCompliantResources / $r.resources, 4) : 1
+        }
+      ) }
+    cache: { ttl: 600 }
+
+layout:
+  - widget: kpi
+    data: summary.compliance
+    label: Resources compliant
+    format: percent
+    status: "${ value < 0.8 ? 'crit' : value < 1 ? 'warn' : 'ok' }"
+  - widget: kpi
+    data: summary.nonCompliantResources
+    label: Non-compliant resources
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+  - widget: kpi
+    data: summary.assignments
+    label: Assignments with findings
+    format: number
+  - widget: kpi
+    data: policies.totalRecords
+    label: Policies listed
+    format: number
+  - widget: table
+    id: policies
+    span: 12
+    data: policies.value
+    rowKey: key
+    columns:
+      - { field: policyName, label: Policy, kind: identity, secondary: assignmentName, sortable: true }
+      - { field: nonCompliant, label: Non-compliant, kind: number, sortable: true, filter: range }
+      - { field: compliance, label: Compliant, kind: percent, sortable: true }
+      - { field: effect, label: Effect, filter: facet }
+      - { field: assignmentName, label: Assignment, filter: facet }
+      - { field: initiativeName, label: Initiative, filter: facet }
+      - field: enforcementMode
+        label: Enforcement
+        kind: status
+        map: { Default: [ok, Enforced], DoNotEnforce: [neutral, Not enforced] }
+        filter: facet
+      - { field: policyCategory, label: Category, filter: facet, hidden: true }
+      - { field: compliant, label: Compliant resources, kind: number, hidden: true }
+      - { field: exempt, label: Exempt, kind: number, hidden: true }
+      - { field: resources, label: Resources evaluated, kind: number, hidden: true }
+      - { field: subscriptions, label: Subscriptions, kind: number, hidden: true }
+      - { field: assignmentScope, label: Assignment scope, kind: code, hidden: true }
+      - { field: assignmentId, label: Assignment id, kind: code, hidden: true }
+      - { field: definitionId, label: Policy definition id, kind: code, hidden: true }
+      - { field: initiativeId, label: Initiative id, kind: code, hidden: true }
+    rowActions:
+      - label: Open compliance in Azure portal
+        icon: arrow-square-out
+        href: https://portal.azure.com/#view/Microsoft_Azure_Policy/PolicyMenuBlade/~/Compliance
+    empty:
+      title: Every evaluated resource is compliant
+      body: No policy assignment in the scopes you can read reports a non-compliant resource. Turn off the filter to list every assigned policy.
+
+export:
+  formats: [csv, xlsx]
+  fileName: azure-policy-compliance
+  data: policies.value
+  columns: all

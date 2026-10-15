@@ -1,0 +1,199 @@
+$schema: ../../../packages/schemas/generated/report.schema.json
+kind: report
+id: m365.sharepoint-site-usage
+version: 1.0.0
+title: SharePoint site storage and inactive sites
+summary: >-
+  SharePoint sites with no activity for the chosen number of days (archive or delete candidates) and sites close to
+  their storage limit, with storage used, files, page views and owner — from the SharePoint site usage report.
+  OneDrive accounts are on the OneDrive storage and activity report.
+owner: m365-team
+tags: [m365, sharepoint, storage, governance, usage, report]
+nav: { section: reports, label: SharePoint site storage and activity, icon: hard-drives, order: 142 }
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    graph: [Reports.Read.All]
+  entraRoles: [Reports Reader, SharePoint Administrator, Global Reader]
+  licences: [sharepoint]
+
+params:
+  view:
+    type: enum
+    label: Show
+    facet: true
+    default: attention
+    values:
+      - { value: attention, label: Inactive or near the storage limit }
+      - { value: inactive, label: Inactive sites }
+      - { value: storage, label: Near the storage limit }
+      - { value: all, label: All sites }
+  days:
+    type: enum
+    label: Inactive after
+    facet: true
+    default: 180
+    values:
+      - { value: 90, label: 90 days }
+      - { value: 180, label: 180 days }
+      - { value: 365, label: 1 year }
+  threshold:
+    type: number
+    label: Near the storage limit at
+    unit: "%"
+    default: 90
+    min: 50
+    max: 100
+    integer: true
+    facet: true
+
+filters:
+  facets: [view, days, threshold]
+
+savedViews:
+  enabled: true
+  shared: true
+  presets:
+    - { name: No activity for a year, params: { view: inactive, days: 365 } }
+    - { name: Near the storage limit, params: { view: storage } }
+
+# Counts (files, active files, page views) cover the last 30 days; storage is current; the last activity date is the
+# site's latest activity whenever it was. With concealed report names the URL and owner are hashes.
+datasources:
+  sites:
+    source: graph
+    label: SharePoint site usage detail (usage report)
+    request:
+      beta: true
+      path: /reports/getSharePointSiteUsageDetail(period='D30')
+      query: { $format: application/json }
+    paging: all
+    maxItems: 100000
+    cache: { ttl: 3600 }
+    transform: >-
+      ${ (
+        $days := params.days ? $number(params.days) : 180;
+        $limit := (params.threshold ? $number(params.threshold) : 90) / 100;
+        $view := params.view ? params.view : 'attention';
+        $all := [value.value[$not(isDeleted = true)].(
+          $idle := lastActivityDate ? -$daysUntil(lastActivityDate);
+          $share := storageAllocatedInBytes > 0 ? $round(storageUsedInBytes / storageAllocatedInBytes, 4);
+          $inactive := lastActivityDate ? $idle >= $days : true;
+          $near := $share ? $share >= $limit : false;
+          {
+            "siteId": siteId,
+            "siteUrl": siteUrl,
+            "ownerDisplayName": ownerDisplayName,
+            "ownerPrincipalName": ownerPrincipalName,
+            "template": rootWebTemplate,
+            "state": $near ? 'storage' : $inactive ? 'inactive' : 'ok',
+            "inactive": $inactive,
+            "nearLimit": $near,
+            "lastActivityDate": lastActivityDate,
+            "daysInactive": $idle,
+            "storageUsedInBytes": storageUsedInBytes ? storageUsedInBytes : 0,
+            "storageAllocatedInBytes": storageAllocatedInBytes,
+            "percentUsed": $share,
+            "fileCount": fileCount,
+            "activeFileCount": activeFileCount,
+            "pageViewCount": pageViewCount,
+            "externalSharing": externalSharing,
+            "sensitivityLabel": siteSensitivityLabelId != '' ? siteSensitivityLabelId,
+            "openable": $substring(siteUrl ? siteUrl : '', 0, 8) = 'https://',
+            "reportRefreshDate": reportRefreshDate
+          }
+        )];
+        $rows := $view = 'all' ? $all
+          : $view = 'inactive' ? $all[inactive]
+          : $view = 'storage' ? $all[nearLimit]
+          : $all[inactive or nearLimit];
+        $inactiveRows := $all[inactive];
+        {
+          "rows": [$rows^(state = 'storage' ? 0 : state = 'inactive' ? 1 : 2, nearLimit ? -percentUsed : 0, $exists(daysInactive) ? 1 : 0, >daysInactive, >storageUsedInBytes)],
+          "inactive": $count($inactiveRows),
+          "inactiveStorage": $sum($inactiveRows.storageUsedInBytes),
+          "nearLimit": $count($all[nearLimit]),
+          "storage": $sum($all.storageUsedInBytes),
+          "sites": $count($all),
+          "largest": [($all^(>storageUsedInBytes))[[0..9]].{ "site": $replace(siteUrl ? siteUrl : siteId, /^https:\/\/[^\/]+/, ''), "storage": storageUsedInBytes }],
+          "concealed": $count($all[$not(openable)]) > 0
+        }
+      ) }
+
+layout:
+  - widget: markdown
+    span: 12
+    when: ${ sites.concealed = true }
+    text: |
+      **Site names are concealed in usage reports.** URLs and owners show as hashes. A Global Administrator can turn off
+      *Display concealed user, group, and site names in all reports* in the Microsoft 365 admin center → **Settings →
+      Org settings → Services → Reports**.
+  - widget: kpi
+    data: sites.inactive
+    label: Inactive sites
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+    href: /p/m365.sharepoint-site-usage?view=inactive
+  - widget: kpi
+    data: sites.inactiveStorage
+    label: Storage held by inactive sites
+    format: bytes
+  - widget: kpi
+    data: sites.nearLimit
+    label: Near the storage limit
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+    href: /p/m365.sharepoint-site-usage?view=storage
+  - widget: kpi
+    data: sites.storage
+    label: Storage used by all sites
+    format: bytes
+  - widget: chart
+    id: largest
+    title: Largest sites
+    type: bar
+    span: 12
+    rows: 2
+    data: sites.largest
+    x: site
+    y: storage
+    format: bytes
+  - widget: table
+    id: sites
+    span: 12
+    data: sites.rows
+    rowKey: siteId
+    columns:
+      - { field: siteUrl, label: Site, kind: identity, secondary: ownerDisplayName, sortable: true }
+      - field: state
+        label: Status
+        kind: status
+        map: { storage: [warn, Near the storage limit], inactive: [info, Inactive], ok: [ok, OK] }
+        filter: facet
+      - { field: daysInactive, label: Days since activity, kind: number, align: end, sortable: true, filter: range }
+      - { field: lastActivityDate, label: Last activity, kind: date, filter: date }
+      - { field: storageUsedInBytes, label: Storage, kind: bytes, align: end, sortable: true }
+      - { field: percentUsed, label: Of limit, kind: percent, align: end, sortable: true }
+      - { field: template, label: Template, filter: facet }
+      - { field: fileCount, label: Files, kind: number, align: end }
+      - { field: activeFileCount, label: Active files (30 days), kind: number, align: end, hidden: true }
+      - { field: pageViewCount, label: Page views (30 days), kind: number, align: end, hidden: true }
+      - { field: ownerPrincipalName, label: Owner sign-in name, hidden: true }
+      - { field: externalSharing, label: External sharing, kind: boolean, hidden: true }
+      - { field: storageAllocatedInBytes, label: Storage limit, kind: bytes, align: end, hidden: true }
+      - { field: siteId, label: Site id, kind: guid, hidden: true }
+      - { field: reportRefreshDate, label: Report date, kind: date, hidden: true }
+    rowActions:
+      - label: Open site
+        icon: arrow-square-out
+        href: ${ row.siteUrl }
+        when: ${ row.openable = true }
+    empty:
+      title: No site needs attention
+      body: Every site had activity within the window and is below the storage threshold.
+
+export:
+  formats: [csv, xlsx]
+  fileName: sharepoint-site-usage-${ params.view }
+  data: sites.rows
+  columns: all

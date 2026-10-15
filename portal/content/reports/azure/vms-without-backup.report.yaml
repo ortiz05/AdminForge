@@ -1,0 +1,174 @@
+$schema: ../../../packages/schemas/generated/report.schema.json
+kind: report
+id: azure.vms-without-backup
+version: 1.0.0
+title: Virtual machines without backup
+summary: Azure virtual machines that no Recovery Services vault protects, whose protection was stopped, or whose last backup failed or is older than the chosen age — from the Azure Backup items in Resource Graph.
+owner: azure-team
+tags: [azure, backup, compute, resilience, resource-graph]
+nav: { section: reports, label: VMs without backup, icon: cloud-arrow-up, order: 186 }
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    arm: [user_impersonation]
+  # Reader on the VMs and on the Recovery Services vaults (a vault in a subscription you can't read looks like "not protected").
+  azureRoles: [Reader]
+
+params:
+  state:
+    type: enum
+    label: Backup state
+    facet: true
+    default: problems
+    values:
+      - { value: problems, label: Not protected or failing }
+      - { value: Not protected, label: Not protected }
+      - { value: Protection stopped, label: Protection stopped }
+      - { value: Last backup failed, label: Last backup failed }
+      - { value: Backup overdue, label: Backup overdue }
+      - { value: any, label: Every VM }
+  overdueHours:
+    type: enum
+    label: Overdue after
+    facet: true
+    default: 48
+    values:
+      - { value: 26, label: 26 hours }
+      - { value: 48, label: 2 days }
+      - { value: 168, label: 7 days }
+  subscriptionId: { type: string, format: guid, label: Subscription, picker: subscription, facet: true }
+
+datasources:
+  vms:
+    source: resourceGraph
+    query: |
+      // af:azure.vms-without-backup#rows
+      resources
+      | where type =~ 'microsoft.compute/virtualmachines'
+      ${ params.subscriptionId ? "| where subscriptionId == '" & $guid(params.subscriptionId) & "'" }
+      | extend lid = tolower(id), powerState = tostring(split(tostring(properties.extended.instanceView.powerState.code), '/')[1]), osType = tostring(properties.storageProfile.osDisk.osType), vmSize = tostring(properties.hardwareProfile.vmSize)
+      | join kind=leftouter (
+          recoveryservicesresources
+          | where type =~ 'microsoft.recoveryservices/vaults/backupfabrics/protectioncontainers/protecteditems'
+          | where tostring(properties.backupManagementType) =~ 'AzureIaasVM'
+          | extend vmId = tolower(tostring(properties.sourceResourceId)), vaultName = tostring(split(id, '/')[8]), protectionState = tostring(properties.protectionState), lastBackupStatus = tostring(properties.lastBackupStatus), lastBackupTime = todatetime(properties.lastBackupTime), policyName = tostring(properties.policyName)
+          | summarize arg_max(lastBackupTime, vaultName, protectionState, lastBackupStatus, policyName) by vmId
+        ) on $left.lid == $right.vmId
+      | extend hoursSinceBackup = iff(isnull(lastBackupTime), int(null), toint(datetime_diff('hour', now(), lastBackupTime)))
+      | extend backup = case(
+          isempty(vmId), 'Not protected',
+          protectionState in~ ('ProtectionStopped', 'ProtectionPaused'), 'Protection stopped',
+          lastBackupStatus =~ 'Failed', 'Last backup failed',
+          isnull(hoursSinceBackup) or hoursSinceBackup >= ${ $number(params.overdueHours) in [26, 48, 168] ? $string($number(params.overdueHours)) : '48' }, 'Backup overdue',
+          'Protected')
+      ${ params.state = 'any' ? '' : params.state in ['Not protected', 'Protection stopped', 'Last backup failed', 'Backup overdue'] ? "| where backup == '" & params.state & "'" : "| where backup != 'Protected'" }
+      | join kind=leftouter (resourcecontainers | where type =~ 'microsoft.resources/subscriptions' | project subscriptionId, subscriptionName = name) on subscriptionId
+      | project id, name, backup, vaultName, policyName, protectionState, lastBackupStatus, lastBackupTime, hoursSinceBackup, powerState, osType, vmSize, resourceGroup, subscriptionId, subscriptionName, location, tags
+      | order by backup asc, name asc
+    paging: all
+    maxItems: 50000
+    cache: { ttl: 300 }
+  summary:
+    source: resourceGraph
+    # Same filters as the rows, counted in Resource Graph: no row transform, so large tenants stay within the
+    # 250 ms transform budget and exports stream the rows as they are.
+    query: |
+      // af:azure.vms-without-backup#summary
+      resources
+      | where type =~ 'microsoft.compute/virtualmachines'
+      ${ params.subscriptionId ? "| where subscriptionId == '" & $guid(params.subscriptionId) & "'" }
+      | extend lid = tolower(id), powerState = tostring(split(tostring(properties.extended.instanceView.powerState.code), '/')[1]), osType = tostring(properties.storageProfile.osDisk.osType), vmSize = tostring(properties.hardwareProfile.vmSize)
+      | join kind=leftouter (
+          recoveryservicesresources
+          | where type =~ 'microsoft.recoveryservices/vaults/backupfabrics/protectioncontainers/protecteditems'
+          | where tostring(properties.backupManagementType) =~ 'AzureIaasVM'
+          | extend vmId = tolower(tostring(properties.sourceResourceId)), vaultName = tostring(split(id, '/')[8]), protectionState = tostring(properties.protectionState), lastBackupStatus = tostring(properties.lastBackupStatus), lastBackupTime = todatetime(properties.lastBackupTime), policyName = tostring(properties.policyName)
+          | summarize arg_max(lastBackupTime, vaultName, protectionState, lastBackupStatus, policyName) by vmId
+        ) on $left.lid == $right.vmId
+      | extend hoursSinceBackup = iff(isnull(lastBackupTime), int(null), toint(datetime_diff('hour', now(), lastBackupTime)))
+      | extend backup = case(
+          isempty(vmId), 'Not protected',
+          protectionState in~ ('ProtectionStopped', 'ProtectionPaused'), 'Protection stopped',
+          lastBackupStatus =~ 'Failed', 'Last backup failed',
+          isnull(hoursSinceBackup) or hoursSinceBackup >= ${ $number(params.overdueHours) in [26, 48, 168] ? $string($number(params.overdueHours)) : '48' }, 'Backup overdue',
+          'Protected')
+      ${ params.state = 'any' ? '' : params.state in ['Not protected', 'Protection stopped', 'Last backup failed', 'Backup overdue'] ? "| where backup == '" & params.state & "'" : "| where backup != 'Protected'" }
+      | summarize total = count(), unprotected = countif(backup == 'Not protected'), stopped = countif(backup == 'Protection stopped'), failing = countif(backup in ('Last backup failed', 'Backup overdue'))
+    transform: "${ value.value[0] }"
+    cache: { ttl: 300 }
+
+layout:
+  - widget: kpi
+    data: summary.total
+    label: VMs listed
+    format: number
+  - widget: kpi
+    data: summary.unprotected
+    label: Not protected
+    format: number
+    status: "${ value > 0 ? 'crit' : 'ok' }"
+    href: /p/azure.vms-without-backup?state=Not%20protected
+  - widget: kpi
+    data: summary.stopped
+    label: Protection stopped
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+    href: /p/azure.vms-without-backup?state=Protection%20stopped
+  - widget: kpi
+    data: summary.failing
+    label: Failed or overdue backups
+    format: number
+    status: "${ value > 0 ? 'crit' : 'ok' }"
+  - widget: table
+    id: vms
+    span: 12
+    data: vms.value
+    rowKey: id
+    selection: multi
+    columns:
+      - { field: name, label: Virtual machine, kind: identity, secondary: vmSize, sortable: true }
+      - field: backup
+        label: Backup
+        kind: status
+        map: { Not protected: [crit, Not protected], Protection stopped: [warn, Protection stopped], Last backup failed: [crit, Last backup failed], Backup overdue: [warn, Backup overdue], Protected: [ok, Protected] }
+        filter: { type: facet, param: state }
+      - { field: lastBackupTime, label: Last backup, kind: relativeTime, sortable: true }
+      - { field: vaultName, label: Vault, filter: facet }
+      - { field: policyName, label: Policy, filter: facet }
+      - { field: powerState, label: Power state, filter: facet }
+      - { field: osType, label: OS, filter: facet }
+      - { field: resourceGroup, label: Resource group, filter: facet }
+      - { field: subscriptionName, label: Subscription, filter: facet }
+      - { field: hoursSinceBackup, label: Hours since backup, kind: number, hidden: true }
+      - { field: lastBackupStatus, label: Last backup status, hidden: true }
+      - { field: protectionState, label: Protection state, hidden: true }
+      - { field: location, label: Location, hidden: true }
+      - { field: tags, label: Tags, kind: tags, hidden: true }
+      - { field: subscriptionId, label: Subscription id, kind: guid, hidden: true }
+      - { field: id, label: Resource id, kind: code, hidden: true }
+    inspect:
+      page: azure.resource
+      params:
+        id: ${ row.id }
+    rowActions:
+      - label: Open Backup in Azure portal
+        icon: arrow-square-out
+        href: https://portal.azure.com/#resource${ row.id }/backup
+    bulkActions:
+      - playbook: azure.add-tags
+        label: Add or update a tag
+        icon: tag
+        forEach:
+          inputs:
+            resourceId: ${ row.id }
+          concurrency: 5
+        maxItems: 500
+    empty:
+      title: Every VM is backed up
+      body: Every virtual machine in the subscriptions you can read is protected by Azure Backup and its last backup succeeded in time. VMs deliberately left without backup can be tagged (for example backup = none).
+
+export:
+  formats: [csv, xlsx]
+  fileName: azure-vms-without-backup
+  data: vms.value
+  columns: all

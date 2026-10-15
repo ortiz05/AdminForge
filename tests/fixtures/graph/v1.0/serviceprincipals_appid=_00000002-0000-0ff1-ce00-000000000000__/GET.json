@@ -1,0 +1,26 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#servicePrincipals(id,appId,displayName,appRoles)/$entity",
+  "id": "00000000-0000-4000-8000-000000000408",
+  "appId": "00000002-0000-0ff1-ce00-000000000000",
+  "displayName": "Office 365 Exchange Online",
+  "appRoles": [
+    {
+      "id": "dc890d15-9560-4a4c-9b7f-a736ec74ec40",
+      "value": "full_access_as_app",
+      "displayName": "Use Exchange Web Services with full access to all mailboxes",
+      "allowedMemberTypes": [
+        "Application"
+      ],
+      "isEnabled": true
+    },
+    {
+      "id": "dc50a0fb-09a3-484d-be87-e023b12c6440",
+      "value": "Exchange.ManageAsApp",
+      "displayName": "Manage Exchange As Application",
+      "allowedMemberTypes": [
+        "Application"
+      ],
+      "isEnabled": true
+    }
+  ]
+}

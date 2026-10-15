@@ -1,0 +1,228 @@
+$schema: ../../../packages/schemas/generated/report.schema.json
+kind: report
+id: identity.directory-changes
+version: 1.0.0
+title: High-impact directory changes
+summary: >-
+  Changes from the Entra directory audit log that deserve a second pair of eyes — role assignments and PIM settings,
+  app consents and application permissions, credentials and owners added to apps, Conditional Access policies and
+  named locations, domains and federation — with who made them, from where, and the target. Entra keeps audit logs
+  for 7 days (30 with Microsoft Entra ID P1).
+owner: identity-team
+tags: [identity, audit, security, change, report]
+nav: { section: reports, label: High-impact directory changes, icon: clock-counter-clockwise, order: 24 }
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    graph: [AuditLog.Read.All, Directory.Read.All]
+  entraRoles: [Reports Reader]
+
+params:
+  days:
+    type: enum
+    label: Time range
+    facet: true
+    default: 7
+    values:
+      - { value: 1, label: Last 24 hours }
+      - { value: 7, label: Last 7 days }
+      - { value: 30, label: Last 30 days (Entra ID P1) }
+  area:
+    type: enum
+    label: Area
+    facet: true
+    default: All
+    values:
+      - { value: All, label: All high-impact changes }
+      - { value: Roles, label: Directory roles and PIM }
+      - { value: Consent, label: Consent and app permissions }
+      - { value: Credentials, label: App credentials and owners }
+      - { value: Conditional Access, label: Conditional Access }
+      - { value: Domains, label: "Domains, federation and partners" }
+  result: { type: enum, values: [Any, success, failure], default: Any, label: Result, facet: true }
+
+savedViews:
+  enabled: true
+  shared: true
+  presets:
+    - { name: Role changes this week, params: { area: Roles, days: 7 } }
+    - { name: New consents and app permissions, params: { area: Consent, days: 7 } }
+    - { name: Credentials added to apps, params: { area: Credentials, days: 7 } }
+    - { name: Failed high-impact changes, params: { result: failure, days: 30 } }
+
+# The activity list lives in one place (`rules`): it builds the server-side $filter and labels each event.
+# `prefix` rules match the activity name's start (PIM variants such as "… completed (PIM activation)").
+datasources:
+  rules:
+    source: static
+    data:
+      - { area: Roles, match: prefix, name: Add member to role }
+      - { area: Roles, match: prefix, name: Add eligible member to role }
+      - { area: Roles, match: prefix, name: Add scoped member to role }
+      - { area: Roles, match: prefix, name: Remove member from role }
+      - { area: Roles, match: prefix, name: Remove eligible member from role }
+      - { area: Roles, match: prefix, name: Remove scoped member from role }
+      - { area: Roles, match: exact, name: Update role setting in PIM }
+      - { area: Consent, match: exact, name: Consent to application }
+      - { area: Consent, match: exact, name: Add delegated permission grant }
+      - { area: Consent, match: exact, name: Add app role assignment to service principal }
+      - { area: Credentials, match: prefix, name: Update application – Certificates and secrets management }
+      - { area: Credentials, match: exact, name: Add service principal credentials }
+      - { area: Credentials, match: exact, name: Add owner to application }
+      - { area: Credentials, match: exact, name: Add owner to service principal }
+      - { area: Conditional Access, match: exact, name: Add conditional access policy }
+      - { area: Conditional Access, match: exact, name: Update conditional access policy }
+      - { area: Conditional Access, match: exact, name: Delete conditional access policy }
+      - { area: Conditional Access, match: exact, name: Add named location }
+      - { area: Conditional Access, match: exact, name: Update named location }
+      - { area: Conditional Access, match: exact, name: Delete named location }
+      - { area: Domains, match: exact, name: Set federation settings on domain }
+      - { area: Domains, match: exact, name: Set domain authentication }
+      - { area: Domains, match: exact, name: Add unverified domain }
+      - { area: Domains, match: exact, name: Verify domain }
+      - { area: Domains, match: exact, name: Add partner to company }
+  audits:
+    source: graph
+    request:
+      path: /auditLogs/directoryAudits
+      query:
+        $filter: >-
+          ${ (
+            $area := params.area ? params.area : 'All';
+            $rules := $area = 'All' ? ds.rules : ds.rules[area = $area];
+            $clauses := $rules.(match = 'prefix'
+              ? 'startswith(activityDisplayName, ' & $odata(name) & ')'
+              : 'activityDisplayName eq ' & $odata(name));
+            $join([
+              'activityDateTime ge ' & $daysAgo($number(params.days ? params.days : 7)),
+              '(' & $join($clauses, ' or ') & ')',
+              params.result in ['success', 'failure'] ? 'result eq ' & $odata(params.result)
+            ][$], ' and ')
+          ) }
+        $top: 999
+    paging: all
+    maxItems: 20000
+    cache: { ttl: 300 }
+    transform: >-
+      ${ (
+        $rules := ds.rules;
+        $areaOf := function($a) {
+          $rules[match = 'exact' ? name = $a : $substring($a, 0, $length(name)) = name][0].area
+        };
+        $unquote := function($v) { $v ? $trim($replace($replace($string($v), '"', ''), /[\[\]]/, '')) : null };
+        $all := [value.value.(
+          $area := $areaOf(activityDisplayName);
+          $props := [targetResources.modifiedProperties];
+          $prop := function($n) { $props[displayName = $n][0] };
+          $role := $unquote($prop('Role.DisplayName').newValue);
+          $perms := $unquote($prop('ConsentAction.Permissions').newValue);
+          $target := targetResources[0];
+          $area ? {
+            "id": id,
+            "time": activityDateTime,
+            "area": $area,
+            "activity": activityDisplayName,
+            "result": result,
+            "reason": resultReason,
+            "initiator": initiatedBy.user.userPrincipalName ? initiatedBy.user.userPrincipalName
+                         : initiatedBy.app.displayName ? initiatedBy.app.displayName & ' (app)' : 'System',
+            "initiatorId": initiatedBy.user.id,
+            "ipAddress": initiatedBy.user.ipAddress,
+            "target": $join(targetResources.(userPrincipalName ? userPrincipalName : displayName)[$], ', '),
+            "targetType": $target.type,
+            "targetId": $target.id,
+            "detail": $role ? $role
+                      : $perms ? $substring($perms, 0, 300)
+                      : $join($distinct($props.displayName)[$ != 'Included Updated Properties'], ', '),
+            "service": loggedByService,
+            "correlationId": correlationId
+          }
+        )];
+        $shown := $all[$$.params.result = 'Any' or result = $$.params.result];
+        {
+          "rows": [$shown^(>time)],
+          "roles": $count($shown[area = 'Roles']),
+          "consent": $count($shown[area = 'Consent']),
+          "credentials": $count($shown[area = 'Credentials']),
+          "conditionalAccess": $count($shown[area = 'Conditional Access']),
+          "domains": $count($shown[area = 'Domains']),
+          "failures": $count($shown[result = 'failure'])
+        }
+      ) }
+
+layout:
+  - widget: kpi
+    id: roles
+    data: audits.roles
+    label: Role and PIM changes
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+  - widget: kpi
+    id: consent
+    data: audits.consent
+    label: Consents and app permissions
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+  - widget: kpi
+    id: credentials
+    data: audits.credentials
+    label: App credentials and owners added
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+  - widget: kpi
+    id: conditionalAccess
+    data: audits.conditionalAccess
+    label: Conditional Access changes
+    format: number
+    status: "${ value > 0 ? 'info' : 'ok' }"
+  - widget: kpi
+    id: domains
+    data: audits.domains
+    label: Domain, federation and partner changes
+    format: number
+    status: "${ value > 0 ? 'crit' : 'ok' }"
+  - widget: kpi
+    id: failures
+    data: audits.failures
+    label: Failed attempts
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+  - widget: table
+    id: changes
+    span: 12
+    data: audits.rows
+    rowKey: id
+    columns:
+      - { field: time, label: Time, kind: datetime, sortable: true }
+      - { field: area, label: Area, filter: { type: facet, param: area } }
+      - { field: activity, label: Activity, filter: facet }
+      - { field: detail, label: Role, permissions or properties }
+      - { field: target, label: Target }
+      - { field: initiator, label: Changed by, filter: text }
+      - field: result
+        label: Result
+        kind: status
+        map: { success: [ok, Success], failure: [crit, Failure], timeout: [warn, Timeout] }
+        filter: { type: facet, param: result }
+      - { field: ipAddress, label: IP address, kind: code, hidden: true }
+      - { field: service, label: Service, hidden: true }
+      - { field: reason, label: Reason, hidden: true }
+      - { field: targetType, label: Target type, hidden: true }
+      - { field: targetId, label: Target id, kind: guid, hidden: true }
+      - { field: correlationId, label: Correlation id, kind: guid, hidden: true }
+    rowActions:
+      - { label: Open changed-by user, icon: user, href: "/p/identity.user?id=${ $encode(row.initiatorId) }", when: "${ $boolean(row.initiatorId) }" }
+      - { label: Open target user, icon: user, href: "/p/identity.user?id=${ $encode(row.targetId) }", when: "${ row.targetType = 'User' and $boolean(row.targetId) }" }
+      - { label: Open target group, icon: users-three, href: "/p/identity.group?id=${ $encode(row.targetId) }", when: "${ row.targetType = 'Group' and $boolean(row.targetId) }" }
+      - { label: Open target enterprise app, icon: app-window, href: "/p/identity.enterprise-app?id=${ $encode(row.targetId) }", when: "${ row.targetType = 'ServicePrincipal' and $boolean(row.targetId) }" }
+      - { label: Open target app registration, icon: app-window, href: "/p/identity.app-registration?id=${ $encode(row.targetId) }", when: "${ row.targetType = 'Application' and $boolean(row.targetId) }" }
+      - { label: Open policy, icon: shield-check, href: "/p/identity.ca-policy?id=${ $encode(row.targetId) }", when: "${ row.activity in ['Add conditional access policy', 'Update conditional access policy'] and $boolean(row.targetId) }" }
+    empty:
+      title: No high-impact changes
+      body: Nothing in these areas changed in the selected time range. Entra keeps audit logs for 7 days (30 with Entra ID P1).
+
+export:
+  formats: [csv, xlsx]
+  fileName: directory-changes-${ params.days }d
+  data: audits.rows
+  columns: all

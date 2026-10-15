@@ -1,0 +1,186 @@
+$schema: ../../../packages/schemas/generated/report.schema.json
+kind: report
+id: azure.orphaned-role-assignments
+version: 1.0.1
+title: Role assignments to deleted identities
+summary: Azure role assignments whose user, group or service principal no longer exists in Microsoft Entra ID (shown as "Identity not found" in the Azure portal) — safe clean-up candidates that clutter access reviews and count towards the 4,000 assignments per subscription.
+owner: azure-team
+tags: [azure, rbac, access, hygiene]
+nav: { section: reports, label: Role assignments to deleted identities, icon: user-circle-dashed, order: 190 }
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    arm: [user_impersonation]
+    # Existence of each principal: getByIds in batches of 1000 (up to 3000 distinct principals per run).
+    graph: [Directory.Read.All]
+  azureRoles: [Reader]
+
+params:
+  subscriptionId: { type: string, format: guid, label: Subscription, picker: subscription, facet: true, description: Leave empty to include the root and management group scopes. }
+  privilegedOnly: { type: boolean, default: false, label: Privileged roles only, facet: true, description: "Owner, User Access Administrator and Role Based Access Control Administrator." }
+
+datasources:
+  principals:
+    source: resourceGraph
+    # One row per principal that holds a role in scope (ForeignGroup principals live in another tenant: never looked up).
+    query: |
+      // af:azure.orphaned-role-assignments#principals
+      authorizationresources
+      | where type =~ 'microsoft.authorization/roleassignments'
+      | extend principalId = tostring(properties.principalId), principalType = tostring(properties.principalType), roleDefinitionGuid = tolower(extract('([0-9a-fA-F-]{36})$', 1, tostring(properties.roleDefinitionId)))
+      | where principalType != 'ForeignGroup'
+      ${ params.subscriptionId ? "| where subscriptionId == '" & $guid(params.subscriptionId) & "'" }
+      | join kind=leftouter (authorizationresources | where type =~ 'microsoft.authorization/roledefinitions' | extend roleDefinitionGuid = tolower(name), roleName = tostring(properties.roleName) | summarize roleName = any(roleName) by roleDefinitionGuid) on roleDefinitionGuid
+      | extend privileged = roleName in~ ('Owner', 'User Access Administrator', 'Role Based Access Control Administrator')
+      ${ params.privilegedOnly = true ? '| where privileged' : '' }
+      | summarize assignments = count(), privilegedAssignments = countif(privileged) by principalId
+      | order by principalId asc
+    paging: all
+    maxItems: 50000
+    cache: { ttl: 300 }
+  found1:
+    source: graph
+    when: "${ $count(ds.principals.value) > 0 }"
+    # getByIds answers only for principals that still exist (1000 ids per call).
+    request:
+      method: POST
+      path: /directoryObjects/getByIds
+      query: { $select: id }
+      body:
+        ids: "${ $append([], $filter(ds.principals.value, function($v, $i) { $i < 1000 }).principalId) }"
+    transform: "${ $append([], value.value.id) }"
+    cache: { ttl: 300 }
+  found2:
+    source: graph
+    when: "${ $count(ds.principals.value) > 1000 }"
+    request:
+      method: POST
+      path: /directoryObjects/getByIds
+      query: { $select: id }
+      body:
+        ids: "${ $append([], $filter(ds.principals.value, function($v, $i) { $i >= 1000 and $i < 2000 }).principalId) }"
+    transform: "${ $append([], value.value.id) }"
+    cache: { ttl: 300 }
+  found3:
+    source: graph
+    when: "${ $count(ds.principals.value) > 2000 }"
+    request:
+      method: POST
+      path: /directoryObjects/getByIds
+      query: { $select: id }
+      body:
+        ids: "${ $append([], $filter(ds.principals.value, function($v, $i) { $i >= 2000 and $i < 3000 }).principalId) }"
+    transform: "${ $append([], value.value.id) }"
+    cache: { ttl: 300 }
+  deleted:
+    source: static
+    data: {}
+    # Checked principals that getByIds didn't return. Lookups go through one object built by JSONata's grouping
+    # constructor (`list{ $: true }`, not $merge of many objects; no `in` over long lists) and slices use $filter (a
+    # [[a..b]] range filter is quadratic in JSONata): about 50 ms for 3,000 principals, well inside the 250 ms budget.
+    transform: >-
+      ${ (
+        $list := function($v) { $type($v) = 'array' ? $v : [] };
+        $checked := $append([], $filter(ds.principals.value, function($v, $i) { $i < 3000 }));
+        $found := $append($append($append([], $list(ds.found1)), $list(ds.found2)), $list(ds.found3))[$type($) = 'string']{ $: true };
+        $deleted := [$checked[$exists($lookup($found, principalId)) = false]];
+        {
+          'ids': $append([], $deleted.principalId),
+          'count': $count($deleted),
+          'privileged': $sum([0, $deleted.privilegedAssignments]),
+          'checked': $count($checked),
+          'notChecked': $count(ds.principals.value) - $count($checked)
+        }
+      ) }
+  orphans:
+    source: resourceGraph
+    # The assignments of the deleted principals (at most 1000 per run; ids are GUID-checked before they reach the query).
+    query: |
+      // af:azure.orphaned-role-assignments#rows
+      authorizationresources
+      | where type =~ 'microsoft.authorization/roleassignments'
+      | extend scope = tolower(tostring(properties.scope)), principalId = tostring(properties.principalId), principalType = tostring(properties.principalType), roleDefinitionGuid = tolower(extract('([0-9a-fA-F-]{36})$', 1, tostring(properties.roleDefinitionId))), createdOn = todatetime(properties.createdOn), createdBy = tostring(properties.createdBy)
+      ${ ds.deleted.count > 0 ? "| where principalId in (" & $join($map($filter($append([], ds.deleted.ids), function($v, $i) { $i < 1000 }), function($v) { "'" & $guid($v) & "'" }), ', ') & ")" : '| where 1 == 0' }
+      ${ params.subscriptionId ? "| where subscriptionId == '" & $guid(params.subscriptionId) & "'" }
+      | join kind=leftouter (authorizationresources | where type =~ 'microsoft.authorization/roledefinitions' | extend roleDefinitionGuid = tolower(name), roleName = tostring(properties.roleName) | summarize roleName = any(roleName) by roleDefinitionGuid) on roleDefinitionGuid
+      | extend privileged = roleName in~ ('Owner', 'User Access Administrator', 'Role Based Access Control Administrator')
+      ${ params.privilegedOnly = true ? '| where privileged' : '' }
+      | extend depth = array_length(split(scope, '/'))
+      | extend scopeLevel = case(scope == '/', 'Root', scope contains '/managementgroups/', 'Management group', depth == 3, 'Subscription', depth == 5, 'Resource group', 'Resource')
+      | project id, roleName, privileged = iff(privileged, 'true', 'false'), principalId, principalType, scope, scopeLevel, subscriptionId, createdOn, createdBy
+      | order by createdOn asc
+    paging: all
+    maxItems: 20000
+    cache: { ttl: 300 }
+
+layout:
+  - widget: kpi
+    data: orphans.totalRecords
+    label: Assignments to deleted identities
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+  - widget: kpi
+    data: deleted.count
+    label: Deleted identities
+    format: number
+  - widget: kpi
+    data: deleted.privileged
+    label: Privileged assignments among them
+    format: number
+    status: "${ value > 0 ? 'crit' : 'ok' }"
+  - widget: kpi
+    data: deleted.checked
+    label: Principals checked
+    format: number
+  - widget: markdown
+    span: 12
+    when: "${ deleted.notChecked > 0 or deleted.count > 1000 }"
+    text: More than 3000 principals hold roles in scope, or more than 1000 of them were deleted, so this run doesn't list everything. Filter by subscription to see the rest.
+  - widget: table
+    id: orphans
+    span: 12
+    data: orphans.value
+    rowKey: id
+    selection: multi
+    columns:
+      - { field: roleName, label: Role, kind: identity, secondary: principalType, sortable: true, filter: facet }
+      - field: privileged
+        label: Privileged
+        kind: status
+        map: { "true": [crit, Privileged], "false": [neutral, Standard] }
+        filter: facet
+      - { field: principalId, label: Deleted principal, kind: guid }
+      - { field: principalType, label: Was a, filter: facet }
+      - { field: scopeLevel, label: Scope level, filter: facet }
+      - { field: scope, label: Scope, kind: code }
+      - { field: createdOn, label: Assigned, kind: date, sortable: true, filter: date }
+      - { field: createdBy, label: Assigned by, kind: guid, hidden: true }
+      - { field: subscriptionId, label: Subscription id, kind: guid, hidden: true }
+      - { field: id, label: Assignment id, kind: code, hidden: true }
+    rowActions:
+      - playbook: azure.remove-role-assignment
+        label: Remove assignment
+        icon: user-minus
+        inputs:
+          assignmentId: ${ row.id }
+      - label: Assignments at this scope
+        icon: funnel
+        href: /p/azure.role-assignments?scope=${ $encode(row.scope) }&include=exact
+    bulkActions:
+      - playbook: azure.remove-role-assignment
+        label: Remove assignments
+        icon: user-minus
+        forEach:
+          inputs:
+            assignmentId: ${ row.id }
+          concurrency: 3
+        maxItems: 50
+    empty:
+      title: No assignments to deleted identities
+      body: Every user, group and service principal that holds an Azure role in the scopes you can read still exists in Microsoft Entra ID.
+
+export:
+  formats: [csv, xlsx]
+  fileName: azure-orphaned-role-assignments
+  data: orphans.value
+  columns: all

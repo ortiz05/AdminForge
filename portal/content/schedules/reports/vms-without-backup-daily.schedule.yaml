@@ -1,0 +1,33 @@
+$schema: ../../../packages/schemas/generated/schedule.schema.json
+kind: schedule
+id: reports.vms-without-backup-daily
+version: 1.0.0
+title: Daily virtual machines without backup report
+summary: >-
+  Every day at 06:30 UTC, writes Azure VMs that no vault protects, whose protection stopped, or whose last backup
+  failed or is more than two days old, as XLSX.
+  Email goes to AF_REPORT_RECIPIENTS when it and AF_MAIL_SENDER are configured.
+owner: azure-team
+tags: [azure, backup, resilience, report]
+cron: "30 6 * * *"
+timezone: UTC
+enabled: true
+identity: automation
+job:
+  kind: report
+  ref: azure.vms-without-backup
+  # Pinned rather than left to the report's defaults so the archive stays comparable from run to run.
+  params: { state: problems, overdueHours: 48 }
+  delivery:
+    - type: file
+      format: xlsx
+      path: azure/vms-without-backup/{date}.xlsx
+      retain: 31
+    - type: email
+      to: ["${ env.AF_REPORT_RECIPIENTS }"]
+      format: xlsx
+retry: { max: 2, backoff: exponential, delay: 5m }
+timeoutSeconds: 1800
+overlap: skip
+requires:
+  azureRoles: [Reader]

@@ -1,0 +1,35 @@
+$schema: ../../../packages/schemas/generated/schedule.schema.json
+kind: schedule
+id: reports.inactive-licensed-users-weekly
+version: 1.0.0
+title: Weekly inactive licensed users report
+summary: >-
+  Every Monday at 07:10 UTC, writes licensed people with no Microsoft 365 activity for 90 days as XLSX and emails it
+  to the report recipients, for the monthly licence true-up. Usage data lags 24–48 hours.
+owner: m365-team
+tags: [m365, usage, licensing, cost, report]
+cron: "10 7 * * 1"
+timezone: UTC
+enabled: true
+identity: automation
+job:
+  kind: report
+  ref: m365.inactive-licensed-users
+  params: { days: 90, workload: any }
+  delivery:
+    - type: file
+      format: xlsx
+      path: m365/inactive-licensed-users/{date}.xlsx
+      retain: 26
+    # Recipients are configuration (never content); without AF_MAIL_SENDER / AF_REPORT_RECIPIENTS the run notes
+    # "not configured" and the file is still kept.
+    - type: email
+      to: ["${ env.AF_REPORT_RECIPIENTS }"]
+      format: xlsx
+retry: { max: 2, backoff: exponential, delay: 5m }
+timeoutSeconds: 1800
+overlap: skip
+requires:
+  # Application permissions held by the automation identity (ADR-011).
+  scopes:
+    graph: [Reports.Read.All]

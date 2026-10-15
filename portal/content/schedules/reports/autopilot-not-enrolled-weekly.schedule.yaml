@@ -1,0 +1,36 @@
+$schema: ../../../packages/schemas/generated/schedule.schema.json
+kind: schedule
+id: reports.autopilot-not-enrolled-weekly
+version: 1.0.0
+title: Weekly Autopilot devices not enrolled report
+summary: >-
+  Every Monday at 07:05 UTC, writes Windows Autopilot devices that never enrolled, failed or are waiting for a reset
+  as XLSX and emails it to the report recipients.
+owner: endpoint-team
+tags: [endpoint, intune, autopilot, report]
+cron: "5 7 * * 1"
+timezone: UTC
+enabled: true
+identity: automation
+job:
+  kind: report
+  ref: endpoint.autopilot-not-enrolled
+  params: { state: any, minDays: 0 }
+  delivery:
+    - type: file
+      format: xlsx
+      path: endpoint/autopilot-not-enrolled/{date}.xlsx
+      retain: 26
+    # Recipients are configuration (never content); without AF_MAIL_SENDER / AF_REPORT_RECIPIENTS the run notes
+    # "not configured" and the file is still kept.
+    - type: email
+      to: ["${ env.AF_REPORT_RECIPIENTS }"]
+      format: xlsx
+retry: { max: 2, backoff: exponential, delay: 5m }
+timeoutSeconds: 1800
+overlap: skip
+requires:
+  # Application permissions held by the automation identity (ADR-011).
+  scopes:
+    graph: [DeviceManagementServiceConfig.Read.All]
+  licences: [intune]

@@ -1,0 +1,69 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#oauth2PermissionGrants",
+  "value": [
+    {
+      "id": "grant-hr-all",
+      "clientId": "00000000-0000-4000-8000-000000000401",
+      "consentType": "AllPrincipals",
+      "principalId": null,
+      "resourceId": "00000000-0000-4000-8000-000000000409",
+      "scope": "User.Read"
+    },
+    {
+      "id": "grant-portal-all",
+      "clientId": "00000000-0000-4000-8000-000000000402",
+      "consentType": "AllPrincipals",
+      "principalId": null,
+      "resourceId": "00000000-0000-4000-8000-000000000409",
+      "scope": "User.Read offline_access"
+    },
+    {
+      "id": "grant-pdf-mchen",
+      "clientId": "00000000-0000-4000-8000-000000000404",
+      "consentType": "Principal",
+      "principalId": "00000000-0000-4000-8000-000000000102",
+      "resourceId": "00000000-0000-4000-8000-000000000409",
+      "scope": "Mail.Read offline_access User.Read"
+    },
+    {
+      "id": "grant-pdf-spatel",
+      "clientId": "00000000-0000-4000-8000-000000000404",
+      "consentType": "Principal",
+      "principalId": "00000000-0000-4000-8000-000000000105",
+      "resourceId": "00000000-0000-4000-8000-000000000409",
+      "scope": "Files.ReadWrite.All Mail.Read offline_access User.Read"
+    },
+    {
+      "id": "grant-payroll-all",
+      "clientId": "00000000-0000-4000-8000-000000000405",
+      "consentType": "AllPrincipals",
+      "principalId": null,
+      "resourceId": "00000000-0000-4000-8000-000000000409",
+      "scope": "openid profile email User.Read"
+    },
+    {
+      "id": "grant-legacy-all",
+      "clientId": "00000000-0000-4000-8000-000000000407",
+      "consentType": "AllPrincipals",
+      "principalId": null,
+      "resourceId": "00000000-0000-4000-8000-000000000409",
+      "scope": "Directory.AccessAsUser.All Directory.ReadWrite.All offline_access"
+    },
+    {
+      "id": "grant-pipeline-all",
+      "clientId": "00000000-0000-4000-8000-000000000406",
+      "consentType": "AllPrincipals",
+      "principalId": null,
+      "resourceId": "00000000-0000-4000-8000-000000000409",
+      "scope": "Sites.Read.All Calendars.ReadWrite User.Read"
+    },
+    {
+      "id": "grant-exo-jrivera",
+      "clientId": "00000000-0000-4000-8000-000000000403",
+      "consentType": "Principal",
+      "principalId": "00000000-0000-4000-8000-000000000109",
+      "resourceId": "00000000-0000-4000-8000-000000000408",
+      "scope": "EWS.AccessAsUser.All"
+    }
+  ]
+}

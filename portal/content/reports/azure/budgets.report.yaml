@@ -1,0 +1,145 @@
+$schema: ../../../packages/schemas/generated/report.schema.json
+kind: report
+id: azure.budgets
+version: 1.0.0
+title: Azure budgets
+summary: Cost Management budgets on a subscription with spend so far, forecast and alert rules — which budgets are over, close to their limit or forecast to overrun before the period ends.
+owner: azure-team
+tags: [azure, cost, budgets, governance]
+nav: { section: reports, label: Azure budgets, icon: piggy-bank, order: 182 }
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    arm: [user_impersonation]
+  # Reader (or Cost Management Reader) on the subscription reads budgets with their current and forecast spend.
+  azureRoles: [Reader]
+
+params:
+  subscriptionId:
+    type: string
+    format: guid
+    label: Subscription
+    picker: subscription
+    facet: true
+    default: "${ env.AF_SUBSCRIPTION_ID }"
+    description: Defaults to the installation's subscription (AF_SUBSCRIPTION_ID).
+  nearPercent:
+    type: enum
+    label: Close to the limit from
+    facet: true
+    default: 80
+    values:
+      - { value: 50, label: 50 % used }
+      - { value: 80, label: 80 % used }
+      - { value: 90, label: 90 % used }
+
+datasources:
+  budgets:
+    source: arm
+    when: "${ params.subscriptionId ? true : false }"
+    # Budgets on the subscription itself; resource-group budgets live under each resource group's scope.
+    request:
+      path: /subscriptions/${ $encode($guid(params.subscriptionId)) }/providers/Microsoft.Consumption/budgets
+      apiVersion: "2023-05-01"
+    paging: all
+    maxItems: 1000
+    transform: >-
+      ${ (
+        $near := ($number(params.nearPercent) in [50, 80, 90] ? $number(params.nearPercent) : 80) / 100;
+        $rows := [value.value.(
+          $amount := properties.amount ? properties.amount : 0;
+          $spent := properties.currentSpend.amount ? properties.currentSpend.amount : 0;
+          $forecast := properties.forecastSpend.amount;
+          $used := $amount > 0 ? $round($spent / $amount, 4) : 0;
+          $forecastUsed := $amount > 0 and $exists($forecast) ? $round($forecast / $amount, 4) : null;
+          $alerts := properties.notifications ? [$each(properties.notifications, function($v) { $v })] : [];
+          $ended := $exists(properties.timePeriod.endDate) and $daysUntil(properties.timePeriod.endDate) < 0;
+          {
+            'id': id,
+            'name': name,
+            'category': properties.category,
+            'timeGrain': properties.timeGrain,
+            'amount': $amount,
+            'currentSpend': $spent,
+            'forecastSpend': $forecast,
+            'currency': properties.currentSpend.unit ? properties.currentSpend.unit : properties.forecastSpend.unit,
+            'used': $used,
+            'forecastUsed': $forecastUsed,
+            'state': $ended ? 'Ended' : $used >= 1 ? 'Over' : $used >= $near ? 'Near' : ($type($forecastUsed) = 'number' and $forecastUsed >= 1) ? 'Forecast' : 'OK',
+            'alerts': $count($alerts[enabled = true]),
+            'thresholds': $join([$alerts[enabled = true].($string(threshold) & ' % ' & (thresholdType ? $lowercase(thresholdType) : 'actual'))], ', '),
+            'startDate': properties.timePeriod.startDate,
+            'endDate': properties.timePeriod.endDate,
+            'filtered': $exists(properties.filter) and $count($keys(properties.filter)) > 0
+          }
+        )];
+        {
+          'rows': [$rows^(>used)],
+          'total': $count($rows),
+          'over': $count($rows[state = 'Over']),
+          'near': $count($rows[state = 'Near']),
+          'forecast': $count($rows[state = 'Forecast']),
+          'noAlerts': $count($rows[state != 'Ended' and alerts = 0])
+        }
+      ) }
+    cache: { ttl: 900 }
+
+layout:
+  - widget: kpi
+    data: budgets.over
+    label: Over budget
+    format: number
+    status: "${ value > 0 ? 'crit' : 'ok' }"
+  - widget: kpi
+    data: budgets.near
+    label: Close to the limit
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+  - widget: kpi
+    data: budgets.forecast
+    label: Forecast to overrun
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+  - widget: kpi
+    data: budgets.noAlerts
+    label: Without alert rules
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+  - widget: table
+    id: budgets
+    span: 12
+    data: budgets.rows
+    rowKey: id
+    columns:
+      - { field: name, label: Budget, kind: identity, secondary: timeGrain, sortable: true }
+      - field: state
+        label: State
+        kind: status
+        map: { Over: [crit, Over budget], Near: [warn, Close to the limit], Forecast: [warn, Forecast to overrun], OK: [ok, Within budget], Ended: [neutral, Period ended] }
+        filter: facet
+      - { field: used, label: Used, kind: percent, sortable: true, filter: range }
+      - { field: forecastUsed, label: Forecast, kind: percent, sortable: true }
+      - { field: currentSpend, label: Spent, kind: number, sortable: true }
+      - { field: amount, label: Budget amount, kind: number, sortable: true }
+      - { field: forecastSpend, label: Forecast spend, kind: number, hidden: true }
+      - { field: currency, label: Currency, filter: facet }
+      - { field: alerts, label: Alert rules, kind: number, filter: range }
+      - { field: thresholds, label: Alert thresholds, hidden: true }
+      - { field: filtered, label: Filtered budget, kind: boolean, hidden: true }
+      - { field: category, label: Category, hidden: true }
+      - { field: startDate, label: Starts, kind: date, hidden: true }
+      - { field: endDate, label: Ends, kind: date }
+      - { field: id, label: Budget id, kind: code, hidden: true }
+    rowActions:
+      - label: Open in Cost Management
+        icon: arrow-square-out
+        href: https://portal.azure.com/#view/Microsoft_Azure_CostManagement/Menu/~/budgets/openedBy/AzurePortal
+    empty:
+      title: No budgets to show
+      body: This subscription has no Cost Management budget, or no subscription is selected. Budgets on resource groups are kept under each resource group. Some offers (for example CSP) manage cost outside the subscription.
+
+export:
+  formats: [csv, xlsx]
+  fileName: azure-budgets
+  data: budgets.rows
+  columns: all

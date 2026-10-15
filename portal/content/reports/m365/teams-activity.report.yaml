@@ -1,0 +1,187 @@
+$schema: ../../../packages/schemas/generated/report.schema.json
+kind: report
+id: m365.teams-activity
+version: 1.0.0
+title: Inactive, public and guest-active teams
+summary: >-
+  Teams with no activity for the chosen number of days (archive or delete candidates), public teams anyone in the
+  organization can join, and teams where guests or external users were active — from the Microsoft Teams team activity
+  report (last 90 days).
+owner: m365-team
+tags: [m365, teams, governance, guests, usage, report]
+nav: { section: reports, label: Team activity and exposure, icon: microsoft-teams-logo, order: 132 }
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    graph: [Reports.Read.All]
+  entraRoles: [Reports Reader, Teams Administrator, Global Reader]
+  licences: [teams]
+
+params:
+  view:
+    type: enum
+    label: Show
+    facet: true
+    default: inactive
+    values:
+      - { value: inactive, label: Inactive teams }
+      - { value: public, label: Public teams }
+      - { value: guests, label: Teams with active guests or external users }
+      - { value: all, label: All teams }
+  days:
+    type: enum
+    label: Inactive after
+    facet: true
+    default: 90
+    values:
+      - { value: 30, label: 30 days }
+      - { value: 60, label: 60 days }
+      - { value: 90, label: 90 days }
+      - { value: 180, label: 180 days }
+
+filters:
+  facets: [view, days]
+
+savedViews:
+  enabled: true
+  shared: true
+  presets:
+    - { name: Inactive for 90 days, params: { view: inactive, days: 90 } }
+    - { name: Public teams, params: { view: public } }
+    - { name: Guests or external users active, params: { view: guests } }
+
+# Activity counts cover the last 90 days; the last activity date is the team's latest activity whenever it was. Guest
+# and external counts are people who were active in the team, not every guest member. Concealed report names show as
+# hashes (no team name), and the team can't be opened from here.
+datasources:
+  teams:
+    source: graph
+    label: Teams team activity detail (usage report)
+    request:
+      beta: true
+      path: /reports/getTeamsTeamActivityDetail(period='D90')
+      query: { $format: application/json }
+    paging: all
+    maxItems: 100000
+    cache: { ttl: 3600 }
+    transform: >-
+      ${ (
+        $days := params.days ? $number(params.days) : 90;
+        $view := params.view ? params.view : 'inactive';
+        $all := [value.value[$not(isDeleted = true)].(
+          $d := $exists(details) ? details[0] : $;
+          $idle := lastActivityDate ? -$daysUntil(lastActivityDate);
+          {
+            "teamId": teamId,
+            "teamName": teamName,
+            "teamType": teamType,
+            "lastActivityDate": lastActivityDate,
+            "daysInactive": $idle,
+            "inactive": lastActivityDate ? $idle >= $days : true,
+            "activeUsers": $d.activeUsers ? $d.activeUsers : 0,
+            "guests": $d.guests ? $d.guests : 0,
+            "externalUsers": $d.activeExternalUsers ? $d.activeExternalUsers : 0,
+            "activeChannels": $d.activeChannels ? $d.activeChannels : 0,
+            "messages": ($d.channelMessages ? $d.channelMessages : 0) + ($d.postMessages ? $d.postMessages : 0) + ($d.replyMessages ? $d.replyMessages : 0),
+            "meetings": $d.meetingsOrganized ? $d.meetingsOrganized : 0,
+            "openable": $contains(teamId ? teamId : '', /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/),
+            "reportRefreshDate": reportRefreshDate
+          }
+        )];
+        $exposed := function($t) { $t.guests > 0 or $t.externalUsers > 0 };
+        $rows := $view = 'all' ? $all
+          : $view = 'public' ? $all[teamType = 'Public']
+          : $view = 'guests' ? $all[$exposed($)]
+          : $all[inactive];
+        {
+          "rows": [$rows^(inactive ? 0 : 1, $exists(daysInactive) ? 1 : 0, >daysInactive, >guests, teamName)],
+          "inactive": $count($all[inactive]),
+          "public": $count($all[teamType = 'Public']),
+          "inactivePublic": $count($all[inactive and teamType = 'Public']),
+          "guests": $count($all[$exposed($)]),
+          "total": $count($all),
+          "concealed": $count($all[$not(openable)]) > 0
+        }
+      ) }
+
+layout:
+  - widget: markdown
+    span: 12
+    when: ${ teams.concealed = true }
+    text: |
+      **Team names are concealed in usage reports**, or some teams can't be matched to a Microsoft 365 group. A Global
+      Administrator can turn off *Display concealed user, group, and site names in all reports* in the Microsoft 365
+      admin center → **Settings → Org settings → Services → Reports**.
+  - widget: kpi
+    data: teams.inactive
+    label: Inactive teams
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+    href: /p/m365.teams-activity?view=inactive
+  - widget: kpi
+    data: teams.public
+    label: Public teams
+    format: number
+    status: "${ teams.inactivePublic > 0 ? 'warn' : 'ok' }"
+    href: /p/m365.teams-activity?view=public
+  - widget: kpi
+    data: teams.guests
+    label: Teams with active guests or external users
+    format: number
+    status: "${ value > 0 ? 'info' : 'ok' }"
+    href: /p/m365.teams-activity?view=guests
+  - widget: kpi
+    data: teams.total
+    label: Teams
+    format: number
+  - widget: markdown
+    span: 12
+    text: |
+      **What to do.** Ask the owners of inactive teams whether they still need them, then archive (read-only, keeps
+      the content) or delete the team — a Microsoft 365 group expiration policy can automate this. Make public teams
+      private unless everyone in the organization should be able to join, and review guest access on teams that hold
+      sensitive content. Teams without any owner are on the Teams without owners report.
+  - widget: table
+    id: teams
+    span: 12
+    data: teams.rows
+    rowKey: teamId
+    columns:
+      - { field: teamName, label: Team, kind: identity, secondary: teamId, sortable: true }
+      - field: inactive
+        label: Activity
+        kind: status
+        map: { "true": [warn, Inactive], "false": [ok, Active] }
+        filter: facet
+      - { field: daysInactive, label: Days since activity, kind: number, align: end, sortable: true, filter: range }
+      - { field: lastActivityDate, label: Last activity, kind: date, filter: date }
+      - field: teamType
+        label: Privacy
+        kind: status
+        map: { Public: [warn, Public], Private: [neutral, Private], Shared: [info, Shared] }
+        filter: facet
+      - { field: activeUsers, label: Active users, kind: number, align: end, sortable: true }
+      - { field: guests, label: Active guests, kind: number, align: end, sortable: true }
+      - { field: externalUsers, label: Active external users, kind: number, align: end }
+      - { field: messages, label: Messages, kind: number, align: end, hidden: true }
+      - { field: meetings, label: Meetings, kind: number, align: end, hidden: true }
+      - { field: activeChannels, label: Active channels, kind: number, align: end, hidden: true }
+      - { field: reportRefreshDate, label: Report date, kind: date, hidden: true }
+    rowActions:
+      - label: Open team
+        icon: microsoft-teams-logo
+        href: /p/m365.team?id=${ $encode(row.teamId) }
+        when: ${ row.openable = true }
+      - label: Open in Teams admin center
+        icon: arrow-square-out
+        href: "https://admin.teams.microsoft.com/teams/manage/${ $encode(row.teamId) }"
+        when: ${ row.openable = true }
+    empty:
+      title: No teams in this view
+      body: No team matches. Usage data appears 24–48 hours after activity; new teams show up after their first report.
+
+export:
+  formats: [csv, xlsx]
+  fileName: teams-activity-${ params.view }
+  data: teams.rows
+  columns: all

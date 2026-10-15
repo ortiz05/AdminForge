@@ -1,0 +1,226 @@
+$schema: ../../../packages/schemas/generated/report.schema.json
+kind: report
+id: azure.orphaned-resources
+version: 1.0.0
+title: Orphaned Azure resources
+summary: Resources that cost money or clutter subscriptions without doing anything — unattached disks, disks of deallocated VMs, unassociated public IPs, detached network interfaces, old snapshots, App Service plans without apps and empty resource groups.
+owner: azure-team
+tags: [azure, cost, hygiene, governance, resource-graph]
+nav: { section: reports, label: Orphaned Azure resources, icon: trash, order: 181 }
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    arm: [user_impersonation]
+  azureRoles: [Reader]
+
+params:
+  category:
+    type: enum
+    label: Kind
+    facet: true
+    default: any
+    values:
+      - { value: any, label: Everything }
+      - { value: Unattached disk, label: Unattached disks }
+      - { value: Disk of a deallocated VM, label: Disks of deallocated VMs }
+      - { value: Unassociated public IP, label: Unassociated public IPs }
+      - { value: Detached network interface, label: Detached network interfaces }
+      - { value: Old snapshot, label: Old snapshots }
+      - { value: Empty App Service plan, label: App Service plans without apps }
+      - { value: Empty resource group, label: Empty resource groups }
+  snapshotDays:
+    type: enum
+    label: Snapshots older than
+    facet: true
+    default: 90
+    values:
+      - { value: 30, label: 30 days }
+      - { value: 90, label: 90 days }
+      - { value: 180, label: 180 days }
+      - { value: 365, label: 1 year }
+  subscriptionId: { type: string, format: guid, label: Subscription, picker: subscription, facet: true }
+
+datasources:
+  orphans:
+    source: resourceGraph
+    # One pass over resources (no join), then the empty resource groups piped in with union (Resource Graph has no
+    # leading `union a, b` and no leftanti join: a leftouter join on the resource count stands in for it). No transform:
+    # the rows go to the table and stream into exports as they are; the KPIs come from the summary below.
+    query: |
+      // af:azure.orphaned-resources#rows
+      resources
+      | where type in~ ('microsoft.compute/disks', 'microsoft.compute/snapshots', 'microsoft.network/publicipaddresses', 'microsoft.network/networkinterfaces', 'microsoft.web/serverfarms')
+      ${ params.subscriptionId ? "| where subscriptionId == '" & $guid(params.subscriptionId) & "'" }
+      | extend diskState = tostring(properties.diskState), created = todatetime(properties.timeCreated)
+      | extend category = case(
+          type =~ 'microsoft.compute/disks' and diskState =~ 'Unattached', 'Unattached disk',
+          type =~ 'microsoft.compute/disks' and diskState =~ 'Reserved', 'Disk of a deallocated VM',
+          type =~ 'microsoft.network/publicipaddresses' and isempty(tostring(properties.ipConfiguration.id)) and isempty(tostring(properties.natGateway.id)), 'Unassociated public IP',
+          type =~ 'microsoft.network/networkinterfaces' and isempty(tostring(properties.virtualMachine.id)) and isempty(tostring(properties.privateEndpoint.id)) and isempty(tostring(properties.privateLinkService.id)) and coalesce(array_length(properties.hostedWorkloads), 0) == 0, 'Detached network interface',
+          type =~ 'microsoft.compute/snapshots' and created < ago(${ $number(params.snapshotDays) in [30, 90, 180, 365] ? $string($number(params.snapshotDays)) : '90' }d), 'Old snapshot',
+          type =~ 'microsoft.web/serverfarms' and toint(properties.numberOfSites) == 0, 'Empty App Service plan',
+          '')
+      | where isnotempty(category)
+      | extend since = case(category == 'Unattached disk', coalesce(todatetime(properties.LastOwnershipUpdateTime), created), category == 'Old snapshot', created, datetime(null))
+      | extend sizeGB = toint(properties.diskSizeGB), skuName = tostring(sku.name), detail = case(
+          category == 'Unassociated public IP', strcat(tostring(sku.name), ' ', tostring(properties.publicIPAllocationMethod), ' ', tostring(properties.ipAddress)),
+          category == 'Empty App Service plan', strcat(tostring(sku.tier), ' ', tostring(sku.name)),
+          category == 'Disk of a deallocated VM', tostring(split(managedBy, '/')[-1]),
+          '')
+      | project id, name, type, category, skuName, sizeGB, since, detail, managedBy, resourceGroup, subscriptionId, location, tags
+      | union (resourcecontainers
+          | where type =~ 'microsoft.resources/subscriptions/resourcegroups'
+          ${ params.subscriptionId ? "| where subscriptionId == '" & $guid(params.subscriptionId) & "'" }
+          | extend lid = tolower(id)
+          | join kind=leftouter (resources | extend rgId = tolower(strcat('/subscriptions/', subscriptionId, '/resourcegroups/', resourceGroup)) | summarize resourceCount = count() by rgId) on $left.lid == $right.rgId
+          | where isnull(resourceCount) or resourceCount == 0
+          | extend category = 'Empty resource group', resourceGroup = name, skuName = '', sizeGB = toint(0), since = datetime(null), detail = tostring(managedBy)
+          | project id, name, type, category, skuName, sizeGB, since, detail, managedBy, resourceGroup, subscriptionId, location, tags)
+      ${ params.category in ['Unattached disk', 'Disk of a deallocated VM', 'Unassociated public IP', 'Detached network interface', 'Old snapshot', 'Empty App Service plan', 'Empty resource group'] ? "| where category == '" & params.category & "'" }
+      | extend daysSince = iff(isnull(since), int(null), toint(datetime_diff('day', now(), since)))
+      | join kind=leftouter (resourcecontainers | where type =~ 'microsoft.resources/subscriptions' | project subscriptionId, subscriptionName = name) on subscriptionId
+      | project id, name, type, category, skuName, sizeGB, since, daysSince, detail, managedBy, resourceGroup, subscriptionId, subscriptionName, location, tags
+      | order by category asc, sizeGB desc, name asc
+    paging: all
+    maxItems: 50000
+    cache: { ttl: 300 }
+  summary:
+    source: resourceGraph
+    # Same filters as the rows, counted in Resource Graph (transforms have a 250 ms budget; large tenants have many rows).
+    query: |
+      // af:azure.orphaned-resources#summary
+      resources
+      | where type in~ ('microsoft.compute/disks', 'microsoft.compute/snapshots', 'microsoft.network/publicipaddresses', 'microsoft.network/networkinterfaces', 'microsoft.web/serverfarms')
+      ${ params.subscriptionId ? "| where subscriptionId == '" & $guid(params.subscriptionId) & "'" }
+      | extend diskState = tostring(properties.diskState), created = todatetime(properties.timeCreated)
+      | extend category = case(
+          type =~ 'microsoft.compute/disks' and diskState =~ 'Unattached', 'Unattached disk',
+          type =~ 'microsoft.compute/disks' and diskState =~ 'Reserved', 'Disk of a deallocated VM',
+          type =~ 'microsoft.network/publicipaddresses' and isempty(tostring(properties.ipConfiguration.id)) and isempty(tostring(properties.natGateway.id)), 'Unassociated public IP',
+          type =~ 'microsoft.network/networkinterfaces' and isempty(tostring(properties.virtualMachine.id)) and isempty(tostring(properties.privateEndpoint.id)) and isempty(tostring(properties.privateLinkService.id)) and coalesce(array_length(properties.hostedWorkloads), 0) == 0, 'Detached network interface',
+          type =~ 'microsoft.compute/snapshots' and created < ago(${ $number(params.snapshotDays) in [30, 90, 180, 365] ? $string($number(params.snapshotDays)) : '90' }d), 'Old snapshot',
+          type =~ 'microsoft.web/serverfarms' and toint(properties.numberOfSites) == 0, 'Empty App Service plan',
+          '')
+      | where isnotempty(category)
+      | extend since = case(category == 'Unattached disk', coalesce(todatetime(properties.LastOwnershipUpdateTime), created), category == 'Old snapshot', created, datetime(null))
+      | extend sizeGB = toint(properties.diskSizeGB), skuName = tostring(sku.name), detail = case(
+          category == 'Unassociated public IP', strcat(tostring(sku.name), ' ', tostring(properties.publicIPAllocationMethod), ' ', tostring(properties.ipAddress)),
+          category == 'Empty App Service plan', strcat(tostring(sku.tier), ' ', tostring(sku.name)),
+          category == 'Disk of a deallocated VM', tostring(split(managedBy, '/')[-1]),
+          '')
+      | project id, name, type, category, skuName, sizeGB, since, detail, managedBy, resourceGroup, subscriptionId, location, tags
+      | union (resourcecontainers
+          | where type =~ 'microsoft.resources/subscriptions/resourcegroups'
+          ${ params.subscriptionId ? "| where subscriptionId == '" & $guid(params.subscriptionId) & "'" }
+          | extend lid = tolower(id)
+          | join kind=leftouter (resources | extend rgId = tolower(strcat('/subscriptions/', subscriptionId, '/resourcegroups/', resourceGroup)) | summarize resourceCount = count() by rgId) on $left.lid == $right.rgId
+          | where isnull(resourceCount) or resourceCount == 0
+          | extend category = 'Empty resource group', resourceGroup = name, skuName = '', sizeGB = toint(0), since = datetime(null), detail = tostring(managedBy)
+          | project id, name, type, category, skuName, sizeGB, since, detail, managedBy, resourceGroup, subscriptionId, location, tags)
+      ${ params.category in ['Unattached disk', 'Disk of a deallocated VM', 'Unassociated public IP', 'Detached network interface', 'Old snapshot', 'Empty App Service plan', 'Empty resource group'] ? "| where category == '" & params.category & "'" }
+      | summarize resources = count(), sizeGB = sum(sizeGB), premium = countif(skuName startswith 'Premium' or skuName startswith 'UltraSSD') by category
+    transform: >-
+      ${ (
+        $s := [value.value];
+        $cats := ['Unattached disk', 'Disk of a deallocated VM', 'Unassociated public IP', 'Detached network interface', 'Old snapshot', 'Empty App Service plan', 'Empty resource group'];
+        {
+          'total': $sum([0, $s.resources]),
+          'unattachedDisks': $sum([0, $s[category = 'Unattached disk'].resources]),
+          'unattachedGiB': $sum([0, $s[category in ['Unattached disk', 'Disk of a deallocated VM'] and $type(sizeGB) = 'number'].sizeGB]),
+          'premiumOnDeallocated': $sum([0, $s[category = 'Disk of a deallocated VM'].premium]),
+          'publicIps': $sum([0, $s[category = 'Unassociated public IP'].resources]),
+          'byCategory': [$cats.( $c := $; { 'category': $c, 'resources': $sum([0, $s[category = $c].resources]) } )[resources > 0]]
+        }
+      ) }
+    cache: { ttl: 300 }
+
+layout:
+  - widget: markdown
+    span: 12
+    text: >-
+      Check before deleting anything: a detached disk may be a deliberate backup, a deallocated VM may be a standby, and
+      a public IP may be reserved for a DNS record. Tag what you keep (for example `keep: <reason>`) so next week's run
+      is shorter. Managed disks are billed whether or not their VM runs; Premium and Ultra disks on deallocated VMs
+      cost the most.
+  - widget: kpi
+    data: summary.total
+    label: Orphaned resources
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+  - widget: kpi
+    data: summary.unattachedDisks
+    label: Unattached disks
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+    href: /p/azure.orphaned-resources?category=Unattached%20disk
+  - widget: kpi
+    data: summary.unattachedGiB
+    label: Disk GiB not in use
+    format: number
+  - widget: kpi
+    data: summary.premiumOnDeallocated
+    label: Premium disks on deallocated VMs
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+    href: /p/azure.orphaned-resources?category=Disk%20of%20a%20deallocated%20VM
+  - widget: chart
+    title: Orphaned resources by kind
+    span: 12
+    type: bar
+    data: summary.byCategory
+    x: category
+    y: resources
+    format: number
+  - widget: table
+    id: orphans
+    span: 12
+    data: orphans.value
+    rowKey: id
+    selection: multi
+    columns:
+      - { field: name, label: Resource, kind: identity, secondary: type, sortable: true }
+      - { field: category, label: Kind, filter: { type: facet, param: category } }
+      - { field: skuName, label: SKU, filter: facet }
+      - { field: sizeGB, label: Size (GiB), kind: number, sortable: true, filter: range }
+      - { field: daysSince, label: Days in this state, kind: number, sortable: true, filter: range }
+      - { field: detail, label: Detail }
+      - { field: resourceGroup, label: Resource group, filter: facet }
+      - { field: subscriptionName, label: Subscription, filter: facet }
+      - { field: location, label: Location, filter: facet, hidden: true }
+      - { field: since, label: Since, kind: date, hidden: true }
+      - { field: tags, label: Tags, kind: tags, hidden: true }
+      - { field: managedBy, label: Managed by, kind: code, hidden: true }
+      - { field: subscriptionId, label: Subscription id, kind: guid, hidden: true }
+      - { field: id, label: Resource id, kind: code, hidden: true }
+    inspect:
+      page: azure.resource
+      params:
+        id: ${ row.id }
+    rowActions:
+      - playbook: azure.add-tags
+        label: Tag as kept
+        icon: tag
+        inputs:
+          resourceId: ${ row.id }
+          tagName: keep
+      - label: Open in Azure portal
+        icon: arrow-square-out
+        href: https://portal.azure.com/#resource${ row.id }/overview
+    bulkActions:
+      - playbook: azure.add-tags
+        label: Add or update a tag
+        icon: tag
+        forEach:
+          inputs:
+            resourceId: ${ row.id }
+          concurrency: 5
+        maxItems: 500
+    empty:
+      title: Nothing orphaned
+      body: No unattached disks, unassociated public IPs, detached network interfaces, old snapshots, empty App Service plans or empty resource groups in the subscriptions you can read.
+
+export:
+  formats: [csv, xlsx]
+  fileName: azure-orphaned-resources
+  data: orphans.value
+  columns: all

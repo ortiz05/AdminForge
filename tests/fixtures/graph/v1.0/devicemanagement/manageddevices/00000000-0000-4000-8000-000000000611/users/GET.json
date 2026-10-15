@@ -1,0 +1,12 @@
+{
+  "value": [
+    {
+      "@odata.type": "#microsoft.graph.user",
+      "id": "00000000-0000-4000-8000-000000000109",
+      "displayName": "Kim Nguyen",
+      "userPrincipalName": "k.nguyen@example.com",
+      "mail": "k.nguyen@example.com",
+      "accountEnabled": true
+    }
+  ]
+}

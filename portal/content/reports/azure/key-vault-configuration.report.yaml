@@ -1,0 +1,146 @@
+$schema: ../../../packages/schemas/generated/report.schema.json
+kind: report
+id: azure.key-vault-configuration
+version: 1.0.0
+title: Key Vault configuration
+summary: Key Vaults that still use access policies instead of Azure RBAC, lack purge protection, keep deleted items for less than 90 days or accept connections from all networks — with each setting per vault.
+owner: azure-team
+tags: [azure, key-vault, security, rbac, resource-graph]
+nav: { section: reports, label: Key Vault configuration, icon: vault, order: 187 }
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    arm: [user_impersonation]
+  azureRoles: [Reader]
+
+params:
+  findingsOnly: { type: boolean, default: true, label: Only vaults with findings, facet: true }
+  subscriptionId: { type: string, format: guid, label: Subscription, picker: subscription, facet: true }
+
+datasources:
+  vaults:
+    source: resourceGraph
+    # Resource Graph returns computed booleans as 1/0, so flags are projected as 'true'/'false' text with iff() (tostring() would give True/False).
+    query: |
+      // af:azure.key-vault-configuration#rows
+      resources
+      | where type =~ 'microsoft.keyvault/vaults'
+      ${ params.subscriptionId ? "| where subscriptionId == '" & $guid(params.subscriptionId) & "'" }
+      | extend rbac = coalesce(tobool(properties.enableRbacAuthorization), false), purgeProtection = coalesce(tobool(properties.enablePurgeProtection), false), softDelete = coalesce(tobool(properties.enableSoftDelete), true), retentionDays = coalesce(toint(properties.softDeleteRetentionInDays), 90)
+      | extend publicNetworkAccess = iff(isempty(tostring(properties.publicNetworkAccess)), 'Enabled', tostring(properties.publicNetworkAccess)), defaultAction = tostring(properties.networkAcls.defaultAction)
+      | extend network = case(publicNetworkAccess =~ 'Disabled', 'Private only', defaultAction =~ 'Deny', 'Selected networks', 'All networks')
+      | extend accessPolicies = coalesce(array_length(properties.accessPolicies), 0), privateEndpoints = coalesce(array_length(properties.privateEndpointConnections), 0), skuName = tostring(properties.sku.name)
+      | extend findings = iff(rbac, 0, 1) + iff(purgeProtection, 0, 1) + iff(softDelete and retentionDays >= 90, 0, 1) + iff(network == 'All networks', 1, 0)
+      ${ params.findingsOnly = false ? '' : '| where findings > 0' }
+      | join kind=leftouter (resourcecontainers | where type =~ 'microsoft.resources/subscriptions' | project subscriptionId, subscriptionName = name) on subscriptionId
+      | project id, name, skuName, rbac = iff(rbac, 'true', 'false'), accessPolicies, purgeProtection = iff(purgeProtection, 'true', 'false'), softDelete = iff(softDelete, 'true', 'false'), retentionDays, network, privateEndpoints, findings, resourceGroup, subscriptionId, subscriptionName, location, tags
+      | order by findings desc, name asc
+    paging: all
+    maxItems: 20000
+    cache: { ttl: 300 }
+  summary:
+    source: resourceGraph
+    # Same filters as the rows, counted in Resource Graph: no row transform, so large tenants stay within the
+    # 250 ms transform budget and exports stream the rows as they are.
+    query: |
+      // af:azure.key-vault-configuration#summary
+      resources
+      | where type =~ 'microsoft.keyvault/vaults'
+      ${ params.subscriptionId ? "| where subscriptionId == '" & $guid(params.subscriptionId) & "'" }
+      | extend rbac = coalesce(tobool(properties.enableRbacAuthorization), false), purgeProtection = coalesce(tobool(properties.enablePurgeProtection), false), softDelete = coalesce(tobool(properties.enableSoftDelete), true), retentionDays = coalesce(toint(properties.softDeleteRetentionInDays), 90)
+      | extend publicNetworkAccess = iff(isempty(tostring(properties.publicNetworkAccess)), 'Enabled', tostring(properties.publicNetworkAccess)), defaultAction = tostring(properties.networkAcls.defaultAction)
+      | extend network = case(publicNetworkAccess =~ 'Disabled', 'Private only', defaultAction =~ 'Deny', 'Selected networks', 'All networks')
+      | extend accessPolicies = coalesce(array_length(properties.accessPolicies), 0), privateEndpoints = coalesce(array_length(properties.privateEndpointConnections), 0), skuName = tostring(properties.sku.name)
+      | extend findings = iff(rbac, 0, 1) + iff(purgeProtection, 0, 1) + iff(softDelete and retentionDays >= 90, 0, 1) + iff(network == 'All networks', 1, 0)
+      ${ params.findingsOnly = false ? '' : '| where findings > 0' }
+      | summarize total = count(), accessPolicies = countif(not(rbac)), noPurgeProtection = countif(not(purgeProtection)), shortRetention = countif(not(softDelete) or retentionDays < 90), allNetworks = countif(network == 'All networks')
+    transform: "${ value.value[0] }"
+    cache: { ttl: 300 }
+
+layout:
+  - widget: kpi
+    data: summary.accessPolicies
+    label: Using access policies
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+  - widget: kpi
+    data: summary.noPurgeProtection
+    label: Without purge protection
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+  - widget: kpi
+    data: summary.shortRetention
+    label: Retention under 90 days
+    format: number
+    status: "${ value > 0 ? 'info' : 'ok' }"
+  - widget: kpi
+    data: summary.allNetworks
+    label: Reachable from all networks
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+  - widget: table
+    id: vaults
+    span: 12
+    data: vaults.value
+    rowKey: id
+    selection: multi
+    columns:
+      - { field: name, label: Key Vault, kind: identity, secondary: skuName, sortable: true }
+      - { field: findings, label: Findings, kind: number, sortable: true, filter: range }
+      - field: rbac
+        label: Permission model
+        kind: status
+        map: { "true": [ok, Azure RBAC], "false": [warn, Access policies] }
+        filter: facet
+      - { field: accessPolicies, label: Access policies, kind: number, filter: range }
+      - field: purgeProtection
+        label: Purge protection
+        kind: status
+        map: { "true": [ok, "On"], "false": [warn, "Off"] }
+        filter: facet
+      - { field: retentionDays, label: Soft-delete days, kind: number, filter: range }
+      - field: network
+        label: Network access
+        kind: status
+        map: { All networks: [warn, All networks], Selected networks: [info, Selected networks], Private only: [ok, Private only] }
+        filter: facet
+      - { field: privateEndpoints, label: Private endpoints, kind: number, hidden: true }
+      - { field: softDelete, label: Soft delete, kind: status, map: { "true": [ok, "On"], "false": [crit, "Off"] }, hidden: true }
+      - { field: resourceGroup, label: Resource group, filter: facet }
+      - { field: subscriptionName, label: Subscription, filter: facet }
+      - { field: location, label: Location, hidden: true }
+      - { field: tags, label: Tags, kind: tags, hidden: true }
+      - { field: subscriptionId, label: Subscription id, kind: guid, hidden: true }
+      - { field: id, label: Resource id, kind: code, hidden: true }
+    inspect:
+      page: azure.resource
+      params:
+        id: ${ row.id }
+    rowActions:
+      - label: Who has access
+        icon: identification-badge
+        href: /p/azure.role-assignments?scope=${ $encode(row.id) }&include=above
+      - label: Migrate to Azure RBAC (guide)
+        icon: book-open
+        href: https://learn.microsoft.com/azure/key-vault/general/rbac-migration
+      - label: Open in Azure portal
+        icon: arrow-square-out
+        href: https://portal.azure.com/#resource${ row.id }/overview
+    bulkActions:
+      - playbook: azure.add-tags
+        label: Add or update a tag
+        icon: tag
+        forEach:
+          inputs:
+            resourceId: ${ row.id }
+          concurrency: 5
+        maxItems: 500
+    empty:
+      title: Every Key Vault is configured well
+      body: Every Key Vault in the subscriptions you can read uses Azure RBAC, has purge protection, keeps deleted items for 90 days and limits network access.
+
+export:
+  formats: [csv, xlsx]
+  fileName: azure-key-vault-configuration
+  data: vaults.value
+  columns: all

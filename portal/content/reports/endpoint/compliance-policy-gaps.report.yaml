@@ -1,0 +1,211 @@
+$schema: ../../../packages/schemas/generated/report.schema.json
+kind: report
+id: endpoint.compliance-policy-gaps
+version: 1.0.0
+title: Compliance policy assignment gaps
+summary: >-
+  Where Intune compliance doesn't cover the fleet — platforms with enrolled devices but no assigned compliance policy,
+  policies assigned to nobody, policies that only exclude, and the tenant setting that marks devices without a policy
+  as compliant — plus how many devices have no compliance policy at all.
+owner: endpoint-team
+tags: [endpoint, intune, compliance, conditional-access, report]
+nav: { section: reports, label: Compliance policy gaps, icon: seal-question, order: 34 }
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    graph: [DeviceManagementConfiguration.Read.All, DeviceManagementManagedDevices.Read.All]
+  entraRoles: [Intune Administrator]
+  licences: [intune]
+
+params:
+  includeOk: { type: boolean, label: Also list platforms and policies without a gap, default: false, facet: true }
+
+filters:
+  facets: [includeOk]
+
+# Linux compliance policies live in the settings catalog (not deviceCompliancePolicies), so Linux isn't checked here.
+# A policy assigned to groups only covers the devices of those groups; the report can't tell how many devices are left
+# out, so it flags it for review (info) rather than as a gap.
+datasources:
+  policies:
+    source: graph
+    label: Compliance policies and their assignments
+    request:
+      path: /deviceManagement/deviceCompliancePolicies
+      query:
+        $expand: assignments
+    paging: all
+    maxItems: 2000
+    cache: { ttl: 900 }
+  fleet:
+    source: graphBatch
+    label: Enrolled devices per platform and tenant compliance settings
+    requests:
+      overview: { path: /deviceManagement/managedDeviceOverview }
+      settings: { path: /deviceManagement, query: { $select: "id,settings" } }
+    cache: { ttl: 900 }
+  noPolicy:
+    source: graph
+    label: Devices without a compliance policy (built-in compliance policy)
+    request:
+      path: /deviceManagement/deviceCompliancePolicySettingStateSummaries
+    paging: all
+    maxItems: 1000
+    cache: { ttl: 900 }
+    transform: >-
+      ${ (
+        $s := value.value[$contains(setting ? setting : '', 'RequireDeviceCompliancePolicyAssigned') or settingName = 'RequireDeviceCompliancePolicyAssigned'];
+        { "devices": $sum($s.nonCompliantDeviceCount), "found": $count($s) > 0 }
+      ) }
+  gaps:
+    source: static
+    label: Findings
+    data: {}
+    transform: >-
+      ${ (
+        $os := ds.fleet.overview.deviceOperatingSystemSummary;
+        $platformOf := function($t) {
+          $contains($t, 'windows') ? 'Windows' : $contains($t, 'macOS') ? 'macOS' : $contains($t, 'ios') ? 'iOS'
+          : $contains($t, 'android') or $contains($t, 'aosp') ? 'Android' : 'Other'
+        };
+        $targetOf := function($t) {
+          $t = '#microsoft.graph.allDevicesAssignmentTarget' ? 'allDevices'
+          : $t = '#microsoft.graph.allLicensedUsersAssignmentTarget' ? 'allUsers'
+          : $t = '#microsoft.graph.exclusionGroupAssignmentTarget' ? 'exclude' : 'group'
+        };
+        $policies := [ds.policies.value.(
+          $targets := [assignments.$targetOf(target.`@odata.type`)];
+          {
+            "id": id,
+            "name": displayName,
+            "platform": $platformOf(`@odata.type`),
+            "assignments": $count($targets),
+            "includes": $count($targets[$ != 'exclude']),
+            "everyone": $count($targets[$ in ['allDevices', 'allUsers']]) > 0
+          }
+        )];
+        $platforms := [
+          { "platform": "Windows", "devices": $os.windowsCount },
+          { "platform": "macOS", "devices": $os.macOSCount },
+          { "platform": "iOS", "devices": $os.iosCount },
+          { "platform": "Android", "devices": $os.androidCount }
+        ];
+        $platformRows := $platforms.(
+          $pl := platform;
+          $assigned := $policies[platform = $pl and includes > 0];
+          {
+            "key": 'platform|' & $pl,
+            "kind": 'platform',
+            "name": $pl & ' devices',
+            "platform": $pl,
+            "devices": devices ? devices : 0,
+            "policies": $count($assigned),
+            "finding": devices > 0 and $count($assigned) = 0 ? 'noPolicy'
+              : devices > 0 and $count($assigned[everyone]) = 0 ? 'groupsOnly' : 'ok',
+            "detail": devices > 0 and $count($assigned) = 0 ? 'Enrolled devices, but no compliance policy is assigned for this platform'
+              : devices > 0 and $count($assigned[everyone]) = 0 ? 'Assigned to groups only — check that every device is in one'
+              : 'Covered'
+          }
+        );
+        $policyRows := $policies.{
+          "key": 'policy|' & id,
+          "kind": 'policy',
+          "policyId": id,
+          "name": name,
+          "platform": platform,
+          "policies": 1,
+          "finding": assignments = 0 ? 'unassigned' : includes = 0 ? 'excludeOnly' : 'ok',
+          "detail": assignments = 0 ? 'Not assigned to anyone' : includes = 0 ? 'Only exclusions — applies to nobody' : 'Assigned'
+        };
+        $secure := ds.fleet.settings.settings.secureByDefault;
+        $settingRows := $secure = false ? [{
+          "key": 'setting|secureByDefault',
+          "kind": 'setting',
+          "name": 'Devices without a compliance policy',
+          "platform": 'All',
+          "finding": 'compliantByDefault',
+          "detail": 'Marked compliant by the tenant setting, so Conditional Access lets them in'
+        }] : [];
+        $all := $append($append($settingRows, $platformRows), $policyRows);
+        $order := { "compliantByDefault": 0, "noPolicy": 1, "excludeOnly": 2, "unassigned": 3, "groupsOnly": 4, "ok": 5 };
+        $rows := [$all[$$.params.includeOk = true or finding != 'ok']];
+        {
+          "rows": [$rows^($lookup($order, finding), platform, name)],
+          "uncovered": $count($platformRows[finding = 'noPolicy']),
+          "uncoveredDevices": $sum($platformRows[finding = 'noPolicy'].devices),
+          "unassigned": $count($policyRows[finding in ['unassigned', 'excludeOnly']]),
+          "groupsOnly": $count($platformRows[finding = 'groupsOnly']),
+          "compliantByDefault": $secure = false
+        }
+      ) }
+
+layout:
+  - widget: markdown
+    span: 12
+    when: ${ gaps.compliantByDefault = true }
+    text: |
+      **Devices without a compliance policy are marked compliant.** Conditional Access policies that require a
+      compliant device let them in. In the Intune admin center → **Endpoint security → Device compliance → Compliance
+      settings**, set *Mark devices with no compliance policy assigned as* to **Not compliant**.
+  - widget: kpi
+    data: gaps.uncovered
+    label: Platforms with no assigned policy
+    format: number
+    status: "${ value > 0 ? 'crit' : 'ok' }"
+  - widget: kpi
+    data: gaps.uncoveredDevices
+    label: Devices on those platforms
+    format: number
+    status: "${ value > 0 ? 'crit' : 'ok' }"
+  - widget: kpi
+    data: noPolicy.devices
+    label: Devices with no compliance policy
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+    hint: From the built-in compliance policy's "Has a compliance policy assigned" setting
+  - widget: kpi
+    data: gaps.unassigned
+    label: Policies that apply to nobody
+    format: number
+    status: "${ value > 0 ? 'info' : 'ok' }"
+  - widget: table
+    id: gaps
+    span: 12
+    data: gaps.rows
+    rowKey: key
+    columns:
+      - { field: name, label: "Platform, policy or setting", kind: identity, secondary: detail, sortable: true }
+      - field: finding
+        label: Finding
+        kind: status
+        map:
+          compliantByDefault: [crit, Compliant without a policy]
+          noPolicy: [crit, No policy assigned]
+          excludeOnly: [warn, Exclusions only]
+          unassigned: [warn, Not assigned]
+          groupsOnly: [info, Groups only]
+          ok: [ok, OK]
+        filter: facet
+      - { field: platform, label: Platform, filter: facet }
+      - { field: devices, label: Enrolled devices, kind: number, align: end }
+      - { field: policies, label: Assigned policies, kind: number, align: end }
+      - { field: kind, label: Type, filter: facet, hidden: true }
+      - { field: policyId, label: Policy id, kind: guid, hidden: true }
+    rowActions:
+      - label: Open policy
+        icon: seal-check
+        href: /p/endpoint.compliance-policy?id=${ $encode(row.policyId) }
+        when: ${ row.kind = 'policy' }
+      - label: All compliance policies
+        icon: list
+        href: /p/endpoint.compliance
+        when: ${ row.kind != 'policy' }
+    empty:
+      title: No compliance gaps
+      body: Every platform with enrolled devices has an assigned compliance policy and every policy applies to someone.
+
+export:
+  formats: [csv, xlsx]
+  fileName: compliance-policy-gaps
+  data: gaps.rows
+  columns: all

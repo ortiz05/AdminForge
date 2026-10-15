@@ -1,0 +1,36 @@
+$schema: ../../../packages/schemas/generated/schedule.schema.json
+kind: schedule
+id: reports.compliance-policy-gaps-weekly
+version: 1.0.0
+title: Weekly compliance policy gaps report
+summary: >-
+  Every Monday at 06:45 UTC, writes platforms without an assigned compliance policy, policies that apply to nobody
+  and the compliant-by-default tenant setting as XLSX, and emails it to the report recipients.
+owner: endpoint-team
+tags: [endpoint, intune, compliance, report]
+cron: "45 6 * * 1"
+timezone: UTC
+enabled: true
+identity: automation
+job:
+  kind: report
+  ref: endpoint.compliance-policy-gaps
+  params: { includeOk: false }
+  delivery:
+    - type: file
+      format: xlsx
+      path: endpoint/compliance-policy-gaps/{date}.xlsx
+      retain: 26
+    # Recipients are configuration (never content); without AF_MAIL_SENDER / AF_REPORT_RECIPIENTS the run notes
+    # "not configured" and the file is still kept.
+    - type: email
+      to: ["${ env.AF_REPORT_RECIPIENTS }"]
+      format: xlsx
+retry: { max: 2, backoff: exponential, delay: 5m }
+timeoutSeconds: 1800
+overlap: skip
+requires:
+  # Application permissions held by the automation identity (ADR-011).
+  scopes:
+    graph: [DeviceManagementConfiguration.Read.All, DeviceManagementManagedDevices.Read.All]
+  licences: [intune]

@@ -1,0 +1,33 @@
+$schema: ../../../packages/schemas/generated/schedule.schema.json
+kind: schedule
+id: reports.app-service-security-weekly
+version: 1.0.0
+title: Weekly App Service security settings report
+summary: >-
+  Every Monday at 05:55 UTC, writes web apps and Function Apps that allow plain HTTP, TLS below 1.2, unencrypted FTP
+  or remote debugging, or run an unsupported language version, as XLSX.
+  Email goes to AF_REPORT_RECIPIENTS when it and AF_MAIL_SENDER are configured.
+owner: azure-team
+tags: [azure, app-service, security, report]
+cron: "55 5 * * 1"
+timezone: UTC
+enabled: true
+identity: automation
+job:
+  kind: report
+  ref: azure.app-service-security
+  # Pinned rather than left to the report's defaults so the archive stays comparable from run to run.
+  params: { appKind: any, findingsOnly: true }
+  delivery:
+    - type: file
+      format: xlsx
+      path: azure/app-service-security/{date}.xlsx
+      retain: 26
+    - type: email
+      to: ["${ env.AF_REPORT_RECIPIENTS }"]
+      format: xlsx
+retry: { max: 2, backoff: exponential, delay: 5m }
+timeoutSeconds: 1800
+overlap: skip
+requires:
+  azureRoles: [Reader]

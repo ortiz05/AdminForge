@@ -1,0 +1,254 @@
+$schema: ../../../packages/schemas/generated/report.schema.json
+kind: report
+id: identity.app-permissions
+version: 1.0.0
+title: Application permissions
+summary: >-
+  Application permissions (app roles) granted to service principals on Microsoft Graph, Exchange Online and SharePoint
+  Online — the apps that can read mail, files or the directory, or change roles, apps and policies, with no user signed
+  in. Each grant is tiered by impact and shows whether the app comes from this organisation, a third party, a managed
+  identity or Microsoft.
+owner: identity-team
+tags: [identity, apps, permissions, consent, security, report, review]
+nav: { section: reports, label: Application permissions, icon: shield-star, order: 16 }
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    graph: [Application.Read.All, Directory.Read.All]
+  entraRoles: [Global Reader]
+
+params:
+  tier:
+    type: enum
+    label: Impact
+    facet: true
+    default: high
+    values:
+      - { value: high, label: Critical and high }
+      - { value: critical, label: Critical only }
+      - { value: all, label: All permissions }
+  holder:
+    type: enum
+    label: Held by
+    facet: true
+    default: Any
+    values:
+      - { value: Any, label: Any app }
+      - { value: This organisation, label: Apps from this organisation }
+      - { value: Other organisation, label: Third-party apps }
+      - { value: Managed identity, label: Managed identities }
+      - { value: Microsoft, label: Microsoft apps }
+
+# Application permissions live on the resource's service principal (appRoleAssignedTo), addressed by its well-known
+# appId so nothing tenant-specific is needed. Exchange Online and SharePoint Online only exist in licensed tenants: their
+# sub-requests answer 404 there and are skipped. Holders are looked up in one getByIds call (up to 1,000 apps).
+datasources:
+  apis:
+    source: graphBatch
+    requests:
+      org: { path: /organization, query: { $select: id } }
+      graph: { path: "/servicePrincipals(appId='00000003-0000-0000-c000-000000000000')", query: { $select: "id,appId,displayName,appRoles" } }
+      exchange: { path: "/servicePrincipals(appId='00000002-0000-0ff1-ce00-000000000000')", query: { $select: "id,appId,displayName,appRoles" } }
+      sharepoint: { path: "/servicePrincipals(appId='00000003-0000-0ff1-ce00-000000000000')", query: { $select: "id,appId,displayName,appRoles" } }
+      exchangeGrants: { path: "/servicePrincipals(appId='00000002-0000-0ff1-ce00-000000000000')/appRoleAssignedTo", query: { $top: 999 } }
+      sharepointGrants: { path: "/servicePrincipals(appId='00000003-0000-0ff1-ce00-000000000000')/appRoleAssignedTo", query: { $top: 999 } }
+    cache: { ttl: 3600 }
+    # App role id → permission name for the three APIs, plus their grants (Graph's come from `grants`, paged).
+    transform: >-
+      ${ {
+        "org": value.org.value[0].id,
+        "roles": $merge([[value.graph.appRoles, value.exchange.appRoles, value.sharepoint.appRoles].{ id: value }]),
+        "grants": [value.exchangeGrants.value, value.sharepointGrants.value],
+        "truncated": $exists(value.exchangeGrants.`@odata.nextLink`) or $exists(value.sharepointGrants.`@odata.nextLink`)
+      } }
+  grants:
+    source: graph
+    request:
+      path: "/servicePrincipals(appId='00000003-0000-0000-c000-000000000000')/appRoleAssignedTo"
+      query:
+        $select: id,principalId,principalDisplayName,principalType,appRoleId,resourceDisplayName,resourceId,createdDateTime
+        $top: 999
+    paging: all
+    maxItems: 50000
+    cache: { ttl: 3600 }
+  holders:
+    source: graph
+    when: ${ $count($append(ds.grants.value, ds.apis.grants)) > 0 }
+    request:
+      method: POST
+      path: /directoryObjects/getByIds
+      body:
+        ids: ${ $append([], [$distinct($append(ds.grants.value, ds.apis.grants).principalId)][[0..999]]) }
+        types: [servicePrincipal]
+    cache: { ttl: 3600 }
+  permissions:
+    source: static
+    data: >-
+      ${ {
+        "grants": $append(ds.grants.value, ds.apis.grants),
+        "roles": ds.apis.roles,
+        "org": ds.apis.org,
+        "holders": ds.holders.value,
+        "truncated": ds.apis.truncated
+      } }
+    # Critical = can take over the tenant or every mailbox/site (role, app, policy, group or credential control);
+    # high = reads or changes content (mail, files, chats, calendars) or writes anything; medium = reads the directory.
+    transform: >-
+      ${ (
+        $critical := ['RoleManagement.ReadWrite.Directory', 'AppRoleAssignment.ReadWrite.All', 'Application.ReadWrite.All',
+          'Directory.ReadWrite.All', 'Domain.ReadWrite.All', 'Organization.ReadWrite.All', 'Policy.ReadWrite.ConditionalAccess',
+          'Policy.ReadWrite.AuthenticationMethod', 'Policy.ReadWrite.PermissionGrant', 'Policy.ReadWrite.Authorization',
+          'PrivilegedAccess.ReadWrite.AzureADGroup', 'PrivilegedAssignmentSchedule.ReadWrite.AzureADGroup',
+          'PrivilegedEligibilitySchedule.ReadWrite.AzureADGroup', 'RoleAssignmentSchedule.ReadWrite.Directory',
+          'RoleEligibilitySchedule.ReadWrite.Directory', 'RoleManagementPolicy.ReadWrite.Directory',
+          'UserAuthenticationMethod.ReadWrite.All', 'DelegatedPermissionGrant.ReadWrite.All', 'Group.ReadWrite.All',
+          'GroupMember.ReadWrite.All', 'full_access_as_app', 'Exchange.ManageAsApp', 'Sites.FullControl.All'];
+        $microsoft := ['f8cdef31-a31e-4b4a-93e4-5f571e91255a', '72f988bf-86f1-41af-91ab-2d7cd011db47'];
+        $tier := function($p) {
+          $p in $critical ? 'critical'
+          : $contains($p, 'ReadWrite') or $contains($p, 'FullControl') or $contains($p, '.Send')
+            or $contains($p, /^(Mail|Files|Sites|Chat|ChannelMessage|Calendars|Contacts|Notes|MailboxSettings|OnlineMeeting\w*|CallRecords|EWS|Exchange)\./) ? 'high'
+          : $contains($p, /\.Read(Basic)?\.(All|Directory)$/) ? 'medium' : 'low'
+        };
+        $roles := value.roles ? value.roles : {};
+        $own := [$append([env.AF_READ_CLIENT_ID, env.AF_WRITE_CLIENT_ID, env.AF_AUTOMATION_CLIENT_ID],
+          env.AF_PROTECTED_APP_IDS ? [$split(env.AF_PROTECTED_APP_IDS, ',').$trim($)] : [])[$ != '']];
+        $org := value.org;
+        $holders := $merge([[value.holders].{ id: $ }]);
+        $all := [value.grants.(
+          $h := $lookup($holders, principalId);
+          $name := $lookup($roles, appRoleId);
+          $p := $name ? $name : appRoleId;
+          $owner := $h.appOwnerOrganizationId;
+          $holder := $h.servicePrincipalType = 'ManagedIdentity' ? 'Managed identity'
+                     : $owner in $microsoft ? 'Microsoft'
+                     : $owner and $owner = $org ? 'This organisation'
+                     : $h ? 'Other organisation' : 'Unknown';
+          {
+            "id": id,
+            "app": principalDisplayName,
+            "principalId": principalId,
+            "appId": $h.appId,
+            "permission": $p,
+            "api": resourceDisplayName,
+            "tier": $tier($p),
+            "holder": $holder,
+            "publisher": $h.verifiedPublisher.displayName ? $h.verifiedPublisher.displayName
+                         : $holder = 'Other organisation' ? 'Unverified publisher' : null,
+            "enabled": $h ? $h.accountEnabled != false : null,
+            "adminforge": $h.appId in $own,
+            "granted": createdDateTime
+          }
+        )];
+        $rank := { "critical": 0, "high": 1, "medium": 2, "low": 3 };
+        $shown := $all[
+          ($$.params.tier = 'all' or tier = 'critical' or ($$.params.tier = 'high' and tier = 'high'))
+          and ($$.params.holder = 'Any' or holder = $$.params.holder)
+        ];
+        $risky := $all[tier in ['critical', 'high']];
+        {
+          "rows": [$shown^($lookup($rank, tier), app, permission)],
+          "critical": $count($all[tier = 'critical']),
+          "criticalApps": $count($distinct($all[tier = 'critical'].principalId)),
+          "thirdParty": $count($distinct($risky[holder = 'Other organisation'].principalId)),
+          "total": $count($all),
+          "top": $append([], [($distinct($risky.permission).( $q := $; { "permission": $q, "apps": $count($distinct($risky[permission = $q].principalId)) } ))^(>apps, permission)][[0..5]]),
+          "truncated": value.truncated = true or $count($distinct($all.principalId)) > 1000
+        }
+      ) }
+
+layout:
+  - widget: kpi
+    id: critical
+    data: permissions.critical
+    label: Critical permissions granted
+    format: number
+    status: "${ value > 0 ? 'crit' : 'ok' }"
+  - widget: kpi
+    id: criticalApps
+    data: permissions.criticalApps
+    label: Apps holding critical permissions
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+  - widget: kpi
+    id: thirdParty
+    data: permissions.thirdParty
+    label: Third-party apps with high-impact permissions
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+  - widget: kpi
+    id: total
+    data: permissions.total
+    label: Application permissions granted
+    format: number
+  - widget: chart
+    id: top
+    title: Most granted high-impact permissions (apps)
+    type: bar
+    span: 12
+    rows: 2
+    data: permissions.top
+    x: permission
+    y: apps
+    format: number
+    empty:
+      title: No high-impact permissions
+      body: No app holds a critical or high-impact application permission.
+  - widget: markdown
+    id: truncated
+    span: 12
+    when: ${ permissions.truncated = true }
+    text: |
+      **Partial result.** More apps hold permissions than one lookup covers (1,000), or Exchange/SharePoint returned
+      more than one page; apps beyond that show as Unknown. Review the rest in the Entra admin center.
+  - widget: table
+    id: permissions
+    span: 12
+    data: permissions.rows
+    rowKey: id
+    columns:
+      - { field: app, label: App, kind: identity, secondary: publisher, sortable: true }
+      - { field: permission, label: Permission, kind: code, filter: facet, sortable: true }
+      - { field: api, label: API, filter: facet }
+      - field: tier
+        label: Impact
+        kind: status
+        map: { critical: [crit, Critical], high: [warn, High], medium: [info, Medium], low: [neutral, Low] }
+        filter: { type: facet, param: tier }
+      - field: holder
+        label: Held by
+        kind: status
+        map: { "This organisation": [neutral, This organisation], "Other organisation": [warn, Third party], "Managed identity": [info, Managed identity], Microsoft: [neutral, Microsoft], Unknown: [neutral, Unknown] }
+        filter: { type: facet, param: holder }
+      - { field: enabled, label: Sign-in, kind: status, map: { "true": [ok, Enabled], "false": [neutral, Disabled] } }
+      - { field: granted, label: Granted, kind: date, filter: date, sortable: true }
+      - { field: publisher, label: Verified publisher, hidden: true }
+      - { field: adminforge, label: AdminForge app, kind: boolean, hidden: true }
+      - { field: appId, label: Application (client) id, kind: guid, hidden: true }
+      - { field: principalId, label: Service principal object id, kind: guid, hidden: true }
+      - { field: id, label: Assignment id, hidden: true }
+    inspect:
+      page: identity.enterprise-app
+      params:
+        id: ${ row.principalId }
+        appId: ${ row.appId }
+    rowActions:
+      - playbook: identity.disable-enterprise-app
+        label: Disable sign-in
+        icon: prohibit
+        inputs:
+          servicePrincipalId: ${ row.principalId }
+        when: ${ row.enabled = true and row.adminforge != true and row.holder in ['This organisation', 'Other organisation'] }
+      - label: Review in Entra admin center
+        icon: arrow-square-out
+        href: "https://entra.microsoft.com/#view/Microsoft_AAD_IAM/ManagedAppMenuBlade/~/Permissions/objectId/${ $encode(row.principalId) }/appId/${ $encode(row.appId) }"
+        when: ${ $boolean(row.appId) }
+    empty:
+      title: No application permissions match
+      body: No app holds an application permission at this impact level (check the Impact and Held by filters).
+
+export:
+  formats: [csv, xlsx]
+  fileName: application-permissions-${ params.tier }
+  data: permissions.rows
+  columns: all

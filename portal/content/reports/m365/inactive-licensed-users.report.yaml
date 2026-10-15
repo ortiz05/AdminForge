@@ -1,0 +1,197 @@
+$schema: ../../../packages/schemas/generated/report.schema.json
+kind: report
+id: m365.inactive-licensed-users
+version: 1.0.0
+title: Inactive licensed users
+summary: >-
+  Licensed people with no activity in Microsoft 365 (or in one workload — Exchange, Teams, OneDrive or SharePoint) for
+  the chosen number of days, from the Microsoft 365 usage reports, plus active and inactive users per workload.
+  Candidates for reclaiming licences. People licensed within the window are left out.
+owner: m365-team
+tags: [m365, usage, licensing, cost, report]
+nav: { section: reports, label: Inactive licensed users, icon: user-minus, order: 112 }
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    graph: [Reports.Read.All]
+  entraRoles: [Reports Reader, Global Reader]
+
+params:
+  days:
+    type: enum
+    label: No activity for at least
+    facet: true
+    default: 90
+    values:
+      - { value: 30, label: 30 days }
+      - { value: 60, label: 60 days }
+      - { value: 90, label: 90 days }
+      - { value: 180, label: 180 days }
+  workload:
+    type: enum
+    label: Workload
+    facet: true
+    default: any
+    values:
+      - { value: any, label: Any Microsoft 365 workload }
+      - { value: exchange, label: "Exchange: licensed, no mail activity" }
+      - { value: teams, label: "Teams: licensed, no Teams activity" }
+      - { value: oneDrive, label: "OneDrive: licensed, no OneDrive activity" }
+      - { value: sharePoint, label: "SharePoint: licensed, no SharePoint activity" }
+
+filters:
+  facets: [days, workload]
+
+savedViews:
+  enabled: true
+  shared: true
+  presets:
+    - { name: No Microsoft 365 activity for 90 days, params: { days: 90, workload: any } }
+    - { name: Teams licence unused for 60 days, params: { days: 60, workload: teams } }
+    - { name: Mailbox unused for 90 days, params: { days: 90, workload: exchange } }
+
+# The 180-day detail report lists every licensed user with the last activity date per workload (whatever the window),
+# so one request answers every window. Data lags 24–48 hours. When the tenant conceals user details in reports, names
+# and sign-in names are hashes (no "@") and can't be matched to accounts; the report says so.
+datasources:
+  users:
+    source: graph
+    label: Microsoft 365 active user detail (usage report)
+    request:
+      beta: true
+      path: /reports/getOffice365ActiveUserDetail(period='D180')
+      query: { $format: application/json }
+    paging: all
+    maxItems: 100000
+    cache: { ttl: 3600 }
+    transform: >-
+      ${ (
+        $days := params.days ? $number(params.days) : 90;
+        $w := params.workload ? params.workload : 'any';
+        $recent := function($d) { $d ? -$daysUntil($d) < $days : false };
+        $state := function($licensed, $last, $assigned) {
+          $licensed != true ? 'unlicensed' : $recent($last) ? 'active' : $recent($assigned) ? 'new' : 'inactive'
+        };
+        $users := [value.value[$not(isDeleted = true) and $count(assignedProducts) > 0].(
+          $last := ([exchangeLastActivityDate, teamsLastActivityDate, oneDriveLastActivityDate, sharePointLastActivityDate, yammerLastActivityDate][$])^(>$)[0];
+          $since := ([exchangeLicenseAssignDate, teamsLicenseAssignDate, oneDriveLicenseAssignDate, sharePointLicenseAssignDate][$])^($)[0];
+          $s := {
+            "exchange": $state(hasExchangeLicense, exchangeLastActivityDate, exchangeLicenseAssignDate),
+            "teams": $state(hasTeamsLicense, teamsLastActivityDate, teamsLicenseAssignDate),
+            "oneDrive": $state(hasOneDriveLicense, oneDriveLastActivityDate, oneDriveLicenseAssignDate),
+            "sharePoint": $state(hasSharePointLicense, sharePointLastActivityDate, sharePointLicenseAssignDate)
+          };
+          $merge([$s, {
+            "userPrincipalName": userPrincipalName,
+            "displayName": displayName,
+            "products": assignedProducts,
+            "licences": $count(assignedProducts),
+            "any": $recent($last) ? 'active' : $recent($since) ? 'new' : 'inactive',
+            "lastActivityDate": $last,
+            "exchangeLastActivityDate": exchangeLastActivityDate,
+            "teamsLastActivityDate": teamsLastActivityDate,
+            "oneDriveLastActivityDate": oneDriveLastActivityDate,
+            "sharePointLastActivityDate": sharePointLastActivityDate,
+            "licensedSince": $since,
+            "concealed": $not($contains(userPrincipalName, '@')),
+            "reportRefreshDate": reportRefreshDate
+          }])
+        )];
+        $rows := [$users[$lookup($, $w) = 'inactive'].(
+          $l := $w = 'any' ? lastActivityDate : $lookup($, $w & 'LastActivityDate');
+          $merge([$, {
+            "workloadLastActivityDate": $l,
+            "daysInactive": $l ? -$daysUntil($l),
+            "activity": $l ? 'inactive' : 'never'
+          }])
+        )];
+        $per := function($key, $label) { {
+          "workload": $label,
+          "active": $count($users[$lookup($, $key) = 'active']),
+          "inactive": $count($users[$lookup($, $key) = 'inactive'])
+        } };
+        {
+          "rows": [$rows^(activity = 'never' ? 0 : 1, >daysInactive)],
+          "total": $count($rows),
+          "never": $count($rows[activity = 'never']),
+          "licences": $sum($rows.licences),
+          "licensedUsers": $count($users),
+          "byWorkload": [$per('exchange', 'Exchange'), $per('teams', 'Teams'), $per('oneDrive', 'OneDrive'), $per('sharePoint', 'SharePoint')],
+          "concealed": $count($users[concealed]) > 0,
+          "asOf": $users[0].reportRefreshDate
+        }
+      ) }
+
+layout:
+  - widget: markdown
+    span: 12
+    when: ${ users.concealed = true }
+    text: |
+      **User names are concealed in usage reports.** Rows show hashed names that can't be matched to accounts. A Global
+      Administrator can turn off *Display concealed user, group, and site names in all reports* in the Microsoft 365
+      admin center → **Settings → Org settings → Services → Reports**.
+  - widget: kpi
+    data: users.total
+    label: Inactive licensed users
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+  - widget: kpi
+    data: users.never
+    label: Never active
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+  - widget: kpi
+    data: users.licences
+    label: Licences held by inactive users
+    format: number
+  - widget: kpi
+    data: users.licensedUsers
+    label: Licensed users
+    format: number
+  - widget: chart
+    id: byWorkload
+    title: Licensed users by workload, active and inactive in the window
+    type: stackedBar
+    span: 12
+    rows: 2
+    data: users.byWorkload
+    x: workload
+    y: [active, inactive]
+    stack: true
+    labels: { active: Active, inactive: Inactive }
+    format: number
+  - widget: table
+    id: users
+    span: 12
+    data: users.rows
+    rowKey: userPrincipalName
+    columns:
+      - { field: displayName, label: User, kind: identity, secondary: userPrincipalName, sortable: true }
+      - field: activity
+        label: Activity
+        kind: status
+        map: { never: [crit, Never active], inactive: [warn, Inactive] }
+        filter: facet
+      - { field: daysInactive, label: Days inactive, kind: number, align: end, sortable: true, filter: range }
+      - { field: workloadLastActivityDate, label: Last activity, kind: date, filter: date }
+      - { field: products, label: Licences, kind: tags }
+      - { field: exchangeLastActivityDate, label: Exchange, kind: date, hidden: true }
+      - { field: teamsLastActivityDate, label: Teams, kind: date, hidden: true }
+      - { field: oneDriveLastActivityDate, label: OneDrive, kind: date, hidden: true }
+      - { field: sharePointLastActivityDate, label: SharePoint, kind: date, hidden: true }
+      - { field: licensedSince, label: Licensed since, kind: date, hidden: true }
+      - { field: reportRefreshDate, label: Report date, kind: date, hidden: true }
+    rowActions:
+      - label: Find the user
+        icon: magnifying-glass
+        href: /p/identity.users?q=${ $encode(row.userPrincipalName) }
+        when: ${ row.concealed = false }
+    empty:
+      title: No inactive licensed users
+      body: Every licensed person used Microsoft 365 within the window. Usage data appears 24–48 hours after activity.
+
+export:
+  formats: [csv, xlsx]
+  fileName: inactive-licensed-users-${ params.workload }-${ params.days }d
+  data: users.rows
+  columns: all

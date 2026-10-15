@@ -1,0 +1,184 @@
+$schema: ../../../packages/schemas/generated/report.schema.json
+kind: report
+id: azure.monthly-cost
+version: 1.0.0
+# Draft until the request policy allows the read-only Cost Management query POST
+# (/subscriptions/{id}/providers/Microsoft.CostManagement/query): read mode refuses it today, so the report would only
+# show "changes data". Both queries were checked against the validation tenant.
+status: draft
+title: Azure cost this month and last
+summary: Actual cost of a subscription month to date and for the whole of last month, by resource group, service or region, with a straight-line projection for the month and each line's share — from the Cost Management query API.
+owner: azure-team
+tags: [azure, cost, finops]
+nav: { section: reports, label: Azure cost this month and last, icon: currency-circle-dollar, order: 183 }
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    arm: [user_impersonation]
+  # Cost Management Reader (or Reader) on the subscription; the offer must support Cost Management (EA, MCA, pay-as-you-go).
+  azureRoles: [Cost Management Reader]
+
+params:
+  subscriptionId:
+    type: string
+    format: guid
+    label: Subscription
+    picker: subscription
+    facet: true
+    default: "${ env.AF_SUBSCRIPTION_ID }"
+    description: Defaults to the installation's subscription (AF_SUBSCRIPTION_ID).
+  groupBy:
+    type: enum
+    label: Group by
+    facet: true
+    default: ResourceGroupName
+    values:
+      - { value: ResourceGroupName, label: Resource group }
+      - { value: ServiceName, label: Service }
+      - { value: ResourceLocation, label: Region }
+
+datasources:
+  # Cost Management allows only a few queries a minute per scope: keep the cache long.
+  monthToDate:
+    source: arm
+    when: "${ params.subscriptionId ? true : false }"
+    request:
+      method: POST
+      path: /subscriptions/${ $encode($guid(params.subscriptionId)) }/providers/Microsoft.CostManagement/query
+      apiVersion: "2023-11-01"
+      body:
+        type: ActualCost
+        timeframe: MonthToDate
+        dataset:
+          granularity: None
+          aggregation: { totalCost: { name: Cost, function: Sum } }
+          grouping:
+            - { type: Dimension, name: "${ params.groupBy in ['ResourceGroupName', 'ServiceName', 'ResourceLocation'] ? params.groupBy : 'ResourceGroupName' }" }
+    transform: >-
+      ${ (
+        $cols := [value.properties.columns.name];
+        $dim := params.groupBy in ['ResourceGroupName', 'ServiceName', 'ResourceLocation'] ? params.groupBy : 'ResourceGroupName';
+        {
+          'rows': [$map(value.properties.rows, function($r) { (
+            $o := $merge($map($cols, function($c, $i) { { $c: $r[$i] } }));
+            { 'group': $lookup($o, $dim), 'cost': $lookup($o, 'Cost'), 'currency': $lookup($o, 'Currency') }
+          ) })]
+        }
+      ) }
+    cache: { ttl: 3600 }
+  cost:
+    source: arm
+    when: "${ params.subscriptionId ? true : false }"
+    # TheLastMonth is not accepted for every offer, so last month is a custom period computed from `now`.
+    request:
+      method: POST
+      path: /subscriptions/${ $encode($guid(params.subscriptionId)) }/providers/Microsoft.CostManagement/query
+      apiVersion: "2023-11-01"
+      body:
+        type: ActualCost
+        timeframe: Custom
+        timePeriod:
+          from: "${ ( $y := $number($substring(now, 0, 4)); $m := $number($substring(now, 5, 2)); $string($m = 1 ? $y - 1 : $y) & '-' & $formatNumber($m = 1 ? 12 : $m - 1, '00') & '-01T00:00:00Z' ) }"
+          to: "${ $fromMillis($toMillis($substring(now, 0, 7) & '-01T00:00:00Z') - 1000) }"
+        dataset:
+          granularity: None
+          aggregation: { totalCost: { name: Cost, function: Sum } }
+          grouping:
+            - { type: Dimension, name: "${ params.groupBy in ['ResourceGroupName', 'ServiceName', 'ResourceLocation'] ? params.groupBy : 'ResourceGroupName' }" }
+    transform: >-
+      ${ (
+        $cols := [value.properties.columns.name];
+        $dim := params.groupBy in ['ResourceGroupName', 'ServiceName', 'ResourceLocation'] ? params.groupBy : 'ResourceGroupName';
+        $last := [$map(value.properties.rows, function($r) { (
+          $o := $merge($map($cols, function($c, $i) { { $c: $r[$i] } }));
+          { 'group': $lookup($o, $dim), 'cost': $lookup($o, 'Cost'), 'currency': $lookup($o, 'Currency') }
+        ) })];
+        $mtd := [ds.monthToDate.rows];
+        $mtdBy := $merge([{}, $mtd.{ $string(group): cost }]);
+        $lastBy := $merge([{}, $last.{ $string(group): cost }]);
+        $groups := $distinct($append($mtd.$string(group), $last.$string(group)));
+        $mtdTotal := $sum([0, $mtd.cost]);
+        $lastTotal := $sum([0, $last.cost]);
+        $currency := $distinct($append($mtd.currency, $last.currency))[0];
+        $y := $number($substring(now, 0, 4));
+        $mo := $number($substring(now, 5, 2));
+        $start := $toMillis($substring(now, 0, 7) & '-01T00:00:00Z');
+        $next := $toMillis($string($mo = 12 ? $y + 1 : $y) & '-' & $formatNumber($mo = 12 ? 1 : $mo + 1, '00') & '-01T00:00:00Z');
+        $runRate := ($next - $start) / $max([86400000, $toMillis(now) - $start]);
+        $rows := [$groups.(
+          $g := $;
+          $m := $lookup($mtdBy, $g) ? $lookup($mtdBy, $g) : 0;
+          $l := $lookup($lastBy, $g) ? $lookup($lastBy, $g) : 0;
+          {
+            'group': $g = '' ? '(not assigned)' : $g,
+            'monthToDate': $round($m, 2),
+            'lastMonth': $round($l, 2),
+            'projected': $round($m * $runRate, 2),
+            'share': $mtdTotal > 0 ? $round($m / $mtdTotal, 4) : 0,
+            'change': $l > 0 ? $round(($m * $runRate - $l) / $l, 4) : null,
+            'currency': $currency
+          }
+        )];
+        {
+          'rows': [$rows^(>monthToDate)],
+          'monthToDate': $round($mtdTotal, 2),
+          'lastMonth': $round($lastTotal, 2),
+          'projected': $round($mtdTotal * $runRate, 2),
+          'currency': $currency,
+          'groups': $count($rows),
+          'top': [$rows^(>monthToDate)][[0..9]]
+        }
+      ) }
+    cache: { ttl: 3600 }
+
+layout:
+  - widget: kpi
+    data: cost.monthToDate
+    label: Month to date
+    format: number
+  - widget: kpi
+    data: cost.lastMonth
+    label: Last month
+    format: number
+  - widget: kpi
+    data: cost.projected
+    label: Projected this month
+    format: number
+  - widget: kpi
+    data: cost.currency
+    label: Currency
+    format: text
+  - widget: chart
+    title: Highest cost this month
+    span: 12
+    type: bar
+    data: cost.top
+    x: group
+    y: [monthToDate, lastMonth]
+    format: number
+  - widget: table
+    id: cost
+    span: 12
+    data: cost.rows
+    rowKey: group
+    columns:
+      - { field: group, label: Resource group, service or region, kind: identity, sortable: true }
+      - { field: monthToDate, label: Month to date, kind: number, sortable: true }
+      - { field: lastMonth, label: Last month, kind: number, sortable: true }
+      - { field: projected, label: Projected this month, kind: number, sortable: true }
+      - { field: share, label: Share this month, kind: percent, sortable: true }
+      - { field: change, label: Projected change, kind: percent, sortable: true }
+      - { field: currency, label: Currency, hidden: true }
+    rowActions:
+      - label: Open Cost analysis
+        icon: arrow-square-out
+        href: https://portal.azure.com/#view/Microsoft_Azure_CostManagement/Menu/~/costanalysis/openedBy/AzurePortal
+    empty:
+      title: No cost to show
+      body: Pick a subscription. Cost Management needs an offer that supports it (EA, MCA, pay-as-you-go) and data can lag by up to a day.
+
+export:
+  formats: [csv, xlsx]
+  fileName: azure-monthly-cost
+  data: cost.rows
+  columns: all

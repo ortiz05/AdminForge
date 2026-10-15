@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/page.schema.json
 kind: page
 id: security.cloud-alerts
-version: 1.0.0
+version: 1.0.1
 title: Cloud alerts
 summary: Microsoft Defender for Cloud security alerts for Azure resources (servers, storage, Key Vault, App Service, …) across all subscriptions.
 owner: security-team
@@ -63,6 +63,8 @@ savedViews:
 datasources:
   alerts:
     source: resourceGraph
+    # Resource Graph returns tobool() and other computed booleans as 1/0: isIncident is projected as 'true'/'false'
+    # text with iff() for the status map and facet.
     query: |
       // af:security.cloud-alerts#rows
       securityresources
@@ -70,7 +72,7 @@ datasources:
       | extend alertName = tostring(properties.alertDisplayName), severity = tostring(properties.severity), status = tostring(properties.status)
       | extend timeGenerated = todatetime(properties.timeGeneratedUtc), startTime = todatetime(properties.startTimeUtc)
       | extend compromisedEntity = tostring(properties.compromisedEntity), intent = tostring(properties.intent), productName = tostring(properties.productName)
-      | extend alertType = tostring(properties.alertType), description = tostring(properties.description), alertUri = tostring(properties.alertUri), isIncident = tobool(properties.isIncident)
+      | extend alertType = tostring(properties.alertType), description = tostring(properties.description), alertUri = tostring(properties.alertUri), isIncident = iff(coalesce(tobool(properties.isIncident), false), 'true', 'false')
       | extend resourceId = tolower(tostring(properties.resourceIdentifiers[0].azureResourceId))
       | extend parts = split(resourceId, '/')
       | extend resourceType = iff(array_length(parts) >= 9, strcat(tostring(parts[6]), '/', tostring(parts[7])), '')
@@ -160,7 +162,7 @@ layout:
       - { field: startTime, label: Activity start, kind: datetime, hidden: true }
       - { field: alertType, label: Alert type, kind: code, hidden: true }
       - { field: description, label: Description, hidden: true }
-      - { field: isIncident, label: Security incident, kind: boolean, hidden: true }
+      - { field: isIncident, label: Security incident, kind: status, map: { "true": [warn, Incident], "false": [neutral, Single alert] }, filter: facet, hidden: true }
       - { field: resourceId, label: Resource id, kind: code, hidden: true }
     rowActions:
       - label: Open affected resource

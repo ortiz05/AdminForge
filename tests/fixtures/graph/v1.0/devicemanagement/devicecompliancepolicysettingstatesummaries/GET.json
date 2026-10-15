@@ -1,0 +1,82 @@
+{
+  "value": [
+    {
+      "id": "10000000-0000-4000-8000-000000000d01",
+      "setting": "DefaultDeviceCompliancePolicy.RequireDeviceCompliancePolicyAssigned",
+      "settingName": "RequireDeviceCompliancePolicyAssigned",
+      "platformType": "windows10AndLater",
+      "unknownDeviceCount": 0,
+      "notApplicableDeviceCount": 0,
+      "compliantDeviceCount": 838,
+      "remediatedDeviceCount": 0,
+      "nonCompliantDeviceCount": 4,
+      "errorDeviceCount": 0,
+      "conflictDeviceCount": 0
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000d02",
+      "setting": "DefaultDeviceCompliancePolicy.RequireDeviceCompliancePolicyAssigned",
+      "settingName": "RequireDeviceCompliancePolicyAssigned",
+      "platformType": "macOS",
+      "unknownDeviceCount": 0,
+      "notApplicableDeviceCount": 0,
+      "compliantDeviceCount": 0,
+      "remediatedDeviceCount": 0,
+      "nonCompliantDeviceCount": 96,
+      "errorDeviceCount": 0,
+      "conflictDeviceCount": 0
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000d03",
+      "setting": "DefaultDeviceCompliancePolicy.RequireDeviceCompliancePolicyAssigned",
+      "settingName": "RequireDeviceCompliancePolicyAssigned",
+      "platformType": "iOS",
+      "unknownDeviceCount": 0,
+      "notApplicableDeviceCount": 0,
+      "compliantDeviceCount": 211,
+      "remediatedDeviceCount": 0,
+      "nonCompliantDeviceCount": 0,
+      "errorDeviceCount": 0,
+      "conflictDeviceCount": 0
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000d04",
+      "setting": "DefaultDeviceCompliancePolicy.RequireDeviceCompliancePolicyAssigned",
+      "settingName": "RequireDeviceCompliancePolicyAssigned",
+      "platformType": "androidWorkProfile",
+      "unknownDeviceCount": 0,
+      "notApplicableDeviceCount": 0,
+      "compliantDeviceCount": 161,
+      "remediatedDeviceCount": 0,
+      "nonCompliantDeviceCount": 2,
+      "errorDeviceCount": 0,
+      "conflictDeviceCount": 0
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000d05",
+      "setting": "DefaultDeviceCompliancePolicy.RequireRemainContact",
+      "settingName": "RequireRemainContact",
+      "platformType": "windows10AndLater",
+      "unknownDeviceCount": 0,
+      "notApplicableDeviceCount": 0,
+      "compliantDeviceCount": 815,
+      "remediatedDeviceCount": 0,
+      "nonCompliantDeviceCount": 27,
+      "errorDeviceCount": 0,
+      "conflictDeviceCount": 0
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000d06",
+      "setting": "DefaultDeviceCompliancePolicy.RequireUserExistence",
+      "settingName": "RequireUserExistence",
+      "platformType": "windows10AndLater",
+      "unknownDeviceCount": 0,
+      "notApplicableDeviceCount": 0,
+      "compliantDeviceCount": 840,
+      "remediatedDeviceCount": 0,
+      "nonCompliantDeviceCount": 2,
+      "errorDeviceCount": 0,
+      "conflictDeviceCount": 0
+    }
+  ]
+}

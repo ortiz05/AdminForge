@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/playbook.schema.json
 kind: playbook
 id: identity.remove-app-access
-version: 1.0.0
+version: 1.1.0
 title: Remove user or group from enterprise app
 summary: >-
   Removes one user or group assignment from an enterprise app. When the app requires assignment, the user (or the
@@ -42,7 +42,7 @@ steps:
   - id: notPortalApp
     type: assert
     that: >-
-      ${ $not(steps.sp.output.appId in [env.AF_READ_CLIENT_ID, env.AF_WRITE_CLIENT_ID, env.AF_AUTOMATION_CLIENT_ID, env.AF_PROVISIONER_CLIENT_ID]) }
+      ${ $not(steps.sp.output.appId in $append([env.AF_READ_CLIENT_ID, env.AF_WRITE_CLIENT_ID, env.AF_AUTOMATION_CLIENT_ID], $map($split(env.AF_PROTECTED_APP_IDS ? env.AF_PROTECTED_APP_IDS : '', ','), function($v) { $trim($v) }))) }
     message: This is one of AdminForge's own apps. Portal access comes from the SG-AdminForge-* groups; change the group membership instead.
 
   - id: principal

@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/page.schema.json
 kind: page
 id: azure.arc-server
-version: 1.0.0
+version: 1.0.1
 title: Azure Arc server
 summary: One Arc-enabled server — connectivity, agent, operating system, extensions and agent errors.
 owner: azure-team
@@ -58,11 +58,13 @@ datasources:
     cache: { ttl: 60 }
   extensions:
     source: resourceGraph
+    # Resource Graph returns tobool() and other computed booleans as 1/0: autoUpgrade is projected as 'true'/'false'
+    # text with iff() for the status map and facet.
     query: |
       // af:azure.arc-server#extensions
       resources
       | where type =~ 'microsoft.hybridcompute/machines/extensions' and tolower(id) startswith strcat('${ $lowercase($replace(params.id, /[^A-Za-z0-9._()\/-]/, '')) }', '/extensions/')
-      | project id, name, publisher = tostring(properties.publisher), extensionType = tostring(properties.type), version = tostring(properties.typeHandlerVersion), provisioningState = tostring(properties.provisioningState), autoUpgrade = tobool(properties.enableAutomaticUpgrade), statusCode = tostring(properties.instanceView.status.code), statusLevel = tostring(properties.instanceView.status.level), statusMessage = tostring(properties.instanceView.status.message)
+      | project id, name, publisher = tostring(properties.publisher), extensionType = tostring(properties.type), version = tostring(properties.typeHandlerVersion), provisioningState = tostring(properties.provisioningState), autoUpgrade = iff(coalesce(tobool(properties.enableAutomaticUpgrade), false), 'true', 'false'), statusCode = tostring(properties.instanceView.status.code), statusLevel = tostring(properties.instanceView.status.level), statusMessage = tostring(properties.instanceView.status.message)
       | order by name asc
     cache: { ttl: 60 }
 
@@ -138,7 +140,7 @@ tabs:
             kind: status
             map: { Succeeded: [ok, Succeeded], Failed: [crit, Failed], Creating: [info, Installing], Updating: [info, Updating], Deleting: [warn, Removing] }
             filter: facet
-          - { field: autoUpgrade, label: Automatic upgrade, kind: boolean, filter: facet }
+          - { field: autoUpgrade, label: Automatic upgrade, kind: status, map: { "true": [ok, "On"], "false": [neutral, "Off"] }, filter: facet }
           - { field: statusMessage, label: Last status message, hidden: true }
           - { field: statusCode, label: Status code, kind: code, hidden: true }
         rowActions:

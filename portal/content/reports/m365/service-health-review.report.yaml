@@ -1,0 +1,185 @@
+$schema: ../../../packages/schemas/generated/report.schema.json
+kind: report
+id: m365.service-health-review
+version: 1.0.0
+title: Service health review
+summary: >-
+  Microsoft 365 incidents and advisories that were open in the chosen period — how many per service, how long each
+  one lasted, and which are still open — for the monthly service review and to answer "was it us or Microsoft?".
+owner: m365-team
+tags: [m365, service-health, incidents, report]
+nav: { section: reports, label: Service health review, icon: heartbeat, order: 146 }
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    graph: [ServiceHealth.Read.All]
+  entraRoles: [Service Support Administrator, Global Reader]
+
+params:
+  days:
+    type: enum
+    label: Period
+    facet: true
+    default: 30
+    values:
+      - { value: 7, label: Last 7 days }
+      - { value: 30, label: Last 30 days }
+      - { value: 90, label: Last 90 days }
+  classification:
+    type: enum
+    label: Type
+    facet: true
+    default: all
+    values:
+      - { value: all, label: Incidents and advisories }
+      - { value: incident, label: Incidents }
+      - { value: advisory, label: Advisories }
+
+filters:
+  facets: [days, classification]
+
+savedViews:
+  enabled: true
+  shared: true
+  presets:
+    - { name: Incidents in the last 30 days, params: { days: 30, classification: incident } }
+    - { name: Last 7 days, params: { days: 7 } }
+
+# Issues updated in the period: those that started in it, plus older ones Microsoft was still working on. Durations run
+# to the end time, or to now while an issue is open. Microsoft keeps issues for about 30 days after they're resolved.
+datasources:
+  issues:
+    source: graph
+    label: Service health issues
+    request:
+      path: /admin/serviceAnnouncement/issues
+      query:
+        $select: id,title,service,feature,featureGroup,classification,status,origin,isResolved,startDateTime,endDateTime,lastModifiedDateTime,impactDescription
+        $filter: >-
+          ${ $join([
+               'lastModifiedDateTime ge ' & $daysAgo($number(params.days ? params.days : 30)),
+               params.classification in ['incident', 'advisory'] ? 'classification eq ' & $odata(params.classification)
+             ][$], ' and ') }
+        $top: 100
+    paging: all
+    maxItems: 5000
+    cache: { ttl: 900 }
+    transform: >-
+      ${ (
+        $days := $number(params.days ? params.days : 30);
+        $kind := params.classification in ['incident', 'advisory'] ? params.classification : null;
+        $nowMs := $toMillis($iso());
+        $rows := [value.value[($kind = null or classification = $kind) and -$daysUntil(lastModifiedDateTime) <= $days].(
+          $end := endDateTime ? $toMillis(endDateTime) : $nowMs;
+          {
+            "id": id,
+            "title": title,
+            "service": service,
+            "feature": feature,
+            "classification": classification,
+            "status": status,
+            "origin": origin,
+            "isResolved": isResolved = true,
+            "state": isResolved = true ? 'resolved' : 'open',
+            "startDateTime": startDateTime,
+            "endDateTime": endDateTime,
+            "lastModifiedDateTime": lastModifiedDateTime,
+            "hours": startDateTime ? $round(($end - $toMillis(startDateTime)) / 3600000, 1),
+            "impactDescription": impactDescription
+          }
+        )];
+        $services := $distinct($rows.service);
+        {
+          "rows": [$rows^(isResolved ? 1 : 0, classification = 'incident' ? 0 : 1, >startDateTime)],
+          "incidents": $count($rows[classification = 'incident']),
+          "advisories": $count($rows[classification = 'advisory']),
+          "open": $count($rows[isResolved = false]),
+          "openIncidents": $count($rows[isResolved = false and classification = 'incident']),
+          "incidentHours": $round($sum($rows[classification = 'incident'].hours), 1),
+          "byService": $append([], [($services.(
+            $s := $;
+            {
+              "service": $s,
+              "incidents": $count($rows[service = $s and classification = 'incident']),
+              "advisories": $count($rows[service = $s and classification = 'advisory'])
+            }
+          ))^(>incidents, >advisories)][[0..7]])
+        }
+      ) }
+
+layout:
+  - widget: kpi
+    data: issues.incidents
+    label: Incidents
+    format: number
+    status: "${ issues.openIncidents > 0 ? 'crit' : value > 0 ? 'warn' : 'ok' }"
+    href: /p/m365.service-health-review?classification=incident
+  - widget: kpi
+    data: issues.advisories
+    label: Advisories
+    format: number
+    status: "${ value > 0 ? 'info' : 'ok' }"
+  - widget: kpi
+    data: issues.open
+    label: Still open
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+  - widget: kpi
+    data: issues.incidentHours
+    label: Incident hours
+    format: number
+  - widget: chart
+    id: byService
+    title: Issues by service
+    type: stackedBar
+    span: 12
+    rows: 2
+    data: issues.byService
+    x: service
+    y: [incidents, advisories]
+    stack: true
+    labels: { incidents: Incidents, advisories: Advisories }
+    format: number
+  - widget: table
+    id: issues
+    span: 12
+    data: issues.rows
+    rowKey: id
+    columns:
+      - { field: title, label: Issue, kind: identity, secondary: id }
+      - { field: service, label: Service, filter: facet, sortable: true }
+      - field: classification
+        label: Type
+        kind: status
+        map: { incident: [crit, Incident], advisory: [info, Advisory] }
+        filter: facet
+      - field: state
+        label: State
+        kind: status
+        map: { open: [warn, Open], resolved: [ok, Resolved] }
+        filter: facet
+      - { field: hours, label: Duration (hours), kind: number, align: end, sortable: true, filter: range }
+      - { field: startDateTime, label: Started, kind: datetime, sortable: true, filter: date }
+      - { field: endDateTime, label: Ended, kind: datetime }
+      - { field: feature, label: Feature, filter: facet, hidden: true }
+      - { field: status, label: Microsoft status, hidden: true }
+      - { field: origin, label: Origin, filter: facet, hidden: true }
+      - { field: impactDescription, label: User impact, hidden: true }
+      - { field: lastModifiedDateTime, label: Last update, kind: datetime, hidden: true }
+    inspect:
+      page: m365.service-issue
+      params:
+        id: ${ row.id }
+    rowActions:
+      - label: Open in Microsoft 365 admin center
+        icon: arrow-square-out
+        href: "https://admin.microsoft.com/Adminportal/Home#/servicehealth/:/alerts/${ $encode(row.id) }"
+    empty:
+      title: No incidents or advisories in this period
+      body: Microsoft didn't track any issue for this tenant in the period. Choose a longer period to look further back.
+
+export:
+  formats: [csv, xlsx]
+  fileName: service-health-review-${ params.days }d
+  data: issues.rows
+  columns: all

@@ -1,0 +1,159 @@
+$schema: ../../../packages/schemas/generated/report.schema.json
+kind: report
+id: azure.arc-agent-health
+version: 1.0.0
+title: Azure Arc agent and extension health
+summary: Arc-enabled servers with failed extensions (monitoring, Defender, update and policy agents) or a Connected Machine agent several releases behind the newest version in your fleet, with automatic agent upgrade and connection state.
+owner: azure-team
+tags: [azure, arc, hybrid, servers, extensions, resource-graph]
+nav: { section: reports, label: Arc agent and extension health, icon: puzzle-piece, order: 194 }
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    arm: [user_impersonation]
+  azureRoles: [Reader]
+
+params:
+  behind:
+    type: enum
+    label: Agent outdated when behind by
+    facet: true
+    default: 6
+    values:
+      - { value: 3, label: 3 releases }
+      - { value: 6, label: 6 releases }
+      - { value: 12, label: 12 releases }
+  issuesOnly: { type: boolean, default: true, label: Servers with an issue only, facet: true }
+  subscriptionId: { type: string, format: guid, label: Subscription, picker: subscription, facet: true }
+
+datasources:
+  machines:
+    source: resourceGraph
+    # "Newest" is the highest agent version among your Arc servers (Resource Graph has no catalogue of agent releases);
+    # the agent ships roughly monthly as 1.<minor>, so the minor number counts releases. Three joins: newest version,
+    # extensions, subscription names.
+    query: |
+      // af:azure.arc-agent-health#rows
+      resources
+      | where type =~ 'microsoft.hybridcompute/machines'
+      ${ params.subscriptionId ? "| where subscriptionId == '" & $guid(params.subscriptionId) & "'" }
+      | extend lid = tolower(id), status = tostring(properties.status), agentVersion = tostring(properties.agentVersion), osName = tostring(properties.osName), osType = tostring(properties.osType), lastStatusChange = todatetime(properties.lastStatusChange), autoUpgrade = iff(coalesce(tobool(properties.agentUpgrade.enableAutomaticUpgrade), false), 'On', 'Off'), k = 1
+      | extend minor = toint(split(agentVersion, '.')[1])
+      | join kind=leftouter (resources | where type =~ 'microsoft.hybridcompute/machines' | extend newestVersion = tostring(properties.agentVersion), v = parse_version(tostring(properties.agentVersion)) | where isnotempty(newestVersion) | summarize arg_max(v, newestVersion) | project newestVersion, k = 1) on k
+      | join kind=leftouter (resources | where type =~ 'microsoft.hybridcompute/machines/extensions' | extend machineId = tolower(tostring(split(id, '/extensions/')[0])), extState = tostring(properties.provisioningState) | summarize extensions = count(), failedExtensions = countif(extState =~ 'Failed'), failedNames = make_set_if(name, extState =~ 'Failed', 10) by machineId) on $left.lid == $right.machineId
+      | extend extensions = coalesce(extensions, 0), failedExtensions = coalesce(failedExtensions, 0), releasesBehind = toint(split(newestVersion, '.')[1]) - minor
+      | extend agent = case(isempty(agentVersion), 'Unknown', releasesBehind >= ${ $number(params.behind) in [3, 6, 12] ? $string($number(params.behind)) : '6' }, 'Outdated', releasesBehind > 0, 'Behind', 'Current')
+      | extend health = case(failedExtensions > 0, 'Extension failed', agent == 'Outdated', 'Agent outdated', status !~ 'Connected', 'Not connected', 'Healthy')
+      ${ params.issuesOnly = false ? '' : "| where health != 'Healthy'" }
+      | join kind=leftouter (resourcecontainers | where type =~ 'microsoft.resources/subscriptions' | project subscriptionId, subscriptionName = name) on subscriptionId
+      | project id, name, health, status, agentVersion, newestVersion, releasesBehind, agent, autoUpgrade, extensions, failedExtensions, failedNames, osName, osType, lastStatusChange, resourceGroup, subscriptionId, subscriptionName, location, tags
+      | order by failedExtensions desc, releasesBehind desc, name asc
+    paging: all
+    maxItems: 20000
+    cache: { ttl: 300 }
+  summary:
+    source: resourceGraph
+    # Same filters as the rows, counted in Resource Graph: no row transform, so large tenants stay within the
+    # 250 ms transform budget and exports stream the rows as they are.
+    query: |
+      // af:azure.arc-agent-health#summary
+      resources
+      | where type =~ 'microsoft.hybridcompute/machines'
+      ${ params.subscriptionId ? "| where subscriptionId == '" & $guid(params.subscriptionId) & "'" }
+      | extend lid = tolower(id), status = tostring(properties.status), agentVersion = tostring(properties.agentVersion), osName = tostring(properties.osName), osType = tostring(properties.osType), lastStatusChange = todatetime(properties.lastStatusChange), autoUpgrade = iff(coalesce(tobool(properties.agentUpgrade.enableAutomaticUpgrade), false), 'On', 'Off'), k = 1
+      | extend minor = toint(split(agentVersion, '.')[1])
+      | join kind=leftouter (resources | where type =~ 'microsoft.hybridcompute/machines' | extend newestVersion = tostring(properties.agentVersion), v = parse_version(tostring(properties.agentVersion)) | where isnotempty(newestVersion) | summarize arg_max(v, newestVersion) | project newestVersion, k = 1) on k
+      | join kind=leftouter (resources | where type =~ 'microsoft.hybridcompute/machines/extensions' | extend machineId = tolower(tostring(split(id, '/extensions/')[0])), extState = tostring(properties.provisioningState) | summarize extensions = count(), failedExtensions = countif(extState =~ 'Failed'), failedNames = make_set_if(name, extState =~ 'Failed', 10) by machineId) on $left.lid == $right.machineId
+      | extend extensions = coalesce(extensions, 0), failedExtensions = coalesce(failedExtensions, 0), releasesBehind = toint(split(newestVersion, '.')[1]) - minor
+      | extend agent = case(isempty(agentVersion), 'Unknown', releasesBehind >= ${ $number(params.behind) in [3, 6, 12] ? $string($number(params.behind)) : '6' }, 'Outdated', releasesBehind > 0, 'Behind', 'Current')
+      | extend health = case(failedExtensions > 0, 'Extension failed', agent == 'Outdated', 'Agent outdated', status !~ 'Connected', 'Not connected', 'Healthy')
+      ${ params.issuesOnly = false ? '' : "| where health != 'Healthy'" }
+      | summarize total = count(), failedExtensions = countif(failedExtensions > 0), outdated = countif(agent == 'Outdated'), noAutoUpgrade = countif(autoUpgrade == 'Off'), newest = take_any(newestVersion)
+    transform: "${ value.value[0] }"
+    cache: { ttl: 300 }
+
+layout:
+  - widget: kpi
+    data: summary.failedExtensions
+    label: Servers with a failed extension
+    format: number
+    status: "${ value > 0 ? 'crit' : 'ok' }"
+  - widget: kpi
+    data: summary.outdated
+    label: Agent outdated
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+  - widget: kpi
+    data: summary.noAutoUpgrade
+    label: Automatic agent upgrade off
+    format: number
+    status: "${ value > 0 ? 'info' : 'ok' }"
+  - widget: kpi
+    data: summary.newest
+    label: Newest agent in the fleet
+    format: text
+  - widget: table
+    id: machines
+    span: 12
+    data: machines.value
+    rowKey: id
+    selection: multi
+    columns:
+      - { field: name, label: Server, kind: identity, secondary: osName, sortable: true }
+      - field: health
+        label: Health
+        kind: status
+        map: { Extension failed: [crit, Extension failed], Agent outdated: [warn, Agent outdated], Not connected: [warn, Not connected], Healthy: [ok, Healthy] }
+        filter: facet
+      - { field: failedNames, label: Failed extensions, kind: tags }
+      - { field: agentVersion, label: Agent version, sortable: true, filter: facet }
+      - { field: releasesBehind, label: Releases behind, kind: number, sortable: true, filter: range }
+      - { field: autoUpgrade, label: Auto upgrade, filter: facet }
+      - field: status
+        label: Connection
+        kind: status
+        map: { Connected: [ok, Connected], Disconnected: [warn, Disconnected], Expired: [crit, Expired], Error: [crit, Error] }
+        filter: facet
+      - { field: resourceGroup, label: Resource group, filter: facet }
+      - { field: subscriptionName, label: Subscription, filter: facet }
+      - { field: extensions, label: Extensions, kind: number, hidden: true }
+      - { field: failedExtensions, label: Failed extensions (count), kind: number, hidden: true }
+      - { field: agent, label: Agent state, hidden: true }
+      - { field: newestVersion, label: Newest version, hidden: true }
+      - { field: osType, label: OS type, hidden: true }
+      - { field: lastStatusChange, label: Status changed, kind: relativeTime, hidden: true }
+      - { field: location, label: Location, hidden: true }
+      - { field: tags, label: Tags, kind: tags, hidden: true }
+      - { field: id, label: Resource id, kind: code, hidden: true }
+    inspect:
+      page: azure.arc-server
+      params:
+        id: ${ row.id }
+    rowActions:
+      - label: Troubleshoot extensions (guide)
+        icon: book-open
+        href: https://learn.microsoft.com/azure/azure-arc/servers/troubleshoot-vm-extensions
+      - label: Upgrade the agent (guide)
+        icon: book-open
+        href: https://learn.microsoft.com/azure/azure-arc/servers/manage-agent
+      - label: Open in Azure portal
+        icon: arrow-square-out
+        href: https://portal.azure.com/#resource${ row.id }/extensions
+    bulkActions:
+      - playbook: azure.add-tags
+        label: Add or update a tag
+        icon: tag
+        forEach:
+          inputs:
+            resourceId: ${ row.id }
+          concurrency: 5
+        maxItems: 500
+    empty:
+      title: Every Arc server is healthy
+      body: No Arc-enabled server has a failed extension, an outdated agent or a lost connection. Turn off "Servers with an issue only" to see them all.
+
+export:
+  formats: [csv, xlsx]
+  fileName: azure-arc-agent-health
+  data: machines.value
+  columns: all

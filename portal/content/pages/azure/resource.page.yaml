@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/page.schema.json
 kind: page
 id: azure.resource
-version: 1.1.0
+version: 1.1.1
 title: Azure resource
 summary: One Azure resource or resource group — properties, tags, who has access and recent activity.
 owner: azure-team
@@ -55,15 +55,16 @@ datasources:
     cache: { ttl: 60 }
   access:
     source: resourceGraph
-    # Assignments at this scope or inherited from its resource group / subscription.
+    # Assignments at this scope or inherited from its resource group / subscription. Resource Graph returns computed
+    # booleans as 1/0 (tostring() gives True/False): flags are projected as 'true'/'false' text with iff().
     query: |
       // af:azure.resource#access
       authorizationresources
       | where type =~ 'microsoft.authorization/roleassignments'
-      | extend scope = tolower(tostring(properties.scope)), principalId = tostring(properties.principalId), principalType = tostring(properties.principalType), roleDefinitionGuid = tolower(extract('([0-9a-fA-F-]{36})$', 1, tostring(properties.roleDefinitionId))), createdOn = todatetime(properties.createdOn), hasCondition = isnotempty(tostring(properties.condition))
+      | extend scope = tolower(tostring(properties.scope)), principalId = tostring(properties.principalId), principalType = tostring(properties.principalType), roleDefinitionGuid = tolower(extract('([0-9a-fA-F-]{36})$', 1, tostring(properties.roleDefinitionId))), createdOn = todatetime(properties.createdOn), hasCondition = iff(isnotempty(tostring(properties.condition)), 'true', 'false')
       | where scope == '${ $lowercase($replace(params.id, /[^A-Za-z0-9._()\/-]/, '')) }' or '${ $lowercase($replace(params.id, /[^A-Za-z0-9._()\/-]/, '')) }' startswith strcat(scope, '/')
       | join kind=leftouter (authorizationresources | where type =~ 'microsoft.authorization/roledefinitions' | extend roleDefinitionGuid = tolower(name), roleName = tostring(properties.roleName), roleType = tostring(properties.type) | summarize roleName = any(roleName), roleType = any(roleType) by roleDefinitionGuid) on roleDefinitionGuid
-      | extend inherited = scope != '${ $lowercase($replace(params.id, /[^A-Za-z0-9._()\/-]/, '')) }'
+      | extend inherited = iff(scope != '${ $lowercase($replace(params.id, /[^A-Za-z0-9._()\/-]/, '')) }', 'true', 'false')
       | project id, roleName, roleType, principalId, principalType, scope, inherited, hasCondition, createdOn
       | order by roleName asc
     cache: { ttl: 120 }
@@ -199,7 +200,7 @@ tabs:
             map: { "true": [neutral, Inherited], "false": [info, This resource] }
             filter: facet
           - { field: scope, label: Scope, kind: code, hidden: true }
-          - { field: hasCondition, label: Condition, kind: boolean, hidden: true }
+          - { field: hasCondition, label: Condition, kind: status, map: { "true": [info, Conditional], "false": [neutral, None] }, filter: facet, hidden: true }
           - { field: createdOn, label: Assigned, kind: date }
         rowActions:
           - playbook: azure.remove-role-assignment
@@ -207,7 +208,7 @@ tabs:
             icon: user-minus
             inputs:
               assignmentId: ${ row.id }
-            when: ${ row.inherited = false }
+            when: ${ row.inherited = 'false' }
         empty:
           title: No role assignments found
           body: Nobody has a role assigned at this scope or its parents (management groups aside), or your account can't read role assignments here.

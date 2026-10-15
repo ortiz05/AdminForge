@@ -1,0 +1,34 @@
+$schema: ../../packages/schemas/generated/probe.schema.json
+kind: probe
+id: probes.privileged-rbac-direct-users
+version: 1.0.0
+title: Privileged Azure roles assigned directly to users
+summary: >-
+  Owner, User Access Administrator or Role Based Access Control Administrator assigned straight to a user (not a group
+  or PIM) at a subscription, management group or the root scope — including elevated access at the root, which should
+  be removed right after use. Resource Graph doesn't know which users are guests; the Privileged Azure role
+  assignments report resolves that with Microsoft Graph.
+owner: azure-team
+tags: [kql, configuration, azure, rbac, security, config-check]
+check:
+  kind: kql
+  source: resourceGraph
+  query: |
+    // af:probes.privileged-rbac-direct-users
+    authorizationresources
+    | where type =~ 'microsoft.authorization/roleassignments'
+    | extend scope = tolower(tostring(properties.scope)), principalType = tostring(properties.principalType), principalId = tostring(properties.principalId), roleDefinitionGuid = tolower(extract('([0-9a-fA-F-]{36})$', 1, tostring(properties.roleDefinitionId))), createdOn = todatetime(properties.createdOn)
+    | where principalType =~ 'User'
+    | extend scopeLevel = case(scope == '/', 'Root', scope contains '/managementgroups/', 'Management group', array_length(split(scope, '/')) == 3, 'Subscription', 'Below subscription')
+    | where scopeLevel != 'Below subscription'
+    | join kind=leftouter (authorizationresources | where type =~ 'microsoft.authorization/roledefinitions' | extend roleDefinitionGuid = tolower(name), roleName = tostring(properties.roleName) | summarize roleName = any(roleName) by roleDefinitionGuid) on roleDefinitionGuid
+    | where roleName in~ ('Owner', 'User Access Administrator', 'Role Based Access Control Administrator')
+    | project id, roleName, principalId, scopeLevel, scope, subscriptionId, createdOn
+    | order by scopeLevel desc, createdOn asc
+  metric: rowCount
+  detailsLimit: 100
+thresholds: { warn: 1, crit: 10 }
+intervalHint: PT6H
+timeoutMs: 60000
+requires:
+  azureRoles: [Reader]

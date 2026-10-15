@@ -1,0 +1,179 @@
+$schema: ../../../packages/schemas/generated/report.schema.json
+kind: report
+id: identity.adminforge-group-changes
+version: 1.0.0
+title: AdminForge role group changes
+summary: >-
+  Who added or removed members and owners of AdminForge's own role groups (SG-AdminForge-<environment>-<role>), and
+  any other change to those groups or their app role assignments, from the Entra directory audit log. Membership of
+  these groups is what grants portal roles, so every change should match an approved access request. AdminForge's
+  playbooks refuse to change these groups; changes come from the Entra admin center, PowerShell or other tools.
+owner: identity-team
+tags: [identity, audit, security, access, adminforge, report]
+nav: { section: reports, label: AdminForge role group changes, icon: user-gear, order: 25 }
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    graph: [AuditLog.Read.All, Group.Read.All]
+  entraRoles: [Reports Reader]
+
+params:
+  days:
+    type: enum
+    label: Time range
+    facet: true
+    default: 7
+    values:
+      - { value: 1, label: Last 24 hours }
+      - { value: 7, label: Last 7 days }
+      - { value: 30, label: Last 30 days (Entra ID P1) }
+
+# The audit log names the group only inside modifiedProperties, so the groups are looked up first (by the prefix
+# provisioning gives them) and the audit query is filtered server-side on their object ids.
+datasources:
+  groups:
+    source: graph
+    request:
+      path: /groups
+      query:
+        $filter: startswith(displayName, 'SG-AdminForge-')
+        $select: id,displayName
+        $top: 999
+    cache: { ttl: 900 }
+  audits:
+    source: graph
+    when: ${ $count(ds.groups.value) > 0 }
+    request:
+      path: /auditLogs/directoryAudits
+      query:
+        $filter: >-
+          ${ (
+            $activities := ['Add member to group', 'Remove member from group', 'Add owner to group', 'Remove owner from group',
+              'Update group', 'Delete group', 'Add app role assignment to group', 'Remove app role assignment from group'];
+            $join([
+              'activityDateTime ge ' & $daysAgo($number(params.days ? params.days : 7)),
+              '(' & $join($activities.('activityDisplayName eq ' & $odata($)), ' or ') & ')',
+              '(' & $join($append([], ds.groups.value[[0..39]].('targetResources/any(t:t/id eq ' & $odata($guid(id)) & ')')), ' or ') & ')'
+            ], ' and ')
+          ) }
+        $top: 999
+    paging: all
+    maxItems: 20000
+    cache: { ttl: 300 }
+    transform: >-
+      ${ (
+        $names := $merge([[ds.groups.value].{ id: displayName }]);
+        $labels := {
+          "Add member to group": "Member added", "Remove member from group": "Member removed",
+          "Add owner to group": "Owner added", "Remove owner from group": "Owner removed",
+          "Update group": "Group changed", "Delete group": "Group deleted",
+          "Add app role assignment to group": "App role assigned", "Remove app role assignment from group": "App role removed"
+        };
+        $unquote := function($v) { $v ? $trim($replace($replace($string($v), '"', ''), /[\[\]]/, '')) : null };
+        $rows := [value.value.(
+          $group := targetResources[type = 'Group'][0];
+          $other := targetResources[type != 'Group'][0];
+          $props := [targetResources.modifiedProperties];
+          $fromProps := $unquote($props[displayName = 'Group.DisplayName'][0].(newValue ? newValue : oldValue));
+          $name := $group.id and $lookup($names, $group.id) ? $lookup($names, $group.id)
+                   : $fromProps ? $fromProps : $group.displayName;
+          $change := $lookup($labels, activityDisplayName);
+          ($change and $name and $substring($name, 0, 14) = 'SG-AdminForge-') ? {
+            "id": id,
+            "time": activityDateTime,
+            "change": $change,
+            "group": $name,
+            "groupId": $group.id,
+            "role": $name ? $split($name, '-')[-1] : null,
+            "member": $other.userPrincipalName ? $other.userPrincipalName : $other.displayName,
+            "memberId": $other.id,
+            "memberType": $other.type,
+            "actor": initiatedBy.user.userPrincipalName ? initiatedBy.user.userPrincipalName
+                     : initiatedBy.app.displayName ? initiatedBy.app.displayName & ' (app)' : 'System',
+            "actorId": initiatedBy.user.id,
+            "ipAddress": initiatedBy.user.ipAddress,
+            "result": result,
+            "reason": resultReason,
+            "correlationId": correlationId
+          }
+        )];
+        {
+          "rows": [$rows^(>time)],
+          "total": $count($rows),
+          "added": $count($rows[change in ['Member added', 'Owner added', 'App role assigned']]),
+          "owners": $count($rows[change in ['Owner added', 'Owner removed']]),
+          "failures": $count($rows[result = 'failure'])
+        }
+      ) }
+
+layout:
+  - widget: kpi
+    id: total
+    data: audits.total
+    label: Changes to AdminForge role groups
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+  - widget: kpi
+    id: added
+    data: audits.added
+    label: Access granted (members, owners, app roles)
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+  - widget: kpi
+    id: owners
+    data: audits.owners
+    label: Owner changes
+    format: number
+    status: "${ value > 0 ? 'crit' : 'ok' }"
+  - widget: kpi
+    id: failures
+    data: audits.failures
+    label: Failed attempts
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+  - widget: markdown
+    id: noGroups
+    span: 12
+    when: ${ $count(groups.value) = 0 }
+    text: |
+      **No SG-AdminForge-* groups were found.** Provisioning creates them (`pnpm adminforge provision entra`); until
+      they exist there is nothing to watch.
+  - widget: table
+    id: changes
+    span: 12
+    data: audits.rows
+    rowKey: id
+    columns:
+      - { field: time, label: Time, kind: datetime, sortable: true }
+      - field: change
+        label: Change
+        kind: status
+        map: { "Member added": [warn, Member added], "Owner added": [crit, Owner added], "App role assigned": [warn, App role assigned], "Member removed": [info, Member removed], "Owner removed": [info, Owner removed], "App role removed": [info, App role removed], "Group changed": [warn, Group changed], "Group deleted": [crit, Group deleted] }
+        filter: facet
+      - { field: group, label: Group, kind: identity, secondary: role, filter: facet }
+      - { field: member, label: Member or owner, kind: identity, secondary: memberType }
+      - { field: actor, label: Changed by, filter: text }
+      - field: result
+        label: Result
+        kind: status
+        map: { success: [ok, Success], failure: [crit, Failure], timeout: [warn, Timeout] }
+        filter: facet
+      - { field: ipAddress, label: IP address, kind: code, hidden: true }
+      - { field: reason, label: Reason, hidden: true }
+      - { field: role, label: Portal role, hidden: true }
+      - { field: groupId, label: Group id, kind: guid, hidden: true }
+      - { field: memberId, label: Member id, kind: guid, hidden: true }
+      - { field: correlationId, label: Correlation id, kind: guid, hidden: true }
+    rowActions:
+      - { label: Open member, icon: user, href: "/p/identity.user?id=${ $encode(row.memberId) }", when: "${ row.memberType = 'User' and $boolean(row.memberId) }" }
+      - { label: Open changed-by user, icon: user, href: "/p/identity.user?id=${ $encode(row.actorId) }", when: "${ $boolean(row.actorId) }" }
+      - { label: Open group, icon: users-three, href: "/p/identity.group?id=${ $encode(row.groupId) }", when: "${ $boolean(row.groupId) }" }
+    empty:
+      title: No changes to AdminForge role groups
+      body: Nobody changed the members, owners or settings of the SG-AdminForge-* groups in this time range.
+
+export:
+  formats: [csv, xlsx]
+  fileName: adminforge-group-changes-${ params.days }d
+  data: audits.rows
+  columns: all

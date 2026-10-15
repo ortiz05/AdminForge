@@ -1,0 +1,88 @@
+{
+  "value": [
+    {
+      "reportRefreshDate": "2026-10-13",
+      "siteId": "10000000-0000-4000-8000-000000000b01",
+      "siteUrl": "https://exampleorg-my.sharepoint.com/personal/avery_example_com",
+      "ownerDisplayName": "Avery Engineer",
+      "ownerPrincipalName": "avery@example.com",
+      "isDeleted": false,
+      "lastActivityDate": "2026-10-13",
+      "fileCount": 8200,
+      "activeFileCount": 410,
+      "storageUsedInBytes": 128849018880,
+      "storageAllocatedInBytes": 1099511627776,
+      "reportPeriod": "30"
+    },
+    {
+      "reportRefreshDate": "2026-10-13",
+      "siteId": "10000000-0000-4000-8000-000000000b02",
+      "siteUrl": "https://exampleorg-my.sharepoint.com/personal/dana_example_com",
+      "ownerDisplayName": "Dana Former",
+      "ownerPrincipalName": "dana@example.com",
+      "isDeleted": false,
+      "lastActivityDate": "2026-06-20",
+      "fileCount": 5300,
+      "activeFileCount": 0,
+      "storageUsedInBytes": 51539607552,
+      "storageAllocatedInBytes": 1099511627776,
+      "reportPeriod": "30"
+    },
+    {
+      "reportRefreshDate": "2026-10-13",
+      "siteId": "10000000-0000-4000-8000-000000000b03",
+      "siteUrl": "https://exampleorg-my.sharepoint.com/personal/blake_example_com",
+      "ownerDisplayName": "Blake Analyst",
+      "ownerPrincipalName": "blake@example.com",
+      "isDeleted": false,
+      "lastActivityDate": "2026-10-12",
+      "fileCount": 91000,
+      "activeFileCount": 2200,
+      "storageUsedInBytes": 1066526278942,
+      "storageAllocatedInBytes": 1099511627776,
+      "reportPeriod": "30"
+    },
+    {
+      "reportRefreshDate": "2026-10-13",
+      "siteId": "10000000-0000-4000-8000-000000000b04",
+      "siteUrl": "https://exampleorg-my.sharepoint.com/personal/eli_obrien_example_com",
+      "ownerDisplayName": "Eli O'Brien",
+      "ownerPrincipalName": "eli.obrien@example.com",
+      "isDeleted": false,
+      "lastActivityDate": null,
+      "fileCount": 0,
+      "activeFileCount": 0,
+      "storageUsedInBytes": 1073741,
+      "storageAllocatedInBytes": 1099511627776,
+      "reportPeriod": "30"
+    },
+    {
+      "reportRefreshDate": "2026-10-13",
+      "siteId": "10000000-0000-4000-8000-000000000b05",
+      "siteUrl": "https://exampleorg-my.sharepoint.com/personal/finance_temp_example_com",
+      "ownerDisplayName": "Finance Temp",
+      "ownerPrincipalName": "finance.temp@example.com",
+      "isDeleted": false,
+      "lastActivityDate": "2026-04-02",
+      "fileCount": 140,
+      "activeFileCount": 0,
+      "storageUsedInBytes": 2147483648,
+      "storageAllocatedInBytes": 1099511627776,
+      "reportPeriod": "30"
+    },
+    {
+      "reportRefreshDate": "2026-10-13",
+      "siteId": "10000000-0000-4000-8000-000000000b06",
+      "siteUrl": "https://exampleorg-my.sharepoint.com/personal/former_contractor_example_com",
+      "ownerDisplayName": "Former Contractor",
+      "ownerPrincipalName": "former.contractor@example.com",
+      "isDeleted": true,
+      "lastActivityDate": "2026-01-10",
+      "fileCount": 0,
+      "activeFileCount": 0,
+      "storageUsedInBytes": 9663676416,
+      "storageAllocatedInBytes": 1099511627776,
+      "reportPeriod": "30"
+    }
+  ]
+}

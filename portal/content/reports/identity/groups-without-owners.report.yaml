@@ -1,0 +1,162 @@
+$schema: ../../../packages/schemas/generated/report.schema.json
+kind: report
+id: identity.groups-without-owners
+version: 1.0.0
+title: Groups without owners
+summary: >-
+  Cloud groups that nobody owns — no one to answer access reviews, renew Microsoft 365 groups before they expire or
+  clean up members — and, on request, groups with no members at all. Groups synced from Active Directory are managed
+  on-premises and left out unless you include them.
+owner: identity-team
+tags: [identity, groups, governance, hygiene, report]
+nav: { section: reports, label: Groups without owners, icon: users-three, order: 21 }
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    graph: [Group.Read.All, GroupMember.Read.All]
+  entraRoles: [Directory Readers]
+
+params:
+  issue:
+    type: enum
+    label: Show
+    facet: true
+    default: noOwners
+    values:
+      - { value: noOwners, label: Groups without owners }
+      - { value: noMembers, label: Groups without members }
+      - { value: either, label: Without owners or without members }
+  includeSynced: { type: boolean, label: Include groups synced from AD, default: false, facet: true }
+
+# Owners: `owners/$count eq 0` (advanced query) returns only ownerless groups. Members: Graph can't filter on member
+# count, so every group is read with its first members expanded (one $expand per request) — only when asked for.
+datasources:
+  ownerless:
+    source: graph
+    when: ${ params.issue != 'noMembers' }
+    request:
+      path: /groups
+      headers: { ConsistencyLevel: eventual }
+      query:
+        $filter: owners/$count eq 0
+        $count: true
+        $select: id,displayName,mail,groupTypes,securityEnabled,mailEnabled,membershipRule,onPremisesSyncEnabled,isAssignableToRole,createdDateTime,visibility
+        $top: 999
+    paging: all
+    maxItems: 50000
+    cache: { ttl: 900 }
+  membership:
+    source: graph
+    when: ${ params.issue != 'noOwners' }
+    request:
+      path: /groups
+      query:
+        $select: id,displayName,mail,groupTypes,securityEnabled,mailEnabled,membershipRule,onPremisesSyncEnabled,isAssignableToRole,createdDateTime,visibility
+        $expand: members($select=id)
+        $top: 999
+    paging: all
+    maxItems: 100000
+    cache: { ttl: 900 }
+  report:
+    source: static
+    data: >-
+      ${ { "ownerless": ds.ownerless.value, "membership": ds.membership.value } }
+    transform: >-
+      ${ (
+        $issue := params.issue ? params.issue : 'noOwners';
+        $noOwner := $merge([[value.ownerless].{ id: true }]);
+        $describe := function($g, $noOwners, $noMembers) {
+          {
+            "id": $g.id,
+            "displayName": $g.displayName,
+            "mail": $g.mail,
+            "kind": 'Unified' in $g.groupTypes ? 'Microsoft 365'
+                    : $g.securityEnabled and $g.mailEnabled ? 'Mail-enabled security'
+                    : $g.securityEnabled ? 'Security' : 'Distribution list',
+            "membership": 'DynamicMembership' in $g.groupTypes ? 'Dynamic' : 'Assigned',
+            "source": $g.onPremisesSyncEnabled = true ? 'Synced' : 'Cloud',
+            "roleAssignable": $g.isAssignableToRole = true,
+            "created": $g.createdDateTime,
+            "noOwners": $noOwners,
+            "noMembers": $noMembers,
+            "issue": $noOwners = true and $noMembers = true ? 'No owners or members'
+                     : $noOwners = true ? 'No owners' : 'No members'
+          }
+        };
+        $rows := $issue = 'noOwners'
+          ? [value.ownerless.$describe($, true, null)]
+          : [value.membership.(
+              $o := $issue = 'either' ? $lookup($noOwner, id) = true : null;
+              $m := $count(members) = 0;
+              ($o = true or $m) ? $describe($, $o, $m)
+            )];
+        $shown := $rows[$$.params.includeSynced = true or source = 'Cloud'];
+        {
+          "rows": [$shown^(displayName)],
+          "total": $count($shown),
+          "noOwners": $issue = 'noMembers' ? null : $count($shown[noOwners = true]),
+          "noMembers": $issue = 'noOwners' ? null : $count($shown[noMembers = true]),
+          "m365NoOwners": $issue = 'noMembers' ? null : $count($shown[noOwners = true and kind = 'Microsoft 365'])
+        }
+      ) }
+
+layout:
+  - widget: kpi
+    id: total
+    data: report.total
+    label: Groups in this report
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+  - widget: kpi
+    id: noOwners
+    data: report.noOwners
+    label: Without owners
+    format: number
+    when: ${ params.issue != 'noMembers' }
+  - widget: kpi
+    id: m365NoOwners
+    data: report.m365NoOwners
+    label: Microsoft 365 groups without owners
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+    when: ${ params.issue != 'noMembers' }
+  - widget: kpi
+    id: noMembers
+    data: report.noMembers
+    label: Without members
+    format: number
+    when: ${ params.issue != 'noOwners' }
+  - widget: table
+    id: groups
+    span: 12
+    data: report.rows
+    rowKey: id
+    columns:
+      - { field: displayName, label: Group, kind: identity, secondary: mail, sortable: true }
+      - { field: issue, label: Issue, kind: status, map: { "No owners": [warn, No owners], "No members": [info, No members], "No owners or members": [warn, No owners or members] }, filter: facet }
+      - { field: kind, label: Type, filter: facet }
+      - { field: membership, label: Membership, filter: facet }
+      - { field: source, label: Source, filter: facet }
+      - { field: roleAssignable, label: Role-assignable, kind: boolean }
+      - { field: created, label: Created, kind: date, filter: date, sortable: true }
+      - { field: id, label: Object id, kind: guid, hidden: true }
+    inspect:
+      page: identity.group
+      params:
+        id: ${ row.id }
+    rowActions:
+      - playbook: identity.add-group-owner
+        label: Add owner
+        icon: user-plus
+        inputs:
+          groupId: ${ row.id }
+        when: ${ row.noOwners = true and row.source = 'Cloud' }
+    empty:
+      title: Nothing to clean up
+      body: Every cloud group in scope has an owner (and members, when you include that check).
+
+export:
+  formats: [csv, xlsx]
+  fileName: groups-${ params.issue }
+  data: report.rows
+  columns: all

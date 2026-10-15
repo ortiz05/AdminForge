@@ -1,0 +1,37 @@
+$schema: ../../../packages/schemas/generated/schedule.schema.json
+kind: schedule
+id: reports.shared-mailbox-sign-in-weekly
+version: 1.0.0
+title: Weekly shared mailboxes with sign-in allowed report
+summary: >-
+  Every Monday at 06:55 UTC, writes shared mailboxes whose account can still sign in as XLSX and emails it to the
+  report recipients. Disabled until the automation identity is set up for app-only Exchange Online
+  (Exchange.ManageAsApp, a certificate credential, and an Exchange role such as View-Only Recipients).
+owner: m365-team
+tags: [m365, exchange, security, report]
+cron: "55 6 * * 1"
+timezone: UTC
+enabled: false
+identity: automation
+job:
+  kind: report
+  ref: m365.shared-mailbox-sign-in
+  params: { includeBlocked: false }
+  delivery:
+    - type: file
+      format: xlsx
+      path: m365/shared-mailbox-sign-in/{date}.xlsx
+      retain: 26
+    # Recipients are configuration (never content); without AF_MAIL_SENDER / AF_REPORT_RECIPIENTS the run notes
+    # "not configured" and the file is still kept.
+    - type: email
+      to: ["${ env.AF_REPORT_RECIPIENTS }"]
+      format: xlsx
+retry: { max: 2, backoff: exponential, delay: 5m }
+timeoutSeconds: 1800
+overlap: skip
+requires:
+  # Application permissions held by the automation identity (ADR-011).
+  scopes:
+    exchange: [Exchange.ManageAsApp]
+  licences: [exchange]

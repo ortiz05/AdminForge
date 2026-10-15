@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/playbook.schema.json
 kind: playbook
 id: identity.add-group-members
-version: 1.0.0
+version: 1.1.0
 title: Add group members
 summary: >-
   Adds one or more users to a cloud security or Microsoft 365 group. Refuses dynamic groups, groups synced from
@@ -38,7 +38,13 @@ steps:
       method: GET
       path: /groups/${ $encode($guid(inputs.groupId)) }
       query:
-        $select: id,displayName,groupTypes,mailEnabled,securityEnabled,onPremisesSyncEnabled,isAssignableToRole
+        $select: id,displayName,uniqueName,groupTypes,mailEnabled,securityEnabled,onPremisesSyncEnabled,isAssignableToRole
+
+  - id: notPortalGroup
+    type: assert
+    that: >-
+      ${ $not($substring($lowercase(steps.group.output.uniqueName ? steps.group.output.uniqueName : ''), 0, 14) = 'sg-adminforge-' or $substring($lowercase(steps.group.output.displayName), 0, 14) = 'sg-adminforge-') }
+    message: This group grants AdminForge roles. Change it in the Microsoft Entra admin center, outside AdminForge, so nobody can grant themselves portal access from inside the portal.
 
   - id: notDynamic
     type: assert
@@ -83,6 +89,11 @@ outputs:
   summary: ${ 'Requested ' & $count(inputs.userIds) & ' addition(s) to ' & steps.group.output.displayName & '. Users who were already members are reported as skipped.' }
 
 tests:
+  - name: refuses AdminForge's role groups
+    inputs: { groupId: 00000000-0000-4000-8000-0000000002ff, userIds: [00000000-0000-4000-8000-000000000102] }
+    mocks:
+      group: { id: 00000000-0000-4000-8000-0000000002ff, displayName: SG-AdminForge-dev-Portal.Operator, uniqueName: sg-adminforge-dev-portal-operator, groupTypes: [], mailEnabled: false, securityEnabled: true, onPremisesSyncEnabled: null }
+    expect: { status: failed, failedStep: notPortalGroup }
   - name: refuses a dynamic group
     inputs: { groupId: 00000000-0000-4000-8000-000000000203, userIds: [00000000-0000-4000-8000-000000000102] }
     mocks:

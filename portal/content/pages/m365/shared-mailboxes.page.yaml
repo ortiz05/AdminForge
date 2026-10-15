@@ -1,9 +1,11 @@
 $schema: ../../../packages/schemas/generated/page.schema.json
 kind: page
 id: m365.shared-mailboxes
-version: 1.1.0
+version: 1.2.0
 title: Shared mailboxes
-summary: Shared mailboxes, and which of them need a licence because they have an archive or litigation hold.
+summary: >-
+  Shared mailboxes, which of them people can still sign in to (block it), and which need a licence because they have
+  an archive or litigation hold.
 owner: m365-team
 tags: [m365, exchange, mailboxes]
 template: list-detail
@@ -42,13 +44,14 @@ datasources:
     source: runner
     label: Shared mailboxes (PowerShell)
     script: exchange/Get-MailboxSummary.ps1
-    sha256: 45facf19c4619af0897f322e35906ddd5f62ff98de23c3ca1933c26f4dec5ae1
+    sha256: 5b35292d4c039dad7036b7e99434a13f2da0c618e2241505a6997b75f02ad12d
     services: [exchange]
     timeoutSeconds: 600
     parameters:
       resultSize: 5000
       recipientTypeDetails: [SharedMailbox]
       includeMailboxes: true
+      includeAccountState: true
     cache: { ttl: 900 }
     # A shared mailbox needs a licence when it has an archive or is on litigation hold (or exceeds 50 GB, not visible here).
     transform: >-
@@ -66,6 +69,7 @@ datasources:
           "rows": $rows,
           "total": $v.total,
           "needsLicence": $count($all[needsLicence]),
+          "signInAllowed": $count($all[accountDisabled = false]),
           "hidden": $v.hiddenFromAddressLists
         }
       ) }
@@ -88,11 +92,18 @@ layout:
     data: shared.hidden
     label: Hidden from address lists
     format: number
+  - widget: kpi
+    id: signInAllowed
+    data: shared.signInAllowed
+    label: Sign-in allowed
+    format: number
+    status: "${ value > 0 ? 'crit' : 'ok' }"
   - widget: markdown
-    span: 3
+    span: 12
     text: |
-      Shared mailboxes don't need a licence up to 50 GB. Block sign-in for the account behind each one —
-      nobody should sign in to a shared mailbox directly.
+      Shared mailboxes don't need a licence up to 50 GB. Block sign-in for the account behind each one — nobody should
+      sign in to a shared mailbox directly; people open it with their own account. The Shared mailboxes with sign-in
+      allowed report runs this check every week.
   - widget: table
     id: shared
     span: 12
@@ -107,6 +118,11 @@ layout:
         filter: { type: facet, param: licence }
       - { field: litigationHoldEnabled, label: Litigation hold, kind: boolean, filter: facet }
       - { field: archiveStatus, label: Archive, kind: status, map: { Active: [ok, Active], None: [neutral, None] }, filter: facet }
+      - field: accountDisabled
+        label: Sign-in
+        kind: status
+        map: { "true": [ok, Blocked], "false": [crit, Allowed] }
+        filter: facet
       - { field: hiddenFromAddressListsEnabled, label: Hidden from address lists, kind: boolean, filter: facet }
       - { field: whenCreated, label: Created, kind: date, filter: date, sortable: true }
       - { field: userPrincipalName, label: Sign-in name, hidden: true }
@@ -115,6 +131,12 @@ layout:
       params:
         mailbox: ${ row.primarySmtpAddress }
     rowActions:
+      - playbook: identity.disable-user
+        label: Block sign-in
+        icon: prohibit
+        inputs:
+          userId: ${ row.externalDirectoryObjectId }
+        when: ${ row.accountDisabled = false and $exists(row.externalDirectoryObjectId) and row.externalDirectoryObjectId != null }
       - label: Open in Exchange admin center
         icon: arrow-square-out
         href: https://admin.exchange.microsoft.com/#/mailboxes

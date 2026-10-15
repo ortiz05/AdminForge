@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/page.schema.json
 kind: page
 id: azure.function-app
-version: 1.0.0
+version: 1.0.1
 title: Function App
 summary: One Function App — state, functions and their triggers, invocations and HTTP errors, app setting names, configuration, authentication and access.
 owner: azure-team
@@ -155,6 +155,8 @@ datasources:
     cache: { ttl: 60 }
   access:
     source: resourceGraph
+    # Resource Graph returns computed booleans as 1/0 (tostring() gives True/False): inherited is projected as
+    # 'true'/'false' text with iff() for the status map.
     query: |
       // af:azure.function-app#access
       authorizationresources
@@ -163,7 +165,7 @@ datasources:
       | extend site = tolower(strcat('/subscriptions/${ $guid(params.subscriptionId) }/resourcegroups/${ $lowercase($replace(params.resourceGroup, /[^A-Za-z0-9._()-]/, '')) }/providers/microsoft.web/sites/${ $lowercase($replace(params.name, /[^A-Za-z0-9._-]/, '')) }'))
       | where site == scope or site startswith strcat(scope, '/')
       | join kind=leftouter (authorizationresources | where type =~ 'microsoft.authorization/roledefinitions' | extend roleDefinitionGuid = tolower(name), roleName = tostring(properties.roleName), roleType = tostring(properties.type) | summarize roleName = any(roleName), roleType = any(roleType) by roleDefinitionGuid) on roleDefinitionGuid
-      | extend inherited = site != scope
+      | extend inherited = iff(site != scope, 'true', 'false')
       | project id, roleName, roleType, principalId, principalType, scope, inherited, createdOn
       | order by roleName asc
     cache: { ttl: 120 }

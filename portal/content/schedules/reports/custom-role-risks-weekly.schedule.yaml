@@ -1,0 +1,33 @@
+$schema: ../../../packages/schemas/generated/schedule.schema.json
+kind: schedule
+id: reports.custom-role-risks-weekly
+version: 1.0.0
+title: Weekly custom Azure roles with broad permissions report
+summary: >-
+  Every Monday at 05:35 UTC, writes every custom Azure role with its breadth (all actions, can grant access, wildcard
+  actions) and how many assignments use it, as XLSX.
+  Email goes to AF_REPORT_RECIPIENTS when it and AF_MAIL_SENDER are configured.
+owner: azure-team
+tags: [azure, rbac, governance, report]
+cron: "35 5 * * 1"
+timezone: UTC
+enabled: true
+identity: automation
+job:
+  kind: report
+  ref: azure.custom-role-risks
+  # Pinned rather than left to the report's defaults so the archive stays comparable from run to run.
+  params: { riskyOnly: false }
+  delivery:
+    - type: file
+      format: xlsx
+      path: azure/custom-role-risks/{date}.xlsx
+      retain: 26
+    - type: email
+      to: ["${ env.AF_REPORT_RECIPIENTS }"]
+      format: xlsx
+retry: { max: 2, backoff: exponential, delay: 5m }
+timeoutSeconds: 1800
+overlap: skip
+requires:
+  azureRoles: [Reader]

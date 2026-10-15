@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/page.schema.json
 kind: page
 id: azure.role-assignments
-version: 1.0.0
+version: 1.0.1
 title: Role assignments
 summary: Azure RBAC role assignments across management groups, subscriptions, resource groups and resources — filter by scope, role and principal; remove or add assignments with approval.
 owner: azure-team
@@ -51,6 +51,8 @@ savedViews:
 datasources:
   assignments:
     source: resourceGraph
+    # Resource Graph returns computed booleans as 1/0 (tostring() gives True/False): flags are projected as
+    # 'true'/'false' text with iff() for the KPI, the status maps and the facets.
     query: |
       // af:azure.role-assignments#assignments
       authorizationresources
@@ -68,7 +70,7 @@ datasources:
       ${ params.privileged = true ? '| where privileged' }
       | extend depth = array_length(split(scope, '/'))
       | extend scopeLevel = case(scope == '/', 'Root', scope contains '/managementgroups/', 'Management group', depth == 3, 'Subscription', depth == 5, 'Resource group', 'Resource')
-      | project id, roleName, roleType, privileged, principalId, principalType, scope, scopeLevel, subscriptionId, createdOn, createdBy, updatedOn, hasCondition = isnotempty(condition), description
+      | project id, roleName, roleType, privileged = iff(privileged, 'true', 'false'), principalId, principalType, scope, scopeLevel, subscriptionId, createdOn, createdBy, updatedOn, hasCondition = iff(isnotempty(condition), 'true', 'false'), description
       | order by privileged desc, createdOn desc
     paging: all
     maxItems: 50000
@@ -78,7 +80,7 @@ datasources:
         {
           'rows': $rows,
           'total': $count($rows),
-          'privileged': $count($rows[privileged = true]),
+          'privileged': $count($rows[privileged = 'true']),
           'servicePrincipals': $count($rows[principalType = 'ServicePrincipal']),
           'broad': $count($rows[scopeLevel in ['Root', 'Management group', 'Subscription']])
         }
@@ -130,7 +132,7 @@ layout:
       - { field: scopeLevel, label: Scope level, filter: facet }
       - { field: scope, label: Scope, kind: code }
       - { field: createdOn, label: Assigned, kind: date, sortable: true, filter: date }
-      - { field: hasCondition, label: Condition, kind: boolean, filter: facet, hidden: true }
+      - { field: hasCondition, label: Condition, kind: status, map: { "true": [info, Conditional], "false": [neutral, None] }, filter: facet, hidden: true }
       - { field: createdBy, label: Assigned by, kind: guid, hidden: true }
       - { field: updatedOn, label: Updated, kind: date, hidden: true }
       - { field: description, label: Description, hidden: true }

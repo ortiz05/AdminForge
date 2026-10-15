@@ -1,0 +1,172 @@
+$schema: ../../../packages/schemas/generated/report.schema.json
+kind: report
+id: azure.advisor-recommendations
+version: 1.0.0
+title: Azure Advisor recommendations
+summary: Active Azure Advisor recommendations across subscriptions by category (cost, security, reliability, performance, operational excellence) and impact, with the affected resource and the estimated yearly savings of cost recommendations.
+owner: azure-team
+tags: [azure, advisor, cost, reliability, resource-graph]
+nav: { section: reports, label: Azure Advisor recommendations, icon: lightbulb, order: 192 }
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    arm: [user_impersonation]
+  azureRoles: [Reader]
+
+params:
+  category:
+    type: enum
+    label: Category
+    facet: true
+    default: any
+    values:
+      - { value: any, label: Every category }
+      - { value: Cost, label: Cost }
+      - { value: Security, label: Security }
+      - { value: HighAvailability, label: Reliability }
+      - { value: Performance, label: Performance }
+      - { value: OperationalExcellence, label: Operational excellence }
+  impact:
+    type: enum
+    label: Impact
+    facet: true
+    default: any
+    values:
+      - { value: any, label: Any impact }
+      - { value: High, label: High }
+      - { value: Medium, label: Medium }
+      - { value: Low, label: Low }
+  subscriptionId: { type: string, format: guid, label: Subscription, picker: subscription, facet: true }
+
+datasources:
+  recommendations:
+    source: resourceGraph
+    query: |
+      // af:azure.advisor-recommendations#rows
+      advisorresources
+      | where type =~ 'microsoft.advisor/recommendations'
+      ${ params.subscriptionId ? "| where subscriptionId == '" & $guid(params.subscriptionId) & "'" }
+      | extend category = tostring(properties.category), impact = tostring(properties.impact)
+      ${ params.category in ['Cost', 'Security', 'HighAvailability', 'Performance', 'OperationalExcellence'] ? "| where category =~ '" & params.category & "'" }
+      ${ params.impact in ['High', 'Medium', 'Low'] ? "| where impact =~ '" & params.impact & "'" }
+      | extend problem = tostring(properties.shortDescription.problem), solution = tostring(properties.shortDescription.solution), impactedType = tostring(properties.impactedField), impactedName = tostring(properties.impactedValue), resourceId = tostring(properties.resourceMetadata.resourceId), lastUpdated = todatetime(properties.lastUpdated), recommendationTypeId = tostring(properties.recommendationTypeId)
+      | extend annualSavings = todouble(properties.extendedProperties.annualSavingsAmount), savingsCurrency = tostring(properties.extendedProperties.savingsCurrency)
+      | extend categoryLabel = case(category =~ 'HighAvailability', 'Reliability', category =~ 'OperationalExcellence', 'Operational excellence', category), impactRank = case(impact =~ 'High', 0, impact =~ 'Medium', 1, 2)
+      | join kind=leftouter (resourcecontainers | where type =~ 'microsoft.resources/subscriptions' | project subscriptionId, subscriptionName = name) on subscriptionId
+      | project id, problem, solution, category, categoryLabel, impact, impactRank, impactedType, impactedName, resourceId, resourceGroup, subscriptionId, subscriptionName, annualSavings, savingsCurrency, lastUpdated, recommendationTypeId
+      | order by impactRank asc, categoryLabel asc, problem asc
+    paging: all
+    maxItems: 50000
+    cache: { ttl: 600 }
+  summary:
+    source: resourceGraph
+    # Same filters as the rows, counted in Resource Graph: no row transform, so large tenants stay within the
+    # 250 ms transform budget and exports stream the rows as they are.
+    query: |
+      // af:azure.advisor-recommendations#summary
+      advisorresources
+      | where type =~ 'microsoft.advisor/recommendations'
+      ${ params.subscriptionId ? "| where subscriptionId == '" & $guid(params.subscriptionId) & "'" }
+      | extend category = tostring(properties.category), impact = tostring(properties.impact)
+      ${ params.category in ['Cost', 'Security', 'HighAvailability', 'Performance', 'OperationalExcellence'] ? "| where category =~ '" & params.category & "'" }
+      ${ params.impact in ['High', 'Medium', 'Low'] ? "| where impact =~ '" & params.impact & "'" }
+      | extend problem = tostring(properties.shortDescription.problem), solution = tostring(properties.shortDescription.solution), impactedType = tostring(properties.impactedField), impactedName = tostring(properties.impactedValue), resourceId = tostring(properties.resourceMetadata.resourceId), lastUpdated = todatetime(properties.lastUpdated), recommendationTypeId = tostring(properties.recommendationTypeId)
+      | extend annualSavings = todouble(properties.extendedProperties.annualSavingsAmount), savingsCurrency = tostring(properties.extendedProperties.savingsCurrency)
+      | extend categoryLabel = case(category =~ 'HighAvailability', 'Reliability', category =~ 'OperationalExcellence', 'Operational excellence', category), impactRank = case(impact =~ 'High', 0, impact =~ 'Medium', 1, 2)
+      | summarize recommendations = count(), high = countif(impact =~ 'High'), medium = countif(impact =~ 'Medium'), low = countif(impact =~ 'Low'), savings = sumif(annualSavings, annualSavings > 0), currencies = make_set_if(savingsCurrency, annualSavings > 0, 5) by categoryLabel
+    transform: >-
+      ${ (
+        $s := [value.value];
+        $cats := ['Cost', 'Security', 'Reliability', 'Performance', 'Operational excellence'];
+        $currencies := [$distinct($s.currencies)];
+        {
+          'total': $sum([0, $s.recommendations]),
+          'high': $sum([0, $s.high]),
+          'security': $sum([0, $s[categoryLabel = 'Security'].recommendations]),
+          'savings': $round($sum([0, $s.savings]), 0),
+          'savingsCurrency': $count($currencies) = 1 ? $currencies[0] : $count($currencies) > 1 ? 'mixed' : '',
+          'byCategory': [$cats.(
+            $c := $;
+            $r := $s[categoryLabel = $c];
+            { 'category': $c, 'high': $sum([0, $r.high]), 'medium': $sum([0, $r.medium]), 'low': $sum([0, $r.low]) }
+          )]
+        }
+      ) }
+    cache: { ttl: 300 }
+
+layout:
+  - widget: kpi
+    data: summary.total
+    label: Recommendations
+    format: number
+  - widget: kpi
+    data: summary.high
+    label: High impact
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+    href: /p/azure.advisor-recommendations?impact=High
+  - widget: kpi
+    data: summary.security
+    label: Security
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+    href: /p/azure.advisor-recommendations?category=Security
+  - widget: kpi
+    data: summary.savings
+    label: Estimated yearly savings
+    format: number
+    href: /p/azure.advisor-recommendations?category=Cost
+  - widget: chart
+    title: Recommendations by category and impact
+    span: 12
+    type: stackedBar
+    data: summary.byCategory
+    x: category
+    y: [high, medium, low]
+    stack: true
+    format: number
+  - widget: table
+    id: recommendations
+    span: 12
+    data: recommendations.value
+    rowKey: id
+    columns:
+      - { field: problem, label: Recommendation, kind: identity, secondary: solution, sortable: true }
+      - field: impact
+        label: Impact
+        kind: status
+        map: { High: [crit, High], Medium: [warn, Medium], Low: [info, Low] }
+        filter: { type: facet, param: impact }
+      - { field: categoryLabel, label: Category, filter: facet }
+      - { field: impactedName, label: Resource, sortable: true }
+      - { field: impactedType, label: Resource type, filter: facet }
+      - { field: annualSavings, label: Yearly savings, kind: number, sortable: true }
+      - { field: savingsCurrency, label: Currency, hidden: true }
+      - { field: resourceGroup, label: Resource group, filter: facet, hidden: true }
+      - { field: subscriptionName, label: Subscription, filter: facet }
+      - { field: lastUpdated, label: Updated, kind: relativeTime, sortable: true }
+      - { field: recommendationTypeId, label: Recommendation type, kind: guid, hidden: true }
+      - { field: resourceId, label: Resource id, kind: code, hidden: true }
+      - { field: id, label: Recommendation id, kind: code, hidden: true }
+    # Subscription-level recommendations point at the subscription, which the resource page does not open.
+    rowActions:
+      - label: Open resource
+        icon: cube
+        href: /p/azure.resource?id=${ $encode(row.resourceId) }
+        when: ${ $count($split(row.resourceId, '/')) > 3 }
+      - label: Open subscription
+        icon: credit-card
+        href: /p/azure.subscription?id=${ $encode(row.subscriptionId) }
+        when: ${ $count($split(row.resourceId, '/')) <= 3 }
+      - label: Open in Azure Advisor
+        icon: arrow-square-out
+        href: https://portal.azure.com/#view/Microsoft_Azure_Expert/AdvisorMenuBlade/~/overview
+    empty:
+      title: No Advisor recommendations
+      body: Azure Advisor has no active recommendation for the subscriptions and filters chosen. Advisor refreshes most recommendations daily.
+
+export:
+  formats: [csv, xlsx]
+  fileName: azure-advisor-recommendations
+  data: recommendations.value
+  columns: all

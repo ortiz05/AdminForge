@@ -1,0 +1,313 @@
+$schema: ../../../packages/schemas/generated/report.schema.json
+kind: report
+id: identity.tenant-baseline
+version: 1.0.0
+title: Identity settings baseline
+summary: >-
+  Tenant-wide Microsoft Entra settings checked against a recommended baseline — MFA enforcement (security defaults or
+  Conditional Access), Global Administrator count, user and admin consent, who can register apps and create tenants,
+  guest access and invitations, authentication methods, device join and Windows LAPS, Microsoft 365 group creation.
+  Each setting shows its current value, the recommendation, why it matters and where to change it.
+owner: identity-team
+tags: [identity, configuration, security, baseline, report, review]
+nav: { section: reports, label: Identity settings baseline, icon: list-checks, order: 26 }
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    graph: [Policy.Read.All, Directory.Read.All, RoleManagement.Read.Directory]
+  entraRoles: [Global Reader]
+
+params:
+  status:
+    type: enum
+    label: Show
+    facet: true
+    default: All
+    values:
+      - { value: All, label: All settings }
+      - { value: attention, label: Needs attention }
+
+# One $batch. A sub-request that fails (missing permission, or Conditional Access without Entra ID P1, which returns an
+# empty list) leaves its rows as "Couldn't be read" instead of failing the report.
+datasources:
+  settings:
+    source: graphBatch
+    requests:
+      authorization: { path: /policies/authorizationPolicy }
+      securityDefaults: { path: /policies/identitySecurityDefaultsEnforcementPolicy }
+      adminConsent: { path: /policies/adminConsentRequestPolicy }
+      authMethods: { path: /policies/authenticationMethodsPolicy }
+      authFlows: { path: /policies/authenticationFlowsPolicy }
+      deviceRegistration: { path: /policies/deviceRegistrationPolicy }
+      crossTenant: { path: /policies/crossTenantAccessPolicy/default }
+      groupSettings: { path: /groupSettings }
+      conditionalAccess: { path: /identity/conditionalAccess/policies, query: { $select: "id,state" } }
+      globalAdmins: { path: "/directoryRoles(roleTemplateId='62e90394-69f5-4237-9190-012177145e10')/members", query: { $select: id } }
+      organization: { path: /organization, query: { $select: "id,onPremisesSyncEnabled,technicalNotificationMails" } }
+    cache: { ttl: 900 }
+    transform: >-
+      ${ (
+        $row := function($id, $area, $setting, $current, $recommended, $status, $why, $where) {
+          { "id": $id, "area": $area, "setting": $setting, "current": $current, "recommended": $recommended,
+            "status": $status, "why": $why, "where": $where }
+        };
+        $unread := "Couldn't be read";
+        $a := value.authorization;
+        $u := $a.defaultUserRolePermissions;
+        $sd := value.securityDefaults;
+        $ca := value.conditionalAccess;
+        $caOn := $count($ca.value[state = 'enabled']);
+        $caReport := $count($ca.value[state = 'enabledForReportingButNotEnforced']);
+        $ga := value.globalAdmins;
+        $gaCount := $count($ga.value);
+        $consent := [$u.permissionGrantPoliciesAssigned];
+        $m := value.authMethods;
+        $method := function($name) { $m.authenticationMethodConfigurations[id = $name][0].state };
+        $campaign := $m.registrationEnforcement.authenticationMethodsRegistrationCampaign.state;
+        $dr := value.deviceRegistration;
+        $unified := value.groupSettings.value[templateId = '62375ab9-6b52-47ed-826b-58e47e0e304b'][0];
+        $createGroups := $unified.values[name = 'EnableGroupCreation'][0].value;
+        $org := value.organization.value[0];
+        $guestRoles := {
+          "a0b1b346-4d3e-4e8b-98f8-753987be4970": "Same access as members",
+          "10dae51f-b6af-4016-8d66-8c2a99b929b3": "Limited access (default)",
+          "2af84b1e-32c8-42b7-82bc-daa82404023b": "Restricted to their own objects"
+        };
+        $invites := {
+          "everyone": "Anyone, including guests",
+          "adminsGuestInvitersAndAllMembers": "Members and admins",
+          "adminsAndGuestInviters": "Admins and Guest Inviters only",
+          "none": "Nobody"
+        };
+        $rows := [
+          $sd ? $row('securityDefaults', 'MFA', 'Security defaults', $sd.isEnabled ? 'On' : 'Off',
+              'On, unless Conditional Access policies require MFA',
+              $sd.isEnabled or $caOn > 0 ? 'ok' : 'crit',
+              'Without security defaults or Conditional Access nothing requires MFA, so a stolen password is enough to sign in.',
+              'Entra admin center › Overview › Properties › Manage security defaults')
+            : $row('securityDefaults', 'MFA', 'Security defaults', $unread, 'On, unless Conditional Access policies require MFA', 'unknown',
+              'Without security defaults or Conditional Access nothing requires MFA.', 'Entra admin center › Overview › Properties'),
+          $ca ? $row('conditionalAccess', 'MFA', 'Conditional Access policies enforced',
+              $string($caOn) & ' on' & ($caReport > 0 ? ', ' & $string($caReport) & ' report-only' : ''),
+              'Policies that require MFA for everyone and block legacy authentication (needs Entra ID P1)',
+              $caOn > 0 ? 'ok' : $sd.isEnabled ? 'info' : 'crit',
+              'Conditional Access is how MFA, device and location rules are enforced once you outgrow security defaults.',
+              'AdminForge › Identity › Conditional Access')
+            : $row('conditionalAccess', 'MFA', 'Conditional Access policies enforced', $unread, 'Policies that require MFA (Entra ID P1)', 'unknown',
+              'Conditional Access enforces MFA beyond security defaults.', 'AdminForge › Identity › Conditional Access'),
+          $ga ? $row('globalAdmins', 'Privileged access', 'Active Global Administrators', $string($gaCount),
+              'Two to four, including two cloud-only emergency access accounts',
+              $gaCount < 2 ? 'crit' : $gaCount >= 8 ? 'crit' : $gaCount >= 5 ? 'warn' : 'ok',
+              'Fewer than two risks a lock-out; every extra Global Administrator is another account that can take over the tenant.',
+              'AdminForge › Reports › Privileged role assignments')
+            : $row('globalAdmins', 'Privileged access', 'Active Global Administrators', $unread, 'Two to four', 'unknown',
+              'Every extra Global Administrator can take over the tenant.', 'AdminForge › Reports › Privileged role assignments'),
+          $a ? (
+            $legacy := $count($consent[$contains($, 'microsoft-user-default-legacy')]) > 0;
+            $low := $count($consent[$contains($, 'microsoft-user-default-low')]) > 0;
+            $custom := $count($consent[$contains($, 'ManagePermissionGrantsForSelf.')]) > 0;
+            $row('userConsent', 'Apps and consent', 'Users can consent to apps',
+              $legacy ? 'Yes, to any app' : $low ? 'Verified publishers, low-impact permissions only' : $custom ? 'Custom consent policy' : 'No',
+              'No, or verified publishers with low-impact permissions only',
+              $legacy ? 'crit' : $custom and $not($low) ? 'info' : 'ok',
+              'Consent phishing tricks users into granting a malicious app access to their mail and files.',
+              'Entra admin center › Enterprise apps › Consent and permissions › User consent settings')
+          ) : $row('userConsent', 'Apps and consent', 'Users can consent to apps', $unread, 'Verified publishers, low-impact permissions only', 'unknown',
+              'Consent phishing tricks users into granting access.', 'Entra admin center › Enterprise apps › Consent and permissions'),
+          value.adminConsent ? $row('adminConsentWorkflow', 'Apps and consent', 'Admin consent requests',
+              value.adminConsent.isEnabled ? 'On' : 'Off', 'On, with reviewers',
+              value.adminConsent.isEnabled ? 'ok' : 'warn',
+              'Without it, users who need an app have no sanctioned way to ask, and look for workarounds.',
+              'Entra admin center › Enterprise apps › Consent and permissions › Admin consent settings')
+            : $row('adminConsentWorkflow', 'Apps and consent', 'Admin consent requests', $unread, 'On, with reviewers', 'unknown',
+              'Gives users a sanctioned way to request apps.', 'Entra admin center › Enterprise apps › Admin consent settings'),
+          $a ? $row('riskyAppConsent', 'Apps and consent', 'User consent to apps flagged as risky',
+              $a.allowUserConsentForRiskyApps = true ? 'Allowed' : 'Blocked', 'Blocked',
+              $a.allowUserConsentForRiskyApps = true ? 'crit' : 'ok',
+              'Microsoft flags apps with risky consent patterns; allowing user consent to them defeats the check.',
+              'Microsoft Graph authorizationPolicy (allowUserConsentForRiskyApps)'),
+          $u ? $row('createApps', 'Apps and consent', 'Users can register applications',
+              $u.allowedToCreateApps ? 'Yes' : 'No', 'No (grant Application Developer to those who need it)',
+              $u.allowedToCreateApps ? 'warn' : 'ok',
+              'Anyone can create an app registration, own its credentials and ask colleagues to consent to it.',
+              'Entra admin center › Users › User settings'),
+          $u ? $row('createTenants', 'Users', 'Users can create tenants',
+              $u.allowedToCreateTenants ? 'Yes' : 'No', 'No', $u.allowedToCreateTenants ? 'warn' : 'ok',
+              'Tenants created by users sit outside your governance but carry your name.',
+              'Entra admin center › Users › User settings'),
+          $u ? $row('createSecurityGroups', 'Users', 'Users can create security groups',
+              $u.allowedToCreateSecurityGroups ? 'Yes' : 'No', 'No, unless self-service groups are wanted',
+              $u.allowedToCreateSecurityGroups ? 'info' : 'ok',
+              'Self-created groups sprawl and are sometimes used to grant access.',
+              'Entra admin center › Groups › General'),
+          $a ? $row('guestAccess', 'External access', 'Guest user access',
+              $lookup($guestRoles, $a.guestUserRoleId) ? $lookup($guestRoles, $a.guestUserRoleId) : $a.guestUserRoleId,
+              'Limited or restricted',
+              $a.guestUserRoleId = 'a0b1b346-4d3e-4e8b-98f8-753987be4970' ? 'crit'
+                : $a.guestUserRoleId = '2af84b1e-32c8-42b7-82bc-daa82404023b' ? 'ok' : 'info',
+              'Guests with member-level access can enumerate your whole directory.',
+              'Entra admin center › External Identities › External collaboration settings'),
+          $a ? $row('guestInvites', 'External access', 'Who can invite guests',
+              $lookup($invites, $a.allowInvitesFrom) ? $lookup($invites, $a.allowInvitesFrom) : $a.allowInvitesFrom,
+              'Admins and Guest Inviters, or members',
+              $a.allowInvitesFrom = 'everyone' ? 'warn' : $a.allowInvitesFrom = 'adminsGuestInvitersAndAllMembers' ? 'info' : 'ok',
+              'When guests can invite guests, external access spreads without anyone inside deciding.',
+              'Entra admin center › External Identities › External collaboration settings'),
+          $a ? $row('emailVerifiedJoin', 'External access', 'Email-verified users can join the tenant',
+              $a.allowEmailVerifiedUsersToJoinOrganization ? 'Yes' : 'No', 'No',
+              $a.allowEmailVerifiedUsersToJoinOrganization ? 'warn' : 'ok',
+              'Anyone with a mailbox on one of your domains can create an unmanaged account (viral sign-up).',
+              'Microsoft Graph authorizationPolicy (allowEmailVerifiedUsersToJoinOrganization)'),
+          value.authFlows ? $row('selfServiceSignUp', 'External access', 'Self-service sign-up for guests (user flows)',
+              value.authFlows.selfServiceSignUp.isEnabled ? 'On' : 'Off', 'Off unless an app needs it',
+              value.authFlows.selfServiceSignUp.isEnabled ? 'warn' : 'ok',
+              'External people can create their own guest account through a user flow.',
+              'Entra admin center › External Identities › External collaboration settings'),
+          value.crossTenant ? $row('b2bInbound', 'External access', 'Inbound B2B collaboration (default for all organisations)',
+              value.crossTenant.b2bCollaborationInbound.usersAndGroups.accessType = 'blocked' ? 'Blocked' : 'Allowed',
+              'Allowed only for partner organisations you trust, or as a reviewed default',
+              'info',
+              'The cross-tenant default decides which external organisations can collaborate with you.',
+              'Entra admin center › External Identities › Cross-tenant access settings'),
+          $m ? $row('methodsMigration', 'Authentication methods', 'Authentication methods policy migration',
+              $m.policyMigrationState = 'migrationComplete' ? 'Complete' : $m.policyMigrationState ? $m.policyMigrationState : 'Not started',
+              'Complete', $m.policyMigrationState = 'migrationComplete' ? 'ok' : 'warn',
+              'The legacy MFA and SSPR method policies are retired; methods should be managed in one policy.',
+              'AdminForge › Identity › Authentication methods')
+            : $row('methodsMigration', 'Authentication methods', 'Authentication methods policy migration', $unread, 'Complete', 'unknown',
+              'Methods should be managed in one policy.', 'AdminForge › Identity › Authentication methods'),
+          $m ? (
+            $phone := [$method('Sms') = 'enabled' ? 'SMS on', $method('Voice') = 'enabled' ? 'Voice on'];
+            $row('phoneMethods', 'Authentication methods', 'SMS and voice call methods',
+              $count($phone) > 0 ? $join($phone, ', ') : 'Off',
+              'Off (or limited to users without a smartphone)',
+              $count($phone) > 0 ? 'warn' : 'ok',
+              'Phone-based codes can be intercepted or SIM-swapped; prefer Authenticator or passkeys.',
+              'AdminForge › Identity › Authentication methods')
+          ),
+          $m ? $row('phishingResistant', 'Authentication methods', 'Phishing-resistant methods (passkeys, certificates)',
+              $method('Fido2') = 'enabled' or $method('X509Certificate') = 'enabled' ? 'Available' : 'Off',
+              'Passkeys (FIDO2) on, at least for admins',
+              $method('Fido2') = 'enabled' or $method('X509Certificate') = 'enabled' ? 'ok' : 'warn',
+              'Only phishing-resistant methods stop adversary-in-the-middle phishing of admins.',
+              'AdminForge › Identity › Authentication methods'),
+          $m ? $row('authenticator', 'Authentication methods', 'Microsoft Authenticator',
+              $method('MicrosoftAuthenticator') = 'enabled' ? 'On' : 'Off', 'On',
+              $method('MicrosoftAuthenticator') = 'enabled' ? 'ok' : 'warn',
+              'Authenticator push with number matching is the default strong method for most users.',
+              'AdminForge › Identity › Authentication methods'),
+          $m ? $row('tap', 'Authentication methods', 'Temporary Access Pass',
+              $method('TemporaryAccessPass') = 'enabled' ? 'On' : 'Off', 'On (for onboarding and recovery)',
+              $method('TemporaryAccessPass') = 'enabled' ? 'ok' : 'info',
+              'Lets the helpdesk onboard and recover users without a password; the Issue Temporary Access Pass playbook needs it.',
+              'AdminForge › Identity › Authentication methods'),
+          $m ? $row('registrationCampaign', 'Authentication methods', 'Authenticator registration campaign',
+              $campaign = 'enabled' ? 'Enabled' : $campaign = 'disabled' ? 'Disabled' : $campaign = 'default' ? 'Microsoft managed' : $unread,
+              'Enabled',
+              $campaign = 'enabled' ? 'ok' : $campaign = 'disabled' ? 'warn' : 'info',
+              'Nudges users who only have SMS or voice to set up Authenticator at sign-in.',
+              'AdminForge › Identity › Authentication methods'),
+          $dr ? $row('deviceJoinMfa', 'Devices', 'MFA to register or join devices',
+              $dr.multiFactorAuthConfiguration = 'required' ? 'Required' : 'Not required', 'Required (or a Conditional Access user action)',
+              $dr.multiFactorAuthConfiguration = 'required' ? 'ok' : 'warn',
+              'A stolen password alone can register a device, which then satisfies device-based access rules.',
+              'Entra admin center › Devices › Device settings')
+            : $row('deviceJoinMfa', 'Devices', 'MFA to register or join devices', $unread, 'Required', 'unknown',
+              'A stolen password alone can register a device.', 'Entra admin center › Devices › Device settings'),
+          $dr ? $row('laps', 'Devices', 'Windows LAPS (local admin passwords in Entra)',
+              $dr.localAdminPassword.isEnabled ? 'On' : 'Off', 'On', $dr.localAdminPassword.isEnabled ? 'ok' : 'warn',
+              'Without LAPS, local administrator passwords are often shared across machines.',
+              'Entra admin center › Devices › Device settings'),
+          $dr ? $row('deviceJoin', 'Devices', 'Who can join devices to Entra ID',
+              $substringAfter($dr.azureADJoin.allowedToJoin.`@odata.type`, '#microsoft.graph.') = 'allDeviceRegistrationMembership' ? 'All users'
+                : $substringAfter($dr.azureADJoin.allowedToJoin.`@odata.type`, '#microsoft.graph.') = 'noDeviceRegistrationMembership' ? 'Nobody'
+                : 'Selected users and groups',
+              'Selected users and groups, or all users with MFA required',
+              'info',
+              'Joined devices get access as company devices.',
+              'Entra admin center › Devices › Device settings'),
+          value.groupSettings ? $row('groupCreation', 'Users', 'Users can create Microsoft 365 groups',
+              $createGroups = 'false' ? 'Restricted to a group' : 'Yes (everyone)', 'Restricted, or allowed with naming and expiry policies',
+              $createGroups = 'false' ? 'ok' : 'info',
+              'Every new Microsoft 365 group creates a team site, mailbox and Team that someone has to govern.',
+              'Entra admin center › Groups › General'),
+          $a ? $row('msolPowerShell', 'Users', 'Legacy MSOnline PowerShell blocked for users',
+              $a.blockMsolPowerShell ? 'Yes' : 'No', 'Yes', $a.blockMsolPowerShell ? 'ok' : 'info',
+              'The retired MSOnline module let any user read the directory outside your other controls.',
+              'Microsoft Graph authorizationPolicy (blockMsolPowerShell)'),
+          $org ? $row('technicalContacts', 'Tenant', 'Technical notification contacts',
+              $string($count($org.technicalNotificationMails)) & ' address(es)', 'At least one monitored mailbox',
+              $count($org.technicalNotificationMails) > 0 ? 'ok' : 'warn',
+              'Microsoft sends service and security notices (for example about sync or certificates) here.',
+              'Microsoft 365 admin center › Settings › Org settings › Organization profile'),
+          $org ? $row('directorySync', 'Tenant', 'Directory synchronisation from Active Directory',
+              $org.onPremisesSyncEnabled = true ? 'On' : 'Off (cloud only)', 'Informational', 'info',
+              'With sync on, accounts and groups that come from AD are changed on-premises, not here.',
+              'Entra admin center › Hybrid management › Microsoft Entra Connect')
+        ];
+        $rank := { "crit": 0, "warn": 1, "unknown": 2, "info": 3, "ok": 4 };
+        $shown := $rows[$$.params.status != 'attention' or status in ['crit', 'warn']];
+        {
+          "rows": [$shown^($lookup($rank, status), area, setting)],
+          "checked": $count($rows[status != 'unknown']),
+          "critical": $count($rows[status = 'crit']),
+          "warnings": $count($rows[status = 'warn']),
+          "unread": $count($rows[status = 'unknown'])
+        }
+      ) }
+
+layout:
+  - widget: kpi
+    id: critical
+    data: settings.critical
+    label: Critical findings
+    format: number
+    status: "${ value > 0 ? 'crit' : 'ok' }"
+  - widget: kpi
+    id: warnings
+    data: settings.warnings
+    label: Warnings
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+  - widget: kpi
+    id: checked
+    data: settings.checked
+    label: Settings checked
+    format: number
+  - widget: kpi
+    id: unread
+    data: settings.unread
+    label: Settings that couldn't be read
+    format: number
+    status: "${ value > 0 ? 'info' : 'ok' }"
+  - widget: table
+    id: settings
+    span: 12
+    data: settings.rows
+    rowKey: id
+    columns:
+      - { field: setting, label: Setting, kind: identity, secondary: area, sortable: true }
+      - field: status
+        label: Status
+        kind: status
+        map: { crit: [crit, Change it], warn: [warn, Review], info: [info, Informational], ok: [ok, As recommended], unknown: [neutral, "Couldn't be read"] }
+        filter: facet
+      - { field: current, label: Current }
+      - { field: recommended, label: Recommended }
+      - { field: why, label: Why it matters }
+      - { field: where, label: Where to change it }
+      - { field: area, label: Area, filter: facet, hidden: true }
+      - { field: id, label: Check id, kind: code, hidden: true }
+    rowActions:
+      - { label: Open Conditional Access, icon: lock-key, href: /p/identity.conditional-access, when: "${ row.id = 'conditionalAccess' }" }
+      - { label: Open Global Administrators, icon: crown, href: /p/identity.role?id=62e90394-69f5-4237-9190-012177145e10, when: "${ row.id = 'globalAdmins' }" }
+      - { label: Open authentication methods, icon: fingerprint, href: /p/identity.auth-methods, when: "${ row.id in ['methodsMigration', 'phoneMethods', 'phishingResistant', 'authenticator', 'tap', 'registrationCampaign'] }" }
+    empty:
+      title: Nothing needs attention
+      body: Every setting checked matches the baseline (choose All settings to see them).
+
+export:
+  formats: [csv, xlsx]
+  fileName: identity-settings-baseline
+  data: settings.rows
+  columns: all

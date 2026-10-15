@@ -1,0 +1,12 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#organization(id,onPremisesSyncEnabled,technicalNotificationMails)",
+  "value": [
+    {
+      "id": "00000000-0000-4000-8000-00000000e0e0",
+      "onPremisesSyncEnabled": true,
+      "technicalNotificationMails": [
+        "it-alerts@example.com"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,34 @@
+$schema: ../../../packages/schemas/generated/schedule.schema.json
+kind: schedule
+id: reports.azure-monthly-cost-weekly
+version: 1.0.0
+status: draft
+title: Weekly Azure cost report
+summary: >-
+  Every Monday at 06:45 UTC, writes the installation subscription's cost month to date and last month by resource
+  group, as XLSX. Draft and off until the request policy allows the read-only Cost Management query (see the report).
+  Email goes to AF_REPORT_RECIPIENTS when it and AF_MAIL_SENDER are configured.
+owner: azure-team
+tags: [azure, cost, finops, report]
+cron: "45 6 * * 1"
+timezone: UTC
+enabled: false
+identity: automation
+job:
+  kind: report
+  ref: azure.monthly-cost
+  # Pinned rather than left to the report's defaults so the archive stays comparable from run to run.
+  params: { groupBy: ResourceGroupName }
+  delivery:
+    - type: file
+      format: xlsx
+      path: azure/monthly-cost/{date}.xlsx
+      retain: 26
+    - type: email
+      to: ["${ env.AF_REPORT_RECIPIENTS }"]
+      format: xlsx
+retry: { max: 2, backoff: exponential, delay: 5m }
+timeoutSeconds: 1800
+overlap: skip
+requires:
+  azureRoles: [Cost Management Reader]

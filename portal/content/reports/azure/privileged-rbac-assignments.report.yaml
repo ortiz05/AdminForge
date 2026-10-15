@@ -1,0 +1,182 @@
+$schema: ../../../packages/schemas/generated/report.schema.json
+kind: report
+id: azure.privileged-rbac-assignments
+version: 1.0.0
+title: Privileged Azure role assignments
+summary: Owner, User Access Administrator and Role Based Access Control Administrator assignments at the root, management group and subscription scopes, with who holds them — flagging guests and external (#EXT#) accounts, identities that no longer exist, direct user assignments and elevated access at the root scope.
+owner: azure-team
+tags: [azure, rbac, access, security, privileged]
+nav: { section: reports, label: Privileged Azure role assignments, icon: crown-simple, order: 189 }
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    arm: [user_impersonation]
+    # Names, user type and existence of each principal (one getByIds call for up to 1000 principals).
+    graph: [Directory.Read.All]
+  azureRoles: [Reader]
+
+params:
+  includeContributor: { type: boolean, default: false, label: Include Contributor, facet: true }
+  principalType:
+    type: enum
+    label: Principal type
+    facet: true
+    default: All
+    values: [All, User, Group, ServicePrincipal]
+  subscriptionId: { type: string, format: guid, label: Subscription, picker: subscription, facet: true, description: Leave empty to include the root and management group scopes. }
+
+datasources:
+  assignments:
+    source: resourceGraph
+    # Resource Graph returns computed booleans as 1/0: hasCondition is projected as 'true'/'false' text with iff().
+    query: |
+      // af:azure.privileged-rbac-assignments#assignments
+      authorizationresources
+      | where type =~ 'microsoft.authorization/roleassignments'
+      | extend scope = tolower(tostring(properties.scope)), principalId = tostring(properties.principalId), principalType = tostring(properties.principalType), roleDefinitionGuid = tolower(extract('([0-9a-fA-F-]{36})$', 1, tostring(properties.roleDefinitionId))), createdOn = todatetime(properties.createdOn), createdBy = tostring(properties.createdBy), condition = tostring(properties.condition)
+      | extend depth = array_length(split(scope, '/'))
+      | extend scopeLevel = case(scope == '/', 'Root', scope contains '/managementgroups/', 'Management group', depth == 3, 'Subscription', depth == 5, 'Resource group', 'Resource')
+      | where scopeLevel in ('Root', 'Management group', 'Subscription')
+      ${ params.subscriptionId ? "| where subscriptionId == '" & $guid(params.subscriptionId) & "'" }
+      ${ params.principalType in ['User', 'Group', 'ServicePrincipal'] ? "| where principalType == '" & params.principalType & "'" }
+      | join kind=leftouter (authorizationresources | where type =~ 'microsoft.authorization/roledefinitions' | extend roleDefinitionGuid = tolower(name), roleName = tostring(properties.roleName), roleType = tostring(properties.type) | summarize roleName = any(roleName), roleType = any(roleType) by roleDefinitionGuid) on roleDefinitionGuid
+      | where roleName in~ ('Owner', 'User Access Administrator', 'Role Based Access Control Administrator'${ params.includeContributor = true ? ", 'Contributor'" : '' })
+      | join kind=leftouter (resourcecontainers | where type =~ 'microsoft.resources/subscriptions' | project subscriptionId, subscriptionName = name) on subscriptionId
+      | project id, roleName, roleType, principalId, principalType, scope, scopeLevel, subscriptionId, subscriptionName, createdOn, createdBy, hasCondition = iff(isnotempty(condition), 'true', 'false')
+      | order by scopeLevel asc, roleName asc, createdOn desc
+    paging: all
+    maxItems: 20000
+    transform: "${ { 'rows': [value.value] } }"
+    cache: { ttl: 300 }
+  principals:
+    source: graph
+    when: "${ $count(ds.assignments.rows) > 0 }"
+    # getByIds returns only principals that exist: a checked id missing from the answer was deleted.
+    request:
+      method: POST
+      path: /directoryObjects/getByIds
+      query: { $select: "id,displayName,userPrincipalName,userType,appId,servicePrincipalType,accountEnabled" }
+      body:
+        ids: "${ $append([], $filter([$distinct(ds.assignments.rows.principalId)], function($v, $i) { $i < 1000 })) }"
+    transform: >-
+      ${ (
+        $checked := $append([], $filter([$distinct(ds.assignments.rows.principalId)], function($v, $i) { $i < 1000 }));
+        $byId := $merge([{}, value.value.{ id: $ }]);
+        $rows := [ds.assignments.rows.(
+          $p := $lookup($byId, principalId);
+          $external := $p.userType != 'Guest' and $contains($p.userPrincipalName ? $p.userPrincipalName : '', '#EXT#');
+          $state := $p ? 'Exists' : (principalId in $checked and principalType != 'ForeignGroup') ? 'Deleted' : 'Not checked';
+          $merge([$, {
+            'principalName': $p.displayName,
+            'principalDetail': $p.userPrincipalName ? $p.userPrincipalName : $p.appId,
+            'userType': $p.userType,
+            'accountEnabled': $p.accountEnabled,
+            'principalState': $state,
+            'finding': $state = 'Deleted' ? 'Deleted identity'
+              : $p.userType = 'Guest' ? 'Guest'
+              : $external ? 'External account'
+              : scopeLevel = 'Root' ? 'Root scope'
+              : principalType = 'User' ? 'Direct user assignment'
+              : principalType = 'ServicePrincipal' ? 'Service principal'
+              : 'Group'
+          }])
+        )];
+        {
+          'rows': $rows,
+          'total': $count($rows),
+          'guests': $count($rows[finding in ['Guest', 'External account']]),
+          'deleted': $count($rows[finding = 'Deleted identity']),
+          'root': $count($rows[scopeLevel = 'Root']),
+          'directUsers': $count($rows[principalType = 'User' and finding != 'Deleted identity']),
+          'notChecked': $count($rows[principalState = 'Not checked'])
+        }
+      ) }
+    cache: { ttl: 300 }
+
+layout:
+  - widget: kpi
+    data: principals.guests
+    label: Held by guests or external accounts
+    format: number
+    status: "${ value > 0 ? 'crit' : 'ok' }"
+  - widget: kpi
+    data: principals.deleted
+    label: Held by deleted identities
+    format: number
+    status: "${ value > 0 ? 'crit' : 'ok' }"
+  - widget: kpi
+    data: principals.root
+    label: At the root scope
+    format: number
+    status: "${ value > 0 ? 'crit' : 'ok' }"
+  - widget: kpi
+    data: principals.directUsers
+    label: Assigned directly to users
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+  - widget: markdown
+    span: 12
+    when: "${ principals.notChecked > 0 }"
+    text: Some principals were not looked up (one lookup covers 1000 principals). Filter by subscription to check the rest.
+  - widget: table
+    id: assignments
+    span: 12
+    data: principals.rows
+    rowKey: id
+    selection: multi
+    columns:
+      - { field: principalName, label: Principal, kind: identity, secondary: principalDetail, sortable: true }
+      - field: finding
+        label: Finding
+        kind: status
+        map: { Deleted identity: [crit, Deleted identity], Guest: [crit, Guest], External account: [warn, External account], Root scope: [crit, Root scope], Direct user assignment: [warn, Direct user assignment], Service principal: [info, Service principal], Group: [ok, Group] }
+        filter: facet
+      - { field: roleName, label: Role, filter: facet }
+      - { field: scopeLevel, label: Scope level, filter: facet }
+      - { field: scope, label: Scope, kind: code }
+      - { field: principalType, label: Principal type, filter: facet }
+      - { field: subscriptionName, label: Subscription, filter: facet }
+      - { field: createdOn, label: Assigned, kind: date, sortable: true, filter: date }
+      - { field: userType, label: User type, hidden: true }
+      - { field: accountEnabled, label: Account enabled, kind: boolean, hidden: true }
+      - { field: principalState, label: Principal state, hidden: true }
+      - { field: hasCondition, label: Condition, kind: status, map: { "true": [info, Conditional], "false": [neutral, None] }, hidden: true }
+      - { field: roleType, label: Role type, hidden: true }
+      - { field: createdBy, label: Assigned by, kind: guid, hidden: true }
+      - { field: principalId, label: Principal id, kind: guid, hidden: true }
+      - { field: id, label: Assignment id, kind: code, hidden: true }
+    rowActions:
+      - playbook: azure.remove-role-assignment
+        label: Remove assignment
+        icon: user-minus
+        inputs:
+          assignmentId: ${ row.id }
+      - label: Open user in Entra
+        icon: arrow-square-out
+        href: https://entra.microsoft.com/#view/Microsoft_AAD_UsersAndTenants/UserProfileMenuBlade/~/overview/userId/${ $encode(row.principalId) }
+        when: ${ row.principalType = 'User' and row.principalState = 'Exists' }
+      - label: Open group in Entra
+        icon: arrow-square-out
+        href: https://entra.microsoft.com/#view/Microsoft_AAD_IAM/GroupDetailsMenuBlade/~/Overview/groupId/${ $encode(row.principalId) }
+        when: ${ row.principalType = 'Group' and row.principalState = 'Exists' }
+      - label: Assignments at this scope
+        icon: funnel
+        href: /p/azure.role-assignments?scope=${ $encode(row.scope) }&include=exact
+    bulkActions:
+      - playbook: azure.remove-role-assignment
+        label: Remove assignments
+        icon: user-minus
+        forEach:
+          inputs:
+            assignmentId: ${ row.id }
+          concurrency: 3
+        maxItems: 50
+    empty:
+      title: No privileged assignments at these scopes
+      body: Nobody holds Owner, User Access Administrator or Role Based Access Control Administrator at subscription scope or above in the scopes you can read. The Role assignments page lists assignments on resource groups and resources.
+
+export:
+  formats: [csv, xlsx]
+  fileName: azure-privileged-rbac-assignments
+  data: principals.rows
+  columns: all

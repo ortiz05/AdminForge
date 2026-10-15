@@ -1,3 +1,155 @@
 {
-  "value": []
+  "value": [
+    {
+      "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/providers/Microsoft.Consumption/budgets/budget-example-monthly",
+      "name": "budget-example-monthly",
+      "type": "Microsoft.Consumption/budgets",
+      "eTag": "\"1d34d016a593709\"",
+      "properties": {
+        "category": "Cost",
+        "amount": 5000,
+        "timeGrain": "Monthly",
+        "timePeriod": {
+          "startDate": "2026-01-01T00:00:00Z",
+          "endDate": "2027-12-31T00:00:00Z"
+        },
+        "currentSpend": {
+          "amount": 4300,
+          "unit": "EUR"
+        },
+        "notifications": {
+          "Actual_GreaterThan_80_Percent": {
+            "enabled": true,
+            "operator": "GreaterThan",
+            "threshold": 80,
+            "thresholdType": "Actual",
+            "contactEmails": [
+              "finops@example.com"
+            ],
+            "contactRoles": [
+              "Owner"
+            ],
+            "contactGroups": [],
+            "locale": "en-us"
+          },
+          "Forecasted_GreaterThan_100_Percent": {
+            "enabled": true,
+            "operator": "GreaterThan",
+            "threshold": 100,
+            "thresholdType": "Forecasted",
+            "contactEmails": [
+              "finops@example.com"
+            ],
+            "contactRoles": [
+              "Owner"
+            ],
+            "contactGroups": [],
+            "locale": "en-us"
+          }
+        },
+        "forecastSpend": {
+          "amount": 5600,
+          "unit": "EUR"
+        }
+      }
+    },
+    {
+      "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/providers/Microsoft.Consumption/budgets/budget-example-data",
+      "name": "budget-example-data",
+      "type": "Microsoft.Consumption/budgets",
+      "eTag": "\"1d34d016a593709\"",
+      "properties": {
+        "category": "Cost",
+        "amount": 1000,
+        "timeGrain": "Monthly",
+        "timePeriod": {
+          "startDate": "2026-01-01T00:00:00Z",
+          "endDate": "2027-12-31T00:00:00Z"
+        },
+        "currentSpend": {
+          "amount": 1150,
+          "unit": "EUR"
+        },
+        "notifications": {
+          "Actual_GreaterThan_100_Percent": {
+            "enabled": true,
+            "operator": "GreaterThan",
+            "threshold": 100,
+            "thresholdType": "Actual",
+            "contactEmails": [
+              "finops@example.com"
+            ],
+            "contactRoles": [
+              "Owner"
+            ],
+            "contactGroups": [],
+            "locale": "en-us"
+          }
+        },
+        "forecastSpend": {
+          "amount": 1900,
+          "unit": "EUR"
+        }
+      }
+    },
+    {
+      "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/providers/Microsoft.Consumption/budgets/budget-example-sandbox",
+      "name": "budget-example-sandbox",
+      "type": "Microsoft.Consumption/budgets",
+      "eTag": "\"1d34d016a593709\"",
+      "properties": {
+        "category": "Cost",
+        "amount": 300,
+        "timeGrain": "Monthly",
+        "timePeriod": {
+          "startDate": "2026-01-01T00:00:00Z",
+          "endDate": "2027-12-31T00:00:00Z"
+        },
+        "currentSpend": {
+          "amount": 60,
+          "unit": "EUR"
+        },
+        "notifications": {},
+        "forecastSpend": {
+          "amount": 330,
+          "unit": "EUR"
+        }
+      }
+    },
+    {
+      "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/providers/Microsoft.Consumption/budgets/budget-example-fy26",
+      "name": "budget-example-fy26",
+      "type": "Microsoft.Consumption/budgets",
+      "eTag": "\"1d34d016a593709\"",
+      "properties": {
+        "category": "Cost",
+        "amount": 50000,
+        "timeGrain": "Annually",
+        "timePeriod": {
+          "startDate": "2025-07-01T00:00:00Z",
+          "endDate": "2026-06-30T00:00:00Z"
+        },
+        "currentSpend": {
+          "amount": 41000,
+          "unit": "EUR"
+        },
+        "notifications": {
+          "Actual_GreaterThan_90_Percent": {
+            "enabled": true,
+            "operator": "GreaterThan",
+            "threshold": 90,
+            "thresholdType": "Actual",
+            "contactEmails": [
+              "finops@example.com"
+            ],
+            "contactRoles": [
+              "Owner"
+            ],
+            "contactGroups": [],
+            "locale": "en-us"
+          }
+        }
+      }
+    }
+  ]
 }

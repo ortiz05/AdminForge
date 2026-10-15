@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/page.schema.json
 kind: page
 id: m365.mailboxes
-version: 1.1.0
+version: 1.1.1
 title: Mailboxes
 summary: Exchange Online mailboxes by type with hold, archive and address-list flags. Filter with the query builder, open a mailbox to see who has access, and convert leavers' mailboxes to shared in bulk.
 owner: m365-team
@@ -72,7 +72,7 @@ datasources:
     source: runner
     label: Exchange Online mailboxes (PowerShell)
     script: exchange/Get-MailboxSummary.ps1
-    sha256: 45facf19c4619af0897f322e35906ddd5f62ff98de23c3ca1933c26f4dec5ae1
+    sha256: 5b35292d4c039dad7036b7e99434a13f2da0c618e2241505a6997b75f02ad12d
     services: [exchange]
     timeoutSeconds: 600
     parameters:

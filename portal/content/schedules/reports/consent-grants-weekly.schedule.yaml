@@ -1,0 +1,35 @@
+$schema: ../../../packages/schemas/generated/schedule.schema.json
+kind: schedule
+id: reports.consent-grants-weekly
+version: 1.0.0
+title: Weekly delegated permission grants report
+summary: >-
+  Every Monday at 05:10 UTC, writes the high-impact delegated permission grants (admin and user consent) as XLSX and emails it, keeping six months of history. To revoke a grant, open the report in the portal and use Revoke grant.
+owner: identity-team
+tags: [identity, apps, consent, report]
+cron: "10 5 * * 1"
+timezone: UTC
+enabled: true
+identity: automation
+job:
+  kind: report
+  ref: identity.consent-grants
+  # Pinned rather than left to the report's defaults so the archive stays comparable from run to run.
+  params: { consent: Any, risk: risky }
+  delivery:
+    - type: file
+      format: xlsx
+      path: identity/consent-grants/{date}.xlsx
+      retain: 26
+    # Sent only when AF_MAIL_SENDER and AF_REPORT_RECIPIENTS are configured (and the automation identity has Mail.Send);
+    # otherwise the run notes the delivery as not configured and the file is still kept.
+    - type: email
+      to: ["${ env.AF_REPORT_RECIPIENTS }"]
+      format: xlsx
+retry: { max: 2, backoff: exponential, delay: 5m }
+timeoutSeconds: 1800
+overlap: skip
+requires:
+  # Application permissions held by the automation identity (ADR-011).
+  scopes:
+    graph: [Directory.Read.All]

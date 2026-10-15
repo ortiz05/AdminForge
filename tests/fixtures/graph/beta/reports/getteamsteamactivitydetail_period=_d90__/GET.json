@@ -1,0 +1,179 @@
+{
+  "value": [
+    {
+      "reportRefreshDate": "2026-10-13",
+      "teamId": "20000000-0000-4000-8000-000000000901",
+      "teamName": "Project Phoenix",
+      "teamType": "Private",
+      "isDeleted": false,
+      "lastActivityDate": "2026-10-13",
+      "details": [
+        {
+          "reportPeriod": 90,
+          "activeUsers": 12,
+          "activeChannels": 4,
+          "guests": 2,
+          "activeExternalUsers": 0,
+          "activeSharedChannels": 0,
+          "reactions": 113,
+          "meetingsOrganized": 9,
+          "postMessages": 170,
+          "replyMessages": 85,
+          "channelMessages": 340,
+          "urgentMessages": 0,
+          "mentions": 68
+        }
+      ]
+    },
+    {
+      "reportRefreshDate": "2026-10-13",
+      "teamId": "20000000-0000-4000-8000-000000000902",
+      "teamName": "All Company",
+      "teamType": "Public",
+      "isDeleted": false,
+      "lastActivityDate": "2026-10-12",
+      "details": [
+        {
+          "reportPeriod": 90,
+          "activeUsers": 180,
+          "activeChannels": 3,
+          "guests": 0,
+          "activeExternalUsers": 0,
+          "activeSharedChannels": 0,
+          "reactions": 31,
+          "meetingsOrganized": 2,
+          "postMessages": 47,
+          "replyMessages": 23,
+          "channelMessages": 95,
+          "urgentMessages": 0,
+          "mentions": 19
+        }
+      ]
+    },
+    {
+      "reportRefreshDate": "2026-10-13",
+      "teamId": "20000000-0000-4000-8000-000000000903",
+      "teamName": "Marketing 2024 Launch",
+      "teamType": "Private",
+      "isDeleted": false,
+      "lastActivityDate": "2026-03-02",
+      "details": [
+        {
+          "reportPeriod": 90,
+          "activeUsers": 0,
+          "activeChannels": 0,
+          "guests": 0,
+          "activeExternalUsers": 0,
+          "activeSharedChannels": 0,
+          "reactions": 0,
+          "meetingsOrganized": 0,
+          "postMessages": 0,
+          "replyMessages": 0,
+          "channelMessages": 0,
+          "urgentMessages": 0,
+          "mentions": 0
+        }
+      ]
+    },
+    {
+      "reportRefreshDate": "2026-10-13",
+      "teamId": "20000000-0000-4000-8000-000000000904",
+      "teamName": "Social Club",
+      "teamType": "Public",
+      "isDeleted": false,
+      "lastActivityDate": "2026-06-01",
+      "details": [
+        {
+          "reportPeriod": 90,
+          "activeUsers": 0,
+          "activeChannels": 0,
+          "guests": 0,
+          "activeExternalUsers": 0,
+          "activeSharedChannels": 0,
+          "reactions": 0,
+          "meetingsOrganized": 0,
+          "postMessages": 0,
+          "replyMessages": 0,
+          "channelMessages": 0,
+          "urgentMessages": 0,
+          "mentions": 0
+        }
+      ]
+    },
+    {
+      "reportRefreshDate": "2026-10-13",
+      "teamId": "20000000-0000-4000-8000-000000000905",
+      "teamName": "Partner Extranet",
+      "teamType": "Private",
+      "isDeleted": false,
+      "lastActivityDate": "2026-10-09",
+      "details": [
+        {
+          "reportPeriod": 90,
+          "activeUsers": 6,
+          "activeChannels": 2,
+          "guests": 0,
+          "activeExternalUsers": 3,
+          "activeSharedChannels": 0,
+          "reactions": 13,
+          "meetingsOrganized": 1,
+          "postMessages": 20,
+          "replyMessages": 10,
+          "channelMessages": 41,
+          "urgentMessages": 0,
+          "mentions": 8
+        }
+      ]
+    },
+    {
+      "reportRefreshDate": "2026-10-13",
+      "teamId": "20000000-0000-4000-8000-000000000906",
+      "teamName": "Test Team (never used)",
+      "teamType": "Private",
+      "isDeleted": false,
+      "lastActivityDate": null,
+      "details": [
+        {
+          "reportPeriod": 90,
+          "activeUsers": 0,
+          "activeChannels": 0,
+          "guests": 0,
+          "activeExternalUsers": 0,
+          "activeSharedChannels": 0,
+          "reactions": 0,
+          "meetingsOrganized": 0,
+          "postMessages": 0,
+          "replyMessages": 0,
+          "channelMessages": 0,
+          "urgentMessages": 0,
+          "mentions": 0
+        }
+      ]
+    },
+    {
+      "reportRefreshDate": "2026-10-13",
+      "teamId": "20000000-0000-4000-8000-000000000907",
+      "teamName": "Retired Project",
+      "teamType": "Private",
+      "isDeleted": true,
+      "lastActivityDate": "2025-11-30",
+      "details": [
+        {
+          "reportPeriod": 90,
+          "activeUsers": 0,
+          "activeChannels": 0,
+          "guests": 0,
+          "activeExternalUsers": 0,
+          "activeSharedChannels": 0,
+          "reactions": 0,
+          "meetingsOrganized": 0,
+          "postMessages": 0,
+          "replyMessages": 0,
+          "channelMessages": 0,
+          "urgentMessages": 0,
+          "mentions": 0
+        }
+      ]
+    }
+  ]
+}

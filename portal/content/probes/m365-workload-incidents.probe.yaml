@@ -1,0 +1,31 @@
+$schema: ../../packages/schemas/generated/probe.schema.json
+kind: probe
+id: probes.m365-workload-incidents
+version: 1.0.0
+title: Microsoft 365 core workloads without an open incident
+summary: >-
+  Critical while Microsoft has an open service incident (not an advisory) for Exchange Online, Microsoft Teams,
+  SharePoint Online, OneDrive for Business or the Microsoft 365 suite, so the service desk hears it from monitoring
+  before the first call. Open the Service health page to see which incident and its latest update.
+owner: m365-team
+tags: [synthetic, m365, service-health, sweep-15m]
+check:
+  kind: graph
+  path: /admin/serviceAnnouncement/issues
+  query:
+    $filter: >-
+      isResolved eq false and classification eq 'incident' and (service eq 'Exchange Online' or service eq 'Microsoft
+      Teams' or service eq 'SharePoint Online' or service eq 'OneDrive for Business' or service eq 'Microsoft 365 suite')
+    $select: id,service
+    $top: 1
+  expect:
+    status: 200
+    # An empty list means no open incident; any incident makes the probe critical.
+    bodyContains: '"value":[]'
+thresholds: { warn: 2000, crit: 6000 }
+intervalHint: PT15M
+timeoutMs: 15000
+requires:
+  # Application permission held by the automation identity (ADR-011).
+  scopes:
+    graph: [ServiceHealth.Read.All]

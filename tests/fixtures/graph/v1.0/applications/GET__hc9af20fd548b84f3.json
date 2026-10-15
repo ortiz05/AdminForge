@@ -1,0 +1,77 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#applications(id,appId,displayName,createdDateTime,signInAudience,passwordCredentials,keyCredentials,requiredResourceAccess,serviceManagementReference)",
+  "@odata.count": 3,
+  "value": [
+    {
+      "id": "00000000-0000-4000-8000-000000000304",
+      "appId": "00000000-0000-4000-8001-000000000304",
+      "displayName": "Example Mobile",
+      "createdDateTime": "2024-03-02T10:00:00Z",
+      "signInAudience": "AzureADandPersonalMicrosoftAccount",
+      "passwordCredentials": [],
+      "keyCredentials": [],
+      "requiredResourceAccess": [
+        {
+          "resourceAppId": "00000003-0000-0000-c000-000000000000",
+          "resourceAccess": [
+            {
+              "id": "e1fe6dd8-ba31-4d61-89e7-88639da4683d",
+              "type": "Scope"
+            }
+          ]
+        }
+      ],
+      "serviceManagementReference": null
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000305",
+      "appId": "00000000-0000-4000-8001-000000000305",
+      "displayName": "Example Data Pipeline",
+      "createdDateTime": "2025-01-01T00:00:00Z",
+      "signInAudience": "AzureADMyOrg",
+      "passwordCredentials": [
+        {
+          "keyId": "00000000-0000-4000-8000-0000000003a5",
+          "displayName": "pipeline",
+          "startDateTime": "2025-01-01T00:00:00Z",
+          "endDateTime": "2026-11-30T00:00:00Z"
+        }
+      ],
+      "keyCredentials": [],
+      "requiredResourceAccess": [
+        {
+          "resourceAppId": "00000003-0000-0000-c000-000000000000",
+          "resourceAccess": [
+            {
+              "id": "332a536c-c7ef-4017-ab91-336970924f0d",
+              "type": "Role"
+            },
+            {
+              "id": "7ab1d382-f21e-4acd-a863-ba3e13f7da61",
+              "type": "Role"
+            }
+          ]
+        }
+      ],
+      "serviceManagementReference": "CHG-2025-0117"
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000306",
+      "appId": "00000000-0000-4000-8001-000000000306",
+      "displayName": "Legacy Automation",
+      "createdDateTime": "2023-05-15T07:40:00Z",
+      "signInAudience": "AzureADMyOrg",
+      "passwordCredentials": [
+        {
+          "keyId": "00000000-0000-4000-8000-0000000003a6",
+          "displayName": "automation",
+          "startDateTime": "2025-01-01T00:00:00Z",
+          "endDateTime": "2025-12-31T00:00:00Z"
+        }
+      ],
+      "keyCredentials": [],
+      "requiredResourceAccess": [],
+      "serviceManagementReference": null
+    }
+  ]
+}

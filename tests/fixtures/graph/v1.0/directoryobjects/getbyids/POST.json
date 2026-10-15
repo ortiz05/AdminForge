@@ -1,0 +1,343 @@
+{
+  "$fixture": {
+    "variants": [
+      {
+        "match": {
+          "bodyIncludes": "30000000-0000-4000-8000-0000000003"
+        },
+        "body": {
+          "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#directoryObjects",
+          "value": [
+            {
+              "@odata.type": "#microsoft.graph.user",
+              "id": "30000000-0000-4000-8000-000000000301",
+              "displayName": "Avery Admin",
+              "userPrincipalName": "avery.admin@example.com",
+              "userType": "Member",
+              "accountEnabled": true
+            },
+            {
+              "@odata.type": "#microsoft.graph.user",
+              "id": "30000000-0000-4000-8000-000000000302",
+              "displayName": "Pat Partner",
+              "userPrincipalName": "pat_partner.example#EXT#@exampleorg.onmicrosoft.com",
+              "userType": "Guest",
+              "accountEnabled": true
+            },
+            {
+              "@odata.type": "#microsoft.graph.group",
+              "id": "30000000-0000-4000-8000-000000000304",
+              "displayName": "Example Org Platform Owners"
+            },
+            {
+              "@odata.type": "#microsoft.graph.servicePrincipal",
+              "id": "30000000-0000-4000-8000-000000000305",
+              "displayName": "Example Org Deploy Pipeline",
+              "appId": "30000000-0000-4000-8000-000000000395",
+              "servicePrincipalType": "Application",
+              "accountEnabled": true
+            },
+            {
+              "@odata.type": "#microsoft.graph.user",
+              "id": "30000000-0000-4000-8000-000000000306",
+              "displayName": "Casey Consultant",
+              "userPrincipalName": "casey_consulting.example#EXT#@exampleorg.onmicrosoft.com",
+              "userType": "Member",
+              "accountEnabled": true
+            },
+            {
+              "@odata.type": "#microsoft.graph.user",
+              "id": "30000000-0000-4000-8000-000000000307",
+              "displayName": "Blake Engineer",
+              "userPrincipalName": "blake.engineer@example.com",
+              "userType": "Member",
+              "accountEnabled": true
+            },
+            {
+              "@odata.type": "#microsoft.graph.group",
+              "id": "30000000-0000-4000-8000-000000000311",
+              "displayName": "Example Org Developers"
+            },
+            {
+              "@odata.type": "#microsoft.graph.servicePrincipal",
+              "id": "30000000-0000-4000-8000-000000000314",
+              "displayName": "func-example",
+              "appId": "30000000-0000-4000-8000-000000000396",
+              "servicePrincipalType": "ManagedIdentity",
+              "accountEnabled": true
+            }
+          ]
+        }
+      },
+      {
+        "match": {
+          "bodyIncludes": "00000000-0000-4000-8000-00000000040"
+        },
+        "body": {
+          "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#directoryObjects",
+          "value": [
+            {
+              "@odata.type": "#microsoft.graph.servicePrincipal",
+              "id": "00000000-0000-4000-8000-000000000401",
+              "appId": "00000000-0000-4000-8001-000000000301",
+              "displayName": "Example HR Sync",
+              "servicePrincipalType": "Application",
+              "appOwnerOrganizationId": "00000000-0000-4000-8000-00000000e0e0",
+              "accountEnabled": true,
+              "verifiedPublisher": {
+                "displayName": null,
+                "verifiedPublisherId": null,
+                "addedDateTime": null
+              },
+              "tags": [
+                "WindowsAzureActiveDirectoryIntegratedApp"
+              ],
+              "preferredSingleSignOnMode": null
+            },
+            {
+              "@odata.type": "#microsoft.graph.servicePrincipal",
+              "id": "00000000-0000-4000-8000-000000000402",
+              "appId": "00000000-0000-4000-8001-000000000302",
+              "displayName": "Example Portal",
+              "servicePrincipalType": "Application",
+              "appOwnerOrganizationId": "00000000-0000-4000-8000-00000000e0e0",
+              "accountEnabled": true,
+              "verifiedPublisher": {
+                "displayName": null,
+                "verifiedPublisherId": null,
+                "addedDateTime": null
+              },
+              "tags": [
+                "WindowsAzureActiveDirectoryIntegratedApp"
+              ],
+              "preferredSingleSignOnMode": null
+            },
+            {
+              "@odata.type": "#microsoft.graph.servicePrincipal",
+              "id": "00000000-0000-4000-8000-000000000403",
+              "appId": "00000000-0000-4000-8001-000000000303",
+              "displayName": "Example Reporting",
+              "servicePrincipalType": "Application",
+              "appOwnerOrganizationId": "00000000-0000-4000-8000-00000000e0e0",
+              "accountEnabled": true,
+              "verifiedPublisher": {
+                "displayName": null,
+                "verifiedPublisherId": null,
+                "addedDateTime": null
+              },
+              "tags": [
+                "WindowsAzureActiveDirectoryIntegratedApp"
+              ],
+              "preferredSingleSignOnMode": null
+            },
+            {
+              "@odata.type": "#microsoft.graph.servicePrincipal",
+              "id": "00000000-0000-4000-8000-000000000404",
+              "appId": "00000000-0000-4000-8001-000000000404",
+              "displayName": "PDF Converter Online",
+              "servicePrincipalType": "Application",
+              "appOwnerOrganizationId": "00000000-0000-4000-8000-00000000e0f1",
+              "accountEnabled": true,
+              "verifiedPublisher": {
+                "displayName": null,
+                "verifiedPublisherId": null,
+                "addedDateTime": null
+              },
+              "tags": [
+                "WindowsAzureActiveDirectoryIntegratedApp"
+              ],
+              "preferredSingleSignOnMode": null
+            },
+            {
+              "@odata.type": "#microsoft.graph.servicePrincipal",
+              "id": "00000000-0000-4000-8000-000000000405",
+              "appId": "00000000-0000-4000-8001-000000000405",
+              "displayName": "Payroll Online",
+              "servicePrincipalType": "Application",
+              "appOwnerOrganizationId": "00000000-0000-4000-8000-00000000e0f1",
+              "accountEnabled": true,
+              "verifiedPublisher": {
+                "displayName": "Payroll Online Inc.",
+                "verifiedPublisherId": "5100000",
+                "addedDateTime": "2024-01-01T00:00:00Z"
+              },
+              "tags": [
+                "WindowsAzureActiveDirectoryIntegratedApp",
+                "WindowsAzureActiveDirectoryCustomSingleSignOnApplication"
+              ],
+              "preferredSingleSignOnMode": "saml"
+            },
+            {
+              "@odata.type": "#microsoft.graph.servicePrincipal",
+              "id": "00000000-0000-4000-8000-000000000406",
+              "appId": "00000000-0000-4000-8001-000000000305",
+              "displayName": "Example Data Pipeline",
+              "servicePrincipalType": "Application",
+              "appOwnerOrganizationId": "00000000-0000-4000-8000-00000000e0e0",
+              "accountEnabled": true,
+              "verifiedPublisher": {
+                "displayName": null,
+                "verifiedPublisherId": null,
+                "addedDateTime": null
+              },
+              "tags": [
+                "WindowsAzureActiveDirectoryIntegratedApp"
+              ],
+              "preferredSingleSignOnMode": null
+            },
+            {
+              "@odata.type": "#microsoft.graph.servicePrincipal",
+              "id": "00000000-0000-4000-8000-000000000407",
+              "appId": "00000000-0000-4000-8001-000000000306",
+              "displayName": "Legacy Automation",
+              "servicePrincipalType": "Application",
+              "appOwnerOrganizationId": "00000000-0000-4000-8000-00000000e0e0",
+              "accountEnabled": true,
+              "verifiedPublisher": {
+                "displayName": null,
+                "verifiedPublisherId": null,
+                "addedDateTime": null
+              },
+              "tags": [
+                "WindowsAzureActiveDirectoryIntegratedApp"
+              ],
+              "preferredSingleSignOnMode": null
+            },
+            {
+              "@odata.type": "#microsoft.graph.servicePrincipal",
+              "id": "00000000-0000-4000-8000-000000000408",
+              "appId": "00000002-0000-0ff1-ce00-000000000000",
+              "displayName": "Office 365 Exchange Online",
+              "servicePrincipalType": "Application",
+              "appOwnerOrganizationId": "f8cdef31-a31e-4b4a-93e4-5f571e91255a",
+              "accountEnabled": true,
+              "verifiedPublisher": {
+                "displayName": null,
+                "verifiedPublisherId": null,
+                "addedDateTime": null
+              },
+              "tags": [],
+              "preferredSingleSignOnMode": null
+            },
+            {
+              "@odata.type": "#microsoft.graph.servicePrincipal",
+              "id": "00000000-0000-4000-8000-000000000409",
+              "appId": "00000003-0000-0000-c000-000000000000",
+              "displayName": "Microsoft Graph",
+              "servicePrincipalType": "Application",
+              "appOwnerOrganizationId": "f8cdef31-a31e-4b4a-93e4-5f571e91255a",
+              "accountEnabled": true,
+              "verifiedPublisher": {
+                "displayName": null,
+                "verifiedPublisherId": null,
+                "addedDateTime": null
+              },
+              "tags": [],
+              "preferredSingleSignOnMode": null
+            },
+            {
+              "@odata.type": "#microsoft.graph.servicePrincipal",
+              "id": "00000000-0000-4000-8000-00000000040a",
+              "appId": "00000000-0000-4000-8001-00000000040a",
+              "displayName": "func-example",
+              "servicePrincipalType": "ManagedIdentity",
+              "appOwnerOrganizationId": null,
+              "accountEnabled": true,
+              "verifiedPublisher": {
+                "displayName": null,
+                "verifiedPublisherId": null,
+                "addedDateTime": null
+              },
+              "tags": [],
+              "preferredSingleSignOnMode": null
+            },
+            {
+              "@odata.type": "#microsoft.graph.user",
+              "id": "00000000-0000-4000-8000-000000000101",
+              "displayName": "Adele Lee",
+              "userPrincipalName": "a.lee@example.com",
+              "mail": "a.lee@example.com"
+            },
+            {
+              "@odata.type": "#microsoft.graph.user",
+              "id": "00000000-0000-4000-8000-000000000102",
+              "displayName": "Morgan Chen",
+              "userPrincipalName": "m.chen@example.com",
+              "mail": "m.chen@example.com"
+            },
+            {
+              "@odata.type": "#microsoft.graph.user",
+              "id": "00000000-0000-4000-8000-000000000103",
+              "displayName": "Priya Raman",
+              "userPrincipalName": "p.raman@example.com",
+              "mail": "p.raman@example.com"
+            },
+            {
+              "@odata.type": "#microsoft.graph.user",
+              "id": "00000000-0000-4000-8000-000000000104",
+              "displayName": "Rafael Castillo",
+              "userPrincipalName": "r.castillo@example.com",
+              "mail": "r.castillo@example.com"
+            },
+            {
+              "@odata.type": "#microsoft.graph.user",
+              "id": "00000000-0000-4000-8000-000000000105",
+              "displayName": "Sam Patel",
+              "userPrincipalName": "s.patel@example.com",
+              "mail": "s.patel@example.com"
+            },
+            {
+              "@odata.type": "#microsoft.graph.user",
+              "id": "00000000-0000-4000-8000-000000000106",
+              "displayName": "Jamie Doe",
+              "userPrincipalName": "j.doe_partner.example#EXT#@exampleorg.onmicrosoft.com",
+              "mail": "j.doe@partner.example"
+            },
+            {
+              "@odata.type": "#microsoft.graph.user",
+              "id": "00000000-0000-4000-8000-000000000107",
+              "displayName": "Taylor Brooks",
+              "userPrincipalName": "t.brooks_vendor.example#EXT#@exampleorg.onmicrosoft.com",
+              "mail": "t.brooks@vendor.example"
+            },
+            {
+              "@odata.type": "#microsoft.graph.user",
+              "id": "00000000-0000-4000-8000-000000000108",
+              "displayName": "Dana Okafor",
+              "userPrincipalName": "d.okafor@example.com",
+              "mail": "d.okafor@example.com"
+            },
+            {
+              "@odata.type": "#microsoft.graph.user",
+              "id": "00000000-0000-4000-8000-000000000109",
+              "displayName": "Jordan Rivera",
+              "userPrincipalName": "j.rivera@example.com",
+              "mail": "j.rivera@example.com"
+            },
+            {
+              "@odata.type": "#microsoft.graph.user",
+              "id": "00000000-0000-4000-8000-000000000110",
+              "displayName": "Break Glass 01",
+              "userPrincipalName": "bg01@exampleorg.onmicrosoft.com",
+              "mail": null
+            },
+            {
+              "@odata.type": "#microsoft.graph.user",
+              "id": "00000000-0000-4000-8000-000000000111",
+              "displayName": "Chris Novak",
+              "userPrincipalName": "c.novak@example.com",
+              "mail": "c.novak@example.com"
+            },
+            {
+              "@odata.type": "#microsoft.graph.user",
+              "id": "00000000-0000-4000-8000-000000000112",
+              "displayName": "Svc Reporting",
+              "userPrincipalName": "svc-reporting@example.com",
+              "mail": "svc-reporting@example.com"
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

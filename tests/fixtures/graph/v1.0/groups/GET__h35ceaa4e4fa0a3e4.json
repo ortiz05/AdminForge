@@ -1,0 +1,251 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#groups(id,displayName,mail,groupTypes,securityEnabled,mailEnabled,membershipRule,onPremisesSyncEnabled,isAssignableToRole,createdDateTime,visibility,members(id))",
+  "value": [
+    {
+      "id": "00000000-0000-4000-8000-000000000201",
+      "displayName": "SG-App-Payroll-Users",
+      "mail": null,
+      "groupTypes": [],
+      "securityEnabled": true,
+      "mailEnabled": false,
+      "membershipRule": null,
+      "onPremisesSyncEnabled": null,
+      "isAssignableToRole": null,
+      "createdDateTime": "2023-04-11T09:00:00Z",
+      "visibility": null,
+      "members": [
+        {
+          "@odata.type": "#microsoft.graph.user",
+          "id": "00000000-0000-4000-8000-000000000101"
+        },
+        {
+          "@odata.type": "#microsoft.graph.user",
+          "id": "00000000-0000-4000-8000-000000000102"
+        }
+      ]
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000202",
+      "displayName": "Project Falcon",
+      "mail": "falcon@example.com",
+      "groupTypes": [
+        "Unified"
+      ],
+      "securityEnabled": false,
+      "mailEnabled": true,
+      "membershipRule": null,
+      "onPremisesSyncEnabled": null,
+      "isAssignableToRole": null,
+      "createdDateTime": "2025-09-02T09:00:00Z",
+      "visibility": "Private",
+      "members": [
+        {
+          "@odata.type": "#microsoft.graph.user",
+          "id": "00000000-0000-4000-8000-000000000101"
+        },
+        {
+          "@odata.type": "#microsoft.graph.user",
+          "id": "00000000-0000-4000-8000-000000000103"
+        },
+        {
+          "@odata.type": "#microsoft.graph.user",
+          "id": "00000000-0000-4000-8000-000000000105"
+        }
+      ]
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000203",
+      "displayName": "All Employees (dynamic)",
+      "mail": null,
+      "groupTypes": [
+        "DynamicMembership"
+      ],
+      "securityEnabled": true,
+      "mailEnabled": false,
+      "membershipRule": "(user.userType -eq \"Member\") and (user.accountEnabled -eq true)",
+      "onPremisesSyncEnabled": null,
+      "isAssignableToRole": null,
+      "createdDateTime": "2020-02-01T09:00:00Z",
+      "visibility": null,
+      "members": [
+        {
+          "@odata.type": "#microsoft.graph.user",
+          "id": "00000000-0000-4000-8000-000000000101"
+        },
+        {
+          "@odata.type": "#microsoft.graph.user",
+          "id": "00000000-0000-4000-8000-000000000102"
+        },
+        {
+          "@odata.type": "#microsoft.graph.user",
+          "id": "00000000-0000-4000-8000-000000000103"
+        },
+        {
+          "@odata.type": "#microsoft.graph.user",
+          "id": "00000000-0000-4000-8000-000000000104"
+        },
+        {
+          "@odata.type": "#microsoft.graph.user",
+          "id": "00000000-0000-4000-8000-000000000105"
+        },
+        {
+          "@odata.type": "#microsoft.graph.user",
+          "id": "00000000-0000-4000-8000-000000000108"
+        },
+        {
+          "@odata.type": "#microsoft.graph.user",
+          "id": "00000000-0000-4000-8000-000000000109"
+        },
+        {
+          "@odata.type": "#microsoft.graph.user",
+          "id": "00000000-0000-4000-8000-000000000111"
+        },
+        {
+          "@odata.type": "#microsoft.graph.user",
+          "id": "00000000-0000-4000-8000-000000000112"
+        }
+      ]
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000204",
+      "displayName": "LIC-M365-E5",
+      "mail": null,
+      "groupTypes": [],
+      "securityEnabled": true,
+      "mailEnabled": false,
+      "membershipRule": null,
+      "onPremisesSyncEnabled": null,
+      "isAssignableToRole": null,
+      "createdDateTime": "2021-03-01T09:00:00Z",
+      "visibility": null,
+      "members": [
+        {
+          "@odata.type": "#microsoft.graph.user",
+          "id": "00000000-0000-4000-8000-000000000101"
+        },
+        {
+          "@odata.type": "#microsoft.graph.user",
+          "id": "00000000-0000-4000-8000-000000000102"
+        }
+      ]
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000205",
+      "displayName": "GG-Engineering (AD)",
+      "mail": null,
+      "groupTypes": [],
+      "securityEnabled": true,
+      "mailEnabled": false,
+      "membershipRule": null,
+      "onPremisesSyncEnabled": true,
+      "isAssignableToRole": null,
+      "createdDateTime": "2019-04-02T09:00:00Z",
+      "visibility": null,
+      "members": [
+        {
+          "@odata.type": "#microsoft.graph.user",
+          "id": "00000000-0000-4000-8000-000000000108"
+        }
+      ]
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000206",
+      "displayName": "Finance Announcements",
+      "mail": "finance-announce@example.com",
+      "groupTypes": [],
+      "securityEnabled": false,
+      "mailEnabled": true,
+      "membershipRule": null,
+      "onPremisesSyncEnabled": null,
+      "isAssignableToRole": null,
+      "createdDateTime": "2022-01-10T09:00:00Z",
+      "visibility": null,
+      "members": []
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000207",
+      "displayName": "SG-Intune-Windows-Devices",
+      "mail": null,
+      "groupTypes": [],
+      "securityEnabled": true,
+      "mailEnabled": false,
+      "membershipRule": null,
+      "onPremisesSyncEnabled": null,
+      "isAssignableToRole": null,
+      "createdDateTime": "2023-01-15T09:00:00Z",
+      "visibility": null,
+      "members": [
+        {
+          "@odata.type": "#microsoft.graph.device",
+          "id": "00000000-0000-4000-8000-000000000701"
+        }
+      ]
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000208",
+      "displayName": "SG-PIM-Identity-Admins",
+      "mail": null,
+      "groupTypes": [],
+      "securityEnabled": true,
+      "mailEnabled": false,
+      "membershipRule": null,
+      "onPremisesSyncEnabled": null,
+      "isAssignableToRole": true,
+      "createdDateTime": "2024-02-20T09:00:00Z",
+      "visibility": null,
+      "members": [
+        {
+          "@odata.type": "#microsoft.graph.user",
+          "id": "00000000-0000-4000-8000-000000000101"
+        }
+      ]
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000209",
+      "displayName": "Sales Team",
+      "mail": "sales@example.com",
+      "groupTypes": [],
+      "securityEnabled": true,
+      "mailEnabled": true,
+      "membershipRule": null,
+      "onPremisesSyncEnabled": null,
+      "isAssignableToRole": null,
+      "createdDateTime": "2022-02-14T09:00:00Z",
+      "visibility": null,
+      "members": []
+    },
+    {
+      "id": "00000000-0000-4000-8000-0000000002e1",
+      "displayName": "SG-CA-Exclusions-BreakGlass",
+      "mail": null,
+      "groupTypes": [],
+      "securityEnabled": true,
+      "mailEnabled": false,
+      "membershipRule": null,
+      "onPremisesSyncEnabled": null,
+      "isAssignableToRole": null,
+      "createdDateTime": "2020-01-06T09:40:00Z",
+      "visibility": null,
+      "members": [
+        {
+          "@odata.type": "#microsoft.graph.user",
+          "id": "00000000-0000-4000-8000-000000000110"
+        }
+      ]
+    },
+    {
+      "id": "00000000-0000-4000-8000-0000000002e2",
+      "displayName": "SG-Payroll-Approvers",
+      "mail": null,
+      "groupTypes": [],
+      "securityEnabled": true,
+      "mailEnabled": false,
+      "membershipRule": null,
+      "onPremisesSyncEnabled": null,
+      "isAssignableToRole": null,
+      "createdDateTime": "2023-04-11T09:30:00Z",
+      "visibility": null,
+      "members": []
+    }
+  ]
+}

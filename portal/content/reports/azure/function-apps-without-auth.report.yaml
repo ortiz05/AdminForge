@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/report.schema.json
 kind: report
 id: azure.function-apps-without-auth
-version: 1.0.0
+version: 1.0.1
 title: Function Apps without authentication
 summary: Function Apps where App Service authentication (Easy Auth) is off, with their HTTPS, TLS and public network settings — candidates for Microsoft Entra authentication or private access.
 owner: azure-team
@@ -22,7 +22,8 @@ datasources:
   apps:
     source: resourceGraph
     # Authentication state comes from the site's "web" configuration (siteAuthEnabled) in the appserviceresources table.
-    # The Function App page reads authsettingsV2 directly and is authoritative for a single app.
+    # The Function App page reads authsettingsV2 directly and is authoritative for a single app. Resource Graph returns
+    # computed booleans as 1/0, so httpsOnly is projected as 'true'/'false' text for the KPI and the status column.
     query: |
       // af:azure.function-apps-without-auth#rows
       resources
@@ -35,7 +36,7 @@ datasources:
       ${ params.includeStopped = false ? "| where state == 'Running'" }
       | extend plan = case(skuName =~ 'Dynamic', 'Consumption', skuName =~ 'FlexConsumption', 'Flex Consumption', skuName =~ 'ElasticPremium', 'Premium', 'Dedicated')
       | join kind=leftouter (resourcecontainers | where type =~ 'microsoft.resources/subscriptions' | project subscriptionId, subscriptionName = name) on subscriptionId
-      | project id, name, defaultHostName, state, plan, httpsOnly, publicNetworkAccess, minTlsVersion, ftpsState, resourceGroup, subscriptionId, subscriptionName, location
+      | project id, name, defaultHostName, state, plan, httpsOnly = iff(coalesce(httpsOnly, false), 'true', 'false'), publicNetworkAccess, minTlsVersion, ftpsState, resourceGroup, subscriptionId, subscriptionName, location
       | order by name asc
     paging: all
     maxItems: 10000
@@ -46,7 +47,7 @@ datasources:
           'rows': $rows,
           'total': $count($rows),
           'public': $count($rows[publicNetworkAccess != 'Disabled']),
-          'httpAllowed': $count($rows[httpsOnly != true]),
+          'httpAllowed': $count($rows[httpsOnly != 'true']),
           'oldTls': $count($rows[minTlsVersion in ['1.0', '1.1']])
         }
       ) }

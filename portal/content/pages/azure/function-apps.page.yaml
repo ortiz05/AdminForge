@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/page.schema.json
 kind: page
 id: azure.function-apps
-version: 1.0.0
+version: 1.0.1
 title: Function Apps
 summary: Azure Function Apps across subscriptions — state, hosting plan, OS, HTTPS and identity settings — with restart, start, stop and trigger sync.
 owner: azure-team
@@ -52,6 +52,8 @@ savedViews:
 datasources:
   apps:
     source: resourceGraph
+    # Resource Graph returns computed booleans (tobool(), isnotempty(), comparisons) as 1/0 and tostring() gives
+    # True/False: flags are projected as 'true'/'false' text with iff() for the KPI, the status maps and facets.
     query: |
       // af:azure.function-apps#apps
       resources
@@ -59,7 +61,7 @@ datasources:
       ${ params.subscriptionId ? "| where subscriptionId == '" & $guid(params.subscriptionId) & "'" }
       ${ params.resourceGroup ? "| where resourceGroup =~ '" & $replace(params.resourceGroup, /[^A-Za-z0-9._()-]/, '') & "'" }
       ${ params.q ? "| where name contains '" & $replace(params.q, /[^A-Za-z0-9 ._()-]/, '') & "'" }
-      | extend state = tostring(properties.state), defaultHostName = tostring(properties.defaultHostName), httpsOnly = tobool(properties.httpsOnly), skuName = tostring(properties.sku), os = iff(kind contains 'linux', 'Linux', 'Windows'), publicNetworkAccess = tostring(properties.publicNetworkAccess), clientCertEnabled = tobool(properties.clientCertEnabled), vnetIntegrated = isnotempty(tostring(properties.virtualNetworkSubnetId)), identityType = tostring(identity.type), lastModified = todatetime(properties.lastModifiedTimeUtc), linuxFxVersion = tostring(properties.siteConfig.linuxFxVersion), planName = tostring(split(tostring(properties.serverFarmId), '/')[-1])
+      | extend state = tostring(properties.state), defaultHostName = tostring(properties.defaultHostName), httpsOnly = iff(coalesce(tobool(properties.httpsOnly), false), 'true', 'false'), skuName = tostring(properties.sku), os = iff(kind contains 'linux', 'Linux', 'Windows'), publicNetworkAccess = tostring(properties.publicNetworkAccess), clientCertEnabled = iff(coalesce(tobool(properties.clientCertEnabled), false), 'true', 'false'), vnetIntegrated = iff(isnotempty(tostring(properties.virtualNetworkSubnetId)), 'true', 'false'), identityType = tostring(identity.type), lastModified = todatetime(properties.lastModifiedTimeUtc), linuxFxVersion = tostring(properties.siteConfig.linuxFxVersion), planName = tostring(split(tostring(properties.serverFarmId), '/')[-1])
       | extend plan = case(skuName =~ 'Dynamic', 'Consumption', skuName =~ 'FlexConsumption', 'Flex Consumption', skuName =~ 'ElasticPremium', 'Premium', 'Dedicated')
       ${ params.state in ['Running', 'Stopped'] ? "| where state == '" & params.state & "'" }
       ${ params.plan in ['Consumption', 'Flex Consumption', 'Premium', 'Dedicated'] ? "| where plan == '" & params.plan & "'" }
@@ -80,7 +82,7 @@ datasources:
           'total': $count($rows),
           'running': $count($rows[state = 'Running']),
           'stopped': $count($rows[state = 'Stopped']),
-          'httpAllowed': $count($rows[httpsOnly != true]),
+          'httpAllowed': $count($rows[httpsOnly != 'true']),
           'noIdentity': $count($rows[identityType = 'None'])
         }
       ) }
@@ -135,8 +137,8 @@ layout:
         filter: facet
       - { field: publicNetworkAccess, label: Public access, filter: facet }
       - { field: identityType, label: Managed identity, filter: facet }
-      - { field: vnetIntegrated, label: VNet integrated, kind: boolean, filter: facet, hidden: true }
-      - { field: clientCertEnabled, label: Client certificates, kind: boolean, hidden: true }
+      - { field: vnetIntegrated, label: VNet integrated, kind: status, map: { "true": [info, "Yes"], "false": [neutral, "No"] }, filter: facet, hidden: true }
+      - { field: clientCertEnabled, label: Client certificates, kind: status, map: { "true": [info, "On"], "false": [neutral, "Off"] }, filter: facet, hidden: true }
       - { field: planName, label: App Service plan, hidden: true }
       - { field: resourceGroup, label: Resource group, filter: { type: text, param: resourceGroup } }
       - { field: subscriptionName, label: Subscription, filter: facet, hidden: true }

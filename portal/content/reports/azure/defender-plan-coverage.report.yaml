@@ -1,0 +1,128 @@
+$schema: ../../../packages/schemas/generated/report.schema.json
+kind: report
+id: azure.defender-plan-coverage
+version: 1.0.0
+title: Defender for Cloud plan coverage
+summary: Which Microsoft Defender for Cloud plans are on in each subscription — one row per subscription, one column per plan — so gaps such as servers or storage without Defender stand out. The Defender for Cloud page shows the same plans per plan.
+owner: security-team
+tags: [azure, defender-for-cloud, security, posture, resource-graph]
+nav: { section: reports, label: Defender for Cloud plan coverage, icon: shield-check, order: 188 }
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    arm: [user_impersonation]
+  azureRoles: [Reader]
+
+params:
+  gapsOnly: { type: boolean, default: false, label: Subscriptions with a plan off only, facet: true }
+  subscriptionId: { type: string, format: guid, label: Subscription, picker: subscription, facet: true }
+
+datasources:
+  coverage:
+    source: resourceGraph
+    # Deprecated plans (Kubernetes, container registries, DNS) and the free Foundational CSPM / Discovery entries are left out.
+    query: |
+      // af:azure.defender-plan-coverage#rows
+      securityresources
+      | where type =~ 'microsoft.security/pricings'
+      ${ params.subscriptionId ? "| where subscriptionId == '" & $guid(params.subscriptionId) & "'" }
+      | extend plan = name, tier = tostring(properties.pricingTier), subPlan = tostring(properties.subPlan), deprecated = coalesce(tobool(properties.deprecated), false)
+      | where not(deprecated) and plan !in~ ('FoundationalCspm', 'Discovery')
+      | extend state = iff(tier =~ 'Standard', 'On', 'Off')
+      | summarize plansOn = countif(state == 'On'), plans = count(), cspm = anyif(state, plan =~ 'CloudPosture'), servers = anyif(state, plan =~ 'VirtualMachines'), serversPlan = anyif(subPlan, plan =~ 'VirtualMachines'), appService = anyif(state, plan =~ 'AppServices'), sqlDatabases = anyif(state, plan =~ 'SqlServers'), sqlOnMachines = anyif(state, plan =~ 'SqlServerVirtualMachines'), openSourceDatabases = anyif(state, plan =~ 'OpenSourceRelationalDatabases'), cosmosDb = anyif(state, plan =~ 'CosmosDbs'), storage = anyif(state, plan =~ 'StorageAccounts'), containers = anyif(state, plan =~ 'Containers'), keyVault = anyif(state, plan =~ 'KeyVaults'), resourceManager = anyif(state, plan =~ 'Arm'), apis = anyif(state, plan =~ 'Api'), ai = anyif(state, plan =~ 'AI') by subscriptionId
+      ${ params.gapsOnly = true ? '| where plansOn < plans' : '' }
+      | join kind=leftouter (resourcecontainers | where type =~ 'microsoft.resources/subscriptions' | project subscriptionId, subscriptionName = name) on subscriptionId
+      | project subscriptionId, subscriptionName, plansOn, plans, cspm, servers, serversPlan, appService, sqlDatabases, sqlOnMachines, openSourceDatabases, cosmosDb, storage, containers, keyVault, resourceManager, apis, ai
+      | order by plansOn asc, subscriptionName asc
+    paging: all
+    maxItems: 5000
+    transform: >-
+      ${ (
+        $rows := [value.value.$merge([$, { 'coverage': plans > 0 ? $round(plansOn / plans, 4) : 0 }])];
+        $plans := [
+          { 'key': 'cspm', 'plan': 'Defender CSPM' }, { 'key': 'servers', 'plan': 'Servers' }, { 'key': 'storage', 'plan': 'Storage' },
+          { 'key': 'sqlDatabases', 'plan': 'Azure SQL Databases' }, { 'key': 'appService', 'plan': 'App Service' }, { 'key': 'keyVault', 'plan': 'Key Vault' },
+          { 'key': 'resourceManager', 'plan': 'Resource Manager' }, { 'key': 'containers', 'plan': 'Containers' }, { 'key': 'apis', 'plan': 'APIs' },
+          { 'key': 'ai', 'plan': 'AI services' }, { 'key': 'cosmosDb', 'plan': 'Azure Cosmos DB' }, { 'key': 'openSourceDatabases', 'plan': 'Open-source databases' },
+          { 'key': 'sqlOnMachines', 'plan': 'SQL servers on machines' }
+        ];
+        {
+          'rows': $rows,
+          'subscriptions': $count($rows),
+          'noCspm': $count($rows[cspm = 'Off']),
+          'noServers': $count($rows[servers = 'Off']),
+          'nothingOn': $count($rows[plansOn = 0]),
+          'byPlan': [$plans.( $k := key; { 'plan': plan, 'subscriptions': $count($rows[$lookup($, $k) = 'On']) } )]
+        }
+      ) }
+    cache: { ttl: 900 }
+
+layout:
+  - widget: kpi
+    data: coverage.subscriptions
+    label: Subscriptions
+    format: number
+  - widget: kpi
+    data: coverage.noCspm
+    label: Without Defender CSPM
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+  - widget: kpi
+    data: coverage.noServers
+    label: Without Defender for Servers
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+  - widget: kpi
+    data: coverage.nothingOn
+    label: No paid plan at all
+    format: number
+    status: "${ value > 0 ? 'crit' : 'ok' }"
+  - widget: chart
+    title: Subscriptions with each plan on
+    span: 12
+    type: bar
+    data: coverage.byPlan
+    x: plan
+    y: subscriptions
+    format: number
+  - widget: table
+    id: coverage
+    span: 12
+    data: coverage.rows
+    rowKey: subscriptionId
+    columns:
+      - { field: subscriptionName, label: Subscription, kind: identity, secondary: subscriptionId, sortable: true }
+      - { field: coverage, label: Plans on, kind: percent, sortable: true, filter: range }
+      - { field: cspm, label: Defender CSPM, kind: status, map: { "On": [ok, "On"], "Off": [warn, "Off"] }, filter: facet }
+      - { field: servers, label: Servers, kind: status, map: { "On": [ok, "On"], "Off": [warn, "Off"] }, filter: facet }
+      - { field: serversPlan, label: Servers plan, filter: facet }
+      - { field: storage, label: Storage, kind: status, map: { "On": [ok, "On"], "Off": [warn, "Off"] }, filter: facet }
+      - { field: sqlDatabases, label: Azure SQL, kind: status, map: { "On": [ok, "On"], "Off": [warn, "Off"] }, filter: facet }
+      - { field: appService, label: App Service, kind: status, map: { "On": [ok, "On"], "Off": [warn, "Off"] }, filter: facet }
+      - { field: keyVault, label: Key Vault, kind: status, map: { "On": [ok, "On"], "Off": [warn, "Off"] }, filter: facet }
+      - { field: resourceManager, label: Resource Manager, kind: status, map: { "On": [ok, "On"], "Off": [warn, "Off"] }, filter: facet }
+      - { field: containers, label: Containers, kind: status, map: { "On": [ok, "On"], "Off": [warn, "Off"] }, filter: facet }
+      - { field: apis, label: APIs, kind: status, map: { "On": [ok, "On"], "Off": [neutral, "Off"] }, hidden: true }
+      - { field: ai, label: AI services, kind: status, map: { "On": [ok, "On"], "Off": [neutral, "Off"] }, hidden: true }
+      - { field: cosmosDb, label: Cosmos DB, kind: status, map: { "On": [ok, "On"], "Off": [neutral, "Off"] }, hidden: true }
+      - { field: openSourceDatabases, label: Open-source databases, kind: status, map: { "On": [ok, "On"], "Off": [neutral, "Off"] }, hidden: true }
+      - { field: sqlOnMachines, label: SQL servers on machines, kind: status, map: { "On": [ok, "On"], "Off": [neutral, "Off"] }, hidden: true }
+      - { field: plansOn, label: Plans on (count), kind: number, hidden: true }
+      - { field: plans, label: Plans available, kind: number, hidden: true }
+    inspect:
+      page: azure.subscription
+      params:
+        id: ${ row.subscriptionId }
+    rowActions:
+      - label: Open Defender plans in Azure portal
+        icon: arrow-square-out
+        href: https://portal.azure.com/#view/Microsoft_Azure_Security/PolicyMenuBlade/~/pricingTier/subscriptionId/${ $encode(row.subscriptionId) }
+    empty:
+      title: No Defender for Cloud plans found
+      body: Defender for Cloud lists plans once the subscription has been opened in Defender for Cloud. Reader or Security Reader on the subscription is needed.
+
+export:
+  formats: [csv, xlsx]
+  fileName: azure-defender-plan-coverage
+  data: coverage.rows
+  columns: all

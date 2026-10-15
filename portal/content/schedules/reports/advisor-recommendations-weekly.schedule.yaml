@@ -1,0 +1,33 @@
+$schema: ../../../packages/schemas/generated/schedule.schema.json
+kind: schedule
+id: reports.advisor-recommendations-weekly
+version: 1.0.0
+title: Weekly Azure Advisor recommendations report
+summary: >-
+  Every Monday at 05:40 UTC, writes every active Azure Advisor recommendation (cost, security, reliability,
+  performance, operational excellence) with its impact and estimated savings, as XLSX.
+  Email goes to AF_REPORT_RECIPIENTS when it and AF_MAIL_SENDER are configured.
+owner: azure-team
+tags: [azure, advisor, cost, report]
+cron: "40 5 * * 1"
+timezone: UTC
+enabled: true
+identity: automation
+job:
+  kind: report
+  ref: azure.advisor-recommendations
+  # Pinned rather than left to the report's defaults so the archive stays comparable from run to run.
+  params: { category: any, impact: any }
+  delivery:
+    - type: file
+      format: xlsx
+      path: azure/advisor-recommendations/{date}.xlsx
+      retain: 26
+    - type: email
+      to: ["${ env.AF_REPORT_RECIPIENTS }"]
+      format: xlsx
+retry: { max: 2, backoff: exponential, delay: 5m }
+timeoutSeconds: 1800
+overlap: skip
+requires:
+  azureRoles: [Reader]

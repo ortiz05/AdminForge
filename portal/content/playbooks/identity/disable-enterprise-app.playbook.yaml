@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/playbook.schema.json
 kind: playbook
 id: identity.disable-enterprise-app
-version: 1.0.0
+version: 1.1.0
 title: Disable enterprise app sign-in
 summary: >-
   Blocks every user and workload from signing in to an enterprise application (its service principal), for example a
@@ -52,7 +52,7 @@ steps:
   - id: notPortalApp
     type: assert
     that: >-
-      ${ $not(steps.sp.output.appId in [env.AF_READ_CLIENT_ID, env.AF_WRITE_CLIENT_ID, env.AF_AUTOMATION_CLIENT_ID, env.AF_PROVISIONER_CLIENT_ID]) }
+      ${ $not(steps.sp.output.appId in $append([env.AF_READ_CLIENT_ID, env.AF_WRITE_CLIENT_ID, env.AF_AUTOMATION_CLIENT_ID], $map($split(env.AF_PROTECTED_APP_IDS ? env.AF_PROTECTED_APP_IDS : '', ','), function($v) { $trim($v) }))) }
     message: This is one of AdminForge's own apps; disabling it would lock everyone out of the portal.
 
   - id: disable

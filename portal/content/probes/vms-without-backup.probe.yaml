@@ -1,0 +1,30 @@
+$schema: ../../packages/schemas/generated/probe.schema.json
+kind: probe
+id: probes.vms-without-backup
+version: 1.0.0
+title: Virtual machines without Azure Backup
+summary: >-
+  Azure virtual machines that no Recovery Services vault protects (no AzureIaasVM backup item points at them). A vault
+  in a subscription the automation identity can't read makes its VMs look unprotected. The VMs without backup report
+  also shows stopped protection and failed or overdue backups.
+owner: azure-team
+tags: [kql, configuration, azure, backup, resilience, config-check]
+check:
+  kind: kql
+  source: resourceGraph
+  query: |
+    // af:probes.vms-without-backup
+    resources
+    | where type =~ 'microsoft.compute/virtualmachines'
+    | extend lid = tolower(id)
+    | join kind=leftouter (recoveryservicesresources | where type =~ 'microsoft.recoveryservices/vaults/backupfabrics/protectioncontainers/protecteditems' | where tostring(properties.backupManagementType) =~ 'AzureIaasVM' | extend vmId = tolower(tostring(properties.sourceResourceId)) | summarize backupItems = count() by vmId) on $left.lid == $right.vmId
+    | where isempty(vmId)
+    | project id, name, resourceGroup, subscriptionId, location, vmSize = tostring(properties.hardwareProfile.vmSize), osType = tostring(properties.storageProfile.osDisk.osType), powerState = tostring(properties.extended.instanceView.powerState.code)
+    | order by name asc
+  metric: rowCount
+  detailsLimit: 100
+thresholds: { warn: 1, crit: 25 }
+intervalHint: PT6H
+timeoutMs: 60000
+requires:
+  azureRoles: [Reader]

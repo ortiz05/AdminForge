@@ -11,6 +11,9 @@
     recipientTypeDetails  string[]  Limit to these types: UserMailbox, SharedMailbox, RoomMailbox,
                                     EquipmentMailbox, SchedulingMailbox (default: all of them).
     includeMailboxes      bool      Include the per-mailbox rows (default true).
+    includeAccountState   bool      Also return each mailbox's Entra object id and whether sign-in is blocked for its
+                                    account (externalDirectoryObjectId, accountDisabled), e.g. to find shared
+                                    mailboxes people can sign in to (default false).
 
 .PARAMETER Context
     Supplied by the runner: JobId, Mode, Tenant, Services, User.
@@ -18,7 +21,8 @@
 .OUTPUTS
     @{ total; truncated; byType = @(@{ type; count }); hiddenFromAddressLists; litigationHold; archiveEnabled;
        mailboxes = @(@{ displayName; userPrincipalName; primarySmtpAddress; recipientTypeDetails; whenCreated;
-                        hiddenFromAddressListsEnabled; litigationHoldEnabled; archiveStatus }) }
+                        hiddenFromAddressListsEnabled; litigationHoldEnabled; archiveStatus
+                        [; externalDirectoryObjectId; accountDisabled] }) }
 
 .NOTES
     Tokens: exchange. Mode: read. Exchange role: View-Only Recipients (or higher).
@@ -36,16 +40,18 @@ $types = 'UserMailbox', 'SharedMailbox', 'RoomMailbox', 'EquipmentMailbox', 'Sch
 $resultSize = Get-AdminForgeInput $Inputs 'resultSize' -Type Int -Default 5000 -Minimum 1 -Maximum 100000
 $typeFilter = Get-AdminForgeInput $Inputs 'recipientTypeDetails' -Type StringArray -AllowedValues $types -MaxCount 5
 $includeMailboxes = Get-AdminForgeInput $Inputs 'includeMailboxes' -Type Bool -Default $true
+$includeAccountState = Get-AdminForgeInput $Inputs 'includeAccountState' -Type Bool -Default $false
 if ($typeFilter.Count -eq 0) { $typeFilter = $types }
 
 Write-AdminForgeProgress -Percent 5 -Message 'Reading mailboxes'
 $properties = 'WhenCreated', 'HiddenFromAddressListsEnabled', 'LitigationHoldEnabled', 'ArchiveStatus'
+if ($includeAccountState) { $properties += 'AccountDisabled' }
 $raw = @(Get-EXOMailbox -ResultSize $resultSize -RecipientTypeDetails $typeFilter -Properties $properties)
 Write-AdminForgeLog "Read $($raw.Count) mailboxes"
 Write-AdminForgeProgress -Percent 70 -Message 'Summarising'
 
 $rows = @($raw | Select-Object DisplayName, UserPrincipalName, PrimarySmtpAddress, RecipientTypeDetails, WhenCreated,
-    HiddenFromAddressListsEnabled, LitigationHoldEnabled, ArchiveStatus)
+    HiddenFromAddressListsEnabled, LitigationHoldEnabled, ArchiveStatus, ExternalDirectoryObjectId, AccountDisabled)
 
 $byType = @($rows | Group-Object -Property RecipientTypeDetails | Sort-Object -Property Count -Descending | ForEach-Object {
         [ordered]@{ type = [string]$_.Name; count = $_.Count }
@@ -61,7 +67,7 @@ $result = [ordered]@{
 }
 if ($includeMailboxes) {
     $result.mailboxes = @($rows | ForEach-Object {
-            [ordered]@{
+            $row = [ordered]@{
                 displayName                   = [string]$_.DisplayName
                 userPrincipalName             = [string]$_.UserPrincipalName
                 primarySmtpAddress            = [string]$_.PrimarySmtpAddress
@@ -71,6 +77,12 @@ if ($includeMailboxes) {
                 litigationHoldEnabled         = [bool]$_.LitigationHoldEnabled
                 archiveStatus                 = [string]$_.ArchiveStatus
             }
+            if ($includeAccountState) {
+                # null = Exchange didn't say (treated as unknown, not as blocked).
+                $row.externalDirectoryObjectId = if ($_.ExternalDirectoryObjectId) { [string]$_.ExternalDirectoryObjectId } else { $null }
+                $row.accountDisabled = if ($null -eq $_.AccountDisabled) { $null } else { [System.Convert]::ToBoolean($_.AccountDisabled) }
+            }
+            $row
         })
 }
 if ($result.truncated) { Write-AdminForgeLog -Level Warn "Stopped at resultSize $resultSize; there may be more mailboxes" }

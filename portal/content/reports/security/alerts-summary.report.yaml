@@ -1,0 +1,238 @@
+$schema: ../../../packages/schemas/generated/report.schema.json
+kind: report
+id: security.alerts-summary
+version: 1.0.0
+title: Defender alerts by severity and status
+summary: >-
+  Every Microsoft Defender XDR and Entra ID Protection alert raised in the chosen period, by severity, status and
+  detecting product — with what is still open, who owns it and how long resolved alerts took — for the weekly security
+  review.
+owner: security-team
+tags: [security, defender, alerts, report]
+nav: { section: reports, label: Defender alerts summary, icon: warning, order: 152 }
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    graph: [SecurityAlert.Read.All]
+  entraRoles: [Security Reader]
+  licences: [defender]
+
+params:
+  days:
+    type: enum
+    label: Raised in the last
+    facet: true
+    default: 7
+    values:
+      - { value: 1, label: 24 hours }
+      - { value: 7, label: 7 days }
+      - { value: 30, label: 30 days }
+      - { value: 90, label: 90 days }
+  severity:
+    type: enum
+    label: Severity
+    facet: true
+    default: all
+    values:
+      - { value: all, label: All severities }
+      - { value: highMedium, label: High and medium }
+      - { value: high, label: High }
+  status:
+    type: enum
+    label: Status
+    facet: true
+    default: any
+    values:
+      - { value: any, label: Any status }
+      - { value: open, label: New or in progress }
+      - { value: resolved, label: Resolved }
+
+filters:
+  facets: [days, severity, status]
+
+savedViews:
+  enabled: true
+  shared: true
+  presets:
+    - { name: Open high and medium (7 days), params: { days: 7, severity: highMedium, status: open } }
+    - { name: Last 30 days, params: { days: 30 } }
+
+datasources:
+  alerts:
+    source: graph
+    label: Defender alerts (alerts_v2)
+    request:
+      path: /security/alerts_v2
+      query:
+        $top: 500
+        $filter: >-
+          ${ $join([
+               'createdDateTime ge ' & $daysAgo($number(params.days ? params.days : 7)),
+               params.severity = 'high' ? "severity eq 'high'",
+               params.severity = 'highMedium' ? "(severity eq 'high' or severity eq 'medium')",
+               params.status = 'open' ? "(status eq 'new' or status eq 'inProgress')",
+               params.status = 'resolved' ? "status eq 'resolved'"
+             ][$], ' and ') }
+    paging: all
+    maxItems: 20000
+    cache: { ttl: 300 }
+    # Filters are re-applied so the counts are exact; product names are shown in words.
+    transform: >-
+      ${ (
+        $p := params;
+        $days := $number($p.days ? $p.days : 7);
+        $sev := $p.severity = 'high' ? ['high'] : $p.severity = 'highMedium' ? ['high', 'medium'] : ['high', 'medium', 'low', 'informational', 'unknownFutureValue'];
+        $st := $p.status = 'open' ? ['new', 'inProgress'] : $p.status = 'resolved' ? ['resolved'] : ['new', 'inProgress', 'resolved', 'unknownFutureValue'];
+        $labels := {
+          "microsoftDefenderForEndpoint": "Defender for Endpoint",
+          "microsoftDefenderForIdentity": "Defender for Identity",
+          "microsoftDefenderForOffice365": "Defender for Office 365",
+          "microsoftDefenderForCloudApps": "Defender for Cloud Apps",
+          "microsoftDefenderForCloud": "Defender for Cloud",
+          "microsoft365Defender": "Defender XDR",
+          "azureAdIdentityProtection": "Entra ID Protection",
+          "dataLossPrevention": "Data loss prevention",
+          "microsoftInsiderRiskManagement": "Insider risk management",
+          "microsoftSentinel": "Microsoft Sentinel"
+        };
+        $rows := [value.value[severity in $sev and status in $st and -$daysUntil(createdDateTime) <= $days].{
+          "id": id,
+          "title": title,
+          "severity": severity,
+          "status": status,
+          "open": status in ['new', 'inProgress'],
+          "product": $lookup($labels, serviceSource) ? $lookup($labels, serviceSource) : serviceSource,
+          "category": category,
+          "assignedTo": assignedTo ? assignedTo,
+          "owner": assignedTo ? assignedTo : 'Unassigned',
+          "classification": classification,
+          "determination": determination,
+          "incidentId": incidentId ? incidentId,
+          "createdDateTime": createdDateTime,
+          "resolvedDateTime": resolvedDateTime,
+          "ageDays": -$daysUntil(createdDateTime),
+          "hoursToResolve": status = 'resolved' and resolvedDateTime ? $round(($toMillis(resolvedDateTime) - $toMillis(createdDateTime)) / 3600000, 1),
+          "mitreTechniques": mitreTechniques,
+          "alertWebUrl": alertWebUrl
+        }];
+        $open := $rows[open];
+        $resolved := $rows[$exists(hoursToResolve)];
+        $order := { "high": 0, "medium": 1, "low": 2, "informational": 3 };
+        {
+          "rows": [$rows^(open ? 0 : 1, $lookup($order, severity), >createdDateTime)],
+          "total": $count($rows),
+          "openHigh": $count($open[severity = 'high']),
+          "open": $count($open),
+          "unassigned": $count($open[$not($exists(assignedTo))]),
+          "meanHoursToResolve": $count($resolved) > 0 ? $round($average($resolved.hoursToResolve), 1) : null,
+          "bySeverity": [['high', 'medium', 'low', 'informational'].(
+            $s := $;
+            {
+              "severity": $s = 'informational' ? 'Informational' : $uppercase($substring($s, 0, 1)) & $substring($s, 1),
+              "new": $count($rows[severity = $s and status = 'new']),
+              "inProgress": $count($rows[severity = $s and status = 'inProgress']),
+              "resolved": $count($rows[severity = $s and status = 'resolved'])
+            }
+          )],
+          "byProduct": $append([], [$distinct($rows.product).(
+            $pr := $;
+            { "product": $pr, "open": $count($open[product = $pr]), "resolved": $count($rows[product = $pr and status = 'resolved']) }
+          )^(>open)][[0..7]])
+        }
+      ) }
+
+layout:
+  - widget: kpi
+    data: alerts.openHigh
+    label: Open high-severity alerts
+    format: number
+    status: "${ value > 0 ? 'crit' : 'ok' }"
+    href: /p/security.alerts-summary?severity=high&status=open
+  - widget: kpi
+    data: alerts.open
+    label: New or in progress
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+  - widget: kpi
+    data: alerts.unassigned
+    label: Open and unassigned
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+  - widget: kpi
+    data: alerts.meanHoursToResolve
+    label: Mean hours to resolve
+    format: number
+  - widget: chart
+    id: bySeverity
+    title: By severity and status
+    type: stackedBar
+    span: 6
+    rows: 2
+    data: alerts.bySeverity
+    x: severity
+    y: [new, inProgress, resolved]
+    stack: true
+    labels: { new: New, inProgress: In progress, resolved: Resolved }
+    format: number
+  - widget: chart
+    id: byProduct
+    title: By detecting product
+    type: stackedBar
+    span: 6
+    rows: 2
+    data: alerts.byProduct
+    x: product
+    y: [open, resolved]
+    stack: true
+    labels: { open: Open, resolved: Resolved }
+    format: number
+  - widget: table
+    id: alerts
+    span: 12
+    data: alerts.rows
+    rowKey: id
+    columns:
+      - { field: title, label: Alert, kind: identity, secondary: category, sortable: true }
+      - field: severity
+        label: Severity
+        kind: status
+        map: { high: [crit, High], medium: [warn, Medium], low: [info, Low], informational: [neutral, Informational] }
+        filter: facet
+      - field: status
+        label: Status
+        kind: status
+        map: { new: [warn, New], inProgress: [info, In progress], resolved: [ok, Resolved] }
+        filter: facet
+      - { field: product, label: Detected by, filter: facet }
+      - { field: owner, label: Assigned to, filter: facet }
+      - { field: ageDays, label: Age (days), kind: number, align: end, sortable: true }
+      - { field: createdDateTime, label: Raised, kind: datetime, sortable: true, filter: date }
+      - { field: hoursToResolve, label: Hours to resolve, kind: number, align: end, hidden: true }
+      - { field: classification, label: Classification, filter: facet, hidden: true }
+      - { field: determination, label: Determination, hidden: true }
+      - { field: mitreTechniques, label: MITRE techniques, kind: tags, hidden: true }
+      - { field: incidentId, label: Incident, kind: code, hidden: true }
+      - { field: resolvedDateTime, label: Resolved, kind: datetime, hidden: true }
+      - { field: id, label: Alert id, kind: code, hidden: true }
+    inspect:
+      page: security.alert
+      params:
+        id: ${ row.id }
+    rowActions:
+      - label: Open incident
+        icon: stack
+        href: ${ '/p/security.incident?id=' & $encode(row.incidentId) }
+        when: ${ $exists(row.incidentId) }
+      - label: Open in Microsoft Defender
+        icon: arrow-square-out
+        href: ${ row.alertWebUrl }
+        when: ${ $exists(row.alertWebUrl) }
+    empty:
+      title: No alerts in this period
+      body: Defender raised no alert matching these filters. Widen the period or the severity.
+
+export:
+  formats: [csv, xlsx]
+  fileName: defender-alerts-${ params.days }d
+  data: alerts.rows
+  columns: all

@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/playbook.schema.json
 kind: playbook
 id: identity.revoke-consent-grant
-version: 1.0.0
+version: 1.1.0
 title: Revoke delegated permission grant
 summary: >-
   Deletes one delegated permission grant (OAuth consent) of an enterprise app — a user's own consent or an admin
@@ -50,7 +50,7 @@ steps:
   - id: notPortalApp
     type: assert
     that: >-
-      ${ $not(steps.client.output.appId in [env.AF_READ_CLIENT_ID, env.AF_WRITE_CLIENT_ID, env.AF_AUTOMATION_CLIENT_ID, env.AF_PROVISIONER_CLIENT_ID]) }
+      ${ $not(steps.client.output.appId in $append([env.AF_READ_CLIENT_ID, env.AF_WRITE_CLIENT_ID, env.AF_AUTOMATION_CLIENT_ID], $map($split(env.AF_PROTECTED_APP_IDS ? env.AF_PROTECTED_APP_IDS : '', ','), function($v) { $trim($v) }))) }
     message: This grant belongs to one of AdminForge's own apps; revoking it would break the portal for everyone.
 
   - id: resource

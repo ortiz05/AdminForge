@@ -1,0 +1,170 @@
+$schema: ../../../packages/schemas/generated/report.schema.json
+kind: report
+id: identity.app-registration-risks
+version: 1.0.0
+title: App registration configuration risks
+summary: >-
+  App registrations configured in ways that make token theft or misuse easier — wildcard or plain-HTTP redirect URIs,
+  redirect URIs on shared hosting domains that can be taken over, the implicit grant, public client flows, sign-in
+  from personal Microsoft accounts — and apps that request critical application permissions.
+owner: identity-team
+tags: [identity, apps, configuration, security, report]
+nav: { section: reports, label: App registration risks, icon: warning-diamond, order: 20 }
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    graph: [Application.Read.All]
+  entraRoles: [Global Reader]
+
+params:
+  severity:
+    type: enum
+    label: Severity
+    facet: true
+    default: warn
+    values:
+      - { value: crit, label: Critical only }
+      - { value: warn, label: Warnings and critical }
+      - { value: all, label: Everything (including informational) }
+
+datasources:
+  graphApi:
+    source: graph
+    request:
+      path: "/servicePrincipals(appId='00000003-0000-0000-c000-000000000000')"
+      query:
+        $select: id,appRoles
+    cache: { ttl: 86400 }
+    transform: >-
+      ${ $merge([[value.appRoles].{ id: value }]) }
+  apps:
+    source: graph
+    request:
+      path: /applications
+      query:
+        $select: id,appId,displayName,createdDateTime,signInAudience,web,spa,publicClient,isFallbackPublicClient,requiredResourceAccess
+        $top: 999
+    paging: all
+    maxItems: 20000
+    cache: { ttl: 900 }
+    transform: >-
+      ${ (
+        $critical := ['RoleManagement.ReadWrite.Directory', 'AppRoleAssignment.ReadWrite.All', 'Application.ReadWrite.All',
+          'Directory.ReadWrite.All', 'Domain.ReadWrite.All', 'Organization.ReadWrite.All', 'Policy.ReadWrite.ConditionalAccess',
+          'Policy.ReadWrite.AuthenticationMethod', 'Policy.ReadWrite.PermissionGrant', 'Policy.ReadWrite.Authorization',
+          'PrivilegedAccess.ReadWrite.AzureADGroup', 'RoleAssignmentSchedule.ReadWrite.Directory',
+          'RoleEligibilitySchedule.ReadWrite.Directory', 'UserAuthenticationMethod.ReadWrite.All',
+          'DelegatedPermissionGrant.ReadWrite.All', 'Group.ReadWrite.All', 'GroupMember.ReadWrite.All',
+          'Mail.ReadWrite', 'Mail.Send', 'Files.ReadWrite.All', 'Sites.ReadWrite.All', 'Sites.FullControl.All', 'User.ReadWrite.All'];
+        $roles := ds.graphApi ? ds.graphApi : {};
+        $local := /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:|\/|$)/i;
+        $shared := /^https?:\/\/[^\/]*\.(azurewebsites\.net|cloudapp\.net|cloudapp\.azure\.com|trafficmanager\.net|blob\.core\.windows\.net|herokuapp\.com|ngrok\.io|ngrok-free\.app|ngrok\.app|glitch\.me|vercel\.app|netlify\.app|github\.io)(:|\/|$)/i;
+        $rank := { "crit": 0, "warn": 1, "info": 2 };
+        $rows := [value.value.(
+          $web := [web.redirectUris, spa.redirectUris];
+          $all := [$web, publicClient.redirectUris];
+          $perms := [requiredResourceAccess[resourceAppId = '00000003-0000-0000-c000-000000000000'].resourceAccess[type = 'Role'].$lookup($roles, id)];
+          $critPerms := [$perms[$ in $critical]];
+          $findings := [
+            $count($all[$contains($, '*')]) > 0 ? { "finding": "Wildcard redirect URI", "severity": "crit" },
+            $count($web[$contains($, /^http:\/\//i) and $not($contains($, $local))]) > 0 ? { "finding": "Redirect URI over plain HTTP", "severity": "crit" },
+            $count($all[$contains($, $shared)]) > 0 ? { "finding": "Redirect URI on a shared hosting domain", "severity": "warn" },
+            web.implicitGrantSettings.enableAccessTokenIssuance = true ? { "finding": "Implicit grant issues access tokens", "severity": "warn" },
+            web.implicitGrantSettings.enableIdTokenIssuance = true ? { "finding": "Implicit grant issues ID tokens", "severity": "info" },
+            isFallbackPublicClient = true ? { "finding": "Public client flows allowed", "severity": "warn" },
+            signInAudience in ['AzureADandPersonalMicrosoftAccount', 'PersonalMicrosoftAccount'] ? { "finding": "Personal Microsoft accounts can sign in", "severity": "warn" },
+            signInAudience = 'AzureADMultipleOrgs' ? { "finding": "Multi-tenant", "severity": "info" },
+            $count($critPerms) > 0 ? { "finding": "Requests critical application permissions", "severity": "warn" },
+            $count($web[$contains($, $local)]) > 0 ? { "finding": "Localhost redirect URI", "severity": "info" }
+          ];
+          $worst := $count($findings[severity = 'crit']) > 0 ? 'crit' : $count($findings[severity = 'warn']) > 0 ? 'warn' : 'info';
+          $count($findings) > 0 ? {
+            "id": id,
+            "appId": appId,
+            "displayName": displayName,
+            "audience": signInAudience,
+            "created": createdDateTime,
+            "severity": $worst,
+            "findings": [$findings.finding],
+            "criticalPermissions": $critPerms,
+            "redirectUris": $count($all),
+            "wildcardOrHttp": $count($findings[severity = 'crit'])
+          }
+        )];
+        $shown := $rows[
+          $$.params.severity = 'all' or severity = 'crit' or ($$.params.severity = 'warn' and severity = 'warn')
+        ];
+        {
+          "rows": [$shown^($lookup($rank, severity), displayName)],
+          "critical": $count($rows[severity = 'crit']),
+          "implicit": $count($rows['Implicit grant issues access tokens' in findings]),
+          "publicClient": $count($rows['Public client flows allowed' in findings]),
+          "personal": $count($rows['Personal Microsoft accounts can sign in' in findings])
+        }
+      ) }
+
+layout:
+  - widget: kpi
+    id: critical
+    data: apps.critical
+    label: Apps with wildcard or plain-HTTP redirect URIs
+    format: number
+    status: "${ value > 0 ? 'crit' : 'ok' }"
+  - widget: kpi
+    id: implicit
+    data: apps.implicit
+    label: Implicit grant issuing access tokens
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+  - widget: kpi
+    id: publicClient
+    data: apps.publicClient
+    label: Public client flows allowed
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+  - widget: kpi
+    id: personal
+    data: apps.personal
+    label: Personal accounts can sign in
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+  - widget: table
+    id: apps
+    span: 12
+    data: apps.rows
+    rowKey: id
+    columns:
+      - { field: displayName, label: App, kind: identity, secondary: appId, sortable: true }
+      - field: severity
+        label: Severity
+        kind: status
+        map: { crit: [crit, Critical], warn: [warn, Warning], info: [info, Informational] }
+        filter: { type: facet, param: severity }
+      - { field: findings, label: Findings, kind: tags }
+      - { field: criticalPermissions, label: Critical permissions requested, kind: tags }
+      - field: audience
+        label: Audience
+        kind: status
+        map: { AzureADMyOrg: [neutral, Single tenant], AzureADMultipleOrgs: [info, Multi-tenant], AzureADandPersonalMicrosoftAccount: [warn, Multi-tenant + personal], PersonalMicrosoftAccount: [warn, Personal only] }
+        filter: facet
+      - { field: redirectUris, label: Redirect URIs, kind: number }
+      - { field: created, label: Created, kind: date, filter: date }
+      - { field: id, label: Object id, kind: guid, hidden: true }
+    inspect:
+      page: identity.app-registration
+      params:
+        id: ${ row.id }
+        appId: ${ row.appId }
+    rowActions:
+      - label: Fix in Entra admin center (Authentication)
+        icon: arrow-square-out
+        href: "https://entra.microsoft.com/#view/Microsoft_AAD_RegisteredApps/ApplicationMenuBlade/~/Authentication/appId/${ $encode(row.appId) }"
+    empty:
+      title: No configuration risks
+      body: No app registration has a finding at this severity.
+
+export:
+  formats: [csv, xlsx]
+  fileName: app-registration-risks
+  data: apps.rows
+  columns: all

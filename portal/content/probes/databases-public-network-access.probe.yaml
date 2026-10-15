@@ -1,0 +1,35 @@
+$schema: ../../packages/schemas/generated/probe.schema.json
+kind: probe
+id: probes.databases-public-network-access
+version: 1.0.0
+title: Databases with public network access on
+summary: >-
+  Azure SQL servers, SQL Managed Instances (public data endpoint), PostgreSQL and MySQL flexible servers, Cosmos DB
+  accounts and Azure Cache for Redis whose public network access is on, so only firewall rules stand between them and
+  the internet. Use private endpoints or virtual network integration. The Databases reachable from public networks
+  report shows network rules, authentication and TLS per server.
+owner: azure-team
+tags: [kql, configuration, azure, databases, network, security, config-check]
+check:
+  kind: kql
+  source: resourceGraph
+  query: |
+    // af:probes.databases-public-network-access
+    resources
+    | where type in~ ('microsoft.sql/servers', 'microsoft.sql/managedinstances', 'microsoft.dbforpostgresql/flexibleservers', 'microsoft.dbformysql/flexibleservers', 'microsoft.documentdb/databaseaccounts', 'microsoft.cache/redis')
+    | extend t = tolower(type), flexPublic = tostring(properties.network.publicNetworkAccess), delegatedSubnet = tostring(properties.network.delegatedSubnetResourceId)
+    | extend publicNetworkAccess = case(
+        t == 'microsoft.sql/managedinstances', iff(coalesce(tobool(properties.publicDataEndpointEnabled), false), 'Enabled', 'Disabled'),
+        t in ('microsoft.dbforpostgresql/flexibleservers', 'microsoft.dbformysql/flexibleservers'), iff(isnotempty(flexPublic), flexPublic, iff(isnotempty(delegatedSubnet), 'Disabled', 'Enabled')),
+        isempty(tostring(properties.publicNetworkAccess)), 'Enabled',
+        tostring(properties.publicNetworkAccess))
+    | where publicNetworkAccess =~ 'Enabled'
+    | project id, name, type, resourceGroup, subscriptionId, location, publicNetworkAccess
+    | order by type asc, name asc
+  metric: rowCount
+  detailsLimit: 100
+thresholds: { warn: 1, crit: 10 }
+intervalHint: PT6H
+timeoutMs: 60000
+requires:
+  azureRoles: [Reader]

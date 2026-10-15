@@ -25,6 +25,12 @@ const CONFIG_CHECKS = [
   'probes.resources-missing-required-tags',
   'probes.activity-failed-writes-spike',
   'probes.risky-oauth-consents',
+  // Azure report library (tests/content/azure-report-library.test.ts)
+  'probes.unattached-disks-30-days',
+  'probes.vms-without-backup',
+  'probes.privileged-rbac-direct-users',
+  'probes.custom-roles-wildcard',
+  'probes.databases-public-network-access',
 ];
 
 describe('probe sweeps', () => {

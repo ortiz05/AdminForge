@@ -1,0 +1,217 @@
+$schema: ../../../packages/schemas/generated/report.schema.json
+kind: report
+id: security.secure-score-summary
+version: 1.0.0
+title: Secure Score trend and top improvement actions
+summary: >-
+  Microsoft Secure Score today, its change over the last 7 and 30 days, how it compares with other tenants, and the
+  improvement actions worth the most points — with the quick wins (low cost, low user impact) flagged — for the weekly
+  security posture review.
+owner: security-team
+tags: [security, secure-score, posture, report]
+nav: { section: reports, label: Secure Score summary, icon: shield-check, order: 154 }
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    graph: [SecurityEvents.Read.All]
+  entraRoles: [Security Reader]
+
+params:
+  top:
+    type: enum
+    label: Improvement actions
+    facet: true
+    default: 25
+    values:
+      - { value: 10, label: Top 10 }
+      - { value: 25, label: Top 25 }
+      - { value: 1000, label: All open actions }
+  quickWins: { type: boolean, label: "Quick wins only (low cost, low user impact)", default: false, facet: true }
+  category:
+    type: enum
+    label: Category
+    facet: true
+    default: All
+    values: [All, Identity, Data, Device, Apps, Infrastructure]
+
+filters:
+  facets: [top, quickWins, category]
+
+savedViews:
+  enabled: true
+  shared: true
+  presets:
+    - { name: Quick wins, params: { quickWins: true, top: 1000 } }
+    - { name: Identity actions, params: { category: Identity } }
+
+# Microsoft keeps one Secure Score snapshot per day for 90 days. Actions marked "risk accepted" or "resolved through a
+# third party" in Defender are left out (they no longer count against the score).
+datasources:
+  history:
+    source: graph
+    label: Daily Secure Score (90 days)
+    request:
+      path: /security/secureScores
+      query:
+        $top: 90
+    cache: { ttl: 3600 }
+    transform: >-
+      ${ (
+        $rows := [(value.value^(createdDateTime)).{
+          "day": $substring(createdDateTime, 0, 10),
+          "percent": maxScore > 0 ? $round(currentScore / maxScore, 4) : 0,
+          "score": $round(currentScore, 1),
+          "maxScore": $round(maxScore, 1)
+        }];
+        $last := $rows[-1];
+        $at := function($n) { ($rows[day >= $substring($daysAgo($n), 0, 10)])[0] };
+        $w := $at(7);
+        $m := $at(30);
+        $latest := (value.value^(>createdDateTime))[0];
+        $all := $latest.averageComparativeScores[basis = 'AllTenants'][0].averageScore;
+        $size := $latest.averageComparativeScores[basis = 'TotalSeats'][0].averageScore;
+        {
+          "trend": $rows,
+          "percent": $last ? $last.percent : null,
+          "score": $last ? $last.score : null,
+          "maxScore": $last ? $last.maxScore : null,
+          "change7": $w ? $round($last.percent - $w.percent, 4) : null,
+          "change30": $m ? $round($last.percent - $m.percent, 4) : null,
+          "allTenants": $all and $latest.maxScore ? $round($all / $latest.maxScore, 4) : null,
+          "similarSize": $size and $latest.maxScore ? $round($size / $latest.maxScore, 4) : null
+        }
+      ) }
+  actions:
+    label: Improvement actions
+    source: graphBatch
+    requests:
+      latest: { path: /security/secureScores, query: { $top: 1 } }
+      profiles: { path: /security/secureScoreControlProfiles, query: { $top: 500 } }
+    cache: { ttl: 3600 }
+    transform: >-
+      ${ (
+        $p := params;
+        $top := $p.top ? $number($p.top) : 25;
+        $cat := $p.category ? $p.category : 'All';
+        $latest := (value.latest.value^(>createdDateTime))[0];
+        $scores := $latest.controlScores;
+        $open := [value.profiles.value[$not(deprecated = true)].(
+          $pr := $;
+          $got := ($scores[controlName = $pr.id])[0].score;
+          $got := $got ? $round($got, 2) : 0;
+          $state := ($pr.controlStateUpdates^(>updatedDateTime))[0].state;
+          $pr.maxScore > $got and $not($state in ['Ignored', 'ThirdParty']) ? {
+            "id": $pr.id,
+            "title": $pr.title,
+            "category": $pr.controlCategory,
+            "service": $pr.service,
+            "pointsAvailable": $round($pr.maxScore - $got, 2),
+            "score": $got,
+            "maxScore": $pr.maxScore,
+            "implementationCost": $pr.implementationCost,
+            "userImpact": $pr.userImpact,
+            "quickWin": $pr.implementationCost = 'Low' and $pr.userImpact = 'Low',
+            "tier": $pr.tier,
+            "rank": $pr.rank,
+            "actionUrl": $pr.actionUrl
+          }
+        )];
+        $ranked := [$open[($cat = 'All' or category = $cat) and ($p.quickWins != true or quickWin)]^(>pointsAvailable, rank)];
+        {
+          "rows": [$ranked[[0..($top - 1)]]],
+          "open": $count($open),
+          "pointsAvailable": $round($sum($open.pointsAvailable), 1),
+          "quickWins": $count($open[quickWin]),
+          "quickWinPoints": $round($sum($open[quickWin].pointsAvailable), 1),
+          "byCategory": $append([], [$distinct($open.category).(
+            $c := $;
+            { "category": $c, "points": $round($sum($open[category = $c].pointsAvailable), 1) }
+          )^(>points)])
+        }
+      ) }
+
+layout:
+  - widget: kpi
+    data: history.percent
+    label: Secure Score
+    format: percent
+    delta: history.change7
+    deltaFormat: percent
+    deltaPeriod: vs 7 days ago
+    status: "${ value >= 0.7 ? 'ok' : value >= 0.5 ? 'warn' : 'crit' }"
+  - widget: kpi
+    data: history.change30
+    label: Change over 30 days
+    format: percent
+    status: "${ value < 0 ? 'warn' : 'ok' }"
+  - widget: kpi
+    data: history.allTenants
+    label: Average across all tenants
+    format: percent
+  - widget: kpi
+    data: actions.quickWinPoints
+    label: Points from quick wins
+    format: number
+    hint: Low-cost, low-impact actions still open
+  - widget: chart
+    id: trend
+    title: Secure Score over 90 days
+    type: line
+    span: 8
+    rows: 3
+    data: history.trend
+    x: day
+    y: percent
+    format: percent
+  - widget: chart
+    id: byCategory
+    title: Points still available by category
+    type: bar
+    span: 4
+    rows: 3
+    data: actions.byCategory
+    x: category
+    y: points
+    format: number
+  - widget: table
+    id: actions
+    title: Improvement actions worth the most points
+    span: 12
+    data: actions.rows
+    rowKey: id
+    columns:
+      - { field: title, label: Improvement action, kind: identity, secondary: service }
+      - { field: pointsAvailable, label: Points available, kind: number, align: end, sortable: true }
+      - { field: category, label: Category, filter: { type: facet, param: category } }
+      - { field: quickWin, label: Quick win, kind: boolean, filter: facet }
+      - field: implementationCost
+        label: Cost
+        kind: status
+        map: { Low: [ok, Low], Moderate: [warn, Moderate], High: [crit, High] }
+        filter: facet
+      - field: userImpact
+        label: User impact
+        kind: status
+        map: { Low: [ok, Low], Moderate: [warn, Moderate], High: [crit, High] }
+        filter: facet
+      - { field: score, label: Points achieved, kind: number, align: end, hidden: true }
+      - { field: maxScore, label: Max points, kind: number, align: end, hidden: true }
+      - { field: tier, label: Tier, hidden: true }
+      - { field: id, label: Control, kind: code, hidden: true }
+    rowActions:
+      - label: Open in Microsoft Defender
+        icon: arrow-square-out
+        href: "${ 'https://security.microsoft.com/securescore?viewid=actions&actionId=' & $encode(row.id) }"
+      - label: Open configuration
+        icon: wrench
+        href: ${ row.actionUrl }
+        when: ${ $exists(row.actionUrl) and row.actionUrl != null }
+    empty:
+      title: No open improvement actions
+      body: Every action in this view is completed, accepted as a risk or handled by a third party.
+
+export:
+  formats: [csv, xlsx]
+  fileName: secure-score-top-actions
+  data: actions.rows
+  columns: all

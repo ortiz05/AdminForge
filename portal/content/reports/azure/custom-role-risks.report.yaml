@@ -1,0 +1,115 @@
+$schema: ../../../packages/schemas/generated/report.schema.json
+kind: report
+id: azure.custom-role-risks
+version: 1.0.0
+title: Custom Azure roles with broad permissions
+summary: Custom Azure RBAC roles whose actions include wildcards — all actions (*), anything that can grant access (Microsoft.Authorization writes) or provider-wide wildcards — with where they can be assigned and how many assignments use them.
+owner: azure-team
+tags: [azure, rbac, access, security, governance]
+nav: { section: reports, label: Custom roles with broad permissions, icon: asterisk, order: 191 }
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    arm: [user_impersonation]
+  azureRoles: [Reader]
+
+params:
+  riskyOnly: { type: boolean, default: true, label: Wildcard or access-granting roles only, facet: true }
+
+datasources:
+  roles:
+    source: resourceGraph
+    # Actions are matched in the permission blocks' JSON text (no mv-expand). Resource Graph returns computed booleans as
+    # 1/0, so the flags are projected as 'true'/'false' text.
+    query: |
+      // af:azure.custom-role-risks#rows
+      authorizationresources
+      | where type =~ 'microsoft.authorization/roledefinitions' and tostring(properties.type) =~ 'CustomRole'
+      | extend roleGuid = tolower(name), roleName = tostring(properties.roleName), description = tostring(properties.description), assignableScopes = properties.assignableScopes
+      | extend actionsText = tostring(properties.permissions[0].actions), notActionsText = tostring(properties.permissions[0].notActions), dataActionsText = tostring(properties.permissions[0].dataActions)
+      | extend allActions = actionsText matches regex @'"\*"', grantsAccess = actionsText matches regex @'(?i)"(\*|microsoft\.authorization/(\*|\*/write|roleassignments/(\*|write)|roledefinitions/(\*|write)|elevateaccess/action))"'
+      | extend wildcardActions = array_length(extract_all(@'"([^"]*\*[^"]*)"', actionsText)), wildcardDataActions = array_length(extract_all(@'"([^"]*\*[^"]*)"', dataActionsText)), actionCount = coalesce(array_length(properties.permissions[0].actions), 0), notActionCount = coalesce(array_length(properties.permissions[0].notActions), 0)
+      | extend risk = case(allActions, 'All actions', grantsAccess, 'Can grant access', wildcardActions > 0 or wildcardDataActions > 0, 'Wildcard actions', 'Specific actions')
+      ${ params.riskyOnly = false ? '' : "| where risk != 'Specific actions'" }
+      | join kind=leftouter (authorizationresources | where type =~ 'microsoft.authorization/roleassignments' | extend roleGuid = tolower(extract('([0-9a-fA-F-]{36})$', 1, tostring(properties.roleDefinitionId))) | summarize assignments = count(), principals = dcount(tostring(properties.principalId)) by roleGuid) on roleGuid
+      | extend assignments = coalesce(assignments, 0), principals = coalesce(principals, 0), scopeCount = coalesce(array_length(assignableScopes), 0), rootAssignable = tostring(assignableScopes) contains '"/"'
+      | project id, roleGuid, roleName, description, risk, wildcardActions, wildcardDataActions, actionCount, notActionCount, assignments, principals, scopeCount, assignableScopes, rootAssignable = iff(rootAssignable, 'true', 'false'), actionsText, createdOn = todatetime(properties.createdOn), updatedOn = todatetime(properties.updatedOn)
+      | extend riskRank = case(risk == 'All actions', 0, risk == 'Can grant access', 1, risk == 'Wildcard actions', 2, 3)
+      | order by riskRank asc, assignments desc, roleName asc
+    paging: all
+    maxItems: 5000
+    transform: >-
+      ${ (
+        $rows := [value.value];
+        {
+          'rows': $rows,
+          'total': $count($rows),
+          'allActions': $count($rows[risk = 'All actions']),
+          'grantsAccess': $count($rows[risk = 'Can grant access']),
+          'assigned': $count($rows[risk != 'Specific actions' and assignments > 0])
+        }
+      ) }
+    cache: { ttl: 600 }
+
+layout:
+  - widget: kpi
+    data: roles.total
+    label: Custom roles listed
+    format: number
+  - widget: kpi
+    data: roles.allActions
+    label: Allow all actions (*)
+    format: number
+    status: "${ value > 0 ? 'crit' : 'ok' }"
+  - widget: kpi
+    data: roles.grantsAccess
+    label: Can grant access
+    format: number
+    status: "${ value > 0 ? 'crit' : 'ok' }"
+  - widget: kpi
+    data: roles.assigned
+    label: Broad roles in use
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+  - widget: table
+    id: roles
+    span: 12
+    data: roles.rows
+    rowKey: id
+    columns:
+      - { field: roleName, label: Role, kind: identity, secondary: description, sortable: true }
+      - field: risk
+        label: Breadth
+        kind: status
+        map: { All actions: [crit, All actions], Can grant access: [crit, Can grant access], Wildcard actions: [warn, Wildcard actions], Specific actions: [ok, Specific actions] }
+        filter: facet
+      - { field: wildcardActions, label: Wildcard actions, kind: number, sortable: true, filter: range }
+      - { field: assignments, label: Assignments, kind: number, sortable: true, filter: range }
+      - { field: principals, label: Principals, kind: number, sortable: true }
+      - { field: scopeCount, label: Assignable scopes, kind: number }
+      - { field: assignableScopes, label: Assignable at, kind: tags, hidden: true }
+      - { field: rootAssignable, label: Assignable at root, kind: status, map: { "true": [warn, "Yes"], "false": [neutral, "No"] }, hidden: true }
+      - { field: actionsText, label: Actions, kind: code, hidden: true }
+      - { field: wildcardDataActions, label: Wildcard data actions, kind: number, hidden: true }
+      - { field: actionCount, label: Actions (count), kind: number, hidden: true }
+      - { field: notActionCount, label: Not actions (count), kind: number, hidden: true }
+      - { field: updatedOn, label: Updated, kind: date, sortable: true }
+      - { field: createdOn, label: Created, kind: date, hidden: true }
+      - { field: roleGuid, label: Role id, kind: guid, hidden: true }
+      - { field: id, label: Role definition id, kind: code, hidden: true }
+    rowActions:
+      - label: Show its assignments
+        icon: funnel
+        href: /p/azure.role-assignments?roleName=${ $encode(row.roleName) }
+      - label: Least-privilege custom roles (guide)
+        icon: book-open
+        href: https://learn.microsoft.com/azure/role-based-access-control/custom-roles
+    empty:
+      title: No broad custom roles
+      body: No custom Azure role in the scopes you can read uses wildcard actions or can grant access. Turn off the filter to list every custom role.
+
+export:
+  formats: [csv, xlsx]
+  fileName: azure-custom-role-risks
+  data: roles.rows
+  columns: all

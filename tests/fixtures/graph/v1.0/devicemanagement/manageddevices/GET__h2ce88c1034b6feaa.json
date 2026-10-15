@@ -1,0 +1,114 @@
+{
+  "value": [
+    {
+      "id": "00000000-0000-4000-8000-000000000601",
+      "deviceName": "EX-LT-0142",
+      "userPrincipalName": "a.lee@example.com",
+      "operatingSystem": "Windows",
+      "osVersion": "10.0.26100.2314",
+      "lastSyncDateTime": "2026-10-15T01:00:00Z",
+      "managedDeviceOwnerType": "company",
+      "model": "Latitude 7450"
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000602",
+      "deviceName": "EX-LT-0211",
+      "userPrincipalName": "m.chen@example.com",
+      "operatingSystem": "Windows",
+      "osVersion": "10.0.22631.4317",
+      "lastSyncDateTime": "2026-10-14T17:30:00Z",
+      "managedDeviceOwnerType": "company",
+      "model": "EliteBook 840 G10"
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000603",
+      "deviceName": "iPhone 15 – R. Castillo",
+      "userPrincipalName": "r.castillo@example.com",
+      "operatingSystem": "iOS",
+      "osVersion": "18.6",
+      "lastSyncDateTime": "2026-06-28T08:00:00Z",
+      "managedDeviceOwnerType": "company",
+      "model": "iPhone 15"
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000604",
+      "deviceName": "Pixel 8 – M. Chen",
+      "userPrincipalName": "m.chen@example.com",
+      "operatingSystem": "Android",
+      "osVersion": "15",
+      "lastSyncDateTime": "2026-10-15T03:05:00Z",
+      "managedDeviceOwnerType": "personal",
+      "model": "Pixel 8"
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000605",
+      "deviceName": "Galaxy S24 – S. Patel",
+      "userPrincipalName": "s.patel@example.com",
+      "operatingSystem": "Android",
+      "osVersion": "14",
+      "lastSyncDateTime": "2026-10-11T19:00:00Z",
+      "managedDeviceOwnerType": "personal",
+      "model": "Galaxy S24"
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000606",
+      "deviceName": "EX-LT-0302",
+      "userPrincipalName": "s.patel@example.com",
+      "operatingSystem": "Windows",
+      "osVersion": "10.0.26100.2314",
+      "lastSyncDateTime": "2026-10-14T08:00:00Z",
+      "managedDeviceOwnerType": "company",
+      "model": "EliteBook 860 G11"
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000607",
+      "deviceName": "EX-LT-0193",
+      "userPrincipalName": "c.novak@example.com",
+      "operatingSystem": "Windows",
+      "osVersion": "10.0.19045.5011",
+      "lastSyncDateTime": "2026-10-10T12:00:00Z",
+      "managedDeviceOwnerType": "company",
+      "model": "ThinkPad T14 Gen 2"
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000608",
+      "deviceName": "MBP-JRIVERA",
+      "userPrincipalName": "j.rivera@example.com",
+      "operatingSystem": "macOS",
+      "osVersion": "15.6.1",
+      "lastSyncDateTime": "2026-10-15T02:10:00Z",
+      "managedDeviceOwnerType": "company",
+      "model": "MacBook Pro (14-inch, M4)"
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000609",
+      "deviceName": "EX-LT-0077",
+      "userPrincipalName": "s.patel@example.com",
+      "operatingSystem": "Windows",
+      "osVersion": "10.0.22621.3880",
+      "lastSyncDateTime": "2025-02-01T10:00:00Z",
+      "managedDeviceOwnerType": "company",
+      "model": "Latitude 5420"
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000610",
+      "deviceName": "Galaxy A15 – J. Okafor",
+      "userPrincipalName": "j.okafor@example.com",
+      "operatingSystem": "Android",
+      "osVersion": "13",
+      "lastSyncDateTime": "2026-10-13T16:20:00Z",
+      "managedDeviceOwnerType": "personal",
+      "model": "SM-A156B"
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000611",
+      "deviceName": "MBA-KNGUYEN",
+      "userPrincipalName": "k.nguyen@example.com",
+      "operatingSystem": "macOS",
+      "osVersion": "14.7.2",
+      "lastSyncDateTime": "2026-10-14T22:40:00Z",
+      "managedDeviceOwnerType": "company",
+      "model": "MacBook Air (M2)"
+    }
+  ]
+}

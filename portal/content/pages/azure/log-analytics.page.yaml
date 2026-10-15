@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/page.schema.json
 kind: page
 id: azure.log-analytics
-version: 1.0.0
+version: 1.0.1
 title: Log Analytics
 summary: Log Analytics workspaces (retention, daily cap, network access) and a gallery of tested KQL queries to run against the selected workspace.
 owner: azure-team
@@ -36,11 +36,13 @@ filters:
 datasources:
   workspaces:
     source: resourceGraph
+    # Resource Graph returns tobool() and other computed booleans as 1/0: localAuthDisabled is projected as
+    # 'true'/'false' text with iff() for the status map and facet.
     query: |
       // af:azure.log-analytics#workspaces
       resources
       | where type =~ 'microsoft.operationalinsights/workspaces'
-      | extend customerId = tostring(properties.customerId), sku = tostring(properties.sku.name), retentionInDays = toint(properties.retentionInDays), dailyQuotaGb = todouble(properties.workspaceCapping.dailyQuotaGb), quotaReached = tostring(properties.workspaceCapping.dataIngestionStatus), publicQuery = tostring(properties.publicNetworkAccessForQuery), publicIngestion = tostring(properties.publicNetworkAccessForIngestion), createdDate = todatetime(properties.createdDate), localAuthDisabled = tobool(properties.features.disableLocalAuth)
+      | extend customerId = tostring(properties.customerId), sku = tostring(properties.sku.name), retentionInDays = toint(properties.retentionInDays), dailyQuotaGb = todouble(properties.workspaceCapping.dailyQuotaGb), quotaReached = tostring(properties.workspaceCapping.dataIngestionStatus), publicQuery = tostring(properties.publicNetworkAccessForQuery), publicIngestion = tostring(properties.publicNetworkAccessForIngestion), createdDate = todatetime(properties.createdDate), localAuthDisabled = iff(coalesce(tobool(properties.features.disableLocalAuth), false), 'true', 'false')
       | join kind=leftouter (resourcecontainers | where type =~ 'microsoft.resources/subscriptions' | project subscriptionId, subscriptionName = name) on subscriptionId
       | project id, name, customerId, sku, retentionInDays, dailyQuotaGb, quotaReached, publicQuery, publicIngestion, localAuthDisabled, createdDate, location, resourceGroup, subscriptionId, subscriptionName, tags
       | order by name asc
@@ -153,7 +155,7 @@ layout:
         filter: facet
       - { field: publicQuery, label: Public query access, filter: facet }
       - { field: publicIngestion, label: Public ingestion, filter: facet, hidden: true }
-      - { field: localAuthDisabled, label: Local auth disabled, kind: boolean, hidden: true }
+      - { field: localAuthDisabled, label: Local authentication, kind: status, map: { "true": [ok, Disabled], "false": [neutral, Allowed] }, filter: facet, hidden: true }
       - { field: location, label: Location, filter: facet }
       - { field: resourceGroup, label: Resource group, filter: facet, hidden: true }
       - { field: subscriptionName, label: Subscription, filter: facet }

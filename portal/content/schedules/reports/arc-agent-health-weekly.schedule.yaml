@@ -1,0 +1,33 @@
+$schema: ../../../packages/schemas/generated/schedule.schema.json
+kind: schedule
+id: reports.arc-agent-health-weekly
+version: 1.0.0
+title: Weekly Azure Arc agent and extension health report
+summary: >-
+  Every Monday at 05:50 UTC, writes Arc-enabled servers with failed extensions, an agent six or more releases behind
+  the newest in the fleet, or a lost connection, as XLSX.
+  Email goes to AF_REPORT_RECIPIENTS when it and AF_MAIL_SENDER are configured.
+owner: azure-team
+tags: [azure, arc, report]
+cron: "50 5 * * 1"
+timezone: UTC
+enabled: true
+identity: automation
+job:
+  kind: report
+  ref: azure.arc-agent-health
+  # Pinned rather than left to the report's defaults so the archive stays comparable from run to run.
+  params: { behind: 6, issuesOnly: true }
+  delivery:
+    - type: file
+      format: xlsx
+      path: azure/arc-agent-health/{date}.xlsx
+      retain: 26
+    - type: email
+      to: ["${ env.AF_REPORT_RECIPIENTS }"]
+      format: xlsx
+retry: { max: 2, backoff: exponential, delay: 5m }
+timeoutSeconds: 1800
+overlap: skip
+requires:
+  azureRoles: [Reader]

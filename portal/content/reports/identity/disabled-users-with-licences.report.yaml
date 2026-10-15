@@ -1,0 +1,178 @@
+$schema: ../../../packages/schemas/generated/report.schema.json
+kind: report
+id: identity.disabled-users-with-licences
+version: 1.0.0
+title: Licensed disabled accounts
+summary: >-
+  Accounts whose sign-in is blocked but that still hold licences — seats paid for and not used. One row per account and
+  licence, showing whether the licence is assigned directly (remove it here) or through a group (remove the account
+  from the group or exclude it). Shared mailboxes converted from users keep a licence only when they need one.
+owner: identity-team
+tags: [identity, licensing, cost, hygiene, report]
+nav: { section: reports, label: Licensed disabled accounts, icon: currency-circle-dollar, order: 22 }
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    graph: [User.Read.All, Organization.Read.All]
+  entraRoles: [Directory Readers]
+
+params:
+  assignment:
+    type: enum
+    label: Assigned
+    facet: true
+    default: Any
+    values:
+      - { value: Any, label: Directly or through a group }
+      - { value: Direct, label: Directly (removable here) }
+      - { value: Group, label: Through a group }
+
+# `accountEnabled eq false and assignedLicenses/$count ne 0` is an advanced query: Graph returns only the disabled,
+# licensed accounts. licenseAssignmentStates says how each licence got there.
+datasources:
+  skus:
+    source: graph
+    request:
+      path: /subscribedSkus
+      query:
+        $select: skuId,skuPartNumber
+    cache: { ttl: 3600 }
+  users:
+    source: graph
+    request:
+      path: /users
+      headers: { ConsistencyLevel: eventual }
+      query:
+        $filter: accountEnabled eq false and assignedLicenses/$count ne 0
+        $count: true
+        $select: id,displayName,userPrincipalName,userType,department,jobTitle,assignedLicenses,licenseAssignmentStates,onPremisesSyncEnabled,createdDateTime
+        $top: 999
+    paging: all
+    maxItems: 50000
+    cache: { ttl: 900 }
+    transform: >-
+      ${ (
+        $names := $merge([[ds.skus.value].{ skuId: skuPartNumber }]);
+        $all := [value.value.(
+          $u := $;
+          assignedLicenses.(
+            $sku := skuId;
+            $states := [$u.licenseAssignmentStates[skuId = $sku]];
+            $direct := $count($states[$not($exists(assignedByGroup)) or assignedByGroup = null]) > 0;
+            $groups := [$states[assignedByGroup].assignedByGroup];
+            {
+              "key": $u.id & '|' & $sku,
+              "userId": $u.id,
+              "displayName": $u.displayName,
+              "userPrincipalName": $u.userPrincipalName,
+              "userType": $u.userType,
+              "department": $u.department,
+              "source": $u.onPremisesSyncEnabled = true ? 'Synced' : 'Cloud',
+              "skuId": $sku,
+              "sku": $lookup($names, $sku) ? $lookup($names, $sku) : $sku,
+              "assignment": $direct and $count($groups) > 0 ? 'Direct and group' : $direct ? 'Direct' : 'Group',
+              "groupId": $groups[0],
+              "groups": $count($groups),
+              "errors": [$states[error and error != 'None'].error],
+              "created": $u.createdDateTime
+            }
+          )
+        )];
+        $shown := $all[
+          $$.params.assignment = 'Any'
+          or ($$.params.assignment = 'Direct' and assignment in ['Direct', 'Direct and group'])
+          or ($$.params.assignment = 'Group' and assignment in ['Group', 'Direct and group'])
+        ];
+        $bySku := $distinct($all.sku);
+        {
+          "rows": [$shown^(displayName, sku)],
+          "accounts": $count($distinct($all.userId)),
+          "licences": $count($all),
+          "direct": $count($all[assignment != 'Group']),
+          "chart": $append([], [($bySku.( $s := $; { "sku": $s, "seats": $count($all[sku = $s]) } ))^(>seats, sku)][[0..5]])
+        }
+      ) }
+
+layout:
+  - widget: kpi
+    id: accounts
+    data: users.accounts
+    label: Disabled accounts holding licences
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+  - widget: kpi
+    id: licences
+    data: users.licences
+    label: Licences tied up
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+  - widget: kpi
+    id: direct
+    data: users.direct
+    label: Assigned directly (removable here)
+    format: number
+  - widget: chart
+    id: bySku
+    title: Licences held by disabled accounts
+    type: bar
+    span: 3
+    rows: 1
+    data: users.chart
+    x: sku
+    y: seats
+    format: number
+  - widget: table
+    id: licences
+    span: 12
+    data: users.rows
+    rowKey: key
+    selection: multi
+    columns:
+      - { field: displayName, label: Account, kind: identity, secondary: userPrincipalName, sortable: true }
+      - { field: sku, label: Licence, filter: facet, sortable: true }
+      - field: assignment
+        label: Assigned
+        kind: status
+        map: { Direct: [warn, Directly], Group: [info, Through a group], "Direct and group": [warn, Directly and through a group] }
+        filter: facet
+      - { field: department, label: Department, filter: facet }
+      - { field: source, label: Source, filter: facet }
+      - { field: userType, label: Type, hidden: true }
+      - { field: groups, label: Groups assigning it, kind: number, hidden: true }
+      - { field: errors, label: Assignment errors, kind: tags, hidden: true }
+      - { field: created, label: Created, kind: date, hidden: true }
+      - { field: skuId, label: SKU id, kind: guid, hidden: true }
+      - { field: userId, label: Object id, kind: guid, hidden: true }
+    inspect:
+      page: identity.user
+      params:
+        id: ${ row.userId }
+    rowActions:
+      - playbook: identity.remove-licence
+        label: Remove licence
+        icon: minus-circle
+        inputs:
+          userId: ${ row.userId }
+          sku: ${ row.sku }
+        when: ${ row.assignment != 'Group' }
+      - { label: Open licensing group, icon: users-three, href: "/p/identity.group?id=${ $encode(row.groupId) }", when: "${ $boolean(row.groupId) }" }
+    bulkActions:
+      - playbook: identity.remove-licence
+        label: Remove licence
+        icon: minus-circle
+        forEach:
+          inputs:
+            userId: ${ row.userId }
+            sku: ${ row.sku }
+          concurrency: 5
+        maxItems: 200
+        when: ${ $count(rows[assignment != 'Group']) = $count(rows) }
+    empty:
+      title: No licences to reclaim
+      body: No blocked account holds a licence.
+
+export:
+  formats: [csv, xlsx]
+  fileName: licensed-disabled-accounts
+  data: users.rows
+  columns: all

@@ -1,0 +1,51 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#servicePrincipals(id,appId,displayName,servicePrincipalType,appOwnerOrganizationId,accountEnabled,appRoleAssignmentRequired,preferredSingleSignOnMode,verifiedPublisher)",
+  "@odata.count": 3,
+  "value": [
+    {
+      "id": "00000000-0000-4000-8000-000000000404",
+      "appId": "00000000-0000-4000-8001-000000000404",
+      "displayName": "PDF Converter Online",
+      "servicePrincipalType": "Application",
+      "appOwnerOrganizationId": "00000000-0000-4000-8000-00000000e0f1",
+      "accountEnabled": true,
+      "appRoleAssignmentRequired": false,
+      "preferredSingleSignOnMode": null,
+      "verifiedPublisher": {
+        "displayName": null,
+        "verifiedPublisherId": null,
+        "addedDateTime": null
+      }
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000405",
+      "appId": "00000000-0000-4000-8001-000000000405",
+      "displayName": "Payroll Online",
+      "servicePrincipalType": "Application",
+      "appOwnerOrganizationId": "00000000-0000-4000-8000-00000000e0f1",
+      "accountEnabled": true,
+      "appRoleAssignmentRequired": true,
+      "preferredSingleSignOnMode": "saml",
+      "verifiedPublisher": {
+        "displayName": "Payroll Online Inc.",
+        "verifiedPublisherId": "5100000",
+        "addedDateTime": "2024-01-01T00:00:00Z"
+      }
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000403",
+      "appId": "00000000-0000-4000-8001-000000000303",
+      "displayName": "Example Reporting",
+      "servicePrincipalType": "Application",
+      "appOwnerOrganizationId": "00000000-0000-4000-8000-00000000e0e0",
+      "accountEnabled": true,
+      "appRoleAssignmentRequired": false,
+      "preferredSingleSignOnMode": null,
+      "verifiedPublisher": {
+        "displayName": null,
+        "verifiedPublisherId": null,
+        "addedDateTime": null
+      }
+    }
+  ]
+}

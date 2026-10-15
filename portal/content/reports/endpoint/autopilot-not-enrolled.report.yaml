@@ -1,0 +1,162 @@
+$schema: ../../../packages/schemas/generated/report.schema.json
+kind: report
+id: endpoint.autopilot-not-enrolled
+version: 1.0.0
+title: Autopilot devices not enrolled
+summary: >-
+  Windows Autopilot devices that haven't enrolled in Intune — never contacted, failed, blocked or waiting for a reset —
+  with group tag, assigned user and last contact, to chase devices that were bought but never deployed or got stuck
+  during provisioning.
+owner: endpoint-team
+tags: [endpoint, intune, autopilot, windows, report]
+nav: { section: reports, label: Autopilot devices not enrolled, icon: rocket-launch, order: 35 }
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    graph: [DeviceManagementServiceConfig.Read.All]
+  entraRoles: [Intune Administrator]
+  licences: [intune]
+
+params:
+  state:
+    type: enum
+    label: Enrolment state
+    facet: true
+    default: any
+    values:
+      - { value: any, label: Any state except enrolled }
+      - { value: notContacted, label: Never contacted }
+      - { value: failed, label: Failed or blocked }
+      - { value: pendingReset, label: Pending reset }
+  minDays:
+    type: number
+    label: Not contacted for at least
+    unit: days
+    default: 0
+    min: 0
+    max: 365
+    integer: true
+    facet: true
+
+savedViews:
+  enabled: true
+  shared: true
+  presets:
+    - { name: Failed or blocked, params: { state: failed } }
+    - { name: Never contacted, params: { state: notContacted } }
+
+# Autopilot filters only on serial number and group tag, so every identity is read (500 per page) and the enrolment
+# state is checked here. "Never contacted" devices report 0001-01-01 as their last contact.
+datasources:
+  devices:
+    source: graph
+    request:
+      path: /deviceManagement/windowsAutopilotDeviceIdentities
+      query:
+        $top: 500
+    paging: all
+    maxItems: 100000
+    cache: { ttl: 1800 }
+    transform: >-
+      ${ (
+        $state := params.state ? params.state : 'any';
+        $min := params.minDays ? $number(params.minDays) : 0;
+        $contacted := function($d) { $d and $substring($d, 0, 4) != '0001' };
+        $all := [value.value[enrollmentState != 'enrolled'].$merge([$, {
+          "contacted": $contacted(lastContactedDateTime),
+          "lastContact": $contacted(lastContactedDateTime) ? lastContactedDateTime,
+          "daysSinceContact": $contacted(lastContactedDateTime) ? -$daysUntil(lastContactedDateTime),
+          "group": groupTag ? groupTag : '(none)',
+          "assignedUser": userPrincipalName ? userPrincipalName
+        }])];
+        $rows := [$all[
+            ($state = 'any'
+              or ($state = 'failed' and enrollmentState in ['failed', 'blocked'])
+              or enrollmentState = $state)
+            and ($min = 0 or $not(contacted) or daysSinceContact >= $min)
+          ]];
+        {
+          "rows": [$rows^(enrollmentState in ['failed', 'blocked'] ? 0 : 1, contacted ? 1 : 0, >daysSinceContact, serialNumber)],
+          "notEnrolled": $count($all),
+          "failed": $count($all[enrollmentState in ['failed', 'blocked']]),
+          "neverContacted": $count($all[$not(contacted)]),
+          "noGroupTag": $count($all[group = '(none)']),
+          "byGroup": $append([], [$distinct($all.group).( $g := $; { "group": $g, "devices": $count($all[group = $g]) } )^(>devices)][[0..5]])
+        }
+      ) }
+
+layout:
+  - widget: kpi
+    data: devices.notEnrolled
+    label: Not enrolled
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+  - widget: kpi
+    data: devices.failed
+    label: Failed or blocked
+    format: number
+    status: "${ value > 0 ? 'crit' : 'ok' }"
+    href: /p/endpoint.autopilot-not-enrolled?state=failed
+  - widget: kpi
+    data: devices.neverContacted
+    label: Never contacted
+    format: number
+    href: /p/endpoint.autopilot-not-enrolled?state=notContacted
+  - widget: kpi
+    data: devices.noGroupTag
+    label: Without a group tag
+    format: number
+    status: "${ value > 0 ? 'info' : 'ok' }"
+  - widget: markdown
+    span: 8
+    text: |
+      **What to do.** *Failed* or *blocked*: check the enrolment restrictions and the device's Autopilot profile, then
+      retry from the Out-of-box experience. *Never contacted*: the device was registered but hasn't been switched on
+      on a network yet — confirm it was delivered. A missing group tag usually means no Autopilot profile reaches the
+      device, so it won't provision as expected.
+  - widget: chart
+    id: byGroup
+    title: By group tag
+    type: bar
+    span: 4
+    rows: 2
+    data: devices.byGroup
+    x: group
+    y: devices
+    format: number
+  - widget: table
+    id: devices
+    span: 12
+    data: devices.rows
+    rowKey: id
+    columns:
+      - { field: serialNumber, label: Serial number, kind: code, sortable: true }
+      - field: enrollmentState
+        label: Enrolment
+        kind: status
+        map: { notContacted: [neutral, Never contacted], pendingReset: [info, Pending reset], failed: [crit, Failed], blocked: [crit, Blocked], unknown: [neutral, Unknown] }
+        filter: facet
+      - { field: daysSinceContact, label: Days since contact, kind: number, align: end, sortable: true, filter: range }
+      - { field: group, label: Group tag, filter: facet }
+      - { field: model, label: Model, filter: facet }
+      - { field: manufacturer, label: Manufacturer, hidden: true }
+      - { field: assignedUser, label: Assigned user }
+      - { field: lastContact, label: Last contact, kind: datetime, hidden: true }
+      - { field: purchaseOrderIdentifier, label: Purchase order, hidden: true }
+      - { field: id, label: Autopilot id, kind: guid, hidden: true }
+    rowActions:
+      - label: Open in Intune admin center
+        icon: arrow-square-out
+        href: https://intune.microsoft.com/#view/Microsoft_Intune_Enrollment/AutopilotDevices.ReactView
+      - label: All Autopilot devices
+        icon: list
+        href: /p/endpoint.autopilot?q=${ $encode(row.serialNumber) }
+    empty:
+      title: Every Autopilot device is enrolled
+      body: No registered device is waiting to enrol or stuck in provisioning.
+
+export:
+  formats: [csv, xlsx]
+  fileName: autopilot-not-enrolled
+  data: devices.rows
+  columns: all

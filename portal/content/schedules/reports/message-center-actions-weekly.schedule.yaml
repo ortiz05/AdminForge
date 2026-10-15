@@ -1,0 +1,35 @@
+$schema: ../../../packages/schemas/generated/schedule.schema.json
+kind: schedule
+id: reports.message-center-actions-weekly
+version: 1.0.0
+title: Weekly message center actions digest
+summary: >-
+  Every Monday at 07:40 UTC, writes message center posts that need action within 60 days (or whose act-by date just
+  passed) and recent major changes as XLSX, and emails it to the report recipients as the change digest.
+owner: m365-team
+tags: [m365, message-center, change-management, report]
+cron: "40 7 * * 1"
+timezone: UTC
+enabled: true
+identity: automation
+job:
+  kind: report
+  ref: m365.message-center-actions
+  params: { horizon: 60, majorChanges: true, service: All }
+  delivery:
+    - type: file
+      format: xlsx
+      path: m365/message-center-actions/{date}.xlsx
+      retain: 26
+    # Recipients are configuration (never content); without AF_MAIL_SENDER / AF_REPORT_RECIPIENTS the run notes
+    # "not configured" and the file is still kept.
+    - type: email
+      to: ["${ env.AF_REPORT_RECIPIENTS }"]
+      format: xlsx
+retry: { max: 2, backoff: exponential, delay: 5m }
+timeoutSeconds: 1800
+overlap: skip
+requires:
+  # Application permissions held by the automation identity (ADR-011).
+  scopes:
+    graph: [ServiceMessage.Read.All]

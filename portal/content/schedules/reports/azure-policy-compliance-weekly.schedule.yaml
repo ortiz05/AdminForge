@@ -1,0 +1,33 @@
+$schema: ../../../packages/schemas/generated/schedule.schema.json
+kind: schedule
+id: reports.azure-policy-compliance-weekly
+version: 1.0.0
+title: Weekly Azure Policy compliance report
+summary: >-
+  Every Monday at 05:45 UTC, writes the Azure Policy assignments and policies with non-compliant resources, their
+  effect and enforcement, as XLSX.
+  Email goes to AF_REPORT_RECIPIENTS when it and AF_MAIL_SENDER are configured.
+owner: azure-team
+tags: [azure, policy, governance, report]
+cron: "45 5 * * 1"
+timezone: UTC
+enabled: true
+identity: automation
+job:
+  kind: report
+  ref: azure.policy-compliance
+  # Pinned rather than left to the report's defaults so the archive stays comparable from run to run.
+  params: { nonCompliantOnly: true }
+  delivery:
+    - type: file
+      format: xlsx
+      path: azure/policy-compliance/{date}.xlsx
+      retain: 26
+    - type: email
+      to: ["${ env.AF_REPORT_RECIPIENTS }"]
+      format: xlsx
+retry: { max: 2, backoff: exponential, delay: 5m }
+timeoutSeconds: 1800
+overlap: skip
+requires:
+  azureRoles: [Reader]

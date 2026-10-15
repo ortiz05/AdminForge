@@ -1,0 +1,34 @@
+$schema: ../../../packages/schemas/generated/schedule.schema.json
+kind: schedule
+id: reports.azure-budgets-daily
+version: 1.0.0
+title: Daily Azure budgets report
+summary: >-
+  Every day at 06:35 UTC, writes the Cost Management budgets of the installation's subscription (AF_SUBSCRIPTION_ID)
+  with spend, forecast and alert rules, as XLSX — over, close to the limit (80 %) or forecast to overrun.
+  Email goes to AF_REPORT_RECIPIENTS when it and AF_MAIL_SENDER are configured.
+owner: azure-team
+tags: [azure, cost, budgets, report]
+cron: "35 6 * * *"
+timezone: UTC
+enabled: true
+identity: automation
+job:
+  kind: report
+  ref: azure.budgets
+  # Pinned rather than left to the report's defaults so the archive stays comparable from run to run.
+  params: { nearPercent: 80 }
+  delivery:
+    - type: file
+      format: xlsx
+      path: azure/budgets/{date}.xlsx
+      retain: 31
+    - type: email
+      to: ["${ env.AF_REPORT_RECIPIENTS }"]
+      format: xlsx
+retry: { max: 2, backoff: exponential, delay: 5m }
+timeoutSeconds: 1800
+overlap: skip
+requires:
+  # Reader (or Cost Management Reader) on AF_SUBSCRIPTION_ID, which provisioning grants the automation identity.
+  azureRoles: [Reader]

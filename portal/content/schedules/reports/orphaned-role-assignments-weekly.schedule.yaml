@@ -1,0 +1,37 @@
+$schema: ../../../packages/schemas/generated/schedule.schema.json
+kind: schedule
+id: reports.orphaned-role-assignments-weekly
+version: 1.0.0
+title: Weekly role assignments to deleted identities report
+summary: >-
+  Every Monday at 05:30 UTC, writes Azure role assignments whose user, group or service principal no longer exists in
+  Microsoft Entra ID, as XLSX. Remove them from the report in the portal (Remove assignment asks a second engineer to
+  approve).
+  Email goes to AF_REPORT_RECIPIENTS when it and AF_MAIL_SENDER are configured.
+owner: azure-team
+tags: [azure, rbac, hygiene, report]
+cron: "30 5 * * 1"
+timezone: UTC
+enabled: true
+identity: automation
+job:
+  kind: report
+  ref: azure.orphaned-role-assignments
+  # Pinned rather than left to the report's defaults so the archive stays comparable from run to run.
+  params: { privilegedOnly: false }
+  delivery:
+    - type: file
+      format: xlsx
+      path: azure/orphaned-role-assignments/{date}.xlsx
+      retain: 26
+    - type: email
+      to: ["${ env.AF_REPORT_RECIPIENTS }"]
+      format: xlsx
+retry: { max: 2, backoff: exponential, delay: 5m }
+timeoutSeconds: 1800
+overlap: skip
+requires:
+  # Reader for the assignments; Directory.Read.All (application) to check which principals still exist.
+  scopes:
+    graph: [Directory.Read.All]
+  azureRoles: [Reader]

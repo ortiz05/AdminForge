@@ -1,0 +1,25 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#subscribedSkus(skuId,skuPartNumber)",
+  "value": [
+    {
+      "skuId": "30000000-0000-4000-8000-000000000401",
+      "skuPartNumber": "SPE_E5"
+    },
+    {
+      "skuId": "30000000-0000-4000-8000-000000000402",
+      "skuPartNumber": "SPE_E3"
+    },
+    {
+      "skuId": "30000000-0000-4000-8000-000000000403",
+      "skuPartNumber": "EMS"
+    },
+    {
+      "skuId": "30000000-0000-4000-8000-000000000404",
+      "skuPartNumber": "POWER_BI_PRO"
+    },
+    {
+      "skuId": "30000000-0000-4000-8000-000000000406",
+      "skuPartNumber": "VISIOCLIENT"
+    }
+  ]
+}

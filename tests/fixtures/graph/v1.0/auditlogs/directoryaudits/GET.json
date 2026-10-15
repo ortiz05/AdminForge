@@ -466,6 +466,106 @@
         }
       ],
       "additionalDetails": []
+    },
+    {
+      "id": "Directory_14_20261013",
+      "category": "GroupManagement",
+      "correlationId": "00000000-0000-4000-8000-00000000ad14",
+      "result": "success",
+      "resultReason": "",
+      "activityDisplayName": "Add member to group",
+      "activityDateTime": "2026-10-13T19:42:00Z",
+      "loggedByService": "Core Directory",
+      "operationType": "Add",
+      "initiatedBy": {
+        "app": null,
+        "user": {
+          "id": "00000000-0000-4000-8000-000000000109",
+          "displayName": "Jordan Rivera",
+          "userPrincipalName": "j.rivera@example.com",
+          "ipAddress": "198.51.100.77"
+        }
+      },
+      "targetResources": [
+        {
+          "id": "00000000-0000-4000-8000-000000000111",
+          "displayName": null,
+          "type": "User",
+          "userPrincipalName": "c.novak@example.com",
+          "groupType": null,
+          "modifiedProperties": [
+            {
+              "displayName": "Group.ObjectID",
+              "oldValue": null,
+              "newValue": "\"00000000-0000-4000-8000-0000000002ff\""
+            },
+            {
+              "displayName": "Group.DisplayName",
+              "oldValue": null,
+              "newValue": "\"SG-AdminForge-dev-Portal.Operator\""
+            }
+          ]
+        },
+        {
+          "id": "00000000-0000-4000-8000-0000000002ff",
+          "displayName": null,
+          "type": "Group",
+          "userPrincipalName": null,
+          "groupType": "unknownFutureValue",
+          "modifiedProperties": []
+        }
+      ],
+      "additionalDetails": []
+    },
+    {
+      "id": "Directory_15_20261012",
+      "category": "GroupManagement",
+      "correlationId": "00000000-0000-4000-8000-00000000ad15",
+      "result": "success",
+      "resultReason": "",
+      "activityDisplayName": "Remove member from group",
+      "activityDateTime": "2026-10-12T08:05:00Z",
+      "loggedByService": "Core Directory",
+      "operationType": "Unassign",
+      "initiatedBy": {
+        "app": null,
+        "user": {
+          "id": "00000000-0000-4000-8000-000000000101",
+          "displayName": "Adele Lee",
+          "userPrincipalName": "a.lee@example.com",
+          "ipAddress": "203.0.113.24"
+        }
+      },
+      "targetResources": [
+        {
+          "id": "00000000-0000-4000-8000-000000000104",
+          "displayName": null,
+          "type": "User",
+          "userPrincipalName": "r.castillo@example.com",
+          "groupType": null,
+          "modifiedProperties": [
+            {
+              "displayName": "Group.ObjectID",
+              "oldValue": "\"00000000-0000-4000-8000-0000000002fe\"",
+              "newValue": null
+            },
+            {
+              "displayName": "Group.DisplayName",
+              "oldValue": "\"SG-AdminForge-dev-Portal.Reader\"",
+              "newValue": null
+            }
+          ]
+        },
+        {
+          "id": "00000000-0000-4000-8000-0000000002fe",
+          "displayName": null,
+          "type": "Group",
+          "userPrincipalName": null,
+          "groupType": "unknownFutureValue",
+          "modifiedProperties": []
+        }
+      ],
+      "additionalDetails": []
     }
   ]
 }

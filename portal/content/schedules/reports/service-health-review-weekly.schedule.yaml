@@ -1,0 +1,36 @@
+$schema: ../../../packages/schemas/generated/schedule.schema.json
+kind: schedule
+id: reports.service-health-review-weekly
+version: 1.0.0
+title: Weekly Microsoft 365 service health review
+summary: >-
+  Every Monday at 07:35 UTC, writes the Microsoft 365 incidents and advisories of the last 30 days (duration,
+  service, still open) as XLSX and emails it to the report recipients; a year of history is kept for the service
+  review.
+owner: m365-team
+tags: [m365, service-health, report]
+cron: "35 7 * * 1"
+timezone: UTC
+enabled: true
+identity: automation
+job:
+  kind: report
+  ref: m365.service-health-review
+  params: { days: 30, classification: all }
+  delivery:
+    - type: file
+      format: xlsx
+      path: m365/service-health-review/{date}.xlsx
+      retain: 52
+    # Recipients are configuration (never content); without AF_MAIL_SENDER / AF_REPORT_RECIPIENTS the run notes
+    # "not configured" and the file is still kept.
+    - type: email
+      to: ["${ env.AF_REPORT_RECIPIENTS }"]
+      format: xlsx
+retry: { max: 2, backoff: exponential, delay: 5m }
+timeoutSeconds: 1800
+overlap: skip
+requires:
+  # Application permissions held by the automation identity (ADR-011).
+  scopes:
+    graph: [ServiceHealth.Read.All]

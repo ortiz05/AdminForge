@@ -1,0 +1,137 @@
+$schema: ../../../packages/schemas/generated/report.schema.json
+kind: report
+id: m365.shared-mailbox-sign-in
+version: 1.0.0
+title: Shared mailboxes with sign-in allowed
+summary: >-
+  Shared mailboxes whose account can still sign in. Nobody should sign in to a shared mailbox directly — people open it
+  with their own account — and an enabled account with a password is an easy target. Block sign-in on each one.
+owner: m365-team
+tags: [m365, exchange, security, shared-mailboxes, report]
+nav: { section: reports, label: Shared mailboxes with sign-in allowed, icon: lock-key-open, order: 122 }
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    exchange: [Exchange.Manage]
+  entraRoles: [Exchange Recipient Administrator, Global Reader]
+  licences: [exchange]
+
+params:
+  includeBlocked: { type: boolean, label: Also list mailboxes already blocked, default: false, facet: true }
+
+filters:
+  facets: [includeBlocked]
+
+# Exchange Online reports whether the account behind each mailbox is disabled (synced from Microsoft Entra ID).
+# Mailboxes whose state Exchange didn't return are listed as Unknown and counted separately.
+datasources:
+  mailboxes:
+    source: runner
+    label: Shared mailboxes and their sign-in state (PowerShell)
+    script: exchange/Get-MailboxSummary.ps1
+    sha256: 5b35292d4c039dad7036b7e99434a13f2da0c618e2241505a6997b75f02ad12d
+    services: [exchange]
+    timeoutSeconds: 900
+    parameters:
+      resultSize: 10000
+      recipientTypeDetails: [SharedMailbox]
+      includeMailboxes: true
+      includeAccountState: true
+    cache: { ttl: 900 }
+    transform: >-
+      ${ (
+        $v := value[0];  /* runner result = [output data]; one summary object */
+        $all := [$v.mailboxes.$merge([$, {
+          "signIn": accountDisabled = false ? 'allowed' : accountDisabled = true ? 'blocked' : 'unknown',
+          "canBlock": accountDisabled = false and $exists(externalDirectoryObjectId) and externalDirectoryObjectId != null
+        }])];
+        $rows := [$all[signIn != 'blocked' or $$.params.includeBlocked = true]];
+        {
+          "rows": [$rows^(signIn = 'allowed' ? 0 : signIn = 'unknown' ? 1 : 2, displayName)],
+          "allowed": $count($all[signIn = 'allowed']),
+          "unknown": $count($all[signIn = 'unknown']),
+          "blocked": $count($all[signIn = 'blocked']),
+          "total": $v.total,
+          "truncated": $v.truncated = true
+        }
+      ) }
+
+layout:
+  - widget: kpi
+    data: mailboxes.allowed
+    label: Sign-in allowed
+    format: number
+    status: "${ value > 0 ? 'crit' : 'ok' }"
+  - widget: kpi
+    data: mailboxes.blocked
+    label: Sign-in blocked
+    format: number
+  - widget: kpi
+    data: mailboxes.unknown
+    label: State not reported
+    format: number
+    status: "${ value > 0 ? 'info' : 'ok' }"
+  - widget: kpi
+    data: mailboxes.total
+    label: Shared mailboxes
+    format: number
+  - widget: markdown
+    span: 12
+    when: ${ mailboxes.truncated = true }
+    text: Only the first 10,000 shared mailboxes were read; the counts above cover those.
+  - widget: markdown
+    span: 12
+    text: |
+      **What to do.** Use **Block sign-in** on each mailbox (or select several). People with Full Access keep using
+      the mailbox from their own Outlook. If an application signs in as the mailbox to send mail, move it to an app
+      registration with Mail.Send scoped by an application access policy before blocking. Find more context on the
+      Shared mailboxes page.
+  - widget: table
+    id: mailboxes
+    span: 12
+    data: mailboxes.rows
+    rowKey: primarySmtpAddress
+    selection: multi
+    columns:
+      - { field: displayName, label: Mailbox, kind: identity, secondary: primarySmtpAddress, sortable: true }
+      - field: signIn
+        label: Sign-in
+        kind: status
+        map: { allowed: [crit, Allowed], unknown: [info, Unknown], blocked: [ok, Blocked] }
+        filter: facet
+      - { field: whenCreated, label: Created, kind: date, filter: date, sortable: true }
+      - { field: litigationHoldEnabled, label: Litigation hold, kind: boolean, hidden: true }
+      - { field: archiveStatus, label: Archive, hidden: true }
+      - { field: hiddenFromAddressListsEnabled, label: Hidden from address lists, kind: boolean, hidden: true }
+      - { field: userPrincipalName, label: Sign-in name, hidden: true }
+      - { field: externalDirectoryObjectId, label: Account object id, kind: guid, hidden: true }
+    inspect:
+      page: m365.mailbox
+      params:
+        mailbox: ${ row.primarySmtpAddress }
+    rowActions:
+      - playbook: identity.disable-user
+        label: Block sign-in
+        icon: prohibit
+        inputs:
+          userId: ${ row.externalDirectoryObjectId }
+        when: ${ row.canBlock = true }
+    bulkActions:
+      - playbook: identity.disable-user
+        label: Block sign-in
+        icon: prohibit
+        forEach:
+          inputs:
+            userId: ${ row.externalDirectoryObjectId }
+          concurrency: 5
+        maxItems: 100
+        when: ${ $count(rows[canBlock = true]) = $count(rows) }
+    empty:
+      title: Every shared mailbox is blocked from sign-in
+      body: No shared mailbox account can sign in. Turn on "Also list mailboxes already blocked" to see them all.
+
+export:
+  formats: [csv, xlsx]
+  fileName: shared-mailboxes-sign-in
+  data: mailboxes.rows
+  columns: all

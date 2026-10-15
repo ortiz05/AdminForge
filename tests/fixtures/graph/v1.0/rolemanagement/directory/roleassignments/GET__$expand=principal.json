@@ -11,7 +11,11 @@
         "@odata.type": "#microsoft.graph.user",
         "id": "00000000-0000-4000-8000-000000000110",
         "displayName": "Break Glass 01",
-        "userPrincipalName": "bg01@exampleorg.onmicrosoft.com"
+        "userPrincipalName": "bg01@exampleorg.onmicrosoft.com",
+        "accountEnabled": true,
+        "onPremisesSyncEnabled": null,
+        "userType": "Member",
+        "assignedLicenses": []
       },
       "roleDefinition": {
         "id": "62e90394-69f5-4237-9190-012177145e10",
@@ -51,7 +55,11 @@
         "@odata.type": "#microsoft.graph.user",
         "id": "00000000-0000-4000-8000-000000000109",
         "displayName": "Jordan Rivera",
-        "userPrincipalName": "j.rivera@example.com"
+        "userPrincipalName": "j.rivera@example.com",
+        "accountEnabled": true,
+        "onPremisesSyncEnabled": null,
+        "userType": "Member",
+        "assignedLicenses": []
       },
       "roleDefinition": {
         "id": "e8611ab8-c189-46e8-94e1-60213ab1f814",
@@ -90,7 +98,16 @@
         "@odata.type": "#microsoft.graph.user",
         "id": "00000000-0000-4000-8000-000000000101",
         "displayName": "Adele Lee",
-        "userPrincipalName": "a.lee@example.com"
+        "userPrincipalName": "a.lee@example.com",
+        "accountEnabled": true,
+        "onPremisesSyncEnabled": null,
+        "userType": "Member",
+        "assignedLicenses": [
+          {
+            "skuId": "30000000-0000-4000-8000-000000000401",
+            "disabledPlans": []
+          }
+        ]
       },
       "roleDefinition": {
         "id": "fe930be7-5e62-47db-91af-98c3a49a38b1",
@@ -110,7 +127,16 @@
         "@odata.type": "#microsoft.graph.user",
         "id": "00000000-0000-4000-8000-0000000000a1",
         "displayName": "Avery Engineer",
-        "userPrincipalName": "avery@example.com"
+        "userPrincipalName": "avery@example.com",
+        "accountEnabled": true,
+        "onPremisesSyncEnabled": null,
+        "userType": "Member",
+        "assignedLicenses": [
+          {
+            "skuId": "30000000-0000-4000-8000-000000000401",
+            "disabledPlans": []
+          }
+        ]
       },
       "roleDefinition": {
         "id": "f2ef992c-3afb-46b9-b7cf-a126ee74c451",
@@ -130,7 +156,16 @@
         "@odata.type": "#microsoft.graph.user",
         "id": "00000000-0000-4000-8000-000000000108",
         "displayName": "Dana Okafor",
-        "userPrincipalName": "d.okafor@example.com"
+        "userPrincipalName": "d.okafor@example.com",
+        "accountEnabled": true,
+        "onPremisesSyncEnabled": true,
+        "userType": "Member",
+        "assignedLicenses": [
+          {
+            "skuId": "30000000-0000-4000-8000-000000000401",
+            "disabledPlans": []
+          }
+        ]
       },
       "roleDefinition": {
         "id": "29232cdf-9323-42fd-ade2-1d097af3e4de",
@@ -150,7 +185,11 @@
         "@odata.type": "#microsoft.graph.user",
         "id": "00000000-0000-4000-8000-000000000112",
         "displayName": "Svc Reporting",
-        "userPrincipalName": "svc-reporting@example.com"
+        "userPrincipalName": "svc-reporting@example.com",
+        "accountEnabled": true,
+        "onPremisesSyncEnabled": null,
+        "userType": "Member",
+        "assignedLicenses": []
       },
       "roleDefinition": {
         "id": "4a5d8f65-41da-4de4-8968-e035b65339cf",
@@ -170,7 +209,16 @@
         "@odata.type": "#microsoft.graph.user",
         "id": "00000000-0000-4000-8000-000000000101",
         "displayName": "Adele Lee",
-        "userPrincipalName": "a.lee@example.com"
+        "userPrincipalName": "a.lee@example.com",
+        "accountEnabled": true,
+        "onPremisesSyncEnabled": null,
+        "userType": "Member",
+        "assignedLicenses": [
+          {
+            "skuId": "30000000-0000-4000-8000-000000000401",
+            "disabledPlans": []
+          }
+        ]
       },
       "roleDefinition": {
         "id": "729827e3-9c14-49f7-bb1b-9608f156bbb8",
@@ -190,7 +238,16 @@
         "@odata.type": "#microsoft.graph.user",
         "id": "00000000-0000-4000-8000-000000000108",
         "displayName": "Dana Okafor",
-        "userPrincipalName": "d.okafor@example.com"
+        "userPrincipalName": "d.okafor@example.com",
+        "accountEnabled": true,
+        "onPremisesSyncEnabled": true,
+        "userType": "Member",
+        "assignedLicenses": [
+          {
+            "skuId": "30000000-0000-4000-8000-000000000401",
+            "disabledPlans": []
+          }
+        ]
       },
       "roleDefinition": {
         "id": "3a2c62db-5318-420d-8d74-23affee5d9d5",
@@ -210,7 +267,16 @@
         "@odata.type": "#microsoft.graph.user",
         "id": "00000000-0000-4000-8000-0000000000a1",
         "displayName": "Avery Engineer",
-        "userPrincipalName": "avery@example.com"
+        "userPrincipalName": "avery@example.com",
+        "accountEnabled": true,
+        "onPremisesSyncEnabled": null,
+        "userType": "Member",
+        "assignedLicenses": [
+          {
+            "skuId": "30000000-0000-4000-8000-000000000401",
+            "disabledPlans": []
+          }
+        ]
       },
       "roleDefinition": {
         "id": "fe930be7-5e62-47db-91af-98c3a49a38b1",

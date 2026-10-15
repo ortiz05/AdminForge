@@ -1,0 +1,22 @@
+$schema: ../../packages/schemas/generated/probe.schema.json
+kind: probe
+id: probes.global-admins-too-many
+version: 1.0.0
+title: Global Administrators (too many)
+summary: >-
+  Counts the accounts that hold the Global Administrator role directly. Microsoft recommends fewer than five: warns at
+  five and is critical at eight. Members of role-assignable groups and PIM-eligible holders aren't counted.
+owner: identity-team
+tags: [identity, privileged, roles, sweep-6h]
+check:
+  kind: graphCount
+  path: /directoryRoles(roleTemplateId='62e90394-69f5-4237-9190-012177145e10')/members
+  query:
+    $select: id,displayName,userPrincipalName
+  fields: [displayName, userPrincipalName]
+thresholds: { warn: 5, crit: 8 }
+intervalHint: PT6H
+timeoutMs: 20000
+requires:
+  scopes:
+    graph: [RoleManagement.Read.Directory]

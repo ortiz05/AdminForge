@@ -1,0 +1,28 @@
+$schema: ../../packages/schemas/generated/probe.schema.json
+kind: probe
+id: probes.adminforge-group-changes
+version: 1.0.0
+title: AdminForge role group changes (last 2 hours)
+summary: >-
+  Critical when someone added or removed members or owners, or changed app-role assignments, on an SG-AdminForge-*
+  group in the last two hours — those groups grant portal roles, and AdminForge itself never changes them. Details
+  name the change and who made it; the identity.adminforge-group-changes report has the full week.
+owner: portal-admins
+tags: [identity, portal, audit, security, sweep-1h]
+check:
+  kind: graphCount
+  path: /auditLogs/directoryAudits
+  query:
+    $filter: >-
+      ${ 'activityDateTime ge ' & $daysAgo(2 / 24) & ' and (' & $join(['Add member to group', 'Remove member from group',
+      'Add owner to group', 'Remove owner from group', 'Add app role assignment to group',
+      'Remove app role assignment from group'].('activityDisplayName eq ' & $odata($)), ' or ') & ')' }
+    $top: 999
+  items: "${ value[$contains($string(targetResources), 'SG-AdminForge-')] }"
+  fields: [activityDateTime, activityDisplayName, initiatedBy.user.userPrincipalName, initiatedBy.app.displayName]
+thresholds: { crit: 1 }
+intervalHint: PT1H
+timeoutMs: 30000
+requires:
+  scopes:
+    graph: [AuditLog.Read.All]

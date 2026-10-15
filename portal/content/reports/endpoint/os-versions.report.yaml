@@ -1,11 +1,12 @@
 $schema: ../../../packages/schemas/generated/report.schema.json
 kind: report
 id: endpoint.os-versions
-version: 1.0.0
+version: 1.1.0
 title: OS version distribution
 summary: >-
   Operating system versions across Intune-managed devices, with Windows builds named by release (24H2, 23H2…) and
-  flagged when out of support — to plan feature updates and find devices stuck on old builds.
+  flagged when out of support — to plan feature updates — and the devices still on an out-of-support release, with
+  their user and last check-in, so they can be upgraded or replaced.
 owner: endpoint-team
 tags: [endpoint, intune, patching, report]
 nav: { section: reports, label: OS versions, icon: stack, order: 32 }
@@ -26,7 +27,7 @@ datasources:
     request:
       path: /deviceManagement/managedDevices
       query:
-        $select: id,operatingSystem,osVersion
+        $select: id,deviceName,userPrincipalName,operatingSystem,osVersion,lastSyncDateTime,managedDeviceOwnerType,model
         $filter: ${ params.os != 'Any' ? 'operatingSystem eq ' & $odata(params.os) }
         $top: 1000
     paging: all
@@ -50,7 +51,15 @@ datasources:
                 { "release": $w ? $w.release : 'Windows build ' & $build, "supported": $w ? $w.supported : false } )
             : { "release": $os & ' ' & $join($split($ver, '.')[[0..1]], '.'), "supported": true }
         };
-        $all := [value.value.( $l := $label(operatingSystem, osVersion ? osVersion : '0.0.0'); { "os": operatingSystem, "release": $l.release, "supported": $l.supported, "version": osVersion } )];
+        $all := [value.value.(
+          $l := $label(operatingSystem, osVersion ? osVersion : '0.0.0');
+          {
+            "id": id, "deviceName": deviceName, "userPrincipalName": userPrincipalName, "os": operatingSystem,
+            "release": $l.release, "supported": $l.supported, "version": osVersion, "model": model,
+            "ownership": managedDeviceOwnerType, "lastSyncDateTime": lastSyncDateTime
+          }
+        )];
+        $outdated := $all[supported = false].$merge([$, { "daysSinceSync": lastSyncDateTime ? -$daysUntil(lastSyncDateTime) }]);
         $total := $count($all);
         $groups := [$distinct($all.release).(
           $r := $;
@@ -68,6 +77,7 @@ datasources:
           "rows": [$groups^(os, >devices)],
           "total": $total,
           "unsupported": $sum($groups[supported = false].devices),
+          "outdated": [$outdated^(release, deviceName)],
           "chart": [($groups^(>devices))[[0..5]]]
         }
       ) }
@@ -84,6 +94,7 @@ layout:
     label: On out-of-support Windows releases
     format: number
     status: "${ value > 0 ? 'crit' : 'ok' }"
+    hint: Listed under Devices on out-of-support releases
   - widget: chart
     id: releaseChart
     title: Most common releases
@@ -113,6 +124,27 @@ layout:
     empty:
       title: No managed devices
       body: No devices are enrolled in Intune.
+  - widget: table
+    id: outdated
+    title: Devices on out-of-support releases
+    span: 12
+    data: devices.outdated
+    rowKey: id
+    columns:
+      - { field: deviceName, label: Device, kind: identity, secondary: userPrincipalName, sortable: true }
+      - { field: release, label: Release, filter: facet, sortable: true }
+      - { field: version, label: Build, kind: code }
+      - { field: ownership, label: Ownership, filter: facet }
+      - { field: daysSinceSync, label: Days since check-in, kind: number, align: end, sortable: true, filter: range }
+      - { field: model, label: Model, hidden: true }
+      - { field: lastSyncDateTime, label: Last check-in, kind: datetime, hidden: true }
+    inspect:
+      page: endpoint.device
+      params:
+        id: ${ row.id }
+    empty:
+      title: No device on an out-of-support release
+      body: Every Windows device runs a release that still gets security updates.
 
 export:
   formats: [csv, xlsx]

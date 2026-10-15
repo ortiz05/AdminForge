@@ -1,0 +1,75 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#groups(id,displayName,mail,groupTypes,securityEnabled,mailEnabled,membershipRule,onPremisesSyncEnabled,isAssignableToRole,createdDateTime,visibility)",
+  "@odata.count": 5,
+  "value": [
+    {
+      "id": "00000000-0000-4000-8000-000000000202",
+      "displayName": "Project Falcon",
+      "mail": "falcon@example.com",
+      "groupTypes": [
+        "Unified"
+      ],
+      "securityEnabled": false,
+      "mailEnabled": true,
+      "membershipRule": null,
+      "onPremisesSyncEnabled": null,
+      "isAssignableToRole": null,
+      "createdDateTime": "2025-09-02T09:00:00Z",
+      "visibility": "Private"
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000203",
+      "displayName": "All Employees (dynamic)",
+      "mail": null,
+      "groupTypes": [
+        "DynamicMembership"
+      ],
+      "securityEnabled": true,
+      "mailEnabled": false,
+      "membershipRule": "(user.userType -eq \"Member\") and (user.accountEnabled -eq true)",
+      "onPremisesSyncEnabled": null,
+      "isAssignableToRole": null,
+      "createdDateTime": "2020-02-01T09:00:00Z",
+      "visibility": null
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000204",
+      "displayName": "LIC-M365-E5",
+      "mail": null,
+      "groupTypes": [],
+      "securityEnabled": true,
+      "mailEnabled": false,
+      "membershipRule": null,
+      "onPremisesSyncEnabled": null,
+      "isAssignableToRole": null,
+      "createdDateTime": "2021-03-01T09:00:00Z",
+      "visibility": null
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000205",
+      "displayName": "GG-Engineering (AD)",
+      "mail": null,
+      "groupTypes": [],
+      "securityEnabled": true,
+      "mailEnabled": false,
+      "membershipRule": null,
+      "onPremisesSyncEnabled": true,
+      "isAssignableToRole": null,
+      "createdDateTime": "2019-04-02T09:00:00Z",
+      "visibility": null
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000206",
+      "displayName": "Finance Announcements",
+      "mail": "finance-announce@example.com",
+      "groupTypes": [],
+      "securityEnabled": false,
+      "mailEnabled": true,
+      "membershipRule": null,
+      "onPremisesSyncEnabled": null,
+      "isAssignableToRole": null,
+      "createdDateTime": "2022-01-10T09:00:00Z",
+      "visibility": null
+    }
+  ]
+}

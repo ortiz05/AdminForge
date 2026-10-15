@@ -1,0 +1,199 @@
+$schema: ../../../packages/schemas/generated/report.schema.json
+kind: report
+id: m365.mailbox-storage
+version: 1.0.0
+title: Mailbox storage and inactive mailboxes
+summary: >-
+  Mailboxes close to or over their send quota, and mailboxes with no activity for the chosen number of days, from the
+  Microsoft 365 mailbox usage report — storage used, quotas, items and archive per mailbox.
+owner: m365-team
+tags: [m365, exchange, usage, storage, hygiene, report]
+nav: { section: reports, label: Mailbox storage and inactivity, icon: tray, order: 114 }
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    graph: [Reports.Read.All]
+  entraRoles: [Reports Reader, Global Reader]
+  licences: [exchange]
+
+params:
+  view:
+    type: enum
+    label: Show
+    facet: true
+    default: attention
+    values:
+      - { value: attention, label: Near quota or inactive }
+      - { value: quota, label: Near or over quota }
+      - { value: inactive, label: Inactive }
+      - { value: all, label: All mailboxes }
+  threshold:
+    type: number
+    label: Near quota at
+    unit: "%"
+    default: 90
+    min: 50
+    max: 100
+    integer: true
+    facet: true
+  inactiveDays:
+    type: enum
+    label: Inactive after
+    facet: true
+    default: 90
+    values:
+      - { value: 30, label: 30 days }
+      - { value: 60, label: 60 days }
+      - { value: 90, label: 90 days }
+      - { value: 180, label: 180 days }
+
+filters:
+  facets: [view, threshold, inactiveDays]
+
+savedViews:
+  enabled: true
+  shared: true
+  presets:
+    - { name: Near or over quota, params: { view: quota } }
+    - { name: Inactive for 90 days, params: { view: inactive, inactiveDays: 90 } }
+
+# Quotas are per mailbox (prohibit-send). Usage data lags 24–48 hours; when user details are concealed in reports the
+# names are hashes (no "@") and the mailbox can't be opened from here.
+datasources:
+  mailboxes:
+    source: graph
+    label: Mailbox usage detail (usage report)
+    request:
+      beta: true
+      path: /reports/getMailboxUsageDetail(period='D30')
+      query: { $format: application/json }
+    paging: all
+    maxItems: 100000
+    cache: { ttl: 3600 }
+    transform: >-
+      ${ (
+        $limit := (params.threshold ? $number(params.threshold) : 90) / 100;
+        $days := params.inactiveDays ? $number(params.inactiveDays) : 90;
+        $view := params.view ? params.view : 'attention';
+        $all := [value.value[$not(isDeleted = true)].(
+          $quota := prohibitSendQuotaInBytes > 0 ? prohibitSendQuotaInBytes;
+          $used := storageUsedInBytes ? storageUsedInBytes : 0;
+          $share := $quota ? $round($used / $quota, 4);
+          $full := $quota ? $used >= $quota : false;
+          $near := $full or ($share ? $share >= $limit : false) or (issueWarningQuotaInBytes > 0 and $used >= issueWarningQuotaInBytes);
+          $inactive := lastActivityDate ? -$daysUntil(lastActivityDate) >= $days : (createdDate ? -$daysUntil(createdDate) >= $days : true);
+          {
+            "userPrincipalName": userPrincipalName,
+            "displayName": displayName,
+            "recipientType": recipientType,
+            "state": $full ? 'full' : $near ? 'nearQuota' : $inactive ? 'inactive' : 'ok',
+            "nearQuota": $near,
+            "inactive": $inactive,
+            "storageUsedInBytes": $used,
+            "prohibitSendQuotaInBytes": $quota,
+            "issueWarningQuotaInBytes": issueWarningQuotaInBytes,
+            "percentUsed": $share,
+            "itemCount": itemCount,
+            "deletedItemSizeInBytes": deletedItemSizeInBytes,
+            "hasArchive": hasArchive = true,
+            "lastActivityDate": lastActivityDate,
+            "createdDate": createdDate,
+            "concealed": $not($contains(userPrincipalName, '@')),
+            "reportRefreshDate": reportRefreshDate
+          }
+        )];
+        $rows := $view = 'all' ? $all
+          : $view = 'quota' ? $all[nearQuota]
+          : $view = 'inactive' ? $all[inactive]
+          : $all[nearQuota or inactive];
+        {
+          "rows": [$rows^(state = 'full' ? 0 : state = 'nearQuota' ? 1 : state = 'inactive' ? 2 : 3, >percentUsed, >storageUsedInBytes)],
+          "full": $count($all[state = 'full']),
+          "nearQuota": $count($all[nearQuota]),
+          "inactive": $count($all[inactive]),
+          "storage": $sum($all.storageUsedInBytes),
+          "mailboxes": $count($all),
+          "largest": [($all^(>storageUsedInBytes))[[0..9]].{ "mailbox": displayName, "storage": storageUsedInBytes }],
+          "concealed": $count($all[concealed]) > 0
+        }
+      ) }
+
+layout:
+  - widget: markdown
+    span: 12
+    when: ${ mailboxes.concealed = true }
+    text: |
+      **User names are concealed in usage reports.** Rows show hashed names that can't be matched to mailboxes. A Global
+      Administrator can turn off *Display concealed user, group, and site names in all reports* in the Microsoft 365
+      admin center → **Settings → Org settings → Services → Reports**.
+  - widget: kpi
+    data: mailboxes.nearQuota
+    label: Near or over quota
+    format: number
+    status: "${ mailboxes.full > 0 ? 'crit' : value > 0 ? 'warn' : 'ok' }"
+    href: /p/m365.mailbox-storage?view=quota
+  - widget: kpi
+    data: mailboxes.inactive
+    label: Inactive mailboxes
+    format: number
+    status: "${ value > 0 ? 'info' : 'ok' }"
+    href: /p/m365.mailbox-storage?view=inactive
+  - widget: kpi
+    data: mailboxes.storage
+    label: Storage used
+    format: bytes
+  - widget: kpi
+    data: mailboxes.mailboxes
+    label: Mailboxes
+    format: number
+  - widget: chart
+    id: largest
+    title: Largest mailboxes
+    type: bar
+    span: 12
+    rows: 2
+    data: mailboxes.largest
+    x: mailbox
+    y: storage
+    format: bytes
+  - widget: table
+    id: mailboxes
+    span: 12
+    data: mailboxes.rows
+    rowKey: userPrincipalName
+    columns:
+      - { field: displayName, label: Mailbox, kind: identity, secondary: userPrincipalName, sortable: true }
+      - field: state
+        label: Status
+        kind: status
+        map:
+          full: [crit, Over send quota]
+          nearQuota: [warn, Near quota]
+          inactive: [info, Inactive]
+          ok: [ok, OK]
+        filter: facet
+      - { field: percentUsed, label: Quota used, kind: percent, align: end, sortable: true, filter: range }
+      - { field: storageUsedInBytes, label: Storage, kind: bytes, align: end, sortable: true }
+      - { field: prohibitSendQuotaInBytes, label: Send quota, kind: bytes, align: end }
+      - { field: lastActivityDate, label: Last activity, kind: date, filter: date, sortable: true }
+      - { field: recipientType, label: Type, filter: facet }
+      - { field: hasArchive, label: Archive, kind: boolean, filter: facet }
+      - { field: itemCount, label: Items, kind: number, align: end, hidden: true }
+      - { field: deletedItemSizeInBytes, label: Recoverable items, kind: bytes, align: end, hidden: true }
+      - { field: issueWarningQuotaInBytes, label: Warning quota, kind: bytes, align: end, hidden: true }
+      - { field: createdDate, label: Created, kind: date, hidden: true }
+      - { field: reportRefreshDate, label: Report date, kind: date, hidden: true }
+    rowActions:
+      - label: Open mailbox
+        icon: tray
+        href: /p/m365.mailbox?mailbox=${ $encode(row.userPrincipalName) }
+        when: ${ row.concealed = false }
+    empty:
+      title: No mailbox needs attention
+      body: No mailbox is near its quota or inactive for the window. Usage data appears 24–48 hours after activity.
+
+export:
+  formats: [csv, xlsx]
+  fileName: mailbox-storage-${ params.view }
+  data: mailboxes.rows
+  columns: all

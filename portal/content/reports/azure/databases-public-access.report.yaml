@@ -1,0 +1,198 @@
+$schema: ../../../packages/schemas/generated/report.schema.json
+kind: report
+id: azure.databases-public-access
+version: 1.0.0
+title: Databases reachable from public networks
+summary: Azure SQL servers, SQL Managed Instances, PostgreSQL and MySQL flexible servers, Cosmos DB accounts and Azure Cache for Redis with public network access on — with their network rules, whether passwords or keys still work, and the minimum TLS version.
+owner: azure-team
+tags: [azure, sql, databases, security, network, resource-graph]
+nav: { section: reports, label: Databases reachable from public networks, icon: database, order: 185 }
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    arm: [user_impersonation]
+  azureRoles: [Reader]
+
+params:
+  publicOnly: { type: boolean, default: true, label: Public network access on only, facet: true }
+  service:
+    type: enum
+    label: Service
+    facet: true
+    default: any
+    values:
+      - { value: any, label: Every service }
+      - { value: microsoft.sql/servers, label: Azure SQL }
+      - { value: microsoft.sql/managedinstances, label: SQL Managed Instance }
+      - { value: microsoft.dbforpostgresql/flexibleservers, label: PostgreSQL }
+      - { value: microsoft.dbformysql/flexibleservers, label: MySQL }
+      - { value: microsoft.documentdb/databaseaccounts, label: Cosmos DB }
+      - { value: microsoft.cache/redis, label: Azure Cache for Redis }
+  subscriptionId: { type: string, format: guid, label: Subscription, picker: subscription, facet: true }
+
+datasources:
+  servers:
+    source: resourceGraph
+    # Resource Graph returns computed booleans as 1/0, so flags are projected as 'true'/'false' text with iff() (tostring() would give True/False).
+    # Server-level firewall rules are not in Resource Graph: "Firewall rules" means the server relies on them (open the
+    # server to see which addresses they allow). PostgreSQL/MySQL TLS is a server parameter, also not in Resource Graph.
+    query: |
+      // af:azure.databases-public-access#rows
+      resources
+      | where type in~ ('microsoft.sql/servers', 'microsoft.sql/managedinstances', 'microsoft.dbforpostgresql/flexibleservers', 'microsoft.dbformysql/flexibleservers', 'microsoft.documentdb/databaseaccounts', 'microsoft.cache/redis')
+      ${ params.service in ['microsoft.sql/servers', 'microsoft.sql/managedinstances', 'microsoft.dbforpostgresql/flexibleservers', 'microsoft.dbformysql/flexibleservers', 'microsoft.documentdb/databaseaccounts', 'microsoft.cache/redis'] ? "| where type =~ '" & params.service & "'" }
+      ${ params.subscriptionId ? "| where subscriptionId == '" & $guid(params.subscriptionId) & "'" }
+      | extend t = tolower(type), flexPublic = tostring(properties.network.publicNetworkAccess), delegatedSubnet = tostring(properties.network.delegatedSubnetResourceId)
+      | extend service = case(t == 'microsoft.sql/servers', 'Azure SQL', t == 'microsoft.sql/managedinstances', 'SQL Managed Instance', t == 'microsoft.dbforpostgresql/flexibleservers', 'PostgreSQL', t == 'microsoft.dbformysql/flexibleservers', 'MySQL', t == 'microsoft.documentdb/databaseaccounts', 'Cosmos DB', 'Redis')
+      | extend publicNetworkAccess = case(
+          t == 'microsoft.sql/managedinstances', iff(coalesce(tobool(properties.publicDataEndpointEnabled), false), 'Enabled', 'Disabled'),
+          t in ('microsoft.dbforpostgresql/flexibleservers', 'microsoft.dbformysql/flexibleservers'), iff(isnotempty(flexPublic), flexPublic, iff(isnotempty(delegatedSubnet), 'Disabled', 'Enabled')),
+          isempty(tostring(properties.publicNetworkAccess)), 'Enabled',
+          tostring(properties.publicNetworkAccess))
+      | extend networkRules = case(
+          t == 'microsoft.documentdb/databaseaccounts', iff(coalesce(array_length(properties.ipRules), 0) > 0 or coalesce(tobool(properties.isVirtualNetworkFilterEnabled), false), 'IP or virtual network rules', 'None (any address)'),
+          t in ('microsoft.dbforpostgresql/flexibleservers', 'microsoft.dbformysql/flexibleservers') and isnotempty(delegatedSubnet), 'Virtual network integrated',
+          t == 'microsoft.cache/redis', iff(isnotempty(tostring(properties.subnetId)), 'Virtual network injected', 'Firewall rules'),
+          t == 'microsoft.sql/managedinstances', 'Network security group',
+          'Firewall rules')
+      | extend entraOnly = case(
+          t in ('microsoft.sql/servers', 'microsoft.sql/managedinstances'), coalesce(tobool(properties.administrators.azureADOnlyAuthentication), false),
+          t == 'microsoft.dbforpostgresql/flexibleservers', tostring(properties.authConfig.passwordAuth) =~ 'Disabled',
+          t == 'microsoft.documentdb/databaseaccounts', coalesce(tobool(properties.disableLocalAuth), false),
+          t == 'microsoft.cache/redis', coalesce(tobool(properties.disableAccessKeyAuthentication), false),
+          false)
+      | extend minimumTls = case(
+          t in ('microsoft.sql/servers', 'microsoft.sql/managedinstances'), tostring(properties.minimalTlsVersion),
+          t == 'microsoft.documentdb/databaseaccounts', case(tostring(properties.minimalTlsVersion) =~ 'Tls12', '1.2', tostring(properties.minimalTlsVersion) =~ 'Tls11', '1.1', tostring(properties.minimalTlsVersion) =~ 'Tls', '1.0', isempty(tostring(properties.minimalTlsVersion)), '1.2', tostring(properties.minimalTlsVersion)),
+          t == 'microsoft.cache/redis', tostring(properties.minimumTlsVersion),
+          '')
+      | extend nonTlsPort = t == 'microsoft.cache/redis' and coalesce(tobool(properties.enableNonSslPort), false)
+      | extend state = coalesce(tostring(properties.state), tostring(properties.provisioningState)), version = tostring(properties.version)
+      | extend findings = iff(publicNetworkAccess =~ 'Enabled', 1, 0) + iff(networkRules == 'None (any address)', 1, 0) + iff(entraOnly, 0, 1) + iff(minimumTls in ('1.0', '1.1', 'None'), 1, 0) + iff(nonTlsPort, 1, 0)
+      ${ params.publicOnly = false ? '' : "| where publicNetworkAccess =~ 'Enabled'" }
+      | join kind=leftouter (resourcecontainers | where type =~ 'microsoft.resources/subscriptions' | project subscriptionId, subscriptionName = name) on subscriptionId
+      | project id, name, type, service, publicNetworkAccess, networkRules, entraOnly = iff(entraOnly, 'true', 'false'), minimumTls, nonTlsPort = iff(nonTlsPort, 'true', 'false'), findings, state, version, resourceGroup, subscriptionId, subscriptionName, location, tags
+      | order by findings desc, service asc, name asc
+    paging: all
+    maxItems: 20000
+    cache: { ttl: 300 }
+  summary:
+    source: resourceGraph
+    # Same filters as the rows, counted in Resource Graph: no row transform, so large tenants stay within the
+    # 250 ms transform budget and exports stream the rows as they are.
+    query: |
+      // af:azure.databases-public-access#summary
+      resources
+      | where type in~ ('microsoft.sql/servers', 'microsoft.sql/managedinstances', 'microsoft.dbforpostgresql/flexibleservers', 'microsoft.dbformysql/flexibleservers', 'microsoft.documentdb/databaseaccounts', 'microsoft.cache/redis')
+      ${ params.service in ['microsoft.sql/servers', 'microsoft.sql/managedinstances', 'microsoft.dbforpostgresql/flexibleservers', 'microsoft.dbformysql/flexibleservers', 'microsoft.documentdb/databaseaccounts', 'microsoft.cache/redis'] ? "| where type =~ '" & params.service & "'" }
+      ${ params.subscriptionId ? "| where subscriptionId == '" & $guid(params.subscriptionId) & "'" }
+      | extend t = tolower(type), flexPublic = tostring(properties.network.publicNetworkAccess), delegatedSubnet = tostring(properties.network.delegatedSubnetResourceId)
+      | extend service = case(t == 'microsoft.sql/servers', 'Azure SQL', t == 'microsoft.sql/managedinstances', 'SQL Managed Instance', t == 'microsoft.dbforpostgresql/flexibleservers', 'PostgreSQL', t == 'microsoft.dbformysql/flexibleservers', 'MySQL', t == 'microsoft.documentdb/databaseaccounts', 'Cosmos DB', 'Redis')
+      | extend publicNetworkAccess = case(
+          t == 'microsoft.sql/managedinstances', iff(coalesce(tobool(properties.publicDataEndpointEnabled), false), 'Enabled', 'Disabled'),
+          t in ('microsoft.dbforpostgresql/flexibleservers', 'microsoft.dbformysql/flexibleservers'), iff(isnotempty(flexPublic), flexPublic, iff(isnotempty(delegatedSubnet), 'Disabled', 'Enabled')),
+          isempty(tostring(properties.publicNetworkAccess)), 'Enabled',
+          tostring(properties.publicNetworkAccess))
+      | extend networkRules = case(
+          t == 'microsoft.documentdb/databaseaccounts', iff(coalesce(array_length(properties.ipRules), 0) > 0 or coalesce(tobool(properties.isVirtualNetworkFilterEnabled), false), 'IP or virtual network rules', 'None (any address)'),
+          t in ('microsoft.dbforpostgresql/flexibleservers', 'microsoft.dbformysql/flexibleservers') and isnotempty(delegatedSubnet), 'Virtual network integrated',
+          t == 'microsoft.cache/redis', iff(isnotempty(tostring(properties.subnetId)), 'Virtual network injected', 'Firewall rules'),
+          t == 'microsoft.sql/managedinstances', 'Network security group',
+          'Firewall rules')
+      | extend entraOnly = case(
+          t in ('microsoft.sql/servers', 'microsoft.sql/managedinstances'), coalesce(tobool(properties.administrators.azureADOnlyAuthentication), false),
+          t == 'microsoft.dbforpostgresql/flexibleservers', tostring(properties.authConfig.passwordAuth) =~ 'Disabled',
+          t == 'microsoft.documentdb/databaseaccounts', coalesce(tobool(properties.disableLocalAuth), false),
+          t == 'microsoft.cache/redis', coalesce(tobool(properties.disableAccessKeyAuthentication), false),
+          false)
+      | extend minimumTls = case(
+          t in ('microsoft.sql/servers', 'microsoft.sql/managedinstances'), tostring(properties.minimalTlsVersion),
+          t == 'microsoft.documentdb/databaseaccounts', case(tostring(properties.minimalTlsVersion) =~ 'Tls12', '1.2', tostring(properties.minimalTlsVersion) =~ 'Tls11', '1.1', tostring(properties.minimalTlsVersion) =~ 'Tls', '1.0', isempty(tostring(properties.minimalTlsVersion)), '1.2', tostring(properties.minimalTlsVersion)),
+          t == 'microsoft.cache/redis', tostring(properties.minimumTlsVersion),
+          '')
+      | extend nonTlsPort = t == 'microsoft.cache/redis' and coalesce(tobool(properties.enableNonSslPort), false)
+      | extend state = coalesce(tostring(properties.state), tostring(properties.provisioningState)), version = tostring(properties.version)
+      | extend findings = iff(publicNetworkAccess =~ 'Enabled', 1, 0) + iff(networkRules == 'None (any address)', 1, 0) + iff(entraOnly, 0, 1) + iff(minimumTls in ('1.0', '1.1', 'None'), 1, 0) + iff(nonTlsPort, 1, 0)
+      ${ params.publicOnly = false ? '' : "| where publicNetworkAccess =~ 'Enabled'" }
+      | summarize total = count(), public = countif(publicNetworkAccess =~ 'Enabled'), anyAddress = countif(networkRules == 'None (any address)'), localAuth = countif(not(entraOnly)), oldTls = countif(minimumTls in ('1.0', '1.1', 'None') or nonTlsPort)
+    transform: "${ value.value[0] }"
+    cache: { ttl: 300 }
+
+layout:
+  - widget: kpi
+    data: summary.public
+    label: Public network access on
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+  - widget: kpi
+    data: summary.anyAddress
+    label: Open to any address
+    format: number
+    status: "${ value > 0 ? 'crit' : 'ok' }"
+  - widget: kpi
+    data: summary.localAuth
+    label: Passwords or keys allowed
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+  - widget: kpi
+    data: summary.oldTls
+    label: TLS below 1.2 or plain port
+    format: number
+    status: "${ value > 0 ? 'crit' : 'ok' }"
+  - widget: table
+    id: servers
+    span: 12
+    data: servers.value
+    rowKey: id
+    selection: multi
+    columns:
+      - { field: name, label: Server or account, kind: identity, secondary: service, sortable: true }
+      - { field: service, label: Service, filter: facet }
+      - field: publicNetworkAccess
+        label: Public network access
+        kind: status
+        map: { Enabled: [warn, "On"], Disabled: [ok, "Off"], SecuredByPerimeter: [ok, Network perimeter] }
+        filter: facet
+      - { field: networkRules, label: Network rules, filter: facet }
+      - field: entraOnly
+        label: Authentication
+        kind: status
+        map: { "true": [ok, Entra ID only], "false": [warn, Passwords or keys allowed] }
+        filter: facet
+      - { field: minimumTls, label: Minimum TLS, filter: facet }
+      - { field: findings, label: Findings, kind: number, sortable: true, filter: range }
+      - { field: nonTlsPort, label: Non-TLS port, kind: status, map: { "true": [crit, "On"], "false": [ok, "Off"] }, hidden: true }
+      - { field: version, label: Version, hidden: true }
+      - { field: state, label: State, hidden: true }
+      - { field: resourceGroup, label: Resource group, filter: facet }
+      - { field: subscriptionName, label: Subscription, filter: facet }
+      - { field: location, label: Location, hidden: true }
+      - { field: tags, label: Tags, kind: tags, hidden: true }
+      - { field: subscriptionId, label: Subscription id, kind: guid, hidden: true }
+      - { field: id, label: Resource id, kind: code, hidden: true }
+    inspect:
+      page: azure.resource
+      params:
+        id: ${ row.id }
+    rowActions:
+      - label: Open Networking in Azure portal
+        icon: arrow-square-out
+        href: https://portal.azure.com/#resource${ row.id }/networking
+    bulkActions:
+      - playbook: azure.add-tags
+        label: Add or update a tag
+        icon: tag
+        forEach:
+          inputs:
+            resourceId: ${ row.id }
+          concurrency: 5
+        maxItems: 500
+    empty:
+      title: No database is reachable from public networks
+      body: Every SQL, PostgreSQL, MySQL, Cosmos DB and Redis resource in the subscriptions you can read has public network access off. Turn off "Public network access on only" to review all of them.
+
+export:
+  formats: [csv, xlsx]
+  fileName: azure-databases-public-access
+  data: servers.value
+  columns: all

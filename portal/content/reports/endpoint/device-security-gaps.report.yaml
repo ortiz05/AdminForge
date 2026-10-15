@@ -1,0 +1,182 @@
+$schema: ../../../packages/schemas/generated/report.schema.json
+kind: report
+id: endpoint.device-security-gaps
+version: 1.0.0
+title: Unencrypted and jailbroken devices
+summary: >-
+  Intune-managed devices whose disk isn't encrypted (BitLocker, FileVault, Android or Linux encryption) and phones that
+  are jailbroken or rooted — the two device states that most often turn a lost device into a data breach.
+owner: endpoint-team
+tags: [endpoint, intune, encryption, security, report]
+nav: { section: reports, label: Unencrypted and jailbroken devices, icon: lock-open, order: 33 }
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    graph: [DeviceManagementManagedDevices.Read.All]
+  entraRoles: [Intune Administrator]
+  licences: [intune]
+
+params:
+  issue:
+    type: enum
+    label: Problem
+    facet: true
+    default: any
+    values:
+      - { value: any, label: Not encrypted or jailbroken }
+      - { value: unencrypted, label: Not encrypted }
+      - { value: jailbroken, label: Jailbroken or rooted }
+  os: { type: enum, values: [Any, Windows, macOS, iOS, Android, Linux], default: Any, label: OS, facet: true }
+  ownership: { type: enum, values: [Any, company, personal], default: Any, label: Ownership, facet: true }
+
+savedViews:
+  enabled: true
+  shared: true
+  presets:
+    - { name: Unencrypted company laptops, params: { issue: unencrypted, ownership: company } }
+    - { name: Jailbroken or rooted phones, params: { issue: jailbroken } }
+
+# Intune doesn't filter on isEncrypted or jailBroken, so the fleet is read with only the fields needed (OS and
+# ownership are filtered by Intune) and the two states are checked here. jailBroken is "True", "False" or "Unknown"
+# (Windows and macOS always report Unknown).
+datasources:
+  devices:
+    source: graph
+    request:
+      path: /deviceManagement/managedDevices
+      query:
+        $select: id,deviceName,userPrincipalName,userDisplayName,operatingSystem,osVersion,isEncrypted,jailBroken,complianceState,lastSyncDateTime,managedDeviceOwnerType,model,serialNumber
+        $top: 1000
+        $filter: >-
+          ${ $join([
+               params.os != 'Any' ? "operatingSystem eq " & $odata(params.os),
+               params.ownership != 'Any' ? "managedDeviceOwnerType eq " & $odata(params.ownership)
+             ][$], ' and ') }
+    paging: all
+    maxItems: 100000
+    cache: { ttl: 1800 }
+    transform: >-
+      ${ (
+        $p := params;
+        $issue := $p.issue ? $p.issue : 'any';
+        $all := [value.value[
+            ($p.os = 'Any' or operatingSystem = $p.os) and ($p.ownership = 'Any' or managedDeviceOwnerType = $p.ownership)
+          ].(
+            $unencrypted := isEncrypted = false and operatingSystem in ['Windows', 'macOS', 'Android', 'Linux'];
+            $rooted := jailBroken = 'True';
+            $merge([$, {
+              "issue": $rooted and $unencrypted ? 'both' : $rooted ? 'jailbroken' : $unencrypted ? 'unencrypted' : 'none',
+              "unencrypted": $unencrypted,
+              "jailbroken": $rooted,
+              "daysSinceSync": lastSyncDateTime ? -$daysUntil(lastSyncDateTime)
+            }])
+          )];
+        $rows := $all[issue != 'none' and ($issue = 'any' or ($issue = 'unencrypted' and unencrypted) or ($issue = 'jailbroken' and jailbroken))];
+        {
+          "rows": [$rows^(jailbroken ? 0 : 1, operatingSystem, deviceName)],
+          "unencrypted": $count($rows[unencrypted]),
+          "jailbroken": $count($rows[jailbroken]),
+          "companyOwned": $count($rows[managedDeviceOwnerType = 'company']),
+          "stale": $count($rows[daysSinceSync > 30]),
+          "byOs": $append([], [$distinct($rows.operatingSystem).( $o := $; { "os": $o, "devices": $count($rows[operatingSystem = $o]) } )^(>devices)])
+        }
+      ) }
+
+layout:
+  - widget: kpi
+    data: devices.unencrypted
+    label: Not encrypted
+    format: number
+    status: "${ value > 0 ? 'crit' : 'ok' }"
+    href: /p/endpoint.device-security-gaps?issue=unencrypted
+  - widget: kpi
+    data: devices.jailbroken
+    label: Jailbroken or rooted
+    format: number
+    status: "${ value > 0 ? 'crit' : 'ok' }"
+    href: /p/endpoint.device-security-gaps?issue=jailbroken
+  - widget: kpi
+    data: devices.companyOwned
+    label: Company-owned
+    format: number
+  - widget: kpi
+    data: devices.stale
+    label: Not checked in for 30+ days
+    format: number
+    status: "${ value > 0 ? 'info' : 'ok' }"
+  - widget: markdown
+    span: 8
+    text: |
+      **What to do.** Require encryption in a compliance policy (and enforce it with an endpoint security disk
+      encryption policy) so Conditional Access blocks unencrypted devices; a device that just enrolled can take a day to
+      report encryption — sync it first. Jailbroken or rooted devices should be retired (company data removed) and the
+      user asked to restore the phone. A device that reported months ago may already be fixed — check the last check-in.
+  - widget: chart
+    id: byOs
+    title: By platform
+    type: bar
+    span: 4
+    rows: 2
+    data: devices.byOs
+    x: os
+    y: devices
+    format: number
+  - widget: table
+    id: devices
+    span: 12
+    data: devices.rows
+    rowKey: id
+    selection: multi
+    columns:
+      - { field: deviceName, label: Device, kind: identity, secondary: userPrincipalName, sortable: true }
+      - field: issue
+        label: Problem
+        kind: status
+        map: { both: [crit, Jailbroken and not encrypted], jailbroken: [crit, Jailbroken or rooted], unencrypted: [crit, Not encrypted] }
+        filter: facet
+      - { field: operatingSystem, label: OS, filter: { type: facet, param: os } }
+      - { field: osVersion, label: Version }
+      - { field: managedDeviceOwnerType, label: Ownership, filter: { type: facet, param: ownership } }
+      - field: complianceState
+        label: Compliance
+        kind: status
+        map: { compliant: [ok, Compliant], noncompliant: [crit, Not compliant], inGracePeriod: [warn, In grace period], unknown: [neutral, Not evaluated], configManager: [info, Configuration Manager] }
+        filter: facet
+      - { field: daysSinceSync, label: Days since check-in, kind: number, align: end, sortable: true, filter: range }
+      - { field: lastSyncDateTime, label: Last check-in, kind: datetime, hidden: true }
+      - { field: model, label: Model, hidden: true }
+      - { field: serialNumber, label: Serial number, kind: code, hidden: true }
+    inspect:
+      page: endpoint.device
+      params:
+        id: ${ row.id }
+    rowActions:
+      - playbook: endpoint.sync-device
+        label: Sync to re-report
+        icon: arrows-clockwise
+        inputs:
+          managedDeviceId: ${ row.id }
+      - playbook: endpoint.retire-device
+        label: Retire
+        icon: sign-out
+        inputs:
+          managedDeviceId: ${ row.id }
+        when: ${ row.jailbroken = true }
+    bulkActions:
+      - playbook: endpoint.sync-device
+        label: Sync to re-report
+        icon: arrows-clockwise
+        forEach:
+          inputs:
+            managedDeviceId: ${ row.id }
+          concurrency: 10
+        maxItems: 500
+    empty:
+      title: Every device is encrypted and none is jailbroken
+      body: No managed device in this view reports a missing encryption or a jailbreak.
+
+export:
+  formats: [csv, xlsx]
+  fileName: device-security-gaps-${ params.issue }
+  data: devices.rows
+  columns: all

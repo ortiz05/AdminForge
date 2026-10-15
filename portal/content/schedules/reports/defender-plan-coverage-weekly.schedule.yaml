@@ -1,0 +1,33 @@
+$schema: ../../../packages/schemas/generated/schedule.schema.json
+kind: schedule
+id: reports.defender-plan-coverage-weekly
+version: 1.0.0
+title: Weekly Defender for Cloud plan coverage report
+summary: >-
+  Every Monday at 05:20 UTC, writes which Defender for Cloud plans are on in each subscription (one row per
+  subscription), as XLSX, for the security posture review.
+  Email goes to AF_REPORT_RECIPIENTS when it and AF_MAIL_SENDER are configured.
+owner: security-team
+tags: [azure, defender-for-cloud, security, report]
+cron: "20 5 * * 1"
+timezone: UTC
+enabled: true
+identity: automation
+job:
+  kind: report
+  ref: azure.defender-plan-coverage
+  # Pinned rather than left to the report's defaults so the archive stays comparable from run to run.
+  params: { gapsOnly: false }
+  delivery:
+    - type: file
+      format: xlsx
+      path: azure/defender-plan-coverage/{date}.xlsx
+      retain: 26
+    - type: email
+      to: ["${ env.AF_REPORT_RECIPIENTS }"]
+      format: xlsx
+retry: { max: 2, backoff: exponential, delay: 5m }
+timeoutSeconds: 1800
+overlap: skip
+requires:
+  azureRoles: [Reader]

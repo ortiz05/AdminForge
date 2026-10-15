@@ -1,0 +1,90 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#users(id,displayName,userPrincipalName,userType,department,jobTitle,assignedLicenses,licenseAssignmentStates,onPremisesSyncEnabled,createdDateTime)",
+  "@odata.count": 2,
+  "value": [
+    {
+      "id": "00000000-0000-4000-8000-000000000104",
+      "displayName": "Rafael Castillo",
+      "userPrincipalName": "r.castillo@example.com",
+      "userType": "Member",
+      "department": "Sales",
+      "jobTitle": "Account Executive",
+      "assignedLicenses": [
+        {
+          "skuId": "30000000-0000-4000-8000-000000000401",
+          "disabledPlans": []
+        },
+        {
+          "skuId": "30000000-0000-4000-8000-000000000404",
+          "disabledPlans": []
+        },
+        {
+          "skuId": "30000000-0000-4000-8000-000000000406",
+          "disabledPlans": []
+        }
+      ],
+      "licenseAssignmentStates": [
+        {
+          "assignedByGroup": "00000000-0000-4000-8000-000000000204",
+          "state": "Active",
+          "error": "None",
+          "skuId": "30000000-0000-4000-8000-000000000401",
+          "disabledPlans": [],
+          "lastUpdatedDateTime": "2026-05-02T10:00:00Z"
+        },
+        {
+          "assignedByGroup": null,
+          "state": "Active",
+          "error": "None",
+          "skuId": "30000000-0000-4000-8000-000000000404",
+          "disabledPlans": [],
+          "lastUpdatedDateTime": "2026-05-02T10:00:00Z"
+        },
+        {
+          "assignedByGroup": null,
+          "state": "Active",
+          "error": "None",
+          "skuId": "30000000-0000-4000-8000-000000000406",
+          "disabledPlans": [],
+          "lastUpdatedDateTime": "2026-05-02T10:00:00Z"
+        },
+        {
+          "assignedByGroup": "00000000-0000-4000-8000-000000000204",
+          "state": "Active",
+          "error": "None",
+          "skuId": "30000000-0000-4000-8000-000000000406",
+          "disabledPlans": [],
+          "lastUpdatedDateTime": "2026-05-02T10:00:00Z"
+        }
+      ],
+      "onPremisesSyncEnabled": null,
+      "createdDateTime": "2022-04-04T09:00:00Z"
+    },
+    {
+      "id": "30000000-0000-4000-8000-000000000004",
+      "displayName": "Dana Former",
+      "userPrincipalName": "dana@example.com",
+      "userType": "Member",
+      "department": "Finance",
+      "jobTitle": "Analyst",
+      "assignedLicenses": [
+        {
+          "skuId": "30000000-0000-4000-8000-000000000402",
+          "disabledPlans": []
+        }
+      ],
+      "licenseAssignmentStates": [
+        {
+          "assignedByGroup": null,
+          "state": "Active",
+          "error": "None",
+          "skuId": "30000000-0000-4000-8000-000000000402",
+          "disabledPlans": [],
+          "lastUpdatedDateTime": "2026-05-02T10:00:00Z"
+        }
+      ],
+      "onPremisesSyncEnabled": null,
+      "createdDateTime": "2021-09-13T09:00:00Z"
+    }
+  ]
+}

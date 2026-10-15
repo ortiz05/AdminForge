@@ -1,0 +1,190 @@
+$schema: ../../../packages/schemas/generated/report.schema.json
+kind: report
+id: m365.onedrive-usage
+version: 1.0.0
+title: OneDrive storage and inactive accounts
+summary: >-
+  OneDrive accounts with no activity for the chosen number of days (often people who left — hand the files over before
+  the OneDrive is deleted) and accounts close to their storage limit, from the OneDrive usage report.
+owner: m365-team
+tags: [m365, onedrive, sharepoint, storage, offboarding, usage, report]
+nav: { section: reports, label: OneDrive storage and activity, icon: cloud, order: 144 }
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    graph: [Reports.Read.All]
+  entraRoles: [Reports Reader, SharePoint Administrator, Global Reader]
+  licences: [sharepoint]
+
+params:
+  view:
+    type: enum
+    label: Show
+    facet: true
+    default: attention
+    values:
+      - { value: attention, label: Inactive or near the storage limit }
+      - { value: inactive, label: Inactive accounts }
+      - { value: storage, label: Near the storage limit }
+      - { value: all, label: All accounts }
+  days:
+    type: enum
+    label: Inactive after
+    facet: true
+    default: 90
+    values:
+      - { value: 30, label: 30 days }
+      - { value: 90, label: 90 days }
+      - { value: 180, label: 180 days }
+      - { value: 365, label: 1 year }
+  threshold:
+    type: number
+    label: Near the storage limit at
+    unit: "%"
+    default: 90
+    min: 50
+    max: 100
+    integer: true
+    facet: true
+
+filters:
+  facets: [view, days, threshold]
+
+savedViews:
+  enabled: true
+  shared: true
+  presets:
+    - { name: Inactive for 90 days, params: { view: inactive, days: 90 } }
+    - { name: Near the storage limit, params: { view: storage } }
+
+# File counts cover the last 30 days; storage is current; the last activity date is the account's latest activity
+# whenever it was. With concealed report names the URL and owner are hashes.
+datasources:
+  accounts:
+    source: graph
+    label: OneDrive usage account detail (usage report)
+    request:
+      beta: true
+      path: /reports/getOneDriveUsageAccountDetail(period='D30')
+      query: { $format: application/json }
+    paging: all
+    maxItems: 100000
+    cache: { ttl: 3600 }
+    transform: >-
+      ${ (
+        $days := params.days ? $number(params.days) : 90;
+        $limit := (params.threshold ? $number(params.threshold) : 90) / 100;
+        $view := params.view ? params.view : 'attention';
+        $all := [value.value[$not(isDeleted = true)].(
+          $idle := lastActivityDate ? -$daysUntil(lastActivityDate);
+          $share := storageAllocatedInBytes > 0 ? $round(storageUsedInBytes / storageAllocatedInBytes, 4);
+          $inactive := lastActivityDate ? $idle >= $days : true;
+          $near := $share ? $share >= $limit : false;
+          {
+            "siteId": siteId,
+            "siteUrl": siteUrl,
+            "ownerDisplayName": ownerDisplayName,
+            "ownerPrincipalName": ownerPrincipalName,
+            "state": $near ? 'storage' : $inactive ? 'inactive' : 'ok',
+            "inactive": $inactive,
+            "nearLimit": $near,
+            "lastActivityDate": lastActivityDate,
+            "daysInactive": $idle,
+            "storageUsedInBytes": storageUsedInBytes ? storageUsedInBytes : 0,
+            "storageAllocatedInBytes": storageAllocatedInBytes,
+            "percentUsed": $share,
+            "fileCount": fileCount,
+            "activeFileCount": activeFileCount,
+            "openable": $substring(siteUrl ? siteUrl : '', 0, 8) = 'https://',
+            "reportRefreshDate": reportRefreshDate
+          }
+        )];
+        $rows := $view = 'all' ? $all
+          : $view = 'inactive' ? $all[inactive]
+          : $view = 'storage' ? $all[nearLimit]
+          : $all[inactive or nearLimit];
+        $inactiveRows := $all[inactive];
+        {
+          "rows": [$rows^(state = 'storage' ? 0 : state = 'inactive' ? 1 : 2, nearLimit ? -percentUsed : 0, $exists(daysInactive) ? 1 : 0, >daysInactive, >storageUsedInBytes)],
+          "inactive": $count($inactiveRows),
+          "inactiveStorage": $sum($inactiveRows.storageUsedInBytes),
+          "nearLimit": $count($all[nearLimit]),
+          "storage": $sum($all.storageUsedInBytes),
+          "accounts": $count($all),
+          "concealed": $count($all[$not(openable)]) > 0
+        }
+      ) }
+
+layout:
+  - widget: markdown
+    span: 12
+    when: ${ accounts.concealed = true }
+    text: |
+      **User names are concealed in usage reports.** Owners and URLs show as hashes. A Global Administrator can turn off
+      *Display concealed user, group, and site names in all reports* in the Microsoft 365 admin center → **Settings →
+      Org settings → Services → Reports**.
+  - widget: kpi
+    data: accounts.inactive
+    label: Inactive OneDrives
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+    href: /p/m365.onedrive-usage?view=inactive
+  - widget: kpi
+    data: accounts.inactiveStorage
+    label: Storage held by inactive OneDrives
+    format: bytes
+  - widget: kpi
+    data: accounts.nearLimit
+    label: Near the storage limit
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+    href: /p/m365.onedrive-usage?view=storage
+  - widget: kpi
+    data: accounts.storage
+    label: OneDrive storage used
+    format: bytes
+  - widget: markdown
+    span: 12
+    text: |
+      **Leavers' OneDrives.** When an account is deleted, its OneDrive is kept for the retention period set in the
+      SharePoint admin center (30 days by default) and then deleted. Use **Give someone access to a OneDrive** (from the
+      person's profile) to hand files to their manager first.
+  - widget: table
+    id: accounts
+    span: 12
+    data: accounts.rows
+    rowKey: siteId
+    columns:
+      - { field: ownerDisplayName, label: Owner, kind: identity, secondary: ownerPrincipalName, sortable: true }
+      - field: state
+        label: Status
+        kind: status
+        map: { storage: [warn, Near the storage limit], inactive: [info, Inactive], ok: [ok, OK] }
+        filter: facet
+      - { field: daysInactive, label: Days since activity, kind: number, align: end, sortable: true, filter: range }
+      - { field: lastActivityDate, label: Last activity, kind: date, filter: date }
+      - { field: storageUsedInBytes, label: Storage, kind: bytes, align: end, sortable: true }
+      - { field: percentUsed, label: Of limit, kind: percent, align: end, sortable: true }
+      - { field: fileCount, label: Files, kind: number, align: end }
+      - { field: activeFileCount, label: Active files (30 days), kind: number, align: end, hidden: true }
+      - { field: storageAllocatedInBytes, label: Storage limit, kind: bytes, align: end, hidden: true }
+      - { field: siteUrl, label: OneDrive URL, kind: link, hidden: true }
+      - { field: reportRefreshDate, label: Report date, kind: date, hidden: true }
+    rowActions:
+      - label: Open OneDrive
+        icon: arrow-square-out
+        href: ${ row.siteUrl }
+        when: ${ row.openable = true }
+      - label: Find the owner
+        icon: magnifying-glass
+        href: /p/identity.users?q=${ $encode(row.ownerPrincipalName) }
+        when: ${ row.openable = true and $contains(row.ownerPrincipalName, '@') }
+    empty:
+      title: No OneDrive needs attention
+      body: Every OneDrive had activity within the window and is below the storage threshold.
+
+export:
+  formats: [csv, xlsx]
+  fileName: onedrive-usage-${ params.view }
+  data: accounts.rows
+  columns: all

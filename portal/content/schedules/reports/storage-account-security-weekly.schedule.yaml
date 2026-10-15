@@ -1,0 +1,33 @@
+$schema: ../../../packages/schemas/generated/schedule.schema.json
+kind: schedule
+id: reports.storage-account-security-weekly
+version: 1.0.0
+title: Weekly storage account security report
+summary: >-
+  Every Monday at 05:05 UTC, writes storage accounts that allow shared key access, anonymous blobs, plain HTTP, TLS
+  below 1.2 or access from all networks, as XLSX.
+  Email goes to AF_REPORT_RECIPIENTS when it and AF_MAIL_SENDER are configured.
+owner: azure-team
+tags: [azure, storage, security, report]
+cron: "5 5 * * 1"
+timezone: UTC
+enabled: true
+identity: automation
+job:
+  kind: report
+  ref: azure.storage-account-security
+  # Pinned rather than left to the report's defaults so the archive stays comparable from run to run.
+  params: { findingsOnly: true }
+  delivery:
+    - type: file
+      format: xlsx
+      path: azure/storage-account-security/{date}.xlsx
+      retain: 26
+    - type: email
+      to: ["${ env.AF_REPORT_RECIPIENTS }"]
+      format: xlsx
+retry: { max: 2, backoff: exponential, delay: 5m }
+timeoutSeconds: 1800
+overlap: skip
+requires:
+  azureRoles: [Reader]

@@ -1,0 +1,30 @@
+$schema: ../../packages/schemas/generated/probe.schema.json
+kind: probe
+id: probes.custom-roles-wildcard
+version: 1.0.0
+title: Custom Azure roles that allow everything or can grant access
+summary: >-
+  Custom Azure RBAC roles whose actions include "*" (every action, like Owner) or Microsoft.Authorization writes (they
+  can create role assignments, so whoever holds them can give themselves more). The Custom roles with broad
+  permissions report also lists provider-wide wildcards and how many assignments use each role.
+owner: azure-team
+tags: [kql, configuration, azure, rbac, security, config-check]
+check:
+  kind: kql
+  source: resourceGraph
+  query: |
+    // af:probes.custom-roles-wildcard
+    authorizationresources
+    | where type =~ 'microsoft.authorization/roledefinitions' and tostring(properties.type) =~ 'CustomRole'
+    | extend actionsText = tostring(properties.permissions[0].actions)
+    | extend allActions = actionsText matches regex @'"\*"', grantsAccess = actionsText matches regex @'(?i)"(\*|microsoft\.authorization/(\*|\*/write|roleassignments/(\*|write)|roledefinitions/(\*|write)|elevateaccess/action))"'
+    | where allActions or grantsAccess
+    | project id, roleName = tostring(properties.roleName), breadth = iff(allActions, 'All actions', 'Can grant access'), assignableScopes = properties.assignableScopes
+    | order by breadth asc, roleName asc
+  metric: rowCount
+  detailsLimit: 50
+thresholds: { warn: 1, crit: 5 }
+intervalHint: PT6H
+timeoutMs: 60000
+requires:
+  azureRoles: [Reader]

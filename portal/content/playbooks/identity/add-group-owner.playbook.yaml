@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/playbook.schema.json
 kind: playbook
 id: identity.add-group-owner
-version: 1.0.0
+version: 1.1.0
 title: Add group owner
 summary: Makes a user an owner of a group (owners manage membership and settings, and receive access reviews).
 owner: identity-team
@@ -32,7 +32,13 @@ steps:
       method: GET
       path: /groups/${ $encode($guid(inputs.groupId)) }
       query:
-        $select: id,displayName,groupTypes,isAssignableToRole
+        $select: id,displayName,uniqueName,groupTypes,isAssignableToRole
+
+  - id: notPortalGroup
+    type: assert
+    that: >-
+      ${ $not($substring($lowercase(steps.group.output.uniqueName ? steps.group.output.uniqueName : ''), 0, 14) = 'sg-adminforge-' or $substring($lowercase(steps.group.output.displayName), 0, 14) = 'sg-adminforge-') }
+    message: This group grants AdminForge roles. Change it in the Microsoft Entra admin center, outside AdminForge, so nobody can grant themselves portal access from inside the portal.
 
   - id: owner
     type: graph
@@ -84,6 +90,11 @@ outputs:
   summary: ${ steps.owner.output.userPrincipalName & ' now owns ' & steps.group.output.displayName & '.' }
 
 tests:
+  - name: refuses AdminForge's role groups
+    inputs: { groupId: 00000000-0000-4000-8000-0000000002ff, ownerId: 00000000-0000-4000-8000-000000000101 }
+    mocks:
+      group: { id: 00000000-0000-4000-8000-0000000002ff, displayName: SG-AdminForge-dev-Portal.Operator, uniqueName: sg-adminforge-dev-portal-operator, groupTypes: [], mailEnabled: false, securityEnabled: true, onPremisesSyncEnabled: null }
+    expect: { status: failed, failedStep: notPortalGroup }
   - name: refuses an existing owner
     inputs: { groupId: 00000000-0000-4000-8000-000000000201, ownerId: 00000000-0000-4000-8000-000000000101 }
     mocks:

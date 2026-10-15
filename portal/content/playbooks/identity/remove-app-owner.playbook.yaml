@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/playbook.schema.json
 kind: playbook
 id: identity.remove-app-owner
-version: 1.0.0
+version: 1.1.0
 title: Remove app registration owner
 summary: Removes an owner from an app registration. Refuses to remove the last owner, so every app stays accountable.
 owner: identity-team
@@ -33,6 +33,12 @@ steps:
       path: /applications/${ $encode($guid(inputs.appObjectId)) }
       query:
         $select: id,appId,displayName
+
+  - id: notPortalApp
+    type: assert
+    that: >-
+      ${ $not(steps.app.output.appId in $append([env.AF_READ_CLIENT_ID, env.AF_WRITE_CLIENT_ID, env.AF_AUTOMATION_CLIENT_ID], $map($split(env.AF_PROTECTED_APP_IDS ? env.AF_PROTECTED_APP_IDS : '', ','), function($v) { $trim($v) }))) }
+    message: This is one of AdminForge's own app registrations (or a protected app such as the provisioner); manage its owners in the Microsoft Entra admin center.
 
   - id: owners
     type: graph
@@ -78,6 +84,12 @@ outputs:
   summary: ${ steps.current.output.displayName & ' no longer owns the app registration ' & steps.app.output.displayName & '.' }
 
 tests:
+  - name: refuses AdminForge's own and protected apps (AF_PROTECTED_APP_IDS)
+    inputs: { appObjectId: 00000000-0000-4000-8000-000000000301, ownerId: 00000000-0000-4000-8000-000000000101 }
+    env: { AF_PROTECTED_APP_IDS: "00000000-0000-4000-8001-0000000000ff, 00000000-0000-4000-8001-0000000003ff" }
+    mocks:
+      app: { id: 00000000-0000-4000-8000-000000000301, appId: 00000000-0000-4000-8001-0000000003ff, displayName: Provisioner, passwordCredentials: [], keyCredentials: [] }
+    expect: { status: failed, failedStep: notPortalApp }
   - name: refuses to remove the last owner
     inputs: { appObjectId: 00000000-0000-4000-8000-000000000301, ownerId: 00000000-0000-4000-8000-000000000101 }
     mocks:

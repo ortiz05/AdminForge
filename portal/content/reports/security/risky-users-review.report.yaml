@@ -1,0 +1,215 @@
+$schema: ../../../packages/schemas/generated/report.schema.json
+kind: report
+id: security.risky-users-review
+version: 1.0.0
+title: Risky users review
+summary: >-
+  Accounts Microsoft Entra ID Protection still considers at risk (or confirmed compromised), how long the risk has gone
+  unremediated and which risk detections were raised for each in the last 30 days — for the weekly identity-risk
+  review, so no high-risk account waits for days.
+owner: security-team
+tags: [security, identity-protection, risk, report]
+nav: { section: reports, label: Risky users review, icon: user-focus, order: 156 }
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    graph: [IdentityRiskyUser.Read.All, IdentityRiskEvent.Read.All]
+  entraRoles: [Security Reader]
+  licences: [identityProtection]
+
+params:
+  level:
+    type: enum
+    label: Risk level
+    facet: true
+    default: all
+    values:
+      - { value: all, label: Any level }
+      - { value: highMedium, label: High and medium }
+      - { value: high, label: High }
+  minDays:
+    type: number
+    label: At risk for at least
+    unit: days
+    default: 0
+    min: 0
+    max: 365
+    integer: true
+    facet: true
+
+filters:
+  facets: [level, minDays]
+
+savedViews:
+  enabled: true
+  shared: true
+  presets:
+    - { name: High and medium for 3+ days, params: { level: highMedium, minDays: 3 } }
+
+datasources:
+  users:
+    source: graph
+    label: Users at risk or confirmed compromised
+    request:
+      path: /identityProtection/riskyUsers
+      query:
+        $top: 500
+        $filter: "riskState eq microsoft.graph.riskState'atRisk' or riskState eq microsoft.graph.riskState'confirmedCompromised'"
+    paging: all
+    maxItems: 20000
+    cache: { ttl: 300 }
+  detections:
+    source: graph
+    label: Risk detections in the last 30 days
+    request:
+      path: /identityProtection/riskDetections
+      query:
+        $top: 500
+        $filter: ${ 'detectedDateTime ge ' & $daysAgo(30) }
+    paging: all
+    maxItems: 20000
+    cache: { ttl: 300 }
+    # Grouped by user once, so the review below looks each user up instead of scanning every detection.
+    transform: >-
+      ${ (
+        $d := value.value[$type(userId) = 'string' and -$daysUntil(detectedDateTime) <= 30];
+        {
+          "total": $count($d),
+          "byUser": $count($d) > 0 ? $d{ userId: {
+            "count": $count(riskEventType),
+            "types": [$distinct(riskEventType)],
+            "last": $sort([detectedDateTime])[-1]
+          } } : {}
+        }
+      ) }
+  review:
+    source: static
+    label: Review
+    data: {}
+    transform: >-
+      ${ (
+        $p := params;
+        $levels := $p.level = 'high' ? ['high'] : $p.level = 'highMedium' ? ['high', 'medium'] : ['high', 'medium', 'low'];
+        $min := $p.minDays ? $number($p.minDays) : 0;
+        $det := ds.detections.byUser;
+        $all := [ds.users.value[$not(isDeleted = true) and riskState in ['atRisk', 'confirmedCompromised']].(
+          $u := $;
+          $mine := $lookup($det, $u.id);
+          {
+            "id": id,
+            "userDisplayName": userDisplayName,
+            "userPrincipalName": userPrincipalName,
+            "riskLevel": riskLevel,
+            "riskState": riskState,
+            "riskDetail": riskDetail,
+            "riskLastUpdatedDateTime": riskLastUpdatedDateTime,
+            "daysAtRisk": -$daysUntil(riskLastUpdatedDateTime),
+            "detections30": $mine ? $mine.count : 0,
+            "detectionTypes": $mine.types,
+            "lastDetection": $mine.last
+          }
+        )];
+        $rows := $all[(riskState = 'confirmedCompromised' or riskLevel in $levels) and daysAtRisk >= $min];
+        $order := { "high": 0, "medium": 1, "low": 2 };
+        $atRisk := $all[riskState = 'atRisk'];
+        {
+          "rows": [$rows^(riskState = 'confirmedCompromised' ? 0 : 1, $lookup($order, riskLevel), >daysAtRisk)],
+          "high": $count($atRisk[riskLevel = 'high']),
+          "medium": $count($atRisk[riskLevel = 'medium']),
+          "waiting": $count($atRisk[riskLevel in ['high', 'medium'] and daysAtRisk > 7]),
+          "compromised": $count($all[riskState = 'confirmedCompromised'])
+        }
+      ) }
+
+layout:
+  - widget: kpi
+    data: review.high
+    label: High risk
+    format: number
+    status: "${ value > 0 ? 'crit' : 'ok' }"
+    href: /p/security.risky-users-review?level=high
+  - widget: kpi
+    data: review.medium
+    label: Medium risk
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+  - widget: kpi
+    data: review.waiting
+    label: High or medium for more than 7 days
+    format: number
+    status: "${ value > 0 ? 'crit' : 'ok' }"
+  - widget: kpi
+    data: review.compromised
+    label: Confirmed compromised
+    format: number
+    status: "${ value > 0 ? 'crit' : 'ok' }"
+  - widget: markdown
+    span: 12
+    text: |
+      **What to do.** For each high-risk account, check its recent sign-ins: if the activity wasn't the person, use
+      **Confirm compromised** (raises the risk so risk-based Conditional Access applies), reset the password and revoke
+      sessions — the compromised-account runbook walks through it. If it was them, **Dismiss risk**. A risk-based
+      Conditional Access policy that requires a secure password change remediates most cases without an administrator.
+  - widget: table
+    id: users
+    span: 12
+    data: review.rows
+    rowKey: id
+    selection: multi
+    columns:
+      - { field: userDisplayName, label: User, kind: identity, secondary: userPrincipalName, sortable: true }
+      - field: riskLevel
+        label: Risk level
+        kind: status
+        map: { high: [crit, High], medium: [warn, Medium], low: [info, Low], hidden: [neutral, Hidden], none: [ok, None] }
+        filter: facet
+      - field: riskState
+        label: Risk state
+        kind: status
+        map: { atRisk: [warn, At risk], confirmedCompromised: [crit, Confirmed compromised] }
+        filter: facet
+      - { field: daysAtRisk, label: Days since risk changed, kind: number, align: end, sortable: true, filter: range }
+      - { field: detections30, label: Detections (30 days), kind: number, align: end, sortable: true }
+      - { field: detectionTypes, label: Detection types, kind: tags }
+      - { field: lastDetection, label: Last detection, kind: datetime, hidden: true }
+      - { field: riskLastUpdatedDateTime, label: Risk last updated, kind: datetime, hidden: true }
+      - { field: riskDetail, label: Last action, hidden: true }
+      - { field: id, label: User object id, kind: guid, hidden: true }
+    inspect:
+      page: security.risky-user
+      params:
+        id: ${ row.id }
+    rowActions:
+      - playbook: security.confirm-risky-user-compromised
+        label: Confirm compromised
+        icon: skull
+        inputs:
+          userId: ${ row.id }
+        when: ${ row.riskState != 'confirmedCompromised' }
+      - playbook: security.dismiss-risky-user
+        label: Dismiss risk
+        icon: check-circle
+        inputs:
+          userId: ${ row.id }
+      - label: Open user profile
+        icon: user
+        href: ${ '/p/identity.user?id=' & $encode(row.id) }
+    bulkActions:
+      - playbook: security.confirm-risky-user-compromised
+        label: Confirm compromised
+        icon: skull
+        forEach:
+          inputs:
+            userId: ${ row.id }
+          concurrency: 5
+        maxItems: 60
+        when: ${ $count(rows[riskState != 'confirmedCompromised']) > 0 }
+    empty:
+      title: No risky users in this view
+      body: Nobody is at risk at this level. Identity Protection lists users when it detects risky sign-ins or leaked credentials.
+
+export:
+  formats: [csv, xlsx]
+  fileName: risky-users-review
+  data: review.rows
+  columns: all

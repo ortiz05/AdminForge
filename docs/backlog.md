@@ -5,9 +5,10 @@ Gaps found while building. Each item names where it lands. Items move to a phase
 ## Schema / content model
 - [ ] Probe schedules: `job.refs` (list) or a tag selector (`job.select: { tags: [hourly] }`) so one schedule sweeps many probes (today: one schedule per probe).
 - [ ] ARM `apiVersion` from an expression or a per-resource-type lookup, enabling a generic "get resource by id".
-- [ ] Expression helpers `$kql(s)` (KQL string literal quoting) and `$uuid()` (fresh GUID, e.g. role assignment names).
+- [ ] Expression helpers `$kql(s)` (KQL string literal quoting — R12) and `$uuid()` (fresh GUID, e.g. role assignment names).
 - [ ] Datasource fan-out (one call per row of another datasource) and simple joins.
-- [ ] `logQuery` widget (free-form KQL editor + result table/chart) — add to `docs/widgets.md`.
+- [ ] `logQuery` widget + Query Studio page (`/query`) with save-as report/probe/schedule — R12.
+- [ ] `kql` probe/check kind over Resource Graph, Log Analytics, advanced hunting — R12.
 - [ ] Licence-threshold probe `sku` from `${env.X}` so SKUs aren't literals.
 - [ ] Approval policy for bulk runs: one approval for the whole bulk run (today each child run asks).
 - [ ] `POST /api/runs/:id/input/:stepId` for input steps (today manual steps accept `values`).

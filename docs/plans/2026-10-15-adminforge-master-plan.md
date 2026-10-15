@@ -92,6 +92,18 @@ Every list view gets: column filters + faceted filters + free-text search, a que
 ### R10. Licensing realities are captured, not blocking
 `docs/licensing-review.md` lists every feature whose live validation is blocked by tenant licensing or permissions, what was built anyway (fixture-backed, UI shows "Requires <licence>" state with the exact SKU/service plan), and what the owner needs to enable. Work continues on everything else.
 
+### R12. KQL at scale for monitoring, schedules, and configuration checks
+Where per-object Graph calls (even `$batch`, 20 requests per call) are too slow for tenant-wide questions, AdminForge queries in **KQL**:
+- **Azure Resource Graph** (`resourceGraph` datasource) — inventory, configuration and policy state across every subscription in one query (`resources`, `resourcecontainers`, `securityresources`, `policyresources`, `alertsmanagementresources`, `advisorresources`, Arc `microsoft.hybridcompute/*`).
+- **Log Analytics / Azure Monitor Logs** (`logAnalytics`) — sign-in and audit logs exported from Entra (diagnostic settings; needs Entra ID P1 for sign-in logs), `AzureActivity`, function/app telemetry, and AdminForge's own probe history if exported.
+- **Microsoft Defender advanced hunting** (Graph `POST /security/runHuntingQuery`, allowed in read mode) — device, identity, email and cloud-app tables (Defender licences).
+Consequences:
+1. **Configuration checks**: a probe check kind `kql` (`source: resourceGraph | logAnalytics | advancedHunting`, `query`, `metric: rowCount | column:<name>`, warn/crit thresholds, `details` = the offending rows, capped) — e.g. storage accounts allowing public blob access, NSG rules open to the internet, disconnected Arc machines, non-compliant policy states, sign-in failure spikes, risky OAuth consents. Results land in `probe_results` with the violating rows for drill-down.
+2. **Schedules** run KQL reports and checks unattended as the automation identity (Reader on the subscription; `Data.Read` on workspaces; `ThreatHunting.Read.All` app permission for advanced hunting when licensed).
+3. **Query Studio** page (`/query`): Monaco KQL editor with source picker, results as table/chart, row-count and timing, history, and "Save as report / probe / schedule" which scaffolds valid YAML (the same files `adminforge new` creates) for review.
+4. `$kql(s)` expression helper for safe KQL string literals; the content linter flags user input concatenated into KQL without it.
+5. Config: `AF_LOG_ANALYTICS_WORKSPACE_ID` (default workspace); provisioning grants the automation identity `Log Analytics Reader` on that workspace.
+
 ### R11. Validation identity in the test tenant
 The owner granted Global Administrator in the test tenant for setup and validation. Bootstrap uses the provided app credential (config only). For delegated end-to-end tests, provisioning creates a dedicated test user (password in local config only) with least-privilege roles, used by Playwright to sign in. Live write tests target only `AF-Test-*` objects that provisioning creates.
 

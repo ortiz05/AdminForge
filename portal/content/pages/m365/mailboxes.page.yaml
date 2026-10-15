@@ -1,9 +1,9 @@
 $schema: ../../../packages/schemas/generated/page.schema.json
 kind: page
 id: m365.mailboxes
-version: 1.0.0
+version: 1.1.0
 title: Mailboxes
-summary: Exchange Online mailboxes by type with hold, archive and address-list flags. Convert leavers' mailboxes to shared in bulk.
+summary: Exchange Online mailboxes by type with hold, archive and address-list flags. Filter with the query builder, open a mailbox to see who has access, and convert leavers' mailboxes to shared in bulk.
 owner: m365-team
 tags: [m365, exchange, mailboxes]
 template: list-detail
@@ -46,6 +46,18 @@ params:
 filters:
   search: q
   facets: [type, hold, archive, hidden]
+  # The runner returns every mailbox; the server keeps the rows that match ($applyAdvanced in the transform).
+  advanced:
+    dialect: rows
+    fields:
+      - { field: displayName, label: Name, type: string, operators: [eq, startsWith, contains] }
+      - { field: primarySmtpAddress, label: Email address, type: string, operators: [eq, startsWith, contains] }
+      - { field: domain, label: Email domain, type: string, operators: [eq, ne, in] }
+      - { field: recipientTypeDetails, label: Mailbox type, type: enum, values: [UserMailbox, SharedMailbox, RoomMailbox, EquipmentMailbox, SchedulingMailbox] }
+      - { field: whenCreated, label: Created, type: date, operators: [ge, le] }
+      - { field: litigationHoldEnabled, label: Litigation hold, type: boolean }
+      - { field: archiveStatus, label: Archive, type: enum, values: [Active, None] }
+      - { field: hiddenFromAddressListsEnabled, label: Hidden from address lists, type: boolean }
 
 savedViews:
   enabled: true
@@ -67,13 +79,16 @@ datasources:
       resultSize: 5000
       includeMailboxes: true
     cache: { ttl: 900 }
-    # value = [script output] — one summary object { total, truncated, byType, …, mailboxes }. Facets filter the cached result.
+    # value = [script output] — one summary object { total, truncated, byType, …, mailboxes }. The query builder's filter
+    # ($applyAdvanced) and the facets filter the result.
     transform: >-
       ${ (
         $v := value[0];  /* runner result = [output data]; one summary object */
         $p := params;
         $q := $lowercase($trim($p.q ? $p.q : ''));
-        $rows := [$v.mailboxes[
+        $all := [$v.mailboxes.$merge([$, { "domain": $lowercase($substringAfter(primarySmtpAddress, '@')) }])];
+        $matching := $applyAdvanced($all, advanced);
+        $rows := [$matching[
             ($q = '' or $contains($lowercase(displayName & ' ' & primarySmtpAddress & ' ' & userPrincipalName), $q))
             and ($p.type = 'All' or $not($exists($p.type)) or recipientTypeDetails = $p.type)
             and ($p.hold = 'Any' or $not($exists($p.hold)) or litigationHoldEnabled = ($p.hold = 'On'))
@@ -164,6 +179,11 @@ layout:
       - { field: hiddenFromAddressListsEnabled, label: Hidden from address lists, kind: boolean, filter: { type: facet, param: hidden } }
       - { field: whenCreated, label: Created, kind: date, filter: date, sortable: true }
       - { field: userPrincipalName, label: Sign-in name, hidden: true }
+      - { field: domain, label: Email domain, hidden: true }
+    inspect:
+      page: m365.mailbox
+      params:
+        mailbox: ${ row.primarySmtpAddress }
     rowActions:
       - playbook: m365.convert-to-shared-mailbox
         label: Convert to shared mailbox

@@ -1,0 +1,855 @@
+{
+  "$fixture": {
+    "variants": [
+      {
+        "match": {
+          "bodyIncludes": "\"identity\":\"avery@example.com\""
+        },
+        "body": [
+          {
+            "mailbox": {
+              "displayName": "Avery Engineer",
+              "primarySmtpAddress": "avery@example.com",
+              "userPrincipalName": "avery@example.com",
+              "recipientTypeDetails": "UserMailbox"
+            },
+            "summary": {
+              "fullAccess": 0,
+              "sendAs": 0,
+              "sendOnBehalf": 1,
+              "total": 1,
+              "inherited": 0,
+              "orphaned": 0
+            },
+            "permissions": [
+              {
+                "key": "sendonbehalf|blake@example.com",
+                "permission": "SendOnBehalf",
+                "trustee": "blake@example.com",
+                "trusteeDisplayName": "Blake Analyst",
+                "trusteeType": "UserMailbox",
+                "accessRights": [
+                  "SendOnBehalf"
+                ],
+                "inherited": false,
+                "deny": false,
+                "orphaned": false,
+                "removable": false
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "match": {
+          "bodyIncludes": "\"identity\":\"blake@example.com\""
+        },
+        "body": [
+          {
+            "mailbox": {
+              "displayName": "Blake Analyst",
+              "primarySmtpAddress": "blake@example.com",
+              "userPrincipalName": "blake@example.com",
+              "recipientTypeDetails": "UserMailbox"
+            },
+            "summary": {
+              "fullAccess": 0,
+              "sendAs": 0,
+              "sendOnBehalf": 0,
+              "total": 0,
+              "inherited": 0,
+              "orphaned": 0
+            },
+            "permissions": []
+          }
+        ]
+      },
+      {
+        "match": {
+          "bodyIncludes": "\"identity\":\"dana@example.com\""
+        },
+        "body": [
+          {
+            "mailbox": {
+              "displayName": "Dana Former",
+              "primarySmtpAddress": "dana@example.com",
+              "userPrincipalName": "dana@example.com",
+              "recipientTypeDetails": "UserMailbox"
+            },
+            "summary": {
+              "fullAccess": 1,
+              "sendAs": 0,
+              "sendOnBehalf": 1,
+              "total": 2,
+              "inherited": 0,
+              "orphaned": 0
+            },
+            "permissions": [
+              {
+                "key": "fullaccess|jordan.price@example.com",
+                "permission": "FullAccess",
+                "trustee": "jordan.price@example.com",
+                "trusteeDisplayName": "Jordan Price",
+                "trusteeType": "UserMailbox",
+                "accessRights": [
+                  "FullAccess"
+                ],
+                "inherited": false,
+                "deny": false,
+                "orphaned": false,
+                "removable": true
+              },
+              {
+                "key": "sendonbehalf|jordan.price@example.com",
+                "permission": "SendOnBehalf",
+                "trustee": "jordan.price@example.com",
+                "trusteeDisplayName": "Jordan Price",
+                "trusteeType": "UserMailbox",
+                "accessRights": [
+                  "SendOnBehalf"
+                ],
+                "inherited": false,
+                "deny": false,
+                "orphaned": false,
+                "removable": false
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "match": {
+          "bodyIncludes": "\"identity\":\"eli.obrien@example.com\""
+        },
+        "body": [
+          {
+            "mailbox": {
+              "displayName": "Eli O'Brien",
+              "primarySmtpAddress": "eli.obrien@example.com",
+              "userPrincipalName": "eli.obrien@example.com",
+              "recipientTypeDetails": "UserMailbox"
+            },
+            "summary": {
+              "fullAccess": 0,
+              "sendAs": 0,
+              "sendOnBehalf": 0,
+              "total": 0,
+              "inherited": 0,
+              "orphaned": 0
+            },
+            "permissions": []
+          }
+        ]
+      },
+      {
+        "match": {
+          "bodyIncludes": "\"identity\":\"farah.haddad@example.com\""
+        },
+        "body": [
+          {
+            "mailbox": {
+              "displayName": "Farah Haddad",
+              "primarySmtpAddress": "farah.haddad@example.com",
+              "userPrincipalName": "farah.haddad@example.com",
+              "recipientTypeDetails": "UserMailbox"
+            },
+            "summary": {
+              "fullAccess": 0,
+              "sendAs": 0,
+              "sendOnBehalf": 0,
+              "total": 0,
+              "inherited": 0,
+              "orphaned": 0
+            },
+            "permissions": []
+          }
+        ]
+      },
+      {
+        "match": {
+          "bodyIncludes": "\"identity\":\"gabriel.nunes@example.com\""
+        },
+        "body": [
+          {
+            "mailbox": {
+              "displayName": "Gabriel Nunes",
+              "primarySmtpAddress": "gabriel.nunes@example.com",
+              "userPrincipalName": "gabriel.nunes@example.com",
+              "recipientTypeDetails": "UserMailbox"
+            },
+            "summary": {
+              "fullAccess": 0,
+              "sendAs": 0,
+              "sendOnBehalf": 0,
+              "total": 0,
+              "inherited": 0,
+              "orphaned": 0
+            },
+            "permissions": []
+          }
+        ]
+      },
+      {
+        "match": {
+          "bodyIncludes": "\"identity\":\"hana.kim@example.com\""
+        },
+        "body": [
+          {
+            "mailbox": {
+              "displayName": "Hana Kim",
+              "primarySmtpAddress": "hana.kim@example.com",
+              "userPrincipalName": "hana.kim@example.com",
+              "recipientTypeDetails": "UserMailbox"
+            },
+            "summary": {
+              "fullAccess": 0,
+              "sendAs": 0,
+              "sendOnBehalf": 0,
+              "total": 0,
+              "inherited": 0,
+              "orphaned": 0
+            },
+            "permissions": []
+          }
+        ]
+      },
+      {
+        "match": {
+          "bodyIncludes": "\"identity\":\"isaac.mensah@example.com\""
+        },
+        "body": [
+          {
+            "mailbox": {
+              "displayName": "Isaac Mensah",
+              "primarySmtpAddress": "isaac.mensah@example.com",
+              "userPrincipalName": "isaac.mensah@example.com",
+              "recipientTypeDetails": "UserMailbox"
+            },
+            "summary": {
+              "fullAccess": 0,
+              "sendAs": 0,
+              "sendOnBehalf": 0,
+              "total": 0,
+              "inherited": 0,
+              "orphaned": 0
+            },
+            "permissions": []
+          }
+        ]
+      },
+      {
+        "match": {
+          "bodyIncludes": "\"identity\":\"jordan.price@example.com\""
+        },
+        "body": [
+          {
+            "mailbox": {
+              "displayName": "Jordan Price",
+              "primarySmtpAddress": "jordan.price@example.com",
+              "userPrincipalName": "jordan.price@example.com",
+              "recipientTypeDetails": "UserMailbox"
+            },
+            "summary": {
+              "fullAccess": 0,
+              "sendAs": 0,
+              "sendOnBehalf": 0,
+              "total": 0,
+              "inherited": 0,
+              "orphaned": 0
+            },
+            "permissions": []
+          }
+        ]
+      },
+      {
+        "match": {
+          "bodyIncludes": "\"identity\":\"kai.lindqvist@example.com\""
+        },
+        "body": [
+          {
+            "mailbox": {
+              "displayName": "Kai Lindqvist",
+              "primarySmtpAddress": "kai.lindqvist@example.com",
+              "userPrincipalName": "kai.lindqvist@example.com",
+              "recipientTypeDetails": "UserMailbox"
+            },
+            "summary": {
+              "fullAccess": 0,
+              "sendAs": 0,
+              "sendOnBehalf": 0,
+              "total": 0,
+              "inherited": 0,
+              "orphaned": 0
+            },
+            "permissions": []
+          }
+        ]
+      },
+      {
+        "match": {
+          "bodyIncludes": "\"identity\":\"leah.moreau@example.com\""
+        },
+        "body": [
+          {
+            "mailbox": {
+              "displayName": "Leah Moreau",
+              "primarySmtpAddress": "leah.moreau@example.com",
+              "userPrincipalName": "leah.moreau@example.com",
+              "recipientTypeDetails": "UserMailbox"
+            },
+            "summary": {
+              "fullAccess": 0,
+              "sendAs": 0,
+              "sendOnBehalf": 0,
+              "total": 0,
+              "inherited": 0,
+              "orphaned": 0
+            },
+            "permissions": []
+          }
+        ]
+      },
+      {
+        "match": {
+          "bodyIncludes": "\"identity\":\"nora.fischer@example.com\""
+        },
+        "body": [
+          {
+            "mailbox": {
+              "displayName": "Nora Fischer",
+              "primarySmtpAddress": "nora.fischer@example.com",
+              "userPrincipalName": "nora.fischer@example.com",
+              "recipientTypeDetails": "UserMailbox"
+            },
+            "summary": {
+              "fullAccess": 0,
+              "sendAs": 0,
+              "sendOnBehalf": 0,
+              "total": 0,
+              "inherited": 0,
+              "orphaned": 0
+            },
+            "permissions": []
+          }
+        ]
+      },
+      {
+        "match": {
+          "bodyIncludes": "\"identity\":\"reception@example.com\""
+        },
+        "body": [
+          {
+            "mailbox": {
+              "displayName": "Reception",
+              "primarySmtpAddress": "reception@example.com",
+              "userPrincipalName": "reception@example.com",
+              "recipientTypeDetails": "SharedMailbox"
+            },
+            "summary": {
+              "fullAccess": 1,
+              "sendAs": 0,
+              "sendOnBehalf": 1,
+              "total": 2,
+              "inherited": 0,
+              "orphaned": 0
+            },
+            "permissions": [
+              {
+                "key": "fullaccess|hana.kim@example.com",
+                "permission": "FullAccess",
+                "trustee": "hana.kim@example.com",
+                "trusteeDisplayName": "Hana Kim",
+                "trusteeType": "UserMailbox",
+                "accessRights": [
+                  "FullAccess"
+                ],
+                "inherited": false,
+                "deny": false,
+                "orphaned": false,
+                "removable": true
+              },
+              {
+                "key": "sendonbehalf|hana.kim@example.com",
+                "permission": "SendOnBehalf",
+                "trustee": "hana.kim@example.com",
+                "trusteeDisplayName": "Hana Kim",
+                "trusteeType": "UserMailbox",
+                "accessRights": [
+                  "SendOnBehalf"
+                ],
+                "inherited": false,
+                "deny": false,
+                "orphaned": false,
+                "removable": false
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "match": {
+          "bodyIncludes": "\"identity\":\"invoices@example.com\""
+        },
+        "body": [
+          {
+            "mailbox": {
+              "displayName": "Finance Invoices",
+              "primarySmtpAddress": "invoices@example.com",
+              "userPrincipalName": "invoices@example.com",
+              "recipientTypeDetails": "SharedMailbox"
+            },
+            "summary": {
+              "fullAccess": 3,
+              "sendAs": 1,
+              "sendOnBehalf": 1,
+              "total": 5,
+              "inherited": 0,
+              "orphaned": 1
+            },
+            "permissions": [
+              {
+                "key": "fullaccess|nora.fischer@example.com",
+                "permission": "FullAccess",
+                "trustee": "nora.fischer@example.com",
+                "trusteeDisplayName": "Nora Fischer",
+                "trusteeType": "UserMailbox",
+                "accessRights": [
+                  "FullAccess"
+                ],
+                "inherited": false,
+                "deny": false,
+                "orphaned": false,
+                "removable": true
+              },
+              {
+                "key": "fullaccess|blake@example.com",
+                "permission": "FullAccess",
+                "trustee": "blake@example.com",
+                "trusteeDisplayName": "Blake Analyst",
+                "trusteeType": "UserMailbox",
+                "accessRights": [
+                  "FullAccess"
+                ],
+                "inherited": false,
+                "deny": false,
+                "orphaned": false,
+                "removable": true
+              },
+              {
+                "key": "fullaccess|s-1-5-21-1004336348-1177238915-682003330-51210",
+                "permission": "FullAccess",
+                "trustee": "S-1-5-21-1004336348-1177238915-682003330-51210",
+                "trusteeDisplayName": null,
+                "trusteeType": null,
+                "accessRights": [
+                  "FullAccess"
+                ],
+                "inherited": false,
+                "deny": false,
+                "orphaned": true,
+                "removable": false
+              },
+              {
+                "key": "sendas|nora.fischer@example.com",
+                "permission": "SendAs",
+                "trustee": "nora.fischer@example.com",
+                "trusteeDisplayName": "Nora Fischer",
+                "trusteeType": "UserMailbox",
+                "accessRights": [
+                  "SendAs"
+                ],
+                "inherited": false,
+                "deny": false,
+                "orphaned": false,
+                "removable": true
+              },
+              {
+                "key": "sendonbehalf|blake@example.com",
+                "permission": "SendOnBehalf",
+                "trustee": "blake@example.com",
+                "trusteeDisplayName": "Blake Analyst",
+                "trusteeType": "UserMailbox",
+                "accessRights": [
+                  "SendOnBehalf"
+                ],
+                "inherited": false,
+                "deny": false,
+                "orphaned": false,
+                "removable": false
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "match": {
+          "bodyIncludes": "\"identity\":\"support@example.com\""
+        },
+        "body": [
+          {
+            "mailbox": {
+              "displayName": "Customer Support",
+              "primarySmtpAddress": "support@example.com",
+              "userPrincipalName": "support@example.com",
+              "recipientTypeDetails": "SharedMailbox"
+            },
+            "summary": {
+              "fullAccess": 4,
+              "sendAs": 2,
+              "sendOnBehalf": 0,
+              "total": 6,
+              "inherited": 1,
+              "orphaned": 0
+            },
+            "permissions": [
+              {
+                "key": "fullaccess|avery@example.com",
+                "permission": "FullAccess",
+                "trustee": "avery@example.com",
+                "trusteeDisplayName": "Avery Engineer",
+                "trusteeType": "UserMailbox",
+                "accessRights": [
+                  "FullAccess"
+                ],
+                "inherited": false,
+                "deny": false,
+                "orphaned": false,
+                "removable": true
+              },
+              {
+                "key": "fullaccess|kai.lindqvist@example.com",
+                "permission": "FullAccess",
+                "trustee": "kai.lindqvist@example.com",
+                "trusteeDisplayName": "Kai Lindqvist",
+                "trusteeType": "UserMailbox",
+                "accessRights": [
+                  "FullAccess"
+                ],
+                "inherited": false,
+                "deny": false,
+                "orphaned": false,
+                "removable": true
+              },
+              {
+                "key": "fullaccess|farah.haddad@example.com",
+                "permission": "FullAccess",
+                "trustee": "farah.haddad@example.com",
+                "trusteeDisplayName": "Farah Haddad",
+                "trusteeType": "UserMailbox",
+                "accessRights": [
+                  "FullAccess"
+                ],
+                "inherited": false,
+                "deny": false,
+                "orphaned": false,
+                "removable": true
+              },
+              {
+                "key": "sendas|avery@example.com",
+                "permission": "SendAs",
+                "trustee": "avery@example.com",
+                "trusteeDisplayName": "Avery Engineer",
+                "trusteeType": "UserMailbox",
+                "accessRights": [
+                  "SendAs"
+                ],
+                "inherited": false,
+                "deny": false,
+                "orphaned": false,
+                "removable": true
+              },
+              {
+                "key": "sendas|kai.lindqvist@example.com",
+                "permission": "SendAs",
+                "trustee": "kai.lindqvist@example.com",
+                "trusteeDisplayName": "Kai Lindqvist",
+                "trusteeType": "UserMailbox",
+                "accessRights": [
+                  "SendAs"
+                ],
+                "inherited": false,
+                "deny": false,
+                "orphaned": false,
+                "removable": true
+              },
+              {
+                "key": "fullaccess|eli.obrien@example.com",
+                "permission": "FullAccess",
+                "trustee": "eli.obrien@example.com",
+                "trusteeDisplayName": "Eli O'Brien",
+                "trusteeType": "UserMailbox",
+                "accessRights": [
+                  "FullAccess",
+                  "ReadPermission"
+                ],
+                "inherited": true,
+                "deny": false,
+                "orphaned": false,
+                "removable": false
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "match": {
+          "bodyIncludes": "\"identity\":\"hr-confidential@example.com\""
+        },
+        "body": [
+          {
+            "mailbox": {
+              "displayName": "HR Confidential",
+              "primarySmtpAddress": "hr-confidential@example.com",
+              "userPrincipalName": "hr-confidential@example.com",
+              "recipientTypeDetails": "SharedMailbox"
+            },
+            "summary": {
+              "fullAccess": 1,
+              "sendAs": 1,
+              "sendOnBehalf": 0,
+              "total": 2,
+              "inherited": 0,
+              "orphaned": 0
+            },
+            "permissions": [
+              {
+                "key": "fullaccess|leah.moreau@example.com",
+                "permission": "FullAccess",
+                "trustee": "leah.moreau@example.com",
+                "trusteeDisplayName": "Leah Moreau",
+                "trusteeType": "UserMailbox",
+                "accessRights": [
+                  "FullAccess"
+                ],
+                "inherited": false,
+                "deny": false,
+                "orphaned": false,
+                "removable": true
+              },
+              {
+                "key": "sendas|leah.moreau@example.com",
+                "permission": "SendAs",
+                "trustee": "leah.moreau@example.com",
+                "trusteeDisplayName": "Leah Moreau",
+                "trusteeType": "UserMailbox",
+                "accessRights": [
+                  "SendAs"
+                ],
+                "inherited": false,
+                "deny": false,
+                "orphaned": false,
+                "removable": true
+              },
+              {
+                "key": "fullaccess|dana@example.com",
+                "permission": "FullAccess",
+                "trustee": "dana@example.com",
+                "trusteeDisplayName": "Dana Former",
+                "trusteeType": "UserMailbox",
+                "accessRights": [
+                  "FullAccess"
+                ],
+                "inherited": false,
+                "deny": true,
+                "orphaned": false,
+                "removable": false
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "match": {
+          "bodyIncludes": "\"identity\":\"room-boardroom@example.com\""
+        },
+        "body": [
+          {
+            "mailbox": {
+              "displayName": "Boardroom",
+              "primarySmtpAddress": "room-boardroom@example.com",
+              "userPrincipalName": "room-boardroom@example.com",
+              "recipientTypeDetails": "RoomMailbox"
+            },
+            "summary": {
+              "fullAccess": 1,
+              "sendAs": 0,
+              "sendOnBehalf": 0,
+              "total": 1,
+              "inherited": 0,
+              "orphaned": 0
+            },
+            "permissions": [
+              {
+                "key": "fullaccess|reception@example.com",
+                "permission": "FullAccess",
+                "trustee": "reception@example.com",
+                "trusteeDisplayName": "Reception",
+                "trusteeType": "SharedMailbox",
+                "accessRights": [
+                  "FullAccess"
+                ],
+                "inherited": false,
+                "deny": false,
+                "orphaned": false,
+                "removable": true
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "match": {
+          "bodyIncludes": "\"identity\":\"room-atlas@example.com\""
+        },
+        "body": [
+          {
+            "mailbox": {
+              "displayName": "Atlas Room (4th floor)",
+              "primarySmtpAddress": "room-atlas@example.com",
+              "userPrincipalName": "room-atlas@example.com",
+              "recipientTypeDetails": "RoomMailbox"
+            },
+            "summary": {
+              "fullAccess": 0,
+              "sendAs": 0,
+              "sendOnBehalf": 0,
+              "total": 0,
+              "inherited": 0,
+              "orphaned": 0
+            },
+            "permissions": []
+          }
+        ]
+      },
+      {
+        "match": {
+          "bodyIncludes": "\"identity\":\"projector-01@example.com\""
+        },
+        "body": [
+          {
+            "mailbox": {
+              "displayName": "Projector 01",
+              "primarySmtpAddress": "projector-01@example.com",
+              "userPrincipalName": "projector-01@example.com",
+              "recipientTypeDetails": "EquipmentMailbox"
+            },
+            "summary": {
+              "fullAccess": 0,
+              "sendAs": 0,
+              "sendOnBehalf": 0,
+              "total": 0,
+              "inherited": 0,
+              "orphaned": 0
+            },
+            "permissions": []
+          }
+        ]
+      }
+    ],
+    "body": [
+      {
+        "mailbox": {
+          "displayName": "Customer Support",
+          "primarySmtpAddress": "support@example.com",
+          "userPrincipalName": "support@example.com",
+          "recipientTypeDetails": "SharedMailbox"
+        },
+        "summary": {
+          "fullAccess": 4,
+          "sendAs": 2,
+          "sendOnBehalf": 0,
+          "total": 6,
+          "inherited": 1,
+          "orphaned": 0
+        },
+        "permissions": [
+          {
+            "key": "fullaccess|avery@example.com",
+            "permission": "FullAccess",
+            "trustee": "avery@example.com",
+            "trusteeDisplayName": "Avery Engineer",
+            "trusteeType": "UserMailbox",
+            "accessRights": [
+              "FullAccess"
+            ],
+            "inherited": false,
+            "deny": false,
+            "orphaned": false,
+            "removable": true
+          },
+          {
+            "key": "fullaccess|kai.lindqvist@example.com",
+            "permission": "FullAccess",
+            "trustee": "kai.lindqvist@example.com",
+            "trusteeDisplayName": "Kai Lindqvist",
+            "trusteeType": "UserMailbox",
+            "accessRights": [
+              "FullAccess"
+            ],
+            "inherited": false,
+            "deny": false,
+            "orphaned": false,
+            "removable": true
+          },
+          {
+            "key": "fullaccess|farah.haddad@example.com",
+            "permission": "FullAccess",
+            "trustee": "farah.haddad@example.com",
+            "trusteeDisplayName": "Farah Haddad",
+            "trusteeType": "UserMailbox",
+            "accessRights": [
+              "FullAccess"
+            ],
+            "inherited": false,
+            "deny": false,
+            "orphaned": false,
+            "removable": true
+          },
+          {
+            "key": "sendas|avery@example.com",
+            "permission": "SendAs",
+            "trustee": "avery@example.com",
+            "trusteeDisplayName": "Avery Engineer",
+            "trusteeType": "UserMailbox",
+            "accessRights": [
+              "SendAs"
+            ],
+            "inherited": false,
+            "deny": false,
+            "orphaned": false,
+            "removable": true
+          },
+          {
+            "key": "sendas|kai.lindqvist@example.com",
+            "permission": "SendAs",
+            "trustee": "kai.lindqvist@example.com",
+            "trusteeDisplayName": "Kai Lindqvist",
+            "trusteeType": "UserMailbox",
+            "accessRights": [
+              "SendAs"
+            ],
+            "inherited": false,
+            "deny": false,
+            "orphaned": false,
+            "removable": true
+          },
+          {
+            "key": "fullaccess|eli.obrien@example.com",
+            "permission": "FullAccess",
+            "trustee": "eli.obrien@example.com",
+            "trusteeDisplayName": "Eli O'Brien",
+            "trusteeType": "UserMailbox",
+            "accessRights": [
+              "FullAccess",
+              "ReadPermission"
+            ],
+            "inherited": true,
+            "deny": false,
+            "orphaned": false,
+            "removable": false
+          }
+        ]
+      }
+    ]
+  }
+}

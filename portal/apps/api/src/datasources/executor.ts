@@ -27,6 +27,7 @@ import {
   compileAdvanced,
   dialectFor,
   parseAdvanced,
+  rowsFilter,
   type AdvancedGroup,
 } from './advanced';
 import { cacheKey, TtlCache } from './cache';
@@ -275,13 +276,13 @@ export class DatasourceRunner {
     return { def: r.def as PageLike, version: r.version, sha256: r.sha256, kind: r.kind, key };
   }
 
-  /** Portal roles (any of `requires.portalRoles`). */
+  /** Portal roles: every role in `requires.portalRoles` (the same rule as runs and scheduled data). */
   assertAccess(roles: string[], requires: Requires | undefined, what: string): void {
-    const need = requires?.portalRoles;
+    const missing = (requires?.portalRoles ?? []).filter((r) => !roles.includes(r));
     // (kept free of Fastify imports: the CLI runs this code too)
-    if (need?.length && !need.some((r) => roles.includes(r)))
-      throw new AppError(403, 'forbidden', `${what} needs one of the roles ${need.join(', ')}.`, {
-        hint: 'Ask a portal administrator for access.',
+    if (missing.length)
+      throw new AppError(403, 'forbidden', `${what} needs the ${missing.join(' and ')} role.`, {
+        hint: `Ask a portal administrator to add you to the matching AdminForge group (SG-AdminForge-…-${missing[0]}).`,
       });
   }
 
@@ -291,7 +292,8 @@ export class DatasourceRunner {
 
   /**
    * Expression scope for one datasource. The query builder's validated filter is removed from `params` and offered
-   * only compiled for this datasource's dialect as `advanced` (OData for Graph, KQL for Resource Graph/Log Analytics).
+   * only compiled for this datasource's dialect as `advanced` (OData for Graph, KQL for Resource Graph/Log Analytics),
+   * or — on `dialect: rows` pages — as validated data for `$applyAdvanced(rows, advanced)` in a transform.
    */
   private datasourceScope(
     page: LoadedPage,
@@ -303,7 +305,14 @@ export class DatasourceRunner {
     const name = advancedParamOf(page.def.filters);
     if (!name) return { ...this.scope(user, params), ds: deps };
     const { [name]: filter, ...plain } = params;
-    const dialect = page.def.filters?.advanced?.dialect === 'client' ? undefined : dialectFor(ds.source);
+    const pageDialect = page.def.filters?.advanced?.dialect;
+    if (pageDialect === 'rows')
+      return {
+        ...this.scope(user, plain),
+        ds: deps,
+        advanced: filter ? rowsFilter(filter as AdvancedGroup) : undefined,
+      };
+    const dialect = pageDialect === 'client' ? undefined : dialectFor(ds.source);
     const advanced = filter && dialect ? compileAdvanced(filter as AdvancedGroup, dialect) : undefined;
     return { ...this.scope(user, plain), ds: deps, advanced };
   }

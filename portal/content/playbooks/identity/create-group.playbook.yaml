@@ -1,0 +1,294 @@
+$schema: ../../../packages/schemas/generated/playbook.schema.json
+kind: playbook
+id: identity.create-group
+version: 2.0.0
+title: Create group
+summary: >-
+  Creates a cloud security group or Microsoft 365 group, with assigned membership (owners and initial members) or
+  dynamic membership (a rule; needs Microsoft Entra ID P1). Refuses duplicate names. Replaces Create security group
+  (identity.create-security-group 1.x). Role-assignable groups are created by a Privileged Role Administrator in the
+  Entra admin center.
+owner: identity-team
+tags: [identity, groups]
+risk: low
+mode: write
+requires:
+  portalRoles: [Portal.Operator]
+  scopes:
+    # Group.Create is application-only; Organization.Read.All reads the tenant's licences for dynamic membership.
+    graph: [Group.Read.All, Group.ReadWrite.All, GroupMember.ReadWrite.All, Organization.Read.All]
+  entraRoles: [Groups Administrator]
+confirm:
+  type: click
+  message: >-
+    ${ 'Create the ' & (inputs.groupType = 'Microsoft365' ? 'Microsoft 365' : 'security') & ' group ' & $trim(inputs.displayName)
+       & (inputs.membership = 'Dynamic'
+          ? ' with dynamic membership? Members are added by the rule within minutes to hours.'
+          : ' with ' & $count(inputs.ownerIds) & ' owner(s) and ' & $count(inputs.memberIds) & ' member(s)?') }
+approval:
+  required: false
+
+inputs:
+  groupType:
+    type: enum
+    label: Type
+    default: Security
+    values:
+      - { value: Security, label: Security group }
+      - { value: Microsoft365, label: "Microsoft 365 group (mailbox, calendar, SharePoint site)" }
+  membership:
+    type: enum
+    label: Membership
+    default: Assigned
+    values:
+      - { value: Assigned, label: "Assigned (you add members)" }
+      - { value: Dynamic, label: "Dynamic (a rule adds members; needs Microsoft Entra ID P1)" }
+  displayName: { type: string, label: Name, minLength: 3, maxLength: 256, placeholder: SG-App-Example-Users }
+  description: { type: string, label: Description, minLength: 10, maxLength: 1024, multiline: true }
+  mailNickname:
+    type: string
+    label: Mail nickname
+    required: false
+    pattern: "^[A-Za-z0-9._-]{1,64}$"
+    description: Defaults to the name without spaces or special characters. Microsoft 365 groups use it as the email alias.
+  visibility:
+    type: enum
+    label: Privacy (Microsoft 365 groups)
+    default: Private
+    values:
+      - { value: Private, label: "Private — owners approve who joins" }
+      - { value: Public, label: "Public — anyone in the organisation can join" }
+  membershipRule:
+    type: string
+    label: Dynamic membership rule
+    required: false
+    multiline: true
+    maxLength: 3072
+    placeholder: (user.department -eq "Sales") and (user.accountEnabled -eq true)
+    description: Dynamic groups only. Use user. properties (or device. properties for security groups), never both.
+  ownerIds: { type: user, multiple: true, maxItems: 10, label: Owners, required: false, description: Recommended — at least two accountable owners. }
+  memberIds: { type: user, multiple: true, maxItems: 500, label: Members, required: false, description: Assigned groups only. }
+
+steps:
+  - id: names
+    type: transform
+    expression: >-
+      ${ {
+        "displayName": $trim(inputs.displayName),
+        "mailNickname": inputs.mailNickname ? inputs.mailNickname : $substring($replace($trim(inputs.displayName), /[^A-Za-z0-9._-]/, ''), 0, 64),
+        "rule": inputs.membershipRule ? $trim(inputs.membershipRule) : '',
+        "m365": inputs.groupType = 'Microsoft365',
+        "dynamic": inputs.membership = 'Dynamic'
+      } }
+
+  - id: ruleForDynamic
+    type: assert
+    that: ${ steps.names.output.dynamic = (steps.names.output.rule != '') }
+    message: >-
+      ${ steps.names.output.dynamic
+         ? 'Dynamic membership needs a membership rule.'
+         : 'A membership rule only applies to dynamic groups: choose Dynamic membership or clear the rule.' }
+
+  - id: noMembersForDynamic
+    type: assert
+    that: ${ $not(steps.names.output.dynamic) or $count(inputs.memberIds) = 0 }
+    message: Dynamic groups get their members from the rule. Remove the members you picked (owners are fine).
+
+  - id: ruleTarget
+    type: assert
+    that: >-
+      ${ $not(steps.names.output.dynamic)
+         or ($not($contains(steps.names.output.rule, /\bdevice\./i) and $contains(steps.names.output.rule, /\buser\./i))
+             and $not(steps.names.output.m365 and $contains(steps.names.output.rule, /\bdevice\./i))) }
+    message: >-
+      A rule can't mix user. and device. properties, and Microsoft 365 groups can only have user members.
+
+  - id: existing
+    type: graph
+    mode: read
+    describe: Check that the name is free
+    request:
+      method: GET
+      path: /groups
+      query:
+        $select: id,displayName
+        $filter: ${ 'displayName eq ' & $odata(steps.names.output.displayName) }
+
+  - id: unique
+    type: assert
+    that: ${ $count(steps.existing.output.value) = 0 }
+    message: ${ 'A group named ' & steps.names.output.displayName & ' already exists. Choose a different name.' }
+
+  - id: aliasTaken
+    type: graph
+    mode: read
+    describe: Check that the email alias is free
+    when: ${ steps.names.output.m365 }
+    request:
+      method: GET
+      path: /groups
+      query:
+        $select: id,displayName
+        $filter: ${ 'mailNickname eq ' & $odata(steps.names.output.mailNickname) }
+
+  - id: aliasFree
+    type: assert
+    that: ${ $not(steps.names.output.m365) or $count(steps.aliasTaken.output.value) = 0 }
+    message: ${ 'The alias ' & steps.names.output.mailNickname & ' is used by ' & steps.aliasTaken.output.value[0].displayName & '. Set a different mail nickname.' }
+
+  # Dynamic membership needs an Entra ID P1 service plan; licences that can't be read never block (Graph decides).
+  - id: licences
+    type: graph
+    mode: read
+    describe: Check that the tenant has Microsoft Entra ID P1 (dynamic membership)
+    when: ${ steps.names.output.dynamic }
+    onError: continue
+    request:
+      method: GET
+      path: /subscribedSkus
+      query:
+        $select: skuPartNumber,capabilityStatus,servicePlans
+
+  - id: p1
+    type: assert
+    that: >-
+      ${ $not(steps.names.output.dynamic) or $not($exists(steps.licences.output.value))
+         or $count(steps.licences.output.value[capabilityStatus in ['Enabled', 'Warning']].servicePlans[
+              servicePlanName in ['AAD_PREMIUM', 'AAD_PREMIUM_P2'] and provisioningStatus = 'Success'
+            ]) > 0 }
+    message: >-
+      Dynamic membership needs Microsoft Entra ID P1 (AAD_PREMIUM) or P2, which this tenant doesn't have. Create a
+      group with assigned membership instead.
+
+  - id: create
+    type: graph
+    mode: write
+    describe: >-
+      ${ 'Create the ' & (steps.names.output.m365 ? 'Microsoft 365' : 'security') & ' group ' & steps.names.output.displayName
+         & (steps.names.output.dynamic ? ' with the rule ' & steps.names.output.rule : '') }
+    idempotent: false
+    request:
+      method: POST
+      path: /groups
+      body: >-
+        ${ (
+          $n := steps.names.output;
+          $merge([
+            {
+              'displayName': $n.displayName,
+              'description': inputs.description,
+              'mailNickname': $n.mailNickname,
+              'mailEnabled': $n.m365,
+              'securityEnabled': $not($n.m365),
+              'groupTypes': [$n.m365 ? 'Unified', $n.dynamic ? 'DynamicMembership']
+            },
+            $n.m365 ? { 'visibility': inputs.visibility },
+            $n.dynamic ? { 'membershipRule': $n.rule, 'membershipRuleProcessingState': 'On' },
+            $count(inputs.ownerIds) > 0 ? { 'owners@odata.bind': [inputs.ownerIds.('https://graph.microsoft.com/v1.0/users/' & $guid($))] }
+          ])
+        ) }
+    dryRunOutput:
+      id: 00000000-0000-0000-0000-000000000000
+      displayName: ${ steps.names.output.displayName }
+    compensate:
+      type: graph
+      describe: Delete the new group (it stays restorable for 30 days)
+      request:
+        method: DELETE
+        path: /groups/${ $encode(steps.create.output.id) }
+
+  - id: members
+    type: forEach
+    items: ${ [inputs.memberIds] }
+    as: memberId
+    concurrency: 5
+    steps:
+      - id: addMember
+        type: graph
+        mode: write
+        describe: ${ 'Add member ' & memberId }
+        onError: continue
+        request:
+          method: POST
+          path: /groups/${ $encode(steps.create.output.id) }/members/$ref
+          body:
+            "@odata.id": https://graph.microsoft.com/v1.0/directoryObjects/${ $guid(memberId) }
+
+outputs:
+  summary: >-
+    ${ 'Created ' & steps.names.output.displayName
+       & (steps.names.output.dynamic
+          ? ' with dynamic membership; members appear as the rule is processed.'
+          : ' with ' & $count(inputs.memberIds) & ' member(s).') }
+  groupId: ${ steps.create.output.id }
+
+tests:
+  - name: refuses a duplicate name
+    inputs: { displayName: SG-App-Payroll-Users, description: Users of the payroll application }
+    mocks:
+      existing: { value: [{ id: 00000000-0000-4000-8000-000000000201, displayName: SG-App-Payroll-Users }] }
+    expect: { status: failed, failedStep: unique }
+  - name: plans a security group and its members
+    inputs:
+      displayName: SG-App-Expenses-Users
+      description: Users of the expenses application
+      ownerIds: [00000000-0000-4000-8000-000000000101, 00000000-0000-4000-8000-000000000102]
+      memberIds: [00000000-0000-4000-8000-000000000105]
+    mocks:
+      existing: { value: [] }
+    expect:
+      status: succeeded
+      plan: [create, addMember]
+      steps: { aliasTaken: skipped, licences: skipped }
+      outputs: { summary: Created SG-App-Expenses-Users with 1 member(s). }
+  - name: refuses a Microsoft 365 group whose alias is taken
+    inputs: { groupType: Microsoft365, displayName: Project Falcon Team, mailNickname: ProjectFalcon, description: Project Falcon delivery team }
+    mocks:
+      existing: { value: [] }
+      aliasTaken: { value: [{ id: 00000000-0000-4000-8000-000000000202, displayName: Project Falcon }] }
+    expect: { status: failed, failedStep: aliasFree }
+  - name: plans a public Microsoft 365 group
+    inputs: { groupType: Microsoft365, visibility: Public, displayName: Book Club Readers, description: Monthly book club for everyone, ownerIds: [00000000-0000-4000-8000-000000000102] }
+    mocks:
+      existing: { value: [] }
+      aliasTaken: { value: [] }
+    expect:
+      status: succeeded
+      plan: [create]
+      outputs: { summary: Created Book Club Readers with 0 member(s). }
+  - name: refuses dynamic membership without a rule
+    inputs: { membership: Dynamic, displayName: SG-Dyn-Sales, description: Everyone in the sales department }
+    expect: { status: failed, failedStep: ruleForDynamic }
+  - name: refuses a rule on an assigned group
+    inputs: { displayName: SG-Sales, description: Everyone in the sales department, membershipRule: (user.department -eq "Sales") }
+    expect: { status: failed, failedStep: ruleForDynamic }
+  - name: refuses members on a dynamic group
+    inputs: { membership: Dynamic, displayName: SG-Dyn-Sales, description: Everyone in the sales department, membershipRule: (user.department -eq "Sales"), memberIds: [00000000-0000-4000-8000-000000000105] }
+    expect: { status: failed, failedStep: noMembersForDynamic }
+  - name: refuses a device rule on a Microsoft 365 group
+    inputs: { groupType: Microsoft365, membership: Dynamic, displayName: Windows Devices, description: All Windows devices in the tenant, membershipRule: (device.deviceOSType -eq "Windows") }
+    expect: { status: failed, failedStep: ruleTarget }
+  - name: refuses dynamic membership without Entra ID P1
+    inputs: { membership: Dynamic, displayName: SG-Dyn-Sales, description: Everyone in the sales department, membershipRule: (user.department -eq "Sales") }
+    mocks:
+      existing: { value: [] }
+      licences: { value: [{ skuPartNumber: FLOW_FREE, capabilityStatus: Enabled, servicePlans: [{ servicePlanName: FLOW_P2_VIRAL, provisioningStatus: Success }] }] }
+    expect: { status: failed, failedStep: p1 }
+  - name: plans a dynamic security group for devices
+    inputs: { membership: Dynamic, displayName: SG-Dyn-Windows-Devices, description: All Windows devices for Intune targeting, membershipRule: '  (device.deviceOSType -eq "Windows")  ' }
+    mocks:
+      existing: { value: [] }
+      licences: { value: [{ skuPartNumber: SPE_E3, capabilityStatus: Enabled, servicePlans: [{ servicePlanName: AAD_PREMIUM, provisioningStatus: Success }] }] }
+    expect:
+      status: succeeded
+      plan: [create]
+      outputs: { summary: Created SG-Dyn-Windows-Devices with dynamic membership; members appear as the rule is processed. }
+  - name: does not block when licences can't be read
+    inputs: { membership: Dynamic, displayName: SG-Dyn-Sales, description: Everyone in the sales department, membershipRule: (user.department -eq "Sales") }
+    mocks:
+      existing: { value: [] }
+    errors:
+      licences: { status: 403, code: Authorization_RequestDenied }
+    expect:
+      status: succeeded
+      plan: [create]

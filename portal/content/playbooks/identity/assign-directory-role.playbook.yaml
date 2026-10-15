@@ -1,0 +1,173 @@
+$schema: ../../../packages/schemas/generated/playbook.schema.json
+kind: playbook
+id: identity.assign-directory-role
+version: 1.0.0
+title: Assign directory role
+summary: >-
+  Gives a user, role-assignable group or service principal an active (standing) Microsoft Entra role assignment.
+  Where the tenant has Entra ID P2, prefer an eligible assignment (Add eligible role assignment). Needs approval by a
+  second engineer, and refuses assigning a role to yourself.
+owner: identity-team
+tags: [identity, roles, privileged-access]
+risk: critical
+mode: write
+requires:
+  portalRoles: [Portal.Operator]
+  scopes:
+    graph: [RoleManagement.ReadWrite.Directory, Directory.Read.All]
+  entraRoles: [Privileged Role Administrator]
+confirm:
+  type: typed
+  value: ${ steps.role.output.displayName }
+  message: >-
+    ${ steps.principal.output.displayName & ' gets ' & steps.role.output.displayName & ' at '
+       & (inputs.directoryScopeId = '/' ? 'directory' : inputs.directoryScopeId) & ' scope until someone removes it.'
+       & ' Type the role name to confirm.' }
+approval:
+  required: true
+  approvers: [Playbook.Approver]
+  minApprovals: 1
+  expiresIn: PT8H
+
+inputs:
+  roleDefinitionId: { type: string, format: guid, label: Role (definition id), description: Open the role from Roles & admins to fill this in. }
+  principalId:
+    type: string
+    format: guid
+    label: Assign to
+    picker: user
+    description: A user, or paste the object id of a role-assignable group or a service principal.
+  directoryScopeId:
+    type: string
+    label: Scope
+    default: /
+    pattern: "^/(administrativeUnits/[0-9a-fA-F-]{36})?$"
+    description: "/ for the whole directory, or /administrativeUnits/<id> for one administrative unit."
+  reason: { type: string, label: Justification, minLength: 10, multiline: true, description: Shown to the approver and recorded in the audit log. }
+
+steps:
+  - id: role
+    type: graph
+    mode: read
+    describe: Look up the role
+    request:
+      method: GET
+      path: /roleManagement/directory/roleDefinitions/${ $encode($guid(inputs.roleDefinitionId)) }
+
+  - id: roleEnabled
+    type: assert
+    that: ${ $not(steps.role.output.isEnabled = false) }
+    message: ${ steps.role.output.displayName & ' is a disabled custom role.' }
+
+  - id: principal
+    type: graph
+    mode: read
+    describe: Look up who gets the role
+    request:
+      method: GET
+      path: /directoryObjects/${ $encode($guid(inputs.principalId)) }
+
+  - id: kind
+    type: transform
+    expression: ${ $substringAfter(steps.principal.output.`@odata.type`, '#microsoft.graph.') }
+
+  - id: supported
+    type: assert
+    that: ${ steps.kind.output in ['user', 'group', 'servicePrincipal'] }
+    message: Directory roles can be assigned to users, role-assignable groups and service principals only.
+
+  - id: roleAssignableGroup
+    type: assert
+    that: ${ steps.kind.output != 'group' or steps.principal.output.isAssignableToRole = true }
+    message: >-
+      ${ steps.principal.output.displayName & ' is not role-assignable. Only groups created as role-assignable can hold'
+         & ' Microsoft Entra roles.' }
+
+  - id: notSelf
+    type: assert
+    that: ${ $not($guid(inputs.principalId) = $lowercase(user.oid)) }
+    message: You can't assign a role to yourself. Ask another administrator, or activate an eligible role in PIM.
+
+  # Same request as the user page's Roles tab: the principal's direct assignments with their role definitions.
+  - id: current
+    type: graph
+    mode: read
+    describe: Read the principal's current role assignments
+    request:
+      method: GET
+      path: /roleManagement/directory/roleAssignments
+      query:
+        $filter: ${ 'principalId eq ' & $odata($guid(inputs.principalId)) }
+        $expand: roleDefinition
+
+  - id: notAssigned
+    type: assert
+    that: >-
+      ${ $count(steps.current.output.value[
+           $lowercase(roleDefinitionId) = $lowercase($$.steps.role.output.id) and directoryScopeId = $$.inputs.directoryScopeId
+         ]) = 0 }
+    message: ${ steps.principal.output.displayName & ' already holds ' & steps.role.output.displayName & ' at this scope.' }
+
+  - id: assign
+    type: graph
+    mode: write
+    describe: >-
+      ${ 'Assign ' & steps.role.output.displayName & ' to ' & steps.principal.output.displayName & ' (' & steps.kind.output
+         & ') at ' & (inputs.directoryScopeId = '/' ? 'directory scope' : inputs.directoryScopeId) }
+    idempotent: false
+    request:
+      method: POST
+      path: /roleManagement/directory/roleAssignments
+      body:
+        principalId: ${ $guid(inputs.principalId) }
+        roleDefinitionId: ${ steps.role.output.id }
+        directoryScopeId: ${ inputs.directoryScopeId }
+    dryRunOutput:
+      id: planned-role-assignment
+    compensate:
+      type: graph
+      describe: Remove the new role assignment
+      request:
+        method: DELETE
+        path: /roleManagement/directory/roleAssignments/${ $encode(steps.assign.output.id) }
+
+outputs:
+  summary: >-
+    ${ steps.role.output.displayName & ' assigned to ' & steps.principal.output.displayName
+       & '. New permissions can take a few minutes to apply across Microsoft services.' }
+  assignmentId: ${ steps.assign.output.id }
+
+tests:
+  - name: refuses a group that is not role-assignable
+    inputs: { roleDefinitionId: fe930be7-5e62-47db-91af-98c3a49a38b1, principalId: 00000000-0000-4000-8000-000000000201, directoryScopeId: /, reason: Helpdesk escalation team REQ-3101 }
+    user: { oid: 00000000-0000-4000-8000-0000000000a1, upn: avery@example.com }
+    mocks:
+      role: { id: fe930be7-5e62-47db-91af-98c3a49a38b1, displayName: User Administrator, isBuiltIn: true, isEnabled: true }
+      principal: { "@odata.type": "#microsoft.graph.group", id: 00000000-0000-4000-8000-000000000201, displayName: SG-App-Payroll-Users, isAssignableToRole: null }
+    expect: { status: failed, failedStep: roleAssignableGroup }
+  - name: refuses assigning a role to yourself
+    inputs: { roleDefinitionId: 62e90394-69f5-4237-9190-012177145e10, principalId: 00000000-0000-4000-8000-0000000000A1, directoryScopeId: /, reason: Need global admin for tenant setting REQ-3102 }
+    user: { oid: 00000000-0000-4000-8000-0000000000a1, upn: avery@example.com }
+    mocks:
+      role: { id: 62e90394-69f5-4237-9190-012177145e10, displayName: Global Administrator, isBuiltIn: true, isEnabled: true }
+      principal: { "@odata.type": "#microsoft.graph.user", id: 00000000-0000-4000-8000-0000000000a1, displayName: Avery Engineer, userPrincipalName: avery@example.com }
+    expect: { status: failed, failedStep: notSelf }
+  - name: refuses a duplicate assignment at the same scope
+    inputs: { roleDefinitionId: fe930be7-5e62-47db-91af-98c3a49a38b1, principalId: 00000000-0000-4000-8000-000000000101, directoryScopeId: /, reason: Helpdesk escalation team REQ-3103 }
+    user: { oid: 00000000-0000-4000-8000-0000000000a1, upn: avery@example.com }
+    mocks:
+      role: { id: fe930be7-5e62-47db-91af-98c3a49a38b1, displayName: User Administrator, isBuiltIn: true, isEnabled: true }
+      principal: { "@odata.type": "#microsoft.graph.user", id: 00000000-0000-4000-8000-000000000101, displayName: Adele Lee, userPrincipalName: a.lee@example.com }
+      current: { value: [{ id: ra-05, principalId: 00000000-0000-4000-8000-000000000101, roleDefinitionId: fe930be7-5e62-47db-91af-98c3a49a38b1, directoryScopeId: / }] }
+    expect: { status: failed, failedStep: notAssigned }
+  - name: plans assigning a role to a role-assignable group
+    inputs: { roleDefinitionId: fe930be7-5e62-47db-91af-98c3a49a38b1, principalId: 00000000-0000-4000-8000-000000000208, directoryScopeId: /, reason: Identity admins group gets User Administrator REQ-3104 }
+    user: { oid: 00000000-0000-4000-8000-0000000000a1, upn: avery@example.com }
+    mocks:
+      role: { id: fe930be7-5e62-47db-91af-98c3a49a38b1, displayName: User Administrator, isBuiltIn: true, isEnabled: true }
+      principal: { "@odata.type": "#microsoft.graph.group", id: 00000000-0000-4000-8000-000000000208, displayName: SG-PIM-Identity-Admins, isAssignableToRole: true }
+      current: { value: [{ id: ra-20, principalId: 00000000-0000-4000-8000-000000000208, roleDefinitionId: fe930be7-5e62-47db-91af-98c3a49a38b1, directoryScopeId: /administrativeUnits/00000000-0000-4000-8000-000000000c01 }] }
+    expect:
+      status: succeeded
+      plan: [assign]
+      outputs: { summary: User Administrator assigned to SG-PIM-Identity-Admins. New permissions can take a few minutes to apply across Microsoft services. }

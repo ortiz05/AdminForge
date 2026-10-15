@@ -36,6 +36,13 @@
       "when": 1792048971586,
       "tag": "0004_preauth_binding",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1792052167637,
+      "tag": "0005_history_indexes",
+      "breakpoints": true
     }
   ]
 }

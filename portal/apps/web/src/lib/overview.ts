@@ -3,7 +3,7 @@ import type { StatusTone } from '@adminforge/ui';
 import { api, isRecord, type Parser } from './api';
 
 /**
- * GET /api/overview (temporary coded endpoint, Task 1.18; becomes a YAML dashboard in Phase 3).
+ * GET /api/overview: a coded endpoint by decision (docs/decisions.md) — it batches many Graph calls into one round trip.
  * Not yet in @adminforge/schemas — this guard is the client side of the contract until it is.
  */
 export interface OverviewProvenance {

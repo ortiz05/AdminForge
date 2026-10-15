@@ -4,6 +4,9 @@ import { requireRole, requireSession } from '../auth/guards';
 import { auditActor, type AppContext } from '../context';
 import { AppError, parseBody } from '../errors';
 import type { SchedulesModule } from '../schedules/module';
+import { tenantValuesFor } from '../query/tenant-values';
+import { previewCron, ScheduleScaffoldRequest, scaffoldSchedule } from '../schedules/scaffold';
+import { TimeZone } from '@adminforge/schemas';
 import type { Caller } from '../schedules/service';
 
 /**
@@ -39,12 +42,39 @@ function key(raw: string): string {
   return r.data;
 }
 
+const CronPreviewRequest = z.object({ cron: z.string().trim().min(1).max(100), timezone: TimeZone });
+
 export function scheduleRoutes(api: FastifyInstance, ctx: AppContext, schedules: SchedulesModule) {
   const svc = schedules.service;
 
   api.get('/schedules', async (request) => {
     requireRole(requireSession(request), 'Portal.Reader', 'Schedules');
     return svc.list();
+  });
+
+  // Schedule editor (R6): live cron preview, and YAML for a new schedule. Nothing is stored; the YAML goes through git.
+  api.post('/schedules/preview', async (request) => {
+    requireRole(requireSession(request), 'Portal.Reader', 'Previewing a schedule');
+    const body = parseBody(CronPreviewRequest, request.body);
+    return previewCron(body.cron, body.timezone, ctx.now());
+  });
+
+  api.post('/schedules/scaffold', async (request) => {
+    const session = requireSession(request);
+    requireRole(session, 'Portal.Reader', 'Creating a schedule');
+    return scaffoldSchedule(parseBody(ScheduleScaffoldRequest, request.body), {
+      known: tenantValuesFor(ctx, session),
+      now: ctx.now(),
+      requiresOf: async (kind, key) => {
+        const def = (await ctx.definitions.resolve(kind, key).catch(() => null))?.def as
+          { requires?: { scopes?: unknown; licences?: unknown } } | undefined;
+        if (!def) throw new AppError(404, 'definition_not_found', `There is no published ${kind} "${key}".`);
+        const r = def.requires;
+        return r?.scopes || r?.licences
+          ? { ...(r.scopes ? { scopes: r.scopes } : {}), ...(r.licences ? { licences: r.licences } : {}) }
+          : null;
+      },
+    });
   });
 
   api.patch<{ Params: { key: string } }>('/schedules/:key', async (request, reply) => {

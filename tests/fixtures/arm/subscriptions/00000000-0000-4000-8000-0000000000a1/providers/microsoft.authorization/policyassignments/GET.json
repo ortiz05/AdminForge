@@ -1,0 +1,31 @@
+{
+  "value": [
+    {
+      "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/providers/Microsoft.Authorization/policyAssignments/require-owner-tag-rg",
+      "name": "require-owner-tag-rg",
+      "type": "Microsoft.Authorization/policyAssignments",
+      "properties": {
+        "displayName": "Require an owner tag on resource groups",
+        "scope": "/subscriptions/00000000-0000-4000-8000-0000000000a1",
+        "enforcementMode": "Default",
+        "policyDefinitionId": "/providers/Microsoft.Authorization/policyDefinitions/96670d01-0a4d-4649-9c89-2d3abc0a5025",
+        "parameters": {
+          "tagName": {
+            "value": "owner"
+          }
+        }
+      }
+    },
+    {
+      "id": "/providers/Microsoft.Management/managementGroups/mg-example/providers/Microsoft.Authorization/policyAssignments/allowed-locations",
+      "name": "allowed-locations",
+      "type": "Microsoft.Authorization/policyAssignments",
+      "properties": {
+        "displayName": "Allowed locations",
+        "scope": "/providers/Microsoft.Management/managementGroups/mg-example",
+        "enforcementMode": "Default",
+        "policyDefinitionId": "/providers/Microsoft.Authorization/policyDefinitions/e56962a6-4747-49cd-b67b-bf8b01975c4c"
+      }
+    }
+  ]
+}

@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/playbook.schema.json
 kind: playbook
 id: identity.pim-activate
-version: 1.0.0
+version: 1.1.0
 title: Activate an eligible role (PIM)
 summary: >-
   Self-activates one of your eligible Microsoft Entra roles through Privileged Identity Management for a limited time.
@@ -10,6 +10,8 @@ owner: identity-team
 tags: [identity, pim, roles]
 risk: medium
 mode: write
+# The activated role only reaches Microsoft in new tokens: refresh the initiator's tokens when the run succeeds.
+refreshTokens: true
 requires:
   portalRoles: [Portal.Operator]
   scopes:

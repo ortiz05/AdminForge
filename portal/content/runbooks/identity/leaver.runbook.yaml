@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/runbook.schema.json
 kind: runbook
 id: identity.leaver
-version: 1.0.0
+version: 1.1.0
 title: Leaver process
 summary: >-
   End-to-end leaver process with HR sign-off: confirm the leave date, hand over owned groups and apps, run the approved
@@ -181,15 +181,16 @@ sections:
           - Devices wiped (or Autopilot reset) before reissue
 
   - id: workloads
-    title: 5. Mailbox, OneDrive and access
-    body: These are done in Exchange Online, SharePoint and line-of-business apps.
+    title: 5. What offboarding couldn't do
+    body: >-
+      Step 3 converts the mailbox to shared, sets the automatic reply, hides it from the address lists and gives the
+      manager OneDrive access when those workloads are licensed. Check its run for anything it listed as not done.
     steps:
       - id: workloadTasks
         type: manual
-        instructions: Complete the remaining tasks the manager was told about.
+        instructions: Finish what the offboarding run listed as not done, and the tasks outside Microsoft 365.
         checklist:
-          - "Exchange: mailbox converted to shared (or forwarding / auto-reply set) and hidden from the address list"
-          - "OneDrive: manager granted access before the retention period ends"
+          - "Offboarding run: every follow-up it listed is done (mailbox, auto-reply, address lists, OneDrive)"
           - "Apps outside Entra ID SSO: accounts removed (HR, finance, SaaS with local logins)"
           - "Physical access: badge deactivated"
 

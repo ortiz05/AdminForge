@@ -2,7 +2,7 @@ import { loadEnv } from '@adminforge/config';
 import type { Config } from '../config';
 
 /** Never exposed to expressions: credentials, keys, connection strings, test-only and bootstrap settings. */
-const EXCLUDED = /SECRET|PASSWORD|TOKEN|_KEY$|CERT|TOTP|PRIVATE|^AF_TEST_|^AF_PROVISIONER_/i;
+const EXCLUDED = /SECRET|PASSWORD|TOKEN|WEBHOOK|_KEY$|CERT|TOTP|PRIVATE|^AF_TEST_|^AF_PROVISIONER_/i;
 const CONFIG_KEYS = [
   'AF_TENANT_ID',
   'AF_PRIMARY_DOMAIN',

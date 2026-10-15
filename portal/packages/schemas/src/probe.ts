@@ -115,6 +115,9 @@ export const SignInHealthCheck = z.strictObject({
   appId: z.union([Guid, Expr]).optional(),
 });
 
+/** AdminForge's own audit log: re-walks the hash chain (crit when an event was changed or removed). */
+export const AuditChainCheck = z.strictObject({ kind: z.literal('auditChain') });
+
 /** Where a `kql` check runs (R12). */
 export const KQL_SOURCES = ['resourceGraph', 'logAnalytics', 'advancedHunting'] as const;
 export const KqlSource = z.enum(KQL_SOURCES);
@@ -176,6 +179,7 @@ export const ProbeCheck = z.discriminatedUnion('kind', [
   LicenseThresholdCheck,
   SignInHealthCheck,
   KqlCheck,
+  AuditChainCheck,
 ]);
 export type ProbeCheck = z.infer<typeof ProbeCheck>;
 export type ProbeCheckKind = ProbeCheck['kind'];
@@ -197,6 +201,8 @@ export const PROBE_METRICS: Record<
   signInHealth: { metric: 'failureRate', unit: '%', worse: 'higher' },
   /** Row count, or the chosen column's aggregate (unit = the column name). */
   kql: { metric: 'rows', unit: 'rows', worse: 'higher' },
+  /** Events verified; the status comes from the verification, not thresholds. */
+  auditChain: { metric: 'events', unit: 'events', worse: 'lower' },
 };
 
 export const Probe = z

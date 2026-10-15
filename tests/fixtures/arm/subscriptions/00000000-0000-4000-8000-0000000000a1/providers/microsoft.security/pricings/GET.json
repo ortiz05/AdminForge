@@ -1,0 +1,49 @@
+{
+  "value": [
+    {
+      "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/providers/Microsoft.Security/pricings/VirtualMachines",
+      "name": "VirtualMachines",
+      "type": "Microsoft.Security/pricings",
+      "properties": {
+        "pricingTier": "Standard",
+        "freeTrialRemainingTime": "PT0S"
+      }
+    },
+    {
+      "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/providers/Microsoft.Security/pricings/StorageAccounts",
+      "name": "StorageAccounts",
+      "type": "Microsoft.Security/pricings",
+      "properties": {
+        "pricingTier": "Standard",
+        "freeTrialRemainingTime": "PT0S"
+      }
+    },
+    {
+      "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/providers/Microsoft.Security/pricings/KeyVaults",
+      "name": "KeyVaults",
+      "type": "Microsoft.Security/pricings",
+      "properties": {
+        "pricingTier": "Free",
+        "freeTrialRemainingTime": "PT0S"
+      }
+    },
+    {
+      "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/providers/Microsoft.Security/pricings/Arm",
+      "name": "Arm",
+      "type": "Microsoft.Security/pricings",
+      "properties": {
+        "pricingTier": "Free",
+        "freeTrialRemainingTime": "PT0S"
+      }
+    },
+    {
+      "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/providers/Microsoft.Security/pricings/AppServices",
+      "name": "AppServices",
+      "type": "Microsoft.Security/pricings",
+      "properties": {
+        "pricingTier": "Free",
+        "freeTrialRemainingTime": "PT0S"
+      }
+    }
+  ]
+}

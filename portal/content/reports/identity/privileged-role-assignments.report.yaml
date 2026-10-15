@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/report.schema.json
 kind: report
 id: identity.privileged-role-assignments
-version: 1.0.0
+version: 1.1.0
 title: Privileged role assignments
 summary: >-
   Every active and eligible assignment of a privileged Microsoft Entra role — who, which role, standing or eligible,
@@ -20,7 +20,10 @@ params:
   assignment: { type: enum, values: [Any, Standing, Eligible, Activated], default: Any, label: Assignment, facet: true }
   principal: { type: enum, values: [Any, User, Group, Service principal], default: Any, label: Holder type, facet: true }
 
-# Eligible and activated assignments need Entra ID P2; without it those sub-requests fail and only standing ones show.
+# Eligible and activated assignments need Entra ID P2 (PIM). They stay in this batch rather than a separate
+# `requires: { licences: [pim] }` datasource so the table and its export remain one complete list for access reviews:
+# without P2 those sub-requests fail, `pimAvailable` is false and only standing assignments show. The licenceGate
+# widget below explains the missing licence.
 datasources:
   assignments:
     source: graphBatch
@@ -113,13 +116,17 @@ layout:
     label: Service principals holding privileged roles
     format: number
     status: "${ value > 0 ? 'warn' : 'ok' }"
+  - widget: licenceGate
+    feature: pim
+    title: Eligible assignments and PIM activations need Microsoft Entra ID P2
+    body: eligible role assignments and just-in-time activations next to the standing ones
   - widget: markdown
     id: noPim
     span: 12
     when: ${ assignments.pimAvailable = false }
     text: |
-      **Eligible assignments aren't shown** — Privileged Identity Management needs Microsoft Entra ID P2. Only standing
-      (active) assignments are listed.
+      **Eligible assignments couldn't be read**, so only standing (active) assignments are listed. Without Microsoft
+      Entra ID P2 there are none; with it, check that you can read PIM (Privileged Role Administrator or Global Reader).
   - widget: markdown
     id: truncated
     span: 12

@@ -1,0 +1,9 @@
+{
+  "@odata.type": "#microsoft.graph.servicePrincipal",
+  "id": "00000000-0000-4000-8000-000000000407",
+  "appId": "00000000-0000-4000-8001-000000000306",
+  "displayName": "Legacy Automation",
+  "accountEnabled": true,
+  "servicePrincipalType": "Application",
+  "appOwnerOrganizationId": "00000000-0000-4000-8000-00000000e0e0"
+}

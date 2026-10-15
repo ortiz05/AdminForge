@@ -18,3 +18,4 @@ export {
   type AutomationTokenProvider,
 } from '@adminforge/api/src/auth/automation';
 export { DatasourceRunner, type UserScope } from '@adminforge/api/src/datasources/executor';
+export { PgAuditWriter, type AuditInput } from '@adminforge/api/src/audit/writer';

@@ -1,0 +1,242 @@
+$schema: ../../../packages/schemas/generated/page.schema.json
+kind: page
+id: security.device-vulnerabilities
+version: 1.0.0
+title: Device vulnerabilities
+summary: >-
+  Software vulnerabilities (CVEs) on onboarded devices from Microsoft Defender Vulnerability Management: the most
+  exposed devices, and the CVEs that affect the most devices, with CVSS score and whether an exploit is known.
+owner: security-team
+tags: [security, defender, vulnerabilities, endpoint, kql]
+template: list-detail
+nav: { section: security, label: Vulnerabilities, icon: bug, order: 35 }
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    graph: [ThreatHunting.Read.All]
+  entraRoles: [Security Reader, Global Reader]
+  # Advanced hunting with the DeviceTvm* tables: Defender for Endpoint Plan 2 (in Microsoft 365 E5) or the Defender
+  # Vulnerability Management add-on/standalone. Defender for Endpoint Plan 1 and Defender for Business don't include it.
+  licences: [WINDEFATP, TVM_PREMIUM_1]
+
+params:
+  q: { type: string, default: "", label: Search, placeholder: "Device name, software or CVE id" }
+  severity:
+    type: enum
+    label: Severity
+    facet: true
+    default: Any
+    values: [Any, Critical, High, Medium, Low]
+  platform:
+    type: enum
+    label: Platform
+    facet: true
+    default: Any
+    values:
+      - { value: Any, label: Any }
+      - { value: Windows, label: Windows }
+      - { value: WindowsServer, label: Windows Server }
+      - { value: macOS, label: macOS }
+      - { value: Linux, label: Linux }
+      - { value: iOS, label: iOS }
+      - { value: Android, label: Android }
+
+filters:
+  search: q
+  facets: [severity, platform]
+
+savedViews:
+  enabled: true
+  shared: true
+  presets:
+    - { name: Critical vulnerabilities, params: { severity: Critical } }
+    - { name: Servers, params: { platform: WindowsServer } }
+
+# Graph POST /security/runHuntingQuery is a read (allowed in read-only sessions). Every user value reaches the KQL
+# through $kql(); platform and severity are matched against fixed lists. Results are capped at 1,000 rows.
+datasources:
+  summary:
+    source: graph
+    label: Totals (advanced hunting)
+    request:
+      method: POST
+      path: /security/runHuntingQuery
+      body:
+        Query: |-
+          // af:security.device-vulnerabilities#summary
+          DeviceTvmSoftwareVulnerabilities
+          ${ params.severity in ['Critical', 'High', 'Medium', 'Low'] ? '| where VulnerabilitySeverityLevel == ' & $kql(params.severity) : '' }
+          ${ params.platform = 'Windows' ? "| where OSPlatform startswith 'Windows' and not(OSPlatform startswith 'WindowsServer')" : params.platform = 'WindowsServer' ? "| where OSPlatform startswith 'WindowsServer'" : params.platform in ['macOS', 'Linux', 'iOS', 'Android'] ? '| where OSPlatform =~ ' & $kql(params.platform) : '' }
+          ${ params.q ? '| where DeviceName startswith ' & $kql(params.q) & ' or SoftwareName has ' & $kql(params.q) & ' or CveId =~ ' & $kql(params.q) : '' }
+          | summarize Devices = dcount(DeviceId), Cves = dcount(CveId),
+              CriticalDevices = dcountif(DeviceId, VulnerabilitySeverityLevel == 'Critical'),
+              HighDevices = dcountif(DeviceId, VulnerabilitySeverityLevel == 'High'),
+              CriticalCves = dcountif(CveId, VulnerabilitySeverityLevel == 'Critical'),
+              HighCves = dcountif(CveId, VulnerabilitySeverityLevel == 'High'),
+              MediumCves = dcountif(CveId, VulnerabilitySeverityLevel == 'Medium'),
+              LowCves = dcountif(CveId, VulnerabilitySeverityLevel == 'Low')
+    cache: { ttl: 900 }
+    transform: >-
+      ${ (
+        $s := value.results[0];
+        $merge([$s, { "bySeverity": [
+          { "severity": "Critical", "cves": $s.CriticalCves ? $s.CriticalCves : 0 },
+          { "severity": "High", "cves": $s.HighCves ? $s.HighCves : 0 },
+          { "severity": "Medium", "cves": $s.MediumCves ? $s.MediumCves : 0 },
+          { "severity": "Low", "cves": $s.LowCves ? $s.LowCves : 0 }
+        ] }])
+      ) }
+  devices:
+    source: graph
+    label: Devices (advanced hunting)
+    request:
+      method: POST
+      path: /security/runHuntingQuery
+      body:
+        Query: |-
+          // af:security.device-vulnerabilities#devices
+          DeviceTvmSoftwareVulnerabilities
+          ${ params.severity in ['Critical', 'High', 'Medium', 'Low'] ? '| where VulnerabilitySeverityLevel == ' & $kql(params.severity) : '' }
+          ${ params.platform = 'Windows' ? "| where OSPlatform startswith 'Windows' and not(OSPlatform startswith 'WindowsServer')" : params.platform = 'WindowsServer' ? "| where OSPlatform startswith 'WindowsServer'" : params.platform in ['macOS', 'Linux', 'iOS', 'Android'] ? '| where OSPlatform =~ ' & $kql(params.platform) : '' }
+          ${ params.q ? '| where DeviceName startswith ' & $kql(params.q) & ' or SoftwareName has ' & $kql(params.q) & ' or CveId =~ ' & $kql(params.q) : '' }
+          | summarize Critical = dcountif(CveId, VulnerabilitySeverityLevel == 'Critical'),
+              High = dcountif(CveId, VulnerabilitySeverityLevel == 'High'),
+              Medium = dcountif(CveId, VulnerabilitySeverityLevel == 'Medium'),
+              Low = dcountif(CveId, VulnerabilitySeverityLevel == 'Low'),
+              Cves = dcount(CveId), Software = dcount(SoftwareName)
+              by DeviceId, DeviceName, OSPlatform
+          | order by Critical desc, High desc, Cves desc
+          | take 1000
+    cache: { ttl: 900 }
+    transform: >-
+      ${ {
+        "rows": [value.results.$merge([$, {
+          "exposure": Critical > 0 ? 'Critical' : High > 0 ? 'High' : Medium > 0 ? 'Medium' : 'Low'
+        }])],
+        "total": $count(value.results)
+      } }
+  cves:
+    source: graph
+    label: CVEs (advanced hunting)
+    request:
+      method: POST
+      path: /security/runHuntingQuery
+      body:
+        Query: |-
+          // af:security.device-vulnerabilities#cves
+          DeviceTvmSoftwareVulnerabilities
+          ${ params.severity in ['Critical', 'High', 'Medium', 'Low'] ? '| where VulnerabilitySeverityLevel == ' & $kql(params.severity) : '' }
+          ${ params.platform = 'Windows' ? "| where OSPlatform startswith 'Windows' and not(OSPlatform startswith 'WindowsServer')" : params.platform = 'WindowsServer' ? "| where OSPlatform startswith 'WindowsServer'" : params.platform in ['macOS', 'Linux', 'iOS', 'Android'] ? '| where OSPlatform =~ ' & $kql(params.platform) : '' }
+          ${ params.q ? '| where DeviceName startswith ' & $kql(params.q) & ' or SoftwareName has ' & $kql(params.q) & ' or CveId =~ ' & $kql(params.q) : '' }
+          | summarize Devices = dcount(DeviceId), Software = make_set(SoftwareName, 5), Severity = take_any(VulnerabilitySeverityLevel) by CveId
+          | join kind=leftouter (DeviceTvmSoftwareVulnerabilitiesKB | project CveId, CvssScore, IsExploitAvailable, PublishedDate) on CveId
+          | project CveId, Severity, CvssScore, IsExploitAvailable, PublishedDate, Devices, Software
+          | order by Devices desc, CvssScore desc
+          | take 1000
+    cache: { ttl: 900 }
+    transform: >-
+      ${ {
+        "rows": [value.results],
+        "exploitable": $count(value.results[IsExploitAvailable = true])
+      } }
+
+layout:
+  - widget: kpi
+    id: devices
+    data: summary.Devices
+    label: Devices with vulnerabilities
+    format: number
+  - widget: kpi
+    id: criticalDevices
+    data: summary.CriticalDevices
+    label: Devices with critical CVEs
+    format: number
+    status: "${ value > 0 ? 'crit' : 'ok' }"
+    href: /p/security.device-vulnerabilities?severity=Critical
+  - widget: kpi
+    id: criticalCves
+    data: summary.CriticalCves
+    label: Critical CVEs
+    format: number
+    status: "${ value > 0 ? 'crit' : 'ok' }"
+  - widget: kpi
+    id: exploitable
+    data: cves.exploitable
+    label: CVEs with a known exploit
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+  - widget: chart
+    id: bySeverity
+    title: CVEs by severity
+    span: 4
+    type: bar
+    data: summary.bySeverity
+    x: severity
+    y: cves
+    format: number
+  - widget: markdown
+    span: 8
+    text: |
+      Data comes from Microsoft Defender Vulnerability Management (advanced hunting) and covers devices onboarded to
+      Defender for Endpoint. Each device and CVE opens in the Microsoft Defender portal, where the security
+      recommendations and remediation requests live. Lists show the first 1,000 devices and CVEs — narrow them with the
+      search box and filters, or export.
+  - widget: table
+    id: devices
+    title: Most exposed devices
+    span: 12
+    data: devices.rows
+    rowKey: DeviceId
+    columns:
+      - { field: DeviceName, label: Device, kind: identity, secondary: OSPlatform }
+      - field: exposure
+        label: Worst severity
+        kind: status
+        map: { Critical: [crit, Critical], High: [warn, High], Medium: [info, Medium], Low: [neutral, Low] }
+        filter: facet
+      - { field: Critical, label: Critical, kind: number, align: end, sortable: true }
+      - { field: High, label: High, kind: number, align: end, sortable: true }
+      - { field: Medium, label: Medium, kind: number, align: end, sortable: true }
+      - { field: Low, label: Low, kind: number, align: end, sortable: true, hidden: true }
+      - { field: Cves, label: CVEs, kind: number, align: end, sortable: true }
+      - { field: Software, label: Vulnerable software, kind: number, align: end, sortable: true }
+      - { field: OSPlatform, label: Platform, filter: facet, hidden: true }
+      - { field: DeviceId, label: Defender device id, kind: code, hidden: true }
+    rowActions:
+      - label: Open in Microsoft Defender
+        icon: arrow-square-out
+        href: "https://security.microsoft.com/machines/v2/${ $encode(row.DeviceId) }/overview"
+    empty:
+      title: No vulnerable devices match
+      body: Clear the filters. If the list is empty without filters, no onboarded device reports vulnerable software, or Defender Vulnerability Management isn't licensed.
+  - widget: table
+    id: cves
+    title: CVEs by devices affected
+    span: 12
+    data: cves.rows
+    rowKey: CveId
+    columns:
+      - { field: CveId, label: CVE, kind: code }
+      - field: Severity
+        label: Severity
+        kind: status
+        map: { Critical: [crit, Critical], High: [warn, High], Medium: [info, Medium], Low: [neutral, Low] }
+        filter: facet
+      - { field: CvssScore, label: CVSS, kind: number, align: end, sortable: true }
+      - { field: IsExploitAvailable, label: Exploit known, kind: status, map: { "true": [crit, Exploit known], "false": [neutral, None known] }, filter: facet }
+      - { field: Devices, label: Devices, kind: number, align: end, sortable: true }
+      - { field: Software, label: Software, kind: tags }
+      - { field: PublishedDate, label: Published, kind: date, sortable: true }
+    rowActions:
+      - label: Open in Microsoft Defender
+        icon: arrow-square-out
+        href: "https://security.microsoft.com/vulnerabilities/vulnerability/${ $encode(row.CveId) }/overview"
+    empty:
+      title: No CVEs match
+      body: Clear the filters to see every CVE on onboarded devices.
+
+export:
+  formats: [csv, xlsx]
+  fileName: device-vulnerabilities
+  data: devices.rows
+  columns: all

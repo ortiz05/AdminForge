@@ -1,4 +1,6 @@
+import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
+import { hostname, userInfo } from 'node:os';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fixtureKey, type GraphClient } from '@adminforge/connectors';
@@ -19,7 +21,9 @@ import {
   DatasourceRunner,
   DbDefinitionStore,
   FsDefinitionSource,
+  PgAuditWriter,
   registryFrom,
+  type AuditInput,
   type AutomationTokenProvider,
   type PublishEntry,
   type PublishResult,
@@ -53,6 +57,8 @@ export interface ContentCliContext {
   graph?: GraphClient;
   /** Tests: automation identity for `fixtures record`. */
   automation?: Pick<AutomationTokenProvider, 'token'> | null;
+  /** Tests: where publish records its audit event (default: the database's audit chain). */
+  audit?: (input: AuditInput) => Promise<unknown>;
   /** Tests: publish target instead of DATABASE_URL. */
   openStore?: () => Promise<{ store: Pick<DbDefinitionStore, 'publish'>; close: () => Promise<void> }>;
   /** Tests: the engine module (runPlaybookTests). */
@@ -257,15 +263,38 @@ export async function publishContent(
     file: d.file,
   }));
   let target: { store: Pick<DbDefinitionStore, 'publish'>; close: () => Promise<void> };
+  let audit = ctx.audit;
   if (ctx.openStore) target = await ctx.openStore();
   else {
     const url = ctx.env.DATABASE_URL;
     if (!url) throw new ConfigError('DATABASE_URL is not set in the env file.');
     const database = createDatabase(url, { max: 2 });
     target = { store: new DbDefinitionStore(database.db), close: () => database.close() };
+    const writer = new PgAuditWriter(database.db, ctx.now);
+    audit ??= (input) => writer.append(input);
   }
   try {
     const result = await target.store.publish(entries, { dryRun: opts.dryRun });
+    // Content changes what the portal can do: who published which versions goes into the audit chain.
+    const created = result.items.filter((i) => i.action === 'create');
+    if (!opts.dryRun && result.applied && created.length && audit)
+      await audit({
+        actorOid: 'cli',
+        actorUpn: publisher(),
+        mode: 'write',
+        action: 'content.published',
+        correlationId: randomUUID(),
+        targetType: 'definitions',
+        targetId: `${created.length} version(s)`,
+        result: 'success',
+        details: {
+          versions: created.map(
+            (i) => `${i.kind}:${i.key}@${i.version}${i.status === 'retired' ? ' (retired)' : ''}`,
+          ),
+          refused: result.refused,
+          git: gitState(ctx.repoRoot),
+        },
+      });
     for (const i of result.items) {
       if (i.action === 'unchanged') continue;
       const mark = i.action === 'create' ? (i.status === 'retired' ? '− retire' : '+ publish') : '✗ refused';
@@ -280,6 +309,31 @@ export async function publishContent(
     return result;
   } finally {
     await target.close();
+  }
+}
+
+/** Who ran the CLI (local account and host), for the audit trail. */
+function publisher(): string {
+  try {
+    return `${userInfo().username}@${hostname()}`;
+  } catch {
+    return 'unknown@cli';
+  }
+}
+
+/** The commit the content came from, and whether the working tree had uncommitted content changes. */
+function gitState(repoRoot: string): { commit: string | null; dirty: boolean | null } {
+  const git = (args: string[]) =>
+    execFileSync('git', args, { cwd: repoRoot, stdio: ['ignore', 'pipe', 'ignore'] })
+      .toString()
+      .trim();
+  try {
+    return {
+      commit: git(['rev-parse', '--short=12', 'HEAD']),
+      dirty: git(['status', '--porcelain', '--', 'portal/content']).length > 0,
+    };
+  } catch {
+    return { commit: null, dirty: null };
   }
 }
 
@@ -360,7 +414,7 @@ interface Recorded {
   body: unknown;
 }
 
-const EXCLUDED_ENV = /SECRET|PASSWORD|TOKEN|_KEY$|CERT|TOTP|PRIVATE|^AF_TEST_|^AF_PROVISIONER_/i;
+const EXCLUDED_ENV = /SECRET|PASSWORD|TOKEN|WEBHOOK|_KEY$|CERT|TOTP|PRIVATE|^AF_TEST_|^AF_PROVISIONER_/i;
 
 /** Values from the local env file that must never land in a fixture (same rule as the no-tenant-data guard). */
 export function forbiddenValues(env: Record<string, string | undefined>): string[] {

@@ -1,0 +1,211 @@
+$schema: ../../../packages/schemas/generated/playbook.schema.json
+kind: playbook
+id: identity.assign-app-access
+version: 1.0.0
+title: Assign user or group to enterprise app
+summary: >-
+  Assigns a user or group to an enterprise app with one of its app roles, or Default Access when the app defines none.
+  Assigned people see the app in My Apps and, when assignment is required, are allowed to sign in. Assigning a group
+  needs Microsoft Entra ID P1 and covers its direct members only. AdminForge's own apps are refused: portal roles come
+  from their security groups.
+owner: identity-team
+tags: [identity, apps, access]
+risk: medium
+mode: write
+requires:
+  portalRoles: [Portal.Operator]
+  scopes:
+    graph: [AppRoleAssignment.ReadWrite.All, Application.Read.All, Directory.Read.All]
+  entraRoles: [Cloud Application Administrator]
+confirm:
+  type: click
+  message: >-
+    ${ 'Assign ' & steps.principal.output.displayName & ' to ' & steps.sp.output.displayName & ' as '
+       & (steps.appRole.output.id = '00000000-0000-0000-0000-000000000000' ? 'Default Access' : steps.appRole.output.displayName) & '?' }
+approval:
+  required: false
+
+inputs:
+  servicePrincipalId: { type: string, format: guid, label: Enterprise app (object id), picker: app }
+  principalId:
+    type: string
+    format: guid
+    label: User or group
+    picker: user
+    description: A user, or paste a group's object id (assigning groups needs Microsoft Entra ID P1; nested groups are not expanded).
+  appRoleId:
+    type: string
+    format: guid
+    label: App role id
+    required: false
+    description: >-
+      One of the app roles listed on the app's Users and groups tab. Leave empty for Default Access on apps that define
+      no roles.
+
+steps:
+  - id: sp
+    type: graph
+    mode: read
+    describe: Look up the enterprise app
+    request:
+      method: GET
+      path: /servicePrincipals/${ $encode($guid(inputs.servicePrincipalId)) }
+      query:
+        $select: id,appId,displayName,servicePrincipalType,appRoles,appRoleAssignmentRequired
+
+  - id: isApplication
+    type: assert
+    that: ${ steps.sp.output.servicePrincipalType = 'Application' }
+    message: ${ steps.sp.output.displayName & ' is a ' & steps.sp.output.servicePrincipalType & ', which people are not assigned to.' }
+
+  - id: notPortalApp
+    type: assert
+    that: >-
+      ${ $not(steps.sp.output.appId in [env.AF_READ_CLIENT_ID, env.AF_WRITE_CLIENT_ID, env.AF_AUTOMATION_CLIENT_ID, env.AF_PROVISIONER_CLIENT_ID]) }
+    message: This is one of AdminForge's own apps. Portal access comes from the SG-AdminForge-* groups; add the person to the right group instead.
+
+  - id: principal
+    type: graph
+    mode: read
+    describe: Look up the user or group
+    request:
+      method: GET
+      path: /directoryObjects/${ $encode($guid(inputs.principalId)) }
+
+  - id: kind
+    type: transform
+    expression: ${ $substringAfter(steps.principal.output.`@odata.type`, '#microsoft.graph.') }
+
+  - id: userOrGroup
+    type: assert
+    that: ${ steps.kind.output in ['user', 'group'] }
+    message: Only users and groups are assigned here. Application permissions for other apps are granted through admin consent.
+
+  # Default Access (all zeros) applies when the app defines no roles people can be assigned to.
+  - id: appRole
+    type: transform
+    expression: >-
+      ${ (
+        $assignable := [steps.sp.output.appRoles[isEnabled = true and 'User' in allowedMemberTypes]];
+        $wanted := inputs.appRoleId ? $guid(inputs.appRoleId) : '00000000-0000-0000-0000-000000000000';
+        $match := $assignable[$lowercase(id) = $wanted][0];
+        {
+          "id": $wanted,
+          "displayName": $match.displayName,
+          "valid": $wanted = '00000000-0000-0000-0000-000000000000' ? $count($assignable) = 0 : $exists($match),
+          "choices": $join($assignable.(displayName & ' (' & id & ')'), ', ')
+        }
+      ) }
+
+  - id: roleValid
+    type: assert
+    that: ${ steps.appRole.output.valid = true }
+    message: >-
+      ${ steps.appRole.output.choices
+         ? steps.sp.output.displayName & ' needs one of its app roles: ' & steps.appRole.output.choices & '.'
+         : steps.sp.output.displayName & ' defines no app roles; leave the app role empty for Default Access.' }
+
+  # A principal's own assignments are a short list; the resource filter is applied here rather than in $filter.
+  - id: existing
+    type: graph
+    mode: read
+    describe: Read the user's or group's current app assignments
+    request:
+      method: GET
+      path: "/${ steps.kind.output = 'group' ? 'groups' : 'users' }/${ $encode($guid(inputs.principalId)) }/appRoleAssignments"
+
+  - id: notAssigned
+    type: assert
+    that: >-
+      ${ $count(steps.existing.output.value[
+           $lowercase(resourceId) = $guid($$.inputs.servicePrincipalId) and $lowercase(appRoleId) = $$.steps.appRole.output.id
+         ]) = 0 }
+    message: ${ steps.principal.output.displayName & ' already has this assignment on ' & steps.sp.output.displayName & '.' }
+
+  - id: assign
+    type: graph
+    mode: write
+    describe: >-
+      ${ 'Assign ' & steps.principal.output.displayName & ' (' & steps.kind.output & ') to ' & steps.sp.output.displayName & ' as '
+         & (steps.appRole.output.displayName ? steps.appRole.output.displayName : 'Default Access') }
+    idempotent: false
+    request:
+      method: POST
+      path: /servicePrincipals/${ $encode($guid(inputs.servicePrincipalId)) }/appRoleAssignedTo
+      body:
+        principalId: ${ $guid(inputs.principalId) }
+        resourceId: ${ $guid(inputs.servicePrincipalId) }
+        appRoleId: ${ steps.appRole.output.id }
+    dryRunOutput: { id: planned-app-role-assignment }
+    compensate:
+      type: graph
+      describe: Remove the assignment again
+      request:
+        method: DELETE
+        path: /servicePrincipals/${ $encode($guid(inputs.servicePrincipalId)) }/appRoleAssignedTo/${ $encode(steps.assign.output.id) }
+
+outputs:
+  summary: ${ steps.principal.output.displayName & ' is assigned to ' & steps.sp.output.displayName & '.' }
+  assignmentId: ${ steps.assign.output.id }
+
+tests:
+  - name: refuses AdminForge's own apps (per-test env stands in for the installation's client ids)
+    inputs: { servicePrincipalId: 00000000-0000-4000-8000-00000000040b, principalId: 00000000-0000-4000-8000-000000000102 }
+    env: { AF_READ_CLIENT_ID: 00000000-0000-4000-8001-00000000040b }
+    mocks:
+      sp: { id: 00000000-0000-4000-8000-00000000040b, appId: 00000000-0000-4000-8001-00000000040b, displayName: AdminForge Read, servicePrincipalType: Application, appRoles: [] }
+    expect: { status: failed, failedStep: notPortalApp }
+  - name: refuses a managed identity
+    inputs: { servicePrincipalId: 00000000-0000-4000-8000-00000000040a, principalId: 00000000-0000-4000-8000-000000000102 }
+    mocks:
+      sp: { id: 00000000-0000-4000-8000-00000000040a, appId: 00000000-0000-4000-8001-00000000040a, displayName: func-example, servicePrincipalType: ManagedIdentity, appRoles: [] }
+    expect: { status: failed, failedStep: isApplication }
+  - name: refuses Default Access on an app that defines roles
+    inputs: { servicePrincipalId: 00000000-0000-4000-8000-000000000405, principalId: 00000000-0000-4000-8000-000000000102 }
+    mocks:
+      sp:
+        id: 00000000-0000-4000-8000-000000000405
+        appId: 00000000-0000-4000-8001-000000000405
+        displayName: Payroll Online
+        servicePrincipalType: Application
+        appRoles:
+          - { id: 00000000-0000-4000-8000-000000000a05, displayName: User, allowedMemberTypes: [User], isEnabled: true }
+          - { id: 00000000-0000-4000-8000-000000000a06, displayName: Payroll approver, allowedMemberTypes: [User], isEnabled: true }
+      principal: { "@odata.type": "#microsoft.graph.user", id: 00000000-0000-4000-8000-000000000102, displayName: Morgan Chen }
+    expect: { status: failed, failedStep: roleValid }
+  - name: refuses an existing assignment
+    inputs: { servicePrincipalId: 00000000-0000-4000-8000-000000000405, principalId: 00000000-0000-4000-8000-000000000201, appRoleId: 00000000-0000-4000-8000-000000000a05 }
+    mocks:
+      sp:
+        id: 00000000-0000-4000-8000-000000000405
+        appId: 00000000-0000-4000-8001-000000000405
+        displayName: Payroll Online
+        servicePrincipalType: Application
+        appRoles: [{ id: 00000000-0000-4000-8000-000000000a05, displayName: User, allowedMemberTypes: [User], isEnabled: true }]
+      principal: { "@odata.type": "#microsoft.graph.group", id: 00000000-0000-4000-8000-000000000201, displayName: SG-App-Payroll-Users }
+      existing: { value: [{ id: ara-405-1, resourceId: 00000000-0000-4000-8000-000000000405, appRoleId: 00000000-0000-4000-8000-000000000a05 }] }
+    expect: { status: failed, failedStep: notAssigned }
+  - name: plans a Default Access assignment for a user
+    inputs: { servicePrincipalId: 00000000-0000-4000-8000-000000000404, principalId: 00000000-0000-4000-8000-000000000102 }
+    mocks:
+      sp: { id: 00000000-0000-4000-8000-000000000404, appId: 00000000-0000-4000-8001-000000000404, displayName: PDF Converter Online, servicePrincipalType: Application, appRoles: [] }
+      principal: { "@odata.type": "#microsoft.graph.user", id: 00000000-0000-4000-8000-000000000102, displayName: Morgan Chen }
+      existing: { value: [] }
+    expect:
+      status: succeeded
+      plan: [assign]
+      outputs: { summary: Morgan Chen is assigned to PDF Converter Online. }
+  - name: plans an app-role assignment for a user
+    inputs: { servicePrincipalId: 00000000-0000-4000-8000-000000000405, principalId: 00000000-0000-4000-8000-000000000102, appRoleId: 00000000-0000-4000-8000-000000000A06 }
+    mocks:
+      sp:
+        id: 00000000-0000-4000-8000-000000000405
+        appId: 00000000-0000-4000-8001-000000000405
+        displayName: Payroll Online
+        servicePrincipalType: Application
+        appRoles: [{ id: 00000000-0000-4000-8000-000000000a06, displayName: Payroll approver, allowedMemberTypes: [User], isEnabled: true }]
+      principal: { "@odata.type": "#microsoft.graph.user", id: 00000000-0000-4000-8000-000000000102, displayName: Morgan Chen }
+      existing: { value: [{ id: ara-other, resourceId: 00000000-0000-4000-8000-000000000404, appRoleId: 00000000-0000-0000-0000-000000000000 }] }
+    expect:
+      status: succeeded
+      plan: [assign]

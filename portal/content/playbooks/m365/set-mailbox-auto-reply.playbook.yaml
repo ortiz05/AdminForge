@@ -1,0 +1,161 @@
+$schema: ../../../packages/schemas/generated/playbook.schema.json
+kind: playbook
+id: m365.set-mailbox-auto-reply
+version: 1.0.0
+title: Set automatic replies
+summary: >-
+  Turns a mailbox's automatic replies (out of office) on — now or for a period — or off. Messages are plain text; one
+  message can serve both people inside and outside the organization.
+owner: m365-team
+tags: [m365, exchange, mailboxes, offboarding]
+risk: medium
+mode: write
+requires:
+  portalRoles: [Portal.Operator]
+  scopes:
+    exchange: [Exchange.Manage]
+  entraRoles: [Exchange Recipient Administrator]
+  licences: [exchange]
+confirm:
+  type: click
+  message: >-
+    ${ inputs.state = 'Disabled'
+       ? 'Turn off automatic replies for ' & steps.current.output[0].primarySmtpAddress & '?'
+       : 'Everyone who writes to ' & steps.current.output[0].primarySmtpAddress
+         & (inputs.externalAudience = 'None' ? ' from inside the organization' : inputs.externalAudience = 'Known' ? ' (outside senders: only known contacts)' : '')
+         & ' gets the automatic reply' & (inputs.state = 'Scheduled' ? ' between the dates you set.' : ' until it is turned off.') }
+
+inputs:
+  mailbox: { type: string, format: email, label: Mailbox }
+  state:
+    type: enum
+    label: Automatic replies
+    default: Enabled
+    values:
+      - { value: Enabled, label: On until turned off }
+      - { value: Scheduled, label: On for a period }
+      - { value: Disabled, label: "Off" }
+  internalMessage:
+    type: string
+    label: Reply to people in the organization
+    multiline: true
+    required: false
+    maxLength: 4000
+    placeholder: e.g. Adele has left Example Org. For sales questions, write to sales@example.com.
+  externalMessage:
+    type: string
+    label: Reply to outside senders
+    description: Leave empty to send the same reply.
+    multiline: true
+    required: false
+    maxLength: 4000
+  externalAudience:
+    type: enum
+    label: Outside senders who get a reply
+    default: All
+    values:
+      - { value: All, label: Everyone }
+      - { value: Known, label: Only their contacts }
+      - { value: None, label: Nobody outside the organization }
+  startTime: { type: date, time: true, required: false, label: From, description: For "On for a period" }
+  endTime: { type: date, time: true, required: false, label: Until, description: For "On for a period" }
+
+steps:
+  - id: messageGiven
+    type: assert
+    that: "${ inputs.state = 'Disabled' or $boolean($trim(inputs.internalMessage ? inputs.internalMessage : '')) }"
+    message: Write the reply people in the organization get.
+
+  - id: periodValid
+    type: assert
+    that: >-
+      ${ inputs.state != 'Scheduled'
+         or ($boolean(inputs.startTime) and $boolean(inputs.endTime) and $toMillis($iso(inputs.endTime)) > $toMillis($iso(inputs.startTime))) }
+    message: For automatic replies during a period, set both dates, with the end after the start.
+
+  - id: current
+    type: runner
+    mode: read
+    describe: Read the mailbox and its current automatic replies
+    script: exchange/Get-MailboxConfiguration.ps1
+    sha256: c86c6bf4f6a3ca272389fe8369e8b9137805f491685d69d58855595207aa9d99
+    services: [exchange]
+    timeoutSeconds: 300
+    parameters:
+      identity: ${ inputs.mailbox }
+      includeAutoReply: true
+
+  - id: set
+    type: runner
+    mode: write
+    describe: >-
+      ${ (inputs.state = 'Disabled' ? 'Turn off' : inputs.state = 'Scheduled' ? 'Schedule' : 'Turn on')
+         & ' automatic replies for ' & steps.current.output[0].primarySmtpAddress
+         & ' (now ' & $lowercase(steps.current.output[0].autoReply.state) & ')' }
+    script: exchange/Set-MailboxAutoReply.ps1
+    sha256: 3c62ee8aea4a22e5a3a754847ca05bd119b7670c4af8ac12ba8d625e94facd10
+    services: [exchange]
+    timeoutSeconds: 300
+    parameters:
+      identity: ${ steps.current.output[0].primarySmtpAddress }
+      state: ${ inputs.state }
+      internalMessage: ${ inputs.internalMessage }
+      externalMessage: ${ inputs.externalMessage }
+      externalAudience: ${ inputs.externalAudience }
+      startTime: "${ inputs.state = 'Scheduled' ? $iso(inputs.startTime) : null }"
+      endTime: "${ inputs.state = 'Scheduled' ? $iso(inputs.endTime) : null }"
+    idempotent: true
+    compensate:
+      type: runner
+      describe: Turn automatic replies off (the previous message is not restored)
+      script: exchange/Set-MailboxAutoReply.ps1
+      sha256: 3c62ee8aea4a22e5a3a754847ca05bd119b7670c4af8ac12ba8d625e94facd10
+      services: [exchange]
+      timeoutSeconds: 300
+      parameters:
+        identity: ${ steps.current.output[0].primarySmtpAddress }
+        state: Disabled
+    dryRunOutput:
+      - identity: ${ steps.current.output[0].primarySmtpAddress }
+        before: { state: "${ steps.current.output[0].autoReply.state }" }
+        after: { state: "${ inputs.state }" }
+        changed: true
+        verified: true
+
+outputs:
+  summary: >-
+    ${ 'Automatic replies for ' & steps.current.output[0].primarySmtpAddress & ' are '
+       & (inputs.state = 'Disabled' ? 'off' : inputs.state = 'Scheduled' ? 'scheduled' : 'on') & '.' }
+  state: ${ steps.set.output[0].after.state }
+
+tests:
+  - name: turns automatic replies on for a leaver
+    inputs: { mailbox: adele.vance@example.com, internalMessage: "Adele has left Example Org.\nPlease write to sales@example.com." }
+    mocks:
+      current:
+        - { primarySmtpAddress: adele.vance@example.com, autoReply: { state: Disabled, externalAudience: None } }
+    expect:
+      status: succeeded
+      plan: [set]
+      outputs: { summary: Automatic replies for adele.vance@example.com are on., state: Enabled }
+  - name: schedules automatic replies for a period
+    inputs: { mailbox: lee.gu@example.com, state: Scheduled, internalMessage: Away until Monday, externalAudience: Known, startTime: "2026-10-20T09:00:00Z", endTime: "2026-10-27T09:00:00Z" }
+    mocks:
+      current:
+        - { primarySmtpAddress: lee.gu@example.com, autoReply: { state: Disabled, externalAudience: None } }
+    expect:
+      status: succeeded
+      plan: [set]
+      outputs: { summary: Automatic replies for lee.gu@example.com are scheduled., state: Scheduled }
+  - name: turns automatic replies off without a message
+    inputs: { mailbox: lee.gu@example.com, state: Disabled }
+    mocks:
+      current:
+        - { primarySmtpAddress: lee.gu@example.com, autoReply: { state: Enabled, externalAudience: All } }
+    expect: { status: succeeded, plan: [set] }
+  - name: refuses to turn replies on without a message
+    inputs: { mailbox: adele.vance@example.com, internalMessage: "   " }
+    expect: { status: failed, failedStep: messageGiven }
+  - name: refuses a period that ends before it starts
+    inputs: { mailbox: lee.gu@example.com, state: Scheduled, internalMessage: Away, startTime: "2026-10-27T09:00:00Z", endTime: "2026-10-20T09:00:00Z" }
+    expect: { status: failed, failedStep: periodValid }

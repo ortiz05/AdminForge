@@ -1,0 +1,165 @@
+$schema: ../../../packages/schemas/generated/playbook.schema.json
+kind: playbook
+id: m365.remove-mailbox-permission
+version: 1.0.0
+title: Remove mailbox access
+summary: >-
+  Takes Full Access and/or Send As on a mailbox away from a person or group. Only permissions granted directly on the
+  mailbox are removed; inherited ones (granted to the whole organization or database) are reported and left alone.
+owner: m365-team
+tags: [m365, exchange, mailboxes, permissions]
+risk: medium
+mode: write
+requires:
+  portalRoles: [Portal.Operator]
+  scopes:
+    exchange: [Exchange.Manage]
+  entraRoles: [Exchange Recipient Administrator]
+  licences: [exchange]
+confirm:
+  type: click
+  message: >-
+    ${ inputs.trustee & ' loses ' & $join(steps.plan.output.remove, ' and ') & ' on ' & steps.plan.output.mailbox
+       & '. Outlook may keep showing the mailbox for up to an hour.' }
+
+inputs:
+  mailbox: { type: string, format: email, label: Mailbox, description: Primary email address of the mailbox }
+  trustee: { type: string, format: email, label: Person or group, description: "Sign-in name or email address, as shown on the mailbox's Access tab" }
+  permission:
+    type: enum
+    label: Access to remove
+    default: Both
+    values:
+      - { value: FullAccess, label: Full Access }
+      - { value: SendAs, label: Send As }
+      - { value: Both, label: Full Access and Send As }
+  reason: { type: string, label: Reason, minLength: 10, multiline: true, placeholder: e.g. REQ-2230 — cover arrangement ended }
+
+steps:
+  - id: current
+    type: runner
+    mode: read
+    describe: Read who has access to the mailbox
+    script: exchange/Get-MailboxPermissions.ps1
+    sha256: 20458fc49331335910f5668635a47274d7bf54cc48fe72e4ee1dd38132e6ee1a
+    services: [exchange]
+    timeoutSeconds: 300
+    parameters:
+      identity: ${ inputs.mailbox }
+
+  - id: plan
+    type: transform
+    describe: Work out which direct permissions the trustee holds
+    expression: >-
+      ${ (
+        $want := inputs.permission = 'Both' ? ['FullAccess', 'SendAs'] : [inputs.permission];
+        $t := $lowercase(inputs.trustee);
+        $mine := steps.current.output[0].permissions[$lowercase(trustee) = $t and deny != true];
+        $direct := [$mine[inherited != true].permission];
+        {
+          "mailbox": steps.current.output[0].mailbox.primarySmtpAddress,
+          "remove": [$filter($want, function($p) { $p in $direct })],
+          "inherited": [$filter($want, function($p) { $p in [$mine[inherited = true].permission] })]
+        }
+      ) }
+
+  - id: somethingToRemove
+    type: assert
+    that: ${ $count(steps.plan.output.remove) > 0 }
+    message: >-
+      ${ $count(steps.plan.output.inherited) > 0
+         ? inputs.trustee & ' has ' & $join(steps.plan.output.inherited, ' and ') & ' on ' & steps.plan.output.mailbox
+           & ' only through an inherited permission (granted to the whole organization or database). Remove it in the Exchange admin center or with PowerShell at that level.'
+         : inputs.trustee & ' has no ' & (inputs.permission = 'Both' ? 'Full Access or Send As' : inputs.permission) & ' on ' & steps.plan.output.mailbox & '. Nothing to remove.' }
+
+  - id: remove
+    type: runner
+    mode: write
+    describe: ${ 'Remove ' & $join(steps.plan.output.remove, ' and ') & ' for ' & inputs.trustee & ' on ' & steps.plan.output.mailbox }
+    script: exchange/Set-MailboxPermission.ps1
+    sha256: f72a767dd9dc34acd67537c91b79fa3af78c2887a0548c191927225de7fc88b9
+    services: [exchange]
+    timeoutSeconds: 300
+    parameters:
+      identity: ${ steps.plan.output.mailbox }
+      trustee: ${ inputs.trustee }
+      action: remove
+      permissions: ${ steps.plan.output.remove }
+    idempotent: true
+    compensate:
+      type: runner
+      describe: Grant the access again (without Outlook auto-mapping)
+      script: exchange/Set-MailboxPermission.ps1
+      sha256: f72a767dd9dc34acd67537c91b79fa3af78c2887a0548c191927225de7fc88b9
+      services: [exchange]
+      timeoutSeconds: 300
+      parameters:
+        identity: ${ steps.plan.output.mailbox }
+        trustee: ${ inputs.trustee }
+        action: add
+        permissions: ${ steps.plan.output.remove }
+        autoMapping: false
+    dryRunOutput:
+      - mailbox: ${ steps.plan.output.mailbox }
+        trustee: ${ inputs.trustee }
+        action: remove
+        changed: ${ steps.plan.output.remove }
+        skipped: []
+        failed: []
+        verified: true
+
+outputs:
+  summary: >-
+    ${ inputs.trustee & ' no longer has ' & $join(steps.remove.output[0].changed, ' and ') & ' on ' & steps.plan.output.mailbox
+       & ($count(steps.plan.output.inherited) > 0 ? '. Still inherited: ' & $join(steps.plan.output.inherited, ' and ') : '') & '.' }
+  removed: ${ steps.remove.output[0].changed }
+
+tests:
+  - name: removes Full Access and Send As
+    inputs: { mailbox: sales@example.com, trustee: kim.akers@example.com, reason: REQ-2230 cover arrangement ended }
+    mocks:
+      current:
+        - mailbox: { displayName: Sales, primarySmtpAddress: sales@example.com }
+          permissions:
+            - { permission: FullAccess, trustee: Kim.Akers@example.com, inherited: false, deny: false }
+            - { permission: SendAs, trustee: kim.akers@example.com, inherited: false, deny: false }
+            - { permission: FullAccess, trustee: lee.gu@example.com, inherited: false, deny: false }
+    expect:
+      status: succeeded
+      plan: [remove]
+      outputs:
+        summary: kim.akers@example.com no longer has FullAccess and SendAs on sales@example.com.
+        removed: [FullAccess, SendAs]
+  - name: removes the direct grant and reports what stays inherited
+    inputs: { mailbox: sales@example.com, trustee: lee.gu@example.com, reason: REQ-2231 moved to finance }
+    mocks:
+      current:
+        - mailbox: { displayName: Sales, primarySmtpAddress: sales@example.com }
+          permissions:
+            - { permission: FullAccess, trustee: lee.gu@example.com, inherited: true, deny: false }
+            - { permission: SendAs, trustee: lee.gu@example.com, inherited: false, deny: false }
+    expect:
+      status: succeeded
+      plan: [remove]
+      outputs:
+        summary: "lee.gu@example.com no longer has SendAs on sales@example.com. Still inherited: FullAccess."
+  - name: refuses when the access is only inherited
+    inputs: { mailbox: sales@example.com, trustee: lee.gu@example.com, permission: FullAccess, reason: REQ-2232 audit clean-up }
+    mocks:
+      current:
+        - mailbox: { displayName: Sales, primarySmtpAddress: sales@example.com }
+          permissions:
+            - { permission: FullAccess, trustee: lee.gu@example.com, inherited: true, deny: false }
+    expect: { status: failed, failedStep: somethingToRemove }
+  - name: refuses when the trustee has no access
+    inputs: { mailbox: sales@example.com, trustee: nobody@example.com, reason: REQ-2233 stale ticket }
+    mocks:
+      current:
+        - mailbox: { displayName: Sales, primarySmtpAddress: sales@example.com }
+          permissions: []
+    expect: { status: failed, failedStep: somethingToRemove }
+  - name: stops when the mailbox can't be read
+    inputs: { mailbox: ghost@example.com, trustee: kim.akers@example.com, reason: REQ-2234 typo in the address }
+    errors:
+      current: { status: 404, code: input, message: "Mailbox 'ghost@example.com' was not found" }
+    expect: { status: failed, failedStep: current }

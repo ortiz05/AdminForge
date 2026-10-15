@@ -1,0 +1,649 @@
+{
+  "$fixture": {
+    "variants": [
+      {
+        "match": {
+          "bodyIncludes": "\"identity\":\"avery@example.com\""
+        },
+        "body": [
+          {
+            "displayName": "Avery Engineer",
+            "primarySmtpAddress": "avery@example.com",
+            "userPrincipalName": "avery@example.com",
+            "recipientTypeDetails": "UserMailbox",
+            "isDirSynced": false,
+            "hiddenFromAddressListsEnabled": false,
+            "litigationHoldEnabled": false,
+            "archiveStatus": "Active",
+            "forwarding": {
+              "enabled": false,
+              "forwardingSmtpAddress": null,
+              "forwardingAddress": null,
+              "forwardingAddressTarget": null,
+              "deliverToMailboxAndForward": false,
+              "targets": [],
+              "external": null
+            },
+            "autoReply": {
+              "state": "Disabled",
+              "externalAudience": "None",
+              "startTime": null,
+              "endTime": null
+            }
+          }
+        ]
+      },
+      {
+        "match": {
+          "bodyIncludes": "\"identity\":\"blake@example.com\""
+        },
+        "body": [
+          {
+            "displayName": "Blake Analyst",
+            "primarySmtpAddress": "blake@example.com",
+            "userPrincipalName": "blake@example.com",
+            "recipientTypeDetails": "UserMailbox",
+            "isDirSynced": false,
+            "hiddenFromAddressListsEnabled": false,
+            "litigationHoldEnabled": false,
+            "archiveStatus": "None",
+            "forwarding": {
+              "enabled": false,
+              "forwardingSmtpAddress": null,
+              "forwardingAddress": null,
+              "forwardingAddressTarget": null,
+              "deliverToMailboxAndForward": false,
+              "targets": [],
+              "external": null
+            },
+            "autoReply": {
+              "state": "Disabled",
+              "externalAudience": "None",
+              "startTime": null,
+              "endTime": null
+            }
+          }
+        ]
+      },
+      {
+        "match": {
+          "bodyIncludes": "\"identity\":\"dana@example.com\""
+        },
+        "body": [
+          {
+            "displayName": "Dana Former",
+            "primarySmtpAddress": "dana@example.com",
+            "userPrincipalName": "dana@example.com",
+            "recipientTypeDetails": "UserMailbox",
+            "isDirSynced": false,
+            "hiddenFromAddressListsEnabled": false,
+            "litigationHoldEnabled": true,
+            "archiveStatus": "None",
+            "forwarding": {
+              "enabled": true,
+              "forwardingSmtpAddress": "dana.former@outlook.example",
+              "forwardingAddress": null,
+              "forwardingAddressTarget": null,
+              "deliverToMailboxAndForward": false,
+              "targets": [
+                "dana.former@outlook.example"
+              ],
+              "external": true
+            },
+            "autoReply": {
+              "state": "Enabled",
+              "externalAudience": "All",
+              "startTime": null,
+              "endTime": null
+            }
+          }
+        ]
+      },
+      {
+        "match": {
+          "bodyIncludes": "\"identity\":\"eli.obrien@example.com\""
+        },
+        "body": [
+          {
+            "displayName": "Eli O'Brien",
+            "primarySmtpAddress": "eli.obrien@example.com",
+            "userPrincipalName": "eli.obrien@example.com",
+            "recipientTypeDetails": "UserMailbox",
+            "isDirSynced": false,
+            "hiddenFromAddressListsEnabled": false,
+            "litigationHoldEnabled": false,
+            "archiveStatus": "Active",
+            "forwarding": {
+              "enabled": false,
+              "forwardingSmtpAddress": null,
+              "forwardingAddress": null,
+              "forwardingAddressTarget": null,
+              "deliverToMailboxAndForward": false,
+              "targets": [],
+              "external": null
+            },
+            "autoReply": {
+              "state": "Disabled",
+              "externalAudience": "None",
+              "startTime": null,
+              "endTime": null
+            }
+          }
+        ]
+      },
+      {
+        "match": {
+          "bodyIncludes": "\"identity\":\"farah.haddad@example.com\""
+        },
+        "body": [
+          {
+            "displayName": "Farah Haddad",
+            "primarySmtpAddress": "farah.haddad@example.com",
+            "userPrincipalName": "farah.haddad@example.com",
+            "recipientTypeDetails": "UserMailbox",
+            "isDirSynced": false,
+            "hiddenFromAddressListsEnabled": false,
+            "litigationHoldEnabled": false,
+            "archiveStatus": "None",
+            "forwarding": {
+              "enabled": false,
+              "forwardingSmtpAddress": null,
+              "forwardingAddress": null,
+              "forwardingAddressTarget": null,
+              "deliverToMailboxAndForward": false,
+              "targets": [],
+              "external": null
+            },
+            "autoReply": {
+              "state": "Disabled",
+              "externalAudience": "None",
+              "startTime": null,
+              "endTime": null
+            }
+          }
+        ]
+      },
+      {
+        "match": {
+          "bodyIncludes": "\"identity\":\"gabriel.nunes@example.com\""
+        },
+        "body": [
+          {
+            "displayName": "Gabriel Nunes",
+            "primarySmtpAddress": "gabriel.nunes@example.com",
+            "userPrincipalName": "gabriel.nunes@example.com",
+            "recipientTypeDetails": "UserMailbox",
+            "isDirSynced": false,
+            "hiddenFromAddressListsEnabled": false,
+            "litigationHoldEnabled": false,
+            "archiveStatus": "None",
+            "forwarding": {
+              "enabled": true,
+              "forwardingSmtpAddress": "gabriel.nunes@gmail.example",
+              "forwardingAddress": null,
+              "forwardingAddressTarget": null,
+              "deliverToMailboxAndForward": true,
+              "targets": [
+                "gabriel.nunes@gmail.example"
+              ],
+              "external": true
+            },
+            "autoReply": {
+              "state": "Disabled",
+              "externalAudience": "None",
+              "startTime": null,
+              "endTime": null
+            }
+          }
+        ]
+      },
+      {
+        "match": {
+          "bodyIncludes": "\"identity\":\"hana.kim@example.com\""
+        },
+        "body": [
+          {
+            "displayName": "Hana Kim",
+            "primarySmtpAddress": "hana.kim@example.com",
+            "userPrincipalName": "hana.kim@example.com",
+            "recipientTypeDetails": "UserMailbox",
+            "isDirSynced": false,
+            "hiddenFromAddressListsEnabled": false,
+            "litigationHoldEnabled": false,
+            "archiveStatus": "Active",
+            "forwarding": {
+              "enabled": false,
+              "forwardingSmtpAddress": null,
+              "forwardingAddress": null,
+              "forwardingAddressTarget": null,
+              "deliverToMailboxAndForward": false,
+              "targets": [],
+              "external": null
+            },
+            "autoReply": {
+              "state": "Disabled",
+              "externalAudience": "None",
+              "startTime": null,
+              "endTime": null
+            }
+          }
+        ]
+      },
+      {
+        "match": {
+          "bodyIncludes": "\"identity\":\"isaac.mensah@example.com\""
+        },
+        "body": [
+          {
+            "displayName": "Isaac Mensah",
+            "primarySmtpAddress": "isaac.mensah@example.com",
+            "userPrincipalName": "isaac.mensah@example.com",
+            "recipientTypeDetails": "UserMailbox",
+            "isDirSynced": false,
+            "hiddenFromAddressListsEnabled": false,
+            "litigationHoldEnabled": false,
+            "archiveStatus": "None",
+            "forwarding": {
+              "enabled": false,
+              "forwardingSmtpAddress": null,
+              "forwardingAddress": null,
+              "forwardingAddressTarget": null,
+              "deliverToMailboxAndForward": false,
+              "targets": [],
+              "external": null
+            },
+            "autoReply": {
+              "state": "Disabled",
+              "externalAudience": "None",
+              "startTime": null,
+              "endTime": null
+            }
+          }
+        ]
+      },
+      {
+        "match": {
+          "bodyIncludes": "\"identity\":\"jordan.price@example.com\""
+        },
+        "body": [
+          {
+            "displayName": "Jordan Price",
+            "primarySmtpAddress": "jordan.price@example.com",
+            "userPrincipalName": "jordan.price@example.com",
+            "recipientTypeDetails": "UserMailbox",
+            "isDirSynced": true,
+            "hiddenFromAddressListsEnabled": false,
+            "litigationHoldEnabled": true,
+            "archiveStatus": "None",
+            "forwarding": {
+              "enabled": false,
+              "forwardingSmtpAddress": null,
+              "forwardingAddress": null,
+              "forwardingAddressTarget": null,
+              "deliverToMailboxAndForward": false,
+              "targets": [],
+              "external": null
+            },
+            "autoReply": {
+              "state": "Disabled",
+              "externalAudience": "None",
+              "startTime": null,
+              "endTime": null
+            }
+          }
+        ]
+      },
+      {
+        "match": {
+          "bodyIncludes": "\"identity\":\"kai.lindqvist@example.com\""
+        },
+        "body": [
+          {
+            "displayName": "Kai Lindqvist",
+            "primarySmtpAddress": "kai.lindqvist@example.com",
+            "userPrincipalName": "kai.lindqvist@example.com",
+            "recipientTypeDetails": "UserMailbox",
+            "isDirSynced": false,
+            "hiddenFromAddressListsEnabled": false,
+            "litigationHoldEnabled": false,
+            "archiveStatus": "Active",
+            "forwarding": {
+              "enabled": false,
+              "forwardingSmtpAddress": null,
+              "forwardingAddress": null,
+              "forwardingAddressTarget": null,
+              "deliverToMailboxAndForward": false,
+              "targets": [],
+              "external": null
+            },
+            "autoReply": {
+              "state": "Scheduled",
+              "externalAudience": "Known",
+              "startTime": "2026-10-12T07:00:00.0000000Z",
+              "endTime": "2026-10-26T17:00:00.0000000Z"
+            }
+          }
+        ]
+      },
+      {
+        "match": {
+          "bodyIncludes": "\"identity\":\"leah.moreau@example.com\""
+        },
+        "body": [
+          {
+            "displayName": "Leah Moreau",
+            "primarySmtpAddress": "leah.moreau@example.com",
+            "userPrincipalName": "leah.moreau@example.com",
+            "recipientTypeDetails": "UserMailbox",
+            "isDirSynced": true,
+            "hiddenFromAddressListsEnabled": false,
+            "litigationHoldEnabled": false,
+            "archiveStatus": "None",
+            "forwarding": {
+              "enabled": true,
+              "forwardingSmtpAddress": null,
+              "forwardingAddress": "HR Confidential",
+              "forwardingAddressTarget": "hr-confidential@example.com",
+              "deliverToMailboxAndForward": false,
+              "targets": [
+                "hr-confidential@example.com"
+              ],
+              "external": false
+            },
+            "autoReply": {
+              "state": "Disabled",
+              "externalAudience": "None",
+              "startTime": null,
+              "endTime": null
+            }
+          }
+        ]
+      },
+      {
+        "match": {
+          "bodyIncludes": "\"identity\":\"nora.fischer@example.com\""
+        },
+        "body": [
+          {
+            "displayName": "Nora Fischer",
+            "primarySmtpAddress": "nora.fischer@example.com",
+            "userPrincipalName": "nora.fischer@example.com",
+            "recipientTypeDetails": "UserMailbox",
+            "isDirSynced": false,
+            "hiddenFromAddressListsEnabled": false,
+            "litigationHoldEnabled": false,
+            "archiveStatus": "None",
+            "forwarding": {
+              "enabled": true,
+              "forwardingSmtpAddress": null,
+              "forwardingAddress": "Finance Invoices",
+              "forwardingAddressTarget": "invoices@example.com",
+              "deliverToMailboxAndForward": true,
+              "targets": [
+                "invoices@example.com"
+              ],
+              "external": false
+            },
+            "autoReply": {
+              "state": "Disabled",
+              "externalAudience": "None",
+              "startTime": null,
+              "endTime": null
+            }
+          }
+        ]
+      },
+      {
+        "match": {
+          "bodyIncludes": "\"identity\":\"reception@example.com\""
+        },
+        "body": [
+          {
+            "displayName": "Reception",
+            "primarySmtpAddress": "reception@example.com",
+            "userPrincipalName": "reception@example.com",
+            "recipientTypeDetails": "SharedMailbox",
+            "isDirSynced": false,
+            "hiddenFromAddressListsEnabled": false,
+            "litigationHoldEnabled": false,
+            "archiveStatus": "None",
+            "forwarding": {
+              "enabled": false,
+              "forwardingSmtpAddress": null,
+              "forwardingAddress": null,
+              "forwardingAddressTarget": null,
+              "deliverToMailboxAndForward": false,
+              "targets": [],
+              "external": null
+            },
+            "autoReply": {
+              "state": "Disabled",
+              "externalAudience": "None",
+              "startTime": null,
+              "endTime": null
+            }
+          }
+        ]
+      },
+      {
+        "match": {
+          "bodyIncludes": "\"identity\":\"invoices@example.com\""
+        },
+        "body": [
+          {
+            "displayName": "Finance Invoices",
+            "primarySmtpAddress": "invoices@example.com",
+            "userPrincipalName": "invoices@example.com",
+            "recipientTypeDetails": "SharedMailbox",
+            "isDirSynced": false,
+            "hiddenFromAddressListsEnabled": false,
+            "litigationHoldEnabled": false,
+            "archiveStatus": "Active",
+            "forwarding": {
+              "enabled": false,
+              "forwardingSmtpAddress": null,
+              "forwardingAddress": null,
+              "forwardingAddressTarget": null,
+              "deliverToMailboxAndForward": false,
+              "targets": [],
+              "external": null
+            },
+            "autoReply": {
+              "state": "Disabled",
+              "externalAudience": "None",
+              "startTime": null,
+              "endTime": null
+            }
+          }
+        ]
+      },
+      {
+        "match": {
+          "bodyIncludes": "\"identity\":\"support@example.com\""
+        },
+        "body": [
+          {
+            "displayName": "Customer Support",
+            "primarySmtpAddress": "support@example.com",
+            "userPrincipalName": "support@example.com",
+            "recipientTypeDetails": "SharedMailbox",
+            "isDirSynced": false,
+            "hiddenFromAddressListsEnabled": false,
+            "litigationHoldEnabled": false,
+            "archiveStatus": "None",
+            "forwarding": {
+              "enabled": false,
+              "forwardingSmtpAddress": null,
+              "forwardingAddress": null,
+              "forwardingAddressTarget": null,
+              "deliverToMailboxAndForward": false,
+              "targets": [],
+              "external": null
+            },
+            "autoReply": {
+              "state": "Enabled",
+              "externalAudience": "All",
+              "startTime": null,
+              "endTime": null
+            }
+          }
+        ]
+      },
+      {
+        "match": {
+          "bodyIncludes": "\"identity\":\"hr-confidential@example.com\""
+        },
+        "body": [
+          {
+            "displayName": "HR Confidential",
+            "primarySmtpAddress": "hr-confidential@example.com",
+            "userPrincipalName": "hr-confidential@example.com",
+            "recipientTypeDetails": "SharedMailbox",
+            "isDirSynced": false,
+            "hiddenFromAddressListsEnabled": true,
+            "litigationHoldEnabled": true,
+            "archiveStatus": "None",
+            "forwarding": {
+              "enabled": false,
+              "forwardingSmtpAddress": null,
+              "forwardingAddress": null,
+              "forwardingAddressTarget": null,
+              "deliverToMailboxAndForward": false,
+              "targets": [],
+              "external": null
+            },
+            "autoReply": {
+              "state": "Disabled",
+              "externalAudience": "None",
+              "startTime": null,
+              "endTime": null
+            }
+          }
+        ]
+      },
+      {
+        "match": {
+          "bodyIncludes": "\"identity\":\"room-boardroom@example.com\""
+        },
+        "body": [
+          {
+            "displayName": "Boardroom",
+            "primarySmtpAddress": "room-boardroom@example.com",
+            "userPrincipalName": "room-boardroom@example.com",
+            "recipientTypeDetails": "RoomMailbox",
+            "isDirSynced": false,
+            "hiddenFromAddressListsEnabled": false,
+            "litigationHoldEnabled": false,
+            "archiveStatus": "None",
+            "forwarding": {
+              "enabled": false,
+              "forwardingSmtpAddress": null,
+              "forwardingAddress": null,
+              "forwardingAddressTarget": null,
+              "deliverToMailboxAndForward": false,
+              "targets": [],
+              "external": null
+            },
+            "autoReply": {
+              "state": "Disabled",
+              "externalAudience": "None",
+              "startTime": null,
+              "endTime": null
+            }
+          }
+        ]
+      },
+      {
+        "match": {
+          "bodyIncludes": "\"identity\":\"room-atlas@example.com\""
+        },
+        "body": [
+          {
+            "displayName": "Atlas Room (4th floor)",
+            "primarySmtpAddress": "room-atlas@example.com",
+            "userPrincipalName": "room-atlas@example.com",
+            "recipientTypeDetails": "RoomMailbox",
+            "isDirSynced": false,
+            "hiddenFromAddressListsEnabled": false,
+            "litigationHoldEnabled": false,
+            "archiveStatus": "None",
+            "forwarding": {
+              "enabled": false,
+              "forwardingSmtpAddress": null,
+              "forwardingAddress": null,
+              "forwardingAddressTarget": null,
+              "deliverToMailboxAndForward": false,
+              "targets": [],
+              "external": null
+            },
+            "autoReply": {
+              "state": "Disabled",
+              "externalAudience": "None",
+              "startTime": null,
+              "endTime": null
+            }
+          }
+        ]
+      },
+      {
+        "match": {
+          "bodyIncludes": "\"identity\":\"projector-01@example.com\""
+        },
+        "body": [
+          {
+            "displayName": "Projector 01",
+            "primarySmtpAddress": "projector-01@example.com",
+            "userPrincipalName": "projector-01@example.com",
+            "recipientTypeDetails": "EquipmentMailbox",
+            "isDirSynced": false,
+            "hiddenFromAddressListsEnabled": true,
+            "litigationHoldEnabled": false,
+            "archiveStatus": "None",
+            "forwarding": {
+              "enabled": false,
+              "forwardingSmtpAddress": null,
+              "forwardingAddress": null,
+              "forwardingAddressTarget": null,
+              "deliverToMailboxAndForward": false,
+              "targets": [],
+              "external": null
+            },
+            "autoReply": {
+              "state": "Disabled",
+              "externalAudience": "None",
+              "startTime": null,
+              "endTime": null
+            }
+          }
+        ]
+      }
+    ],
+    "body": [
+      {
+        "displayName": "Avery Engineer",
+        "primarySmtpAddress": "avery@example.com",
+        "userPrincipalName": "avery@example.com",
+        "recipientTypeDetails": "UserMailbox",
+        "isDirSynced": false,
+        "hiddenFromAddressListsEnabled": false,
+        "litigationHoldEnabled": false,
+        "archiveStatus": "Active",
+        "forwarding": {
+          "enabled": false,
+          "forwardingSmtpAddress": null,
+          "forwardingAddress": null,
+          "forwardingAddressTarget": null,
+          "deliverToMailboxAndForward": false,
+          "targets": [],
+          "external": null
+        },
+        "autoReply": {
+          "state": "Disabled",
+          "externalAudience": "None",
+          "startTime": null,
+          "endTime": null
+        }
+      }
+    ]
+  }
+}

@@ -72,6 +72,8 @@ export class RunWorker {
       bus: RunEventBus;
       now: () => Date;
       log?: Log;
+      /** Refreshes a session's delegated tokens (playbooks with `refreshTokens: true`). */
+      refreshTokens?: (sessionHash: string) => Promise<void>;
     },
   ) {}
 
@@ -147,6 +149,17 @@ export class RunWorker {
         await this.deps.identity.liveSession(row.sessionHash).catch(() => null);
       const outcome = await this.deps.engine.execute(runId, def, { signal: ac.signal });
       if (outcome.wakeAt) await this.deps.queue.enqueue(runId, { startAfter: outcome.wakeAt });
+      if (
+        outcome.status === 'succeeded' &&
+        def.refreshTokens &&
+        !row.dryRun &&
+        row.identity === 'delegated' &&
+        row.sessionHash &&
+        this.deps.refreshTokens
+      )
+        await this.deps
+          .refreshTokens(row.sessionHash)
+          .catch((err: unknown) => this.deps.log?.warn({ err, runId }, 'token refresh after run failed'));
     } finally {
       signal?.removeEventListener('abort', onAbort);
       this.active.delete(runId);

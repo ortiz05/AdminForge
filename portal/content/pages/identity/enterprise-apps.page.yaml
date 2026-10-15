@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/page.schema.json
 kind: page
 id: identity.enterprise-apps
-version: 1.0.0
+version: 1.1.0
 title: Enterprise apps
 summary: >-
   Service principals — the apps users and workloads sign in to. Filter by app type, sign-in state, assignment
@@ -48,6 +48,17 @@ params:
 filters:
   search: q
   facets: [appType, enabled, assignment, sso]
+  # Compiled server-side into `${ advanced }` (OData). Only properties /servicePrincipals can filter on.
+  advanced:
+    dialect: odata
+    param: adv
+    fields:
+      - { field: displayName, label: Name, type: string, operators: [eq, startsWith, in] }
+      - { field: appId, label: Application (client) id, type: guid, operators: [eq, in] }
+      - { field: publisherName, label: Publisher, type: string, operators: [eq, startsWith] }
+      - { field: servicePrincipalType, label: Type, type: enum, values: [Application, ManagedIdentity, Legacy, SocialIdp], operators: [eq, ne] }
+      - { field: signInAudience, label: Audience, type: enum, values: [AzureADMyOrg, AzureADMultipleOrgs, AzureADandPersonalMicrosoftAccount, PersonalMicrosoftAccount], operators: [eq] }
+      - { field: homepage, label: Home page, type: string, operators: [eq, startsWith] }
 
 savedViews:
   enabled: true
@@ -78,7 +89,8 @@ datasources:
                params.enabled = 'Disabled' ? "accountEnabled eq false",
                params.assignment = 'Required' ? "appRoleAssignmentRequired eq true",
                params.assignment = 'NotRequired' ? "appRoleAssignmentRequired eq false",
-               params.sso != 'Any' ? "preferredSingleSignOnMode eq " & $odata(params.sso)
+               params.sso != 'Any' ? "preferredSingleSignOnMode eq " & $odata(params.sso),
+               advanced
              ][$], ' and ') }
         $search: ${ params.q ? '"displayName:' & $odataSearch(params.q) & '"' }
     paging: cursor

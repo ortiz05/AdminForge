@@ -29,6 +29,8 @@ const ThemeOverrides = z.strictObject({
 
 export const Appearance = z.strictObject({
   overrides: z.partialRecord(z.enum(THEME_NAMES), ThemeOverrides).default({}),
+  /** Default theme for users without a preference (`system` follows each person's OS). */
+  theme: z.enum([...THEME_NAMES, 'system']).optional(),
   /** Default density for users without a preference. */
   density: z.enum(DENSITY_NAMES).optional(),
   /** Multiplies every font size (0.85–1.25). */

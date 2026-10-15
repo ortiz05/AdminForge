@@ -1,0 +1,119 @@
+$schema: ../../../packages/schemas/generated/playbook.schema.json
+kind: playbook
+id: identity.revoke-consent-grant
+version: 1.0.0
+title: Revoke delegated permission grant
+summary: >-
+  Deletes one delegated permission grant (OAuth consent) of an enterprise app — a user's own consent or an admin
+  consent for every user. The app can no longer get new tokens for those permissions; tokens it already holds stay valid
+  until they expire, so disable the app too when it is malicious. AdminForge's own grants are refused.
+owner: identity-team
+tags: [identity, apps, consent, incident]
+risk: high
+mode: write
+requires:
+  portalRoles: [Portal.Operator]
+  scopes:
+    graph: [DelegatedPermissionGrant.ReadWrite.All, Directory.Read.All, Application.Read.All]
+  entraRoles: [Cloud Application Administrator]
+confirm:
+  type: click
+  message: >-
+    ${ 'Revoke the access of ' & steps.client.output.displayName & ' to ' & steps.resource.output.displayName & ' (' & steps.grant.output.scope & ') for '
+       & (steps.grant.output.consentType = 'AllPrincipals' ? 'every user in the tenant? Features that use these permissions stop working for everyone.' : 'this user?') }
+approval:
+  required: false
+
+inputs:
+  grantId: { type: string, label: Grant id, pattern: "^[A-Za-z0-9_-]{1,200}$" }
+  reason: { type: string, label: Reason, minLength: 10, multiline: true, placeholder: Consent phishing reported in SEC-311 }
+
+steps:
+  - id: grant
+    type: graph
+    mode: read
+    describe: Read the grant
+    request:
+      method: GET
+      path: /oauth2PermissionGrants/${ $encode(inputs.grantId) }
+
+  - id: client
+    type: graph
+    mode: read
+    describe: Look up the app that holds the grant
+    request:
+      method: GET
+      path: /servicePrincipals/${ $encode($guid(steps.grant.output.clientId)) }
+      query:
+        $select: id,appId,displayName,appOwnerOrganizationId
+
+  - id: notPortalApp
+    type: assert
+    that: >-
+      ${ $not(steps.client.output.appId in [env.AF_READ_CLIENT_ID, env.AF_WRITE_CLIENT_ID, env.AF_AUTOMATION_CLIENT_ID, env.AF_PROVISIONER_CLIENT_ID]) }
+    message: This grant belongs to one of AdminForge's own apps; revoking it would break the portal for everyone.
+
+  - id: resource
+    type: graph
+    mode: read
+    describe: Look up the API the permissions are for
+    request:
+      method: GET
+      path: /servicePrincipals/${ $encode($guid(steps.grant.output.resourceId)) }
+      query:
+        $select: id,appId,displayName
+
+  - id: revoke
+    type: graph
+    mode: write
+    describe: >-
+      ${ 'Delete the ' & (steps.grant.output.consentType = 'AllPrincipals' ? 'admin' : 'user') & ' consent grant of '
+         & steps.client.output.displayName & ' to ' & steps.resource.output.displayName & ' (' & steps.grant.output.scope & ')' }
+    request:
+      method: DELETE
+      path: /oauth2PermissionGrants/${ $encode(inputs.grantId) }
+    compensate:
+      type: graph
+      describe: Recreate the grant with the same permissions
+      request:
+        method: POST
+        path: /oauth2PermissionGrants
+        body: >-
+          ${ $merge([
+            {
+              'clientId': steps.grant.output.clientId,
+              'consentType': steps.grant.output.consentType,
+              'resourceId': steps.grant.output.resourceId,
+              'scope': steps.grant.output.scope
+            },
+            steps.grant.output.consentType = 'Principal' ? { 'principalId': steps.grant.output.principalId }
+          ]) }
+
+outputs:
+  summary: >-
+    ${ steps.client.output.displayName & ' no longer has ' & steps.grant.output.scope & ' on ' & steps.resource.output.displayName
+       & (steps.grant.output.consentType = 'AllPrincipals' ? ' for any user.' : ' for that user.')
+       & ' Existing tokens stay valid until they expire (about an hour).' }
+
+tests:
+  # The AdminForge-app guard reads env (AF_*_CLIENT_ID), which playbook tests can't set yet (docs/backlog.md).
+  - name: plans revoking an admin consent for every user
+    inputs: { grantId: grant-legacy-all, reason: Retired integration still holds admin consent }
+    mocks:
+      grant: { id: grant-legacy-all, clientId: 00000000-0000-4000-8000-000000000407, consentType: AllPrincipals, resourceId: 00000000-0000-4000-8000-000000000409, scope: Directory.Read.All }
+      client: { id: 00000000-0000-4000-8000-000000000407, appId: 00000000-0000-4000-8001-000000000306, displayName: Legacy Automation }
+      resource: { id: 00000000-0000-4000-8000-000000000409, appId: 00000003-0000-0000-c000-000000000000, displayName: Microsoft Graph }
+    expect:
+      status: succeeded
+      plan: [revoke]
+      outputs: { summary: Legacy Automation no longer has Directory.Read.All on Microsoft Graph for any user. Existing tokens stay valid until they expire (about an hour). }
+  - name: plans revoking a user's consent to a suspicious app
+    inputs: { grantId: grant-pdf-mchen, reason: Consent phishing reported in SEC-311 }
+    mocks:
+      grant: { id: grant-pdf-mchen, clientId: 00000000-0000-4000-8000-000000000404, consentType: Principal, principalId: 00000000-0000-4000-8000-000000000102, resourceId: 00000000-0000-4000-8000-000000000409, scope: Mail.Read offline_access User.Read }
+      client: { id: 00000000-0000-4000-8000-000000000404, appId: 00000000-0000-4000-8001-000000000404, displayName: PDF Converter Online }
+      resource: { id: 00000000-0000-4000-8000-000000000409, appId: 00000003-0000-0000-c000-000000000000, displayName: Microsoft Graph }
+    expect:
+      status: succeeded
+      plan: [revoke]
+      outputs: { summary: PDF Converter Online no longer has Mail.Read offline_access User.Read on Microsoft Graph for that user. Existing tokens stay valid until they expire (about an hour). }

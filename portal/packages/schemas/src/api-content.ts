@@ -317,6 +317,8 @@ export const AppearanceThemeOverrides = z.object({
 export const AppearanceResponse = z.object({
   version: z.number(),
   overrides: z.record(z.string(), AppearanceThemeOverrides),
+  /** Default theme for people without a preference (`system` = follow their OS). */
+  theme: z.enum(['steel', 'daylight', 'contrast', 'system']).optional(),
   density: z.enum(['comfortable', 'compact']).optional(),
   fontScale: z.number().optional(),
 });

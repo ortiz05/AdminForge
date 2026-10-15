@@ -40,9 +40,16 @@ export function readLocalPrefs(): UserPrefs {
 
 const media = (q: string) => typeof window.matchMedia === 'function' && window.matchMedia(q).matches;
 
-/** "system" follows the OS: high contrast first, then light/dark. */
+/** Organisation defaults (Admin → Appearance) for people without a preference; set when the session loads. */
+let orgDefaults: { theme?: ThemePref; density?: DensityPref } = {};
+export function setOrgDefaults(d: { theme?: ThemePref; density?: DensityPref } | undefined): void {
+  orgDefaults = d ?? {};
+}
+
+/** Own choice, else the organisation default, else the OS ("system": high contrast first, then light/dark). */
 export function resolveTheme(theme: ThemePref | undefined): ThemeName {
   if (theme && theme !== 'system') return theme;
+  if (!theme && orgDefaults.theme && orgDefaults.theme !== 'system') return orgDefaults.theme;
   if (media('(prefers-contrast: more)')) return 'contrast';
   if (media('(prefers-color-scheme: light)')) return 'daylight';
   return DEFAULT_THEME;
@@ -51,7 +58,7 @@ export function resolveTheme(theme: ThemePref | undefined): ThemeName {
 /** Sets the <html> attributes every token selector keys off. */
 export function applyPrefs(p: UserPrefs, root: HTMLElement = document.documentElement): void {
   root.dataset.theme = resolveTheme(p.theme);
-  root.dataset.density = p.density ?? DEFAULT_DENSITY;
+  root.dataset.density = p.density ?? orgDefaults.density ?? DEFAULT_DENSITY;
   root.dataset.nav = p.navCollapsed ? 'collapsed' : 'expanded';
 }
 

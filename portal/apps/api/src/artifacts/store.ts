@@ -125,6 +125,37 @@ export class ArtifactStore {
     }
   }
 
+  /** Deletes report files last modified before `cutoff`, in every schedule folder. Returns how many were removed. */
+  async pruneOlderThan(cutoff: Date): Promise<number> {
+    let removed = 0;
+    let folders: string[];
+    try {
+      folders = (await readdir(this.dir)).filter((n) => SAFE_SEGMENT.test(n));
+    } catch {
+      return 0;
+    }
+    for (const folder of folders) {
+      let names: string[];
+      try {
+        names = (await readdir(path.join(this.dir, folder))).filter((n) => SAFE_FILE.test(n));
+      } catch {
+        continue;
+      }
+      for (const n of names) {
+        const abs = path.join(this.dir, folder, n);
+        try {
+          if ((await stat(abs)).mtime.getTime() < cutoff.getTime()) {
+            await rm(abs, { force: true });
+            removed++;
+          }
+        } catch {
+          /* raced with another prune */
+        }
+      }
+    }
+    return removed;
+  }
+
   /** Keeps the newest `keep` files of one extension for a schedule (names sort by time). Returns the deleted relative paths. */
   async prune(scheduleKey: string, ext: string, keep: number): Promise<string[]> {
     if (!SAFE_SEGMENT.test(scheduleKey)) return [];

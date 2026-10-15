@@ -64,6 +64,13 @@ export class RepositoryRunStore implements RunStore {
   constructor(
     readonly repo: RunRepository,
     private readonly audit: AuditWriter,
+    /** Called once when a run's approval gate opens (approver notifications). */
+    private readonly onApprovalRequested?: (info: {
+      runId: string;
+      title: string;
+      requestedBy: string | null;
+      correlationId: string;
+    }) => Promise<void>,
   ) {}
 
   /** Registers the pinned definition of a run before the engine executes it (titles and policies of human tasks). */
@@ -203,6 +210,7 @@ export class RepositoryRunStore implements RunStore {
     const row = await this.row(runId);
     const def = this.defs.get(runId);
     const { requestedBy, ...rest } = task;
+    const isNew = task.kind === 'approval' && !(await this.repo.getTask(runId, task.path));
     await this.repo.upsertTask(runId, task, {
       ...rest,
       title: def?.title ?? row?.definitionKey ?? 'Run',
@@ -212,6 +220,13 @@ export class RepositoryRunStore implements RunStore {
       initiatorOid: row?.initiatorOid ?? null,
       ...(task.kind === 'approval' ? { writesAfter: def ? writesAfter(def, task.path) : true } : {}),
     });
+    if (isNew && this.onApprovalRequested)
+      await this.onApprovalRequested({
+        runId,
+        title: def?.title ?? row?.definitionKey ?? 'Run',
+        requestedBy: requestedBy.upn ?? null,
+        correlationId: row?.correlationId ?? runId,
+      }).catch(() => undefined);
   }
 
   async getDecision(runId: string, path: string): Promise<Decision | null> {

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useLiveUpdates } from './live-updates';
 import { errorDescription } from '../lib/errors';
 import { useQueryClient } from '@tanstack/react-query';
 import { useRouterState } from '@tanstack/react-router';
@@ -6,7 +7,7 @@ import type { ArmRequest, MeResponse } from '@adminforge/schemas';
 import { Brand, Button, ErrorState, Skeleton, useMediaQuery, useToast } from '@adminforge/ui';
 import { api, ApiRequestError, ExtendResponse, RedirectResponse } from '../lib/api';
 import { browser } from '../lib/browser';
-import { hydratePrefs, pushRecent, updatePrefs, usePrefs } from '../lib/prefs';
+import { hydratePrefs, pushRecent, updatePrefs, usePrefs, setOrgDefaults } from '../lib/prefs';
 import { meQuery, SessionContext, useNav, useSession } from '../lib/session';
 import { useAppearanceStylesheet } from '../ops/appearance-link';
 import { PlaybookDrawerMount } from '../playbooks/PlaybookDrawerMount';
@@ -43,6 +44,7 @@ function SignedInShell({ me, children }: { me: MeResponse; children: ReactNode }
   const prefs = usePrefs();
   const { toast } = useToast();
   const arm = useArmState(me);
+  useLiveUpdates();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const narrow = useMediaQuery('(max-width: 1023px)');
   const collapsed = Boolean(prefs.navCollapsed) || narrow;
@@ -55,8 +57,9 @@ function SignedInShell({ me, children }: { me: MeResponse; children: ReactNode }
   useEffect(() => {
     if (hydrated.current) return;
     hydrated.current = true;
+    setOrgDefaults(me.defaults);
     hydratePrefs(me.prefs);
-  }, [me.prefs]);
+  }, [me.prefs, me.defaults]);
 
   // <html> attributes the tokens and shell.css key off.
   useEffect(() => {

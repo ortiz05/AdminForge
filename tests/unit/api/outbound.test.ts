@@ -666,3 +666,57 @@ describe('outbound executor', () => {
     expect(templatePath('/security/incidents/4224')).toBe('/security/incidents/{id}');
   });
 });
+
+describe('per-call telemetry (onCall)', () => {
+  it('records template path, status, duration and request id — never the concrete path', async () => {
+    const records: unknown[] = [];
+    const c = cloud(() => json({ id: 'u1' }, 200, { 'request-id': 'req-9' }));
+    const { out } = executor({ fetch: c.fetch, onCall: (r) => records.push(r) });
+    await out.execute(read(), {
+      service: 'graph',
+      method: 'GET',
+      path: '/users/avery@example.com',
+      pathTemplate: '/users/{id}',
+    });
+    expect(records).toEqual([
+      expect.objectContaining({
+        service: 'graph',
+        method: 'GET',
+        path: '/users/{id}',
+        status: 200,
+        throttled: false,
+        identity: 'delegated',
+        mode: 'read',
+        requestId: 'req-9',
+      }),
+    ]);
+    expect(JSON.stringify(records)).not.toContain('avery@example.com');
+  });
+
+  it('records throttled failures too', async () => {
+    const records: Array<{ status: number; throttled: boolean }> = [];
+    const c = cloud(() => json({ error: { code: 'TooManyRequests', message: 'slow down' } }, 429));
+    const { out } = executor({ fetch: c.fetch, maxRetries: 0, onCall: (r) => records.push(r) });
+    await out
+      .execute(read(), { service: 'graph', method: 'GET', path: '/users', pathTemplate: '/users' })
+      .catch(() => undefined);
+    expect(records.at(-1)).toMatchObject({ status: 429, throttled: true });
+  });
+});
+
+describe('provenance: Graph beta is flagged as a preview API', () => {
+  it('sets preview for beta calls only', async () => {
+    const c = cloud(() => json({ value: [] }));
+    const { out } = executor({ fetch: c.fetch });
+    const beta = await out.execute(read(), {
+      service: 'graph',
+      method: 'GET',
+      path: '/reports/x',
+      beta: true,
+    });
+    const v1 = await out.execute(read(), { service: 'graph', method: 'GET', path: '/users' });
+    expect(beta.provenance.preview).toBe(true);
+    expect(v1.provenance.preview).toBeUndefined();
+    expect(c.calls[0]!.url).toContain('/beta/');
+  });
+});

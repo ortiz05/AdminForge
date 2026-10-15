@@ -13,6 +13,8 @@ export interface Provenance {
   cachedAt?: string;
   /** Microsoft request-id, for support tickets. */
   requestId?: string;
+  /** Served by a Microsoft Graph beta (preview) endpoint. */
+  preview?: boolean;
 }
 
 export type ProvenanceFooterProps = Provenance & { className?: string };
@@ -27,6 +29,7 @@ export function ProvenanceFooter({
   ms,
   cachedAt,
   requestId,
+  preview,
   className,
 }: ProvenanceFooterProps) {
   const now = useNow(15_000);
@@ -37,6 +40,7 @@ export function ProvenanceFooter({
     cachedAt ? `cached ${formatRelative(cachedAt, now)}` : 'live',
   ];
   const title = [
+    preview ? 'Microsoft Graph beta: a preview API that can change without notice' : null,
     cachedAt ? `Fetched ${formatTimestamp(cachedAt)}` : null,
     requestId ? `Request ID ${requestId}` : null,
   ]
@@ -48,6 +52,11 @@ export function ProvenanceFooter({
       title={title || undefined}
     >
       <span className="sr-only">Data source: </span>
+      {preview && (
+        <span className="mr-1.5 shrink-0 rounded-sm border border-warn px-1 whitespace-nowrap text-warn">
+          preview API
+        </span>
+      )}
       {parts
         .filter((p): p is string => Boolean(p))
         .map((p, i) => (

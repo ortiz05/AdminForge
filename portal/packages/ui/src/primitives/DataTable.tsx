@@ -142,8 +142,8 @@ export interface DataTableProps<T extends RowData> {
   loading?: boolean;
   error?: DataTableError | null;
   empty?: { title: string; description?: ReactNode; action?: ReactNode };
-  /** Row checkboxes + bulk-action bar. */
-  selectable?: boolean;
+  /** Row checkboxes + bulk-action bar; `'single'` allows one row at a time (no "select all"). */
+  selectable?: boolean | 'single';
   bulkActions?: (rows: T[], clear: () => void) => ReactNode;
   /** Global search box (default on). */
   searchable?: boolean;
@@ -670,7 +670,9 @@ export function DataTable<T extends RowData>({
     onRowSelectionChange: setRowSelection,
     onColumnVisibilityChange: setColumnVisibility,
     enableRowSelection: Boolean(selectable),
-    isRowRangeSelectionEvent: (e: unknown) => Boolean((e as { shiftKey?: boolean }).shiftKey),
+    enableMultiRowSelection: selectable !== 'single',
+    isRowRangeSelectionEvent: (e: unknown) =>
+      selectable !== 'single' && Boolean((e as { shiftKey?: boolean }).shiftKey),
     globalFilterFn: (row: Row<F, T>, id: string, filterValue: unknown) =>
       searchText(kindOf(id), row.getValue(id))
         .toLowerCase()
@@ -989,7 +991,7 @@ export function DataTable<T extends RowData>({
         aria-label={label}
         aria-rowcount={showStates ? undefined : filtered + 1}
         aria-colcount={colCount}
-        aria-multiselectable={selectable || undefined}
+        aria-multiselectable={selectable === true || undefined}
         aria-busy={loading || undefined}
         className={s.scroller()}
         style={{ maxHeight }}
@@ -999,12 +1001,16 @@ export function DataTable<T extends RowData>({
             <div role="row" aria-rowindex={1} className={s.headRow()}>
               {selectable && (
                 <div role="columnheader" className={s.th()}>
-                  <Checkbox
-                    aria-label="Select all rows"
-                    checked={allSelected ? true : someSelected ? 'indeterminate' : false}
-                    onCheckedChange={(on) => t.toggleAllRowsSelected(on)}
-                    disabled={!filtered}
-                  />
+                  {selectable === 'single' ? (
+                    <span className="sr-only">Select</span>
+                  ) : (
+                    <Checkbox
+                      aria-label="Select all rows"
+                      checked={allSelected ? true : someSelected ? 'indeterminate' : false}
+                      onCheckedChange={(on) => t.toggleAllRowsSelected(on)}
+                      disabled={!filtered}
+                    />
+                  )}
                 </div>
               )}
               {visibleColumns.map((c) => {

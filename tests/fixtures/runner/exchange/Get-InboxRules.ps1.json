@@ -1,0 +1,1785 @@
+{
+  "$fixture": {
+    "variants": [
+      {
+        "match": {
+          "bodyIncludes": [
+            "\"identity\":\"avery@example.com\"",
+            "\"riskyOnly\":false"
+          ]
+        },
+        "body": [
+          {
+            "scope": "mailbox",
+            "acceptedDomains": [
+              "example.com",
+              "exampleorg.onmicrosoft.com",
+              "mail.example.com"
+            ],
+            "summary": {
+              "mailboxesScanned": 1,
+              "mailboxesFailed": 0,
+              "rules": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "externalForwarding": 0,
+              "deleting": 0,
+              "hiding": 0
+            },
+            "rules": []
+          }
+        ]
+      },
+      {
+        "match": {
+          "bodyIncludes": "\"identity\":\"avery@example.com\""
+        },
+        "body": [
+          {
+            "scope": "mailbox",
+            "acceptedDomains": [
+              "example.com",
+              "exampleorg.onmicrosoft.com",
+              "mail.example.com"
+            ],
+            "summary": {
+              "mailboxesScanned": 1,
+              "mailboxesFailed": 0,
+              "rules": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "externalForwarding": 0,
+              "deleting": 0,
+              "hiding": 0
+            },
+            "rules": []
+          }
+        ]
+      },
+      {
+        "match": {
+          "bodyIncludes": [
+            "\"identity\":\"blake@example.com\"",
+            "\"riskyOnly\":false"
+          ]
+        },
+        "body": [
+          {
+            "scope": "mailbox",
+            "acceptedDomains": [
+              "example.com",
+              "exampleorg.onmicrosoft.com",
+              "mail.example.com"
+            ],
+            "summary": {
+              "mailboxesScanned": 1,
+              "mailboxesFailed": 0,
+              "rules": 1,
+              "high": 1,
+              "medium": 0,
+              "low": 0,
+              "externalForwarding": 1,
+              "deleting": 0,
+              "hiding": 1
+            },
+            "rules": [
+              {
+                "key": "blake@example.com|.|1",
+                "mailbox": "blake@example.com",
+                "userPrincipalName": "blake@example.com",
+                "ruleName": ".",
+                "enabled": true,
+                "priority": 1,
+                "risk": "high",
+                "reasons": [
+                  "Forwards outside the organization",
+                  "Moves messages to RSS Feeds",
+                  "Marks messages as read"
+                ],
+                "targets": [
+                  "invoices@fabrikam.example"
+                ],
+                "externalTargets": [
+                  "invoices@fabrikam.example"
+                ],
+                "deletes": false,
+                "moveToFolder": "blake@example.com:\\RSS Feeds",
+                "markAsRead": true,
+                "stopProcessingRules": true,
+                "conditions": "Subject or body contains: invoice, payment, wire transfer"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "match": {
+          "bodyIncludes": "\"identity\":\"blake@example.com\""
+        },
+        "body": [
+          {
+            "scope": "mailbox",
+            "acceptedDomains": [
+              "example.com",
+              "exampleorg.onmicrosoft.com",
+              "mail.example.com"
+            ],
+            "summary": {
+              "mailboxesScanned": 1,
+              "mailboxesFailed": 0,
+              "rules": 1,
+              "high": 1,
+              "medium": 0,
+              "low": 0,
+              "externalForwarding": 1,
+              "deleting": 0,
+              "hiding": 1
+            },
+            "rules": [
+              {
+                "key": "blake@example.com|.|1",
+                "mailbox": "blake@example.com",
+                "userPrincipalName": "blake@example.com",
+                "ruleName": ".",
+                "enabled": true,
+                "priority": 1,
+                "risk": "high",
+                "reasons": [
+                  "Forwards outside the organization",
+                  "Moves messages to RSS Feeds",
+                  "Marks messages as read"
+                ],
+                "targets": [
+                  "invoices@fabrikam.example"
+                ],
+                "externalTargets": [
+                  "invoices@fabrikam.example"
+                ],
+                "deletes": false,
+                "moveToFolder": "blake@example.com:\\RSS Feeds",
+                "markAsRead": true,
+                "stopProcessingRules": true,
+                "conditions": "Subject or body contains: invoice, payment, wire transfer"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "match": {
+          "bodyIncludes": [
+            "\"identity\":\"dana@example.com\"",
+            "\"riskyOnly\":false"
+          ]
+        },
+        "body": [
+          {
+            "scope": "mailbox",
+            "acceptedDomains": [
+              "example.com",
+              "exampleorg.onmicrosoft.com",
+              "mail.example.com"
+            ],
+            "summary": {
+              "mailboxesScanned": 1,
+              "mailboxesFailed": 0,
+              "rules": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "externalForwarding": 0,
+              "deleting": 0,
+              "hiding": 0
+            },
+            "rules": []
+          }
+        ]
+      },
+      {
+        "match": {
+          "bodyIncludes": "\"identity\":\"dana@example.com\""
+        },
+        "body": [
+          {
+            "scope": "mailbox",
+            "acceptedDomains": [
+              "example.com",
+              "exampleorg.onmicrosoft.com",
+              "mail.example.com"
+            ],
+            "summary": {
+              "mailboxesScanned": 1,
+              "mailboxesFailed": 0,
+              "rules": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "externalForwarding": 0,
+              "deleting": 0,
+              "hiding": 0
+            },
+            "rules": []
+          }
+        ]
+      },
+      {
+        "match": {
+          "bodyIncludes": [
+            "\"identity\":\"eli.obrien@example.com\"",
+            "\"riskyOnly\":false"
+          ]
+        },
+        "body": [
+          {
+            "scope": "mailbox",
+            "acceptedDomains": [
+              "example.com",
+              "exampleorg.onmicrosoft.com",
+              "mail.example.com"
+            ],
+            "summary": {
+              "mailboxesScanned": 1,
+              "mailboxesFailed": 0,
+              "rules": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "externalForwarding": 0,
+              "deleting": 0,
+              "hiding": 0
+            },
+            "rules": []
+          }
+        ]
+      },
+      {
+        "match": {
+          "bodyIncludes": "\"identity\":\"eli.obrien@example.com\""
+        },
+        "body": [
+          {
+            "scope": "mailbox",
+            "acceptedDomains": [
+              "example.com",
+              "exampleorg.onmicrosoft.com",
+              "mail.example.com"
+            ],
+            "summary": {
+              "mailboxesScanned": 1,
+              "mailboxesFailed": 0,
+              "rules": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "externalForwarding": 0,
+              "deleting": 0,
+              "hiding": 0
+            },
+            "rules": []
+          }
+        ]
+      },
+      {
+        "match": {
+          "bodyIncludes": [
+            "\"identity\":\"farah.haddad@example.com\"",
+            "\"riskyOnly\":false"
+          ]
+        },
+        "body": [
+          {
+            "scope": "mailbox",
+            "acceptedDomains": [
+              "example.com",
+              "exampleorg.onmicrosoft.com",
+              "mail.example.com"
+            ],
+            "summary": {
+              "mailboxesScanned": 1,
+              "mailboxesFailed": 0,
+              "rules": 1,
+              "high": 0,
+              "medium": 0,
+              "low": 1,
+              "externalForwarding": 0,
+              "deleting": 0,
+              "hiding": 0
+            },
+            "rules": [
+              {
+                "key": "farah.haddad@example.com|copy to me|1",
+                "mailbox": "farah.haddad@example.com",
+                "userPrincipalName": "farah.haddad@example.com",
+                "ruleName": "Copy to me",
+                "enabled": true,
+                "priority": 1,
+                "risk": "low",
+                "reasons": [
+                  "Forwards inside the organization"
+                ],
+                "targets": [
+                  "farah.haddad@example.com"
+                ],
+                "externalTargets": [],
+                "deletes": false,
+                "moveToFolder": null,
+                "markAsRead": false,
+                "stopProcessingRules": false,
+                "conditions": null
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "match": {
+          "bodyIncludes": "\"identity\":\"farah.haddad@example.com\""
+        },
+        "body": [
+          {
+            "scope": "mailbox",
+            "acceptedDomains": [
+              "example.com",
+              "exampleorg.onmicrosoft.com",
+              "mail.example.com"
+            ],
+            "summary": {
+              "mailboxesScanned": 1,
+              "mailboxesFailed": 0,
+              "rules": 1,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "externalForwarding": 0,
+              "deleting": 0,
+              "hiding": 0
+            },
+            "rules": []
+          }
+        ]
+      },
+      {
+        "match": {
+          "bodyIncludes": [
+            "\"identity\":\"gabriel.nunes@example.com\"",
+            "\"riskyOnly\":false"
+          ]
+        },
+        "body": [
+          {
+            "scope": "mailbox",
+            "acceptedDomains": [
+              "example.com",
+              "exampleorg.onmicrosoft.com",
+              "mail.example.com"
+            ],
+            "summary": {
+              "mailboxesScanned": 1,
+              "mailboxesFailed": 0,
+              "rules": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "externalForwarding": 0,
+              "deleting": 0,
+              "hiding": 0
+            },
+            "rules": []
+          }
+        ]
+      },
+      {
+        "match": {
+          "bodyIncludes": "\"identity\":\"gabriel.nunes@example.com\""
+        },
+        "body": [
+          {
+            "scope": "mailbox",
+            "acceptedDomains": [
+              "example.com",
+              "exampleorg.onmicrosoft.com",
+              "mail.example.com"
+            ],
+            "summary": {
+              "mailboxesScanned": 1,
+              "mailboxesFailed": 0,
+              "rules": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "externalForwarding": 0,
+              "deleting": 0,
+              "hiding": 0
+            },
+            "rules": []
+          }
+        ]
+      },
+      {
+        "match": {
+          "bodyIncludes": [
+            "\"identity\":\"hana.kim@example.com\"",
+            "\"riskyOnly\":false"
+          ]
+        },
+        "body": [
+          {
+            "scope": "mailbox",
+            "acceptedDomains": [
+              "example.com",
+              "exampleorg.onmicrosoft.com",
+              "mail.example.com"
+            ],
+            "summary": {
+              "mailboxesScanned": 1,
+              "mailboxesFailed": 0,
+              "rules": 1,
+              "high": 1,
+              "medium": 0,
+              "low": 0,
+              "externalForwarding": 1,
+              "deleting": 0,
+              "hiding": 0
+            },
+            "rules": [
+              {
+                "key": "hana.kim@example.com|notes to self|1",
+                "mailbox": "hana.kim@example.com",
+                "userPrincipalName": "hana.kim@example.com",
+                "ruleName": "Notes to self",
+                "enabled": false,
+                "priority": 1,
+                "risk": "high",
+                "reasons": [
+                  "Redirects outside the organization"
+                ],
+                "targets": [
+                  "hk-notes@outlook.example"
+                ],
+                "externalTargets": [
+                  "hk-notes@outlook.example"
+                ],
+                "deletes": false,
+                "moveToFolder": null,
+                "markAsRead": false,
+                "stopProcessingRules": false,
+                "conditions": null
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "match": {
+          "bodyIncludes": "\"identity\":\"hana.kim@example.com\""
+        },
+        "body": [
+          {
+            "scope": "mailbox",
+            "acceptedDomains": [
+              "example.com",
+              "exampleorg.onmicrosoft.com",
+              "mail.example.com"
+            ],
+            "summary": {
+              "mailboxesScanned": 1,
+              "mailboxesFailed": 0,
+              "rules": 1,
+              "high": 1,
+              "medium": 0,
+              "low": 0,
+              "externalForwarding": 1,
+              "deleting": 0,
+              "hiding": 0
+            },
+            "rules": [
+              {
+                "key": "hana.kim@example.com|notes to self|1",
+                "mailbox": "hana.kim@example.com",
+                "userPrincipalName": "hana.kim@example.com",
+                "ruleName": "Notes to self",
+                "enabled": false,
+                "priority": 1,
+                "risk": "high",
+                "reasons": [
+                  "Redirects outside the organization"
+                ],
+                "targets": [
+                  "hk-notes@outlook.example"
+                ],
+                "externalTargets": [
+                  "hk-notes@outlook.example"
+                ],
+                "deletes": false,
+                "moveToFolder": null,
+                "markAsRead": false,
+                "stopProcessingRules": false,
+                "conditions": null
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "match": {
+          "bodyIncludes": [
+            "\"identity\":\"isaac.mensah@example.com\"",
+            "\"riskyOnly\":false"
+          ]
+        },
+        "body": [
+          {
+            "scope": "mailbox",
+            "acceptedDomains": [
+              "example.com",
+              "exampleorg.onmicrosoft.com",
+              "mail.example.com"
+            ],
+            "summary": {
+              "mailboxesScanned": 1,
+              "mailboxesFailed": 0,
+              "rules": 2,
+              "high": 1,
+              "medium": 0,
+              "low": 0,
+              "externalForwarding": 1,
+              "deleting": 0,
+              "hiding": 0
+            },
+            "rules": [
+              {
+                "key": "isaac.mensah@example.com|backup|1",
+                "mailbox": "isaac.mensah@example.com",
+                "userPrincipalName": "isaac.mensah@example.com",
+                "ruleName": "Backup",
+                "enabled": true,
+                "priority": 1,
+                "risk": "high",
+                "reasons": [
+                  "Forwards outside the organization"
+                ],
+                "targets": [
+                  "isaac.m.backup@proton.example"
+                ],
+                "externalTargets": [
+                  "isaac.m.backup@proton.example"
+                ],
+                "deletes": false,
+                "moveToFolder": null,
+                "markAsRead": false,
+                "stopProcessingRules": false,
+                "conditions": null
+              },
+              {
+                "key": "isaac.mensah@example.com|newsletters|2",
+                "mailbox": "isaac.mensah@example.com",
+                "userPrincipalName": "isaac.mensah@example.com",
+                "ruleName": "Newsletters",
+                "enabled": true,
+                "priority": 2,
+                "risk": "none",
+                "reasons": [],
+                "targets": [],
+                "externalTargets": [],
+                "deletes": false,
+                "moveToFolder": "isaac.mensah@example.com:\\Newsletters",
+                "markAsRead": false,
+                "stopProcessingRules": false,
+                "conditions": null
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "match": {
+          "bodyIncludes": "\"identity\":\"isaac.mensah@example.com\""
+        },
+        "body": [
+          {
+            "scope": "mailbox",
+            "acceptedDomains": [
+              "example.com",
+              "exampleorg.onmicrosoft.com",
+              "mail.example.com"
+            ],
+            "summary": {
+              "mailboxesScanned": 1,
+              "mailboxesFailed": 0,
+              "rules": 2,
+              "high": 1,
+              "medium": 0,
+              "low": 0,
+              "externalForwarding": 1,
+              "deleting": 0,
+              "hiding": 0
+            },
+            "rules": [
+              {
+                "key": "isaac.mensah@example.com|backup|1",
+                "mailbox": "isaac.mensah@example.com",
+                "userPrincipalName": "isaac.mensah@example.com",
+                "ruleName": "Backup",
+                "enabled": true,
+                "priority": 1,
+                "risk": "high",
+                "reasons": [
+                  "Forwards outside the organization"
+                ],
+                "targets": [
+                  "isaac.m.backup@proton.example"
+                ],
+                "externalTargets": [
+                  "isaac.m.backup@proton.example"
+                ],
+                "deletes": false,
+                "moveToFolder": null,
+                "markAsRead": false,
+                "stopProcessingRules": false,
+                "conditions": null
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "match": {
+          "bodyIncludes": [
+            "\"identity\":\"jordan.price@example.com\"",
+            "\"riskyOnly\":false"
+          ]
+        },
+        "body": [
+          {
+            "scope": "mailbox",
+            "acceptedDomains": [
+              "example.com",
+              "exampleorg.onmicrosoft.com",
+              "mail.example.com"
+            ],
+            "summary": {
+              "mailboxesScanned": 1,
+              "mailboxesFailed": 0,
+              "rules": 2,
+              "high": 0,
+              "medium": 2,
+              "low": 0,
+              "externalForwarding": 0,
+              "deleting": 1,
+              "hiding": 1
+            },
+            "rules": [
+              {
+                "key": "jordan.price@example.com|clean up alerts|1",
+                "mailbox": "jordan.price@example.com",
+                "userPrincipalName": "jordan.price@example.com",
+                "ruleName": "Clean up alerts",
+                "enabled": true,
+                "priority": 1,
+                "risk": "medium",
+                "reasons": [
+                  "Deletes messages"
+                ],
+                "targets": [],
+                "externalTargets": [],
+                "deletes": true,
+                "moveToFolder": null,
+                "markAsRead": false,
+                "stopProcessingRules": false,
+                "conditions": "From: alerts@monitoring.example"
+              },
+              {
+                "key": "jordan.price@example.com|security notices|2",
+                "mailbox": "jordan.price@example.com",
+                "userPrincipalName": "jordan.price@example.com",
+                "ruleName": "Security notices",
+                "enabled": true,
+                "priority": 2,
+                "risk": "medium",
+                "reasons": [
+                  "Moves messages to Conversation History",
+                  "Marks messages as read"
+                ],
+                "targets": [],
+                "externalTargets": [],
+                "deletes": false,
+                "moveToFolder": "jordan.price@example.com:\\Conversation History",
+                "markAsRead": true,
+                "stopProcessingRules": false,
+                "conditions": "From: security@example.com; Subject contains: sign-in, password"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "match": {
+          "bodyIncludes": "\"identity\":\"jordan.price@example.com\""
+        },
+        "body": [
+          {
+            "scope": "mailbox",
+            "acceptedDomains": [
+              "example.com",
+              "exampleorg.onmicrosoft.com",
+              "mail.example.com"
+            ],
+            "summary": {
+              "mailboxesScanned": 1,
+              "mailboxesFailed": 0,
+              "rules": 2,
+              "high": 0,
+              "medium": 2,
+              "low": 0,
+              "externalForwarding": 0,
+              "deleting": 1,
+              "hiding": 1
+            },
+            "rules": [
+              {
+                "key": "jordan.price@example.com|clean up alerts|1",
+                "mailbox": "jordan.price@example.com",
+                "userPrincipalName": "jordan.price@example.com",
+                "ruleName": "Clean up alerts",
+                "enabled": true,
+                "priority": 1,
+                "risk": "medium",
+                "reasons": [
+                  "Deletes messages"
+                ],
+                "targets": [],
+                "externalTargets": [],
+                "deletes": true,
+                "moveToFolder": null,
+                "markAsRead": false,
+                "stopProcessingRules": false,
+                "conditions": "From: alerts@monitoring.example"
+              },
+              {
+                "key": "jordan.price@example.com|security notices|2",
+                "mailbox": "jordan.price@example.com",
+                "userPrincipalName": "jordan.price@example.com",
+                "ruleName": "Security notices",
+                "enabled": true,
+                "priority": 2,
+                "risk": "medium",
+                "reasons": [
+                  "Moves messages to Conversation History",
+                  "Marks messages as read"
+                ],
+                "targets": [],
+                "externalTargets": [],
+                "deletes": false,
+                "moveToFolder": "jordan.price@example.com:\\Conversation History",
+                "markAsRead": true,
+                "stopProcessingRules": false,
+                "conditions": "From: security@example.com; Subject contains: sign-in, password"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "match": {
+          "bodyIncludes": [
+            "\"identity\":\"kai.lindqvist@example.com\"",
+            "\"riskyOnly\":false"
+          ]
+        },
+        "body": [
+          {
+            "scope": "mailbox",
+            "acceptedDomains": [
+              "example.com",
+              "exampleorg.onmicrosoft.com",
+              "mail.example.com"
+            ],
+            "summary": {
+              "mailboxesScanned": 1,
+              "mailboxesFailed": 0,
+              "rules": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "externalForwarding": 0,
+              "deleting": 0,
+              "hiding": 0
+            },
+            "rules": []
+          }
+        ]
+      },
+      {
+        "match": {
+          "bodyIncludes": "\"identity\":\"kai.lindqvist@example.com\""
+        },
+        "body": [
+          {
+            "scope": "mailbox",
+            "acceptedDomains": [
+              "example.com",
+              "exampleorg.onmicrosoft.com",
+              "mail.example.com"
+            ],
+            "summary": {
+              "mailboxesScanned": 1,
+              "mailboxesFailed": 0,
+              "rules": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "externalForwarding": 0,
+              "deleting": 0,
+              "hiding": 0
+            },
+            "rules": []
+          }
+        ]
+      },
+      {
+        "match": {
+          "bodyIncludes": [
+            "\"identity\":\"leah.moreau@example.com\"",
+            "\"riskyOnly\":false"
+          ]
+        },
+        "body": [
+          {
+            "scope": "mailbox",
+            "acceptedDomains": [
+              "example.com",
+              "exampleorg.onmicrosoft.com",
+              "mail.example.com"
+            ],
+            "summary": {
+              "mailboxesScanned": 1,
+              "mailboxesFailed": 0,
+              "rules": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "externalForwarding": 0,
+              "deleting": 0,
+              "hiding": 0
+            },
+            "rules": []
+          }
+        ]
+      },
+      {
+        "match": {
+          "bodyIncludes": "\"identity\":\"leah.moreau@example.com\""
+        },
+        "body": [
+          {
+            "scope": "mailbox",
+            "acceptedDomains": [
+              "example.com",
+              "exampleorg.onmicrosoft.com",
+              "mail.example.com"
+            ],
+            "summary": {
+              "mailboxesScanned": 1,
+              "mailboxesFailed": 0,
+              "rules": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "externalForwarding": 0,
+              "deleting": 0,
+              "hiding": 0
+            },
+            "rules": []
+          }
+        ]
+      },
+      {
+        "match": {
+          "bodyIncludes": [
+            "\"identity\":\"nora.fischer@example.com\"",
+            "\"riskyOnly\":false"
+          ]
+        },
+        "body": [
+          {
+            "scope": "mailbox",
+            "acceptedDomains": [
+              "example.com",
+              "exampleorg.onmicrosoft.com",
+              "mail.example.com"
+            ],
+            "summary": {
+              "mailboxesScanned": 1,
+              "mailboxesFailed": 0,
+              "rules": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "externalForwarding": 0,
+              "deleting": 0,
+              "hiding": 0
+            },
+            "rules": []
+          }
+        ]
+      },
+      {
+        "match": {
+          "bodyIncludes": "\"identity\":\"nora.fischer@example.com\""
+        },
+        "body": [
+          {
+            "scope": "mailbox",
+            "acceptedDomains": [
+              "example.com",
+              "exampleorg.onmicrosoft.com",
+              "mail.example.com"
+            ],
+            "summary": {
+              "mailboxesScanned": 1,
+              "mailboxesFailed": 0,
+              "rules": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "externalForwarding": 0,
+              "deleting": 0,
+              "hiding": 0
+            },
+            "rules": []
+          }
+        ]
+      },
+      {
+        "match": {
+          "bodyIncludes": [
+            "\"identity\":\"reception@example.com\"",
+            "\"riskyOnly\":false"
+          ]
+        },
+        "body": [
+          {
+            "scope": "mailbox",
+            "acceptedDomains": [
+              "example.com",
+              "exampleorg.onmicrosoft.com",
+              "mail.example.com"
+            ],
+            "summary": {
+              "mailboxesScanned": 1,
+              "mailboxesFailed": 0,
+              "rules": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "externalForwarding": 0,
+              "deleting": 0,
+              "hiding": 0
+            },
+            "rules": []
+          }
+        ]
+      },
+      {
+        "match": {
+          "bodyIncludes": "\"identity\":\"reception@example.com\""
+        },
+        "body": [
+          {
+            "scope": "mailbox",
+            "acceptedDomains": [
+              "example.com",
+              "exampleorg.onmicrosoft.com",
+              "mail.example.com"
+            ],
+            "summary": {
+              "mailboxesScanned": 1,
+              "mailboxesFailed": 0,
+              "rules": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "externalForwarding": 0,
+              "deleting": 0,
+              "hiding": 0
+            },
+            "rules": []
+          }
+        ]
+      },
+      {
+        "match": {
+          "bodyIncludes": [
+            "\"identity\":\"invoices@example.com\"",
+            "\"riskyOnly\":false"
+          ]
+        },
+        "body": [
+          {
+            "scope": "mailbox",
+            "acceptedDomains": [
+              "example.com",
+              "exampleorg.onmicrosoft.com",
+              "mail.example.com"
+            ],
+            "summary": {
+              "mailboxesScanned": 1,
+              "mailboxesFailed": 0,
+              "rules": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "externalForwarding": 0,
+              "deleting": 0,
+              "hiding": 0
+            },
+            "rules": []
+          }
+        ]
+      },
+      {
+        "match": {
+          "bodyIncludes": "\"identity\":\"invoices@example.com\""
+        },
+        "body": [
+          {
+            "scope": "mailbox",
+            "acceptedDomains": [
+              "example.com",
+              "exampleorg.onmicrosoft.com",
+              "mail.example.com"
+            ],
+            "summary": {
+              "mailboxesScanned": 1,
+              "mailboxesFailed": 0,
+              "rules": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "externalForwarding": 0,
+              "deleting": 0,
+              "hiding": 0
+            },
+            "rules": []
+          }
+        ]
+      },
+      {
+        "match": {
+          "bodyIncludes": [
+            "\"identity\":\"support@example.com\"",
+            "\"riskyOnly\":false"
+          ]
+        },
+        "body": [
+          {
+            "scope": "mailbox",
+            "acceptedDomains": [
+              "example.com",
+              "exampleorg.onmicrosoft.com",
+              "mail.example.com"
+            ],
+            "summary": {
+              "mailboxesScanned": 1,
+              "mailboxesFailed": 0,
+              "rules": 2,
+              "high": 0,
+              "medium": 1,
+              "low": 1,
+              "externalForwarding": 0,
+              "deleting": 1,
+              "hiding": 0
+            },
+            "rules": [
+              {
+                "key": "support@example.com|escalations|1",
+                "mailbox": "support@example.com",
+                "userPrincipalName": "support@example.com",
+                "ruleName": "Escalations",
+                "enabled": true,
+                "priority": 1,
+                "risk": "low",
+                "reasons": [
+                  "Forwards inside the organization"
+                ],
+                "targets": [
+                  "avery@example.com"
+                ],
+                "externalTargets": [],
+                "deletes": false,
+                "moveToFolder": null,
+                "markAsRead": false,
+                "stopProcessingRules": false,
+                "conditions": "Subject contains: urgent"
+              },
+              {
+                "key": "support@example.com|auto-replies|2",
+                "mailbox": "support@example.com",
+                "userPrincipalName": "support@example.com",
+                "ruleName": "Auto-replies",
+                "enabled": true,
+                "priority": 2,
+                "risk": "medium",
+                "reasons": [
+                  "Deletes messages"
+                ],
+                "targets": [],
+                "externalTargets": [],
+                "deletes": true,
+                "moveToFolder": null,
+                "markAsRead": false,
+                "stopProcessingRules": false,
+                "conditions": "Subject contains: automatic reply, out of office"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "match": {
+          "bodyIncludes": "\"identity\":\"support@example.com\""
+        },
+        "body": [
+          {
+            "scope": "mailbox",
+            "acceptedDomains": [
+              "example.com",
+              "exampleorg.onmicrosoft.com",
+              "mail.example.com"
+            ],
+            "summary": {
+              "mailboxesScanned": 1,
+              "mailboxesFailed": 0,
+              "rules": 2,
+              "high": 0,
+              "medium": 1,
+              "low": 0,
+              "externalForwarding": 0,
+              "deleting": 1,
+              "hiding": 0
+            },
+            "rules": [
+              {
+                "key": "support@example.com|auto-replies|2",
+                "mailbox": "support@example.com",
+                "userPrincipalName": "support@example.com",
+                "ruleName": "Auto-replies",
+                "enabled": true,
+                "priority": 2,
+                "risk": "medium",
+                "reasons": [
+                  "Deletes messages"
+                ],
+                "targets": [],
+                "externalTargets": [],
+                "deletes": true,
+                "moveToFolder": null,
+                "markAsRead": false,
+                "stopProcessingRules": false,
+                "conditions": "Subject contains: automatic reply, out of office"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "match": {
+          "bodyIncludes": [
+            "\"identity\":\"hr-confidential@example.com\"",
+            "\"riskyOnly\":false"
+          ]
+        },
+        "body": [
+          {
+            "scope": "mailbox",
+            "acceptedDomains": [
+              "example.com",
+              "exampleorg.onmicrosoft.com",
+              "mail.example.com"
+            ],
+            "summary": {
+              "mailboxesScanned": 1,
+              "mailboxesFailed": 0,
+              "rules": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "externalForwarding": 0,
+              "deleting": 0,
+              "hiding": 0
+            },
+            "rules": []
+          }
+        ]
+      },
+      {
+        "match": {
+          "bodyIncludes": "\"identity\":\"hr-confidential@example.com\""
+        },
+        "body": [
+          {
+            "scope": "mailbox",
+            "acceptedDomains": [
+              "example.com",
+              "exampleorg.onmicrosoft.com",
+              "mail.example.com"
+            ],
+            "summary": {
+              "mailboxesScanned": 1,
+              "mailboxesFailed": 0,
+              "rules": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "externalForwarding": 0,
+              "deleting": 0,
+              "hiding": 0
+            },
+            "rules": []
+          }
+        ]
+      },
+      {
+        "match": {
+          "bodyIncludes": [
+            "\"identity\":\"room-boardroom@example.com\"",
+            "\"riskyOnly\":false"
+          ]
+        },
+        "body": [
+          {
+            "scope": "mailbox",
+            "acceptedDomains": [
+              "example.com",
+              "exampleorg.onmicrosoft.com",
+              "mail.example.com"
+            ],
+            "summary": {
+              "mailboxesScanned": 1,
+              "mailboxesFailed": 0,
+              "rules": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "externalForwarding": 0,
+              "deleting": 0,
+              "hiding": 0
+            },
+            "rules": []
+          }
+        ]
+      },
+      {
+        "match": {
+          "bodyIncludes": "\"identity\":\"room-boardroom@example.com\""
+        },
+        "body": [
+          {
+            "scope": "mailbox",
+            "acceptedDomains": [
+              "example.com",
+              "exampleorg.onmicrosoft.com",
+              "mail.example.com"
+            ],
+            "summary": {
+              "mailboxesScanned": 1,
+              "mailboxesFailed": 0,
+              "rules": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "externalForwarding": 0,
+              "deleting": 0,
+              "hiding": 0
+            },
+            "rules": []
+          }
+        ]
+      },
+      {
+        "match": {
+          "bodyIncludes": [
+            "\"identity\":\"room-atlas@example.com\"",
+            "\"riskyOnly\":false"
+          ]
+        },
+        "body": [
+          {
+            "scope": "mailbox",
+            "acceptedDomains": [
+              "example.com",
+              "exampleorg.onmicrosoft.com",
+              "mail.example.com"
+            ],
+            "summary": {
+              "mailboxesScanned": 1,
+              "mailboxesFailed": 0,
+              "rules": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "externalForwarding": 0,
+              "deleting": 0,
+              "hiding": 0
+            },
+            "rules": []
+          }
+        ]
+      },
+      {
+        "match": {
+          "bodyIncludes": "\"identity\":\"room-atlas@example.com\""
+        },
+        "body": [
+          {
+            "scope": "mailbox",
+            "acceptedDomains": [
+              "example.com",
+              "exampleorg.onmicrosoft.com",
+              "mail.example.com"
+            ],
+            "summary": {
+              "mailboxesScanned": 1,
+              "mailboxesFailed": 0,
+              "rules": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "externalForwarding": 0,
+              "deleting": 0,
+              "hiding": 0
+            },
+            "rules": []
+          }
+        ]
+      },
+      {
+        "match": {
+          "bodyIncludes": [
+            "\"identity\":\"projector-01@example.com\"",
+            "\"riskyOnly\":false"
+          ]
+        },
+        "body": [
+          {
+            "scope": "mailbox",
+            "acceptedDomains": [
+              "example.com",
+              "exampleorg.onmicrosoft.com",
+              "mail.example.com"
+            ],
+            "summary": {
+              "mailboxesScanned": 1,
+              "mailboxesFailed": 0,
+              "rules": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "externalForwarding": 0,
+              "deleting": 0,
+              "hiding": 0
+            },
+            "rules": []
+          }
+        ]
+      },
+      {
+        "match": {
+          "bodyIncludes": "\"identity\":\"projector-01@example.com\""
+        },
+        "body": [
+          {
+            "scope": "mailbox",
+            "acceptedDomains": [
+              "example.com",
+              "exampleorg.onmicrosoft.com",
+              "mail.example.com"
+            ],
+            "summary": {
+              "mailboxesScanned": 1,
+              "mailboxesFailed": 0,
+              "rules": 0,
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "externalForwarding": 0,
+              "deleting": 0,
+              "hiding": 0
+            },
+            "rules": []
+          }
+        ]
+      },
+      {
+        "match": {
+          "bodyIncludes": "\"riskyOnly\":false"
+        },
+        "body": [
+          {
+            "scope": "organization",
+            "acceptedDomains": [
+              "example.com",
+              "exampleorg.onmicrosoft.com",
+              "mail.example.com"
+            ],
+            "summary": {
+              "mailboxesScanned": 15,
+              "mailboxesFailed": 1,
+              "rules": 9,
+              "high": 3,
+              "medium": 3,
+              "low": 2,
+              "externalForwarding": 3,
+              "deleting": 2,
+              "hiding": 2
+            },
+            "rules": [
+              {
+                "key": "isaac.mensah@example.com|backup|1",
+                "mailbox": "isaac.mensah@example.com",
+                "userPrincipalName": "isaac.mensah@example.com",
+                "ruleName": "Backup",
+                "enabled": true,
+                "priority": 1,
+                "risk": "high",
+                "reasons": [
+                  "Forwards outside the organization"
+                ],
+                "targets": [
+                  "isaac.m.backup@proton.example"
+                ],
+                "externalTargets": [
+                  "isaac.m.backup@proton.example"
+                ],
+                "deletes": false,
+                "moveToFolder": null,
+                "markAsRead": false,
+                "stopProcessingRules": false,
+                "conditions": null
+              },
+              {
+                "key": "isaac.mensah@example.com|newsletters|2",
+                "mailbox": "isaac.mensah@example.com",
+                "userPrincipalName": "isaac.mensah@example.com",
+                "ruleName": "Newsletters",
+                "enabled": true,
+                "priority": 2,
+                "risk": "none",
+                "reasons": [],
+                "targets": [],
+                "externalTargets": [],
+                "deletes": false,
+                "moveToFolder": "isaac.mensah@example.com:\\Newsletters",
+                "markAsRead": false,
+                "stopProcessingRules": false,
+                "conditions": null
+              },
+              {
+                "key": "blake@example.com|.|1",
+                "mailbox": "blake@example.com",
+                "userPrincipalName": "blake@example.com",
+                "ruleName": ".",
+                "enabled": true,
+                "priority": 1,
+                "risk": "high",
+                "reasons": [
+                  "Forwards outside the organization",
+                  "Moves messages to RSS Feeds",
+                  "Marks messages as read"
+                ],
+                "targets": [
+                  "invoices@fabrikam.example"
+                ],
+                "externalTargets": [
+                  "invoices@fabrikam.example"
+                ],
+                "deletes": false,
+                "moveToFolder": "blake@example.com:\\RSS Feeds",
+                "markAsRead": true,
+                "stopProcessingRules": true,
+                "conditions": "Subject or body contains: invoice, payment, wire transfer"
+              },
+              {
+                "key": "hana.kim@example.com|notes to self|1",
+                "mailbox": "hana.kim@example.com",
+                "userPrincipalName": "hana.kim@example.com",
+                "ruleName": "Notes to self",
+                "enabled": false,
+                "priority": 1,
+                "risk": "high",
+                "reasons": [
+                  "Redirects outside the organization"
+                ],
+                "targets": [
+                  "hk-notes@outlook.example"
+                ],
+                "externalTargets": [
+                  "hk-notes@outlook.example"
+                ],
+                "deletes": false,
+                "moveToFolder": null,
+                "markAsRead": false,
+                "stopProcessingRules": false,
+                "conditions": null
+              },
+              {
+                "key": "farah.haddad@example.com|copy to me|1",
+                "mailbox": "farah.haddad@example.com",
+                "userPrincipalName": "farah.haddad@example.com",
+                "ruleName": "Copy to me",
+                "enabled": true,
+                "priority": 1,
+                "risk": "low",
+                "reasons": [
+                  "Forwards inside the organization"
+                ],
+                "targets": [
+                  "farah.haddad@example.com"
+                ],
+                "externalTargets": [],
+                "deletes": false,
+                "moveToFolder": null,
+                "markAsRead": false,
+                "stopProcessingRules": false,
+                "conditions": null
+              },
+              {
+                "key": "jordan.price@example.com|clean up alerts|1",
+                "mailbox": "jordan.price@example.com",
+                "userPrincipalName": "jordan.price@example.com",
+                "ruleName": "Clean up alerts",
+                "enabled": true,
+                "priority": 1,
+                "risk": "medium",
+                "reasons": [
+                  "Deletes messages"
+                ],
+                "targets": [],
+                "externalTargets": [],
+                "deletes": true,
+                "moveToFolder": null,
+                "markAsRead": false,
+                "stopProcessingRules": false,
+                "conditions": "From: alerts@monitoring.example"
+              },
+              {
+                "key": "jordan.price@example.com|security notices|2",
+                "mailbox": "jordan.price@example.com",
+                "userPrincipalName": "jordan.price@example.com",
+                "ruleName": "Security notices",
+                "enabled": true,
+                "priority": 2,
+                "risk": "medium",
+                "reasons": [
+                  "Moves messages to Conversation History",
+                  "Marks messages as read"
+                ],
+                "targets": [],
+                "externalTargets": [],
+                "deletes": false,
+                "moveToFolder": "jordan.price@example.com:\\Conversation History",
+                "markAsRead": true,
+                "stopProcessingRules": false,
+                "conditions": "From: security@example.com; Subject contains: sign-in, password"
+              },
+              {
+                "key": "support@example.com|escalations|1",
+                "mailbox": "support@example.com",
+                "userPrincipalName": "support@example.com",
+                "ruleName": "Escalations",
+                "enabled": true,
+                "priority": 1,
+                "risk": "low",
+                "reasons": [
+                  "Forwards inside the organization"
+                ],
+                "targets": [
+                  "avery@example.com"
+                ],
+                "externalTargets": [],
+                "deletes": false,
+                "moveToFolder": null,
+                "markAsRead": false,
+                "stopProcessingRules": false,
+                "conditions": "Subject contains: urgent"
+              },
+              {
+                "key": "support@example.com|auto-replies|2",
+                "mailbox": "support@example.com",
+                "userPrincipalName": "support@example.com",
+                "ruleName": "Auto-replies",
+                "enabled": true,
+                "priority": 2,
+                "risk": "medium",
+                "reasons": [
+                  "Deletes messages"
+                ],
+                "targets": [],
+                "externalTargets": [],
+                "deletes": true,
+                "moveToFolder": null,
+                "markAsRead": false,
+                "stopProcessingRules": false,
+                "conditions": "Subject contains: automatic reply, out of office"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "body": [
+      {
+        "scope": "organization",
+        "acceptedDomains": [
+          "example.com",
+          "exampleorg.onmicrosoft.com",
+          "mail.example.com"
+        ],
+        "summary": {
+          "mailboxesScanned": 15,
+          "mailboxesFailed": 1,
+          "rules": 9,
+          "high": 3,
+          "medium": 3,
+          "low": 0,
+          "externalForwarding": 3,
+          "deleting": 2,
+          "hiding": 2
+        },
+        "rules": [
+          {
+            "key": "isaac.mensah@example.com|backup|1",
+            "mailbox": "isaac.mensah@example.com",
+            "userPrincipalName": "isaac.mensah@example.com",
+            "ruleName": "Backup",
+            "enabled": true,
+            "priority": 1,
+            "risk": "high",
+            "reasons": [
+              "Forwards outside the organization"
+            ],
+            "targets": [
+              "isaac.m.backup@proton.example"
+            ],
+            "externalTargets": [
+              "isaac.m.backup@proton.example"
+            ],
+            "deletes": false,
+            "moveToFolder": null,
+            "markAsRead": false,
+            "stopProcessingRules": false,
+            "conditions": null
+          },
+          {
+            "key": "blake@example.com|.|1",
+            "mailbox": "blake@example.com",
+            "userPrincipalName": "blake@example.com",
+            "ruleName": ".",
+            "enabled": true,
+            "priority": 1,
+            "risk": "high",
+            "reasons": [
+              "Forwards outside the organization",
+              "Moves messages to RSS Feeds",
+              "Marks messages as read"
+            ],
+            "targets": [
+              "invoices@fabrikam.example"
+            ],
+            "externalTargets": [
+              "invoices@fabrikam.example"
+            ],
+            "deletes": false,
+            "moveToFolder": "blake@example.com:\\RSS Feeds",
+            "markAsRead": true,
+            "stopProcessingRules": true,
+            "conditions": "Subject or body contains: invoice, payment, wire transfer"
+          },
+          {
+            "key": "hana.kim@example.com|notes to self|1",
+            "mailbox": "hana.kim@example.com",
+            "userPrincipalName": "hana.kim@example.com",
+            "ruleName": "Notes to self",
+            "enabled": false,
+            "priority": 1,
+            "risk": "high",
+            "reasons": [
+              "Redirects outside the organization"
+            ],
+            "targets": [
+              "hk-notes@outlook.example"
+            ],
+            "externalTargets": [
+              "hk-notes@outlook.example"
+            ],
+            "deletes": false,
+            "moveToFolder": null,
+            "markAsRead": false,
+            "stopProcessingRules": false,
+            "conditions": null
+          },
+          {
+            "key": "jordan.price@example.com|clean up alerts|1",
+            "mailbox": "jordan.price@example.com",
+            "userPrincipalName": "jordan.price@example.com",
+            "ruleName": "Clean up alerts",
+            "enabled": true,
+            "priority": 1,
+            "risk": "medium",
+            "reasons": [
+              "Deletes messages"
+            ],
+            "targets": [],
+            "externalTargets": [],
+            "deletes": true,
+            "moveToFolder": null,
+            "markAsRead": false,
+            "stopProcessingRules": false,
+            "conditions": "From: alerts@monitoring.example"
+          },
+          {
+            "key": "jordan.price@example.com|security notices|2",
+            "mailbox": "jordan.price@example.com",
+            "userPrincipalName": "jordan.price@example.com",
+            "ruleName": "Security notices",
+            "enabled": true,
+            "priority": 2,
+            "risk": "medium",
+            "reasons": [
+              "Moves messages to Conversation History",
+              "Marks messages as read"
+            ],
+            "targets": [],
+            "externalTargets": [],
+            "deletes": false,
+            "moveToFolder": "jordan.price@example.com:\\Conversation History",
+            "markAsRead": true,
+            "stopProcessingRules": false,
+            "conditions": "From: security@example.com; Subject contains: sign-in, password"
+          },
+          {
+            "key": "support@example.com|auto-replies|2",
+            "mailbox": "support@example.com",
+            "userPrincipalName": "support@example.com",
+            "ruleName": "Auto-replies",
+            "enabled": true,
+            "priority": 2,
+            "risk": "medium",
+            "reasons": [
+              "Deletes messages"
+            ],
+            "targets": [],
+            "externalTargets": [],
+            "deletes": true,
+            "moveToFolder": null,
+            "markAsRead": false,
+            "stopProcessingRules": false,
+            "conditions": "Subject contains: automatic reply, out of office"
+          }
+        ]
+      }
+    ]
+  }
+}

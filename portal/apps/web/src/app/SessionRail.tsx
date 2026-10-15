@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { Link } from '@tanstack/react-router';
-import { Brand, Kbd, MagnifyingGlassIcon, modKey, ShieldStarIcon, Tooltip, tv } from '@adminforge/ui';
+import { Brand, Kbd, MagnifyingGlassIcon, modKey, tv } from '@adminforge/ui';
+import { PimIndicator } from './PimIndicator';
 import type { MeResponse } from '@adminforge/schemas';
 
 const rail = tv({
@@ -67,12 +68,7 @@ export function SessionRail({ me, onOpenPalette, armControl, userMenu }: Session
         </button>
       </div>
       <div className={s.right()}>
-        <Tooltip content="Privileged roles (PIM): activation arrives with write mode." side="bottom">
-          <button type="button" className={s.pim()} aria-label="Privileged roles: not connected yet">
-            <ShieldStarIcon size={15} aria-hidden />
-            PIM
-          </button>
-        </Tooltip>
+        <PimIndicator className={s.pim()} />
         <span className={s.divider()} aria-hidden />
         {armControl}
         <span className={s.divider()} aria-hidden />

@@ -6,3 +6,6 @@ packages:
   - tooling/*
 allowBuilds:
   esbuild: true
+overrides:
+  # exceljs pins uuid 8 (GHSA moderate, fixed in 11.1.1); 11 keeps the CommonJS build exceljs requires.
+  exceljs>uuid: ^11.1.1

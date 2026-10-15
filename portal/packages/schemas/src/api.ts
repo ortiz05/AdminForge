@@ -34,6 +34,10 @@ export const MeResponse = z.object({
   armMaxMinutes: z.number().int().positive(),
   csrf: z.string(),
   prefs: UserPrefs,
+  /** Organisation defaults from Admin → Appearance, used where the person has no preference of their own. */
+  defaults: z
+    .object({ theme: ThemePref.optional(), density: z.enum(['comfortable', 'compact']).optional() })
+    .optional(),
   authMode: z.enum(['entra', 'mock']),
   dataMode: z.enum(['live', 'fixtures']),
 });

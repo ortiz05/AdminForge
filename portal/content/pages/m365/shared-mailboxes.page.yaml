@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/page.schema.json
 kind: page
 id: m365.shared-mailboxes
-version: 1.0.0
+version: 1.1.0
 title: Shared mailboxes
 summary: Shared mailboxes, and which of them need a licence because they have an archive or litigation hold.
 owner: m365-team
@@ -110,6 +110,10 @@ layout:
       - { field: hiddenFromAddressListsEnabled, label: Hidden from address lists, kind: boolean, filter: facet }
       - { field: whenCreated, label: Created, kind: date, filter: date, sortable: true }
       - { field: userPrincipalName, label: Sign-in name, hidden: true }
+    inspect:
+      page: m365.mailbox
+      params:
+        mailbox: ${ row.primarySmtpAddress }
     rowActions:
       - label: Open in Exchange admin center
         icon: arrow-square-out

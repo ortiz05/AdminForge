@@ -1,0 +1,148 @@
+$schema: ../../../packages/schemas/generated/playbook.schema.json
+kind: playbook
+id: identity.remove-directory-role
+version: 1.0.0
+title: Remove directory role assignment
+summary: >-
+  Removes one active (standing) Microsoft Entra role assignment. Needs approval by a second engineer; refuses to remove
+  your own assignment or to leave the tenant with fewer than two Global Administrators. PIM activations end on their
+  own (deactivate them in PIM); eligible assignments are removed with Remove eligible role assignment.
+owner: identity-team
+tags: [identity, roles, privileged-access]
+risk: high
+mode: write
+requires:
+  portalRoles: [Portal.Operator]
+  scopes:
+    graph: [RoleManagement.ReadWrite.Directory, Directory.Read.All]
+  entraRoles: [Privileged Role Administrator]
+confirm:
+  type: typed
+  value: ${ steps.assignment.output.roleDefinition.displayName }
+  message: >-
+    ${ steps.principal.output.displayName & ' loses ' & steps.assignment.output.roleDefinition.displayName
+       & ' within a few minutes. Type the role name to confirm.' }
+approval:
+  required: true
+  approvers: [Playbook.Approver]
+  minApprovals: 1
+  expiresIn: PT8H
+
+inputs:
+  assignmentId: { type: string, label: Role assignment id, pattern: "^[A-Za-z0-9_-]{1,200}$" }
+  principalId: { type: string, format: guid, label: Holder (object id), picker: user }
+  reason: { type: string, label: Justification, minLength: 10, multiline: true, description: Shown to the approver and recorded in the audit log. }
+
+steps:
+  # Same request as the user page's Roles tab, so the assignment is re-read for this holder (not trusted from the screen).
+  - id: current
+    type: graph
+    mode: read
+    describe: Read the holder's role assignments
+    request:
+      method: GET
+      path: /roleManagement/directory/roleAssignments
+      query:
+        $filter: ${ 'principalId eq ' & $odata($guid(inputs.principalId)) }
+        $expand: roleDefinition
+
+  - id: assignment
+    type: transform
+    expression: ${ steps.current.output.value[id = $$.inputs.assignmentId][0] }
+
+  - id: found
+    type: assert
+    that: ${ $exists(steps.assignment.output.id) }
+    message: That role assignment no longer exists for this holder (it was removed, or it was a PIM activation that ended).
+
+  - id: principal
+    type: graph
+    mode: read
+    describe: Look up the holder
+    request:
+      method: GET
+      path: /directoryObjects/${ $encode($guid(inputs.principalId)) }
+
+  - id: notSelf
+    type: assert
+    that: ${ $not($guid(inputs.principalId) = $lowercase(user.oid)) }
+    message: This assignment is your own. Ask another administrator to remove it.
+
+  # 62e90394-… is the Global Administrator role template (identical in every tenant).
+  - id: globalAdmins
+    type: graph
+    mode: read
+    describe: Count Global Administrator assignments
+    when: ${ steps.assignment.output.roleDefinitionId = '62e90394-69f5-4237-9190-012177145e10' }
+    request:
+      method: GET
+      path: /roleManagement/directory/roleAssignments
+      query:
+        $filter: roleDefinitionId eq '62e90394-69f5-4237-9190-012177145e10'
+        $select: id,principalId
+
+  - id: keepTwoGlobalAdmins
+    type: assert
+    that: >-
+      ${ steps.assignment.output.roleDefinitionId != '62e90394-69f5-4237-9190-012177145e10'
+         or $count(steps.globalAdmins.output.value) > 2 }
+    message: >-
+      Removing this would leave fewer than two Global Administrators. Keep at least two, including the break-glass
+      accounts — add another first.
+
+  - id: remove
+    type: graph
+    mode: write
+    describe: >-
+      ${ 'Remove ' & steps.assignment.output.roleDefinition.displayName & ' from ' & steps.principal.output.displayName & ' at '
+         & (steps.assignment.output.directoryScopeId = '/' ? 'directory scope' : steps.assignment.output.directoryScopeId) }
+    request:
+      method: DELETE
+      path: /roleManagement/directory/roleAssignments/${ $encode(inputs.assignmentId) }
+    compensate:
+      type: graph
+      describe: Assign the role again
+      request:
+        method: POST
+        path: /roleManagement/directory/roleAssignments
+        body:
+          principalId: ${ steps.assignment.output.principalId }
+          roleDefinitionId: ${ steps.assignment.output.roleDefinitionId }
+          directoryScopeId: ${ steps.assignment.output.directoryScopeId }
+
+outputs:
+  summary: ${ steps.assignment.output.roleDefinition.displayName & ' removed from ' & steps.principal.output.displayName & '.' }
+
+tests:
+  - name: refuses an assignment the holder no longer has
+    inputs: { assignmentId: ra-99, principalId: 00000000-0000-4000-8000-000000000101, reason: quarterly privileged access review }
+    user: { oid: 00000000-0000-4000-8000-0000000000a1, upn: avery@example.com }
+    mocks:
+      current: { value: [{ id: ra-05, principalId: 00000000-0000-4000-8000-000000000101, roleDefinitionId: fe930be7-5e62-47db-91af-98c3a49a38b1, directoryScopeId: /, roleDefinition: { displayName: User Administrator } }] }
+    expect: { status: failed, failedStep: found }
+  - name: refuses to remove the engineer's own assignment
+    inputs: { assignmentId: ra-11, principalId: 00000000-0000-4000-8000-0000000000a1, reason: quarterly privileged access review }
+    user: { oid: 00000000-0000-4000-8000-0000000000a1, upn: avery@example.com }
+    mocks:
+      current: { value: [{ id: ra-11, principalId: 00000000-0000-4000-8000-0000000000a1, roleDefinitionId: fe930be7-5e62-47db-91af-98c3a49a38b1, directoryScopeId: /, roleDefinition: { displayName: User Administrator } }] }
+      principal: { "@odata.type": "#microsoft.graph.user", id: 00000000-0000-4000-8000-0000000000a1, displayName: Avery Engineer }
+    expect: { status: failed, failedStep: notSelf }
+  - name: refuses to leave fewer than two Global Administrators
+    inputs: { assignmentId: ra-01, principalId: 00000000-0000-4000-8000-000000000110, reason: break-glass account rotation }
+    user: { oid: 00000000-0000-4000-8000-0000000000a1, upn: avery@example.com }
+    mocks:
+      current: { value: [{ id: ra-01, principalId: 00000000-0000-4000-8000-000000000110, roleDefinitionId: 62e90394-69f5-4237-9190-012177145e10, directoryScopeId: /, roleDefinition: { displayName: Global Administrator } }] }
+      principal: { "@odata.type": "#microsoft.graph.user", id: 00000000-0000-4000-8000-000000000110, displayName: Break Glass 01 }
+      globalAdmins: { value: [{ id: ra-01, principalId: 00000000-0000-4000-8000-000000000110 }, { id: ra-02, principalId: 00000000-0000-4000-8000-000000000407 }] }
+    expect: { status: failed, failedStep: keepTwoGlobalAdmins }
+  - name: plans removing a standing assignment
+    inputs: { assignmentId: ra-05, principalId: 00000000-0000-4000-8000-000000000101, reason: quarterly privileged access review }
+    user: { oid: 00000000-0000-4000-8000-0000000000a1, upn: avery@example.com }
+    mocks:
+      current: { value: [{ id: ra-05, principalId: 00000000-0000-4000-8000-000000000101, roleDefinitionId: fe930be7-5e62-47db-91af-98c3a49a38b1, directoryScopeId: /, roleDefinition: { displayName: User Administrator } }] }
+      principal: { "@odata.type": "#microsoft.graph.user", id: 00000000-0000-4000-8000-000000000101, displayName: Adele Lee }
+    expect:
+      status: succeeded
+      plan: [remove]
+      steps: { globalAdmins: skipped }
+      outputs: { summary: User Administrator removed from Adele Lee. }

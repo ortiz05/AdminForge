@@ -116,7 +116,7 @@ export type Scopes = z.infer<typeof Scopes>;
 
 /**
  * What a definition needs to be offered and to work (§5.4).
- * `portalRoles` gate features; `scopes` are verified against the app registrations (or the automation identity for schedules);
+ * `portalRoles` gate features (the caller needs **every** listed role); `scopes` are verified against the app registrations (or the automation identity for schedules);
  * `entraRoles` / `azureRoles` are advisory (preflight + "Activate in PIM"); `licences` are SKU part numbers or service plan names
  * that, when missing, render a "Requires <licence>" state instead of an error (R10).
  */

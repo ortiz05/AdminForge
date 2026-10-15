@@ -364,6 +364,10 @@ export const PlaybookTest = z.strictObject({
     .optional(),
   /** Defaults to true (write steps are planned, not executed). */
   dryRun: z.boolean().optional(),
+  /** Virtual "now" for this test (ISO date-time), e.g. to test expiry windows. */
+  now: z.iso.datetime({ offset: true }).optional(),
+  /** `${ env.X }` values for this test (configuration such as AF_READ_CLIENT_ID), merged over the runner's env. */
+  env: z.record(z.string().regex(/^[A-Z][A-Z0-9_]*$/), z.string()).optional(),
   user: z
     .strictObject({
       oid: z.string().optional(),
@@ -397,6 +401,11 @@ const automationShape = {
   tests: z.array(PlaybookTest).optional(),
   /** Max run time (≤ 4h, §7.8). */
   timeout: Duration.optional(),
+  /**
+   * The playbook changes the initiator's own permissions (e.g. PIM activation): when an interactive run succeeds, the
+   * initiator's delegated tokens are refreshed so the new Entra roles apply right away instead of at token expiry.
+   */
+  refreshTokens: z.boolean().optional(),
 };
 
 /** Calls `visit` for every step, depth-first, including steps nested in branch/forEach. */

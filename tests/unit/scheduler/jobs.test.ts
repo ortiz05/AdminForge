@@ -164,7 +164,7 @@ describe('report jobs', () => {
     );
   });
 
-  it('writes one file per format, keeps the newest `retain`, and notes deliveries not built yet', async () => {
+  it('writes one file per format, keeps the newest `retain`, and notes deliveries it cannot make', async () => {
     const { jobs } = setup();
     const def = reportSchedule([
       { type: 'file', format: 'xlsx', retain: 2 },
@@ -187,8 +187,48 @@ describe('report jobs', () => {
       rows: [{ name: 'sa1', location: 'westeurope' }, { name: '=cmd()' }],
     });
     expect(r.result!.delivery).toEqual([
-      { type: 'email', status: 'not_supported', message: expect.stringMatching(/not built yet/) },
+      { type: 'email', status: 'not_configured', message: expect.stringMatching(/not available/) },
     ]);
+  });
+
+  it('emails the report (attached) and posts to Teams when delivery is configured', async () => {
+    const sent: unknown[] = [];
+    const posts: string[] = [];
+    const { jobs } = setup({
+      delivery: {
+        outbound: {
+          execute: async (_i: unknown, call: unknown) => {
+            sent.push(call);
+            return { data: null, status: 202, provenance: { service: 'graph', path: '/x', ms: 1 } };
+          },
+        } as never,
+        fetch: (async (url: string) => {
+          posts.push(url);
+          return new Response('', { status: 202 });
+        }) as never,
+        env: {
+          AF_MAIL_SENDER: 'reports@example.com',
+          AF_REPORT_RECIPIENTS: 'ops@example.com',
+          AF_TEAMS: 'https://example.webhook.office.com/webhookb2/x',
+        },
+        publicBaseUrl: 'https://portal.example.com',
+      },
+    });
+    const r = await jobs.run(
+      ctx(
+        reportSchedule([
+          { type: 'email', to: ['${ env.AF_REPORT_RECIPIENTS }'] },
+          { type: 'teams', webhook: '${ env.AF_TEAMS }' },
+        ]),
+      ),
+    );
+    expect(r.result!.delivery).toEqual([
+      expect.objectContaining({ type: 'email', status: 'sent' }),
+      expect.objectContaining({ type: 'teams', status: 'sent' }),
+    ]);
+    const mail = sent[0] as { body: { message: { attachments: Array<{ name: string }> } } };
+    expect(mail.body.message.attachments[0]!.name).toMatch(/\.xlsx$/);
+    expect(posts).toEqual(['https://example.webhook.office.com/webhookb2/x']);
   });
 
   it('writes a file for email-only deliveries so the run still has its output', async () => {

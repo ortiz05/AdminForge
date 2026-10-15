@@ -1,0 +1,591 @@
+{
+  "$fixture": {
+    "variants": [
+      {
+        "match": {
+          "bodyIncludes": [
+            "af:security.device-vulnerabilities#summary",
+            "VulnerabilitySeverityLevel == \\\"Critical\\\""
+          ]
+        },
+        "body": {
+          "schema": [
+            {
+              "name": "Devices",
+              "type": "Int64"
+            },
+            {
+              "name": "Cves",
+              "type": "Int64"
+            },
+            {
+              "name": "CriticalDevices",
+              "type": "Int64"
+            },
+            {
+              "name": "HighDevices",
+              "type": "Int64"
+            },
+            {
+              "name": "CriticalCves",
+              "type": "Int64"
+            },
+            {
+              "name": "HighCves",
+              "type": "Int64"
+            },
+            {
+              "name": "MediumCves",
+              "type": "Int64"
+            },
+            {
+              "name": "LowCves",
+              "type": "Int64"
+            }
+          ],
+          "results": [
+            {
+              "Devices": 4,
+              "Cves": 3,
+              "CriticalDevices": 4,
+              "HighDevices": 0,
+              "CriticalCves": 3,
+              "HighCves": 0,
+              "MediumCves": 0,
+              "LowCves": 0
+            }
+          ]
+        }
+      },
+      {
+        "match": {
+          "bodyIncludes": "af:security.device-vulnerabilities#summary"
+        },
+        "body": {
+          "schema": [
+            {
+              "name": "Devices",
+              "type": "Int64"
+            },
+            {
+              "name": "Cves",
+              "type": "Int64"
+            },
+            {
+              "name": "CriticalDevices",
+              "type": "Int64"
+            },
+            {
+              "name": "HighDevices",
+              "type": "Int64"
+            },
+            {
+              "name": "CriticalCves",
+              "type": "Int64"
+            },
+            {
+              "name": "HighCves",
+              "type": "Int64"
+            },
+            {
+              "name": "MediumCves",
+              "type": "Int64"
+            },
+            {
+              "name": "LowCves",
+              "type": "Int64"
+            }
+          ],
+          "results": [
+            {
+              "Devices": 8,
+              "Cves": 147,
+              "CriticalDevices": 4,
+              "HighDevices": 7,
+              "CriticalCves": 3,
+              "HighCves": 14,
+              "MediumCves": 61,
+              "LowCves": 69
+            }
+          ]
+        }
+      },
+      {
+        "match": {
+          "bodyIncludes": [
+            "af:security.device-vulnerabilities#devices",
+            "VulnerabilitySeverityLevel == \\\"Critical\\\""
+          ]
+        },
+        "body": {
+          "schema": [
+            {
+              "name": "DeviceId",
+              "type": "String"
+            },
+            {
+              "name": "DeviceName",
+              "type": "String"
+            },
+            {
+              "name": "OSPlatform",
+              "type": "String"
+            },
+            {
+              "name": "Critical",
+              "type": "Int64"
+            },
+            {
+              "name": "High",
+              "type": "Int64"
+            },
+            {
+              "name": "Medium",
+              "type": "Int64"
+            },
+            {
+              "name": "Low",
+              "type": "Int64"
+            },
+            {
+              "name": "Cves",
+              "type": "Int64"
+            },
+            {
+              "name": "Software",
+              "type": "Int64"
+            }
+          ],
+          "results": [
+            {
+              "DeviceId": "3f6a1c0e5d8b4a7c9e2f1b0d6c5a4e3f2d1c0b9a",
+              "DeviceName": "ex-lt-0193.example.com",
+              "OSPlatform": "Windows11",
+              "Critical": 3,
+              "High": 9,
+              "Medium": 14,
+              "Low": 2,
+              "Cves": 28,
+              "Software": 21
+            },
+            {
+              "DeviceId": "8b2e4d6f0a1c3e5b7d9f2a4c6e8b0d1f3a5c7e9b",
+              "DeviceName": "ex-lt-0201.example.com",
+              "OSPlatform": "Windows11",
+              "Critical": 2,
+              "High": 6,
+              "Medium": 11,
+              "Low": 4,
+              "Cves": 23,
+              "Software": 18
+            },
+            {
+              "DeviceId": "c4a6e8b0d2f4a6c8e0b2d4f6a8c0e2b4d6f8a0c2",
+              "DeviceName": "ex-srv-web01.example.com",
+              "OSPlatform": "WindowsServer2022",
+              "Critical": 2,
+              "High": 4,
+              "Medium": 7,
+              "Low": 1,
+              "Cves": 14,
+              "Software": 9
+            },
+            {
+              "DeviceId": "1d3f5b7a9c1e3a5c7e9b1d3f5a7c9e1b3d5f7a9c",
+              "DeviceName": "ex-mac-0042.example.com",
+              "OSPlatform": "macOS",
+              "Critical": 1,
+              "High": 3,
+              "Medium": 6,
+              "Low": 2,
+              "Cves": 12,
+              "Software": 7
+            }
+          ]
+        }
+      },
+      {
+        "match": {
+          "bodyIncludes": "af:security.device-vulnerabilities#devices"
+        },
+        "body": {
+          "schema": [
+            {
+              "name": "DeviceId",
+              "type": "String"
+            },
+            {
+              "name": "DeviceName",
+              "type": "String"
+            },
+            {
+              "name": "OSPlatform",
+              "type": "String"
+            },
+            {
+              "name": "Critical",
+              "type": "Int64"
+            },
+            {
+              "name": "High",
+              "type": "Int64"
+            },
+            {
+              "name": "Medium",
+              "type": "Int64"
+            },
+            {
+              "name": "Low",
+              "type": "Int64"
+            },
+            {
+              "name": "Cves",
+              "type": "Int64"
+            },
+            {
+              "name": "Software",
+              "type": "Int64"
+            }
+          ],
+          "results": [
+            {
+              "DeviceId": "3f6a1c0e5d8b4a7c9e2f1b0d6c5a4e3f2d1c0b9a",
+              "DeviceName": "ex-lt-0193.example.com",
+              "OSPlatform": "Windows11",
+              "Critical": 3,
+              "High": 9,
+              "Medium": 14,
+              "Low": 2,
+              "Cves": 28,
+              "Software": 21
+            },
+            {
+              "DeviceId": "8b2e4d6f0a1c3e5b7d9f2a4c6e8b0d1f3a5c7e9b",
+              "DeviceName": "ex-lt-0201.example.com",
+              "OSPlatform": "Windows11",
+              "Critical": 2,
+              "High": 6,
+              "Medium": 11,
+              "Low": 4,
+              "Cves": 23,
+              "Software": 18
+            },
+            {
+              "DeviceId": "c4a6e8b0d2f4a6c8e0b2d4f6a8c0e2b4d6f8a0c2",
+              "DeviceName": "ex-srv-web01.example.com",
+              "OSPlatform": "WindowsServer2022",
+              "Critical": 2,
+              "High": 4,
+              "Medium": 7,
+              "Low": 1,
+              "Cves": 14,
+              "Software": 9
+            },
+            {
+              "DeviceId": "1d3f5b7a9c1e3a5c7e9b1d3f5a7c9e1b3d5f7a9c",
+              "DeviceName": "ex-mac-0042.example.com",
+              "OSPlatform": "macOS",
+              "Critical": 1,
+              "High": 3,
+              "Medium": 6,
+              "Low": 2,
+              "Cves": 12,
+              "Software": 7
+            },
+            {
+              "DeviceId": "6e8a0c2e4b6d8f0a2c4e6b8d0f2a4c6e8b0d2f4a",
+              "DeviceName": "ex-lt-0177.example.com",
+              "OSPlatform": "Windows10",
+              "Critical": 0,
+              "High": 7,
+              "Medium": 12,
+              "Low": 5,
+              "Cves": 24,
+              "Software": 15
+            },
+            {
+              "DeviceId": "9a1b3c5d7e9f1a3b5c7d9e1f3a5b7c9d1e3f5a7b",
+              "DeviceName": "ex-srv-sql02.example.com",
+              "OSPlatform": "WindowsServer2019",
+              "Critical": 0,
+              "High": 2,
+              "Medium": 9,
+              "Low": 3,
+              "Cves": 14,
+              "Software": 6
+            },
+            {
+              "DeviceId": "2c4e6a8c0e2a4c6e8a0c2e4a6c8e0a2c4e6a8c0e",
+              "DeviceName": "ex-lnx-build01.example.com",
+              "OSPlatform": "Linux",
+              "Critical": 0,
+              "High": 1,
+              "Medium": 4,
+              "Low": 6,
+              "Cves": 11,
+              "Software": 5
+            },
+            {
+              "DeviceId": "5f7b9d1f3b5d7f9b1d3f5b7d9f1b3d5f7b9d1f3b",
+              "DeviceName": "ex-ipad-0012.example.com",
+              "OSPlatform": "iOS",
+              "Critical": 0,
+              "High": 0,
+              "Medium": 2,
+              "Low": 1,
+              "Cves": 3,
+              "Software": 1
+            }
+          ]
+        }
+      },
+      {
+        "match": {
+          "bodyIncludes": [
+            "af:security.device-vulnerabilities#cves",
+            "VulnerabilitySeverityLevel == \\\"Critical\\\""
+          ]
+        },
+        "body": {
+          "schema": [
+            {
+              "name": "CveId",
+              "type": "String"
+            },
+            {
+              "name": "Severity",
+              "type": "String"
+            },
+            {
+              "name": "CvssScore",
+              "type": "Real"
+            },
+            {
+              "name": "IsExploitAvailable",
+              "type": "Boolean"
+            },
+            {
+              "name": "PublishedDate",
+              "type": "String"
+            },
+            {
+              "name": "Devices",
+              "type": "Int64"
+            },
+            {
+              "name": "Software",
+              "type": "Dynamic"
+            }
+          ],
+          "results": [
+            {
+              "CveId": "CVE-2026-21412",
+              "Severity": "Critical",
+              "CvssScore": 9.8,
+              "IsExploitAvailable": true,
+              "PublishedDate": "2026-09-09T00:00:00Z",
+              "Devices": 3,
+              "Software": [
+                "chrome"
+              ]
+            },
+            {
+              "CveId": "CVE-2026-20871",
+              "Severity": "Critical",
+              "CvssScore": 9.1,
+              "IsExploitAvailable": false,
+              "PublishedDate": "2026-08-12T00:00:00Z",
+              "Devices": 2,
+              "Software": [
+                "windows_11"
+              ]
+            },
+            {
+              "CveId": "CVE-2026-31004",
+              "Severity": "Critical",
+              "CvssScore": 9.0,
+              "IsExploitAvailable": true,
+              "PublishedDate": "2026-09-23T00:00:00Z",
+              "Devices": 2,
+              "Software": [
+                "openssl"
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "match": {
+          "bodyIncludes": "af:security.device-vulnerabilities#cves"
+        },
+        "body": {
+          "schema": [
+            {
+              "name": "CveId",
+              "type": "String"
+            },
+            {
+              "name": "Severity",
+              "type": "String"
+            },
+            {
+              "name": "CvssScore",
+              "type": "Real"
+            },
+            {
+              "name": "IsExploitAvailable",
+              "type": "Boolean"
+            },
+            {
+              "name": "PublishedDate",
+              "type": "String"
+            },
+            {
+              "name": "Devices",
+              "type": "Int64"
+            },
+            {
+              "name": "Software",
+              "type": "Dynamic"
+            }
+          ],
+          "results": [
+            {
+              "CveId": "CVE-2026-21412",
+              "Severity": "Critical",
+              "CvssScore": 9.8,
+              "IsExploitAvailable": true,
+              "PublishedDate": "2026-09-09T00:00:00Z",
+              "Devices": 3,
+              "Software": [
+                "chrome"
+              ]
+            },
+            {
+              "CveId": "CVE-2026-20871",
+              "Severity": "Critical",
+              "CvssScore": 9.1,
+              "IsExploitAvailable": false,
+              "PublishedDate": "2026-08-12T00:00:00Z",
+              "Devices": 2,
+              "Software": [
+                "windows_11"
+              ]
+            },
+            {
+              "CveId": "CVE-2026-31004",
+              "Severity": "Critical",
+              "CvssScore": 9.0,
+              "IsExploitAvailable": true,
+              "PublishedDate": "2026-09-23T00:00:00Z",
+              "Devices": 2,
+              "Software": [
+                "openssl"
+              ]
+            },
+            {
+              "CveId": "CVE-2026-18833",
+              "Severity": "High",
+              "CvssScore": 8.8,
+              "IsExploitAvailable": true,
+              "PublishedDate": "2026-07-08T00:00:00Z",
+              "Devices": 5,
+              "Software": [
+                "edge_chromium",
+                "chrome"
+              ]
+            },
+            {
+              "CveId": "CVE-2026-24410",
+              "Severity": "High",
+              "CvssScore": 8.1,
+              "IsExploitAvailable": false,
+              "PublishedDate": "2026-09-09T00:00:00Z",
+              "Devices": 4,
+              "Software": [
+                "office"
+              ]
+            },
+            {
+              "CveId": "CVE-2026-19901",
+              "Severity": "High",
+              "CvssScore": 7.8,
+              "IsExploitAvailable": false,
+              "PublishedDate": "2026-06-10T00:00:00Z",
+              "Devices": 4,
+              "Software": [
+                "7-zip"
+              ]
+            },
+            {
+              "CveId": "CVE-2026-27755",
+              "Severity": "High",
+              "CvssScore": 7.5,
+              "IsExploitAvailable": true,
+              "PublishedDate": "2026-08-26T00:00:00Z",
+              "Devices": 3,
+              "Software": [
+                "java_runtime_environment"
+              ]
+            },
+            {
+              "CveId": "CVE-2026-22150",
+              "Severity": "Medium",
+              "CvssScore": 6.5,
+              "IsExploitAvailable": false,
+              "PublishedDate": "2026-05-13T00:00:00Z",
+              "Devices": 6,
+              "Software": [
+                "teams"
+              ]
+            },
+            {
+              "CveId": "CVE-2026-25677",
+              "Severity": "Medium",
+              "CvssScore": 5.9,
+              "IsExploitAvailable": false,
+              "PublishedDate": "2026-07-22T00:00:00Z",
+              "Devices": 5,
+              "Software": [
+                "zoom"
+              ]
+            },
+            {
+              "CveId": "CVE-2026-14209",
+              "Severity": "Medium",
+              "CvssScore": 5.3,
+              "IsExploitAvailable": false,
+              "PublishedDate": "2026-03-11T00:00:00Z",
+              "Devices": 4,
+              "Software": [
+                "notepad++"
+              ]
+            },
+            {
+              "CveId": "CVE-2026-11180",
+              "Severity": "Low",
+              "CvssScore": 3.7,
+              "IsExploitAvailable": false,
+              "PublishedDate": "2026-02-10T00:00:00Z",
+              "Devices": 4,
+              "Software": [
+                "vlc_media_player"
+              ]
+            },
+            {
+              "CveId": "CVE-2025-48812",
+              "Severity": "Low",
+              "CvssScore": 3.1,
+              "IsExploitAvailable": false,
+              "PublishedDate": "2025-12-09T00:00:00Z",
+              "Devices": 2,
+              "Software": [
+                "adobe_acrobat_reader"
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

@@ -1,0 +1,122 @@
+$schema: ../../../packages/schemas/generated/playbook.schema.json
+kind: playbook
+id: m365.grant-onedrive-access
+version: 1.0.0
+title: Give someone access to a OneDrive
+summary: >-
+  Gives one person (usually a leaver's manager) full access to another person's OneDrive by adding them as a site
+  collection administrator, so files can be handed over before the OneDrive is deleted. Existing access is kept. Take
+  the access away later in the SharePoint admin center.
+owner: m365-team
+tags: [m365, sharepoint, onedrive, offboarding]
+risk: high
+mode: write
+requires:
+  portalRoles: [Portal.Operator]
+  scopes:
+    graph: [User.Read.All]
+    sharepointAdmin: [AllSites.FullControl]
+  entraRoles: [SharePoint Administrator]
+  licences: [sharepoint]
+confirm:
+  type: typed
+  value: ${ steps.owner.output.userPrincipalName }
+  message: >-
+    ${ steps.grantee.output.displayName & ' will be able to open, change and delete every file in '
+       & steps.owner.output.displayName & "'s OneDrive. Type " & steps.owner.output.userPrincipalName & ' to confirm.' }
+
+inputs:
+  ownerId: { type: user, label: OneDrive of, description: The person whose files are handed over (usually a leaver) }
+  granteeId: { type: user, label: Give access to, description: Usually their manager }
+  reason: { type: string, label: Reason, minLength: 10, multiline: true, placeholder: e.g. Leaver HR-1234 — handover of project files }
+
+steps:
+  - id: owner
+    type: graph
+    mode: read
+    describe: Look up the OneDrive owner
+    request:
+      method: GET
+      path: /users/${ $encode($guid(inputs.ownerId)) }
+      query:
+        $select: id,displayName,userPrincipalName,userType
+
+  - id: grantee
+    type: graph
+    mode: read
+    describe: Look up the person getting access
+    request:
+      method: GET
+      path: /users/${ $encode($guid(inputs.granteeId)) }
+      query:
+        $select: id,displayName,userPrincipalName,userType,accountEnabled
+
+  - id: different
+    type: assert
+    that: ${ $lowercase(steps.owner.output.id) != $lowercase(steps.grantee.output.id) }
+    message: Pick someone other than the OneDrive's owner.
+
+  - id: granteeCanUseIt
+    type: assert
+    that: ${ steps.grantee.output.userType = 'Member' and steps.grantee.output.accountEnabled = true }
+    message: >-
+      ${ steps.grantee.output.userPrincipalName & (steps.grantee.output.userType = 'Guest'
+         ? ' is a guest. Hand files to a guest by sharing them, not by giving access to the whole OneDrive.'
+         : " can't sign in (the account is disabled).") }
+
+  # No compensation: the SharePoint admin API can add site collection administrators but not remove them;
+  # removal is done on the site (SharePoint admin center › Active sites › Permissions).
+  - id: grant
+    type: runner
+    mode: write
+    describe: ${ 'Give ' & steps.grantee.output.displayName & ' access to the OneDrive of ' & steps.owner.output.displayName }
+    script: sharepoint/Grant-OneDriveAccess.ps1
+    sha256: 4f5490a6e920158abdc1d9731667571c00cf3e6d09ce5d3e92202bcf26f0a360
+    services: [sharepointAdmin]
+    timeoutSeconds: 300
+    parameters:
+      owner: ${ steps.owner.output.userPrincipalName }
+      grantee: ${ steps.grantee.output.userPrincipalName }
+    idempotent: true
+    dryRunOutput:
+      - owner: ${ steps.owner.output.userPrincipalName }
+        grantee: ${ steps.grantee.output.userPrincipalName }
+        oneDriveUrl: null
+        granted: true
+
+outputs:
+  summary: >-
+    ${ steps.grantee.output.displayName & ' now has access to the OneDrive of ' & steps.owner.output.displayName
+       & (steps.grant.output[0].oneDriveUrl ? ' (' & steps.grant.output[0].oneDriveUrl & ')' : '')
+       & '. Remove the access in the SharePoint admin center once the handover is done.' }
+  oneDriveUrl: ${ steps.grant.output[0].oneDriveUrl }
+
+tests:
+  - name: gives the manager access to a leaver's OneDrive
+    inputs: { ownerId: 10000000-0000-4000-8000-000000000001, granteeId: 10000000-0000-4000-8000-000000000007, reason: Leaver HR-1001 handover }
+    mocks:
+      owner: { id: 10000000-0000-4000-8000-000000000001, displayName: Adele Vance, userPrincipalName: adele.vance@example.com, userType: Member }
+      grantee: { id: 10000000-0000-4000-8000-000000000007, displayName: Lee Gu, userPrincipalName: lee.gu@example.com, userType: Member, accountEnabled: true }
+    expect:
+      status: succeeded
+      plan: [grant]
+      outputs:
+        summary: Lee Gu now has access to the OneDrive of Adele Vance. Remove the access in the SharePoint admin center once the handover is done.
+  - name: refuses the owner themselves
+    inputs: { ownerId: 10000000-0000-4000-8000-000000000001, granteeId: 10000000-0000-4000-8000-000000000001, reason: Mistyped request }
+    mocks:
+      owner: { id: 10000000-0000-4000-8000-000000000001, displayName: Adele Vance, userPrincipalName: adele.vance@example.com, userType: Member }
+      grantee: { id: 10000000-0000-4000-8000-000000000001, displayName: Adele Vance, userPrincipalName: adele.vance@example.com, userType: Member, accountEnabled: true }
+    expect: { status: failed, failedStep: different }
+  - name: refuses a disabled account
+    inputs: { ownerId: 10000000-0000-4000-8000-000000000001, granteeId: 10000000-0000-4000-8000-000000000012, reason: Leaver HR-1001 handover }
+    mocks:
+      owner: { id: 10000000-0000-4000-8000-000000000001, displayName: Adele Vance, userPrincipalName: adele.vance@example.com, userType: Member }
+      grantee: { id: 10000000-0000-4000-8000-000000000012, displayName: Former Manager, userPrincipalName: former.manager@example.com, userType: Member, accountEnabled: false }
+    expect: { status: failed, failedStep: granteeCanUseIt }
+  - name: refuses a guest
+    inputs: { ownerId: 10000000-0000-4000-8000-000000000001, granteeId: 10000000-0000-4000-8000-000000000020, reason: Leaver HR-1001 handover }
+    mocks:
+      owner: { id: 10000000-0000-4000-8000-000000000001, displayName: Adele Vance, userPrincipalName: adele.vance@example.com, userType: Member }
+      grantee: { id: 10000000-0000-4000-8000-000000000020, displayName: Partner, userPrincipalName: "partner_fabrikam.example#EXT#@example.onmicrosoft.com", userType: Guest, accountEnabled: true }
+    expect: { status: failed, failedStep: granteeCanUseIt }

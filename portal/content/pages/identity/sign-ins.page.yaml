@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/page.schema.json
 kind: page
 id: identity.sign-ins
-version: 1.0.0
+version: 1.1.0
 title: Sign-in logs
 summary: >-
   Interactive user sign-ins — filter by time range, result, user, application, country, IP address, Conditional
@@ -55,6 +55,20 @@ params:
 
 filters:
   facets: [status, user, app, country, ip, ca, risk, client]
+  # Compiled server-side into `${ advanced }` (OData). Only properties /auditLogs/signIns can filter on.
+  advanced:
+    dialect: odata
+    param: adv
+    fields:
+      - { field: userId, label: User id, type: guid, operators: [eq] }
+      - { field: userDisplayName, label: User name, type: string, operators: [eq, startsWith] }
+      - { field: appId, label: Application id, type: guid, operators: [eq] }
+      - { field: resourceDisplayName, label: Resource, type: string, operators: [eq] }
+      - { field: errorCode, label: Error code, type: number, property: status/errorCode, operators: [eq, ne] }
+      - { field: city, label: City, type: string, property: location/city, operators: [eq, startsWith] }
+      - { field: state, label: State or province, type: string, property: location/state, operators: [eq, startsWith] }
+      - { field: riskState, label: Risk state, type: enum, values: [none, confirmedSafe, remediated, dismissed, atRisk, confirmedCompromised], operators: [eq] }
+      - { field: correlationId, label: Correlation id, type: guid, operators: [eq] }
 
 savedViews:
   enabled: true
@@ -85,7 +99,8 @@ datasources:
                params.ip ? "ipAddress eq " & $odata(params.ip),
                params.ca != 'Any' ? "conditionalAccessStatus eq " & $odata(params.ca),
                params.risk != 'Any' ? "riskLevelDuringSignIn eq " & $odata(params.risk),
-               params.client != 'Any' ? "clientAppUsed eq " & $odata(params.client)
+               params.client != 'Any' ? "clientAppUsed eq " & $odata(params.client),
+               advanced
              ][$], ' and ') }
     paging: cursor
     cache: { ttl: 60 }

@@ -1,0 +1,215 @@
+$schema: ../../../packages/schemas/generated/page.schema.json
+kind: page
+id: m365.mailbox
+version: 1.0.0
+title: Mailbox
+summary: >-
+  One Exchange Online mailbox: forwarding, address-list visibility, holds and automatic replies, and who can open it
+  (Full Access), send as it (Send As) or send on its behalf. Grant or remove access, clear forwarding, set automatic
+  replies.
+owner: m365-team
+tags: [m365, exchange, mailboxes, permissions]
+template: entity
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    exchange: [Exchange.Manage]
+  entraRoles: [Exchange Recipient Administrator, Global Reader]
+  licences: [exchange]
+
+params:
+  mailbox: { type: string, format: email, label: Mailbox, required: true, hidden: true }
+
+datasources:
+  mailbox:
+    source: runner
+    label: Mailbox settings (PowerShell)
+    script: exchange/Get-MailboxConfiguration.ps1
+    sha256: c86c6bf4f6a3ca272389fe8369e8b9137805f491685d69d58855595207aa9d99
+    services: [exchange]
+    timeoutSeconds: 300
+    parameters:
+      identity: ${ params.mailbox }
+      includeAutoReply: true
+    cache: { ttl: 60 }
+    # value = [script output] — one object; adds display labels.
+    transform: >-
+      ${ (
+        $m := value[0];
+        $types := { 'UserMailbox': 'User mailbox', 'SharedMailbox': 'Shared mailbox', 'RoomMailbox': 'Room', 'EquipmentMailbox': 'Equipment', 'SchedulingMailbox': 'Scheduling' };
+        $merge([$m, {
+          "typeLabel": $lookup($types, $m.recipientTypeDetails) ? $lookup($types, $m.recipientTypeDetails) : $m.recipientTypeDetails,
+          "forwardsTo": $join($m.forwarding.targets, ', ')
+        }])
+      ) }
+  permissions:
+    source: runner
+    label: Mailbox access (PowerShell)
+    script: exchange/Get-MailboxPermissions.ps1
+    sha256: 20458fc49331335910f5668635a47274d7bf54cc48fe72e4ee1dd38132e6ee1a
+    services: [exchange]
+    timeoutSeconds: 300
+    parameters:
+      identity: ${ params.mailbox }
+    cache: { ttl: 60 }
+    # value = [script output] — one object { mailbox, summary, permissions }; rows carry the mailbox for row actions.
+    transform: >-
+      ${ (
+        $v := value[0];
+        $merge([$v, { "rows": [$v.permissions.$merge([$, {
+          "mailbox": $v.mailbox.primarySmtpAddress,
+          "name": trusteeDisplayName ? trusteeDisplayName : trustee
+        }])] }])
+      ) }
+
+header:
+  title: ${ mailbox.displayName }
+  subtitle: ${ mailbox.primarySmtpAddress }
+  status: "${ mailbox.forwarding.external = true ? 'crit' : mailbox.forwarding.enabled = true ? 'warn' : mailbox.recipientTypeDetails = 'SharedMailbox' ? 'info' : 'ok' }"
+  statusLabel: "${ mailbox.forwarding.external = true ? 'Forwards outside the organization' : mailbox.forwarding.enabled = true ? 'Forwards mail' : mailbox.typeLabel }"
+  ids:
+    Sign-in name: ${ mailbox.userPrincipalName }
+
+actions:
+  - playbook: m365.grant-mailbox-permission
+    label: Grant access
+    icon: user-plus
+    inputs:
+      mailbox: ${ params.mailbox }
+  - playbook: m365.clear-mailbox-forwarding
+    label: Clear forwarding
+    icon: prohibit
+    inputs:
+      mailbox: ${ params.mailbox }
+    when: ${ mailbox.forwarding.enabled = true }
+  - playbook: m365.set-mailbox-auto-reply
+    label: Automatic replies
+    icon: chat-teardrop-text
+    inputs:
+      mailbox: ${ params.mailbox }
+      state: "${ mailbox.autoReply.state = 'Disabled' ? 'Enabled' : 'Disabled' }"
+  - playbook: m365.set-address-list-visibility
+    label: Hide from address lists
+    icon: eye-slash
+    inputs:
+      mailbox: ${ params.mailbox }
+      hidden: true
+    when: ${ mailbox.hiddenFromAddressListsEnabled != true }
+  - playbook: m365.set-address-list-visibility
+    label: Show in address lists
+    icon: eye
+    inputs:
+      mailbox: ${ params.mailbox }
+      hidden: false
+    when: ${ mailbox.hiddenFromAddressListsEnabled = true }
+  - playbook: m365.convert-to-shared-mailbox
+    label: Convert to shared mailbox
+    icon: users-three
+    inputs:
+      mailbox: ${ params.mailbox }
+    when: ${ mailbox.recipientTypeDetails = 'UserMailbox' }
+  - label: Inbox rules
+    icon: funnel
+    href: /p/m365.inbox-rules?mailbox=${ $encode(params.mailbox) }
+  - label: Open in Exchange admin center
+    icon: arrow-square-out
+    href: https://admin.exchange.microsoft.com/#/mailboxes
+
+tabs:
+  - id: overview
+    label: Overview
+    layout:
+      - widget: markdown
+        span: 12
+        when: ${ mailbox.forwarding.external = true }
+        text: |
+          **This mailbox forwards mail outside the organization** (to ${ mailbox.forwardsTo }). Unless that is expected,
+          treat it as a possible account compromise: check the account's recent sign-ins and its inbox rules, then
+          clear the forwarding.
+      - widget: keyValue
+        span: 6
+        title: Mailbox
+        data: mailbox
+        fields:
+          - { field: typeLabel, label: Type }
+          - { field: primarySmtpAddress, label: Email address, kind: id }
+          - { field: userPrincipalName, label: Sign-in name, kind: id }
+          - { field: hiddenFromAddressListsEnabled, label: Hidden from address lists, kind: boolean }
+          - { field: litigationHoldEnabled, label: Litigation hold, kind: status, map: { "true": [info, "On"], "false": [neutral, "Off"] } }
+          - { field: archiveStatus, label: Archive, kind: status, map: { Active: [ok, Active], None: [neutral, None] } }
+          - { field: isDirSynced, label: Synced from on-premises, kind: boolean }
+      - widget: keyValue
+        span: 6
+        title: Forwarding
+        data: mailbox.forwarding
+        fields:
+          - { field: enabled, label: Forwards mail, kind: status, map: { "true": [warn, "Yes"], "false": [ok, "No"] } }
+          - { field: external, label: Outside the organization, kind: status, map: { "true": [crit, "Yes"], "false": [ok, "No"] } }
+          - { field: forwardingSmtpAddress, label: Forwarding address }
+          - { field: forwardingAddress, label: Forwarding recipient }
+          - { field: forwardingAddressTarget, label: Recipient's address }
+          - { field: deliverToMailboxAndForward, label: Keeps a copy, kind: boolean }
+      - widget: keyValue
+        span: 6
+        title: Automatic replies
+        data: mailbox.autoReply
+        fields:
+          - { field: state, label: State, kind: status, map: { Enabled: [info, "On"], Scheduled: [info, Scheduled], Disabled: [neutral, "Off"] } }
+          - { field: externalAudience, label: Outside senders, kind: status, map: { All: [neutral, Everyone], Known: [neutral, Contacts only], None: [neutral, Nobody] } }
+          - { field: startTime, label: From, kind: datetime }
+          - { field: endTime, label: Until, kind: datetime }
+  - id: access
+    label: Access
+    layout:
+      - widget: kpi
+        data: permissions.summary.fullAccess
+        label: Full Access
+        format: number
+      - widget: kpi
+        data: permissions.summary.sendAs
+        label: Send As
+        format: number
+      - widget: kpi
+        data: permissions.summary.sendOnBehalf
+        label: Send on Behalf
+        format: number
+      - widget: kpi
+        data: permissions.summary.orphaned
+        label: Deleted accounts
+        format: number
+        status: "${ value > 0 ? 'warn' : 'ok' }"
+      - widget: table
+        id: access
+        span: 12
+        data: permissions.rows
+        rowKey: key
+        columns:
+          - { field: name, label: Person or group, kind: identity, secondary: trustee }
+          - field: permission
+            label: Access
+            kind: status
+            map: { FullAccess: [warn, Full Access], SendAs: [warn, Send As], SendOnBehalf: [info, Send on Behalf] }
+            filter: facet
+          - { field: inherited, label: Inherited, kind: boolean, filter: facet }
+          - { field: orphaned, label: Deleted account, kind: status, map: { "true": [warn, Deleted account], "false": [ok, Active] }, filter: facet }
+          - { field: deny, label: Denied, kind: boolean, hidden: true }
+          - { field: trusteeType, label: Recipient type, hidden: true }
+          - { field: accessRights, label: Rights, kind: tags, hidden: true }
+        rowActions:
+          - playbook: m365.remove-mailbox-permission
+            label: Remove access
+            icon: user-minus
+            inputs:
+              mailbox: ${ row.mailbox }
+              trustee: ${ row.trustee }
+              permission: ${ row.permission }
+            when: ${ row.removable = true }
+        empty:
+          title: Only the owner has access
+          body: Nobody else can open, send as or send on behalf of this mailbox. Use Grant access to add someone.
+      - widget: markdown
+        span: 12
+        text: |
+          **Inherited** access is granted to the whole organization or mailbox database and can't be removed here.
+          **Deleted account** entries point at people who no longer exist; remove them in the Exchange admin center.
+          Send on Behalf is managed on the mailbox's delegation settings in the Exchange admin center.

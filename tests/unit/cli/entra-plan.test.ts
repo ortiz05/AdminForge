@@ -202,8 +202,11 @@ describe('buildDesiredEntra', () => {
     const write = desired.apps.find((a) => a.key === 'write')!;
     expect(write.body.web.redirectUris).toEqual(['http://localhost:5173/auth/arm/callback']);
     const graphScopes = write.grants.find((g) => g.resource === 'graph')!.scopes;
-    expect(graphScopes).toContain('Policy.ReadWrite.ConditionalAccess');
+    expect(graphScopes).toContain('User.EnableDisableAccount.All');
     expect(graphScopes).not.toContain('Directory.ReadWrite.All');
+    // Least privilege: scopes only some content needs come from that content, not the baseline.
+    expect(graphScopes).not.toContain('Policy.ReadWrite.ConditionalAccess');
+    expect(graphScopes).not.toContain('RoleManagement.ReadWrite.Directory');
   });
 
   it('gives the automation identity application permissions and no redirect URI', () => {

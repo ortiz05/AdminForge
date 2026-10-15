@@ -1,3 +1,4 @@
+import type { RowsFilterCondition, RowsFilterGroup } from '@adminforge/expressions';
 import {
   advancedOpsFor,
   DEFAULT_ADVANCED_PARAM,
@@ -298,6 +299,18 @@ export function compileAdvanced(g: AdvancedGroup, dialect: 'odata' | 'kql'): str
     return parts.length === 1 ? parts[0]! : `(${parts.join(` ${x.join} `)})`;
   };
   return render(g);
+}
+
+/**
+ * `dialect: rows`: the validated filter as data for `$applyAdvanced(rows, advanced)` — field names resolved to their
+ * row paths (`property`, default `field`), values already normalised (dates as ISO instants).
+ */
+export function rowsFilter(g: AdvancedGroup): RowsFilterGroup {
+  const one = (x: AdvancedGroup | AdvancedCondition): RowsFilterGroup | RowsFilterCondition =>
+    isGroup(x)
+      ? { join: x.join, clauses: x.clauses.map(one) }
+      : { path: x.field.property ?? x.field.field, type: x.field.type, op: x.op, value: x.value };
+  return one(g) as RowsFilterGroup;
 }
 
 /** Which dialect a datasource's templates get: OData for Graph, KQL for Resource Graph / Log Analytics. */

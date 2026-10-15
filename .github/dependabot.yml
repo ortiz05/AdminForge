@@ -1,0 +1,24 @@
+# Dependency updates (supply chain, plan §8.3). Grouped weekly so each week is one reviewable PR per ecosystem;
+# CI (audit, guards, tests, e2e, bundle budget) must pass before merging.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule: { interval: weekly, day: monday }
+    open-pull-requests-limit: 5
+    groups:
+      minor-and-patch:
+        update-types: [minor, patch]
+    ignore:
+      # tooling/lint stays on TypeScript 6 until typescript-eslint supports the native compiler (docs/decisions.md).
+      - dependency-name: typescript
+        update-types: [version-update:semver-major]
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: { interval: weekly, day: monday }
+    groups:
+      actions:
+        patterns: ['*']
+  - package-ecosystem: docker
+    directory: /portal/apps/runner
+    schedule: { interval: weekly, day: monday }

@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/page.schema.json
 kind: page
 id: identity.enterprise-app
-version: 1.0.0
+version: 1.1.0
 title: Enterprise app
 summary: >-
   One enterprise app (service principal) — properties, user and group assignments, granted permissions (admin and
@@ -144,6 +144,12 @@ actions:
     inputs:
       servicePrincipalId: ${ params.id }
     when: ${ sp.accountEnabled = false }
+  - playbook: identity.assign-app-access
+    label: Assign users or groups
+    icon: user-plus
+    inputs:
+      servicePrincipalId: ${ params.id }
+    when: ${ sp.servicePrincipalType = 'Application' }
   - label: Open in Entra admin center
     icon: arrow-square-out
     href: "https://entra.microsoft.com/#view/Microsoft_AAD_IAM/ManagedAppMenuBlade/~/Overview/objectId/${ $encode(params.id) }/appId/${ $encode(sp.appId) }"
@@ -221,9 +227,17 @@ tabs:
         rowActions:
           - { label: Open user, icon: user, href: "/p/identity.user?id=${ $encode(row.principalId) }", when: "${ row.principalType = 'User' }" }
           - { label: Open group, icon: users-three, href: "/p/identity.group?id=${ $encode(row.principalId) }", when: "${ row.principalType = 'Group' }" }
+          - playbook: identity.remove-app-access
+            label: Remove assignment
+            icon: user-minus
+            inputs:
+              servicePrincipalId: ${ params.id }
+              principalId: ${ row.principalId }
+              assignmentId: ${ row.id }
+            when: ${ row.principalType in ['User', 'Group'] }
         empty:
           title: No assignments
-          body: No users or groups are assigned to this app.
+          body: No users or groups are assigned to this app. Use Assign users or groups to add one.
       - widget: table
         id: appRoles
         title: App roles defined by this app
@@ -252,6 +266,13 @@ tabs:
           - { field: scopes, label: Permissions, kind: tags }
           - { field: principalId, label: Consented by (user id), kind: guid }
           - { field: resourceId, label: API (object id), kind: guid, hidden: true }
+        rowActions:
+          - playbook: identity.revoke-consent-grant
+            label: Revoke grant
+            icon: prohibit
+            inputs:
+              grantId: ${ row.id }
+          - { label: Open user, icon: user, href: "/p/identity.user?id=${ $encode(row.principalId) }", when: "${ $boolean(row.principalId) }" }
         empty:
           title: No delegated permissions
           body: Nobody has consented to this app acting on their behalf.

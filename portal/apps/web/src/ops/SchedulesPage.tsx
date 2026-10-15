@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
 import {
+  button,
   ArrowClockwiseIcon,
   Badge,
   DataTable,
@@ -215,11 +216,16 @@ export function SchedulesPage() {
         title="Schedules"
         description="Jobs that run on their own on this host: reports, synthetic tests, content health and approved playbooks."
         actions={
-          <IconButton
-            label="Refresh"
-            icon={<ArrowClockwiseIcon size={16} />}
-            onClick={() => void q.refetch()}
-          />
+          <div className="flex items-center gap-2">
+            <Link to="/schedules/new" className={button({ intent: 'secondary', size: 'sm' })}>
+              New schedule
+            </Link>
+            <IconButton
+              label="Refresh"
+              icon={<ArrowClockwiseIcon size={16} />}
+              onClick={() => void q.refetch()}
+            />
+          </div>
         }
       />
       <div className="flex flex-col gap-6">

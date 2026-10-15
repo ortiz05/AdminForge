@@ -1,0 +1,127 @@
+$schema: ../../../packages/schemas/generated/playbook.schema.json
+kind: playbook
+id: identity.remove-app-access
+version: 1.0.0
+title: Remove user or group from enterprise app
+summary: >-
+  Removes one user or group assignment from an enterprise app. When the app requires assignment, the user (or the
+  group's members) can no longer sign in to it unless another assignment covers them.
+owner: identity-team
+tags: [identity, apps, access]
+risk: medium
+mode: write
+requires:
+  portalRoles: [Portal.Operator]
+  scopes:
+    graph: [AppRoleAssignment.ReadWrite.All, Application.Read.All, Directory.Read.All]
+  entraRoles: [Cloud Application Administrator]
+confirm:
+  type: click
+  message: >-
+    ${ 'Remove ' & steps.principal.output.displayName & ' from ' & steps.sp.output.displayName & '?'
+       & (steps.sp.output.appRoleAssignmentRequired = true ? ' The app requires assignment, so this blocks their sign-in to it.' : '') }
+approval:
+  required: false
+
+inputs:
+  servicePrincipalId: { type: string, format: guid, label: Enterprise app (object id), picker: app }
+  principalId: { type: string, format: guid, label: User or group, picker: user }
+  assignmentId: { type: string, label: Assignment id, pattern: "^[A-Za-z0-9_-]{1,200}$" }
+
+steps:
+  - id: sp
+    type: graph
+    mode: read
+    describe: Look up the enterprise app
+    request:
+      method: GET
+      path: /servicePrincipals/${ $encode($guid(inputs.servicePrincipalId)) }
+      query:
+        $select: id,appId,displayName,appRoleAssignmentRequired
+
+  - id: notPortalApp
+    type: assert
+    that: >-
+      ${ $not(steps.sp.output.appId in [env.AF_READ_CLIENT_ID, env.AF_WRITE_CLIENT_ID, env.AF_AUTOMATION_CLIENT_ID, env.AF_PROVISIONER_CLIENT_ID]) }
+    message: This is one of AdminForge's own apps. Portal access comes from the SG-AdminForge-* groups; change the group membership instead.
+
+  - id: principal
+    type: graph
+    mode: read
+    describe: Look up the user or group
+    request:
+      method: GET
+      path: /directoryObjects/${ $encode($guid(inputs.principalId)) }
+
+  - id: kind
+    type: transform
+    expression: ${ $substringAfter(steps.principal.output.`@odata.type`, '#microsoft.graph.') }
+
+  - id: userOrGroup
+    type: assert
+    that: ${ steps.kind.output in ['user', 'group'] }
+    message: Only user and group assignments are removed here; application permissions are revoked from the client app.
+
+  - id: existing
+    type: graph
+    mode: read
+    describe: Read the user's or group's app assignments
+    request:
+      method: GET
+      path: "/${ steps.kind.output = 'group' ? 'groups' : 'users' }/${ $encode($guid(inputs.principalId)) }/appRoleAssignments"
+
+  - id: assignment
+    type: transform
+    expression: >-
+      ${ steps.existing.output.value[id = $$.inputs.assignmentId and $lowercase(resourceId) = $guid($$.inputs.servicePrincipalId)][0] }
+
+  - id: found
+    type: assert
+    that: ${ $exists(steps.assignment.output.id) }
+    message: ${ steps.principal.output.displayName & ' no longer has that assignment on ' & steps.sp.output.displayName & '.' }
+
+  - id: remove
+    type: graph
+    mode: write
+    describe: ${ 'Remove ' & steps.principal.output.displayName & ' (' & steps.kind.output & ') from ' & steps.sp.output.displayName }
+    request:
+      method: DELETE
+      path: /servicePrincipals/${ $encode($guid(inputs.servicePrincipalId)) }/appRoleAssignedTo/${ $encode(inputs.assignmentId) }
+    compensate:
+      type: graph
+      describe: Assign them again with the same app role
+      request:
+        method: POST
+        path: /servicePrincipals/${ $encode($guid(inputs.servicePrincipalId)) }/appRoleAssignedTo
+        body:
+          principalId: ${ $guid(inputs.principalId) }
+          resourceId: ${ $guid(inputs.servicePrincipalId) }
+          appRoleId: ${ steps.assignment.output.appRoleId }
+
+outputs:
+  summary: ${ steps.principal.output.displayName & ' is no longer assigned to ' & steps.sp.output.displayName & '.' }
+
+tests:
+  - name: refuses an assignment that no longer exists
+    inputs: { servicePrincipalId: 00000000-0000-4000-8000-000000000405, principalId: 00000000-0000-4000-8000-000000000109, assignmentId: ara-405-9 }
+    mocks:
+      sp: { id: 00000000-0000-4000-8000-000000000405, appId: 00000000-0000-4000-8001-000000000405, displayName: Payroll Online, appRoleAssignmentRequired: true }
+      principal: { "@odata.type": "#microsoft.graph.user", id: 00000000-0000-4000-8000-000000000109, displayName: Jordan Rivera }
+      existing: { value: [{ id: ara-405-2, resourceId: 00000000-0000-4000-8000-000000000405, appRoleId: 00000000-0000-4000-8000-000000000a06 }] }
+    expect: { status: failed, failedStep: found }
+  - name: refuses a service principal holder (application permission)
+    inputs: { servicePrincipalId: 00000000-0000-4000-8000-000000000409, principalId: 00000000-0000-4000-8000-000000000401, assignmentId: ara-409-1 }
+    mocks:
+      sp: { id: 00000000-0000-4000-8000-000000000409, appId: 00000003-0000-0000-c000-000000000000, displayName: Microsoft Graph }
+      principal: { "@odata.type": "#microsoft.graph.servicePrincipal", id: 00000000-0000-4000-8000-000000000401, displayName: Example HR Sync }
+    expect: { status: failed, failedStep: userOrGroup }
+  - name: plans removing a user assignment
+    inputs: { servicePrincipalId: 00000000-0000-4000-8000-000000000405, principalId: 00000000-0000-4000-8000-000000000109, assignmentId: ara-405-2 }
+    mocks:
+      sp: { id: 00000000-0000-4000-8000-000000000405, appId: 00000000-0000-4000-8001-000000000405, displayName: Payroll Online, appRoleAssignmentRequired: true }
+      principal: { "@odata.type": "#microsoft.graph.user", id: 00000000-0000-4000-8000-000000000109, displayName: Jordan Rivera }
+      existing: { value: [{ id: ara-405-2, resourceId: 00000000-0000-4000-8000-000000000405, appRoleId: 00000000-0000-4000-8000-000000000a06 }] }
+    expect:
+      status: succeeded
+      plan: [remove]
+      outputs: { summary: Jordan Rivera is no longer assigned to Payroll Online. }

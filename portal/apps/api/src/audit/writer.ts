@@ -48,7 +48,7 @@ export interface AuditRow extends AuditEvent {
 
 export interface AuditWriter {
   append(input: AuditInput): Promise<AuditRow>;
-  /** Re-walks the whole chain (small installs; `adminforge audit verify` streams instead). */
+  /** Re-walks the whole chain (the Audit page, `adminforge audit verify`, and the probes.audit-chain check). */
   verify(): Promise<{ ok: true; count: number } | { ok: false; brokenAt: number; seq: number }>;
 }
 

@@ -1,0 +1,116 @@
+$schema: ../../../packages/schemas/generated/page.schema.json
+kind: page
+id: m365.teams-user-policies
+version: 1.0.0
+title: Teams policies for a user
+summary: >-
+  The Teams policies in effect for one person — messaging, meetings, calling, app setup and more — and where each comes
+  from: assigned to them directly, inherited from a group (with its rank), or the org-wide default.
+owner: m365-team
+tags: [m365, teams, policies, users]
+template: list-detail
+nav: { section: m365, label: Teams user policies, icon: user-gear, order: 78 }
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    graph: [User.Read.All]
+    teams: [user_impersonation]
+  entraRoles: [Teams Administrator, Teams Communications Administrator, Global Reader]
+  licences: [teams]
+
+params:
+  user: { type: string, format: upn, label: Person, placeholder: "Sign-in name, e.g. adele.vance@example.com" }
+  area:
+    type: enum
+    label: Area
+    facet: true
+    default: All
+    values:
+      - { value: All, label: Every policy }
+      - { value: Core, label: "Messaging, meetings, calling and app setup" }
+      - { value: Assigned, label: Not the org-wide default }
+
+filters:
+  search: user
+  facets: [area]
+
+datasources:
+  policies:
+    source: runner
+    label: Teams policy assignments (PowerShell)
+    script: teams/Get-UserTeamsPolicies.ps1
+    sha256: 84d955dbeebf28c15b4000d3de5789b9d79671c562732467176f6e2faf12048f
+    services: [graph, teams]
+    timeoutSeconds: 300
+    when: "${ $contains($trim(params.user ? params.user : ''), '@') }"
+    parameters:
+      identity: ${ $trim(params.user) }
+    cache: { ttl: 300 }
+    # value = [script output] — one object { user, summary, policies }. The area facet filters the rows.
+    transform: >-
+      ${ (
+        $v := value[0];
+        $p := params;
+        $merge([$v, {
+          "rows": [$v.policies[
+            $p.area = 'All' or $not($exists($p.area))
+            or ($p.area = 'Core' and area = 'Core')
+            or ($p.area = 'Assigned' and assignment != 'Default')
+          ]]
+        }])
+      ) }
+
+layout:
+  - widget: markdown
+    span: 12
+    when: ${ $not($exists(policies)) or policies = null }
+    text: |
+      Type a person's sign-in name in the search box to see the Teams policies that apply to them and where each one
+      comes from. You can also open this page from a team's member list.
+  - widget: keyValue
+    span: 6
+    title: Person
+    data: policies.user
+    when: ${ $exists(policies.user) }
+    fields:
+      - { field: displayName, label: Name }
+      - { field: userPrincipalName, label: Sign-in name, kind: id }
+      - { field: accountEnabled, label: Sign-in, kind: status, map: { "true": [ok, Allowed], "false": [crit, Blocked] } }
+      - { field: teamsUpgradeEffectiveMode, label: Teams mode }
+      - { field: interpretedUserType, label: Teams account type }
+      - { field: usageLocation, label: Usage location }
+  - widget: kpi
+    data: policies.summary.direct
+    label: Assigned directly
+    format: number
+    when: ${ $exists(policies.user) }
+  - widget: kpi
+    data: policies.summary.group
+    label: From a group
+    format: number
+    when: ${ $exists(policies.user) }
+  - widget: table
+    id: policies
+    span: 12
+    data: policies.rows
+    rowKey: policyType
+    when: ${ $exists(policies.user) }
+    columns:
+      - { field: label, label: Policy, kind: identity, secondary: policyType }
+      - { field: policyName, label: In effect }
+      - field: assignment
+        label: Comes from
+        kind: status
+        map: { Direct: [info, Assigned directly], Group: [info, Group], Default: [neutral, Org-wide default] }
+        filter: facet
+      - { field: groupId, label: Group, kind: link, link: { page: identity.group, params: { id: "${ row.groupId }" } } }
+      - { field: priority, label: Group rank, kind: number, align: end }
+      - { field: area, label: Area, filter: facet, hidden: true }
+    empty:
+      title: No policies in this area
+      body: Clear the area filter to see every policy.
+
+actions:
+  - label: Open in Teams admin center
+    icon: arrow-square-out
+    href: https://admin.teams.microsoft.com/users

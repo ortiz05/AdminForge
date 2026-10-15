@@ -96,6 +96,8 @@ export const auditEvents = pgTable(
     index('audit_actor_idx').on(t.actorOid),
     index('audit_action_idx').on(t.action),
     index('audit_ts_idx').on(t.ts),
+    // "Reference" lookups from error pages and logs.
+    index('audit_correlation_idx').on(t.correlationId),
   ],
 );
 
@@ -191,6 +193,9 @@ export const runs = pgTable(
     index('runs_initiator_idx').on(t.initiatorOid, t.createdAt),
     index('runs_status_idx').on(t.status),
     index('runs_definition_idx').on(t.definitionKey),
+    // Child runs of a parent (bulk items, nested playbooks) and retention by age.
+    index('runs_parent_idx').on(t.parentRunId),
+    index('runs_created_idx').on(t.createdAt),
   ],
 );
 

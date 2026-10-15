@@ -42,6 +42,8 @@ jobs:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - name: Dependency audit (fails on high or critical advisories)
+        run: pnpm audit --audit-level high
       - name: Guards (secrets, tenant data, design tokens)
         run: pnpm --filter @adminforge/tests exec vitest run --project guards
       - run: pnpm lint
@@ -52,6 +54,8 @@ jobs:
       - name: Tests (unit, component, api, content)
         run: pnpm test
       - run: pnpm build
+      - name: Initial-load budget (≤ 250 KB gzip JS)
+        run: node tooling/ci/check-bundle.mjs
       - name: End-to-end and visual (mock mode, system Chrome)
         run: pnpm test:e2e
       - if: failure()

@@ -119,6 +119,8 @@ export class ScheduleService {
       now: () => Date;
       /** Fingerprint of a playbook job's playbook and its children (runs/fingerprint.ts); absent → no playbook runs. */
       fingerprint?: (ref: PlaybookRef) => Promise<string>;
+      /** Tells approvers a request is waiting (email/Teams); failures never block the request. */
+      notifyApprovers?: (request: { title: string; requestedBy: string; key: string }) => Promise<void>;
     },
   ) {}
 
@@ -290,6 +292,9 @@ export class ScheduleService {
         requestedBy: c.session.userOid,
         expiresAt: new Date(now.getTime() + APPROVAL_TTL_MS),
       });
+      await this.deps
+        .notifyApprovers?.({ title: policy.title, requestedBy: c.session.upn, key })
+        .catch(() => undefined);
       await this.deps.audit.append({
         ...this.actor(c),
         action: 'schedule.enable_requested',

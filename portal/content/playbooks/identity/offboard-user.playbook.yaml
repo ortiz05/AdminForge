@@ -1,12 +1,14 @@
 $schema: ../../../packages/schemas/generated/playbook.schema.json
 kind: playbook
 id: identity.offboard-user
-version: 1.0.0
+version: 1.1.0
 title: Offboard user
 summary: >-
-  Leaver offboarding: blocks sign-in, revokes sessions, removes cloud group memberships and direct licences, optionally
-  removes MFA methods, and emails the manager a summary with the remaining Exchange/OneDrive/device follow-ups.
-  Requires approval. Completed steps are compensated if a later step fails.
+  Leaver offboarding: blocks sign-in, revokes sessions, removes cloud group memberships, converts the mailbox to a
+  shared mailbox (with an optional automatic reply, hidden from the address lists), gives the manager access to the
+  OneDrive, removes direct licences, optionally removes MFA methods, and emails the manager a summary with what is
+  left to do. Mailbox and OneDrive steps run only when the leaver has them. Requires approval. Completed steps are
+  compensated if a later step fails.
 owner: identity-team
 tags: [identity, users, offboarding, leaver]
 risk: high
@@ -23,14 +25,21 @@ requires:
       - GroupMember.ReadWrite.All
       - LicenseAssignment.ReadWrite.All
       - UserAuthenticationMethod.ReadWrite.All
+      - MailboxSettings.Read
       - Mail.Send
-  entraRoles: [User Administrator, License Administrator, Groups Administrator]
+    exchange: [Exchange.Manage]
+    sharepointAdmin: [AllSites.FullControl]
+  entraRoles: [User Administrator, License Administrator, Groups Administrator, Exchange Recipient Administrator, SharePoint Administrator]
 confirm:
   type: typed
   value: ${ steps.lookup.output.userPrincipalName }
   message: >-
     ${ 'Offboards ' & steps.lookup.output.displayName & ': removes ' & $count(steps.memberships.output.removable) & ' group membership(s) and '
-       & $count(steps.memberships.output.licences) & ' direct licence(s). Type the sign-in name to confirm.' }
+       & $count(steps.memberships.output.licences) & ' direct licence(s)'
+       & (steps.workloads.output.mailbox = true and inputs.convertMailbox = true ? ', converts the mailbox to a shared mailbox' : '')
+       & (steps.workloads.output.oneDrive = true and inputs.grantManagerOneDrive = true and $boolean(steps.workloads.output.managerId)
+          ? ' and gives ' & steps.lookup.output.manager.displayName & ' access to the OneDrive' : '')
+       & '. Type the sign-in name to confirm.' }
 approval:
   required: true
   approvers: [Playbook.Approver]
@@ -44,6 +53,21 @@ inputs:
   removeGroups: { type: boolean, label: Remove cloud group memberships, default: true }
   removeLicences: { type: boolean, label: Remove direct licences, default: true }
   removeAuthMethods: { type: boolean, label: Remove MFA methods (including passkeys), default: false }
+  convertMailbox:
+    type: boolean
+    label: Convert the mailbox to a shared mailbox
+    description: Keeps the mail available to colleagues once the licences are removed. If the conversion fails, the licences are kept.
+    default: true
+  autoReplyMessage:
+    type: string
+    label: Automatic reply
+    description: Sent to everyone who writes to the leaver. Leave empty for no automatic reply.
+    multiline: true
+    required: false
+    maxLength: 4000
+    placeholder: e.g. Sam has left Example Org. Please write to sales@example.com instead.
+  hideFromAddressLists: { type: boolean, label: Hide the mailbox from the address lists, default: true }
+  grantManagerOneDrive: { type: boolean, label: "Give the manager access to the leaver's OneDrive", default: true }
   notifyManager: { type: boolean, label: Email the manager a summary, default: true }
 
 steps:
@@ -55,7 +79,7 @@ steps:
       method: GET
       path: /users/${ $encode($guid(inputs.userId)) }
       query:
-        $select: id,displayName,userPrincipalName,mail,accountEnabled,userType,onPremisesSyncEnabled,assignedLicenses,licenseAssignmentStates
+        $select: id,displayName,userPrincipalName,mail,accountEnabled,userType,onPremisesSyncEnabled,assignedLicenses,licenseAssignmentStates,assignedPlans
         $expand: manager($select=id,displayName,mail,userPrincipalName)
 
   - id: notSelf
@@ -121,6 +145,20 @@ steps:
         }
       ) }
 
+  # Workloads the leaver has today (enabled service plans, direct or through a group): the mailbox and OneDrive steps
+  # run only when there is something to act on.
+  - id: workloads
+    type: transform
+    expression: >-
+      ${ (
+        $plans := steps.lookup.output.assignedPlans[capabilityStatus = 'Enabled'];
+        {
+          "mailbox": $boolean(steps.lookup.output.mail) and $count($plans[$lowercase(service) = 'exchange']) > 0,
+          "oneDrive": $count($plans[$lowercase(service) = 'sharepoint']) > 0,
+          "managerId": steps.lookup.output.manager.id
+        }
+      ) }
+
   - id: disable
     type: graph
     mode: write
@@ -172,11 +210,63 @@ steps:
             body:
               "@odata.id": https://graph.microsoft.com/v1.0/directoryObjects/${ $guid(inputs.userId) }
 
+  # Mailbox and OneDrive hand-over run before the licences go: a user mailbox without a licence is disconnected after
+  # 30 days. Each is its own child playbook (with its own checks); a failure is reported and the leaver still goes.
+  - id: convertMailbox
+    type: playbook
+    mode: write
+    describe: Convert the mailbox to a shared mailbox
+    when: ${ inputs.convertMailbox = true and steps.workloads.output.mailbox = true }
+    onError: continue
+    ref: m365.convert-to-shared-mailbox
+    inputs:
+      mailbox: ${ steps.lookup.output.mail }
+      blockSignIn: false
+      reason: ${ 'Offboarding — ' & inputs.reason }
+
+  - id: autoReply
+    type: playbook
+    mode: write
+    describe: Turn on the automatic reply
+    when: "${ $boolean($trim(inputs.autoReplyMessage ? inputs.autoReplyMessage : '')) and steps.workloads.output.mailbox = true }"
+    onError: continue
+    ref: m365.set-mailbox-auto-reply
+    inputs:
+      mailbox: ${ steps.lookup.output.mail }
+      state: Enabled
+      internalMessage: ${ inputs.autoReplyMessage }
+      externalAudience: All
+
+  - id: hideFromAddressLists
+    type: playbook
+    mode: write
+    describe: Hide the mailbox from the address lists
+    when: ${ inputs.hideFromAddressLists = true and steps.workloads.output.mailbox = true }
+    onError: continue
+    ref: m365.set-address-list-visibility
+    inputs:
+      mailbox: ${ steps.lookup.output.mail }
+      hidden: true
+      reason: ${ 'Offboarding — ' & inputs.reason }
+
+  - id: managerOneDrive
+    type: playbook
+    mode: write
+    describe: ${ 'Give ' & steps.lookup.output.manager.displayName & ' access to the OneDrive' }
+    when: ${ inputs.grantManagerOneDrive = true and steps.workloads.output.oneDrive = true and $boolean(steps.workloads.output.managerId) }
+    onError: continue
+    ref: m365.grant-onedrive-access
+    inputs:
+      ownerId: ${ $guid(inputs.userId) }
+      granteeId: ${ $guid(steps.workloads.output.managerId) }
+      reason: ${ 'Offboarding — ' & inputs.reason }
+
+  # Kept when the mailbox conversion failed, so the mail isn't lost with the licence.
   - id: removeLicences
     type: graph
     mode: write
     describe: ${ 'Remove ' & $count(steps.memberships.output.licences) & ' direct licence(s)' }
-    when: ${ inputs.removeLicences = true and $count(steps.memberships.output.licences) > 0 }
+    when: ${ inputs.removeLicences = true and $count(steps.memberships.output.licences) > 0 and steps.convertMailbox.status != 'failed' }
     onError: compensate
     request:
       method: POST
@@ -219,31 +309,64 @@ steps:
     message: |
       ${ steps.lookup.output.displayName } (${ steps.lookup.output.userPrincipalName }) has been offboarded${ inputs.ticket ? ' for ' & inputs.ticket : '' }.
 
-      - Sign-in blocked and all sessions revoked
-      - Removed from ${ inputs.removeGroups = true ? $count(steps.memberships.output.removable) : 0 } group(s)
-      - ${ inputs.removeLicences = true ? $count(steps.memberships.output.licences) : 0 } direct licence(s) removed
+      ${ (
+        $done := function($s) { $s in ['succeeded', 'planned'] };
+        $join([
+          '- Sign-in blocked and all sessions revoked',
+          '- Removed from ' & (inputs.removeGroups = true ? $count(steps.memberships.output.removable) : 0) & ' group(s)',
+          '- ' & ($done(steps.removeLicences.status) ? $count(steps.memberships.output.licences) : 0) & ' direct licence(s) removed',
+          $done(steps.convertMailbox.status) ? '- Mailbox converted to a shared mailbox (IT can give you or your team access to it)',
+          $done(steps.autoReply.status) ? '- Automatic reply turned on',
+          $done(steps.managerOneDrive.status) ? '- You now have access to their OneDrive: move what you need before it is deleted'
+        ], '\n')
+      ) }
 
-      Still to do (IT will contact you): mailbox conversion or delegation, OneDrive access for you, and the return of
-      ${ $count(steps.devices.output.value) } registered device(s).
+      ${ (
+        $done := function($s) { $s in ['succeeded', 'planned'] };
+        $todo := [
+          steps.workloads.output.mailbox = true and $not($done(steps.convertMailbox.status)) ? 'the mailbox (conversion to shared or delegation)',
+          steps.workloads.output.oneDrive = true and $not($done(steps.managerOneDrive.status)) ? 'access to their OneDrive for you',
+          $count(steps.devices.output.value) > 0 ? 'the return of ' & $count(steps.devices.output.value) & ' registered device(s)'
+        ];
+        $count($todo) > 0 ? 'Still to do (IT will contact you): ' & $join($todo, ', ') & '.' : 'Nothing else is needed from you.'
+      ) }
 
 outputs:
   summary: >-
     ${ steps.lookup.output.userPrincipalName & ' offboarded'
        & (steps.lookup.output.onPremisesSyncEnabled = true ? ' (synced account: also disable it in on-premises AD)' : '')
        & '. Removed ' & (inputs.removeGroups = true ? $count(steps.memberships.output.removable) : 0) & ' group membership(s) and '
-       & (inputs.removeLicences = true ? $count(steps.memberships.output.licences) : 0) & ' direct licence(s).' }
+       & (steps.removeLicences.status in ['succeeded', 'planned'] ? $count(steps.memberships.output.licences) : 0) & ' direct licence(s)'
+       & (steps.convertMailbox.status in ['succeeded', 'planned'] ? '; the mailbox is now a shared mailbox' : '')
+       & (steps.managerOneDrive.status in ['succeeded', 'planned'] ? '; the manager has access to the OneDrive' : '') & '.' }
   followUps: >-
-    ${ $append(
-         [
-           'Exchange: convert the mailbox to shared or set forwarding/auto-reply, hide from the address list',
-           'OneDrive: grant the manager access before the retention period ends',
-           steps.lookup.output.onPremisesSyncEnabled = true ? 'Active Directory: disable the account on-premises'
-         ],
-         $append(
-           [steps.memberships.output.manual.('Group (dynamic, synced or Exchange-managed): ' & $)],
-           [steps.devices.output.value.('Device: ' & displayName & ' (' & operatingSystem & ')')]
-         )
-       ) }
+    ${ (
+      $done := function($s) { $s in ['succeeded', 'planned'] };
+      $mbx := steps.workloads.output.mailbox = true;
+      $append(
+        [
+          $mbx and steps.convertMailbox.status = 'failed'
+            ? 'Exchange: converting the mailbox to shared failed, so the licences were kept. Convert it (Mailboxes › Convert to shared mailbox), then remove the licences',
+          $mbx and inputs.convertMailbox != true
+            ? 'Exchange: the mailbox was not converted. Convert it to shared or delegate it; without a licence it is deleted after 30 days',
+          $mbx and $done(steps.convertMailbox.status)
+            ? 'Exchange: a shared mailbox over 50 GB, with an archive or on litigation hold still needs a licence',
+          $mbx and steps.autoReply.status = 'failed' ? 'Exchange: set the automatic reply (it failed)',
+          $mbx and steps.hideFromAddressLists.status = 'failed'
+            ? (steps.lookup.output.onPremisesSyncEnabled = true
+                ? 'Exchange: hide the mailbox from the address lists in Active Directory (msExchHideFromAddressLists)'
+                : 'Exchange: hide the mailbox from the address lists (it failed)'),
+          steps.workloads.output.oneDrive = true and $not($done(steps.managerOneDrive.status))
+            ? 'OneDrive: give ' & ($boolean(steps.workloads.output.managerId) ? 'the manager' : 'someone (no manager is set)')
+              & ' access before the retention period ends',
+          steps.lookup.output.onPremisesSyncEnabled = true ? 'Active Directory: disable the account on-premises'
+        ],
+        $append(
+          [steps.memberships.output.manual.('Group (dynamic, synced or Exchange-managed): ' & $)],
+          [steps.devices.output.value.('Device: ' & displayName & ' (' & operatingSystem & ')')]
+        )
+      )
+    ) }
 
 tests:
   - name: refuses a user who still holds directory roles
@@ -290,3 +413,93 @@ tests:
       status: succeeded
       plan: [revoke]
       steps: { disable: skipped, removeLicences: skipped, notify: skipped }
+  - name: hands over the mailbox and OneDrive before removing the licences
+    inputs: { userId: 00000000-0000-4000-8000-000000000106, reason: Leaver HR-7784 last day 2026-10-14, ticket: HR-7784, autoReplyMessage: "Mia has left Example Org.\nPlease write to finance@example.com." }
+    user: { oid: 00000000-0000-4000-8000-000000000101 }
+    mocks:
+      lookup:
+        id: 00000000-0000-4000-8000-000000000106
+        displayName: Mia Chen
+        userPrincipalName: m.chen@example.com
+        mail: m.chen@example.com
+        accountEnabled: true
+        onPremisesSyncEnabled: null
+        assignedLicenses: [{ skuId: 00000000-0000-4000-8000-000000001002, disabledPlans: [] }]
+        licenseAssignmentStates: [{ skuId: 00000000-0000-4000-8000-000000001002, assignedByGroup: null, state: Active }]
+        assignedPlans:
+          - { service: exchange, capabilityStatus: Enabled, servicePlanId: 00000000-0000-4000-8000-000000002001 }
+          - { service: SharePoint, capabilityStatus: Enabled, servicePlanId: 00000000-0000-4000-8000-000000002002 }
+          - { service: MicrosoftCommunicationsOnline, capabilityStatus: Deleted, servicePlanId: 00000000-0000-4000-8000-000000002003 }
+        manager: { id: 00000000-0000-4000-8000-000000000101, displayName: Avery Lee, mail: a.lee@example.com, userPrincipalName: a.lee@example.com }
+      roles: { value: [] }
+      groups:
+        value:
+          - { id: 00000000-0000-4000-8000-000000000206, displayName: SG-Finance-Users, groupTypes: [], mailEnabled: false, securityEnabled: true, onPremisesSyncEnabled: null }
+      devices: { value: [{ id: 00000000-0000-4000-8000-000000000504, displayName: EX-LT-0201, operatingSystem: Windows, trustType: AzureAd }] }
+    expect:
+      status: succeeded
+      plan: [disable, revoke, removeMember, convertMailbox, autoReply, hideFromAddressLists, managerOneDrive, removeLicences, notify]
+      outputs:
+        summary: m.chen@example.com offboarded. Removed 1 group membership(s) and 1 direct licence(s); the mailbox is now a shared mailbox; the manager has access to the OneDrive.
+        followUps:
+          - "Exchange: a shared mailbox over 50 GB, with an archive or on litigation hold still needs a licence"
+          - "Device: EX-LT-0201 (Windows)"
+  - name: keeps the licences when the mailbox conversion fails
+    inputs: { userId: 00000000-0000-4000-8000-000000000106, reason: Leaver HR-7785 last day 2026-10-14 }
+    user: { oid: 00000000-0000-4000-8000-000000000101 }
+    mocks:
+      lookup:
+        id: 00000000-0000-4000-8000-000000000106
+        displayName: Mia Chen
+        userPrincipalName: m.chen@example.com
+        mail: m.chen@example.com
+        accountEnabled: true
+        onPremisesSyncEnabled: null
+        assignedLicenses: [{ skuId: 00000000-0000-4000-8000-000000001002, disabledPlans: [] }]
+        licenseAssignmentStates: [{ skuId: 00000000-0000-4000-8000-000000001002, assignedByGroup: null, state: Active }]
+        assignedPlans: [{ service: exchange, capabilityStatus: Enabled, servicePlanId: 00000000-0000-4000-8000-000000002001 }]
+        manager: { id: 00000000-0000-4000-8000-000000000101, displayName: Avery Lee, mail: a.lee@example.com, userPrincipalName: a.lee@example.com }
+      roles: { value: [] }
+      groups: { value: [] }
+      devices: { value: [] }
+    errors:
+      convertMailbox: { status: 409, code: ChildFailed, message: The mailbox is on hold and can't be converted right now }
+    expect:
+      status: succeeded
+      steps: { convertMailbox: failed, autoReply: skipped, hideFromAddressLists: planned, managerOneDrive: skipped, removeLicences: skipped, notify: planned }
+      outputs:
+        summary: m.chen@example.com offboarded. Removed 0 group membership(s) and 0 direct licence(s).
+        followUps:
+          - "Exchange: converting the mailbox to shared failed, so the licences were kept. Convert it (Mailboxes › Convert to shared mailbox), then remove the licences"
+  - name: flags on-premises follow-ups for a synced account without a manager
+    inputs: { userId: 00000000-0000-4000-8000-000000000108, reason: Leaver HR-7786 last day 2026-10-14, removeLicences: false }
+    user: { oid: 00000000-0000-4000-8000-000000000101 }
+    mocks:
+      lookup:
+        id: 00000000-0000-4000-8000-000000000108
+        displayName: Dana Okafor
+        userPrincipalName: d.okafor@example.com
+        mail: d.okafor@example.com
+        accountEnabled: true
+        onPremisesSyncEnabled: true
+        assignedLicenses: []
+        licenseAssignmentStates: []
+        assignedPlans:
+          - { service: exchange, capabilityStatus: Enabled, servicePlanId: 00000000-0000-4000-8000-000000002001 }
+          - { service: SharePoint, capabilityStatus: Enabled, servicePlanId: 00000000-0000-4000-8000-000000002002 }
+      roles: { value: [] }
+      groups: { value: [{ id: 00000000-0000-4000-8000-000000000205, displayName: GG-Engineering (AD), groupTypes: [], mailEnabled: false, securityEnabled: true, onPremisesSyncEnabled: true }] }
+      devices: { value: [] }
+    errors:
+      hideFromAddressLists: { status: 400, code: ChildFailed, message: The object is synchronized from your on-premises organization }
+    expect:
+      status: succeeded
+      plan: [revoke, convertMailbox, hideFromAddressLists]
+      steps: { disable: skipped, managerOneDrive: skipped, removeLicences: skipped, notify: skipped }
+      outputs:
+        followUps:
+          - "Exchange: a shared mailbox over 50 GB, with an archive or on litigation hold still needs a licence"
+          - "Exchange: hide the mailbox from the address lists in Active Directory (msExchHideFromAddressLists)"
+          - "OneDrive: give someone (no manager is set) access before the retention period ends"
+          - "Active Directory: disable the account on-premises"
+          - "Group (dynamic, synced or Exchange-managed): GG-Engineering (AD)"

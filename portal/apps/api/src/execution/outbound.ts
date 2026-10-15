@@ -85,6 +85,22 @@ export interface OutboundDeps {
    * to names; the API wires this to the audit log.
    */
   onSensitiveRead?: (info: SensitiveRead) => Promise<void> | void;
+  /** Per-call telemetry (service, path template, status, duration, throttling, request id): logged by the API. */
+  onCall?: (record: CallRecord) => void;
+}
+
+/** One Microsoft API call, for logs and metrics: never ids, query values or bodies (the path is a template). */
+export interface CallRecord {
+  service: ServiceId;
+  method: string;
+  path: string;
+  status: number;
+  ms: number;
+  throttled: boolean;
+  identity: ExecutionIdentity['kind'];
+  mode: string;
+  correlationId: string;
+  requestId?: string;
 }
 
 export interface SensitiveRead {
@@ -640,7 +656,18 @@ export class Outbound implements OutboundExecutor {
         path: out.path ?? template,
         ms: Math.round(performance.now() - started),
         ...(out.requestId ? { requestId: out.requestId } : {}),
+        ...(service === 'graph' && call.beta ? { preview: true as const } : {}),
       };
+      this.record(
+        identity,
+        service,
+        method,
+        template,
+        out.status,
+        provenance.ms,
+        correlationId,
+        out.requestId,
+      );
       return {
         data: out.data as T,
         status: out.status,
@@ -659,6 +686,16 @@ export class Outbound implements OutboundExecutor {
           ms: Math.round(performance.now() - started),
           ...(err.requestId ? { requestId: err.requestId } : {}),
         };
+        this.record(
+          identity,
+          service,
+          method,
+          template,
+          err.status,
+          provenance.ms,
+          correlationId,
+          err.requestId,
+        );
         const { hint, licence } = errorHint(err, service, identity, call.requires, call.connection);
         throw new OutboundError(err, service, hint, licence, provenance);
       }
@@ -674,6 +711,35 @@ export class Outbound implements OutboundExecutor {
         throw new AppError(400, 'invalid_request', err.message);
       }
       throw err;
+    }
+  }
+
+  private record(
+    identity: ExecutionIdentity,
+    service: ServiceId,
+    method: string,
+    template: string,
+    status: number,
+    ms: number,
+    correlationId: string,
+    requestId: string | undefined,
+  ) {
+    if (!this.deps.onCall) return;
+    try {
+      this.deps.onCall({
+        service,
+        method,
+        path: template,
+        status,
+        ms,
+        throttled: status === 429,
+        identity: identity.kind,
+        mode: identity.mode,
+        correlationId,
+        ...(requestId ? { requestId } : {}),
+      });
+    } catch {
+      /* telemetry never breaks a call */
     }
   }
 

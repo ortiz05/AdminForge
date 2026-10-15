@@ -101,7 +101,10 @@ export async function buildApp(
       return value && UUID.test(value) ? value.toLowerCase() : randomUUID();
     },
   });
-  const ctx = createContext(config, deps, { warn: (obj, msg) => app.log.warn(obj, msg) });
+  const ctx = createContext(config, deps, {
+    warn: (obj, msg) => app.log.warn(obj, msg),
+    info: (obj, msg) => app.log.info(obj, msg),
+  });
   app.decorate('ctx', ctx);
   app.addHook('onClose', async () => {
     await ctx.database?.close();
@@ -142,7 +145,8 @@ export async function buildApp(
       directives: {
         defaultSrc: ["'self'"],
         scriptSrc: ["'self'"],
-        // Tightened in Phase 8 once Radix/Monaco style injection is audited.
+        // Styles keep 'unsafe-inline': Radix (positioning) and Monaco inject <style> elements and style attributes at
+        // runtime. Accepted risk (docs/decisions.md): CSS injection can't run script — script-src stays 'self' only.
         styleSrc: ["'self'", "'unsafe-inline'"],
         imgSrc: ["'self'", 'data:'],
         fontSrc: ["'self'"],

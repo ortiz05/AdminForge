@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/page.schema.json
 kind: page
 id: identity.audit-logs
-version: 1.0.0
+version: 1.1.0
 title: Directory audit logs
 summary: >-
   Changes made in Microsoft Entra ID — who changed what, when, through which service, and whether it succeeded.
@@ -37,6 +37,17 @@ params:
 
 filters:
   facets: [category, result, service, initiatedBy, target, activity]
+  # Compiled server-side into `${ advanced }` (OData). Only properties /auditLogs/directoryAudits can filter on.
+  advanced:
+    dialect: odata
+    param: adv
+    fields:
+      - { field: activityDisplayName, label: Activity, type: string, operators: [eq, startsWith] }
+      - { field: initiatedByUserId, label: Initiated by (user id), type: guid, property: initiatedBy/user/id, operators: [eq] }
+      - { field: initiatedByUserName, label: Initiated by (user name), type: string, property: initiatedBy/user/displayName, operators: [eq] }
+      - { field: initiatedByAppId, label: Initiated by (app id), type: guid, property: initiatedBy/app/appId, operators: [eq] }
+      - { field: initiatedByAppName, label: Initiated by (app name), type: string, property: initiatedBy/app/displayName, operators: [eq] }
+      - { field: correlationId, label: Correlation id, type: guid, operators: [eq] }
 
 savedViews:
   enabled: true
@@ -63,7 +74,8 @@ datasources:
                params.service != 'Any' ? "loggedByService eq " & $odata(params.service),
                params.initiatedBy ? "startswith(initiatedBy/user/userPrincipalName, " & $odata($lowercase(params.initiatedBy)) & ")",
                params.target ? "targetResources/any(t:startswith(t/displayName, " & $odata(params.target) & "))",
-               params.activity ? "startswith(activityDisplayName, " & $odata(params.activity) & ")"
+               params.activity ? "startswith(activityDisplayName, " & $odata(params.activity) & ")",
+               advanced
              ][$], ' and ') }
     paging: cursor
     cache: { ttl: 60 }

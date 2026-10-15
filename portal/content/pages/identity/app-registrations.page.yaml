@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/page.schema.json
 kind: page
 id: identity.app-registrations
-version: 1.0.0
+version: 1.1.0
 title: App registrations
 summary: >-
   Applications registered in this tenant, with credential expiry status, sign-in audience, API permission counts and
@@ -45,6 +45,17 @@ params:
 filters:
   search: q
   facets: [credentials, audience, owners]
+  # Compiled server-side into `${ advanced }` (OData). This list can't use advanced queries (it expands owners), so
+  # only operators /applications supports without ConsistencyLevel: eventual are offered.
+  advanced:
+    dialect: odata
+    param: adv
+    fields:
+      - { field: displayName, label: Name, type: string, operators: [eq, startsWith, in] }
+      - { field: appId, label: Application (client) id, type: guid, operators: [eq, in] }
+      - { field: publisherDomain, label: Publisher domain, type: string, operators: [eq, startsWith] }
+      - { field: serviceManagementReference, label: Service management reference, type: string, operators: [eq, startsWith] }
+      - { field: createdDateTime, label: Created, type: date, operators: [ge, le] }
 
 savedViews:
   enabled: true
@@ -68,7 +79,8 @@ datasources:
         $filter: >-
           ${ $join([
                params.audience != 'Any' ? 'signInAudience eq ' & $odata(params.audience),
-               params.q ? 'startswith(displayName, ' & $odata(params.q) & ')'
+               params.q ? 'startswith(displayName, ' & $odata(params.q) & ')',
+               advanced
              ][$], ' and ') }
     # All pages are loaded (apps are usually < 10k) so credential and owner facets filter the whole set.
     paging: all

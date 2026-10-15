@@ -82,6 +82,8 @@ export const advancedOpsFor = (f: Pick<AdvancedField, 'type' | 'operators'>): re
  * structured filter (`{ all|any: [{ field, op, value }] }`) in the request param `param` (default `adv`, NOT declared
  * under params); the server validates it against `fields` and compiles it — OData for Graph datasources, KQL for
  * Resource Graph / Log Analytics — into `${ advanced }`. Templates never see the raw value.
+ * `rows` is for datasources with no query language (runner, static, function): `advanced` is the validated filter as
+ * data and a transform keeps the matching rows with `$applyAdvanced(<rows>, advanced)`.
  */
 export const FilterBar = z.strictObject({
   /** Param bound to the free-text search box. */
@@ -90,8 +92,11 @@ export const FilterBar = z.strictObject({
   facets: z.array(Identifier).optional(),
   advanced: z
     .strictObject({
-      /** odata / kql: compiled server-side into `${ advanced }`; client: the browser filters loaded rows. */
-      dialect: z.enum(['odata', 'kql', 'client']),
+      /**
+       * odata / kql: compiled server-side into `${ advanced }`; rows: the server filters a transform's rows with
+       * `$applyAdvanced(rows, advanced)`; client: the browser filters loaded rows (not offered by the renderer yet).
+       */
+      dialect: z.enum(['odata', 'kql', 'rows', 'client']),
       /** Request param carrying the structured filter (default `adv`). Must not be declared under params. */
       param: Identifier.optional(),
       fields: z.array(AdvancedField).min(1).max(50),
@@ -230,7 +235,27 @@ function checkAdvanced(
         path: ['filters', 'advanced', 'fields', i, 'property'],
         message: 'KQL columns use . (e.g. properties.state).',
       });
+    if (adv.dialect === 'rows' && f.property?.includes('/'))
+      ctx.addIssue({
+        code: 'custom',
+        path: ['filters', 'advanced', 'fields', i, 'property'],
+        message: 'Row fields use . (e.g. owner.displayName).',
+      });
   });
+  // `rows` filters nothing by itself: some transform has to apply it, or the builder would silently do nothing.
+  if (adv.dialect === 'rows') {
+    const datasources = (def.datasources ?? {}) as Record<string, { transform?: unknown }>;
+    const applies = Object.values(datasources).some(
+      (ds) => typeof ds?.transform === 'string' && /\$applyAdvanced\s*\([^)]*\badvanced\b/.test(ds.transform),
+    );
+    if (!applies)
+      ctx.addIssue({
+        code: 'custom',
+        path: ['filters', 'advanced', 'dialect'],
+        message:
+          'dialect: rows needs a datasource transform that keeps the matching rows with $applyAdvanced(<rows>, advanced).',
+      });
+  }
 }
 
 function checkPage(

@@ -1,0 +1,12 @@
+{
+  "@odata.type": "#microsoft.graph.user",
+  "id": "00000000-0000-4000-8000-000000000110",
+  "displayName": "Break Glass 01",
+  "userPrincipalName": "bg01@exampleorg.onmicrosoft.com",
+  "mail": null,
+  "accountEnabled": true,
+  "userType": "Member",
+  "jobTitle": "Emergency access account",
+  "department": null,
+  "onPremisesSyncEnabled": null
+}

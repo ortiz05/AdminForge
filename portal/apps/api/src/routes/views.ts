@@ -39,6 +39,9 @@ export function viewRoutes(api: FastifyInstance, ctx: AppContext) {
     const session = requireSession(request);
     const page = request.query.page;
     if (!page) throw new AppError(400, 'invalid_request', 'Pass ?page=<page key>.');
+    // Shared views (names and saved filters) only for a page that exists and that the caller may open.
+    const def = await ctx.definitions.resolveAny(PAGE_KINDS, page);
+    ctx.datasources.assertAccess(session.roles, def.def.requires, `Page ${page}`);
     const views = await ctx.views.list(page, session.userOid);
     return { items: views.map((v) => toView(v, session.userOid)) };
   });

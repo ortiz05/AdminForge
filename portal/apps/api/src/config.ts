@@ -39,6 +39,11 @@ const Schema = z
 
     DATABASE_URL: z.string().optional(),
     TOKEN_CACHE_KEY: z.string().optional(),
+    /** Retention (days): finished runs with their steps and events, schedule history, probe results, report files. */
+    RETENTION_RUN_DAYS: z.coerce.number().int().min(7).max(3650).default(180),
+    RETENTION_SCHEDULE_RUN_DAYS: z.coerce.number().int().min(7).max(3650).default(180),
+    RETENTION_PROBE_DAYS: z.coerce.number().int().min(7).max(3650).default(35),
+    RETENTION_ARTIFACT_DAYS: z.coerce.number().int().min(1).max(3650).default(90),
     SESSION_IDLE_MINUTES: z.coerce
       .number()
       .int()

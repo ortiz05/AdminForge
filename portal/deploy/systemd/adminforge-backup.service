@@ -1,0 +1,11 @@
+# AdminForge backup (database, configuration, data) — run by adminforge-backup.timer. See docs/operations.md.
+[Unit]
+Description=AdminForge backup
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=%h/AdminForge/portal/deploy/backup/adminforge-backup.sh
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+NoNewPrivileges=true
+UMask=0077

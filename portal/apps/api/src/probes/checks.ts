@@ -1,4 +1,5 @@
 import { Resolver } from 'node:dns/promises';
+import type { AuditWriter } from '../audit/writer';
 import { isIP } from 'node:net';
 import tls from 'node:tls';
 import { ApiError } from '@adminforge/connectors';
@@ -87,6 +88,8 @@ export interface ProbeDeps {
   fetch: typeof fetch;
   dns?: DnsResolver;
   tls?: TlsInspector;
+  /** The portal's audit chain (`auditChain` checks); absent → the check reports not configured. */
+  audit?: Pick<AuditWriter, 'verify'>;
 }
 
 const AUTOMATION: ExecutionIdentity = { kind: 'automation', mode: 'read' };
@@ -618,6 +621,32 @@ interface GraphSignIn {
   status?: { errorCode?: number; failureReason?: string };
 }
 
+async function auditChain(
+  _c: Extract<ProbeCheck, { kind: 'auditChain' }>,
+  x: CheckContext,
+): Promise<CheckResult> {
+  if (!x.deps.audit)
+    return {
+      metric: null,
+      status: 'error',
+      code: 'not_configured',
+      message: 'No audit log in this process.',
+    };
+  const r = await x.deps.audit.verify();
+  return r.ok
+    ? {
+        metric: r.count,
+        status: 'ok',
+        message: `${r.count} audit events verified; every hash links to the one before it.`,
+      }
+    : {
+        metric: r.brokenAt,
+        status: 'crit',
+        code: 'audit_chain_broken',
+        message: `The audit chain is broken at event #${r.brokenAt} (seq ${r.seq}): an event was changed or removed. Run \`adminforge audit verify\` and investigate database access.`,
+      };
+}
+
 async function signInHealth(
   c: Extract<ProbeCheck, { kind: 'signInHealth' }>,
   x: CheckContext,
@@ -826,6 +855,7 @@ const CHECKS: {
   licenseThreshold,
   signInHealth,
   kql,
+  auditChain,
 };
 
 /** Runs one probe and evaluates it. Never throws: failures become `crit` or `error` outcomes. */

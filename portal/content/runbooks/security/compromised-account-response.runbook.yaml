@@ -1,12 +1,12 @@
 $schema: ../../../packages/schemas/generated/runbook.schema.json
 kind: runbook
 id: security.compromised-account-response
-version: 1.0.0
+version: 1.1.0
 title: Compromised account response
-summary: Guided response to a suspected account compromise — confirm the signal, contain (block sign-in, revoke sessions, confirm compromised), investigate, recover and close.
+summary: Retired — merged into identity.compromised-account (Compromised account response), which covers confirm, contain, investigate, recover and close.
+status: retired
 owner: security-team
 tags: [security, identity, incident, runbook]
-nav: { section: security, label: Compromised account response, icon: first-aid-kit, order: 90 }
 risk: high
 mode: write
 requires:

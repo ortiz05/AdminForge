@@ -1,0 +1,154 @@
+$schema: ../../../packages/schemas/generated/playbook.schema.json
+kind: playbook
+id: identity.edit-dynamic-rule
+version: 1.0.0
+title: Edit dynamic membership rule
+summary: >-
+  Changes the membership rule of a dynamic group, or pauses and resumes its processing. Membership is recalculated
+  from the new rule, so people (or devices) can lose access, licences or policy coverage the group grants — pause
+  processing first when you are unsure. Needs Microsoft Entra ID P1.
+owner: identity-team
+tags: [identity, groups, dynamic-groups]
+risk: high
+mode: write
+requires:
+  portalRoles: [Portal.Operator]
+  scopes:
+    graph: [Group.ReadWrite.All]
+  entraRoles: [Groups Administrator]
+  licences: [AAD_PREMIUM]
+confirm:
+  type: typed
+  value: ${ steps.group.output.displayName }
+  message: >-
+    ${ steps.group.output.displayName & ' has ' & (steps.memberCount.output ? $string(steps.memberCount.output) : 'an unknown number of')
+       & ' members now; they are recalculated from the new rule' & (inputs.processing = 'Paused' ? ' once processing is resumed' : '')
+       & '. Type the group name to confirm.' }
+approval:
+  required: false
+
+inputs:
+  groupId: { type: string, format: guid, label: Group, picker: group }
+  membershipRule:
+    type: string
+    label: New membership rule
+    multiline: true
+    minLength: 5
+    maxLength: 3072
+    placeholder: (user.department -eq "Sales") and (user.accountEnabled -eq true)
+    description: Use user. properties (or device. properties for security groups), never both.
+  processing:
+    type: enum
+    label: Rule processing
+    default: "On"
+    values:
+      - { value: "On", label: "On — apply the rule now" }
+      - { value: Paused, label: "Paused — save the rule, keep current members" }
+  reason: { type: string, label: Reason, minLength: 10, multiline: true }
+
+steps:
+  - id: group
+    type: graph
+    mode: read
+    describe: Look up the group and its current rule
+    request:
+      method: GET
+      path: /groups/${ $encode($guid(inputs.groupId)) }
+      query:
+        $select: id,displayName,groupTypes,membershipRule,membershipRuleProcessingState,onPremisesSyncEnabled
+
+  - id: isDynamic
+    type: assert
+    that: ${ 'DynamicMembership' in steps.group.output.groupTypes }
+    message: ${ steps.group.output.displayName & ' has assigned membership; it has no rule to edit.' }
+
+  - id: rule
+    type: transform
+    expression: ${ $trim(inputs.membershipRule) }
+
+  - id: changed
+    type: assert
+    that: >-
+      ${ steps.rule.output != steps.group.output.membershipRule
+         or inputs.processing != steps.group.output.membershipRuleProcessingState }
+    message: The rule and processing state are already set to these values.
+
+  - id: ruleTarget
+    type: assert
+    that: >-
+      ${ $not($contains(steps.rule.output, /\bdevice\./i) and $contains(steps.rule.output, /\buser\./i))
+         and $not('Unified' in steps.group.output.groupTypes and $contains(steps.rule.output, /\bdevice\./i)) }
+    message: A rule can't mix user. and device. properties, and Microsoft 365 groups can only have user members.
+
+  - id: memberCount
+    type: graph
+    mode: read
+    describe: Count the current members
+    onError: continue
+    request:
+      method: GET
+      path: /groups/${ $encode($guid(inputs.groupId)) }/members/$count
+      headers: { ConsistencyLevel: eventual }
+
+  - id: update
+    type: graph
+    mode: write
+    describe: >-
+      ${ 'Set the rule of ' & steps.group.output.displayName & ' to ' & steps.rule.output & ' (processing ' & inputs.processing & ')' }
+    request:
+      method: PATCH
+      path: /groups/${ $encode($guid(inputs.groupId)) }
+      body:
+        membershipRule: ${ steps.rule.output }
+        membershipRuleProcessingState: ${ inputs.processing }
+    compensate:
+      type: graph
+      describe: Restore the previous rule and processing state
+      request:
+        method: PATCH
+        path: /groups/${ $encode($guid(inputs.groupId)) }
+        body:
+          membershipRule: ${ steps.group.output.membershipRule }
+          membershipRuleProcessingState: ${ steps.group.output.membershipRuleProcessingState }
+
+outputs:
+  summary: >-
+    ${ steps.group.output.displayName & ': rule updated'
+       & (inputs.processing = 'Paused' ? ' and processing paused; members stay as they are until you resume it.' : '. Members are recalculated within minutes to hours.') }
+  previousRule: ${ steps.group.output.membershipRule }
+
+tests:
+  - name: refuses a group with assigned membership
+    inputs: { groupId: 00000000-0000-4000-8000-000000000201, membershipRule: (user.department -eq "Finance"), reason: Payroll access follows department }
+    mocks:
+      group: { id: 00000000-0000-4000-8000-000000000201, displayName: SG-App-Payroll-Users, groupTypes: [] }
+    expect: { status: failed, failedStep: isDynamic }
+  - name: refuses an unchanged rule
+    inputs: { groupId: 00000000-0000-4000-8000-000000000203, membershipRule: '(user.userType -eq "Member")', reason: Re-apply the all employees rule }
+    mocks:
+      group: { id: 00000000-0000-4000-8000-000000000203, displayName: All Employees (dynamic), groupTypes: [DynamicMembership], membershipRule: '(user.userType -eq "Member")', membershipRuleProcessingState: "On" }
+    expect: { status: failed, failedStep: changed }
+  - name: refuses a device rule on a Microsoft 365 group
+    inputs: { groupId: 10000000-0000-4000-8000-000000000211, membershipRule: (device.deviceOSType -eq "Windows"), reason: Wrong group picked on purpose }
+    mocks:
+      group: { id: 10000000-0000-4000-8000-000000000211, displayName: Engineering Guild, groupTypes: [Unified, DynamicMembership], membershipRule: (user.department -eq "Engineering"), membershipRuleProcessingState: "On" }
+    expect: { status: failed, failedStep: ruleTarget }
+  - name: plans a new rule
+    inputs: { groupId: 00000000-0000-4000-8000-000000000203, membershipRule: '(user.userType -eq "Member") and (user.accountEnabled -eq true)', reason: Exclude disabled accounts from all employees }
+    mocks:
+      group: { id: 00000000-0000-4000-8000-000000000203, displayName: All Employees (dynamic), groupTypes: [DynamicMembership], membershipRule: '(user.userType -eq "Member")', membershipRuleProcessingState: "On" }
+      memberCount: 412
+    expect:
+      status: succeeded
+      plan: [update]
+      outputs: { summary: "All Employees (dynamic): rule updated. Members are recalculated within minutes to hours." }
+  - name: plans pausing processing without changing the rule
+    inputs: { groupId: 00000000-0000-4000-8000-000000000203, membershipRule: '(user.userType -eq "Member")', processing: Paused, reason: Freeze membership during HR migration }
+    mocks:
+      group: { id: 00000000-0000-4000-8000-000000000203, displayName: All Employees (dynamic), groupTypes: [DynamicMembership], membershipRule: '(user.userType -eq "Member")', membershipRuleProcessingState: "On" }
+    errors:
+      memberCount: { status: 400, code: Request_UnsupportedQuery }
+    expect:
+      status: succeeded
+      plan: [update]
+      outputs: { summary: "All Employees (dynamic): rule updated and processing paused; members stay as they are until you resume it." }

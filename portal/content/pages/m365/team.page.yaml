@@ -1,9 +1,11 @@
 $schema: ../../../packages/schemas/generated/page.schema.json
 kind: page
 id: m365.team
-version: 1.0.0
+version: 1.1.0
 title: Team or Microsoft 365 group
-summary: One Microsoft 365 group and, when it is team-enabled, its team — owners, members, guests, channels and team settings.
+summary: >-
+  One Microsoft 365 group and, when it is team-enabled, its team — owners, members, guests, channels and team settings.
+  Team settings and channels need a Microsoft Teams licence; the group itself doesn't.
 owner: m365-team
 tags: [m365, teams, groups, collaboration]
 template: entity
@@ -28,6 +30,7 @@ datasources:
   team:
     source: graph
     label: Team settings
+    requires: { licences: [teams] }
     when: ${ group.isTeam = true }
     request:
       path: /teams/${ $encode($guid(params.id)) }
@@ -63,6 +66,7 @@ datasources:
       ) }
   channels:
     source: graph
+    requires: { licences: [teams] }
     when: ${ group.isTeam = true }
     request:
       path: /teams/${ $encode($guid(params.id)) }/channels
@@ -130,6 +134,11 @@ tabs:
           - { field: renewedDateTime, label: Renewed, kind: datetime }
           - { field: expirationDateTime, label: Expires, kind: datetime }
           - { field: description, label: Description }
+      - widget: licenceGate
+        feature: teams
+        title: Microsoft Teams isn't licensed in this tenant
+        body: the team's settings and channels
+        when: ${ group.isTeam = true }
       - widget: keyValue
         span: 6
         title: Team
@@ -164,6 +173,11 @@ tabs:
           page: identity.user
           params:
             id: ${ row.id }
+        rowActions:
+          - label: Teams policies
+            icon: user-gear
+            href: /p/m365.teams-user-policies?user=${ $encode(row.userPrincipalName) }
+            when: ${ row.userType = 'Member' and $boolean(row.userPrincipalName) }
         empty:
           title: This group has no owners
           body: Nobody can manage membership or settings except administrators. Add at least two owners in the Teams or Entra admin center.
@@ -186,6 +200,11 @@ tabs:
           page: identity.user
           params:
             id: ${ row.id }
+        rowActions:
+          - label: Teams policies
+            icon: user-gear
+            href: /p/m365.teams-user-policies?user=${ $encode(row.userPrincipalName) }
+            when: ${ row.userType = 'Member' and $boolean(row.userPrincipalName) }
         empty:
           title: No members
           body: This group has no user members.
@@ -211,6 +230,11 @@ tabs:
   - id: channels
     label: Channels
     layout:
+      - widget: licenceGate
+        feature: teams
+        title: Microsoft Teams isn't licensed in this tenant
+        body: the team's channels
+        when: ${ group.isTeam = true }
       - widget: kpi
         data: channels.private
         label: Private channels

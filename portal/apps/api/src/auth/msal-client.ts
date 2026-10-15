@@ -15,6 +15,7 @@ const SIGN_IN_SCOPES = ['openid', 'profile', 'offline_access', 'https://graph.mi
 
 export interface MsalLogger {
   warn(obj: object, msg: string): void;
+  info?(obj: object, msg: string): void;
 }
 
 /**

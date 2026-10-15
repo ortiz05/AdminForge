@@ -1,0 +1,12 @@
+{
+  "@odata.type": "#microsoft.graph.user",
+  "id": "00000000-0000-4000-8000-0000000000a1",
+  "displayName": "Avery Engineer",
+  "userPrincipalName": "avery@example.com",
+  "mail": "avery@example.com",
+  "accountEnabled": true,
+  "userType": "Member",
+  "jobTitle": "Senior Systems Engineer",
+  "department": "IT Operations",
+  "onPremisesSyncEnabled": null
+}

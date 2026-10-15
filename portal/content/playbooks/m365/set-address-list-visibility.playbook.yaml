@@ -1,0 +1,108 @@
+$schema: ../../../packages/schemas/generated/playbook.schema.json
+kind: playbook
+id: m365.set-address-list-visibility
+version: 1.0.0
+title: Hide or show a mailbox in the address lists
+summary: >-
+  Hides a mailbox from the address lists (the global address list people pick recipients from) or shows it again.
+  Mail still reaches a hidden mailbox. For accounts synced from Active Directory, Exchange Online may refuse the change;
+  set msExchHideFromAddressLists on-premises instead.
+owner: m365-team
+tags: [m365, exchange, mailboxes, offboarding]
+risk: low
+mode: write
+requires:
+  portalRoles: [Portal.Operator]
+  scopes:
+    exchange: [Exchange.Manage]
+  entraRoles: [Exchange Recipient Administrator]
+  licences: [exchange]
+confirm:
+  type: click
+  message: >-
+    ${ (inputs.hidden = true ? 'Hide ' : 'Show ') & steps.current.output[0].primarySmtpAddress
+       & (inputs.hidden = true ? ' from' : ' in') & ' the address lists? Outlook picks the change up within a day (offline address book).' }
+
+inputs:
+  mailbox: { type: string, format: email, label: Mailbox }
+  hidden: { type: boolean, label: Hide from the address lists, description: Turn off to show the mailbox again., default: true }
+  reason: { type: string, label: Reason, minLength: 10, multiline: true, placeholder: e.g. Leaver HR-1234 }
+
+steps:
+  - id: current
+    type: runner
+    mode: read
+    describe: Read the mailbox's address-list visibility
+    script: exchange/Get-MailboxConfiguration.ps1
+    sha256: c86c6bf4f6a3ca272389fe8369e8b9137805f491685d69d58855595207aa9d99
+    services: [exchange]
+    timeoutSeconds: 300
+    parameters:
+      identity: ${ inputs.mailbox }
+      includeAutoReply: false
+
+  - id: change
+    type: runner
+    mode: write
+    when: ${ steps.current.output[0].hiddenFromAddressListsEnabled != inputs.hidden }
+    describe: "${ (inputs.hidden = true ? 'Hide ' : 'Show ') & steps.current.output[0].primarySmtpAddress & (inputs.hidden = true ? ' from' : ' in') & ' the address lists' }"
+    script: exchange/Set-MailboxAddressListVisibility.ps1
+    sha256: 157e0cdd89868e8655f411b8a935d7abb52b1a432583f922beee87a1c51c55ac
+    services: [exchange]
+    timeoutSeconds: 300
+    parameters:
+      identity: ${ steps.current.output[0].primarySmtpAddress }
+      hidden: ${ inputs.hidden }
+    idempotent: true
+    compensate:
+      type: runner
+      describe: "${ (inputs.hidden = true ? 'Show the mailbox in' : 'Hide the mailbox from') & ' the address lists again' }"
+      script: exchange/Set-MailboxAddressListVisibility.ps1
+      sha256: 157e0cdd89868e8655f411b8a935d7abb52b1a432583f922beee87a1c51c55ac
+      services: [exchange]
+      timeoutSeconds: 300
+      parameters:
+        identity: ${ steps.current.output[0].primarySmtpAddress }
+        hidden: ${ inputs.hidden != true }
+    dryRunOutput:
+      - identity: ${ steps.current.output[0].primarySmtpAddress }
+        before: ${ steps.current.output[0].hiddenFromAddressListsEnabled }
+        after: ${ inputs.hidden }
+        changed: true
+        verified: true
+
+outputs:
+  summary: >-
+    ${ steps.current.output[0].primarySmtpAddress
+       & (steps.current.output[0].hiddenFromAddressListsEnabled = inputs.hidden ? ' was already ' : ' is now ')
+       & (inputs.hidden = true ? 'hidden from' : 'shown in') & ' the address lists.' }
+
+tests:
+  - name: hides a leaver's mailbox
+    inputs: { mailbox: adele.vance@example.com, reason: Leaver HR-1001 }
+    mocks:
+      current:
+        - { primarySmtpAddress: adele.vance@example.com, hiddenFromAddressListsEnabled: false, isDirSynced: false }
+    expect:
+      status: succeeded
+      plan: [change]
+      outputs: { summary: adele.vance@example.com is now hidden from the address lists. }
+  - name: does nothing when the mailbox is already hidden
+    inputs: { mailbox: reception@example.com, reason: Leaver HR-1002 duplicate }
+    mocks:
+      current:
+        - { primarySmtpAddress: reception@example.com, hiddenFromAddressListsEnabled: true, isDirSynced: false }
+    expect:
+      status: succeeded
+      plan: []
+      steps: { change: skipped }
+      outputs: { summary: reception@example.com was already hidden from the address lists. }
+  - name: shows a mailbox again
+    inputs: { mailbox: reception@example.com, hidden: false, reason: Returner HR-1003 }
+    mocks:
+      current:
+        - { primarySmtpAddress: reception@example.com, hiddenFromAddressListsEnabled: true, isDirSynced: false }
+    expect:
+      status: succeeded
+      plan: [change]
+      outputs: { summary: reception@example.com is now shown in the address lists. }

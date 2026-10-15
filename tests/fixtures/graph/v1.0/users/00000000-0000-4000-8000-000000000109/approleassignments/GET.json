@@ -1,0 +1,14 @@
+{
+  "value": [
+    {
+      "id": "ara-405-2",
+      "principalId": "00000000-0000-4000-8000-000000000109",
+      "principalDisplayName": "Jordan Rivera",
+      "principalType": "User",
+      "appRoleId": "00000000-0000-4000-8000-000000000a06",
+      "resourceId": "00000000-0000-4000-8000-000000000405",
+      "resourceDisplayName": "Payroll Online",
+      "createdDateTime": "2023-04-12T09:10:00Z"
+    }
+  ]
+}

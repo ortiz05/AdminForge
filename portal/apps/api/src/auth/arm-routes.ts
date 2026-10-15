@@ -39,6 +39,7 @@ const notArmed = () =>
 export function armLifecycleRoutes(app: FastifyInstance, ctx: AppContext) {
   app.post('/auth/arm/extend', { config: { rateLimit: ARM_RATE_LIMIT } }, async (request) => {
     const session = requireSessionWithCsrf(request);
+    requireRole(session, 'Portal.Operator', 'Extending write access');
     const body = parseBody(ExtendRequest, request.body);
     const now = ctx.now();
     if (!isArmed(session, now)) throw notArmed();

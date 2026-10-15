@@ -191,8 +191,14 @@ function yieldsUserData(node: unknown, trusted: ReadonlySet<string>): boolean {
   return false;
 }
 
-/** KQL text: a string at key `query` (resourceGraph / logAnalytics datasources and steps, `kql` probe checks). */
-const isKqlQuery = (segments: readonly PathSegment[]) => segments[segments.length - 1] === 'query';
+/**
+ * KQL text: a string at key `query` (resourceGraph / logAnalytics datasources and steps, `kql` probe checks), or the
+ * `Query` of a request body (Graph `POST /security/runHuntingQuery` — Defender advanced hunting).
+ */
+const isKqlQuery = (segments: readonly PathSegment[]) => {
+  const key = segments[segments.length - 1];
+  return key === 'query' || (key === 'Query' && segments[segments.length - 2] === 'body');
+};
 
 /** Params compiled server-side into safe KQL by the advanced filter builder (`filters.advanced` with `dialect: kql`). */
 function compiledKqlParams(def: unknown): string[] {

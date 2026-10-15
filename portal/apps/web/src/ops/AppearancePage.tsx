@@ -1,7 +1,7 @@
 import { useMemo, useState, type CSSProperties } from 'react';
 import { errorDescription } from '../lib/errors';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { densities, scale } from '@adminforge/design-tokens';
+import { densities, scale, themeMeta } from '@adminforge/design-tokens';
 import {
   ArrowCounterClockwiseIcon,
   Badge,
@@ -40,6 +40,7 @@ import {
   type AppearanceBody,
   type Density,
   type Draft,
+  type OrgTheme,
   type ThemeName,
 } from './appearance';
 import { loadAppearanceStylesheet } from './appearance-link';
@@ -346,6 +347,16 @@ export function AppearancePage() {
                   />
                   <span className="text-xs text-fg-3">People who picked their own density keep it.</span>
                 </div>
+                <Select
+                  label="Default theme"
+                  value={draft.theme}
+                  onValueChange={(v) => setDraft((d) => d && { ...d, theme: v as OrgTheme })}
+                  options={[
+                    { value: 'system', label: 'Match each person’s system' },
+                    ...THEME_NAMES.map((t) => ({ value: t, label: themeMeta[t].label })),
+                  ]}
+                  className="max-w-56"
+                />
                 <Select
                   label="Base font size"
                   value={String(

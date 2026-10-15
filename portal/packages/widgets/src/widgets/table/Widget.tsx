@@ -547,7 +547,10 @@ export function TableWidget({ config, data, runtime, instanceId, variant }: Widg
         error={error}
         empty={empty}
         selectable={
-          config.selection === 'multi' || (config.selection !== 'none' && Boolean(config.bulkActions?.length))
+          config.selection === 'single'
+            ? 'single'
+            : config.selection === 'multi' ||
+              (config.selection !== 'none' && Boolean(config.bulkActions?.length))
         }
         bulkActions={
           config.bulkActions?.length

@@ -1,0 +1,13 @@
+{
+  "@odata.type": "#microsoft.graph.group",
+  "id": "00000000-0000-4000-8000-000000000208",
+  "displayName": "SG-PIM-Identity-Admins",
+  "description": "Role-assignable: Security Administrator for the identity team",
+  "mail": null,
+  "mailEnabled": false,
+  "securityEnabled": true,
+  "groupTypes": [],
+  "isAssignableToRole": true,
+  "membershipRule": null,
+  "onPremisesSyncEnabled": null
+}

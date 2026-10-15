@@ -1,13 +1,14 @@
 $schema: ../../../packages/schemas/generated/playbook.schema.json
 kind: playbook
 id: identity.create-security-group
-version: 1.0.1
+version: 1.1.0
 title: Create security group
 summary: >-
-  Creates a cloud security group with assigned membership, owners and initial members. Refuses duplicate names.
-  (Role-assignable groups are created by a Privileged Role Administrator in the Entra admin center.)
+  Retired — replaced by Create group (identity.create-group), which also creates Microsoft 365 groups and dynamic
+  groups. Kept so the published history and past runs still resolve.
 owner: identity-team
 tags: [identity, groups]
+status: retired
 risk: low
 mode: write
 requires:

@@ -1,0 +1,35 @@
+{
+  "id": "00000000-0000-4000-8000-000000000408",
+  "appId": "00000002-0000-0ff1-ce00-000000000000",
+  "displayName": "Office 365 Exchange Online",
+  "description": null,
+  "accountEnabled": true,
+  "appRoleAssignmentRequired": false,
+  "servicePrincipalType": "Application",
+  "appOwnerOrganizationId": "f8cdef31-a31e-4b4a-93e4-5f571e91255a",
+  "publisherName": "Microsoft Services",
+  "verifiedPublisher": {
+    "displayName": null,
+    "verifiedPublisherId": null,
+    "addedDateTime": null
+  },
+  "homepage": null,
+  "loginUrl": null,
+  "logoutUrl": null,
+  "replyUrls": [],
+  "servicePrincipalNames": [
+    "00000002-0000-0ff1-ce00-000000000000"
+  ],
+  "tags": [],
+  "notes": null,
+  "notificationEmailAddresses": [],
+  "preferredSingleSignOnMode": null,
+  "preferredTokenSigningKeyThumbprint": null,
+  "keyCredentials": [],
+  "passwordCredentials": [],
+  "appRoles": [],
+  "oauth2PermissionScopes": [],
+  "alternativeNames": [],
+  "signInAudience": "AzureADMultipleOrgs",
+  "owners": []
+}

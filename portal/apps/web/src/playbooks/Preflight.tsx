@@ -162,18 +162,25 @@ export function Requirements({ requires, writes }: { requires: Requires | undefi
           <Row key={role} label={role} sub="Microsoft Entra role" check={check} />
         ))}
         {licences.map((l) => {
-          const has = caps.data?.skus?.includes(l);
+          // Content names licence features (pim, signInLogs, intune…); a bare SKU part number also works.
+          const feature = caps.data?.features[l];
+          const has = feature
+            ? feature.available
+            : caps.data?.skus == null
+              ? null
+              : caps.data.skus.includes(l);
+          const label = feature?.label ?? l;
           return (
             <Row
               key={l}
-              label={l}
+              label={label}
               sub="Licence"
               check={
-                caps.data?.skus == null
+                has === null || has === undefined
                   ? { tone: 'neutral', text: caps.isPending ? 'Checking…' : 'Couldn’t check' }
                   : has
                     ? { tone: 'ok', text: 'Licensed' }
-                    : { tone: 'warn', text: `Requires ${l}` }
+                    : { tone: 'warn', text: `Requires ${label}` }
               }
             />
           );

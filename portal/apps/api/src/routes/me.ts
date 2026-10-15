@@ -1,4 +1,5 @@
 import { UserPrefs, type MeResponse } from '@adminforge/schemas';
+import { APPEARANCE_KEY, Appearance } from '../admin/appearance';
 import type { FastifyInstance } from 'fastify';
 import { hasRole, requireSession } from '../auth/guards';
 import { isArmed, type SessionRecord } from '../auth/session-store';
@@ -7,6 +8,20 @@ import { auditActor, type AppContext } from '../context';
 import { parseBody } from '../errors';
 
 /** Builds the exact GET /api/me contract for a session. */
+/** Default theme and density from Admin → Appearance (never fails /api/me). */
+async function orgDefaults(ctx: AppContext): Promise<MeResponse['defaults']> {
+  try {
+    const parsed = Appearance.safeParse((await ctx.settings.get<unknown>(APPEARANCE_KEY))?.value ?? {});
+    if (!parsed.success) return {};
+    return {
+      ...(parsed.data.theme ? { theme: parsed.data.theme } : {}),
+      ...(parsed.data.density ? { density: parsed.data.density } : {}),
+    };
+  } catch {
+    return {};
+  }
+}
+
 export async function buildMe(ctx: AppContext, session: SessionRecord): Promise<MeResponse> {
   const armed = isArmed(session, ctx.now());
   return {
@@ -22,6 +37,7 @@ export async function buildMe(ctx: AppContext, session: SessionRecord): Promise<
     armMaxMinutes: ctx.config.WRITE_SESSION_MAX_MINUTES,
     csrf: session.csrf,
     prefs: await ctx.prefs.get(session.userOid),
+    defaults: await orgDefaults(ctx),
     authMode: ctx.config.AUTH_MODE,
     dataMode: ctx.config.DATA_MODE,
   };

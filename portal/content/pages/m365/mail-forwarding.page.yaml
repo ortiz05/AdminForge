@@ -1,9 +1,9 @@
 $schema: ../../../packages/schemas/generated/page.schema.json
 kind: page
 id: m365.mail-forwarding
-version: 1.0.0
+version: 1.1.0
 title: Mail forwarding
-summary: Mailboxes that forward mail — mailbox-level forwarding and, optionally, inbox rules — with forwarding to outside domains flagged.
+summary: Mailboxes that forward mail — mailbox-level forwarding and, optionally, inbox rules — with forwarding to outside domains flagged. Clear mailbox forwarding from the list.
 owner: m365-team
 tags: [m365, exchange, security, data-loss]
 template: list-detail
@@ -149,7 +149,21 @@ layout:
       - { field: ruleName, label: Rule }
       - { field: ruleEnabled, label: Rule enabled, kind: boolean, filter: facet }
       - { field: deliverToMailboxAndForward, label: Keeps a copy, kind: boolean, hidden: true }
+    inspect:
+      page: m365.mailbox
+      params:
+        mailbox: ${ row.mailbox }
     rowActions:
+      - playbook: m365.clear-mailbox-forwarding
+        label: Clear forwarding
+        icon: prohibit
+        inputs:
+          mailbox: ${ row.mailbox }
+        when: ${ row.source = 'mailbox' }
+      - label: Inbox rules
+        icon: funnel
+        href: /p/m365.inbox-rules?mailbox=${ $encode(row.mailbox) }
+        when: ${ row.source = 'inboxRule' }
       - label: Open in Exchange admin center
         icon: arrow-square-out
         href: https://admin.exchange.microsoft.com/#/mailboxes

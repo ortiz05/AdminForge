@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/page.schema.json
 kind: page
 id: identity.role
-version: 1.0.0
+version: 1.1.0
 title: Directory role
 summary: One Microsoft Entra role — who holds it (active, activated through PIM, eligible) and what it allows.
 owner: identity-team
@@ -65,6 +65,7 @@ datasources:
             "principalDetail": $i.principal.userPrincipalName ? $i.principal.userPrincipalName : $i.principal.appId,
             "state": $state,
             "memberType": $i.memberType,
+            "scopeId": $i.directoryScopeId,
             "scope": $i.directoryScopeId = '/' ? 'Directory' : $i.directoryScopeId,
             "start": $i.startDateTime,
             "end": $i.endDateTime
@@ -92,6 +93,16 @@ actions:
     icon: lightning
     inputs:
       roleDefinitionId: ${ params.id }
+  - playbook: identity.add-role-eligibility
+    label: Add eligible assignment
+    icon: user-circle-plus
+    inputs:
+      roleDefinitionId: ${ params.id }
+  - playbook: identity.assign-directory-role
+    label: Assign (standing)
+    icon: user-plus
+    inputs:
+      roleDefinitionId: ${ params.id }
   - label: Manage in PIM
     icon: arrow-square-out
     href: https://entra.microsoft.com/#view/Microsoft_Azure_PIMCommon/CommonMenuBlade/~/quickStart
@@ -117,6 +128,14 @@ tabs:
           - { label: Open user, icon: user, href: "/p/identity.user?id=${ $encode(row.principalId) }", when: "${ row.principalType = 'User' }" }
           - { label: Open group, icon: users-three, href: "/p/identity.group?id=${ $encode(row.principalId) }", when: "${ row.principalType = 'Group' }" }
           - { label: Open enterprise app, icon: app-window, href: "/p/identity.enterprise-app?id=${ $encode(row.principalId) }", when: "${ row.principalType = 'Service principal' }" }
+          # This list includes current PIM activations; those end on their own or are deactivated in PIM, not removed here.
+          - playbook: identity.remove-directory-role
+            label: Remove assignment
+            icon: user-minus
+            inputs:
+              assignmentId: ${ row.id }
+              principalId: ${ row.principalId }
+            when: ${ $not(row.principalId in pim.activated.principalId) }
         empty:
           title: Nobody holds this role
           body: No active assignments.
@@ -137,6 +156,15 @@ tabs:
           page: identity.user
           params:
             id: ${ row.principalId }
+        rowActions:
+          - playbook: identity.remove-role-eligibility
+            label: Remove eligibility
+            icon: user-minus
+            inputs:
+              roleDefinitionId: ${ params.id }
+              principalId: ${ row.principalId }
+              directoryScopeId: ${ row.scopeId }
+            when: ${ row.memberType = 'Direct' }
         empty:
           title: No eligible holders
           body: Nobody can activate this role through PIM.

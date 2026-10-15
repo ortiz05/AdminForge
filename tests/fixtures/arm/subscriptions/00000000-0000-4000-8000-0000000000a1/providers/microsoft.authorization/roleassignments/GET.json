@@ -1,0 +1,52 @@
+{
+  "value": [
+    {
+      "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/providers/Microsoft.Authorization/roleAssignments/30000000-0000-4000-8000-000000000301",
+      "name": "30000000-0000-4000-8000-000000000301",
+      "type": "Microsoft.Authorization/roleAssignments",
+      "properties": {
+        "roleDefinitionId": "/subscriptions/00000000-0000-4000-8000-0000000000a1/providers/Microsoft.Authorization/roleDefinitions/8e3af657-a8ff-443c-a75c-2fe8c4bcb635",
+        "principalId": "30000000-0000-4000-8000-000000000101",
+        "principalType": "Group",
+        "scope": "/subscriptions/00000000-0000-4000-8000-0000000000a1",
+        "createdOn": "2026-02-01T09:00:00Z"
+      }
+    },
+    {
+      "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/providers/Microsoft.Authorization/roleAssignments/30000000-0000-4000-8000-000000000302",
+      "name": "30000000-0000-4000-8000-000000000302",
+      "type": "Microsoft.Authorization/roleAssignments",
+      "properties": {
+        "roleDefinitionId": "/subscriptions/00000000-0000-4000-8000-0000000000a1/providers/Microsoft.Authorization/roleDefinitions/8e3af657-a8ff-443c-a75c-2fe8c4bcb635",
+        "principalId": "00000000-0000-4000-8000-000000000101",
+        "principalType": "User",
+        "scope": "/subscriptions/00000000-0000-4000-8000-0000000000a1",
+        "createdOn": "2026-02-01T09:00:00Z"
+      }
+    },
+    {
+      "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/providers/Microsoft.Authorization/roleAssignments/30000000-0000-4000-8000-000000000303",
+      "name": "30000000-0000-4000-8000-000000000303",
+      "type": "Microsoft.Authorization/roleAssignments",
+      "properties": {
+        "roleDefinitionId": "/subscriptions/00000000-0000-4000-8000-0000000000a1/providers/Microsoft.Authorization/roleDefinitions/b24988ac-6180-42a0-ab88-20f7382dd24c",
+        "principalId": "00000000-0000-4000-8000-000000000407",
+        "principalType": "ServicePrincipal",
+        "scope": "/subscriptions/00000000-0000-4000-8000-0000000000a1",
+        "createdOn": "2026-02-01T09:00:00Z"
+      }
+    },
+    {
+      "id": "/providers/Microsoft.Management/managementGroups/mg-example/providers/Microsoft.Authorization/roleAssignments/30000000-0000-4000-8000-000000000304",
+      "name": "30000000-0000-4000-8000-000000000304",
+      "type": "Microsoft.Authorization/roleAssignments",
+      "properties": {
+        "roleDefinitionId": "/subscriptions/00000000-0000-4000-8000-0000000000a1/providers/Microsoft.Authorization/roleDefinitions/acdd72a7-3385-48ef-bd42-f606fba81ae7",
+        "principalId": "30000000-0000-4000-8000-000000000101",
+        "principalType": "Group",
+        "scope": "/providers/Microsoft.Management/managementGroups/mg-example",
+        "createdOn": "2026-02-01T09:00:00Z"
+      }
+    }
+  ]
+}

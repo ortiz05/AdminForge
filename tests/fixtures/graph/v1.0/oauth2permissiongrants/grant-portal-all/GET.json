@@ -1,0 +1,8 @@
+{
+  "id": "grant-portal-all",
+  "clientId": "00000000-0000-4000-8000-000000000402",
+  "consentType": "AllPrincipals",
+  "principalId": null,
+  "resourceId": "00000000-0000-4000-8000-000000000409",
+  "scope": "User.Read offline_access"
+}

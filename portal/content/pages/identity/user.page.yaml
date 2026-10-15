@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/page.schema.json
 kind: page
 id: identity.user
-version: 1.1.0
+version: 1.2.0
 title: User
 summary: One user account — profile, groups, roles, devices, authentication methods, sign-ins, licences and audit history.
 owner: identity-team
@@ -92,9 +92,11 @@ datasources:
           $act := $activated[roleDefinitionId = $rid][0];
           {
             "key": 'active|' & id,
+            "assignmentId": id,
             "roleId": roleDefinitionId,
             "role": roleDefinition.displayName,
             "assignment": $act ? "Activated" : "Active",
+            "scopeId": directoryScopeId,
             "scope": $scope(directoryScopeId),
             "start": $act.startDateTime,
             "end": $act.endDateTime
@@ -105,6 +107,7 @@ datasources:
           "roleId": roleDefinitionId,
           "role": roleDefinition.displayName,
           "assignment": "Eligible",
+          "scopeId": directoryScopeId,
           "scope": $scope(directoryScopeId),
           "start": startDateTime,
           "end": endDateTime,
@@ -421,6 +424,12 @@ tabs:
         feature: pim
         span: 6
         title: Eligible assignments need Microsoft Entra ID P2 (Privileged Identity Management)
+      - widget: actionBar
+        id: roleActions
+        span: 12
+        actions:
+          - { playbook: identity.add-role-eligibility, label: Add eligible role (PIM), icon: user-circle-plus, inputs: { principalId: "${ params.id }" } }
+          - { playbook: identity.assign-directory-role, label: Assign role (standing), icon: user-plus, inputs: { principalId: "${ params.id }" } }
       - widget: table
         id: roleRows
         span: 12
@@ -442,6 +451,22 @@ tabs:
           page: identity.role
           params:
             id: ${ row.roleId }
+        rowActions:
+          - playbook: identity.remove-directory-role
+            label: Remove assignment
+            icon: user-minus
+            inputs:
+              assignmentId: ${ row.assignmentId }
+              principalId: ${ params.id }
+            when: ${ row.assignment = 'Active' }
+          - playbook: identity.remove-role-eligibility
+            label: Remove eligibility
+            icon: user-minus
+            inputs:
+              roleDefinitionId: ${ row.roleId }
+              principalId: ${ params.id }
+              directoryScopeId: ${ row.scopeId }
+            when: ${ row.assignment = 'Eligible' and row.memberType = 'Direct' }
         empty:
           title: No directory roles
           body: This account holds no active or eligible Microsoft Entra roles.

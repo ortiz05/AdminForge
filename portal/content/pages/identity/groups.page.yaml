@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/page.schema.json
 kind: page
 id: identity.groups
-version: 1.0.0
+version: 1.1.0
 title: Groups
 summary: >-
   Security groups, Microsoft 365 groups, mail-enabled security groups and distribution lists — filter by type,
@@ -52,6 +52,22 @@ params:
 filters:
   search: q
   facets: [kind, membership, source, roleAssignable]
+  # Compiled server-side into `${ advanced }` (OData). Only properties /groups can filter on.
+  advanced:
+    dialect: odata
+    param: adv
+    fields:
+      - { field: displayName, label: Name, type: string, operators: [eq, startsWith, in] }
+      - { field: mail, label: Email, type: string, operators: [eq, startsWith] }
+      - { field: mailNickname, label: Mail nickname, type: string, operators: [eq, startsWith] }
+      - { field: description, label: Description, type: string, operators: [eq, startsWith] }
+      - { field: classification, label: Classification, type: string, operators: [eq] }
+      - { field: visibility, label: Visibility, type: enum, values: [Public, Private, HiddenMembership], operators: [eq] }
+      - { field: membershipRuleProcessingState, label: Rule processing, type: enum, values: ["On", Paused], operators: [eq] }
+      - { field: onPremisesSamAccountName, label: sAMAccountName, type: string, operators: [eq, startsWith] }
+      - { field: createdDateTime, label: Created, type: date, operators: [ge, le] }
+      - { field: expirationDateTime, label: Expires, type: date, operators: [ge, le] }
+      - { field: renewedDateTime, label: Renewed, type: date, operators: [ge, le] }
 
 savedViews:
   enabled: true
@@ -84,7 +100,8 @@ datasources:
                params.source = 'Synced' ? "onPremisesSyncEnabled eq true",
                params.source = 'Cloud' ? "NOT(onPremisesSyncEnabled eq true)",
                params.roleAssignable = 'Yes' ? "isAssignableToRole eq true",
-               params.roleAssignable = 'No' ? "NOT(isAssignableToRole eq true)"
+               params.roleAssignable = 'No' ? "NOT(isAssignableToRole eq true)",
+               advanced
              ][$], ' and ') }
         $search: >-
           ${ params.q ? '"displayName:' & $odataSearch(params.q) & '" OR "description:' & $odataSearch(params.q) & '"' }
@@ -111,9 +128,14 @@ datasources:
     cache: { ttl: 300 }
 
 actions:
-  - playbook: identity.create-security-group
-    label: New security group
+  - playbook: identity.create-group
+    label: New group
     icon: plus-circle
+  - playbook: identity.create-group
+    label: New dynamic group
+    icon: funnel-simple
+    inputs:
+      membership: Dynamic
 
 layout:
   - widget: kpi
@@ -190,13 +212,21 @@ layout:
         icon: crown-simple
         inputs:
           groupId: ${ row.id }
+      - playbook: identity.edit-dynamic-rule
+        label: Edit dynamic rule
+        icon: funnel-simple
+        inputs:
+          groupId: ${ row.id }
+          membershipRule: ${ row.membershipRule }
+          processing: ${ row.membershipRuleProcessingState }
+        when: ${ row.membership = 'Dynamic' }
       - label: Open in Entra admin center
         icon: arrow-square-out
         href: "https://entra.microsoft.com/#view/Microsoft_AAD_IAM/GroupDetailsMenuBlade/~/Overview/groupId/${ $encode(row.id) }"
     empty:
       title: No groups match these filters
       body: Clear a facet or the search. Search matches the start of words in the name or description.
-      action: { playbook: identity.create-security-group, label: New security group }
+      action: { playbook: identity.create-group, label: New group }
 
 export:
   formats: [csv, xlsx]

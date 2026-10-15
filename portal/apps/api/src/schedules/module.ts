@@ -1,4 +1,8 @@
 import type { Connection } from '@adminforge/schemas';
+import { loadEnv } from '@adminforge/config';
+import { notifyApprovers, type DeliveryDeps } from '../delivery/notifier';
+import { randomUUID } from 'node:crypto';
+import { Heartbeat } from '../health/heartbeat';
 import { ArtifactStore } from '../artifacts/store';
 import type { AppContext } from '../context';
 import type { ProbeDeps } from '../probes/checks';
@@ -37,6 +41,8 @@ export interface SchedulesOptions {
   sleep?: (ms: number, signal: AbortSignal) => Promise<void>;
   probeDeps?: Partial<ProbeDeps>;
   log?: Log;
+  /** Tests: email/Teams delivery overrides. */
+  delivery?: Partial<DeliveryDeps>;
 }
 
 export interface SchedulesModule {
@@ -83,11 +89,21 @@ export function createSchedulesModule(
     now: ctx.now,
     spoTenantName: ctx.config.AF_SPO_TENANT_NAME,
     fetch: ctx.fetch,
+    audit: ctx.audit,
     ...opts.probeDeps,
+  };
+  // Email/Teams delivery reads recipients and webhooks from configuration (never content, never expressions).
+  const delivery: DeliveryDeps = {
+    outbound: ctx.outbound,
+    fetch: ctx.fetch,
+    env: ctx.config.NODE_ENV === 'test' ? {} : loadEnv(),
+    publicBaseUrl: ctx.config.PUBLIC_BASE_URL,
+    ...opts.delivery,
   };
   const jobs =
     opts.jobs ??
     createJobRunner({
+      delivery,
       definitions: ctx.definitions,
       store,
       outbound: probeDeps.outbound,
@@ -112,6 +128,13 @@ export function createSchedulesModule(
     events,
     artifacts,
     now: ctx.now,
+    notifyApprovers: async (r) => {
+      await notifyApprovers(
+        delivery,
+        { title: r.title, requestedBy: r.requestedBy, path: '/approvals' },
+        randomUUID(),
+      );
+    },
     fingerprint: (ref) =>
       automationFingerprint((r, v) => ctx.definitions.resolveAny(['playbook', 'runbook'], r, v), ref),
   });
@@ -145,6 +168,7 @@ export function createSchedulesModule(
       now: ctx.now,
       concurrency: ctx.config.SCHEDULER_CONCURRENCY,
       leader,
+      delivery,
       ...(opts.timers ? { timers: opts.timers } : {}),
       ...(log ? { log } : {}),
     });
@@ -154,6 +178,12 @@ export function createSchedulesModule(
   }
 
   let started = false;
+  const heartbeat =
+    ctx.database && ctx.config.NODE_ENV !== 'test'
+      ? new Heartbeat(ctx.database.db, 'scheduler', ctx.now, (err) =>
+          log?.warn({ err }, 'scheduler heartbeat failed'),
+        )
+      : null;
   return {
     store,
     events,
@@ -168,10 +198,12 @@ export function createSchedulesModule(
       started = true;
       await events.start();
       await scheduler?.start();
+      if (scheduler) heartbeat?.start();
     },
     async stop() {
       if (!started) return;
       started = false;
+      heartbeat?.stop();
       await scheduler?.stop();
       await events.stop();
     },

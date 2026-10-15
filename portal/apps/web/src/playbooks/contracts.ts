@@ -64,6 +64,8 @@ export interface Capabilities {
   eligible: DirectoryRole[] | null;
   /** Licensed SKUs (skuPartNumber), when the server reports them. */
   skus: string[] | null;
+  /** Licence features by the keys content uses in `requires.licences` (pim, signInLogs, intune…). */
+  features: Record<string, { available: boolean | null; label: string }>;
 }
 
 const roles = (v: unknown): DirectoryRole[] | null =>
@@ -78,7 +80,8 @@ const roles = (v: unknown): DirectoryRole[] | null =>
     : null;
 
 export const capabilitiesQuery = queryOptions({
-  queryKey: ['capabilities'] as const,
+  // Its own key: the renderer caches the same endpoint in another shape under ['capabilities'] (features).
+  queryKey: ['capabilities', 'roles'] as const,
   queryFn: ({ signal }) =>
     api('/api/me/capabilities', {
       signal,
@@ -93,6 +96,18 @@ export const capabilitiesQuery = queryOptions({
                 .map((s) => pick(rec(s), 'skuPartNumber') ?? str(s))
                 .filter((s): s is string => !!s)
             : null,
+          features: Object.fromEntries(
+            Object.entries(rec(o.features)).map(([k, f]) => {
+              const x = rec(f);
+              const available =
+                typeof x.available === 'boolean'
+                  ? x.available
+                  : typeof x.enabled === 'boolean'
+                    ? x.enabled
+                    : null;
+              return [k, { available, label: pick(x, 'label') ?? k }];
+            }),
+          ),
         };
       }),
     }),

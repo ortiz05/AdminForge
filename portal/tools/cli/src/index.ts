@@ -1,5 +1,6 @@
 #!/usr/bin/env -S npx tsx
 import { ApiError } from '@adminforge/connectors';
+import { auditVerify } from './commands/audit';
 import { loadEnv, repoRoot, writeEnvKeys } from '@adminforge/config';
 import { createInterface } from 'node:readline/promises';
 import { Command } from 'commander';
@@ -113,7 +114,8 @@ provision
 const useEnv = (name?: string) => {
   if (name && !process.env.ADMINFORGE_ENV_FILE) process.env.ADMINFORGE_ENV = name;
 };
-const content = () => contentContext(loadEnv(), (line) => console.log(line), repoRoot);
+const content = () =>
+  contentContext(loadEnv(process.env, { admin: true }), (line) => console.log(line), repoRoot);
 
 program
   .command('validate')
@@ -136,6 +138,17 @@ program
   .description('Run the tests: blocks of playbooks and runbooks (dry run with mocked step outputs)')
   .action(async (pattern?: string) => {
     if (!(await testContent(content(), { pattern }))) process.exitCode = 1;
+  });
+
+const audit = program.command('audit').description('The tamper-evident audit log');
+audit
+  .command('verify')
+  .description('Re-walk the audit hash chain (ADMINFORGE_ENV_OVERLAY=host checks the services’ database)')
+  .option('--env <name>', 'env file to use (~/.config/adminforge/<name>.env)', 'dev')
+  .action(async (opts: { env?: string }) => {
+    useEnv(opts.env);
+    if (!(await auditVerify(loadEnv(process.env, { admin: true }), (l) => console.log(l))))
+      process.exitCode = 1;
   });
 
 program

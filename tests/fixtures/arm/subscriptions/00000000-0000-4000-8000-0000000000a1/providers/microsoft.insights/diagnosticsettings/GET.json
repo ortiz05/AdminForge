@@ -1,0 +1,46 @@
+{
+  "value": [
+    {
+      "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/providers/microsoft.insights/diagnosticSettings/to-central-workspace",
+      "name": "to-central-workspace",
+      "type": "Microsoft.Insights/diagnosticSettings",
+      "properties": {
+        "workspaceId": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-monitoring/providers/Microsoft.OperationalInsights/workspaces/law-example-central",
+        "logs": [
+          {
+            "category": "Administrative",
+            "enabled": true
+          },
+          {
+            "category": "Security",
+            "enabled": true
+          },
+          {
+            "category": "ServiceHealth",
+            "enabled": true
+          },
+          {
+            "category": "Alert",
+            "enabled": true
+          },
+          {
+            "category": "Recommendation",
+            "enabled": false
+          },
+          {
+            "category": "Policy",
+            "enabled": true
+          },
+          {
+            "category": "Autoscale",
+            "enabled": true
+          },
+          {
+            "category": "ResourceHealth",
+            "enabled": true
+          }
+        ]
+      }
+    }
+  ]
+}

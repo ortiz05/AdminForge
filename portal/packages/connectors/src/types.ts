@@ -13,6 +13,8 @@ export interface Provenance {
   ms: number;
   requestId?: string;
   cachedAt?: string;
+  /** Served by a Microsoft Graph beta (preview) endpoint, which may change without notice. */
+  preview?: true;
 }
 
 /** Supplies a bearer token for a service; never logged. */

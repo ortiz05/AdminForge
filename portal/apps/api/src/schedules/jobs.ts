@@ -1,4 +1,11 @@
 import { pipeline } from 'node:stream/promises';
+import {
+  MAX_ATTACHMENT_BYTES,
+  postTeams,
+  sendEmail,
+  type DeliveryDeps,
+  type DeliveryStatus,
+} from '../delivery/notifier';
 import { isTerminal } from '@adminforge/engine';
 import type { Delivery, Probe, ProbeJob, Schedule } from '@adminforge/schemas';
 import type { ArtifactStore, WrittenArtifact } from '../artifacts/store';
@@ -69,6 +76,8 @@ export interface JobDeps {
   sleep?: (ms: number, signal: AbortSignal) => Promise<void>;
   /** Called after each probe result is stored (events). */
   onProbe?: (outcome: ProbeOutcome) => void;
+  /** Email/Teams delivery of report files (absent: those targets are reported as not configured). */
+  delivery?: DeliveryDeps;
 }
 
 const defaultSleep = (ms: number, signal: AbortSignal) =>
@@ -191,13 +200,7 @@ export function createJobRunner(deps: JobDeps): JobRunner {
         'export_not_supported',
         `Report ${job.ref} declares no export, so it cannot be scheduled.`,
       );
-    const notes = job.delivery
-      .filter((d) => d.type !== 'file')
-      .map((d) => ({
-        type: d.type,
-        status: 'not_supported',
-        message: 'Email and Teams delivery are not built yet; the file is kept with this run instead.',
-      }));
+    const notes: DeliveryStatus[] = [];
     let files = job.delivery.filter((d): d is Extract<Delivery, { type: 'file' }> => d.type === 'file');
     if (!files.length) files = [{ type: 'file', format: job.delivery[0]?.format ?? 'xlsx' }];
     const formats = [...new Set(files.map((f) => f.format))];
@@ -255,6 +258,43 @@ export function createJobRunner(deps: JobDeps): JobRunner {
       written.push({ ...artifact, format, ...stats });
       const retain = files.find((f) => f.format === format && f.retain)?.retain;
       if (retain) await deps.artifacts.prune(ctx.schedule.key, format, retain);
+    }
+    // Email and Teams: the report goes out after the file is safely written (the file stays with the run either way).
+    for (const d of job.delivery) {
+      if (d.type === 'file') continue;
+      if (!deps.delivery) {
+        notes.push({
+          type: d.type,
+          status: 'not_configured',
+          message: 'Delivery is not available in this process.',
+        });
+        continue;
+      }
+      const file = written.find((w) => w.format === (d.format ?? written[0]!.format)) ?? written[0]!;
+      const def = ctx.schedule.definition;
+      const msg = {
+        title:
+          (d.type === 'email' ? d.subject : undefined) ?? `${def.title} — ${at.toISOString().slice(0, 10)}`,
+        text: `${d.message ?? `The scheduled report "${resolved.def.title}" ran: ${file.rows} row(s)${file.truncated ? ' (truncated)' : ''}.`}\nSchedule: ${def.title}. Reference: ${ctx.correlationId}.`,
+        link: `${deps.delivery.publicBaseUrl}/schedules/${encodeURIComponent(ctx.schedule.key)}`,
+      };
+      if (d.type === 'email') {
+        const opened = d.attach === false ? null : await deps.artifacts.open(file.path);
+        const bytes = opened ? await streamBytes(opened.stream, MAX_ATTACHMENT_BYTES + 1) : null;
+        notes.push(
+          await sendEmail(
+            deps.delivery,
+            { to: d.to, ...(d.cc ? { cc: d.cc } : {}) },
+            {
+              ...msg,
+              ...(bytes && opened
+                ? { attachment: { name: file.name, contentType: opened.contentType, bytes } }
+                : {}),
+            },
+            ctx.correlationId,
+          ),
+        );
+      } else notes.push(await postTeams(deps.delivery, d.webhook, msg));
     }
     return {
       artifactPath: written[0]!.path,
@@ -391,4 +431,19 @@ export function createJobRunner(deps: JobDeps): JobRunner {
       }
     },
   };
+}
+
+/** Reads a stream into memory, stopping after `limit` bytes (the caller treats a full buffer as "too large"). */
+async function streamBytes(stream: NodeJS.ReadableStream, limit: number): Promise<Buffer> {
+  const chunks: Buffer[] = [];
+  let size = 0;
+  for await (const chunk of stream as AsyncIterable<Buffer>) {
+    chunks.push(chunk);
+    size += chunk.length;
+    if (size >= limit) {
+      (stream as unknown as { destroy?: () => void }).destroy?.();
+      break;
+    }
+  }
+  return Buffer.concat(chunks);
 }

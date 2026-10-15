@@ -1,0 +1,116 @@
+$schema: ../../../packages/schemas/generated/playbook.schema.json
+kind: playbook
+id: m365.clear-mailbox-forwarding
+version: 1.0.0
+title: Clear mailbox forwarding
+summary: >-
+  Stops a mailbox forwarding mail: removes the forwarding address (ForwardingSmtpAddress), the forwarding recipient
+  (ForwardingAddress) and "keep a copy and forward" (DeliverToMailboxAndForward). The previous targets are kept in the
+  run record. Inbox rules that forward mail are not changed — see the inbox-rule audit.
+owner: m365-team
+tags: [m365, exchange, security, data-loss, forwarding]
+risk: medium
+mode: write
+requires:
+  portalRoles: [Portal.Operator]
+  scopes:
+    exchange: [Exchange.Manage]
+  entraRoles: [Exchange Recipient Administrator]
+  licences: [exchange]
+confirm:
+  type: click
+  message: >-
+    ${ 'Mail to ' & steps.current.output[0].primarySmtpAddress & ' stops being forwarded to '
+       & $join(steps.current.output[0].forwarding.targets, ', ') & '. This is not undone automatically.' }
+
+inputs:
+  mailbox: { type: string, format: email, label: Mailbox, description: Primary email address of the mailbox that forwards }
+  reason: { type: string, label: Reason, minLength: 10, multiline: true, placeholder: e.g. SEC-412 — forwarding to a personal address found in the weekly audit }
+
+steps:
+  - id: current
+    type: runner
+    mode: read
+    describe: Read the mailbox's forwarding settings
+    script: exchange/Get-MailboxConfiguration.ps1
+    sha256: c86c6bf4f6a3ca272389fe8369e8b9137805f491685d69d58855595207aa9d99
+    services: [exchange]
+    timeoutSeconds: 300
+    parameters:
+      identity: ${ inputs.mailbox }
+      includeAutoReply: false
+
+  - id: forwards
+    type: assert
+    that: ${ steps.current.output[0].forwarding.enabled = true }
+    message: ${ steps.current.output[0].primarySmtpAddress & " doesn't forward mail at the mailbox level. Check its inbox rules instead." }
+
+  # No compensation: restoring a forwarding target is a deliberate decision, not an undo. The run keeps the old values.
+  - id: clear
+    type: runner
+    mode: write
+    describe: >-
+      ${ 'Remove forwarding to ' & $join(steps.current.output[0].forwarding.targets, ', ') & ' from ' & steps.current.output[0].primarySmtpAddress }
+    script: exchange/Clear-MailboxForwarding.ps1
+    sha256: eeb164379d89b47a08d47b61ba3e1fd41776a3f27d51e876272bd8f3e727eedd
+    services: [exchange]
+    timeoutSeconds: 300
+    parameters:
+      identity: ${ steps.current.output[0].primarySmtpAddress }
+    idempotent: true
+    dryRunOutput:
+      - identity: ${ steps.current.output[0].primarySmtpAddress }
+        before:
+          forwardingSmtpAddress: ${ steps.current.output[0].forwarding.forwardingSmtpAddress }
+          forwardingAddress: ${ steps.current.output[0].forwarding.forwardingAddress }
+          deliverToMailboxAndForward: ${ steps.current.output[0].forwarding.deliverToMailboxAndForward }
+        changed: true
+        verified: true
+
+outputs:
+  summary: >-
+    ${ 'Forwarding to ' & $join(steps.current.output[0].forwarding.targets, ', ') & ' was removed from '
+       & steps.current.output[0].primarySmtpAddress
+       & (steps.current.output[0].forwarding.external = true
+          ? '. It went outside the organization: check the account for compromise (recent sign-ins, inbox rules).'
+          : '.') }
+  previousTargets: ${ steps.current.output[0].forwarding.targets }
+  verified: ${ steps.clear.output[0].verified }
+
+tests:
+  - name: clears forwarding to an outside address
+    inputs: { mailbox: adele.vance@example.com, reason: SEC-412 personal forwarding found in the audit }
+    mocks:
+      current:
+        - primarySmtpAddress: adele.vance@example.com
+          forwarding: { enabled: true, forwardingSmtpAddress: adele.home@outlook.example, forwardingAddress: null, deliverToMailboxAndForward: true, targets: [adele.home@outlook.example], external: true }
+    expect:
+      status: succeeded
+      plan: [clear]
+      outputs:
+        summary: "Forwarding to adele.home@outlook.example was removed from adele.vance@example.com. It went outside the organization: check the account for compromise (recent sign-ins, inbox rules)."
+        previousTargets: [adele.home@outlook.example]
+        verified: true
+  - name: clears forwarding to a mail contact inside the organization
+    inputs: { mailbox: reception@example.com, reason: SEC-413 old desk forwarding }
+    mocks:
+      current:
+        - primarySmtpAddress: reception@example.com
+          forwarding: { enabled: true, forwardingSmtpAddress: null, forwardingAddress: Front Desk, forwardingAddressTarget: desk@example.com, deliverToMailboxAndForward: false, targets: [desk@example.com], external: false }
+    expect:
+      status: succeeded
+      plan: [clear]
+      outputs:
+        summary: Forwarding to desk@example.com was removed from reception@example.com.
+  - name: refuses a mailbox that doesn't forward
+    inputs: { mailbox: lee.gu@example.com, reason: SEC-414 false positive }
+    mocks:
+      current:
+        - primarySmtpAddress: lee.gu@example.com
+          forwarding: { enabled: false, forwardingSmtpAddress: null, forwardingAddress: null, deliverToMailboxAndForward: false, targets: [], external: null }
+    expect: { status: failed, failedStep: forwards }
+  - name: stops when the mailbox doesn't exist
+    inputs: { mailbox: ghost@example.com, reason: SEC-415 typo in the address }
+    errors:
+      current: { status: 404, code: input, message: "Mailbox 'ghost@example.com' was not found" }
+    expect: { status: failed, failedStep: current }

@@ -93,6 +93,8 @@ export function createContentServices(
       env,
       now: base.now,
       onSensitiveRead,
+      // One line per Microsoft call (template path, status, ms, throttling, request id) for troubleshooting by Reference.
+      onCall: log?.info ? (r) => log.info?.({ call: r }, 'microsoft call') : undefined,
     });
   const licences = deps.licences ?? new LicenceService(outbound, base.now);
   // PowerShell datasources: fixture files in DATA_MODE=fixtures; the runs worker's runner adapter when configured.

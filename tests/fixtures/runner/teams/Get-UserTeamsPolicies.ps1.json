@@ -1,0 +1,2068 @@
+{
+  "$fixture": {
+    "variants": [
+      {
+        "match": {
+          "bodyIncludes": "\"identity\":\"avery@example.com\""
+        },
+        "body": [
+          {
+            "user": {
+              "displayName": "Avery Engineer",
+              "userPrincipalName": "avery@example.com",
+              "accountEnabled": true,
+              "interpretedUserType": "PureOnlineTeamsOnlyUser",
+              "teamsUpgradeEffectiveMode": "TeamsOnly",
+              "usageLocation": "GB"
+            },
+            "summary": {
+              "direct": 1,
+              "group": 1,
+              "default": 13
+            },
+            "policies": [
+              {
+                "policyType": "TeamsMessagingPolicy",
+                "label": "Messaging",
+                "area": "Core",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "TeamsMeetingPolicy",
+                "label": "Meetings",
+                "area": "Core",
+                "policyName": "AllOn",
+                "assignment": "Direct",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "TeamsCallingPolicy",
+                "label": "Calling",
+                "area": "Core",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "TeamsAppSetupPolicy",
+                "label": "App setup",
+                "area": "Core",
+                "policyName": "IT Admin apps",
+                "assignment": "Group",
+                "groupId": "00000000-0000-4000-8000-000000000205",
+                "priority": 1
+              },
+              {
+                "policyType": "TeamsAppPermissionPolicy",
+                "label": "App permission",
+                "area": "Apps",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "TeamsChannelsPolicy",
+                "label": "Teams and channels",
+                "area": "Collaboration",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "TeamsMeetingBroadcastPolicy",
+                "label": "Live events",
+                "area": "Meetings",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "TeamsEventsPolicy",
+                "label": "Events and webinars",
+                "area": "Meetings",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "TeamsUpdateManagementPolicy",
+                "label": "Update management",
+                "area": "Client",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "TeamsFeedbackPolicy",
+                "label": "Feedback",
+                "area": "Client",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "TeamsEmergencyCallingPolicy",
+                "label": "Emergency calling",
+                "area": "Voice",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "TeamsVoiceApplicationsPolicy",
+                "label": "Voice applications",
+                "area": "Voice",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "OnlineVoiceRoutingPolicy",
+                "label": "Voice routing",
+                "area": "Voice",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "CallingLineIdentity",
+                "label": "Caller ID",
+                "area": "Voice",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "TenantDialPlan",
+                "label": "Dial plan",
+                "area": "Voice",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "match": {
+          "bodyIncludes": "\"identity\":\"blake@example.com\""
+        },
+        "body": [
+          {
+            "user": {
+              "displayName": "Blake Analyst",
+              "userPrincipalName": "blake@example.com",
+              "accountEnabled": true,
+              "interpretedUserType": "PureOnlineTeamsOnlyUser",
+              "teamsUpgradeEffectiveMode": "TeamsOnly",
+              "usageLocation": "GB"
+            },
+            "summary": {
+              "direct": 0,
+              "group": 2,
+              "default": 13
+            },
+            "policies": [
+              {
+                "policyType": "TeamsMessagingPolicy",
+                "label": "Messaging",
+                "area": "Core",
+                "policyName": "Restricted chat",
+                "assignment": "Group",
+                "groupId": "00000000-0000-4000-8000-000000000206",
+                "priority": 1
+              },
+              {
+                "policyType": "TeamsMeetingPolicy",
+                "label": "Meetings",
+                "area": "Core",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "TeamsCallingPolicy",
+                "label": "Calling",
+                "area": "Core",
+                "policyName": "No calling",
+                "assignment": "Group",
+                "groupId": "00000000-0000-4000-8000-000000000206",
+                "priority": 1
+              },
+              {
+                "policyType": "TeamsAppSetupPolicy",
+                "label": "App setup",
+                "area": "Core",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "TeamsAppPermissionPolicy",
+                "label": "App permission",
+                "area": "Apps",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "TeamsChannelsPolicy",
+                "label": "Teams and channels",
+                "area": "Collaboration",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "TeamsMeetingBroadcastPolicy",
+                "label": "Live events",
+                "area": "Meetings",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "TeamsEventsPolicy",
+                "label": "Events and webinars",
+                "area": "Meetings",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "TeamsUpdateManagementPolicy",
+                "label": "Update management",
+                "area": "Client",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "TeamsFeedbackPolicy",
+                "label": "Feedback",
+                "area": "Client",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "TeamsEmergencyCallingPolicy",
+                "label": "Emergency calling",
+                "area": "Voice",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "TeamsVoiceApplicationsPolicy",
+                "label": "Voice applications",
+                "area": "Voice",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "OnlineVoiceRoutingPolicy",
+                "label": "Voice routing",
+                "area": "Voice",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "CallingLineIdentity",
+                "label": "Caller ID",
+                "area": "Voice",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "TenantDialPlan",
+                "label": "Dial plan",
+                "area": "Voice",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "match": {
+          "bodyIncludes": "\"identity\":\"dana@example.com\""
+        },
+        "body": [
+          {
+            "user": {
+              "displayName": "Dana Former",
+              "userPrincipalName": "dana@example.com",
+              "accountEnabled": false,
+              "interpretedUserType": "PureOnlineTeamsOnlyUser",
+              "teamsUpgradeEffectiveMode": "TeamsOnly",
+              "usageLocation": "GB"
+            },
+            "summary": {
+              "direct": 3,
+              "group": 0,
+              "default": 12
+            },
+            "policies": [
+              {
+                "policyType": "TeamsMessagingPolicy",
+                "label": "Messaging",
+                "area": "Core",
+                "policyName": "Leavers",
+                "assignment": "Direct",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "TeamsMeetingPolicy",
+                "label": "Meetings",
+                "area": "Core",
+                "policyName": "RestrictedAnonymousNoRecording",
+                "assignment": "Direct",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "TeamsCallingPolicy",
+                "label": "Calling",
+                "area": "Core",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "TeamsAppSetupPolicy",
+                "label": "App setup",
+                "area": "Core",
+                "policyName": "FirstLineWorker",
+                "assignment": "Direct",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "TeamsAppPermissionPolicy",
+                "label": "App permission",
+                "area": "Apps",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "TeamsChannelsPolicy",
+                "label": "Teams and channels",
+                "area": "Collaboration",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "TeamsMeetingBroadcastPolicy",
+                "label": "Live events",
+                "area": "Meetings",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "TeamsEventsPolicy",
+                "label": "Events and webinars",
+                "area": "Meetings",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "TeamsUpdateManagementPolicy",
+                "label": "Update management",
+                "area": "Client",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "TeamsFeedbackPolicy",
+                "label": "Feedback",
+                "area": "Client",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "TeamsEmergencyCallingPolicy",
+                "label": "Emergency calling",
+                "area": "Voice",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "TeamsVoiceApplicationsPolicy",
+                "label": "Voice applications",
+                "area": "Voice",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "OnlineVoiceRoutingPolicy",
+                "label": "Voice routing",
+                "area": "Voice",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "CallingLineIdentity",
+                "label": "Caller ID",
+                "area": "Voice",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "TenantDialPlan",
+                "label": "Dial plan",
+                "area": "Voice",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "match": {
+          "bodyIncludes": "\"identity\":\"eli.obrien@example.com\""
+        },
+        "body": [
+          {
+            "user": {
+              "displayName": "Eli O'Brien",
+              "userPrincipalName": "eli.obrien@example.com",
+              "accountEnabled": true,
+              "interpretedUserType": "PureOnlineTeamsOnlyUser",
+              "teamsUpgradeEffectiveMode": "TeamsOnly",
+              "usageLocation": "GB"
+            },
+            "summary": {
+              "direct": 0,
+              "group": 0,
+              "default": 15
+            },
+            "policies": [
+              {
+                "policyType": "TeamsMessagingPolicy",
+                "label": "Messaging",
+                "area": "Core",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "TeamsMeetingPolicy",
+                "label": "Meetings",
+                "area": "Core",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "TeamsCallingPolicy",
+                "label": "Calling",
+                "area": "Core",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "TeamsAppSetupPolicy",
+                "label": "App setup",
+                "area": "Core",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "TeamsAppPermissionPolicy",
+                "label": "App permission",
+                "area": "Apps",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "TeamsChannelsPolicy",
+                "label": "Teams and channels",
+                "area": "Collaboration",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "TeamsMeetingBroadcastPolicy",
+                "label": "Live events",
+                "area": "Meetings",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "TeamsEventsPolicy",
+                "label": "Events and webinars",
+                "area": "Meetings",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "TeamsUpdateManagementPolicy",
+                "label": "Update management",
+                "area": "Client",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "TeamsFeedbackPolicy",
+                "label": "Feedback",
+                "area": "Client",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "TeamsEmergencyCallingPolicy",
+                "label": "Emergency calling",
+                "area": "Voice",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "TeamsVoiceApplicationsPolicy",
+                "label": "Voice applications",
+                "area": "Voice",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "OnlineVoiceRoutingPolicy",
+                "label": "Voice routing",
+                "area": "Voice",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "CallingLineIdentity",
+                "label": "Caller ID",
+                "area": "Voice",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "TenantDialPlan",
+                "label": "Dial plan",
+                "area": "Voice",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "match": {
+          "bodyIncludes": "\"identity\":\"farah.haddad@example.com\""
+        },
+        "body": [
+          {
+            "user": {
+              "displayName": "Farah Haddad",
+              "userPrincipalName": "farah.haddad@example.com",
+              "accountEnabled": true,
+              "interpretedUserType": "PureOnlineTeamsOnlyUser",
+              "teamsUpgradeEffectiveMode": "TeamsOnly",
+              "usageLocation": "GB"
+            },
+            "summary": {
+              "direct": 1,
+              "group": 1,
+              "default": 13
+            },
+            "policies": [
+              {
+                "policyType": "TeamsMessagingPolicy",
+                "label": "Messaging",
+                "area": "Core",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "TeamsMeetingPolicy",
+                "label": "Meetings",
+                "area": "Core",
+                "policyName": "Webinar hosts",
+                "assignment": "Group",
+                "groupId": "00000000-0000-4000-8000-000000000206",
+                "priority": 2
+              },
+              {
+                "policyType": "TeamsCallingPolicy",
+                "label": "Calling",
+                "area": "Core",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "TeamsAppSetupPolicy",
+                "label": "App setup",
+                "area": "Core",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "TeamsAppPermissionPolicy",
+                "label": "App permission",
+                "area": "Apps",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "TeamsChannelsPolicy",
+                "label": "Teams and channels",
+                "area": "Collaboration",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "TeamsMeetingBroadcastPolicy",
+                "label": "Live events",
+                "area": "Meetings",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "TeamsEventsPolicy",
+                "label": "Events and webinars",
+                "area": "Meetings",
+                "policyName": "Town halls",
+                "assignment": "Direct",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "TeamsUpdateManagementPolicy",
+                "label": "Update management",
+                "area": "Client",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "TeamsFeedbackPolicy",
+                "label": "Feedback",
+                "area": "Client",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "TeamsEmergencyCallingPolicy",
+                "label": "Emergency calling",
+                "area": "Voice",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "TeamsVoiceApplicationsPolicy",
+                "label": "Voice applications",
+                "area": "Voice",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "OnlineVoiceRoutingPolicy",
+                "label": "Voice routing",
+                "area": "Voice",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "CallingLineIdentity",
+                "label": "Caller ID",
+                "area": "Voice",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "TenantDialPlan",
+                "label": "Dial plan",
+                "area": "Voice",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "match": {
+          "bodyIncludes": "\"identity\":\"gabriel.nunes@example.com\""
+        },
+        "body": [
+          {
+            "user": {
+              "displayName": "Gabriel Nunes",
+              "userPrincipalName": "gabriel.nunes@example.com",
+              "accountEnabled": true,
+              "interpretedUserType": "PureOnlineTeamsOnlyUser",
+              "teamsUpgradeEffectiveMode": "TeamsOnly",
+              "usageLocation": "GB"
+            },
+            "summary": {
+              "direct": 3,
+              "group": 0,
+              "default": 12
+            },
+            "policies": [
+              {
+                "policyType": "TeamsMessagingPolicy",
+                "label": "Messaging",
+                "area": "Core",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "TeamsMeetingPolicy",
+                "label": "Meetings",
+                "area": "Core",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "TeamsCallingPolicy",
+                "label": "Calling",
+                "area": "Core",
+                "policyName": "AllowCalling",
+                "assignment": "Direct",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "TeamsAppSetupPolicy",
+                "label": "App setup",
+                "area": "Core",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "TeamsAppPermissionPolicy",
+                "label": "App permission",
+                "area": "Apps",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "TeamsChannelsPolicy",
+                "label": "Teams and channels",
+                "area": "Collaboration",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "TeamsMeetingBroadcastPolicy",
+                "label": "Live events",
+                "area": "Meetings",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "TeamsEventsPolicy",
+                "label": "Events and webinars",
+                "area": "Meetings",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "TeamsUpdateManagementPolicy",
+                "label": "Update management",
+                "area": "Client",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "TeamsFeedbackPolicy",
+                "label": "Feedback",
+                "area": "Client",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "TeamsEmergencyCallingPolicy",
+                "label": "Emergency calling",
+                "area": "Voice",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "TeamsVoiceApplicationsPolicy",
+                "label": "Voice applications",
+                "area": "Voice",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "OnlineVoiceRoutingPolicy",
+                "label": "Voice routing",
+                "area": "Voice",
+                "policyName": "UK-National",
+                "assignment": "Direct",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "CallingLineIdentity",
+                "label": "Caller ID",
+                "area": "Voice",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "TenantDialPlan",
+                "label": "Dial plan",
+                "area": "Voice",
+                "policyName": "UK",
+                "assignment": "Direct",
+                "groupId": null,
+                "priority": null
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "match": {
+          "bodyIncludes": "\"identity\":\"hana.kim@example.com\""
+        },
+        "body": [
+          {
+            "user": {
+              "displayName": "Hana Kim",
+              "userPrincipalName": "hana.kim@example.com",
+              "accountEnabled": true,
+              "interpretedUserType": "PureOnlineTeamsOnlyUser",
+              "teamsUpgradeEffectiveMode": "TeamsOnly",
+              "usageLocation": "GB"
+            },
+            "summary": {
+              "direct": 0,
+              "group": 1,
+              "default": 14
+            },
+            "policies": [
+              {
+                "policyType": "TeamsMessagingPolicy",
+                "label": "Messaging",
+                "area": "Core",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "TeamsMeetingPolicy",
+                "label": "Meetings",
+                "area": "Core",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "TeamsCallingPolicy",
+                "label": "Calling",
+                "area": "Core",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "TeamsAppSetupPolicy",
+                "label": "App setup",
+                "area": "Core",
+                "policyName": "Support desk",
+                "assignment": "Group",
+                "groupId": "00000000-0000-4000-8000-000000000205",
+                "priority": 1
+              },
+              {
+                "policyType": "TeamsAppPermissionPolicy",
+                "label": "App permission",
+                "area": "Apps",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "TeamsChannelsPolicy",
+                "label": "Teams and channels",
+                "area": "Collaboration",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "TeamsMeetingBroadcastPolicy",
+                "label": "Live events",
+                "area": "Meetings",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "TeamsEventsPolicy",
+                "label": "Events and webinars",
+                "area": "Meetings",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "TeamsUpdateManagementPolicy",
+                "label": "Update management",
+                "area": "Client",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "TeamsFeedbackPolicy",
+                "label": "Feedback",
+                "area": "Client",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "TeamsEmergencyCallingPolicy",
+                "label": "Emergency calling",
+                "area": "Voice",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "TeamsVoiceApplicationsPolicy",
+                "label": "Voice applications",
+                "area": "Voice",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "OnlineVoiceRoutingPolicy",
+                "label": "Voice routing",
+                "area": "Voice",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "CallingLineIdentity",
+                "label": "Caller ID",
+                "area": "Voice",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "TenantDialPlan",
+                "label": "Dial plan",
+                "area": "Voice",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "match": {
+          "bodyIncludes": "\"identity\":\"isaac.mensah@example.com\""
+        },
+        "body": [
+          {
+            "user": {
+              "displayName": "Isaac Mensah",
+              "userPrincipalName": "isaac.mensah@example.com",
+              "accountEnabled": true,
+              "interpretedUserType": "PureOnlineTeamsOnlyUser",
+              "teamsUpgradeEffectiveMode": "TeamsOnly",
+              "usageLocation": "GB"
+            },
+            "summary": {
+              "direct": 0,
+              "group": 0,
+              "default": 15
+            },
+            "policies": [
+              {
+                "policyType": "TeamsMessagingPolicy",
+                "label": "Messaging",
+                "area": "Core",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "TeamsMeetingPolicy",
+                "label": "Meetings",
+                "area": "Core",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "TeamsCallingPolicy",
+                "label": "Calling",
+                "area": "Core",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "TeamsAppSetupPolicy",
+                "label": "App setup",
+                "area": "Core",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "TeamsAppPermissionPolicy",
+                "label": "App permission",
+                "area": "Apps",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "TeamsChannelsPolicy",
+                "label": "Teams and channels",
+                "area": "Collaboration",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "TeamsMeetingBroadcastPolicy",
+                "label": "Live events",
+                "area": "Meetings",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "TeamsEventsPolicy",
+                "label": "Events and webinars",
+                "area": "Meetings",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "TeamsUpdateManagementPolicy",
+                "label": "Update management",
+                "area": "Client",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "TeamsFeedbackPolicy",
+                "label": "Feedback",
+                "area": "Client",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "TeamsEmergencyCallingPolicy",
+                "label": "Emergency calling",
+                "area": "Voice",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "TeamsVoiceApplicationsPolicy",
+                "label": "Voice applications",
+                "area": "Voice",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "OnlineVoiceRoutingPolicy",
+                "label": "Voice routing",
+                "area": "Voice",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "CallingLineIdentity",
+                "label": "Caller ID",
+                "area": "Voice",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "TenantDialPlan",
+                "label": "Dial plan",
+                "area": "Voice",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "match": {
+          "bodyIncludes": "\"identity\":\"jordan.price@example.com\""
+        },
+        "body": [
+          {
+            "user": {
+              "displayName": "Jordan Price",
+              "userPrincipalName": "jordan.price@example.com",
+              "accountEnabled": true,
+              "interpretedUserType": "PureOnlineTeamsOnlyUser",
+              "teamsUpgradeEffectiveMode": "TeamsOnly",
+              "usageLocation": "GB"
+            },
+            "summary": {
+              "direct": 0,
+              "group": 1,
+              "default": 14
+            },
+            "policies": [
+              {
+                "policyType": "TeamsMessagingPolicy",
+                "label": "Messaging",
+                "area": "Core",
+                "policyName": "Restricted chat",
+                "assignment": "Group",
+                "groupId": "00000000-0000-4000-8000-000000000206",
+                "priority": 1
+              },
+              {
+                "policyType": "TeamsMeetingPolicy",
+                "label": "Meetings",
+                "area": "Core",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "TeamsCallingPolicy",
+                "label": "Calling",
+                "area": "Core",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "TeamsAppSetupPolicy",
+                "label": "App setup",
+                "area": "Core",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "TeamsAppPermissionPolicy",
+                "label": "App permission",
+                "area": "Apps",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "TeamsChannelsPolicy",
+                "label": "Teams and channels",
+                "area": "Collaboration",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "TeamsMeetingBroadcastPolicy",
+                "label": "Live events",
+                "area": "Meetings",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "TeamsEventsPolicy",
+                "label": "Events and webinars",
+                "area": "Meetings",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "TeamsUpdateManagementPolicy",
+                "label": "Update management",
+                "area": "Client",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "TeamsFeedbackPolicy",
+                "label": "Feedback",
+                "area": "Client",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "TeamsEmergencyCallingPolicy",
+                "label": "Emergency calling",
+                "area": "Voice",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "TeamsVoiceApplicationsPolicy",
+                "label": "Voice applications",
+                "area": "Voice",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "OnlineVoiceRoutingPolicy",
+                "label": "Voice routing",
+                "area": "Voice",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "CallingLineIdentity",
+                "label": "Caller ID",
+                "area": "Voice",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "TenantDialPlan",
+                "label": "Dial plan",
+                "area": "Voice",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "match": {
+          "bodyIncludes": "\"identity\":\"kai.lindqvist@example.com\""
+        },
+        "body": [
+          {
+            "user": {
+              "displayName": "Kai Lindqvist",
+              "userPrincipalName": "kai.lindqvist@example.com",
+              "accountEnabled": true,
+              "interpretedUserType": "PureOnlineTeamsOnlyUser",
+              "teamsUpgradeEffectiveMode": "TeamsOnly",
+              "usageLocation": "GB"
+            },
+            "summary": {
+              "direct": 2,
+              "group": 0,
+              "default": 13
+            },
+            "policies": [
+              {
+                "policyType": "TeamsMessagingPolicy",
+                "label": "Messaging",
+                "area": "Core",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "TeamsMeetingPolicy",
+                "label": "Meetings",
+                "area": "Core",
+                "policyName": "AllOn",
+                "assignment": "Direct",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "TeamsCallingPolicy",
+                "label": "Calling",
+                "area": "Core",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "TeamsAppSetupPolicy",
+                "label": "App setup",
+                "area": "Core",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "TeamsAppPermissionPolicy",
+                "label": "App permission",
+                "area": "Apps",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "TeamsChannelsPolicy",
+                "label": "Teams and channels",
+                "area": "Collaboration",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "TeamsMeetingBroadcastPolicy",
+                "label": "Live events",
+                "area": "Meetings",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "TeamsEventsPolicy",
+                "label": "Events and webinars",
+                "area": "Meetings",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "TeamsUpdateManagementPolicy",
+                "label": "Update management",
+                "area": "Client",
+                "policyName": "Public preview",
+                "assignment": "Direct",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "TeamsFeedbackPolicy",
+                "label": "Feedback",
+                "area": "Client",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "TeamsEmergencyCallingPolicy",
+                "label": "Emergency calling",
+                "area": "Voice",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "TeamsVoiceApplicationsPolicy",
+                "label": "Voice applications",
+                "area": "Voice",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "OnlineVoiceRoutingPolicy",
+                "label": "Voice routing",
+                "area": "Voice",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "CallingLineIdentity",
+                "label": "Caller ID",
+                "area": "Voice",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "TenantDialPlan",
+                "label": "Dial plan",
+                "area": "Voice",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "match": {
+          "bodyIncludes": "\"identity\":\"leah.moreau@example.com\""
+        },
+        "body": [
+          {
+            "user": {
+              "displayName": "Leah Moreau",
+              "userPrincipalName": "leah.moreau@example.com",
+              "accountEnabled": true,
+              "interpretedUserType": "PureOnlineTeamsOnlyUser",
+              "teamsUpgradeEffectiveMode": "TeamsOnly",
+              "usageLocation": "GB"
+            },
+            "summary": {
+              "direct": 0,
+              "group": 0,
+              "default": 15
+            },
+            "policies": [
+              {
+                "policyType": "TeamsMessagingPolicy",
+                "label": "Messaging",
+                "area": "Core",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "TeamsMeetingPolicy",
+                "label": "Meetings",
+                "area": "Core",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "TeamsCallingPolicy",
+                "label": "Calling",
+                "area": "Core",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "TeamsAppSetupPolicy",
+                "label": "App setup",
+                "area": "Core",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "TeamsAppPermissionPolicy",
+                "label": "App permission",
+                "area": "Apps",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "TeamsChannelsPolicy",
+                "label": "Teams and channels",
+                "area": "Collaboration",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "TeamsMeetingBroadcastPolicy",
+                "label": "Live events",
+                "area": "Meetings",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "TeamsEventsPolicy",
+                "label": "Events and webinars",
+                "area": "Meetings",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "TeamsUpdateManagementPolicy",
+                "label": "Update management",
+                "area": "Client",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "TeamsFeedbackPolicy",
+                "label": "Feedback",
+                "area": "Client",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "TeamsEmergencyCallingPolicy",
+                "label": "Emergency calling",
+                "area": "Voice",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "TeamsVoiceApplicationsPolicy",
+                "label": "Voice applications",
+                "area": "Voice",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "OnlineVoiceRoutingPolicy",
+                "label": "Voice routing",
+                "area": "Voice",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "CallingLineIdentity",
+                "label": "Caller ID",
+                "area": "Voice",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "TenantDialPlan",
+                "label": "Dial plan",
+                "area": "Voice",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "match": {
+          "bodyIncludes": "\"identity\":\"nora.fischer@example.com\""
+        },
+        "body": [
+          {
+            "user": {
+              "displayName": "Nora Fischer",
+              "userPrincipalName": "nora.fischer@example.com",
+              "accountEnabled": true,
+              "interpretedUserType": "PureOnlineTeamsOnlyUser",
+              "teamsUpgradeEffectiveMode": "TeamsOnly",
+              "usageLocation": "GB"
+            },
+            "summary": {
+              "direct": 0,
+              "group": 1,
+              "default": 14
+            },
+            "policies": [
+              {
+                "policyType": "TeamsMessagingPolicy",
+                "label": "Messaging",
+                "area": "Core",
+                "policyName": "Restricted chat",
+                "assignment": "Group",
+                "groupId": "00000000-0000-4000-8000-000000000206",
+                "priority": 1
+              },
+              {
+                "policyType": "TeamsMeetingPolicy",
+                "label": "Meetings",
+                "area": "Core",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "TeamsCallingPolicy",
+                "label": "Calling",
+                "area": "Core",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "TeamsAppSetupPolicy",
+                "label": "App setup",
+                "area": "Core",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "TeamsAppPermissionPolicy",
+                "label": "App permission",
+                "area": "Apps",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "TeamsChannelsPolicy",
+                "label": "Teams and channels",
+                "area": "Collaboration",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "TeamsMeetingBroadcastPolicy",
+                "label": "Live events",
+                "area": "Meetings",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "TeamsEventsPolicy",
+                "label": "Events and webinars",
+                "area": "Meetings",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "TeamsUpdateManagementPolicy",
+                "label": "Update management",
+                "area": "Client",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "TeamsFeedbackPolicy",
+                "label": "Feedback",
+                "area": "Client",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "TeamsEmergencyCallingPolicy",
+                "label": "Emergency calling",
+                "area": "Voice",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "TeamsVoiceApplicationsPolicy",
+                "label": "Voice applications",
+                "area": "Voice",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "OnlineVoiceRoutingPolicy",
+                "label": "Voice routing",
+                "area": "Voice",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "CallingLineIdentity",
+                "label": "Caller ID",
+                "area": "Voice",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              },
+              {
+                "policyType": "TenantDialPlan",
+                "label": "Dial plan",
+                "area": "Voice",
+                "policyName": "Global",
+                "assignment": "Default",
+                "groupId": null,
+                "priority": null
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "body": [
+      {
+        "user": {
+          "displayName": "Avery Engineer",
+          "userPrincipalName": "avery@example.com",
+          "accountEnabled": true,
+          "interpretedUserType": "PureOnlineTeamsOnlyUser",
+          "teamsUpgradeEffectiveMode": "TeamsOnly",
+          "usageLocation": "GB"
+        },
+        "summary": {
+          "direct": 1,
+          "group": 1,
+          "default": 13
+        },
+        "policies": [
+          {
+            "policyType": "TeamsMessagingPolicy",
+            "label": "Messaging",
+            "area": "Core",
+            "policyName": "Global",
+            "assignment": "Default",
+            "groupId": null,
+            "priority": null
+          },
+          {
+            "policyType": "TeamsMeetingPolicy",
+            "label": "Meetings",
+            "area": "Core",
+            "policyName": "AllOn",
+            "assignment": "Direct",
+            "groupId": null,
+            "priority": null
+          },
+          {
+            "policyType": "TeamsCallingPolicy",
+            "label": "Calling",
+            "area": "Core",
+            "policyName": "Global",
+            "assignment": "Default",
+            "groupId": null,
+            "priority": null
+          },
+          {
+            "policyType": "TeamsAppSetupPolicy",
+            "label": "App setup",
+            "area": "Core",
+            "policyName": "IT Admin apps",
+            "assignment": "Group",
+            "groupId": "00000000-0000-4000-8000-000000000205",
+            "priority": 1
+          },
+          {
+            "policyType": "TeamsAppPermissionPolicy",
+            "label": "App permission",
+            "area": "Apps",
+            "policyName": "Global",
+            "assignment": "Default",
+            "groupId": null,
+            "priority": null
+          },
+          {
+            "policyType": "TeamsChannelsPolicy",
+            "label": "Teams and channels",
+            "area": "Collaboration",
+            "policyName": "Global",
+            "assignment": "Default",
+            "groupId": null,
+            "priority": null
+          },
+          {
+            "policyType": "TeamsMeetingBroadcastPolicy",
+            "label": "Live events",
+            "area": "Meetings",
+            "policyName": "Global",
+            "assignment": "Default",
+            "groupId": null,
+            "priority": null
+          },
+          {
+            "policyType": "TeamsEventsPolicy",
+            "label": "Events and webinars",
+            "area": "Meetings",
+            "policyName": "Global",
+            "assignment": "Default",
+            "groupId": null,
+            "priority": null
+          },
+          {
+            "policyType": "TeamsUpdateManagementPolicy",
+            "label": "Update management",
+            "area": "Client",
+            "policyName": "Global",
+            "assignment": "Default",
+            "groupId": null,
+            "priority": null
+          },
+          {
+            "policyType": "TeamsFeedbackPolicy",
+            "label": "Feedback",
+            "area": "Client",
+            "policyName": "Global",
+            "assignment": "Default",
+            "groupId": null,
+            "priority": null
+          },
+          {
+            "policyType": "TeamsEmergencyCallingPolicy",
+            "label": "Emergency calling",
+            "area": "Voice",
+            "policyName": "Global",
+            "assignment": "Default",
+            "groupId": null,
+            "priority": null
+          },
+          {
+            "policyType": "TeamsVoiceApplicationsPolicy",
+            "label": "Voice applications",
+            "area": "Voice",
+            "policyName": "Global",
+            "assignment": "Default",
+            "groupId": null,
+            "priority": null
+          },
+          {
+            "policyType": "OnlineVoiceRoutingPolicy",
+            "label": "Voice routing",
+            "area": "Voice",
+            "policyName": "Global",
+            "assignment": "Default",
+            "groupId": null,
+            "priority": null
+          },
+          {
+            "policyType": "CallingLineIdentity",
+            "label": "Caller ID",
+            "area": "Voice",
+            "policyName": "Global",
+            "assignment": "Default",
+            "groupId": null,
+            "priority": null
+          },
+          {
+            "policyType": "TenantDialPlan",
+            "label": "Dial plan",
+            "area": "Voice",
+            "policyName": "Global",
+            "assignment": "Default",
+            "groupId": null,
+            "priority": null
+          }
+        ]
+      }
+    ]
+  }
+}

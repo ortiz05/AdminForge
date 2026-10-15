@@ -215,9 +215,14 @@ describe.skipIf(!url)('Postgres-backed stores', () => {
   it('the app runs on Postgres stores (mock sign-in → /api/me → audit row)', async () => {
     const app = await buildApp(mockConfig({ DATABASE_URL: url! }));
     try {
-      expect((await app.inject({ method: 'GET', url: '/readyz' })).json()).toEqual({
-        status: 'ok',
-        checks: { db: 'ok' },
+      // No run worker or scheduler in this test: the API is ready, but reports them (heartbeats) as degraded.
+      expect((await app.inject({ method: 'GET', url: '/readyz' })).json()).toMatchObject({
+        status: 'degraded',
+        checks: {
+          db: 'ok',
+          worker: expect.stringMatching(/missing|stale/),
+          scheduler: expect.stringMatching(/missing|stale/),
+        },
       });
       const login = await app.inject({ method: 'GET', url: '/auth/login' });
       const cookie = cookieFrom(login)!;

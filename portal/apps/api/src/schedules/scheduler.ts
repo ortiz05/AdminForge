@@ -1,4 +1,6 @@
 import { randomUUID } from 'node:crypto';
+import { postTeams, sendEmail, type DeliveryDeps, type DeliveryStatus } from '../delivery/notifier';
+import type { NotifyTargetSpec } from '@adminforge/schemas';
 import { isWriteCapable, parseDuration, type Schedule } from '@adminforge/schemas';
 import type { AuditWriter } from '../audit/writer';
 import { toErrorInfo } from '../datasources/executor';
@@ -45,6 +47,8 @@ export interface SchedulerOptions {
   maxIdleMs?: number;
   /** Full content re-sync interval even without change notifications (default 5 min). */
   resyncMs?: number;
+  /** Email/Teams for `notify.onFailure` / `notify.onSuccess` (absent: only the audit log and the portal event). */
+  delivery?: DeliveryDeps;
 }
 
 export const DEFAULT_TIMEOUT_SECONDS = 900;
@@ -457,6 +461,16 @@ export class Scheduler {
     this.o.events.publish({ type: 'schedule.updated', data: { key: s.key, scheduleRunId: run.id, status } });
     if (status === 'failed' || status === 'timeout')
       await this.failed(s, run, status, error!, attempt, correlationId);
+    else if (status === 'succeeded' && s.definition.notify?.onSuccess?.length)
+      await this.notify(
+        s,
+        s.definition.notify.onSuccess,
+        {
+          title: `${s.definition.title} ran`,
+          text: `The schedule "${s.definition.title}" finished successfully. Reference: ${correlationId}.`,
+        },
+        correlationId,
+      );
     return row;
   }
 
@@ -501,6 +515,45 @@ export class Scheduler {
       .catch((err: unknown) =>
         this.o.log?.error?.({ err: { message: (err as Error).message } }, 'scheduler: audit failed'),
       );
+  }
+
+  /** Sends a schedule's email/Teams notifications; outcomes are audited (never thrown). */
+  private async notify(
+    s: ScheduleRow,
+    targets: readonly NotifyTargetSpec[],
+    msg: { title: string; text: string },
+    correlationId: string,
+  ): Promise<void> {
+    const delivery = this.o.delivery;
+    const link = delivery ? `${delivery.publicBaseUrl}/schedules/${encodeURIComponent(s.key)}` : undefined;
+    const results: DeliveryStatus[] = [];
+    for (const t of targets) {
+      if (!delivery)
+        results.push({ type: t.type, status: 'not_configured', message: 'Delivery is not available.' });
+      else if (t.type === 'email')
+        results.push(
+          await sendEmail(
+            delivery,
+            { to: t.to, ...(t.cc ? { cc: t.cc } : {}) },
+            { title: t.subject ?? msg.title, text: t.message ?? msg.text, ...(link ? { link } : {}) },
+            correlationId,
+          ),
+        );
+      else results.push(await postTeams(delivery, t.webhook, { ...msg, ...(link ? { link } : {}) }));
+    }
+    await this.o.audit
+      .append({
+        actorOid: 'automation',
+        actorUpn: 'automation identity',
+        mode: 'read',
+        action: 'schedule.notified',
+        targetType: 'schedule',
+        targetId: s.key,
+        result: results.every((r) => r.status === 'sent') ? 'success' : 'failure',
+        correlationId,
+        details: { results: results.map((r) => ({ type: r.type, status: r.status, message: r.message })) },
+      })
+      .catch(() => undefined);
   }
 
   /** Failure notification (audit + event), then a retry when the policy allows. */
@@ -548,6 +601,17 @@ export class Scheduler {
         ...(retryAt ? { retryAt: retryAt.toISOString() } : {}),
       },
     });
+    // Tell people only when it has really failed (no retry left), so a flaky minute doesn't page anyone.
+    if (!retryAt && def.notify?.onFailure?.length)
+      await this.notify(
+        s,
+        def.notify.onFailure,
+        {
+          title: `${def.title} failed`,
+          text: `The schedule "${def.title}" ${status === 'timeout' ? 'timed out' : 'failed'}: ${error.message.slice(0, 300)}\nReference: ${correlationId}.`,
+        },
+        correlationId,
+      );
     if (retryAt)
       await this.o.store.insertRun({
         scheduleId: s.id,

@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/page.schema.json
 kind: page
 id: identity.group
-version: 1.0.0
+version: 1.1.0
 title: Group
 summary: One group — properties, members (add/remove in bulk), owners, nesting, app assignments and group-based licensing.
 owner: identity-team
@@ -146,6 +146,14 @@ actions:
     icon: crown-simple
     inputs:
       groupId: ${ params.id }
+  - playbook: identity.edit-dynamic-rule
+    label: Edit dynamic rule
+    icon: funnel-simple
+    inputs:
+      groupId: ${ params.id }
+      membershipRule: ${ group.membershipRule }
+      processing: ${ group.membershipRuleProcessingState }
+    when: ${ group.membership = 'Dynamic' }
   - label: Open in Entra admin center
     icon: arrow-square-out
     href: "https://entra.microsoft.com/#view/Microsoft_AAD_IAM/GroupDetailsMenuBlade/~/Overview/groupId/${ $encode(params.id) }"

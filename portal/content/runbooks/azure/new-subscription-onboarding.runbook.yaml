@@ -1,0 +1,385 @@
+$schema: ../../../packages/schemas/generated/runbook.schema.json
+kind: runbook
+id: azure.new-subscription-onboarding
+version: 1.0.0
+title: New subscription onboarding
+summary: >-
+  Brings a new Azure subscription under management: confirm it is enabled, tag it and check tag policy, review who has
+  access and grant the owning team (with a second engineer's approval), then check the Defender for Cloud plans, the
+  activity-log diagnostic settings and a budget before handing it over.
+owner: azure-team
+tags: [azure, subscriptions, governance, onboarding, runbook]
+nav: { section: azure, label: Subscription onboarding, icon: rocket-launch, order: 91 }
+risk: medium
+mode: write
+requires:
+  portalRoles: [Portal.Operator]
+  scopes:
+    arm: [user_impersonation]
+  azureRoles: [Reader, Security Reader, Tag Contributor, Role Based Access Control Administrator]
+confirm:
+  type: click
+  message: >-
+    ${ 'Onboard ' & steps.subscription.output.displayName & ' (' & inputs.ticket & ')?'
+       & (inputs.ownerTag ? ' The owner tag is set to ' & inputs.ownerTag & '.' : '')
+       & (inputs.teamGroupId ? ' Granting the team ' & inputs.teamRole & ' asks a second engineer to approve.' : '') }
+approval:
+  required: false
+timeout: PT4H
+
+inputs:
+  subscriptionId: { type: string, format: guid, label: Subscription, picker: subscription }
+  ticket: { type: string, label: Request or ticket number, minLength: 3, placeholder: REQ-1234 }
+  ownerTag:
+    type: string
+    label: Owner (tag value)
+    required: false
+    maxLength: 256
+    placeholder: platform-team
+    description: Sets the owner tag on the subscription when it is missing or different (Add or update a tag).
+  teamGroupId:
+    type: string
+    format: guid
+    label: Owning team's group
+    required: false
+    picker: group
+    description: Granted the role below at subscription scope through Assign Azure role, which a second engineer approves.
+  teamRole: { type: string, label: Role for the team, default: Contributor, description: Built-in or custom role name exactly as Azure shows it. }
+
+sections:
+  - id: confirm
+    title: 1. Confirm the subscription
+    body: Check that this is the subscription the request is about, that it is enabled, and what kind of offer it is.
+    steps:
+      - id: subscription
+        type: arm
+        mode: read
+        describe: Read the subscription
+        request:
+          method: GET
+          path: /subscriptions/${ $encode($guid(inputs.subscriptionId)) }
+          apiVersion: "2022-12-01"
+
+      - id: enabled
+        type: assert
+        that: ${ steps.subscription.output.state = 'Enabled' }
+        message: ${ steps.subscription.output.displayName & ' is ' & steps.subscription.output.state & '. Only enabled subscriptions are onboarded.' }
+
+      - id: confirmSubscription
+        type: manual
+        instructions: >-
+          ${ '**' & steps.subscription.output.displayName & '** (' & steps.subscription.output.subscriptionId & ') — offer '
+             & steps.subscription.output.subscriptionPolicies.quotaId & ', spending limit '
+             & steps.subscription.output.subscriptionPolicies.spendingLimit & '. Open the [subscription page](/p/azure.subscription?id='
+             & $encode($guid(inputs.subscriptionId)) & ') for resource groups and resources.' }
+        checklist:
+          - The request ${ inputs.ticket } names this subscription and an accountable owner
+          - The subscription sits under the right management group (policies and access inherit from it)
+          - Its name follows the naming convention
+
+  - id: tags
+    title: 2. Tags and tag policy
+    body: |
+      Every subscription carries the tags in AF_REQUIRED_TAGS (default `owner`). Tag policies (require, inherit or add
+      a tag) at the subscription or a parent management group keep resources tagged too.
+    steps:
+      - id: policies
+        type: arm
+        mode: read
+        describe: Policy assignments that apply to the subscription (including inherited ones)
+        onError: continue
+        request:
+          method: GET
+          path: /subscriptions/${ $encode($guid(inputs.subscriptionId)) }/providers/Microsoft.Authorization/policyAssignments
+          apiVersion: "2022-06-01"
+          query:
+            $filter: atScope()
+
+      # Built-in tag policies: require a tag (and value) on resources / resource groups, add or replace a tag, inherit
+      # a tag from the resource group or subscription. Assignments with "tag" in their name count too.
+      - id: tagState
+        type: transform
+        expression: >-
+          ${ (
+            $required := [$split($lowercase($replace(env.AF_REQUIRED_TAGS ? env.AF_REQUIRED_TAGS : 'owner', /\s+/, '')), ',')[$ != '']];
+            $tags := steps.subscription.output.tags ? steps.subscription.output.tags : {};
+            $have := [$keys($tags).$lowercase($)];
+            $builtIn := ['871b6d14-10aa-478d-b590-94f262ecfa99', '96670d01-0a4d-4649-9c89-2d3abc0a5025',
+              '1e30110a-5ceb-460c-a204-c1c3969c6d62', '4f9dc7db-30c1-420c-b61a-e1d640128d26',
+              '5ffd78d9-436d-4b41-a421-5baa819e3008', 'ea3f2387-9b95-492a-a190-fcdc54f7b070',
+              '40df99da-1232-49b1-a39a-6da8d878f469'];
+            $policies := [steps.policies.output.value[
+              $contains($lowercase(properties.displayName ? properties.displayName : ''), 'tag')
+              or $lowercase($split(properties.policyDefinitionId, '/')[-1]) in $builtIn
+            ].properties.displayName];
+            {
+              "tags": $join($keys($tags).($ & '=' & $lookup($tags, $)), ', '),
+              "owner": $lookup($tags, $keys($tags)[$lowercase($) = 'owner'][0]),
+              "missing": [$required[$not($ in $have)]],
+              "policies": $policies,
+              "policiesRead": $exists(steps.policies.output.value)
+            }
+          ) }
+
+      - id: tagOwner
+        type: playbook
+        mode: write
+        describe: ${ 'Set the owner tag of ' & steps.subscription.output.displayName & ' to ' & inputs.ownerTag }
+        when: ${ $boolean(inputs.ownerTag) and $not(steps.tagState.output.owner = inputs.ownerTag) }
+        ref: azure.add-tags
+        inputs:
+          resourceId: ${ '/subscriptions/' & $guid(inputs.subscriptionId) }
+          tagName: owner
+          tagValue: ${ inputs.ownerTag }
+
+      - id: tagReview
+        type: manual
+        instructions: >-
+          ${ 'Tags: ' & (steps.tagState.output.tags ? steps.tagState.output.tags : 'none')
+             & '. Missing required tags: ' & ($count(steps.tagState.output.missing) > 0 ? $join(steps.tagState.output.missing, ', ') : 'none')
+             & (inputs.ownerTag ? ' (owner is set by this run)' : '') & '. '
+             & (steps.tagState.output.policiesRead
+                ? 'Tag policies in effect: ' & ($count(steps.tagState.output.policies) > 0 ? $join(steps.tagState.output.policies, ', ') : '**none**') & '. '
+                : 'Policy assignments could not be read. ')
+             & 'Untagged resources: [Untagged Azure resources](/p/azure.untagged-resources?subscriptionId=' & $encode($guid(inputs.subscriptionId)) & ').' }
+        checklist:
+          - Every required tag is on the subscription (add others with Add or update a tag on the subscription page)
+          - A tag policy applies here (assigned at the subscription or a parent management group), or an exception is recorded
+
+  - id: access
+    title: 3. Access (RBAC)
+    body: |
+      Who can change this subscription, including assignments inherited from management groups. Privileged roles
+      (Owner, User Access Administrator, Role Based Access Control Administrator) belong to groups or PIM, not to
+      individual standing user assignments.
+    steps:
+      - id: roleAssignments
+        type: arm
+        mode: read
+        describe: Role assignments that apply to the subscription (including inherited ones)
+        request:
+          method: GET
+          path: /subscriptions/${ $encode($guid(inputs.subscriptionId)) }/providers/Microsoft.Authorization/roleAssignments
+          apiVersion: "2022-04-01"
+          query:
+            $filter: atScope()
+
+      # Built-in role definition GUIDs (identical in every tenant).
+      - id: accessSummary
+        type: transform
+        expression: >-
+          ${ (
+            $names := {
+              '8e3af657-a8ff-443c-a75c-2fe8c4bcb635': 'Owner',
+              '18d7d88d-d35e-4fb5-a5c3-7773c20a72d9': 'User Access Administrator',
+              'f58310d9-a9f6-439a-9e8d-f62e7b41a168': 'Role Based Access Control Administrator',
+              'b24988ac-6180-42a0-ab88-20f7382dd24c': 'Contributor'
+            };
+            $sub := '/subscriptions/' & $guid($$.inputs.subscriptionId);
+            $rows := [steps.roleAssignments.output.value.(
+              $rid := $lowercase($split(properties.roleDefinitionId, '/')[-1]);
+              {
+                "role": $lookup($names, $rid) ? $lookup($names, $rid) : 'Other',
+                "principalType": properties.principalType,
+                "inherited": $lowercase(properties.scope) != $lowercase($sub)
+              }
+            )];
+            $privileged := $rows[role in ['Owner', 'User Access Administrator', 'Role Based Access Control Administrator']];
+            {
+              "total": $count($rows),
+              "privileged": $count($privileged),
+              "privilegedUsers": $count($privileged[principalType = 'User']),
+              "privilegedServicePrincipals": $count($privileged[principalType = 'ServicePrincipal']),
+              "inherited": $count($rows[inherited])
+            }
+          ) }
+
+      - id: grantTeam
+        type: playbook
+        mode: write
+        describe: ${ 'Grant the owning team ' & inputs.teamRole & ' on ' & steps.subscription.output.displayName & ' (needs approval)' }
+        when: ${ $boolean(inputs.teamGroupId) }
+        ref: azure.assign-role
+        inputs:
+          scope: ${ '/subscriptions/' & $guid(inputs.subscriptionId) }
+          principalId: ${ $guid(inputs.teamGroupId) }
+          principalType: Group
+          roleName: ${ inputs.teamRole }
+          reason: ${ 'Subscription onboarding ' & inputs.ticket & ' - access for the owning team' }
+
+      - id: accessReview
+        type: manual
+        instructions: >-
+          ${ $string(steps.accessSummary.output.total) & ' role assignments apply (' & $string(steps.accessSummary.output.inherited)
+             & ' inherited); ' & $string(steps.accessSummary.output.privileged) & ' privileged, of which '
+             & $string(steps.accessSummary.output.privilegedUsers) & ' to individual users and '
+             & $string(steps.accessSummary.output.privilegedServicePrincipals) & ' to service principals. Review them on the [Access tab](/p/azure.subscription?id='
+             & $encode($guid(inputs.subscriptionId)) & '&tab=access) or in [Azure role assignments](/p/azure.role-assignments?scope='
+             & $encode('/subscriptions/' & $guid(inputs.subscriptionId)) & '&include=above).' }
+        checklist:
+          - No individual user holds a standing privileged role (use a group or PIM for Azure resources)
+          - Service principals with Owner or User Access Administrator are justified and owned
+          - The owning team has the access it needs (granted above, or requested)
+          - The AdminForge automation identity can read the subscription (Reader at the subscription or a parent management group) so schedules and probes cover it
+
+  - id: defender
+    title: 4. Defender for Cloud
+    body: Defender plans protect workloads in the subscription; the security baseline says which ones must be on.
+    steps:
+      - id: pricings
+        type: arm
+        mode: read
+        describe: Defender for Cloud plans
+        onError: continue
+        request:
+          method: GET
+          path: /subscriptions/${ $encode($guid(inputs.subscriptionId)) }/providers/Microsoft.Security/pricings
+          apiVersion: "2024-01-01"
+
+      - id: plans
+        type: transform
+        expression: >-
+          ${ (
+            $p := [steps.pricings.output.value[$not(properties.deprecated = true)]];
+            {
+              "read": $exists(steps.pricings.output.value),
+              "on": [$p[properties.pricingTier = 'Standard'].name],
+              "off": [$p[properties.pricingTier != 'Standard'].name]
+            }
+          ) }
+
+      - id: defenderReview
+        type: manual
+        instructions: >-
+          ${ steps.plans.output.read
+             ? 'Plans on: ' & ($count(steps.plans.output.on) > 0 ? $join(steps.plans.output.on, ', ') : '**none**')
+               & '. Off: ' & ($count(steps.plans.output.off) > 0 ? $join(steps.plans.output.off, ', ') : 'none') & '.'
+             : 'Defender for Cloud plans could not be read (needs Reader or Security Reader).' }
+          See [Defender for Cloud](/p/security.defender-for-cloud) for the secure score and recommendations.
+        checklist:
+          - The plans the security baseline requires are on (for example Servers, Storage, Key Vault, Resource Manager)
+          - Security contact email and alert notifications are set for the subscription
+
+  - id: diagnostics
+    title: 5. Activity log and diagnostics
+    body: The subscription's activity log goes to the central Log Analytics workspace so changes are searchable and alertable.
+    steps:
+      - id: diagnosticSettings
+        type: arm
+        mode: read
+        describe: Activity-log diagnostic settings
+        onError: continue
+        request:
+          method: GET
+          path: /subscriptions/${ $encode($guid(inputs.subscriptionId)) }/providers/Microsoft.Insights/diagnosticSettings
+          apiVersion: "2021-05-01-preview"
+
+      - id: diagnosticState
+        type: transform
+        expression: >-
+          ${ {
+            "read": $exists(steps.diagnosticSettings.output.value),
+            "settings": $count(steps.diagnosticSettings.output.value),
+            "toWorkspace": [steps.diagnosticSettings.output.value[$boolean(properties.workspaceId)].$split(properties.workspaceId, '/')[-1]],
+            "categories": [$distinct(steps.diagnosticSettings.output.value.properties.logs[enabled = true].category)]
+          } }
+
+      - id: diagnosticReview
+        type: manual
+        instructions: >-
+          ${ steps.diagnosticState.output.read
+             ? $string(steps.diagnosticState.output.settings) & ' diagnostic setting(s); to Log Analytics workspace(s): '
+               & ($count(steps.diagnosticState.output.toWorkspace) > 0 ? $join(steps.diagnosticState.output.toWorkspace, ', ') : '**none**')
+               & '. Categories: ' & ($count(steps.diagnosticState.output.categories) > 0 ? $join(steps.diagnosticState.output.categories, ', ') : 'none') & '.'
+             : 'Diagnostic settings could not be read.' }
+        checklist:
+          - The activity log (Administrative, Security, Policy and ServiceHealth at least) goes to the central workspace
+          - Resource diagnostic settings are deployed by policy for the resource types in use
+
+  - id: budget
+    title: 6. Budget
+    body: A monthly budget with alerts tells the owning team about cost surprises before the invoice does.
+    steps:
+      - id: budgets
+        type: arm
+        mode: read
+        describe: Cost Management budgets
+        onError: continue
+        request:
+          method: GET
+          path: /subscriptions/${ $encode($guid(inputs.subscriptionId)) }/providers/Microsoft.Consumption/budgets
+          apiVersion: "2023-05-01"
+
+      - id: budgetReview
+        type: manual
+        instructions: >-
+          ${ $exists(steps.budgets.output.value)
+             ? ($count(steps.budgets.output.value) > 0
+                ? 'Budgets: ' & $join(steps.budgets.output.value.(name & ' ' & $string(properties.amount) & ' per ' & properties.timeGrain
+                    & ' (' & $string($count($keys(properties.notifications))) & ' alert(s))'), '; ') & '.'
+                : '**No budget** on this subscription.')
+             : 'Budgets could not be read (some offers, such as CSP, manage cost elsewhere).' }
+        checklist:
+          - A monthly budget exists with alerts (for example forecast at 80 % and actual at 100 %) to the owning team
+          - Cost allocation tags (cost centre, environment) agreed with finance
+
+  - id: handover
+    title: 7. Hand over
+    body: Record the subscription and tell the owning team it is ready.
+    steps:
+      - id: handoverChecklist
+        type: manual
+        instructions: Close the request.
+        checklist:
+          - Subscription recorded in the CMDB / subscription register with its owner
+          - Owning team told what was set up and what is theirs to maintain
+          - Request ${ inputs.ticket } updated and closed
+
+outputs:
+  summary: >-
+    ${ steps.subscription.output.displayName & ' onboarded (' & inputs.ticket & '): '
+       & $string(steps.accessSummary.output.privileged) & ' privileged assignment(s), '
+       & ($count(steps.plans.output.on) > 0 ? $string($count(steps.plans.output.on)) & ' Defender plan(s) on' : 'no Defender plans on')
+       & ($count(steps.tagState.output.missing) > 0 and $not($boolean(inputs.ownerTag)) ? ', missing tags: ' & $join(steps.tagState.output.missing, ', ') : '')
+       & '.' }
+
+tests:
+  - name: refuses a disabled subscription
+    inputs: { subscriptionId: 00000000-0000-4000-8000-0000000000a2, ticket: REQ-5101 }
+    mocks:
+      subscription: { subscriptionId: 00000000-0000-4000-8000-0000000000a2, displayName: Example Org Sandbox, state: Disabled }
+    expect: { status: failed, failedStep: enabled }
+  - name: tags the subscription and grants the owning team
+    inputs: { subscriptionId: 00000000-0000-4000-8000-0000000000a1, ticket: REQ-5102, ownerTag: platform-team, teamGroupId: 30000000-0000-4000-8000-000000000101 }
+    mocks:
+      subscription: { subscriptionId: 00000000-0000-4000-8000-0000000000a1, displayName: Example Org Production, state: Enabled, subscriptionPolicies: { quotaId: EnterpriseAgreement_2014-09-01, spendingLimit: "Off" }, tags: {} }
+      policies:
+        value:
+          - { properties: { displayName: Require an owner tag on resource groups, policyDefinitionId: /providers/Microsoft.Authorization/policyDefinitions/96670d01-0a4d-4649-9c89-2d3abc0a5025 } }
+          - { properties: { displayName: Allowed locations, policyDefinitionId: /providers/Microsoft.Authorization/policyDefinitions/e56962a6-4747-49cd-b67b-bf8b01975c4c } }
+      roleAssignments:
+        value:
+          - { properties: { roleDefinitionId: /subscriptions/00000000-0000-4000-8000-0000000000a1/providers/Microsoft.Authorization/roleDefinitions/8e3af657-a8ff-443c-a75c-2fe8c4bcb635, principalType: User, scope: /subscriptions/00000000-0000-4000-8000-0000000000a1 } }
+          - { properties: { roleDefinitionId: /providers/Microsoft.Authorization/roleDefinitions/acdd72a7-3385-48ef-bd42-f606fba81ae7, principalType: Group, scope: /providers/Microsoft.Management/managementGroups/mg-example } }
+      pricings: { value: [{ name: VirtualMachines, properties: { pricingTier: Standard } }, { name: StorageAccounts, properties: { pricingTier: Free } }] }
+      diagnosticSettings: { value: [] }
+      budgets: { value: [] }
+    expect:
+      status: succeeded
+      plan: [tagOwner, grantTeam]
+      outputs: { summary: "Example Org Production onboarded (REQ-5102): 1 privileged assignment(s), 1 Defender plan(s) on." }
+  - name: only reviews when nothing needs changing and optional reads fail
+    inputs: { subscriptionId: 00000000-0000-4000-8000-0000000000a1, ticket: REQ-5103, ownerTag: platform-team }
+    mocks:
+      subscription: { subscriptionId: 00000000-0000-4000-8000-0000000000a1, displayName: Example Org Production, state: Enabled, subscriptionPolicies: { quotaId: EnterpriseAgreement_2014-09-01, spendingLimit: "Off" }, tags: { Owner: platform-team } }
+      roleAssignments: { value: [] }
+    errors:
+      policies: { status: 403, code: AuthorizationFailed }
+      pricings: { status: 403, code: AuthorizationFailed }
+      diagnosticSettings: { status: 403, code: AuthorizationFailed }
+      budgets: { status: 400, code: UnsupportedOfferType }
+    expect:
+      status: succeeded
+      plan: []
+      steps: { tagOwner: skipped, grantTeam: skipped }
+      outputs: { summary: "Example Org Production onboarded (REQ-5103): 0 privileged assignment(s), no Defender plans on." }

@@ -1,0 +1,141 @@
+$schema: ../../../packages/schemas/generated/report.schema.json
+kind: report
+id: m365.inbox-rules
+version: 1.0.0
+title: Inbox rule audit
+summary: >-
+  Inbox rules that forward or redirect mail outside the organization, delete it, or move it to folders people rarely
+  check (RSS Feeds, Conversation History, Junk, Deleted Items) — common after an account compromise. One mailbox, or
+  the first mailboxes of the organization.
+owner: m365-team
+tags: [m365, exchange, security, data-loss, inbox-rules]
+nav: { section: reports, label: Inbox rule audit, icon: funnel, order: 125 }
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    exchange: [Exchange.Manage]
+  entraRoles: [Exchange Administrator, Exchange Recipient Administrator]
+  licences: [exchange]
+
+params:
+  mailbox: { type: string, format: email, label: Mailbox, placeholder: Leave empty to scan the organization, facet: true }
+  allRules: { type: boolean, label: Show every rule (not only risky ones), default: false, facet: true }
+  includeHidden: { type: boolean, label: Include hidden rules, default: false, facet: true }
+  maxMailboxes:
+    type: number
+    label: Mailboxes to scan
+    default: 500
+    min: 1
+    max: 5000
+    integer: true
+    facet: true
+
+filters:
+  facets: [mailbox, allRules, includeHidden, maxMailboxes]
+
+savedViews:
+  enabled: true
+  shared: true
+  presets:
+    - { name: Forwarding outside the organization, params: { allRules: false } }
+    - { name: Every rule, params: { allRules: true } }
+
+datasources:
+  rules:
+    source: runner
+    label: Inbox rules (PowerShell)
+    script: exchange/Get-InboxRules.ps1
+    sha256: ef8268fcfc41fe09f7ecfbcb1d87eec7e91659f665d2cff679328be74779366d
+    services: [exchange]
+    timeoutSeconds: 1800
+    parameters:
+      identity: ${ params.mailbox }
+      maxMailboxes: "${ params.maxMailboxes ? $number(params.maxMailboxes) : 500 }"
+      riskyOnly: ${ params.allRules != true }
+      includeHidden: ${ params.includeHidden = true }
+    cache: { ttl: 900 }
+    # value = [script output] — one object { scope, acceptedDomains, summary, rules }. Adds display text per rule.
+    transform: >-
+      ${ (
+        $v := value[0];
+        $rows := [$v.rules.$merge([$, {
+          "targetText": $join(targets, ', '),
+          "riskOrder": risk = 'high' ? 0 : risk = 'medium' ? 1 : risk = 'low' ? 2 : 3
+        }])];
+        {
+          "rows": [$sort($rows, function($a, $b) { $a.riskOrder > $b.riskOrder })],
+          "scope": $v.scope,
+          "summary": $v.summary,
+          "mailboxes": $count($distinct($rows[risk in ['high', 'medium']].mailbox)),
+          "byRisk": [
+            { "risk": "Outside forwarding", "rules": $v.summary.high },
+            { "risk": "Deletes or hides mail", "rules": $v.summary.medium },
+            { "risk": "Inside forwarding", "rules": $v.summary.low }
+          ]
+        }
+      ) }
+
+layout:
+  - widget: kpi
+    data: rules.summary.high
+    label: Forward or redirect outside
+    format: number
+    status: "${ value > 0 ? 'crit' : 'ok' }"
+  - widget: kpi
+    data: rules.summary.medium
+    label: Delete or hide mail
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+  - widget: kpi
+    data: rules.mailboxes
+    label: Mailboxes with risky rules
+    format: number
+  - widget: kpi
+    data: rules.summary.mailboxesScanned
+    label: Mailboxes scanned
+    format: number
+  - widget: markdown
+    span: 12
+    when: ${ rules.summary.mailboxesFailed > 0 }
+    text: ${ rules.summary.mailboxesFailed & " mailbox(es) couldn't be read and are not in the results. Your Exchange role needs Get-InboxRule (Mail Recipients or higher)." }
+  - widget: markdown
+    span: 12
+    text: |
+      **What to do.** A rule that sends mail outside the organization, or quietly deletes or files away mail about
+      invoices, payments or sign-ins, is a typical sign of a compromised account. Check the person's recent sign-ins
+      before removing the rule in Outlook or with `Remove-InboxRule`, and reset their password and sessions if the
+      rule wasn't theirs. Mailbox-level forwarding is on the Mail forwarding page.
+  - widget: table
+    id: rules
+    span: 12
+    data: rules.rows
+    rowKey: key
+    columns:
+      - { field: mailbox, label: Mailbox, kind: identity, secondary: userPrincipalName }
+      - { field: ruleName, label: Rule }
+      - field: risk
+        label: Risk
+        kind: status
+        map: { high: [crit, Outside forwarding], medium: [warn, Deletes or hides mail], low: [info, Inside forwarding], none: [neutral, None] }
+        filter: facet
+      - { field: reasons, label: Why, kind: tags }
+      - { field: targetText, label: Sends to }
+      - { field: conditions, label: When }
+      - { field: enabled, label: Enabled, kind: boolean, filter: facet }
+      - { field: moveToFolder, label: Moves to, hidden: true }
+      - { field: markAsRead, label: Marks as read, kind: boolean, hidden: true }
+      - { field: stopProcessingRules, label: Stops other rules, kind: boolean, hidden: true }
+      - { field: priority, label: Order, kind: number, hidden: true }
+    inspect:
+      page: m365.mailbox
+      params:
+        mailbox: ${ row.mailbox }
+    empty:
+      title: No risky inbox rules
+      body: No rule forwards mail outside the organization, deletes it or hides it. Turn on "Show every rule" to see all rules.
+
+export:
+  formats: [csv, xlsx]
+  fileName: inbox-rules
+  data: rules.rows
+  columns: all

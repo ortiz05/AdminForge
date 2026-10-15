@@ -1,4 +1,8 @@
 import { randomBytes } from 'node:crypto';
+import { loadEnv } from '@adminforge/config';
+import { notifyApprovers, type DeliveryDeps } from '../delivery/notifier';
+import { isArmed } from '../auth/session-store';
+import { Heartbeat } from '../health/heartbeat';
 import { Engine, type Clock, type Limits, type RunnerPort } from '@adminforge/engine';
 import { tokenCacheKey } from '../config';
 import type { AppContext } from '../context';
@@ -39,6 +43,8 @@ export interface RunsOptions {
   runner?: RunnerPort | null;
   /** Consume jobs in this process. Default: RUN_WORKER_IN_PROCESS=true, or always with the in-memory queue. */
   inProcessWorker?: boolean;
+  /** Tests: replaces the post-run token refresh (playbooks with `refreshTokens: true`). */
+  refreshTokens?: (sessionHash: string) => Promise<void>;
   workerConcurrency?: number;
   /** Periodic sweep (approval expiry, lost jobs) in the in-process worker. Default true. */
   sweep?: boolean;
@@ -129,7 +135,24 @@ export function createRunsModule(ctx: AppContext, opts: RunsOptions = {}): RunsM
     }
   }
 
-  const store = new RepositoryRunStore(repo, ctx.audit);
+  const approvalsDelivery: DeliveryDeps = {
+    outbound: ctx.outbound,
+    fetch: ctx.fetch,
+    env: testing ? {} : loadEnv(),
+    publicBaseUrl: ctx.config.PUBLIC_BASE_URL,
+  };
+  const store = new RepositoryRunStore(repo, ctx.audit, async (r) => {
+    const results = await notifyApprovers(
+      approvalsDelivery,
+      { title: r.title, requestedBy: r.requestedBy, path: `/runs/${r.runId}` },
+      r.correlationId,
+    );
+    if (results.some((x) => x.status !== 'sent'))
+      opts.log?.warn(
+        { results: results.map((x) => ({ type: x.type, status: x.status })) },
+        'approver notification incomplete',
+      );
+  });
   const pg = !!ctx.database && !!ctx.config.DATABASE_URL && !(repo instanceof MemoryRunRepository);
   const secrets = new SecretBroker({
     repo,
@@ -176,10 +199,28 @@ export function createRunsModule(ctx: AppContext, opts: RunsOptions = {}): RunsM
     bus,
     now: ctx.now,
     ...(log ? { log } : {}),
+    // New Entra roles (PIM activation) only reach Microsoft in fresh tokens: refresh Graph and ARM for that session.
+    refreshTokens:
+      opts.refreshTokens ??
+      (async (hash) => {
+        const session = await ctx.sessions.get(hash);
+        if (!session || !ctx.broker) return;
+        const modes = isArmed(session, ctx.now()) ? (['read', 'write'] as const) : (['read'] as const);
+        for (const mode of modes)
+          for (const service of ['graph', 'arm'] as const)
+            await ctx.broker.get(session, service, mode, { forceRefresh: true });
+      }),
   });
   const service = new RunService({ repo, queue, store, definitions, audit: ctx.audit, env, now: ctx.now });
 
   let started = false;
+  // Tells /readyz the run worker is alive (only where this process consumes the queue, on Postgres).
+  const heartbeat =
+    consuming && ctx.database && !testing
+      ? new Heartbeat(ctx.database.db, 'worker', ctx.now, (err) =>
+          opts.log?.warn({ err }, 'worker heartbeat failed'),
+        )
+      : null;
   return {
     service,
     repo,
@@ -195,10 +236,14 @@ export function createRunsModule(ctx: AppContext, opts: RunsOptions = {}): RunsM
       if (started) return;
       started = true;
       await secrets.start();
-      if (consuming) await worker.start(opts.workerConcurrency ?? 4, { sweep: opts.sweep ?? !testing });
+      if (consuming) {
+        await worker.start(opts.workerConcurrency ?? 4, { sweep: opts.sweep ?? !testing });
+        heartbeat?.start();
+      }
     },
     async stop() {
       started = false;
+      heartbeat?.stop();
       await worker.stop();
       await queue.stop();
       await bus.stop();

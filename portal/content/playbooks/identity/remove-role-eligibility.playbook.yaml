@@ -1,0 +1,131 @@
+$schema: ../../../packages/schemas/generated/playbook.schema.json
+kind: playbook
+id: identity.remove-role-eligibility
+version: 1.0.0
+title: Remove eligible role assignment (PIM)
+summary: >-
+  Removes a direct eligible assignment of a Microsoft Entra role in Privileged Identity Management, so the holder can no
+  longer activate it. Eligibility inherited through a group is changed on the group (or its membership) instead.
+owner: identity-team
+tags: [identity, pim, roles, privileged-access]
+risk: medium
+mode: write
+requires:
+  portalRoles: [Portal.Operator]
+  scopes:
+    graph: [RoleEligibilitySchedule.ReadWrite.Directory, Directory.Read.All]
+  entraRoles: [Privileged Role Administrator]
+  licences: [pim]
+confirm:
+  type: click
+  message: >-
+    ${ steps.principal.output.displayName & ' will no longer be able to activate ' & steps.eligibility.output.roleDefinition.displayName & '.' }
+approval:
+  required: false
+
+inputs:
+  roleDefinitionId: { type: string, format: guid, label: Role (definition id) }
+  principalId: { type: string, format: guid, label: Eligible holder, picker: user }
+  directoryScopeId: { type: string, label: Scope, default: /, pattern: "^/(administrativeUnits/[0-9a-fA-F-]{36})?$" }
+  justification: { type: string, label: Justification, minLength: 10, maxLength: 500, multiline: true }
+
+steps:
+  # Same request as the user page's Roles tab.
+  - id: eligible
+    type: graph
+    mode: read
+    describe: Read the holder's eligible assignments
+    request:
+      method: GET
+      path: /roleManagement/directory/roleEligibilityScheduleInstances
+      query:
+        $filter: ${ 'principalId eq ' & $odata($guid(inputs.principalId)) }
+        $expand: roleDefinition
+
+  - id: matching
+    type: transform
+    expression: >-
+      ${ [steps.eligible.output.value[
+           $lowercase(roleDefinitionId) = $guid($$.inputs.roleDefinitionId) and directoryScopeId = $$.inputs.directoryScopeId
+         ]] }
+
+  - id: isEligible
+    type: assert
+    that: ${ $count(steps.matching.output) > 0 }
+    message: This holder is not eligible for that role at that scope.
+
+  - id: eligibility
+    type: transform
+    expression: ${ steps.matching.output[memberType = 'Direct'][0] }
+
+  - id: direct
+    type: assert
+    that: ${ $exists(steps.eligibility.output.id) }
+    message: >-
+      The eligibility is inherited through a group. Remove the group's eligibility, or remove the holder from the group.
+
+  - id: principal
+    type: graph
+    mode: read
+    describe: Look up the holder
+    request:
+      method: GET
+      path: /directoryObjects/${ $encode($guid(inputs.principalId)) }
+
+  - id: remove
+    type: graph
+    mode: write
+    describe: ${ 'Remove the eligibility of ' & steps.principal.output.displayName & ' for ' & steps.eligibility.output.roleDefinition.displayName }
+    idempotent: false
+    request:
+      method: POST
+      path: /roleManagement/directory/roleEligibilityScheduleRequests
+      body:
+        action: adminRemove
+        principalId: ${ $guid(inputs.principalId) }
+        roleDefinitionId: ${ steps.eligibility.output.roleDefinitionId }
+        directoryScopeId: ${ inputs.directoryScopeId }
+        justification: ${ inputs.justification }
+    dryRunOutput: { id: planned-eligibility-request, status: Revoked }
+    compensate:
+      type: graph
+      describe: Make the holder eligible again until the original end date
+      request:
+        method: POST
+        path: /roleManagement/directory/roleEligibilityScheduleRequests
+        body:
+          action: adminAssign
+          principalId: ${ $guid(inputs.principalId) }
+          roleDefinitionId: ${ steps.eligibility.output.roleDefinitionId }
+          directoryScopeId: ${ inputs.directoryScopeId }
+          justification: ${ 'Undo of AdminForge run ' & run.id }
+          scheduleInfo:
+            startDateTime: ${ $iso() }
+            expiration: >-
+              ${ steps.eligibility.output.endDateTime
+                 ? { 'type': 'afterDateTime', 'endDateTime': steps.eligibility.output.endDateTime }
+                 : { 'type': 'noExpiration' } }
+
+outputs:
+  summary: ${ steps.principal.output.displayName & ' is no longer eligible for ' & steps.eligibility.output.roleDefinition.displayName & '.' }
+
+tests:
+  - name: refuses a role the holder is not eligible for
+    inputs: { roleDefinitionId: fe930be7-5e62-47db-91af-98c3a49a38b1, principalId: 00000000-0000-4000-8000-000000000101, justification: quarterly access review }
+    mocks:
+      eligible: { value: [{ id: re-03, roleDefinitionId: e8611ab8-c189-46e8-94e1-60213ab1f814, directoryScopeId: /, memberType: Direct, roleDefinition: { displayName: Privileged Role Administrator } }] }
+    expect: { status: failed, failedStep: isEligible }
+  - name: refuses eligibility inherited through a group
+    inputs: { roleDefinitionId: e8611ab8-c189-46e8-94e1-60213ab1f814, principalId: 00000000-0000-4000-8000-000000000102, justification: quarterly access review }
+    mocks:
+      eligible: { value: [{ id: re-21, roleDefinitionId: e8611ab8-c189-46e8-94e1-60213ab1f814, directoryScopeId: /, memberType: Group, roleDefinition: { displayName: Privileged Role Administrator } }] }
+    expect: { status: failed, failedStep: direct }
+  - name: plans removing a direct eligibility
+    inputs: { roleDefinitionId: E8611AB8-C189-46E8-94E1-60213AB1F814, principalId: 00000000-0000-4000-8000-000000000101, justification: quarterly access review }
+    mocks:
+      eligible: { value: [{ id: re-03, roleDefinitionId: e8611ab8-c189-46e8-94e1-60213ab1f814, directoryScopeId: /, memberType: Direct, endDateTime: "2027-03-31T00:00:00Z", roleDefinition: { displayName: Privileged Role Administrator } }] }
+      principal: { "@odata.type": "#microsoft.graph.user", id: 00000000-0000-4000-8000-000000000101, displayName: Adele Lee }
+    expect:
+      status: succeeded
+      plan: [remove]
+      outputs: { summary: Adele Lee is no longer eligible for Privileged Role Administrator. }

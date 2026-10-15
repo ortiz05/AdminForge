@@ -1,0 +1,8 @@
+{
+  "id": "grant-pdf-mchen",
+  "clientId": "00000000-0000-4000-8000-000000000404",
+  "consentType": "Principal",
+  "principalId": "00000000-0000-4000-8000-000000000102",
+  "resourceId": "00000000-0000-4000-8000-000000000409",
+  "scope": "Mail.Read offline_access User.Read"
+}

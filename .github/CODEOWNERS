@@ -1,0 +1,22 @@
+# Code owners (plan §7.9 two-person review). Takes effect with branch protection on `main`:
+# Settings → Branches → require a pull request and "Require review from Code Owners".
+# Add more owners (GitHub handles or teams) as engineers join; the author can't approve their own PR.
+
+*                                   @ortiz05
+
+# Content that can change the tenant, run unattended, or call out: always a second pair of eyes.
+/portal/content/playbooks/          @ortiz05
+/portal/content/runbooks/           @ortiz05
+/portal/content/schedules/          @ortiz05
+/portal/content/connections/        @ortiz05
+/portal/content/scripts/            @ortiz05
+
+# Security-sensitive code and configuration.
+/portal/apps/api/src/auth/          @ortiz05
+/portal/apps/api/src/security/      @ortiz05
+/portal/apps/api/src/execution/     @ortiz05
+/portal/apps/runner/                @ortiz05
+/portal/tools/cli/src/provision/    @ortiz05
+/portal/deploy/                     @ortiz05
+/.github/                           @ortiz05
+/.claude/                           @ortiz05

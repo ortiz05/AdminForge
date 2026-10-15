@@ -48,7 +48,10 @@ export const READ_GRAPH_SCOPES = [
   'Team.ReadBasic.All',
 ] as const;
 
-/** Write app, Microsoft Graph delegated scopes. Directory.ReadWrite.All is deliberately absent. */
+/**
+ * Write app, Microsoft Graph delegated scopes. Directory.ReadWrite.All is deliberately absent; scopes only some content
+ * needs (directory roles, Conditional Access, …) come from that content's `requires.scopes` instead of this baseline.
+ */
 export const WRITE_GRAPH_SCOPES = [
   ...OIDC_SCOPES,
   'User.ReadWrite.All',
@@ -57,11 +60,8 @@ export const WRITE_GRAPH_SCOPES = [
   'Group.ReadWrite.All',
   'GroupMember.ReadWrite.All',
   'UserAuthenticationMethod.ReadWrite.All',
-  'RoleManagement.ReadWrite.Directory',
   'RoleAssignmentSchedule.ReadWrite.Directory',
   'Application.ReadWrite.All',
-  'Policy.ReadWrite.ConditionalAccess',
-  'DeviceManagementManagedDevices.ReadWrite.All',
   'DeviceManagementManagedDevices.PrivilegedOperations.All',
   'Mail.Send',
 ] as const;

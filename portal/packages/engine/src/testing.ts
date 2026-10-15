@@ -84,6 +84,8 @@ export async function runPlaybookTest(
   index = 0,
   opts: RunTestsOptions = {},
 ): Promise<PlaybookTestResult> {
+  // Per-test `now` / `env` win over the runner's defaults.
+  opts = { ...opts, now: test.now ?? opts.now, env: { ...(opts.env ?? {}), ...(test.env ?? {}) } };
   const clock = new VirtualClock(opts.now ?? '2026-01-15T12:00:00.000Z');
   const store = new MemoryRunStore(clock.now);
   const base = {

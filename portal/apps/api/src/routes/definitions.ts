@@ -29,8 +29,9 @@ export interface DefinitionSummary {
 }
 
 const HREF_KINDS = new Set(['page', 'dashboard', 'report', 'playbook', 'runbook']);
+/** Every role in `requires.portalRoles` (one rule for pages, playbooks, exports and scheduled data). */
 const allowed = (roles: string[], def: Definition) =>
-  !def.requires?.portalRoles?.length || def.requires.portalRoles.some((r) => hasRole({ roles }, r));
+  (def.requires?.portalRoles ?? []).every((r) => hasRole({ roles }, r));
 
 export function definitionRoutes(api: FastifyInstance, ctx: AppContext) {
   /** The client-safe definition plus `version` and `sha256` (pin these when starting a run). */

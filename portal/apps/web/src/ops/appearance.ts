@@ -35,8 +35,14 @@ export interface AppearanceState {
   /** As stored, per theme (kept whole so tokens this page doesn't edit survive a publish). */
   overrides: Partial<Record<ThemeName, ThemeOverrides>>;
   density: Density | null;
+  /** Default theme for people without a preference (null = follow each person's OS). */
+  theme: OrgTheme | null;
   fontScale: number | null;
 }
+
+export type OrgTheme = ThemeName | 'system';
+const isOrgTheme = (v: unknown): v is OrgTheme =>
+  v === 'system' || (typeof v === 'string' && (THEME_NAMES as readonly string[]).includes(v));
 
 const HEX = /^#[0-9a-f]{6}$/i;
 export const isHex = (v: string) => HEX.test(v);
@@ -60,6 +66,7 @@ export const AppearanceResponse = parser((input): AppearanceState => {
     version,
     overrides: readOverrides(o.overrides),
     density: o.density === 'compact' || o.density === 'comfortable' ? o.density : null,
+    theme: isOrgTheme(o.theme) ? o.theme : null,
     fontScale: num(o.fontScale) ?? null,
   };
 });
@@ -74,6 +81,7 @@ export interface AppearanceBody {
   version: number;
   overrides: AppearanceState['overrides'];
   density?: Density;
+  theme?: OrgTheme;
   fontScale?: number;
 }
 
@@ -151,12 +159,15 @@ export { THEME_NAMES, type ThemeName };
 
 export interface Draft {
   accents: Record<ThemeName, string>;
+  theme: OrgTheme;
   density: Density;
   fontScale: number;
   radiusScale: number;
 }
 
-export function draftFrom(s: Pick<AppearanceState, 'overrides' | 'density' | 'fontScale'>): Draft {
+export function draftFrom(
+  s: Pick<AppearanceState, 'overrides' | 'density' | 'fontScale'> & Partial<Pick<AppearanceState, 'theme'>>,
+): Draft {
   const accent = (t: ThemeName) => {
     const v = s.overrides[t]?.accent;
     return typeof v === 'string' && isHex(v) ? v.toUpperCase() : defaultHex(t, 'accent');
@@ -166,6 +177,7 @@ export function draftFrom(s: Pick<AppearanceState, 'overrides' | 'density' | 'fo
   );
   return {
     accents: Object.fromEntries(THEME_NAMES.map((t) => [t, accent(t)])) as Record<ThemeName, string>,
+    theme: s.theme ?? 'system',
     density: s.density ?? 'comfortable',
     fontScale: s.fontScale ?? 1,
     radiusScale: radius ?? 1,
@@ -187,6 +199,7 @@ export function bodyFor(d: Draft, base: AppearanceState): AppearanceBody {
     version: base.version,
     overrides,
     ...(d.density !== 'comfortable' ? { density: d.density } : {}),
+    ...(d.theme !== 'system' ? { theme: d.theme } : {}),
     ...(Math.abs(d.fontScale - 1) > 0.001 ? { fontScale: Math.round(d.fontScale * 1000) / 1000 } : {}),
   };
 }

@@ -152,6 +152,122 @@ export function daysUntil(value: unknown, now: Date = new Date()): number {
   return Math.floor((toDate(value, '$daysUntil').getTime() - now.getTime()) / DAY_MS);
 }
 
+/** A query-builder condition for `filters.advanced.dialect: rows`, as the API puts it in scope (already validated). */
+export interface RowsFilterCondition {
+  /** Dot path into the row (`owner.displayName`). */
+  path: string;
+  type: 'string' | 'number' | 'boolean' | 'date' | 'guid' | 'enum';
+  op: 'eq' | 'ne' | 'gt' | 'ge' | 'lt' | 'le' | 'startsWith' | 'contains' | 'in' | 'isEmpty';
+  value: string | number | boolean | Array<string | number | boolean> | null;
+}
+/** `advanced` in the expression scope of a `dialect: rows` page: conditions joined with and/or (nesting ≤ 2). */
+export interface RowsFilterGroup {
+  join: 'and' | 'or';
+  clauses: Array<RowsFilterCondition | RowsFilterGroup>;
+}
+
+const ROWS_OPS = new Set(['eq', 'ne', 'gt', 'ge', 'lt', 'le', 'startsWith', 'contains', 'in', 'isEmpty']);
+const ROWS_PATH = /^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)*$/;
+
+function readPath(row: unknown, path: string): unknown {
+  let v: unknown = row;
+  for (const key of path.split('.')) {
+    if (v === null || typeof v !== 'object' || Array.isArray(v) || !Object.hasOwn(v, key)) return undefined;
+    v = (v as Record<string, unknown>)[key];
+  }
+  return v;
+}
+
+/** Comparable form of one value: lower-cased text, epoch ms for dates, numbers and booleans as they are. */
+function comparable(type: RowsFilterCondition['type'], v: unknown): string | number | boolean | undefined {
+  if (v === undefined || v === null || v === '') return undefined;
+  if (type === 'date') {
+    const t = typeof v === 'string' || typeof v === 'number' ? new Date(v).getTime() : Number.NaN;
+    return Number.isNaN(t) ? undefined : t;
+  }
+  if (type === 'number') return typeof v === 'number' ? v : Number.isNaN(Number(v)) ? undefined : Number(v);
+  if (type === 'boolean')
+    return typeof v === 'boolean' ? v : v === 'true' ? true : v === 'false' ? false : undefined;
+  if (typeof v === 'string') return v.toLowerCase();
+  if (typeof v === 'number' || typeof v === 'boolean') return v;
+  return undefined;
+}
+
+function matchOne(c: RowsFilterCondition, actual: unknown): boolean {
+  const a = comparable(c.type, actual);
+  const values = (Array.isArray(c.value) ? c.value : [c.value]).map((v) => comparable(c.type, v));
+  const want = values[0];
+  if (a === undefined) return false;
+  switch (c.op) {
+    case 'eq':
+      return a === want;
+    case 'in':
+      return values.includes(a);
+    case 'startsWith':
+      return typeof a === 'string' && typeof want === 'string' && a.startsWith(want);
+    case 'contains':
+      return typeof a === 'string' && typeof want === 'string' && a.includes(want);
+    case 'gt':
+      return want !== undefined && a > want;
+    case 'ge':
+      return want !== undefined && a >= want;
+    case 'lt':
+      return want !== undefined && a < want;
+    case 'le':
+      return want !== undefined && a <= want;
+    default:
+      return false;
+  }
+}
+
+function matchCondition(c: RowsFilterCondition, row: unknown): boolean {
+  const actual = readPath(row, c.path);
+  const list = Array.isArray(actual) ? actual : [actual];
+  if (c.op === 'isEmpty') return list.every((v) => v === undefined || v === null || v === '');
+  // A list-valued field (tags, addresses) matches when any element does; `ne` when none equals the value.
+  if (c.op === 'ne') return !list.some((v) => matchOne({ ...c, op: 'eq' }, v));
+  return list.some((v) => matchOne(c, v));
+}
+
+function checkRowsFilter(g: unknown, depth: number): RowsFilterGroup {
+  const bad = (why: string): never => {
+    throw new Error(`$applyAdvanced: not a query-builder filter (${why})`);
+  };
+  if (!g || typeof g !== 'object' || Array.isArray(g)) return bad('expected an object');
+  const { join, clauses } = g as { join?: unknown; clauses?: unknown };
+  if (join !== 'and' && join !== 'or') return bad('join must be and/or');
+  if (!Array.isArray(clauses)) return bad('clauses must be a list');
+  for (const c of clauses as unknown[]) {
+    if (c && typeof c === 'object' && 'join' in c) {
+      if (depth >= 2) bad('nested too deeply');
+      checkRowsFilter(c, depth + 1);
+      continue;
+    }
+    const { path, op } = (c ?? {}) as { path?: unknown; op?: unknown };
+    if (typeof path !== 'string' || !ROWS_PATH.test(path)) bad('invalid path');
+    if (typeof op !== 'string' || !ROWS_OPS.has(op)) bad('invalid operator');
+  }
+  return g as RowsFilterGroup;
+}
+
+function matchGroup(g: RowsFilterGroup, row: unknown): boolean {
+  const test = (c: RowsFilterCondition | RowsFilterGroup) =>
+    'join' in c ? matchGroup(c, row) : matchCondition(c, row);
+  return g.join === 'and' ? g.clauses.every(test) : g.clauses.some(test);
+}
+
+/**
+ * Rows that match the query builder's filter (`filters.advanced.dialect: rows`): `$applyAdvanced(rows, advanced)` in
+ * a datasource transform. No filter (`advanced` undefined/null) returns the rows unchanged. Text comparisons ignore
+ * case; dates compare as instants; a row without the field matches nothing but `ne`.
+ */
+export function applyAdvanced(rows: unknown, filter: unknown): unknown[] {
+  const list = rows === undefined || rows === null ? [] : Array.isArray(rows) ? rows : [rows];
+  if (filter === undefined || filter === null) return [...list];
+  const g = checkRowsFilter(filter, 1);
+  return list.filter((row) => matchGroup(g, row));
+}
+
 /** `now` from the evaluation scope when present (tests, consistent run timestamps), else the clock. */
 function scopeNow(focus: jsonata.Focus | undefined): Date {
   const root = focus?.environment?.lookup('$') as { now?: unknown } | undefined;
@@ -175,6 +291,7 @@ export const HELPER_NAMES = [
   'kql',
   'uuid',
   'secureRandom',
+  'applyAdvanced',
 ] as const;
 
 /** Registers the helpers on a compiled expression. */
@@ -197,4 +314,5 @@ export function registerHelpers(expr: jsonata.Expression): void {
   expr.registerFunction('daysUntil', function (this: jsonata.Focus, v: unknown) {
     return daysUntil(v, scopeNow(this));
   });
+  expr.registerFunction('applyAdvanced', (rows: unknown, filter: unknown) => applyAdvanced(rows, filter));
 }

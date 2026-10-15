@@ -1,0 +1,190 @@
+$schema: ../../../packages/schemas/generated/playbook.schema.json
+kind: playbook
+id: identity.add-role-eligibility
+version: 1.0.0
+title: Add eligible role assignment (PIM)
+summary: >-
+  Makes a user or role-assignable group eligible for a Microsoft Entra role through Privileged Identity Management, so
+  the role is activated just in time instead of held permanently. The role's PIM settings decide the maximum
+  eligibility, MFA, justification and approval on activation. Needs approval by a second engineer.
+owner: identity-team
+tags: [identity, pim, roles, privileged-access]
+risk: high
+mode: write
+requires:
+  portalRoles: [Portal.Operator]
+  scopes:
+    graph: [RoleEligibilitySchedule.ReadWrite.Directory, RoleManagement.Read.Directory, Directory.Read.All]
+  entraRoles: [Privileged Role Administrator]
+  licences: [pim]
+confirm:
+  type: typed
+  value: ${ steps.role.output.displayName }
+  message: >-
+    ${ steps.principal.output.displayName & ' becomes eligible for ' & steps.role.output.displayName
+       & (inputs.expiry = 'Permanent' ? ' with no end date' : ' for ' & $substring(inputs.expiry, 1, $length(inputs.expiry) - 2) & ' days')
+       & '. Type the role name to confirm.' }
+approval:
+  required: true
+  approvers: [Playbook.Approver]
+  minApprovals: 1
+  expiresIn: PT8H
+
+inputs:
+  roleDefinitionId: { type: string, format: guid, label: Role (definition id), description: Open the role from Roles & admins to fill this in. }
+  principalId:
+    type: string
+    format: guid
+    label: Make eligible
+    picker: user
+    description: A user, or paste the object id of a role-assignable group.
+  directoryScopeId:
+    type: string
+    label: Scope
+    default: /
+    pattern: "^/(administrativeUnits/[0-9a-fA-F-]{36})?$"
+    description: "/ for the whole directory, or /administrativeUnits/<id> for one administrative unit."
+  expiry:
+    type: enum
+    label: Eligible for
+    default: P180D
+    description: The role's PIM settings may cap this (one year by default) or forbid permanent eligibility.
+    values:
+      - { value: P30D, label: 30 days }
+      - { value: P90D, label: 90 days }
+      - { value: P180D, label: 180 days }
+      - { value: P365D, label: 365 days }
+      - { value: Permanent, label: No end date }
+  justification: { type: string, label: Justification, minLength: 10, maxLength: 500, multiline: true, description: Shown to the approver and stored on the PIM request. }
+  ticketNumber: { type: string, label: Ticket number, required: false }
+
+steps:
+  - id: role
+    type: graph
+    mode: read
+    describe: Look up the role
+    request:
+      method: GET
+      path: /roleManagement/directory/roleDefinitions/${ $encode($guid(inputs.roleDefinitionId)) }
+
+  - id: principal
+    type: graph
+    mode: read
+    describe: Look up who becomes eligible
+    request:
+      method: GET
+      path: /directoryObjects/${ $encode($guid(inputs.principalId)) }
+
+  - id: kind
+    type: transform
+    expression: ${ $substringAfter(steps.principal.output.`@odata.type`, '#microsoft.graph.') }
+
+  - id: supported
+    type: assert
+    that: ${ steps.kind.output = 'user' or (steps.kind.output = 'group' and steps.principal.output.isAssignableToRole = true) }
+    message: >-
+      ${ steps.principal.output.displayName & ' cannot be made eligible: PIM eligibility for directory roles takes users and'
+         & ' role-assignable groups only.' }
+
+  - id: notSelf
+    type: assert
+    that: ${ $not($guid(inputs.principalId) = $lowercase(user.oid)) }
+    message: You can't make yourself eligible for a role. Ask another administrator.
+
+  # Same request as the user page's Roles tab.
+  - id: eligible
+    type: graph
+    mode: read
+    describe: Read the current eligible assignments
+    request:
+      method: GET
+      path: /roleManagement/directory/roleEligibilityScheduleInstances
+      query:
+        $filter: ${ 'principalId eq ' & $odata($guid(inputs.principalId)) }
+        $expand: roleDefinition
+
+  - id: notEligibleYet
+    type: assert
+    that: >-
+      ${ $count(steps.eligible.output.value[
+           $lowercase(roleDefinitionId) = $lowercase($$.steps.role.output.id) and directoryScopeId = $$.inputs.directoryScopeId
+         ]) = 0 }
+    message: >-
+      ${ steps.principal.output.displayName & ' is already eligible for ' & steps.role.output.displayName
+         & ' at this scope (directly or through a group).' }
+
+  - id: request
+    type: graph
+    mode: write
+    describe: >-
+      ${ 'Make ' & steps.principal.output.displayName & ' eligible for ' & steps.role.output.displayName
+         & (inputs.expiry = 'Permanent' ? ' with no end date' : ' for ' & inputs.expiry) }
+    idempotent: false
+    request:
+      method: POST
+      path: /roleManagement/directory/roleEligibilityScheduleRequests
+      body:
+        action: adminAssign
+        principalId: ${ $guid(inputs.principalId) }
+        roleDefinitionId: ${ steps.role.output.id }
+        directoryScopeId: ${ inputs.directoryScopeId }
+        justification: ${ inputs.justification }
+        scheduleInfo:
+          startDateTime: ${ $iso() }
+          expiration: "${ inputs.expiry = 'Permanent' ? { 'type': 'noExpiration' } : { 'type': 'afterDuration', 'duration': inputs.expiry } }"
+        ticketInfo:
+          ticketNumber: ${ inputs.ticketNumber }
+    dryRunOutput: { id: planned-eligibility-request, status: Provisioned }
+    compensate:
+      type: graph
+      describe: Remove the eligibility again
+      request:
+        method: POST
+        path: /roleManagement/directory/roleEligibilityScheduleRequests
+        body:
+          action: adminRemove
+          principalId: ${ $guid(inputs.principalId) }
+          roleDefinitionId: ${ steps.role.output.id }
+          directoryScopeId: ${ inputs.directoryScopeId }
+          justification: ${ 'Undo of AdminForge run ' & run.id }
+
+outputs:
+  summary: >-
+    ${ steps.principal.output.displayName & ' is eligible for ' & steps.role.output.displayName
+       & ' (PIM request ' & steps.request.output.status & '). They activate it from PIM when they need it.' }
+  status: ${ steps.request.output.status }
+
+tests:
+  - name: refuses a group that is not role-assignable
+    inputs: { roleDefinitionId: fe930be7-5e62-47db-91af-98c3a49a38b1, principalId: 00000000-0000-4000-8000-000000000201, justification: Payroll team needs user admin REQ-3201 }
+    user: { oid: 00000000-0000-4000-8000-0000000000a1, upn: avery@example.com }
+    mocks:
+      role: { id: fe930be7-5e62-47db-91af-98c3a49a38b1, displayName: User Administrator }
+      principal: { "@odata.type": "#microsoft.graph.group", id: 00000000-0000-4000-8000-000000000201, displayName: SG-App-Payroll-Users, isAssignableToRole: null }
+    expect: { status: failed, failedStep: supported }
+  - name: refuses a service principal
+    inputs: { roleDefinitionId: fe930be7-5e62-47db-91af-98c3a49a38b1, principalId: 00000000-0000-4000-8000-000000000407, justification: Automation needs user admin REQ-3202 }
+    user: { oid: 00000000-0000-4000-8000-0000000000a1, upn: avery@example.com }
+    mocks:
+      role: { id: fe930be7-5e62-47db-91af-98c3a49a38b1, displayName: User Administrator }
+      principal: { "@odata.type": "#microsoft.graph.servicePrincipal", id: 00000000-0000-4000-8000-000000000407, displayName: Legacy Automation }
+    expect: { status: failed, failedStep: supported }
+  - name: refuses an existing eligibility
+    inputs: { roleDefinitionId: e8611ab8-c189-46e8-94e1-60213ab1f814, principalId: 00000000-0000-4000-8000-000000000101, justification: Privileged role admin rotation REQ-3203 }
+    user: { oid: 00000000-0000-4000-8000-0000000000a1, upn: avery@example.com }
+    mocks:
+      role: { id: e8611ab8-c189-46e8-94e1-60213ab1f814, displayName: Privileged Role Administrator }
+      principal: { "@odata.type": "#microsoft.graph.user", id: 00000000-0000-4000-8000-000000000101, displayName: Adele Lee }
+      eligible: { value: [{ id: re-03, roleDefinitionId: e8611ab8-c189-46e8-94e1-60213ab1f814, directoryScopeId: /, memberType: Direct }] }
+    expect: { status: failed, failedStep: notEligibleYet }
+  - name: plans a 90-day eligibility for a user
+    inputs: { roleDefinitionId: fe930be7-5e62-47db-91af-98c3a49a38b1, principalId: 00000000-0000-4000-8000-000000000102, expiry: P90D, justification: New helpdesk lead REQ-3204, ticketNumber: REQ-3204 }
+    user: { oid: 00000000-0000-4000-8000-0000000000a1, upn: avery@example.com }
+    mocks:
+      role: { id: fe930be7-5e62-47db-91af-98c3a49a38b1, displayName: User Administrator }
+      principal: { "@odata.type": "#microsoft.graph.user", id: 00000000-0000-4000-8000-000000000102, displayName: Morgan Chen }
+      eligible: { value: [] }
+    expect:
+      status: succeeded
+      plan: [request]
+      outputs: { status: Provisioned }

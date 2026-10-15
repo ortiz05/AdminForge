@@ -1,11 +1,12 @@
 $schema: ../../../packages/schemas/generated/page.schema.json
 kind: page
 id: endpoint.devices
-version: 1.0.0
+version: 1.1.0
 title: Managed devices
 summary: >-
   Devices enrolled in Microsoft Intune — compliance, OS, ownership, management agent, encryption and last check-in.
-  Sync, restart, retire or wipe one device or many.
+  Filter by model, OS version, enrolment and more with the query builder. Sync, restart, retire or wipe one device or
+  many.
 owner: endpoint-team
 tags: [endpoint, intune, devices]
 template: list-detail
@@ -59,6 +60,29 @@ params:
 filters:
   search: q
   facets: [os, compliance, ownership, agent, checkin, user]
+  # Compiled server-side into `${ advanced }` (OData). Intune filters a subset of managedDevice properties and
+  # operators; these are the ones it accepts.
+  advanced:
+    dialect: odata
+    fields:
+      - { field: model, label: Model, type: string, operators: [eq] }
+      - { field: manufacturer, label: Manufacturer, type: string, operators: [eq] }
+      - { field: osVersion, label: OS version, type: string, operators: [eq, startsWith] }
+      - { field: serialNumber, label: Serial number, type: string, operators: [eq] }
+      - { field: azureADDeviceId, label: Entra device id, type: string, operators: [eq] }
+      - { field: enrolledDateTime, label: Enrolled, type: date, operators: [ge, le] }
+      - { field: lastSyncDateTime, label: Last check-in, type: date, operators: [ge, le] }
+      - field: deviceEnrollmentType
+        label: Enrolment type
+        type: enum
+        operators: [eq]
+        values: [userEnrollment, deviceEnrollmentManager, appleBulkWithUser, appleBulkWithoutUser, windowsAzureADJoin, windowsBulkUserless, windowsAutoEnrollment, windowsBulkAzureDomainJoin, windowsCoManagement, windowsAzureADJoinUsingDeviceAuth, appleUserEnrollment, appleUserEnrollmentWithServiceAccount]
+      - field: managementState
+        label: Management state
+        type: enum
+        operators: [eq]
+        values: [managed, retirePending, retireFailed, wipePending, wipeFailed, unhealthy, deletePending, retireIssued, wipeIssued, wipeCanceled, retireCanceled, discovered]
+      - { field: isEncrypted, label: Encrypted, type: boolean, operators: [eq] }
 
 savedViews:
   enabled: true
@@ -87,7 +111,8 @@ datasources:
                params.agent != 'Any' ? "managementAgent eq " & $odata(params.agent),
                params.checkin = 'Recent' ? "lastSyncDateTime ge " & $daysAgo(7),
                params.checkin = 'Stale30' ? "lastSyncDateTime le " & $daysAgo(30),
-               params.checkin = 'Stale90' ? "lastSyncDateTime le " & $daysAgo(90)
+               params.checkin = 'Stale90' ? "lastSyncDateTime le " & $daysAgo(90),
+               advanced
              ][$], ' and ') }
     paging: cursor
     cache: { ttl: 60 }

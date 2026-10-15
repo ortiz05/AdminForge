@@ -1,7 +1,11 @@
 import { buildApp } from './app';
 import { loadConfig } from './config';
+import { applyRetention } from './housekeeping/retention';
 
 const HOUSEKEEPING_MS = 10 * 60_000;
+/** History retention runs at most this often (it scans by age; cheap when there is nothing to delete). */
+const RETENTION_EVERY_MS = 6 * 3_600_000;
+let lastRetention = 0;
 
 const config = loadConfig();
 const app = await buildApp(config);
@@ -12,6 +16,20 @@ async function housekeeping() {
   try {
     await ctx.preauth.purge(now);
     await ctx.sessions.purge({ now, idleMinutes: config.SESSION_IDLE_MINUTES });
+    if (ctx.database && now.getTime() - lastRetention >= RETENTION_EVERY_MS) {
+      lastRetention = now.getTime();
+      const purged = await applyRetention(
+        ctx.database.db,
+        { artifacts: app.schedules.artifacts, audit: ctx.audit, now },
+        {
+          runDays: config.RETENTION_RUN_DAYS,
+          scheduleRunDays: config.RETENTION_SCHEDULE_RUN_DAYS,
+          probeDays: config.RETENTION_PROBE_DAYS,
+          artifactDays: config.RETENTION_ARTIFACT_DAYS,
+        },
+      );
+      app.log.info({ purged }, 'retention applied');
+    }
   } catch (err) {
     app.log.warn({ err }, 'housekeeping failed');
   }

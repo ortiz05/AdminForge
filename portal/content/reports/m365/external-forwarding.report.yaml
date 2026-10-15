@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/report.schema.json
 kind: report
 id: m365.external-forwarding
-version: 1.0.0
+version: 1.1.0
 title: Mailbox external forwarding
 summary: Mailboxes and inbox rules that forward or redirect mail to addresses outside the organization's accepted domains.
 owner: m365-team
@@ -93,6 +93,21 @@ layout:
       - { field: ruleName, label: Rule }
       - { field: ruleEnabled, label: Rule enabled, kind: boolean, filter: facet }
       - { field: deliverToMailboxAndForward, label: Keeps a copy, kind: boolean }
+    inspect:
+      page: m365.mailbox
+      params:
+        mailbox: ${ row.mailbox }
+    rowActions:
+      - playbook: m365.clear-mailbox-forwarding
+        label: Clear forwarding
+        icon: prohibit
+        inputs:
+          mailbox: ${ row.mailbox }
+        when: ${ row.source = 'mailbox' }
+      - label: Inbox rules
+        icon: funnel
+        href: /p/m365.inbox-rules?mailbox=${ $encode(row.mailbox) }
+        when: ${ row.source = 'inboxRule' }
     empty:
       title: No external forwarding
       body: No mailbox forwards mail outside the organization's accepted domains.

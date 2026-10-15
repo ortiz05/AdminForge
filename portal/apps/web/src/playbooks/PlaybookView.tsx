@@ -1,8 +1,9 @@
-import { useEffect, useId, useRef } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import {
   Button,
   CodeBlock,
-  ConfirmDialog,
+  Dialog,
+  TextField,
   IdChip,
   LockKeyOpenIcon,
   Skeleton,
@@ -24,7 +25,7 @@ import { RunStatusPill, STEP_STATUS_VIEW, StatusGlyph } from '../runs/status';
 import { humanize, labelOf } from './form';
 import { InputsForm } from './InputsForm';
 import { Requirements, RiskBanner } from './Preflight';
-import type { PlaybookFlow } from './usePlaybookFlow';
+import { isConfirmationError, isPreviewError, type PlaybookFlow } from './usePlaybookFlow';
 import { itemInputs, itemLabel } from './url';
 
 const GUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -164,6 +165,29 @@ export function Outputs({ outputs, now }: { outputs: Record<string, unknown>; no
   );
 }
 
+/** Bulk dry run: what each item would do. */
+function BulkPreview({ detail }: { detail: RunDetail }) {
+  const failing = detail.children.filter((c) => c.status !== 'succeeded');
+  return (
+    <section aria-label="Items in the preview" className="flex flex-col gap-2">
+      <div className="flex items-baseline justify-between">
+        <h3 className="af-eyebrow">Items</h3>
+        <span className="text-xs text-fg-3">
+          {detail.children.length - failing.length} of {detail.children.length} ready{failing.length ? ` · ${failing.length} would stop` : ''}
+        </span>
+      </div>
+      <ul className="overflow-hidden rounded-(--af-panel-radius) border border-line bg-panel text-sm">
+        {detail.children.map((c) => (
+          <li key={c.id} className="flex items-center justify-between gap-3 border-t border-line px-3 py-2 first:border-t-0">
+            <span className="min-w-0 truncate text-fg">{c.title}</span>
+            <RunStatusPill status={c.status} size="sm" />
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
 function PreviewSection({ flow }: { flow: PlaybookFlow }) {
   const now = useNow(15_000);
   const ref = useRef<HTMLElement>(null);
@@ -213,12 +237,32 @@ function PreviewSection({ flow }: { flow: PlaybookFlow }) {
               {detail.run.error?.hint && <p className="mt-1">{detail.run.error.hint}</p>}
             </Callout>
           )}
-          {detail.run.status === 'succeeded' && flow.writes && !flow.preview.fresh && (
-            <Callout tone="warn" title="The inputs changed since this preview">
-              Preview again to see the plan for the current inputs.
+          {detail.run.status === 'succeeded' && flow.writes && (flow.preview.rejection || !flow.preview.fresh || flow.preview.stale) && (
+            <Callout
+              tone="warn"
+              role="status"
+              title={
+                flow.preview.rejection
+                  ? flow.preview.rejection.message
+                  : !flow.preview.fresh
+                    ? 'Inputs changed — preview again'
+                    : 'This preview expired'
+              }
+              action={
+                <Button size="sm" pending={flow.preview.pending} onClick={() => flow.preview.start()}>
+                  Preview again
+                </Button>
+              }
+            >
+              {flow.preview.rejection
+                ? (flow.preview.rejection.hint ?? 'Nothing ran. Preview again, then confirm.')
+                : !flow.preview.fresh
+                  ? 'The plan below is for the earlier inputs. Nothing runs until you preview the current ones.'
+                  : 'Previews are good for 15 minutes. Run previews again first, then asks you to confirm.'}
             </Callout>
           )}
           {detail.run.status === 'succeeded' && <PlanView plan={detail.plan} />}
+          {flow.bulk && detail.children.length > 0 && <BulkPreview detail={detail} />}
           <ReadChecks detail={detail} index={index} />
           {!flow.writes && detail.run.outputs && <Outputs outputs={detail.run.outputs} now={now} />}
         </>
@@ -279,6 +323,106 @@ export function PlaybookSections({ flow, problems }: { flow: PlaybookFlow; probl
   );
 }
 
+/**
+ * The confirmation before a write: what will change, and (typed confirmation) the exact text to type. The server
+ * checks the text too; its 422 message appears under the field and the dialog stays open.
+ */
+function RunConfirmDialog({ flow, label }: { flow: PlaybookFlow; label: string }) {
+  const { def } = flow;
+  const confirm = flow.confirm!;
+  const [typed, setTyped] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [failure, setFailure] = useState<string | null>(null);
+  const [pending, setPending] = useState(false);
+  const count = flow.items?.length ?? 0;
+  const matches = confirm.text === null || typed === confirm.text;
+  const submit = async () => {
+    if (!matches || pending) return;
+    setPending(true);
+    setError(null);
+    setFailure(null);
+    try {
+      await flow.run.go(confirm.text === null ? undefined : typed);
+      flow.closeConfirm();
+    } catch (e) {
+      if (isConfirmationError(e)) setError((e as Error).message);
+      else if (!isPreviewError(e)) setFailure((e as Error).message);
+    } finally {
+      setPending(false);
+    }
+  };
+  return (
+    <Dialog
+      open
+      onOpenChange={(open) => !open && !pending && flow.closeConfirm()}
+      size="sm"
+      title={flow.bulk ? `${def.title} for ${count} items?` : `${def.title}?`}
+      description={confirm.description}
+      footer={
+        <>
+          <Button intent="ghost" onClick={flow.closeConfirm} aria-disabled={pending || undefined}>
+            Cancel
+          </Button>
+          <Button intent="armed" pending={pending} aria-disabled={!matches || undefined} onClick={() => void submit()}>
+            {label}
+          </Button>
+        </>
+      }
+    >
+      <form
+        className="flex flex-col gap-3 pb-2"
+        onSubmit={(e) => {
+          e.preventDefault();
+          void submit();
+        }}
+      >
+        {!flow.bulk && flow.preview.detail && flow.preview.detail.plan.length > 0 && (
+          <ul className="flex list-disc flex-col gap-0.5 pl-4 text-sm text-fg-2">
+            {flow.preview.detail.plan.map((p, i) => (
+              <li key={`${p.stepPath}-${i}`}>{p.describe ?? p.stepId}</li>
+            ))}
+          </ul>
+        )}
+        {def.confirm?.message && !flow.bulk && <p className="text-sm text-fg-2">{def.confirm.message}</p>}
+        {confirm.text !== null && (
+          <TextField
+            label={
+              <>
+                Type <code className="rounded-sm bg-sunken px-1 py-0.5 text-fg">{confirm.text}</code> to confirm
+                {flow.bulk ? ` changing ${count} object${count === 1 ? '' : 's'}` : ''}
+              </>
+            }
+            value={typed}
+            onChange={(e) => {
+              setTyped(e.target.value);
+              setError(null);
+            }}
+            autoComplete="off"
+            spellCheck={false}
+            autoFocus
+            inputMode={flow.bulk ? 'numeric' : undefined}
+            inputClassName="font-mono"
+            error={error ?? undefined}
+          />
+        )}
+        {failure && (
+          <p role="alert" className="rounded-md bg-crit-subtle px-3 py-2 text-sm text-crit">
+            {failure}
+          </p>
+        )}
+      </form>
+    </Dialog>
+  );
+}
+
+/** "expires in 12 min" — the server refuses a preview after 15 minutes. */
+function expiryText(ms: number | null): string | null {
+  if (ms === null) return null;
+  if (ms <= 0) return 'Preview expired: Run previews again first.';
+  const min = Math.ceil(ms / 60_000);
+  return `Preview expires in ${min} min.`;
+}
+
 /** Preview, Run (locked until armed for write playbooks), and the confirmation. */
 export function PlaybookActions({ flow, align = 'end' }: { flow: PlaybookFlow; align?: 'end' | 'between' }) {
   const me = useMe();
@@ -287,13 +431,17 @@ export function PlaybookActions({ flow, align = 'end' }: { flow: PlaybookFlow; a
   const statusId = useId();
   const runLabel = flow.bulk ? `${def.title} · ${flow.items?.length ?? 0} items` : flow.writes ? def.title : 'Run';
   const needsArm = flow.writes && !flow.armed;
-  const status = needsArm
-    ? me.canArm
-      ? flow.preview.ok && flow.preview.fresh
-        ? 'Preview ready.'
-        : 'Needs write access.'
-      : 'Running this needs the Portal Operator role.'
-    : flow.run.blocked;
+  const ready = flow.preview.ok && flow.preview.fresh && !flow.preview.rejection;
+  const expiry = flow.writes && ready ? expiryText(flow.preview.expiresInMs) : null;
+  const status = flow.preview.refreshingForRun
+    ? 'The preview expired: previewing again before you confirm…'
+    : needsArm
+      ? me.canArm
+        ? ready
+          ? `Preview ready.${expiry ? ` ${expiry.replace(/^Preview /, '').replace(/^e/, 'E')}` : ''}`
+          : 'Needs write access.'
+        : 'Running this needs the Portal Operator role.'
+      : (flow.run.blocked ?? expiry);
 
   const RunButton = flow.writes ? WriteAction : Button;
   // Invalid inputs keep the button pressable: pressing it shows what's missing. Other blockers lock it with a reason.
@@ -316,18 +464,14 @@ export function PlaybookActions({ flow, align = 'end' }: { flow: PlaybookFlow; a
           </button>
         )}
       </p>
-      {!flow.bulk && (
-        <Button
-          intent="secondary"
-          pending={flow.preview.pending}
-          onClick={() => flow.preview.start()}
-        >
+      {(!flow.bulk || flow.needsPreview) && (
+        <Button intent="secondary" pending={flow.preview.pending} onClick={() => flow.preview.start()}>
           {flow.preview.id ? 'Preview again' : 'Preview (dry run)'}
         </Button>
       )}
       <RunButton
         intent="primary"
-        pending={flow.run.pending}
+        pending={flow.run.pending || flow.preview.refreshingForRun}
         aria-disabled={blockedNow || undefined}
         aria-describedby={statusId}
         onClick={() => {
@@ -336,29 +480,7 @@ export function PlaybookActions({ flow, align = 'end' }: { flow: PlaybookFlow; a
       >
         {runLabel}
       </RunButton>
-      {flow.confirm && (
-        <ConfirmDialog
-          open
-          onOpenChange={(open) => !open && flow.closeConfirm()}
-          title={flow.bulk ? `${def.title} for ${flow.items?.length ?? 0} items?` : `${def.title}?`}
-          description={flow.confirm.description}
-          confirmLabel={runLabel}
-          intent="armed"
-          confirmText={flow.confirm.text ?? undefined}
-          onConfirm={async () => {
-            await flow.run.go();
-          }}
-        >
-          {!flow.bulk && flow.preview.detail && flow.preview.detail.plan.length > 0 && (
-            <ul className="mb-2 flex list-disc flex-col gap-0.5 pl-4 text-sm text-fg-2">
-              {flow.preview.detail.plan.map((p, i) => (
-                <li key={`${p.stepPath}-${i}`}>{p.describe ?? p.stepId}</li>
-              ))}
-            </ul>
-          )}
-          {def.confirm?.message && !flow.bulk && <p className="mb-1 text-sm text-fg-2">{def.confirm.message}</p>}
-        </ConfirmDialog>
-      )}
+      {flow.confirm && <RunConfirmDialog flow={flow} label={runLabel} />}
     </div>
   );
 }

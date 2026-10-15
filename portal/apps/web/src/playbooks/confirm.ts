@@ -28,5 +28,5 @@ export async function confirmationText(
   }
 }
 
-/** Bulk runs confirm the blast radius: the number of items. */
-export const bulkConfirmationText = (count: number) => `${count} item${count === 1 ? '' : 's'}`;
+/** Bulk runs confirm the blast radius: the number of items ("Type 12 to confirm changing 12 objects"). */
+export const bulkConfirmationText = (count: number) => String(count);

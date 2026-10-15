@@ -39,8 +39,14 @@ type RunDetail = { run: { status: string }; steps: Array<{ stepId: string; statu
  * execute with previewRunId and — for typed confirms — the text the UI would ask for, read from the preview's outputs.
  */
 async function previewThenRun(playbook: string, inputs: Record<string, unknown>, confirmFrom?: (preview: RunDetail) => string | undefined) {
-  const p = await call<{ runId: string }>('POST', '/api/runs', { playbook, inputs, dryRun: true });
-  const preview = await waitRun(p.json?.runId, p);
+  // Graph is eventually consistent: a preview right after a write may still see the old state, so retry briefly.
+  let p = await call<{ runId: string }>('POST', '/api/runs', { playbook, inputs, dryRun: true });
+  let preview = await waitRun(p.json?.runId, p);
+  for (let attempt = 1; preview.status === 'failed' && attempt <= 5; attempt++) {
+    await page.waitForTimeout(10_000);
+    p = await call<{ runId: string }>('POST', '/api/runs', { playbook, inputs, dryRun: true });
+    preview = await waitRun(p.json?.runId, p);
+  }
   if (preview.status !== 'succeeded') return { preview, created: undefined };
   const detail = await call<RunDetail>('GET', `/api/runs/${p.json.runId}`);
   const confirmation = confirmFrom?.(detail.json);

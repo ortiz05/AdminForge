@@ -8,6 +8,10 @@ describe('errorHint licence classification', () => {
     const err = new ApiError(404, 'UnknownTenantId', 'We do not recognize this tenant ID.');
     expect(errorHint(err, 'graph', identity, { licences: ['m365'] } as never)).toMatchObject({ licence: true });
   });
+  it('also recognises the reports service sending its error body as text', () => {
+    const err = new ApiError(404, 'HTTP404', '{"error":{"code":"UnknownTenantId","message":"We do not recognize this tenant ID."}}');
+    expect(errorHint(err, 'graph', identity).licence).toBe(true);
+  });
   it('keeps other 404s as not-found', () => {
     const err = new ApiError(404, 'Request_ResourceNotFound', 'Resource not found.');
     expect(errorHint(err, 'graph', identity).licence).toBe(false);

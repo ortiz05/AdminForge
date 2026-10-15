@@ -5,7 +5,7 @@ import { App, createAppRouter, createQueryClient } from '@adminforge/web/src/app
 import { overview } from '../../../e2e/fixtures/overview';
 import { me, NAV } from '../../../e2e/fixtures/session';
 import type { MockHandler } from '../../../e2e/support/mock-api';
-import { automationApi } from '../../../e2e/support/mock-automation';
+import { automationApi, type AutomationOptions } from '../../../e2e/support/mock-automation';
 
 const json = (body: unknown, status = 200) =>
   new Response(status === 204 ? null : JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
@@ -21,8 +21,13 @@ export interface Call {
  * The real app (router, shell, lazy routes) against the same stateful automation mock the Playwright specs use,
  * answered through a stubbed fetch. jsdom has no EventSource, so live views fall back to polling.
  */
-export function renderApp({ path = '/', session = me(), handlers = [] }: { path?: string; session?: MeResponse; handlers?: MockHandler[] } = {}) {
-  const auto = automationApi();
+export function renderApp({
+  path = '/',
+  session = me(),
+  handlers = [],
+  automation,
+}: { path?: string; session?: MeResponse; handlers?: MockHandler[]; automation?: AutomationOptions } = {}) {
+  const auto = automationApi(automation);
   const calls: Call[] = [];
   vi.stubGlobal(
     'fetch',

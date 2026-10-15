@@ -68,7 +68,7 @@ test('write playbook: locked in read mode → preview → arm → typed confirma
   const plan = drawer.getByRole('region', { name: 'What this run will change' });
   await expect(plan.getByText('Set accountEnabled to false')).toBeVisible();
   await expect(plan.getByText('2 changes')).toBeVisible();
-  await expect(drawer.getByText('Preview ready.')).toBeVisible();
+  await expect(drawer.getByText(/^Preview ready\. Expires in \d+ min\.$/)).toBeVisible();
   await runButton.click({ force: true });
   expect(auto.state.runPosts).toHaveLength(1); // locked: nothing was started
 
@@ -85,7 +85,7 @@ test('write playbook: locked in read mode → preview → arm → typed confirma
   await expect(armedDrawer.getByRole('region', { name: 'What this run will change' })).toBeVisible();
   await armedDrawer.getByRole('button', { name: 'Disable sign-in', exact: true }).click();
 
-  const confirm = page.getByRole('alertdialog', { name: 'Disable sign-in?' });
+  const confirm = page.getByRole('dialog', { name: 'Disable sign-in?' });
   await expect(confirm.getByText('Set accountEnabled to false')).toBeVisible();
   const go = confirm.getByRole('button', { name: 'Disable sign-in' });
   await expect(go).toHaveAttribute('aria-disabled', 'true');
@@ -93,11 +93,14 @@ test('write playbook: locked in read mode → preview → arm → typed confirma
   await go.click();
 
   await expect(page).toHaveURL(new RegExp(`/runs/${IDS.liveRun}$`));
+  // Preview then confirm: the run carries the dry run it was confirmed against, and what was typed.
   expect(auto.state.runPosts.at(-1)).toEqual({
     playbook: 'identity.disable-user',
     version: '1.0.0',
     inputs: { userId: IDS.aLee, reason: 'INC-4821 account compromised' },
     dryRun: false,
+    previewRunId: IDS.previewRun,
+    confirmation: 'a.lee@example.com',
   });
   // The timeline fills in from the SSE stream (disable → revoke → succeeded) and the logs stream in.
   const steps = page.getByRole('list', { name: 'Steps of Disable sign-in' });
@@ -129,7 +132,7 @@ test('bulk run: items from a selection, shared inputs asked once, one child run 
   await expect(drawer.getByText('Reason is required.')).toBeVisible();
   await drawer.getByLabel('Reason').fill('Quarterly leaver sweep');
   await run.click();
-  const confirm = page.getByRole('alertdialog', { name: 'Revoke sessions for 3 items?' });
+  const confirm = page.getByRole('dialog', { name: 'Revoke sessions for 3 items?' });
   await confirm.getByRole('button', { name: 'Revoke sessions · 3 items' }).click();
 
   await expect(page).toHaveURL(new RegExp(`/runs/${IDS.bulkRun}$`));
@@ -354,4 +357,101 @@ test('runbook link prefill: plain params named like inputs are validated and fil
   await page.getByRole('button', { name: 'Start runbook' }).click();
   await expect(page).toHaveURL(new RegExp(`run=${IDS.runbookRun}`));
   expect(auto.state.runPosts[0]).toEqual({ playbook: 'identity.offboard-leaver', version: '2.1.0', inputs: { userId: IDS.jDoe, ticket: 'HR-2231' }, dryRun: false });
+});
+
+test('preview then confirm: edits invalidate the preview; a stale preview is refreshed on Run; the server’s mismatch shows under the field', async ({ page }) => {
+  const auto = automationApi({ stalePreview: true, mismatchOnce: true });
+  await mockApi(page, { me: armedMe(), handlers: [auto.handler] });
+  await page.goto(playbookHref({ playbook: 'identity.disable-user', inputs: { userId: IDS.aLee, reason: 'INC-4821 account compromised' } }, '/runs'));
+  const drawer = page.getByRole('dialog', { name: 'Disable sign-in' });
+  const run = drawer.getByRole('button', { name: 'Disable sign-in', exact: true });
+
+  await drawer.getByRole('button', { name: 'Preview (dry run)' }).click();
+  await expect(drawer.getByText('This preview expired')).toBeVisible();
+  // Any edit invalidates the preview.
+  await drawer.getByLabel(/Reason/).fill('INC-4821 account compromised, confirmed by SOC');
+  await expect(drawer.getByText('Inputs changed — preview again').first()).toBeVisible();
+  await expect(run).toHaveAttribute('aria-disabled', 'true');
+  await drawer.getByLabel(/Reason/).fill('INC-4821 account compromised');
+  await expect(run).toHaveAttribute('aria-disabled', 'true');
+
+  // Preview again → still the stale fixture? No: the second dry run is fresh. Run refreshes stale previews itself.
+  await drawer.getByRole('button', { name: 'Preview again' }).first().click();
+  await expect(drawer.getByText(/Expires in 15 min|Preview expires in 15 min/)).toBeVisible();
+  await run.click();
+  const confirm = page.getByRole('dialog', { name: 'Disable sign-in?' });
+  await confirm.getByLabel(/to confirm/).fill('a.lee@example.com');
+  await confirm.getByRole('button', { name: 'Disable sign-in' }).click();
+  await expect(confirm.getByText('That doesn’t match. Type the sign-in name exactly as shown.')).toBeVisible();
+  await confirm.getByRole('button', { name: 'Disable sign-in' }).click();
+  await expect(page).toHaveURL(new RegExp(`/runs/${IDS.liveRun}$`));
+  expect(auto.state.runPosts.filter((p) => (p as { dryRun: boolean }).dryRun)).toHaveLength(2);
+  expect(auto.state.runPosts.at(-1)).toMatchObject({ previewRunId: IDS.previewRun2, confirmation: 'a.lee@example.com' });
+});
+
+test('preview then confirm: Run with an expired preview previews again, then asks to confirm', async ({ page }) => {
+  const auto = automationApi({ stalePreview: true });
+  await mockApi(page, { me: armedMe(), handlers: [auto.handler] });
+  await page.goto(playbookHref({ playbook: 'identity.disable-user', inputs: { userId: IDS.aLee, reason: 'INC-4821 account compromised' } }, '/runs'));
+  const drawer = page.getByRole('dialog', { name: 'Disable sign-in' });
+  await drawer.getByRole('button', { name: 'Preview (dry run)' }).click();
+  await expect(drawer.getByText('This preview expired')).toBeVisible();
+  await drawer.getByRole('button', { name: 'Disable sign-in', exact: true }).click();
+  const confirm = page.getByRole('dialog', { name: 'Disable sign-in?' });
+  await expect(confirm).toBeVisible();
+  expect(auto.state.runPosts.filter((p) => (p as { dryRun: boolean }).dryRun)).toHaveLength(2);
+  await confirm.getByLabel(/to confirm/).fill('a.lee@example.com');
+  await confirm.getByRole('button', { name: 'Disable sign-in' }).click();
+  await expect(page).toHaveURL(new RegExp(`/runs/${IDS.liveRun}$`));
+  expect(auto.state.runPosts.at(-1)).toMatchObject({ previewRunId: IDS.previewRun2 });
+});
+
+test('preview then confirm: a 409 from the server closes the confirmation and offers Preview again', async ({ page }) => {
+  const auto = automationApi({ refuseStaleOnce: true });
+  await mockApi(page, { me: armedMe(), handlers: [auto.handler] });
+  await page.goto(playbookHref({ playbook: 'identity.disable-user', inputs: { userId: IDS.aLee, reason: 'INC-4821 account compromised' } }, '/runs'));
+  const drawer = page.getByRole('dialog', { name: 'Disable sign-in' });
+  await drawer.getByRole('button', { name: 'Preview (dry run)' }).click();
+  await drawer.getByRole('button', { name: 'Disable sign-in', exact: true }).click();
+  const confirm = page.getByRole('dialog', { name: 'Disable sign-in?' });
+  await confirm.getByLabel(/to confirm/).fill('a.lee@example.com');
+  await confirm.getByRole('button', { name: 'Disable sign-in' }).click();
+  await expect(confirm).toHaveCount(0);
+  await expect(drawer.getByText('The preview is more than 15 minutes old, or its inputs changed.')).toBeVisible();
+  await drawer.getByRole('button', { name: 'Preview again' }).first().click();
+  await drawer.getByRole('button', { name: 'Disable sign-in', exact: true }).click();
+  await page.getByRole('dialog', { name: 'Disable sign-in?' }).getByLabel(/to confirm/).fill('a.lee@example.com');
+  await page.getByRole('dialog', { name: 'Disable sign-in?' }).getByRole('button', { name: 'Disable sign-in' }).click();
+  await expect(page).toHaveURL(new RegExp(`/runs/${IDS.liveRun}$`));
+  expect(auto.state.runPosts.at(-1)).toMatchObject({ previewRunId: IDS.previewRun2, confirmation: 'a.lee@example.com' });
+});
+
+test('bulk with typed confirmation: bulk dry run, then type the number of items', async ({ page }) => {
+  const auto = automationApi();
+  await mockApi(page, { me: armedMe(), handlers: [auto.handler] });
+  const items = [
+    { userId: IDS.aLee, $label: 'Adele Lee' },
+    { userId: IDS.mChen, $label: 'Ming Chen' },
+  ];
+  await page.goto(playbookHref({ playbook: 'identity.disable-user', items, inputs: { reason: 'Leaver sweep HR-2240' } }, '/runs'));
+  const drawer = page.getByRole('dialog', { name: 'Disable sign-in' });
+  const run = drawer.getByRole('button', { name: 'Disable sign-in · 2 items' });
+  await expect(run).toHaveAttribute('aria-disabled', 'true');
+  await drawer.getByRole('button', { name: 'Preview (dry run)' }).click();
+  await expect(drawer.getByRole('region', { name: 'Items in the preview' }).getByText('2 of 2 ready')).toBeVisible();
+  expect(auto.state.bulkPosts[0]).toMatchObject({ dryRun: true, items: [{ userId: IDS.aLee }, { userId: IDS.mChen }] });
+  await run.click();
+  const confirm = page.getByRole('dialog', { name: 'Disable sign-in for 2 items?' });
+  await expect(confirm.getByText(/to confirm changing 2 objects/)).toBeVisible();
+  await confirm.getByLabel(/to confirm/).fill('2');
+  await confirm.getByRole('button', { name: 'Disable sign-in · 2 items' }).click();
+  await expect(page).toHaveURL(new RegExp(`/runs/${IDS.bulkRun}$`));
+  expect(auto.state.bulkPosts[1]).toEqual({
+    playbook: 'identity.disable-user',
+    version: '1.0.0',
+    items: [{ userId: IDS.aLee }, { userId: IDS.mChen }],
+    inputsTemplate: { reason: 'Leaver sweep HR-2240' },
+    previewRunId: IDS.bulkPreview,
+    confirmation: '2',
+  });
 });

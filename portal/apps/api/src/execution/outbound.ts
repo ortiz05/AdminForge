@@ -154,7 +154,7 @@ export function errorHint(err: ApiError, service: ServiceId, identity: Pick<Exec
   const licence =
     ((err.status === 401 || err.status === 403 || err.status === 400) && (LICENCE_CODES.test(err.code) || LICENCE_TEXT.test(err.message))) ||
     // Microsoft 365 usage reports answer 404 UnknownTenantId for tenants without Microsoft 365 workloads.
-    (err.status === 404 && /^UnknownTenantId$/i.test(err.code));
+    (err.status === 404 && (/^UnknownTenantId$/i.test(err.code) || /"code"\s*:\s*"UnknownTenantId"/.test(err.message)));
   if (licence) {
     const need = requires?.licences?.length ? ` It requires ${requires.licences.join(' or ')}.` : '';
     return { hint: `Your tenant's licences don't include this feature.${need}${ref}`, licence: true };

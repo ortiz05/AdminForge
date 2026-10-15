@@ -148,7 +148,7 @@ test('playbook drawer · armed · typed confirmation · steel', async ({ page })
   await drawer.getByRole('button', { name: 'Preview (dry run)' }).click();
   await expect(drawer.getByRole('region', { name: 'What this run will change' })).toBeVisible();
   await drawer.getByRole('button', { name: 'Disable sign-in', exact: true }).click();
-  await expect(page.getByRole('alertdialog', { name: 'Disable sign-in?' })).toBeVisible();
-  await page.getByRole('alertdialog').getByLabel(/to confirm/).fill('a.lee@exam');
+  await expect(page.getByRole('dialog', { name: 'Disable sign-in?' })).toBeVisible();
+  await page.getByRole('dialog', { name: 'Disable sign-in?' }).getByLabel(/to confirm/).fill('a.lee@exam');
   await shoot(page, 'playbook-confirm-armed-steel.png', { full: false });
 });

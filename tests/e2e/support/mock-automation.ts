@@ -6,6 +6,7 @@ import {
   auditEventsOlder,
   auditVerify,
   bulkDetail,
+  bulkPreviewDetail,
   CHILD_TAP_VALUE,
   capabilities,
   DEFINITIONS,
@@ -30,13 +31,26 @@ import {
 } from '../fixtures/automation';
 import type { MockHandler, MockReply } from './mock-api';
 
+const previewRefusal = (code: string, message: string): MockReply => ({
+  status: 409,
+  body: { error: { code, message, hint: 'Nothing ran. Preview again, then confirm.' } },
+});
 const notFound = (what: string): MockReply => ({ status: 404, body: { error: { code: 'not_found', message: `No mock for ${what}` } } });
 const sse = (text: string): MockReply => ({ text, contentType: 'text/event-stream' });
 
 export interface AutomationOptions {
   /** Approvals inbox status (403 for non-approvers). */
   approvalsStatus?: number;
+  /** The first preview is older than the server's 15-minute limit. */
+  stalePreview?: boolean;
+  /** The first real run is refused: 409 preview_stale (the server lost or aged the preview). */
+  refuseStaleOnce?: boolean;
+  /** The first typed confirmation is refused with 422 confirmation_mismatch. */
+  mismatchOnce?: boolean;
 }
+
+/** Typed confirmations the mock server expects ("preview then confirm"). */
+const EXPECTED_CONFIRMATION: Record<string, string> = { 'identity.disable-user': 'a.lee@example.com', 'identity.issue-tap': 'm.chen@example.com' };
 
 /**
  * Stateful mock of the automation APIs (runs, approvals, schedules, probes, audit, appearance, settings) for
@@ -59,12 +73,18 @@ export function automationApi(opts: AutomationOptions = {}) {
     /** Held secrets claimed (GET …/secret/:path) and whether the CSRF header came with it. */
     secretClaims: [] as Array<{ path: string; csrf: boolean }>,
     secretClaimed: false,
+    previews: 0,
+    refusals: { stale: Boolean(opts.refuseStaleOnce), mismatch: Boolean(opts.mismatchOnce) },
   };
 
   const runDetail = (id: string): MockReply => {
     switch (id) {
       case IDS.previewRun:
-        return { body: previewDetail() };
+        return { body: previewDetail(undefined, opts.stalePreview ? { endedAgoMs: 20 * 60_000 } : {}) };
+      case IDS.previewRun2:
+        return { body: previewDetail(undefined, { id: IDS.previewRun2, endedAgoMs: 5_000 }) };
+      case IDS.bulkPreview:
+        return { body: bulkPreviewDetail() };
       case IDS.readRun:
         return { body: readPreviewDetail() };
       case IDS.liveRun:
@@ -100,14 +120,35 @@ export function automationApi(opts: AutomationOptions = {}) {
     // Runs
     if (method === 'POST' && path === '/api/runs') {
       state.runPosts.push(body);
-      const b = body as { playbook: string; dryRun?: boolean };
+      const b = body as { playbook: string; dryRun?: boolean; previewRunId?: string; confirmation?: string };
       if (b.playbook === 'diagnostics.user-sign-in-check') return { status: 202, body: { runId: IDS.readRun, status: 'queued' } };
       if (b.playbook === 'identity.offboard-leaver') return { status: 202, body: { runId: IDS.runbookRun, status: 'queued' } };
-      return { status: 202, body: { runId: b.dryRun ? IDS.previewRun : IDS.liveRun, status: 'queued' } };
+      if (b.dryRun) return { status: 202, body: { runId: state.previews++ === 0 ? IDS.previewRun : IDS.previewRun2, status: 'queued' } };
+      // "Preview then confirm": write runs carry the dry run and, for typed confirmation, what was typed.
+      const expected = EXPECTED_CONFIRMATION[b.playbook];
+      if (expected) {
+        if (!b.previewRunId) return previewRefusal('preview_required', 'Preview this playbook before running it.');
+        if (state.refusals.stale) {
+          state.refusals.stale = false;
+          return previewRefusal('preview_stale', 'The preview is more than 15 minutes old, or its inputs changed.');
+        }
+        if (state.refusals.mismatch || b.confirmation !== expected) {
+          state.refusals.mismatch = false;
+          return { status: 422, body: { error: { code: 'confirmation_mismatch', message: 'That doesn’t match. Type the sign-in name exactly as shown.' } } };
+        }
+      }
+      return { status: 202, body: { runId: IDS.liveRun, status: 'queued' } };
     }
     if (method === 'POST' && path === '/api/runs/bulk') {
       state.bulkPosts.push(body);
-      return { status: 202, body: { runId: IDS.bulkRun, status: 'queued', items: (body as { items: unknown[] }).items.length } };
+      const b = body as { playbook: string; items: unknown[]; dryRun?: boolean; previewRunId?: string; confirmation?: string };
+      if (b.dryRun) return { status: 202, body: { runId: IDS.bulkPreview, status: 'queued', items: b.items.length } };
+      if (EXPECTED_CONFIRMATION[b.playbook]) {
+        if (!b.previewRunId) return previewRefusal('preview_required', 'Preview this playbook before running it.');
+        if (b.confirmation !== String(b.items.length))
+          return { status: 422, body: { error: { code: 'confirmation_mismatch', message: `Type ${b.items.length} to confirm changing ${b.items.length} objects.` } } };
+      }
+      return { status: 202, body: { runId: IDS.bulkRun, status: 'queued', items: b.items.length } };
     }
     if (method === 'GET' && path === '/api/runs') {
       const list = runsList().items as unknown as Array<{ status: string; initiatorUpn: string | null }>;

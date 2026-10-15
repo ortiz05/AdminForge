@@ -19,6 +19,8 @@ export const IDS = {
   jDoe: '9c8b7a6d-5e4f-4321-8a9b-0c1d2e3f4a5b',
   rPatel: '1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d',
   previewRun: 'a1d0c4f2-1111-4b6e-9c3a-5e7f9a1b3c5d',
+  previewRun2: 'a2e1d5a3-1212-4c7f-8d4b-6f8a0b2c4d6e',
+  bulkPreview: 'a3f2e6b4-1313-4d8a-9e5c-7a9b1c3d5e7f',
   liveRun: 'b2e1d5a3-2222-4c7f-8d4b-6f8a0b2c4d6e',
   readRun: 'c3f2e6b4-3333-4d8a-9e5c-7a9b1c3d5e7f',
   bulkRun: 'd4a3f7c5-4444-4e9b-8f6d-8b0c2d4e6f8a',
@@ -230,10 +232,13 @@ export const disablePlan = [
 ];
 
 /** GET /api/runs/:id for the disable-user dry run (preview). */
-export function previewDetail(inputs: Record<string, unknown> = { userId: IDS.aLee, reason: 'INC-4821 account compromised' }) {
+export function previewDetail(
+  inputs: Record<string, unknown> = { userId: IDS.aLee, reason: 'INC-4821 account compromised' },
+  { id = IDS.previewRun as string, endedAgoMs = 58_000 } = {},
+) {
   return {
     run: {
-      ...summary({ id: IDS.previewRun, definitionKey: 'identity.disable-user', title: 'Disable sign-in', status: 'succeeded', dryRun: true, createdAt: at(-60_000), startedAt: at(-60_000), endedAt: at(-58_000) }),
+      ...summary({ id, definitionKey: 'identity.disable-user', title: 'Disable sign-in', status: 'succeeded', dryRun: true, createdAt: at(-endedAgoMs - 2_000), startedAt: at(-endedAgoMs - 2_000), endedAt: at(-endedAgoMs) }),
       definitionSha256: disableUser.sha256,
       correlationId: IDS.correlation,
       inputs,
@@ -713,4 +718,30 @@ export function onboardEvents(): string {
     `id: 1\ndata: ${JSON.stringify({ id: 1, type: 'log', ts: at(-4 * MIN), stepSeq: 2, data: { level: 'info', message: 'Temporary Access Pass issued for the new starter (held for the requester)', path: 'tap', secret: { runId: IDS.onboardChild, stepId: 'issue', stepPath: 'issue', fields: ['temporaryAccessPass'], status: 'held' } } })}\n\n`,
     'event: end\ndata: {"status":"succeeded"}\n\n',
   ].join('');
+}
+
+/** A bulk dry run (disable-user × 2): each item is its own planned child run. */
+export function bulkPreviewDetail() {
+  const child = (i: number, upn: string, status = 'succeeded') =>
+    summary({ id: `a3f2e6b4-1313-4d8a-9e5c-7a9b1c3d5e8${i}`, definitionKey: 'identity.disable-user', title: `Disable sign-in · ${upn}`, status, dryRun: true, trigger: 'child', parentRunId: IDS.bulkPreview, createdAt: at(-30_000), endedAt: at(-28_000) });
+  return {
+    run: {
+      ...summary({ id: IDS.bulkPreview, definitionKey: 'identity.disable-user', title: 'Disable sign-in (bulk)', status: 'succeeded', dryRun: true, trigger: 'bulk', createdAt: at(-30_000), startedAt: at(-30_000), endedAt: at(-28_000) }),
+      definitionSha256: disableUser.sha256,
+      correlationId: IDS.correlation,
+      inputs: { reason: 'Leaver sweep HR-2240', items: [{ userId: IDS.aLee }, { userId: IDS.mChen }] },
+      outputs: null,
+      error: null,
+      waiting: null,
+    },
+    steps: [step(1, 'items', { type: 'forEach', mode: 'write' })],
+    plan: [
+      { ...disablePlan[0], stepPath: 'items[0].run', childRunId: 'a3f2e6b4-1313-4d8a-9e5c-7a9b1c3d5e80' },
+      { ...disablePlan[1], stepPath: 'items[0].run#revoke', childRunId: 'a3f2e6b4-1313-4d8a-9e5c-7a9b1c3d5e80' },
+      { ...disablePlan[0], path: `/users/${IDS.mChen}`, stepPath: 'items[1].run', childRunId: 'a3f2e6b4-1313-4d8a-9e5c-7a9b1c3d5e81' },
+      { ...disablePlan[1], path: `/users/${IDS.mChen}/revokeSignInSessions`, stepPath: 'items[1].run#revoke', childRunId: 'a3f2e6b4-1313-4d8a-9e5c-7a9b1c3d5e81' },
+    ],
+    tasks: [],
+    children: [child(0, 'a.lee@example.com'), child(1, 'm.chen@example.com')],
+  };
 }

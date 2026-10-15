@@ -232,6 +232,13 @@ function SignedInShell({ me, children }: { me: MeResponse; children: ReactNode }
           loading={nav.isPending}
           collapsed={collapsed}
           onToggle={() => updatePrefs({ navCollapsed: !collapsed })}
+          closedSections={prefs.navSections}
+          onToggleSection={(key) => {
+            const closed = prefs.navSections ?? [];
+            updatePrefs({
+              navSections: closed.includes(key) ? closed.filter((k) => k !== key) : [...closed, key],
+            });
+          }}
         />
         <main
           id="main"

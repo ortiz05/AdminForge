@@ -3,6 +3,7 @@ import type { NavItem, NavSection } from '@adminforge/schemas';
 import {
   CaretDoubleLeftIcon,
   CaretDoubleRightIcon,
+  CaretDownIcon,
   cn,
   Icon,
   LockKeyIcon,
@@ -22,6 +23,13 @@ const nav = tv({
       'flex min-h-0 flex-1 flex-col gap-4 overflow-x-hidden overflow-y-auto px-3 py-4 nav-collapsed:px-2',
     section: 'flex flex-col gap-0.5',
     heading: 'af-eyebrow flex h-6 items-center gap-2 px-2 nav-collapsed:sr-only',
+    /** Section headings toggle their section (not in the icon rail, where headings are hidden). */
+    headingToggle: [
+      'af-eyebrow flex h-6 w-full items-center gap-2 rounded-sm px-2 text-left',
+      'transition-colors duration-(--af-motion-fast) hover:bg-hover hover:text-fg-2',
+    ],
+    caret: 'shrink-0 transition-transform duration-(--af-motion-fast)',
+    hiddenCount: 'font-normal text-fg-3 tabular-nums',
     item: [
       'group flex h-(--af-control-h) min-w-0 items-center gap-2.5 rounded-md px-2 text-fg-2',
       'transition-colors duration-(--af-motion-fast) hover:bg-hover hover:text-fg',
@@ -145,10 +153,23 @@ export interface NavRailProps {
   loading?: boolean;
   collapsed: boolean;
   onToggle: () => void;
+  /** Keys of sections the person closed. A closed section still shows the page you're on. */
+  closedSections?: readonly string[];
+  onToggleSection?: (key: string) => void;
 }
 
-/** Sections and pages from GET /api/nav, collapsible to a 56 px icon rail. */
-export function NavRail({ sections, loading, collapsed, onToggle }: NavRailProps) {
+/**
+ * Sections and pages from GET /api/nav, collapsible to a 56 px icon rail. Section headings open and close their
+ * section; the icon rail always shows every page (its headings are hidden).
+ */
+export function NavRail({
+  sections,
+  loading,
+  collapsed,
+  onToggle,
+  closedSections = [],
+  onToggleSection,
+}: NavRailProps) {
   const pathname = useRouterState({ select: (st) => st.location.pathname });
   const s = nav();
   return (
@@ -162,26 +183,66 @@ export function NavRail({ sections, loading, collapsed, onToggle }: NavRailProps
               <Skeleton className="h-4 w-28 nav-collapsed:w-8" />
             </div>
           ))}
-        {sections?.map((section, i) => (
-          <div key={section.key} className={s.section()}>
-            {i > 0 && <div className={s.divider()} aria-hidden />}
-            <h2 className={s.heading()} id={`nav-${section.key}`}>
-              {section.label}
-            </h2>
-            <ul aria-labelledby={`nav-${section.key}`} className="flex flex-col gap-0.5">
-              {section.items.map((item) => (
-                <li key={item.key}>
-                  <NavLink
-                    item={item}
-                    section={section}
-                    active={isActive(item.href, pathname)}
-                    collapsed={collapsed}
-                  />
-                </li>
-              ))}
-            </ul>
-          </div>
-        ))}
+        {sections?.map((section, i) => {
+          const closed = !collapsed && closedSections.includes(section.key);
+          const items = closed
+            ? section.items.filter((item) => isActive(item.href, pathname))
+            : section.items;
+          return (
+            <div key={section.key} className={s.section()}>
+              {i > 0 && <div className={s.divider()} aria-hidden />}
+              {collapsed || !onToggleSection ? (
+                <h2 className={s.heading()} id={`nav-${section.key}`}>
+                  {section.label}
+                </h2>
+              ) : (
+                <h2 className="nav-collapsed:sr-only" id={`nav-${section.key}`}>
+                  <button
+                    type="button"
+                    className={s.headingToggle()}
+                    aria-expanded={!closed}
+                    aria-controls={`nav-list-${section.key}`}
+                    aria-label={
+                      closed ? `${section.label} (${section.items.length} pages hidden)` : section.label
+                    }
+                    onClick={() => onToggleSection(section.key)}
+                  >
+                    <span className="min-w-0 flex-1 truncate">{section.label}</span>
+                    {closed && (
+                      <span className={s.hiddenCount()} aria-hidden>
+                        {section.items.length}
+                      </span>
+                    )}
+                    <CaretDownIcon
+                      size={10}
+                      weight="bold"
+                      aria-hidden
+                      className={cn(s.caret(), closed && '-rotate-90')}
+                    />
+                  </button>
+                </h2>
+              )}
+              {/* Always in the DOM so the heading's aria-controls resolves; hidden when nothing in it is shown. */}
+              <ul
+                id={`nav-list-${section.key}`}
+                aria-labelledby={`nav-${section.key}`}
+                className="flex flex-col gap-0.5"
+                hidden={items.length === 0}
+              >
+                {items.map((item) => (
+                  <li key={item.key}>
+                    <NavLink
+                      item={item}
+                      section={section}
+                      active={isActive(item.href, pathname)}
+                      collapsed={collapsed}
+                    />
+                  </li>
+                ))}
+              </ul>
+            </div>
+          );
+        })}
       </div>
       <div className={s.foot()}>
         <button

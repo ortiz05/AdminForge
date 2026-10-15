@@ -38,6 +38,9 @@ Closes the gaps found by comparing the build with the original plan (see the pla
 - **Repository:** API reference (`docs/api.md`), Dependabot, CODEOWNERS, `pnpm audit` and an initial-bundle budget
   (`pnpm check:bundle`, 250 KB gzip) in CI.
 
+- Navigation sections (Identity, Microsoft 365, Azure, …) open and close from their headings; the choice is saved per
+  person, and a closed section still shows the page you're on.
+
 ### Changed
 
 - `identity.offboard-user` 1.1.0 converts the mailbox to shared, sets an automatic reply, hides it from address lists
@@ -46,6 +49,9 @@ Closes the gaps found by comparing the build with the original plan (see the pla
 - `identity.compromised-account` 2.0.0 merges `security.compromised-account-response` (retired).
 - Write-app permissions trimmed to what content declares (removed `Policy.ReadWrite.ConditionalAccess`,
   `DeviceManagementManagedDevices.ReadWrite.All`, `IdentityRiskyUser.Read.All`); new ones added for the new playbooks.
+
+- Recent pages and closed navigation sections are saved without an audit event; every page visit used to add a
+  `prefs.updated` entry. Settings changes (theme, density, pins) are still audited.
 
 ### Security
 

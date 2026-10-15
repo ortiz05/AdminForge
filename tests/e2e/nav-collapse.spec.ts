@@ -38,3 +38,26 @@ for (const { name, width, startsCollapsed } of [
     await expect.poll(() => railWidth(page)).toBe(before);
   });
 }
+
+for (const theme of ['steel', 'daylight'] as const) {
+  test(`navigation sections close and reopen · ${theme}`, async ({ page }) => {
+    await setPrefs(page, { theme });
+    await page.goto('/identity/users');
+    await expect(page.getByRole('heading', { level: 1, name: 'Users' })).toBeVisible();
+    const nav = page.getByRole('navigation', { name: 'Primary' });
+    await nav.getByRole('button', { name: 'Identity', exact: true }).click();
+    await nav.getByRole('button', { name: 'Microsoft 365', exact: true }).click();
+    // The page you're on stays visible in its closed section; the other section hides everything.
+    await expect(nav.getByRole('link', { name: 'Users' })).toBeVisible();
+    await expect(nav.getByRole('link', { name: 'Groups' })).toBeHidden();
+    await expect(nav.getByRole('link', { name: 'Licences' })).toBeHidden();
+    await expect(nav.getByRole('button', { name: 'Microsoft 365 (4 pages hidden)' })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    );
+    await page.mouse.move(700, 500);
+    await expect(nav).toHaveScreenshot(`nav-sections-closed-${theme}.png`);
+    await nav.getByRole('button', { name: /^Identity \(/ }).click();
+    await expect(nav.getByRole('link', { name: 'Groups' })).toBeVisible();
+  });
+}

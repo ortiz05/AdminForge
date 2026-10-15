@@ -47,6 +47,7 @@ export async function buildMe(ctx: AppContext, session: SessionRecord): Promise<
 export function meRoutes(api: FastifyInstance, ctx: AppContext) {
   api.get('/me', async (request) => buildMe(ctx, requireSession(request)));
 
+  const NAVIGATION_STATE = new Set(['recents', 'navSections']);
   /** Merges the given keys into the stored prefs; unknown keys are rejected (400). */
   api.put('/me/prefs', async (request) => {
     const session = requireSession(request);
@@ -57,7 +58,8 @@ export function meRoutes(api: FastifyInstance, ctx: AppContext) {
     const changed = Object.keys(patch).filter(
       (k) => JSON.stringify(current[k as keyof UserPrefs]) !== JSON.stringify(patch[k as keyof UserPrefs]),
     );
-    if (changed.length) {
+    // Settings are audited; navigation state (recent pages, collapsed sections) changes on every click and isn't.
+    if (changed.some((k) => !NAVIGATION_STATE.has(k))) {
       await ctx.audit.append({
         ...auditActor(ctx, request, session),
         action: 'prefs.updated',

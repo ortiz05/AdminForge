@@ -13,6 +13,8 @@ export const UserPrefs = z.object({
   theme: ThemePref.optional(),
   density: DensityPref.optional(),
   navCollapsed: z.boolean().optional(),
+  /** Keys of the navigation sections the person collapsed (Identity, Azure, …). */
+  navSections: z.array(z.string().max(64)).max(30).optional(),
   pinned: z.array(z.string()).max(50).optional(),
   recents: z.array(z.string()).max(50).optional(),
 });

@@ -329,9 +329,10 @@ and bound to the browser. A reused, expired, foreign or wrong-kind `state` → 4
 
 - **Who:** Session.
 - **Body:** a partial `UserPrefs`, merged into the stored one: `theme` (`steel`, `daylight`, `contrast`, `system`),
-  `density` (`comfortable`, `compact`), `navCollapsed`, `pinned` (≤ 50 strings), `recents` (≤ 50 strings). Unknown keys
-  → 400 `invalid_request`.
-- **Response:** `{prefs}` (the merged result). Audited `prefs.updated` (changed keys only) when something changed.
+  `density` (`comfortable`, `compact`), `navCollapsed`, `navSections` (keys of closed navigation sections, ≤ 30),
+  `pinned` (≤ 50 strings), `recents` (≤ 50 strings). Unknown keys → 400 `invalid_request`.
+- **Response:** `{prefs}` (the merged result). Audited `prefs.updated` (changed keys only) when a setting changed;
+  navigation state alone (`recents`, `navSections`) is saved without an audit event.
 
 #### `GET /api/me/capabilities`
 

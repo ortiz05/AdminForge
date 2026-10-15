@@ -3,8 +3,8 @@
 Gaps found while building. Each item names where it lands. Items move to a phase plan when scheduled.
 
 ## Security (before write playbooks go live)
-- [ ] **Secret outputs**: temporary passwords, Temporary Access Passes and new app secrets are currently kept in step/run outputs. Add `secret: true` on step outputs → shown once to the initiator over the live stream, never persisted (store a redacted marker), never in audit/export. Applies to identity.reset-password, identity.issue-tap, identity.create-user, identity.rotate-app-secret.
-- [ ] `$secureRandom(len)` helper (crypto-backed) — `create-user` currently uses JSONata `$random()` for a throwaway initial password.
+- [x] **Secret outputs** (done: `secretOutputs`, show-once delivery): temporary passwords, Temporary Access Passes and new app secrets are currently kept in step/run outputs. Add `secret: true` on step outputs → shown once to the initiator over the live stream, never persisted (store a redacted marker), never in audit/export. Applies to identity.reset-password, identity.issue-tap, identity.create-user, identity.rotate-app-secret.
+- [x] `$secureRandom(len)` helper (crypto-backed) — `create-user` currently uses JSONata `$random()` for a throwaway initial password.
 
 ## Schema / content model
 - [ ] Licence state in the expression scope (`licences.signInLogs`) so a page can drop P1-only `$select` fields instead of gating the whole page (users list + signInActivity).

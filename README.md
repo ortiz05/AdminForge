@@ -32,4 +32,7 @@ Mock mode (no tenant needed): set `AUTH_MODE=mock` and `DATA_MODE=fixtures`.
 
 `pnpm test` (unit, component, api, content, guards) · `pnpm test:e2e` (Playwright) · `pnpm test:live` (opt-in, against a configured tenant) · `pnpm guard` (runs on every commit).
 
-See `docs/plans/2026-10-15-adminforge-master-plan.md` for the full design.
+## Extending
+
+Use Claude Code: the rules are in `CLAUDE.md`, one skill per extension point lives in `.claude/skills/`, and
+`docs/extending.md` explains the workflow. See `docs/plans/2026-10-15-adminforge-master-plan.md` for the full design.

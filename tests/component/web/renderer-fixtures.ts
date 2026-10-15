@@ -20,7 +20,18 @@ export const USERS_PAGE = {
     userType: { type: 'enum', values: ['All', 'Member', 'Guest'], default: 'All', label: 'Type', facet: true },
     department: { type: 'string', label: 'Department', facet: true },
   },
-  filters: { search: 'q', facets: ['userType', 'department'] },
+  filters: {
+    search: 'q',
+    facets: ['userType', 'department'],
+    advanced: {
+      dialect: 'odata',
+      fields: [
+        { field: 'department', label: 'Department', type: 'string', operators: ['eq', 'startsWith'] },
+        { field: 'createdDateTime', label: 'Created', type: 'date', operators: ['ge', 'le'] },
+        { field: 'profileType', label: 'Profile type', type: 'enum', values: ['RegisteredDevice', 'Printer'] },
+      ],
+    },
+  },
   savedViews: { enabled: true, shared: true, presets: [{ name: 'Guests', params: { userType: 'Guest' } }] },
   datasources: {
     users: { source: 'graph', request: { method: 'GET', path: '/users' }, paging: 'cursor' },

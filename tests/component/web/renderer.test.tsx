@@ -114,6 +114,55 @@ describe('content renderer (/p/$key)', () => {
     expect(within(screen.getByRole('list', { name: 'Active filters' })).getByText('Guest')).toBeInTheDocument();
   });
 
+  it('the advanced filter sends a structured filter (URL: base64url JSON; API: the object)', async () => {
+    const user = userEvent.setup();
+    const { calls, search } = renderAt('/p/test.users');
+    await screen.findByText('Adele Vance');
+    await user.click(screen.getByRole('button', { name: 'Advanced filter' }));
+    const builder = await screen.findByRole('dialog', { name: 'Advanced filter' });
+    await user.click(within(builder).getByRole('combobox', { name: 'Condition 1 operator' }));
+    await user.click(await screen.findByRole('option', { name: 'starts with' }));
+    await user.type(within(builder).getByRole('textbox', { name: 'Condition 1 value' }), 'IT');
+    await user.click(within(builder).getByRole('button', { name: 'Apply' }));
+    const expected = { all: [{ field: 'department', op: 'startsWith', value: 'IT' }] };
+    await waitFor(() => expect(typeof search().adv).toBe('string'));
+    expect(decode(search().adv)).toEqual(expected);
+    await waitFor(() => expect(executeMany(calls).some((c) => JSON.stringify((c.body as { params: { adv?: unknown } }).params.adv) === JSON.stringify(expected))).toBe(true));
+    expect(screen.getByRole('list', { name: 'Active filters' })).toHaveTextContent('Advanced:1 condition');
+  });
+
+  it('the advanced filter checks values before sending and shows the problem inline', async () => {
+    const user = userEvent.setup();
+    const { search } = renderAt('/p/test.users');
+    await screen.findByText('Adele Vance');
+    await user.click(screen.getByRole('button', { name: 'Advanced filter' }));
+    const builder = await screen.findByRole('dialog', { name: 'Advanced filter' });
+    await user.click(within(builder).getByRole('combobox', { name: 'Condition 1 field' }));
+    await user.click(await screen.findByRole('option', { name: 'Created' }));
+    await user.type(within(builder).getByRole('textbox', { name: 'Condition 1 value' }), 'last week');
+    await user.click(within(builder).getByRole('button', { name: 'Apply' }));
+    expect(await within(builder).findByText(/Enter a date like 2026-01-31, or today, now, -30d/)).toBeInTheDocument();
+    expect(search().adv).toBeUndefined();
+    expect(await axeViolations()).toEqual([]);
+  });
+
+  it('a filter the BFF rejects (400 invalid_params) shows every problem in the builder', async () => {
+    const user = userEvent.setup();
+    const bad = btoa(JSON.stringify({ all: [{ field: 'nope', op: 'eq', value: 'x' }] })).replace(/=+$/, '').replace(/\+/g, '-').replace(/\//g, '_');
+    renderAt(`/p/test.users?adv=${bad}`, {
+      respond: (url) =>
+        url === '/api/datasources/execute-many'
+          ? json({ error: { code: 'invalid_params', message: 'Invalid parameters: adv: unknown field "nope"; adv: at most 20 conditions', hint: 'Check the filter values and try again.' } }, 400)
+          : undefined,
+    });
+    expect(await screen.findByText(/The advanced filter was rejected: unknown field "nope"; at most 20 conditions/)).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /Advanced filter, 1 condition/ }));
+    const builder = await screen.findByRole('dialog', { name: 'Advanced filter' });
+    const alert = within(builder).getByRole('alert');
+    expect(alert).toHaveTextContent('The service rejected this filter');
+    expect(within(alert).getAllByRole('listitem').map((li) => li.textContent)).toEqual(['unknown field "nope"', 'at most 20 conditions']);
+  });
+
   it('loads the next page of a cursor datasource with execute', async () => {
     const user = userEvent.setup();
     const { calls } = renderAt('/p/test.users');

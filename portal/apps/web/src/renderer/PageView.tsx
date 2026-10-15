@@ -25,7 +25,7 @@ import { FilterRegion, filterParamsOf } from './FilterRegion';
 import { activeBlocks, licenceState, neededDatasources, sectionLabel, tableColumns, withIds, type TableColumns } from './page-model';
 import { EntityHeader, RefreshControl } from './PageParts';
 import { ParamsForm } from './ParamsForm';
-import { readRules } from './QueryBuilder';
+import { advancedParamOf, decodeFilter, paramIssues } from './QueryBuilder';
 import { paramsToSearch, resolveParams } from './params';
 import { usePageData } from './use-page-data';
 import { pageSearch, readInspect, readTableView, tableSearch, tableViewToSearch, withInspect } from './url-state';
@@ -106,6 +106,15 @@ export function PageView({ def, search, update, inspector, viewId, onTitle }: Pa
   const template = (def.template as string | undefined) ?? (def.kind === 'report' ? 'report' : 'dashboard');
 
   const params = useMemo(() => resolveParams(def.params, search), [def.params, search]);
+  // Query builder (`filters.advanced`): the URL carries the structured filter as base64url JSON (`?adv=…`); requests
+  // send it as the JSON object and the BFF validates and compiles it. (`client` dialect builders aren't offered.)
+  const advSpec = def.filters?.advanced?.dialect === 'client' ? undefined : def.filters?.advanced;
+  const advParam = advSpec ? advancedParamOf(advSpec) : undefined;
+  const advFilter = useMemo(() => (advParam ? decodeFilter(search[advParam]) : undefined), [advParam, search]);
+  const send = useMemo(
+    () => (advParam && advFilter ? { ...params.send, [advParam]: advFilter } : params.send),
+    [params.send, advParam, advFilter],
+  );
   const { blocks, tab } = useMemo(() => activeBlocks(def, typeof search.tab === 'string' ? search.tab : undefined), [def, search.tab]);
   const headerBlocks = useMemo(() => (def.tabs?.length && def.layout?.length && template === 'entity' ? withIds(def.layout, 'head_') : []), [def, template]);
   const allBlocks = useMemo(() => [...headerBlocks, ...blocks], [headerBlocks, blocks]);
@@ -121,7 +130,24 @@ export function PageView({ def, search, update, inspector, viewId, onTitle }: Pa
     () => (blocked ? [] : neededDatasources(def, [allBlocks, def.header, def.actions])),
     [blocked, def, allBlocks],
   );
-  const data = usePageData(def, params.send, needed, !blocked && (!gateRelevant || !caps.isPending));
+  const data = usePageData(def, send, needed, !blocked && (!gateRelevant || !caps.isPending));
+
+  // A 400 invalid_params lists every problem; show each next to its control (advanced filter or facet).
+  const serverIssues = useMemo(() => {
+    const f = data.failure;
+    if (!f || f.code !== 'invalid_params') return {};
+    return paramIssues(f.message, [...Object.keys(def.params ?? {}), ...(advParam ? [advParam] : [])]);
+  }, [data.failure, def.params, advParam]);
+  const filterIssues = useMemo(() => {
+    const out: Record<string, string> = { ...params.issues };
+    for (const [name, msgs] of Object.entries(serverIssues))
+      if (name !== advParam) out[name] = `${def.params?.[name]?.label ?? name} ${msgs.join('; ')}`;
+    return out;
+  }, [params.issues, serverIssues, advParam, def.params]);
+  const advanced = useMemo(
+    () => (advSpec ? { spec: advSpec, filter: advFilter, issues: advParam ? (serverIssues[advParam] ?? []) : [] } : undefined),
+    [advSpec, advFilter, advParam, serverIssues],
+  );
 
   const [mountedAt] = useState(() => Date.now());
   const scope = useMemo(
@@ -185,26 +211,26 @@ export function PageView({ def, search, update, inspector, viewId, onTitle }: Pa
     [def.savedViews?.presets, def.params, firstTable],
   );
   const currentState: ViewState = useMemo(() => {
-    const declared = new Set(Object.keys(def.params ?? {}));
+    const declared = new Set([...Object.keys(def.params ?? {}), ...(advParam ? [advParam] : [])]);
     return {
       params: Object.fromEntries(Object.entries(pageSearch(search)).filter(([k]) => declared.has(k))),
       table: tableSearch(search),
     };
-  }, [search, def.params]);
+  }, [search, def.params, advParam]);
   const applyView = useCallback(
     (id: string | undefined, state: ViewState, opts?: { replace?: boolean }) => {
       tableViews.reset();
       void update((prev) => {
         const next: SearchPatch = {};
         for (const [k, v] of Object.entries(prev)) {
-          const isParam = !k.includes('.') && Object.hasOwn(def.params ?? {}, k);
+          const isParam = !k.includes('.') && (Object.hasOwn(def.params ?? {}, k) || k === advParam);
           const isTable = k.includes('.') && !k.startsWith('i.');
           if (!isParam && !isTable && k !== 'view') next[k] = v;
         }
         return { ...next, ...state.params, ...state.table, view: id || undefined };
       }, opts);
     },
-    [update, def.params, tableViews],
+    [update, def.params, tableViews, advParam],
   );
 
   // Open the user's default view when the page is opened without any state in the URL.
@@ -257,19 +283,12 @@ export function PageView({ def, search, update, inspector, viewId, onTitle }: Pa
     };
   }, [def.export?.fileName, scope]);
 
-  // Query builder: compiled server-side filters (odata / kql) into the declared hidden param.
-  const adv = def.filters?.advanced;
-  const advanced = useMemo(
-    () => (adv?.param && adv.dialect !== 'client' ? { spec: adv, rules: readRules(search[`${adv.param}.rules`]) } : undefined),
-    [adv, search],
-  );
-
   // ── Layout ───────────────────────────────────────────────────────────────────────────────────────
   const section = sectionLabel(def, nav.data?.sections);
   const filterParams = useMemo(() => (template === 'report' ? [] : filterParamsOf(def, allBlocks)), [template, def, allBlocks]);
   const refresh = <RefreshControl updatedAt={data.updatedAt} fetching={data.fetching} onRefresh={data.refresh} every={def.refresh} />;
   const exportMenu = def.export && !inspector && (
-    <ExportMenu pageKey={def.id} version={def.version} spec={def.export} params={params.send} columns={exportColumns} fallbackName={fileName} />
+    <ExportMenu pageKey={def.id} version={def.version} spec={def.export} params={send} columns={exportColumns} fallbackName={fileName} />
   );
   const viewsMenu = viewsEnabled && (
     <ViewsMenu
@@ -360,7 +379,7 @@ export function PageView({ def, search, update, inspector, viewId, onTitle }: Pa
         {gate}
         {!blocked && (
           <>
-            <ParamsForm declared={def.params ?? {}} values={params.values} issues={params.issues} onChange={setParams} />
+            <ParamsForm declared={def.params ?? {}} values={params.values} issues={filterIssues} onChange={setParams} />
             {summary.length > 0 && grid(summary)}
             {tables.length > 0 && grid(tables)}
             {def.export && (
@@ -376,7 +395,7 @@ export function PageView({ def, search, update, inspector, viewId, onTitle }: Pa
                     pageKey={def.id}
                     version={def.version}
                     spec={def.export}
-                    params={params.send}
+                    params={send}
                     columns={exportColumns}
                     fallbackName={fileName}
                     intent="primary"
@@ -431,7 +450,7 @@ export function PageView({ def, search, update, inspector, viewId, onTitle }: Pa
           searchParam={def.filters?.search}
           filterParams={filterParams}
           values={params.values}
-          issues={params.issues}
+          issues={filterIssues}
           onChange={setParams}
           advanced={advanced}
         />

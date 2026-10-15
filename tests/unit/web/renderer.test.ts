@@ -15,7 +15,7 @@ import {
   withoutInspect,
 } from '@adminforge/web/src/renderer/url-state';
 import { sameState } from '@adminforge/web/src/renderer/ViewsMenu';
-import { compileRules, readRules } from '@adminforge/web/src/renderer/QueryBuilder';
+import { advancedParamOf, countConditions, decodeFilter, draftFromWire, draftToWire, encodeFilter, paramIssues, placeServerIssues } from '@adminforge/web/src/renderer/QueryBuilder';
 import { contentKeyOf, splitHref } from '@adminforge/web/src/lib/links';
 import { requiresText } from '@adminforge/web/src/app/NavRail';
 
@@ -231,45 +231,107 @@ describe('small helpers', () => {
   });
 });
 
-describe('advanced filter (query builder) compilation', () => {
-  const fields = [
-    { field: 'department', label: 'Department', type: 'string' as const, operators: ['eq' as const, 'startsWith' as const, 'isEmpty' as const] },
-    { field: 'employeeCount', label: 'Count', type: 'number' as const },
-    { field: 'createdDateTime', label: 'Created', type: 'date' as const, operators: ['ge' as const, 'le' as const] },
-    { field: 'userType', label: 'Type', type: 'enum' as const, values: ['Member', 'Guest'], operators: ['eq' as const, 'in' as const] },
-    { field: 'id', label: 'Id', type: 'guid' as const },
-  ];
+describe('advanced filter (structured, compiled by the BFF)', () => {
+  const spec = {
+    dialect: 'odata' as const,
+    fields: [
+      { field: 'department', label: 'Department', type: 'string' as const, operators: ['eq' as const, 'startsWith' as const, 'isEmpty' as const] },
+      { field: 'createdDateTime', label: 'Created', type: 'date' as const, operators: ['ge' as const, 'le' as const] },
+      { field: 'onPremisesSyncEnabled', label: 'Synced', type: 'boolean' as const, operators: ['eq' as const] },
+      { field: 'profileType', label: 'Profile type', type: 'enum' as const, values: ['RegisteredDevice', 'Printer'] },
+      { field: 'tagCount', label: 'Tags', type: 'number' as const, operators: ['eq' as const, 'lt' as const, 'gt' as const] },
+      { field: 'subscriptionId', label: 'Subscription', type: 'guid' as const, operators: ['eq' as const, 'in' as const] },
+    ],
+  };
+  const cond = (field: string, op: string, text = '', picks: string[] = []) => ({ kind: 'condition' as const, field, op: op as never, text, picks });
 
-  it('OData: quotes and escapes every value, drops invalid and undeclared rules', () => {
-    const spec = { dialect: 'odata' as const, param: 'adv', fields };
-    expect(
-      compileRules(spec, [
-        { field: 'department', op: 'eq', value: "O'Brien' or 1 eq 1" },
-        { field: 'department', op: 'startsWith', value: 'Fin' },
-        { field: 'employeeCount', op: 'gt', value: 'ten' },
-        { field: 'employeeCount', op: 'ge', value: '10' },
-        { field: 'createdDateTime', op: 'ge', value: '2026-01-31' },
-        { field: 'userType', op: 'in', value: 'Member, Guest' },
-        { field: 'id', op: 'eq', value: 'not-a-guid' },
-        { field: 'accountEnabled', op: 'eq', value: 'true' },
-        { field: 'department', op: 'contains', value: 'x' },
-        { field: 'department', op: 'isEmpty', value: '' },
-      ]),
-    ).toBe(
-      "department eq 'O''Brien'' or 1 eq 1' and startswith(department, 'Fin') and employeeCount ge 10 and createdDateTime ge 2026-01-31T00:00:00.000Z and userType in ('Member', 'Guest') and department eq null",
-    );
+  it('uses filters.advanced.param, defaulting to adv', () => {
+    expect(advancedParamOf(spec)).toBe('adv');
+    expect(advancedParamOf({ ...spec, param: 'where' })).toBe('where');
   });
 
-  it('KQL: escapes quotes and backslashes', () => {
-    const spec = { dialect: 'kql' as const, param: 'adv', fields };
-    expect(compileRules(spec, [{ field: 'department', op: 'eq', value: "a'b\\c" }, { field: 'department', op: 'isEmpty', value: '' }])).toBe(
-      "department == 'a\\'b\\\\c' and isempty(department)",
-    );
+  it('types every value per field and nests one group level', () => {
+    const r = draftToWire(spec, {
+      join: 'all',
+      items: [
+        cond('department', 'startsWith', '  IT '),
+        cond('createdDateTime', 'ge', '-30d'),
+        cond('onPremisesSyncEnabled', 'eq', '', ['true']),
+        cond('department', 'isEmpty'),
+        { kind: 'group', join: 'any', items: [cond('profileType', 'in', '', ['Printer', 'RegisteredDevice']), cond('tagCount', 'lt', '3')] },
+        cond('subscriptionId', 'in', '0A1B2C3D-0000-4000-8000-000000000001, 0a1b2c3d-0000-4000-8000-000000000002'),
+      ],
+    });
+    expect(r.problems).toEqual({ byCondition: {}, general: [] });
+    expect(r.filter).toEqual({
+      all: [
+        { field: 'department', op: 'startsWith', value: 'IT' },
+        { field: 'createdDateTime', op: 'ge', value: '-30d' },
+        { field: 'onPremisesSyncEnabled', op: 'eq', value: true },
+        { field: 'department', op: 'isEmpty' },
+        { any: [{ field: 'profileType', op: 'in', value: ['Printer', 'RegisteredDevice'] }, { field: 'tagCount', op: 'lt', value: 3 }] },
+        { field: 'subscriptionId', op: 'in', value: ['0a1b2c3d-0000-4000-8000-000000000001', '0a1b2c3d-0000-4000-8000-000000000002'] },
+      ],
+    });
   });
 
-  it('reads rules back from the URL leniently', () => {
-    expect(readRules('[{"field":"department","op":"eq","value":"HR"}]')).toEqual([{ field: 'department', op: 'eq', value: 'HR' }]);
-    expect(readRules('not json')).toEqual([]);
-    expect(readRules([{ field: 1 }])).toEqual([]);
+  it('reports problems per condition (and the 20-condition cap) instead of sending them', () => {
+    const r = draftToWire(spec, {
+      join: 'any',
+      items: [
+        cond('tagCount', 'gt', 'ten'),
+        cond('createdDateTime', 'ge', 'last week'),
+        cond('department', 'eq', 'x'.repeat(257)),
+        cond('department', 'contains', 'a'),
+        { kind: 'group', join: 'all', items: [cond('subscriptionId', 'eq', 'nope')] },
+      ],
+    });
+    expect(r.filter).toBeUndefined();
+    expect(Object.keys(r.problems.byCondition)).toEqual(['0', '1', '2', '3', '4.0']);
+    expect(r.problems.byCondition['3']).toMatch(/doesn’t support/);
+    const many = draftToWire(spec, { join: 'all', items: Array.from({ length: 21 }, () => cond('department', 'eq', 'a')) });
+    expect(many.problems.general).toEqual(['Use at most 20 conditions.']);
+    const tooManyValues = draftToWire(spec, { join: 'all', items: [cond('subscriptionId', 'in', Array.from({ length: 51 }, () => '0a1b2c3d-0000-4000-8000-000000000001').join(','))] });
+    expect(tooManyValues.problems.byCondition['0']).toMatch(/at most 50/);
+  });
+
+  it('round-trips through the URL (base64url JSON) and back into the form', () => {
+    const filter = { any: [{ field: 'department', op: 'eq' as const, value: 'Ünïcode & co' }, { all: [{ field: 'tagCount', op: 'gt' as const, value: 2 }] }] };
+    const encoded = encodeFilter(filter);
+    expect(encoded).toMatch(/^[A-Za-z0-9_-]+$/);
+    expect(decodeFilter(encoded)).toEqual(filter);
+    expect(decodeFilter(JSON.stringify(filter))).toEqual(filter);
+    expect(decodeFilter('not-a-filter')).toBeUndefined();
+    expect(decodeFilter({ all: [], extra: 1 })).toBeUndefined();
+    expect(countConditions(filter)).toBe(2);
+    const draft = draftFromWire(spec, filter);
+    expect(draft.join).toBe('any');
+    expect(draft.items[1]).toMatchObject({ kind: 'group', join: 'all', items: [{ field: 'tagCount', op: 'gt', text: '2' }] });
+    expect(draftToWire(spec, draft).filter).toEqual(filter);
+  });
+
+  it('reads every problem from a 400 invalid_params message, per param', () => {
+    const message =
+      'Invalid parameters: adv: createdDateTime ge: expects an ISO date or today, now, -30d; adv: unknown field "x"; userType: is not one of All, Member, Guest; adv: is not a valid filter (root: bad; all.0: worse)';
+    expect(paramIssues(message, ['userType', 'adv'])).toEqual({
+      adv: ['createdDateTime ge: expects an ISO date or today, now, -30d', 'unknown field "x"', 'is not a valid filter (root: bad; all.0: worse)'],
+      userType: ['is not one of All, Member, Guest'],
+    });
+  });
+});
+
+describe('server issues next to their conditions', () => {
+  it('places "field op: message" on the matching condition and keeps the rest general', () => {
+    const draft = {
+      join: 'all' as const,
+      items: [
+        { kind: 'condition' as const, field: 'department', op: 'eq' as const, text: 'x', picks: [] },
+        { kind: 'group' as const, join: 'any' as const, items: [{ kind: 'condition' as const, field: 'createdDateTime', op: 'ge' as const, text: 'soon', picks: [] }] },
+      ],
+    };
+    expect(placeServerIssues(draft, ['createdDateTime ge: expects an ISO date or today, now, -30d', 'unknown field "nope"'])).toEqual({
+      byCondition: { '1.0': 'Expects an ISO date or today, now, -30d' },
+      general: ['unknown field "nope"'],
+    });
   });
 });

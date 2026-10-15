@@ -108,12 +108,16 @@ export function isDefault(p: Param, value: unknown): boolean {
   return JSON.stringify(d) === JSON.stringify(value) || String(d) === String(value);
 }
 
-/** Search patch for new param values: defaults and blanks are removed from the URL. */
+/**
+ * Search patch for new param values: defaults and blanks are removed from the URL. Keys that aren't declared params
+ * (the query builder's filter) pass through as given.
+ */
 export function paramsToSearch(declared: Params | undefined, patch: Record<string, unknown>): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   for (const [name, value] of Object.entries(patch)) {
     const p = declared?.[name];
-    out[name] = !p || isDefault(p, value) || (Array.isArray(value) && value.length === 0) ? undefined : value;
+    if (!p) out[name] = value === '' ? undefined : value;
+    else out[name] = isDefault(p, value) || (Array.isArray(value) && value.length === 0) ? undefined : value;
   }
   return out;
 }

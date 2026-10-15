@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useQueries, useQueryClient } from '@tanstack/react-query';
 import { getPath, splitDataRef, type WidgetData, type WidgetError } from '@adminforge/widgets';
+import { ApiRequestError } from '../lib/api';
 import { loadDatasource, loadNextPage, toWidgetError, type DatasourceOutcome, type PageDefinition } from './api';
 
 interface ExtraPages {
@@ -24,6 +25,8 @@ export interface PageData {
   updatedAt: number;
   /** All needed datasources have answered (data or error). */
   settled: boolean;
+  /** The first request-level failure (e.g. 400 invalid_params for the whole page). */
+  failure?: ApiRequestError;
 }
 
 const stable = (v: unknown) => JSON.stringify(v, (_k, val) => (val && typeof val === 'object' && !Array.isArray(val) ? Object.fromEntries(Object.entries(val).sort(([a], [b]) => a.localeCompare(b))) : val));
@@ -182,6 +185,7 @@ export function usePageData(def: PageDefinition, send: Record<string, unknown>, 
     fetching: queries.some((q) => q.isFetching),
     updatedAt: Math.max(0, ...queries.map((q) => q.dataUpdatedAt)),
     settled: queries.every((q) => !q.isPending || !enabled),
+    failure: queries.map((q) => q.error).find((e): e is ApiRequestError => e instanceof ApiRequestError),
   };
 }
 

@@ -71,6 +71,42 @@ test.describe('identity.users (list-detail)', () => {
     await expect(page).not.toHaveURL(/userType=|q=/);
   });
 
+  test('the advanced filter goes to the BFF as a structured filter (base64url JSON in the URL)', async ({ page }) => {
+    const calls: NonNullable<BackendOptions['calls']> = [];
+    await open(page, '/p/identity.users', { backend: { calls } });
+    await expect(usersGrid(page).getByRole('row').nth(1)).toBeVisible();
+    await page.getByRole('button', { name: 'Advanced filter' }).click();
+    const builder = page.getByRole('dialog', { name: 'Advanced filter' });
+    await builder.getByRole('combobox', { name: 'Condition 1 operator' }).click();
+    await page.getByRole('option', { name: 'starts with' }).click();
+    await builder.getByRole('textbox', { name: 'Condition 1 value' }).fill('IT');
+    await builder.getByRole('button', { name: 'Add condition' }).click();
+    await builder.getByRole('combobox', { name: 'Condition 2 field' }).click();
+    await page.getByRole('option', { name: 'Created' }).click();
+    await builder.getByRole('textbox', { name: 'Condition 2 value' }).fill('-365d');
+    await builder.getByRole('button', { name: 'Apply' }).click();
+    const expected = {
+      all: [
+        { field: 'department', op: 'startsWith', value: 'IT' },
+        { field: 'createdDateTime', op: 'ge', value: '-365d' },
+      ],
+    };
+    await expect(page).toHaveURL(/[?&]adv=[A-Za-z0-9_-]+/);
+    expect(decode(new URL(page.url()).searchParams.get('adv'))).toEqual(expected);
+    await expect.poll(() => calls.some((c) => c.path === '/api/datasources/execute-many' && JSON.stringify((c.body as { params: { adv?: unknown } }).params.adv) === JSON.stringify(expected))).toBe(true);
+    await expect(page.getByRole('list', { name: 'Active filters' })).toContainText('2 conditions');
+  });
+
+  test('a filter the BFF rejects shows its problems in the builder', async ({ page }) => {
+    const bad = Buffer.from(JSON.stringify({ all: [{ field: 'nope', op: 'eq', value: 'x' }, { field: 'createdDateTime', op: 'ge', value: 'yesterday-ish' }] })).toString('base64url');
+    await open(page, `/p/identity.users?adv=${bad}`);
+    await expect(page.getByText(/The advanced filter was rejected: .*unknown field "nope"/)).toBeVisible();
+    await page.getByRole('button', { name: /Advanced filter, 2 conditions/ }).click();
+    const alert = page.getByRole('dialog', { name: 'Advanced filter' }).getByRole('alert');
+    await expect(alert).toContainText('unknown field "nope"');
+    await expect(alert).toContainText('createdDateTime ge: expects an ISO date');
+  });
+
   test('table state (sort, columns, client filters) lives in the URL and survives a reload', async ({ page }) => {
     await open(page, '/p/identity.users');
     const grid = usersGrid(page);

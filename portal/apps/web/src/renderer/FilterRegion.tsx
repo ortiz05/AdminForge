@@ -16,7 +16,7 @@ import {
   filterBar,
 } from '@adminforge/ui';
 import type { Block } from './blocks';
-import { compileRules, QueryBuilder, type Rule } from './QueryBuilder';
+import { advancedParamOf, countConditions, encodeFilter, QueryBuilder, type AdvancedSpec, type WireGroup } from './QueryBuilder';
 import { DATE_RANGE_PRESETS, dateRangeLabel, enumOptions, isDefault, isNeutralOption, literalDefault } from './params';
 
 export interface FilterRegionProps {
@@ -28,8 +28,8 @@ export interface FilterRegionProps {
   values: Record<string, unknown>;
   issues: Record<string, string>;
   onChange: (patch: Record<string, unknown>) => void;
-  /** The query builder (`filters.advanced`), when the page declares one with a target param. */
-  advanced?: { spec: NonNullable<NonNullable<Parameters<typeof compileRules>[0]>>; rules: Rule[] };
+  /** The query builder (`filters.advanced`): the current structured filter and what the BFF rejected in it. */
+  advanced?: { spec: AdvancedSpec; filter: WireGroup | undefined; issues: string[] };
   /** Right-aligned extras (row counts, refresh). */
   children?: React.ReactNode;
 }
@@ -262,11 +262,11 @@ function chipValue(p: Param, v: unknown): string {
  * the loaded rows further with their own column filters.
  */
 export function FilterRegion({ declared, searchParam, filterParams, values, issues, onChange, advanced, children }: FilterRegionProps) {
-  const advParam = advanced?.spec.param;
-  const applyRules = (rules: Rule[]) => {
-    if (!advanced || !advParam) return;
-    const compiled = compileRules(advanced.spec, rules);
-    onChange({ [advParam]: compiled || undefined, [`${advParam}.rules`]: rules.length ? rules : undefined });
+  const advParam = advanced ? advancedParamOf(advanced.spec) : undefined;
+  const advCount = countConditions(advanced?.filter);
+  // The URL carries the structured filter as base64url JSON; the server validates and compiles it.
+  const applyAdvanced = (filter: WireGroup | undefined) => {
+    if (advParam) onChange({ [advParam]: filter ? encodeFilter(filter) : undefined });
   };
   const s = filterBar();
   const serverSearch = searchParam ? (values[searchParam] as string | undefined) ?? '' : '';
@@ -299,7 +299,7 @@ export function FilterRegion({ declared, searchParam, filterParams, values, issu
   const clearAll = () => {
     const patch: Record<string, unknown> = Object.fromEntries(filterParams.map((n) => [n, undefined]));
     if (searchParam) patch[searchParam] = undefined;
-    if (advParam) Object.assign(patch, { [advParam]: undefined, [`${advParam}.rules`]: undefined });
+    if (advParam) patch[advParam] = undefined;
     setText('');
     onChange(patch);
   };
@@ -335,23 +335,23 @@ export function FilterRegion({ declared, searchParam, filterParams, values, issu
           if (p.type === 'boolean') return <BooleanFilter key={name} name={name} p={p} value={values[name]} onChange={set} />;
           return <TextFilter key={`${name}:${String(values[name] ?? '')}`} name={name} p={p} value={values[name]} onChange={set} />;
         })}
-        {advanced && advParam && <QueryBuilder spec={advanced.spec} rules={advanced.rules} onApply={applyRules} />}
-        {(chips.length > 0 || serverSearch || (advanced?.rules.length ?? 0) > 0) && (
+        {advanced && <QueryBuilder spec={advanced.spec} filter={advanced.filter} onApply={applyAdvanced} serverIssues={advanced.issues} />}
+        {(chips.length > 0 || serverSearch || advCount > 0) && (
           <Button size="sm" intent="ghost" onClick={clearAll}>
             Clear
           </Button>
         )}
         {children && <div className={s.spacer()}>{children}</div>}
       </div>
-      {(chips.length > 0 || (advanced?.rules.length ?? 0) > 0) && (
+      {(chips.length > 0 || advCount > 0) && (
         <ul className={s.chips()} aria-label="Active filters">
-          {advanced && advanced.rules.length > 0 && (
+          {advCount > 0 && (
             <li className={s.chip()}>
               <span className={s.chipKey()}>Advanced:</span>
               <span className="truncate">
-                {advanced.rules.length} {advanced.rules.length === 1 ? 'condition' : 'conditions'}
+                {advCount} {advCount === 1 ? 'condition' : 'conditions'}
               </span>
-              <button type="button" className={s.chipRemove()} aria-label="Remove advanced filter" onClick={() => applyRules([])}>
+              <button type="button" className={s.chipRemove()} aria-label="Remove advanced filter" onClick={() => applyAdvanced(undefined)}>
                 <XIcon size={11} weight="bold" aria-hidden />
               </button>
             </li>
@@ -366,6 +366,12 @@ export function FilterRegion({ declared, searchParam, filterParams, values, issu
             </li>
           ))}
         </ul>
+      )}
+      {(advanced?.issues.length ?? 0) > 0 && (
+        <p role="alert" className="flex items-center gap-1.5 text-xs text-crit">
+          <WarningIcon size={13} weight="fill" aria-hidden />
+          The advanced filter was rejected: {advanced!.issues.join('; ')}. Open Advanced to fix it.
+        </p>
       )}
       {issueList.length > 0 && (
         <p role="status" className="flex items-center gap-1.5 text-xs text-warn">

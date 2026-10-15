@@ -17,12 +17,18 @@ refuses anything else. Prefer Graph when it can do the job.
    `Set-StrictMode -Version Latest`, `param([hashtable]$Inputs, [hashtable]$Context)`.
 2. Don't connect in the script: list the services it needs in the datasource/step `services`
    (`graph`, `exchange`, `teams`, `sharepointAdmin`, `arm`) and the worker connects with the forwarded delegated
-   tokens before it runs (and, in read mode, enables the Get-only guard). Read inputs with `Get-AdminForgeInput`
+   tokens before it runs (and, in read mode, checks the script against the read-only policy, then guards every write command). Read inputs with `Get-AdminForgeInput`
    (typed, bounded); emit results with `Write-AdminForgeOutput` (`-Data` for one object, or pipe rows), progress with
    `Write-AdminForgeProgress`, logs with `Write-AdminForgeLog`, failures with `New-AdminForgeError`. Never write tokens
    or secrets.
 3. Inputs are data — never build commands by string interpolation (`Invoke-Expression` is forbidden).
-4. Read scripts only call `Get-*` (read mode replaces every other command with a guard). Write scripts are used from
+4. Read scripts pass the runner's **read-only policy** (checked before the script runs; a refusal names the line):
+   `Get-*` commands (not ones returning tokens or connections), the AdminForge helpers, the script's own functions and
+   a fixed set of utilities (`ForEach-/Where-/Select-/Sort-/Group-/Measure-Object`, `ConvertTo/From-Json`, `Get-Date`,
+   …). No `Module\Verb-Noun` except to allowed commands, no `& $x`, no `$env:`/`$ExecutionContext`, no
+   `.Invoke()`/`.GetType()`/`.ExecuteQuery()`, no `-as $string`, no classes or `using`; .NET types from a small
+   allow-list only. Service writes fail at the call. Check with `Test-AdminForgeReadOnlyScript -Content (Get-Content
+-Raw <file>)` (the Pester `Invoke-ContentScript` helper applies it in read mode). Write scripts are used from
    playbook steps with `mode: write`.
 5. Pin it: `sha256sum portal/content/scripts/<path>` → put `script` + `sha256` in the datasource/step. **Any edit to
    the script changes the hash — update every reference.** Write scripts start with

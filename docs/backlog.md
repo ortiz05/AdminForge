@@ -18,9 +18,54 @@ Gaps found while building. Each item names where it lands. Items move to a phase
       to a file or the journal, and verify against it, so a database writer can't rewrite the tail.
 - [ ] Re-validate definitions loaded from the database (`definitions/db-store.ts`): schema-parse and re-hash on load
       (cached by sha256), refusing rows that don't match.
-- [ ] Response-size cap in `createHttpClient` (stream and stop at N MB) as a backstop to KQL `take` limits.
-- [ ] Child runs: check the child playbook's `requires.portalRoles` and `confirm` against the initiator
-      (`runs/children.ts`).
+- [x] Response-size cap in `createHttpClient` (`OUTBOUND_MAX_BYTES`, streamed).
+- [x] Child runs check the child playbook's `requires.portalRoles` against whoever runs them.
+- [x] Second security review (2026-10-15, API + identity/RBAC) — fixed: connection scopes and audience allow-list,
+      `invalid_grant` ends sessions, control characters in paths, guests refused (`acct`), step-up always forced,
+      query params out of logs, mock mode fenced, response caps, HTTP-probe SSRF, expression limits, `/readyz` cache,
+      server-side correlation ids; current-version-only data and exports, delivery recipients from configuration only,
+      manual-step values from the right person, scheduled-run output visibility, connection-aware approval
+      fingerprints, redaction after resume, safe Markdown links, approver and child roles, drafts can't run,
+      single-use previews; runner tokens sealed and answers signed, read-mode command policy; provisioning ceilings
+      (tier-0 Write scopes, sensitive automation reads), unexpected-privilege status, `acct` claim, automation
+      assignment required and certificate support, https-only redirects, validation user hardened and disabled between
+      runs; playbooks refuse AdminForge's own groups and apps; services on a least-privilege database role; backups
+      without admin credentials or CA keys. See `SECURITY.md`.
+- [ ] Child confirmation: a child playbook's typed confirmation isn't asked when a parent starts it; validation only
+      requires the parent to have a `confirm` block. Align `identity.create-user`, `azure.new-subscription-onboarding`
+      (medium parents with high children), `identity.compromised-account`, `identity.leaver` and
+      `security.compromised-account-response` (click parents with typed children), then require parent risk and confirm
+      type ≥ the child's.
+- [ ] Constrained runspace for read-mode PowerShell: run read jobs in a ConstrainedLanguage `InitialSessionState`
+      runspace with only allow-listed commands visible (keeping the static policy). Blocked by CLM-incompatible lines in
+      six read scripts (Generic `List::new()`, `[Math]`, `[Convert]` — listed in the runner fix notes): rewrite them,
+      re-pin hashes, and live-check Exchange/Teams/PnP connections in a non-default runspace.
+- [ ] Live-check the runner's read-mode guards (Graph and Az guarded, module auto-loading off) on the Exchange, Teams
+      and SharePoint read pages once those workloads are licensed (`pnpm test:live`).
+- [ ] Sign the runner's `/healthz` and cancel answers; optionally encrypt runner answers.
+- [ ] HTTP probes: close the DNS-rebinding window between the address check and the fetch (pinned-address
+      dispatcher); TLS and DNS probe checks can still reach internal hosts and ports.
+- [ ] Connection audiences: resolve the service principal and require `appOwnerOrganizationId` = tenant for GUID and
+      `api://` audiences.
+- [ ] Expressions: string concatenation (`&`) can grow strings without a size check.
+- [ ] Definitions loaded from the database aren't re-validated, so validation-only rules (child confirmation, `$eval`,
+      recipient keys) aren't enforced at run time for rows that bypassed the CLI.
+- [ ] Manual steps that take values can't be completed in automation runs.
+- [ ] Key-value `link` fields with no `href` evaluate the data value as a template (the result is URL-checked; data
+      shouldn't be evaluated as an expression).
+- [ ] A separate "Write-Privileged" app (own group, own authentication context with phishing-resistant MFA) for the
+      tier-0 Write scopes, so routine armed sessions don't hold them.
+- [ ] Separate app registrations per environment label (today `pnpm dev` and the host services share the Read/Write
+      apps and their secrets).
+- [ ] Scope the validation user's User Administrator role to an administrative unit holding the `AF-Test-*` objects
+      (Entra ID P1), or make the privileged groups role-assignable.
+- [ ] Trim the automation baseline to what built-in code needs (Application.Read.All, AuditLog.Read.All,
+      Organization.Read.All, Policy.Read.All); Device.Read.All is unused.
+- [ ] Move Read-app pages that need `Exchange.Manage`, `AllSites.FullControl` or Teams to a narrower identity.
+- [ ] Decide whether `UserAuthenticationMethod.ReadWrite.All` (TAPs for admins) belongs in the tier-0 list.
+- [ ] `provision entra` retires stale extra client secrets (status flags them today; nothing removes them).
+- [ ] Re-issue the automation identity's credential as a certificate on this host (`AF_AUTOMATION_CERT_PATH`); move
+      `AF_AUTOMATION_*` to an env file only the scheduler and worker read.
 - [ ] Run AdminForge as a dedicated system user with system units (filesystem isolation: `ProtectSystem=strict`,
       `ProtectHome`, `ReadWritePaths`), which user units can't enforce on Ubuntu 24.04.
 
@@ -39,7 +84,28 @@ Gaps found while building. Each item names where it lands. Items move to a phase
 - [x] Probe schedules: `job.refs` (list) or a tag selector (`job.select: { tags: [hourly] }`) so one schedule sweeps many probes (today: one schedule per probe).
 - [ ] ARM `apiVersion` from an expression or a per-resource-type lookup, enabling a generic "get resource by id".
 - [x] Expression helpers `$kql(s)` (KQL string literal quoting — R12) and `$uuid()` (fresh GUID, e.g. role assignment names).
-- [ ] Datasource fan-out (one call per row of another datasource) and simple joins.
+- [ ] Make `kind: boolean` (cell and facet) also accept 1/0 and `'true'`/`'false'` text, so computed Resource Graph
+      flags work without a status map.
+- [ ] Datasource fan-out (one call per row of another datasource) and simple joins. Wanted by: members of
+      role-assignable groups, app install failures per app, last sign-in per shared mailbox.
+- [ ] Graph/ARM probe metrics beyond counts: a value from the response (Secure Score drop, budget percentage).
+      (`graphCount` covers counts: Global Administrators, role-group changes.)
+- [ ] Intune report POSTs as reads (`/deviceManagement/reports/get*Report`) — unblocks an app install failures report.
+- [ ] Multi-sheet XLSX exports (the scheduled OS-versions file has only the release summary).
+- [ ] Schedules that export pages (not only reports).
+- [ ] A licence feature key for Microsoft 365 usage reports, so `m365.inactive-licensed-users` can be gated.
+- [ ] Usage-report transforms near the 250 ms budget at ~100,000 users: move counting into the query or summarise
+      server-side.
+- [ ] Linux compliance in the compliance-gaps report (Linux policies live in the settings catalog).
+- [ ] Re-check on a licensed tenant: mailbox `recipientType`, team activity `details[]`, the
+      `RequireDeviceCompliancePolicyAssigned` setting name, Exchange `AccountDisabled`, PIM requests outside `$batch`.
+- [ ] Playbooks: revoke an application permission; remove a credential from a service principal; delete orphaned Azure
+      resources (with approval); disable or remove inbox rules; manage Send on Behalf; remove OneDrive access.
+- [ ] `identity.inactive-guests`: the unredeemed-invitations view should work without Entra ID P1.
+- [ ] Azure: `getByIds` batching beyond 3,000 principals; an option to give the automation identity Reader at a
+      management group; review the App Service end-of-support list quarterly; sub-groups in the Reports navigation.
+- [ ] Enable `reports.azure-monthly-cost-weekly` once the automation identity's access to Cost Management is
+      confirmed (Reader may be enough; Cost Management Reader otherwise).
 - [x] ~~`logQuery` widget~~ — superseded by the `logAnalytics` datasource with table/chart widgets and Query Studio (docs/decisions.md).
 - [x] `kql` probe/check kind over Resource Graph, Log Analytics, advanced hunting — R12.
 - [x] Licence-threshold probe `sku` from `${env.X}` so SKUs aren't literals.

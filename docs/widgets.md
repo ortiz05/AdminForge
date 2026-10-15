@@ -64,22 +64,22 @@ Validated in detail by the schema (`TableWidgetConfig` in `portal/packages/schem
 
 Column `kind` (default `text`):
 
-| Kind           | Renders                                                                              |
-| -------------- | ------------------------------------------------------------------------------------ |
-| `text`         | Plain text                                                                           |
-| `identity`     | Primary text plus a second line from `secondary` (a field path)                      |
-| `status`       | Icon + label from `map` (`value: [tone, label]` or `{ tone, label }`)                |
-| `relativeTime` | "3 days ago", exact time on hover                                                    |
-| `datetime`     | Short timestamp                                                                      |
-| `date`         | Date only                                                                            |
-| `number`       | Formatted number, right-aligned                                                      |
-| `percent`      | A fraction as a percentage (0.42 → 42%)                                              |
-| `bytes`        | Human-readable size                                                                  |
-| `boolean`      | Yes / No (facet filter by default)                                                   |
-| `guid`         | Id chip (keyValue fields call this kind `id`)                                        |
-| `tags`         | Chips from a list or an object (`{ env: prod }` → `env: prod`)                       |
-| `link`         | Link to `link: { page, params }` (templated with `row`), or to a URL value (new tab) |
-| `code`         | Monospace text                                                                       |
+| Kind           | Renders                                                                                                                                                                                               |
+| -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `text`         | Plain text                                                                                                                                                                                            |
+| `identity`     | Primary text plus a second line from `secondary` (a field path)                                                                                                                                       |
+| `status`       | Icon + label from `map` (`value: [tone, label]` or `{ tone, label }`)                                                                                                                                 |
+| `relativeTime` | "3 days ago", exact time on hover                                                                                                                                                                     |
+| `datetime`     | Short timestamp                                                                                                                                                                                       |
+| `date`         | Date only                                                                                                                                                                                             |
+| `number`       | Formatted number, right-aligned                                                                                                                                                                       |
+| `percent`      | A fraction as a percentage (0.42 → 42%)                                                                                                                                                               |
+| `bytes`        | Human-readable size                                                                                                                                                                                   |
+| `boolean`      | Yes / No (facet filter by default). Only for real JSON booleans (Graph, ARM, raw Resource Graph properties); computed KQL flags arrive as 1/0 — send them as `'true'`/`'false'` text and use `status` |
+| `guid`         | Id chip (keyValue fields call this kind `id`)                                                                                                                                                         |
+| `tags`         | Chips from a list or an object (`{ env: prod }` → `env: prod`)                                                                                                                                        |
+| `link`         | Link to `link: { page, params }` (templated with `row`), or to a URL value (new tab)                                                                                                                  |
+| `code`         | Monospace text                                                                                                                                                                                        |
 
 Other column keys: `sortable`, `hidden` (off by default; still in the column chooser and exports), `width` (px),
 `align: start|center|end`. Column `filter`: `text`, `facet`, `range`, `date`, or `{ type, param }` to bind it to a page

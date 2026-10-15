@@ -23,7 +23,28 @@ Pages, dashboards and reports are YAML in `portal/content/{pages,dashboards,repo
    - Resource Graph can't start a query with `union a, b`; pipe instead: `resources | where … | union
 (resourcecontainers | where …)` (resource groups and subscriptions live in `resourcecontainers`).
      `adminforge validate` rejects the leading form.
-   - User input: `$odata()`, `$odataSearch()`, `$kql()`, `$encode()`. Advanced filters: declare
+   - Resource Graph returns **computed** booleans as `1`/`0` (`tostring()` gives `True`/`False`); raw `properties.*`
+     booleans stay `true`/`false`. Project flags you compare or map as `iff(cond, 'true', 'false')` in the final `project` (keep the boolean for KQL `where`/`order by`), compare with `= 'true'`, show them with `kind: status` (never `kind: boolean`), and make fixtures
+     match what Resource Graph really returns. Only `leftouter`/`inner`/`innerunique` joins (≤ 3): use `leftouter` +
+     `where isnull(x)` instead of `leftanti`; every union branch must project the columns used after it.
+   - Results that can reach thousands of rows: a rows datasource without a transform (transforms have a 250 ms budget)
+     plus a second Resource Graph `summarize` query for KPIs; `<ds>.totalRecords` works directly as a KPI.
+   - JSONata: `$filter(arr, function($v, $i) { $i < n })`, not `[[a..b]]` (slow on long lists); `$sum([0, …])` so
+     empty sums are 0; `$exists(x) = false`, not `$not(x)`; guard comparisons with `$type(x) = 'number'`. Build lookup sets with the grouping constructor (`ids{ $: true }`, then `$lookup`), not `$merge` of many objects or `in` over long lists.
+   - Check every new request once against a real tenant, read-only (fixtures can't catch a request Microsoft
+     rejects). Graph checks `$select`/`$expand`/`$filter` before licence checks, so even an unlicensed tenant
+     confirms the syntax.
+   - JSONata: a comparison with a missing field is false — write `$not(isDeleted = true)`, not `isDeleted != true`;
+     never sort on a key that can be `null`. Usage reports may conceal names: detect it by the missing `@` in the UPN.
+   - Graph patterns: resolve names with `POST /directoryObjects/getByIds` (an allowed read, ≤ 1,000 ids) and skip it
+     with `when` when there are no ids (Graph rejects an empty list); wrap id lists in `$append([], …)` because a
+     one-element list becomes a single string; read PIM through `graphBatch`; in directory audit events a group's
+     name is only in `modifiedProperties`, so filter with `targetResources/any(t:t/id eq …)`.
+   - Fixtures: long queries get hashed file names (find them with `fixtureKey()`); add POST fixtures as `variants`
+     rather than overwriting a shared file.
+   - User input: `$odata()`, `$odataSearch()`, `$kql()`, `$encode()` (validation flags user data in a `path`/`url`
+     without `$encode()`). `${ }` values in Markdown text show as plain text; links must be http(s), mailto, `/path` or
+     `#`. `$eval` is unavailable; ranges are capped at 1,000,000 items and built text at 10 M characters. Advanced filters: declare
      `filters.advanced.fields` and use `${ advanced }`; never read the raw param. Dialect `odata` (Graph) and `kql`
      (Resource Graph / Log Analytics) compile into the request; for sources with no query language (`runner`,
      `static`, `function`) use `dialect: rows` and keep the matching rows in the transform with

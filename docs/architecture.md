@@ -77,9 +77,13 @@ person arms again). Steps after an approval run as the approver. Run events go b
 `NOTIFY run_events` and the API's SSE stream.
 
 **PowerShell.** Exchange, Teams and SharePoint work goes to the runner on loopback. The API or worker mints delegated
-tokens for the services the script declares and sends a job signed with HMAC over timestamp, method, path and body
-hash (`RUNNER_SHARED_KEY`, ±60 seconds). The runner only runs scripts from `portal/content/scripts` whose SHA-256
-matches, hands the tokens to a single-use `pwsh` worker over stdin, and in read mode allows only Get-\* cmdlets.
+tokens for the services the script declares, seals them (AES-256-GCM, bound to the job id and request timestamp) and
+sends a job with a fresh nonce, signed with HMAC over timestamp, method, path and body hash (±60 seconds); all keys are
+derived from `RUNNER_SHARED_KEY` with HKDF-SHA256. The runner only runs scripts from `portal/content/scripts` whose
+SHA-256 matches, opens the tokens for a single-use `pwsh` worker (stdin), and signs every event of its answer over the
+nonce; the API verifies each event before using it and refuses redirects. In read mode the worker first checks the
+script against a static read-only policy, then guards every write command of the loaded service modules and turns
+module auto-loading off.
 Scheduled scripts aren't supported yet: the runner can't sign in as the automation identity (`docs/backlog.md`).
 
 **Schedules.** Each scheduler process campaigns for a Postgres advisory lock; the holder fires schedules

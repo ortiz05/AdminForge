@@ -30,7 +30,17 @@ Markdown sections, manual steps and executable steps.
    `refreshTokens: true` so the new roles apply as soon as it succeeds.
 7. **Paths & queries:** `$encode()` path segments, `$odata()` in filters, `$kql()` in KQL.
 8. **Declare** `requires.portalRoles` (`Portal.Operator` for writes), `requires.scopes` (exact write scopes — they must
-   exist on the Write app; check with `pnpm adminforge validate --scopes`), `requires.entraRoles`.
+   exist on the Write app; check with `pnpm adminforge validate --scopes`), `requires.entraRoles`. Tier-0 scopes
+   (role management/PIM, app credentials and owners, app-role and consent grants, `Directory.AccessAsUser.All`,
+   tenant policies — `portal/tools/cli/src/provision/privilege.ts`) are only granted with
+   `AF_ALLOW_PRIVILEGED_WRITE_SCOPES=true`: say so in the PR.
+   - Never let a playbook change AdminForge's own access: refuse the `SG-AdminForge-*` groups (`notPortalGroup`) and
+     AdminForge's apps plus `AF_PROTECTED_APP_IDS` (`notPortalApp`) — copy the asserts from `add-group-members` and
+     `add-app-owner`.
+   - A playbook that starts a child with its own confirmation, or a high/critical child, needs a `confirm` block itself
+     (validation enforces it). Drafts can be previewed but never run.
+   - `redact: true` inputs and manual-step fields are masked everywhere, including run outputs; a step that would send
+     a masked value fails (`redacted_value`). Only the person a manual step waits for can supply its values.
 9. **Tests:** a `tests:` block per behaviour (a test may set `now` and `env` — e.g. `env: { AF_READ_CLIENT_ID: … }` for guards that read configuration) (happy path, each precondition refusal, compensation) with `mocks` per
    step id and `expect.{status, failedStep, plan}`. Run `pnpm adminforge test <id>`.
 10. **Wire it:** reference it from pages (`rowActions`, `bulkActions`, `actionBar`) — see adding-a-page-or-report.

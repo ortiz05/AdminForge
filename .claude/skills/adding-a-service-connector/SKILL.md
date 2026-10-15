@@ -16,8 +16,10 @@ mode) → token for the identity → connector in `portal/packages/connectors`. 
 1. `pnpm adminforge new connection <section>/<name>`: `baseUrl: ${env.X}`, `audience: ${env.Y}` (add both keys to
    `config/example.env`), named `operations` with `method`, `path`, `mode: read|write`. The audience must be **your
    own** app registration (`api://…` or its application id): Microsoft first-party audiences (Graph, ARM, Exchange,
-   SharePoint…) are refused, because the token would go to the connection's host. Function calls never follow
-   redirects.
+   SharePoint…) are refused, because the token would go to the connection's host. An `https://` audience needs its
+   host in `AF_CONNECTION_AUDIENCE_HOSTS`. `scopes` are plain names on that audience (e.g. `user_impersonation`), never
+   a URL or another resource's `.default`. Function calls never follow redirects, and response bodies are capped
+   (`OUTBOUND_MAX_BYTES`).
 2. Grant the Read/Write apps delegated access to that API's scope (add to provisioning; `provision entra`).
 3. Use it from content: datasource `source: function` / step `type: function` with `connection` + `operation`.
 

@@ -16,7 +16,10 @@ services).
 
 `pnpm adminforge env check` → `pnpm adminforge provision entra` → `provision test-identities` → (Azure) `provision
 azure-test` → `pnpm exec tsx tests/live/scripts/register-test-user-mfa.ts` (registers TOTP if Entra asks).
-`pnpm adminforge provision status` must be all ✓ (licence-blocked items are listed separately).
+`pnpm adminforge provision status` must be all ✓ (licence-blocked items are listed separately) and report no
+unexpected privilege. Test identities exist only where `AF_ENV_LABEL` is in `AF_TEST_IDENTITY_LABELS` (default
+`dev,test`). The validation user is **disabled between runs**: `pnpm test:live` enables and disables it itself; wrap
+scripts in `pnpm adminforge provision test-identities --enable` / `--disable`.
 
 ## Checks
 

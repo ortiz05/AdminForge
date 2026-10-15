@@ -39,3 +39,28 @@ Administrator, often activated through PIM). The portal explains when a role or 
 Remove them from the groups (or disable the account). AdminForge re-checks roles every 5 minutes: a session with no
 AdminForge role left ends, and write access ends as soon as Operator is removed. Disabling the account ends the
 session at the next check as well.
+
+## What the apps may do
+
+AdminForge's three app registrations get only the permissions published content declares (`pnpm adminforge
+validate --scopes` compares them), within ceilings that need a deliberate opt-in (`docs/operations.md`):
+
+- **Read app** (everyone): read scopes, plus write-capable workload scopes that have no read-only equivalent —
+  ARM `user_impersonation` (always), and on licensed tenants Exchange `Exchange.Manage`, SharePoint
+  `AllSites.FullControl` and Teams `user_impersonation`. Provisioning flags them; AdminForge's read policy and the
+  runner's read mode are what keep them read-only.
+- **Write app** (Operators while armed): the scopes write playbooks declare. Tier-0 scopes — role management and PIM,
+  app credentials and owners, app-role and consent grants, `Directory.AccessAsUser.All` (device deletion), tenant
+  policies — only with `AF_ALLOW_PRIVILEGED_WRITE_SCOPES=true`. The lists are in
+  `portal/tools/cli/src/provision/privilege.ts`.
+- **Automation identity** (schedules): read-only application permissions; writes need
+  `AF_AUTOMATION_ALLOW_WRITE_PERMISSIONS=true`, sensitive reads (mail, files, sites, chats, calendars, BitLocker keys,
+  …) need `AF_AUTOMATION_ALLOW_SENSITIVE_READS=true`. It requires assignment and can use a certificate instead of a
+  secret.
+
+AdminForge never manages its own access: its playbooks refuse to change the `SG-AdminForge-*` groups, its own app
+registrations and the apps in `AF_PROTECTED_APP_IDS` (the provisioner). Do that in the Microsoft Entra admin center.
+
+**This installation:** `AF_ALLOW_PRIVILEGED_WRITE_SCOPES=true` (2026-10-15) — the identity playbooks for directory
+roles, PIM eligibility, app access, consent grants, app owners and stale-device deletion need it. Review whether all
+of them are wanted before go-live.

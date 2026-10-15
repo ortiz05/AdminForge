@@ -11,6 +11,18 @@ Closes the gaps found by comparing the build with the original plan (see the pla
 
 ### Added
 
+- **Report library** (~40 new reports, each with a delivery schedule): identity (application permissions, consent
+  grants, apps and groups without owners, app credential hygiene, app registration risks, licensed disabled accounts,
+  password age, high-impact directory changes, AdminForge role-group changes, tenant settings baseline); Microsoft 365,
+  endpoint and security (inactive licensed users, mailbox, Teams, SharePoint and OneDrive usage, service health
+  review, message center actions, device security and compliance gaps, Autopilot, Defender alerts, Secure Score,
+  risky users); Azure (orphaned resources, budgets, monthly cost, storage, database and Key Vault security, VMs without
+  backup, Defender plan coverage, privileged, orphaned and custom-role RBAC, Advisor, policy compliance, Arc agent
+  health, App Service security). Every query was checked against a live tenant.
+- **Count probes** (`kind: graphCount`): alert when a Graph list holds too many or too few items — Global
+  Administrators (more than four, fewer than two users), changes to AdminForge's role groups, plus five Azure
+  configuration checks and two Microsoft 365 / Defender probes.
+- **Production-build smoke test** in CI (`pnpm test:e2e:prod`).
 - **Delivery:** scheduled reports by email (Graph `sendMail` as the automation identity, from `AF_MAIL_SENDER`) and to
   Teams (Workflows webhooks on Microsoft hosts only); schedule failure/success alerts; approver notifications for run
   approvals and schedule enable requests. Recipients and webhooks are configuration keys, never content.
@@ -55,6 +67,20 @@ Closes the gaps found by comparing the build with the original plan (see the pla
 
 ### Security
 
+- Second security review (API, runs, runner, identity and RBAC) fixed: connection token scopes and audience allow-list;
+  sessions end on `invalid_grant`; guests refused (`acct`); step-up always forces a fresh sign-in; control characters
+  in paths; response size caps; HTTP-probe SSRF; expression limits; query parameters kept out of logs; mock mode fenced;
+  current-version-only data and exports; email recipients from configuration only; manual-step values only from the
+  person asked; scheduled-run outputs need the schedule's roles; connections in approval fingerprints; redaction after
+  resume; safe Markdown links; approver and child playbook roles; drafts can't run; single-use previews; runner tokens
+  sealed and answers signed; a read-only command policy for PowerShell read jobs.
+- Provisioning ceilings for tier-0 Write scopes (`AF_ALLOW_PRIVILEGED_WRITE_SCOPES`) and sensitive automation reads
+  (`AF_AUTOMATION_ALLOW_SENSITIVE_READS`); `provision status` fails on privilege it didn't grant; automation identity
+  requires assignment and can use a certificate; the validation user drops Groups Administrator and stays disabled
+  between live runs.
+- AdminForge's playbooks refuse to change its own role groups, its own apps and `AF_PROTECTED_APP_IDS` (the provisioner).
+- The services use a least-privilege database role (`adminforge_app`) that can't change the audit log; backups no
+  longer include the admin env file or private keys unless encrypted (`AF_BACKUP_GPG_RECIPIENT`).
 - `requires.portalRoles` now means **every** listed role everywhere (pages and datasources previously accepted any
   one of them).
 - Shared saved views are listed only for pages the caller can open.
@@ -62,6 +88,13 @@ Closes the gaps found by comparing the build with the original plan (see the pla
 
 ### Fixed
 
+- Azure pages read Resource Graph flags correctly: computed booleans arrive as 1/0, so the Privileged KPI showed 0, the
+  resource Access tab never offered "Remove assignment", and several flag columns and facets were wrong (8 pages).
+- `identity.*` reports: a one-item id list was sent to Graph as a plain string.
+- Error messages never show Microsoft's raw JSON (e.g. usage reports on a tenant without Microsoft 365).
+- Graph requests send `Accept-Language: en-US` (direct PIM requests failed with `CultureNotFoundException`).
+- Built-in email delivery can get `Mail.Send` (provisioning requests it when `AF_MAIL_SENDER` is set, behind the write
+  opt-in; prefer scoping it to that mailbox with Exchange RBAC for Applications).
 - Playbook preflight checked licences by SKU name instead of feature key, so licensed features could show as missing.
 - An admin's default density never applied to people without their own preference.
 - The PIM menu and the page renderer shared a query key, so one could overwrite the other's data.

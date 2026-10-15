@@ -38,8 +38,17 @@ Claude picks the matching skill automatically (or name it: "use the adding-a-pla
   pinned sha256 is now stale.
 - **On every commit** (`.githooks/pre-commit`, enabled by `pnpm install` or `git config core.hooksPath .githooks`):
   guard tests — no secrets, no tenant-specific values, tokens-only UI.
-- **In CI** (`.github/workflows/ci.yml`): guards, lint, `format:check`, typecheck, database migrations, the unit /
-  component / api / content tests, build, and e2e + visual in mock mode.
+- **In CI** (`.github/workflows/ci.yml`): dependency audit, guards, lint, `format:check`, typecheck, database
+  migrations, the unit / component / api / content tests, a production build with the initial-load budget, e2e +
+  visual in mock mode, and a production-build smoke test (`pnpm test:e2e:prod`).
+- **In `adminforge validate`** (content rules people trip over): Resource Graph queries may not start with `union`;
+  user data in a request `path`/`url` needs `$encode()`; email recipients are `${ env.AF_…RECIPIENTS }`-style keys
+  only; a playbook that starts a confirmed or high-risk child needs its own `confirm`; `$eval` is unavailable.
+- **In provisioning** (`adminforge provision entra`): tier-0 Write scopes, application write permissions and
+  sensitive application reads are only granted with their opt-ins (`docs/access.md`); `provision status` fails on
+  privilege it didn't grant.
+- **Fixtures can't catch what Microsoft rejects:** run every new Graph request, Resource Graph or KQL query once
+  against a real tenant, read-only (the page and schedule skills show how).
 
 ## Reviewers
 

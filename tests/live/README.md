@@ -25,7 +25,14 @@ The `validating-against-a-tenant` skill (`.claude/skills/`) is the step-by-step 
   `pnpm adminforge provision test-identities` (creates the validation user and the `AF-Test-*` targets, and writes
   `AF_TEST_USER_UPN` / `AF_TEST_USER_PASSWORD` to `<env>.admin.env`), and for KQL checks
   `pnpm adminforge provision azure-test`. `pnpm adminforge provision status` should be all ✓ (licence-blocked items
-  are listed separately).
+  are listed separately). Test identities are only provisioned when `AF_ENV_LABEL` is listed in
+  `AF_TEST_IDENTITY_LABELS` (default `dev,test`); in any other environment `provision status` fails if they exist.
+- The validation user is **disabled between runs**. `pnpm test:live` enables it in Playwright's global setup and
+  disables it (revoking its sessions) in global teardown, using the provisioner credential from `<env>.admin.env`, so
+  that credential must still be allowed to change a privileged user's account (Global Administrator or Privileged
+  Authentication Administrator). For the scripts below, wrap them yourself:
+  `pnpm adminforge provision test-identities --enable` before, `--disable` after. `AF_LIVE_KEEP_TESTER=1` makes the
+  suite leave the account as it is.
 - MFA for the validation user: run the TOTP bootstrap once (below).
 - A running stack whose URL is `PUBLIC_BASE_URL`: `pnpm dev` (with `RUN_WORKER_IN_PROCESS=true` and
   `SCHEDULER_IN_PROCESS=true` if no worker/scheduler service runs) or the host services (`portal/deploy/README.md`).
@@ -64,6 +71,19 @@ Run from the repository root with `pnpm exec tsx tests/live/scripts/<script>.ts`
 
 `register-test-user-mfa.ts` and `verify-api-live.ts` take an optional failure-screenshot path; the default is under
 `/tmp`. Keep screenshots out of the repository — they can show tenant data.
+
+## What the validation user can do
+
+Exactly what the suite needs, nothing standing that it doesn't:
+
+- **Portal roles:** `Portal.Reader` (pages, Query Studio, schedules, probes), `Portal.Operator` (arm, write
+  playbooks) and `Portal.Admin` (audit chain, admin pages). Not `Playbook.Approver`: approvals need a second person,
+  and a single tester who can approve would approve its own requests — approval flows aren't covered by this suite.
+- **Directory roles:** Global Reader (every page reads) and User Administrator (disable/re-enable `AF-Test-User-02`).
+  It owns `AF-Test-Group-01` instead of holding Groups Administrator; `provision test-identities` removes a Groups
+  Administrator assignment left by earlier versions. User Administrator can still manage ordinary (not
+  role-assignable) groups, which is why the account is disabled between runs; see `docs/backlog.md` for scoping it to
+  an administrative unit.
 
 ## Safety rules
 

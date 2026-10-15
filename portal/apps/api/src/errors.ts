@@ -19,12 +19,34 @@ export class AppError extends Error {
   }
 }
 
+/** Public page (rendered by the SPA without a session) that explains a failed sign-in or write-access round trip. */
+export const PROBLEM_PAGE = '/sign-in-problem';
+
+/** A top-level browser navigation (an Entra redirect, a link, a new tab), where a JSON error would show raw. */
+export function isNavigation(request: FastifyRequest): boolean {
+  if (request.method !== 'GET' && request.method !== 'HEAD') return false;
+  const mode = request.headers['sec-fetch-mode'];
+  if (typeof mode === 'string') return mode === 'navigate';
+  return (request.headers.accept ?? '').includes('text/html');
+}
+
+/** The problem page for `err`: only the code, the correlation id and an upstream detail travel in the URL. */
+export function problemPageUrl(request: FastifyRequest, err: AppError): string {
+  const params = new URLSearchParams({ code: err.code, ref: String(request.id) });
+  if (request.url.startsWith('/auth/arm')) params.set('during', 'arm');
+  const detail = err.extras.detail;
+  if (detail && /^[A-Za-z0-9_]{1,40}$/.test(detail)) params.set('detail', detail);
+  return `${PROBLEM_PAGE}?${params}`;
+}
+
 /** Where the SPA sends the browser to sign in. */
 export const loginUrl = (returnTo = '/', claims?: string) =>
   `/auth/login?returnTo=${encodeURIComponent(returnTo)}${claims ? `&claims=${encodeURIComponent(Buffer.from(claims, 'utf8').toString('base64url'))}` : ''}`;
 
 export const unauthenticated = () =>
-  new AppError(401, 'unauthenticated', 'Sign in to continue.', { login: loginUrl() });
+  new AppError(401, 'unauthenticated', 'Your AdminForge session has ended. Sign in to continue.', {
+    login: loginUrl(),
+  });
 
 /** Parses a request body with zod, throwing a 400 ApiErrorBody on failure. */
 export function parseBody<T extends z.ZodType>(schema: T, body: unknown): z.infer<T> {
@@ -89,12 +111,18 @@ export function sendError(request: FastifyRequest, reply: FastifyReply, err: App
   return reply.status(err.status).type('application/json; charset=utf-8').send(body);
 }
 
-/** The single error handler: every failure leaves as an ApiErrorBody. */
+/**
+ * The single error handler: every failure leaves as an ApiErrorBody — except a browser navigation to /auth/*
+ * (Entra redirects back there), which goes to the problem page so nobody is ever shown raw JSON.
+ */
 export function registerErrorHandler(app: FastifyInstance) {
   app.setErrorHandler((err, request, reply) => {
     const appErr = toAppError(err);
     if (appErr.status >= 500) request.log.error({ err }, 'request failed');
     else request.log.info({ code: appErr.code, status: appErr.status }, 'request rejected');
+    if (request.url.startsWith('/auth/') && isNavigation(request)) {
+      return reply.header('cache-control', 'no-store').redirect(problemPageUrl(request, appErr), 303);
+    }
     return sendError(request, reply, appErr);
   });
 }

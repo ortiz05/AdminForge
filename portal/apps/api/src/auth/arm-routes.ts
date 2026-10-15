@@ -9,6 +9,7 @@ import {
   authContextClaims,
   beginRoundTrip,
   finishRoundTrip,
+  providerDescription,
   providerError,
   type CallbackQuery,
 } from './flow';
@@ -28,7 +29,7 @@ export const armMinutes = (ctx: AppContext, requested: number) =>
   Math.min(requested, ctx.config.WRITE_SESSION_MAX_MINUTES);
 
 const notArmed = () =>
-  new AppError(409, 'not_armed', 'Write access is not armed.', { hint: 'Arm write access first.' });
+  new AppError(409, 'not_armed', 'Write access is off.', { hint: 'Arm write access first.' });
 
 /** Extend (once per armed session) and disarm — identical in mock and Entra modes. */
 export function armLifecycleRoutes(app: FastifyInstance, ctx: AppContext) {
@@ -38,11 +39,9 @@ export function armLifecycleRoutes(app: FastifyInstance, ctx: AppContext) {
     const now = ctx.now();
     if (!isArmed(session, now)) throw notArmed();
     if (session.writeExtended) {
-      throw new AppError(
-        409,
-        'already_extended',
-        'Write access can be extended once. Disarm and arm again to continue.',
-      );
+      throw new AppError(409, 'already_extended', 'Write access has already been extended once.', {
+        hint: 'Disarm, then arm again to start a new write window.',
+      });
     }
     const minutes = armMinutes(ctx, body.minutes ?? ctx.config.WRITE_SESSION_MAX_MINUTES);
     const until = new Date(Math.max(session.writeExpiresAt!.getTime(), now.getTime() + minutes * 60_000));
@@ -108,9 +107,9 @@ export function entraArmRoutes(app: FastifyInstance, ctx: AppContext) {
         throw new AppError(
           503,
           'write_app_not_configured',
-          'The Write app is not configured for this installation.',
+          'Write access isn’t set up on this AdminForge installation.',
           {
-            hint: 'Run `adminforge provision entra` to create it (AF_WRITE_CLIENT_ID / AF_WRITE_CLIENT_SECRET).',
+            hint: 'An administrator needs to run `adminforge provision entra`, which creates the Write app (AF_WRITE_CLIENT_ID / AF_WRITE_CLIENT_SECRET).',
           },
         );
       }
@@ -146,8 +145,11 @@ export function entraArmRoutes(app: FastifyInstance, ctx: AppContext) {
         throw new AppError(
           401,
           'session_mismatch',
-          'Arming was started from a different session. Sign in and arm again.',
-          { login: '/auth/login?returnTo=%2F' },
+          'Write access was requested from a different sign-in session.',
+          {
+            hint: 'Your session changed while you were verifying (for example, you signed in again in another tab). Arm again from this tab.',
+            login: '/auth/login?returnTo=%2F',
+          },
         );
       }
       const reason = pending.details?.reason ?? null;
@@ -161,15 +163,23 @@ export function entraArmRoutes(app: FastifyInstance, ctx: AppContext) {
         });
         return err;
       };
-      const entraError = providerError('arm_failed', request.query);
-      if (entraError) throw await fail(entraError);
+      const entraError = providerError('write', request.query);
+      if (entraError)
+        throw await fail(entraError, {
+          detail: entraError.extras.detail,
+          entra: providerDescription(request.query),
+        });
       if (!request.query.code)
         throw await fail(
-          new AppError(400, 'invalid_request', 'The step-up response had no authorization code.'),
+          new AppError(400, 'invalid_request', 'The verification response from Microsoft was incomplete.', {
+            hint: 'You’re still signed in with read-only access. Arm again.',
+          }),
         );
       if (!session.roles.includes('Portal.Operator'))
         throw await fail(
-          new AppError(403, 'forbidden', 'Arming write access needs the Portal.Operator role.'),
+          new AppError(403, 'forbidden', 'Turning on write access needs the Operator role.', {
+            hint: 'Ask a portal administrator to add you to the AdminForge Operator group.',
+          }),
         );
 
       const writePartition = partitionKey('write', session.idHash);
@@ -188,7 +198,11 @@ export function entraArmRoutes(app: FastifyInstance, ctx: AppContext) {
           'write code redemption failed',
         );
         await ctx.tokenCache.delete(writePartition);
-        throw await fail(new AppError(400, 'arm_failed', 'Write access could not be armed. Try again.'));
+        throw await fail(
+          new AppError(400, 'arm_failed', 'AdminForge couldn’t complete the write-access verification.', {
+            hint: 'You’re still signed in with read-only access. Arm again. If it keeps happening, give a portal administrator the reference below.',
+          }),
+        );
       }
       const { claims, homeAccountId } = redeemed;
       const reject = async (err: AppError, details: Record<string, unknown> = {}) => {
@@ -198,18 +212,28 @@ export function entraArmRoutes(app: FastifyInstance, ctx: AppContext) {
       };
       if (!claims.nonce || claims.nonce !== pending.nonce)
         throw await reject(
-          new AppError(400, 'invalid_nonce', 'Step-up response failed validation. Try again.'),
+          new AppError(
+            400,
+            'invalid_nonce',
+            'The verification response from Microsoft didn’t pass validation.',
+            {
+              hint: 'You’re still signed in with read-only access. Arm again.',
+            },
+          ),
         );
       if (claims.tid !== cfg.AF_TENANT_ID)
         throw await reject(
-          new AppError(400, 'wrong_tenant', 'This account belongs to a different Microsoft Entra tenant.'),
+          new AppError(400, 'wrong_tenant', 'That account isn’t part of this organisation.', {
+            hint: 'Arm again and verify with the same work account you signed in with.',
+          }),
         );
       if (claims.oid !== session.userOid) {
         throw await reject(
           new AppError(
             403,
             'user_mismatch',
-            'You armed with a different account than the one signed in. Arm again with your own account.',
+            'You verified with a different account than the one signed in.',
+            { hint: 'Arm again and verify with the account shown in the top-right corner.' },
           ),
           {
             armedOid: claims.oid ?? null,
@@ -222,14 +246,21 @@ export function entraArmRoutes(app: FastifyInstance, ctx: AppContext) {
           new AppError(
             403,
             'step_up_required',
-            'The sign-in did not satisfy the write-access Conditional Access requirement.',
+            'Your verification didn’t meet the write-access sign-in policy.',
+            {
+              hint: 'Your organisation requires a stronger verification for write access (for example, phishing-resistant MFA or a compliant device). Arm again and complete every prompt.',
+            },
           ),
           { acrs },
         );
       }
       const now = ctx.now();
       if (!cfg.WRITE_AUTH_CONTEXT && claims.auth_time && now.getTime() / 1000 - claims.auth_time > 600) {
-        throw await reject(new AppError(403, 'step_up_stale', 'Arming needs a fresh sign-in. Try again.'));
+        throw await reject(
+          new AppError(403, 'step_up_stale', 'Write access needs a fresh verification.', {
+            hint: 'Microsoft reused an earlier sign-in. Arm again and enter your credentials when asked.',
+          }),
+        );
       }
 
       const minutes = armMinutes(ctx, requested);

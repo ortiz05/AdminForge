@@ -49,6 +49,8 @@ export const ApiErrorBody = z.object({
     login: z.string().optional(),
     /** Present when a claims challenge or step-up is required. */
     reauth: z.object({ url: z.string() }).optional(),
+    /** Upstream identifier an administrator can look up (e.g. AADSTS50105, a Graph error code). */
+    detail: z.string().optional(),
     correlationId: z.string().optional(),
   }),
 });

@@ -9,6 +9,7 @@ import {
   beginRoundTrip,
   decodeClaimsParam,
   finishRoundTrip,
+  providerDescription,
   providerError,
   type CallbackQuery,
 } from './flow';
@@ -93,12 +94,14 @@ export function entraSignInRoutes(app: FastifyInstance, ctx: AppContext) {
   const cfg = ctx.config;
   const auth = ctx.auth!;
 
-  app.get<{ Querystring: { returnTo?: string; claims?: string } }>(
+  // `?account=choose` shows Entra's account picker (after a no-access or wrong-account sign-in).
+  app.get<{ Querystring: { returnTo?: string; claims?: string; account?: string } }>(
     '/auth/login',
     { config: { rateLimit: AUTH_RATE_LIMIT } },
     async (request, reply) => {
       const returnTo = safeReturnTo(request.query.returnTo);
       const claims = decodeClaimsParam(request.query.claims);
+      const choose = request.query.account === 'choose';
       const { state, nonce, challenge } = await beginRoundTrip(ctx, { kind: 'read', returnTo });
       const url = await auth.authUrl({
         kind: 'read',
@@ -106,7 +109,7 @@ export function entraSignInRoutes(app: FastifyInstance, ctx: AppContext) {
         challenge,
         nonce,
         claims,
-        loginHint: request.session?.upn,
+        ...(choose ? { prompt: 'select_account' as const } : { loginHint: request.session?.upn }),
       });
       return reply.redirect(url);
     },
@@ -126,11 +129,18 @@ export function entraSignInRoutes(app: FastifyInstance, ctx: AppContext) {
         });
         return err;
       };
-      const entraError = providerError('signin_failed', request.query);
-      if (entraError) throw await fail(entraError);
+      const entraError = providerError('read', request.query);
+      if (entraError)
+        throw await fail(entraError, {
+          detail: entraError.extras.detail,
+          entra: providerDescription(request.query),
+        });
       if (!request.query.code)
         throw await fail(
-          new AppError(400, 'invalid_request', 'The sign-in response had no authorization code.'),
+          new AppError(400, 'invalid_request', 'The sign-in response from Microsoft was incomplete.', {
+            hint: 'Sign in again.',
+            login: '/auth/login?returnTo=%2F',
+          }),
         );
 
       const sid = randomToken();
@@ -152,7 +162,8 @@ export function entraSignInRoutes(app: FastifyInstance, ctx: AppContext) {
         );
         await ctx.tokenCache.delete(readPartition);
         throw await fail(
-          new AppError(400, 'signin_failed', 'Sign-in could not be completed. Start again.', {
+          new AppError(400, 'signin_failed', 'AdminForge couldn’t complete your sign-in with Microsoft.', {
+            hint: 'Sign in again. If it keeps happening, give a portal administrator the reference below.',
             login: '/auth/login?returnTo=%2F',
           }),
         );
@@ -165,19 +176,32 @@ export function entraSignInRoutes(app: FastifyInstance, ctx: AppContext) {
       };
       if (!claims.nonce || claims.nonce !== pending.nonce)
         throw await reject(
-          new AppError(400, 'invalid_nonce', 'Sign-in response failed validation. Start again.'),
+          new AppError(400, 'invalid_nonce', 'The sign-in response from Microsoft didn’t pass validation.', {
+            hint: 'Sign in again. Nothing was changed.',
+          }),
         );
       if (claims.tid !== cfg.AF_TENANT_ID)
         throw await reject(
-          new AppError(400, 'wrong_tenant', 'This account belongs to a different Microsoft Entra tenant.'),
+          new AppError(400, 'wrong_tenant', 'That account isn’t part of this organisation.', {
+            hint: 'Sign in with your work account for this organisation.',
+          }),
         );
       if (!claims.oid)
-        throw await reject(new AppError(400, 'invalid_token', 'Sign-in response has no user object id.'));
+        throw await reject(
+          new AppError(
+            400,
+            'invalid_token',
+            'Microsoft didn’t identify your account in the sign-in response.',
+            {
+              hint: 'Sign in again with a work account. Guest and personal accounts can’t use AdminForge.',
+            },
+          ),
+        );
       const roles = portalRoles(claims);
       if (roles.length === 0) {
         throw await reject(
-          new AppError(403, 'no_portal_role', 'Your account has no AdminForge role.', {
-            hint: 'Ask a portal administrator to add you to an AdminForge group.',
+          new AppError(403, 'no_portal_role', 'Your account doesn’t have access to AdminForge yet.', {
+            hint: 'Ask a portal administrator to add you to an AdminForge group: Reader to view, Operator to make changes.',
           }),
         );
       }

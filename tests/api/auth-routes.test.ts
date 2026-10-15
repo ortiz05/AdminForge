@@ -77,7 +77,7 @@ describe('Entra sign-in routes (fake AuthClient)', () => {
     expect(res.statusCode).toBe(400);
     expect(ApiErrorBody.parse(res.json()).error).toMatchObject({
       code: 'invalid_state',
-      message: 'Sign-in expired or was started in another tab. Start again.',
+      message: 'This sign-in link has expired or was already used.',
     });
     expect(t.auth.redeems).toHaveLength(0);
   });
@@ -156,7 +156,7 @@ describe('Entra sign-in routes (fake AuthClient)', () => {
     expect(t.sessions.rows.size).toBe(0);
   });
 
-  it('an Entra error redirect → 400 signin_failed with a short message', async () => {
+  it('an Entra error redirect → a specific code, the AADSTS number as detail, no Entra text shown', async () => {
     const { state } = await startLogin(t);
     const description = encodeURIComponent(
       'AADSTS50105: The signed in user is not assigned to a role.\r\nTrace ID: abc',
@@ -165,10 +165,11 @@ describe('Entra sign-in routes (fake AuthClient)', () => {
       method: 'GET',
       url: `/auth/callback?error=access_denied&error_description=${description}&state=${state}`,
     });
-    expect(res.statusCode).toBe(400);
+    expect(res.statusCode).toBe(403);
     expect(res.json().error).toMatchObject({
-      code: 'signin_failed',
-      message: 'AADSTS50105: The signed in user is not assigned to a role.',
+      code: 'no_portal_role',
+      message: 'Your account doesn’t have access to AdminForge yet.',
+      detail: 'AADSTS50105',
     });
   });
 

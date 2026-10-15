@@ -28,7 +28,8 @@ export async function beginRoundTrip(
 }
 
 const invalidState = () =>
-  new AppError(400, 'invalid_state', 'Sign-in expired or was started in another tab. Start again.', {
+  new AppError(400, 'invalid_state', 'This sign-in link has expired or was already used.', {
+    hint: 'Sign-ins time out after 10 minutes and work once, in the tab that started them. Start again from AdminForge.',
     login: '/auth/login?returnTo=%2F',
   });
 
@@ -45,25 +46,7 @@ export async function finishRoundTrip(
   return record;
 }
 
-/** Query parameters of an authorization response (response_mode=query). */
-export interface CallbackQuery {
-  code?: string;
-  state?: string;
-  error?: string;
-  error_description?: string;
-}
-
-/** Entra error redirect → 400 with a short, single-line message (no trace noise). */
-export function providerError(code: string, query: CallbackQuery): AppError | undefined {
-  if (!query.error) return undefined;
-  const description = (query.error_description ?? '')
-    .split(/\r?\n/)[0]!
-    .replace(/\s+Trace ID:.*$/i, '')
-    .slice(0, 300);
-  return new AppError(400, code, description || `Microsoft Entra returned ${query.error}.`, {
-    hint: `Entra error: ${query.error.slice(0, 64)}`,
-  });
-}
+export { providerError, providerDescription, type CallbackQuery } from './entra-errors';
 
 /** Acr values satisfied by the sign-in, normalised to an array. */
 export const acrsOf = (claims: IdClaims): string[] =>

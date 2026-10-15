@@ -60,6 +60,13 @@ Closes the gaps found by comparing the build with the original plan (see the pla
 - An admin's default density never applied to people without their own preference.
 - The PIM menu and the page renderer shared a query key, so one could overwrite the other's data.
 - `adminforge validate --scopes` didn't read the provisioner credentials from the admin env file.
+- Collapse/Expand did nothing in windows narrower than 1024 px: the button treated the rail as collapsed while it
+  was drawn expanded. Your own choice now wins; without one, narrow windows start collapsed.
+- Opening an Azure resource or resource group failed with "Query is invalid": Resource Graph doesn't accept a leading
+  `union a, b` (`azure.resource` 1.1.0). `adminforge validate` now rejects that form in Resource Graph queries.
+- Bar, line and area charts stayed empty in production builds (`… is not a constructor`): the bundler dropped the chart
+  runtime's top-level registrations. Registration is now explicit, and a production-build smoke test
+  (`pnpm test:e2e:prod`, in CI) covers it.
 
 ## 0.1.0 — 2026-10-15
 

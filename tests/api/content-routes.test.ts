@@ -395,9 +395,11 @@ describe('GET /api/events (SSE)', () => {
 
   it('streams ready, definitions.changed, run.updated (per user) and session.mode at the end of the write window', async () => {
     const t = await fixturesApp(env);
+    // The stream's timers are real, so the clock follows real time — from before sign-in, or the session would look
+    // idle-expired whenever real time is over an hour past the fixture clock's start.
+    t.clock.t = Date.now();
     const { cookie, csrf } = await mockLogin(t.app);
     // Armed for 0.6 s: the stream reports the switch back to read exactly when the window closes.
-    t.clock.t = Date.now();
     await t.app.inject({
       method: 'POST',
       url: '/auth/mock/state',

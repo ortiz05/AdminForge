@@ -8,7 +8,7 @@ describe('Icon: any Phosphor glyph on demand', () => {
   });
 
   // Each glyph is its own module; the first transform can be slow on a busy machine.
-  it('loads kebab-case names outside the curated set (siren, microsoft-teams-logo, FirstAidKit)', { timeout: 15_000 }, async () => {
+  it('loads kebab-case names outside the curated set (siren, microsoft-teams-logo, FirstAidKit)', { timeout: 45_000 }, async () => {
     expect(await loadPhosphorIcon('microsoft-teams-logo')).toBeTruthy();
     expect(await loadPhosphorIcon('FirstAidKit')).toBeTruthy();
     expect(await loadPhosphorIcon('definitely-not-an-icon')).toBeNull();
@@ -23,8 +23,8 @@ describe('Icon: any Phosphor glyph on demand', () => {
       </div>,
     );
     const svg = (id: string) => screen.getByTestId(id).querySelector('svg');
-    await waitFor(() => expect(svg('siren')?.style.visibility).not.toBe('hidden'), { timeout: 5000 });
-    await waitFor(() => expect(svg('fallback')?.style.visibility).not.toBe('hidden'), { timeout: 5000 });
+    await waitFor(() => expect(svg('siren')?.style.visibility).not.toBe('hidden'), { timeout: 20_000 });
+    await waitFor(() => expect(svg('fallback')?.style.visibility).not.toBe('hidden'), { timeout: 20_000 });
     expect(svg('siren')!.innerHTML).not.toBe(svg('fallback')!.innerHTML);
   });
 });

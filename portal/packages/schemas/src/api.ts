@@ -29,6 +29,8 @@ export const MeResponse = z.object({
   canArm: z.boolean(),
   /** Extension already used for this armed session. */
   armExtended: z.boolean(),
+  /** Longest write session the server allows (WRITE_SESSION_MAX_MINUTES). */
+  armMaxMinutes: z.number().int().positive(),
   csrf: z.string(),
   prefs: UserPrefs,
   authMode: z.enum(['entra', 'mock']),

@@ -20,6 +20,7 @@ export function me(overrides: Partial<MeResponse> = {}): MeResponse {
     armedUntil: null,
     canArm: true,
     armExtended: false,
+  armMaxMinutes: 60,
     csrf: 'e2e-csrf-token',
     prefs: {},
     authMode: 'mock',

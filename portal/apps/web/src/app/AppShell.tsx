@@ -191,6 +191,7 @@ function SignedInShell({ me, children }: { me: MeResponse; children: ReactNode }
             <ArmControl
               canArm={me.canArm}
               authMode={me.authMode}
+              maxMinutes={me.armMaxMinutes}
               arm={arm}
               tenantName={me.tenant.name}
               dialogOpen={armDialogOpen}

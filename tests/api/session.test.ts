@@ -54,6 +54,7 @@ describe('sessions, mock sign-in, /api/me, CSRF', () => {
       armedUntil: null,
       canArm: true,
       armExtended: false,
+      armMaxMinutes: 60,
       prefs: {},
       authMode: 'mock',
       dataMode: 'fixtures',

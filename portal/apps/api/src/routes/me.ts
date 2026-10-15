@@ -17,6 +17,7 @@ export async function buildMe(ctx: AppContext, session: SessionRecord): Promise<
     armedUntil: armed ? session.writeExpiresAt!.toISOString() : null,
     canArm: hasRole(session, 'Portal.Operator') && (ctx.config.AUTH_MODE === 'mock' || writeAppConfigured(ctx.config)),
     armExtended: armed && session.writeExtended,
+    armMaxMinutes: ctx.config.WRITE_SESSION_MAX_MINUTES,
     csrf: session.csrf,
     prefs: await ctx.prefs.get(session.userOid),
     authMode: ctx.config.AUTH_MODE,

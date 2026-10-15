@@ -1,0 +1,15 @@
+# Used by BuildKit for portal/apps/runner/Dockerfile (context = repository root).
+**/node_modules
+**/dist
+**/.turbo
+**/coverage
+**/*.log
+**/*.tsbuildinfo
+.git
+.env
+.env.*
+.local
+*.pem
+*.pfx
+portal/apps/runner/modules
+docs

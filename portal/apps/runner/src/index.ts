@@ -1,0 +1,33 @@
+// Public surface of @adminforge/runner for the API: request signing, the wire protocol, and a small client.
+// The supervisor itself (server, pool) is not exported here so importing this pulls in no Fastify code.
+export {
+  RUNNER_AUTH_SCHEME,
+  RUNNER_MAX_CLOCK_SKEW_SECONDS,
+  RUNNER_TIMESTAMP_HEADER,
+  RunnerRequestError,
+  cancelRunnerJob,
+  computeRunnerSignature,
+  decodeRunnerKey,
+  readNdjson,
+  sha256Hex,
+  signRunnerRequest,
+  submitRunnerJob,
+  type RunnerClientOptions,
+  type RunnerKey,
+  type RunnerSignatureHeaders,
+} from './client';
+export {
+  ERROR_CATEGORIES,
+  JOB_STATUSES,
+  RUNNER_MAX_TIMEOUT_SECONDS,
+  RUNNER_SERVICES,
+  RunnerEventSchema,
+  RunnerJobRequestSchema,
+  type RunnerErrorCategory,
+  type RunnerEvent,
+  type RunnerJob,
+  type RunnerJobRequest,
+  type RunnerJobStatus,
+  type RunnerLogLevel,
+  type RunnerService,
+} from './protocol';

@@ -3,11 +3,16 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./src/*": "./src/*.ts"
+  },
   "scripts": {
     "dev": "tsx watch src/main.ts",
     "build": "tsup",
     "start": "node dist/main.js",
-    "typecheck": "tsc -p tsconfig.json"
+    "typecheck": "tsc -p tsconfig.json",
+    "modules:install": "pwsh -NoLogo -NoProfile -NonInteractive -File scripts/install-modules.ps1"
   },
   "dependencies": {
     "fastify": "^5.12.7",

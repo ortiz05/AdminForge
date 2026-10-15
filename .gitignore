@@ -18,3 +18,4 @@ test-results/
 # Generated
 portal/apps/web/src/routeTree.gen.ts
 portal/packages/schemas/generated/
+portal/apps/runner/modules/

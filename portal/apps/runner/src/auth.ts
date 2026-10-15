@@ -1,0 +1,38 @@
+import { timingSafeEqual } from 'node:crypto';
+import { RUNNER_AUTH_SCHEME, RUNNER_MAX_CLOCK_SKEW_SECONDS, computeRunnerSignature } from './client';
+
+export type AuthFailureReason =
+  'missing_signature' | 'malformed_signature' | 'missing_timestamp' | 'stale_timestamp' | 'bad_signature';
+
+export type AuthResult = { ok: true } | { ok: false; reason: AuthFailureReason };
+
+const SIGNATURE_RE = new RegExp(`^${RUNNER_AUTH_SCHEME} ([0-9a-f]{64})$`);
+const TIMESTAMP_RE = /^\d{1,12}$/;
+
+/**
+ * Verifies `Authorization: AdminForge-HMAC <hex>` + `X-AdminForge-Timestamp` over the raw request body.
+ * The timestamp must be within ±maxSkewSeconds of now (replay window).
+ */
+export function verifyRunnerRequest(opts: {
+  key: Buffer;
+  authorization: string | undefined;
+  timestamp: string | undefined;
+  body: Buffer;
+  nowSeconds?: number;
+  maxSkewSeconds?: number;
+}): AuthResult {
+  if (!opts.authorization) return { ok: false, reason: 'missing_signature' };
+  const match = SIGNATURE_RE.exec(opts.authorization.trim());
+  if (!match) return { ok: false, reason: 'malformed_signature' };
+  if (!opts.timestamp) return { ok: false, reason: 'missing_timestamp' };
+  if (!TIMESTAMP_RE.test(opts.timestamp)) return { ok: false, reason: 'stale_timestamp' };
+  const now = opts.nowSeconds ?? Math.floor(Date.now() / 1000);
+  if (Math.abs(now - Number(opts.timestamp)) > (opts.maxSkewSeconds ?? RUNNER_MAX_CLOCK_SKEW_SECONDS)) {
+    return { ok: false, reason: 'stale_timestamp' };
+  }
+  const expected = Buffer.from(computeRunnerSignature(opts.key, opts.timestamp, opts.body), 'hex');
+  const given = Buffer.from(match[1]!, 'hex');
+  if (given.length !== expected.length || !timingSafeEqual(given, expected))
+    return { ok: false, reason: 'bad_signature' };
+  return { ok: true };
+}

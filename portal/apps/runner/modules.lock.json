@@ -1,0 +1,14 @@
+{
+  "$comment": "Pinned PowerShell modules for the AdminForge runner. Installed by `pnpm --filter @adminforge/runner modules:install` into portal/apps/runner/modules (git-ignored). Bump deliberately and re-run the runner smoke tests.",
+  "repository": "PSGallery",
+  "modules": {
+    "Microsoft.Graph.Authentication": "2.41.2",
+    "ExchangeOnlineManagement": "3.10.1",
+    "MicrosoftTeams": "8.0.0",
+    "PnP.PowerShell": "3.4.1",
+    "Az.Accounts": "5.5.3"
+  },
+  "devModules": {
+    "Pester": "6.2.0"
+  }
+}

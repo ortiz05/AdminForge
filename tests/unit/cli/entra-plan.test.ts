@@ -74,7 +74,7 @@ describe('buildDesiredEntra', () => {
   it('configures the Read app: single tenant, callback, no implicit grant, five deterministic roles, ID-token claims', () => {
     const read = desired.apps.find((a) => a.key === 'read')!;
     expect(read.body.signInAudience).toBe('AzureADMyOrg');
-    expect(read.body.web.redirectUris).toEqual(['http://localhost:5173/auth/callback']);
+    expect(read.body.web.redirectUris).toEqual(['http://localhost:5173/auth/callback', 'http://localhost:5173/auth/signed-out']);
     expect(read.body.web.implicitGrantSettings).toEqual({ enableAccessTokenIssuance: false, enableIdTokenIssuance: false });
     expect(read.body.appRoles.map((r) => r.value)).toEqual(['Portal.Reader', 'Portal.Operator', 'Playbook.Author', 'Playbook.Approver', 'Portal.Admin']);
     expect(buildDesiredEntra(settings, resources()).apps[0]!.body.appRoles.map((r) => r.id)).toEqual(read.body.appRoles.map((r) => r.id));

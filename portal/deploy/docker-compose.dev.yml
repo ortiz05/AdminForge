@@ -1,0 +1,28 @@
+# Local development Postgres for AdminForge.
+#   pnpm --filter @adminforge/api init:local   # adds POSTGRES_PASSWORD / DATABASE_URL to your env file (once)
+#   pnpm db:up                                 # passes the env file to compose, waits until healthy
+#   pnpm --filter @adminforge/api db:migrate
+# Bound to loopback on 55432 (5432 is used by the host's own Postgres).
+name: adminforge-dev
+
+services:
+  postgres:
+    image: postgres:18-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: adminforge
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is not set - run pnpm --filter @adminforge/api init:local}
+      POSTGRES_DB: adminforge
+    ports:
+      - '127.0.0.1:55432:5432'
+    volumes:
+      # Postgres 18 images keep data under /var/lib/postgresql/<major>/docker; mount the parent.
+      - pgdata:/var/lib/postgresql
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U adminforge -d adminforge']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  pgdata: {}

@@ -91,7 +91,7 @@ describe('adminforge provision entra (against a fake Graph/ARM)', () => {
     cloud.grants[0]!.scope = 'openid';
     const run = await provisionEntra(ctx);
     expect(changed(run.ops).map((o) => `${o.action} ${o.section}`)).toEqual(['update Applications', 'update Consent grants']);
-    expect((read.web as { redirectUris: string[] }).redirectUris).toEqual(['http://localhost:5173/auth/callback']);
+    expect((read.web as { redirectUris: string[] }).redirectUris).toEqual(['http://localhost:5173/auth/callback', 'http://localhost:5173/auth/signed-out']);
     expect(cloud.apps).toHaveLength(3);
   });
 });

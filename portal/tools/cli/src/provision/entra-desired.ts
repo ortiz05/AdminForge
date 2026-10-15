@@ -113,7 +113,7 @@ export function buildDesiredEntra(settings: ProvisionSettings, resources: Resour
   const skipped: Skipped[] = [];
   const apps: DesiredApp[] = [];
 
-  const delegatedApp = (key: AppKey, graphScopes: readonly string[], redirectPath: string, extra: Partial<ApplicationBody>, more: PermissionRequest[]) => {
+  const delegatedApp = (key: AppKey, graphScopes: readonly string[], redirectPath: string | string[], extra: Partial<ApplicationBody>, more: PermissionRequest[]) => {
     const names = appNames(label, key);
     const { rra, resolved } = resolvePermissions(
       names.displayName,
@@ -124,7 +124,7 @@ export function buildDesiredEntra(settings: ProvisionSettings, resources: Resour
     apps.push({
       key,
       uniqueName: names.uniqueName,
-      body: appBody(names.displayName, [`${baseUrl}${redirectPath}`], rra, extra),
+      body: appBody(names.displayName, [redirectPath].flat().map((path) => `${baseUrl}${path}`), rra, extra),
       sp: { appRoleAssignmentRequired: true, tags: [ENTERPRISE_APP_TAG] },
       grants: resolved.map((r) => ({ resource: r.resource, scopes: r.items.map((i) => i.value) })),
       appPermissions: [],
@@ -135,7 +135,8 @@ export function buildDesiredEntra(settings: ProvisionSettings, resources: Resour
   delegatedApp(
     'read',
     READ_GRAPH_SCOPES,
-    '/auth/callback',
+    // The sign-out landing page doubles as the post_logout_redirect_uri, which must be registered.
+    ['/auth/callback', '/auth/signed-out'],
     {
       appRoles: PORTAL_ROLES.map((r) => ({
         id: appRoleId(label, r.value),

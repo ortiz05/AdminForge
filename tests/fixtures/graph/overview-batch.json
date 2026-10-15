@@ -1,0 +1,44 @@
+{
+  "responses": [
+    {
+      "id": "org",
+      "status": 200,
+      "body": {
+        "value": [
+          {
+            "id": "00000000-0000-4000-8000-00000000e0e0",
+            "displayName": "Example Org",
+            "verifiedDomains": [
+              { "name": "example.com", "isDefault": true, "isInitial": false, "type": "Managed" },
+              { "name": "exampleorg.onmicrosoft.com", "isDefault": false, "isInitial": true, "type": "Managed" }
+            ]
+          }
+        ]
+      }
+    },
+    { "id": "users", "status": 200, "body": "MTI4NA==" },
+    { "id": "groups", "status": 200, "body": 342 },
+    { "id": "apps", "status": 200, "body": "87" },
+    { "id": "devices", "status": 200, "body": 1530 },
+    {
+      "id": "skus",
+      "status": 200,
+      "body": {
+        "value": [
+          { "skuPartNumber": "SPE_E5", "consumedUnits": 1104, "prepaidUnits": { "enabled": 1200, "suspended": 0, "warning": 0 } },
+          { "skuPartNumber": "EMS", "consumedUnits": 62, "prepaidUnits": { "enabled": 100, "suspended": 0, "warning": 0 } }
+        ]
+      }
+    },
+    {
+      "id": "health",
+      "status": 200,
+      "body": {
+        "value": [
+          { "service": "Exchange Online", "status": "serviceOperational" },
+          { "service": "Microsoft Teams", "status": "serviceDegradation" }
+        ]
+      }
+    }
+  ]
+}

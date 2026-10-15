@@ -1,0 +1,39 @@
+{
+  "org": {
+    "id": "00000000-0000-4000-8000-00000000e0e0",
+    "name": "Example Org",
+    "domains": [
+      { "name": "example.com", "isDefault": true, "isInitial": false },
+      { "name": "exampleorg.onmicrosoft.com", "isDefault": false, "isInitial": true },
+      { "name": "mail.example.com", "isDefault": false, "isInitial": false }
+    ]
+  },
+  "counts": { "users": 1284, "groups": 342, "apps": 87, "devices": 1530 },
+  "skus": [
+    { "sku": "SPE_E5", "used": 1104, "total": 1200 },
+    { "sku": "SPE_E3", "used": 148, "total": 150 },
+    { "sku": "EMS", "used": 62, "total": 100 },
+    { "sku": "POWER_BI_PRO", "used": 40, "total": 40 },
+    { "sku": "FLOW_FREE", "used": 311, "total": 10000 }
+  ],
+  "health": {
+    "items": [
+      { "service": "Exchange Online", "status": "serviceOperational" },
+      { "service": "Microsoft Entra", "status": "serviceOperational" },
+      { "service": "Microsoft Teams", "status": "serviceDegradation" },
+      { "service": "SharePoint Online", "status": "serviceOperational" },
+      { "service": "Microsoft Intune", "status": "investigating" },
+      { "service": "Microsoft Defender XDR", "status": "serviceOperational" },
+      { "service": "Microsoft 365 apps", "status": "serviceRestored" }
+    ]
+  },
+  "provenance": {
+    "org": { "service": "graph", "path": "/organization", "ms": 412, "requestId": "fixture-0000-0001" },
+    "users": { "service": "graph", "path": "/users/$count", "ms": 412, "requestId": "fixture-0000-0001" },
+    "groups": { "service": "graph", "path": "/groups/$count", "ms": 412, "requestId": "fixture-0000-0001" },
+    "apps": { "service": "graph", "path": "/applications/$count", "ms": 412, "requestId": "fixture-0000-0001" },
+    "devices": { "service": "graph", "path": "/devices/$count", "ms": 412, "requestId": "fixture-0000-0001" },
+    "skus": { "service": "graph", "path": "/subscribedSkus", "ms": 412, "requestId": "fixture-0000-0001" },
+    "health": { "service": "graph", "path": "/admin/serviceAnnouncement/healthOverviews", "ms": 412, "requestId": "fixture-0000-0001" }
+  }
+}

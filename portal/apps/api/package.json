@@ -4,9 +4,10 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "tsx watch src/main.ts",
+    "dev": "tsx watch --clear-screen=false src/main.ts",
     "build": "tsup",
     "start": "node dist/main.js",
+    "init:local": "tsx src/scripts/init-local.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx src/db/migrate.ts",
     "typecheck": "tsc -p tsconfig.json"

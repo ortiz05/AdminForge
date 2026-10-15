@@ -1,0 +1,185 @@
+import { randomUUID } from 'node:crypto';
+import { createRequire } from 'node:module';
+import cookie from '@fastify/cookie';
+import helmet from '@fastify/helmet';
+import rateLimit from '@fastify/rate-limit';
+import fastifyStatic from '@fastify/static';
+import Fastify, { type FastifyInstance, type FastifyServerOptions } from 'fastify';
+import { armLifecycleRoutes, entraArmRoutes } from './auth/arm-routes';
+import { mockAuthRoutes } from './auth/mock-routes';
+import { entraSignInRoutes, sessionEndRoutes } from './auth/routes';
+import { registerSessions } from './auth/session-plugin';
+import { webDistAvailable, type Config } from './config';
+import { createContext, type AppContext, type AppDeps } from './context';
+import { AppError, registerErrorHandler, sendError, unauthenticated } from './errors';
+import { healthRoutes } from './routes/health';
+import { meRoutes } from './routes/me';
+import { navRoutes } from './routes/nav';
+import { overviewRoutes } from './routes/overview';
+import { assertCsrf, isSafeMethod } from './security/csrf';
+
+declare module 'fastify' {
+  interface FastifyInstance {
+    ctx: AppContext;
+  }
+}
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+/** Query parameters that must never reach the logs (auth codes, state, CAE claims, hints). */
+const SECRET_QUERY = /([?&](?:code|state|session_state|id_token|client_info|claims|login_hint)=)[^&#]*/gi;
+
+export const redactUrl = (url: string) => url.replace(SECRET_QUERY, '$1[redacted]');
+
+/** Paths whose responses must never be cached by the browser or a proxy. */
+const NO_STORE = /^\/(api|auth)(\/|$|\?)|^\/(healthz|readyz)(\?|$)/;
+const API_OR_AUTH = /^\/(api|auth)(\/|$|\?)/;
+const STATIC_ASSET = /^\/assets\/|\.(js|mjs|css|map|json|png|jpe?g|gif|svg|ico|webp|avif|woff2?|ttf|txt|webmanifest|wasm)$/i;
+
+function loggerOptions(config: Config): FastifyServerOptions['logger'] {
+  if (config.NODE_ENV === 'test') return false;
+  let transport: { target: string; options: Record<string, unknown> } | undefined;
+  if (config.NODE_ENV === 'development') {
+    try {
+      // Resolved here so pino's worker finds it under pnpm's strict layout; absent in production installs.
+      transport = { target: createRequire(import.meta.url).resolve('pino-pretty'), options: { translateTime: 'HH:MM:ss', ignore: 'pid,hostname' } };
+    } catch {
+      transport = undefined;
+    }
+  }
+  return {
+    level: config.LOG_LEVEL,
+    redact: {
+      paths: [
+        'req.headers.authorization',
+        'req.headers.cookie',
+        'req.headers["x-adminforge-csrf"]',
+        'res.headers["set-cookie"]',
+        'headers.authorization',
+        'headers.cookie',
+      ],
+      censor: '[redacted]',
+    },
+    serializers: {
+      req: (req: { method: string; url: string; ip?: string }) => ({ method: req.method, url: redactUrl(req.url), remoteAddress: req.ip }),
+    },
+    ...(transport ? { transport } : {}),
+  };
+}
+
+/** Builds the BFF. `deps` replaces stores/clients (tests use in-memory stores and a fake AuthClient). */
+export async function buildApp(config: Config, deps: AppDeps = {}): Promise<FastifyInstance> {
+  const app = Fastify({
+    logger: loggerOptions(config),
+    trustProxy: config.TRUST_PROXY,
+    bodyLimit: 256 * 1024,
+    genReqId: (req) => {
+      const header = req.headers['x-correlation-id'];
+      const value = Array.isArray(header) ? header[0] : header;
+      return value && UUID.test(value) ? value.toLowerCase() : randomUUID();
+    },
+  });
+  const ctx = createContext(config, deps, { warn: (obj, msg) => app.log.warn(obj, msg) });
+  app.decorate('ctx', ctx);
+  app.addHook('onClose', async () => {
+    await ctx.database?.close();
+  });
+
+  registerErrorHandler(app);
+
+  // Bodiless POSTs (disarm, logout) often still carry Content-Type: application/json; treat "" as no body.
+  // Everything else goes through Fastify's own parser (prototype-poisoning protection included).
+  const jsonParser = app.getDefaultJsonParser('error', 'error');
+  app.removeContentTypeParser('application/json');
+  app.addContentTypeParser('application/json', { parseAs: 'string' }, (request, body, done) => {
+    const text = typeof body === 'string' ? body : body.toString('utf8');
+    if (text.trim() === '') return done(null, undefined);
+    return jsonParser(request, text, done);
+  });
+
+  app.addHook('onRequest', async (request, reply) => {
+    reply.header('x-correlation-id', request.id);
+  });
+  app.addHook('onSend', async (request, reply) => {
+    if (NO_STORE.test(request.url)) reply.header('cache-control', 'no-store');
+  });
+
+  await app.register(cookie);
+  await app.register(helmet, {
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'"],
+        // Tightened in Phase 8 once Radix/Monaco style injection is audited.
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        imgSrc: ["'self'", 'data:'],
+        fontSrc: ["'self'"],
+        connectSrc: ["'self'"],
+        // Monaco runs its language services in web workers.
+        workerSrc: ["'self'", 'blob:'],
+        objectSrc: ["'none'"],
+        baseUri: ["'self'"],
+        formAction: ["'self'"],
+        frameAncestors: ["'none'"],
+        upgradeInsecureRequests: config.PUBLIC_BASE_URL.startsWith('https://') ? [] : null,
+      },
+    },
+    crossOriginEmbedderPolicy: false,
+    frameguard: { action: 'deny' },
+    hsts: config.NODE_ENV === 'production' ? { maxAge: 31_536_000, includeSubDomains: true } : false,
+    referrerPolicy: { policy: 'no-referrer' },
+  });
+  await app.register(rateLimit, { max: config.RATE_LIMIT_PER_MINUTE, timeWindow: '1 minute' });
+
+  registerSessions(app, ctx);
+
+  healthRoutes(app, ctx);
+  sessionEndRoutes(app, ctx);
+  armLifecycleRoutes(app, ctx);
+  if (config.AUTH_MODE === 'mock') {
+    mockAuthRoutes(app, ctx);
+  } else {
+    if (!ctx.auth) throw new Error('AUTH_MODE=entra needs an AuthClient');
+    entraSignInRoutes(app, ctx);
+    entraArmRoutes(app, ctx);
+  }
+
+  await app.register(
+    async (api) => {
+      // Every /api call needs a session; every non-GET also needs the CSRF header.
+      api.addHook('preHandler', async (request) => {
+        if (!request.session) throw unauthenticated();
+        if (!isSafeMethod(request.method)) assertCsrf(request);
+      });
+      meRoutes(api, ctx);
+      navRoutes(api, ctx);
+      overviewRoutes(api, ctx);
+    },
+    { prefix: '/api' },
+  );
+
+  const serveSpa = webDistAvailable(config);
+  if (serveSpa) {
+    await app.register(fastifyStatic, {
+      root: config.WEB_DIST_DIR,
+      setHeaders: (reply, filePath) => {
+        // Vite fingerprints everything under assets/; index.html must always be revalidated.
+        if (/[\\/]assets[\\/]/.test(filePath)) reply.header('cache-control', 'public, max-age=31536000, immutable');
+        else reply.header('cache-control', 'no-cache');
+      },
+    });
+  }
+
+  app.setNotFoundHandler(async (request, reply) => {
+    const pathname = request.url.split(/[?#]/)[0]!;
+    // Client routes only (page keys contain dots, e.g. /p/identity.users); a missing asset gets a 404, not index.html.
+    const isPage =
+      (request.method === 'GET' || request.method === 'HEAD') && !API_OR_AUTH.test(pathname) && !NO_STORE.test(pathname) && !STATIC_ASSET.test(pathname);
+    if (serveSpa && isPage) {
+      // SPA fallback: client-side routes (e.g. /p/identity.users) get index.html.
+      return reply.header('cache-control', 'no-cache').sendFile('index.html');
+    }
+    return sendError(request, reply, new AppError(404, 'not_found', `No route for ${request.method} ${request.url.split('?')[0]}.`));
+  });
+
+  return app;
+}

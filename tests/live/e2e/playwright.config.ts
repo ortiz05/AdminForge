@@ -15,5 +15,7 @@ export default defineConfig({
     channel: 'chrome',
     headless: true,
     viewport: { width: 1440, height: 900 },
+    // Set AF_LIVE_INSECURE_TLS=1 when the stack sits behind a private CA (e.g. Caddy `tls internal` for LAN access).
+    ignoreHTTPSErrors: process.env.AF_LIVE_INSECURE_TLS === '1',
   },
 });

@@ -33,7 +33,7 @@ The units in `systemd/` are **user** units: they run as you, without root, and r
 
 ```sh
 mkdir -p ~/.config/systemd/user
-for u in api worker scheduler runner; do
+for u in api worker scheduler runner; do   # + proxy for LAN access, below
   sed "s#%h/AdminForge#$PWD#g" portal/deploy/systemd/adminforge-$u.service > ~/.config/systemd/user/adminforge-$u.service
 done
 systemctl --user daemon-reload
@@ -61,7 +61,44 @@ Environment=SCHEDULER_IN_PROCESS=false
 
 Production reads definitions from Postgres: run `pnpm adminforge publish` after content changes (CI does this on merge).
 `http://localhost` works because browsers treat it as a secure context; any other host name needs TLS in front
-(e.g. Caddy with `reverse_proxy localhost:3300`), because the session cookie is `__Host-` and `Secure`.
+(see below), because the session cookie is `__Host-` and `Secure` and Entra only accepts `http://` redirect URIs for
+`localhost`.
+
+### LAN access (TLS with Caddy, no root)
+
+Caddy terminates TLS on an unprivileged port with its own local CA and proxies to the API, which then listens on
+loopback only. Replace `ADDRESS` with the host's LAN IP or DNS name:
+
+```sh
+# Caddy: latest release binary from github.com/caddyserver/caddy/releases (verify its sha512) → ~/.local/bin/caddy
+sed 's/ADDRESS/<lan-ip-or-name>/' portal/deploy/caddy/Caddyfile.example > ~/.config/adminforge/Caddyfile
+cp portal/deploy/systemd/adminforge-proxy.service ~/.config/systemd/user/
+systemctl --user daemon-reload && systemctl --user enable --now adminforge-proxy
+```
+
+Then point the services at the new origin and register it with Entra:
+
+```ini
+# adminforge-{api,worker,scheduler} override.conf
+Environment=PUBLIC_BASE_URL=https://<lan-ip-or-name>:8443
+Environment=NODE_EXTRA_CA_CERTS=%h/.local/share/caddy/pki/authorities/local/root.crt
+# adminforge-api override.conf only: loopback-only listener; TRUST_PROXY defaults to loopback (Caddy on this host)
+Environment=API_HOST=127.0.0.1
+```
+
+```sh
+# env file: AF_REDIRECT_BASE_URLS=...,https://<lan-ip-or-name>:8443
+pnpm adminforge provision entra
+systemctl --user restart adminforge-api adminforge-worker adminforge-scheduler
+```
+
+Browsers on other machines must trust Caddy's root certificate
+(`~/.local/share/caddy/pki/authorities/local/root.crt`, valid 10 years; Caddy renews the short-lived server certificate
+itself): import it as a trusted root (Windows: `certutil -addstore -user Root root.crt`; macOS: Keychain Access →
+System → Always Trust). With a DNS name and a certificate from your own CA, replace `tls internal` with that
+certificate. Sign-in works on the public origin only, so use the LAN URL on this host too. If the address is
+DHCP-assigned, reserve it (or use a DNS name), since the certificate and the Entra redirect URIs name it.
+Live validation through the proxy: `PUBLIC_BASE_URL=https://… AF_LIVE_INSECURE_TLS=1` (see `tests/live`).
 
 Run the `sed` from the repository root (it points `WorkingDirectory` at your checkout). If `node` comes from
 nvm or fnm, add its `bin` directory to the `Environment=PATH=…` line (`systemctl --user edit adminforge-scheduler`).

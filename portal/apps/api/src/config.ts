@@ -27,7 +27,7 @@ const Schema = z
     /** Interface to bind; defaults to loopback except in production containers. */
     API_HOST: z.string().optional(),
     PUBLIC_BASE_URL: z.url().transform((u) => u.replace(/\/+$/, '')),
-    /** Fastify trustProxy: IPs/CIDRs or proxy-addr presets (loopback, linklocal, uniquelocal). */
+    /** Fastify trustProxy: `true`/`false`, or IPs/CIDRs/proxy-addr presets (loopback = a proxy on this host, e.g. Caddy). */
     TRUST_PROXY: z.string().default('loopback'),
     RATE_LIMIT_PER_MINUTE: z.coerce.number().int().min(1).default(600),
 

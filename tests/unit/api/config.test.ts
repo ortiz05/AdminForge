@@ -102,3 +102,17 @@ describe('loadConfig', () => {
     );
   });
 });
+
+describe('TRUST_PROXY', () => {
+  it('defaults to loopback (a reverse proxy on this host, e.g. Caddy)', () => {
+    expect(loadConfig(entra).TRUST_PROXY).toBe('loopback');
+  });
+
+  it('passes true/false to Fastify as booleans and anything else as an address list', async () => {
+    const { trustProxyOption } = await import('@adminforge/api/src/app');
+    expect(trustProxyOption('true')).toBe(true);
+    expect(trustProxyOption('false')).toBe(false);
+    expect(trustProxyOption('loopback')).toBe('loopback');
+    expect(trustProxyOption('10.0.0.0/8,127.0.0.1')).toBe('10.0.0.0/8,127.0.0.1');
+  });
+});

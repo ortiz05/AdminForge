@@ -1,0 +1,17 @@
+# AdminForge TLS front door for LAN access (template — copy to ~/.config/adminforge/Caddyfile and set the address).
+# Entra only accepts http:// redirect URIs for localhost, and the session cookie is __Host-/Secure in production,
+# so every non-localhost origin must be HTTPS. Add the origin to AF_REDIRECT_BASE_URLS and run
+# `pnpm adminforge provision entra`; set PUBLIC_BASE_URL of the api/worker/scheduler services to it.
+{
+	# No root: don't try to install the local CA into the system trust store or bind :80/:443.
+	skip_install_trust
+	auto_https disable_redirects
+	http_port 8088
+}
+
+# Use a DNS name if you have one (then `tls internal` can be replaced by a real certificate).
+https://ADDRESS:8443 {
+	tls internal
+	encode zstd gzip
+	reverse_proxy 127.0.0.1:3300
+}

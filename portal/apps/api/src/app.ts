@@ -38,6 +38,10 @@ const SECRET_QUERY = /([?&](?:code|state|session_state|id_token|client_info|clai
 
 export const redactUrl = (url: string) => url.replace(SECRET_QUERY, '$1[redacted]');
 
+/** TRUST_PROXY → Fastify trustProxy: 'true'/'false' are booleans; anything else is an address/preset list ("true" would be read as a host name). */
+export const trustProxyOption = (value: string): boolean | string =>
+  value === 'true' ? true : value === 'false' ? false : value;
+
 /** Paths whose responses must never be cached by the browser or a proxy. */
 const NO_STORE = /^\/(api|auth)(\/|$|\?)|^\/(healthz|readyz)(\?|$)/;
 const API_OR_AUTH = /^\/(api|auth)(\/|$|\?)/;
@@ -89,7 +93,7 @@ export async function buildApp(
 ): Promise<FastifyInstance> {
   const app = Fastify({
     logger: loggerOptions(config),
-    trustProxy: config.TRUST_PROXY,
+    trustProxy: trustProxyOption(config.TRUST_PROXY),
     bodyLimit: 256 * 1024,
     genReqId: (req) => {
       const header = req.headers['x-correlation-id'];

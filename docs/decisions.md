@@ -4,17 +4,17 @@ Decisions taken while building AdminForge, in addition to the ADRs in `docs/adr/
 
 ## Open decisions from the plan (D1–D9)
 
-| #   | Decision                | Outcome                                                                                                                                                                                                     |
-| --- | ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| D1  | Git host                | GitHub (`ortiz05/AdminForge`), Actions CI on latest action majors                                                                                                                                           |
-| D2  | Network exposure        | This host; services on `http://localhost:3300` (TLS via Caddy required for any other host name — `__Host-` cookie)                                                                                          |
-| D3  | Region                  | `eastus` for test resources (`AF_TEST_LOCATION`)                                                                                                                                                            |
-| D4  | Naming prefix           | `adminforge` / `AF_`                                                                                                                                                                                        |
-| D5  | Write step-up           | Conditional Access auth context when `WRITE_AUTH_CONTEXT` is set (needs Entra ID P1); validation tenant has no P1, so step-up is a fresh interactive sign-in (`prompt=login`, `max_age=0`) to the Write app |
-| D6  | Write session length    | 60 min default, `WRITE_SESSION_MAX_MINUTES` caps it, one extension                                                                                                                                          |
-| D7  | Portal role groups      | `SG-AdminForge-<label>-<Role>` created by provisioning                                                                                                                                                      |
-| D8  | Live validation         | Automated: dedicated test user signs in with password + TOTP (registered once by the live helper); writes only on `AF-Test-*` objects                                                                       |
-| D9  | Content source of truth | Git (`portal/content`) → `adminforge publish` → Postgres; production reads Postgres, dev reads the files with hot reload                                                                                    |
+| #   | Decision                | Outcome                                                                                                                                                                                                         |
+| --- | ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| D1  | Git host                | GitHub (`ortiz05/AdminForge`), Actions CI on latest action majors                                                                                                                                               |
+| D2  | Network exposure        | This host; services on `http://localhost:3300`, published to the LAN through Caddy (`tls internal`, port 8443, no root) — TLS is required for any non-localhost origin (`__Host-` cookie, Entra redirect rules) |
+| D3  | Region                  | `eastus` for test resources (`AF_TEST_LOCATION`)                                                                                                                                                                |
+| D4  | Naming prefix           | `adminforge` / `AF_`                                                                                                                                                                                            |
+| D5  | Write step-up           | Conditional Access auth context when `WRITE_AUTH_CONTEXT` is set (needs Entra ID P1); validation tenant has no P1, so step-up is a fresh interactive sign-in (`prompt=login`, `max_age=0`) to the Write app     |
+| D6  | Write session length    | 60 min default, `WRITE_SESSION_MAX_MINUTES` caps it, one extension                                                                                                                                              |
+| D7  | Portal role groups      | `SG-AdminForge-<label>-<Role>` created by provisioning                                                                                                                                                          |
+| D8  | Live validation         | Automated: dedicated test user signs in with password + TOTP (registered once by the live helper); writes only on `AF-Test-*` objects                                                                           |
+| D9  | Content source of truth | Git (`portal/content`) → `adminforge publish` → Postgres; production reads Postgres, dev reads the files with hot reload                                                                                        |
 
 ## Platform
 

@@ -1,0 +1,33 @@
+$schema: ../../../packages/schemas/generated/schedule.schema.json
+kind: schedule
+id: reports.inactive-guests-weekly
+version: 1.0.0
+title: Weekly inactive guests report
+summary: >-
+  Every Monday at 06:15 UTC, writes enabled guest accounts that haven't signed in for 90 days or more (including
+  invitations never redeemed) as XLSX, keeping six months of history for the guest access review. To block a guest,
+  open the report in the portal and use its Block sign-in action.
+owner: identity-team
+tags: [identity, guests, hygiene, report]
+cron: "15 6 * * 1"
+timezone: UTC
+enabled: true
+identity: automation
+job:
+  kind: report
+  ref: identity.inactive-guests
+  # Pinned rather than left to the report's defaults so the archive stays comparable week to week.
+  params: { days: 90, pending: Include }
+  delivery:
+    - type: file
+      format: xlsx
+      path: identity/inactive-guests/{date}.xlsx
+      retain: 26
+retry: { max: 2, backoff: exponential, delay: 5m }
+timeoutSeconds: 1800
+overlap: skip
+requires:
+  # Application permissions held by the automation identity (ADR-011); signInActivity needs Entra ID P1.
+  scopes:
+    graph: [User.Read.All, AuditLog.Read.All]
+  licences: [signInLogs]

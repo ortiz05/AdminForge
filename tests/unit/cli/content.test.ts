@@ -272,6 +272,13 @@ describe('Sanitizer', () => {
       'contoso.com',
     ].sort());
   });
+
+  it('forbiddenValues allows a bare loopback origin but not a loopback URL with a path', () => {
+    expect(forbiddenValues({ RUNNER_URL: 'http://127.0.0.1:3101', RUNNER_BASE: 'http://127.0.0.1:3101/', RUNNER_CALLBACK: `http://127.0.0.1:3101/${TENANT_ID}` })).toEqual([
+      `http://127.0.0.1:3101/${TENANT_ID}`,
+    ]);
+    expect(forbiddenValues({ RUNNER_URL: 'http://127.0.0.1.example.net:3101' })).toEqual(['http://127.0.0.1.example.net:3101']);
+  });
 });
 
 describe('adminforge fixtures record', () => {

@@ -23,7 +23,9 @@ describe('no tenant-specific values are committed', () => {
   const values = new Set<string>();
   for (const file of localEnvFiles()) {
     for (const [key, value] of Object.entries(parseEnvFile(file))) {
-      if (value.length >= 8 && !/^(true|false|\d+|https?:\/\/localhost.*|postgres:\/\/.*@127\.0\.0\.1.*)$/i.test(value)) values.add(value);
+      // A bare loopback origin (RUNNER_URL=http://127.0.0.1:3101, the config/example.env default) isn't tenant data;
+      // anything with a path still counts. Same rule as forbiddenValues in portal/tools/cli/src/commands/content.ts.
+      if (value.length >= 8 && !/^(true|false|\d+|https?:\/\/localhost.*|https?:\/\/127\.0\.0\.1(:\d+)?\/?|postgres:\/\/.*@127\.0\.0\.1.*)$/i.test(value)) values.add(value);
       if (/DOMAIN/.test(key)) values.add(value.toLowerCase());
     }
   }

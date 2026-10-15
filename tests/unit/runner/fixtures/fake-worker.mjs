@@ -105,11 +105,19 @@ function run(job) {
       send({ type: 'exit', status: 'succeeded' });
       process.exit(0);
       break;
-    case 'flood':
-      for (let i = 0; i < 2000; i++) send({ type: 'output', data: 'x'.repeat(1000) });
-      send({ type: 'exit', status: 'succeeded' });
-      process.exit(0);
+    case 'flood': {
+      // Like a runaway script: keep writing (respecting pipe backpressure) until the supervisor stops us.
+      // Exiting here instead would race the pipe flush and make the limit check flaky under load.
+      const line = `${JSON.stringify({ type: 'output', data: 'x'.repeat(1000) })}\n`;
+      const pump = () => {
+        while (process.stdout.write(line)) {
+          /* keep filling until the pipe pushes back */
+        }
+        process.stdout.once('drain', pump);
+      };
+      pump();
       break;
+    }
     default:
       send({ type: 'error', message: `unknown behaviour ${behaviour}`, category: 'input' });
       send({ type: 'exit', status: 'failed' });

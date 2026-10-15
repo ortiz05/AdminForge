@@ -1,0 +1,8 @@
+packages:
+  - portal/apps/*
+  - portal/packages/*
+  - portal/tools/*
+  - tests
+  - tooling/*
+allowBuilds:
+  esbuild: true

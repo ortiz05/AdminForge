@@ -1,0 +1,20 @@
+node_modules/
+dist/
+.turbo/
+coverage/
+playwright-report/
+test-results/
+*.tsbuildinfo
+*.log
+
+# Configuration and secrets never live in the repo (see config/example.env)
+.env
+.env.*
+!config/example.env
+*.pem
+*.pfx
+.local/
+
+# Generated
+portal/apps/web/src/routeTree.gen.ts
+portal/packages/schemas/generated/

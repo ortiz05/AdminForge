@@ -1,0 +1,30 @@
+{
+  "name": "adminforge",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@11.10.0",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "dev": "turbo run dev --filter=@adminforge/api --filter=@adminforge/web",
+    "build": "turbo run build",
+    "lint": "tooling/lint/node_modules/.bin/eslint --config tooling/lint/eslint.config.js .",
+    "typecheck": "turbo run typecheck",
+    "test": "pnpm --filter @adminforge/tests test",
+    "test:e2e": "pnpm --filter @adminforge/tests e2e",
+    "test:live": "pnpm --filter @adminforge/tests live",
+    "guard": "pnpm --filter @adminforge/tests guard",
+    "format": "prettier --write .",
+    "adminforge": "tsx portal/tools/cli/src/index.ts",
+    "db:up": "docker compose -f portal/deploy/docker-compose.dev.yml up -d --wait postgres",
+    "db:down": "docker compose -f portal/deploy/docker-compose.dev.yml down"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.5",
+    "prettier": "^3.9.10",
+    "tsx": "^4.23.15",
+    "turbo": "^2.11.8",
+    "typescript": "^7.0.2"
+  }
+}

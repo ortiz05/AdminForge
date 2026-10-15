@@ -1,0 +1,20 @@
+{
+  "name": "@adminforge/cli",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "adminforge": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@adminforge/connectors": "workspace:*",
+    "@adminforge/expressions": "workspace:*",
+    "@adminforge/schemas": "workspace:*",
+    "commander": "^15.0.0",
+    "yaml": "^2.9.1",
+    "zod": "^4.6.7"
+  }
+}

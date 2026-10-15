@@ -1,0 +1,23 @@
+{
+  "name": "@adminforge/widgets",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@adminforge/expressions": "workspace:*",
+    "@adminforge/schemas": "workspace:*",
+    "@adminforge/ui": "workspace:*",
+    "echarts": "^6.1.0",
+    "react": "^19.3.0",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/react": "^19.3.0"
+  }
+}

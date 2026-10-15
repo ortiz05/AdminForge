@@ -21,9 +21,16 @@ if (rel.startsWith('..')) process.exit(0);
 const problems = [];
 
 // 0. Keep formatting consistent: Prettier on code and docs Claude writes (content YAML and fixtures are not formatted).
-if (/\.(ts|tsx|js|mjs|json|css|md)$/.test(rel) && !/^(portal\/content|tests\/fixtures|docs\/plans)\//.test(rel)) {
+if (
+  /\.(ts|tsx|js|mjs|json|css|md)$/.test(rel) &&
+  !/^(portal\/content|tests\/fixtures|docs\/plans)\//.test(rel)
+) {
   try {
-    execFileSync('pnpm', ['-s', 'exec', 'prettier', '--write', '--log-level', 'warn', rel], { cwd: root, stdio: 'pipe', timeout: 60_000 });
+    execFileSync('pnpm', ['-s', 'exec', 'prettier', '--write', '--log-level', 'warn', rel], {
+      cwd: root,
+      stdio: 'pipe',
+      timeout: 60_000,
+    });
   } catch {
     /* formatting is best effort; CI's format:check is authoritative */
   }

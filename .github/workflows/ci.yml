@@ -61,6 +61,8 @@ jobs:
         run: node tooling/ci/check-bundle.mjs
       - name: End-to-end and visual (mock mode, system Chrome)
         run: pnpm test:e2e
+      - name: Production-build smoke (vite preview of dist/)
+        run: pnpm test:e2e:prod
       - if: failure()
         uses: actions/upload-artifact@v7
         with:

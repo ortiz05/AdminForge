@@ -120,9 +120,9 @@ export function Chart({
     if (view !== 'chart' || !plotRef.current) return;
     let disposed = false;
     let observer: ResizeObserver | undefined;
-    void import('../lib/chart-runtime').then(({ echarts }) => {
+    void import('../lib/chart-runtime').then(({ loadEcharts }) => {
       if (disposed || !plotRef.current) return;
-      const c = echarts.init(plotRef.current, `af-${theme}`, { renderer: 'svg' });
+      const c = loadEcharts().init(plotRef.current, `af-${theme}`, { renderer: 'svg' });
       instance.current = c;
       setReady(true);
       if (typeof ResizeObserver !== 'undefined') {

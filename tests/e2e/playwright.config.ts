@@ -7,6 +7,8 @@ import { defineConfig } from '@playwright/test';
 export default defineConfig({
   testDir: '.',
   testMatch: '**/*.spec.ts',
+  // Production-build smoke tests have their own config (playwright.prod.config.ts).
+  testIgnore: 'prod/**',
   outputDir: '../test-results/e2e',
   snapshotPathTemplate: '{testDir}/__screenshots__/{testFileName}/{arg}{ext}',
   fullyParallel: true,

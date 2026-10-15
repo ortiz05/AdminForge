@@ -13,6 +13,7 @@
     "typecheck": "turbo run typecheck",
     "test": "pnpm --filter @adminforge/tests test",
     "test:e2e": "pnpm --filter @adminforge/tests e2e",
+    "test:e2e:prod": "pnpm --filter @adminforge/tests e2e:prod",
     "test:live": "pnpm --filter @adminforge/tests exec playwright test -c live/e2e/playwright.config.ts",
     "guard": "pnpm --filter @adminforge/tests guard",
     "format": "prettier --write .",

@@ -58,7 +58,12 @@ run in CI and in the pre-commit hook (`.githooks/pre-commit`; `pnpm install` set
 pnpm test:e2e                                                                  # all specs
 pnpm --filter @adminforge/tests exec playwright test -c e2e/playwright.config.ts query.spec.ts
 pnpm --filter @adminforge/tests exec playwright test -c e2e/playwright.config.ts --update-snapshots   # intended UI changes only
+pnpm build && pnpm test:e2e:prod                                               # production-build smoke (vite preview)
 ```
+
+- `e2e/prod/` runs against the **built** app (`vite preview` of `dist/` on :4174, config `playwright.prod.config.ts`)
+  with the same mocked API. It catches what only the bundler breaks — tree-shaken side effects, chunking,
+  minification — which the dev server never shows. Run `pnpm build` first; CI runs it after the build.
 
 - Uses the **system Chrome** (`channel: 'chrome'`); Playwright downloads no browser.
 - Starts only the Vite dev server (`pnpm --filter @adminforge/web dev`, reused if one already runs on :5173). `/api`

@@ -7,6 +7,7 @@
     "test": "vitest run --project unit --project component --project api --project content --project guards",
     "watch": "vitest",
     "e2e": "playwright test -c e2e/playwright.config.ts",
+    "e2e:prod": "playwright test -c e2e/playwright.prod.config.ts",
     "live": "playwright test -c live/e2e/playwright.config.ts",
     "guard": "vitest run --project guards",
     "typecheck": "tsc -p tsconfig.json"

@@ -69,7 +69,7 @@ extension point — and the reviewer agents in `.claude/agents/`.
 | Scaffold content               | `pnpm adminforge new <kind> <section>/<name> [--template list-detail\|dashboard\|report\|entity]`                                        |
 | Validate content               | `pnpm adminforge validate` (add `--scopes` to compare with the app registrations)                                                        |
 | Playbook/runbook tests         | `pnpm adminforge test [pattern]`                                                                                                         |
-| All tests                      | `pnpm test` · e2e: `pnpm test:e2e` · guards: `pnpm guard`                                                                                |
+| All tests                      | `pnpm test` · e2e: `pnpm test:e2e` · production build: `pnpm build && pnpm test:e2e:prod` · guards: `pnpm guard`                         |
 | Focused tests                  | `pnpm --filter @adminforge/tests exec vitest run --project <unit\|component\|api\|content\|guards> <path>`                               |
 | Lint / types                   | `pnpm lint` · `pnpm typecheck`                                                                                                           |
 | Format                         | `pnpm format` (write) · `pnpm format:check` (CI)                                                                                         |

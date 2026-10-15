@@ -17,7 +17,9 @@ const runtime = vi.hoisted(() => {
   const instance = { setOption: vi.fn(), setTheme: vi.fn(), resize: vi.fn(), dispose: vi.fn() };
   return { instance, init: vi.fn(() => instance) };
 });
-vi.mock('../../../portal/packages/ui/src/lib/chart-runtime', () => ({ echarts: { init: runtime.init } }));
+vi.mock('../../../portal/packages/ui/src/lib/chart-runtime', () => ({
+  loadEcharts: () => ({ init: runtime.init }),
+}));
 
 const Chart = WIDGETS.chart!.component;
 const parse = (c: unknown) => WIDGETS.chart!.schema.parse(c) as ChartConfig;

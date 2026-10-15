@@ -1,0 +1,23 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#directoryObjects",
+  "value": [
+    {
+      "@odata.type": "#microsoft.graph.user",
+      "id": "10000000-0000-4000-8000-000000000008",
+      "displayName": "Hana Kim",
+      "mail": "hana.kim@example.com",
+      "userPrincipalName": "hana.kim@example.com",
+      "userType": "Member",
+      "accountEnabled": true
+    },
+    {
+      "@odata.type": "#microsoft.graph.user",
+      "id": "10000000-0000-4000-8000-00000000000b",
+      "displayName": "Kai Lindqvist",
+      "mail": "kai.lindqvist@example.com",
+      "userPrincipalName": "kai.lindqvist@example.com",
+      "userType": "Member",
+      "accountEnabled": true
+    }
+  ]
+}

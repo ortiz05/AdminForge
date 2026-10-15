@@ -1,0 +1,125 @@
+$schema: ../../../packages/schemas/generated/report.schema.json
+kind: report
+id: identity.users-without-mfa
+version: 1.0.0
+title: Users without MFA
+summary: >-
+  Accounts that have not registered any MFA method, admins first — the accounts a password spray or phishing
+  campaign can take over. From the authentication methods registration report (refreshed every few hours).
+owner: identity-team
+tags: [identity, mfa, report, security]
+nav: { section: reports, label: Users without MFA, icon: shield-warning, order: 11 }
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    graph: [AuditLog.Read.All]
+  entraRoles: [Reports Reader]
+  licences: [signInLogs]
+
+params:
+  userType: { type: enum, values: [member, guest, Any], default: member, label: Type, facet: true }
+  adminsOnly: { type: boolean, label: Admins only, default: false, facet: true }
+
+datasources:
+  report:
+    source: graph
+    request:
+      path: /reports/authenticationMethods/userRegistrationDetails
+      query:
+        $filter: >-
+          ${ $join([
+               "isMfaRegistered eq false",
+               params.userType != 'Any' ? "userType eq " & $odata(params.userType),
+               params.adminsOnly = true ? "isAdmin eq true"
+             ][$], ' and ') }
+    paging: all
+    maxItems: 100000
+    cache: { ttl: 1800 }
+    transform: >-
+      ${ (
+        $rows := [value.value[isMfaRegistered = false].{
+          "id": id,
+          "userDisplayName": userDisplayName,
+          "userPrincipalName": userPrincipalName,
+          "userType": userType,
+          "isAdmin": isAdmin = true,
+          "isSsprRegistered": isSsprRegistered = true,
+          "methods": [methodsRegistered],
+          "isPasswordlessCapable": isPasswordlessCapable = true,
+          "lastUpdated": lastUpdatedDateTime
+        }];
+        {
+          "rows": [$rows^(>(isAdmin ? 1 : 0), userDisplayName)],
+          "total": $count($rows),
+          "admins": $count($rows[isAdmin]),
+          "ssprOnly": $count($rows[isSsprRegistered])
+        }
+      ) }
+
+layout:
+  - widget: kpi
+    id: total
+    data: report.total
+    label: Users without MFA
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+  - widget: kpi
+    id: admins
+    data: report.admins
+    label: Admins without MFA
+    format: number
+    status: "${ value > 0 ? 'crit' : 'ok' }"
+  - widget: kpi
+    id: ssprOnly
+    data: report.ssprOnly
+    label: Registered for SSPR only
+    format: number
+  - widget: markdown
+    id: guidance
+    span: 12
+    text: |
+      Fix in this order: **admins**, then users who can sign in from anywhere. Turn on the MFA **registration
+      campaign** (Authentication methods → Registration campaign), require MFA with Conditional Access, and issue a
+      Temporary Access Pass to anyone who can't register on their own.
+  - widget: table
+    id: users
+    span: 12
+    data: report.rows
+    rowKey: id
+    selection: multi
+    columns:
+      - { field: userDisplayName, label: User, kind: identity, secondary: userPrincipalName, sortable: true }
+      - { field: isAdmin, label: Admin, kind: status, map: { "true": [crit, Admin], "false": [neutral, User] }, filter: facet }
+      - { field: userType, label: Type, filter: facet }
+      - { field: isSsprRegistered, label: SSPR registered, kind: boolean }
+      - { field: methods, label: Methods registered, kind: tags }
+      - { field: lastUpdated, label: Report updated, kind: relativeTime, hidden: true }
+      - { field: id, label: Object id, kind: guid, hidden: true }
+    inspect:
+      page: identity.user
+      params:
+        id: ${ row.id }
+    rowActions:
+      - playbook: identity.issue-tap
+        label: Issue Temporary Access Pass
+        icon: ticket
+        inputs:
+          userId: ${ row.id }
+    bulkActions:
+      - playbook: identity.add-group-members
+        label: Add to MFA rollout group
+        icon: users-three
+        forEach:
+          inputs:
+            userIds: ${ [row.id] }
+          concurrency: 5
+        maxItems: 1000
+    empty:
+      title: Everyone has MFA
+      body: Every user in scope has registered at least one MFA method.
+
+export:
+  formats: [csv, xlsx]
+  fileName: users-without-mfa
+  data: report.rows
+  columns: all

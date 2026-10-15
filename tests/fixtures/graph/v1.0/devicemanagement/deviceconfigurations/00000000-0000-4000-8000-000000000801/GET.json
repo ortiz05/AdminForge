@@ -1,0 +1,21 @@
+{
+  "@odata.type": "#microsoft.graph.windowsWifiConfiguration",
+  "id": "00000000-0000-4000-8000-000000000801",
+  "displayName": "Windows – Wi-Fi Corp",
+  "description": "Corporate WPA2-Enterprise network",
+  "createdDateTime": "2023-02-01T09:00:00Z",
+  "lastModifiedDateTime": "2025-10-01T09:00:00Z",
+  "version": 3,
+  "ssid": "EXAMPLE-CORP",
+  "connectAutomatically": true,
+  "wifiSecurityType": "wpa2Enterprise",
+  "assignments": [
+    {
+      "id": "asg-group-207",
+      "target": {
+        "@odata.type": "#microsoft.graph.groupAssignmentTarget",
+        "groupId": "00000000-0000-4000-8000-000000000207"
+      }
+    }
+  ]
+}

@@ -1,0 +1,370 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#fixture",
+  "value": [
+    {
+      "id": "00000000-0000-4000-8000-000000000901",
+      "templateId": null,
+      "displayName": "CA001 – Require MFA for all users",
+      "createdDateTime": "2024-03-01T09:00:00Z",
+      "modifiedDateTime": "2026-02-10T09:00:00Z",
+      "state": "enabled",
+      "conditions": {
+        "userRiskLevels": [],
+        "signInRiskLevels": [],
+        "clientAppTypes": [
+          "all"
+        ],
+        "platforms": null,
+        "locations": null,
+        "devices": null,
+        "clientApplications": null,
+        "servicePrincipalRiskLevels": [],
+        "insiderRiskLevels": null,
+        "users": {
+          "includeUsers": [
+            "All"
+          ],
+          "excludeUsers": [],
+          "includeGroups": [],
+          "excludeGroups": [
+            "00000000-0000-4000-8000-0000000002e1"
+          ],
+          "includeRoles": [],
+          "excludeRoles": [],
+          "includeGuestsOrExternalUsers": null,
+          "excludeGuestsOrExternalUsers": null
+        },
+        "applications": {
+          "includeApplications": [
+            "All"
+          ],
+          "excludeApplications": [],
+          "includeUserActions": [],
+          "includeAuthenticationContextClassReferences": [],
+          "applicationFilter": null
+        }
+      },
+      "grantControls": {
+        "operator": "OR",
+        "builtInControls": [
+          "mfa"
+        ],
+        "customAuthenticationFactors": [],
+        "termsOfUse": [],
+        "authenticationStrength": null
+      },
+      "sessionControls": null
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000902",
+      "templateId": null,
+      "displayName": "CA002 – Block legacy authentication",
+      "createdDateTime": "2024-03-01T09:00:00Z",
+      "modifiedDateTime": "2025-11-01T09:00:00Z",
+      "state": "enabled",
+      "conditions": {
+        "userRiskLevels": [],
+        "signInRiskLevels": [],
+        "clientAppTypes": [
+          "exchangeActiveSync",
+          "other"
+        ],
+        "platforms": null,
+        "locations": null,
+        "devices": null,
+        "clientApplications": null,
+        "servicePrincipalRiskLevels": [],
+        "insiderRiskLevels": null,
+        "users": {
+          "includeUsers": [
+            "All"
+          ],
+          "excludeUsers": [],
+          "includeGroups": [],
+          "excludeGroups": [
+            "00000000-0000-4000-8000-0000000002e1"
+          ],
+          "includeRoles": [],
+          "excludeRoles": [],
+          "includeGuestsOrExternalUsers": null,
+          "excludeGuestsOrExternalUsers": null
+        },
+        "applications": {
+          "includeApplications": [
+            "All"
+          ],
+          "excludeApplications": [],
+          "includeUserActions": [],
+          "includeAuthenticationContextClassReferences": [],
+          "applicationFilter": null
+        }
+      },
+      "grantControls": {
+        "operator": "OR",
+        "builtInControls": [
+          "block"
+        ],
+        "customAuthenticationFactors": [],
+        "termsOfUse": [],
+        "authenticationStrength": null
+      },
+      "sessionControls": null
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000903",
+      "templateId": null,
+      "displayName": "CA003 – Phishing-resistant MFA for admins",
+      "createdDateTime": "2024-03-01T09:00:00Z",
+      "modifiedDateTime": "2026-09-18T09:00:00Z",
+      "state": "enabled",
+      "conditions": {
+        "userRiskLevels": [],
+        "signInRiskLevels": [],
+        "clientAppTypes": [
+          "all"
+        ],
+        "platforms": null,
+        "locations": null,
+        "devices": null,
+        "clientApplications": null,
+        "servicePrincipalRiskLevels": [],
+        "insiderRiskLevels": null,
+        "users": {
+          "includeUsers": [],
+          "excludeUsers": [
+            "00000000-0000-4000-8000-000000000110"
+          ],
+          "includeGroups": [],
+          "excludeGroups": [],
+          "includeRoles": [
+            "62e90394-69f5-4237-9190-012177145e10",
+            "e8611ab8-c189-46e8-94e1-60213ab1f814",
+            "194ae4cb-b126-40b2-bd5b-6091b380977d",
+            "fe930be7-5e62-47db-91af-98c3a49a38b1"
+          ],
+          "excludeRoles": [],
+          "includeGuestsOrExternalUsers": null,
+          "excludeGuestsOrExternalUsers": null
+        },
+        "applications": {
+          "includeApplications": [
+            "All"
+          ],
+          "excludeApplications": [],
+          "includeUserActions": [],
+          "includeAuthenticationContextClassReferences": [],
+          "applicationFilter": null
+        }
+      },
+      "grantControls": {
+        "operator": "OR",
+        "builtInControls": [],
+        "customAuthenticationFactors": [],
+        "termsOfUse": [],
+        "authenticationStrength": {
+          "id": "00000000-0000-0000-0000-000000000004",
+          "displayName": "Phishing-resistant MFA",
+          "policyType": "builtIn",
+          "requirementsSatisfied": "mfa",
+          "allowedCombinations": [
+            "windowsHelloForBusiness",
+            "fido2",
+            "x509CertificateMultiFactor"
+          ]
+        }
+      },
+      "sessionControls": {
+        "signInFrequency": {
+          "value": 4,
+          "type": "hours",
+          "authenticationType": "primaryAndSecondaryAuthentication",
+          "frequencyInterval": "timeBased",
+          "isEnabled": true
+        },
+        "persistentBrowser": null,
+        "cloudAppSecurity": null,
+        "applicationEnforcedRestrictions": null,
+        "disableResilienceDefaults": false
+      }
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000904",
+      "templateId": null,
+      "displayName": "CA004 – Require compliant device for Office 365",
+      "createdDateTime": "2024-03-01T09:00:00Z",
+      "modifiedDateTime": "2026-10-02T09:00:00Z",
+      "state": "enabledForReportingButNotEnforced",
+      "conditions": {
+        "userRiskLevels": [],
+        "signInRiskLevels": [],
+        "clientAppTypes": [
+          "all"
+        ],
+        "platforms": {
+          "includePlatforms": [
+            "windows",
+            "macOS"
+          ],
+          "excludePlatforms": []
+        },
+        "locations": null,
+        "devices": null,
+        "clientApplications": null,
+        "servicePrincipalRiskLevels": [],
+        "insiderRiskLevels": null,
+        "users": {
+          "includeUsers": [
+            "All"
+          ],
+          "excludeUsers": [
+            "GuestsOrExternalUsers"
+          ],
+          "includeGroups": [],
+          "excludeGroups": [
+            "00000000-0000-4000-8000-0000000002e1"
+          ],
+          "includeRoles": [],
+          "excludeRoles": [],
+          "includeGuestsOrExternalUsers": null,
+          "excludeGuestsOrExternalUsers": null
+        },
+        "applications": {
+          "includeApplications": [
+            "Office365"
+          ],
+          "excludeApplications": [],
+          "includeUserActions": [],
+          "includeAuthenticationContextClassReferences": [],
+          "applicationFilter": null
+        }
+      },
+      "grantControls": {
+        "operator": "OR",
+        "builtInControls": [
+          "compliantDevice",
+          "domainJoinedDevice"
+        ],
+        "customAuthenticationFactors": [],
+        "termsOfUse": [],
+        "authenticationStrength": null
+      },
+      "sessionControls": null
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000905",
+      "templateId": null,
+      "displayName": "CA005 – Block untrusted countries",
+      "createdDateTime": "2024-03-01T09:00:00Z",
+      "modifiedDateTime": "2026-10-14T15:00:00Z",
+      "state": "enabled",
+      "conditions": {
+        "userRiskLevels": [],
+        "signInRiskLevels": [],
+        "clientAppTypes": [
+          "all"
+        ],
+        "platforms": null,
+        "locations": {
+          "includeLocations": [
+            "00000000-0000-4000-8000-000000000a01"
+          ],
+          "excludeLocations": [
+            "AllTrusted"
+          ]
+        },
+        "devices": null,
+        "clientApplications": null,
+        "servicePrincipalRiskLevels": [],
+        "insiderRiskLevels": null,
+        "users": {
+          "includeUsers": [
+            "All"
+          ],
+          "excludeUsers": [],
+          "includeGroups": [],
+          "excludeGroups": [],
+          "includeRoles": [],
+          "excludeRoles": [],
+          "includeGuestsOrExternalUsers": null,
+          "excludeGuestsOrExternalUsers": null
+        },
+        "applications": {
+          "includeApplications": [
+            "All"
+          ],
+          "excludeApplications": [],
+          "includeUserActions": [],
+          "includeAuthenticationContextClassReferences": [],
+          "applicationFilter": null
+        }
+      },
+      "grantControls": {
+        "operator": "OR",
+        "builtInControls": [
+          "block"
+        ],
+        "customAuthenticationFactors": [],
+        "termsOfUse": [],
+        "authenticationStrength": null
+      },
+      "sessionControls": null
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000906",
+      "templateId": null,
+      "displayName": "CA006 – Guests: require MFA",
+      "createdDateTime": "2024-03-01T09:00:00Z",
+      "modifiedDateTime": "2025-06-01T09:00:00Z",
+      "state": "disabled",
+      "conditions": {
+        "userRiskLevels": [],
+        "signInRiskLevels": [],
+        "clientAppTypes": [
+          "all"
+        ],
+        "platforms": null,
+        "locations": null,
+        "devices": null,
+        "clientApplications": null,
+        "servicePrincipalRiskLevels": [],
+        "insiderRiskLevels": null,
+        "users": {
+          "includeUsers": [
+            "GuestsOrExternalUsers"
+          ],
+          "excludeUsers": [],
+          "includeGroups": [],
+          "excludeGroups": [],
+          "includeRoles": [],
+          "excludeRoles": [],
+          "includeGuestsOrExternalUsers": {
+            "guestOrExternalUserTypes": "b2bCollaborationGuest,b2bCollaborationMember",
+            "externalTenants": {
+              "membershipKind": "all"
+            }
+          },
+          "excludeGuestsOrExternalUsers": null
+        },
+        "applications": {
+          "includeApplications": [
+            "All"
+          ],
+          "excludeApplications": [],
+          "includeUserActions": [],
+          "includeAuthenticationContextClassReferences": [],
+          "applicationFilter": null
+        }
+      },
+      "grantControls": {
+        "operator": "OR",
+        "builtInControls": [
+          "mfa"
+        ],
+        "customAuthenticationFactors": [],
+        "termsOfUse": [],
+        "authenticationStrength": null
+      },
+      "sessionControls": null
+    }
+  ]
+}

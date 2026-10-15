@@ -1,0 +1,220 @@
+$schema: ../../../packages/schemas/generated/page.schema.json
+kind: page
+id: identity.devices
+version: 1.0.0
+title: Devices
+summary: >-
+  Microsoft Entra device objects — joined, hybrid joined and registered — with OS, compliance, management and last
+  activity. Use the activity facet to find stale devices for cleanup.
+owner: identity-team
+tags: [identity, devices]
+template: list-detail
+nav: { section: identity, label: Devices, icon: devices, order: 60 }
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    graph: [Device.Read.All]
+  entraRoles: [Global Reader]
+
+params:
+  q: { type: string, default: "", label: Search, placeholder: Device name }
+  joinType:
+    type: enum
+    label: Join type
+    facet: true
+    default: Any
+    values:
+      - { value: Any, label: Any }
+      - { value: AzureAd, label: Microsoft Entra joined }
+      - { value: ServerAd, label: Hybrid joined }
+      - { value: Workplace, label: Registered }
+  os: { type: enum, values: [Any, Windows, macOS, iOS, Android, Linux], default: Any, label: OS, facet: true }
+  compliance: { type: enum, values: [Any, Compliant, NotCompliant], default: Any, label: Compliance, facet: true }
+  managed: { type: enum, values: [Any, Managed, Unmanaged], default: Any, label: Management, facet: true }
+  enabled: { type: enum, values: [Any, Enabled, Disabled], default: Any, label: State, facet: true }
+  activity:
+    type: enum
+    label: Last activity
+    facet: true
+    default: Any
+    values:
+      - { value: Any, label: Any time }
+      - { value: Active30, label: Active in the last 30 days }
+      - { value: Stale90, label: Inactive more than 90 days }
+      - { value: Stale180, label: Inactive more than 180 days }
+  adv: { type: string, hidden: true, label: Advanced filter }
+
+filters:
+  search: q
+  facets: [joinType, os, compliance, managed, enabled, activity]
+  advanced:
+    dialect: odata
+    param: adv
+    fields:
+      - { field: operatingSystemVersion, label: OS version, type: string, operators: [eq, startsWith] }
+      - { field: manufacturer, label: Manufacturer, type: string, operators: [eq, startsWith] }
+      - { field: model, label: Model, type: string, operators: [eq, startsWith] }
+      - { field: registrationDateTime, label: Registered, type: date, operators: [ge, le] }
+      - { field: approximateLastSignInDateTime, label: Last activity, type: date, operators: [ge, le] }
+      - { field: profileType, label: Profile type, type: enum, values: [RegisteredDevice, SecureVM, Printer, Shared, IoT], operators: [eq] }
+
+savedViews:
+  enabled: true
+  shared: true
+  presets:
+    - { name: Stale (90+ days), params: { activity: Stale90 } }
+    - { name: Not compliant, params: { compliance: NotCompliant } }
+    - { name: Personal registered devices, params: { joinType: Workplace } }
+    - { name: Disabled devices, params: { enabled: Disabled } }
+
+datasources:
+  devices:
+    source: graph
+    request:
+      path: /devices
+      headers: { ConsistencyLevel: eventual }
+      query:
+        $select: id,deviceId,displayName,operatingSystem,operatingSystemVersion,trustType,isCompliant,isManaged,accountEnabled,approximateLastSignInDateTime,registrationDateTime,profileType,manufacturer,model,onPremisesSyncEnabled,mdmAppId
+        $count: true
+        $top: 100
+        $filter: >-
+          ${ $join([
+               params.joinType != 'Any' ? "trustType eq " & $odata(params.joinType),
+               params.os = 'Windows' ? "operatingSystem eq 'Windows'",
+               params.os = 'macOS' ? "operatingSystem in ('MacMDM', 'Mac OS X', 'macOS')",
+               params.os = 'iOS' ? "operatingSystem in ('iOS', 'IPhone', 'iPadOS', 'IPad')",
+               params.os = 'Android' ? "startswith(operatingSystem, 'Android')",
+               params.os = 'Linux' ? "operatingSystem eq 'Linux'",
+               params.compliance = 'Compliant' ? "isCompliant eq true",
+               params.compliance = 'NotCompliant' ? "NOT(isCompliant eq true)",
+               params.managed = 'Managed' ? "isManaged eq true",
+               params.managed = 'Unmanaged' ? "NOT(isManaged eq true)",
+               params.enabled = 'Enabled' ? "accountEnabled eq true",
+               params.enabled = 'Disabled' ? "accountEnabled eq false",
+               params.activity = 'Active30' ? "approximateLastSignInDateTime ge " & $daysAgo(30),
+               params.activity = 'Stale90' ? "approximateLastSignInDateTime le " & $daysAgo(90),
+               params.activity = 'Stale180' ? "approximateLastSignInDateTime le " & $daysAgo(180),
+               params.adv
+             ][$], ' and ') }
+        $search: ${ params.q ? '"displayName:' & $odataSearch(params.q) & '"' }
+    paging: cursor
+    cache: { ttl: 120 }
+    transform: >-
+      ${ $merge([value, { "value": [value.value.$merge([$, {
+           "daysInactive": approximateLastSignInDateTime ? -$daysUntil(approximateLastSignInDateTime) : null,
+           "activityState": approximateLastSignInDateTime
+                            ? ($d := -$daysUntil(approximateLastSignInDateTime); $d > 180 ? 'stale180' : $d > 90 ? 'stale90' : 'active')
+                            : 'never',
+           "osFamily": operatingSystem in ['MacMDM', 'Mac OS X', 'macOS'] ? 'macOS'
+                       : operatingSystem in ['IPhone', 'IPad', 'iOS', 'iPadOS'] ? 'iOS'
+                       : $contains(operatingSystem ? operatingSystem : '', 'Android') ? 'Android' : operatingSystem
+         }])] }]) }
+  counts:
+    source: graphBatch
+    requests:
+      total: { path: /devices/$count, headers: { ConsistencyLevel: eventual } }
+      joined: { path: /devices/$count, query: { $filter: "trustType eq 'AzureAd'" }, headers: { ConsistencyLevel: eventual } }
+      hybrid: { path: /devices/$count, query: { $filter: "trustType eq 'ServerAd'" }, headers: { ConsistencyLevel: eventual } }
+      registered: { path: /devices/$count, query: { $filter: "trustType eq 'Workplace'" }, headers: { ConsistencyLevel: eventual } }
+      stale: { path: /devices/$count, query: { $filter: "${ 'approximateLastSignInDateTime le ' & $daysAgo(90) }" }, headers: { ConsistencyLevel: eventual } }
+    cache: { ttl: 600 }
+
+layout:
+  - widget: kpi
+    id: joined
+    data: counts.joined
+    label: Entra joined
+    format: number
+    href: /p/identity.devices?joinType=AzureAd
+  - widget: kpi
+    id: hybrid
+    data: counts.hybrid
+    label: Hybrid joined
+    format: number
+    href: /p/identity.devices?joinType=ServerAd
+  - widget: kpi
+    id: registered
+    data: counts.registered
+    label: Registered
+    format: number
+    href: /p/identity.devices?joinType=Workplace
+  - widget: kpi
+    id: stale
+    data: counts.stale
+    label: Inactive 90+ days
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+    href: /p/identity.devices?activity=Stale90
+  - widget: table
+    id: devices
+    span: 12
+    data: devices.value
+    rowKey: id
+    selection: multi
+    columns:
+      - { field: displayName, label: Device, kind: identity, secondary: model, sortable: true }
+      - { field: osFamily, label: OS, filter: { type: facet, param: os } }
+      - { field: operatingSystemVersion, label: OS version }
+      - field: trustType
+        label: Join type
+        kind: status
+        map: { AzureAd: [info, Entra joined], ServerAd: [info, Hybrid joined], Workplace: [neutral, Registered] }
+        filter: { type: facet, param: joinType }
+      - field: isCompliant
+        label: Compliance
+        kind: status
+        map: { "true": [ok, Compliant], "false": [crit, Not compliant] }
+        filter: { type: facet, param: compliance }
+      - { field: isManaged, label: Managed, kind: boolean, filter: { type: facet, param: managed } }
+      - field: accountEnabled
+        label: State
+        kind: status
+        map: { "true": [ok, Enabled], "false": [neutral, Disabled] }
+        filter: { type: facet, param: enabled }
+      - { field: approximateLastSignInDateTime, label: Last activity, kind: relativeTime, filter: date }
+      - field: activityState
+        label: Activity
+        kind: status
+        map: { active: [ok, Active], stale90: [warn, Inactive 90+ days], stale180: [crit, Inactive 180+ days], never: [neutral, No activity] }
+        hidden: true
+      - { field: daysInactive, label: Days inactive, kind: number, filter: range, hidden: true }
+      - { field: registrationDateTime, label: Registered, kind: date, hidden: true }
+      - { field: manufacturer, label: Manufacturer, hidden: true }
+      - { field: profileType, label: Profile type, hidden: true }
+      - { field: deviceId, label: Device id, kind: guid, hidden: true }
+      - { field: id, label: Object id, kind: guid, hidden: true }
+    inspect:
+      page: identity.device
+      params:
+        id: ${ row.id }
+        deviceId: ${ row.deviceId }
+    rowActions:
+      - playbook: identity.delete-stale-device
+        label: Delete stale device
+        icon: trash
+        inputs:
+          deviceObjectId: ${ row.id }
+        when: ${ row.activityState in ['stale90', 'stale180'] and row.trustType != 'ServerAd' }
+      - label: Open in Entra admin center
+        icon: arrow-square-out
+        href: "https://entra.microsoft.com/#view/Microsoft_AAD_Devices/DeviceDetailsMenuBlade/~/Properties/objectId/${ $encode(row.id) }/deviceId/${ $encode(row.deviceId) }"
+        when: ${ $boolean(row.deviceId) }
+    bulkActions:
+      - playbook: identity.delete-stale-device
+        label: Delete stale devices
+        icon: trash
+        forEach:
+          inputs:
+            deviceObjectId: ${ row.id }
+          concurrency: 5
+        maxItems: 200
+        when: ${ $count(rows[activityState in ['stale90', 'stale180'] and trustType != 'ServerAd']) = $count(rows) }
+    empty:
+      title: No devices match these filters
+      body: Clear a facet or the search.
+
+export:
+  formats: [csv, xlsx]
+  fileName: entra-devices
+  data: devices.value
+  columns: visible

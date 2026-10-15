@@ -1,0 +1,24 @@
+{
+  "id": "00000000-0000-4000-8000-000000000507",
+  "deviceId": "00000000-0000-4000-8001-000000000507",
+  "displayName": "Old iPhone",
+  "operatingSystem": "iOS",
+  "operatingSystemVersion": "16.7.10",
+  "trustType": "Workplace",
+  "isCompliant": null,
+  "isManaged": false,
+  "accountEnabled": true,
+  "approximateLastSignInDateTime": "2024-12-01T10:00:00Z",
+  "registrationDateTime": "2022-09-01T09:00:00Z",
+  "profileType": "RegisteredDevice",
+  "manufacturer": "Apple",
+  "model": "iPhone 11",
+  "onPremisesSyncEnabled": null,
+  "onPremisesLastSyncDateTime": null,
+  "mdmAppId": null,
+  "complianceExpirationDateTime": null,
+  "physicalIds": [],
+  "extensionAttributes": {
+    "extensionAttribute1": null
+  }
+}

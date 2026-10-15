@@ -1,0 +1,44 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#fixture",
+  "value": [
+    {
+      "id": "Directory_01_20261015",
+      "category": "RoleManagement",
+      "correlationId": "00000000-0000-4000-8000-00000000ad01",
+      "result": "success",
+      "resultReason": "",
+      "activityDisplayName": "Add member to role completed (PIM activation)",
+      "activityDateTime": "2026-10-15T03:00:00Z",
+      "loggedByService": "PIM",
+      "operationType": "Add",
+      "initiatedBy": {
+        "app": null,
+        "user": {
+          "id": "00000000-0000-4000-8000-0000000000a1",
+          "displayName": "Avery Engineer",
+          "userPrincipalName": "avery@example.com",
+          "ipAddress": "203.0.113.24"
+        }
+      },
+      "targetResources": [
+        {
+          "id": "fe930be7-5e62-47db-91af-98c3a49a38b1",
+          "displayName": "User Administrator",
+          "type": "Role",
+          "userPrincipalName": null,
+          "groupType": null,
+          "modifiedProperties": []
+        },
+        {
+          "id": "00000000-0000-4000-8000-0000000000a1",
+          "displayName": null,
+          "type": "User",
+          "userPrincipalName": "avery@example.com",
+          "groupType": null,
+          "modifiedProperties": []
+        }
+      ],
+      "additionalDetails": []
+    }
+  ]
+}

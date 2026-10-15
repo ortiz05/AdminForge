@@ -1,0 +1,151 @@
+$schema: ../../../packages/schemas/generated/page.schema.json
+kind: page
+id: endpoint.configuration-profile
+version: 1.0.0
+title: Configuration profile
+summary: One template-based configuration profile — per-device deployment status, assignments and configured settings.
+owner: endpoint-team
+tags: [endpoint, intune, configuration]
+template: entity
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    graph: [DeviceManagementConfiguration.Read.All]
+  entraRoles: [Intune Administrator]
+  licences: [intune]
+
+params:
+  id: { type: guid, label: Configuration profile, required: true, hidden: true }
+
+datasources:
+  profile:
+    source: graph
+    request:
+      path: /deviceManagement/deviceConfigurations/${ $encode($guid(params.id)) }
+      query:
+        $expand: assignments
+    cache: { ttl: 120 }
+    transform: >-
+      ${ (
+        $p := value;
+        $skip := ['id', 'displayName', 'description', 'createdDateTime', 'lastModifiedDateTime', 'version', 'assignments',
+                  '@odata.context', '@odata.type', 'roleScopeTagIds', 'assignments@odata.context', 'supportsScopeTags',
+                  'deviceManagementApplicabilityRuleOsEdition', 'deviceManagementApplicabilityRuleOsVersion',
+                  'deviceManagementApplicabilityRuleDeviceMode'];
+        $merge([$p, {
+          "profileType": $substringAfter($p.`@odata.type`, '#microsoft.graph.'),
+          "settings": [$keys($p)[$not($ in $skip)].(
+            $k := $;
+            $v := $lookup($p, $k);
+            $v != null and $v != false and $v != '' and $v != 0 and $v != 'notConfigured'
+              ? { "setting": $k, "value": $string($v) }
+          )],
+          "targets": [$p.assignments.{
+            "id": id,
+            "kind": target.`@odata.type` = '#microsoft.graph.allDevicesAssignmentTarget' ? 'All devices'
+                    : target.`@odata.type` = '#microsoft.graph.allLicensedUsersAssignmentTarget' ? 'All users'
+                    : target.`@odata.type` = '#microsoft.graph.exclusionGroupAssignmentTarget' ? 'Exclude group' : 'Include group',
+            "groupId": target.groupId
+          }]
+        }])
+      ) }
+  overview:
+    source: graph
+    request:
+      path: /deviceManagement/deviceConfigurations/${ $encode($guid(params.id)) }/deviceStatusOverview
+    cache: { ttl: 120 }
+  statuses:
+    source: graph
+    request:
+      path: /deviceManagement/deviceConfigurations/${ $encode($guid(params.id)) }/deviceStatuses
+      query:
+        $top: 100
+    paging: cursor
+    cache: { ttl: 120 }
+
+header:
+  title: ${ profile.displayName }
+  subtitle: "${ profile.profileType & ' · version ' & profile.version }"
+  status: "${ overview.failedCount + overview.errorCount + overview.conflictCount > 0 ? 'warn' : 'ok' }"
+  statusLabel: "${ overview.successCount & ' succeeded · ' & (overview.failedCount + overview.errorCount) & ' failed · ' & overview.conflictCount & ' conflicts' }"
+  ids:
+    Profile id: ${ profile.id }
+
+actions:
+  - label: Open in Intune admin center
+    icon: arrow-square-out
+    href: https://intune.microsoft.com/#view/Microsoft_Intune_DeviceSettings/DevicesMenu/~/configuration
+
+tabs:
+  - id: status
+    label: Device status
+    layout:
+      - widget: kpi
+        id: succeeded
+        data: overview.successCount
+        label: Succeeded
+        format: number
+      - widget: kpi
+        id: failed
+        data: overview.failedCount
+        label: Failed
+        format: number
+        status: "${ value > 0 ? 'crit' : 'ok' }"
+      - widget: kpi
+        id: conflicts
+        data: overview.conflictCount
+        label: Conflicts
+        format: number
+        status: "${ value > 0 ? 'warn' : 'ok' }"
+      - widget: kpi
+        id: pending
+        data: overview.pendingCount
+        label: Pending
+        format: number
+      - widget: table
+        id: statuses
+        span: 12
+        data: statuses.value
+        rowKey: id
+        columns:
+          - { field: deviceDisplayName, label: Device, kind: identity, secondary: userPrincipalName }
+          - field: status
+            label: Status
+            kind: status
+            map: { compliant: [ok, Succeeded], nonCompliant: [crit, Failed], error: [crit, Error], conflict: [warn, Conflict], notApplicable: [neutral, Not applicable], unknown: [neutral, Pending], remediated: [ok, Remediated], notAssigned: [neutral, Not assigned] }
+            filter: facet
+          - { field: lastReportedDateTime, label: Last reported, kind: relativeTime }
+        empty:
+          title: No devices have reported
+          body: Devices report after their next check-in once the profile is assigned.
+  - id: assignments
+    label: Assignments
+    layout:
+      - widget: table
+        id: targets
+        span: 12
+        data: profile.targets
+        rowKey: id
+        columns:
+          - { field: kind, label: Target }
+          - { field: groupId, label: Group id, kind: guid }
+        rowActions:
+          - { label: Open group, icon: users-three, href: "/p/identity.group?id=${ $encode(row.groupId) }", when: "${ $boolean(row.groupId) }" }
+        empty:
+          title: Not assigned
+          body: This profile applies to no devices.
+  - id: settings
+    label: Settings
+    layout:
+      - widget: table
+        id: settings
+        span: 12
+        data: profile.settings
+        rowKey: setting
+        search: true
+        columns:
+          - { field: setting, label: Setting, kind: code }
+          - { field: value, label: Value, kind: code }
+        empty:
+          title: No settings configured
+          body: Every setting is left at "Not configured".

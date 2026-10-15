@@ -1,0 +1,24 @@
+{
+  "id": "00000000-0000-4000-8000-000000000109",
+  "userPrincipalName": "j.rivera@example.com",
+  "userDisplayName": "Jordan Rivera",
+  "userType": "member",
+  "isAdmin": true,
+  "isSsprRegistered": true,
+  "isSsprEnabled": true,
+  "isSsprCapable": true,
+  "isMfaRegistered": true,
+  "isMfaCapable": true,
+  "isPasswordlessCapable": true,
+  "methodsRegistered": [
+    "passKeyDeviceBound",
+    "microsoftAuthenticatorPush"
+  ],
+  "isSystemPreferredAuthenticationMethodEnabled": true,
+  "systemPreferredAuthenticationMethods": [
+    "Fido2"
+  ],
+  "userPreferredMethodForSecondaryAuthentication": "push",
+  "defaultMfaMethod": "microsoftAuthenticatorPush",
+  "lastUpdatedDateTime": "2026-10-15T00:00:00Z"
+}

@@ -1,0 +1,30 @@
+{
+  "id": "00000000-0000-4000-8000-000000000204",
+  "displayName": "LIC-M365-E5",
+  "description": "Group-based licensing: Microsoft 365 E5",
+  "mail": null,
+  "mailNickname": "LICM365E5",
+  "mailEnabled": false,
+  "securityEnabled": true,
+  "groupTypes": [],
+  "membershipRule": null,
+  "membershipRuleProcessingState": null,
+  "onPremisesSyncEnabled": null,
+  "onPremisesLastSyncDateTime": null,
+  "onPremisesSamAccountName": null,
+  "createdDateTime": "2021-03-01T09:00:00Z",
+  "renewedDateTime": "2021-03-01T09:00:00Z",
+  "expirationDateTime": null,
+  "visibility": null,
+  "isAssignableToRole": null,
+  "classification": null,
+  "proxyAddresses": [],
+  "resourceProvisioningOptions": [],
+  "assignedLicenses": [
+    {
+      "skuId": "00000000-0000-4000-8000-000000001001",
+      "disabledPlans": []
+    }
+  ],
+  "hasMembersWithLicenseErrors": true
+}

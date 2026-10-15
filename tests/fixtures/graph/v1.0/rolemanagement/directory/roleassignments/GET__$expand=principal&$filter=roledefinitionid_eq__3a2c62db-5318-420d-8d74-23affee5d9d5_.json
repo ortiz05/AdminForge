@@ -1,0 +1,25 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#fixture",
+  "value": [
+    {
+      "id": "ra-10",
+      "principalId": "00000000-0000-4000-8000-000000000108",
+      "roleDefinitionId": "3a2c62db-5318-420d-8d74-23affee5d9d5",
+      "directoryScopeId": "/",
+      "appScopeId": null,
+      "principal": {
+        "@odata.type": "#microsoft.graph.user",
+        "id": "00000000-0000-4000-8000-000000000108",
+        "displayName": "Dana Okafor",
+        "userPrincipalName": "d.okafor@example.com"
+      },
+      "roleDefinition": {
+        "id": "3a2c62db-5318-420d-8d74-23affee5d9d5",
+        "displayName": "Intune Administrator",
+        "description": "Can manage all aspects of the Intune product.",
+        "isBuiltIn": true,
+        "templateId": "3a2c62db-5318-420d-8d74-23affee5d9d5"
+      }
+    }
+  ]
+}

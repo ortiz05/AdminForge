@@ -1,0 +1,314 @@
+$schema: ../../../packages/schemas/generated/runbook.schema.json
+kind: runbook
+id: identity.compromised-account
+version: 1.0.0
+title: Compromised account response
+summary: >-
+  Guided response to a suspected account compromise: scope the activity, contain (block sign-in, revoke sessions,
+  remove attacker-registered MFA methods), investigate changes and consents, then recover access safely and close out.
+owner: identity-team
+tags: [identity, incident, security, runbook]
+risk: high
+mode: write
+requires:
+  portalRoles: [Portal.Operator]
+  scopes:
+    graph:
+      - User.Read.All
+      - AuditLog.Read.All
+      - Directory.Read.All
+      - IdentityRiskyUser.Read.All
+      - UserAuthenticationMethod.Read.All
+      - User.EnableDisableAccount.All
+      - User.RevokeSessions.All
+      - UserAuthenticationMethod.ReadWrite.All
+      - Policy.Read.All
+  entraRoles: [User Administrator, Authentication Administrator, Security Reader]
+confirm:
+  type: click
+  message: >-
+    ${ 'Start incident response for ' & steps.account.output.userPrincipalName & ' (' & inputs.ticket
+       & ')? Containment blocks the user from every app until you restore access in step 4.' }
+approval:
+  required: false
+timeout: PT4H
+
+inputs:
+  userId: { type: string, format: guid, label: Affected user, picker: user }
+  ticket: { type: string, label: Incident or ticket number, minLength: 3 }
+  removeMethods:
+    type: boolean
+    label: Remove all registered MFA methods
+    description: Recommended — an attacker who had the password may have registered their own Authenticator or passkey.
+    default: true
+  tapForRecovery: { type: boolean, label: Issue a one-time Temporary Access Pass for recovery, default: true }
+
+sections:
+  - id: triage
+    title: 1. Confirm and scope
+    body: |
+      Confirm the report before acting: who reported it, what they saw (MFA prompts they didn't start, mail sent in
+      their name, sign-ins from unfamiliar places). The steps below pull the last 7 days of sign-ins and the user's
+      Identity Protection risk so you can judge the scope.
+    steps:
+      - id: account
+        type: graph
+        mode: read
+        describe: Look up the account
+        request:
+          method: GET
+          path: /users/${ $encode($guid(inputs.userId)) }
+          query:
+            $select: id,displayName,userPrincipalName,accountEnabled,userType,onPremisesSyncEnabled,lastPasswordChangeDateTime
+
+      - id: signIns
+        type: graph
+        mode: read
+        describe: Sign-ins in the last 7 days (needs Entra ID P1)
+        onError: continue
+        request:
+          method: GET
+          path: /auditLogs/signIns
+          query:
+            $filter: ${ 'userId eq ' & $odata($guid(inputs.userId)) & ' and createdDateTime ge ' & $daysAgo(7) }
+            $top: 200
+
+      - id: risk
+        type: graph
+        mode: read
+        describe: Identity Protection risk (needs Entra ID P2)
+        onError: continue
+        request:
+          method: GET
+          path: /identityProtection/riskyUsers/${ $encode($guid(inputs.userId)) }
+
+      - id: scope
+        type: transform
+        expression: >-
+          ${ (
+            $s := [steps.signIns.output.value];
+            {
+              "signIns": $count($s),
+              "failures": $count($s[status.errorCode != 0]),
+              "countries": [$distinct($s.location.countryOrRegion)],
+              "ips": [$distinct($s.ipAddress)],
+              "apps": [$distinct($s.appDisplayName)],
+              "riskLevel": steps.risk.output.riskLevel ? steps.risk.output.riskLevel : 'unknown',
+              "riskState": steps.risk.output.riskState ? steps.risk.output.riskState : 'unknown'
+            }
+          ) }
+
+      - id: confirmed
+        type: manual
+        instructions: |
+          **${ steps.account.output.userPrincipalName }** — ${ steps.scope.output.signIns } sign-ins in 7 days
+          (${ steps.scope.output.failures } failed) from ${ $join(steps.scope.output.countries, ', ') }.
+          Identity Protection risk: **${ steps.scope.output.riskLevel }** (${ steps.scope.output.riskState }).
+
+          Review the [sign-in logs](/p/identity.sign-ins?user=${ $encode(steps.account.output.userPrincipalName) }) for
+          unfamiliar locations, IP addresses and apps, then confirm before containing.
+        checklist:
+          - The report is credible (unfamiliar activity confirmed with the user or their manager)
+          - Ticket ${ inputs.ticket } is opened and the security team is informed
+          - If the user is an administrator, escalated to the security lead
+
+  - id: contain
+    title: 2. Contain
+    body: |
+      Block sign-in and revoke every session so stolen tokens stop working, and remove MFA methods the attacker may
+      have registered. Apps that support Continuous Access Evaluation react within minutes.
+    steps:
+      - id: disable
+        type: playbook
+        mode: write
+        describe: Block sign-in and revoke sessions
+        when: ${ steps.account.output.accountEnabled = true }
+        ref: identity.disable-user
+        inputs:
+          userId: ${ $guid(inputs.userId) }
+          reason: ${ 'Compromised account response — ' & inputs.ticket }
+
+      - id: revokeOnly
+        type: playbook
+        mode: write
+        describe: Revoke sessions (sign-in was already blocked)
+        when: ${ steps.account.output.accountEnabled = false }
+        ref: identity.revoke-sessions
+        inputs:
+          userId: ${ $guid(inputs.userId) }
+          reason: ${ 'Compromised account response — ' & inputs.ticket }
+
+      - id: removeMethods
+        type: playbook
+        mode: write
+        describe: Remove all registered MFA methods, including passkeys
+        when: ${ inputs.removeMethods = true }
+        onError: continue
+        ref: identity.reset-mfa
+        inputs:
+          userId: ${ $guid(inputs.userId) }
+          includePhishingResistant: true
+          revokeSessions: false
+          reason: ${ 'Compromised account response — ' & inputs.ticket }
+
+      - id: containOther
+        type: manual
+        instructions: |
+          Contain in the other workloads too (these are outside Microsoft Graph's identity APIs):
+        checklist:
+          - "Exchange Online: remove inbox rules and forwarding the user didn't create; check mailbox delegates"
+          - "Defender: isolate any device the attacker used; mark the user compromised in Identity Protection"
+          - "Synced account: also disable it and reset the password in on-premises AD"
+
+  - id: investigate
+    title: 3. Investigate
+    body: |
+      Find what the attacker changed: directory changes made by the account, apps it consented to, and which
+      authentication methods remain registered.
+    steps:
+      - id: changesBy
+        type: graph
+        mode: read
+        describe: Directory changes made by the account (30 days)
+        request:
+          method: GET
+          path: /auditLogs/directoryAudits
+          query:
+            $filter: ${ 'initiatedBy/user/id eq ' & $odata($guid(inputs.userId)) }
+            $top: 200
+
+      - id: consents
+        type: graph
+        mode: read
+        describe: Delegated permissions the user consented to
+        request:
+          method: GET
+          path: /users/${ $encode($guid(inputs.userId)) }/oauth2PermissionGrants
+
+      - id: methodsNow
+        type: graph
+        mode: read
+        describe: Authentication methods still registered
+        request:
+          method: GET
+          path: /users/${ $encode($guid(inputs.userId)) }/authentication/methods
+
+      - id: findings
+        type: transform
+        expression: >-
+          ${ {
+            "changes": [steps.changesBy.output.value.(activityDateTime & ' ' & activityDisplayName)],
+            "consents": [steps.consents.output.value[consentType = 'Principal'].{ "clientId": clientId, "scope": scope }],
+            "methodsLeft": $count(steps.methodsNow.output.value[`@odata.type` != '#microsoft.graph.passwordAuthenticationMethod'])
+          } }
+
+      - id: review
+        type: manual
+        instructions: |
+          - **${ $count(steps.findings.output.changes) }** directory changes by this account — revert anything unexpected
+            (new app credentials, role or group changes, new users).
+          - **${ $count(steps.findings.output.consents) }** user consent grants — revoke grants to apps the user doesn't
+            recognise and disable the app (*Disable enterprise app sign-in*).
+          - **${ steps.findings.output.methodsLeft }** MFA methods still registered.
+          - Exchange: search the unified audit log for `MailItemsAccessed`, `New-InboxRule` and `Set-Mailbox` forwarding.
+        checklist:
+          - Malicious changes reverted
+          - Suspicious app consents revoked and the apps disabled
+          - Mailbox audit reviewed; data exposure assessed
+        inputs:
+          notes: { type: string, label: Findings, multiline: true, required: false }
+
+  - id: recover
+    title: 4. Recover access
+    body: |
+      Only after the investigation: verify the user's identity out of band (call back on a known number), make sure
+      their device is clean, then reset the password and give them a one-time Temporary Access Pass to register MFA again.
+    steps:
+      - id: verified
+        type: manual
+        instructions: Verify the user's identity through a channel the attacker can't control before restoring access.
+        checklist:
+          - Identity verified by call-back to a number on file (or in person)
+          - The user's device is clean or has been reimaged
+
+      - id: password
+        type: playbook
+        mode: write
+        describe: Reset the password (attacker knows the old one)
+        when: ${ $not(steps.account.output.onPremisesSyncEnabled = true) }
+        ref: identity.reset-password
+        inputs:
+          userId: ${ $guid(inputs.userId) }
+          revokeSessions: true
+          reason: ${ 'Compromised account recovery — ' & inputs.ticket }
+
+      - id: tap
+        type: playbook
+        mode: write
+        describe: Issue a one-time Temporary Access Pass to register MFA again
+        when: ${ inputs.tapForRecovery = true }
+        onError: continue
+        ref: identity.issue-tap
+        inputs:
+          userId: ${ $guid(inputs.userId) }
+          lifetimeMinutes: 60
+          isUsableOnce: true
+          replaceExisting: true
+          reason: ${ 'Compromised account recovery — ' & inputs.ticket }
+
+      - id: enable
+        type: playbook
+        mode: write
+        describe: Allow sign-in again
+        when: ${ $not(steps.account.output.onPremisesSyncEnabled = true) }
+        ref: identity.enable-user
+        inputs:
+          userId: ${ $guid(inputs.userId) }
+          reason: ${ 'Compromised account recovery — ' & inputs.ticket }
+
+  - id: close
+    title: 5. Close
+    body: Record what happened and keep watching the account for two weeks.
+    steps:
+      - id: closeout
+        type: manual
+        instructions: Close the incident.
+        checklist:
+          - The user re-registered MFA (phishing-resistant if possible)
+          - Ticket updated with timeline, findings and actions
+          - Account added to heightened monitoring for 14 days
+          - Root cause recorded (phishing, password reuse, token theft…) and lessons shared
+
+outputs:
+  summary: >-
+    ${ 'Incident ' & inputs.ticket & ' for ' & steps.account.output.userPrincipalName & ': contained'
+       & (inputs.removeMethods = true ? ', MFA methods removed' : '')
+       & ', investigated and access restored.' }
+
+tests:
+  - name: stops when the account doesn't exist
+    inputs: { userId: 00000000-0000-4000-8000-000000000199, ticket: INC-1001 }
+    errors:
+      account: { status: 404, code: Request_ResourceNotFound }
+    expect: { status: failed, failedStep: account }
+  - name: walks through containment and recovery for an enabled cloud account
+    inputs: { userId: 00000000-0000-4000-8000-000000000102, ticket: INC-1002 }
+    mocks:
+      account: { id: 00000000-0000-4000-8000-000000000102, userPrincipalName: m.chen@example.com, accountEnabled: true, userType: Member, onPremisesSyncEnabled: null }
+      signIns:
+        value:
+          - { id: s1, createdDateTime: "2026-01-14T03:12:00Z", appDisplayName: Office 365 Exchange Online, ipAddress: 203.0.113.50, status: { errorCode: 0 }, location: { countryOrRegion: NL } }
+          - { id: s2, createdDateTime: "2026-01-14T03:10:00Z", appDisplayName: Office 365 Exchange Online, ipAddress: 203.0.113.50, status: { errorCode: 50126 }, location: { countryOrRegion: NL } }
+      risk: { id: 00000000-0000-4000-8000-000000000102, riskLevel: high, riskState: atRisk }
+      changesBy: { value: [{ activityDateTime: "2026-01-14T03:20:00Z", activityDisplayName: Consent to application }] }
+      consents: { value: [{ clientId: 00000000-0000-4000-8000-000000000404, consentType: Principal, scope: Mail.Read offline_access }] }
+      methodsNow: { value: [{ "@odata.type": "#microsoft.graph.passwordAuthenticationMethod", id: 28c10230-6103-485e-b985-444c60001490 }] }
+      disable: { summary: Sign-in disabled and sessions revoked for m.chen@example.com }
+      removeMethods: { summary: Removed 2 MFA method(s) }
+      password: { summary: Password reset }
+      tap: { summary: Temporary Access Pass issued }
+      enable: { summary: Sign-in enabled for m.chen@example.com }
+    expect:
+      status: succeeded
+      steps: { disable: succeeded, revokeOnly: skipped, removeMethods: succeeded, password: succeeded, tap: succeeded, enable: succeeded, confirmed: skipped }
+      outputs: { summary: "Incident INC-1002 for m.chen@example.com: contained, MFA methods removed, investigated and access restored." }

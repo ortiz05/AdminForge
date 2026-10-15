@@ -1,0 +1,201 @@
+$schema: ../../../packages/schemas/generated/page.schema.json
+kind: page
+id: identity.enterprise-apps
+version: 1.0.0
+title: Enterprise apps
+summary: >-
+  Service principals — the apps users and workloads sign in to. Filter by app type, sign-in state, assignment
+  requirement and single sign-on mode; spot SAML signing certificates near expiry.
+owner: identity-team
+tags: [identity, apps]
+template: list-detail
+nav: { section: identity, label: Enterprise apps, icon: squares-four, order: 50 }
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    graph: [Application.Read.All]
+  entraRoles: [Global Reader]
+
+params:
+  q: { type: string, default: "", label: Search, placeholder: App name }
+  appType:
+    type: enum
+    label: App type
+    facet: true
+    default: Enterprise
+    values:
+      - { value: Enterprise, label: Enterprise applications }
+      - { value: Microsoft, label: Microsoft applications }
+      - { value: ManagedIdentity, label: Managed identities }
+      - { value: All, label: All service principals }
+  enabled: { type: enum, values: [Any, Enabled, Disabled], default: Any, label: Sign-in, facet: true }
+  assignment:
+    type: enum
+    label: Assignment required
+    facet: true
+    default: Any
+    values:
+      - { value: Any, label: Any }
+      - { value: Required, label: Required }
+      - { value: NotRequired, label: Not required (open to all users) }
+  sso:
+    type: enum
+    label: Single sign-on
+    facet: true
+    default: Any
+    values: [Any, saml, oidc, password, notSupported]
+
+filters:
+  search: q
+  facets: [appType, enabled, assignment, sso]
+
+savedViews:
+  enabled: true
+  shared: true
+  presets:
+    - { name: SAML apps, params: { sso: saml } }
+    - { name: Disabled apps, params: { enabled: Disabled } }
+    - { name: Open to all users, params: { assignment: NotRequired } }
+    - { name: Managed identities, params: { appType: ManagedIdentity } }
+
+datasources:
+  apps:
+    source: graph
+    request:
+      path: /servicePrincipals
+      headers: { ConsistencyLevel: eventual }
+      query:
+        $select: id,appId,displayName,accountEnabled,appRoleAssignmentRequired,servicePrincipalType,appOwnerOrganizationId,publisherName,verifiedPublisher,tags,homepage,preferredSingleSignOnMode,keyCredentials,notes
+        $count: true
+        $top: 100
+        # f8cdef31-… is Microsoft's tenant (owner of first-party apps); the tag marks apps shown as enterprise apps in Entra.
+        $filter: >-
+          ${ $join([
+               params.appType = 'Enterprise' ? "tags/any(t:t eq 'WindowsAzureActiveDirectoryIntegratedApp')",
+               params.appType = 'Microsoft' ? "appOwnerOrganizationId eq f8cdef31-a31e-4b4a-93e4-5f571e91255a",
+               params.appType = 'ManagedIdentity' ? "servicePrincipalType eq 'ManagedIdentity'",
+               params.enabled = 'Enabled' ? "accountEnabled eq true",
+               params.enabled = 'Disabled' ? "accountEnabled eq false",
+               params.assignment = 'Required' ? "appRoleAssignmentRequired eq true",
+               params.assignment = 'NotRequired' ? "appRoleAssignmentRequired eq false",
+               params.sso != 'Any' ? "preferredSingleSignOnMode eq " & $odata(params.sso)
+             ][$], ' and ') }
+        $search: ${ params.q ? '"displayName:' & $odataSearch(params.q) & '"' }
+    paging: cursor
+    cache: { ttl: 300 }
+    transform: >-
+      ${ $merge([value, { "value": [value.value.(
+           $certDays := [keyCredentials[usage = 'Sign' and endDateTime].$daysUntil(endDateTime)];
+           $next := $count($certDays) > 0 ? $min($certDays) : null;
+           $merge([$, {
+             "kind": appOwnerOrganizationId = 'f8cdef31-a31e-4b4a-93e4-5f571e91255a' ? 'Microsoft'
+                     : servicePrincipalType = 'ManagedIdentity' ? 'Managed identity'
+                     : servicePrincipalType = 'Application' ? 'Application' : servicePrincipalType,
+             "publisher": verifiedPublisher.displayName ? verifiedPublisher.displayName : publisherName,
+             "verified": $exists(verifiedPublisher.verifiedPublisherId) and verifiedPublisher.verifiedPublisherId != null,
+             "signingCertDays": $next,
+             "signingCertState": $next = null ? 'none' : $next < 0 ? 'expired' : $next <= 30 ? 'expiring' : 'ok'
+           }])
+         )] }]) }
+  counts:
+    source: graphBatch
+    requests:
+      enterprise: { path: /servicePrincipals/$count, query: { $filter: "tags/any(t:t eq 'WindowsAzureActiveDirectoryIntegratedApp')" }, headers: { ConsistencyLevel: eventual } }
+      disabled: { path: /servicePrincipals/$count, query: { $filter: "accountEnabled eq false" }, headers: { ConsistencyLevel: eventual } }
+      open: { path: /servicePrincipals/$count, query: { $filter: "tags/any(t:t eq 'WindowsAzureActiveDirectoryIntegratedApp') and appRoleAssignmentRequired eq false" }, headers: { ConsistencyLevel: eventual } }
+      saml: { path: /servicePrincipals/$count, query: { $filter: "preferredSingleSignOnMode eq 'saml'" }, headers: { ConsistencyLevel: eventual } }
+    cache: { ttl: 300 }
+
+layout:
+  - widget: kpi
+    id: enterprise
+    data: counts.enterprise
+    label: Enterprise applications
+    format: number
+  - widget: kpi
+    id: open
+    data: counts.open
+    label: Open to every user
+    format: number
+    href: /p/identity.enterprise-apps?assignment=NotRequired
+  - widget: kpi
+    id: saml
+    data: counts.saml
+    label: SAML single sign-on
+    format: number
+    href: /p/identity.enterprise-apps?sso=saml
+  - widget: kpi
+    id: disabled
+    data: counts.disabled
+    label: Sign-in disabled
+    format: number
+    href: /p/identity.enterprise-apps?enabled=Disabled&appType=All
+  - widget: table
+    id: apps
+    span: 12
+    data: apps.value
+    rowKey: id
+    selection: multi
+    columns:
+      - { field: displayName, label: Application, kind: identity, secondary: appId, sortable: true }
+      - field: accountEnabled
+        label: Sign-in
+        kind: status
+        map: { "true": [ok, Enabled], "false": [crit, Disabled] }
+        filter: { type: facet, param: enabled }
+      - field: appRoleAssignmentRequired
+        label: Assignment
+        kind: status
+        map: { "true": [ok, Required], "false": [warn, Not required] }
+        filter: { type: facet, param: assignment }
+      - { field: kind, label: Type, filter: facet }
+      - { field: preferredSingleSignOnMode, label: Single sign-on, filter: { type: facet, param: sso } }
+      - field: signingCertState
+        label: SAML signing certificate
+        kind: status
+        map: { expired: [crit, Expired], expiring: [warn, Expires within 30 days], ok: [ok, Valid], none: [neutral, n/a] }
+      - { field: signingCertDays, label: Certificate days left, kind: number, hidden: true }
+      - { field: publisher, label: Publisher }
+      - { field: verified, label: Verified publisher, kind: boolean, hidden: true }
+      - { field: homepage, label: Home page, kind: link, hidden: true }
+      - { field: id, label: Object id, kind: guid, hidden: true }
+    inspect:
+      page: identity.enterprise-app
+      params:
+        id: ${ row.id }
+        appId: ${ row.appId }
+    rowActions:
+      - playbook: identity.disable-enterprise-app
+        label: Disable sign-in
+        icon: prohibit
+        inputs:
+          servicePrincipalId: ${ row.id }
+        when: ${ row.accountEnabled = true and row.kind != 'Microsoft' }
+      - playbook: identity.enable-enterprise-app
+        label: Enable sign-in
+        icon: check-circle
+        inputs:
+          servicePrincipalId: ${ row.id }
+        when: ${ row.accountEnabled = false }
+      - label: Open in Entra admin center
+        icon: arrow-square-out
+        href: "https://entra.microsoft.com/#view/Microsoft_AAD_IAM/ManagedAppMenuBlade/~/Overview/objectId/${ $encode(row.id) }/appId/${ $encode(row.appId) }"
+    bulkActions:
+      - playbook: identity.disable-enterprise-app
+        label: Disable sign-in
+        icon: prohibit
+        forEach:
+          inputs:
+            servicePrincipalId: ${ row.id }
+          concurrency: 3
+        maxItems: 25
+        when: ${ $count(rows[accountEnabled = true and kind != 'Microsoft']) = $count(rows) }
+    empty:
+      title: No apps match these filters
+      body: Try All service principals, or clear the search.
+
+export:
+  formats: [csv, xlsx]
+  fileName: enterprise-apps
+  data: apps.value
+  columns: visible

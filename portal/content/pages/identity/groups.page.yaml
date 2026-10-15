@@ -1,0 +1,205 @@
+$schema: ../../../packages/schemas/generated/page.schema.json
+kind: page
+id: identity.groups
+version: 1.0.0
+title: Groups
+summary: >-
+  Security groups, Microsoft 365 groups, mail-enabled security groups and distribution lists — filter by type,
+  membership (assigned or dynamic), source and role-assignability.
+owner: identity-team
+tags: [identity, groups]
+template: list-detail
+nav: { section: identity, label: Groups, icon: users-three, order: 20 }
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    graph: [Group.Read.All]
+  entraRoles: [Directory Readers]
+
+params:
+  q: { type: string, default: "", label: Search, placeholder: Group name or description }
+  kind:
+    type: enum
+    label: Type
+    facet: true
+    default: All
+    values:
+      - { value: All, label: All types }
+      - { value: Security, label: Security }
+      - { value: Microsoft365, label: Microsoft 365 }
+      - { value: MailSecurity, label: Mail-enabled security }
+      - { value: Distribution, label: Distribution list }
+  membership:
+    type: enum
+    label: Membership
+    facet: true
+    default: Any
+    values:
+      - { value: Any, label: Assigned or dynamic }
+      - { value: Assigned, label: Assigned }
+      - { value: Dynamic, label: Dynamic }
+  source:
+    type: enum
+    label: Source
+    facet: true
+    default: Any
+    values:
+      - { value: Any, label: Cloud or synced }
+      - { value: Cloud, label: Cloud only }
+      - { value: Synced, label: Synced from AD }
+  roleAssignable: { type: enum, values: [Any, Yes, No], default: Any, label: Role-assignable, facet: true }
+
+filters:
+  search: q
+  facets: [kind, membership, source, roleAssignable]
+
+savedViews:
+  enabled: true
+  shared: true
+  presets:
+    - { name: Security groups, params: { kind: Security } }
+    - { name: Dynamic groups, params: { membership: Dynamic } }
+    - { name: Role-assignable groups, params: { roleAssignable: "Yes" } }
+    - { name: Synced from AD, params: { source: Synced } }
+
+datasources:
+  groups:
+    source: graph
+    request:
+      path: /groups
+      headers: { ConsistencyLevel: eventual }
+      query:
+        $select: id,displayName,description,mail,mailEnabled,securityEnabled,groupTypes,membershipRule,membershipRuleProcessingState,onPremisesSyncEnabled,onPremisesLastSyncDateTime,createdDateTime,visibility,isAssignableToRole
+        $count: true
+        $top: 100
+        # Advanced query (ConsistencyLevel: eventual + $count) is needed for NOT and for $search with $filter.
+        $filter: >-
+          ${ $join([
+               params.kind = 'Microsoft365' ? "groupTypes/any(c:c eq 'Unified')",
+               params.kind = 'Security' ? "securityEnabled eq true and mailEnabled eq false",
+               params.kind = 'MailSecurity' ? "securityEnabled eq true and mailEnabled eq true and NOT(groupTypes/any(c:c eq 'Unified'))",
+               params.kind = 'Distribution' ? "securityEnabled eq false and mailEnabled eq true and NOT(groupTypes/any(c:c eq 'Unified'))",
+               params.membership = 'Dynamic' ? "groupTypes/any(c:c eq 'DynamicMembership')",
+               params.membership = 'Assigned' ? "NOT(groupTypes/any(c:c eq 'DynamicMembership'))",
+               params.source = 'Synced' ? "onPremisesSyncEnabled eq true",
+               params.source = 'Cloud' ? "NOT(onPremisesSyncEnabled eq true)",
+               params.roleAssignable = 'Yes' ? "isAssignableToRole eq true",
+               params.roleAssignable = 'No' ? "NOT(isAssignableToRole eq true)"
+             ][$], ' and ') }
+        $search: >-
+          ${ params.q ? '"displayName:' & $odataSearch(params.q) & '" OR "description:' & $odataSearch(params.q) & '"' }
+    paging: cursor
+    cache: { ttl: 120 }
+    transform: >-
+      ${ $merge([value, { "value": [value.value.$merge([$, {
+           "kind": 'Unified' in groupTypes ? "Microsoft 365"
+                   : securityEnabled = true and mailEnabled = true ? "Mail-enabled security"
+                   : securityEnabled = true ? "Security" : "Distribution",
+           "membership": 'DynamicMembership' in groupTypes ? "Dynamic" : "Assigned",
+           "sourceLabel": onPremisesSyncEnabled = true ? "Synced" : "Cloud",
+           "graphManaged": $not('DynamicMembership' in groupTypes) and $not(onPremisesSyncEnabled = true)
+                           and $not(mailEnabled = true and $not('Unified' in groupTypes))
+         }])] }]) }
+  counts:
+    source: graphBatch
+    requests:
+      total: { path: /groups/$count, headers: { ConsistencyLevel: eventual } }
+      security: { path: /groups/$count, query: { $filter: "securityEnabled eq true and mailEnabled eq false" }, headers: { ConsistencyLevel: eventual } }
+      unified: { path: /groups/$count, query: { $filter: "groupTypes/any(c:c eq 'Unified')" }, headers: { ConsistencyLevel: eventual } }
+      dynamic: { path: /groups/$count, query: { $filter: "groupTypes/any(c:c eq 'DynamicMembership')" }, headers: { ConsistencyLevel: eventual } }
+      roleAssignable: { path: /groups/$count, query: { $filter: "isAssignableToRole eq true" }, headers: { ConsistencyLevel: eventual } }
+    cache: { ttl: 300 }
+
+actions:
+  - playbook: identity.create-security-group
+    label: New security group
+    icon: plus-circle
+
+layout:
+  - widget: kpi
+    id: total
+    data: counts.total
+    label: Groups
+    format: number
+  - widget: kpi
+    id: security
+    data: counts.security
+    label: Security
+    format: number
+    href: /p/identity.groups?kind=Security
+  - widget: kpi
+    id: unified
+    data: counts.unified
+    label: Microsoft 365
+    format: number
+    href: /p/identity.groups?kind=Microsoft365
+  - widget: kpi
+    id: roleAssignable
+    data: counts.roleAssignable
+    label: Role-assignable
+    format: number
+    href: /p/identity.groups?roleAssignable=Yes
+  - widget: table
+    id: groups
+    span: 12
+    data: groups.value
+    rowKey: id
+    selection: multi
+    columns:
+      - { field: displayName, label: Group, kind: identity, secondary: mail, sortable: true }
+      - field: kind
+        label: Type
+        kind: status
+        map: { Microsoft 365: [info, Microsoft 365], Security: [neutral, Security], Mail-enabled security: [neutral, Mail-enabled security], Distribution: [neutral, Distribution] }
+        filter: { type: facet, param: kind }
+      - field: membership
+        label: Membership
+        kind: status
+        map: { Assigned: [neutral, Assigned], Dynamic: [info, Dynamic] }
+        filter: { type: facet, param: membership }
+      - field: sourceLabel
+        label: Source
+        kind: status
+        map: { Cloud: [neutral, Cloud], Synced: [info, Synced from AD] }
+        filter: { type: facet, param: source }
+      - { field: isAssignableToRole, label: Role-assignable, kind: boolean, filter: { type: facet, param: roleAssignable } }
+      - field: membershipRuleProcessingState
+        label: Rule processing
+        kind: status
+        map: { On: [ok, On], Paused: [warn, Paused] }
+        hidden: true
+      - { field: description, label: Description }
+      - { field: visibility, label: Visibility, hidden: true }
+      - { field: createdDateTime, label: Created, kind: date, filter: date }
+      - { field: onPremisesLastSyncDateTime, label: Last directory sync, kind: relativeTime, hidden: true }
+      - { field: membershipRule, label: Membership rule, kind: code, hidden: true }
+      - { field: id, label: Object id, kind: guid, hidden: true }
+    inspect:
+      page: identity.group
+      params:
+        id: ${ row.id }
+    rowActions:
+      - playbook: identity.add-group-members
+        label: Add members
+        icon: user-plus
+        inputs:
+          groupId: ${ row.id }
+        when: ${ row.graphManaged = true }
+      - playbook: identity.add-group-owner
+        label: Add owner
+        icon: crown-simple
+        inputs:
+          groupId: ${ row.id }
+      - label: Open in Entra admin center
+        icon: arrow-square-out
+        href: "https://entra.microsoft.com/#view/Microsoft_AAD_IAM/GroupDetailsMenuBlade/~/Overview/groupId/${ $encode(row.id) }"
+    empty:
+      title: No groups match these filters
+      body: Clear a facet or the search. Search matches the start of words in the name or description.
+      action: { playbook: identity.create-security-group, label: New security group }
+
+export:
+  formats: [csv, xlsx]
+  fileName: groups
+  data: groups.value
+  columns: visible

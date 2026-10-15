@@ -1,0 +1,39 @@
+{
+  "@odata.type": "#microsoft.graph.androidWorkProfileCompliancePolicy",
+  "id": "00000000-0000-4000-8000-000000000703",
+  "displayName": "Android – Work profile compliance",
+  "description": "Screen lock, minimum Android 13, Play Integrity",
+  "createdDateTime": "2024-03-01T09:00:00Z",
+  "lastModifiedDateTime": "2026-02-01T09:00:00Z",
+  "version": 3,
+  "roleScopeTagIds": [
+    "0"
+  ],
+  "passwordRequired": true,
+  "osMinimumVersion": "13.0",
+  "securityRequireSafetyNetAttestationBasicIntegrity": true,
+  "securityRequireVerifyApps": true,
+  "minAndroidSecurityPatchLevel": "2026-06-01",
+  "assignments": [
+    {
+      "id": "asg-users-x",
+      "target": {
+        "@odata.type": "#microsoft.graph.allLicensedUsersAssignmentTarget"
+      }
+    }
+  ],
+  "scheduledActionsForRule": [
+    {
+      "id": "rule-703",
+      "ruleName": null,
+      "scheduledActionConfigurations": [
+        {
+          "id": "sac-703-1",
+          "gracePeriodHours": 168,
+          "actionType": "block",
+          "notificationTemplateId": "00000000-0000-0000-0000-000000000000"
+        }
+      ]
+    }
+  ]
+}

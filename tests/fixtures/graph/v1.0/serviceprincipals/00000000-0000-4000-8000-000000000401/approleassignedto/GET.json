@@ -1,0 +1,14 @@
+{
+  "value": [
+    {
+      "id": "ara-401-1",
+      "principalId": "00000000-0000-4000-8000-000000000103",
+      "principalDisplayName": "Priya Raman",
+      "principalType": "User",
+      "appRoleId": "00000000-0000-0000-0000-000000000000",
+      "resourceId": "00000000-0000-4000-8000-000000000401",
+      "resourceDisplayName": "Example HR Sync",
+      "createdDateTime": "2023-04-02T09:00:00Z"
+    }
+  ]
+}

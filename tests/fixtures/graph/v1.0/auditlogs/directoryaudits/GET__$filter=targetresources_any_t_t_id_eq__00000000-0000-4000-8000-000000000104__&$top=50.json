@@ -1,0 +1,73 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#fixture",
+  "value": [
+    {
+      "id": "Directory_08_20261001",
+      "category": "UserManagement",
+      "correlationId": "00000000-0000-4000-8000-00000000ad08",
+      "result": "success",
+      "resultReason": "",
+      "activityDisplayName": "Disable account",
+      "activityDateTime": "2026-10-01T08:55:00Z",
+      "loggedByService": "Core Directory",
+      "operationType": "Disable",
+      "initiatedBy": {
+        "app": null,
+        "user": {
+          "id": "00000000-0000-4000-8000-000000000101",
+          "displayName": "Adele Lee",
+          "userPrincipalName": "a.lee@example.com",
+          "ipAddress": "203.0.113.24"
+        }
+      },
+      "targetResources": [
+        {
+          "id": "00000000-0000-4000-8000-000000000104",
+          "displayName": null,
+          "type": "User",
+          "userPrincipalName": "r.castillo@example.com",
+          "groupType": null,
+          "modifiedProperties": [
+            {
+              "displayName": "AccountEnabled",
+              "oldValue": "\"…\"",
+              "newValue": "\"…\""
+            }
+          ]
+        }
+      ],
+      "additionalDetails": []
+    },
+    {
+      "id": "Directory_09_20261001",
+      "category": "UserManagement",
+      "correlationId": "00000000-0000-4000-8000-00000000ad09",
+      "result": "success",
+      "resultReason": "",
+      "activityDisplayName": "Reset user password",
+      "activityDateTime": "2026-10-01T08:56:00Z",
+      "loggedByService": "Self-service Password Management",
+      "operationType": "Reset",
+      "initiatedBy": {
+        "app": null,
+        "user": {
+          "id": "00000000-0000-4000-8000-000000000101",
+          "displayName": "Adele Lee",
+          "userPrincipalName": "a.lee@example.com",
+          "ipAddress": "203.0.113.24"
+        }
+      },
+      "targetResources": [
+        {
+          "id": "00000000-0000-4000-8000-000000000104",
+          "displayName": null,
+          "type": "User",
+          "userPrincipalName": "r.castillo@example.com",
+          "groupType": null,
+          "modifiedProperties": []
+        }
+      ],
+      "additionalDetails": []
+    }
+  ]
+}

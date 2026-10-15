@@ -1,0 +1,171 @@
+$schema: ../../../packages/schemas/generated/playbook.schema.json
+kind: playbook
+id: identity.assign-licence
+version: 1.0.0
+title: Assign licence
+summary: >-
+  Assigns a subscribed licence (by SKU part number such as SPE_E5, or SKU id) directly to a user. Checks for free seats
+  and sets the usage location first when it is missing. Prefer group-based licensing for standing assignments.
+owner: identity-team
+tags: [identity, licensing, bulk]
+risk: medium
+mode: write
+requires:
+  portalRoles: [Portal.Operator]
+  scopes:
+    graph: [User.Read.All, Organization.Read.All, LicenseAssignment.ReadWrite.All, User.ReadWrite.All]
+  entraRoles: [License Administrator]
+confirm:
+  type: click
+  message: >-
+    ${ 'Assign ' & steps.pick.output.skuPartNumber & ' to ' & steps.lookup.output.userPrincipalName & '? '
+       & (steps.pick.output.prepaidUnits.enabled - steps.pick.output.consumedUnits) & ' seat(s) free.' }
+approval:
+  required: false
+
+inputs:
+  userId: { type: string, format: guid, label: User, picker: user }
+  sku:
+    type: string
+    label: Licence
+    placeholder: SPE_E5
+    description: SKU part number or SKU id (see the licence utilisation report).
+    minLength: 2
+  usageLocation:
+    type: string
+    label: Usage location (only if the user has none)
+    description: Two-letter country code, e.g. US or GB. Licences can't be assigned without one.
+    pattern: "^[A-Za-z]{2}$"
+    required: false
+
+steps:
+  - id: lookup
+    type: graph
+    mode: read
+    describe: Look up the user
+    request:
+      method: GET
+      path: /users/${ $encode($guid(inputs.userId)) }
+      query:
+        $select: id,displayName,userPrincipalName,usageLocation,assignedLicenses
+
+  - id: skus
+    type: graph
+    mode: read
+    describe: Read subscribed licences
+    request:
+      method: GET
+      path: /subscribedSkus
+      query:
+        $select: skuId,skuPartNumber,capabilityStatus,consumedUnits,prepaidUnits,appliesTo
+
+  - id: pick
+    type: transform
+    expression: >-
+      ${ (
+        $want := $lowercase($trim(inputs.sku));
+        steps.skus.output.value[$lowercase(skuPartNumber) = $want or $lowercase(skuId) = $want][0]
+      ) }
+
+  - id: found
+    type: assert
+    that: ${ $exists(steps.pick.output.skuId) }
+    message: ${ 'No subscribed licence matches "' & inputs.sku & '". Check the SKU part number in the licence utilisation report.' }
+
+  - id: forUsers
+    type: assert
+    that: ${ steps.pick.output.appliesTo = 'User' and steps.pick.output.capabilityStatus = 'Enabled' }
+    message: ${ steps.pick.output.skuPartNumber & ' is not an active user licence (status ' & steps.pick.output.capabilityStatus & ').' }
+
+  - id: notAssigned
+    type: assert
+    that: ${ $not(steps.pick.output.skuId in steps.lookup.output.assignedLicenses.skuId) }
+    message: ${ steps.lookup.output.userPrincipalName & ' already has ' & steps.pick.output.skuPartNumber & '.' }
+
+  - id: seatFree
+    type: assert
+    that: ${ steps.pick.output.prepaidUnits.enabled - steps.pick.output.consumedUnits > 0 }
+    message: >-
+      ${ steps.pick.output.skuPartNumber & ' has no free seats (' & steps.pick.output.consumedUnits & ' of '
+         & steps.pick.output.prepaidUnits.enabled & ' assigned).' }
+
+  - id: hasLocation
+    type: assert
+    that: ${ $boolean(steps.lookup.output.usageLocation) or $boolean(inputs.usageLocation) }
+    message: ${ steps.lookup.output.userPrincipalName & ' has no usage location. Enter a two-letter country code and run again.' }
+
+  - id: setLocation
+    type: graph
+    mode: write
+    describe: ${ 'Set usage location to ' & $uppercase(inputs.usageLocation) }
+    when: ${ $not($boolean(steps.lookup.output.usageLocation) = true) and $boolean(inputs.usageLocation) = true }
+    request:
+      method: PATCH
+      path: /users/${ $encode($guid(inputs.userId)) }
+      body:
+        usageLocation: ${ $uppercase(inputs.usageLocation) }
+
+  - id: assign
+    type: graph
+    mode: write
+    describe: ${ 'Assign ' & steps.pick.output.skuPartNumber }
+    request:
+      method: POST
+      path: /users/${ $encode($guid(inputs.userId)) }/assignLicense
+      body:
+        addLicenses:
+          - skuId: ${ steps.pick.output.skuId }
+            disabledPlans: []
+        removeLicenses: []
+    compensate:
+      type: graph
+      describe: Remove the licence again
+      request:
+        method: POST
+        path: /users/${ $encode($guid(inputs.userId)) }/assignLicense
+        body:
+          addLicenses: []
+          removeLicenses: ["${ steps.pick.output.skuId }"]
+
+outputs:
+  summary: ${ steps.pick.output.skuPartNumber & ' assigned to ' & steps.lookup.output.userPrincipalName & '. Services can take a few minutes to provision.' }
+
+tests:
+  - name: refuses an unknown SKU
+    inputs: { userId: 00000000-0000-4000-8000-000000000102, sku: NOT_A_SKU }
+    mocks:
+      lookup: { id: 00000000-0000-4000-8000-000000000102, userPrincipalName: m.chen@example.com, usageLocation: US, assignedLicenses: [] }
+      skus:
+        value:
+          - { skuId: 00000000-0000-4000-8000-000000001001, skuPartNumber: SPE_E5, appliesTo: User, capabilityStatus: Enabled, consumedUnits: 1104, prepaidUnits: { enabled: 1200 } }
+    expect: { status: failed, failedStep: found }
+  - name: refuses when no seats are free
+    inputs: { userId: 00000000-0000-4000-8000-000000000102, sku: power_bi_pro }
+    mocks:
+      lookup: { id: 00000000-0000-4000-8000-000000000102, userPrincipalName: m.chen@example.com, usageLocation: US, assignedLicenses: [] }
+      skus:
+        value:
+          - { skuId: 00000000-0000-4000-8000-000000001004, skuPartNumber: POWER_BI_PRO, appliesTo: User, capabilityStatus: Enabled, consumedUnits: 40, prepaidUnits: { enabled: 40 } }
+    expect: { status: failed, failedStep: seatFree }
+  - name: sets the usage location first when it is missing
+    inputs: { userId: 00000000-0000-4000-8000-000000000105, sku: SPE_E5, usageLocation: gb }
+    mocks:
+      lookup: { id: 00000000-0000-4000-8000-000000000105, userPrincipalName: s.patel@example.com, usageLocation: null, assignedLicenses: [] }
+      skus:
+        value:
+          - { skuId: 00000000-0000-4000-8000-000000001001, skuPartNumber: SPE_E5, appliesTo: User, capabilityStatus: Enabled, consumedUnits: 1104, prepaidUnits: { enabled: 1200 } }
+    expect:
+      status: succeeded
+      plan: [setLocation, assign]
+      outputs: { summary: SPE_E5 assigned to s.patel@example.com. Services can take a few minutes to provision. }
+  - name: assigns by SKU id without touching the usage location
+    inputs: { userId: 00000000-0000-4000-8000-000000000102, sku: 00000000-0000-4000-8000-000000001001 }
+    mocks:
+      lookup: { id: 00000000-0000-4000-8000-000000000102, userPrincipalName: m.chen@example.com, usageLocation: US, assignedLicenses: [] }
+      skus:
+        value:
+          - { skuId: 00000000-0000-4000-8000-000000001001, skuPartNumber: SPE_E5, appliesTo: User, capabilityStatus: Enabled, consumedUnits: 1104, prepaidUnits: { enabled: 1200 } }
+    expect:
+      status: succeeded
+      plan: [assign]
+      steps: { setLocation: skipped }

@@ -1,0 +1,25 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#Collection(microsoft.graph.riskyUserHistoryItem)",
+  "value": [
+    {
+      "id": "10000000-0000-4000-8000-00000000000a",
+      "isDeleted": false,
+      "isProcessing": false,
+      "riskLastUpdatedDateTime": "2026-10-11T05:00:00Z",
+      "riskLevel": "low",
+      "riskState": "atRisk",
+      "riskDetail": "none",
+      "userDisplayName": "Jordan Price",
+      "userPrincipalName": "jordan.price@example.com",
+      "userId": "10000000-0000-4000-8000-00000000000a",
+      "initiatedBy": null,
+      "activity": {
+        "eventTypes": [],
+        "riskEventTypes": [
+          "unfamiliarFeatures"
+        ],
+        "detail": "none"
+      }
+    }
+  ]
+}

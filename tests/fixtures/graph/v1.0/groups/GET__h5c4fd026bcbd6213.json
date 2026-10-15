@@ -1,0 +1,14 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#groups",
+  "value": [
+    {
+      "id": "10000000-0000-4000-8000-000000000601",
+      "displayName": "All Staff",
+      "mail": "all-staff@example.com",
+      "mailEnabled": true,
+      "securityEnabled": false,
+      "onPremisesSyncEnabled": null,
+      "createdDateTime": "2023-07-03T09:00:00Z"
+    }
+  ]
+}

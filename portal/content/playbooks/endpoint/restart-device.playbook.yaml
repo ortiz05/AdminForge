@@ -1,0 +1,70 @@
+$schema: ../../../packages/schemas/generated/playbook.schema.json
+kind: playbook
+id: endpoint.restart-device
+version: 1.0.0
+title: Restart Intune device
+summary: >-
+  Restarts an Intune-managed Windows, macOS or supervised iOS/iPadOS device the next time it checks in. The user gets
+  no chance to save work on most platforms — warn them first.
+owner: endpoint-team
+tags: [endpoint, intune, bulk]
+risk: medium
+mode: write
+requires:
+  portalRoles: [Portal.Operator]
+  scopes:
+    graph: [DeviceManagementManagedDevices.Read.All, DeviceManagementManagedDevices.PrivilegedOperations.All]
+  entraRoles: [Intune Administrator]
+  licences: [intune]
+confirm:
+  type: click
+  message: ${ 'Restart ' & steps.device.output.deviceName & ' (' & steps.device.output.userPrincipalName & ')? Unsaved work may be lost.' }
+approval:
+  required: false
+
+inputs:
+  managedDeviceId: { type: string, format: guid, label: Device (Intune id), picker: device }
+  reason: { type: string, label: Reason, required: false, multiline: true }
+
+steps:
+  - id: device
+    type: graph
+    mode: read
+    describe: Look up the managed device
+    request:
+      method: GET
+      path: /deviceManagement/managedDevices/${ $encode($guid(inputs.managedDeviceId)) }
+      query:
+        $select: id,deviceName,operatingSystem,isSupervised,managementState,userPrincipalName
+
+  - id: supported
+    type: assert
+    that: >-
+      ${ steps.device.output.operatingSystem in ['Windows', 'macOS']
+         or (steps.device.output.operatingSystem in ['iOS', 'iPadOS'] and steps.device.output.isSupervised = true) }
+    message: ${ 'Remote restart is not supported for ' & steps.device.output.operatingSystem & ' devices like ' & steps.device.output.deviceName & '.' }
+
+  - id: restart
+    type: graph
+    mode: write
+    describe: ${ 'Restart ' & steps.device.output.deviceName }
+    request:
+      method: POST
+      path: /deviceManagement/managedDevices/${ $encode($guid(inputs.managedDeviceId)) }/rebootNow
+
+outputs:
+  summary: ${ 'Restart requested for ' & steps.device.output.deviceName & '. It restarts at its next check-in.' }
+
+tests:
+  - name: refuses an Android device
+    inputs: { managedDeviceId: 00000000-0000-4000-8000-000000000604 }
+    mocks:
+      device: { id: 00000000-0000-4000-8000-000000000604, deviceName: Pixel 8 – M. Chen, operatingSystem: Android, isSupervised: false, managementState: managed, userPrincipalName: m.chen@example.com }
+    expect: { status: failed, failedStep: supported }
+  - name: plans a restart for a Windows device
+    inputs: { managedDeviceId: 00000000-0000-4000-8000-000000000601 }
+    mocks:
+      device: { id: 00000000-0000-4000-8000-000000000601, deviceName: EX-LT-0142, operatingSystem: Windows, isSupervised: false, managementState: managed, userPrincipalName: a.lee@example.com }
+    expect:
+      status: succeeded
+      plan: [restart]

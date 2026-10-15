@@ -1,0 +1,11 @@
+{
+  "@odata.type": "#microsoft.graph.windowsDeliveryOptimizationConfiguration",
+  "id": "00000000-0000-4000-8000-000000000804",
+  "displayName": "Windows – Delivery Optimization (pilot)",
+  "description": "Peer caching pilot",
+  "createdDateTime": "2026-04-01T09:00:00Z",
+  "lastModifiedDateTime": "2026-04-01T09:00:00Z",
+  "version": 1,
+  "deliveryOptimizationMode": "httpWithPeeringNat",
+  "assignments": []
+}

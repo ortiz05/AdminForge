@@ -1,0 +1,289 @@
+$schema: ../../packages/schemas/generated/dashboard.schema.json
+kind: dashboard
+id: identity.health
+version: 1.0.0
+title: Identity health
+summary: >-
+  Posture of the directory at a glance — MFA registration, admins without MFA, stale accounts, guest growth, risky
+  users, Global Administrator count, Conditional Access coverage, directory sync and app credential hygiene.
+owner: identity-team
+tags: [identity, dashboard, posture]
+template: dashboard
+nav: { section: identity, label: Identity health, icon: heartbeat, order: 5 }
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    graph: [User.Read.All, AuditLog.Read.All, RoleManagement.Read.Directory, Application.Read.All, Policy.Read.All, Organization.Read.All, IdentityRiskyUser.Read.All]
+  entraRoles: [Global Reader]
+refresh: 900
+
+datasources:
+  counts:
+    source: graphBatch
+    requests:
+      members: { path: /users/$count, query: { $filter: "userType eq 'Member'" }, headers: { ConsistencyLevel: eventual } }
+      guests: { path: /users/$count, query: { $filter: "userType eq 'Guest'" }, headers: { ConsistencyLevel: eventual } }
+      disabled: { path: /users/$count, query: { $filter: "accountEnabled eq false" }, headers: { ConsistencyLevel: eventual } }
+      # Global Administrator's role template id is the same in every tenant.
+      globalAdmins: { path: /roleManagement/directory/roleAssignments, query: { $filter: "roleDefinitionId eq '62e90394-69f5-4237-9190-012177145e10'", $select: "id,principalId" } }
+      org: { path: /organization, query: { $select: "id,displayName,onPremisesSyncEnabled,onPremisesLastSyncDateTime" } }
+    cache: { ttl: 600 }
+    transform: >-
+      ${ {
+        "members": value.members,
+        "guests": value.guests,
+        "disabled": value.disabled,
+        "globalAdmins": $count(value.globalAdmins.value),
+        "syncEnabled": value.org.value[0].onPremisesSyncEnabled = true,
+        "lastSync": value.org.value[0].onPremisesLastSyncDateTime,
+        "syncHoursAgo": value.org.value[0].onPremisesLastSyncDateTime ? $round(($toMillis($iso()) - $toMillis(value.org.value[0].onPremisesLastSyncDateTime)) / 3600000, 1) : null
+      } }
+  mfa:
+    source: graphBatch
+    requires: { licences: [signInLogs] }
+    requests:
+      features: { path: /reports/authenticationMethods/usersRegisteredByFeature }
+      methods: { path: /reports/authenticationMethods/usersRegisteredByMethod }
+      adminsWithoutMfa: { path: /reports/authenticationMethods/userRegistrationDetails, query: { $filter: "isAdmin eq true and isMfaRegistered eq false", $select: "id,userDisplayName,userPrincipalName,isAdmin,isMfaRegistered" } }
+    cache: { ttl: 1800 }
+    transform: >-
+      ${ (
+        $total := value.features.totalUserCount;
+        $capable := $sum(value.features.userRegistrationFeatureCounts[feature = 'mfaCapable'].userCount);
+        $pwdless := $sum(value.features.userRegistrationFeatureCounts[feature = 'passwordlessCapable'].userCount);
+        {
+          "mfaCapable": $total > 0 ? $round($capable / $total, 3) : null,
+          "passwordless": $total > 0 ? $round($pwdless / $total, 3) : null,
+          "notRegistered": $total - $capable,
+          "admins": [value.adminsWithoutMfa.value[isAdmin = true and isMfaRegistered = false]],
+          "adminCount": $count(value.adminsWithoutMfa.value[isAdmin = true and isMfaRegistered = false]),
+          "methods": $append([], [value.methods.userRegistrationMethodCounts[userCount > 0].{ "method": authenticationMethod, "users": userCount }^(>users)][[0..5]])
+        }
+      ) }
+  stale:
+    source: graph
+    requires: { licences: [signInLogs] }
+    request:
+      path: /users
+      query:
+        $select: id,userType,accountEnabled,signInActivity
+        $filter: ${ 'signInActivity/lastSignInDateTime le ' & $daysAgo(90) }
+        $top: 120
+    paging: all
+    maxItems: 50000
+    cache: { ttl: 3600 }
+    # The window is re-applied here so the numbers stay right whatever the page size or source.
+    transform: >-
+      ${ (
+        $stale := value.value[signInActivity.lastSignInDateTime and $daysUntil(signInActivity.lastSignInDateTime) <= -90];
+        {
+          "members": $count($stale[userType = 'Member' and accountEnabled = true]),
+          "guests": $count($stale[userType = 'Guest' and accountEnabled = true])
+        }
+      ) }
+  guestGrowth:
+    source: graph
+    request:
+      path: /users
+      headers: { ConsistencyLevel: eventual }
+      query:
+        $select: id,userType,createdDateTime
+        $filter: ${ "userType eq 'Guest' and createdDateTime ge " & $daysAgo(365) }
+        $count: true
+        $top: 999
+    paging: all
+    maxItems: 50000
+    cache: { ttl: 3600 }
+    transform: >-
+      ${ (
+        $months := [value.value[userType = 'Guest' and createdDateTime and $daysUntil(createdDateTime) >= -365].$substring(createdDateTime, 0, 7)];
+        { "byMonth": [$distinct($months).( $m := $; { "month": $m, "invited": $count($months[$ = $m]) } )^(month)] }
+      ) }
+  risky:
+    source: graph
+    requires: { licences: [identityProtection] }
+    request:
+      path: /identityProtection/riskyUsers
+      query:
+        $filter: riskState eq 'atRisk'
+        $top: 500
+    cache: { ttl: 600 }
+    transform: >-
+      ${ {
+        "count": $count(value.value[riskState = 'atRisk']),
+        "high": $count(value.value[riskState = 'atRisk' and riskLevel = 'high']),
+        "top": $append([], [value.value[riskState = 'atRisk']^(riskLevel = 'high' ? 0 : riskLevel = 'medium' ? 1 : 2, >riskLastUpdatedDateTime)][[0..7]])
+      } }
+  credentials:
+    source: graph
+    request:
+      path: /applications
+      query:
+        $select: id,appId,displayName,passwordCredentials,keyCredentials
+        $top: 999
+    paging: all
+    maxItems: 20000
+    cache: { ttl: 1800 }
+    transform: >-
+      ${ (
+        $days := [value.value.$append(passwordCredentials.endDateTime, keyCredentials.endDateTime)[$].$daysUntil($)];
+        { "expired": $count($days[$ < 0]), "expiring": $count($days[$ >= 0 and $ <= 30]) }
+      ) }
+  ca:
+    source: graph
+    requires: { licences: [conditionalAccess] }
+    request:
+      path: /identity/conditionalAccess/policies
+    paging: all
+    maxItems: 1000
+    cache: { ttl: 1800 }
+    transform: >-
+      ${ {
+        "enabled": $count(value.value[state = 'enabled']),
+        "reportOnly": $count(value.value[state = 'enabledForReportingButNotEnforced']),
+        "mfaForAll": $count(value.value[state = 'enabled' and 'All' in conditions.users.includeUsers
+                       and ('mfa' in grantControls.builtInControls or $exists(grantControls.authenticationStrength.id))]) > 0,
+        "blocksLegacy": $count(value.value[state = 'enabled' and 'block' in grantControls.builtInControls
+                       and ('exchangeActiveSync' in conditions.clientAppTypes or 'other' in conditions.clientAppTypes)]) > 0
+      } }
+
+layout:
+  - widget: kpi
+    id: members
+    data: counts.members
+    label: Members
+    format: number
+    href: /p/identity.users?userType=Member
+  - widget: kpi
+    id: guests
+    data: counts.guests
+    label: Guests
+    format: number
+    href: /p/identity.users?userType=Guest
+  - widget: kpi
+    id: mfaCapable
+    data: mfa.mfaCapable
+    label: Users MFA capable
+    format: percent
+    status: "${ value >= 0.98 ? 'ok' : value >= 0.9 ? 'warn' : 'crit' }"
+    href: /p/identity.auth-registration?mfa=NotRegistered
+  - widget: kpi
+    id: adminsWithoutMfa
+    data: mfa.adminCount
+    label: Admins without MFA
+    format: number
+    status: "${ value > 0 ? 'crit' : 'ok' }"
+    href: /p/identity.auth-registration?admin=Admins&mfa=NotRegistered&userType=Any
+
+  - widget: kpi
+    id: staleMembers
+    data: stale.members
+    label: Enabled members inactive 90+ days
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+    href: /p/identity.inactive-users
+  - widget: kpi
+    id: globalAdmins
+    data: counts.globalAdmins
+    label: Global Administrators
+    format: number
+    status: "${ value < 2 or value > 4 ? 'warn' : 'ok' }"
+    href: /p/identity.roles?privileged=Privileged
+  - widget: kpi
+    id: riskyUsers
+    data: risky.count
+    label: Users at risk
+    format: number
+    status: "${ risky.high > 0 ? 'crit' : value > 0 ? 'warn' : 'ok' }"
+  - widget: kpi
+    id: credentials
+    data: credentials.expired
+    label: Expired app credentials
+    format: number
+    status: "${ value > 0 ? 'crit' : credentials.expiring > 0 ? 'warn' : 'ok' }"
+    href: /p/identity.app-credential-expiry
+
+  - widget: chart
+    id: guestGrowth
+    title: Guests invited per month
+    type: bar
+    span: 8
+    rows: 2
+    data: guestGrowth.byMonth
+    x: month
+    y: invited
+    format: number
+  - widget: list
+    id: riskyList
+    title: Users at risk
+    span: 4
+    rows: 2
+    data: risky.top
+    primary: userDisplayName
+    secondary: riskLastUpdatedDateTime
+    secondaryFormat: relativeTime
+    status: { field: riskLevel, map: { high: [crit, High], medium: [warn, Medium], low: [info, Low] } }
+    href: ${ '/p/identity.user?id=' & $encode(row.id) }
+    limit: 8
+    empty:
+      title: No users at risk
+      body: Identity Protection reports no users currently at risk.
+
+  - widget: chart
+    id: methods
+    title: Users by registered authentication method
+    type: bar
+    span: 6
+    rows: 2
+    data: mfa.methods
+    x: method
+    y: users
+    format: number
+  - widget: list
+    id: adminsList
+    title: Admins without MFA
+    span: 3
+    rows: 2
+    data: mfa.admins
+    primary: userDisplayName
+    secondary: userPrincipalName
+    href: ${ '/p/identity.user?id=' & $encode(row.id) }
+    limit: 8
+    empty:
+      title: All admins have MFA
+      body: Every account with a directory role has registered an MFA method.
+  - widget: keyValue
+    id: posture
+    title: Conditional Access
+    span: 3
+    rows: 2
+    data: ca
+    fields:
+      - { field: enabled, label: Policies on, kind: number }
+      - { field: reportOnly, label: Report-only, kind: number }
+      - { field: mfaForAll, label: MFA required for all users, kind: status, map: { "true": [ok, Yes], "false": [crit, No policy] } }
+      - { field: blocksLegacy, label: Legacy authentication blocked, kind: status, map: { "true": [ok, Yes], "false": [crit, Not blocked] } }
+
+  - widget: kpi
+    id: lastSync
+    data: counts.lastSync
+    label: Last directory sync
+    format: relativeTime
+    status: "${ counts.syncEnabled = false ? 'neutral' : counts.syncHoursAgo > 3 ? 'crit' : 'ok' }"
+    when: ${ counts.syncEnabled = true }
+  - widget: kpi
+    id: disabled
+    data: counts.disabled
+    label: Accounts with sign-in blocked
+    format: number
+    href: /p/identity.users?enabled=Disabled
+  - widget: kpi
+    id: passwordless
+    data: mfa.passwordless
+    label: Passwordless capable
+    format: percent
+  - widget: probeStatus
+    id: probes
+    title: Synthetic checks
+    span: 3
+    probes: [probes.graph-reachability, probes.token-graph, probes.sign-in-health, probes.app-credential-expiry]

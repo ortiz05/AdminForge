@@ -1,0 +1,36 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#fixture",
+  "value": [
+    {
+      "id": "Directory_11_20260301",
+      "category": "UserManagement",
+      "correlationId": "00000000-0000-4000-8000-00000000ad11",
+      "result": "success",
+      "resultReason": "",
+      "activityDisplayName": "Invite external user",
+      "activityDateTime": "2026-03-01T09:00:00Z",
+      "loggedByService": "Invited Users",
+      "operationType": "Invite",
+      "initiatedBy": {
+        "app": null,
+        "user": {
+          "id": "00000000-0000-4000-8000-000000000102",
+          "displayName": "Morgan Chen",
+          "userPrincipalName": "m.chen@example.com",
+          "ipAddress": "203.0.113.24"
+        }
+      },
+      "targetResources": [
+        {
+          "id": "00000000-0000-4000-8000-000000000107",
+          "displayName": null,
+          "type": "User",
+          "userPrincipalName": "t.brooks_vendor.example#EXT#@exampleorg.onmicrosoft.com",
+          "groupType": null,
+          "modifiedProperties": []
+        }
+      ],
+      "additionalDetails": []
+    }
+  ]
+}

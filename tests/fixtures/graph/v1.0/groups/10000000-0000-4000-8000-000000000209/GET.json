@@ -1,0 +1,22 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#groups/$entity",
+  "id": "10000000-0000-4000-8000-000000000209",
+  "displayName": "Project Orion (retired)",
+  "description": "Archived project.",
+  "mail": "project-orion@example.com",
+  "visibility": "Private",
+  "groupTypes": [
+    "Unified"
+  ],
+  "resourceProvisioningOptions": [
+    "Team"
+  ],
+  "createdDateTime": "2024-02-08T09:00:00Z",
+  "renewedDateTime": "2025-09-10T09:00:00Z",
+  "expirationDateTime": "2026-09-10T09:00:00Z",
+  "membershipRule": null,
+  "onPremisesSyncEnabled": null,
+  "classification": null,
+  "mailEnabled": true,
+  "securityEnabled": false
+}

@@ -1,0 +1,12 @@
+{
+  "value": [
+    {
+      "id": "701-609",
+      "displayName": "Windows – Baseline compliance",
+      "version": 7,
+      "platformType": "windows10AndLater",
+      "state": "nonCompliant",
+      "settingCount": 9
+    }
+  ]
+}

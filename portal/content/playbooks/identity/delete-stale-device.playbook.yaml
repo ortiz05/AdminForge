@@ -1,0 +1,125 @@
+$schema: ../../../packages/schemas/generated/playbook.schema.json
+kind: playbook
+id: identity.delete-stale-device
+version: 1.0.0
+title: Delete stale Entra device
+summary: >-
+  Permanently deletes a Microsoft Entra device object that has not signed in for the chosen number of days. Refuses
+  hybrid-joined devices (delete them in AD) and devices whose BitLocker recovery keys are stored only in Entra ID
+  unless you confirm they are backed up. Requires approval.
+owner: identity-team
+tags: [identity, devices, hygiene, bulk]
+risk: high
+mode: write
+requires:
+  portalRoles: [Portal.Operator]
+  scopes:
+    graph: [Device.Read.All, BitlockerKey.ReadBasic.All, Device.ReadWrite.All]
+  entraRoles: [Cloud Device Administrator]
+confirm:
+  type: typed
+  value: ${ steps.device.output.displayName }
+  message: >-
+    ${ 'Deletes ' & steps.device.output.displayName & ' (' & steps.device.output.operatingSystem & ', last seen '
+       & steps.age.output.daysInactive & ' days ago). Deleted devices cannot be restored. Type the device name to confirm.' }
+approval:
+  required: true
+  approvers: [Playbook.Approver]
+  minApprovals: 1
+  expiresIn: P3D
+
+inputs:
+  deviceObjectId: { type: string, format: guid, label: Device (object id), picker: device }
+  minInactiveDays: { type: number, label: Inactive for at least, unit: days, default: 90, min: 30, max: 3650, integer: true }
+  acknowledgeBitLocker:
+    type: boolean
+    label: BitLocker recovery keys for this device are backed up elsewhere (or not needed)
+    default: false
+  reason: { type: string, label: Reason, minLength: 10, multiline: true }
+
+steps:
+  - id: device
+    type: graph
+    mode: read
+    describe: Look up the device
+    request:
+      method: GET
+      path: /devices/${ $encode($guid(inputs.deviceObjectId)) }
+      query:
+        $select: id,deviceId,displayName,operatingSystem,operatingSystemVersion,trustType,accountEnabled,approximateLastSignInDateTime,registrationDateTime,isManaged
+
+  - id: age
+    type: transform
+    expression: >-
+      ${ (
+        $seen := steps.device.output.approximateLastSignInDateTime ? steps.device.output.approximateLastSignInDateTime : steps.device.output.registrationDateTime;
+        { "lastSeen": $seen, "daysInactive": $seen ? -$daysUntil($seen) : 99999 }
+      ) }
+
+  - id: isStale
+    type: assert
+    that: ${ steps.age.output.daysInactive >= inputs.minInactiveDays }
+    message: >-
+      ${ steps.device.output.displayName & ' signed in ' & steps.age.output.daysInactive & ' days ago, less than the '
+         & inputs.minInactiveDays & '-day threshold.' }
+
+  - id: notHybrid
+    type: assert
+    that: ${ $not(steps.device.output.trustType = 'ServerAd') }
+    message: ${ steps.device.output.displayName & ' is hybrid joined. Delete the computer object in Active Directory; the sync removes it here.' }
+
+  - id: keys
+    type: graph
+    mode: read
+    describe: Check for BitLocker recovery keys stored with the device
+    request:
+      method: GET
+      path: /informationProtection/bitlocker/recoveryKeys
+      headers: { ocp-client-name: AdminForge, ocp-client-version: "1.0" }
+      query:
+        $filter: ${ 'deviceId eq ' & $odata(steps.device.output.deviceId) }
+
+  - id: bitLockerAcknowledged
+    type: assert
+    that: ${ $count(steps.keys.output.value) = 0 or inputs.acknowledgeBitLocker = true }
+    message: >-
+      ${ steps.device.output.displayName & ' has ' & $count(steps.keys.output.value)
+         & ' BitLocker recovery key(s) in Entra ID that are deleted with it. Back them up, then tick the acknowledgement.' }
+
+  - id: delete
+    type: graph
+    mode: write
+    describe: ${ 'Delete the device object ' & steps.device.output.displayName & ' (permanent)' }
+    request:
+      method: DELETE
+      path: /devices/${ $encode($guid(inputs.deviceObjectId)) }
+
+outputs:
+  summary: ${ steps.device.output.displayName & ' deleted (inactive for ' & steps.age.output.daysInactive & ' days).' }
+
+tests:
+  # Tests have no clock override (see the report), so "recent" is a far-future date that stays recent.
+  - name: refuses a device that is still active
+    inputs: { deviceObjectId: 00000000-0000-4000-8000-000000000501, minInactiveDays: 90, reason: stale device cleanup Q4 }
+    mocks:
+      device: { id: 00000000-0000-4000-8000-000000000501, deviceId: 00000000-0000-4000-8001-000000000501, displayName: EX-LT-0142, operatingSystem: Windows, trustType: AzureAd, approximateLastSignInDateTime: "2099-01-01T00:00:00Z", registrationDateTime: "2025-01-10T00:00:00Z" }
+    expect: { status: failed, failedStep: isStale }
+  - name: refuses a hybrid-joined device
+    inputs: { deviceObjectId: 00000000-0000-4000-8000-000000000506, minInactiveDays: 90, reason: stale device cleanup Q4 }
+    mocks:
+      device: { id: 00000000-0000-4000-8000-000000000506, deviceId: 00000000-0000-4000-8001-000000000506, displayName: EX-DT-0031, operatingSystem: Windows, trustType: ServerAd, approximateLastSignInDateTime: "2025-03-01T00:00:00Z", registrationDateTime: "2021-05-01T00:00:00Z" }
+    expect: { status: failed, failedStep: notHybrid }
+  - name: requires acknowledging BitLocker keys
+    inputs: { deviceObjectId: 00000000-0000-4000-8000-000000000505, minInactiveDays: 90, acknowledgeBitLocker: false, reason: stale device cleanup Q4 }
+    mocks:
+      device: { id: 00000000-0000-4000-8000-000000000505, deviceId: 00000000-0000-4000-8001-000000000505, displayName: EX-LT-0077, operatingSystem: Windows, trustType: AzureAd, approximateLastSignInDateTime: "2025-02-01T00:00:00Z", registrationDateTime: "2022-02-01T00:00:00Z" }
+      keys: { value: [{ id: 00000000-0000-4000-8000-00000000b101, deviceId: 00000000-0000-4000-8001-000000000505, volumeType: operatingSystemVolume }] }
+    expect: { status: failed, failedStep: bitLockerAcknowledged }
+  - name: plans deleting a stale device without stored keys
+    inputs: { deviceObjectId: 00000000-0000-4000-8000-000000000507, minInactiveDays: 90, reason: stale device cleanup Q4 }
+    mocks:
+      device: { id: 00000000-0000-4000-8000-000000000507, deviceId: 00000000-0000-4000-8001-000000000507, displayName: Old iPhone, operatingSystem: iOS, trustType: Workplace, approximateLastSignInDateTime: "2024-12-01T00:00:00Z", registrationDateTime: "2022-09-01T00:00:00Z" }
+      keys: { value: [] }
+    expect:
+      status: succeeded
+      plan: [delete]

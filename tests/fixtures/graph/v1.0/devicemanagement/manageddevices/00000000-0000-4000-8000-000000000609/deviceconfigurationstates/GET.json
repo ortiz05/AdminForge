@@ -1,0 +1,20 @@
+{
+  "value": [
+    {
+      "id": "801-609",
+      "displayName": "Windows – Wi-Fi Corp",
+      "version": 3,
+      "platformType": "windows10AndLater",
+      "state": "compliant",
+      "settingCount": 6
+    },
+    {
+      "id": "802-609",
+      "displayName": "Windows – Device restrictions",
+      "version": 9,
+      "platformType": "windows10AndLater",
+      "state": "compliant",
+      "settingCount": 6
+    }
+  ]
+}

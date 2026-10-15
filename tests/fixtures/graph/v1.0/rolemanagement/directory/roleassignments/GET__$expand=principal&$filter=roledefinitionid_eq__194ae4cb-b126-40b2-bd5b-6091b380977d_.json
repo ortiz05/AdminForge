@@ -1,0 +1,24 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#fixture",
+  "value": [
+    {
+      "id": "ra-04",
+      "principalId": "00000000-0000-4000-8000-000000000208",
+      "roleDefinitionId": "194ae4cb-b126-40b2-bd5b-6091b380977d",
+      "directoryScopeId": "/",
+      "appScopeId": null,
+      "principal": {
+        "@odata.type": "#microsoft.graph.group",
+        "id": "00000000-0000-4000-8000-000000000208",
+        "displayName": "SG-PIM-Identity-Admins"
+      },
+      "roleDefinition": {
+        "id": "194ae4cb-b126-40b2-bd5b-6091b380977d",
+        "displayName": "Security Administrator",
+        "description": "Can read security information and reports, and manage configuration in Microsoft Entra ID and Office 365.",
+        "isBuiltIn": true,
+        "templateId": "194ae4cb-b126-40b2-bd5b-6091b380977d"
+      }
+    }
+  ]
+}

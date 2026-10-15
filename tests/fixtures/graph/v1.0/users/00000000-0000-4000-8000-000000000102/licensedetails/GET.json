@@ -1,0 +1,54 @@
+{
+  "value": [
+    {
+      "id": "lic-102-0",
+      "skuId": "00000000-0000-4000-8000-000000001002",
+      "skuPartNumber": "SPE_E3",
+      "servicePlans": [
+        {
+          "servicePlanId": "00000000-0000-4000-8000-000000001100",
+          "servicePlanName": "EXCHANGE_S_ENTERPRISE",
+          "provisioningStatus": "Success",
+          "appliesTo": "User"
+        },
+        {
+          "servicePlanId": "00000000-0000-4000-8000-000000001101",
+          "servicePlanName": "SHAREPOINTENTERPRISE",
+          "provisioningStatus": "Success",
+          "appliesTo": "User"
+        },
+        {
+          "servicePlanId": "00000000-0000-4000-8000-000000001102",
+          "servicePlanName": "TEAMS1",
+          "provisioningStatus": "Success",
+          "appliesTo": "User"
+        },
+        {
+          "servicePlanId": "00000000-0000-4000-8000-000000001103",
+          "servicePlanName": "AAD_PREMIUM",
+          "provisioningStatus": "Success",
+          "appliesTo": "User"
+        },
+        {
+          "servicePlanId": "00000000-0000-4000-8000-000000001104",
+          "servicePlanName": "INTUNE_A",
+          "provisioningStatus": "Success",
+          "appliesTo": "User"
+        }
+      ]
+    },
+    {
+      "id": "lic-102-1",
+      "skuId": "00000000-0000-4000-8000-000000001004",
+      "skuPartNumber": "POWER_BI_PRO",
+      "servicePlans": [
+        {
+          "servicePlanId": "00000000-0000-4000-8000-000000001100",
+          "servicePlanName": "BI_AZURE_P2",
+          "provisioningStatus": "Success",
+          "appliesTo": "User"
+        }
+      ]
+    }
+  ]
+}

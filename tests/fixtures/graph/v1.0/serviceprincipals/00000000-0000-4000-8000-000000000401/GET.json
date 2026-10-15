@@ -1,0 +1,45 @@
+{
+  "id": "00000000-0000-4000-8000-000000000401",
+  "appId": "00000000-0000-4000-8001-000000000301",
+  "displayName": "Example HR Sync",
+  "description": null,
+  "accountEnabled": true,
+  "appRoleAssignmentRequired": true,
+  "servicePrincipalType": "Application",
+  "appOwnerOrganizationId": "00000000-0000-4000-8000-00000000e0e0",
+  "publisherName": "Example Org",
+  "verifiedPublisher": {
+    "displayName": null,
+    "verifiedPublisherId": null,
+    "addedDateTime": null
+  },
+  "homepage": null,
+  "loginUrl": null,
+  "logoutUrl": null,
+  "replyUrls": [],
+  "servicePrincipalNames": [
+    "00000000-0000-4000-8001-000000000301"
+  ],
+  "tags": [
+    "WindowsAzureActiveDirectoryIntegratedApp"
+  ],
+  "notes": null,
+  "notificationEmailAddresses": [],
+  "preferredSingleSignOnMode": null,
+  "preferredTokenSigningKeyThumbprint": null,
+  "keyCredentials": [],
+  "passwordCredentials": [],
+  "appRoles": [],
+  "oauth2PermissionScopes": [],
+  "alternativeNames": [],
+  "signInAudience": "AzureADMyOrg",
+  "owners": [
+    {
+      "@odata.type": "#microsoft.graph.user",
+      "id": "00000000-0000-4000-8000-000000000101",
+      "displayName": "Adele Lee",
+      "userPrincipalName": "a.lee@example.com",
+      "accountEnabled": true
+    }
+  ]
+}

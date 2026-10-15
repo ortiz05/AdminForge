@@ -1,0 +1,126 @@
+$schema: ../../../packages/schemas/generated/playbook.schema.json
+kind: playbook
+id: identity.create-security-group
+version: 1.0.0
+title: Create security group
+summary: >-
+  Creates a cloud security group with assigned membership, owners and initial members. Refuses duplicate names.
+  (Role-assignable groups are created by a Privileged Role Administrator in the Entra admin center.)
+owner: identity-team
+tags: [identity, groups]
+risk: low
+mode: write
+requires:
+  portalRoles: [Portal.Operator]
+  scopes:
+    graph: [Group.Read.All, Group.Create, GroupMember.ReadWrite.All]
+  entraRoles: [Groups Administrator]
+confirm:
+  type: click
+  message: >-
+    ${ 'Create the security group ' & $trim(inputs.displayName) & ' with ' & $count(inputs.ownerIds) & ' owner(s) and '
+       & $count(inputs.memberIds) & ' member(s)?' }
+approval:
+  required: false
+
+inputs:
+  displayName: { type: string, label: Name, minLength: 3, maxLength: 256, placeholder: SG-App-Example-Users }
+  description: { type: string, label: Description, minLength: 10, maxLength: 1024, multiline: true }
+  mailNickname:
+    type: string
+    label: Mail nickname
+    required: false
+    pattern: "^[A-Za-z0-9._-]{1,64}$"
+    description: Defaults to the name without spaces or special characters.
+  ownerIds: { type: user, multiple: true, maxItems: 10, label: Owners, required: false, description: Recommended — at least two accountable owners. }
+  memberIds: { type: user, multiple: true, maxItems: 500, label: Members, required: false }
+
+steps:
+  - id: names
+    type: transform
+    expression: >-
+      ${ {
+        "displayName": $trim(inputs.displayName),
+        "mailNickname": inputs.mailNickname ? inputs.mailNickname : $substring($replace($trim(inputs.displayName), /[^A-Za-z0-9._-]/, ''), 0, 64)
+      } }
+
+  - id: existing
+    type: graph
+    mode: read
+    describe: Check that the name is free
+    request:
+      method: GET
+      path: /groups
+      query:
+        $select: id,displayName
+        $filter: ${ 'displayName eq ' & $odata(steps.names.output.displayName) }
+
+  - id: unique
+    type: assert
+    that: ${ $count(steps.existing.output.value) = 0 }
+    message: ${ 'A group named ' & steps.names.output.displayName & ' already exists. Choose a different name.' }
+
+  - id: create
+    type: graph
+    mode: write
+    describe: ${ 'Create the security group ' & steps.names.output.displayName }
+    idempotent: false
+    request:
+      method: POST
+      path: /groups
+      body:
+        displayName: ${ steps.names.output.displayName }
+        description: ${ inputs.description }
+        mailEnabled: false
+        securityEnabled: true
+        mailNickname: ${ steps.names.output.mailNickname }
+        "owners@odata.bind": "${ $count(inputs.ownerIds) > 0 ? [inputs.ownerIds.('https://graph.microsoft.com/v1.0/users/' & $guid($))] }"
+    dryRunOutput:
+      id: 00000000-0000-0000-0000-000000000000
+      displayName: ${ steps.names.output.displayName }
+    compensate:
+      type: graph
+      describe: Delete the new group (it stays restorable for 30 days)
+      request:
+        method: DELETE
+        path: /groups/${ $encode(steps.create.output.id) }
+
+  - id: members
+    type: forEach
+    items: ${ [inputs.memberIds] }
+    as: memberId
+    concurrency: 5
+    steps:
+      - id: addMember
+        type: graph
+        mode: write
+        describe: ${ 'Add member ' & memberId }
+        onError: continue
+        request:
+          method: POST
+          path: /groups/${ $encode(steps.create.output.id) }/members/$ref
+          body:
+            "@odata.id": https://graph.microsoft.com/v1.0/directoryObjects/${ $guid(memberId) }
+
+outputs:
+  summary: ${ 'Created ' & steps.names.output.displayName & ' with ' & $count(inputs.memberIds) & ' member(s).' }
+  groupId: ${ steps.create.output.id }
+
+tests:
+  - name: refuses a duplicate name
+    inputs: { displayName: SG-App-Payroll-Users, description: Users of the payroll application }
+    mocks:
+      existing: { value: [{ id: 00000000-0000-4000-8000-000000000201, displayName: SG-App-Payroll-Users }] }
+    expect: { status: failed, failedStep: unique }
+  - name: plans the group and its members
+    inputs:
+      displayName: SG-App-Expenses-Users
+      description: Users of the expenses application
+      ownerIds: [00000000-0000-4000-8000-000000000101, 00000000-0000-4000-8000-000000000102]
+      memberIds: [00000000-0000-4000-8000-000000000105]
+    mocks:
+      existing: { value: [] }
+    expect:
+      status: succeeded
+      plan: [create, addMember]
+      outputs: { summary: Created SG-App-Expenses-Users with 1 member(s). }

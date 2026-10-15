@@ -1,0 +1,86 @@
+$schema: ../../../packages/schemas/generated/playbook.schema.json
+kind: playbook
+id: identity.enable-user
+version: 1.0.0
+title: Enable sign-in
+summary: Re-enables sign-in for a disabled cloud user account.
+owner: identity-team
+tags: [identity, users]
+risk: medium
+mode: write
+requires:
+  portalRoles: [Portal.Operator]
+  scopes:
+    graph: [User.Read.All, User.EnableDisableAccount.All]
+  entraRoles: [User Administrator]
+confirm:
+  type: click
+  message: ${ 'Allow ' & steps.lookup.output.userPrincipalName & ' to sign in again?' }
+approval:
+  required: false
+
+inputs:
+  userId: { type: string, format: guid, label: User, picker: user }
+  reason: { type: string, label: Reason, minLength: 10, multiline: true }
+
+steps:
+  - id: lookup
+    type: graph
+    mode: read
+    describe: Look up the user
+    request:
+      method: GET
+      path: /users/${ $encode($guid(inputs.userId)) }
+      query:
+        $select: id,displayName,userPrincipalName,accountEnabled,onPremisesSyncEnabled
+
+  - id: isDisabled
+    type: assert
+    that: ${ steps.lookup.output.accountEnabled = false }
+    message: ${ steps.lookup.output.userPrincipalName & ' can already sign in.' }
+
+  - id: cloudManaged
+    type: assert
+    that: ${ $not(steps.lookup.output.onPremisesSyncEnabled = true) }
+    message: >-
+      ${ steps.lookup.output.userPrincipalName & ' is synced from on-premises Active Directory. Enable the account in AD;
+      a change made here is overwritten at the next sync.' }
+
+  - id: enable
+    type: graph
+    mode: write
+    describe: Set accountEnabled to true
+    request:
+      method: PATCH
+      path: /users/${ $encode($guid(inputs.userId)) }
+      body: { accountEnabled: true }
+    compensate:
+      type: graph
+      describe: Disable sign-in again
+      request:
+        method: PATCH
+        path: /users/${ $encode($guid(inputs.userId)) }
+        body: { accountEnabled: false }
+
+outputs:
+  summary: ${ 'Sign-in enabled for ' & steps.lookup.output.userPrincipalName }
+
+tests:
+  - name: refuses a user who can already sign in
+    inputs: { userId: 00000000-0000-4000-8000-000000000101, reason: ticket 1001 rehire }
+    mocks:
+      lookup: { id: 00000000-0000-4000-8000-000000000101, userPrincipalName: a.lee@example.com, accountEnabled: true, onPremisesSyncEnabled: null }
+    expect: { status: failed, failedStep: isDisabled }
+  - name: refuses a user synced from on-premises AD
+    inputs: { userId: 00000000-0000-4000-8000-000000000108, reason: ticket 1002 rehire }
+    mocks:
+      lookup: { id: 00000000-0000-4000-8000-000000000108, userPrincipalName: d.okafor@example.com, accountEnabled: false, onPremisesSyncEnabled: true }
+    expect: { status: failed, failedStep: cloudManaged }
+  - name: plans enabling a disabled cloud user
+    inputs: { userId: 00000000-0000-4000-8000-000000000104, reason: ticket 1003 returned from leave }
+    mocks:
+      lookup: { id: 00000000-0000-4000-8000-000000000104, userPrincipalName: r.castillo@example.com, accountEnabled: false, onPremisesSyncEnabled: null }
+    expect:
+      status: succeeded
+      plan: [enable]
+      outputs: { summary: Sign-in enabled for r.castillo@example.com }

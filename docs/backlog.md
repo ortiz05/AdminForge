@@ -2,7 +2,17 @@
 
 Gaps found while building. Each item names where it lands. Items move to a phase plan when scheduled.
 
+## Security (before write playbooks go live)
+- [ ] **Secret outputs**: temporary passwords, Temporary Access Passes and new app secrets are currently kept in step/run outputs. Add `secret: true` on step outputs → shown once to the initiator over the live stream, never persisted (store a redacted marker), never in audit/export. Applies to identity.reset-password, identity.issue-tap, identity.create-user, identity.rotate-app-secret.
+- [ ] `$secureRandom(len)` helper (crypto-backed) — `create-user` currently uses JSONata `$random()` for a throwaway initial password.
+
 ## Schema / content model
+- [ ] Licence state in the expression scope (`licences.signInLogs`) so a page can drop P1-only `$select` fields instead of gating the whole page (users list + signInActivity).
+- [ ] `graphBatch` paging (`@odata.nextLink` per sub-request).
+- [ ] Per-row `inspect.page` expression (mixed row types).
+- [ ] Playbook `tests` can set `now` and `env`.
+- [ ] Column kind naming: align `id` (docs/widgets.md) vs `guid` (schema) — accept both.
+- [ ] `widgets.md`: document `timeline.heading`, `empty.action` with playbook inputs.
 - [ ] Probe schedules: `job.refs` (list) or a tag selector (`job.select: { tags: [hourly] }`) so one schedule sweeps many probes (today: one schedule per probe).
 - [ ] ARM `apiVersion` from an expression or a per-resource-type lookup, enabling a generic "get resource by id".
 - [ ] Expression helpers `$kql(s)` (KQL string literal quoting — R12) and `$uuid()` (fresh GUID, e.g. role assignment names).

@@ -1,0 +1,56 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#users",
+  "@odata.count": 2,
+  "value": [
+    {
+      "@odata.type": "#microsoft.graph.user",
+      "id": "30000000-0000-4000-8000-000000000001",
+      "displayName": "Avery Engineer",
+      "userPrincipalName": "avery@example.com",
+      "mail": "avery@example.com",
+      "userType": "Member",
+      "accountEnabled": true,
+      "department": "IT Operations",
+      "jobTitle": "Systems Engineer",
+      "usageLocation": "US",
+      "licenseAssignmentStates": [
+        {
+          "skuId": "10000000-0000-4000-8000-000000000508",
+          "disabledPlans": [],
+          "assignedByGroup": null,
+          "state": "Active",
+          "error": "None",
+          "lastUpdatedDateTime": "2026-09-05T09:00:00Z"
+        }
+      ],
+      "signInActivity": {
+        "lastSignInDateTime": "2026-10-15T06:00:00Z"
+      }
+    },
+    {
+      "@odata.type": "#microsoft.graph.user",
+      "id": "30000000-0000-4000-8000-000000000002",
+      "displayName": "Blake Analyst",
+      "userPrincipalName": "blake@example.com",
+      "mail": "blake@example.com",
+      "userType": "Member",
+      "accountEnabled": true,
+      "department": "Finance",
+      "jobTitle": "Financial Analyst",
+      "usageLocation": "US",
+      "licenseAssignmentStates": [
+        {
+          "skuId": "10000000-0000-4000-8000-000000000508",
+          "disabledPlans": [],
+          "assignedByGroup": "10000000-0000-4000-8000-000000000301",
+          "state": "Active",
+          "error": "None",
+          "lastUpdatedDateTime": "2026-09-05T09:00:00Z"
+        }
+      ],
+      "signInActivity": {
+        "lastSignInDateTime": "2026-10-14T09:00:00Z"
+      }
+    }
+  ]
+}

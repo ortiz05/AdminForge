@@ -1,0 +1,72 @@
+$schema: ../../../packages/schemas/generated/playbook.schema.json
+kind: playbook
+id: endpoint.retire-device
+version: 1.0.0
+title: Retire Intune device
+summary: >-
+  Removes company data, apps, email profiles, Wi-Fi/VPN profiles and certificates from a device and removes it from
+  Intune management. Personal data is kept. Use for leavers' personal devices or devices being repurposed.
+owner: endpoint-team
+tags: [endpoint, intune, leaver]
+risk: high
+mode: write
+requires:
+  portalRoles: [Portal.Operator]
+  scopes:
+    graph: [DeviceManagementManagedDevices.Read.All, DeviceManagementManagedDevices.PrivilegedOperations.All]
+  entraRoles: [Intune Administrator]
+  licences: [intune]
+confirm:
+  type: typed
+  value: ${ steps.device.output.deviceName }
+  message: >-
+    ${ 'Retire ' & steps.device.output.deviceName & ' (' & steps.device.output.operatingSystem & ', '
+       & steps.device.output.managedDeviceOwnerType & '-owned, ' & steps.device.output.userPrincipalName
+       & ')? Company data is removed and the device leaves management. Type the device name to confirm.' }
+approval:
+  required: false
+
+inputs:
+  managedDeviceId: { type: string, format: guid, label: Device (Intune id), picker: device }
+  reason: { type: string, label: Reason, minLength: 10, multiline: true }
+
+steps:
+  - id: device
+    type: graph
+    mode: read
+    describe: Look up the managed device
+    request:
+      method: GET
+      path: /deviceManagement/managedDevices/${ $encode($guid(inputs.managedDeviceId)) }
+      query:
+        $select: id,deviceName,operatingSystem,managedDeviceOwnerType,managementState,userPrincipalName,serialNumber
+
+  - id: notPending
+    type: assert
+    that: ${ $not(steps.device.output.managementState in ['retirePending', 'wipePending', 'retireIssued', 'wipeIssued']) }
+    message: ${ steps.device.output.deviceName & ' already has a retire or wipe pending (' & steps.device.output.managementState & ').' }
+
+  - id: retire
+    type: graph
+    mode: write
+    describe: ${ 'Retire ' & steps.device.output.deviceName & ' (cannot be undone; the device must re-enrol to be managed again)' }
+    request:
+      method: POST
+      path: /deviceManagement/managedDevices/${ $encode($guid(inputs.managedDeviceId)) }/retire
+
+outputs:
+  summary: ${ 'Retire sent to ' & steps.device.output.deviceName & '. It completes when the device next checks in.' }
+
+tests:
+  - name: refuses a device that already has a wipe pending
+    inputs: { managedDeviceId: 00000000-0000-4000-8000-000000000607, reason: leaver HR-7782 personal phone }
+    mocks:
+      device: { id: 00000000-0000-4000-8000-000000000607, deviceName: EX-LT-0077, operatingSystem: Windows, managedDeviceOwnerType: company, managementState: wipePending, userPrincipalName: s.patel@example.com }
+    expect: { status: failed, failedStep: notPending }
+  - name: plans retiring a personal phone
+    inputs: { managedDeviceId: 00000000-0000-4000-8000-000000000604, reason: leaver HR-7782 personal phone }
+    mocks:
+      device: { id: 00000000-0000-4000-8000-000000000604, deviceName: Pixel 8 – M. Chen, operatingSystem: Android, managedDeviceOwnerType: personal, managementState: managed, userPrincipalName: m.chen@example.com }
+    expect:
+      status: succeeded
+      plan: [retire]

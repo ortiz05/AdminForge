@@ -1,0 +1,21 @@
+{
+  "id": "4a5d8f65-41da-4de4-8968-e035b65339cf",
+  "templateId": "4a5d8f65-41da-4de4-8968-e035b65339cf",
+  "displayName": "Reports Reader",
+  "description": "Can read sign-in and audit reports.",
+  "isBuiltIn": true,
+  "isEnabled": true,
+  "version": "1",
+  "resourceScopes": [
+    "/"
+  ],
+  "rolePermissions": [
+    {
+      "allowedResourceActions": [
+        "microsoft.directory/auditLogs/allProperties/read",
+        "microsoft.directory/signInReports/allProperties/read"
+      ],
+      "condition": null
+    }
+  ]
+}

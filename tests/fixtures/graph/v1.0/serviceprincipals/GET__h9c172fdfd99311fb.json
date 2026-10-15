@@ -1,0 +1,123 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#fixture",
+  "value": [
+    {
+      "id": "00000000-0000-4000-8000-000000000409",
+      "appId": "00000003-0000-0000-c000-000000000000",
+      "displayName": "Microsoft Graph",
+      "description": null,
+      "accountEnabled": true,
+      "appRoleAssignmentRequired": false,
+      "servicePrincipalType": "Application",
+      "appOwnerOrganizationId": "f8cdef31-a31e-4b4a-93e4-5f571e91255a",
+      "publisherName": "Microsoft Services",
+      "verifiedPublisher": {
+        "displayName": null,
+        "verifiedPublisherId": null,
+        "addedDateTime": null
+      },
+      "homepage": null,
+      "loginUrl": null,
+      "logoutUrl": null,
+      "replyUrls": [],
+      "servicePrincipalNames": [
+        "00000003-0000-0000-c000-000000000000"
+      ],
+      "tags": [],
+      "notes": null,
+      "notificationEmailAddresses": [],
+      "preferredSingleSignOnMode": null,
+      "preferredTokenSigningKeyThumbprint": null,
+      "keyCredentials": [],
+      "passwordCredentials": [],
+      "appRoles": [
+        {
+          "id": "df021288-bdef-4463-88db-98f22de89214",
+          "value": "User.Read.All",
+          "displayName": "Read all users’ full profiles",
+          "allowedMemberTypes": [
+            "Application"
+          ],
+          "isEnabled": true,
+          "description": "Read all users’ full profiles"
+        },
+        {
+          "id": "5b567255-7703-4780-807c-7be8301ae99b",
+          "value": "Group.Read.All",
+          "displayName": "Read all groups",
+          "allowedMemberTypes": [
+            "Application"
+          ],
+          "isEnabled": true,
+          "description": "Read all groups"
+        },
+        {
+          "id": "230c1aed-a721-4c5d-9cb4-a90514e508ef",
+          "value": "Reports.Read.All",
+          "displayName": "Read all usage reports",
+          "allowedMemberTypes": [
+            "Application"
+          ],
+          "isEnabled": true,
+          "description": "Read all usage reports"
+        },
+        {
+          "id": "332a536c-c7ef-4017-ab91-336970924f0d",
+          "value": "Sites.Read.All",
+          "displayName": "Read items in all site collections",
+          "allowedMemberTypes": [
+            "Application"
+          ],
+          "isEnabled": true,
+          "description": "Read items in all site collections"
+        },
+        {
+          "id": "01d4889c-1287-42c6-ac1f-5d1e02578ef6",
+          "value": "Files.Read.All",
+          "displayName": "Read files in all site collections",
+          "allowedMemberTypes": [
+            "Application"
+          ],
+          "isEnabled": true,
+          "description": "Read files in all site collections"
+        },
+        {
+          "id": "19dbc75e-c2e2-444c-a770-ec69d8559fc7",
+          "value": "Directory.ReadWrite.All",
+          "displayName": "Read and write directory data",
+          "allowedMemberTypes": [
+            "Application"
+          ],
+          "isEnabled": true,
+          "description": "Read and write directory data"
+        }
+      ],
+      "oauth2PermissionScopes": [
+        {
+          "id": "e1fe6dd8-ba31-4d61-89e7-88639da4683d",
+          "value": "User.Read",
+          "adminConsentDisplayName": "Sign in and read user profile",
+          "type": "User",
+          "isEnabled": true
+        },
+        {
+          "id": "7427e0e9-2fba-42fe-b0c0-848c9e6a8182",
+          "value": "offline_access",
+          "adminConsentDisplayName": "Maintain access to data you have given it access to",
+          "type": "User",
+          "isEnabled": true
+        },
+        {
+          "id": "570282fd-fa5c-430d-a7fd-fc8dc98a9dca",
+          "value": "Mail.Read",
+          "adminConsentDisplayName": "Read user mail",
+          "type": "User",
+          "isEnabled": true
+        }
+      ],
+      "alternativeNames": [],
+      "signInAudience": "AzureADMultipleOrgs",
+      "owners": []
+    }
+  ]
+}

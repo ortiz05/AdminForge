@@ -1,0 +1,31 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#fixture",
+  "value": [
+    {
+      "id": "00000000-0000-4000-8000-000000000208",
+      "displayName": "SG-PIM-Identity-Admins",
+      "description": "Role-assignable: Security Administrator for the identity team",
+      "mail": null,
+      "mailNickname": "SGPIMIdentityAdmins",
+      "mailEnabled": false,
+      "securityEnabled": true,
+      "groupTypes": [],
+      "membershipRule": null,
+      "membershipRuleProcessingState": null,
+      "onPremisesSyncEnabled": null,
+      "onPremisesLastSyncDateTime": null,
+      "onPremisesSamAccountName": null,
+      "createdDateTime": "2024-02-20T09:00:00Z",
+      "renewedDateTime": "2024-02-20T09:00:00Z",
+      "expirationDateTime": null,
+      "visibility": null,
+      "isAssignableToRole": true,
+      "classification": null,
+      "proxyAddresses": [],
+      "resourceProvisioningOptions": [],
+      "assignedLicenses": [],
+      "hasMembersWithLicenseErrors": false
+    }
+  ],
+  "@odata.count": 1
+}

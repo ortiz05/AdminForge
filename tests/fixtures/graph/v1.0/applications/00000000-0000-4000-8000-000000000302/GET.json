@@ -1,0 +1,69 @@
+{
+  "id": "00000000-0000-4000-8000-000000000302",
+  "appId": "00000000-0000-4000-8001-000000000302",
+  "displayName": "Example Portal",
+  "description": null,
+  "createdDateTime": "2024-06-12T09:00:00Z",
+  "signInAudience": "AzureADMyOrg",
+  "publisherDomain": "example.com",
+  "identifierUris": [],
+  "notes": null,
+  "serviceManagementReference": null,
+  "tags": [],
+  "verifiedPublisher": {
+    "displayName": null,
+    "verifiedPublisherId": null,
+    "addedDateTime": null
+  },
+  "passwordCredentials": [
+    {
+      "keyId": "00000000-0000-4000-8000-0000000c3020",
+      "displayName": "ci",
+      "hint": "x9D",
+      "startDateTime": "2025-01-01T00:00:00Z",
+      "endDateTime": "2026-09-30T00:00:00Z",
+      "secretText": null,
+      "customKeyIdentifier": null
+    }
+  ],
+  "keyCredentials": [],
+  "requiredResourceAccess": [
+    {
+      "resourceAppId": "00000003-0000-0000-c000-000000000000",
+      "resourceAccess": [
+        {
+          "id": "e1fe6dd8-ba31-4d61-89e7-88639da4683d",
+          "type": "Scope"
+        },
+        {
+          "id": "7427e0e9-2fba-42fe-b0c0-848c9e6a8182",
+          "type": "Scope"
+        }
+      ]
+    }
+  ],
+  "web": {
+    "redirectUris": [
+      "https://portal.example.com/auth/callback",
+      "https://localhost:5173/auth/callback"
+    ],
+    "implicitGrantSettings": {
+      "enableIdTokenIssuance": true,
+      "enableAccessTokenIssuance": false
+    }
+  },
+  "spa": {
+    "redirectUris": []
+  },
+  "publicClient": {
+    "redirectUris": []
+  },
+  "owners": [
+    {
+      "@odata.type": "#microsoft.graph.user",
+      "id": "00000000-0000-4000-8000-000000000101",
+      "displayName": "Adele Lee",
+      "userPrincipalName": "a.lee@example.com"
+    }
+  ]
+}

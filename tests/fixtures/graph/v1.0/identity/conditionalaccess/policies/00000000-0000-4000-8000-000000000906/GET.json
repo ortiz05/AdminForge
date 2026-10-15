@@ -1,0 +1,57 @@
+{
+  "id": "00000000-0000-4000-8000-000000000906",
+  "templateId": null,
+  "displayName": "CA006 – Guests: require MFA",
+  "createdDateTime": "2024-03-01T09:00:00Z",
+  "modifiedDateTime": "2025-06-01T09:00:00Z",
+  "state": "disabled",
+  "conditions": {
+    "userRiskLevels": [],
+    "signInRiskLevels": [],
+    "clientAppTypes": [
+      "all"
+    ],
+    "platforms": null,
+    "locations": null,
+    "devices": null,
+    "clientApplications": null,
+    "servicePrincipalRiskLevels": [],
+    "insiderRiskLevels": null,
+    "users": {
+      "includeUsers": [
+        "GuestsOrExternalUsers"
+      ],
+      "excludeUsers": [],
+      "includeGroups": [],
+      "excludeGroups": [],
+      "includeRoles": [],
+      "excludeRoles": [],
+      "includeGuestsOrExternalUsers": {
+        "guestOrExternalUserTypes": "b2bCollaborationGuest,b2bCollaborationMember",
+        "externalTenants": {
+          "membershipKind": "all"
+        }
+      },
+      "excludeGuestsOrExternalUsers": null
+    },
+    "applications": {
+      "includeApplications": [
+        "All"
+      ],
+      "excludeApplications": [],
+      "includeUserActions": [],
+      "includeAuthenticationContextClassReferences": [],
+      "applicationFilter": null
+    }
+  },
+  "grantControls": {
+    "operator": "OR",
+    "builtInControls": [
+      "mfa"
+    ],
+    "customAuthenticationFactors": [],
+    "termsOfUse": [],
+    "authenticationStrength": null
+  },
+  "sessionControls": null
+}

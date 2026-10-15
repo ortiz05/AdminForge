@@ -1,0 +1,278 @@
+$schema: ../../../packages/schemas/generated/playbook.schema.json
+kind: playbook
+id: identity.create-user
+version: 1.0.0
+title: Onboard user
+summary: >-
+  Creates a cloud user account with a unique sign-in name, sets the manager, adds group memberships, assigns a licence,
+  and issues first sign-in credentials (a Temporary Access Pass by default — passwordless onboarding).
+owner: identity-team
+tags: [identity, users, onboarding]
+risk: medium
+mode: write
+requires:
+  portalRoles: [Portal.Operator]
+  scopes:
+    graph:
+      - User.ReadWrite.All
+      - Organization.Read.All
+      - GroupMember.ReadWrite.All
+      - LicenseAssignment.ReadWrite.All
+      - Policy.Read.All
+      - UserAuthenticationMethod.ReadWrite.All
+      - User.RevokeSessions.All
+  entraRoles: [User Administrator]
+confirm:
+  type: click
+  message: >-
+    ${ 'Create ' & steps.names.output.userPrincipalName & ' (' & steps.names.output.displayName & ')'
+       & ($count(inputs.groupIds) > 0 ? ', add to ' & $count(inputs.groupIds) & ' group(s)' : '')
+       & (inputs.sku ? ', assign ' & inputs.sku : '') & '?' }
+approval:
+  required: false
+
+inputs:
+  givenName: { type: string, label: First name, minLength: 1, maxLength: 64 }
+  surname: { type: string, label: Last name, minLength: 1, maxLength: 64 }
+  displayName: { type: string, label: Display name, required: false, description: Defaults to first and last name. }
+  upnPrefix:
+    type: string
+    label: Sign-in name (before the @)
+    required: false
+    pattern: "^[A-Za-z0-9._-]{1,64}$"
+    description: Defaults to first.last.
+  domain:
+    type: string
+    label: Domain
+    format: hostname
+    required: false
+    description: A verified domain. Defaults to the primary domain configured for AdminForge (AF_PRIMARY_DOMAIN).
+  usageLocation: { type: string, label: Usage location, pattern: "^[A-Za-z]{2}$", placeholder: US, description: Two-letter country code (needed for licences). }
+  department: { type: string, label: Department, required: false }
+  jobTitle: { type: string, label: Job title, required: false }
+  companyName: { type: string, label: Company, required: false }
+  officeLocation: { type: string, label: Office, required: false }
+  employeeId: { type: string, label: Employee id, required: false, maxLength: 16 }
+  managerId: { type: string, format: guid, label: Manager, picker: user, required: false }
+  groupIds: { type: group, multiple: true, maxItems: 50, label: Groups, required: false }
+  sku: { type: string, label: Licence (SKU part number), placeholder: SPE_E5, required: false }
+  firstSignIn:
+    type: enum
+    label: First sign-in
+    values: [Temporary Access Pass, Temporary password, None]
+    default: Temporary Access Pass
+
+steps:
+  - id: names
+    type: transform
+    expression: >-
+      ${ (
+        $clean := function($s) { $lowercase($replace($trim($s), /[^A-Za-z0-9-]/, '')) };
+        $prefix := inputs.upnPrefix ? $lowercase($trim(inputs.upnPrefix)) : $clean(inputs.givenName) & '.' & $clean(inputs.surname);
+        $domain := inputs.domain ? $lowercase($trim(inputs.domain)) : env.AF_PRIMARY_DOMAIN;
+        {
+          "displayName": inputs.displayName ? $trim(inputs.displayName) : $trim(inputs.givenName) & ' ' & $trim(inputs.surname),
+          "mailNickname": $replace($prefix, /[^a-z0-9._-]/, ''),
+          "userPrincipalName": $prefix & '@' & $domain,
+          "domain": $domain
+        }
+      ) }
+
+  - id: hasDomain
+    type: assert
+    that: ${ $boolean(steps.names.output.domain) = true }
+    message: No domain was given and AF_PRIMARY_DOMAIN is not configured. Enter the domain.
+
+  - id: org
+    type: graph
+    mode: read
+    describe: Read verified domains
+    request:
+      method: GET
+      path: /organization
+      query:
+        $select: id,verifiedDomains
+
+  - id: domainVerified
+    type: assert
+    that: ${ steps.names.output.domain in [steps.org.output.value.verifiedDomains.$lowercase(name)] }
+    message: ${ steps.names.output.domain & ' is not a verified domain in this tenant.' }
+
+  - id: existing
+    type: graph
+    mode: read
+    describe: Check that the sign-in name and email address are free
+    request:
+      method: GET
+      path: /users
+      headers: { ConsistencyLevel: eventual }
+      query:
+        $count: true
+        $select: id,displayName,userPrincipalName
+        $filter: >-
+          ${ 'userPrincipalName eq ' & $odata(steps.names.output.userPrincipalName)
+             & ' or mail eq ' & $odata(steps.names.output.userPrincipalName)
+             & ' or proxyAddresses/any(p:p eq ' & $odata('smtp:' & steps.names.output.userPrincipalName) & ')' }
+
+  - id: unique
+    type: assert
+    that: ${ $count(steps.existing.output.value) = 0 }
+    message: ${ steps.names.output.userPrincipalName & ' is already used by ' & steps.existing.output.value[0].displayName & '. Choose another sign-in name.' }
+
+  # Throwaway initial password: never shown or stored in outputs. The user's first credential is the TAP or a
+  # system-generated password from identity.reset-password. (JSONata $random is not a CSPRNG — see the report.)
+  - id: initialPassword
+    type: transform
+    expression: >-
+      ${ (
+        $sets := ['ABCDEFGHJKLMNPQRSTUVWXYZ', 'abcdefghijkmnopqrstuvwxyz', '23456789', '!@#%^*-_=+?'];
+        $pick := function($s) { $substring($s, $floor($random() * $length($s)), 1) };
+        $join([1..24].( $i := $ % 4; $pick($sets[$i]) ))
+      ) }
+
+  - id: create
+    type: graph
+    mode: write
+    describe: ${ 'Create the user ' & steps.names.output.userPrincipalName }
+    idempotent: false
+    request:
+      method: POST
+      path: /users
+      body:
+        accountEnabled: true
+        displayName: ${ steps.names.output.displayName }
+        givenName: ${ $trim(inputs.givenName) }
+        surname: ${ $trim(inputs.surname) }
+        mailNickname: ${ steps.names.output.mailNickname }
+        userPrincipalName: ${ steps.names.output.userPrincipalName }
+        usageLocation: ${ $uppercase(inputs.usageLocation) }
+        department: ${ inputs.department }
+        jobTitle: ${ inputs.jobTitle }
+        companyName: ${ inputs.companyName }
+        officeLocation: ${ inputs.officeLocation }
+        employeeId: ${ inputs.employeeId }
+        passwordProfile:
+          forceChangePasswordNextSignIn: true
+          password: ${ steps.initialPassword.output }
+    dryRunOutput:
+      id: 00000000-0000-0000-0000-000000000000
+      userPrincipalName: ${ steps.names.output.userPrincipalName }
+    compensate:
+      type: graph
+      describe: Delete the new user (it stays restorable for 30 days)
+      request:
+        method: DELETE
+        path: /users/${ $encode(steps.create.output.id) }
+
+  - id: manager
+    type: graph
+    mode: write
+    describe: Set the manager
+    when: ${ $boolean(inputs.managerId) = true }
+    request:
+      method: PUT
+      path: /users/${ $encode(steps.create.output.id) }/manager/$ref
+      body:
+        "@odata.id": https://graph.microsoft.com/v1.0/users/${ $guid(inputs.managerId) }
+
+  - id: groups
+    type: forEach
+    items: ${ [inputs.groupIds] }
+    as: groupId
+    concurrency: 5
+    steps:
+      - id: joinGroup
+        type: graph
+        mode: write
+        describe: ${ 'Add to group ' & groupId }
+        # Dynamic, synced and Exchange-managed groups refuse direct adds; the rest of onboarding carries on.
+        onError: continue
+        request:
+          method: POST
+          path: /groups/${ $encode($guid(groupId)) }/members/$ref
+          body:
+            "@odata.id": https://graph.microsoft.com/v1.0/directoryObjects/${ steps.create.output.id }
+
+  - id: licence
+    type: playbook
+    mode: write
+    describe: ${ 'Assign ' & inputs.sku }
+    when: ${ $boolean(inputs.sku) = true }
+    onError: continue
+    ref: identity.assign-licence
+    inputs:
+      userId: ${ steps.create.output.id }
+      sku: ${ inputs.sku }
+
+  - id: tap
+    type: playbook
+    mode: write
+    describe: Issue a one-time Temporary Access Pass for first sign-in
+    when: ${ inputs.firstSignIn = 'Temporary Access Pass' }
+    onError: continue
+    ref: identity.issue-tap
+    inputs:
+      userId: ${ steps.create.output.id }
+      isUsableOnce: true
+      replaceExisting: true
+      reason: New user onboarding — first sign-in
+
+  - id: password
+    type: playbook
+    mode: write
+    describe: Generate a temporary password for first sign-in
+    when: ${ inputs.firstSignIn = 'Temporary password' }
+    onError: continue
+    ref: identity.reset-password
+    inputs:
+      userId: ${ steps.create.output.id }
+      revokeSessions: false
+      reason: New user onboarding — first sign-in
+
+outputs:
+  summary: >-
+    ${ 'Created ' & steps.names.output.userPrincipalName
+       & (inputs.firstSignIn = 'Temporary Access Pass' ? '. Give the user the Temporary Access Pass to sign in and register passwordless methods.' :
+          inputs.firstSignIn = 'Temporary password' ? '. Give the user the temporary password; they must change it at first sign-in.' :
+          '. No first sign-in credential was issued; run Issue Temporary Access Pass when the user starts.') }
+  userId: ${ steps.create.output.id }
+  userPrincipalName: ${ steps.names.output.userPrincipalName }
+  # Secret outputs from the child playbooks (assumes a playbook step's output is the child's outputs).
+  temporaryAccessPass: ${ steps.tap.output.temporaryAccessPass }
+  temporaryPassword: ${ steps.password.output.temporaryPassword }
+
+tests:
+  - name: refuses a sign-in name that is already taken
+    inputs: { givenName: Avery, surname: Lee, domain: example.com, usageLocation: US, firstSignIn: None }
+    mocks:
+      org: { value: [{ id: 00000000-0000-4000-8000-00000000e0e0, verifiedDomains: [{ name: example.com }, { name: exampleorg.onmicrosoft.com }] }] }
+      existing: { value: [{ id: 00000000-0000-4000-8000-000000000101, displayName: Avery Lee, userPrincipalName: avery.lee@example.com }] }
+    expect: { status: failed, failedStep: unique }
+  - name: refuses an unverified domain
+    inputs: { givenName: Kim, surname: Novak, domain: example.net, usageLocation: US, firstSignIn: None }
+    mocks:
+      org: { value: [{ id: 00000000-0000-4000-8000-00000000e0e0, verifiedDomains: [{ name: example.com }] }] }
+    expect: { status: failed, failedStep: domainVerified }
+  - name: plans a full onboarding with groups, licence and a TAP
+    inputs:
+      givenName: Kim
+      surname: Novak
+      domain: example.com
+      usageLocation: us
+      department: Finance
+      jobTitle: Analyst
+      managerId: 00000000-0000-4000-8000-000000000105
+      groupIds: [00000000-0000-4000-8000-000000000201]
+      sku: SPE_E5
+      firstSignIn: Temporary Access Pass
+    mocks:
+      org: { value: [{ id: 00000000-0000-4000-8000-00000000e0e0, verifiedDomains: [{ name: example.com }, { name: exampleorg.onmicrosoft.com }] }] }
+      existing: { value: [] }
+      # Child playbooks are mocked with their outputs (their own tests cover their plans).
+      licence: { summary: SPE_E5 assigned }
+      tap: { summary: Temporary Access Pass issued, temporaryAccessPass: null }
+    expect:
+      status: succeeded
+      plan: [create, manager, joinGroup]
+      steps: { licence: succeeded, tap: succeeded, password: skipped }
+      outputs: { userPrincipalName: kim.novak@example.com }

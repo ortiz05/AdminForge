@@ -1,0 +1,147 @@
+$schema: ../../../packages/schemas/generated/page.schema.json
+kind: page
+id: identity.auth-methods
+version: 1.0.0
+title: Authentication methods
+summary: >-
+  The tenant's authentication methods policy — which methods are on and for whom, the MFA registration campaign,
+  and the authentication strengths Conditional Access can require.
+owner: identity-team
+tags: [identity, mfa, authentication]
+template: list-detail
+nav: { section: identity, label: Authentication methods, icon: fingerprint, order: 80 }
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    graph: [Policy.Read.All]
+  entraRoles: [Security Reader]
+
+datasources:
+  policy:
+    source: graph
+    request:
+      path: /policies/authenticationMethodsPolicy
+    cache: { ttl: 300 }
+    transform: >-
+      ${ (
+        $labels := {
+          "Fido2": "Passkey (FIDO2)", "MicrosoftAuthenticator": "Microsoft Authenticator", "Sms": "SMS",
+          "TemporaryAccessPass": "Temporary Access Pass", "SoftwareOath": "Third-party software OATH tokens",
+          "HardwareOath": "Hardware OATH tokens", "Voice": "Voice call", "Email": "Email OTP",
+          "X509Certificate": "Certificate-based authentication", "QRCodePin": "QR code"
+        };
+        $strength := {
+          "Fido2": "Phishing-resistant", "X509Certificate": "Phishing-resistant", "MicrosoftAuthenticator": "Strong",
+          "TemporaryAccessPass": "Onboarding", "SoftwareOath": "Strong", "HardwareOath": "Strong", "QRCodePin": "Frontline",
+          "Sms": "Weak", "Voice": "Weak", "Email": "Guests only"
+        };
+        $target := function($t) { $t.id = 'all_users' ? 'All users' : ($t.targetType = 'group' ? 'Group ' : '') & $t.id };
+        $c := value.registrationEnforcement.authenticationMethodsRegistrationCampaign;
+        {
+          "id": value.id,
+          "description": value.description,
+          "modified": value.lastModifiedDateTime,
+          "migrationState": value.policyMigrationState,
+          "reconfirmationInDays": value.reconfirmationInDays,
+          "campaignState": $c.state,
+          "campaignSnoozeDays": $c.snoozeDurationInDays,
+          "campaignTargets": $join($c.includeTargets.$target($), ', '),
+          "methods": [value.authenticationMethodConfigurations.{
+            "id": id,
+            "method": $lookup($labels, id) ? $lookup($labels, id) : id,
+            "state": state,
+            "strength": $lookup($strength, id) ? $lookup($strength, id) : 'Other',
+            "targets": state = 'enabled' ? $join(includeTargets.$target($), ', ') : '',
+            "excluded": $count(excludeTargets),
+            "detail": id = 'TemporaryAccessPass' ? ('Lifetime ' & minimumLifetimeInMinutes & '–' & maximumLifetimeInMinutes & ' min' & (isUsableOnce = true ? ', one-time only' : ''))
+                      : id = 'Fido2' ? ('Attestation ' & (isAttestationEnforced = true ? 'enforced' : 'not enforced') & (keyRestrictions.isEnforced = true ? ', key restrictions on' : ''))
+                      : id = 'MicrosoftAuthenticator' ? ('Number matching on; app/location context ' & featureSettings.displayAppInformationRequiredState.state & '/' & featureSettings.displayLocationInformationRequiredState.state)
+                      : ''
+          }^(state = 'enabled' ? 0 : 1, method)],
+          "enabledCount": $count(value.authenticationMethodConfigurations[state = 'enabled']),
+          "weakEnabled": $count(value.authenticationMethodConfigurations[state = 'enabled' and id in ['Sms', 'Voice']])
+        }
+      ) }
+  strengths:
+    source: graph
+    request:
+      path: /policies/authenticationStrengthPolicies
+    cache: { ttl: 600 }
+    transform: >-
+      ${ {
+        "rows": [value.value.{
+          "id": id,
+          "displayName": displayName,
+          "type": policyType = 'builtIn' ? 'Built-in' : 'Custom',
+          "satisfies": requirementsSatisfied,
+          "combinations": [allowedCombinations],
+          "modified": modifiedDateTime
+        }^(type, displayName)]
+      } }
+
+actions:
+  - label: MFA registration report
+    icon: chart-bar
+    href: /p/identity.auth-registration
+  - label: Open in Entra admin center
+    icon: arrow-square-out
+    href: https://entra.microsoft.com/#view/Microsoft_AAD_IAM/AuthenticationMethodsMenuBlade/~/AdminAuthMethods
+
+layout:
+  - widget: kpi
+    id: enabledCount
+    data: policy.enabledCount
+    label: Methods enabled
+    format: number
+  - widget: kpi
+    id: weakEnabled
+    data: policy.weakEnabled
+    label: Weak methods enabled (SMS, voice)
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+  - widget: keyValue
+    id: policySettings
+    title: Policy settings
+    span: 6
+    data: policy
+    fields:
+      - field: migrationState
+        label: Legacy MFA/SSPR migration
+        kind: status
+        map: { migrationComplete: [ok, Complete], migrationInProgress: [warn, In progress], preMigration: [warn, Not started] }
+      - field: campaignState
+        label: Registration campaign
+        kind: status
+        map: { enabled: [ok, On], disabled: [neutral, Off], default: [info, Microsoft managed] }
+      - { field: campaignTargets, label: Campaign targets }
+      - { field: campaignSnoozeDays, label: Campaign snooze, kind: number }
+      - { field: reconfirmationInDays, label: SSPR reconfirmation, kind: number }
+      - { field: modified, label: Last changed, kind: relativeTime }
+  - widget: table
+    id: methods
+    title: Methods
+    span: 12
+    data: policy.methods
+    rowKey: id
+    columns:
+      - { field: method, label: Method }
+      - { field: state, label: State, kind: status, map: { enabled: [ok, On], disabled: [neutral, Off] }, filter: facet }
+      - field: strength
+        label: Strength
+        kind: status
+        map: { Phishing-resistant: [ok, Phishing-resistant], Strong: [info, Strong], Onboarding: [info, Onboarding], Frontline: [info, Frontline], Weak: [warn, Weak], Guests only: [neutral, Guests only], Other: [neutral, Other] }
+      - { field: targets, label: Enabled for }
+      - { field: excluded, label: Exclusions, kind: number }
+      - { field: detail, label: Settings }
+  - widget: table
+    id: strengths
+    title: Authentication strengths
+    span: 12
+    data: strengths.rows
+    rowKey: id
+    columns:
+      - { field: displayName, label: Strength }
+      - { field: type, label: Type, filter: facet }
+      - { field: satisfies, label: Satisfies }
+      - { field: combinations, label: Allowed combinations, kind: tags }
+      - { field: modified, label: Modified, kind: relativeTime, hidden: true }

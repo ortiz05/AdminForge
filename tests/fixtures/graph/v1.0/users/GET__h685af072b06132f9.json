@@ -1,0 +1,206 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#users",
+  "@odata.count": 8,
+  "value": [
+    {
+      "@odata.type": "#microsoft.graph.user",
+      "id": "30000000-0000-4000-8000-000000000002",
+      "displayName": "Blake Analyst",
+      "userPrincipalName": "blake@example.com",
+      "mail": "blake@example.com",
+      "userType": "Member",
+      "accountEnabled": true,
+      "department": "Finance",
+      "jobTitle": "Financial Analyst",
+      "usageLocation": "US",
+      "licenseAssignmentStates": [
+        {
+          "skuId": "10000000-0000-4000-8000-000000000507",
+          "disabledPlans": [],
+          "assignedByGroup": null,
+          "state": "Active",
+          "error": "None",
+          "lastUpdatedDateTime": "2026-09-05T09:00:00Z"
+        }
+      ],
+      "signInActivity": {
+        "lastSignInDateTime": "2026-10-14T09:00:00Z"
+      }
+    },
+    {
+      "@odata.type": "#microsoft.graph.user",
+      "id": "30000000-0000-4000-8000-000000000004",
+      "displayName": "Dana Former",
+      "userPrincipalName": "dana@example.com",
+      "mail": "dana@example.com",
+      "userType": "Member",
+      "accountEnabled": false,
+      "department": "Sales",
+      "jobTitle": "Account Executive",
+      "usageLocation": "US",
+      "licenseAssignmentStates": [
+        {
+          "skuId": "10000000-0000-4000-8000-000000000507",
+          "disabledPlans": [],
+          "assignedByGroup": "10000000-0000-4000-8000-000000000301",
+          "state": "Active",
+          "error": "None",
+          "lastUpdatedDateTime": "2026-09-05T09:00:00Z"
+        }
+      ],
+      "signInActivity": {
+        "lastSignInDateTime": "2026-08-28T09:00:00Z"
+      }
+    },
+    {
+      "@odata.type": "#microsoft.graph.user",
+      "id": "10000000-0000-4000-8000-000000000006",
+      "displayName": "Farah Haddad",
+      "userPrincipalName": "farah.haddad@example.com",
+      "mail": "farah.haddad@example.com",
+      "userType": "Member",
+      "accountEnabled": true,
+      "department": "Marketing",
+      "jobTitle": "Marketing Lead",
+      "usageLocation": "US",
+      "licenseAssignmentStates": [
+        {
+          "skuId": "10000000-0000-4000-8000-000000000507",
+          "disabledPlans": [],
+          "assignedByGroup": null,
+          "state": "Active",
+          "error": "None",
+          "lastUpdatedDateTime": "2026-09-05T09:00:00Z"
+        }
+      ],
+      "signInActivity": {
+        "lastSignInDateTime": "2026-10-13T09:00:00Z"
+      }
+    },
+    {
+      "@odata.type": "#microsoft.graph.user",
+      "id": "10000000-0000-4000-8000-000000000007",
+      "displayName": "Gabriel Nunes",
+      "userPrincipalName": "gabriel.nunes@example.com",
+      "mail": "gabriel.nunes@example.com",
+      "userType": "Member",
+      "accountEnabled": true,
+      "department": "Sales",
+      "jobTitle": "Sales Manager",
+      "usageLocation": "BR",
+      "licenseAssignmentStates": [
+        {
+          "skuId": "10000000-0000-4000-8000-000000000507",
+          "disabledPlans": [],
+          "assignedByGroup": "10000000-0000-4000-8000-000000000301",
+          "state": "Active",
+          "error": "None",
+          "lastUpdatedDateTime": "2026-09-05T09:00:00Z"
+        }
+      ],
+      "signInActivity": {
+        "lastSignInDateTime": "2026-06-13T09:00:00Z"
+      }
+    },
+    {
+      "@odata.type": "#microsoft.graph.user",
+      "id": "10000000-0000-4000-8000-000000000009",
+      "displayName": "Isaac Mensah",
+      "userPrincipalName": "isaac.mensah@example.com",
+      "mail": "isaac.mensah@example.com",
+      "userType": "Member",
+      "accountEnabled": true,
+      "department": "Sales",
+      "jobTitle": "Sales Representative",
+      "usageLocation": "GB",
+      "licenseAssignmentStates": [
+        {
+          "skuId": "10000000-0000-4000-8000-000000000507",
+          "disabledPlans": [],
+          "assignedByGroup": null,
+          "state": "Active",
+          "error": "None",
+          "lastUpdatedDateTime": "2026-09-05T09:00:00Z"
+        }
+      ],
+      "signInActivity": {
+        "lastSignInDateTime": "2026-10-12T09:00:00Z"
+      }
+    },
+    {
+      "@odata.type": "#microsoft.graph.user",
+      "id": "10000000-0000-4000-8000-00000000000a",
+      "displayName": "Jordan Price",
+      "userPrincipalName": "jordan.price@example.com",
+      "mail": "jordan.price@example.com",
+      "userType": "Member",
+      "accountEnabled": true,
+      "department": "Legal",
+      "jobTitle": "Counsel",
+      "usageLocation": "US",
+      "licenseAssignmentStates": [
+        {
+          "skuId": "10000000-0000-4000-8000-000000000507",
+          "disabledPlans": [],
+          "assignedByGroup": "10000000-0000-4000-8000-000000000301",
+          "state": "Active",
+          "error": "None",
+          "lastUpdatedDateTime": "2026-09-05T09:00:00Z"
+        }
+      ],
+      "signInActivity": {
+        "lastSignInDateTime": "2026-10-10T09:00:00Z"
+      }
+    },
+    {
+      "@odata.type": "#microsoft.graph.user",
+      "id": "10000000-0000-4000-8000-00000000000d",
+      "displayName": "Leah Moreau",
+      "userPrincipalName": "leah.moreau@example.com",
+      "mail": "leah.moreau@example.com",
+      "userType": "Member",
+      "accountEnabled": true,
+      "department": "HR",
+      "jobTitle": "HR Business Partner",
+      "usageLocation": "FR",
+      "licenseAssignmentStates": [
+        {
+          "skuId": "10000000-0000-4000-8000-000000000507",
+          "disabledPlans": [],
+          "assignedByGroup": null,
+          "state": "Active",
+          "error": "None",
+          "lastUpdatedDateTime": "2026-09-05T09:00:00Z"
+        }
+      ],
+      "signInActivity": {
+        "lastSignInDateTime": "2026-10-14T09:00:00Z"
+      }
+    },
+    {
+      "@odata.type": "#microsoft.graph.user",
+      "id": "10000000-0000-4000-8000-000000000010",
+      "displayName": "Nora Fischer",
+      "userPrincipalName": "nora.fischer@example.com",
+      "mail": "nora.fischer@example.com",
+      "userType": "Member",
+      "accountEnabled": true,
+      "department": "Finance",
+      "jobTitle": "Controller",
+      "usageLocation": "DE",
+      "licenseAssignmentStates": [
+        {
+          "skuId": "10000000-0000-4000-8000-000000000507",
+          "disabledPlans": [],
+          "assignedByGroup": "10000000-0000-4000-8000-000000000301",
+          "state": "Active",
+          "error": "None",
+          "lastUpdatedDateTime": "2026-09-05T09:00:00Z"
+        }
+      ],
+      "signInActivity": {
+        "lastSignInDateTime": "2026-10-15T07:00:00Z"
+      }
+    }
+  ]
+}

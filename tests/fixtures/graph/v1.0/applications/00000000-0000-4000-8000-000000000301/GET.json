@@ -1,0 +1,98 @@
+{
+  "id": "00000000-0000-4000-8000-000000000301",
+  "appId": "00000000-0000-4000-8001-000000000301",
+  "displayName": "Example HR Sync",
+  "description": "HR system → Entra provisioning connector",
+  "createdDateTime": "2023-04-01T09:00:00Z",
+  "signInAudience": "AzureADMyOrg",
+  "publisherDomain": "example.com",
+  "identifierUris": [
+    "api://00000000-0000-4000-8001-000000000301"
+  ],
+  "notes": "HR system → Entra provisioning connector",
+  "serviceManagementReference": "SVC-HR-01",
+  "tags": [],
+  "verifiedPublisher": {
+    "displayName": null,
+    "verifiedPublisherId": null,
+    "addedDateTime": null
+  },
+  "passwordCredentials": [
+    {
+      "keyId": "00000000-0000-4000-8000-0000000c3010",
+      "displayName": "prod",
+      "hint": "Q7~",
+      "startDateTime": "2025-01-01T00:00:00Z",
+      "endDateTime": "2026-10-20T00:00:00Z",
+      "secretText": null,
+      "customKeyIdentifier": null
+    },
+    {
+      "keyId": "00000000-0000-4000-8000-0000000c3011",
+      "displayName": "prod-2025",
+      "hint": "k2P",
+      "startDateTime": "2025-01-01T00:00:00Z",
+      "endDateTime": "2026-04-30T00:00:00Z",
+      "secretText": null,
+      "customKeyIdentifier": null
+    }
+  ],
+  "keyCredentials": [
+    {
+      "keyId": "00000000-0000-4000-8000-0000000d3010",
+      "displayName": "CN=hr-sync.example.com",
+      "type": "AsymmetricX509Cert",
+      "usage": "Verify",
+      "startDateTime": "2025-02-01T00:00:00Z",
+      "endDateTime": "2027-02-01T00:00:00Z",
+      "customKeyIdentifier": "QUJDREVGMDEyMzQ1Njc4OQ==",
+      "key": null
+    }
+  ],
+  "requiredResourceAccess": [
+    {
+      "resourceAppId": "00000003-0000-0000-c000-000000000000",
+      "resourceAccess": [
+        {
+          "id": "df021288-bdef-4463-88db-98f22de89214",
+          "type": "Role"
+        },
+        {
+          "id": "5b567255-7703-4780-807c-7be8301ae99b",
+          "type": "Role"
+        },
+        {
+          "id": "e1fe6dd8-ba31-4d61-89e7-88639da4683d",
+          "type": "Scope"
+        }
+      ]
+    }
+  ],
+  "web": {
+    "redirectUris": [],
+    "implicitGrantSettings": {
+      "enableIdTokenIssuance": false,
+      "enableAccessTokenIssuance": false
+    }
+  },
+  "spa": {
+    "redirectUris": []
+  },
+  "publicClient": {
+    "redirectUris": []
+  },
+  "owners": [
+    {
+      "@odata.type": "#microsoft.graph.user",
+      "id": "00000000-0000-4000-8000-000000000101",
+      "displayName": "Adele Lee",
+      "userPrincipalName": "a.lee@example.com"
+    },
+    {
+      "@odata.type": "#microsoft.graph.user",
+      "id": "00000000-0000-4000-8000-000000000109",
+      "displayName": "Jordan Rivera",
+      "userPrincipalName": "j.rivera@example.com"
+    }
+  ]
+}

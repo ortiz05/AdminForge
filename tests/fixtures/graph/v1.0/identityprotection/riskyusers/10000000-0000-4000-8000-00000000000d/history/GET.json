@@ -1,0 +1,43 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#Collection(microsoft.graph.riskyUserHistoryItem)",
+  "value": [
+    {
+      "id": "10000000-0000-4000-8000-00000000000d",
+      "isDeleted": false,
+      "isProcessing": false,
+      "riskLastUpdatedDateTime": "2026-10-07T01:00:00Z",
+      "riskLevel": "none",
+      "riskState": "dismissed",
+      "riskDetail": "adminDismissedAllRiskForUser",
+      "userDisplayName": "Leah Moreau",
+      "userPrincipalName": "leah.moreau@example.com",
+      "userId": "10000000-0000-4000-8000-00000000000d",
+      "initiatedBy": "alex.admin@example.com",
+      "activity": {
+        "eventTypes": [],
+        "riskEventTypes": [],
+        "detail": "adminDismissedAllRiskForUser"
+      }
+    },
+    {
+      "id": "10000000-0000-4000-8000-00000000000d",
+      "isDeleted": false,
+      "isProcessing": false,
+      "riskLastUpdatedDateTime": "2026-09-28T17:00:00Z",
+      "riskLevel": "medium",
+      "riskState": "atRisk",
+      "riskDetail": "none",
+      "userDisplayName": "Leah Moreau",
+      "userPrincipalName": "leah.moreau@example.com",
+      "userId": "10000000-0000-4000-8000-00000000000d",
+      "initiatedBy": null,
+      "activity": {
+        "eventTypes": [],
+        "riskEventTypes": [
+          "anonymizedIPAddress"
+        ],
+        "detail": "none"
+      }
+    }
+  ]
+}

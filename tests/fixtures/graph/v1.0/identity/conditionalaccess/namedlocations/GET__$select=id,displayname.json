@@ -1,0 +1,65 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#fixture",
+  "value": [
+    {
+      "@odata.type": "#microsoft.graph.countryNamedLocation",
+      "id": "00000000-0000-4000-8000-000000000a01",
+      "displayName": "Untrusted countries (example)",
+      "createdDateTime": "2024-03-01T09:00:00Z",
+      "modifiedDateTime": "2026-10-14T14:50:00Z",
+      "countriesAndRegions": [
+        "AQ",
+        "BV",
+        "HM"
+      ],
+      "includeUnknownCountriesAndRegions": true,
+      "countryLookupMethod": "clientIpAddress"
+    },
+    {
+      "@odata.type": "#microsoft.graph.ipNamedLocation",
+      "id": "00000000-0000-4000-8000-000000000a02",
+      "displayName": "Head office",
+      "createdDateTime": "2023-01-01T09:00:00Z",
+      "modifiedDateTime": "2025-05-01T09:00:00Z",
+      "isTrusted": true,
+      "ipRanges": [
+        {
+          "@odata.type": "#microsoft.graph.iPv4CidrRange",
+          "cidrAddress": "203.0.113.0/24"
+        }
+      ]
+    },
+    {
+      "@odata.type": "#microsoft.graph.ipNamedLocation",
+      "id": "00000000-0000-4000-8000-000000000a03",
+      "displayName": "Branch VPN",
+      "createdDateTime": "2023-01-01T09:00:00Z",
+      "modifiedDateTime": "2025-05-01T09:00:00Z",
+      "isTrusted": true,
+      "ipRanges": [
+        {
+          "@odata.type": "#microsoft.graph.iPv4CidrRange",
+          "cidrAddress": "198.51.100.0/25"
+        },
+        {
+          "@odata.type": "#microsoft.graph.iPv6CidrRange",
+          "cidrAddress": "2001:db8:100::/48"
+        }
+      ]
+    },
+    {
+      "@odata.type": "#microsoft.graph.ipNamedLocation",
+      "id": "00000000-0000-4000-8000-000000000a04",
+      "displayName": "Datacenter egress",
+      "createdDateTime": "2024-08-01T09:00:00Z",
+      "modifiedDateTime": "2024-08-01T09:00:00Z",
+      "isTrusted": false,
+      "ipRanges": [
+        {
+          "@odata.type": "#microsoft.graph.iPv4CidrRange",
+          "cidrAddress": "192.0.2.0/24"
+        }
+      ]
+    }
+  ]
+}

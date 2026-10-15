@@ -1,0 +1,45 @@
+{
+  "id": "00000000-0000-4000-8000-000000000303",
+  "appId": "00000000-0000-4000-8001-000000000303",
+  "displayName": "Example Reporting",
+  "description": null,
+  "createdDateTime": "2025-01-15T09:00:00Z",
+  "signInAudience": "AzureADMyOrg",
+  "publisherDomain": "example.com",
+  "identifierUris": [],
+  "notes": null,
+  "serviceManagementReference": null,
+  "tags": [],
+  "verifiedPublisher": {
+    "displayName": null,
+    "verifiedPublisherId": null,
+    "addedDateTime": null
+  },
+  "passwordCredentials": [],
+  "keyCredentials": [],
+  "requiredResourceAccess": [
+    {
+      "resourceAppId": "00000003-0000-0000-c000-000000000000",
+      "resourceAccess": [
+        {
+          "id": "230c1aed-a721-4c5d-9cb4-a90514e508ef",
+          "type": "Role"
+        }
+      ]
+    }
+  ],
+  "web": {
+    "redirectUris": [],
+    "implicitGrantSettings": {
+      "enableIdTokenIssuance": false,
+      "enableAccessTokenIssuance": false
+    }
+  },
+  "spa": {
+    "redirectUris": []
+  },
+  "publicClient": {
+    "redirectUris": []
+  },
+  "owners": []
+}

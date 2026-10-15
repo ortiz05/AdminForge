@@ -1,0 +1,327 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#fixture",
+  "value": [
+    {
+      "id": "00000000-0000-4000-8000-000000000401",
+      "appId": "00000000-0000-4000-8001-000000000301",
+      "displayName": "Example HR Sync",
+      "description": null,
+      "accountEnabled": true,
+      "appRoleAssignmentRequired": true,
+      "servicePrincipalType": "Application",
+      "appOwnerOrganizationId": "00000000-0000-4000-8000-00000000e0e0",
+      "publisherName": "Example Org",
+      "verifiedPublisher": {
+        "displayName": null,
+        "verifiedPublisherId": null,
+        "addedDateTime": null
+      },
+      "homepage": null,
+      "loginUrl": null,
+      "logoutUrl": null,
+      "replyUrls": [],
+      "servicePrincipalNames": [
+        "00000000-0000-4000-8001-000000000301"
+      ],
+      "tags": [
+        "WindowsAzureActiveDirectoryIntegratedApp"
+      ],
+      "notes": null,
+      "notificationEmailAddresses": [],
+      "preferredSingleSignOnMode": null,
+      "preferredTokenSigningKeyThumbprint": null,
+      "keyCredentials": [],
+      "passwordCredentials": [],
+      "appRoles": [],
+      "oauth2PermissionScopes": [],
+      "alternativeNames": [],
+      "signInAudience": "AzureADMyOrg",
+      "owners": [
+        {
+          "@odata.type": "#microsoft.graph.user",
+          "id": "00000000-0000-4000-8000-000000000101",
+          "displayName": "Adele Lee",
+          "userPrincipalName": "a.lee@example.com",
+          "accountEnabled": true
+        }
+      ]
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000402",
+      "appId": "00000000-0000-4000-8001-000000000302",
+      "displayName": "Example Portal",
+      "description": null,
+      "accountEnabled": true,
+      "appRoleAssignmentRequired": false,
+      "servicePrincipalType": "Application",
+      "appOwnerOrganizationId": "00000000-0000-4000-8000-00000000e0e0",
+      "publisherName": "Example Org",
+      "verifiedPublisher": {
+        "displayName": null,
+        "verifiedPublisherId": null,
+        "addedDateTime": null
+      },
+      "homepage": "https://portal.example.com",
+      "loginUrl": null,
+      "logoutUrl": null,
+      "replyUrls": [],
+      "servicePrincipalNames": [
+        "00000000-0000-4000-8001-000000000302"
+      ],
+      "tags": [
+        "WindowsAzureActiveDirectoryIntegratedApp"
+      ],
+      "notes": null,
+      "notificationEmailAddresses": [],
+      "preferredSingleSignOnMode": null,
+      "preferredTokenSigningKeyThumbprint": null,
+      "keyCredentials": [],
+      "passwordCredentials": [],
+      "appRoles": [],
+      "oauth2PermissionScopes": [],
+      "alternativeNames": [],
+      "signInAudience": "AzureADMyOrg",
+      "owners": []
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000403",
+      "appId": "00000000-0000-4000-8001-000000000303",
+      "displayName": "Example Reporting",
+      "description": null,
+      "accountEnabled": true,
+      "appRoleAssignmentRequired": true,
+      "servicePrincipalType": "Application",
+      "appOwnerOrganizationId": "00000000-0000-4000-8000-00000000e0e0",
+      "publisherName": "Example Org",
+      "verifiedPublisher": {
+        "displayName": null,
+        "verifiedPublisherId": null,
+        "addedDateTime": null
+      },
+      "homepage": null,
+      "loginUrl": null,
+      "logoutUrl": null,
+      "replyUrls": [],
+      "servicePrincipalNames": [
+        "00000000-0000-4000-8001-000000000303"
+      ],
+      "tags": [
+        "WindowsAzureActiveDirectoryIntegratedApp"
+      ],
+      "notes": null,
+      "notificationEmailAddresses": [],
+      "preferredSingleSignOnMode": null,
+      "preferredTokenSigningKeyThumbprint": null,
+      "keyCredentials": [],
+      "passwordCredentials": [],
+      "appRoles": [],
+      "oauth2PermissionScopes": [],
+      "alternativeNames": [],
+      "signInAudience": "AzureADMyOrg",
+      "owners": []
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000404",
+      "appId": "00000000-0000-4000-8001-000000000404",
+      "displayName": "PDF Converter Online",
+      "description": null,
+      "accountEnabled": true,
+      "appRoleAssignmentRequired": false,
+      "servicePrincipalType": "Application",
+      "appOwnerOrganizationId": "00000000-0000-4000-8000-00000000e0f1",
+      "publisherName": "PDF Tools Example",
+      "verifiedPublisher": {
+        "displayName": null,
+        "verifiedPublisherId": null,
+        "addedDateTime": null
+      },
+      "homepage": "https://pdfconverter.example.net",
+      "loginUrl": null,
+      "logoutUrl": null,
+      "replyUrls": [],
+      "servicePrincipalNames": [
+        "00000000-0000-4000-8001-000000000404"
+      ],
+      "tags": [
+        "WindowsAzureActiveDirectoryIntegratedApp"
+      ],
+      "notes": null,
+      "notificationEmailAddresses": [],
+      "preferredSingleSignOnMode": null,
+      "preferredTokenSigningKeyThumbprint": null,
+      "keyCredentials": [],
+      "passwordCredentials": [],
+      "appRoles": [],
+      "oauth2PermissionScopes": [],
+      "alternativeNames": [],
+      "signInAudience": "AzureADMultipleOrgs",
+      "owners": []
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000405",
+      "appId": "00000000-0000-4000-8001-000000000405",
+      "displayName": "Payroll Online",
+      "description": null,
+      "accountEnabled": true,
+      "appRoleAssignmentRequired": true,
+      "servicePrincipalType": "Application",
+      "appOwnerOrganizationId": "00000000-0000-4000-8000-00000000e0f1",
+      "publisherName": "Payroll Online Inc.",
+      "verifiedPublisher": {
+        "displayName": "Payroll Online Inc.",
+        "verifiedPublisherId": "5100000",
+        "addedDateTime": "2024-01-01T00:00:00Z"
+      },
+      "homepage": "https://payroll.example.net/sso",
+      "loginUrl": "https://payroll.example.net/sso",
+      "logoutUrl": null,
+      "replyUrls": [
+        "https://payroll.example.net/saml/acs"
+      ],
+      "servicePrincipalNames": [
+        "00000000-0000-4000-8001-000000000405",
+        "https://payroll.example.net/saml"
+      ],
+      "tags": [
+        "WindowsAzureActiveDirectoryIntegratedApp",
+        "WindowsAzureActiveDirectoryCustomSingleSignOnApplication"
+      ],
+      "notes": null,
+      "notificationEmailAddresses": [
+        "identity-team@example.com"
+      ],
+      "preferredSingleSignOnMode": "saml",
+      "preferredTokenSigningKeyThumbprint": "A1B2C3D4E5F60718293A4B5C6D7E8F9012345678",
+      "keyCredentials": [
+        {
+          "keyId": "00000000-0000-4000-8000-00000000e405",
+          "displayName": "CN=Microsoft Azure Federated SSO Certificate",
+          "type": "AsymmetricX509Cert",
+          "usage": "Sign",
+          "startDateTime": "2023-11-05T00:00:00Z",
+          "endDateTime": "2026-11-05T00:00:00Z",
+          "customKeyIdentifier": "A1B2C3D4E5F60718293A4B5C6D7E8F9012345678"
+        },
+        {
+          "keyId": "00000000-0000-4000-8000-0000000e4051",
+          "displayName": "CN=Microsoft Azure Federated SSO Certificate",
+          "type": "AsymmetricX509Cert",
+          "usage": "Verify",
+          "startDateTime": "2023-11-05T00:00:00Z",
+          "endDateTime": "2026-11-05T00:00:00Z",
+          "customKeyIdentifier": "A1B2C3D4E5F60718293A4B5C6D7E8F9012345678"
+        }
+      ],
+      "passwordCredentials": [],
+      "appRoles": [
+        {
+          "id": "00000000-0000-4000-8000-000000000a05",
+          "value": "User",
+          "displayName": "User",
+          "allowedMemberTypes": [
+            "User"
+          ],
+          "isEnabled": true,
+          "description": "User"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000a06",
+          "value": "Approver",
+          "displayName": "Payroll approver",
+          "allowedMemberTypes": [
+            "User"
+          ],
+          "isEnabled": true,
+          "description": "Payroll approver"
+        }
+      ],
+      "oauth2PermissionScopes": [],
+      "alternativeNames": [],
+      "signInAudience": "AzureADMultipleOrgs",
+      "owners": [
+        {
+          "@odata.type": "#microsoft.graph.user",
+          "id": "00000000-0000-4000-8000-000000000101",
+          "displayName": "Adele Lee",
+          "userPrincipalName": "a.lee@example.com",
+          "accountEnabled": true
+        }
+      ]
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000406",
+      "appId": "00000000-0000-4000-8001-000000000305",
+      "displayName": "Example Data Pipeline",
+      "description": null,
+      "accountEnabled": true,
+      "appRoleAssignmentRequired": true,
+      "servicePrincipalType": "Application",
+      "appOwnerOrganizationId": "00000000-0000-4000-8000-00000000e0e0",
+      "publisherName": "Example Org",
+      "verifiedPublisher": {
+        "displayName": null,
+        "verifiedPublisherId": null,
+        "addedDateTime": null
+      },
+      "homepage": null,
+      "loginUrl": null,
+      "logoutUrl": null,
+      "replyUrls": [],
+      "servicePrincipalNames": [
+        "00000000-0000-4000-8001-000000000305"
+      ],
+      "tags": [
+        "WindowsAzureActiveDirectoryIntegratedApp"
+      ],
+      "notes": null,
+      "notificationEmailAddresses": [],
+      "preferredSingleSignOnMode": null,
+      "preferredTokenSigningKeyThumbprint": null,
+      "keyCredentials": [],
+      "passwordCredentials": [],
+      "appRoles": [],
+      "oauth2PermissionScopes": [],
+      "alternativeNames": [],
+      "signInAudience": "AzureADMyOrg",
+      "owners": []
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000407",
+      "appId": "00000000-0000-4000-8001-000000000306",
+      "displayName": "Legacy Automation",
+      "description": null,
+      "accountEnabled": true,
+      "appRoleAssignmentRequired": false,
+      "servicePrincipalType": "Application",
+      "appOwnerOrganizationId": "00000000-0000-4000-8000-00000000e0e0",
+      "publisherName": "Example Org",
+      "verifiedPublisher": {
+        "displayName": null,
+        "verifiedPublisherId": null,
+        "addedDateTime": null
+      },
+      "homepage": null,
+      "loginUrl": null,
+      "logoutUrl": null,
+      "replyUrls": [],
+      "servicePrincipalNames": [
+        "00000000-0000-4000-8001-000000000306"
+      ],
+      "tags": [
+        "WindowsAzureActiveDirectoryIntegratedApp"
+      ],
+      "notes": null,
+      "notificationEmailAddresses": [],
+      "preferredSingleSignOnMode": null,
+      "preferredTokenSigningKeyThumbprint": null,
+      "keyCredentials": [],
+      "passwordCredentials": [],
+      "appRoles": [],
+      "oauth2PermissionScopes": [],
+      "alternativeNames": [],
+      "signInAudience": "AzureADMyOrg",
+      "owners": []
+    }
+  ],
+  "@odata.count": 7
+}

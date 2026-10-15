@@ -1,0 +1,55 @@
+{
+  "id": "00000000-0000-4000-8000-000000000306",
+  "appId": "00000000-0000-4000-8001-000000000306",
+  "displayName": "Legacy Automation",
+  "description": "Old provisioning script. Owner left the company.",
+  "createdDateTime": "2019-08-01T09:00:00Z",
+  "signInAudience": "AzureADMyOrg",
+  "publisherDomain": "example.com",
+  "identifierUris": [],
+  "notes": "Old provisioning script. Owner left the company.",
+  "serviceManagementReference": null,
+  "tags": [],
+  "verifiedPublisher": {
+    "displayName": null,
+    "verifiedPublisherId": null,
+    "addedDateTime": null
+  },
+  "passwordCredentials": [
+    {
+      "keyId": "00000000-0000-4000-8000-0000000c3060",
+      "displayName": "automation",
+      "hint": "zz1",
+      "startDateTime": "2025-01-01T00:00:00Z",
+      "endDateTime": "2025-12-31T00:00:00Z",
+      "secretText": null,
+      "customKeyIdentifier": null
+    }
+  ],
+  "keyCredentials": [],
+  "requiredResourceAccess": [
+    {
+      "resourceAppId": "00000003-0000-0000-c000-000000000000",
+      "resourceAccess": [
+        {
+          "id": "19dbc75e-c2e2-444c-a770-ec69d8559fc7",
+          "type": "Role"
+        }
+      ]
+    }
+  ],
+  "web": {
+    "redirectUris": [],
+    "implicitGrantSettings": {
+      "enableIdTokenIssuance": false,
+      "enableAccessTokenIssuance": false
+    }
+  },
+  "spa": {
+    "redirectUris": []
+  },
+  "publicClient": {
+    "redirectUris": []
+  },
+  "owners": []
+}

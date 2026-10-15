@@ -1,0 +1,233 @@
+$schema: ../../../packages/schemas/generated/page.schema.json
+kind: page
+id: identity.auth-registration
+version: 1.0.0
+title: MFA registration
+summary: >-
+  Per-user authentication method registration — who is MFA registered, passwordless capable and SSPR registered,
+  which methods they use, and which admins still lack MFA. Refreshed by Microsoft every few hours.
+owner: identity-team
+tags: [identity, mfa, authentication, report]
+template: list-detail
+nav: { section: identity, label: MFA registration, icon: shield-check, order: 85 }
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    graph: [AuditLog.Read.All, UserAuthenticationMethod.Read.All]
+  entraRoles: [Reports Reader]
+  licences: [signInLogs]
+
+params:
+  q: { type: string, default: "", label: Search, placeholder: Sign-in name starts with }
+  mfa: { type: enum, values: [Any, Registered, NotRegistered], default: Any, label: MFA, facet: true }
+  passwordless: { type: enum, values: [Any, Capable, NotCapable], default: Any, label: Passwordless, facet: true }
+  sspr: { type: enum, values: [Any, Registered, NotRegistered], default: Any, label: SSPR, facet: true }
+  admin: { type: enum, values: [Any, Admins, NonAdmins], default: Any, label: Admin roles, facet: true }
+  userType: { type: enum, values: [Any, member, guest], default: member, label: Type, facet: true }
+  method:
+    type: enum
+    label: Has method
+    facet: true
+    default: Any
+    values:
+      - { value: Any, label: Any }
+      - { value: microsoftAuthenticatorPush, label: Authenticator (push) }
+      - { value: microsoftAuthenticatorPasswordless, label: Authenticator (passwordless) }
+      - { value: passKeyDeviceBound, label: Passkey (device-bound) }
+      - { value: passKeyDeviceBoundAuthenticator, label: Passkey in Authenticator }
+      - { value: fido2SecurityKey, label: FIDO2 security key }
+      - { value: windowsHelloForBusiness, label: Windows Hello for Business }
+      - { value: softwareOneTimePasscode, label: Software OTP }
+      - { value: mobilePhone, label: Mobile phone (SMS/voice) }
+      - { value: temporaryAccessPass, label: Temporary Access Pass }
+
+filters:
+  search: q
+  facets: [mfa, passwordless, sspr, admin, userType, method]
+
+savedViews:
+  enabled: true
+  shared: true
+  presets:
+    - { name: Not MFA registered, params: { mfa: NotRegistered } }
+    - { name: Admins without MFA, params: { admin: Admins, mfa: NotRegistered, userType: Any } }
+    - { name: Phone-only MFA, params: { method: mobilePhone } }
+    - { name: Passwordless ready, params: { passwordless: Capable } }
+
+datasources:
+  details:
+    source: graph
+    request:
+      path: /reports/authenticationMethods/userRegistrationDetails
+      query:
+        $filter: >-
+          ${ $join([
+               params.mfa = 'Registered' ? "isMfaRegistered eq true",
+               params.mfa = 'NotRegistered' ? "isMfaRegistered eq false",
+               params.passwordless = 'Capable' ? "isPasswordlessCapable eq true",
+               params.passwordless = 'NotCapable' ? "isPasswordlessCapable eq false",
+               params.sspr = 'Registered' ? "isSsprRegistered eq true",
+               params.sspr = 'NotRegistered' ? "isSsprRegistered eq false",
+               params.admin = 'Admins' ? "isAdmin eq true",
+               params.admin = 'NonAdmins' ? "isAdmin eq false",
+               params.userType != 'Any' ? "userType eq " & $odata(params.userType),
+               params.method != 'Any' ? "methodsRegistered/any(m:m eq " & $odata(params.method) & ")",
+               params.q ? "startswith(userPrincipalName, " & $odata(params.q) & ")"
+             ][$], ' and ') }
+    paging: cursor
+    cache: { ttl: 600 }
+  byFeature:
+    source: graph
+    request:
+      path: /reports/authenticationMethods/usersRegisteredByFeature
+    cache: { ttl: 1800 }
+    transform: >-
+      ${ (
+        $total := value.totalUserCount;
+        $get := function($f) { $sum(value.userRegistrationFeatureCounts[feature = $f].userCount) };
+        $pct := function($n) { $total > 0 ? $round($n / $total, 3) : null };
+        {
+          "total": $total,
+          "mfaCapable": $pct($get('mfaCapable')),
+          "passwordlessCapable": $pct($get('passwordlessCapable')),
+          "ssprRegistered": $pct($get('ssprRegistered')),
+          "ssprCapable": $pct($get('ssprCapable'))
+        }
+      ) }
+  byMethod:
+    source: graph
+    request:
+      path: /reports/authenticationMethods/usersRegisteredByMethod
+    cache: { ttl: 1800 }
+    transform: >-
+      ${ {
+        "rows": [value.userRegistrationMethodCounts[userCount > 0].{ "method": authenticationMethod, "users": userCount }^(>users)]
+      } }
+  admins:
+    source: graph
+    request:
+      path: /reports/authenticationMethods/userRegistrationDetails
+      query:
+        $filter: isAdmin eq true and isMfaRegistered eq false
+    paging: all
+    maxItems: 1000
+    cache: { ttl: 600 }
+    transform: '${ { "rows": [value.value[isAdmin = true and isMfaRegistered = false]], "count": $count(value.value[isAdmin = true and isMfaRegistered = false]) } }'
+
+layout:
+  - widget: kpi
+    id: mfaCapable
+    data: byFeature.mfaCapable
+    label: MFA capable
+    format: percent
+    status: "${ value < 0.95 ? 'warn' : 'ok' }"
+    href: /p/identity.auth-registration?mfa=NotRegistered
+  - widget: kpi
+    id: passwordlessCapable
+    data: byFeature.passwordlessCapable
+    label: Passwordless capable
+    format: percent
+    href: /p/identity.auth-registration?passwordless=Capable
+  - widget: kpi
+    id: ssprRegistered
+    data: byFeature.ssprRegistered
+    label: SSPR registered
+    format: percent
+  - widget: kpi
+    id: adminsWithoutMfa
+    data: admins.count
+    label: Admins without MFA
+    format: number
+    status: "${ value > 0 ? 'crit' : 'ok' }"
+    href: /p/identity.auth-registration?admin=Admins&mfa=NotRegistered&userType=Any
+  - widget: chart
+    id: methods
+    title: Users by registered method
+    type: bar
+    span: 6
+    rows: 3
+    data: byMethod.rows
+    x: method
+    y: users
+    format: number
+  - widget: list
+    id: adminsList
+    title: Admins without MFA
+    span: 6
+    data: admins.rows
+    primary: userDisplayName
+    secondary: userPrincipalName
+    secondaryFormat: text
+    href: ${ '/p/identity.user?id=' & $encode(row.id) }
+    limit: 8
+    empty:
+      title: Every admin is MFA registered
+      body: Accounts with directory roles all have an MFA method.
+  - widget: table
+    id: details
+    span: 12
+    data: details.value
+    rowKey: id
+    selection: multi
+    columns:
+      - { field: userDisplayName, label: User, kind: identity, secondary: userPrincipalName, sortable: true }
+      - field: isMfaRegistered
+        label: MFA
+        kind: status
+        map: { "true": [ok, Registered], "false": [crit, Not registered] }
+        filter: { type: facet, param: mfa }
+      - { field: methodsRegistered, label: Methods, kind: tags }
+      - { field: defaultMfaMethod, label: Default method }
+      - { field: isPasswordlessCapable, label: Passwordless capable, kind: boolean, filter: { type: facet, param: passwordless } }
+      - { field: isSsprRegistered, label: SSPR registered, kind: boolean, filter: { type: facet, param: sspr } }
+      - { field: isAdmin, label: Admin, kind: boolean, filter: { type: facet, param: admin } }
+      - { field: userType, label: Type, filter: { type: facet, param: userType } }
+      - { field: isMfaCapable, label: MFA capable, kind: boolean, hidden: true }
+      - { field: isSystemPreferredAuthenticationMethodEnabled, label: System-preferred MFA, kind: boolean, hidden: true }
+      - { field: userPreferredMethodForSecondaryAuthentication, label: User-preferred method, hidden: true }
+      - { field: lastUpdatedDateTime, label: Report updated, kind: relativeTime, hidden: true }
+      - { field: id, label: Object id, kind: guid, hidden: true }
+    inspect:
+      page: identity.user
+      params:
+        id: ${ row.id }
+    rowActions:
+      - playbook: identity.issue-tap
+        label: Issue Temporary Access Pass
+        icon: ticket
+        inputs:
+          userId: ${ row.id }
+        when: ${ row.isMfaRegistered = false }
+      - playbook: identity.reset-mfa
+        label: Reset MFA methods
+        icon: shield-slash
+        inputs:
+          userId: ${ row.id }
+        when: ${ row.isMfaRegistered = true }
+    bulkActions:
+      - playbook: identity.issue-tap
+        label: Issue Temporary Access Passes
+        icon: ticket
+        forEach:
+          inputs:
+            userId: ${ row.id }
+          concurrency: 3
+        maxItems: 50
+        when: ${ $count(rows[isMfaRegistered = false]) = $count(rows) }
+      - playbook: identity.add-group-members
+        label: Add to group (e.g. MFA rollout)
+        icon: users-three
+        forEach:
+          inputs:
+            userIds: ${ [row.id] }
+          concurrency: 5
+        maxItems: 500
+    empty:
+      title: Nobody matches these filters
+      body: Clear a facet. The report covers users who can sign in; it is refreshed every few hours.
+
+export:
+  formats: [csv, xlsx]
+  fileName: mfa-registration
+  data: details.value
+  columns: visible

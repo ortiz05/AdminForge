@@ -1,0 +1,102 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#fixture",
+  "value": [
+    {
+      "@odata.type": "#microsoft.graph.officeSuiteApp",
+      "id": "00000000-0000-4000-8000-000000000d01",
+      "displayName": "Microsoft 365 Apps for Windows",
+      "publisher": "Microsoft",
+      "isAssigned": true,
+      "isFeatured": true,
+      "publishingState": "published",
+      "createdDateTime": "2023-02-01T09:00:00Z",
+      "lastModifiedDateTime": "2026-09-15T09:00:00Z",
+      "description": "Word, Excel, PowerPoint, Outlook, Teams"
+    },
+    {
+      "@odata.type": "#microsoft.graph.winGetApp",
+      "id": "00000000-0000-4000-8000-000000000d02",
+      "displayName": "Company Portal",
+      "publisher": "Microsoft Corporation",
+      "isAssigned": true,
+      "isFeatured": false,
+      "publishingState": "published",
+      "createdDateTime": "2023-02-01T09:00:00Z",
+      "lastModifiedDateTime": "2025-10-01T09:00:00Z",
+      "description": "Intune Company Portal (Microsoft Store)"
+    },
+    {
+      "@odata.type": "#microsoft.graph.win32LobApp",
+      "id": "00000000-0000-4000-8000-000000000d03",
+      "displayName": "7-Zip 24.09",
+      "publisher": "Igor Pavlov",
+      "isAssigned": true,
+      "isFeatured": false,
+      "publishingState": "published",
+      "createdDateTime": "2024-12-01T09:00:00Z",
+      "lastModifiedDateTime": "2024-12-01T09:00:00Z",
+      "description": "File archiver"
+    },
+    {
+      "@odata.type": "#microsoft.graph.win32LobApp",
+      "id": "00000000-0000-4000-8000-000000000d04",
+      "displayName": "Example VPN Client 5.2",
+      "publisher": "Example Org IT",
+      "isAssigned": false,
+      "isFeatured": false,
+      "publishingState": "published",
+      "createdDateTime": "2026-09-20T09:00:00Z",
+      "lastModifiedDateTime": "2026-09-20T09:00:00Z",
+      "description": "Pilot build, not yet assigned"
+    },
+    {
+      "@odata.type": "#microsoft.graph.iosStoreApp",
+      "id": "00000000-0000-4000-8000-000000000d05",
+      "displayName": "Microsoft Authenticator",
+      "publisher": "Microsoft Corporation",
+      "isAssigned": true,
+      "isFeatured": true,
+      "publishingState": "published",
+      "createdDateTime": "2023-03-01T09:00:00Z",
+      "lastModifiedDateTime": "2023-03-01T09:00:00Z",
+      "description": "Authenticator for iOS"
+    },
+    {
+      "@odata.type": "#microsoft.graph.managedAndroidStoreApp",
+      "id": "00000000-0000-4000-8000-000000000d06",
+      "displayName": "Microsoft Outlook",
+      "publisher": "Microsoft Corporation",
+      "isAssigned": true,
+      "isFeatured": false,
+      "publishingState": "published",
+      "createdDateTime": "2023-03-01T09:00:00Z",
+      "lastModifiedDateTime": "2024-01-01T09:00:00Z",
+      "description": "Outlook (managed Google Play)"
+    },
+    {
+      "@odata.type": "#microsoft.graph.webApp",
+      "id": "00000000-0000-4000-8000-000000000d07",
+      "displayName": "Example Expenses",
+      "publisher": "Example Org",
+      "isAssigned": true,
+      "isFeatured": true,
+      "publishingState": "published",
+      "createdDateTime": "2025-01-15T09:00:00Z",
+      "lastModifiedDateTime": "2025-01-15T09:00:00Z",
+      "description": "Link to the expenses portal",
+      "appUrl": "https://expenses.example.com"
+    },
+    {
+      "@odata.type": "#microsoft.graph.macOSMicrosoftEdgeApp",
+      "id": "00000000-0000-4000-8000-000000000d08",
+      "displayName": "Microsoft Edge for macOS",
+      "publisher": "Microsoft",
+      "isAssigned": true,
+      "isFeatured": false,
+      "publishingState": "published",
+      "createdDateTime": "2025-08-12T09:00:00Z",
+      "lastModifiedDateTime": "2025-08-12T09:00:00Z",
+      "description": "Edge stable channel"
+    }
+  ]
+}

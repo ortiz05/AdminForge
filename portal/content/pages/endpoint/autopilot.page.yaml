@@ -1,0 +1,111 @@
+$schema: ../../../packages/schemas/generated/page.schema.json
+kind: page
+id: endpoint.autopilot
+version: 1.0.0
+title: Autopilot devices
+summary: >-
+  Windows Autopilot device identities — serial number, model, group tag, assigned user and enrolment state — to check
+  that new and reset devices will provision correctly.
+owner: endpoint-team
+tags: [endpoint, intune, autopilot, windows]
+template: list-detail
+nav: { section: endpoint, label: Autopilot, icon: rocket-launch, order: 50 }
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    graph: [DeviceManagementServiceConfig.Read.All]
+  entraRoles: [Intune Administrator]
+  licences: [intune]
+
+params:
+  q: { type: string, default: "", label: Search, placeholder: Serial number contains }
+  groupTag: { type: string, label: Group tag, facet: true }
+  state:
+    type: enum
+    label: Enrolment state
+    facet: true
+    default: Any
+    values:
+      - { value: Any, label: Any }
+      - { value: enrolled, label: Enrolled }
+      - { value: notContacted, label: Not contacted }
+      - { value: pendingReset, label: Pending reset }
+      - { value: failed, label: Failed }
+      - { value: blocked, label: Blocked }
+
+filters:
+  search: q
+  facets: [groupTag, state]
+
+savedViews:
+  enabled: true
+  shared: true
+  presets:
+    - { name: Never contacted, params: { state: notContacted } }
+    - { name: Failed enrolments, params: { state: failed } }
+
+datasources:
+  devices:
+    source: graph
+    request:
+      path: /deviceManagement/windowsAutopilotDeviceIdentities
+      query:
+        $top: 500
+        # Autopilot supports contains() on serial number and group tag; the enrolment state is filtered on loaded rows.
+        $filter: >-
+          ${ $join([
+               params.q ? "contains(serialNumber, " & $odata(params.q) & ")",
+               params.groupTag ? "contains(groupTag, " & $odata(params.groupTag) & ")"
+             ][$], ' and ') }
+    paging: cursor
+    cache: { ttl: 300 }
+    transform: >-
+      ${ $merge([value, { "value": [value.value[$$.params.state = 'Any' or enrollmentState = $$.params.state].$merge([$, {
+           "daysSinceContact": lastContactedDateTime and $substring(lastContactedDateTime, 0, 4) != '0001' ? -$daysUntil(lastContactedDateTime) : null
+         }])] }]) }
+
+layout:
+  - widget: licenceGate
+    feature: intune
+    title: Intune isn't licensed in this tenant
+  - widget: table
+    id: autopilot
+    span: 12
+    data: devices.value
+    rowKey: id
+    columns:
+      - { field: serialNumber, label: Serial number, kind: code, sortable: true }
+      - { field: manufacturer, label: Manufacturer }
+      - { field: model, label: Model, filter: facet }
+      - { field: groupTag, label: Group tag, filter: { type: text, param: groupTag } }
+      - field: enrollmentState
+        label: Enrolment
+        kind: status
+        map: { enrolled: [ok, Enrolled], notContacted: [neutral, Not contacted], pendingReset: [info, Pending reset], failed: [crit, Failed], blocked: [crit, Blocked], unknown: [neutral, Unknown] }
+        filter: { type: facet, param: state }
+      - { field: userPrincipalName, label: Assigned user }
+      - { field: lastContactedDateTime, label: Last contacted, kind: relativeTime }
+      - { field: displayName, label: Device name (on provisioning), hidden: true }
+      - { field: purchaseOrderIdentifier, label: Purchase order, hidden: true }
+      - { field: systemFamily, label: System family, hidden: true }
+      - { field: skuNumber, label: SKU, hidden: true }
+      - { field: azureActiveDirectoryDeviceId, label: Entra device id, kind: guid, hidden: true }
+      - { field: managedDeviceId, label: Intune device id, kind: guid, hidden: true }
+      - { field: id, label: Autopilot id, kind: guid, hidden: true }
+    rowActions:
+      - label: Open Intune device
+        icon: laptop
+        href: "/p/endpoint.device?id=${ $encode(row.managedDeviceId) }"
+        when: ${ $boolean(row.managedDeviceId) and row.managedDeviceId != '00000000-0000-0000-0000-000000000000' }
+      - label: Open in Intune admin center
+        icon: arrow-square-out
+        href: https://intune.microsoft.com/#view/Microsoft_Intune_Enrollment/AutopilotDevices.ReactView
+    empty:
+      title: No Autopilot devices
+      body: Import hardware hashes or have your reseller register devices to use Windows Autopilot.
+
+export:
+  formats: [csv, xlsx]
+  fileName: autopilot-devices
+  data: devices.value
+  columns: visible

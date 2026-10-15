@@ -1,0 +1,84 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#Collection(microsoft.graph.riskyUserHistoryItem)",
+  "value": [
+    {
+      "id": "30000000-0000-4000-8000-000000000001",
+      "isDeleted": false,
+      "isProcessing": false,
+      "riskLastUpdatedDateTime": "2026-10-15T07:00:00Z",
+      "riskLevel": "high",
+      "riskState": "atRisk",
+      "riskDetail": "none",
+      "userDisplayName": "Avery Engineer",
+      "userPrincipalName": "avery@example.com",
+      "userId": "30000000-0000-4000-8000-000000000001",
+      "initiatedBy": null,
+      "activity": {
+        "eventTypes": [],
+        "riskEventTypes": [
+          "passwordSpray",
+          "unfamiliarFeatures"
+        ],
+        "detail": "none"
+      }
+    },
+    {
+      "id": "30000000-0000-4000-8000-000000000001",
+      "isDeleted": false,
+      "isProcessing": false,
+      "riskLastUpdatedDateTime": "2026-10-15T06:00:00Z",
+      "riskLevel": "medium",
+      "riskState": "atRisk",
+      "riskDetail": "none",
+      "userDisplayName": "Avery Engineer",
+      "userPrincipalName": "avery@example.com",
+      "userId": "30000000-0000-4000-8000-000000000001",
+      "initiatedBy": null,
+      "activity": {
+        "eventTypes": [],
+        "riskEventTypes": [
+          "unfamiliarFeatures"
+        ],
+        "detail": "none"
+      }
+    },
+    {
+      "id": "30000000-0000-4000-8000-000000000001",
+      "isDeleted": false,
+      "isProcessing": false,
+      "riskLastUpdatedDateTime": "2026-09-04T09:00:00Z",
+      "riskLevel": "none",
+      "riskState": "remediated",
+      "riskDetail": "userPerformedSecuredPasswordReset",
+      "userDisplayName": "Avery Engineer",
+      "userPrincipalName": "avery@example.com",
+      "userId": "30000000-0000-4000-8000-000000000001",
+      "initiatedBy": "30000000-0000-4000-8000-000000000001",
+      "activity": {
+        "eventTypes": [],
+        "riskEventTypes": [],
+        "detail": "userPerformedSecuredPasswordReset"
+      }
+    },
+    {
+      "id": "30000000-0000-4000-8000-000000000001",
+      "isDeleted": false,
+      "isProcessing": false,
+      "riskLastUpdatedDateTime": "2026-09-03T09:00:00Z",
+      "riskLevel": "low",
+      "riskState": "atRisk",
+      "riskDetail": "none",
+      "userDisplayName": "Avery Engineer",
+      "userPrincipalName": "avery@example.com",
+      "userId": "30000000-0000-4000-8000-000000000001",
+      "initiatedBy": null,
+      "activity": {
+        "eventTypes": [],
+        "riskEventTypes": [
+          "anonymizedIPAddress"
+        ],
+        "detail": "none"
+      }
+    }
+  ]
+}

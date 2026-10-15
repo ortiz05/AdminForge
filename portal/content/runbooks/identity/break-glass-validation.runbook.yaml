@@ -1,0 +1,160 @@
+$schema: ../../../packages/schemas/generated/runbook.schema.json
+kind: runbook
+id: identity.break-glass-validation
+version: 1.0.0
+title: Break-glass account validation
+summary: >-
+  Regular check (at least every 90 days) that emergency access accounts will work when everything else fails: enabled,
+  cloud-only, permanent Global Administrators, excluded from every enabled Conditional Access policy, recently tested,
+  and monitored. Fails with a list of every problem found.
+owner: identity-team
+tags: [identity, break-glass, conditional-access, runbook, resilience]
+risk: low
+mode: read
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    graph: [User.Read.All, AuditLog.Read.All, RoleManagement.Read.Directory, Policy.Read.All, Directory.Read.All]
+  entraRoles: [Global Reader]
+timeout: PT2H
+
+inputs:
+  accountIds: { type: user, multiple: true, maxItems: 5, label: Break-glass accounts }
+
+sections:
+  - id: accounts
+    title: 1. Account state
+    body: Emergency accounts must be enabled, cloud-only (not synced), and on the tenant's onmicrosoft.com domain.
+    steps:
+      - id: accounts
+        type: graph
+        mode: read
+        describe: Read the break-glass accounts and their group memberships
+        request:
+          method: GET
+          path: /users
+          query:
+            $filter: ${ 'id in (' & $join([inputs.accountIds].$odata($guid($)), ', ') & ')' }
+            $select: id,displayName,userPrincipalName,accountEnabled,onPremisesSyncEnabled,passwordPolicies
+            $expand: memberOf($select=id)
+
+      - id: activity
+        type: graph
+        mode: read
+        describe: Last sign-in of each account (needs Entra ID P1)
+        onError: continue
+        request:
+          method: GET
+          path: /users
+          query:
+            $filter: ${ 'id in (' & $join([inputs.accountIds].$odata($guid($)), ', ') & ')' }
+            $select: id,signInActivity
+
+  - id: roles
+    title: 2. Global Administrator
+    body: Each emergency account needs a permanent, active Global Administrator assignment — not an eligible one.
+    steps:
+      - id: globalAdmins
+        type: graph
+        mode: read
+        describe: Read active Global Administrator assignments
+        request:
+          method: GET
+          path: /roleManagement/directory/roleAssignments
+          query:
+            $filter: roleDefinitionId eq '62e90394-69f5-4237-9190-012177145e10'
+            $select: id,principalId,directoryScopeId
+
+  - id: conditionalAccess
+    title: 3. Conditional Access exclusions
+    body: Every enabled or report-only policy must exclude the accounts (directly or through an exclusion group).
+    steps:
+      - id: policies
+        type: graph
+        mode: read
+        describe: Read Conditional Access policies
+        paging: all
+        request:
+          method: GET
+          path: /identity/conditionalAccess/policies
+
+  - id: assess
+    title: 4. Assess
+    steps:
+      - id: findings
+        type: transform
+        expression: >-
+          ${ (
+            $ids := [inputs.accountIds.$lowercase($)];
+            $accounts := [steps.accounts.output.value];
+            $gaIds := [steps.globalAdmins.output.value[directoryScopeId = '/'].principalId];
+            $policies := [steps.policies.output.value[state != 'disabled']];
+            $act := [steps.activity.output.value];
+            [$ids.(
+              $id := $;
+              $a := $accounts[id = $id][0];
+              $name := $a ? $a.userPrincipalName : $id;
+              $groups := [$a.memberOf.id];
+              $last := $act[id = $id][0].signInActivity.lastSignInDateTime;
+              $append(
+                [
+                  $a ? null : $name & ': account not found',
+                  $a.accountEnabled = false ? $name & ': sign-in is blocked',
+                  $a.onPremisesSyncEnabled = true ? $name & ': synced from on-premises AD (use a cloud-only account)',
+                  $a and $not($contains($a.userPrincipalName, '.onmicrosoft.com')) ? $name & ': not on the onmicrosoft.com domain (a custom domain can fail with federation or DNS)',
+                  $a and $not($id in $gaIds) ? $name & ': not a permanent active Global Administrator',
+                  $count($act) > 0 and ($not($boolean($last)) or -$daysUntil($last) > 90) ? $name & ': no sign-in in the last 90 days — test it'
+                ][$],
+                [$policies[
+                  ('All' in conditions.users.includeUsers or $id in conditions.users.includeUsers
+                   or $count(conditions.users.includeGroups[$ in $groups]) > 0)
+                  and $not($id in conditions.users.excludeUsers)
+                  and $count(conditions.users.excludeGroups[$ in $groups]) = 0
+                ].($name & ': not excluded from Conditional Access policy "' & displayName & '"')]
+              )
+            )]
+          ) }
+
+      - id: monitoring
+        type: manual
+        instructions: |
+          Check the safeguards around the accounts. Problems found so far: **${ $count(steps.findings.output) }**.
+        checklist:
+          - An alert fires on any sign-in by these accounts (Log Analytics / Sentinel rule on SigninLogs)
+          - Credentials (FIDO2 keys or passwords) are stored in separate secure locations, and the custodians are current
+          - A test sign-in was performed from a secure workstation in the last 90 days and recorded
+        inputs:
+          testedOn: { type: date, label: Date of the last test sign-in, required: false }
+
+      - id: verdict
+        type: assert
+        that: ${ $count(steps.findings.output) = 0 }
+        message: ${ 'Break-glass validation found ' & $count(steps.findings.output) & ' problem(s) — ' & $join(steps.findings.output, '; ') }
+
+outputs:
+  summary: ${ 'All ' & $count(inputs.accountIds) & ' break-glass account(s) passed validation.' }
+
+tests:
+  - name: passes for a correctly configured account
+    inputs: { accountIds: [00000000-0000-4000-8000-0000000001b1] }
+    mocks:
+      accounts: { value: [{ id: 00000000-0000-4000-8000-0000000001b1, userPrincipalName: bg1@exampleorg.onmicrosoft.com, accountEnabled: true, onPremisesSyncEnabled: null, memberOf: [{ id: 00000000-0000-4000-8000-0000000002e1 }] }] }
+      activity: { value: [{ id: 00000000-0000-4000-8000-0000000001b1, signInActivity: { lastSignInDateTime: "2026-01-02T09:00:00Z" } }] }
+      globalAdmins: { value: [{ id: r1, principalId: 00000000-0000-4000-8000-0000000001b1, directoryScopeId: / }] }
+      policies:
+        value:
+          - { id: p1, displayName: Require MFA for all users, state: enabled, conditions: { users: { includeUsers: [All], excludeUsers: [], includeGroups: [], excludeGroups: [00000000-0000-4000-8000-0000000002e1] } } }
+          - { id: p2, displayName: Old pilot, state: disabled, conditions: { users: { includeUsers: [All], excludeUsers: [], includeGroups: [], excludeGroups: [] } } }
+    expect:
+      status: succeeded
+      outputs: { summary: All 1 break-glass account(s) passed validation. }
+  - name: fails and lists every problem
+    inputs: { accountIds: [00000000-0000-4000-8000-0000000001b1] }
+    mocks:
+      accounts: { value: [{ id: 00000000-0000-4000-8000-0000000001b1, userPrincipalName: bg1@example.com, accountEnabled: true, onPremisesSyncEnabled: null, memberOf: [] }] }
+      activity: { value: [{ id: 00000000-0000-4000-8000-0000000001b1, signInActivity: { lastSignInDateTime: "2025-06-01T09:00:00Z" } }] }
+      globalAdmins: { value: [] }
+      policies:
+        value:
+          - { id: p1, displayName: Require MFA for all users, state: enabled, conditions: { users: { includeUsers: [All], excludeUsers: [], includeGroups: [], excludeGroups: [] } } }
+    expect: { status: failed, failedStep: verdict }

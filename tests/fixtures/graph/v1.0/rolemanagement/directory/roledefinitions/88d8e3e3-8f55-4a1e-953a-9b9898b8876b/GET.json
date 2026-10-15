@@ -1,0 +1,20 @@
+{
+  "id": "88d8e3e3-8f55-4a1e-953a-9b9898b8876b",
+  "templateId": "88d8e3e3-8f55-4a1e-953a-9b9898b8876b",
+  "displayName": "Directory Readers",
+  "description": "Can read basic directory information.",
+  "isBuiltIn": true,
+  "isEnabled": true,
+  "version": "1",
+  "resourceScopes": [
+    "/"
+  ],
+  "rolePermissions": [
+    {
+      "allowedResourceActions": [
+        "microsoft.directory/users/standard/read"
+      ],
+      "condition": null
+    }
+  ]
+}

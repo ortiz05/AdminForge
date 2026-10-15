@@ -1,0 +1,192 @@
+$schema: ../../../packages/schemas/generated/page.schema.json
+kind: page
+id: endpoint.configuration
+version: 1.0.0
+title: Configuration profiles
+summary: >-
+  Intune device configuration — template-based profiles and settings catalog policies, by platform, with assignment
+  coverage. Unassigned profiles do nothing; open a profile for per-device status.
+owner: endpoint-team
+tags: [endpoint, intune, configuration]
+template: list-detail
+nav: { section: endpoint, label: Configuration, icon: sliders-horizontal, order: 30 }
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    graph: [DeviceManagementConfiguration.Read.All]
+  entraRoles: [Intune Administrator]
+  licences: [intune]
+
+params:
+  q: { type: string, default: "", label: Search, placeholder: Profile name }
+  platform: { type: enum, values: [Any, Windows, macOS, iOS, Android, Linux], default: Any, label: Platform, facet: true }
+  assigned: { type: enum, values: [Any, Assigned, Unassigned], default: Any, label: Assignment, facet: true }
+
+filters:
+  search: q
+  facets: [platform, assigned]
+
+savedViews:
+  enabled: true
+  shared: true
+  presets:
+    - { name: Unassigned, params: { assigned: Unassigned } }
+    - { name: Windows, params: { platform: Windows } }
+
+datasources:
+  profiles:
+    source: graph
+    request:
+      path: /deviceManagement/deviceConfigurations
+      query:
+        $select: id,displayName,description,createdDateTime,lastModifiedDateTime,version
+        $expand: assignments
+    paging: all
+    maxItems: 5000
+    cache: { ttl: 300 }
+    transform: >-
+      ${ (
+        $q := $lowercase(params.q ? params.q : '');
+        $platform := function($t) {
+          $contains($t, 'windows') or $contains($t, 'edition') or $contains($t, 'sharedPC') ? 'Windows'
+          : $contains($t, 'macOS') ? 'macOS' : $contains($t, 'ios') ? 'iOS'
+          : $contains($t, 'android') or $contains($t, 'aosp') ? 'Android' : 'Other'
+        };
+        $rows := [value.value.{
+          "id": id,
+          "displayName": displayName,
+          "description": description,
+          "platform": $platform(`@odata.type`),
+          "profileType": $substringAfter(`@odata.type`, '#microsoft.graph.'),
+          "assignments": $count(assignments),
+          "assigned": $count(assignments) > 0,
+          "modified": lastModifiedDateTime,
+          "version": version
+        }];
+        {
+          "rows": [$rows[
+            ($$.params.platform = 'Any' or platform = $$.params.platform)
+            and ($$.params.assigned = 'Any' or ($$.params.assigned = 'Assigned') = assigned)
+            and ($q = '' or $contains($lowercase(displayName), $q))
+          ]^(platform, displayName)],
+          "total": $count($rows),
+          "unassigned": $count($rows[assigned = false])
+        }
+      ) }
+  catalog:
+    source: graph
+    request:
+      path: /deviceManagement/configurationPolicies
+      # Settings catalog policies are only in the beta endpoint.
+      beta: true
+      query:
+        $select: id,name,description,platforms,technologies,lastModifiedDateTime,settingCount,isAssigned
+    paging: all
+    maxItems: 5000
+    cache: { ttl: 300 }
+    transform: >-
+      ${ (
+        $q := $lowercase(params.q ? params.q : '');
+        $platform := function($p) {
+          $contains($p, 'windows') ? 'Windows' : $contains($p, 'macOS') ? 'macOS' : $contains($p, 'iOS') ? 'iOS'
+          : $contains($p, 'android') or $contains($p, 'aosp') ? 'Android' : $contains($p, 'linux') ? 'Linux' : 'Other'
+        };
+        $rows := [value.value.{
+          "id": id,
+          "displayName": name,
+          "description": description,
+          "platform": $platform(platforms),
+          "technologies": [$split(technologies, ',')],
+          "settings": settingCount,
+          "assigned": isAssigned = true,
+          "modified": lastModifiedDateTime
+        }];
+        {
+          "rows": [$rows[
+            ($$.params.platform = 'Any' or platform = $$.params.platform)
+            and ($$.params.assigned = 'Any' or ($$.params.assigned = 'Assigned') = assigned)
+            and ($q = '' or $contains($lowercase(displayName), $q))
+          ]^(platform, displayName)],
+          "total": $count($rows),
+          "unassigned": $count($rows[assigned = false])
+        }
+      ) }
+
+layout:
+  - widget: licenceGate
+    feature: intune
+    title: Intune isn't licensed in this tenant
+  - widget: kpi
+    id: profiles
+    data: profiles.total
+    label: Template profiles
+    format: number
+  - widget: kpi
+    id: catalog
+    data: catalog.total
+    label: Settings catalog policies
+    format: number
+  - widget: kpi
+    id: unassignedProfiles
+    data: profiles.unassigned
+    label: Unassigned template profiles
+    format: number
+    status: "${ value > 0 ? 'info' : 'ok' }"
+    href: /p/endpoint.configuration?assigned=Unassigned
+  - widget: kpi
+    id: unassignedCatalog
+    data: catalog.unassigned
+    label: Unassigned catalog policies
+    format: number
+    status: "${ value > 0 ? 'info' : 'ok' }"
+    href: /p/endpoint.configuration?assigned=Unassigned
+  - widget: table
+    id: catalogPolicies
+    title: Settings catalog (preview API)
+    span: 12
+    data: catalog.rows
+    rowKey: id
+    columns:
+      - { field: displayName, label: Policy, sortable: true }
+      - { field: platform, label: Platform, filter: { type: facet, param: platform } }
+      - { field: technologies, label: Technologies, kind: tags }
+      - { field: settings, label: Settings, kind: number }
+      - { field: assigned, label: Assigned, kind: status, map: { "true": [ok, Assigned], "false": [neutral, Not assigned] }, filter: { type: facet, param: assigned } }
+      - { field: modified, label: Modified, kind: relativeTime }
+      - { field: description, label: Description, hidden: true }
+      - { field: id, label: Policy id, kind: guid, hidden: true }
+    rowActions:
+      - label: Open in Intune admin center
+        icon: arrow-square-out
+        href: "https://intune.microsoft.com/#view/Microsoft_Intune_Workflows/PolicySummaryBlade/policyId/${ $encode(row.id) }/isAssigned~/${ row.assigned }/technology/mdm/templateId//platformName/${ $encode(row.platform) }"
+    empty:
+      title: No settings catalog policies
+      body: Settings catalog is the recommended way to build new configuration policies.
+  - widget: table
+    id: templateProfiles
+    title: Template profiles
+    span: 12
+    data: profiles.rows
+    rowKey: id
+    columns:
+      - { field: displayName, label: Profile, sortable: true }
+      - { field: platform, label: Platform, filter: { type: facet, param: platform } }
+      - { field: profileType, label: Profile type, kind: code }
+      - { field: assignments, label: Assignments, kind: number }
+      - { field: assigned, label: Assigned, kind: status, map: { "true": [ok, Assigned], "false": [neutral, Not assigned] }, filter: { type: facet, param: assigned } }
+      - { field: modified, label: Modified, kind: relativeTime }
+      - { field: description, label: Description, hidden: true }
+      - { field: id, label: Profile id, kind: guid, hidden: true }
+    inspect:
+      page: endpoint.configuration-profile
+      params:
+        id: ${ row.id }
+    empty:
+      title: No template profiles
+      body: Template profiles (device restrictions, Wi-Fi, VPN, certificates…) appear here.
+
+export:
+  formats: [csv, xlsx]
+  fileName: configuration-profiles
+  data: profiles.rows
+  columns: all

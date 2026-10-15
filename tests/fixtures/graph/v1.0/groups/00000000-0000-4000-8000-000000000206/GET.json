@@ -1,0 +1,27 @@
+{
+  "id": "00000000-0000-4000-8000-000000000206",
+  "displayName": "Finance Announcements",
+  "description": "Finance team announcements",
+  "mail": "finance-announce@example.com",
+  "mailNickname": "FinanceAnnouncements",
+  "mailEnabled": true,
+  "securityEnabled": false,
+  "groupTypes": [],
+  "membershipRule": null,
+  "membershipRuleProcessingState": null,
+  "onPremisesSyncEnabled": null,
+  "onPremisesLastSyncDateTime": null,
+  "onPremisesSamAccountName": null,
+  "createdDateTime": "2022-01-10T09:00:00Z",
+  "renewedDateTime": "2022-01-10T09:00:00Z",
+  "expirationDateTime": null,
+  "visibility": null,
+  "isAssignableToRole": null,
+  "classification": null,
+  "proxyAddresses": [
+    "SMTP:finance-announce@example.com"
+  ],
+  "resourceProvisioningOptions": [],
+  "assignedLicenses": [],
+  "hasMembersWithLicenseErrors": false
+}

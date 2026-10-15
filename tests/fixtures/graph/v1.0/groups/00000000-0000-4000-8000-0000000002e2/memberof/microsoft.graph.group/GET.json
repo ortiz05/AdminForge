@@ -1,0 +1,30 @@
+{
+  "value": [
+    {
+      "@odata.type": "#microsoft.graph.group",
+      "id": "00000000-0000-4000-8000-000000000201",
+      "displayName": "SG-App-Payroll-Users",
+      "description": "Users of the Payroll Online application",
+      "mail": null,
+      "mailNickname": "SGAppPayrollUsers",
+      "mailEnabled": false,
+      "securityEnabled": true,
+      "groupTypes": [],
+      "membershipRule": null,
+      "membershipRuleProcessingState": null,
+      "onPremisesSyncEnabled": null,
+      "onPremisesLastSyncDateTime": null,
+      "onPremisesSamAccountName": null,
+      "createdDateTime": "2023-04-11T09:00:00Z",
+      "renewedDateTime": "2023-04-11T09:00:00Z",
+      "expirationDateTime": null,
+      "visibility": null,
+      "isAssignableToRole": null,
+      "classification": null,
+      "proxyAddresses": [],
+      "resourceProvisioningOptions": [],
+      "assignedLicenses": [],
+      "hasMembersWithLicenseErrors": false
+    }
+  ]
+}

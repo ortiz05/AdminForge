@@ -1,0 +1,12 @@
+{
+  "value": [
+    {
+      "id": "702-603",
+      "displayName": "iOS – Baseline compliance",
+      "version": 4,
+      "platformType": "iOS",
+      "state": "compliant",
+      "settingCount": 9
+    }
+  ]
+}

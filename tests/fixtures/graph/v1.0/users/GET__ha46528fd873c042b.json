@@ -1,0 +1,697 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#fixture",
+  "value": [
+    {
+      "id": "00000000-0000-4000-8000-0000000000a1",
+      "displayName": "Avery Engineer",
+      "givenName": "Avery",
+      "surname": "Engineer",
+      "userPrincipalName": "avery@example.com",
+      "mail": "avery@example.com",
+      "otherMails": [],
+      "proxyAddresses": [
+        "SMTP:avery@example.com",
+        "smtp:avery@exampleorg.onmicrosoft.com"
+      ],
+      "accountEnabled": true,
+      "userType": "Member",
+      "department": "IT Operations",
+      "jobTitle": "Senior Systems Engineer",
+      "companyName": "Example Org",
+      "officeLocation": "Seattle HQ",
+      "city": "Seattle",
+      "country": "United States",
+      "usageLocation": "US",
+      "mobilePhone": null,
+      "businessPhones": [],
+      "employeeId": "E1001",
+      "employeeType": "Employee",
+      "employeeHireDate": "2023-02-01T09:00:00Z",
+      "createdDateTime": "2023-02-01T09:00:00Z",
+      "creationType": null,
+      "externalUserState": null,
+      "externalUserStateChangeDateTime": null,
+      "onPremisesSyncEnabled": null,
+      "onPremisesLastSyncDateTime": null,
+      "onPremisesSamAccountName": null,
+      "onPremisesDomainName": null,
+      "onPremisesImmutableId": null,
+      "lastPasswordChangeDateTime": "2026-08-02T10:00:00Z",
+      "passwordPolicies": null,
+      "preferredLanguage": "en-US",
+      "signInSessionsValidFromDateTime": "2026-08-02T10:00:00Z",
+      "assignedLicenses": [
+        {
+          "skuId": "00000000-0000-4000-8000-000000001001",
+          "disabledPlans": []
+        }
+      ],
+      "licenseAssignmentStates": [
+        {
+          "skuId": "00000000-0000-4000-8000-000000001001",
+          "assignedByGroup": null,
+          "state": "Active",
+          "error": "None",
+          "disabledPlans": [],
+          "lastUpdatedDateTime": "2026-09-01T09:00:00Z"
+        }
+      ],
+      "signInActivity": {
+        "lastSignInDateTime": "2026-10-15T02:55:00Z",
+        "lastSignInRequestId": "00000000-0000-4000-8000-0000000005e1",
+        "lastNonInteractiveSignInDateTime": "2026-10-15T03:40:00Z",
+        "lastNonInteractiveSignInRequestId": "00000000-0000-4000-8000-0000000005e2",
+        "lastSuccessfulSignInDateTime": "2026-10-15T02:55:00Z",
+        "lastSuccessfulSignInRequestId": null
+      }
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000101",
+      "displayName": "Adele Lee",
+      "givenName": "Adele",
+      "surname": "Lee",
+      "userPrincipalName": "a.lee@example.com",
+      "mail": "a.lee@example.com",
+      "otherMails": [],
+      "proxyAddresses": [
+        "SMTP:a.lee@example.com",
+        "smtp:a.lee@exampleorg.onmicrosoft.com"
+      ],
+      "accountEnabled": true,
+      "userType": "Member",
+      "department": "IT Operations",
+      "jobTitle": "Identity Engineer",
+      "companyName": "Example Org",
+      "officeLocation": "Seattle HQ",
+      "city": "Seattle",
+      "country": "United States",
+      "usageLocation": "US",
+      "mobilePhone": null,
+      "businessPhones": [],
+      "employeeId": "E1002",
+      "employeeType": "Employee",
+      "employeeHireDate": "2022-05-16T09:00:00Z",
+      "createdDateTime": "2022-05-16T09:00:00Z",
+      "creationType": null,
+      "externalUserState": null,
+      "externalUserStateChangeDateTime": null,
+      "onPremisesSyncEnabled": null,
+      "onPremisesLastSyncDateTime": null,
+      "onPremisesSamAccountName": null,
+      "onPremisesDomainName": null,
+      "onPremisesImmutableId": null,
+      "lastPasswordChangeDateTime": "2026-06-11T10:00:00Z",
+      "passwordPolicies": null,
+      "preferredLanguage": "en-US",
+      "signInSessionsValidFromDateTime": "2026-06-11T10:00:00Z",
+      "assignedLicenses": [
+        {
+          "skuId": "00000000-0000-4000-8000-000000001001",
+          "disabledPlans": []
+        }
+      ],
+      "licenseAssignmentStates": [
+        {
+          "skuId": "00000000-0000-4000-8000-000000001001",
+          "assignedByGroup": "00000000-0000-4000-8000-000000000204",
+          "state": "Active",
+          "error": "None",
+          "disabledPlans": [],
+          "lastUpdatedDateTime": "2026-09-01T09:00:00Z"
+        }
+      ],
+      "signInActivity": {
+        "lastSignInDateTime": "2026-10-14T16:20:00Z",
+        "lastSignInRequestId": "00000000-0000-4000-8000-0000000005e1",
+        "lastNonInteractiveSignInDateTime": "2026-10-15T01:10:00Z",
+        "lastNonInteractiveSignInRequestId": "00000000-0000-4000-8000-0000000005e2",
+        "lastSuccessfulSignInDateTime": "2026-10-14T16:20:00Z",
+        "lastSuccessfulSignInRequestId": null
+      }
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000102",
+      "displayName": "Morgan Chen",
+      "givenName": "Morgan",
+      "surname": "Chen",
+      "userPrincipalName": "m.chen@example.com",
+      "mail": "m.chen@example.com",
+      "otherMails": [],
+      "proxyAddresses": [
+        "SMTP:m.chen@example.com",
+        "smtp:m.chen@exampleorg.onmicrosoft.com"
+      ],
+      "accountEnabled": true,
+      "userType": "Member",
+      "department": "Finance",
+      "jobTitle": "Financial Analyst",
+      "companyName": "Example Org",
+      "officeLocation": "London",
+      "city": "London",
+      "country": "United Kingdom",
+      "usageLocation": "GB",
+      "mobilePhone": null,
+      "businessPhones": [],
+      "employeeId": "E2040",
+      "employeeType": "Employee",
+      "employeeHireDate": "2024-01-08T09:00:00Z",
+      "createdDateTime": "2024-01-08T09:00:00Z",
+      "creationType": null,
+      "externalUserState": null,
+      "externalUserStateChangeDateTime": null,
+      "onPremisesSyncEnabled": null,
+      "onPremisesLastSyncDateTime": null,
+      "onPremisesSamAccountName": null,
+      "onPremisesDomainName": null,
+      "onPremisesImmutableId": null,
+      "lastPasswordChangeDateTime": "2025-11-20T10:00:00Z",
+      "passwordPolicies": null,
+      "preferredLanguage": "en-US",
+      "signInSessionsValidFromDateTime": "2025-11-20T10:00:00Z",
+      "assignedLicenses": [
+        {
+          "skuId": "00000000-0000-4000-8000-000000001002",
+          "disabledPlans": []
+        },
+        {
+          "skuId": "00000000-0000-4000-8000-000000001004",
+          "disabledPlans": []
+        }
+      ],
+      "licenseAssignmentStates": [
+        {
+          "skuId": "00000000-0000-4000-8000-000000001002",
+          "assignedByGroup": null,
+          "state": "Active",
+          "error": "None",
+          "disabledPlans": [],
+          "lastUpdatedDateTime": "2026-09-01T09:00:00Z"
+        },
+        {
+          "skuId": "00000000-0000-4000-8000-000000001004",
+          "assignedByGroup": null,
+          "state": "Active",
+          "error": "None",
+          "disabledPlans": [],
+          "lastUpdatedDateTime": "2026-09-01T09:00:00Z"
+        }
+      ],
+      "signInActivity": {
+        "lastSignInDateTime": "2026-10-15T03:02:00Z",
+        "lastSignInRequestId": "00000000-0000-4000-8000-0000000005e1",
+        "lastNonInteractiveSignInDateTime": "2026-10-15T03:30:00Z",
+        "lastNonInteractiveSignInRequestId": "00000000-0000-4000-8000-0000000005e2",
+        "lastSuccessfulSignInDateTime": "2026-10-15T03:02:00Z",
+        "lastSuccessfulSignInRequestId": null
+      }
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000103",
+      "displayName": "Priya Raman",
+      "givenName": "Priya",
+      "surname": "Raman",
+      "userPrincipalName": "p.raman@example.com",
+      "mail": "p.raman@example.com",
+      "otherMails": [],
+      "proxyAddresses": [
+        "SMTP:p.raman@example.com",
+        "smtp:p.raman@exampleorg.onmicrosoft.com"
+      ],
+      "accountEnabled": true,
+      "userType": "Member",
+      "department": "Human Resources",
+      "jobTitle": "HR Business Partner",
+      "companyName": "Example Org",
+      "officeLocation": "Seattle HQ",
+      "city": "Seattle",
+      "country": "United States",
+      "usageLocation": "US",
+      "mobilePhone": null,
+      "businessPhones": [],
+      "employeeId": "E0712",
+      "employeeType": "Employee",
+      "employeeHireDate": "2021-09-01T09:00:00Z",
+      "createdDateTime": "2021-09-01T09:00:00Z",
+      "creationType": null,
+      "externalUserState": null,
+      "externalUserStateChangeDateTime": null,
+      "onPremisesSyncEnabled": null,
+      "onPremisesLastSyncDateTime": null,
+      "onPremisesSamAccountName": null,
+      "onPremisesDomainName": null,
+      "onPremisesImmutableId": null,
+      "lastPasswordChangeDateTime": "2026-01-15T10:00:00Z",
+      "passwordPolicies": null,
+      "preferredLanguage": "en-US",
+      "signInSessionsValidFromDateTime": "2026-01-15T10:00:00Z",
+      "assignedLicenses": [
+        {
+          "skuId": "00000000-0000-4000-8000-000000001001",
+          "disabledPlans": []
+        }
+      ],
+      "licenseAssignmentStates": [
+        {
+          "skuId": "00000000-0000-4000-8000-000000001001",
+          "assignedByGroup": "00000000-0000-4000-8000-000000000204",
+          "state": "Active",
+          "error": "None",
+          "disabledPlans": [],
+          "lastUpdatedDateTime": "2026-09-01T09:00:00Z"
+        }
+      ],
+      "signInActivity": {
+        "lastSignInDateTime": "2026-10-12T13:05:00Z",
+        "lastSignInRequestId": "00000000-0000-4000-8000-0000000005e1",
+        "lastNonInteractiveSignInDateTime": "2026-10-13T09:00:00Z",
+        "lastNonInteractiveSignInRequestId": "00000000-0000-4000-8000-0000000005e2",
+        "lastSuccessfulSignInDateTime": "2026-10-12T13:05:00Z",
+        "lastSuccessfulSignInRequestId": null
+      }
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000104",
+      "displayName": "Rafael Castillo",
+      "givenName": "Rafael",
+      "surname": "Castillo",
+      "userPrincipalName": "r.castillo@example.com",
+      "mail": "r.castillo@example.com",
+      "otherMails": [],
+      "proxyAddresses": [
+        "SMTP:r.castillo@example.com",
+        "smtp:r.castillo@exampleorg.onmicrosoft.com"
+      ],
+      "accountEnabled": false,
+      "userType": "Member",
+      "department": "Sales",
+      "jobTitle": "Account Executive",
+      "companyName": "Example Org",
+      "officeLocation": "Madrid",
+      "city": "Madrid",
+      "country": "Spain",
+      "usageLocation": "ES",
+      "mobilePhone": null,
+      "businessPhones": [],
+      "employeeId": "E3101",
+      "employeeType": "Employee",
+      "employeeHireDate": "2023-07-03T09:00:00Z",
+      "createdDateTime": "2023-07-03T09:00:00Z",
+      "creationType": null,
+      "externalUserState": null,
+      "externalUserStateChangeDateTime": null,
+      "onPremisesSyncEnabled": null,
+      "onPremisesLastSyncDateTime": null,
+      "onPremisesSamAccountName": null,
+      "onPremisesDomainName": null,
+      "onPremisesImmutableId": null,
+      "lastPasswordChangeDateTime": "2026-10-01T10:00:00Z",
+      "passwordPolicies": null,
+      "preferredLanguage": "en-US",
+      "signInSessionsValidFromDateTime": "2026-10-01T10:00:00Z",
+      "assignedLicenses": [
+        {
+          "skuId": "00000000-0000-4000-8000-000000001002",
+          "disabledPlans": []
+        }
+      ],
+      "licenseAssignmentStates": [
+        {
+          "skuId": "00000000-0000-4000-8000-000000001002",
+          "assignedByGroup": null,
+          "state": "Active",
+          "error": "None",
+          "disabledPlans": [],
+          "lastUpdatedDateTime": "2026-09-01T09:00:00Z"
+        }
+      ],
+      "signInActivity": {
+        "lastSignInDateTime": "2026-06-30T17:45:00Z",
+        "lastSignInRequestId": "00000000-0000-4000-8000-0000000005e1",
+        "lastNonInteractiveSignInDateTime": "2026-07-01T07:00:00Z",
+        "lastNonInteractiveSignInRequestId": "00000000-0000-4000-8000-0000000005e2",
+        "lastSuccessfulSignInDateTime": "2026-06-30T17:45:00Z",
+        "lastSuccessfulSignInRequestId": null
+      }
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000105",
+      "displayName": "Sam Patel",
+      "givenName": "Sam",
+      "surname": "Patel",
+      "userPrincipalName": "s.patel@example.com",
+      "mail": "s.patel@example.com",
+      "otherMails": [],
+      "proxyAddresses": [
+        "SMTP:s.patel@example.com",
+        "smtp:s.patel@exampleorg.onmicrosoft.com"
+      ],
+      "accountEnabled": true,
+      "userType": "Member",
+      "department": "Finance",
+      "jobTitle": "Accounts Payable Clerk",
+      "companyName": "Example Org",
+      "officeLocation": "London",
+      "city": "London",
+      "country": "United Kingdom",
+      "usageLocation": null,
+      "mobilePhone": null,
+      "businessPhones": [],
+      "employeeId": "E2105",
+      "employeeType": "Employee",
+      "employeeHireDate": "2025-03-10T09:00:00Z",
+      "createdDateTime": "2025-03-10T09:00:00Z",
+      "creationType": null,
+      "externalUserState": null,
+      "externalUserStateChangeDateTime": null,
+      "onPremisesSyncEnabled": null,
+      "onPremisesLastSyncDateTime": null,
+      "onPremisesSamAccountName": null,
+      "onPremisesDomainName": null,
+      "onPremisesImmutableId": null,
+      "lastPasswordChangeDateTime": "2025-03-10T09:00:00Z",
+      "passwordPolicies": null,
+      "preferredLanguage": "en-US",
+      "signInSessionsValidFromDateTime": "2025-03-10T09:00:00Z",
+      "assignedLicenses": [],
+      "licenseAssignmentStates": [
+        {
+          "skuId": "00000000-0000-4000-8000-000000001001",
+          "assignedByGroup": "00000000-0000-4000-8000-000000000204",
+          "state": "Error",
+          "error": "UsageLocationNotAllowed",
+          "disabledPlans": [],
+          "lastUpdatedDateTime": "2026-09-01T09:00:00Z"
+        }
+      ],
+      "signInActivity": {
+        "lastSignInDateTime": "2026-05-02T09:12:00Z",
+        "lastSignInRequestId": "00000000-0000-4000-8000-0000000005e1",
+        "lastNonInteractiveSignInDateTime": "2026-05-02T10:00:00Z",
+        "lastNonInteractiveSignInRequestId": "00000000-0000-4000-8000-0000000005e2",
+        "lastSuccessfulSignInDateTime": "2026-05-02T09:12:00Z",
+        "lastSuccessfulSignInRequestId": null
+      }
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000108",
+      "displayName": "Dana Okafor",
+      "givenName": "Dana",
+      "surname": "Okafor",
+      "userPrincipalName": "d.okafor@example.com",
+      "mail": "d.okafor@example.com",
+      "otherMails": [],
+      "proxyAddresses": [
+        "SMTP:d.okafor@example.com",
+        "smtp:d.okafor@exampleorg.onmicrosoft.com"
+      ],
+      "accountEnabled": true,
+      "userType": "Member",
+      "department": "Engineering",
+      "jobTitle": "Platform Engineer",
+      "companyName": "Example Org",
+      "officeLocation": "Seattle HQ",
+      "city": "Seattle",
+      "country": "United States",
+      "usageLocation": "US",
+      "mobilePhone": null,
+      "businessPhones": [],
+      "employeeId": "E0410",
+      "employeeType": "Employee",
+      "employeeHireDate": "2019-04-02T09:00:00Z",
+      "createdDateTime": "2019-04-02T09:00:00Z",
+      "creationType": null,
+      "externalUserState": null,
+      "externalUserStateChangeDateTime": null,
+      "onPremisesSyncEnabled": true,
+      "onPremisesLastSyncDateTime": "2026-10-15T03:30:00Z",
+      "onPremisesSamAccountName": "dokafor",
+      "onPremisesDomainName": "corp.example.com",
+      "onPremisesImmutableId": "kq5aBdUe3kSWpG0pP1a2Bw==",
+      "lastPasswordChangeDateTime": "2026-09-01T10:00:00Z",
+      "passwordPolicies": null,
+      "preferredLanguage": "en-US",
+      "signInSessionsValidFromDateTime": "2026-09-01T10:00:00Z",
+      "assignedLicenses": [
+        {
+          "skuId": "00000000-0000-4000-8000-000000001001",
+          "disabledPlans": []
+        }
+      ],
+      "licenseAssignmentStates": [
+        {
+          "skuId": "00000000-0000-4000-8000-000000001001",
+          "assignedByGroup": null,
+          "state": "Active",
+          "error": "None",
+          "disabledPlans": [],
+          "lastUpdatedDateTime": "2026-09-01T09:00:00Z"
+        }
+      ],
+      "signInActivity": {
+        "lastSignInDateTime": "2026-10-15T03:20:00Z",
+        "lastSignInRequestId": "00000000-0000-4000-8000-0000000005e1",
+        "lastNonInteractiveSignInDateTime": "2026-10-15T03:50:00Z",
+        "lastNonInteractiveSignInRequestId": "00000000-0000-4000-8000-0000000005e2",
+        "lastSuccessfulSignInDateTime": "2026-10-15T03:20:00Z",
+        "lastSuccessfulSignInRequestId": null
+      }
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000109",
+      "displayName": "Jordan Rivera",
+      "givenName": "Jordan",
+      "surname": "Rivera",
+      "userPrincipalName": "j.rivera@example.com",
+      "mail": "j.rivera@example.com",
+      "otherMails": [],
+      "proxyAddresses": [
+        "SMTP:j.rivera@example.com",
+        "smtp:j.rivera@exampleorg.onmicrosoft.com"
+      ],
+      "accountEnabled": true,
+      "userType": "Member",
+      "department": "IT Operations",
+      "jobTitle": "Head of IT",
+      "companyName": "Example Org",
+      "officeLocation": "Seattle HQ",
+      "city": "Seattle",
+      "country": "United States",
+      "usageLocation": "US",
+      "mobilePhone": null,
+      "businessPhones": [],
+      "employeeId": "E0001",
+      "employeeType": "Employee",
+      "employeeHireDate": "2020-01-06T09:00:00Z",
+      "createdDateTime": "2020-01-06T09:00:00Z",
+      "creationType": null,
+      "externalUserState": null,
+      "externalUserStateChangeDateTime": null,
+      "onPremisesSyncEnabled": null,
+      "onPremisesLastSyncDateTime": null,
+      "onPremisesSamAccountName": null,
+      "onPremisesDomainName": null,
+      "onPremisesImmutableId": null,
+      "lastPasswordChangeDateTime": "2026-04-01T10:00:00Z",
+      "passwordPolicies": null,
+      "preferredLanguage": "en-US",
+      "signInSessionsValidFromDateTime": "2026-04-01T10:00:00Z",
+      "assignedLicenses": [
+        {
+          "skuId": "00000000-0000-4000-8000-000000001001",
+          "disabledPlans": []
+        },
+        {
+          "skuId": "00000000-0000-4000-8000-000000001006",
+          "disabledPlans": []
+        }
+      ],
+      "licenseAssignmentStates": [
+        {
+          "skuId": "00000000-0000-4000-8000-000000001001",
+          "assignedByGroup": null,
+          "state": "Active",
+          "error": "None",
+          "disabledPlans": [],
+          "lastUpdatedDateTime": "2026-09-01T09:00:00Z"
+        },
+        {
+          "skuId": "00000000-0000-4000-8000-000000001006",
+          "assignedByGroup": null,
+          "state": "Active",
+          "error": "None",
+          "disabledPlans": [],
+          "lastUpdatedDateTime": "2026-09-01T09:00:00Z"
+        }
+      ],
+      "signInActivity": {
+        "lastSignInDateTime": "2026-10-15T02:30:00Z",
+        "lastSignInRequestId": "00000000-0000-4000-8000-0000000005e1",
+        "lastNonInteractiveSignInDateTime": "2026-10-15T03:45:00Z",
+        "lastNonInteractiveSignInRequestId": "00000000-0000-4000-8000-0000000005e2",
+        "lastSuccessfulSignInDateTime": "2026-10-15T02:30:00Z",
+        "lastSuccessfulSignInRequestId": null
+      }
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000110",
+      "displayName": "Break Glass 01",
+      "givenName": "Break Glass",
+      "surname": "01",
+      "userPrincipalName": "bg01@exampleorg.onmicrosoft.com",
+      "mail": null,
+      "otherMails": [],
+      "proxyAddresses": [],
+      "accountEnabled": true,
+      "userType": "Member",
+      "department": null,
+      "jobTitle": "Emergency access account",
+      "companyName": "Example Org",
+      "officeLocation": null,
+      "city": null,
+      "country": null,
+      "usageLocation": "US",
+      "mobilePhone": null,
+      "businessPhones": [],
+      "employeeId": null,
+      "employeeType": null,
+      "employeeHireDate": null,
+      "createdDateTime": "2020-01-06T09:30:00Z",
+      "creationType": null,
+      "externalUserState": null,
+      "externalUserStateChangeDateTime": null,
+      "onPremisesSyncEnabled": null,
+      "onPremisesLastSyncDateTime": null,
+      "onPremisesSamAccountName": null,
+      "onPremisesDomainName": null,
+      "onPremisesImmutableId": null,
+      "lastPasswordChangeDateTime": "2026-08-20T10:05:00Z",
+      "passwordPolicies": "DisablePasswordExpiration",
+      "preferredLanguage": "en-US",
+      "signInSessionsValidFromDateTime": "2026-08-20T10:05:00Z",
+      "assignedLicenses": [],
+      "licenseAssignmentStates": [],
+      "signInActivity": {
+        "lastSignInDateTime": "2026-08-20T10:00:00Z",
+        "lastSignInRequestId": "00000000-0000-4000-8000-0000000005e1",
+        "lastNonInteractiveSignInDateTime": null,
+        "lastNonInteractiveSignInRequestId": null,
+        "lastSuccessfulSignInDateTime": "2026-08-20T10:00:00Z",
+        "lastSuccessfulSignInRequestId": null
+      }
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000111",
+      "displayName": "Chris Novak",
+      "givenName": "Chris",
+      "surname": "Novak",
+      "userPrincipalName": "c.novak@example.com",
+      "mail": "c.novak@example.com",
+      "otherMails": [],
+      "proxyAddresses": [
+        "SMTP:c.novak@example.com",
+        "smtp:c.novak@exampleorg.onmicrosoft.com"
+      ],
+      "accountEnabled": true,
+      "userType": "Member",
+      "department": "Sales",
+      "jobTitle": "Sales Manager",
+      "companyName": "Example Org",
+      "officeLocation": "Madrid",
+      "city": "Madrid",
+      "country": "Spain",
+      "usageLocation": "ES",
+      "mobilePhone": null,
+      "businessPhones": [],
+      "employeeId": "E3001",
+      "employeeType": "Employee",
+      "employeeHireDate": "2022-02-14T09:00:00Z",
+      "createdDateTime": "2022-02-14T09:00:00Z",
+      "creationType": null,
+      "externalUserState": null,
+      "externalUserStateChangeDateTime": null,
+      "onPremisesSyncEnabled": null,
+      "onPremisesLastSyncDateTime": null,
+      "onPremisesSamAccountName": null,
+      "onPremisesDomainName": null,
+      "onPremisesImmutableId": null,
+      "lastPasswordChangeDateTime": "2024-12-01T10:00:00Z",
+      "passwordPolicies": null,
+      "preferredLanguage": "en-US",
+      "signInSessionsValidFromDateTime": "2024-12-01T10:00:00Z",
+      "assignedLicenses": [
+        {
+          "skuId": "00000000-0000-4000-8000-000000001002",
+          "disabledPlans": []
+        }
+      ],
+      "licenseAssignmentStates": [
+        {
+          "skuId": "00000000-0000-4000-8000-000000001002",
+          "assignedByGroup": null,
+          "state": "Active",
+          "error": "None",
+          "disabledPlans": [],
+          "lastUpdatedDateTime": "2026-09-01T09:00:00Z"
+        }
+      ],
+      "signInActivity": {
+        "lastSignInDateTime": "2026-10-13T18:40:00Z",
+        "lastSignInRequestId": "00000000-0000-4000-8000-0000000005e1",
+        "lastNonInteractiveSignInDateTime": "2026-10-14T07:00:00Z",
+        "lastNonInteractiveSignInRequestId": "00000000-0000-4000-8000-0000000005e2",
+        "lastSuccessfulSignInDateTime": "2026-10-13T18:40:00Z",
+        "lastSuccessfulSignInRequestId": null
+      }
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000112",
+      "displayName": "Svc Reporting",
+      "givenName": "Svc",
+      "surname": "Reporting",
+      "userPrincipalName": "svc-reporting@example.com",
+      "mail": "svc-reporting@example.com",
+      "otherMails": [],
+      "proxyAddresses": [
+        "SMTP:svc-reporting@example.com",
+        "smtp:svc-reporting@exampleorg.onmicrosoft.com"
+      ],
+      "accountEnabled": true,
+      "userType": "Member",
+      "department": "IT Operations",
+      "jobTitle": "Service account – reporting",
+      "companyName": "Example Org",
+      "officeLocation": null,
+      "city": null,
+      "country": null,
+      "usageLocation": "US",
+      "mobilePhone": null,
+      "businessPhones": [],
+      "employeeId": null,
+      "employeeType": null,
+      "employeeHireDate": null,
+      "createdDateTime": "2021-06-01T09:00:00Z",
+      "creationType": null,
+      "externalUserState": null,
+      "externalUserStateChangeDateTime": null,
+      "onPremisesSyncEnabled": null,
+      "onPremisesLastSyncDateTime": null,
+      "onPremisesSamAccountName": null,
+      "onPremisesDomainName": null,
+      "onPremisesImmutableId": null,
+      "lastPasswordChangeDateTime": "2021-06-01T09:00:00Z",
+      "passwordPolicies": "DisablePasswordExpiration",
+      "preferredLanguage": "en-US",
+      "signInSessionsValidFromDateTime": "2021-06-01T09:00:00Z",
+      "assignedLicenses": [],
+      "licenseAssignmentStates": [],
+      "signInActivity": {
+        "lastSignInDateTime": null,
+        "lastSignInRequestId": null,
+        "lastNonInteractiveSignInDateTime": "2026-10-15T01:00:00Z",
+        "lastNonInteractiveSignInRequestId": "00000000-0000-4000-8000-0000000005e2",
+        "lastSuccessfulSignInDateTime": "2026-10-15T01:00:00Z",
+        "lastSuccessfulSignInRequestId": null
+      }
+    }
+  ]
+}

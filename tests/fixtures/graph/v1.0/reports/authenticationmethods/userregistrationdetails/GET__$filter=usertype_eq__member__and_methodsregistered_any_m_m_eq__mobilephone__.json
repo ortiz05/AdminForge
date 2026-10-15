@@ -1,0 +1,52 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#fixture",
+  "value": [
+    {
+      "id": "00000000-0000-4000-8000-000000000102",
+      "userPrincipalName": "m.chen@example.com",
+      "userDisplayName": "Morgan Chen",
+      "userType": "member",
+      "isAdmin": false,
+      "isSsprRegistered": true,
+      "isSsprEnabled": true,
+      "isSsprCapable": true,
+      "isMfaRegistered": true,
+      "isMfaCapable": true,
+      "isPasswordlessCapable": false,
+      "methodsRegistered": [
+        "microsoftAuthenticatorPush",
+        "mobilePhone"
+      ],
+      "isSystemPreferredAuthenticationMethodEnabled": true,
+      "systemPreferredAuthenticationMethods": [
+        "Push"
+      ],
+      "userPreferredMethodForSecondaryAuthentication": "push",
+      "defaultMfaMethod": "microsoftAuthenticatorPush",
+      "lastUpdatedDateTime": "2026-10-15T00:00:00Z"
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000103",
+      "userPrincipalName": "p.raman@example.com",
+      "userDisplayName": "Priya Raman",
+      "userType": "member",
+      "isAdmin": false,
+      "isSsprRegistered": true,
+      "isSsprEnabled": true,
+      "isSsprCapable": true,
+      "isMfaRegistered": true,
+      "isMfaCapable": true,
+      "isPasswordlessCapable": false,
+      "methodsRegistered": [
+        "mobilePhone"
+      ],
+      "isSystemPreferredAuthenticationMethodEnabled": true,
+      "systemPreferredAuthenticationMethods": [
+        "Push"
+      ],
+      "userPreferredMethodForSecondaryAuthentication": "sms",
+      "defaultMfaMethod": "mobilePhone",
+      "lastUpdatedDateTime": "2026-10-15T00:00:00Z"
+    }
+  ]
+}

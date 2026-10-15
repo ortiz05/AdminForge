@@ -1,0 +1,59 @@
+{
+  "value": [
+    {
+      "id": "802-601",
+      "deviceDisplayName": "EX-LT-0142",
+      "userName": "Adele Lee",
+      "userPrincipalName": "a.lee@example.com",
+      "deviceModel": "Latitude 7450",
+      "platform": 0,
+      "complianceGracePeriodExpirationDateTime": "9999-12-31T23:59:59Z",
+      "status": "conflict",
+      "lastReportedDateTime": "2026-10-15T01:00:00Z"
+    },
+    {
+      "id": "802-602",
+      "deviceDisplayName": "EX-LT-0211",
+      "userName": "Morgan Chen",
+      "userPrincipalName": "m.chen@example.com",
+      "deviceModel": "EliteBook 840 G10",
+      "platform": 0,
+      "complianceGracePeriodExpirationDateTime": "9999-12-31T23:59:59Z",
+      "status": "compliant",
+      "lastReportedDateTime": "2026-10-14T17:30:00Z"
+    },
+    {
+      "id": "802-606",
+      "deviceDisplayName": "EX-LT-0302",
+      "userName": "Sam Patel",
+      "userPrincipalName": "s.patel@example.com",
+      "deviceModel": "EliteBook 860 G11",
+      "platform": 0,
+      "complianceGracePeriodExpirationDateTime": "9999-12-31T23:59:59Z",
+      "status": "compliant",
+      "lastReportedDateTime": "2026-10-14T08:00:00Z"
+    },
+    {
+      "id": "802-607",
+      "deviceDisplayName": "EX-LT-0193",
+      "userName": "Chris Novak",
+      "userPrincipalName": "c.novak@example.com",
+      "deviceModel": "ThinkPad T14 Gen 2",
+      "platform": 0,
+      "complianceGracePeriodExpirationDateTime": "9999-12-31T23:59:59Z",
+      "status": "compliant",
+      "lastReportedDateTime": "2026-10-10T12:00:00Z"
+    },
+    {
+      "id": "802-609",
+      "deviceDisplayName": "EX-LT-0077",
+      "userName": "Sam Patel",
+      "userPrincipalName": "s.patel@example.com",
+      "deviceModel": "Latitude 5420",
+      "platform": 0,
+      "complianceGracePeriodExpirationDateTime": "9999-12-31T23:59:59Z",
+      "status": "compliant",
+      "lastReportedDateTime": "2025-02-01T10:00:00Z"
+    }
+  ]
+}

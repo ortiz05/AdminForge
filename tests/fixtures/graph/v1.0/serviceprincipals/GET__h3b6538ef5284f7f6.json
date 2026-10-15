@@ -1,0 +1,42 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#fixture",
+  "value": [
+    {
+      "id": "00000000-0000-4000-8000-000000000407",
+      "appId": "00000000-0000-4000-8001-000000000306",
+      "displayName": "Legacy Automation",
+      "description": null,
+      "accountEnabled": true,
+      "appRoleAssignmentRequired": false,
+      "servicePrincipalType": "Application",
+      "appOwnerOrganizationId": "00000000-0000-4000-8000-00000000e0e0",
+      "publisherName": "Example Org",
+      "verifiedPublisher": {
+        "displayName": null,
+        "verifiedPublisherId": null,
+        "addedDateTime": null
+      },
+      "homepage": null,
+      "loginUrl": null,
+      "logoutUrl": null,
+      "replyUrls": [],
+      "servicePrincipalNames": [
+        "00000000-0000-4000-8001-000000000306"
+      ],
+      "tags": [
+        "WindowsAzureActiveDirectoryIntegratedApp"
+      ],
+      "notes": null,
+      "notificationEmailAddresses": [],
+      "preferredSingleSignOnMode": null,
+      "preferredTokenSigningKeyThumbprint": null,
+      "keyCredentials": [],
+      "passwordCredentials": [],
+      "appRoles": [],
+      "oauth2PermissionScopes": [],
+      "alternativeNames": [],
+      "signInAudience": "AzureADMyOrg",
+      "owners": []
+    }
+  ]
+}

@@ -1,0 +1,22 @@
+{
+  "id": "managedDeviceOverview",
+  "enrolledDeviceCount": 1312,
+  "mdmEnrolledCount": 1240,
+  "dualEnrolledDeviceCount": 72,
+  "deviceOperatingSystemSummary": {
+    "androidCount": 163,
+    "iosCount": 211,
+    "macOSCount": 96,
+    "windowsMobileCount": 0,
+    "windowsCount": 842,
+    "unknownCount": 0,
+    "linuxCount": 0
+  },
+  "deviceExchangeAccessStateSummary": {
+    "allowedDeviceCount": 1101,
+    "blockedDeviceCount": 3,
+    "quarantinedDeviceCount": 0,
+    "unknownDeviceCount": 208,
+    "unavailableDeviceCount": 0
+  }
+}

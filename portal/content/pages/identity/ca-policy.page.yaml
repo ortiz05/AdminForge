@@ -1,0 +1,183 @@
+$schema: ../../../packages/schemas/generated/page.schema.json
+kind: page
+id: identity.ca-policy
+version: 1.0.0
+title: Conditional Access policy
+summary: One Conditional Access policy — assignments, conditions, grant and session controls, and the raw definition.
+owner: identity-team
+tags: [identity, conditional-access, security]
+template: entity
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    graph: [Policy.Read.All, RoleManagement.Read.Directory]
+  entraRoles: [Security Reader]
+  licences: [conditionalAccess]
+
+params:
+  id: { type: guid, label: Policy, required: true, hidden: true }
+
+datasources:
+  policy:
+    source: graphBatch
+    requests:
+      policy: { path: "/identity/conditionalAccess/policies/${ $encode($guid(params.id)) }" }
+      roles: { path: /roleManagement/directory/roleDefinitions, query: { $select: "id,templateId,displayName" } }
+      locations: { path: /identity/conditionalAccess/namedLocations, query: { $select: "id,displayName" } }
+    cache: { ttl: 120 }
+    # Users, groups and apps are shown by id: resolving arbitrary id lists needs getByIds (see the report).
+    transform: >-
+      ${ (
+        $p := value.policy;
+        $roles := [value.roles.value];
+        $locs := [value.locations.value];
+        $roleName := function($id) { ($r := $roles[templateId = $id or id = $id][0]; $r ? $r.displayName : $id) };
+        $locName := function($id) { $id = 'All' ? 'Any location' : $id = 'AllTrusted' ? 'All trusted locations' : ($l := $locs[id = $id][0]; $l ? $l.displayName : $id) };
+        $special := ['All', 'None', 'GuestsOrExternalUsers'];
+        $entry := function($section, $kind, $ids, $namer) {
+          [$ids.{
+            "key": $section & '|' & $kind & '|' & $,
+            "section": $section,
+            "kind": $kind,
+            "value": $ in $special ? ($ = 'All' ? 'All' : $ = 'None' ? 'None' : 'Guests and external users') : $namer($),
+            "objectId": $ in $special ? null : $
+          }]
+        };
+        $u := $p.conditions.users;
+        $a := $p.conditions.applications;
+        $id := function($x) { $x };
+        $merge([$p, {
+          "assignments": $append($append($append(
+            $entry('Include', 'User', $u.includeUsers, $id), $entry('Include', 'Group', $u.includeGroups, $id)),
+            $append($entry('Include', 'Role', $u.includeRoles, $roleName), $entry('Exclude', 'User', $u.excludeUsers, $id))),
+            $append($entry('Exclude', 'Group', $u.excludeGroups, $id), $entry('Exclude', 'Role', $u.excludeRoles, $roleName))),
+          "resources": $append($append(
+            $entry('Include', 'App', $a.includeApplications, $id), $entry('Exclude', 'App', $a.excludeApplications, $id)),
+            $entry('Include', 'User action', $a.includeUserActions, $id)),
+          "summary": {
+            "clientApps": $join($p.conditions.clientAppTypes, ', '),
+            "platformsIn": $join($p.conditions.platforms.includePlatforms, ', '),
+            "platformsOut": $join($p.conditions.platforms.excludePlatforms, ', '),
+            "locationsIn": $join($p.conditions.locations.includeLocations.$locName($), ', '),
+            "locationsOut": $join($p.conditions.locations.excludeLocations.$locName($), ', '),
+            "signInRisk": $join($p.conditions.signInRiskLevels, ', '),
+            "userRisk": $join($p.conditions.userRiskLevels, ', '),
+            "deviceFilter": $p.conditions.devices.deviceFilter
+              ? ($p.conditions.devices.deviceFilter.mode & ': ' & $p.conditions.devices.deviceFilter.rule) : null,
+            "guestTypes": $p.conditions.users.includeGuestsOrExternalUsers.guestOrExternalUserTypes,
+            "grantOperator": $p.grantControls.operator,
+            "grantControls": $join($p.grantControls.builtInControls, ', '),
+            "authStrength": $p.grantControls.authenticationStrength.displayName,
+            "termsOfUse": $join($p.grantControls.termsOfUse, ', '),
+            "signInFrequency": $p.sessionControls.signInFrequency.isEnabled = true
+              ? ($p.sessionControls.signInFrequency.frequencyInterval = 'everyTime' ? 'Every time'
+                 : $p.sessionControls.signInFrequency.value & ' ' & $p.sessionControls.signInFrequency.type) : null,
+            "persistentBrowser": $p.sessionControls.persistentBrowser.isEnabled = true ? $p.sessionControls.persistentBrowser.mode : null,
+            "appControl": $p.sessionControls.cloudAppSecurity.isEnabled = true ? $p.sessionControls.cloudAppSecurity.cloudAppSecurityType : null,
+            "appEnforced": $p.sessionControls.applicationEnforcedRestrictions.isEnabled = true,
+            "resilienceDefaultsOff": $p.sessionControls.disableResilienceDefaults = true
+          },
+          "json": $string($p, true)
+        }])
+      ) }
+
+header:
+  title: ${ policy.displayName }
+  subtitle: "${ 'Modified ' & (policy.modifiedDateTime ? $substring(policy.modifiedDateTime, 0, 10) : $substring(policy.createdDateTime, 0, 10)) }"
+  status: "${ policy.state = 'enabled' ? 'ok' : policy.state = 'disabled' ? 'neutral' : 'info' }"
+  statusLabel: "${ policy.state = 'enabled' ? 'On' : policy.state = 'disabled' ? 'Off' : 'Report-only' }"
+  ids:
+    Policy id: ${ policy.id }
+
+actions:
+  - label: Open in Entra admin center
+    icon: arrow-square-out
+    href: "https://entra.microsoft.com/#view/Microsoft_AAD_ConditionalAccess/PolicyBlade/policyId/${ $encode(params.id) }"
+  - label: What If
+    icon: question
+    href: https://entra.microsoft.com/#view/Microsoft_AAD_ConditionalAccess/WhatIfBlade
+
+tabs:
+  - id: assignments
+    label: Assignments
+    layout:
+      - widget: table
+        id: users
+        title: Users, groups and roles
+        span: 12
+        data: policy.assignments
+        rowKey: key
+        columns:
+          - { field: section, label: Rule, kind: status, map: { Include: [info, Include], Exclude: [warn, Exclude] }, filter: facet }
+          - { field: kind, label: Type, filter: facet }
+          - { field: value, label: Value }
+          - { field: objectId, label: Object id, kind: guid }
+        rowActions:
+          - { label: Open user, icon: user, href: "/p/identity.user?id=${ $encode(row.objectId) }", when: "${ row.kind = 'User' and $boolean(row.objectId) }" }
+          - { label: Open group, icon: users-three, href: "/p/identity.group?id=${ $encode(row.objectId) }", when: "${ row.kind = 'Group' and $boolean(row.objectId) }" }
+        empty:
+          title: No user assignments
+          body: The policy targets nobody yet.
+      - widget: table
+        id: resources
+        title: Target resources
+        span: 12
+        data: policy.resources
+        rowKey: key
+        columns:
+          - { field: section, label: Rule, kind: status, map: { Include: [info, Include], Exclude: [warn, Exclude] } }
+          - { field: kind, label: Type }
+          - { field: value, label: App id or action, kind: code }
+        empty:
+          title: No target resources
+          body: The policy has no target apps or user actions.
+  - id: conditions
+    label: Conditions
+    layout:
+      - widget: keyValue
+        id: conditions
+        span: 12
+        data: policy.summary
+        fields:
+          - { field: clientApps, label: Client apps }
+          - { field: platformsIn, label: Platforms included }
+          - { field: platformsOut, label: Platforms excluded }
+          - { field: locationsIn, label: Locations included }
+          - { field: locationsOut, label: Locations excluded }
+          - { field: signInRisk, label: Sign-in risk }
+          - { field: userRisk, label: User risk }
+          - { field: deviceFilter, label: Device filter, kind: code }
+          - { field: guestTypes, label: Guest or external user types }
+  - id: controls
+    label: Controls
+    layout:
+      - widget: keyValue
+        id: grant
+        title: Grant
+        span: 6
+        data: policy.summary
+        fields:
+          - { field: grantControls, label: Built-in controls }
+          - { field: grantOperator, label: Require, kind: status, map: { AND: [info, All selected controls], OR: [info, One of the selected controls] } }
+          - { field: authStrength, label: Authentication strength }
+          - { field: termsOfUse, label: Terms of use }
+      - widget: keyValue
+        id: session
+        title: Session
+        span: 6
+        data: policy.summary
+        fields:
+          - { field: signInFrequency, label: Sign-in frequency }
+          - { field: persistentBrowser, label: Persistent browser session }
+          - { field: appControl, label: Conditional Access App Control }
+          - { field: appEnforced, label: App-enforced restrictions, kind: boolean }
+          - { field: resilienceDefaultsOff, label: Resilience defaults disabled, kind: status, map: { "true": [warn, Disabled], "false": [ok, Enabled] } }
+  - id: definition
+    label: Definition
+    layout:
+      - widget: keyValue
+        id: json
+        span: 12
+        data: policy
+        fields:
+          - { field: json, label: Policy JSON, kind: code }

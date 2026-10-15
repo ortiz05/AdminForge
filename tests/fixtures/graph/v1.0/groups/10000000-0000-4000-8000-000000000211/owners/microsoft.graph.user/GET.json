@@ -1,0 +1,16 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#users",
+  "value": [
+    {
+      "@odata.type": "#microsoft.graph.user",
+      "id": "10000000-0000-4000-8000-000000000008",
+      "displayName": "Hana Kim",
+      "userPrincipalName": "hana.kim@example.com",
+      "mail": "hana.kim@example.com",
+      "userType": "Member",
+      "accountEnabled": true,
+      "department": "Engineering",
+      "jobTitle": "Software Engineer"
+    }
+  ]
+}

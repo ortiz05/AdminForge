@@ -1,0 +1,176 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#groups(id,displayName,description,mail,visibility,createdDateTime,renewedDateTime,expirationDateTime,owners(id,displayName,userPrincipalName))",
+  "value": [
+    {
+      "id": "10000000-0000-4000-8000-000000000201",
+      "displayName": "Project Atlas",
+      "description": "Atlas platform migration.",
+      "mail": "project-atlas@example.com",
+      "visibility": "Private",
+      "createdDateTime": "2026-03-19T09:00:00Z",
+      "renewedDateTime": "2026-09-20T09:00:00Z",
+      "expirationDateTime": "2027-09-20T09:00:00Z",
+      "owners": [
+        {
+          "@odata.type": "#microsoft.graph.user",
+          "id": "10000000-0000-4000-8000-000000000008",
+          "displayName": "Hana Kim",
+          "userPrincipalName": "hana.kim@example.com"
+        },
+        {
+          "@odata.type": "#microsoft.graph.user",
+          "id": "10000000-0000-4000-8000-00000000000b",
+          "displayName": "Kai Lindqvist",
+          "userPrincipalName": "kai.lindqvist@example.com"
+        }
+      ]
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000208",
+      "displayName": "All Company",
+      "description": "Company-wide announcements and conversations.",
+      "mail": "allcompany@example.com",
+      "visibility": "Public",
+      "createdDateTime": "2024-04-28T09:00:00Z",
+      "renewedDateTime": "2026-09-15T09:00:00Z",
+      "expirationDateTime": "2027-09-15T09:00:00Z",
+      "owners": [
+        {
+          "@odata.type": "#microsoft.graph.user",
+          "id": "30000000-0000-4000-8000-000000000005",
+          "displayName": "Eli O'Brien",
+          "userPrincipalName": "eli.obrien@example.com"
+        },
+        {
+          "@odata.type": "#microsoft.graph.user",
+          "id": "30000000-0000-4000-8000-000000000001",
+          "displayName": "Avery Engineer",
+          "userPrincipalName": "avery@example.com"
+        }
+      ]
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000206",
+      "displayName": "Executive Leadership",
+      "description": "Leadership team.",
+      "mail": "exec-leadership@example.com",
+      "visibility": "Private",
+      "createdDateTime": "2025-01-03T09:00:00Z",
+      "renewedDateTime": "2026-09-30T09:00:00Z",
+      "expirationDateTime": "2027-09-30T09:00:00Z",
+      "owners": [
+        {
+          "@odata.type": "#microsoft.graph.user",
+          "id": "10000000-0000-4000-8000-00000000000a",
+          "displayName": "Jordan Price",
+          "userPrincipalName": "jordan.price@example.com"
+        },
+        {
+          "@odata.type": "#microsoft.graph.user",
+          "id": "30000000-0000-4000-8000-000000000005",
+          "displayName": "Eli O'Brien",
+          "userPrincipalName": "eli.obrien@example.com"
+        }
+      ]
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000204",
+      "displayName": "IT Operations",
+      "description": "Run the platform.",
+      "mail": "it-operations@example.com",
+      "visibility": "Private",
+      "createdDateTime": "2024-07-17T09:00:00Z",
+      "renewedDateTime": "2026-10-05T09:00:00Z",
+      "expirationDateTime": "2027-10-05T09:00:00Z",
+      "owners": [
+        {
+          "@odata.type": "#microsoft.graph.user",
+          "id": "30000000-0000-4000-8000-000000000005",
+          "displayName": "Eli O'Brien",
+          "userPrincipalName": "eli.obrien@example.com"
+        },
+        {
+          "@odata.type": "#microsoft.graph.user",
+          "id": "30000000-0000-4000-8000-000000000001",
+          "displayName": "Avery Engineer",
+          "userPrincipalName": "avery@example.com"
+        },
+        {
+          "@odata.type": "#microsoft.graph.user",
+          "id": "10000000-0000-4000-8000-00000000000b",
+          "displayName": "Kai Lindqvist",
+          "userPrincipalName": "kai.lindqvist@example.com"
+        }
+      ]
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000205",
+      "displayName": "Legal Review",
+      "description": "Contract reviews.",
+      "mail": "legal-review@example.com",
+      "visibility": "Private",
+      "createdDateTime": "2025-12-19T09:00:00Z",
+      "renewedDateTime": "2026-03-29T09:00:00Z",
+      "expirationDateTime": "2027-03-29T09:00:00Z",
+      "owners": []
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000203",
+      "displayName": "Marketing Campaigns",
+      "description": "Campaign planning.",
+      "mail": "marketing-campaigns@example.com",
+      "visibility": "Public",
+      "createdDateTime": "2025-06-02T09:00:00Z",
+      "renewedDateTime": "2026-06-17T09:00:00Z",
+      "expirationDateTime": "2027-06-17T09:00:00Z",
+      "owners": []
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000207",
+      "displayName": "Partner Collaboration – Fabrikam",
+      "description": "Joint project with Fabrikam.",
+      "mail": "partner-fabrikam@example.com",
+      "visibility": "Private",
+      "createdDateTime": "2026-05-28T09:00:00Z",
+      "renewedDateTime": "2026-09-15T09:00:00Z",
+      "expirationDateTime": "2027-09-15T09:00:00Z",
+      "owners": [
+        {
+          "@odata.type": "#microsoft.graph.user",
+          "id": "10000000-0000-4000-8000-000000000009",
+          "displayName": "Isaac Mensah",
+          "userPrincipalName": "isaac.mensah@example.com"
+        }
+      ]
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000209",
+      "displayName": "Project Orion (retired)",
+      "description": "Archived project.",
+      "mail": "project-orion@example.com",
+      "visibility": "Private",
+      "createdDateTime": "2024-02-08T09:00:00Z",
+      "renewedDateTime": "2025-09-10T09:00:00Z",
+      "expirationDateTime": "2026-09-10T09:00:00Z",
+      "owners": []
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000202",
+      "displayName": "Sales EMEA",
+      "description": "EMEA sales team.",
+      "mail": "sales-emea@example.com",
+      "visibility": "Public",
+      "createdDateTime": "2024-09-15T09:00:00Z",
+      "renewedDateTime": "2026-09-10T09:00:00Z",
+      "expirationDateTime": "2027-09-10T09:00:00Z",
+      "owners": [
+        {
+          "@odata.type": "#microsoft.graph.user",
+          "id": "10000000-0000-4000-8000-000000000007",
+          "displayName": "Gabriel Nunes",
+          "userPrincipalName": "gabriel.nunes@example.com"
+        }
+      ]
+    }
+  ]
+}

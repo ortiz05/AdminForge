@@ -1,0 +1,21 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#groups/$entity",
+  "id": "10000000-0000-4000-8000-000000000211",
+  "displayName": "Engineering Guild",
+  "description": "Everyone in Engineering (dynamic).",
+  "mail": "engineering-guild@example.com",
+  "visibility": "Private",
+  "groupTypes": [
+    "Unified",
+    "DynamicMembership"
+  ],
+  "resourceProvisioningOptions": [],
+  "createdDateTime": "2026-03-09T09:00:00Z",
+  "renewedDateTime": "2026-09-25T09:00:00Z",
+  "expirationDateTime": "2027-09-25T09:00:00Z",
+  "membershipRule": "(user.department -eq \"Engineering\")",
+  "onPremisesSyncEnabled": null,
+  "classification": null,
+  "mailEnabled": true,
+  "securityEnabled": false
+}

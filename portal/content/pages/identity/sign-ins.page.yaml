@@ -1,0 +1,155 @@
+$schema: ../../../packages/schemas/generated/page.schema.json
+kind: page
+id: identity.sign-ins
+version: 1.0.0
+title: Sign-in logs
+summary: >-
+  Interactive user sign-ins — filter by time range, result, user, application, country, IP address, Conditional
+  Access result and risk. Open a sign-in to see which Conditional Access policies applied.
+owner: identity-team
+tags: [identity, sign-ins, logs, investigation]
+template: list-detail
+nav: { section: identity, label: Sign-in logs, icon: sign-in, order: 90 }
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    graph: [AuditLog.Read.All, Directory.Read.All]
+  entraRoles: [Reports Reader]
+  licences: [signInLogs]
+
+params:
+  range: { type: dateRange, label: Time range, presets: [PT1H, PT4H, P1D, P7D, P30D], default: P1D, max: P30D }
+  status: { type: enum, values: [Any, Success, Failure], default: Any, label: Result, facet: true }
+  user: { type: string, label: User (sign-in name starts with), facet: true }
+  app: { type: string, label: Application (name starts with), facet: true }
+  country: { type: string, label: Country code, placeholder: US, pattern: "^[A-Za-z]{2}$", facet: true }
+  ip: { type: string, label: IP address, facet: true }
+  ca:
+    type: enum
+    label: Conditional Access
+    facet: true
+    default: Any
+    values:
+      - { value: Any, label: Any }
+      - { value: success, label: Success }
+      - { value: failure, label: Failure }
+      - { value: notApplied, label: Not applied }
+  risk:
+    type: enum
+    label: Sign-in risk
+    facet: true
+    default: Any
+    description: Risk detail needs Entra ID P2 (Identity Protection).
+    values: [Any, low, medium, high]
+  client:
+    type: enum
+    label: Client app
+    facet: true
+    default: Any
+    values:
+      - { value: Any, label: Any }
+      - { value: Browser, label: Browser }
+      - { value: Mobile Apps and Desktop clients, label: Mobile apps and desktop clients }
+      - { value: Exchange ActiveSync, label: Exchange ActiveSync (legacy) }
+      - { value: Other clients, label: Other clients (legacy) }
+
+filters:
+  facets: [status, user, app, country, ip, ca, risk, client]
+
+savedViews:
+  enabled: true
+  shared: true
+  presets:
+    - { name: Failures in the last 24 hours, params: { status: Failure, range: P1D } }
+    - { name: Blocked by Conditional Access, params: { ca: failure } }
+    - { name: Legacy authentication, params: { client: Other clients } }
+    - { name: Risky sign-ins (7 days), params: { risk: high, range: P7D } }
+
+datasources:
+  signIns:
+    source: graph
+    request:
+      path: /auditLogs/signIns
+      query:
+        $top: 100
+        # Timestamps go through $iso() (validated, canonical); every other user value through $odata().
+        $filter: >-
+          ${ $join([
+               params.range.from ? "createdDateTime ge " & $iso(params.range.from),
+               params.range.to ? "createdDateTime le " & $iso(params.range.to),
+               params.status = 'Success' ? "status/errorCode eq 0",
+               params.status = 'Failure' ? "status/errorCode ne 0",
+               params.user ? "startswith(userPrincipalName, " & $odata($lowercase(params.user)) & ")",
+               params.app ? "startswith(appDisplayName, " & $odata(params.app) & ")",
+               params.country ? "location/countryOrRegion eq " & $odata($uppercase(params.country)),
+               params.ip ? "ipAddress eq " & $odata(params.ip),
+               params.ca != 'Any' ? "conditionalAccessStatus eq " & $odata(params.ca),
+               params.risk != 'Any' ? "riskLevelDuringSignIn eq " & $odata(params.risk),
+               params.client != 'Any' ? "clientAppUsed eq " & $odata(params.client)
+             ][$], ' and ') }
+    paging: cursor
+    cache: { ttl: 60 }
+    transform: >-
+      ${ $merge([value, { "value": [value.value.$merge([$, {
+           "result": status.errorCode = 0 ? "success" : status.errorCode in [50074, 50076, 50079, 50125, 50140, 50158, 53003] ? "interrupted" : "failure",
+           "place": $join([location.city, location.countryOrRegion][$], ', '),
+           "device": $join([deviceDetail.displayName, deviceDetail.operatingSystem, deviceDetail.browser][$], ' · '),
+           "mfa": authenticationRequirement = 'multiFactorAuthentication' ? 'MFA' : 'Single factor'
+         }])] }]) }
+
+layout:
+  - widget: table
+    id: signIns
+    span: 12
+    data: signIns.value
+    rowKey: id
+    columns:
+      - { field: createdDateTime, label: Time, kind: datetime, sortable: true }
+      - { field: userDisplayName, label: User, kind: identity, secondary: userPrincipalName, filter: { type: text, param: user } }
+      - { field: appDisplayName, label: Application, filter: { type: text, param: app } }
+      - field: result
+        label: Result
+        kind: status
+        map: { success: [ok, Success], interrupted: [warn, Interrupted], failure: [crit, Failure] }
+        filter: { type: facet, param: status }
+      - { field: status.errorCode, label: Error code, kind: number }
+      - { field: status.failureReason, label: Failure reason, hidden: true }
+      - { field: ipAddress, label: IP address, kind: code, filter: { type: text, param: ip } }
+      - { field: place, label: Location }
+      - field: conditionalAccessStatus
+        label: Conditional Access
+        kind: status
+        map: { success: [ok, Success], failure: [crit, Failure], notApplied: [neutral, Not applied] }
+        filter: { type: facet, param: ca }
+      - { field: mfa, label: Authentication, filter: facet }
+      - { field: clientAppUsed, label: Client app, filter: { type: facet, param: client } }
+      - { field: device, label: Device, hidden: true }
+      - field: riskLevelDuringSignIn
+        label: Risk
+        kind: status
+        map: { none: [neutral, None], low: [info, Low], medium: [warn, Medium], high: [crit, High], hidden: [neutral, Hidden] }
+        filter: { type: facet, param: risk }
+        hidden: true
+      - { field: resourceDisplayName, label: Resource, hidden: true }
+      - { field: correlationId, label: Correlation id, kind: guid, hidden: true }
+      - { field: userId, label: User id, kind: guid, hidden: true }
+    inspect:
+      page: identity.sign-in
+      params:
+        id: ${ row.id }
+    rowActions:
+      - { label: Open user, icon: user, href: "/p/identity.user?id=${ $encode(row.userId) }" }
+      - playbook: identity.revoke-sessions
+        label: Revoke the user's sessions
+        icon: sign-out
+        inputs:
+          userId: ${ row.userId }
+    empty:
+      title: No sign-ins match
+      body: Widen the time range or clear a filter. Sign-ins appear within a few minutes; v1.0 shows interactive sign-ins only.
+
+export:
+  formats: [csv, xlsx]
+  fileName: sign-ins
+  data: signIns.value
+  columns: visible

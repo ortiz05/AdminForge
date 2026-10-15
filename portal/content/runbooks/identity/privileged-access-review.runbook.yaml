@@ -1,0 +1,148 @@
+$schema: ../../../packages/schemas/generated/runbook.schema.json
+kind: runbook
+id: identity.privileged-access-review
+version: 1.0.0
+title: Quarterly privileged access review
+summary: >-
+  Quarterly review of who holds privileged Microsoft Entra roles: inventory standing and eligible assignments, flag
+  the risky ones (standing access, service principals, guests, too many Global Administrators), record decisions,
+  remediate in PIM and keep the evidence.
+owner: identity-team
+tags: [identity, roles, privileged-access, governance, runbook, review]
+risk: low
+mode: read
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    graph: [RoleManagement.Read.Directory, RoleEligibilitySchedule.Read.Directory, Directory.Read.All]
+  entraRoles: [Global Reader]
+timeout: PT4H
+
+inputs:
+  period: { type: string, label: Review period, placeholder: 2026 Q4, minLength: 4 }
+  reviewer: { type: string, label: Second reviewer (name), minLength: 3 }
+
+sections:
+  - id: inventory
+    title: 1. Inventory
+    body: |
+      Reads every role definition, active assignment and eligible assignment, and keeps the privileged ones.
+      The same data is in the [Privileged role assignments](/p/identity.privileged-role-assignments) report.
+    steps:
+      - id: roles
+        type: graphBatch
+        mode: read
+        describe: Read role definitions and assignments
+        requests:
+          definitions: { path: /roleManagement/directory/roleDefinitions }
+          active: { path: /roleManagement/directory/roleAssignments, query: { $expand: principal } }
+          eligible: { path: /roleManagement/directory/roleEligibilityScheduleInstances, query: { $expand: principal } }
+
+      - id: inventorySummary
+        type: transform
+        expression: >-
+          ${ (
+            $privilegedNames := ['Global Administrator', 'Privileged Role Administrator', 'Privileged Authentication Administrator',
+              'Security Administrator', 'Conditional Access Administrator', 'Application Administrator', 'Cloud Application Administrator',
+              'Authentication Administrator', 'User Administrator', 'Helpdesk Administrator', 'Hybrid Identity Administrator',
+              'Intune Administrator', 'Exchange Administrator', 'SharePoint Administrator', 'Global Reader'];
+            $defs := [steps.roles.output.definitions.value];
+            $name := function($rid) { $defs[id = $rid or templateId = $rid][0].displayName };
+            $type := function($p) { $substringAfter($p.`@odata.type`, '#microsoft.graph.') };
+            $rows := $append(
+              [steps.roles.output.active.value.{ "role": $name(roleDefinitionId), "holder": principal.displayName,
+                "upn": principal.userPrincipalName, "type": $type(principal), "assignment": "Standing" }],
+              [steps.roles.output.eligible.value.{ "role": $name(roleDefinitionId), "holder": principal.displayName,
+                "upn": principal.userPrincipalName, "type": $type(principal), "assignment": "Eligible", "end": endDateTime }]
+            )[role in $privilegedNames];
+            {
+              "rows": [$rows],
+              "standing": $count($rows[assignment = 'Standing']),
+              "eligible": $count($rows[assignment = 'Eligible']),
+              "globalAdmins": $count($rows[role = 'Global Administrator' and assignment = 'Standing']),
+              "servicePrincipals": [$rows[type = 'servicePrincipal'].(holder & ' — ' & role)],
+              "guests": [$rows[$contains(upn ? upn : '', '#EXT#')].(holder & ' — ' & role)],
+              "permanentEligible": $count($rows[assignment = 'Eligible' and $not($boolean(end) = true)])
+            }
+          ) }
+
+  - id: review
+    title: 2. Review with a second reviewer
+    body: |
+      Go through every privileged assignment with **${ inputs.reviewer }**. For each one decide: keep, convert to
+      eligible (just-in-time through PIM), shorten, or remove.
+    steps:
+      - id: decisions
+        type: manual
+        instructions: |
+          **${ inputs.period }** — ${ steps.inventorySummary.output.standing } standing and
+          ${ steps.inventorySummary.output.eligible } eligible privileged assignments.
+
+          - Global Administrators (standing): **${ steps.inventorySummary.output.globalAdmins }** — aim for 2–4 including
+            the break-glass accounts.
+          - Service principals with privileged roles: ${ $count(steps.inventorySummary.output.servicePrincipals) > 0 ? $join(steps.inventorySummary.output.servicePrincipals, '; ') : 'none' }
+          - Guests with privileged roles: ${ $count(steps.inventorySummary.output.guests) > 0 ? $join(steps.inventorySummary.output.guests, '; ') : 'none' }
+          - Eligible assignments that never expire: ${ steps.inventorySummary.output.permanentEligible }
+        checklist:
+          - Every standing assignment is either justified (break-glass, service account with no PIM option) or marked for conversion
+          - Every service principal with a privileged role is owned, needed, and uses certificate or federated credentials
+          - No guest holds a privileged role
+          - Role-assignable groups have accountable owners
+          - PIM role settings require MFA, justification and (for Global Administrator) approval
+        inputs:
+          toRemove: { type: string, label: Assignments to remove, multiline: true, required: false }
+          toConvert: { type: string, label: Assignments to convert to eligible, multiline: true, required: false }
+
+  - id: remediate
+    title: 3. Remediate
+    body: |
+      Make the changes in Privileged Identity Management (Entra admin center → Identity governance → PIM → Microsoft
+      Entra roles → Assignments). Changes to role assignments are made by a Privileged Role Administrator.
+    steps:
+      - id: changesMade
+        type: manual
+        instructions: Apply the decisions recorded above.
+        checklist:
+          - Removals done
+          - Conversions to eligible done (with an end date)
+          - Owners told about changes to their access
+
+  - id: evidence
+    title: 4. Keep the evidence
+    body: Export the report after remediation and attach it, with the decisions above, to the review record.
+    steps:
+      - id: evidenceFiled
+        type: manual
+        instructions: Export **Privileged role assignments** as XLSX and file it with this run's link.
+        checklist:
+          - Report exported after remediation
+          - Review record signed off by both reviewers
+        inputs:
+          evidenceLink: { type: string, label: Link to the review record, format: url, required: false }
+
+outputs:
+  summary: >-
+    ${ inputs.period & ' privileged access review: ' & steps.inventorySummary.output.standing & ' standing and '
+       & steps.inventorySummary.output.eligible & ' eligible privileged assignments reviewed with ' & inputs.reviewer & '.' }
+
+tests:
+  - name: inventories privileged assignments and flags risks
+    inputs: { period: 2026 Q4, reviewer: Morgan Chen }
+    mocks:
+      roles:
+        definitions:
+          value:
+            - { id: 62e90394-69f5-4237-9190-012177145e10, templateId: 62e90394-69f5-4237-9190-012177145e10, displayName: Global Administrator }
+            - { id: 88d8e3e3-8f55-4a1e-953a-9b9898b8876b, templateId: 88d8e3e3-8f55-4a1e-953a-9b9898b8876b, displayName: Directory Readers }
+        active:
+          value:
+            - { id: a1, roleDefinitionId: 62e90394-69f5-4237-9190-012177145e10, principal: { "@odata.type": "#microsoft.graph.user", displayName: Break Glass 1, userPrincipalName: bg1@exampleorg.onmicrosoft.com } }
+            - { id: a2, roleDefinitionId: 62e90394-69f5-4237-9190-012177145e10, principal: { "@odata.type": "#microsoft.graph.servicePrincipal", displayName: Legacy Automation } }
+            - { id: a3, roleDefinitionId: 88d8e3e3-8f55-4a1e-953a-9b9898b8876b, principal: { "@odata.type": "#microsoft.graph.user", displayName: Reader, userPrincipalName: r@example.com } }
+        eligible:
+          value:
+            - { id: e1, roleDefinitionId: 62e90394-69f5-4237-9190-012177145e10, principal: { "@odata.type": "#microsoft.graph.user", displayName: Avery Lee, userPrincipalName: a.lee@example.com } }
+    expect:
+      status: succeeded
+      steps: { decisions: skipped }
+      outputs: { summary: "2026 Q4 privileged access review: 2 standing and 1 eligible privileged assignments reviewed with Morgan Chen." }

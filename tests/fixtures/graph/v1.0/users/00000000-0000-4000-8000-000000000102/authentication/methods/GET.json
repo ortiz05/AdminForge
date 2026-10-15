@@ -1,0 +1,25 @@
+{
+  "value": [
+    {
+      "@odata.type": "#microsoft.graph.passwordAuthenticationMethod",
+      "id": "28c10230-6103-485e-b985-444c60001490",
+      "password": null,
+      "createdDateTime": "2025-11-20T10:00:00Z"
+    },
+    {
+      "@odata.type": "#microsoft.graph.microsoftAuthenticatorAuthenticationMethod",
+      "id": "00000000-0000-4000-8000-0000000f1020",
+      "displayName": "Pixel 8",
+      "deviceTag": "SoftwareTokenActivated",
+      "phoneAppVersion": "6.8.20",
+      "createdDateTime": "2025-02-10T09:00:00Z"
+    },
+    {
+      "@odata.type": "#microsoft.graph.phoneAuthenticationMethod",
+      "id": "3179e48a-750b-4051-897c-87b9720928f7",
+      "phoneNumber": "+1 2065550101",
+      "phoneType": "mobile",
+      "smsSignInState": "notAllowedByPolicy"
+    }
+  ]
+}

@@ -1,0 +1,1120 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#fixture",
+  "value": [
+    {
+      "id": "00000000-0000-4000-8000-0000000f0001",
+      "createdDateTime": "2026-10-15T02:55:00Z",
+      "userDisplayName": "Avery Engineer",
+      "userPrincipalName": "avery@example.com",
+      "userId": "00000000-0000-4000-8000-0000000000a1",
+      "appId": "c44b4083-3bb0-49c1-b47d-974e53cbdf3c",
+      "appDisplayName": "Azure Portal",
+      "ipAddress": "203.0.113.10",
+      "clientAppUsed": "Browser",
+      "correlationId": "00000000-0000-4000-8000-00000000c001",
+      "conditionalAccessStatus": "success",
+      "isInteractive": true,
+      "authenticationRequirement": "multiFactorAuthentication",
+      "riskDetail": "none",
+      "riskLevelAggregated": "none",
+      "riskLevelDuringSignIn": "none",
+      "riskState": "none",
+      "riskEventTypes_v2": [],
+      "resourceDisplayName": "Windows Azure Service Management API",
+      "resourceId": "c44b4083-3bb0-49c1-b47d-974e53cbdf3c",
+      "status": {
+        "errorCode": 0,
+        "failureReason": "Other.",
+        "additionalDetails": null
+      },
+      "deviceDetail": {
+        "deviceId": "",
+        "displayName": "EX-LT-0142",
+        "operatingSystem": "Windows10",
+        "browser": "Edge 141.0",
+        "isCompliant": true,
+        "isManaged": true,
+        "trustType": "Azure AD joined"
+      },
+      "location": {
+        "city": "Seattle",
+        "state": "Washington",
+        "countryOrRegion": "US",
+        "geoCoordinates": {
+          "altitude": null,
+          "latitude": 47.6,
+          "longitude": -122.3
+        }
+      },
+      "appliedConditionalAccessPolicies": [
+        {
+          "id": "00000000-0000-4000-8000-000000000901",
+          "displayName": "CA001 – Require MFA for all users",
+          "enforcedGrantControls": [
+            "Mfa"
+          ],
+          "enforcedSessionControls": [],
+          "result": "success"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000902",
+          "displayName": "CA002 – Block legacy authentication",
+          "enforcedGrantControls": [],
+          "enforcedSessionControls": [],
+          "result": "notApplied"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000903",
+          "displayName": "CA003 – Phishing-resistant MFA for admins",
+          "enforcedGrantControls": [
+            "RequireAuthenticationStrength"
+          ],
+          "enforcedSessionControls": [
+            "SignInFrequency"
+          ],
+          "result": "success"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000904",
+          "displayName": "CA004 – Require compliant device for Office 365",
+          "enforcedGrantControls": [],
+          "enforcedSessionControls": [],
+          "result": "reportOnlySuccess"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000905",
+          "displayName": "CA005 – Block untrusted countries",
+          "enforcedGrantControls": [],
+          "enforcedSessionControls": [],
+          "result": "notApplied"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000906",
+          "displayName": "CA006 – Guests: require MFA",
+          "enforcedGrantControls": [],
+          "enforcedSessionControls": [],
+          "result": "notEnabled"
+        }
+      ]
+    },
+    {
+      "id": "00000000-0000-4000-8000-0000000f0002",
+      "createdDateTime": "2026-10-14T16:20:00Z",
+      "userDisplayName": "Adele Lee",
+      "userPrincipalName": "a.lee@example.com",
+      "userId": "00000000-0000-4000-8000-000000000101",
+      "appId": "1fec8e78-bce4-4aaf-ab1b-5451cc387264",
+      "appDisplayName": "Microsoft Teams",
+      "ipAddress": "203.0.113.24",
+      "clientAppUsed": "Mobile Apps and Desktop clients",
+      "correlationId": "00000000-0000-4000-8000-00000000c002",
+      "conditionalAccessStatus": "success",
+      "isInteractive": true,
+      "authenticationRequirement": "multiFactorAuthentication",
+      "riskDetail": "none",
+      "riskLevelAggregated": "none",
+      "riskLevelDuringSignIn": "none",
+      "riskState": "none",
+      "riskEventTypes_v2": [],
+      "resourceDisplayName": "Microsoft Teams",
+      "resourceId": "1fec8e78-bce4-4aaf-ab1b-5451cc387264",
+      "status": {
+        "errorCode": 0,
+        "failureReason": "Other.",
+        "additionalDetails": null
+      },
+      "deviceDetail": {
+        "deviceId": "",
+        "displayName": "EX-LT-0142",
+        "operatingSystem": "Windows10",
+        "browser": "Teams",
+        "isCompliant": true,
+        "isManaged": true,
+        "trustType": "Azure AD joined"
+      },
+      "location": {
+        "city": "Seattle",
+        "state": "Washington",
+        "countryOrRegion": "US",
+        "geoCoordinates": {
+          "altitude": null,
+          "latitude": 47.6,
+          "longitude": -122.3
+        }
+      },
+      "appliedConditionalAccessPolicies": [
+        {
+          "id": "00000000-0000-4000-8000-000000000901",
+          "displayName": "CA001 – Require MFA for all users",
+          "enforcedGrantControls": [
+            "Mfa"
+          ],
+          "enforcedSessionControls": [],
+          "result": "success"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000902",
+          "displayName": "CA002 – Block legacy authentication",
+          "enforcedGrantControls": [],
+          "enforcedSessionControls": [],
+          "result": "notApplied"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000903",
+          "displayName": "CA003 – Phishing-resistant MFA for admins",
+          "enforcedGrantControls": [
+            "RequireAuthenticationStrength"
+          ],
+          "enforcedSessionControls": [
+            "SignInFrequency"
+          ],
+          "result": "success"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000904",
+          "displayName": "CA004 – Require compliant device for Office 365",
+          "enforcedGrantControls": [],
+          "enforcedSessionControls": [],
+          "result": "reportOnlySuccess"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000905",
+          "displayName": "CA005 – Block untrusted countries",
+          "enforcedGrantControls": [],
+          "enforcedSessionControls": [],
+          "result": "notApplied"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000906",
+          "displayName": "CA006 – Guests: require MFA",
+          "enforcedGrantControls": [],
+          "enforcedSessionControls": [],
+          "result": "notEnabled"
+        }
+      ]
+    },
+    {
+      "id": "00000000-0000-4000-8000-0000000f0003",
+      "createdDateTime": "2026-10-15T03:02:00Z",
+      "userDisplayName": "Morgan Chen",
+      "userPrincipalName": "m.chen@example.com",
+      "userId": "00000000-0000-4000-8000-000000000102",
+      "appId": "00000002-0000-0ff1-ce00-000000000000",
+      "appDisplayName": "Office 365 Exchange Online",
+      "ipAddress": "198.51.100.20",
+      "clientAppUsed": "Browser",
+      "correlationId": "00000000-0000-4000-8000-00000000c003",
+      "conditionalAccessStatus": "success",
+      "isInteractive": true,
+      "authenticationRequirement": "multiFactorAuthentication",
+      "riskDetail": "none",
+      "riskLevelAggregated": "none",
+      "riskLevelDuringSignIn": "none",
+      "riskState": "none",
+      "riskEventTypes_v2": [],
+      "resourceDisplayName": "Office 365 Exchange Online",
+      "resourceId": "00000002-0000-0ff1-ce00-000000000000",
+      "status": {
+        "errorCode": 0,
+        "failureReason": "Other.",
+        "additionalDetails": null
+      },
+      "deviceDetail": {
+        "deviceId": "",
+        "displayName": "EX-LT-0211",
+        "operatingSystem": "Windows10",
+        "browser": "Edge 141.0",
+        "isCompliant": true,
+        "isManaged": true,
+        "trustType": "Azure AD joined"
+      },
+      "location": {
+        "city": "London",
+        "state": "England",
+        "countryOrRegion": "GB",
+        "geoCoordinates": {
+          "altitude": null,
+          "latitude": 47.6,
+          "longitude": -122.3
+        }
+      },
+      "appliedConditionalAccessPolicies": [
+        {
+          "id": "00000000-0000-4000-8000-000000000901",
+          "displayName": "CA001 – Require MFA for all users",
+          "enforcedGrantControls": [
+            "Mfa"
+          ],
+          "enforcedSessionControls": [],
+          "result": "success"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000902",
+          "displayName": "CA002 – Block legacy authentication",
+          "enforcedGrantControls": [],
+          "enforcedSessionControls": [],
+          "result": "notApplied"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000903",
+          "displayName": "CA003 – Phishing-resistant MFA for admins",
+          "enforcedGrantControls": [],
+          "enforcedSessionControls": [],
+          "result": "notApplied"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000904",
+          "displayName": "CA004 – Require compliant device for Office 365",
+          "enforcedGrantControls": [],
+          "enforcedSessionControls": [],
+          "result": "reportOnlySuccess"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000905",
+          "displayName": "CA005 – Block untrusted countries",
+          "enforcedGrantControls": [],
+          "enforcedSessionControls": [],
+          "result": "notApplied"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000906",
+          "displayName": "CA006 – Guests: require MFA",
+          "enforcedGrantControls": [],
+          "enforcedSessionControls": [],
+          "result": "notEnabled"
+        }
+      ]
+    },
+    {
+      "id": "00000000-0000-4000-8000-0000000f0004",
+      "createdDateTime": "2026-10-14T03:10:00Z",
+      "userDisplayName": "Morgan Chen",
+      "userPrincipalName": "m.chen@example.com",
+      "userId": "00000000-0000-4000-8000-000000000102",
+      "appId": "00000002-0000-0ff1-ce00-000000000000",
+      "appDisplayName": "Office 365 Exchange Online",
+      "ipAddress": "192.0.2.77",
+      "clientAppUsed": "Browser",
+      "correlationId": "00000000-0000-4000-8000-00000000c004",
+      "conditionalAccessStatus": "notApplied",
+      "isInteractive": true,
+      "authenticationRequirement": "singleFactorAuthentication",
+      "riskDetail": "none",
+      "riskLevelAggregated": "medium",
+      "riskLevelDuringSignIn": "medium",
+      "riskState": "atRisk",
+      "riskEventTypes_v2": [
+        "unfamiliarFeatures"
+      ],
+      "resourceDisplayName": "Office 365 Exchange Online",
+      "resourceId": "00000002-0000-0ff1-ce00-000000000000",
+      "status": {
+        "errorCode": 50126,
+        "failureReason": "Error validating credentials due to invalid username or password.",
+        "additionalDetails": null
+      },
+      "deviceDetail": {
+        "deviceId": "",
+        "displayName": "",
+        "operatingSystem": "Linux",
+        "browser": "Python Requests 2.32",
+        "isCompliant": false,
+        "isManaged": false,
+        "trustType": ""
+      },
+      "location": {
+        "city": "Amsterdam",
+        "state": "North Holland",
+        "countryOrRegion": "NL",
+        "geoCoordinates": {
+          "altitude": null,
+          "latitude": 47.6,
+          "longitude": -122.3
+        }
+      },
+      "appliedConditionalAccessPolicies": [
+        {
+          "id": "00000000-0000-4000-8000-000000000901",
+          "displayName": "CA001 – Require MFA for all users",
+          "enforcedGrantControls": [],
+          "enforcedSessionControls": [],
+          "result": "notApplied"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000902",
+          "displayName": "CA002 – Block legacy authentication",
+          "enforcedGrantControls": [],
+          "enforcedSessionControls": [],
+          "result": "notApplied"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000903",
+          "displayName": "CA003 – Phishing-resistant MFA for admins",
+          "enforcedGrantControls": [],
+          "enforcedSessionControls": [],
+          "result": "notApplied"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000904",
+          "displayName": "CA004 – Require compliant device for Office 365",
+          "enforcedGrantControls": [],
+          "enforcedSessionControls": [],
+          "result": "reportOnlyNotApplied"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000905",
+          "displayName": "CA005 – Block untrusted countries",
+          "enforcedGrantControls": [],
+          "enforcedSessionControls": [],
+          "result": "notApplied"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000906",
+          "displayName": "CA006 – Guests: require MFA",
+          "enforcedGrantControls": [],
+          "enforcedSessionControls": [],
+          "result": "notEnabled"
+        }
+      ]
+    },
+    {
+      "id": "00000000-0000-4000-8000-0000000f0005",
+      "createdDateTime": "2026-10-14T03:18:00Z",
+      "userDisplayName": "Morgan Chen",
+      "userPrincipalName": "m.chen@example.com",
+      "userId": "00000000-0000-4000-8000-000000000102",
+      "appId": "00000000-0000-4000-8001-000000000404",
+      "appDisplayName": "PDF Converter Online",
+      "ipAddress": "192.0.2.77",
+      "clientAppUsed": "Browser",
+      "correlationId": "00000000-0000-4000-8000-00000000c005",
+      "conditionalAccessStatus": "success",
+      "isInteractive": true,
+      "authenticationRequirement": "multiFactorAuthentication",
+      "riskDetail": "none",
+      "riskLevelAggregated": "high",
+      "riskLevelDuringSignIn": "high",
+      "riskState": "atRisk",
+      "riskEventTypes_v2": [
+        "unfamiliarFeatures",
+        "anonymizedIPAddress"
+      ],
+      "resourceDisplayName": "PDF Converter Online",
+      "resourceId": "00000000-0000-4000-8001-000000000404",
+      "status": {
+        "errorCode": 0,
+        "failureReason": "Other.",
+        "additionalDetails": null
+      },
+      "deviceDetail": {
+        "deviceId": "",
+        "displayName": "",
+        "operatingSystem": "Linux",
+        "browser": "Chrome 140.0",
+        "isCompliant": false,
+        "isManaged": false,
+        "trustType": ""
+      },
+      "location": {
+        "city": "Amsterdam",
+        "state": "North Holland",
+        "countryOrRegion": "NL",
+        "geoCoordinates": {
+          "altitude": null,
+          "latitude": 47.6,
+          "longitude": -122.3
+        }
+      },
+      "appliedConditionalAccessPolicies": [
+        {
+          "id": "00000000-0000-4000-8000-000000000901",
+          "displayName": "CA001 – Require MFA for all users",
+          "enforcedGrantControls": [
+            "Mfa"
+          ],
+          "enforcedSessionControls": [],
+          "result": "success"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000902",
+          "displayName": "CA002 – Block legacy authentication",
+          "enforcedGrantControls": [],
+          "enforcedSessionControls": [],
+          "result": "notApplied"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000903",
+          "displayName": "CA003 – Phishing-resistant MFA for admins",
+          "enforcedGrantControls": [],
+          "enforcedSessionControls": [],
+          "result": "notApplied"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000904",
+          "displayName": "CA004 – Require compliant device for Office 365",
+          "enforcedGrantControls": [],
+          "enforcedSessionControls": [],
+          "result": "reportOnlyNotApplied"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000905",
+          "displayName": "CA005 – Block untrusted countries",
+          "enforcedGrantControls": [],
+          "enforcedSessionControls": [],
+          "result": "notApplied"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000906",
+          "displayName": "CA006 – Guests: require MFA",
+          "enforcedGrantControls": [],
+          "enforcedSessionControls": [],
+          "result": "notEnabled"
+        }
+      ]
+    },
+    {
+      "id": "00000000-0000-4000-8000-0000000f0006",
+      "createdDateTime": "2026-10-12T13:04:00Z",
+      "userDisplayName": "Priya Raman",
+      "userPrincipalName": "p.raman@example.com",
+      "userId": "00000000-0000-4000-8000-000000000103",
+      "appId": "00000003-0000-0ff1-ce00-000000000000",
+      "appDisplayName": "Office 365 SharePoint Online",
+      "ipAddress": "203.0.113.31",
+      "clientAppUsed": "Browser",
+      "correlationId": "00000000-0000-4000-8000-00000000c006",
+      "conditionalAccessStatus": "notApplied",
+      "isInteractive": true,
+      "authenticationRequirement": "singleFactorAuthentication",
+      "riskDetail": "none",
+      "riskLevelAggregated": "none",
+      "riskLevelDuringSignIn": "none",
+      "riskState": "none",
+      "riskEventTypes_v2": [],
+      "resourceDisplayName": "Office 365 SharePoint Online",
+      "resourceId": "00000003-0000-0ff1-ce00-000000000000",
+      "status": {
+        "errorCode": 50074,
+        "failureReason": "Strong Authentication is required.",
+        "additionalDetails": "MFA required in Microsoft Entra ID"
+      },
+      "deviceDetail": {
+        "deviceId": "",
+        "displayName": "",
+        "operatingSystem": "MacOs",
+        "browser": "Safari 18.6",
+        "isCompliant": false,
+        "isManaged": false,
+        "trustType": ""
+      },
+      "location": {
+        "city": "Seattle",
+        "state": "Washington",
+        "countryOrRegion": "US",
+        "geoCoordinates": {
+          "altitude": null,
+          "latitude": 47.6,
+          "longitude": -122.3
+        }
+      },
+      "appliedConditionalAccessPolicies": [
+        {
+          "id": "00000000-0000-4000-8000-000000000901",
+          "displayName": "CA001 – Require MFA for all users",
+          "enforcedGrantControls": [],
+          "enforcedSessionControls": [],
+          "result": "notApplied"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000902",
+          "displayName": "CA002 – Block legacy authentication",
+          "enforcedGrantControls": [],
+          "enforcedSessionControls": [],
+          "result": "notApplied"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000903",
+          "displayName": "CA003 – Phishing-resistant MFA for admins",
+          "enforcedGrantControls": [],
+          "enforcedSessionControls": [],
+          "result": "notApplied"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000904",
+          "displayName": "CA004 – Require compliant device for Office 365",
+          "enforcedGrantControls": [],
+          "enforcedSessionControls": [],
+          "result": "reportOnlyNotApplied"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000905",
+          "displayName": "CA005 – Block untrusted countries",
+          "enforcedGrantControls": [],
+          "enforcedSessionControls": [],
+          "result": "notApplied"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000906",
+          "displayName": "CA006 – Guests: require MFA",
+          "enforcedGrantControls": [],
+          "enforcedSessionControls": [],
+          "result": "notEnabled"
+        }
+      ]
+    },
+    {
+      "id": "00000000-0000-4000-8000-0000000f0007",
+      "createdDateTime": "2026-10-12T13:05:00Z",
+      "userDisplayName": "Priya Raman",
+      "userPrincipalName": "p.raman@example.com",
+      "userId": "00000000-0000-4000-8000-000000000103",
+      "appId": "00000003-0000-0ff1-ce00-000000000000",
+      "appDisplayName": "Office 365 SharePoint Online",
+      "ipAddress": "203.0.113.31",
+      "clientAppUsed": "Browser",
+      "correlationId": "00000000-0000-4000-8000-00000000c007",
+      "conditionalAccessStatus": "success",
+      "isInteractive": true,
+      "authenticationRequirement": "multiFactorAuthentication",
+      "riskDetail": "none",
+      "riskLevelAggregated": "none",
+      "riskLevelDuringSignIn": "none",
+      "riskState": "none",
+      "riskEventTypes_v2": [],
+      "resourceDisplayName": "Office 365 SharePoint Online",
+      "resourceId": "00000003-0000-0ff1-ce00-000000000000",
+      "status": {
+        "errorCode": 0,
+        "failureReason": "Other.",
+        "additionalDetails": null
+      },
+      "deviceDetail": {
+        "deviceId": "",
+        "displayName": "",
+        "operatingSystem": "MacOs",
+        "browser": "Safari 18.6",
+        "isCompliant": false,
+        "isManaged": false,
+        "trustType": ""
+      },
+      "location": {
+        "city": "Seattle",
+        "state": "Washington",
+        "countryOrRegion": "US",
+        "geoCoordinates": {
+          "altitude": null,
+          "latitude": 47.6,
+          "longitude": -122.3
+        }
+      },
+      "appliedConditionalAccessPolicies": [
+        {
+          "id": "00000000-0000-4000-8000-000000000901",
+          "displayName": "CA001 – Require MFA for all users",
+          "enforcedGrantControls": [
+            "Mfa"
+          ],
+          "enforcedSessionControls": [],
+          "result": "success"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000902",
+          "displayName": "CA002 – Block legacy authentication",
+          "enforcedGrantControls": [],
+          "enforcedSessionControls": [],
+          "result": "notApplied"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000903",
+          "displayName": "CA003 – Phishing-resistant MFA for admins",
+          "enforcedGrantControls": [],
+          "enforcedSessionControls": [],
+          "result": "notApplied"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000904",
+          "displayName": "CA004 – Require compliant device for Office 365",
+          "enforcedGrantControls": [],
+          "enforcedSessionControls": [],
+          "result": "reportOnlyFailure"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000905",
+          "displayName": "CA005 – Block untrusted countries",
+          "enforcedGrantControls": [],
+          "enforcedSessionControls": [],
+          "result": "notApplied"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000906",
+          "displayName": "CA006 – Guests: require MFA",
+          "enforcedGrantControls": [],
+          "enforcedSessionControls": [],
+          "result": "notEnabled"
+        }
+      ]
+    },
+    {
+      "id": "00000000-0000-4000-8000-0000000f0008",
+      "createdDateTime": "2026-10-01T09:00:00Z",
+      "userDisplayName": "Rafael Castillo",
+      "userPrincipalName": "r.castillo@example.com",
+      "userId": "00000000-0000-4000-8000-000000000104",
+      "appId": "d3590ed6-52b3-4102-aeff-aad2292ab01c",
+      "appDisplayName": "Microsoft Office",
+      "ipAddress": "198.51.100.140",
+      "clientAppUsed": "Browser",
+      "correlationId": "00000000-0000-4000-8000-00000000c008",
+      "conditionalAccessStatus": "notApplied",
+      "isInteractive": true,
+      "authenticationRequirement": "singleFactorAuthentication",
+      "riskDetail": "none",
+      "riskLevelAggregated": "none",
+      "riskLevelDuringSignIn": "none",
+      "riskState": "none",
+      "riskEventTypes_v2": [],
+      "resourceDisplayName": "Microsoft Office",
+      "resourceId": "d3590ed6-52b3-4102-aeff-aad2292ab01c",
+      "status": {
+        "errorCode": 50057,
+        "failureReason": "User account is disabled.",
+        "additionalDetails": null
+      },
+      "deviceDetail": {
+        "deviceId": "",
+        "displayName": "",
+        "operatingSystem": "Ios",
+        "browser": "Mobile Safari",
+        "isCompliant": false,
+        "isManaged": false,
+        "trustType": ""
+      },
+      "location": {
+        "city": "Madrid",
+        "state": "Madrid",
+        "countryOrRegion": "ES",
+        "geoCoordinates": {
+          "altitude": null,
+          "latitude": 47.6,
+          "longitude": -122.3
+        }
+      },
+      "appliedConditionalAccessPolicies": [
+        {
+          "id": "00000000-0000-4000-8000-000000000901",
+          "displayName": "CA001 – Require MFA for all users",
+          "enforcedGrantControls": [],
+          "enforcedSessionControls": [],
+          "result": "notApplied"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000902",
+          "displayName": "CA002 – Block legacy authentication",
+          "enforcedGrantControls": [],
+          "enforcedSessionControls": [],
+          "result": "notApplied"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000903",
+          "displayName": "CA003 – Phishing-resistant MFA for admins",
+          "enforcedGrantControls": [],
+          "enforcedSessionControls": [],
+          "result": "notApplied"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000904",
+          "displayName": "CA004 – Require compliant device for Office 365",
+          "enforcedGrantControls": [],
+          "enforcedSessionControls": [],
+          "result": "reportOnlyNotApplied"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000905",
+          "displayName": "CA005 – Block untrusted countries",
+          "enforcedGrantControls": [],
+          "enforcedSessionControls": [],
+          "result": "notApplied"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000906",
+          "displayName": "CA006 – Guests: require MFA",
+          "enforcedGrantControls": [],
+          "enforcedSessionControls": [],
+          "result": "notEnabled"
+        }
+      ]
+    },
+    {
+      "id": "00000000-0000-4000-8000-0000000f0009",
+      "createdDateTime": "2026-10-13T18:40:00Z",
+      "userDisplayName": "Chris Novak",
+      "userPrincipalName": "c.novak@example.com",
+      "userId": "00000000-0000-4000-8000-000000000111",
+      "appId": "00000002-0000-0ff1-ce00-000000000000",
+      "appDisplayName": "Office 365 Exchange Online",
+      "ipAddress": "198.51.100.141",
+      "clientAppUsed": "Exchange ActiveSync",
+      "correlationId": "00000000-0000-4000-8000-00000000c009",
+      "conditionalAccessStatus": "failure",
+      "isInteractive": true,
+      "authenticationRequirement": "singleFactorAuthentication",
+      "riskDetail": "none",
+      "riskLevelAggregated": "none",
+      "riskLevelDuringSignIn": "none",
+      "riskState": "none",
+      "riskEventTypes_v2": [],
+      "resourceDisplayName": "Office 365 Exchange Online",
+      "resourceId": "00000002-0000-0ff1-ce00-000000000000",
+      "status": {
+        "errorCode": 53003,
+        "failureReason": "Access has been blocked by Conditional Access policies.",
+        "additionalDetails": null
+      },
+      "deviceDetail": {
+        "deviceId": "",
+        "displayName": "",
+        "operatingSystem": "Android",
+        "browser": "Native mail",
+        "isCompliant": false,
+        "isManaged": false,
+        "trustType": ""
+      },
+      "location": {
+        "city": "Madrid",
+        "state": "Madrid",
+        "countryOrRegion": "ES",
+        "geoCoordinates": {
+          "altitude": null,
+          "latitude": 47.6,
+          "longitude": -122.3
+        }
+      },
+      "appliedConditionalAccessPolicies": [
+        {
+          "id": "00000000-0000-4000-8000-000000000901",
+          "displayName": "CA001 – Require MFA for all users",
+          "enforcedGrantControls": [],
+          "enforcedSessionControls": [],
+          "result": "notApplied"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000902",
+          "displayName": "CA002 – Block legacy authentication",
+          "enforcedGrantControls": [
+            "Block"
+          ],
+          "enforcedSessionControls": [],
+          "result": "failure"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000903",
+          "displayName": "CA003 – Phishing-resistant MFA for admins",
+          "enforcedGrantControls": [],
+          "enforcedSessionControls": [],
+          "result": "notApplied"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000904",
+          "displayName": "CA004 – Require compliant device for Office 365",
+          "enforcedGrantControls": [],
+          "enforcedSessionControls": [],
+          "result": "reportOnlyNotApplied"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000905",
+          "displayName": "CA005 – Block untrusted countries",
+          "enforcedGrantControls": [],
+          "enforcedSessionControls": [],
+          "result": "notApplied"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000906",
+          "displayName": "CA006 – Guests: require MFA",
+          "enforcedGrantControls": [],
+          "enforcedSessionControls": [],
+          "result": "notEnabled"
+        }
+      ]
+    },
+    {
+      "id": "00000000-0000-4000-8000-0000000f0010",
+      "createdDateTime": "2026-09-30T14:00:00Z",
+      "userDisplayName": "Jamie Doe",
+      "userPrincipalName": "j.doe_partner.example#EXT#@exampleorg.onmicrosoft.com",
+      "userId": "00000000-0000-4000-8000-000000000106",
+      "appId": "1fec8e78-bce4-4aaf-ab1b-5451cc387264",
+      "appDisplayName": "Microsoft Teams",
+      "ipAddress": "192.0.2.150",
+      "clientAppUsed": "Mobile Apps and Desktop clients",
+      "correlationId": "00000000-0000-4000-8000-00000000c010",
+      "conditionalAccessStatus": "success",
+      "isInteractive": true,
+      "authenticationRequirement": "multiFactorAuthentication",
+      "riskDetail": "none",
+      "riskLevelAggregated": "none",
+      "riskLevelDuringSignIn": "none",
+      "riskState": "none",
+      "riskEventTypes_v2": [],
+      "resourceDisplayName": "Microsoft Teams",
+      "resourceId": "1fec8e78-bce4-4aaf-ab1b-5451cc387264",
+      "status": {
+        "errorCode": 0,
+        "failureReason": "Other.",
+        "additionalDetails": null
+      },
+      "deviceDetail": {
+        "deviceId": "",
+        "displayName": "",
+        "operatingSystem": "Windows10",
+        "browser": "Teams",
+        "isCompliant": false,
+        "isManaged": false,
+        "trustType": ""
+      },
+      "location": {
+        "city": "Dublin",
+        "state": "Leinster",
+        "countryOrRegion": "IE",
+        "geoCoordinates": {
+          "altitude": null,
+          "latitude": 47.6,
+          "longitude": -122.3
+        }
+      },
+      "appliedConditionalAccessPolicies": [
+        {
+          "id": "00000000-0000-4000-8000-000000000901",
+          "displayName": "CA001 – Require MFA for all users",
+          "enforcedGrantControls": [
+            "Mfa"
+          ],
+          "enforcedSessionControls": [],
+          "result": "success"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000902",
+          "displayName": "CA002 – Block legacy authentication",
+          "enforcedGrantControls": [],
+          "enforcedSessionControls": [],
+          "result": "notApplied"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000903",
+          "displayName": "CA003 – Phishing-resistant MFA for admins",
+          "enforcedGrantControls": [],
+          "enforcedSessionControls": [],
+          "result": "notApplied"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000904",
+          "displayName": "CA004 – Require compliant device for Office 365",
+          "enforcedGrantControls": [],
+          "enforcedSessionControls": [],
+          "result": "reportOnlyNotApplied"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000905",
+          "displayName": "CA005 – Block untrusted countries",
+          "enforcedGrantControls": [],
+          "enforcedSessionControls": [],
+          "result": "notApplied"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000906",
+          "displayName": "CA006 – Guests: require MFA",
+          "enforcedGrantControls": [],
+          "enforcedSessionControls": [],
+          "result": "notEnabled"
+        }
+      ]
+    },
+    {
+      "id": "00000000-0000-4000-8000-0000000f0011",
+      "createdDateTime": "2026-10-15T03:20:00Z",
+      "userDisplayName": "Dana Okafor",
+      "userPrincipalName": "d.okafor@example.com",
+      "userId": "00000000-0000-4000-8000-000000000108",
+      "appId": "499b84ac-1321-427f-aa17-267ca6975798",
+      "appDisplayName": "Azure DevOps",
+      "ipAddress": "203.0.113.40",
+      "clientAppUsed": "Browser",
+      "correlationId": "00000000-0000-4000-8000-00000000c011",
+      "conditionalAccessStatus": "success",
+      "isInteractive": true,
+      "authenticationRequirement": "multiFactorAuthentication",
+      "riskDetail": "none",
+      "riskLevelAggregated": "none",
+      "riskLevelDuringSignIn": "none",
+      "riskState": "none",
+      "riskEventTypes_v2": [],
+      "resourceDisplayName": "Azure DevOps",
+      "resourceId": "499b84ac-1321-427f-aa17-267ca6975798",
+      "status": {
+        "errorCode": 0,
+        "failureReason": "Other.",
+        "additionalDetails": null
+      },
+      "deviceDetail": {
+        "deviceId": "",
+        "displayName": "EX-DT-0031",
+        "operatingSystem": "Windows10",
+        "browser": "Chrome 141.0",
+        "isCompliant": false,
+        "isManaged": false,
+        "trustType": "Azure AD joined"
+      },
+      "location": {
+        "city": "Seattle",
+        "state": "Washington",
+        "countryOrRegion": "US",
+        "geoCoordinates": {
+          "altitude": null,
+          "latitude": 47.6,
+          "longitude": -122.3
+        }
+      },
+      "appliedConditionalAccessPolicies": [
+        {
+          "id": "00000000-0000-4000-8000-000000000901",
+          "displayName": "CA001 – Require MFA for all users",
+          "enforcedGrantControls": [
+            "Mfa"
+          ],
+          "enforcedSessionControls": [],
+          "result": "success"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000902",
+          "displayName": "CA002 – Block legacy authentication",
+          "enforcedGrantControls": [],
+          "enforcedSessionControls": [],
+          "result": "notApplied"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000903",
+          "displayName": "CA003 – Phishing-resistant MFA for admins",
+          "enforcedGrantControls": [
+            "RequireAuthenticationStrength"
+          ],
+          "enforcedSessionControls": [
+            "SignInFrequency"
+          ],
+          "result": "success"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000904",
+          "displayName": "CA004 – Require compliant device for Office 365",
+          "enforcedGrantControls": [],
+          "enforcedSessionControls": [],
+          "result": "reportOnlyNotApplied"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000905",
+          "displayName": "CA005 – Block untrusted countries",
+          "enforcedGrantControls": [],
+          "enforcedSessionControls": [],
+          "result": "notApplied"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000906",
+          "displayName": "CA006 – Guests: require MFA",
+          "enforcedGrantControls": [],
+          "enforcedSessionControls": [],
+          "result": "notEnabled"
+        }
+      ]
+    },
+    {
+      "id": "00000000-0000-4000-8000-0000000f0012",
+      "createdDateTime": "2026-08-20T10:00:00Z",
+      "userDisplayName": "Break Glass 01",
+      "userPrincipalName": "bg01@exampleorg.onmicrosoft.com",
+      "userId": "00000000-0000-4000-8000-000000000110",
+      "appId": "c44b4083-3bb0-49c1-b47d-974e53cbdf3c",
+      "appDisplayName": "Azure Portal",
+      "ipAddress": "203.0.113.5",
+      "clientAppUsed": "Browser",
+      "correlationId": "00000000-0000-4000-8000-00000000c012",
+      "conditionalAccessStatus": "success",
+      "isInteractive": true,
+      "authenticationRequirement": "multiFactorAuthentication",
+      "riskDetail": "none",
+      "riskLevelAggregated": "none",
+      "riskLevelDuringSignIn": "none",
+      "riskState": "none",
+      "riskEventTypes_v2": [],
+      "resourceDisplayName": "Windows Azure Service Management API",
+      "resourceId": "c44b4083-3bb0-49c1-b47d-974e53cbdf3c",
+      "status": {
+        "errorCode": 0,
+        "failureReason": "Other.",
+        "additionalDetails": null
+      },
+      "deviceDetail": {
+        "deviceId": "",
+        "displayName": "",
+        "operatingSystem": "Windows10",
+        "browser": "Edge 139.0",
+        "isCompliant": false,
+        "isManaged": false,
+        "trustType": ""
+      },
+      "location": {
+        "city": "Seattle",
+        "state": "Washington",
+        "countryOrRegion": "US",
+        "geoCoordinates": {
+          "altitude": null,
+          "latitude": 47.6,
+          "longitude": -122.3
+        }
+      },
+      "appliedConditionalAccessPolicies": [
+        {
+          "id": "00000000-0000-4000-8000-000000000901",
+          "displayName": "CA001 – Require MFA for all users",
+          "enforcedGrantControls": [],
+          "enforcedSessionControls": [],
+          "result": "notApplied"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000902",
+          "displayName": "CA002 – Block legacy authentication",
+          "enforcedGrantControls": [],
+          "enforcedSessionControls": [],
+          "result": "notApplied"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000903",
+          "displayName": "CA003 – Phishing-resistant MFA for admins",
+          "enforcedGrantControls": [],
+          "enforcedSessionControls": [],
+          "result": "notApplied"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000904",
+          "displayName": "CA004 – Require compliant device for Office 365",
+          "enforcedGrantControls": [],
+          "enforcedSessionControls": [],
+          "result": "reportOnlyNotApplied"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000905",
+          "displayName": "CA005 – Block untrusted countries",
+          "enforcedGrantControls": [
+            "Block"
+          ],
+          "enforcedSessionControls": [],
+          "result": "success"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000906",
+          "displayName": "CA006 – Guests: require MFA",
+          "enforcedGrantControls": [],
+          "enforcedSessionControls": [],
+          "result": "notEnabled"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,29 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#fixture",
+  "value": [
+    {
+      "id": "re-05",
+      "principalId": "00000000-0000-4000-8000-0000000000a1",
+      "roleDefinitionId": "194ae4cb-b126-40b2-bd5b-6091b380977d",
+      "directoryScopeId": "/",
+      "appScopeId": null,
+      "memberType": "Direct",
+      "roleEligibilityScheduleId": "re-05-schedule",
+      "startDateTime": "2026-01-01T00:00:00Z",
+      "endDateTime": "2027-06-30T00:00:00Z",
+      "principal": {
+        "@odata.type": "#microsoft.graph.user",
+        "id": "00000000-0000-4000-8000-0000000000a1",
+        "displayName": "Avery Engineer",
+        "userPrincipalName": "avery@example.com"
+      },
+      "roleDefinition": {
+        "id": "194ae4cb-b126-40b2-bd5b-6091b380977d",
+        "displayName": "Security Administrator",
+        "description": "Can read security information and reports, and manage configuration in Microsoft Entra ID and Office 365.",
+        "isBuiltIn": true,
+        "templateId": "194ae4cb-b126-40b2-bd5b-6091b380977d"
+      }
+    }
+  ]
+}

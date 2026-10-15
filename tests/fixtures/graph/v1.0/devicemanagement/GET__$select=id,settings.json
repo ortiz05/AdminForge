@@ -1,0 +1,8 @@
+{
+  "id": "deviceManagement",
+  "settings": {
+    "deviceComplianceCheckinThresholdDays": 30,
+    "isScheduledActionEnabled": true,
+    "secureByDefault": true
+  }
+}

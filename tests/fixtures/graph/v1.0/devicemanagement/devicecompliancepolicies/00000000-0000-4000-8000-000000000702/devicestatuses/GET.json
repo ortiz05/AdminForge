@@ -1,0 +1,15 @@
+{
+  "value": [
+    {
+      "id": "702-603",
+      "deviceDisplayName": "iPhone 15 – R. Castillo",
+      "userName": "Rafael Castillo",
+      "userPrincipalName": "r.castillo@example.com",
+      "deviceModel": "iPhone 15",
+      "platform": 0,
+      "complianceGracePeriodExpirationDateTime": "9999-12-31T23:59:59Z",
+      "status": "compliant",
+      "lastReportedDateTime": "2026-06-28T08:00:00Z"
+    }
+  ]
+}

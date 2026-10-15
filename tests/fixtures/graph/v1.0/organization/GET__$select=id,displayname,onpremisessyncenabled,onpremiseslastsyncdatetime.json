@@ -1,0 +1,26 @@
+{
+  "value": [
+    {
+      "id": "00000000-0000-4000-8000-00000000e0e0",
+      "displayName": "Example Org",
+      "onPremisesSyncEnabled": true,
+      "onPremisesLastSyncDateTime": "2026-10-15T03:30:00Z",
+      "verifiedDomains": [
+        {
+          "name": "example.com",
+          "isDefault": true,
+          "isInitial": false,
+          "type": "Managed",
+          "capabilities": "Email, OfficeCommunicationsOnline"
+        },
+        {
+          "name": "exampleorg.onmicrosoft.com",
+          "isDefault": false,
+          "isInitial": true,
+          "type": "Managed",
+          "capabilities": "Email, OfficeCommunicationsOnline"
+        }
+      ]
+    }
+  ]
+}

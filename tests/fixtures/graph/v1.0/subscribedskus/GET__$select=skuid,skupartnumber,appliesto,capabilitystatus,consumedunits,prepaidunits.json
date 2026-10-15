@@ -1,0 +1,212 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#fixture",
+  "value": [
+    {
+      "skuId": "00000000-0000-4000-8000-000000001001",
+      "skuPartNumber": "SPE_E5",
+      "appliesTo": "User",
+      "capabilityStatus": "Enabled",
+      "consumedUnits": 1104,
+      "prepaidUnits": {
+        "enabled": 1200,
+        "suspended": 0,
+        "warning": 0,
+        "lockedOut": 0
+      },
+      "servicePlans": [
+        {
+          "servicePlanId": "00000000-0000-4000-8000-000000001100",
+          "servicePlanName": "EXCHANGE_S_ENTERPRISE",
+          "provisioningStatus": "Success",
+          "appliesTo": "User"
+        },
+        {
+          "servicePlanId": "00000000-0000-4000-8000-000000001101",
+          "servicePlanName": "SHAREPOINTENTERPRISE",
+          "provisioningStatus": "Success",
+          "appliesTo": "User"
+        },
+        {
+          "servicePlanId": "00000000-0000-4000-8000-000000001102",
+          "servicePlanName": "TEAMS1",
+          "provisioningStatus": "Success",
+          "appliesTo": "User"
+        },
+        {
+          "servicePlanId": "00000000-0000-4000-8000-000000001103",
+          "servicePlanName": "AAD_PREMIUM_P2",
+          "provisioningStatus": "Success",
+          "appliesTo": "User"
+        },
+        {
+          "servicePlanId": "00000000-0000-4000-8000-000000001104",
+          "servicePlanName": "INTUNE_A",
+          "provisioningStatus": "Success",
+          "appliesTo": "User"
+        },
+        {
+          "servicePlanId": "00000000-0000-4000-8000-000000001105",
+          "servicePlanName": "MDE_LITE",
+          "provisioningStatus": "Success",
+          "appliesTo": "User"
+        }
+      ]
+    },
+    {
+      "skuId": "00000000-0000-4000-8000-000000001002",
+      "skuPartNumber": "SPE_E3",
+      "appliesTo": "User",
+      "capabilityStatus": "Enabled",
+      "consumedUnits": 148,
+      "prepaidUnits": {
+        "enabled": 150,
+        "suspended": 0,
+        "warning": 0,
+        "lockedOut": 0
+      },
+      "servicePlans": [
+        {
+          "servicePlanId": "00000000-0000-4000-8000-000000001100",
+          "servicePlanName": "EXCHANGE_S_ENTERPRISE",
+          "provisioningStatus": "Success",
+          "appliesTo": "User"
+        },
+        {
+          "servicePlanId": "00000000-0000-4000-8000-000000001101",
+          "servicePlanName": "SHAREPOINTENTERPRISE",
+          "provisioningStatus": "Success",
+          "appliesTo": "User"
+        },
+        {
+          "servicePlanId": "00000000-0000-4000-8000-000000001102",
+          "servicePlanName": "TEAMS1",
+          "provisioningStatus": "Success",
+          "appliesTo": "User"
+        },
+        {
+          "servicePlanId": "00000000-0000-4000-8000-000000001103",
+          "servicePlanName": "AAD_PREMIUM",
+          "provisioningStatus": "Success",
+          "appliesTo": "User"
+        },
+        {
+          "servicePlanId": "00000000-0000-4000-8000-000000001104",
+          "servicePlanName": "INTUNE_A",
+          "provisioningStatus": "Success",
+          "appliesTo": "User"
+        }
+      ]
+    },
+    {
+      "skuId": "00000000-0000-4000-8000-000000001003",
+      "skuPartNumber": "EMS",
+      "appliesTo": "User",
+      "capabilityStatus": "Enabled",
+      "consumedUnits": 62,
+      "prepaidUnits": {
+        "enabled": 100,
+        "suspended": 0,
+        "warning": 0,
+        "lockedOut": 0
+      },
+      "servicePlans": [
+        {
+          "servicePlanId": "00000000-0000-4000-8000-000000001100",
+          "servicePlanName": "AAD_PREMIUM",
+          "provisioningStatus": "Success",
+          "appliesTo": "User"
+        },
+        {
+          "servicePlanId": "00000000-0000-4000-8000-000000001101",
+          "servicePlanName": "INTUNE_A",
+          "provisioningStatus": "Success",
+          "appliesTo": "User"
+        }
+      ]
+    },
+    {
+      "skuId": "00000000-0000-4000-8000-000000001004",
+      "skuPartNumber": "POWER_BI_PRO",
+      "appliesTo": "User",
+      "capabilityStatus": "Enabled",
+      "consumedUnits": 40,
+      "prepaidUnits": {
+        "enabled": 40,
+        "suspended": 0,
+        "warning": 0,
+        "lockedOut": 0
+      },
+      "servicePlans": [
+        {
+          "servicePlanId": "00000000-0000-4000-8000-000000001100",
+          "servicePlanName": "BI_AZURE_P2",
+          "provisioningStatus": "Success",
+          "appliesTo": "User"
+        }
+      ]
+    },
+    {
+      "skuId": "00000000-0000-4000-8000-000000001005",
+      "skuPartNumber": "FLOW_FREE",
+      "appliesTo": "User",
+      "capabilityStatus": "Enabled",
+      "consumedUnits": 311,
+      "prepaidUnits": {
+        "enabled": 10000,
+        "suspended": 0,
+        "warning": 0,
+        "lockedOut": 0
+      },
+      "servicePlans": [
+        {
+          "servicePlanId": "00000000-0000-4000-8000-000000001100",
+          "servicePlanName": "FLOW_P2_VIRAL",
+          "provisioningStatus": "Success",
+          "appliesTo": "User"
+        }
+      ]
+    },
+    {
+      "skuId": "00000000-0000-4000-8000-000000001006",
+      "skuPartNumber": "Microsoft_365_Copilot",
+      "appliesTo": "User",
+      "capabilityStatus": "Enabled",
+      "consumedUnits": 21,
+      "prepaidUnits": {
+        "enabled": 50,
+        "suspended": 0,
+        "warning": 0,
+        "lockedOut": 0
+      },
+      "servicePlans": [
+        {
+          "servicePlanId": "00000000-0000-4000-8000-000000001100",
+          "servicePlanName": "M365_COPILOT_APPS",
+          "provisioningStatus": "Success",
+          "appliesTo": "User"
+        }
+      ]
+    },
+    {
+      "skuId": "00000000-0000-4000-8000-000000001007",
+      "skuPartNumber": "AAD_PREMIUM_P2",
+      "appliesTo": "User",
+      "capabilityStatus": "Warning",
+      "consumedUnits": 24,
+      "prepaidUnits": {
+        "enabled": 25,
+        "suspended": 0,
+        "warning": 25,
+        "lockedOut": 0
+      },
+      "servicePlans": [
+        {
+          "servicePlanId": "00000000-0000-4000-8000-000000001100",
+          "servicePlanName": "AAD_PREMIUM_P2",
+          "provisioningStatus": "Success",
+          "appliesTo": "User"
+        }
+      ]
+    }
+  ]
+}

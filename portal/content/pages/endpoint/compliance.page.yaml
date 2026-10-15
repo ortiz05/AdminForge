@@ -1,0 +1,213 @@
+$schema: ../../../packages/schemas/generated/page.schema.json
+kind: page
+id: endpoint.compliance
+version: 1.0.0
+title: Compliance
+summary: >-
+  Device compliance across the fleet — compliance policies with their assignment and device status, the tenant-wide
+  compliance settings, and the devices that are not compliant right now.
+owner: endpoint-team
+tags: [endpoint, intune, compliance]
+template: list-detail
+nav: { section: endpoint, label: Compliance, icon: seal-check, order: 20 }
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    graph: [DeviceManagementConfiguration.Read.All, DeviceManagementManagedDevices.Read.All]
+  entraRoles: [Intune Administrator]
+  licences: [intune]
+
+params:
+  platform: { type: enum, values: [Any, Windows, macOS, iOS, Android, Linux], default: Any, label: Platform, facet: true }
+
+filters:
+  facets: [platform]
+
+datasources:
+  summary:
+    source: graphBatch
+    requests:
+      states: { path: /deviceManagement/deviceCompliancePolicyDeviceStateSummary }
+      settings: { path: /deviceManagement, query: { $select: "id,settings" } }
+    cache: { ttl: 300 }
+    transform: >-
+      ${ (
+        $s := value.states;
+        $total := $s.compliantDeviceCount + $s.nonCompliantDeviceCount + $s.inGracePeriodCount + $s.errorDeviceCount + $s.conflictDeviceCount + $s.unknownDeviceCount;
+        {
+          "compliant": $s.compliantDeviceCount,
+          "nonCompliant": $s.nonCompliantDeviceCount,
+          "grace": $s.inGracePeriodCount,
+          "errors": $s.errorDeviceCount + $s.conflictDeviceCount,
+          "rate": $total > 0 ? $round($s.compliantDeviceCount / $total, 3) : null,
+          "states": $append([], [
+            { "state": "Compliant", "devices": $s.compliantDeviceCount },
+            { "state": "Not compliant", "devices": $s.nonCompliantDeviceCount },
+            { "state": "In grace period", "devices": $s.inGracePeriodCount },
+            { "state": "Not evaluated", "devices": $s.unknownDeviceCount },
+            { "state": "Conflict", "devices": $s.conflictDeviceCount },
+            { "state": "Error", "devices": $s.errorDeviceCount }
+          ][devices > 0]),
+          "settings": {
+            "secureByDefault": value.settings.settings.secureByDefault,
+            "checkinThresholdDays": value.settings.settings.deviceComplianceCheckinThresholdDays,
+            "scheduledActions": value.settings.settings.isScheduledActionEnabled
+          }
+        }
+      ) }
+  policies:
+    source: graph
+    request:
+      path: /deviceManagement/deviceCompliancePolicies
+      query:
+        $expand: assignments
+    paging: all
+    maxItems: 2000
+    cache: { ttl: 300 }
+    transform: >-
+      ${ (
+        $platform := function($t) {
+          $contains($t, 'windows') ? 'Windows' : $contains($t, 'macOS') ? 'macOS' : $contains($t, 'ios') ? 'iOS'
+          : $contains($t, 'android') or $contains($t, 'aosp') ? 'Android' : $contains($t, 'linux') ? 'Linux' : 'Other'
+        };
+        $rows := [value.value.{
+          "id": id,
+          "displayName": displayName,
+          "description": description,
+          "platform": $platform(`@odata.type`),
+          "type": $substringAfter(`@odata.type`, '#microsoft.graph.'),
+          "assignments": $count(assignments),
+          "targets": $join(assignments.(
+            target.`@odata.type` = '#microsoft.graph.allDevicesAssignmentTarget' ? 'All devices'
+            : target.`@odata.type` = '#microsoft.graph.allLicensedUsersAssignmentTarget' ? 'All users'
+            : target.`@odata.type` = '#microsoft.graph.exclusionGroupAssignmentTarget' ? 'Exclude group'
+            : 'Group'
+          ), ', '),
+          "modified": lastModifiedDateTime,
+          "version": version
+        }];
+        { "rows": [$rows[$$.params.platform = 'Any' or platform = $$.params.platform]^(platform, displayName)], "unassigned": $count($rows[assignments = 0]) }
+      ) }
+  nonCompliant:
+    source: graph
+    request:
+      path: /deviceManagement/managedDevices
+      query:
+        $select: id,deviceName,userPrincipalName,operatingSystem,osVersion,complianceState,complianceGracePeriodExpirationDateTime,lastSyncDateTime,managedDeviceOwnerType
+        $filter: >-
+          ${ $join([
+               "complianceState eq 'noncompliant'",
+               params.platform != 'Any' ? "operatingSystem eq " & $odata(params.platform)
+             ][$], ' and ') }
+        $top: 100
+    paging: cursor
+    cache: { ttl: 120 }
+
+layout:
+  - widget: licenceGate
+    feature: intune
+    title: Intune isn't licensed in this tenant
+  - widget: kpi
+    id: rate
+    data: summary.rate
+    label: Compliance rate
+    format: percent
+    status: "${ value < 0.9 ? 'warn' : 'ok' }"
+  - widget: kpi
+    id: nonCompliant
+    data: summary.nonCompliant
+    label: Not compliant
+    format: number
+    status: "${ value > 0 ? 'crit' : 'ok' }"
+    href: /p/endpoint.devices?compliance=noncompliant
+  - widget: kpi
+    id: grace
+    data: summary.grace
+    label: In grace period
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+  - widget: kpi
+    id: unassigned
+    data: policies.unassigned
+    label: Unassigned policies
+    format: number
+    status: "${ value > 0 ? 'info' : 'ok' }"
+  - widget: chart
+    id: states
+    title: Devices by compliance state
+    type: donut
+    span: 6
+    rows: 2
+    data: summary.states
+    x: state
+    y: devices
+    format: number
+  - widget: keyValue
+    id: settings
+    title: Compliance policy settings (tenant-wide)
+    span: 6
+    data: summary.settings
+    fields:
+      - field: secureByDefault
+        label: Devices with no compliance policy are
+        kind: status
+        map: { "true": [ok, Not compliant], "false": [warn, Compliant] }
+      - { field: checkinThresholdDays, label: Compliance status validity (days), kind: number }
+      - { field: scheduledActions, label: Jailbreak detection and scheduled actions, kind: boolean }
+  - widget: table
+    id: policies
+    title: Compliance policies
+    span: 12
+    data: policies.rows
+    rowKey: id
+    columns:
+      - { field: displayName, label: Policy, sortable: true }
+      - { field: platform, label: Platform, filter: { type: facet, param: platform } }
+      - { field: assignments, label: Assignments, kind: number }
+      - { field: targets, label: Targets }
+      - { field: modified, label: Modified, kind: relativeTime }
+      - { field: type, label: Policy type, kind: code, hidden: true }
+      - { field: description, label: Description, hidden: true }
+      - { field: id, label: Policy id, kind: guid, hidden: true }
+    inspect:
+      page: endpoint.compliance-policy
+      params:
+        id: ${ row.id }
+    empty:
+      title: No compliance policies
+      body: Without compliance policies, Conditional Access can't require a compliant device.
+  - widget: table
+    id: nonCompliantDevices
+    title: Devices not compliant now
+    span: 12
+    data: nonCompliant.value
+    rowKey: id
+    selection: multi
+    columns:
+      - { field: deviceName, label: Device, kind: identity, secondary: userPrincipalName }
+      - { field: operatingSystem, label: OS }
+      - { field: osVersion, label: Version }
+      - { field: managedDeviceOwnerType, label: Ownership }
+      - { field: lastSyncDateTime, label: Last check-in, kind: relativeTime }
+    inspect:
+      page: endpoint.device
+      params:
+        id: ${ row.id }
+    bulkActions:
+      - playbook: endpoint.sync-device
+        label: Sync to re-evaluate
+        icon: arrows-clockwise
+        forEach:
+          inputs:
+            managedDeviceId: ${ row.id }
+          concurrency: 10
+        maxItems: 500
+    empty:
+      title: Every device is compliant
+      body: No device reports a non-compliant state.
+
+export:
+  formats: [csv, xlsx]
+  fileName: compliance-policies
+  data: policies.rows
+  columns: all

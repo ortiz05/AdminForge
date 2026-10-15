@@ -1,0 +1,20 @@
+{
+  "id": "3a2c62db-5318-420d-8d74-23affee5d9d5",
+  "templateId": "3a2c62db-5318-420d-8d74-23affee5d9d5",
+  "displayName": "Intune Administrator",
+  "description": "Can manage all aspects of the Intune product.",
+  "isBuiltIn": true,
+  "isEnabled": true,
+  "version": "1",
+  "resourceScopes": [
+    "/"
+  ],
+  "rolePermissions": [
+    {
+      "allowedResourceActions": [
+        "microsoft.intune/allEntities/allTasks"
+      ],
+      "condition": null
+    }
+  ]
+}

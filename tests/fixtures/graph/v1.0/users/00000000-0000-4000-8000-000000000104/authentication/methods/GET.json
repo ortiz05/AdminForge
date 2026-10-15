@@ -1,0 +1,18 @@
+{
+  "value": [
+    {
+      "@odata.type": "#microsoft.graph.passwordAuthenticationMethod",
+      "id": "28c10230-6103-485e-b985-444c60001490",
+      "password": null,
+      "createdDateTime": "2026-10-01T10:00:00Z"
+    },
+    {
+      "@odata.type": "#microsoft.graph.microsoftAuthenticatorAuthenticationMethod",
+      "id": "00000000-0000-4000-8000-0000000f1040",
+      "displayName": "iPhone 15",
+      "deviceTag": "SoftwareTokenActivated",
+      "phoneAppVersion": "6.8.20",
+      "createdDateTime": "2025-02-10T09:00:00Z"
+    }
+  ]
+}

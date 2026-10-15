@@ -1,0 +1,145 @@
+$schema: ../../../packages/schemas/generated/report.schema.json
+kind: report
+id: endpoint.non-compliant-devices
+version: 1.0.0
+title: Non-compliant devices
+summary: >-
+  Intune devices that are not compliant or in their grace period — who uses them, how long since they checked in,
+  and when the grace period ends (after which Conditional Access blocks them).
+owner: endpoint-team
+tags: [endpoint, intune, compliance, report]
+nav: { section: reports, label: Non-compliant devices, icon: seal-warning, order: 31 }
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    graph: [DeviceManagementManagedDevices.Read.All]
+  entraRoles: [Intune Administrator]
+  licences: [intune]
+
+params:
+  state:
+    type: enum
+    label: State
+    facet: true
+    default: Both
+    values:
+      - { value: Both, label: Not compliant or in grace period }
+      - { value: noncompliant, label: Not compliant }
+      - { value: inGracePeriod, label: In grace period }
+  os: { type: enum, values: [Any, Windows, macOS, iOS, Android, Linux], default: Any, label: OS, facet: true }
+  ownership: { type: enum, values: [Any, company, personal], default: Any, label: Ownership, facet: true }
+
+datasources:
+  devices:
+    source: graph
+    request:
+      path: /deviceManagement/managedDevices
+      query:
+        $select: id,deviceName,userPrincipalName,userDisplayName,operatingSystem,osVersion,complianceState,complianceGracePeriodExpirationDateTime,lastSyncDateTime,managedDeviceOwnerType,managementAgent,model,serialNumber,isEncrypted
+        $top: 1000
+        $filter: >-
+          ${ $join([
+               params.state = 'Both' ? "(complianceState eq 'noncompliant' or complianceState eq 'inGracePeriod')" : "complianceState eq " & $odata(params.state),
+               params.os != 'Any' ? "operatingSystem eq " & $odata(params.os),
+               params.ownership != 'Any' ? "managedDeviceOwnerType eq " & $odata(params.ownership)
+             ][$], ' and ') }
+    paging: all
+    maxItems: 100000
+    cache: { ttl: 900 }
+    transform: >-
+      ${ (
+        $wanted := $$.params.state = 'Both' ? ['noncompliant', 'inGracePeriod'] : [$$.params.state];
+        $rows := [value.value[complianceState in $wanted].$merge([$, {
+          "daysSinceSync": lastSyncDateTime ? -$daysUntil(lastSyncDateTime) : null,
+          "graceDaysLeft": complianceState = 'inGracePeriod' and complianceGracePeriodExpirationDateTime ? $daysUntil(complianceGracePeriodExpirationDateTime) : null,
+          "likelyCause": lastSyncDateTime and -$daysUntil(lastSyncDateTime) > 30 ? 'Not checking in'
+                         : isEncrypted = false and operatingSystem in ['Windows', 'macOS'] ? 'Not encrypted'
+                         : 'See policy states'
+        }])];
+        {
+          "rows": [$rows^(complianceState = 'noncompliant' ? 0 : 1, >daysSinceSync)],
+          "nonCompliant": $count($rows[complianceState = 'noncompliant']),
+          "grace": $count($rows[complianceState = 'inGracePeriod']),
+          "silent": $count($rows[daysSinceSync > 30]),
+          "byOs": [$distinct($rows.operatingSystem).( $o := $; { "os": $o, "devices": $count($rows[operatingSystem = $o]) } )^(>devices)]
+        }
+      ) }
+
+layout:
+  - widget: kpi
+    id: nonCompliant
+    data: devices.nonCompliant
+    label: Not compliant
+    format: number
+    status: "${ value > 0 ? 'crit' : 'ok' }"
+  - widget: kpi
+    id: grace
+    data: devices.grace
+    label: In grace period
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+  - widget: kpi
+    id: silent
+    data: devices.silent
+    label: Not checked in for 30+ days
+    format: number
+  - widget: chart
+    id: byOs
+    title: By platform
+    type: bar
+    span: 3
+    rows: 1
+    data: devices.byOs
+    x: os
+    y: devices
+  - widget: table
+    id: devices
+    span: 12
+    data: devices.rows
+    rowKey: id
+    selection: multi
+    columns:
+      - { field: deviceName, label: Device, kind: identity, secondary: userPrincipalName, sortable: true }
+      - field: complianceState
+        label: State
+        kind: status
+        map: { noncompliant: [crit, Not compliant], inGracePeriod: [warn, In grace period] }
+        filter: { type: facet, param: state }
+      - { field: graceDaysLeft, label: Grace days left, kind: number }
+      - { field: operatingSystem, label: OS, filter: { type: facet, param: os } }
+      - { field: osVersion, label: Version }
+      - { field: managedDeviceOwnerType, label: Ownership, filter: { type: facet, param: ownership } }
+      - { field: daysSinceSync, label: Days since check-in, kind: number, filter: range, sortable: true }
+      - { field: likelyCause, label: Likely cause, filter: facet }
+      - { field: isEncrypted, label: Encrypted, kind: boolean, hidden: true }
+      - { field: managementAgent, label: Managed by, hidden: true }
+      - { field: model, label: Model, hidden: true }
+      - { field: serialNumber, label: Serial number, kind: code, hidden: true }
+    inspect:
+      page: endpoint.device
+      params:
+        id: ${ row.id }
+    rowActions:
+      - playbook: endpoint.sync-device
+        label: Sync to re-evaluate
+        icon: arrows-clockwise
+        inputs:
+          managedDeviceId: ${ row.id }
+    bulkActions:
+      - playbook: endpoint.sync-device
+        label: Sync to re-evaluate
+        icon: arrows-clockwise
+        forEach:
+          inputs:
+            managedDeviceId: ${ row.id }
+          concurrency: 10
+        maxItems: 1000
+    empty:
+      title: Every device is compliant
+      body: No device is non-compliant or in its grace period.
+
+export:
+  formats: [csv, xlsx]
+  fileName: non-compliant-devices
+  data: devices.rows
+  columns: all

@@ -1,0 +1,16 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#users",
+  "value": [
+    {
+      "@odata.type": "#microsoft.graph.user",
+      "id": "10000000-0000-4000-8000-00000000000d",
+      "displayName": "Leah Moreau",
+      "userPrincipalName": "leah.moreau@example.com",
+      "mail": "leah.moreau@example.com",
+      "userType": "Member",
+      "accountEnabled": true,
+      "department": "HR",
+      "jobTitle": "HR Business Partner"
+    }
+  ]
+}

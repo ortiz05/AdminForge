@@ -1,0 +1,89 @@
+$schema: ../../../packages/schemas/generated/playbook.schema.json
+kind: playbook
+id: identity.disable-enterprise-app
+version: 1.0.0
+title: Disable enterprise app sign-in
+summary: >-
+  Blocks every user and workload from signing in to an enterprise application (its service principal), for example a
+  suspicious OAuth app or a retired SaaS integration. Existing tokens stay valid until they expire. Refuses Microsoft
+  first-party apps and AdminForge's own apps.
+owner: identity-team
+tags: [identity, apps, incident]
+risk: high
+mode: write
+requires:
+  portalRoles: [Portal.Operator]
+  scopes:
+    graph: [Application.ReadWrite.All]
+  entraRoles: [Cloud Application Administrator]
+confirm:
+  type: typed
+  value: ${ steps.sp.output.displayName }
+  message: Nobody can sign in to this app until it is enabled again. Type the app name to confirm.
+approval:
+  required: false
+
+inputs:
+  servicePrincipalId: { type: string, format: guid, label: Enterprise app (object id), picker: app }
+  reason: { type: string, label: Reason, minLength: 10, multiline: true }
+
+steps:
+  - id: sp
+    type: graph
+    mode: read
+    describe: Look up the enterprise app
+    request:
+      method: GET
+      path: /servicePrincipals/${ $encode($guid(inputs.servicePrincipalId)) }
+      query:
+        $select: id,appId,displayName,accountEnabled,appOwnerOrganizationId,servicePrincipalType
+
+  - id: isEnabled
+    type: assert
+    that: ${ steps.sp.output.accountEnabled = true }
+    message: ${ steps.sp.output.displayName & ' is already disabled.' }
+
+  # f8cdef31-… is Microsoft's own tenant: the owner of every Microsoft first-party application.
+  - id: notMicrosoft
+    type: assert
+    that: ${ $not(steps.sp.output.appOwnerOrganizationId = 'f8cdef31-a31e-4b4a-93e4-5f571e91255a') }
+    message: ${ steps.sp.output.displayName & ' is a Microsoft first-party app; disabling it can break Microsoft 365 for everyone.' }
+
+  - id: notPortalApp
+    type: assert
+    that: >-
+      ${ $not(steps.sp.output.appId in [env.AF_READ_CLIENT_ID, env.AF_WRITE_CLIENT_ID, env.AF_AUTOMATION_CLIENT_ID, env.AF_PROVISIONER_CLIENT_ID]) }
+    message: This is one of AdminForge's own apps; disabling it would lock everyone out of the portal.
+
+  - id: disable
+    type: graph
+    mode: write
+    describe: Set accountEnabled to false on the service principal
+    request:
+      method: PATCH
+      path: /servicePrincipals/${ $encode($guid(inputs.servicePrincipalId)) }
+      body: { accountEnabled: false }
+    compensate:
+      type: graph
+      describe: Enable sign-in again
+      request:
+        method: PATCH
+        path: /servicePrincipals/${ $encode($guid(inputs.servicePrincipalId)) }
+        body: { accountEnabled: true }
+
+outputs:
+  summary: ${ 'Sign-in disabled for ' & steps.sp.output.displayName & '. Revoke its delegated permission grants too if it is malicious.' }
+
+tests:
+  - name: refuses a Microsoft first-party app
+    inputs: { servicePrincipalId: 00000000-0000-4000-8000-000000000408, reason: testing first-party guard }
+    mocks:
+      sp: { id: 00000000-0000-4000-8000-000000000408, appId: 00000000-0000-4000-8001-000000000408, displayName: Office 365 Exchange Online, accountEnabled: true, appOwnerOrganizationId: f8cdef31-a31e-4b4a-93e4-5f571e91255a }
+    expect: { status: failed, failedStep: notMicrosoft }
+  - name: plans disabling a third-party app
+    inputs: { servicePrincipalId: 00000000-0000-4000-8000-000000000404, reason: Suspicious consent phishing app SEC-311 }
+    mocks:
+      sp: { id: 00000000-0000-4000-8000-000000000404, appId: 00000000-0000-4000-8001-000000000404, displayName: PDF Converter Online, accountEnabled: true, appOwnerOrganizationId: 00000000-0000-4000-8000-00000000e0f1 }
+    expect:
+      status: succeeded
+      plan: [disable]

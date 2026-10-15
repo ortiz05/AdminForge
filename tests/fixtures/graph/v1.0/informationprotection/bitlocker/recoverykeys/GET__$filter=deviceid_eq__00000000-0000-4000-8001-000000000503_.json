@@ -1,0 +1,11 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#fixture",
+  "value": [
+    {
+      "id": "00000000-0000-4000-8000-0000000b5030",
+      "createdDateTime": "2022-03-01T09:00:00Z",
+      "deviceId": "00000000-0000-4000-8001-000000000503",
+      "volumeType": "operatingSystemVolume"
+    }
+  ]
+}

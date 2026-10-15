@@ -1,0 +1,37 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#fixture",
+  "value": [
+    {
+      "@odata.type": "#microsoft.graph.group",
+      "id": "00000000-0000-4000-8000-000000000202",
+      "displayName": "Project Falcon",
+      "description": "Project Falcon collaboration (Teams)",
+      "mail": "falcon@example.com",
+      "mailNickname": "ProjectFalcon",
+      "mailEnabled": true,
+      "securityEnabled": false,
+      "groupTypes": [
+        "Unified"
+      ],
+      "membershipRule": null,
+      "membershipRuleProcessingState": null,
+      "onPremisesSyncEnabled": null,
+      "onPremisesLastSyncDateTime": null,
+      "onPremisesSamAccountName": null,
+      "createdDateTime": "2025-09-02T09:00:00Z",
+      "renewedDateTime": "2025-09-02T09:00:00Z",
+      "expirationDateTime": null,
+      "visibility": "Private",
+      "isAssignableToRole": null,
+      "classification": null,
+      "proxyAddresses": [
+        "SMTP:falcon@example.com"
+      ],
+      "resourceProvisioningOptions": [
+        "Team"
+      ],
+      "assignedLicenses": [],
+      "hasMembersWithLicenseErrors": false
+    }
+  ]
+}

@@ -1,0 +1,47 @@
+{
+  "value": [
+    {
+      "id": "lic-101-0",
+      "skuId": "00000000-0000-4000-8000-000000001001",
+      "skuPartNumber": "SPE_E5",
+      "servicePlans": [
+        {
+          "servicePlanId": "00000000-0000-4000-8000-000000001100",
+          "servicePlanName": "EXCHANGE_S_ENTERPRISE",
+          "provisioningStatus": "Success",
+          "appliesTo": "User"
+        },
+        {
+          "servicePlanId": "00000000-0000-4000-8000-000000001101",
+          "servicePlanName": "SHAREPOINTENTERPRISE",
+          "provisioningStatus": "Success",
+          "appliesTo": "User"
+        },
+        {
+          "servicePlanId": "00000000-0000-4000-8000-000000001102",
+          "servicePlanName": "TEAMS1",
+          "provisioningStatus": "Success",
+          "appliesTo": "User"
+        },
+        {
+          "servicePlanId": "00000000-0000-4000-8000-000000001103",
+          "servicePlanName": "AAD_PREMIUM_P2",
+          "provisioningStatus": "Success",
+          "appliesTo": "User"
+        },
+        {
+          "servicePlanId": "00000000-0000-4000-8000-000000001104",
+          "servicePlanName": "INTUNE_A",
+          "provisioningStatus": "Success",
+          "appliesTo": "User"
+        },
+        {
+          "servicePlanId": "00000000-0000-4000-8000-000000001105",
+          "servicePlanName": "MDE_LITE",
+          "provisioningStatus": "Success",
+          "appliesTo": "User"
+        }
+      ]
+    }
+  ]
+}

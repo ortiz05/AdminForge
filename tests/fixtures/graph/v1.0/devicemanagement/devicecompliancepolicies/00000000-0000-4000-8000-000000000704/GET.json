@@ -1,0 +1,31 @@
+{
+  "@odata.type": "#microsoft.graph.macOSCompliancePolicy",
+  "id": "00000000-0000-4000-8000-000000000704",
+  "displayName": "macOS – Baseline compliance (draft)",
+  "description": "FileVault, firewall, minimum macOS 15",
+  "createdDateTime": "2025-08-01T09:00:00Z",
+  "lastModifiedDateTime": "2025-08-01T09:00:00Z",
+  "version": 1,
+  "roleScopeTagIds": [
+    "0"
+  ],
+  "storageRequireEncryption": true,
+  "firewallEnabled": true,
+  "osMinimumVersion": "15.0",
+  "systemIntegrityProtectionEnabled": true,
+  "assignments": [],
+  "scheduledActionsForRule": [
+    {
+      "id": "rule-704",
+      "ruleName": null,
+      "scheduledActionConfigurations": [
+        {
+          "id": "sac-704-1",
+          "gracePeriodHours": 0,
+          "actionType": "block",
+          "notificationTemplateId": "00000000-0000-0000-0000-000000000000"
+        }
+      ]
+    }
+  ]
+}

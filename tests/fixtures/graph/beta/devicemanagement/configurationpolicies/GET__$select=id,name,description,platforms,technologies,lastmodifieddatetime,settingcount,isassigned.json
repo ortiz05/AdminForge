@@ -1,0 +1,77 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#fixture",
+  "value": [
+    {
+      "id": "00000000-0000-4000-8000-000000000c01",
+      "name": "Windows – BitLocker",
+      "description": "XTS-AES 256, TPM protector, recovery to Entra ID",
+      "platforms": "windows10",
+      "technologies": "mdm",
+      "settingCount": 12,
+      "isAssigned": true,
+      "createdDateTime": "2024-05-01T09:00:00Z",
+      "lastModifiedDateTime": "2026-07-01T09:00:00Z",
+      "roleScopeTagIds": [
+        "0"
+      ],
+      "templateReference": {
+        "templateId": "",
+        "templateFamily": "none"
+      }
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000c02",
+      "name": "Windows – Edge security baseline",
+      "description": "Microsoft Edge baseline settings",
+      "platforms": "windows10",
+      "technologies": "mdm",
+      "settingCount": 34,
+      "isAssigned": true,
+      "createdDateTime": "2024-05-01T09:00:00Z",
+      "lastModifiedDateTime": "2026-03-01T09:00:00Z",
+      "roleScopeTagIds": [
+        "0"
+      ],
+      "templateReference": {
+        "templateId": "",
+        "templateFamily": "none"
+      }
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000c03",
+      "name": "macOS – Platform SSO",
+      "description": "Secure Enclave key, Entra ID sign-in",
+      "platforms": "macOS",
+      "technologies": "mdm,appleRemoteManagement",
+      "settingCount": 6,
+      "isAssigned": true,
+      "createdDateTime": "2025-08-12T09:00:00Z",
+      "lastModifiedDateTime": "2025-08-12T09:00:00Z",
+      "roleScopeTagIds": [
+        "0"
+      ],
+      "templateReference": {
+        "templateId": "",
+        "templateFamily": "none"
+      }
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000c04",
+      "name": "Windows – OneDrive Known Folder Move",
+      "description": "Silently move Desktop, Documents and Pictures (pilot)",
+      "platforms": "windows10",
+      "technologies": "mdm",
+      "settingCount": 5,
+      "isAssigned": false,
+      "createdDateTime": "2026-05-20T09:00:00Z",
+      "lastModifiedDateTime": "2026-05-20T09:00:00Z",
+      "roleScopeTagIds": [
+        "0"
+      ],
+      "templateReference": {
+        "templateId": "",
+        "templateFamily": "none"
+      }
+    }
+  ]
+}

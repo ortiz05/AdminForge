@@ -1,0 +1,229 @@
+$schema: ../../../packages/schemas/generated/page.schema.json
+kind: page
+id: identity.conditional-access
+version: 1.0.0
+title: Conditional Access
+summary: >-
+  Conditional Access policies with their state, who and what they target, grant controls and session controls.
+  Flags enabled policies without exclusions (check your break-glass accounts) and report-only policies awaiting a decision.
+owner: identity-team
+tags: [identity, conditional-access, security]
+template: list-detail
+nav: { section: identity, label: Conditional Access, icon: lock-key, order: 70 }
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    graph: [Policy.Read.All]
+  entraRoles: [Security Reader]
+  licences: [conditionalAccess]
+
+params:
+  q: { type: string, default: "", label: Search, placeholder: Policy name }
+  state:
+    type: enum
+    label: State
+    facet: true
+    default: Any
+    values:
+      - { value: Any, label: Any }
+      - { value: enabled, label: On }
+      - { value: enabledForReportingButNotEnforced, label: Report-only }
+      - { value: disabled, label: Off }
+  control:
+    type: enum
+    label: Grant control
+    facet: true
+    default: Any
+    values:
+      - { value: Any, label: Any }
+      - { value: block, label: Block access }
+      - { value: mfa, label: Require MFA or authentication strength }
+      - { value: compliantDevice, label: Require compliant or hybrid-joined device }
+      - { value: session, label: Session controls only }
+  target: { type: enum, values: [Any, AllUsers, Guests, Roles, Groups], default: Any, label: Targets, facet: true }
+
+filters:
+  search: q
+  facets: [state, control, target]
+
+savedViews:
+  enabled: true
+  shared: true
+  presets:
+    - { name: Report-only, params: { state: enabledForReportingButNotEnforced } }
+    - { name: Block policies, params: { control: block } }
+    - { name: Policies for admins (roles), params: { target: Roles } }
+
+datasources:
+  policies:
+    source: graph
+    request:
+      path: /identity/conditionalAccess/policies
+    paging: all
+    maxItems: 1000
+    cache: { ttl: 300 }
+    transform: >-
+      ${ (
+        $labels := {
+          "mfa": "MFA", "compliantDevice": "Compliant device", "domainJoinedDevice": "Hybrid joined device",
+          "approvedApplication": "Approved client app", "compliantApplication": "App protection policy",
+          "passwordChange": "Password change", "block": "Block"
+        };
+        $q := $lowercase(params.q ? params.q : '');
+        $rows := [value.value.(
+          $u := conditions.users;
+          $a := conditions.applications;
+          $g := grantControls;
+          $s := sessionControls;
+          $controls := $append([$g.builtInControls.$lookup($labels, $)], $g.authenticationStrength.displayName ? ['Strength: ' & $g.authenticationStrength.displayName] : []);
+          $exclusions := $count($u.excludeUsers) + $count($u.excludeGroups) + $count($u.excludeRoles);
+          {
+            "id": id,
+            "displayName": displayName,
+            "state": state,
+            "users": 'All' in $u.includeUsers ? 'All users'
+                     : $join([
+                         $count($u.includeUsers[$ != 'GuestsOrExternalUsers']) > 0 ? $count($u.includeUsers[$ != 'GuestsOrExternalUsers']) & ' user(s)',
+                         $count($u.includeGroups) > 0 ? $count($u.includeGroups) & ' group(s)',
+                         $count($u.includeRoles) > 0 ? $count($u.includeRoles) & ' role(s)',
+                         ('GuestsOrExternalUsers' in $u.includeUsers or $exists($u.includeGuestsOrExternalUsers.guestOrExternalUserTypes)) ? 'guests'
+                       ][$], ', '),
+            "targetsAll": 'All' in $u.includeUsers,
+            "targetsGuests": 'GuestsOrExternalUsers' in $u.includeUsers or $exists($u.includeGuestsOrExternalUsers.guestOrExternalUserTypes),
+            "targetsRoles": $count($u.includeRoles) > 0,
+            "targetsGroups": $count($u.includeGroups) > 0,
+            "exclusions": $exclusions,
+            "apps": 'All' in $a.includeApplications ? 'All resources'
+                    : 'Office365' in $a.includeApplications ? 'Office 365'
+                    : $count($a.includeUserActions) > 0 ? 'User action: ' & $join($a.includeUserActions, ', ')
+                    : $count($a.includeApplications) & ' app(s)',
+            "conditions": [
+              $count(conditions.clientAppTypes[$ != 'all']) > 0 ? 'Client apps',
+              $exists(conditions.platforms) and conditions.platforms != null ? 'Platforms',
+              $exists(conditions.locations) and conditions.locations != null ? 'Locations',
+              $count(conditions.signInRiskLevels) > 0 ? 'Sign-in risk',
+              $count(conditions.userRiskLevels) > 0 ? 'User risk',
+              $exists(conditions.devices.deviceFilter) and conditions.devices != null ? 'Device filter'
+            ],
+            "grant": $count($controls) > 0 ? $join($controls, $g.operator = 'AND' ? ' and ' : ' or ') : '—',
+            "controlKind": 'block' in $g.builtInControls ? 'block'
+                           : ('mfa' in $g.builtInControls or $exists($g.authenticationStrength.id)) ? 'mfa'
+                           : ('compliantDevice' in $g.builtInControls or 'domainJoinedDevice' in $g.builtInControls) ? 'compliantDevice'
+                           : $count($controls) = 0 ? 'session' : 'other',
+            "session": $join([
+              $s.signInFrequency.isEnabled = true ? 'Sign-in frequency',
+              $s.persistentBrowser.isEnabled = true ? 'Persistent browser',
+              $s.cloudAppSecurity.isEnabled = true ? 'App control',
+              $s.applicationEnforcedRestrictions.isEnabled = true ? 'App-enforced restrictions',
+              $s.disableResilienceDefaults = true ? 'Resilience defaults off'
+            ][$], ', '),
+            "risk": state = 'enabled' and $exclusions = 0 and ('All' in $u.includeUsers) ? 'noExclusions' : 'ok',
+            "created": createdDateTime,
+            "modified": modifiedDateTime
+          }
+        )];
+        $shown := $rows[
+          ($$.params.state = 'Any' or state = $$.params.state)
+          and ($$.params.control = 'Any' or controlKind = $$.params.control)
+          and ($$.params.target = 'Any'
+               or ($$.params.target = 'AllUsers' and targetsAll) or ($$.params.target = 'Guests' and targetsGuests)
+               or ($$.params.target = 'Roles' and targetsRoles) or ($$.params.target = 'Groups' and targetsGroups))
+          and ($q = '' or $contains($lowercase(displayName), $q))
+        ];
+        {
+          "rows": [$shown^(state = 'enabled' ? 0 : state = 'enabledForReportingButNotEnforced' ? 1 : 2, displayName)],
+          "enabled": $count($rows[state = 'enabled']),
+          "reportOnly": $count($rows[state = 'enabledForReportingButNotEnforced']),
+          "disabled": $count($rows[state = 'disabled']),
+          "noExclusions": $count($rows[risk = 'noExclusions'])
+        }
+      ) }
+
+actions:
+  - label: Named locations
+    icon: map-pin
+    href: /p/identity.named-locations
+  - label: Open in Entra admin center
+    icon: arrow-square-out
+    href: https://entra.microsoft.com/#view/Microsoft_AAD_ConditionalAccess/ConditionalAccessBlade/~/Policies
+
+layout:
+  - widget: licenceGate
+    feature: conditionalAccess
+    title: Conditional Access needs Microsoft Entra ID P1
+  - widget: kpi
+    id: enabled
+    data: policies.enabled
+    label: On
+    format: number
+    href: /p/identity.conditional-access?state=enabled
+  - widget: kpi
+    id: reportOnly
+    data: policies.reportOnly
+    label: Report-only
+    format: number
+    status: "${ value > 0 ? 'info' : 'neutral' }"
+    href: /p/identity.conditional-access?state=enabledForReportingButNotEnforced
+  - widget: kpi
+    id: disabled
+    data: policies.disabled
+    label: Off
+    format: number
+    href: /p/identity.conditional-access?state=disabled
+  - widget: kpi
+    id: noExclusions
+    data: policies.noExclusions
+    label: All-users policies with no exclusions
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+  - widget: markdown
+    id: noExclusionsNote
+    span: 12
+    when: ${ policies.noExclusions > 0 }
+    text: |
+      **Check your emergency access.** Enabled policies that target all users without any exclusion also apply to
+      break-glass accounts — a misconfiguration can lock everyone out. Run the
+      [Break-glass account validation](/runbooks/identity.break-glass-validation) runbook.
+  - widget: table
+    id: policies
+    span: 12
+    data: policies.rows
+    rowKey: id
+    columns:
+      - { field: displayName, label: Policy, sortable: true }
+      - field: state
+        label: State
+        kind: status
+        map: { enabled: [ok, On], enabledForReportingButNotEnforced: [info, Report-only], disabled: [neutral, Off] }
+        filter: { type: facet, param: state }
+      - { field: users, label: Users }
+      - { field: exclusions, label: Exclusions, kind: number }
+      - { field: apps, label: Target resources }
+      - { field: conditions, label: Conditions, kind: tags }
+      - { field: grant, label: Grant }
+      - { field: session, label: Session, hidden: true }
+      - field: risk
+        label: Review
+        kind: status
+        map: { noExclusions: [warn, No exclusions], ok: [ok, OK] }
+        hidden: true
+      - { field: modified, label: Modified, kind: relativeTime, sortable: true }
+      - { field: created, label: Created, kind: date, hidden: true }
+      - { field: id, label: Policy id, kind: guid, hidden: true }
+    inspect:
+      page: identity.ca-policy
+      params:
+        id: ${ row.id }
+    rowActions:
+      - label: Open in Entra admin center
+        icon: arrow-square-out
+        href: "https://entra.microsoft.com/#view/Microsoft_AAD_ConditionalAccess/PolicyBlade/policyId/${ $encode(row.id) }"
+    empty:
+      title: No policies match
+      body: Clear the filters. Without any Conditional Access policy, security defaults are the only protection.
+
+export:
+  formats: [csv, xlsx]
+  fileName: conditional-access-policies
+  data: policies.rows
+  columns: all

@@ -1,0 +1,254 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#groups",
+  "@odata.count": 12,
+  "value": [
+    {
+      "id": "10000000-0000-4000-8000-000000000208",
+      "displayName": "All Company",
+      "description": "Company-wide announcements and conversations.",
+      "mail": "allcompany@example.com",
+      "visibility": "Public",
+      "groupTypes": [
+        "Unified",
+        "DynamicMembership"
+      ],
+      "resourceProvisioningOptions": [
+        "Team"
+      ],
+      "createdDateTime": "2024-04-28T09:00:00Z",
+      "renewedDateTime": "2026-09-15T09:00:00Z",
+      "expirationDateTime": "2027-09-15T09:00:00Z",
+      "membershipRule": "(user.accountEnabled -eq true) and (user.userType -eq \"Member\")",
+      "onPremisesSyncEnabled": null,
+      "classification": null,
+      "mailEnabled": true,
+      "securityEnabled": false
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000210",
+      "displayName": "Book Club",
+      "description": "Monthly book club.",
+      "mail": "bookclub@example.com",
+      "visibility": "Public",
+      "groupTypes": [
+        "Unified"
+      ],
+      "resourceProvisioningOptions": [],
+      "createdDateTime": "2025-09-10T09:00:00Z",
+      "renewedDateTime": "2026-08-16T09:00:00Z",
+      "expirationDateTime": "2027-08-16T09:00:00Z",
+      "membershipRule": null,
+      "onPremisesSyncEnabled": null,
+      "classification": null,
+      "mailEnabled": true,
+      "securityEnabled": false
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000211",
+      "displayName": "Engineering Guild",
+      "description": "Everyone in Engineering (dynamic).",
+      "mail": "engineering-guild@example.com",
+      "visibility": "Private",
+      "groupTypes": [
+        "Unified",
+        "DynamicMembership"
+      ],
+      "resourceProvisioningOptions": [],
+      "createdDateTime": "2026-03-09T09:00:00Z",
+      "renewedDateTime": "2026-09-25T09:00:00Z",
+      "expirationDateTime": "2027-09-25T09:00:00Z",
+      "membershipRule": "(user.department -eq \"Engineering\")",
+      "onPremisesSyncEnabled": null,
+      "classification": null,
+      "mailEnabled": true,
+      "securityEnabled": false
+    },
+    {
+      "id": "30000000-0000-4000-8000-000000000102",
+      "displayName": "Example Finance",
+      "description": "Finance department group.",
+      "mail": "finance@example.com",
+      "visibility": "Private",
+      "groupTypes": [
+        "Unified"
+      ],
+      "resourceProvisioningOptions": [],
+      "createdDateTime": "2024-11-14T09:00:00Z",
+      "renewedDateTime": "2026-08-26T09:00:00Z",
+      "expirationDateTime": "2027-08-26T09:00:00Z",
+      "membershipRule": null,
+      "onPremisesSyncEnabled": null,
+      "classification": null,
+      "mailEnabled": true,
+      "securityEnabled": false
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000206",
+      "displayName": "Executive Leadership",
+      "description": "Leadership team.",
+      "mail": "exec-leadership@example.com",
+      "visibility": "Private",
+      "groupTypes": [
+        "Unified"
+      ],
+      "resourceProvisioningOptions": [
+        "Team"
+      ],
+      "createdDateTime": "2025-01-03T09:00:00Z",
+      "renewedDateTime": "2026-09-30T09:00:00Z",
+      "expirationDateTime": "2027-09-30T09:00:00Z",
+      "membershipRule": null,
+      "onPremisesSyncEnabled": null,
+      "classification": null,
+      "mailEnabled": true,
+      "securityEnabled": false
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000204",
+      "displayName": "IT Operations",
+      "description": "Run the platform.",
+      "mail": "it-operations@example.com",
+      "visibility": "Private",
+      "groupTypes": [
+        "Unified"
+      ],
+      "resourceProvisioningOptions": [
+        "Team"
+      ],
+      "createdDateTime": "2024-07-17T09:00:00Z",
+      "renewedDateTime": "2026-10-05T09:00:00Z",
+      "expirationDateTime": "2027-10-05T09:00:00Z",
+      "membershipRule": null,
+      "onPremisesSyncEnabled": null,
+      "classification": null,
+      "mailEnabled": true,
+      "securityEnabled": false
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000205",
+      "displayName": "Legal Review",
+      "description": "Contract reviews.",
+      "mail": "legal-review@example.com",
+      "visibility": "Private",
+      "groupTypes": [
+        "Unified"
+      ],
+      "resourceProvisioningOptions": [
+        "Team"
+      ],
+      "createdDateTime": "2025-12-19T09:00:00Z",
+      "renewedDateTime": "2026-03-29T09:00:00Z",
+      "expirationDateTime": "2027-03-29T09:00:00Z",
+      "membershipRule": null,
+      "onPremisesSyncEnabled": null,
+      "classification": null,
+      "mailEnabled": true,
+      "securityEnabled": false
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000203",
+      "displayName": "Marketing Campaigns",
+      "description": "Campaign planning.",
+      "mail": "marketing-campaigns@example.com",
+      "visibility": "Public",
+      "groupTypes": [
+        "Unified"
+      ],
+      "resourceProvisioningOptions": [
+        "Team"
+      ],
+      "createdDateTime": "2025-06-02T09:00:00Z",
+      "renewedDateTime": "2026-06-17T09:00:00Z",
+      "expirationDateTime": "2027-06-17T09:00:00Z",
+      "membershipRule": null,
+      "onPremisesSyncEnabled": null,
+      "classification": null,
+      "mailEnabled": true,
+      "securityEnabled": false
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000207",
+      "displayName": "Partner Collaboration – Fabrikam",
+      "description": "Joint project with Fabrikam.",
+      "mail": "partner-fabrikam@example.com",
+      "visibility": "Private",
+      "groupTypes": [
+        "Unified"
+      ],
+      "resourceProvisioningOptions": [
+        "Team"
+      ],
+      "createdDateTime": "2026-05-28T09:00:00Z",
+      "renewedDateTime": "2026-09-15T09:00:00Z",
+      "expirationDateTime": "2027-09-15T09:00:00Z",
+      "membershipRule": null,
+      "onPremisesSyncEnabled": null,
+      "classification": null,
+      "mailEnabled": true,
+      "securityEnabled": false
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000201",
+      "displayName": "Project Atlas",
+      "description": "Atlas platform migration.",
+      "mail": "project-atlas@example.com",
+      "visibility": "Private",
+      "groupTypes": [
+        "Unified"
+      ],
+      "resourceProvisioningOptions": [
+        "Team"
+      ],
+      "createdDateTime": "2026-03-19T09:00:00Z",
+      "renewedDateTime": "2026-09-20T09:00:00Z",
+      "expirationDateTime": "2027-09-20T09:00:00Z",
+      "membershipRule": null,
+      "onPremisesSyncEnabled": null,
+      "classification": null,
+      "mailEnabled": true,
+      "securityEnabled": false
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000209",
+      "displayName": "Project Orion (retired)",
+      "description": "Archived project.",
+      "mail": "project-orion@example.com",
+      "visibility": "Private",
+      "groupTypes": [
+        "Unified"
+      ],
+      "resourceProvisioningOptions": [
+        "Team"
+      ],
+      "createdDateTime": "2024-02-08T09:00:00Z",
+      "renewedDateTime": "2025-09-10T09:00:00Z",
+      "expirationDateTime": "2026-09-10T09:00:00Z",
+      "membershipRule": null,
+      "onPremisesSyncEnabled": null,
+      "classification": null,
+      "mailEnabled": true,
+      "securityEnabled": false
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000202",
+      "displayName": "Sales EMEA",
+      "description": "EMEA sales team.",
+      "mail": "sales-emea@example.com",
+      "visibility": "Public",
+      "groupTypes": [
+        "Unified"
+      ],
+      "resourceProvisioningOptions": [
+        "Team"
+      ],
+      "createdDateTime": "2024-09-15T09:00:00Z",
+      "renewedDateTime": "2026-09-10T09:00:00Z",
+      "expirationDateTime": "2027-09-10T09:00:00Z",
+      "membershipRule": null,
+      "onPremisesSyncEnabled": null,
+      "classification": null,
+      "mailEnabled": true,
+      "securityEnabled": false
+    }
+  ]
+}

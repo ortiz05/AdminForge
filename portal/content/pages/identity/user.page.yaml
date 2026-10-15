@@ -1,79 +1,642 @@
 $schema: ../../../packages/schemas/generated/page.schema.json
 kind: page
 id: identity.user
-version: 1.0.0
+version: 1.1.0
 title: User
-summary: One user account — profile, status and group memberships.
+summary: One user account — profile, groups, roles, devices, authentication methods, sign-ins, licences and audit history.
 owner: identity-team
 tags: [identity, users]
 template: entity
 requires:
   portalRoles: [Portal.Reader]
   scopes:
-    graph: [User.Read.All, Directory.Read.All]
+    graph: [User.Read.All, Directory.Read.All, AuditLog.Read.All, RoleManagement.Read.Directory, UserAuthenticationMethod.Read.All]
+  entraRoles: [Global Reader]
 
 params:
   id: { type: guid, label: User, required: true, hidden: true }
+  groupScope:
+    type: enum
+    label: Memberships
+    facet: true
+    default: Direct
+    values:
+      - { value: Direct, label: Direct }
+      - { value: Transitive, label: Including nested }
 
+filters:
+  facets: [groupScope]
+
+# Named `profile` so it doesn't shadow `user` (the signed-in engineer) in expressions.
 datasources:
-  user:
+  profile:
     source: graph
     request:
       path: /users/${ $encode($guid(params.id)) }
       query:
-        $select: id,displayName,userPrincipalName,mail,accountEnabled,userType,department,jobTitle,createdDateTime,onPremisesSyncEnabled
+        $select: id,displayName,givenName,surname,userPrincipalName,mail,otherMails,proxyAddresses,accountEnabled,userType,department,jobTitle,companyName,officeLocation,city,country,usageLocation,mobilePhone,businessPhones,employeeId,employeeType,employeeHireDate,createdDateTime,creationType,externalUserState,externalUserStateChangeDateTime,onPremisesSyncEnabled,onPremisesLastSyncDateTime,onPremisesSamAccountName,onPremisesDomainName,onPremisesImmutableId,lastPasswordChangeDateTime,passwordPolicies,preferredLanguage,signInSessionsValidFromDateTime,assignedLicenses
+        $expand: manager($select=id,displayName,userPrincipalName)
     cache: { ttl: 30 }
+  activity:
+    source: graph
+    requires: { licences: [signInLogs] }
+    request:
+      path: /users/${ $encode($guid(params.id)) }
+      query:
+        $select: id,signInActivity
+    cache: { ttl: 60 }
   groups:
     source: graph
     request:
-      path: /users/${ $encode($guid(params.id)) }/memberOf/microsoft.graph.group
+      path: "/users/${ $encode($guid(params.id)) }/${ params.groupScope = 'Transitive' ? 'transitiveMemberOf' : 'memberOf' }/microsoft.graph.group"
       query:
-        $select: id,displayName,groupTypes,securityEnabled,mailEnabled
+        $select: id,displayName,description,mail,groupTypes,securityEnabled,mailEnabled,membershipRule,onPremisesSyncEnabled,isAssignableToRole
         $top: 100
+    paging: cursor
+    cache: { ttl: 60 }
+    transform: >-
+      ${ $merge([value, { "value": [value.value.$merge([$, {
+           "kind": 'Unified' in groupTypes ? "Microsoft 365"
+                   : securityEnabled = true and mailEnabled = true ? "Mail-enabled security"
+                   : securityEnabled = true ? "Security" : "Distribution",
+           "membership": 'DynamicMembership' in groupTypes ? "Dynamic" : "Assigned",
+           "sourceLabel": onPremisesSyncEnabled = true ? "Synced" : "Cloud",
+           "removable": $not('DynamicMembership' in groupTypes) and $not(onPremisesSyncEnabled = true)
+                        and $not(mailEnabled = true and $not('Unified' in groupTypes))
+         }])] }]) }
+  roles:
+    source: graphBatch
+    requests:
+      active:
+        path: /roleManagement/directory/roleAssignments
+        query:
+          $filter: ${ 'principalId eq ' & $odata($guid(params.id)) }
+          $expand: roleDefinition
+      eligible:
+        path: /roleManagement/directory/roleEligibilityScheduleInstances
+        query:
+          $filter: ${ 'principalId eq ' & $odata($guid(params.id)) }
+          $expand: roleDefinition
+      activated:
+        path: /roleManagement/directory/roleAssignmentScheduleInstances
+        query:
+          $filter: ${ 'principalId eq ' & $odata($guid(params.id)) }
+    cache: { ttl: 120 }
+    # Eligibility and activations need Entra ID P2 (PIM); without it those sub-requests fail and only active roles show.
+    transform: >-
+      ${ (
+        $activated := [value.activated.value[assignmentType = 'Activated']];
+        $scope := function($s) { $s = '/' ? 'Directory' : $s };
+        $active := [value.active.value.(
+          $rid := roleDefinitionId;
+          $act := $activated[roleDefinitionId = $rid][0];
+          {
+            "key": 'active|' & id,
+            "roleId": roleDefinitionId,
+            "role": roleDefinition.displayName,
+            "assignment": $act ? "Activated" : "Active",
+            "scope": $scope(directoryScopeId),
+            "start": $act.startDateTime,
+            "end": $act.endDateTime
+          }
+        )];
+        $eligible := [value.eligible.value.{
+          "key": 'eligible|' & id,
+          "roleId": roleDefinitionId,
+          "role": roleDefinition.displayName,
+          "assignment": "Eligible",
+          "scope": $scope(directoryScopeId),
+          "start": startDateTime,
+          "end": endDateTime,
+          "memberType": memberType
+        }];
+        {
+          "rows": $append($active, $eligible),
+          "active": $count($active),
+          "eligible": $count($eligible),
+          "pimAvailable": $exists(value.eligible.value)
+        }
+      ) }
+  devices:
+    source: graph
+    request:
+      path: /users/${ $encode($guid(params.id)) }/ownedDevices/microsoft.graph.device
+      query:
+        $select: id,deviceId,displayName,operatingSystem,operatingSystemVersion,trustType,isCompliant,isManaged,accountEnabled,approximateLastSignInDateTime,registrationDateTime
+    cache: { ttl: 120 }
+  managedDevices:
+    source: graph
+    requires: { licences: [intune], scopes: { graph: [DeviceManagementManagedDevices.Read.All] } }
+    request:
+      path: /users/${ $encode($guid(params.id)) }/managedDevices
+      query:
+        $select: id,deviceName,operatingSystem,osVersion,complianceState,lastSyncDateTime,managementAgent,managedDeviceOwnerType,model,serialNumber
+    cache: { ttl: 120 }
+  auth:
+    source: graphBatch
+    requests:
+      methods: { path: "/users/${ $encode($guid(params.id)) }/authentication/methods" }
+      registration: { path: "/reports/authenticationMethods/userRegistrationDetails/${ $encode($guid(params.id)) }" }
+    cache: { ttl: 60 }
+    transform: >-
+      ${ (
+        $labels := {
+          "#microsoft.graph.passwordAuthenticationMethod": "Password",
+          "#microsoft.graph.microsoftAuthenticatorAuthenticationMethod": "Microsoft Authenticator",
+          "#microsoft.graph.phoneAuthenticationMethod": "Phone",
+          "#microsoft.graph.fido2AuthenticationMethod": "FIDO2 key / passkey",
+          "#microsoft.graph.windowsHelloForBusinessAuthenticationMethod": "Windows Hello for Business",
+          "#microsoft.graph.softwareOathAuthenticationMethod": "Software OATH token",
+          "#microsoft.graph.temporaryAccessPassAuthenticationMethod": "Temporary Access Pass",
+          "#microsoft.graph.emailAuthenticationMethod": "Email (SSPR)",
+          "#microsoft.graph.platformCredentialAuthenticationMethod": "Platform credential"
+        };
+        $strong := ["#microsoft.graph.fido2AuthenticationMethod", "#microsoft.graph.windowsHelloForBusinessAuthenticationMethod", "#microsoft.graph.platformCredentialAuthenticationMethod"];
+        {
+          "methods": [value.methods.value.{
+            "id": id,
+            "method": $lookup($labels, `@odata.type`) ? $lookup($labels, `@odata.type`) : `@odata.type`,
+            "detail": displayName ? displayName : phoneNumber ? phoneType & ' ' & phoneNumber : emailAddress ? emailAddress : model ? model : '',
+            "strength": `@odata.type` in $strong ? "Phishing-resistant" : `@odata.type` = "#microsoft.graph.passwordAuthenticationMethod" ? "Password" : "MFA",
+            "created": createdDateTime
+          }],
+          "registration": value.registration.id ? value.registration : null
+        }
+      ) }
+  signIns:
+    source: graph
+    requires: { licences: [signInLogs] }
+    request:
+      path: /auditLogs/signIns
+      query:
+        $filter: ${ 'userId eq ' & $odata($guid(params.id)) }
+        $top: 50
+    paging: cursor
+    cache: { ttl: 60 }
+    transform: >-
+      ${ $merge([value, { "value": [value.value.$merge([$, {
+           "result": status.errorCode = 0 ? "success" : "failure",
+           "place": $join([location.city, location.countryOrRegion][$], ', ')
+         }])] }]) }
+  licences:
+    source: graphBatch
+    requests:
+      details: { path: "/users/${ $encode($guid(params.id)) }/licenseDetails", query: { $select: "id,skuId,skuPartNumber,servicePlans" } }
+      states: { path: "/users/${ $encode($guid(params.id)) }", query: { $select: "id,licenseAssignmentStates" } }
+    cache: { ttl: 60 }
+    transform: >-
+      ${ (
+        $states := [value.states.licenseAssignmentStates];
+        {
+          "rows": [value.details.value.(
+            $sku := skuId;
+            $st := $states[skuId = $sku];
+            {
+              "skuId": skuId,
+              "sku": skuPartNumber,
+              "assignment": $count($st[$not($boolean(assignedByGroup) = true)]) > 0
+                ? ($count($st[$boolean(assignedByGroup) = true]) > 0 ? "Direct and group" : "Direct")
+                : "Group",
+              "direct": $count($st[$not($boolean(assignedByGroup) = true)]) > 0,
+              "groups": [$st[$boolean(assignedByGroup) = true].assignedByGroup],
+              "state": $st[0].state,
+              "error": $join([$st[error != 'None'].error], ', '),
+              "plansEnabled": $count(servicePlans[provisioningStatus != 'Disabled']),
+              "plansDisabled": $count(servicePlans[provisioningStatus = 'Disabled'])
+            }
+          )]
+        }
+      ) }
+  auditTarget:
+    source: graph
+    request:
+      path: /auditLogs/directoryAudits
+      query:
+        $filter: ${ 'targetResources/any(t:t/id eq ' & $odata($guid(params.id)) & ')' }
+        $top: 50
+    paging: cursor
+    cache: { ttl: 60 }
+  auditBy:
+    source: graph
+    request:
+      path: /auditLogs/directoryAudits
+      query:
+        $filter: ${ 'initiatedBy/user/id eq ' & $odata($guid(params.id)) }
+        $top: 50
     paging: cursor
     cache: { ttl: 60 }
 
 header:
-  title: ${ user.displayName }
-  subtitle: ${ user.userPrincipalName }
-  status: "${ user.accountEnabled ? 'ok' : 'crit' }"
-  statusLabel: "${ user.accountEnabled ? 'Sign-in enabled' : 'Sign-in disabled' }"
+  title: ${ profile.displayName }
+  subtitle: "${ profile.userPrincipalName & (profile.jobTitle ? ' · ' & profile.jobTitle : '') & (profile.department ? ' · ' & profile.department : '') }"
+  status: "${ profile.accountEnabled ? 'ok' : 'crit' }"
+  statusLabel: "${ profile.accountEnabled ? 'Sign-in allowed' : 'Sign-in blocked' }"
   ids:
-    Object id: ${ user.id }
+    Object id: ${ profile.id }
 
 actions:
   - playbook: identity.disable-user
-    label: Disable sign-in
+    label: Block sign-in
     icon: prohibit
     inputs:
       userId: ${ params.id }
-    when: ${ user.accountEnabled = true }
+    when: ${ profile.accountEnabled = true }
+  - playbook: identity.enable-user
+    label: Allow sign-in
+    icon: check-circle
+    inputs:
+      userId: ${ params.id }
+    when: ${ profile.accountEnabled = false and $not(profile.onPremisesSyncEnabled = true) }
+  - playbook: identity.revoke-sessions
+    label: Revoke sessions
+    icon: sign-out
+    inputs:
+      userId: ${ params.id }
+  - playbook: identity.reset-password
+    label: Reset password
+    icon: password
+    inputs:
+      userId: ${ params.id }
+    when: ${ profile.userType = 'Member' }
+  - playbook: identity.issue-tap
+    label: Issue Temporary Access Pass
+    icon: ticket
+    inputs:
+      userId: ${ params.id }
+    when: ${ profile.accountEnabled = true }
+  - playbook: identity.reset-mfa
+    label: Reset MFA methods
+    icon: shield-slash
+    inputs:
+      userId: ${ params.id }
+  - playbook: identity.assign-licence
+    label: Assign licence
+    icon: identification-badge
+    inputs:
+      userId: ${ params.id }
+  - playbook: identity.add-group-members
+    label: Add to group
+    icon: users-three
+    inputs:
+      userIds: ${ [params.id] }
+  - playbook: identity.offboard-user
+    label: Offboard
+    icon: user-minus
+    inputs:
+      userId: ${ params.id }
+    when: ${ profile.userType = 'Member' }
+  - playbook: identity.compromised-account
+    label: Compromised account response
+    icon: siren
+    inputs:
+      userId: ${ params.id }
+  - label: Open in Entra admin center
+    icon: arrow-square-out
+    href: "https://entra.microsoft.com/#view/Microsoft_AAD_UsersAndTenants/UserProfileMenuBlade/~/overview/userId/${ $encode(params.id) }"
 
 tabs:
   - id: overview
     label: Overview
     layout:
       - widget: keyValue
-        span: 12
-        data: user
+        id: identity
+        title: Identity
+        span: 6
+        data: profile
         fields:
           - { field: userPrincipalName, label: Sign-in name }
           - { field: mail, label: Email }
-          - { field: userType, label: Type }
-          - { field: department, label: Department }
-          - { field: jobTitle, label: Job title }
-          - { field: onPremisesSyncEnabled, label: Synced from on-premises, kind: boolean }
+          - { field: userType, label: Type, kind: status, map: { Member: [neutral, Member], Guest: [info, Guest] } }
+          - { field: creationType, label: Created via }
+          - { field: externalUserState, label: Invitation, kind: status, map: { Accepted: [ok, Accepted], PendingAcceptance: [warn, Pending acceptance] } }
           - { field: createdDateTime, label: Created, kind: datetime }
+          - { field: proxyAddresses, label: Proxy addresses, kind: tags }
+          - { field: otherMails, label: Other emails, kind: tags }
+      - widget: keyValue
+        id: organisation
+        title: Organisation
+        span: 6
+        data: profile
+        fields:
+          - { field: jobTitle, label: Job title }
+          - { field: department, label: Department }
+          - { field: companyName, label: Company }
+          - { field: manager.displayName, label: Manager }
+          - { field: officeLocation, label: Office }
+          - { field: city, label: City }
+          - { field: country, label: Country or region }
+          - { field: usageLocation, label: Usage location }
+          - { field: employeeId, label: Employee id }
+          - { field: employeeType, label: Employee type }
+          - { field: employeeHireDate, label: Hire date, kind: date }
+      - widget: keyValue
+        id: signInActivity
+        title: Sign-in activity
+        description: From signInActivity (Entra ID P1). Updated by Microsoft within a few hours of each sign-in.
+        span: 6
+        data: activity.signInActivity
+        fields:
+          - { field: lastSignInDateTime, label: Last interactive sign-in, kind: relativeTime }
+          - { field: lastNonInteractiveSignInDateTime, label: Last non-interactive sign-in, kind: relativeTime }
+          - { field: lastSuccessfulSignInDateTime, label: Last successful sign-in, kind: relativeTime }
+      - widget: keyValue
+        id: security
+        title: Account security
+        span: 6
+        data: profile
+        fields:
+          - { field: accountEnabled, label: Sign-in, kind: status, map: { "true": [ok, Allowed], "false": [crit, Blocked] } }
+          - { field: lastPasswordChangeDateTime, label: Password last changed, kind: relativeTime }
+          - { field: passwordPolicies, label: Password policies }
+          - { field: signInSessionsValidFromDateTime, label: Sessions valid from, kind: datetime }
+          - { field: onPremisesSyncEnabled, label: Synced from AD, kind: boolean }
+          - { field: onPremisesSamAccountName, label: sAMAccountName }
+          - { field: onPremisesDomainName, label: AD domain }
+          - { field: onPremisesImmutableId, label: Immutable id, kind: code }
+          - { field: onPremisesLastSyncDateTime, label: Last directory sync, kind: relativeTime }
+
   - id: groups
     label: Groups
     layout:
       - widget: table
+        id: groups
         span: 12
         data: groups.value
         rowKey: id
+        selection: multi
         columns:
-          - { field: displayName, label: Group }
-          - { field: securityEnabled, label: Security, kind: boolean }
-          - { field: mailEnabled, label: Mail-enabled, kind: boolean }
-          - { field: groupTypes, label: Types, kind: tags }
+          - { field: displayName, label: Group, kind: identity, secondary: mail }
+          - field: kind
+            label: Type
+            kind: status
+            map: { Microsoft 365: [info, Microsoft 365], Security: [neutral, Security], Mail-enabled security: [neutral, Mail-enabled security], Distribution: [neutral, Distribution] }
+            filter: facet
+          - { field: membership, label: Membership, kind: status, map: { Assigned: [neutral, Assigned], Dynamic: [info, Dynamic] }, filter: facet }
+          - { field: sourceLabel, label: Source, kind: status, map: { Cloud: [neutral, Cloud], Synced: [info, Synced from AD] }, filter: facet }
+          - { field: isAssignableToRole, label: Role-assignable, kind: boolean }
+          - { field: description, label: Description, hidden: true }
+          - { field: membershipRule, label: Membership rule, kind: code, hidden: true }
           - { field: id, label: Object id, kind: guid, hidden: true }
+        inspect:
+          page: identity.group
+          params:
+            id: ${ row.id }
+        rowActions:
+          - playbook: identity.remove-group-members
+            label: Remove from group
+            icon: user-minus
+            inputs:
+              groupId: ${ row.id }
+              memberIds: ${ [params.id] }
+            when: ${ row.removable = true and params.groupScope != 'Transitive' }
+        bulkActions:
+          - playbook: identity.remove-group-members
+            label: Remove from selected groups
+            icon: user-minus
+            forEach:
+              inputs:
+                groupId: ${ row.id }
+                memberIds: ${ [params.id] }
+              concurrency: 5
+            maxItems: 100
+            when: ${ $count(rows[removable = true]) = $count(rows) and params.groupScope != 'Transitive' }
+        empty:
+          title: Not a member of any group
+          body: Group memberships grant app access, licences and policy scope. Use Add to group to add one.
+
+  - id: roles
+    label: Roles
+    layout:
+      - widget: kpi
+        id: activeRoles
+        data: roles.active
+        label: Active role assignments
+        format: number
+        status: "${ value > 0 ? 'info' : 'neutral' }"
+      - widget: kpi
+        id: eligibleRoles
+        data: roles.eligible
+        label: Eligible (PIM)
+        format: number
+      - widget: licenceGate
+        feature: pim
+        span: 6
+        title: Eligible assignments need Microsoft Entra ID P2 (Privileged Identity Management)
+      - widget: table
+        id: roleRows
+        span: 12
+        data: roles.rows
+        rowKey: key
+        columns:
+          - { field: role, label: Role }
+          - field: assignment
+            label: Assignment
+            kind: status
+            map: { Active: [warn, Active (standing)], Activated: [info, Activated (PIM)], Eligible: [neutral, Eligible] }
+            filter: facet
+          - { field: scope, label: Scope }
+          - { field: memberType, label: Via, hidden: true }
+          - { field: start, label: Start, kind: datetime }
+          - { field: end, label: End, kind: datetime }
+          - { field: roleId, label: Role definition id, kind: guid, hidden: true }
+        inspect:
+          page: identity.role
+          params:
+            id: ${ row.roleId }
+        empty:
+          title: No directory roles
+          body: This account holds no active or eligible Microsoft Entra roles.
+
+  - id: devices
+    label: Devices
+    layout:
+      - widget: table
+        id: ownedDevices
+        title: Microsoft Entra devices
+        span: 12
+        data: devices.value
+        rowKey: id
+        columns:
+          - { field: displayName, label: Device, kind: identity, secondary: operatingSystem }
+          - { field: operatingSystemVersion, label: OS version }
+          - field: trustType
+            label: Join type
+            kind: status
+            map: { AzureAd: [info, Entra joined], ServerAd: [info, Hybrid joined], Workplace: [neutral, Registered] }
+          - { field: isCompliant, label: Compliant, kind: status, map: { "true": [ok, Compliant], "false": [crit, Not compliant] } }
+          - { field: isManaged, label: Managed, kind: boolean }
+          - { field: accountEnabled, label: Enabled, kind: boolean }
+          - { field: approximateLastSignInDateTime, label: Last activity, kind: relativeTime }
+          - { field: deviceId, label: Device id, kind: guid, hidden: true }
+        inspect:
+          page: identity.device
+          params:
+            id: ${ row.id }
+        empty:
+          title: No registered devices
+          body: The user owns no Entra-joined or registered devices.
+      - widget: table
+        id: managedDevices
+        title: Intune managed devices
+        span: 12
+        data: managedDevices.value
+        rowKey: id
+        columns:
+          - { field: deviceName, label: Device, kind: identity, secondary: model }
+          - { field: operatingSystem, label: OS }
+          - { field: osVersion, label: Version }
+          - field: complianceState
+            label: Compliance
+            kind: status
+            map: { compliant: [ok, Compliant], noncompliant: [crit, Not compliant], inGracePeriod: [warn, In grace period], unknown: [neutral, Unknown], configManager: [info, Configuration Manager], conflict: [warn, Conflict], error: [crit, Error] }
+          - { field: managedDeviceOwnerType, label: Ownership }
+          - { field: lastSyncDateTime, label: Last check-in, kind: relativeTime }
+          - { field: serialNumber, label: Serial number, hidden: true }
+        inspect:
+          page: endpoint.device
+          params:
+            id: ${ row.id }
+        rowActions:
+          - playbook: endpoint.sync-device
+            label: Sync
+            icon: arrows-clockwise
+            inputs:
+              managedDeviceId: ${ row.id }
+        empty:
+          title: No Intune-managed devices
+          body: No device enrolled in Intune lists this user as its primary user.
+
+  - id: authMethods
+    label: Authentication
+    layout:
+      - widget: keyValue
+        id: registration
+        title: Registration summary
+        description: From the authentication methods registration report (Entra ID P1).
+        span: 5
+        data: auth.registration
+        fields:
+          - { field: isMfaRegistered, label: MFA registered, kind: status, map: { "true": [ok, Registered], "false": [crit, Not registered] } }
+          - { field: isMfaCapable, label: MFA capable, kind: boolean }
+          - { field: isPasswordlessCapable, label: Passwordless capable, kind: boolean }
+          - { field: isSsprRegistered, label: SSPR registered, kind: boolean }
+          - { field: defaultMfaMethod, label: Default MFA method }
+          - { field: isSystemPreferredAuthenticationMethodEnabled, label: System-preferred MFA, kind: boolean }
+          - { field: lastUpdatedDateTime, label: Report updated, kind: relativeTime }
+        empty:
+          title: No registration data
+          body: The registration report needs Entra ID P1 and Reports Reader (or higher).
+      - widget: table
+        id: methods
+        title: Registered methods
+        span: 7
+        data: auth.methods
+        rowKey: id
+        columns:
+          - { field: method, label: Method }
+          - { field: detail, label: Detail }
+          - field: strength
+            label: Strength
+            kind: status
+            map: { Phishing-resistant: [ok, Phishing-resistant], MFA: [info, MFA], Password: [neutral, Password] }
+          - { field: created, label: Registered, kind: relativeTime }
+        empty:
+          title: Only a password
+          body: This user has no MFA methods. Issue a Temporary Access Pass so they can register one.
+          action: { playbook: identity.issue-tap, label: Issue Temporary Access Pass, inputs: { userId: "${ params.id }" } }
+
+  - id: signIns
+    label: Sign-ins
+    layout:
+      - widget: licenceGate
+        feature: signInLogs
+        title: Sign-in logs need Microsoft Entra ID P1
+      - widget: table
+        id: signIns
+        span: 12
+        data: signIns.value
+        rowKey: id
+        columns:
+          - { field: createdDateTime, label: Time, kind: datetime }
+          - { field: appDisplayName, label: Application, filter: facet }
+          - { field: result, label: Result, kind: status, map: { success: [ok, Success], failure: [crit, Failure] }, filter: facet }
+          - { field: status.errorCode, label: Error code, kind: number, hidden: true }
+          - { field: status.failureReason, label: Failure reason }
+          - { field: ipAddress, label: IP address, kind: code }
+          - { field: place, label: Location }
+          - field: conditionalAccessStatus
+            label: Conditional Access
+            kind: status
+            map: { success: [ok, Success], failure: [crit, Failure], notApplied: [neutral, Not applied] }
+            filter: facet
+          - { field: clientAppUsed, label: Client app, hidden: true }
+          - { field: deviceDetail.operatingSystem, label: OS, hidden: true }
+          - { field: deviceDetail.browser, label: Browser, hidden: true }
+          - { field: riskLevelDuringSignIn, label: Risk, hidden: true }
+          - { field: correlationId, label: Correlation id, kind: guid, hidden: true }
+        inspect:
+          page: identity.sign-in
+          params:
+            id: ${ row.id }
+        empty:
+          title: No sign-ins in the last 30 days
+          body: Interactive sign-ins appear here within a few minutes.
+
+  - id: licences
+    label: Licences
+    layout:
+      - widget: table
+        id: licenceRows
+        span: 12
+        data: licences.rows
+        rowKey: skuId
+        columns:
+          - { field: sku, label: Licence }
+          - field: assignment
+            label: Assigned
+            kind: status
+            map: { Direct: [neutral, Direct], Group: [info, Through a group], Direct and group: [warn, Direct and through a group] }
+          - field: state
+            label: State
+            kind: status
+            map: { Active: [ok, Active], ActiveWithError: [warn, Active with errors], Error: [crit, Error], Disabled: [neutral, Disabled] }
+          - { field: error, label: Assignment error }
+          - { field: plansEnabled, label: Services on, kind: number }
+          - { field: plansDisabled, label: Services off, kind: number }
+          - { field: groups, label: Licensing groups, kind: tags, hidden: true }
+          - { field: skuId, label: SKU id, kind: guid, hidden: true }
+        rowActions:
+          - playbook: identity.remove-licence
+            label: Remove licence
+            icon: minus-circle
+            inputs:
+              userId: ${ params.id }
+              sku: ${ row.skuId }
+            when: ${ row.direct = true }
+        empty:
+          title: No licences
+          body: This user has no licences, so they can't use Microsoft 365 services.
+          action: { playbook: identity.assign-licence, label: Assign licence, inputs: { userId: "${ params.id }" } }
+
+  - id: audit
+    label: Audit
+    layout:
+      # timeline uses `title` for each event, so the panel heading is `heading`.
+      - widget: timeline
+        id: changesToUser
+        heading: Changes to this account
+        span: 6
+        data: auditTarget.value
+        ts: activityDateTime
+        title: activityDisplayName
+        detail: "${ initiatedBy.user.userPrincipalName ? initiatedBy.user.userPrincipalName : initiatedBy.app.displayName }"
+        status: { field: result, map: { success: [ok, Success], failure: [crit, Failure] } }
+      - widget: timeline
+        id: changesByUser
+        heading: Changes made by this account
+        span: 6
+        data: auditBy.value
+        ts: activityDateTime
+        title: activityDisplayName
+        detail: "${ $join(targetResources.(userPrincipalName ? userPrincipalName : displayName), ', ') }"
+        status: { field: result, map: { success: [ok, Success], failure: [crit, Failure] } }

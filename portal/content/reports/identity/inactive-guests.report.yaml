@@ -1,0 +1,152 @@
+$schema: ../../../packages/schemas/generated/report.schema.json
+kind: report
+id: identity.inactive-guests
+version: 1.0.0
+title: Inactive guests
+summary: >-
+  Guest accounts that haven't signed in for the chosen number of days, plus invitations never redeemed — the external
+  access to review and remove. Includes the guest's home domain and who they are.
+owner: identity-team
+tags: [identity, guests, hygiene, report]
+nav: { section: reports, label: Inactive guests, icon: user-switch, order: 13 }
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    graph: [User.Read.All, AuditLog.Read.All]
+  entraRoles: [Reports Reader]
+  licences: [signInLogs]
+
+params:
+  days:
+    type: enum
+    label: Inactive for at least
+    facet: true
+    default: 90
+    values:
+      - { value: 30, label: 30 days }
+      - { value: 90, label: 90 days }
+      - { value: 180, label: 180 days }
+      - { value: 365, label: 1 year }
+  pending: { type: enum, values: [Include, Only, Exclude], default: Include, label: Unredeemed invitations, facet: true }
+
+datasources:
+  guests:
+    source: graph
+    request:
+      path: /users
+      query:
+        $select: id,displayName,userPrincipalName,mail,accountEnabled,userType,companyName,createdDateTime,creationType,externalUserState,externalUserStateChangeDateTime,signInActivity
+        $filter: userType eq 'Guest'
+        $top: 120
+    paging: all
+    maxItems: 100000
+    cache: { ttl: 3600 }
+    transform: >-
+      ${ (
+        $days := params.days ? $number(params.days) : 90;
+        $latest := function($a) {
+          $a.lastSuccessfulSignInDateTime ? $a.lastSuccessfulSignInDateTime
+          : ([$a.lastSignInDateTime, $a.lastNonInteractiveSignInDateTime][$])^(>$)[0]
+        };
+        $rows := [value.value[userType = 'Guest'].(
+          $last := $latest(signInActivity);
+          $pendingInvite := externalUserState = 'PendingAcceptance';
+          $since := $pendingInvite ? (externalUserStateChangeDateTime ? externalUserStateChangeDateTime : createdDateTime) : $last;
+          {
+            "id": id,
+            "displayName": displayName,
+            "mail": mail,
+            "userPrincipalName": userPrincipalName,
+            "homeDomain": mail ? $substringAfter(mail, '@') : null,
+            "company": companyName,
+            "accountEnabled": accountEnabled,
+            "invitation": $pendingInvite ? 'Pending' : externalUserState = 'Accepted' ? 'Accepted' : 'Other',
+            "invited": createdDateTime,
+            "lastSignIn": $last,
+            "daysInactive": $since ? -$daysUntil($since) : -$daysUntil(createdDateTime)
+          }
+        )];
+        $hits := $rows[
+          daysInactive >= $days and accountEnabled = true
+          and ($$.params.pending = 'Include' or ($$.params.pending = 'Only') = (invitation = 'Pending'))
+        ];
+        {
+          "rows": [$hits^(>daysInactive)],
+          "total": $count($hits),
+          "pending": $count($hits[invitation = 'Pending']),
+          "domains": $append([], [$distinct($hits.homeDomain).( $d := $; { "domain": $d, "guests": $count($hits[homeDomain = $d]) } )^(>guests)][[0..5]]),
+          "allGuests": $count($rows)
+        }
+      ) }
+
+layout:
+  - widget: kpi
+    id: total
+    data: guests.total
+    label: Inactive guests
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+  - widget: kpi
+    id: pending
+    data: guests.pending
+    label: Invitations never redeemed
+    format: number
+  - widget: kpi
+    id: allGuests
+    data: guests.allGuests
+    label: Guests in the directory
+    format: number
+  - widget: chart
+    id: domains
+    title: Top home domains (inactive guests)
+    type: bar
+    span: 3
+    rows: 1
+    data: guests.domains
+    x: domain
+    y: guests
+    format: number
+  - widget: table
+    id: guests
+    span: 12
+    data: guests.rows
+    rowKey: id
+    selection: multi
+    columns:
+      - { field: displayName, label: Guest, kind: identity, secondary: mail, sortable: true }
+      - { field: homeDomain, label: Home domain, filter: facet }
+      - { field: company, label: Company, hidden: true }
+      - { field: invitation, label: Invitation, kind: status, map: { Pending: [warn, Not redeemed], Accepted: [ok, Accepted], Other: [neutral, Other] }, filter: { type: facet, param: pending } }
+      - { field: daysInactive, label: Days inactive, kind: number, filter: range, sortable: true }
+      - { field: lastSignIn, label: Last sign-in, kind: date }
+      - { field: invited, label: Invited, kind: date }
+      - { field: userPrincipalName, label: Sign-in name, hidden: true }
+      - { field: id, label: Object id, kind: guid, hidden: true }
+    inspect:
+      page: identity.user
+      params:
+        id: ${ row.id }
+    rowActions:
+      - playbook: identity.disable-user
+        label: Block sign-in
+        icon: prohibit
+        inputs:
+          userId: ${ row.id }
+    bulkActions:
+      - playbook: identity.disable-user
+        label: Block sign-in
+        icon: prohibit
+        forEach:
+          inputs:
+            userId: ${ row.id }
+          concurrency: 5
+        maxItems: 500
+    empty:
+      title: No inactive guests
+      body: Every enabled guest signed in within the window.
+
+export:
+  formats: [csv, xlsx]
+  fileName: inactive-guests-${ params.days }d
+  data: guests.rows
+  columns: all

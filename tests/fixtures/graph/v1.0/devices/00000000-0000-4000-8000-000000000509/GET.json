@@ -1,0 +1,24 @@
+{
+  "id": "00000000-0000-4000-8000-000000000509",
+  "deviceId": "00000000-0000-4000-8001-000000000509",
+  "displayName": "Pixel 8 – M. Chen",
+  "operatingSystem": "AndroidForWork",
+  "operatingSystemVersion": "15.0",
+  "trustType": "Workplace",
+  "isCompliant": true,
+  "isManaged": true,
+  "accountEnabled": true,
+  "approximateLastSignInDateTime": "2026-10-15T03:05:00Z",
+  "registrationDateTime": "2025-02-10T09:00:00Z",
+  "profileType": "RegisteredDevice",
+  "manufacturer": "Google",
+  "model": "Pixel 8",
+  "onPremisesSyncEnabled": null,
+  "onPremisesLastSyncDateTime": null,
+  "mdmAppId": "0000000a-0000-0000-c000-000000000000",
+  "complianceExpirationDateTime": null,
+  "physicalIds": [],
+  "extensionAttributes": {
+    "extensionAttribute1": null
+  }
+}

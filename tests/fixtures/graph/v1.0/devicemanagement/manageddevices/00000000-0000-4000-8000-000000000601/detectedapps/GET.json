@@ -1,0 +1,40 @@
+{
+  "value": [
+    {
+      "id": "da-601-1",
+      "displayName": "Microsoft 365 Apps for enterprise - en-us",
+      "version": "16.0.19127.20154",
+      "sizeInByte": 0,
+      "deviceCount": 1,
+      "publisher": "Microsoft Corporation",
+      "platform": "windows"
+    },
+    {
+      "id": "da-601-2",
+      "displayName": "Microsoft Edge",
+      "version": "141.0.3537.71",
+      "sizeInByte": 0,
+      "deviceCount": 1,
+      "publisher": "Microsoft Corporation",
+      "platform": "windows"
+    },
+    {
+      "id": "da-601-3",
+      "displayName": "7-Zip 24.09 (x64)",
+      "version": "24.09",
+      "sizeInByte": 0,
+      "deviceCount": 1,
+      "publisher": "Igor Pavlov",
+      "platform": "windows"
+    },
+    {
+      "id": "da-601-4",
+      "displayName": "Company Portal",
+      "version": "11.2.1495.0",
+      "sizeInByte": 0,
+      "deviceCount": 1,
+      "publisher": "Microsoft Corporation",
+      "platform": "windows"
+    }
+  ]
+}

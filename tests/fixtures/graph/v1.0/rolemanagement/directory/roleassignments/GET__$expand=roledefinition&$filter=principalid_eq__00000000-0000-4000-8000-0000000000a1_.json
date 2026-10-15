@@ -1,0 +1,45 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#fixture",
+  "value": [
+    {
+      "id": "ra-06",
+      "principalId": "00000000-0000-4000-8000-0000000000a1",
+      "roleDefinitionId": "f2ef992c-3afb-46b9-b7cf-a126ee74c451",
+      "directoryScopeId": "/",
+      "appScopeId": null,
+      "principal": {
+        "@odata.type": "#microsoft.graph.user",
+        "id": "00000000-0000-4000-8000-0000000000a1",
+        "displayName": "Avery Engineer",
+        "userPrincipalName": "avery@example.com"
+      },
+      "roleDefinition": {
+        "id": "f2ef992c-3afb-46b9-b7cf-a126ee74c451",
+        "displayName": "Global Reader",
+        "description": "Can read everything that a Global Administrator can, but not update anything.",
+        "isBuiltIn": true,
+        "templateId": "f2ef992c-3afb-46b9-b7cf-a126ee74c451"
+      }
+    },
+    {
+      "id": "ra-11",
+      "principalId": "00000000-0000-4000-8000-0000000000a1",
+      "roleDefinitionId": "fe930be7-5e62-47db-91af-98c3a49a38b1",
+      "directoryScopeId": "/",
+      "appScopeId": null,
+      "principal": {
+        "@odata.type": "#microsoft.graph.user",
+        "id": "00000000-0000-4000-8000-0000000000a1",
+        "displayName": "Avery Engineer",
+        "userPrincipalName": "avery@example.com"
+      },
+      "roleDefinition": {
+        "id": "fe930be7-5e62-47db-91af-98c3a49a38b1",
+        "displayName": "User Administrator",
+        "description": "Can manage all aspects of users and groups, including resetting passwords for limited admins.",
+        "isBuiltIn": true,
+        "templateId": "fe930be7-5e62-47db-91af-98c3a49a38b1"
+      }
+    }
+  ]
+}

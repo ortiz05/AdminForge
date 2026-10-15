@@ -1,0 +1,29 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#fixture",
+  "value": [
+    {
+      "id": "re-08",
+      "principalId": "00000000-0000-4000-8000-000000000101",
+      "roleDefinitionId": "b1be1c3e-b65d-4f19-8427-f6fa0d97feb9",
+      "directoryScopeId": "/",
+      "appScopeId": null,
+      "memberType": "Direct",
+      "roleEligibilityScheduleId": "re-08-schedule",
+      "startDateTime": "2026-01-01T00:00:00Z",
+      "endDateTime": null,
+      "principal": {
+        "@odata.type": "#microsoft.graph.user",
+        "id": "00000000-0000-4000-8000-000000000101",
+        "displayName": "Adele Lee",
+        "userPrincipalName": "a.lee@example.com"
+      },
+      "roleDefinition": {
+        "id": "b1be1c3e-b65d-4f19-8427-f6fa0d97feb9",
+        "displayName": "Conditional Access Administrator",
+        "description": "Can manage Conditional Access capabilities.",
+        "isBuiltIn": true,
+        "templateId": "b1be1c3e-b65d-4f19-8427-f6fa0d97feb9"
+      }
+    }
+  ]
+}

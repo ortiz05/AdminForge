@@ -1,0 +1,20 @@
+{
+  "value": [
+    {
+      "id": "30000000-0000-4000-8000-000000000201",
+      "displayName": "EX-LAPTOP-001",
+      "operatingSystem": "Windows",
+      "operatingSystemVersion": "10.0.26100",
+      "trustType": "AzureAd",
+      "accountEnabled": true
+    },
+    {
+      "id": "30000000-0000-4000-8000-000000000202",
+      "displayName": "EX-MAC-007",
+      "operatingSystem": "MacMDM",
+      "operatingSystemVersion": "15.1",
+      "trustType": "Workplace",
+      "accountEnabled": true
+    }
+  ]
+}

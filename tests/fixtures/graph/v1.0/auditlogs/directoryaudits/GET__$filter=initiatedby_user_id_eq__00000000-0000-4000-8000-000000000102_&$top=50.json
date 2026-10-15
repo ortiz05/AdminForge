@@ -1,0 +1,104 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#fixture",
+  "value": [
+    {
+      "id": "Directory_04_20261014",
+      "category": "ApplicationManagement",
+      "correlationId": "00000000-0000-4000-8000-00000000ad04",
+      "result": "success",
+      "resultReason": "",
+      "activityDisplayName": "Consent to application",
+      "activityDateTime": "2026-10-14T03:20:00Z",
+      "loggedByService": "Core Directory",
+      "operationType": "Consent",
+      "initiatedBy": {
+        "app": null,
+        "user": {
+          "id": "00000000-0000-4000-8000-000000000102",
+          "displayName": "Morgan Chen",
+          "userPrincipalName": "m.chen@example.com",
+          "ipAddress": "203.0.113.24"
+        }
+      },
+      "targetResources": [
+        {
+          "id": "00000000-0000-4000-8000-000000000404",
+          "displayName": "PDF Converter Online",
+          "type": "ServicePrincipal",
+          "userPrincipalName": null,
+          "groupType": null,
+          "modifiedProperties": [
+            {
+              "displayName": "ConsentAction.Permissions",
+              "oldValue": "\"…\"",
+              "newValue": "\"…\""
+            }
+          ]
+        }
+      ],
+      "additionalDetails": []
+    },
+    {
+      "id": "Directory_05_20261014",
+      "category": "ApplicationManagement",
+      "correlationId": "00000000-0000-4000-8000-00000000ad05",
+      "result": "success",
+      "resultReason": "",
+      "activityDisplayName": "Add app role assignment grant to user",
+      "activityDateTime": "2026-10-14T03:21:00Z",
+      "loggedByService": "Core Directory",
+      "operationType": "Add",
+      "initiatedBy": {
+        "app": null,
+        "user": {
+          "id": "00000000-0000-4000-8000-000000000102",
+          "displayName": "Morgan Chen",
+          "userPrincipalName": "m.chen@example.com",
+          "ipAddress": "203.0.113.24"
+        }
+      },
+      "targetResources": [
+        {
+          "id": "00000000-0000-4000-8000-000000000404",
+          "displayName": "PDF Converter Online",
+          "type": "ServicePrincipal",
+          "userPrincipalName": null,
+          "groupType": null,
+          "modifiedProperties": []
+        }
+      ],
+      "additionalDetails": []
+    },
+    {
+      "id": "Directory_11_20260301",
+      "category": "UserManagement",
+      "correlationId": "00000000-0000-4000-8000-00000000ad11",
+      "result": "success",
+      "resultReason": "",
+      "activityDisplayName": "Invite external user",
+      "activityDateTime": "2026-03-01T09:00:00Z",
+      "loggedByService": "Invited Users",
+      "operationType": "Invite",
+      "initiatedBy": {
+        "app": null,
+        "user": {
+          "id": "00000000-0000-4000-8000-000000000102",
+          "displayName": "Morgan Chen",
+          "userPrincipalName": "m.chen@example.com",
+          "ipAddress": "203.0.113.24"
+        }
+      },
+      "targetResources": [
+        {
+          "id": "00000000-0000-4000-8000-000000000107",
+          "displayName": null,
+          "type": "User",
+          "userPrincipalName": "t.brooks_vendor.example#EXT#@exampleorg.onmicrosoft.com",
+          "groupType": null,
+          "modifiedProperties": []
+        }
+      ],
+      "additionalDetails": []
+    }
+  ]
+}

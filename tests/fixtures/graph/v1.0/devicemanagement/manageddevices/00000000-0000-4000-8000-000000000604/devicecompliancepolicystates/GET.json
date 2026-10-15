@@ -1,0 +1,12 @@
+{
+  "value": [
+    {
+      "id": "703-604",
+      "displayName": "Android – Work profile compliance",
+      "version": 3,
+      "platformType": "androidWorkProfile",
+      "state": "compliant",
+      "settingCount": 9
+    }
+  ]
+}

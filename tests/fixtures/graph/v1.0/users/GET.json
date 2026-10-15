@@ -1,0 +1,77 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#users",
+  "@odata.count": 6,
+  "value": [
+    {
+      "id": "30000000-0000-4000-8000-000000000001",
+      "displayName": "Avery Engineer",
+      "userPrincipalName": "avery@example.com",
+      "mail": "avery@example.com",
+      "accountEnabled": true,
+      "userType": "Member",
+      "department": "IT Operations",
+      "jobTitle": "Systems Engineer",
+      "createdDateTime": "2024-03-04T09:12:00Z",
+      "signInActivity": {
+        "lastSignInDateTime": "2026-10-14T08:02:11Z"
+      }
+    },
+    {
+      "id": "30000000-0000-4000-8000-000000000002",
+      "displayName": "Blake Analyst",
+      "userPrincipalName": "blake@example.com",
+      "mail": "blake@example.com",
+      "accountEnabled": true,
+      "userType": "Member",
+      "department": "Finance",
+      "jobTitle": "Analyst",
+      "createdDateTime": "2023-11-20T14:00:00Z",
+      "signInActivity": {
+        "lastSignInDateTime": "2026-10-13T16:45:00Z"
+      }
+    },
+    {
+      "id": "30000000-0000-4000-8000-000000000003",
+      "displayName": "Casey Contractor",
+      "userPrincipalName": "casey_partner.example.net#EXT#@exampleorg.onmicrosoft.com",
+      "mail": "casey@partner.example.net",
+      "accountEnabled": true,
+      "userType": "Guest",
+      "department": null,
+      "jobTitle": null,
+      "createdDateTime": "2025-06-01T10:00:00Z",
+      "signInActivity": {
+        "lastSignInDateTime": "2026-09-02T11:20:00Z"
+      }
+    },
+    {
+      "id": "30000000-0000-4000-8000-000000000004",
+      "displayName": "Dana Former",
+      "userPrincipalName": "dana@example.com",
+      "mail": "dana@example.com",
+      "accountEnabled": false,
+      "userType": "Member",
+      "department": "Sales",
+      "jobTitle": "Account Manager",
+      "createdDateTime": "2022-01-10T08:00:00Z",
+      "signInActivity": {
+        "lastSignInDateTime": "2026-04-30T17:05:00Z"
+      }
+    },
+    {
+      "id": "30000000-0000-4000-8000-000000000005",
+      "displayName": "Eli O'Brien",
+      "userPrincipalName": "eli.obrien@example.com",
+      "mail": "eli.obrien@example.com",
+      "accountEnabled": true,
+      "userType": "Member",
+      "department": "IT Operations",
+      "jobTitle": "Security Engineer",
+      "createdDateTime": "2024-08-12T12:30:00Z",
+      "signInActivity": {
+        "lastSignInDateTime": "2026-10-15T07:55:00Z"
+      }
+    }
+  ],
+  "@odata.nextLink": "https://graph.microsoft.com/v1.0/users?$skiptoken=page2"
+}

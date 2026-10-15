@@ -1,0 +1,24 @@
+{
+  "value": [
+    {
+      "id": "ara-401-0",
+      "principalId": "00000000-0000-4000-8000-000000000401",
+      "principalType": "ServicePrincipal",
+      "principalDisplayName": "Example HR Sync",
+      "resourceId": "00000000-0000-4000-8000-000000000409",
+      "resourceDisplayName": "Microsoft Graph",
+      "appRoleId": "df021288-bdef-4463-88db-98f22de89214",
+      "createdDateTime": "2023-04-01T09:00:00Z"
+    },
+    {
+      "id": "ara-401-1",
+      "principalId": "00000000-0000-4000-8000-000000000401",
+      "principalType": "ServicePrincipal",
+      "principalDisplayName": "Example HR Sync",
+      "resourceId": "00000000-0000-4000-8000-000000000409",
+      "resourceDisplayName": "Microsoft Graph",
+      "appRoleId": "5b567255-7703-4780-807c-7be8301ae99b",
+      "createdDateTime": "2023-04-01T09:00:00Z"
+    }
+  ]
+}

@@ -1,0 +1,42 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#fixture",
+  "value": [
+    {
+      "id": "Directory_13_20261015",
+      "category": "UserManagement",
+      "correlationId": "00000000-0000-4000-8000-00000000ad13",
+      "result": "success",
+      "resultReason": "",
+      "activityDisplayName": "Update user",
+      "activityDateTime": "2026-10-15T01:00:00Z",
+      "loggedByService": "Core Directory",
+      "operationType": "Update",
+      "initiatedBy": {
+        "user": null,
+        "app": {
+          "appId": "00000000-0000-4000-8001-0000000000ec",
+          "displayName": "Microsoft Entra Connect Sync",
+          "servicePrincipalId": "00000000-0000-4000-8000-0000000004ec",
+          "servicePrincipalName": "Microsoft Entra Connect Sync"
+        }
+      },
+      "targetResources": [
+        {
+          "id": "00000000-0000-4000-8000-000000000108",
+          "displayName": null,
+          "type": "User",
+          "userPrincipalName": "d.okafor@example.com",
+          "groupType": null,
+          "modifiedProperties": [
+            {
+              "displayName": "Manager",
+              "oldValue": "\"…\"",
+              "newValue": "\"…\""
+            }
+          ]
+        }
+      ],
+      "additionalDetails": []
+    }
+  ]
+}

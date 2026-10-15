@@ -1,0 +1,112 @@
+$schema: ../../../packages/schemas/generated/page.schema.json
+kind: page
+id: identity.audit-logs
+version: 1.0.0
+title: Directory audit logs
+summary: >-
+  Changes made in Microsoft Entra ID — who changed what, when, through which service, and whether it succeeded.
+  Filter by time range, category, result, service, initiator, target and activity.
+owner: identity-team
+tags: [identity, audit, logs, investigation]
+template: list-detail
+nav: { section: identity, label: Audit logs, icon: scroll, order: 95 }
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    graph: [AuditLog.Read.All, Directory.Read.All]
+  entraRoles: [Reports Reader]
+
+params:
+  range: { type: dateRange, label: Time range, presets: [PT1H, P1D, P7D, P30D], default: P7D, max: P30D }
+  category:
+    type: enum
+    label: Category
+    facet: true
+    default: Any
+    values: [Any, UserManagement, GroupManagement, ApplicationManagement, RoleManagement, Policy, Device, DirectoryManagement, Authentication, UserAuthenticationMethodManagement]
+  result: { type: enum, values: [Any, success, failure], default: Any, label: Result, facet: true }
+  service:
+    type: enum
+    label: Service
+    facet: true
+    default: Any
+    values: [Any, Core Directory, PIM, Conditional Access, Authentication Methods, Self-service Password Management, Invited Users, Entitlement Management, Lifecycle Workflows]
+  initiatedBy: { type: string, label: Initiated by (sign-in name starts with), facet: true }
+  target: { type: string, label: Target (name starts with), facet: true }
+  activity: { type: string, label: Activity (starts with), facet: true, placeholder: Update user }
+
+filters:
+  facets: [category, result, service, initiatedBy, target, activity]
+
+savedViews:
+  enabled: true
+  shared: true
+  presets:
+    - { name: Role changes, params: { category: RoleManagement } }
+    - { name: Conditional Access changes, params: { category: Policy, service: Conditional Access } }
+    - { name: Failed operations, params: { result: failure } }
+    - { name: App credential and consent changes, params: { category: ApplicationManagement } }
+
+datasources:
+  audits:
+    source: graph
+    request:
+      path: /auditLogs/directoryAudits
+      query:
+        $top: 100
+        $filter: >-
+          ${ $join([
+               params.range.from ? "activityDateTime ge " & $iso(params.range.from),
+               params.range.to ? "activityDateTime le " & $iso(params.range.to),
+               params.category != 'Any' ? "category eq " & $odata(params.category),
+               params.result != 'Any' ? "result eq " & $odata(params.result),
+               params.service != 'Any' ? "loggedByService eq " & $odata(params.service),
+               params.initiatedBy ? "startswith(initiatedBy/user/userPrincipalName, " & $odata($lowercase(params.initiatedBy)) & ")",
+               params.target ? "targetResources/any(t:startswith(t/displayName, " & $odata(params.target) & "))",
+               params.activity ? "startswith(activityDisplayName, " & $odata(params.activity) & ")"
+             ][$], ' and ') }
+    paging: cursor
+    cache: { ttl: 60 }
+    transform: >-
+      ${ $merge([value, { "value": [value.value.$merge([$, {
+           "initiator": initiatedBy.user.userPrincipalName ? initiatedBy.user.userPrincipalName
+                        : initiatedBy.app.displayName ? initiatedBy.app.displayName & ' (app)' : 'System',
+           "initiatorId": initiatedBy.user.id,
+           "target": $join(targetResources.(userPrincipalName ? userPrincipalName : displayName)[$], ', '),
+           "targetType": targetResources[0].type,
+           "changes": $join(targetResources.modifiedProperties.displayName[$], ', ')
+         }])] }]) }
+
+layout:
+  - widget: table
+    id: audits
+    span: 12
+    data: audits.value
+    rowKey: id
+    columns:
+      - { field: activityDateTime, label: Time, kind: datetime, sortable: true }
+      - { field: activityDisplayName, label: Activity, filter: { type: text, param: activity } }
+      - { field: category, label: Category, filter: { type: facet, param: category } }
+      - field: result
+        label: Result
+        kind: status
+        map: { success: [ok, Success], failure: [crit, Failure], timeout: [warn, Timeout] }
+        filter: { type: facet, param: result }
+      - { field: initiator, label: Initiated by, filter: { type: text, param: initiatedBy } }
+      - { field: target, label: Target, filter: { type: text, param: target } }
+      - { field: targetType, label: Target type, hidden: true }
+      - { field: changes, label: Properties changed, hidden: true }
+      - { field: loggedByService, label: Service, filter: { type: facet, param: service } }
+      - { field: resultReason, label: Reason, hidden: true }
+      - { field: correlationId, label: Correlation id, kind: guid, hidden: true }
+    rowActions:
+      - { label: Open initiating user, icon: user, href: "/p/identity.user?id=${ $encode(row.initiatorId) }", when: "${ $boolean(row.initiatorId) }" }
+    empty:
+      title: No audit events match
+      body: Widen the time range or clear a filter. Entra ID keeps audit logs for 30 days (7 days without P1).
+
+export:
+  formats: [csv, xlsx]
+  fileName: directory-audit
+  data: audits.value
+  columns: visible

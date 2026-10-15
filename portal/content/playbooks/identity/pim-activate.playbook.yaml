@@ -1,0 +1,121 @@
+$schema: ../../../packages/schemas/generated/playbook.schema.json
+kind: playbook
+id: identity.pim-activate
+version: 1.0.0
+title: Activate an eligible role (PIM)
+summary: >-
+  Self-activates one of your eligible Microsoft Entra roles through Privileged Identity Management for a limited time.
+  Role policies may require MFA, a ticket number or approval; the run shows the request status.
+owner: identity-team
+tags: [identity, pim, roles]
+risk: medium
+mode: write
+requires:
+  portalRoles: [Portal.Operator]
+  scopes:
+    graph: [RoleEligibilitySchedule.Read.Directory, RoleAssignmentSchedule.ReadWrite.Directory]
+  licences: [pim]
+confirm:
+  type: click
+  message: >-
+    ${ 'Activate ' & steps.eligible.output.value[0].roleDefinition.displayName & ' for ' & inputs.durationHours
+       & ' hour(s)? The activation and justification are recorded in the PIM audit log.' }
+approval:
+  required: false
+
+inputs:
+  roleDefinitionId: { type: string, format: guid, label: Role (definition id) }
+  directoryScopeId: { type: string, label: Scope, default: /, description: "/ for the whole directory, or /administrativeUnits/<id>." }
+  durationHours: { type: number, label: Duration, unit: hours, default: 1, min: 0.5, max: 24, step: 0.5 }
+  justification: { type: string, label: Justification, minLength: 10, maxLength: 500, multiline: true }
+  ticketNumber: { type: string, label: Ticket number, required: false }
+  ticketSystem: { type: string, label: Ticket system, required: false }
+
+steps:
+  - id: eligible
+    type: graph
+    mode: read
+    describe: Find your eligibility for this role
+    request:
+      method: GET
+      path: /roleManagement/directory/roleEligibilityScheduleInstances
+      query:
+        $filter: ${ 'principalId eq ' & $odata(user.oid) & ' and roleDefinitionId eq ' & $odata($guid(inputs.roleDefinitionId)) }
+        $expand: roleDefinition
+
+  - id: isEligible
+    type: assert
+    that: ${ $count(steps.eligible.output.value[directoryScopeId = $$.inputs.directoryScopeId]) > 0 }
+    message: You are not eligible for this role at that scope. Ask a Privileged Role Administrator for an eligible assignment.
+
+  - id: active
+    type: graph
+    mode: read
+    describe: Check whether the role is already active for you
+    request:
+      method: GET
+      path: /roleManagement/directory/roleAssignmentScheduleInstances
+      query:
+        $filter: ${ 'principalId eq ' & $odata(user.oid) & ' and roleDefinitionId eq ' & $odata($guid(inputs.roleDefinitionId)) }
+
+  - id: notActive
+    type: assert
+    that: ${ $count(steps.active.output.value[directoryScopeId = $$.inputs.directoryScopeId]) = 0 }
+    message: >-
+      ${ 'The role is already active for you'
+         & (steps.active.output.value[0].endDateTime ? ' until ' & steps.active.output.value[0].endDateTime : ' (permanent assignment)') & '.' }
+
+  - id: activate
+    type: graph
+    mode: write
+    describe: ${ 'Request self-activation of ' & steps.eligible.output.value[0].roleDefinition.displayName & ' for ' & inputs.durationHours & ' hour(s)' }
+    idempotent: false
+    request:
+      method: POST
+      path: /roleManagement/directory/roleAssignmentScheduleRequests
+      body:
+        action: selfActivate
+        principalId: ${ user.oid }
+        roleDefinitionId: ${ $guid(inputs.roleDefinitionId) }
+        directoryScopeId: ${ inputs.directoryScopeId }
+        justification: ${ inputs.justification }
+        scheduleInfo:
+          startDateTime: ${ $iso() }
+          expiration:
+            type: afterDuration
+            duration: ${ 'PT' & $round(inputs.durationHours * 60) & 'M' }
+        ticketInfo:
+          ticketNumber: ${ inputs.ticketNumber }
+          ticketSystem: ${ inputs.ticketSystem }
+    dryRunOutput: { status: Provisioned }
+
+outputs:
+  summary: >-
+    ${ steps.eligible.output.value[0].roleDefinition.displayName
+       & (steps.activate.output.status = 'PendingApproval' ? ' activation is waiting for approval.' : ' is active. New permissions can take a few minutes to apply across Microsoft services.') }
+  status: ${ steps.activate.output.status }
+
+tests:
+  - name: refuses a role you are not eligible for
+    inputs: { roleDefinitionId: fe930be7-5e62-47db-91af-98c3a49a38b1, directoryScopeId: /, durationHours: 1, justification: Bulk user cleanup ticket 5501 }
+    user: { oid: 00000000-0000-4000-8000-000000000101, upn: a.lee@example.com }
+    mocks:
+      eligible: { value: [] }
+    expect: { status: failed, failedStep: isEligible }
+  - name: refuses a role that is already active
+    inputs: { roleDefinitionId: fe930be7-5e62-47db-91af-98c3a49a38b1, directoryScopeId: /, durationHours: 1, justification: Bulk user cleanup ticket 5502 }
+    user: { oid: 00000000-0000-4000-8000-000000000101, upn: a.lee@example.com }
+    mocks:
+      eligible: { value: [{ roleDefinitionId: fe930be7-5e62-47db-91af-98c3a49a38b1, directoryScopeId: /, roleDefinition: { displayName: User Administrator } }] }
+      active: { value: [{ roleDefinitionId: fe930be7-5e62-47db-91af-98c3a49a38b1, directoryScopeId: /, assignmentType: Activated, endDateTime: "2026-10-15T12:00:00Z" }] }
+    expect: { status: failed, failedStep: notActive }
+  - name: plans a self-activation request
+    inputs: { roleDefinitionId: fe930be7-5e62-47db-91af-98c3a49a38b1, directoryScopeId: /, durationHours: 2, justification: Bulk user cleanup ticket 5503, ticketNumber: "5503" }
+    user: { oid: 00000000-0000-4000-8000-000000000101, upn: a.lee@example.com }
+    mocks:
+      eligible: { value: [{ roleDefinitionId: fe930be7-5e62-47db-91af-98c3a49a38b1, directoryScopeId: /, roleDefinition: { displayName: User Administrator } }] }
+      active: { value: [] }
+    expect:
+      status: succeeded
+      plan: [activate]
+      outputs: { status: Provisioned }

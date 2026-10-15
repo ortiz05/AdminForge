@@ -1,0 +1,22 @@
+{
+  "id": "e8611ab8-c189-46e8-94e1-60213ab1f814",
+  "templateId": "e8611ab8-c189-46e8-94e1-60213ab1f814",
+  "displayName": "Privileged Role Administrator",
+  "description": "Can manage role assignments in Microsoft Entra ID, and all aspects of Privileged Identity Management.",
+  "isBuiltIn": true,
+  "isEnabled": true,
+  "version": "1",
+  "resourceScopes": [
+    "/"
+  ],
+  "rolePermissions": [
+    {
+      "allowedResourceActions": [
+        "microsoft.directory/roleAssignments/allProperties/allTasks",
+        "microsoft.directory/roleDefinitions/allProperties/allTasks",
+        "microsoft.directory/privilegedIdentityManagement/allProperties/allTasks"
+      ],
+      "condition": null
+    }
+  ]
+}

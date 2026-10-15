@@ -1,0 +1,14 @@
+{
+  "value": [
+    {
+      "id": "ara-403-0",
+      "principalId": "00000000-0000-4000-8000-000000000403",
+      "principalType": "ServicePrincipal",
+      "principalDisplayName": "Example Reporting",
+      "resourceId": "00000000-0000-4000-8000-000000000409",
+      "resourceDisplayName": "Microsoft Graph",
+      "appRoleId": "230c1aed-a721-4c5d-9cb4-a90514e508ef",
+      "createdDateTime": "2025-01-15T09:00:00Z"
+    }
+  ]
+}

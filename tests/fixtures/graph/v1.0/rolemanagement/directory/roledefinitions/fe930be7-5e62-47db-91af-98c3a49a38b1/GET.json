@@ -1,0 +1,24 @@
+{
+  "id": "fe930be7-5e62-47db-91af-98c3a49a38b1",
+  "templateId": "fe930be7-5e62-47db-91af-98c3a49a38b1",
+  "displayName": "User Administrator",
+  "description": "Can manage all aspects of users and groups, including resetting passwords for limited admins.",
+  "isBuiltIn": true,
+  "isEnabled": true,
+  "version": "1",
+  "resourceScopes": [
+    "/"
+  ],
+  "rolePermissions": [
+    {
+      "allowedResourceActions": [
+        "microsoft.directory/users/create",
+        "microsoft.directory/users/delete",
+        "microsoft.directory/users/disable",
+        "microsoft.directory/users/password/update",
+        "microsoft.directory/groups/members/update"
+      ],
+      "condition": null
+    }
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "id": "deviceCompliancePolicyDeviceStateSummary",
+  "inGracePeriodCount": 23,
+  "configManagerCount": 41,
+  "unknownDeviceCount": 19,
+  "notApplicableDeviceCount": 0,
+  "compliantDeviceCount": 1201,
+  "remediatedDeviceCount": 0,
+  "nonCompliantDeviceCount": 58,
+  "errorDeviceCount": 5,
+  "conflictDeviceCount": 6
+}

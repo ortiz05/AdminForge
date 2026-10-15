@@ -1,0 +1,252 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#fixture",
+  "value": [
+    {
+      "id": "00000000-0000-4000-8000-0000000000a1",
+      "userPrincipalName": "avery@example.com",
+      "userDisplayName": "Avery Engineer",
+      "userType": "member",
+      "isAdmin": true,
+      "isSsprRegistered": true,
+      "isSsprEnabled": true,
+      "isSsprCapable": true,
+      "isMfaRegistered": true,
+      "isMfaCapable": true,
+      "isPasswordlessCapable": true,
+      "methodsRegistered": [
+        "microsoftAuthenticatorPush",
+        "passKeyDeviceBound",
+        "windowsHelloForBusiness"
+      ],
+      "isSystemPreferredAuthenticationMethodEnabled": true,
+      "systemPreferredAuthenticationMethods": [
+        "Fido2"
+      ],
+      "userPreferredMethodForSecondaryAuthentication": "push",
+      "defaultMfaMethod": "microsoftAuthenticatorPush",
+      "lastUpdatedDateTime": "2026-10-15T00:00:00Z"
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000101",
+      "userPrincipalName": "a.lee@example.com",
+      "userDisplayName": "Adele Lee",
+      "userType": "member",
+      "isAdmin": true,
+      "isSsprRegistered": true,
+      "isSsprEnabled": true,
+      "isSsprCapable": true,
+      "isMfaRegistered": true,
+      "isMfaCapable": true,
+      "isPasswordlessCapable": true,
+      "methodsRegistered": [
+        "microsoftAuthenticatorPush",
+        "passKeyDeviceBound"
+      ],
+      "isSystemPreferredAuthenticationMethodEnabled": true,
+      "systemPreferredAuthenticationMethods": [
+        "Fido2"
+      ],
+      "userPreferredMethodForSecondaryAuthentication": "push",
+      "defaultMfaMethod": "microsoftAuthenticatorPush",
+      "lastUpdatedDateTime": "2026-10-15T00:00:00Z"
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000102",
+      "userPrincipalName": "m.chen@example.com",
+      "userDisplayName": "Morgan Chen",
+      "userType": "member",
+      "isAdmin": false,
+      "isSsprRegistered": true,
+      "isSsprEnabled": true,
+      "isSsprCapable": true,
+      "isMfaRegistered": true,
+      "isMfaCapable": true,
+      "isPasswordlessCapable": false,
+      "methodsRegistered": [
+        "microsoftAuthenticatorPush",
+        "mobilePhone"
+      ],
+      "isSystemPreferredAuthenticationMethodEnabled": true,
+      "systemPreferredAuthenticationMethods": [
+        "Push"
+      ],
+      "userPreferredMethodForSecondaryAuthentication": "push",
+      "defaultMfaMethod": "microsoftAuthenticatorPush",
+      "lastUpdatedDateTime": "2026-10-15T00:00:00Z"
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000103",
+      "userPrincipalName": "p.raman@example.com",
+      "userDisplayName": "Priya Raman",
+      "userType": "member",
+      "isAdmin": false,
+      "isSsprRegistered": true,
+      "isSsprEnabled": true,
+      "isSsprCapable": true,
+      "isMfaRegistered": true,
+      "isMfaCapable": true,
+      "isPasswordlessCapable": false,
+      "methodsRegistered": [
+        "mobilePhone"
+      ],
+      "isSystemPreferredAuthenticationMethodEnabled": true,
+      "systemPreferredAuthenticationMethods": [
+        "Push"
+      ],
+      "userPreferredMethodForSecondaryAuthentication": "sms",
+      "defaultMfaMethod": "mobilePhone",
+      "lastUpdatedDateTime": "2026-10-15T00:00:00Z"
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000104",
+      "userPrincipalName": "r.castillo@example.com",
+      "userDisplayName": "Rafael Castillo",
+      "userType": "member",
+      "isAdmin": false,
+      "isSsprRegistered": true,
+      "isSsprEnabled": true,
+      "isSsprCapable": true,
+      "isMfaRegistered": true,
+      "isMfaCapable": true,
+      "isPasswordlessCapable": false,
+      "methodsRegistered": [
+        "microsoftAuthenticatorPush"
+      ],
+      "isSystemPreferredAuthenticationMethodEnabled": true,
+      "systemPreferredAuthenticationMethods": [
+        "Push"
+      ],
+      "userPreferredMethodForSecondaryAuthentication": "push",
+      "defaultMfaMethod": "microsoftAuthenticatorPush",
+      "lastUpdatedDateTime": "2026-10-15T00:00:00Z"
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000105",
+      "userPrincipalName": "s.patel@example.com",
+      "userDisplayName": "Sam Patel",
+      "userType": "member",
+      "isAdmin": false,
+      "isSsprRegistered": false,
+      "isSsprEnabled": true,
+      "isSsprCapable": false,
+      "isMfaRegistered": false,
+      "isMfaCapable": false,
+      "isPasswordlessCapable": false,
+      "methodsRegistered": [],
+      "isSystemPreferredAuthenticationMethodEnabled": true,
+      "systemPreferredAuthenticationMethods": [],
+      "userPreferredMethodForSecondaryAuthentication": "none",
+      "defaultMfaMethod": "none",
+      "lastUpdatedDateTime": "2026-10-15T00:00:00Z"
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000108",
+      "userPrincipalName": "d.okafor@example.com",
+      "userDisplayName": "Dana Okafor",
+      "userType": "member",
+      "isAdmin": true,
+      "isSsprRegistered": true,
+      "isSsprEnabled": true,
+      "isSsprCapable": true,
+      "isMfaRegistered": true,
+      "isMfaCapable": true,
+      "isPasswordlessCapable": true,
+      "methodsRegistered": [
+        "microsoftAuthenticatorPush",
+        "windowsHelloForBusiness"
+      ],
+      "isSystemPreferredAuthenticationMethodEnabled": true,
+      "systemPreferredAuthenticationMethods": [
+        "Push"
+      ],
+      "userPreferredMethodForSecondaryAuthentication": "push",
+      "defaultMfaMethod": "microsoftAuthenticatorPush",
+      "lastUpdatedDateTime": "2026-10-15T00:00:00Z"
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000109",
+      "userPrincipalName": "j.rivera@example.com",
+      "userDisplayName": "Jordan Rivera",
+      "userType": "member",
+      "isAdmin": true,
+      "isSsprRegistered": true,
+      "isSsprEnabled": true,
+      "isSsprCapable": true,
+      "isMfaRegistered": true,
+      "isMfaCapable": true,
+      "isPasswordlessCapable": true,
+      "methodsRegistered": [
+        "passKeyDeviceBound",
+        "microsoftAuthenticatorPush"
+      ],
+      "isSystemPreferredAuthenticationMethodEnabled": true,
+      "systemPreferredAuthenticationMethods": [
+        "Fido2"
+      ],
+      "userPreferredMethodForSecondaryAuthentication": "push",
+      "defaultMfaMethod": "microsoftAuthenticatorPush",
+      "lastUpdatedDateTime": "2026-10-15T00:00:00Z"
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000110",
+      "userPrincipalName": "bg01@exampleorg.onmicrosoft.com",
+      "userDisplayName": "Break Glass 01",
+      "userType": "member",
+      "isAdmin": true,
+      "isSsprRegistered": true,
+      "isSsprEnabled": true,
+      "isSsprCapable": true,
+      "isMfaRegistered": true,
+      "isMfaCapable": true,
+      "isPasswordlessCapable": true,
+      "methodsRegistered": [
+        "passKeyDeviceBound"
+      ],
+      "isSystemPreferredAuthenticationMethodEnabled": true,
+      "systemPreferredAuthenticationMethods": [
+        "Fido2"
+      ],
+      "userPreferredMethodForSecondaryAuthentication": "none",
+      "defaultMfaMethod": "none",
+      "lastUpdatedDateTime": "2026-10-15T00:00:00Z"
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000111",
+      "userPrincipalName": "c.novak@example.com",
+      "userDisplayName": "Chris Novak",
+      "userType": "member",
+      "isAdmin": false,
+      "isSsprRegistered": false,
+      "isSsprEnabled": true,
+      "isSsprCapable": false,
+      "isMfaRegistered": false,
+      "isMfaCapable": false,
+      "isPasswordlessCapable": false,
+      "methodsRegistered": [],
+      "isSystemPreferredAuthenticationMethodEnabled": true,
+      "systemPreferredAuthenticationMethods": [],
+      "userPreferredMethodForSecondaryAuthentication": "none",
+      "defaultMfaMethod": "none",
+      "lastUpdatedDateTime": "2026-10-15T00:00:00Z"
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000112",
+      "userPrincipalName": "svc-reporting@example.com",
+      "userDisplayName": "Svc Reporting",
+      "userType": "member",
+      "isAdmin": true,
+      "isSsprRegistered": false,
+      "isSsprEnabled": true,
+      "isSsprCapable": false,
+      "isMfaRegistered": false,
+      "isMfaCapable": false,
+      "isPasswordlessCapable": false,
+      "methodsRegistered": [],
+      "isSystemPreferredAuthenticationMethodEnabled": true,
+      "systemPreferredAuthenticationMethods": [],
+      "userPreferredMethodForSecondaryAuthentication": "none",
+      "defaultMfaMethod": "none",
+      "lastUpdatedDateTime": "2026-10-15T00:00:00Z"
+    }
+  ]
+}

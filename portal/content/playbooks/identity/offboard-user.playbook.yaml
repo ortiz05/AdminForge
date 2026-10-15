@@ -1,0 +1,292 @@
+$schema: ../../../packages/schemas/generated/playbook.schema.json
+kind: playbook
+id: identity.offboard-user
+version: 1.0.0
+title: Offboard user
+summary: >-
+  Leaver offboarding: blocks sign-in, revokes sessions, removes cloud group memberships and direct licences, optionally
+  removes MFA methods, and emails the manager a summary with the remaining Exchange/OneDrive/device follow-ups.
+  Requires approval. Completed steps are compensated if a later step fails.
+owner: identity-team
+tags: [identity, users, offboarding, leaver]
+risk: high
+mode: write
+requires:
+  portalRoles: [Portal.Operator]
+  scopes:
+    graph:
+      - User.Read.All
+      - Directory.Read.All
+      - RoleManagement.Read.Directory
+      - User.EnableDisableAccount.All
+      - User.RevokeSessions.All
+      - GroupMember.ReadWrite.All
+      - LicenseAssignment.ReadWrite.All
+      - UserAuthenticationMethod.ReadWrite.All
+      - Mail.Send
+  entraRoles: [User Administrator, License Administrator, Groups Administrator]
+confirm:
+  type: typed
+  value: ${ steps.lookup.output.userPrincipalName }
+  message: >-
+    ${ 'Offboards ' & steps.lookup.output.displayName & ': removes ' & $count(steps.memberships.output.removable) & ' group membership(s) and '
+       & $count(steps.memberships.output.licences) & ' direct licence(s). Type the sign-in name to confirm.' }
+approval:
+  required: true
+  approvers: [Playbook.Approver]
+  minApprovals: 1
+  expiresIn: PT24H
+
+inputs:
+  userId: { type: string, format: guid, label: Leaver, picker: user }
+  reason: { type: string, label: Reason, minLength: 10, multiline: true }
+  ticket: { type: string, label: HR or ticket reference, required: false }
+  removeGroups: { type: boolean, label: Remove cloud group memberships, default: true }
+  removeLicences: { type: boolean, label: Remove direct licences, default: true }
+  removeAuthMethods: { type: boolean, label: Remove MFA methods (including passkeys), default: false }
+  notifyManager: { type: boolean, label: Email the manager a summary, default: true }
+
+steps:
+  - id: lookup
+    type: graph
+    mode: read
+    describe: Look up the leaver and their manager
+    request:
+      method: GET
+      path: /users/${ $encode($guid(inputs.userId)) }
+      query:
+        $select: id,displayName,userPrincipalName,mail,accountEnabled,userType,onPremisesSyncEnabled,assignedLicenses,licenseAssignmentStates
+        $expand: manager($select=id,displayName,mail,userPrincipalName)
+
+  - id: notSelf
+    type: assert
+    that: ${ $not($guid(inputs.userId) = $lowercase(user.oid)) }
+    message: You can't offboard your own account.
+
+  - id: roles
+    type: graph
+    mode: read
+    describe: Check for directory role assignments
+    request:
+      method: GET
+      path: /roleManagement/directory/roleAssignments
+      query:
+        $filter: ${ 'principalId eq ' & $odata($guid(inputs.userId)) }
+        $expand: roleDefinition
+
+  - id: noRoles
+    type: assert
+    that: ${ $count(steps.roles.output.value) = 0 }
+    message: >-
+      ${ steps.lookup.output.userPrincipalName & ' holds directory roles (' & $join(steps.roles.output.value.roleDefinition.displayName, ', ')
+         & '). A Privileged Role Administrator must remove them first.' }
+
+  - id: groups
+    type: graph
+    mode: read
+    describe: Read group memberships
+    paging: all
+    maxItems: 5000
+    request:
+      method: GET
+      path: /users/${ $encode($guid(inputs.userId)) }/memberOf/microsoft.graph.group
+      query:
+        $select: id,displayName,groupTypes,mailEnabled,securityEnabled,onPremisesSyncEnabled
+        $top: 999
+
+  - id: devices
+    type: graph
+    mode: read
+    describe: List devices the leaver owns (for follow-up)
+    request:
+      method: GET
+      path: /users/${ $encode($guid(inputs.userId)) }/ownedDevices/microsoft.graph.device
+      query:
+        $select: id,displayName,operatingSystem,trustType,isManaged
+
+  # Removable = cloud, assigned-membership, not Exchange-managed. Everything else needs a manual follow-up.
+  - id: memberships
+    type: transform
+    expression: >-
+      ${ (
+        $all := [steps.groups.output.value];
+        $isManual := function($g) {
+          'DynamicMembership' in $g.groupTypes or $g.onPremisesSyncEnabled = true
+          or ($g.mailEnabled = true and $not('Unified' in $g.groupTypes))
+        };
+        {
+          "removable": [$all[$not($isManual($))].{ "id": id, "displayName": displayName }],
+          "manual": [$all[$isManual($)].displayName],
+          "licences": [$distinct(steps.lookup.output.licenseAssignmentStates[$not($boolean(assignedByGroup) = true)].skuId)]
+        }
+      ) }
+
+  - id: disable
+    type: graph
+    mode: write
+    describe: Block sign-in
+    when: ${ $not(steps.lookup.output.onPremisesSyncEnabled = true) and steps.lookup.output.accountEnabled = true }
+    request:
+      method: PATCH
+      path: /users/${ $encode($guid(inputs.userId)) }
+      body: { accountEnabled: false }
+    compensate:
+      type: graph
+      describe: Re-enable sign-in
+      request:
+        method: PATCH
+        path: /users/${ $encode($guid(inputs.userId)) }
+        body: { accountEnabled: true }
+
+  - id: revoke
+    type: graph
+    mode: write
+    describe: Revoke refresh tokens and session cookies
+    onError: compensate
+    request:
+      method: POST
+      path: /users/${ $encode($guid(inputs.userId)) }/revokeSignInSessions
+    dryRunOutput: { value: true }
+
+  - id: removeGroups
+    type: forEach
+    when: ${ inputs.removeGroups = true }
+    items: ${ steps.memberships.output.removable }
+    as: group
+    concurrency: 5
+    steps:
+      - id: removeMember
+        type: graph
+        mode: write
+        describe: ${ 'Remove from ' & group.displayName }
+        onError: continue
+        request:
+          method: DELETE
+          path: /groups/${ $encode(group.id) }/members/${ $encode($guid(inputs.userId)) }/$ref
+        compensate:
+          type: graph
+          describe: ${ 'Add back to ' & group.displayName }
+          request:
+            method: POST
+            path: /groups/${ $encode(group.id) }/members/$ref
+            body:
+              "@odata.id": https://graph.microsoft.com/v1.0/directoryObjects/${ $guid(inputs.userId) }
+
+  - id: removeLicences
+    type: graph
+    mode: write
+    describe: ${ 'Remove ' & $count(steps.memberships.output.licences) & ' direct licence(s)' }
+    when: ${ inputs.removeLicences = true and $count(steps.memberships.output.licences) > 0 }
+    onError: compensate
+    request:
+      method: POST
+      path: /users/${ $encode($guid(inputs.userId)) }/assignLicense
+      body:
+        addLicenses: []
+        removeLicenses: ${ steps.memberships.output.licences }
+    compensate:
+      type: graph
+      describe: Assign the licences again with their previous disabled plans
+      request:
+        method: POST
+        path: /users/${ $encode($guid(inputs.userId)) }/assignLicense
+        body:
+          addLicenses: ${ [steps.lookup.output.assignedLicenses[skuId in $$.steps.memberships.output.licences]] }
+          removeLicenses: []
+
+  - id: resetMfa
+    type: playbook
+    mode: write
+    describe: Remove all MFA methods
+    when: ${ inputs.removeAuthMethods = true }
+    onError: continue
+    ref: identity.reset-mfa
+    inputs:
+      userId: ${ $guid(inputs.userId) }
+      includePhishingResistant: true
+      revokeSessions: false
+      reason: ${ 'Offboarding — ' & inputs.reason }
+
+  - id: notify
+    type: notify
+    mode: write
+    describe: Email the manager a summary
+    when: ${ inputs.notifyManager = true and $boolean(steps.lookup.output.manager.mail) = true }
+    onError: continue
+    channel: email
+    to: ${ steps.lookup.output.manager.mail }
+    subject: ${ 'Leaver processed — ' & steps.lookup.output.displayName }
+    message: |
+      ${ steps.lookup.output.displayName } (${ steps.lookup.output.userPrincipalName }) has been offboarded${ inputs.ticket ? ' for ' & inputs.ticket : '' }.
+
+      - Sign-in blocked and all sessions revoked
+      - Removed from ${ inputs.removeGroups = true ? $count(steps.memberships.output.removable) : 0 } group(s)
+      - ${ inputs.removeLicences = true ? $count(steps.memberships.output.licences) : 0 } direct licence(s) removed
+
+      Still to do (IT will contact you): mailbox conversion or delegation, OneDrive access for you, and the return of
+      ${ $count(steps.devices.output.value) } registered device(s).
+
+outputs:
+  summary: >-
+    ${ steps.lookup.output.userPrincipalName & ' offboarded'
+       & (steps.lookup.output.onPremisesSyncEnabled = true ? ' (synced account: also disable it in on-premises AD)' : '')
+       & '. Removed ' & (inputs.removeGroups = true ? $count(steps.memberships.output.removable) : 0) & ' group membership(s) and '
+       & (inputs.removeLicences = true ? $count(steps.memberships.output.licences) : 0) & ' direct licence(s).' }
+  followUps: >-
+    ${ $append(
+         [
+           'Exchange: convert the mailbox to shared or set forwarding/auto-reply, hide from the address list',
+           'OneDrive: grant the manager access before the retention period ends',
+           steps.lookup.output.onPremisesSyncEnabled = true ? 'Active Directory: disable the account on-premises'
+         ],
+         $append(
+           [steps.memberships.output.manual.('Group (dynamic, synced or Exchange-managed): ' & $)],
+           [steps.devices.output.value.('Device: ' & displayName & ' (' & operatingSystem & ')')]
+         )
+       ) }
+
+tests:
+  - name: refuses a user who still holds directory roles
+    inputs: { userId: 00000000-0000-4000-8000-000000000103, reason: Leaver HR-7781 last day 2026-10-14 }
+    user: { oid: 00000000-0000-4000-8000-000000000101 }
+    mocks:
+      lookup: { id: 00000000-0000-4000-8000-000000000103, displayName: Priya Raman, userPrincipalName: p.raman@example.com, accountEnabled: true, onPremisesSyncEnabled: null, assignedLicenses: [], licenseAssignmentStates: [] }
+      roles: { value: [{ id: x1, roleDefinitionId: fe930be7-5e62-47db-91af-98c3a49a38b1, roleDefinition: { displayName: User Administrator } }] }
+    expect: { status: failed, failedStep: noRoles }
+  - name: plans the full offboarding of a cloud user
+    inputs: { userId: 00000000-0000-4000-8000-000000000105, reason: Leaver HR-7782 last day 2026-10-14, ticket: HR-7782 }
+    user: { oid: 00000000-0000-4000-8000-000000000101 }
+    mocks:
+      lookup:
+        id: 00000000-0000-4000-8000-000000000105
+        displayName: Sam Patel
+        userPrincipalName: s.patel@example.com
+        accountEnabled: true
+        onPremisesSyncEnabled: null
+        assignedLicenses: [{ skuId: 00000000-0000-4000-8000-000000001001, disabledPlans: [] }]
+        licenseAssignmentStates: [{ skuId: 00000000-0000-4000-8000-000000001001, assignedByGroup: null, state: Active }]
+        manager: { id: 00000000-0000-4000-8000-000000000101, displayName: Avery Lee, mail: a.lee@example.com }
+      roles: { value: [] }
+      groups:
+        value:
+          - { id: 00000000-0000-4000-8000-000000000201, displayName: SG-App-Payroll-Users, groupTypes: [], mailEnabled: false, securityEnabled: true, onPremisesSyncEnabled: null }
+          - { id: 00000000-0000-4000-8000-000000000203, displayName: All Employees (dynamic), groupTypes: [DynamicMembership], mailEnabled: false, securityEnabled: true, onPremisesSyncEnabled: null }
+      devices: { value: [{ id: 00000000-0000-4000-8000-000000000503, displayName: EX-LT-0193, operatingSystem: Windows, trustType: AzureAd }] }
+    expect:
+      status: succeeded
+      plan: [disable, revoke, removeMember, removeLicences, notify]
+      steps: { resetMfa: skipped }
+      outputs:
+        summary: s.patel@example.com offboarded. Removed 1 group membership(s) and 1 direct licence(s).
+  - name: leaves a synced account enabled in the cloud and flags the AD follow-up
+    inputs: { userId: 00000000-0000-4000-8000-000000000108, reason: Leaver HR-7783 last day 2026-10-14, notifyManager: false, removeLicences: false }
+    user: { oid: 00000000-0000-4000-8000-000000000101 }
+    mocks:
+      lookup: { id: 00000000-0000-4000-8000-000000000108, displayName: Dana Okafor, userPrincipalName: d.okafor@example.com, accountEnabled: true, onPremisesSyncEnabled: true, assignedLicenses: [], licenseAssignmentStates: [] }
+      roles: { value: [] }
+      groups: { value: [{ id: 00000000-0000-4000-8000-000000000205, displayName: GG-Engineering (AD), groupTypes: [], mailEnabled: false, securityEnabled: true, onPremisesSyncEnabled: true }] }
+      devices: { value: [] }
+    expect:
+      status: succeeded
+      plan: [revoke]
+      steps: { disable: skipped, removeLicences: skipped, notify: skipped }

@@ -1,0 +1,23 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#groups/$entity",
+  "id": "10000000-0000-4000-8000-000000000208",
+  "displayName": "All Company",
+  "description": "Company-wide announcements and conversations.",
+  "mail": "allcompany@example.com",
+  "visibility": "Public",
+  "groupTypes": [
+    "Unified",
+    "DynamicMembership"
+  ],
+  "resourceProvisioningOptions": [
+    "Team"
+  ],
+  "createdDateTime": "2024-04-28T09:00:00Z",
+  "renewedDateTime": "2026-09-15T09:00:00Z",
+  "expirationDateTime": "2027-09-15T09:00:00Z",
+  "membershipRule": "(user.accountEnabled -eq true) and (user.userType -eq \"Member\")",
+  "onPremisesSyncEnabled": null,
+  "classification": null,
+  "mailEnabled": true,
+  "securityEnabled": false
+}

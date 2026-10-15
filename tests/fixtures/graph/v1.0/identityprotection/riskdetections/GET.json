@@ -1,0 +1,113 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#identityProtection/riskDetections",
+  "value": [
+    {
+      "id": "0000000000000000000000000000000000000000000000000000000000000001",
+      "requestId": "00000001-2222-4000-8000-000000000000",
+      "correlationId": "00000001-3333-4000-8000-000000000000",
+      "riskEventType": "passwordSpray",
+      "riskState": "atRisk",
+      "riskLevel": "high",
+      "riskDetail": "none",
+      "source": "IdentityProtection",
+      "detectionTimingType": "offline",
+      "activity": "signin",
+      "tokenIssuerType": "AzureAD",
+      "ipAddress": "203.0.113.45",
+      "activityDateTime": "2026-10-15T06:00:00Z",
+      "detectedDateTime": "2026-10-15T07:00:00Z",
+      "lastUpdatedDateTime": "2026-10-15T08:00:00Z",
+      "userId": "30000000-0000-4000-8000-000000000001",
+      "userDisplayName": "Avery Engineer",
+      "userPrincipalName": "avery@example.com",
+      "additionalInfo": "[{\"Key\":\"userAgent\",\"Value\":\"Mozilla/5.0 (Windows NT 10.0; Win64; x64)\"}]",
+      "location": {
+        "city": "Amsterdam",
+        "state": null,
+        "countryOrRegion": "NL",
+        "geoCoordinates": null
+      }
+    },
+    {
+      "id": "0000000000000000000000000000000000000000000000000000000000000002",
+      "requestId": "00000002-2222-4000-8000-000000000000",
+      "correlationId": "00000002-3333-4000-8000-000000000000",
+      "riskEventType": "unfamiliarFeatures",
+      "riskState": "atRisk",
+      "riskLevel": "medium",
+      "riskDetail": "none",
+      "source": "IdentityProtection",
+      "detectionTimingType": "realtime",
+      "activity": "signin",
+      "tokenIssuerType": "AzureAD",
+      "ipAddress": "203.0.113.45",
+      "activityDateTime": "2026-10-15T05:00:00Z",
+      "detectedDateTime": "2026-10-15T06:00:00Z",
+      "lastUpdatedDateTime": "2026-10-15T07:00:00Z",
+      "userId": "30000000-0000-4000-8000-000000000001",
+      "userDisplayName": "Avery Engineer",
+      "userPrincipalName": "avery@example.com",
+      "additionalInfo": "[{\"Key\":\"userAgent\",\"Value\":\"Mozilla/5.0 (Windows NT 10.0; Win64; x64)\"}]",
+      "location": {
+        "city": "Amsterdam",
+        "state": null,
+        "countryOrRegion": "NL",
+        "geoCoordinates": null
+      }
+    },
+    {
+      "id": "0000000000000000000000000000000000000000000000000000000000000003",
+      "requestId": "00000003-2222-4000-8000-000000000000",
+      "correlationId": "00000003-3333-4000-8000-000000000000",
+      "riskEventType": "suspiciousInboxManipulationRules",
+      "riskState": "atRisk",
+      "riskLevel": "medium",
+      "riskDetail": "none",
+      "source": "MicrosoftCloudAppSecurity",
+      "detectionTimingType": "offline",
+      "activity": "user",
+      "tokenIssuerType": "AzureAD",
+      "ipAddress": null,
+      "activityDateTime": "2026-10-15T06:00:00Z",
+      "detectedDateTime": "2026-10-15T07:00:00Z",
+      "lastUpdatedDateTime": "2026-10-15T08:00:00Z",
+      "userId": "30000000-0000-4000-8000-000000000001",
+      "userDisplayName": "Avery Engineer",
+      "userPrincipalName": "avery@example.com",
+      "additionalInfo": "[{\"Key\":\"userAgent\",\"Value\":\"Mozilla/5.0 (Windows NT 10.0; Win64; x64)\"}]",
+      "location": {
+        "city": null,
+        "state": null,
+        "countryOrRegion": null,
+        "geoCoordinates": null
+      }
+    },
+    {
+      "id": "0000000000000000000000000000000000000000000000000000000000000004",
+      "requestId": "00000004-2222-4000-8000-000000000000",
+      "correlationId": "00000004-3333-4000-8000-000000000000",
+      "riskEventType": "anonymizedIPAddress",
+      "riskState": "remediated",
+      "riskLevel": "low",
+      "riskDetail": "userPerformedSecuredPasswordReset",
+      "source": "IdentityProtection",
+      "detectionTimingType": "realtime",
+      "activity": "signin",
+      "tokenIssuerType": "AzureAD",
+      "ipAddress": "192.0.2.18",
+      "activityDateTime": "2026-09-03T08:00:00Z",
+      "detectedDateTime": "2026-09-03T09:00:00Z",
+      "lastUpdatedDateTime": "2026-09-03T10:00:00Z",
+      "userId": "30000000-0000-4000-8000-000000000001",
+      "userDisplayName": "Avery Engineer",
+      "userPrincipalName": "avery@example.com",
+      "additionalInfo": "[{\"Key\":\"userAgent\",\"Value\":\"Mozilla/5.0 (Windows NT 10.0; Win64; x64)\"}]",
+      "location": {
+        "city": null,
+        "state": null,
+        "countryOrRegion": null,
+        "geoCoordinates": null
+      }
+    }
+  ]
+}

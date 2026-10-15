@@ -1,0 +1,441 @@
+$schema: ../../../packages/schemas/generated/page.schema.json
+kind: page
+id: identity.group
+version: 1.0.0
+title: Group
+summary: One group — properties, members (add/remove in bulk), owners, nesting, app assignments and group-based licensing.
+owner: identity-team
+tags: [identity, groups]
+template: entity
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    graph: [Group.Read.All, GroupMember.Read.All, Directory.Read.All, Organization.Read.All]
+  entraRoles: [Directory Readers]
+
+params:
+  id: { type: guid, label: Group, required: true, hidden: true }
+  memberScope:
+    type: enum
+    label: Members
+    facet: true
+    default: Direct
+    values:
+      - { value: Direct, label: Direct }
+      - { value: Transitive, label: Including nested }
+
+filters:
+  facets: [memberScope]
+
+datasources:
+  group:
+    source: graph
+    request:
+      path: /groups/${ $encode($guid(params.id)) }
+      query:
+        $select: id,displayName,description,mail,mailNickname,mailEnabled,securityEnabled,groupTypes,membershipRule,membershipRuleProcessingState,onPremisesSyncEnabled,onPremisesLastSyncDateTime,onPremisesSamAccountName,createdDateTime,renewedDateTime,expirationDateTime,visibility,isAssignableToRole,classification,proxyAddresses
+    cache: { ttl: 30 }
+    transform: >-
+      ${ $merge([value, {
+           "kind": 'Unified' in value.groupTypes ? "Microsoft 365"
+                   : value.securityEnabled = true and value.mailEnabled = true ? "Mail-enabled security"
+                   : value.securityEnabled = true ? "Security" : "Distribution",
+           "membership": 'DynamicMembership' in value.groupTypes ? "Dynamic" : "Assigned",
+           "graphManaged": $not('DynamicMembership' in value.groupTypes) and $not(value.onPremisesSyncEnabled = true)
+                           and $not(value.mailEnabled = true and $not('Unified' in value.groupTypes))
+         }]) }
+  memberCount:
+    source: graphBatch
+    requests:
+      direct: { path: "/groups/${ $encode($guid(params.id)) }/members/$count", headers: { ConsistencyLevel: eventual } }
+      transitive: { path: "/groups/${ $encode($guid(params.id)) }/transitiveMembers/$count", headers: { ConsistencyLevel: eventual } }
+      owners: { path: "/groups/${ $encode($guid(params.id)) }/owners/$count", headers: { ConsistencyLevel: eventual } }
+    cache: { ttl: 60 }
+  members:
+    source: graph
+    request:
+      path: "/groups/${ $encode($guid(params.id)) }/${ params.memberScope = 'Transitive' ? 'transitiveMembers' : 'members' }/microsoft.graph.user"
+      query:
+        $select: id,displayName,userPrincipalName,mail,accountEnabled,userType,jobTitle,department
+        $top: 100
+    paging: cursor
+    cache: { ttl: 30 }
+  memberDevices:
+    source: graph
+    request:
+      path: /groups/${ $encode($guid(params.id)) }/members/microsoft.graph.device
+      query:
+        $select: id,deviceId,displayName,operatingSystem,operatingSystemVersion,trustType,accountEnabled,approximateLastSignInDateTime
+        $top: 100
+    paging: cursor
+    cache: { ttl: 60 }
+  owners:
+    source: graph
+    request:
+      path: /groups/${ $encode($guid(params.id)) }/owners
+      query:
+        $select: id,displayName,userPrincipalName,mail,accountEnabled,appId
+    cache: { ttl: 30 }
+    transform: >-
+      ${ $merge([value, { "value": [value.value.$merge([$, {
+           "ownerType": `@odata.type` = '#microsoft.graph.servicePrincipal' ? 'Service principal' : 'User'
+         }])] }]) }
+  parents:
+    source: graph
+    request:
+      path: /groups/${ $encode($guid(params.id)) }/memberOf/microsoft.graph.group
+      query:
+        $select: id,displayName,description,groupTypes,securityEnabled,mailEnabled,isAssignableToRole
+    cache: { ttl: 60 }
+  children:
+    source: graph
+    request:
+      path: /groups/${ $encode($guid(params.id)) }/members/microsoft.graph.group
+      query:
+        $select: id,displayName,description,groupTypes,securityEnabled,mailEnabled
+    cache: { ttl: 60 }
+  appRoles:
+    source: graph
+    request:
+      path: /groups/${ $encode($guid(params.id)) }/appRoleAssignments
+      query:
+        $select: id,resourceDisplayName,resourceId,appRoleId,createdDateTime
+    cache: { ttl: 120 }
+  licensing:
+    source: graphBatch
+    requests:
+      group: { path: "/groups/${ $encode($guid(params.id)) }", query: { $select: "id,assignedLicenses" } }
+      skus: { path: /subscribedSkus, query: { $select: "skuId,skuPartNumber,consumedUnits,prepaidUnits" } }
+      errors: { path: "/groups/${ $encode($guid(params.id)) }/membersWithLicenseErrors", query: { $select: "id,displayName,userPrincipalName" } }
+    cache: { ttl: 300 }
+    transform: >-
+      ${ (
+        $skus := [value.skus.value];
+        {
+          "licences": [value.group.assignedLicenses.(
+            $id := skuId;
+            $sku := $skus[skuId = $id][0];
+            {
+              "skuId": skuId,
+              "sku": $sku.skuPartNumber ? $sku.skuPartNumber : skuId,
+              "disabledPlans": $count(disabledPlans),
+              "free": $sku ? $sku.prepaidUnits.enabled - $sku.consumedUnits : null
+            }
+          )],
+          "errors": [value.errors.value]
+        }
+      ) }
+
+header:
+  title: ${ group.displayName }
+  subtitle: "${ group.kind & ' group · ' & group.membership & ' membership' & (group.onPremisesSyncEnabled = true ? ' · synced from AD' : '') }"
+  status: "${ group.isAssignableToRole = true ? 'warn' : 'neutral' }"
+  statusLabel: "${ group.isAssignableToRole = true ? 'Role-assignable' : group.kind }"
+  ids:
+    Object id: ${ group.id }
+
+actions:
+  - playbook: identity.add-group-members
+    label: Add members
+    icon: user-plus
+    inputs:
+      groupId: ${ params.id }
+    when: ${ group.graphManaged = true }
+  - playbook: identity.add-group-owner
+    label: Add owner
+    icon: crown-simple
+    inputs:
+      groupId: ${ params.id }
+  - label: Open in Entra admin center
+    icon: arrow-square-out
+    href: "https://entra.microsoft.com/#view/Microsoft_AAD_IAM/GroupDetailsMenuBlade/~/Overview/groupId/${ $encode(params.id) }"
+
+tabs:
+  - id: overview
+    label: Overview
+    layout:
+      - widget: kpi
+        id: directMembers
+        data: memberCount.direct
+        label: Direct members
+        format: number
+      - widget: kpi
+        id: allMembers
+        data: memberCount.transitive
+        label: Members including nested
+        format: number
+      - widget: kpi
+        id: ownerCount
+        data: memberCount.owners
+        label: Owners
+        format: number
+        status: "${ value = 0 ? 'warn' : 'ok' }"
+      - widget: markdown
+        id: noOwners
+        span: 12
+        when: ${ memberCount.owners = 0 }
+        text: |
+          **This group has no owners.** Nobody is accountable for its membership or receives access reviews.
+          Add at least two owners.
+      - widget: keyValue
+        id: properties
+        title: Properties
+        span: 6
+        data: group
+        fields:
+          - { field: description, label: Description }
+          - { field: kind, label: Type }
+          - { field: mail, label: Email }
+          - { field: visibility, label: Visibility }
+          - { field: isAssignableToRole, label: Role-assignable, kind: boolean }
+          - { field: classification, label: Classification }
+          - { field: createdDateTime, label: Created, kind: datetime }
+          - { field: renewedDateTime, label: Renewed, kind: relativeTime }
+          - { field: expirationDateTime, label: Expires, kind: date }
+      - widget: keyValue
+        id: membershipSettings
+        title: Membership and source
+        span: 6
+        data: group
+        fields:
+          - { field: membership, label: Membership, kind: status, map: { Assigned: [neutral, Assigned], Dynamic: [info, Dynamic] } }
+          - { field: membershipRule, label: Dynamic rule, kind: code }
+          - field: membershipRuleProcessingState
+            label: Rule processing
+            kind: status
+            map: { On: [ok, On], Paused: [warn, Paused] }
+          - { field: onPremisesSyncEnabled, label: Synced from AD, kind: boolean }
+          - { field: onPremisesSamAccountName, label: sAMAccountName }
+          - { field: onPremisesLastSyncDateTime, label: Last directory sync, kind: relativeTime }
+          - { field: proxyAddresses, label: Proxy addresses, kind: tags }
+
+  - id: members
+    label: Members
+    layout:
+      - widget: markdown
+        id: notGraphManaged
+        span: 12
+        when: ${ group.graphManaged = false }
+        text: |
+          Membership of this group can't be changed here: it is **dynamic**, **synced from Active Directory**, or
+          **managed in Exchange Online** (distribution list or mail-enabled security group).
+      - widget: table
+        id: members
+        title: Users
+        span: 12
+        data: members.value
+        rowKey: id
+        selection: multi
+        columns:
+          - { field: displayName, label: Member, kind: identity, secondary: userPrincipalName }
+          - { field: userType, label: Type, kind: status, map: { Member: [neutral, Member], Guest: [info, Guest] }, filter: facet }
+          - { field: accountEnabled, label: Sign-in, kind: status, map: { "true": [ok, Allowed], "false": [crit, Blocked] }, filter: facet }
+          - { field: department, label: Department, filter: text }
+          - { field: jobTitle, label: Job title, hidden: true }
+          - { field: mail, label: Email, hidden: true }
+          - { field: id, label: Object id, kind: guid, hidden: true }
+        inspect:
+          page: identity.user
+          params:
+            id: ${ row.id }
+        rowActions:
+          - playbook: identity.remove-group-members
+            label: Remove from group
+            icon: user-minus
+            inputs:
+              groupId: ${ params.id }
+              memberIds: ${ [row.id] }
+            when: ${ group.graphManaged = true and params.memberScope != 'Transitive' }
+        bulkActions:
+          - playbook: identity.remove-group-members
+            label: Remove from group
+            icon: user-minus
+            forEach:
+              inputs:
+                groupId: ${ params.id }
+                memberIds: ${ [row.id] }
+              concurrency: 5
+            maxItems: 500
+            when: ${ group.graphManaged = true and params.memberScope != 'Transitive' }
+          - playbook: identity.revoke-sessions
+            label: Revoke sessions
+            icon: sign-out
+            forEach:
+              inputs:
+                userId: ${ row.id }
+              concurrency: 5
+            maxItems: 200
+          - playbook: identity.disable-user
+            label: Block sign-in
+            icon: prohibit
+            forEach:
+              inputs:
+                userId: ${ row.id }
+              concurrency: 5
+            maxItems: 100
+            when: ${ $count(rows[accountEnabled = true]) > 0 }
+        empty:
+          title: No user members
+          body: No users are members of this group.
+          action: { playbook: identity.add-group-members, label: Add members, inputs: { groupId: "${ params.id }" } }
+      - widget: table
+        id: memberDevices
+        title: Devices
+        span: 12
+        data: memberDevices.value
+        rowKey: id
+        selection: multi
+        when: ${ $count(memberDevices.value) > 0 }
+        columns:
+          - { field: displayName, label: Device, kind: identity, secondary: operatingSystem }
+          - field: trustType
+            label: Join type
+            kind: status
+            map: { AzureAd: [info, Entra joined], ServerAd: [info, Hybrid joined], Workplace: [neutral, Registered] }
+          - { field: accountEnabled, label: Enabled, kind: boolean }
+          - { field: approximateLastSignInDateTime, label: Last activity, kind: relativeTime }
+          - { field: id, label: Object id, kind: guid, hidden: true }
+        inspect:
+          page: identity.device
+          params:
+            id: ${ row.id }
+        bulkActions:
+          - playbook: identity.remove-group-members
+            label: Remove from group
+            icon: minus-circle
+            forEach:
+              inputs:
+                groupId: ${ params.id }
+                memberIds: ${ [row.id] }
+              concurrency: 5
+            maxItems: 500
+            when: ${ group.graphManaged = true }
+
+  - id: owners
+    label: Owners
+    layout:
+      - widget: table
+        id: owners
+        span: 12
+        data: owners.value
+        rowKey: id
+        columns:
+          - { field: displayName, label: Owner, kind: identity, secondary: userPrincipalName }
+          - { field: ownerType, label: Type }
+          - { field: accountEnabled, label: Enabled, kind: status, map: { "true": [ok, Enabled], "false": [crit, Disabled] } }
+          - { field: id, label: Object id, kind: guid, hidden: true }
+        inspect:
+          page: identity.user
+          params:
+            id: ${ row.id }
+        rowActions:
+          - playbook: identity.remove-group-owner
+            label: Remove owner
+            icon: user-minus
+            inputs:
+              groupId: ${ params.id }
+              ownerId: ${ row.id }
+            when: ${ $count(owners.value) > 1 }
+        empty:
+          title: No owners
+          body: Add at least two owners so someone is accountable for this group.
+          action: { playbook: identity.add-group-owner, label: Add owner, inputs: { groupId: "${ params.id }" } }
+
+  - id: nesting
+    label: Nesting
+    layout:
+      - widget: table
+        id: parents
+        title: Member of
+        span: 6
+        data: parents.value
+        rowKey: id
+        columns:
+          - { field: displayName, label: Parent group }
+          - { field: isAssignableToRole, label: Role-assignable, kind: boolean }
+          - { field: groupTypes, label: Group types, kind: tags }
+        inspect:
+          page: identity.group
+          params:
+            id: ${ row.id }
+        empty:
+          title: Not nested
+          body: This group is not a member of any other group.
+      - widget: table
+        id: children
+        title: Nested groups
+        span: 6
+        data: children.value
+        rowKey: id
+        columns:
+          - { field: displayName, label: Child group }
+          - { field: groupTypes, label: Group types, kind: tags }
+          - { field: securityEnabled, label: Security, kind: boolean }
+        inspect:
+          page: identity.group
+          params:
+            id: ${ row.id }
+        rowActions:
+          - playbook: identity.remove-group-members
+            label: Remove nesting
+            icon: link-break
+            inputs:
+              groupId: ${ params.id }
+              memberIds: ${ [row.id] }
+            when: ${ group.graphManaged = true }
+        empty:
+          title: No nested groups
+          body: No groups are members of this group.
+
+  - id: apps
+    label: App assignments
+    layout:
+      - widget: table
+        id: appRoles
+        span: 12
+        data: appRoles.value
+        rowKey: id
+        columns:
+          - { field: resourceDisplayName, label: Application }
+          - { field: appRoleId, label: App role id, kind: guid }
+          - { field: createdDateTime, label: Assigned, kind: date }
+          - { field: resourceId, label: Enterprise app object id, kind: guid, hidden: true }
+        inspect:
+          page: identity.enterprise-app
+          params:
+            id: ${ row.resourceId }
+        empty:
+          title: No app assignments
+          body: Members of this group get no enterprise app access through it.
+
+  - id: licensing
+    label: Licensing
+    layout:
+      - widget: table
+        id: groupLicences
+        title: Licences assigned to members
+        span: 6
+        data: licensing.licences
+        rowKey: skuId
+        columns:
+          - { field: sku, label: Licence }
+          - { field: disabledPlans, label: Services turned off, kind: number }
+          - { field: free, label: Free seats, kind: number }
+        empty:
+          title: No group-based licensing
+          body: This group doesn't assign licences.
+      - widget: table
+        id: licenceErrors
+        title: Members with licence errors
+        span: 6
+        data: licensing.errors
+        rowKey: id
+        columns:
+          - { field: displayName, label: User, kind: identity, secondary: userPrincipalName }
+        inspect:
+          page: identity.user
+          params:
+            id: ${ row.id }
+        empty:
+          title: No licence errors
+          body: Every member received the group's licences.

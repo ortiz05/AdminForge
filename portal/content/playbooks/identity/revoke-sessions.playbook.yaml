@@ -1,0 +1,71 @@
+$schema: ../../../packages/schemas/generated/playbook.schema.json
+kind: playbook
+id: identity.revoke-sessions
+version: 1.0.0
+title: Revoke sessions
+summary: >-
+  Invalidates every refresh token and browser session cookie for one user, so they must sign in again on every device.
+  Apps that honour Continuous Access Evaluation react within minutes; others when their access token expires (up to an hour).
+owner: identity-team
+tags: [identity, users, incident]
+risk: medium
+mode: write
+requires:
+  portalRoles: [Portal.Operator]
+  scopes:
+    graph: [User.Read.All, User.RevokeSessions.All]
+  entraRoles: [User Administrator]
+confirm:
+  type: click
+  message: ${ 'Sign ' & steps.lookup.output.userPrincipalName & ' out of every session?' }
+approval:
+  required: false
+
+inputs:
+  userId: { type: string, format: guid, label: User, picker: user }
+  reason: { type: string, label: Reason, minLength: 10, multiline: true }
+
+steps:
+  - id: lookup
+    type: graph
+    mode: read
+    describe: Look up the user
+    request:
+      method: GET
+      path: /users/${ $encode($guid(inputs.userId)) }
+      query:
+        $select: id,displayName,userPrincipalName,accountEnabled,signInSessionsValidFromDateTime
+
+  - id: notSelf
+    type: assert
+    that: ${ $not($guid(inputs.userId) = $lowercase(user.oid)) }
+    message: You can't revoke your own sessions from here (it would end this portal session too). Use My Account → Sign out everywhere.
+
+  - id: revoke
+    type: graph
+    mode: write
+    describe: Revoke refresh tokens and session cookies
+    request:
+      method: POST
+      path: /users/${ $encode($guid(inputs.userId)) }/revokeSignInSessions
+    dryRunOutput: { value: true }
+
+outputs:
+  summary: ${ 'Sessions revoked for ' & steps.lookup.output.userPrincipalName & '. They must sign in again on every device.' }
+
+tests:
+  - name: refuses to revoke the signed-in engineer's own sessions
+    inputs: { userId: 00000000-0000-4000-8000-000000000101, reason: testing self revoke }
+    user: { oid: 00000000-0000-4000-8000-000000000101, upn: a.lee@example.com }
+    mocks:
+      lookup: { id: 00000000-0000-4000-8000-000000000101, userPrincipalName: a.lee@example.com, accountEnabled: true }
+    expect: { status: failed, failedStep: notSelf }
+  - name: plans the revocation for another user
+    inputs: { userId: 00000000-0000-4000-8000-000000000102, reason: incident 4413 token theft }
+    user: { oid: 00000000-0000-4000-8000-000000000101, upn: a.lee@example.com }
+    mocks:
+      lookup: { id: 00000000-0000-4000-8000-000000000102, userPrincipalName: m.chen@example.com, accountEnabled: true }
+    expect:
+      status: succeeded
+      plan: [revoke]
+      outputs: { summary: Sessions revoked for m.chen@example.com. They must sign in again on every device. }

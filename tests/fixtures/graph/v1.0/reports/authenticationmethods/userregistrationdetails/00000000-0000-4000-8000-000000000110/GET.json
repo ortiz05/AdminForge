@@ -1,0 +1,23 @@
+{
+  "id": "00000000-0000-4000-8000-000000000110",
+  "userPrincipalName": "bg01@exampleorg.onmicrosoft.com",
+  "userDisplayName": "Break Glass 01",
+  "userType": "member",
+  "isAdmin": true,
+  "isSsprRegistered": true,
+  "isSsprEnabled": true,
+  "isSsprCapable": true,
+  "isMfaRegistered": true,
+  "isMfaCapable": true,
+  "isPasswordlessCapable": true,
+  "methodsRegistered": [
+    "passKeyDeviceBound"
+  ],
+  "isSystemPreferredAuthenticationMethodEnabled": true,
+  "systemPreferredAuthenticationMethods": [
+    "Fido2"
+  ],
+  "userPreferredMethodForSecondaryAuthentication": "none",
+  "defaultMfaMethod": "none",
+  "lastUpdatedDateTime": "2026-10-15T00:00:00Z"
+}

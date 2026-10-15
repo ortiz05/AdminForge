@@ -1,0 +1,155 @@
+$schema: ../../../packages/schemas/generated/page.schema.json
+kind: page
+id: identity.roles
+version: 1.0.0
+title: Roles & admins
+summary: >-
+  Microsoft Entra directory roles with their active and eligible holders. Privileged roles are flagged; standing
+  (permanent active) assignments to privileged roles are the first thing to review.
+owner: identity-team
+tags: [identity, roles, privileged-access]
+template: list-detail
+nav: { section: identity, label: Roles & admins, icon: crown, order: 30 }
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    graph: [RoleManagement.Read.Directory, RoleEligibilitySchedule.Read.Directory, Directory.Read.All]
+  entraRoles: [Global Reader]
+
+params:
+  q: { type: string, default: "", label: Search, placeholder: Role or holder name }
+  privileged: { type: enum, values: [All, Privileged, Other], default: All, label: Privilege, facet: true }
+  assigned: { type: enum, values: [Any, Assigned, Unassigned], default: Assigned, label: Holders, facet: true }
+
+filters:
+  search: q
+  facets: [privileged, assigned]
+
+savedViews:
+  enabled: true
+  shared: true
+  presets:
+    - { name: Privileged roles in use, params: { privileged: Privileged, assigned: Assigned } }
+    - { name: All roles, params: { privileged: All, assigned: Any } }
+
+# Batch sub-requests don't follow @odata.nextLink; `truncated` flags a partial result (see the report).
+datasources:
+  directory:
+    source: graphBatch
+    requests:
+      definitions: { path: /roleManagement/directory/roleDefinitions }
+      active: { path: /roleManagement/directory/roleAssignments, query: { $expand: principal } }
+      eligible: { path: /roleManagement/directory/roleEligibilityScheduleInstances, query: { $expand: principal } }
+    cache: { ttl: 300 }
+    transform: >-
+      ${ (
+        $privilegedNames := ['Global Administrator', 'Privileged Role Administrator', 'Privileged Authentication Administrator',
+          'Security Administrator', 'Conditional Access Administrator', 'Application Administrator', 'Cloud Application Administrator',
+          'Authentication Administrator', 'Authentication Policy Administrator', 'User Administrator', 'Helpdesk Administrator',
+          'Password Administrator', 'Hybrid Identity Administrator', 'Intune Administrator', 'Cloud Device Administrator',
+          'Exchange Administrator', 'SharePoint Administrator', 'Domain Name Administrator', 'External Identity Provider Administrator',
+          'Partner Tier2 Support', 'Security Operator', 'Directory Writers', 'Global Reader', 'Lifecycle Workflows Administrator'];
+        $q := $lowercase(params.q ? params.q : '');
+        $kind := function($p) {
+          $substringAfter($p.`@odata.type`, '#microsoft.graph.') = 'user' ? 'User'
+          : $substringAfter($p.`@odata.type`, '#microsoft.graph.') = 'group' ? 'Group'
+          : $substringAfter($p.`@odata.type`, '#microsoft.graph.') = 'servicePrincipal' ? 'Service principal' : 'Other'
+        };
+        $active := [value.active.value];
+        $eligible := [value.eligible.value];
+        $roles := [value.definitions.value.(
+          $rid := id;
+          $a := $active[roleDefinitionId = $rid];
+          $e := $eligible[roleDefinitionId = $rid];
+          {
+            "id": id,
+            "role": displayName,
+            "description": description,
+            "builtIn": isBuiltIn,
+            "privileged": isPrivileged = true or displayName in $privilegedNames,
+            "active": $count($a),
+            "eligible": $count($e),
+            "servicePrincipals": $count($a[$kind(principal) = 'Service principal']),
+            "holders": $join([$append($a.principal.displayName, $e.principal.displayName)][[0..4]], ', ')
+          }
+        )];
+        $shown := $roles[
+          ($$.params.privileged = 'Privileged' ? privileged : $$.params.privileged = 'Other' ? $not(privileged) : true)
+          and ($$.params.assigned = 'Assigned' ? active + eligible > 0 : $$.params.assigned = 'Unassigned' ? active + eligible = 0 : true)
+          and ($q = '' or $contains($lowercase(role), $q) or $contains($lowercase(holders ? holders : ''), $q))
+        ];
+        {
+          "roles": [$shown^(>(privileged ? 1 : 0), >(active + eligible), role)],
+          "globalAdmins": $count($active[roleDefinitionId = '62e90394-69f5-4237-9190-012177145e10']),
+          "privilegedActive": $sum($roles[privileged].active),
+          "privilegedEligible": $sum($roles[privileged].eligible),
+          "spPrivileged": $sum($roles[privileged].servicePrincipals),
+          "truncated": $exists(value.active.`@odata.nextLink`) or $exists(value.eligible.`@odata.nextLink`)
+        }
+      ) }
+
+layout:
+  - widget: kpi
+    id: globalAdmins
+    data: directory.globalAdmins
+    label: Global Administrators (active)
+    format: number
+    status: "${ value > 4 or value < 2 ? 'warn' : 'ok' }"
+  - widget: kpi
+    id: privilegedActive
+    data: directory.privilegedActive
+    label: Active privileged assignments
+    format: number
+  - widget: kpi
+    id: privilegedEligible
+    data: directory.privilegedEligible
+    label: Eligible privileged assignments (PIM)
+    format: number
+  - widget: kpi
+    id: spPrivileged
+    data: directory.spPrivileged
+    label: Service principals in privileged roles
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+  - widget: markdown
+    id: truncated
+    span: 12
+    when: ${ directory.truncated = true }
+    text: |
+      **Partial list.** This tenant has more role assignments than one Graph page returns, so counts are a lower bound.
+      Use the [Privileged role assignments](/p/identity.privileged-role-assignments) report for the complete list.
+  - widget: table
+    id: roles
+    span: 12
+    data: directory.roles
+    rowKey: id
+    columns:
+      - { field: role, label: Role, sortable: true }
+      - field: privileged
+        label: Privilege
+        kind: status
+        map: { "true": [warn, Privileged], "false": [neutral, Standard] }
+        filter: { type: facet, param: privileged }
+      - { field: active, label: Active, kind: number, sortable: true }
+      - { field: eligible, label: Eligible, kind: number, sortable: true }
+      - { field: holders, label: Holders (first five) }
+      - { field: builtIn, label: Built-in, kind: boolean, hidden: true }
+      - { field: description, label: Description, hidden: true }
+      - { field: id, label: Role definition id, kind: guid, hidden: true }
+    inspect:
+      page: identity.role
+      params:
+        id: ${ row.id }
+    rowActions:
+      - label: Open in Entra admin center
+        icon: arrow-square-out
+        href: https://entra.microsoft.com/#view/Microsoft_AAD_IAM/AllRolesBlade
+    empty:
+      title: No roles match
+      body: Change the Privilege or Holders filter to see unassigned roles.
+
+export:
+  formats: [csv, xlsx]
+  fileName: directory-roles
+  data: directory.roles
+  columns: all

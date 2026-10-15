@@ -1,0 +1,279 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#fixture",
+  "value": [
+    {
+      "id": "00000000-0000-4000-8000-000000000501",
+      "deviceId": "00000000-0000-4000-8001-000000000501",
+      "displayName": "EX-LT-0142",
+      "operatingSystem": "Windows",
+      "operatingSystemVersion": "10.0.26100.2314",
+      "trustType": "AzureAd",
+      "isCompliant": true,
+      "isManaged": true,
+      "accountEnabled": true,
+      "approximateLastSignInDateTime": "2026-10-15T01:00:00Z",
+      "registrationDateTime": "2025-01-20T09:00:00Z",
+      "profileType": "RegisteredDevice",
+      "manufacturer": "Dell Inc.",
+      "model": "Latitude 7450",
+      "onPremisesSyncEnabled": null,
+      "onPremisesLastSyncDateTime": null,
+      "mdmAppId": "0000000a-0000-0000-c000-000000000000",
+      "complianceExpirationDateTime": null,
+      "physicalIds": [
+        "[ZTDID]:00000000-0000-4000-8001-000000009501",
+        "[OrderId]:EX-ORDER-501"
+      ],
+      "extensionAttributes": {
+        "extensionAttribute1": null
+      }
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000502",
+      "deviceId": "00000000-0000-4000-8001-000000000502",
+      "displayName": "EX-LT-0211",
+      "operatingSystem": "Windows",
+      "operatingSystemVersion": "10.0.22631.4317",
+      "trustType": "AzureAd",
+      "isCompliant": true,
+      "isManaged": true,
+      "accountEnabled": true,
+      "approximateLastSignInDateTime": "2026-10-14T17:30:00Z",
+      "registrationDateTime": "2024-02-01T09:00:00Z",
+      "profileType": "RegisteredDevice",
+      "manufacturer": "HP",
+      "model": "EliteBook 840 G10",
+      "onPremisesSyncEnabled": null,
+      "onPremisesLastSyncDateTime": null,
+      "mdmAppId": "0000000a-0000-0000-c000-000000000000",
+      "complianceExpirationDateTime": null,
+      "physicalIds": [
+        "[ZTDID]:00000000-0000-4000-8001-000000009502",
+        "[OrderId]:EX-ORDER-502"
+      ],
+      "extensionAttributes": {
+        "extensionAttribute1": null
+      }
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000503",
+      "deviceId": "00000000-0000-4000-8001-000000000503",
+      "displayName": "EX-LT-0193",
+      "operatingSystem": "Windows",
+      "operatingSystemVersion": "10.0.19045.5011",
+      "trustType": "AzureAd",
+      "isCompliant": false,
+      "isManaged": true,
+      "accountEnabled": true,
+      "approximateLastSignInDateTime": "2026-10-10T12:00:00Z",
+      "registrationDateTime": "2022-03-01T09:00:00Z",
+      "profileType": "RegisteredDevice",
+      "manufacturer": "Lenovo",
+      "model": "ThinkPad T14 Gen 2",
+      "onPremisesSyncEnabled": null,
+      "onPremisesLastSyncDateTime": null,
+      "mdmAppId": "0000000a-0000-0000-c000-000000000000",
+      "complianceExpirationDateTime": null,
+      "physicalIds": [],
+      "extensionAttributes": {
+        "extensionAttribute1": null
+      }
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000504",
+      "deviceId": "00000000-0000-4000-8001-000000000504",
+      "displayName": "iPhone 15 – R. Castillo",
+      "operatingSystem": "iOS",
+      "operatingSystemVersion": "18.6",
+      "trustType": "Workplace",
+      "isCompliant": true,
+      "isManaged": true,
+      "accountEnabled": true,
+      "approximateLastSignInDateTime": "2026-06-28T08:00:00Z",
+      "registrationDateTime": "2024-10-01T09:00:00Z",
+      "profileType": "RegisteredDevice",
+      "manufacturer": "Apple",
+      "model": "iPhone 15",
+      "onPremisesSyncEnabled": null,
+      "onPremisesLastSyncDateTime": null,
+      "mdmAppId": "0000000a-0000-0000-c000-000000000000",
+      "complianceExpirationDateTime": null,
+      "physicalIds": [],
+      "extensionAttributes": {
+        "extensionAttribute1": null
+      }
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000505",
+      "deviceId": "00000000-0000-4000-8001-000000000505",
+      "displayName": "EX-LT-0077",
+      "operatingSystem": "Windows",
+      "operatingSystemVersion": "10.0.22621.3880",
+      "trustType": "AzureAd",
+      "isCompliant": false,
+      "isManaged": true,
+      "accountEnabled": true,
+      "approximateLastSignInDateTime": "2025-02-01T10:00:00Z",
+      "registrationDateTime": "2022-02-01T09:00:00Z",
+      "profileType": "RegisteredDevice",
+      "manufacturer": "Dell Inc.",
+      "model": "Latitude 5420",
+      "onPremisesSyncEnabled": null,
+      "onPremisesLastSyncDateTime": null,
+      "mdmAppId": "0000000a-0000-0000-c000-000000000000",
+      "complianceExpirationDateTime": null,
+      "physicalIds": [],
+      "extensionAttributes": {
+        "extensionAttribute1": null
+      }
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000506",
+      "deviceId": "00000000-0000-4000-8001-000000000506",
+      "displayName": "EX-DT-0031",
+      "operatingSystem": "Windows",
+      "operatingSystemVersion": "10.0.19045.4529",
+      "trustType": "ServerAd",
+      "isCompliant": null,
+      "isManaged": false,
+      "accountEnabled": true,
+      "approximateLastSignInDateTime": "2025-03-01T10:00:00Z",
+      "registrationDateTime": "2021-05-01T09:00:00Z",
+      "profileType": "RegisteredDevice",
+      "manufacturer": "Dell Inc.",
+      "model": "OptiPlex 7090",
+      "onPremisesSyncEnabled": true,
+      "onPremisesLastSyncDateTime": "2026-10-15T03:30:00Z",
+      "mdmAppId": null,
+      "complianceExpirationDateTime": null,
+      "physicalIds": [],
+      "extensionAttributes": {
+        "extensionAttribute1": null
+      }
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000507",
+      "deviceId": "00000000-0000-4000-8001-000000000507",
+      "displayName": "Old iPhone",
+      "operatingSystem": "iOS",
+      "operatingSystemVersion": "16.7.10",
+      "trustType": "Workplace",
+      "isCompliant": null,
+      "isManaged": false,
+      "accountEnabled": true,
+      "approximateLastSignInDateTime": "2024-12-01T10:00:00Z",
+      "registrationDateTime": "2022-09-01T09:00:00Z",
+      "profileType": "RegisteredDevice",
+      "manufacturer": "Apple",
+      "model": "iPhone 11",
+      "onPremisesSyncEnabled": null,
+      "onPremisesLastSyncDateTime": null,
+      "mdmAppId": null,
+      "complianceExpirationDateTime": null,
+      "physicalIds": [],
+      "extensionAttributes": {
+        "extensionAttribute1": null
+      }
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000508",
+      "deviceId": "00000000-0000-4000-8001-000000000508",
+      "displayName": "MBP-JRIVERA",
+      "operatingSystem": "MacMDM",
+      "operatingSystemVersion": "15.6.1",
+      "trustType": "Workplace",
+      "isCompliant": true,
+      "isManaged": true,
+      "accountEnabled": true,
+      "approximateLastSignInDateTime": "2026-10-15T02:10:00Z",
+      "registrationDateTime": "2025-08-12T09:00:00Z",
+      "profileType": "RegisteredDevice",
+      "manufacturer": "Apple",
+      "model": "MacBook Pro (14-inch, M4)",
+      "onPremisesSyncEnabled": null,
+      "onPremisesLastSyncDateTime": null,
+      "mdmAppId": "0000000a-0000-0000-c000-000000000000",
+      "complianceExpirationDateTime": null,
+      "physicalIds": [],
+      "extensionAttributes": {
+        "extensionAttribute1": null
+      }
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000509",
+      "deviceId": "00000000-0000-4000-8001-000000000509",
+      "displayName": "Pixel 8 – M. Chen",
+      "operatingSystem": "AndroidForWork",
+      "operatingSystemVersion": "15.0",
+      "trustType": "Workplace",
+      "isCompliant": true,
+      "isManaged": true,
+      "accountEnabled": true,
+      "approximateLastSignInDateTime": "2026-10-15T03:05:00Z",
+      "registrationDateTime": "2025-02-10T09:00:00Z",
+      "profileType": "RegisteredDevice",
+      "manufacturer": "Google",
+      "model": "Pixel 8",
+      "onPremisesSyncEnabled": null,
+      "onPremisesLastSyncDateTime": null,
+      "mdmAppId": "0000000a-0000-0000-c000-000000000000",
+      "complianceExpirationDateTime": null,
+      "physicalIds": [],
+      "extensionAttributes": {
+        "extensionAttribute1": null
+      }
+    },
+    {
+      "id": "00000000-0000-4000-8000-00000000050a",
+      "deviceId": "00000000-0000-4000-8001-00000000050a",
+      "displayName": "Galaxy S24 – S. Patel",
+      "operatingSystem": "AndroidForWork",
+      "operatingSystemVersion": "14.0",
+      "trustType": "Workplace",
+      "isCompliant": false,
+      "isManaged": true,
+      "accountEnabled": true,
+      "approximateLastSignInDateTime": "2026-10-11T19:00:00Z",
+      "registrationDateTime": "2025-03-12T09:00:00Z",
+      "profileType": "RegisteredDevice",
+      "manufacturer": "Samsung",
+      "model": "Galaxy S24",
+      "onPremisesSyncEnabled": null,
+      "onPremisesLastSyncDateTime": null,
+      "mdmAppId": "0000000a-0000-0000-c000-000000000000",
+      "complianceExpirationDateTime": null,
+      "physicalIds": [],
+      "extensionAttributes": {
+        "extensionAttribute1": null
+      }
+    },
+    {
+      "id": "00000000-0000-4000-8000-00000000050b",
+      "deviceId": "00000000-0000-4000-8001-00000000050b",
+      "displayName": "EX-LT-0302",
+      "operatingSystem": "Windows",
+      "operatingSystemVersion": "10.0.26100.2314",
+      "trustType": "AzureAd",
+      "isCompliant": false,
+      "isManaged": true,
+      "accountEnabled": true,
+      "approximateLastSignInDateTime": "2026-10-14T08:00:00Z",
+      "registrationDateTime": "2025-03-10T09:00:00Z",
+      "profileType": "RegisteredDevice",
+      "manufacturer": "HP",
+      "model": "EliteBook 860 G11",
+      "onPremisesSyncEnabled": null,
+      "onPremisesLastSyncDateTime": null,
+      "mdmAppId": "0000000a-0000-0000-c000-000000000000",
+      "complianceExpirationDateTime": null,
+      "physicalIds": [
+        "[ZTDID]:00000000-0000-4000-8001-00000000950b",
+        "[OrderId]:EX-ORDER-50b"
+      ],
+      "extensionAttributes": {
+        "extensionAttribute1": null
+      }
+    }
+  ],
+  "@odata.count": 11
+}

@@ -1,0 +1,121 @@
+$schema: ../../../packages/schemas/generated/report.schema.json
+kind: report
+id: endpoint.os-versions
+version: 1.0.0
+title: OS version distribution
+summary: >-
+  Operating system versions across Intune-managed devices, with Windows builds named by release (24H2, 23H2…) and
+  flagged when out of support — to plan feature updates and find devices stuck on old builds.
+owner: endpoint-team
+tags: [endpoint, intune, patching, report]
+nav: { section: reports, label: OS versions, icon: stack, order: 32 }
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    graph: [DeviceManagementManagedDevices.Read.All]
+  entraRoles: [Intune Administrator]
+  licences: [intune]
+
+params:
+  os: { type: enum, values: [Any, Windows, macOS, iOS, Android], default: Any, label: OS, facet: true }
+
+# Windows release names come from the build number (10.0.<build>); update the map when Microsoft ships a release.
+datasources:
+  devices:
+    source: graph
+    request:
+      path: /deviceManagement/managedDevices
+      query:
+        $select: id,operatingSystem,osVersion
+        $filter: ${ params.os != 'Any' ? 'operatingSystem eq ' & $odata(params.os) }
+        $top: 1000
+    paging: all
+    maxItems: 100000
+    cache: { ttl: 3600 }
+    transform: >-
+      ${ (
+        $windows := {
+          "26200": { "release": "Windows 11 25H2", "supported": true },
+          "26100": { "release": "Windows 11 24H2", "supported": true },
+          "22631": { "release": "Windows 11 23H2", "supported": true },
+          "22621": { "release": "Windows 11 22H2", "supported": false },
+          "22000": { "release": "Windows 11 21H2", "supported": false },
+          "19045": { "release": "Windows 10 22H2", "supported": false },
+          "19044": { "release": "Windows 10 21H2", "supported": false },
+          "17763": { "release": "Windows 10 1809 / LTSC 2019", "supported": false }
+        };
+        $label := function($os, $ver) {
+          $os = 'Windows'
+            ? ( $build := $split($ver, '.')[2]; $w := $lookup($windows, $build);
+                { "release": $w ? $w.release : 'Windows build ' & $build, "supported": $w ? $w.supported : false } )
+            : { "release": $os & ' ' & $join($split($ver, '.')[[0..1]], '.'), "supported": true }
+        };
+        $all := [value.value.( $l := $label(operatingSystem, osVersion ? osVersion : '0.0.0'); { "os": operatingSystem, "release": $l.release, "supported": $l.supported, "version": osVersion } )];
+        $total := $count($all);
+        $groups := [$distinct($all.release).(
+          $r := $;
+          $m := $all[release = $r];
+          {
+            "release": $r,
+            "os": $m[0].os,
+            "devices": $count($m),
+            "share": $total > 0 ? $round($count($m) / $total, 3) : 0,
+            "supported": $m[0].supported,
+            "versions": $join($distinct($m.version)[[0..4]], ', ')
+          }
+        )];
+        {
+          "rows": [$groups^(os, >devices)],
+          "total": $total,
+          "unsupported": $sum($groups[supported = false].devices),
+          "chart": [($groups^(>devices))[[0..5]]]
+        }
+      ) }
+
+layout:
+  - widget: kpi
+    id: total
+    data: devices.total
+    label: Devices
+    format: number
+  - widget: kpi
+    id: unsupported
+    data: devices.unsupported
+    label: On out-of-support Windows releases
+    format: number
+    status: "${ value > 0 ? 'crit' : 'ok' }"
+  - widget: chart
+    id: releaseChart
+    title: Most common releases
+    type: bar
+    span: 6
+    rows: 2
+    data: devices.chart
+    x: release
+    y: devices
+    format: number
+  - widget: table
+    id: releases
+    span: 12
+    data: devices.rows
+    rowKey: release
+    columns:
+      - { field: release, label: Release, sortable: true }
+      - { field: os, label: OS, filter: { type: facet, param: os } }
+      - { field: devices, label: Devices, kind: number, sortable: true }
+      - { field: share, label: Share of fleet, kind: percent, sortable: true }
+      - { field: supported, label: Support, kind: status, map: { "true": [ok, Supported], "false": [crit, Out of support] }, filter: facet }
+      - { field: versions, label: Versions seen, kind: code }
+    rowActions:
+      - label: List these devices
+        icon: list
+        href: "/p/endpoint.devices?os=${ $encode(row.os) }"
+    empty:
+      title: No managed devices
+      body: No devices are enrolled in Intune.
+
+export:
+  formats: [csv, xlsx]
+  fileName: os-versions
+  data: devices.rows
+  columns: all

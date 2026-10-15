@@ -1,0 +1,22 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#groups/$entity",
+  "id": "10000000-0000-4000-8000-000000000204",
+  "displayName": "IT Operations",
+  "description": "Run the platform.",
+  "mail": "it-operations@example.com",
+  "visibility": "Private",
+  "groupTypes": [
+    "Unified"
+  ],
+  "resourceProvisioningOptions": [
+    "Team"
+  ],
+  "createdDateTime": "2024-07-17T09:00:00Z",
+  "renewedDateTime": "2026-10-05T09:00:00Z",
+  "expirationDateTime": "2027-10-05T09:00:00Z",
+  "membershipRule": null,
+  "onPremisesSyncEnabled": null,
+  "classification": null,
+  "mailEnabled": true,
+  "securityEnabled": false
+}

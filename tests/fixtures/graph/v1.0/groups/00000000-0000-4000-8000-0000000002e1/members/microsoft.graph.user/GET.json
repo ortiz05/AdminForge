@@ -1,0 +1,53 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#fixture",
+  "value": [
+    {
+      "@odata.type": "#microsoft.graph.user",
+      "id": "00000000-0000-4000-8000-000000000110",
+      "displayName": "Break Glass 01",
+      "givenName": "Break Glass",
+      "surname": "01",
+      "userPrincipalName": "bg01@exampleorg.onmicrosoft.com",
+      "mail": null,
+      "otherMails": [],
+      "proxyAddresses": [],
+      "accountEnabled": true,
+      "userType": "Member",
+      "department": null,
+      "jobTitle": "Emergency access account",
+      "companyName": "Example Org",
+      "officeLocation": null,
+      "city": null,
+      "country": null,
+      "usageLocation": "US",
+      "mobilePhone": null,
+      "businessPhones": [],
+      "employeeId": null,
+      "employeeType": null,
+      "employeeHireDate": null,
+      "createdDateTime": "2020-01-06T09:30:00Z",
+      "creationType": null,
+      "externalUserState": null,
+      "externalUserStateChangeDateTime": null,
+      "onPremisesSyncEnabled": null,
+      "onPremisesLastSyncDateTime": null,
+      "onPremisesSamAccountName": null,
+      "onPremisesDomainName": null,
+      "onPremisesImmutableId": null,
+      "lastPasswordChangeDateTime": "2026-08-20T10:05:00Z",
+      "passwordPolicies": "DisablePasswordExpiration",
+      "preferredLanguage": "en-US",
+      "signInSessionsValidFromDateTime": "2026-08-20T10:05:00Z",
+      "assignedLicenses": [],
+      "licenseAssignmentStates": [],
+      "signInActivity": {
+        "lastSignInDateTime": "2026-08-20T10:00:00Z",
+        "lastSignInRequestId": "00000000-0000-4000-8000-0000000005e1",
+        "lastNonInteractiveSignInDateTime": null,
+        "lastNonInteractiveSignInRequestId": null,
+        "lastSuccessfulSignInDateTime": "2026-08-20T10:00:00Z",
+        "lastSuccessfulSignInRequestId": null
+      }
+    }
+  ]
+}

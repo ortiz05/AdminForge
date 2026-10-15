@@ -1,0 +1,22 @@
+{
+  "id": "194ae4cb-b126-40b2-bd5b-6091b380977d",
+  "templateId": "194ae4cb-b126-40b2-bd5b-6091b380977d",
+  "displayName": "Security Administrator",
+  "description": "Can read security information and reports, and manage configuration in Microsoft Entra ID and Office 365.",
+  "isBuiltIn": true,
+  "isEnabled": true,
+  "version": "1",
+  "resourceScopes": [
+    "/"
+  ],
+  "rolePermissions": [
+    {
+      "allowedResourceActions": [
+        "microsoft.directory/conditionalAccessPolicies/create",
+        "microsoft.directory/identityProtection/allProperties/update",
+        "microsoft.directory/policies/standard/update"
+      ],
+      "condition": null
+    }
+  ]
+}

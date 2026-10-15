@@ -1,0 +1,54 @@
+{
+  "id": "00000000-0000-4000-8000-000000000304",
+  "appId": "00000000-0000-4000-8001-000000000304",
+  "displayName": "Example Mobile",
+  "description": null,
+  "createdDateTime": "2025-05-20T09:00:00Z",
+  "signInAudience": "AzureADandPersonalMicrosoftAccount",
+  "publisherDomain": "example.com",
+  "identifierUris": [],
+  "notes": null,
+  "serviceManagementReference": null,
+  "tags": [],
+  "verifiedPublisher": {
+    "displayName": null,
+    "verifiedPublisherId": null,
+    "addedDateTime": null
+  },
+  "passwordCredentials": [],
+  "keyCredentials": [],
+  "requiredResourceAccess": [
+    {
+      "resourceAppId": "00000003-0000-0000-c000-000000000000",
+      "resourceAccess": [
+        {
+          "id": "e1fe6dd8-ba31-4d61-89e7-88639da4683d",
+          "type": "Scope"
+        }
+      ]
+    }
+  ],
+  "web": {
+    "redirectUris": [],
+    "implicitGrantSettings": {
+      "enableIdTokenIssuance": false,
+      "enableAccessTokenIssuance": false
+    }
+  },
+  "spa": {
+    "redirectUris": []
+  },
+  "publicClient": {
+    "redirectUris": [
+      "msauth.com.example.mobile://auth"
+    ]
+  },
+  "owners": [
+    {
+      "@odata.type": "#microsoft.graph.user",
+      "id": "00000000-0000-4000-8000-000000000102",
+      "displayName": "Morgan Chen",
+      "userPrincipalName": "m.chen@example.com"
+    }
+  ]
+}

@@ -1,0 +1,31 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#fixture",
+  "value": [
+    {
+      "id": "ai-ra-06",
+      "principalId": "00000000-0000-4000-8000-0000000000a1",
+      "roleDefinitionId": "f2ef992c-3afb-46b9-b7cf-a126ee74c451",
+      "directoryScopeId": "/",
+      "appScopeId": null,
+      "assignmentType": "Assigned",
+      "memberType": "Direct",
+      "roleAssignmentOriginId": "ra-06",
+      "roleAssignmentScheduleId": "ra-06-schedule",
+      "startDateTime": "2024-01-01T00:00:00Z",
+      "endDateTime": null,
+      "principal": {
+        "@odata.type": "#microsoft.graph.user",
+        "id": "00000000-0000-4000-8000-0000000000a1",
+        "displayName": "Avery Engineer",
+        "userPrincipalName": "avery@example.com"
+      },
+      "roleDefinition": {
+        "id": "f2ef992c-3afb-46b9-b7cf-a126ee74c451",
+        "displayName": "Global Reader",
+        "description": "Can read everything that a Global Administrator can, but not update anything.",
+        "isBuiltIn": true,
+        "templateId": "f2ef992c-3afb-46b9-b7cf-a126ee74c451"
+      }
+    }
+  ]
+}

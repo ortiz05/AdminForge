@@ -1,0 +1,88 @@
+$schema: ../../../packages/schemas/generated/playbook.schema.json
+kind: playbook
+id: endpoint.wipe-device
+version: 1.0.0
+title: Wipe Intune device
+summary: >-
+  Factory-resets an Intune-managed device (lost or stolen device, or a corporate device being reissued). All data is
+  erased unless you keep user data (Windows only). Critical: needs a second approver.
+owner: endpoint-team
+tags: [endpoint, intune, incident]
+risk: critical
+mode: write
+requires:
+  portalRoles: [Portal.Operator]
+  scopes:
+    graph: [DeviceManagementManagedDevices.Read.All, DeviceManagementManagedDevices.PrivilegedOperations.All]
+  entraRoles: [Intune Administrator]
+  licences: [intune]
+confirm:
+  type: typed
+  value: ${ steps.device.output.deviceName }
+  message: >-
+    ${ 'Erase ' & steps.device.output.deviceName & ' (' & steps.device.output.operatingSystem & ', serial '
+       & steps.device.output.serialNumber & ', ' & steps.device.output.userPrincipalName
+       & ')? This cannot be undone. Type the device name to confirm.' }
+approval:
+  required: true
+  approvers: [Playbook.Approver]
+  minApprovals: 1
+  expiresIn: PT8H
+
+inputs:
+  managedDeviceId: { type: string, format: guid, label: Device (Intune id), picker: device }
+  keepEnrollmentData: { type: boolean, label: Keep enrolment state (Windows Autopilot re-provisioning), default: false }
+  keepUserData: { type: boolean, label: Keep user data (Windows only), default: false }
+  persistEsimDataPlan: { type: boolean, label: Keep the eSIM data plan (iOS/iPadOS), default: false }
+  reason: { type: string, label: Reason, minLength: 10, multiline: true }
+
+steps:
+  - id: device
+    type: graph
+    mode: read
+    describe: Look up the managed device
+    request:
+      method: GET
+      path: /deviceManagement/managedDevices/${ $encode($guid(inputs.managedDeviceId)) }
+      query:
+        $select: id,deviceName,operatingSystem,managedDeviceOwnerType,managementState,userPrincipalName,serialNumber,lastSyncDateTime
+
+  - id: notPending
+    type: assert
+    that: ${ $not(steps.device.output.managementState in ['wipePending', 'wipeIssued']) }
+    message: ${ steps.device.output.deviceName & ' already has a wipe pending.' }
+
+  - id: optionsValid
+    type: assert
+    that: >-
+      ${ $not((inputs.keepUserData = true or inputs.keepEnrollmentData = true) and steps.device.output.operatingSystem != 'Windows') }
+    message: ${ 'Keeping user data or enrolment state is only supported on Windows; ' & steps.device.output.deviceName & ' runs ' & steps.device.output.operatingSystem & '.' }
+
+  - id: wipe
+    type: graph
+    mode: write
+    describe: "${ 'Factory-reset ' & steps.device.output.deviceName & (inputs.keepUserData = true ? ' keeping user data' : '') & ' (cannot be undone)' }"
+    request:
+      method: POST
+      path: /deviceManagement/managedDevices/${ $encode($guid(inputs.managedDeviceId)) }/wipe
+      body:
+        keepEnrollmentData: ${ inputs.keepEnrollmentData = true }
+        keepUserData: ${ inputs.keepUserData = true }
+        persistEsimDataPlan: ${ inputs.persistEsimDataPlan = true }
+
+outputs:
+  summary: ${ 'Wipe sent to ' & steps.device.output.deviceName & '. It runs when the device next connects; the record stays in Intune until then.' }
+
+tests:
+  - name: refuses keep-user-data on an iPhone
+    inputs: { managedDeviceId: 00000000-0000-4000-8000-000000000603, keepUserData: true, reason: lost device SEC-512 }
+    mocks:
+      device: { id: 00000000-0000-4000-8000-000000000603, deviceName: iPhone 15 – R. Castillo, operatingSystem: iOS, managedDeviceOwnerType: company, managementState: managed, userPrincipalName: r.castillo@example.com, serialNumber: EXSN000603 }
+    expect: { status: failed, failedStep: optionsValid }
+  - name: plans a full wipe of a lost laptop
+    inputs: { managedDeviceId: 00000000-0000-4000-8000-000000000602, reason: stolen laptop SEC-513 police ref 42 }
+    mocks:
+      device: { id: 00000000-0000-4000-8000-000000000602, deviceName: EX-LT-0211, operatingSystem: Windows, managedDeviceOwnerType: company, managementState: managed, userPrincipalName: m.chen@example.com, serialNumber: EXSN000602 }
+    expect:
+      status: succeeded
+      plan: [wipe]

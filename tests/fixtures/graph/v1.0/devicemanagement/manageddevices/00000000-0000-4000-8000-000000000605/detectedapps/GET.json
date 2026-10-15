@@ -1,0 +1,13 @@
+{
+  "value": [
+    {
+      "id": "da-605-1",
+      "displayName": "Microsoft Authenticator",
+      "version": "6.8.20",
+      "sizeInByte": 0,
+      "deviceCount": 1,
+      "publisher": "Microsoft Corporation",
+      "platform": "androidWorkProfile"
+    }
+  ]
+}

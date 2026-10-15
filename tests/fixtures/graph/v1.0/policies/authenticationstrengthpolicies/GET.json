@@ -1,0 +1,67 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#fixture",
+  "value": [
+    {
+      "id": "00000000-0000-0000-0000-000000000002",
+      "createdDateTime": "2022-01-01T00:00:00Z",
+      "modifiedDateTime": "2022-01-01T00:00:00Z",
+      "displayName": "Multifactor authentication",
+      "description": "Combinations of methods that satisfy strong authentication",
+      "policyType": "builtIn",
+      "requirementsSatisfied": "mfa",
+      "allowedCombinations": [
+        "windowsHelloForBusiness",
+        "fido2",
+        "x509CertificateMultiFactor",
+        "deviceBasedPush",
+        "temporaryAccessPassOneTime",
+        "temporaryAccessPassMultiUse",
+        "password,microsoftAuthenticatorPush",
+        "password,softwareOath",
+        "password,sms"
+      ]
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000003",
+      "createdDateTime": "2022-01-01T00:00:00Z",
+      "modifiedDateTime": "2022-01-01T00:00:00Z",
+      "displayName": "Passwordless MFA",
+      "description": "Passwordless methods that satisfy strong authentication",
+      "policyType": "builtIn",
+      "requirementsSatisfied": "mfa",
+      "allowedCombinations": [
+        "windowsHelloForBusiness",
+        "fido2",
+        "x509CertificateMultiFactor",
+        "deviceBasedPush"
+      ]
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000004",
+      "createdDateTime": "2022-01-01T00:00:00Z",
+      "modifiedDateTime": "2022-01-01T00:00:00Z",
+      "displayName": "Phishing-resistant MFA",
+      "policyType": "builtIn",
+      "requirementsSatisfied": "mfa",
+      "allowedCombinations": [
+        "windowsHelloForBusiness",
+        "fido2",
+        "x509CertificateMultiFactor"
+      ],
+      "description": "Phishing-resistant, passwordless methods"
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000ac1",
+      "createdDateTime": "2025-04-01T09:00:00Z",
+      "modifiedDateTime": "2026-02-01T09:00:00Z",
+      "displayName": "Admins – FIDO2 or certificate",
+      "description": "Hardware-backed methods for privileged roles",
+      "policyType": "custom",
+      "requirementsSatisfied": "mfa",
+      "allowedCombinations": [
+        "fido2",
+        "x509CertificateMultiFactor"
+      ]
+    }
+  ]
+}

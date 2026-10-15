@@ -1,0 +1,12 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#identityProtection/riskyUsers/$entity",
+  "id": "10000000-0000-4000-8000-00000000000b",
+  "isDeleted": false,
+  "isProcessing": false,
+  "riskLastUpdatedDateTime": "2026-10-09T03:00:00Z",
+  "riskLevel": "none",
+  "riskState": "remediated",
+  "riskDetail": "userPerformedSecuredPasswordChange",
+  "userDisplayName": "Kai Lindqvist",
+  "userPrincipalName": "kai.lindqvist@example.com"
+}

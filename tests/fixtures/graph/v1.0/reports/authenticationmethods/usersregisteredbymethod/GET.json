@@ -1,0 +1,43 @@
+{
+  "totalUserCount": 1284,
+  "userTypes": "all",
+  "userRoles": "all",
+  "userRegistrationMethodCounts": [
+    {
+      "authenticationMethod": "microsoftAuthenticatorPush",
+      "userCount": 1088
+    },
+    {
+      "authenticationMethod": "mobilePhone",
+      "userCount": 402
+    },
+    {
+      "authenticationMethod": "windowsHelloForBusiness",
+      "userCount": 377
+    },
+    {
+      "authenticationMethod": "email",
+      "userCount": 210
+    },
+    {
+      "authenticationMethod": "passKeyDeviceBoundAuthenticator",
+      "userCount": 151
+    },
+    {
+      "authenticationMethod": "fido2SecurityKey",
+      "userCount": 64
+    },
+    {
+      "authenticationMethod": "softwareOneTimePasscode",
+      "userCount": 39
+    },
+    {
+      "authenticationMethod": "temporaryAccessPass",
+      "userCount": 6
+    },
+    {
+      "authenticationMethod": "officePhone",
+      "userCount": 0
+    }
+  ]
+}

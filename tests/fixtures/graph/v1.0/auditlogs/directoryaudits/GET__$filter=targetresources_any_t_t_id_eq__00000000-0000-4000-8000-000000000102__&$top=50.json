@@ -1,0 +1,44 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#fixture",
+  "value": [
+    {
+      "id": "Directory_03_20261014",
+      "category": "GroupManagement",
+      "correlationId": "00000000-0000-4000-8000-00000000ad03",
+      "result": "success",
+      "resultReason": "",
+      "activityDisplayName": "Add member to group",
+      "activityDateTime": "2026-10-14T16:35:00Z",
+      "loggedByService": "Core Directory",
+      "operationType": "Add",
+      "initiatedBy": {
+        "app": null,
+        "user": {
+          "id": "00000000-0000-4000-8000-000000000101",
+          "displayName": "Adele Lee",
+          "userPrincipalName": "a.lee@example.com",
+          "ipAddress": "203.0.113.24"
+        }
+      },
+      "targetResources": [
+        {
+          "id": "00000000-0000-4000-8000-000000000102",
+          "displayName": null,
+          "type": "User",
+          "userPrincipalName": "m.chen@example.com",
+          "groupType": null,
+          "modifiedProperties": []
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000201",
+          "displayName": "SG-App-Payroll-Users",
+          "type": "Group",
+          "userPrincipalName": null,
+          "groupType": null,
+          "modifiedProperties": []
+        }
+      ],
+      "additionalDetails": []
+    }
+  ]
+}

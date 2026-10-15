@@ -1,0 +1,22 @@
+{
+  "id": "62e90394-69f5-4237-9190-012177145e10",
+  "templateId": "62e90394-69f5-4237-9190-012177145e10",
+  "displayName": "Global Administrator",
+  "description": "Can manage all aspects of Microsoft Entra ID and Microsoft services that use Microsoft Entra identities.",
+  "isBuiltIn": true,
+  "isEnabled": true,
+  "version": "1",
+  "resourceScopes": [
+    "/"
+  ],
+  "rolePermissions": [
+    {
+      "allowedResourceActions": [
+        "microsoft.directory/*/allProperties/allTasks",
+        "microsoft.azure.serviceHealth/allEntities/allTasks",
+        "microsoft.office365.serviceHealth/allEntities/allTasks"
+      ],
+      "condition": null
+    }
+  ]
+}

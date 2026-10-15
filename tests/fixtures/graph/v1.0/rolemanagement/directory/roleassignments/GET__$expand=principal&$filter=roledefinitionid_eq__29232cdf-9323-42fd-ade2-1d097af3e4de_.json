@@ -1,0 +1,25 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#fixture",
+  "value": [
+    {
+      "id": "ra-07",
+      "principalId": "00000000-0000-4000-8000-000000000108",
+      "roleDefinitionId": "29232cdf-9323-42fd-ade2-1d097af3e4de",
+      "directoryScopeId": "/",
+      "appScopeId": null,
+      "principal": {
+        "@odata.type": "#microsoft.graph.user",
+        "id": "00000000-0000-4000-8000-000000000108",
+        "displayName": "Dana Okafor",
+        "userPrincipalName": "d.okafor@example.com"
+      },
+      "roleDefinition": {
+        "id": "29232cdf-9323-42fd-ade2-1d097af3e4de",
+        "displayName": "Exchange Administrator",
+        "description": "Can manage all aspects of the Exchange product.",
+        "isBuiltIn": true,
+        "templateId": "29232cdf-9323-42fd-ade2-1d097af3e4de"
+      }
+    }
+  ]
+}

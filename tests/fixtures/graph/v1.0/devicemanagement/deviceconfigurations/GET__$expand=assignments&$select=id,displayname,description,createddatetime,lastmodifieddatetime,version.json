@@ -1,0 +1,88 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#fixture",
+  "value": [
+    {
+      "@odata.type": "#microsoft.graph.windowsWifiConfiguration",
+      "id": "00000000-0000-4000-8000-000000000801",
+      "displayName": "Windows – Wi-Fi Corp",
+      "description": "Corporate WPA2-Enterprise network",
+      "createdDateTime": "2023-02-01T09:00:00Z",
+      "lastModifiedDateTime": "2025-10-01T09:00:00Z",
+      "version": 3,
+      "ssid": "EXAMPLE-CORP",
+      "connectAutomatically": true,
+      "wifiSecurityType": "wpa2Enterprise",
+      "assignments": [
+        {
+          "id": "asg-group-207",
+          "target": {
+            "@odata.type": "#microsoft.graph.groupAssignmentTarget",
+            "groupId": "00000000-0000-4000-8000-000000000207"
+          }
+        }
+      ]
+    },
+    {
+      "@odata.type": "#microsoft.graph.windows10GeneralConfiguration",
+      "id": "00000000-0000-4000-8000-000000000802",
+      "displayName": "Windows – Device restrictions",
+      "description": "Baseline restrictions for corporate Windows",
+      "createdDateTime": "2023-02-01T09:00:00Z",
+      "lastModifiedDateTime": "2026-06-10T09:00:00Z",
+      "version": 9,
+      "passwordRequired": true,
+      "passwordMinimumLength": 8,
+      "defenderRequireRealTimeMonitoring": true,
+      "storageBlockRemovableStorage": true,
+      "bluetoothBlocked": false,
+      "cameraBlocked": false,
+      "assignments": [
+        {
+          "id": "asg-all-x",
+          "target": {
+            "@odata.type": "#microsoft.graph.allDevicesAssignmentTarget"
+          }
+        },
+        {
+          "id": "asg-exclude-205",
+          "target": {
+            "@odata.type": "#microsoft.graph.exclusionGroupAssignmentTarget",
+            "groupId": "00000000-0000-4000-8000-000000000205"
+          }
+        }
+      ]
+    },
+    {
+      "@odata.type": "#microsoft.graph.iosGeneralDeviceConfiguration",
+      "id": "00000000-0000-4000-8000-000000000803",
+      "displayName": "iOS – Device restrictions",
+      "description": "Supervised iOS baseline",
+      "createdDateTime": "2024-01-10T09:00:00Z",
+      "lastModifiedDateTime": "2025-05-05T09:00:00Z",
+      "version": 2,
+      "passcodeRequired": true,
+      "passcodeMinimumLength": 6,
+      "appStoreBlocked": false,
+      "iCloudBlockBackup": true,
+      "assignments": [
+        {
+          "id": "asg-users-x",
+          "target": {
+            "@odata.type": "#microsoft.graph.allLicensedUsersAssignmentTarget"
+          }
+        }
+      ]
+    },
+    {
+      "@odata.type": "#microsoft.graph.windowsDeliveryOptimizationConfiguration",
+      "id": "00000000-0000-4000-8000-000000000804",
+      "displayName": "Windows – Delivery Optimization (pilot)",
+      "description": "Peer caching pilot",
+      "createdDateTime": "2026-04-01T09:00:00Z",
+      "lastModifiedDateTime": "2026-04-01T09:00:00Z",
+      "version": 1,
+      "deliveryOptimizationMode": "httpWithPeeringNat",
+      "assignments": []
+    }
+  ]
+}

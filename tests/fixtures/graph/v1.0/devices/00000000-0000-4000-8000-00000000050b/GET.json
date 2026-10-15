@@ -1,0 +1,27 @@
+{
+  "id": "00000000-0000-4000-8000-00000000050b",
+  "deviceId": "00000000-0000-4000-8001-00000000050b",
+  "displayName": "EX-LT-0302",
+  "operatingSystem": "Windows",
+  "operatingSystemVersion": "10.0.26100.2314",
+  "trustType": "AzureAd",
+  "isCompliant": false,
+  "isManaged": true,
+  "accountEnabled": true,
+  "approximateLastSignInDateTime": "2026-10-14T08:00:00Z",
+  "registrationDateTime": "2025-03-10T09:00:00Z",
+  "profileType": "RegisteredDevice",
+  "manufacturer": "HP",
+  "model": "EliteBook 860 G11",
+  "onPremisesSyncEnabled": null,
+  "onPremisesLastSyncDateTime": null,
+  "mdmAppId": "0000000a-0000-0000-c000-000000000000",
+  "complianceExpirationDateTime": null,
+  "physicalIds": [
+    "[ZTDID]:00000000-0000-4000-8001-00000000950b",
+    "[OrderId]:EX-ORDER-50b"
+  ],
+  "extensionAttributes": {
+    "extensionAttribute1": null
+  }
+}

@@ -1,0 +1,104 @@
+$schema: ../../../packages/schemas/generated/playbook.schema.json
+kind: playbook
+id: identity.remove-group-owner
+version: 1.0.0
+title: Remove group owner
+summary: Removes an owner from a group. Refuses to remove the last owner, so groups never end up ownerless.
+owner: identity-team
+tags: [identity, groups, governance]
+risk: medium
+mode: write
+requires:
+  portalRoles: [Portal.Operator]
+  scopes:
+    graph: [Group.ReadWrite.All]
+  entraRoles: [Groups Administrator]
+confirm:
+  type: click
+  message: ${ 'Remove ' & steps.current.output.userPrincipalName & ' as owner of ' & steps.group.output.displayName & '?' }
+approval:
+  required: false
+
+inputs:
+  groupId: { type: string, format: guid, label: Group, picker: group }
+  ownerId: { type: string, format: guid, label: Owner to remove, picker: user }
+
+steps:
+  - id: group
+    type: graph
+    mode: read
+    describe: Look up the group
+    request:
+      method: GET
+      path: /groups/${ $encode($guid(inputs.groupId)) }
+      query:
+        $select: id,displayName
+
+  - id: owners
+    type: graph
+    mode: read
+    describe: Read current owners
+    request:
+      method: GET
+      path: /groups/${ $encode($guid(inputs.groupId)) }/owners
+      query:
+        $select: id,displayName,userPrincipalName
+
+  - id: current
+    type: transform
+    expression: ${ steps.owners.output.value[id = $lowercase($$.inputs.ownerId)][0] }
+
+  - id: isOwner
+    type: assert
+    that: ${ $exists(steps.current.output.id) }
+    message: ${ 'That account is not an owner of ' & steps.group.output.displayName & '.' }
+
+  - id: notLastOwner
+    type: assert
+    that: ${ $count(steps.owners.output.value) > 1 }
+    message: ${ steps.current.output.userPrincipalName & ' is the only owner of ' & steps.group.output.displayName & '. Add another owner first.' }
+
+  - id: removeOwner
+    type: graph
+    mode: write
+    describe: ${ 'Remove ' & steps.current.output.userPrincipalName & ' as owner of ' & steps.group.output.displayName }
+    request:
+      method: DELETE
+      path: /groups/${ $encode($guid(inputs.groupId)) }/owners/${ $encode($guid(inputs.ownerId)) }/$ref
+    compensate:
+      type: graph
+      describe: Add the owner back
+      request:
+        method: POST
+        path: /groups/${ $encode($guid(inputs.groupId)) }/owners/$ref
+        body:
+          "@odata.id": https://graph.microsoft.com/v1.0/directoryObjects/${ $guid(inputs.ownerId) }
+
+outputs:
+  summary: ${ steps.current.output.userPrincipalName & ' no longer owns ' & steps.group.output.displayName & '.' }
+
+tests:
+  - name: refuses to remove the last owner
+    inputs: { groupId: 00000000-0000-4000-8000-000000000201, ownerId: 00000000-0000-4000-8000-000000000101 }
+    mocks:
+      group: { id: 00000000-0000-4000-8000-000000000201, displayName: SG-App-Payroll-Users }
+      owners: { value: [{ id: 00000000-0000-4000-8000-000000000101, userPrincipalName: a.lee@example.com }] }
+    expect: { status: failed, failedStep: notLastOwner }
+  - name: refuses someone who is not an owner
+    inputs: { groupId: 00000000-0000-4000-8000-000000000201, ownerId: 00000000-0000-4000-8000-000000000105 }
+    mocks:
+      group: { id: 00000000-0000-4000-8000-000000000201, displayName: SG-App-Payroll-Users }
+      owners: { value: [{ id: 00000000-0000-4000-8000-000000000101, userPrincipalName: a.lee@example.com }] }
+    expect: { status: failed, failedStep: isOwner }
+  - name: plans removing one of two owners
+    inputs: { groupId: 00000000-0000-4000-8000-000000000201, ownerId: 00000000-0000-4000-8000-000000000102 }
+    mocks:
+      group: { id: 00000000-0000-4000-8000-000000000201, displayName: SG-App-Payroll-Users }
+      owners:
+        value:
+          - { id: 00000000-0000-4000-8000-000000000101, userPrincipalName: a.lee@example.com }
+          - { id: 00000000-0000-4000-8000-000000000102, userPrincipalName: m.chen@example.com }
+    expect:
+      status: succeeded
+      plan: [removeOwner]
+      outputs: { summary: m.chen@example.com no longer owns SG-App-Payroll-Users. }

@@ -1,0 +1,145 @@
+$schema: ../../../packages/schemas/generated/playbook.schema.json
+kind: playbook
+id: identity.reset-mfa
+version: 1.0.0
+title: Reset MFA methods
+summary: >-
+  Removes a user's registered MFA methods (Authenticator, OATH tokens, phone, Temporary Access Pass; optionally FIDO2 keys,
+  passkeys, Windows Hello and platform credentials) so they must register again. The password is kept.
+owner: identity-team
+tags: [identity, users, mfa, incident]
+risk: high
+mode: write
+requires:
+  portalRoles: [Portal.Operator]
+  scopes:
+    graph: [User.Read.All, UserAuthenticationMethod.ReadWrite.All, User.RevokeSessions.All]
+  # Privileged Authentication Administrator is needed when the target holds an admin role.
+  entraRoles: [Authentication Administrator]
+confirm:
+  type: typed
+  value: ${ steps.lookup.output.userPrincipalName }
+  message: >-
+    ${ 'Removes ' & $count(steps.plan.output) & ' method(s): ' & $join(steps.plan.output.label, ', ')
+       & '. Removed methods cannot be restored; the user re-registers at next sign-in. Type the sign-in name to confirm.' }
+approval:
+  required: false
+
+inputs:
+  userId: { type: string, format: guid, label: User, picker: user }
+  includePhishingResistant:
+    type: boolean
+    label: Also remove FIDO2 keys, passkeys, Windows Hello and platform credentials
+    description: Leave off for a lost phone; turn on when the account is compromised (an attacker may have registered a passkey).
+    default: false
+  revokeSessions: { type: boolean, label: Also sign the user out everywhere, default: true }
+  reason: { type: string, label: Reason, minLength: 10, multiline: true }
+
+steps:
+  - id: lookup
+    type: graph
+    mode: read
+    describe: Look up the user
+    request:
+      method: GET
+      path: /users/${ $encode($guid(inputs.userId)) }
+      query:
+        $select: id,displayName,userPrincipalName,accountEnabled,userType
+
+  - id: methods
+    type: graph
+    mode: read
+    describe: List registered authentication methods
+    request:
+      method: GET
+      path: /users/${ $encode($guid(inputs.userId)) }/authentication/methods
+
+  # Maps each method type to its collection; phones go last because the default phone can't be removed while others exist.
+  - id: plan
+    type: transform
+    expression: >-
+      ${ (
+        $strong := inputs.includePhishingResistant = true;
+        $types := {
+          "#microsoft.graph.microsoftAuthenticatorAuthenticationMethod": { "segment": "microsoftAuthenticatorMethods", "label": "Microsoft Authenticator", "order": 1, "strong": false },
+          "#microsoft.graph.softwareOathAuthenticationMethod": { "segment": "softwareOathMethods", "label": "Software OATH token", "order": 2, "strong": false },
+          "#microsoft.graph.temporaryAccessPassAuthenticationMethod": { "segment": "temporaryAccessPassMethods", "label": "Temporary Access Pass", "order": 3, "strong": false },
+          "#microsoft.graph.fido2AuthenticationMethod": { "segment": "fido2Methods", "label": "FIDO2 key / passkey", "order": 4, "strong": true },
+          "#microsoft.graph.windowsHelloForBusinessAuthenticationMethod": { "segment": "windowsHelloForBusinessMethods", "label": "Windows Hello for Business", "order": 5, "strong": true },
+          "#microsoft.graph.platformCredentialAuthenticationMethod": { "segment": "platformCredentialMethods", "label": "Platform credential", "order": 6, "strong": true },
+          "#microsoft.graph.phoneAuthenticationMethod": { "segment": "phoneMethods", "label": "Phone", "order": 9, "strong": false }
+        };
+        $rows := [steps.methods.output.value.(
+          $t := $lookup($types, `@odata.type`);
+          $t and ($t.strong = false or $strong) ? {
+            "id": id,
+            "segment": $t.segment,
+            "label": $t.label & (displayName ? ' (' & displayName & ')' : phoneNumber ? ' (' & phoneType & ')' : ''),
+            "order": $t.order
+          }
+        )];
+        [$rows^(order)]
+      ) }
+
+  - id: hasMethods
+    type: assert
+    that: ${ $count(steps.plan.output) > 0 }
+    message: >-
+      ${ steps.lookup.output.userPrincipalName & ' has no MFA methods to remove'
+         & (inputs.includePhishingResistant = true ? '.' : ' (phishing-resistant methods are kept unless you include them).') }
+
+  - id: remove
+    type: forEach
+    items: ${ steps.plan.output }
+    as: method
+    concurrency: 1
+    steps:
+      - id: removeMethod
+        type: graph
+        mode: write
+        describe: ${ 'Remove ' & method.label }
+        onError: continue
+        request:
+          method: DELETE
+          path: /users/${ $encode($guid(inputs.userId)) }/authentication/${ $encode(method.segment) }/${ $encode(method.id) }
+
+  - id: revoke
+    type: graph
+    mode: write
+    describe: Revoke refresh tokens and session cookies
+    when: ${ inputs.revokeSessions = true }
+    request:
+      method: POST
+      path: /users/${ $encode($guid(inputs.userId)) }/revokeSignInSessions
+    dryRunOutput: { value: true }
+
+outputs:
+  summary: >-
+    ${ 'Removed ' & $count(steps.plan.output) & ' MFA method(s) for ' & steps.lookup.output.userPrincipalName
+       & (inputs.revokeSessions = true ? ' and revoked all sessions' : '')
+       & '. The user is asked to register again at next sign-in; issue a Temporary Access Pass if they cannot.' }
+  removed: ${ [steps.plan.output.label] }
+
+tests:
+  - name: fails when nothing but a password and a kept passkey are registered
+    inputs: { userId: 00000000-0000-4000-8000-000000000102, includePhishingResistant: false, revokeSessions: true, reason: lost phone ticket 3301 }
+    mocks:
+      lookup: { id: 00000000-0000-4000-8000-000000000102, userPrincipalName: m.chen@example.com, accountEnabled: true, userType: Member }
+      methods:
+        value:
+          - { "@odata.type": "#microsoft.graph.passwordAuthenticationMethod", id: 28c10230-6103-485e-b985-444c60001490 }
+          - { "@odata.type": "#microsoft.graph.fido2AuthenticationMethod", id: 00000000-0000-4000-8000-00000000f201, displayName: YubiKey 5C }
+    expect: { status: failed, failedStep: hasMethods }
+  - name: plans removing the Authenticator app and revoking sessions
+    inputs: { userId: 00000000-0000-4000-8000-000000000102, includePhishingResistant: false, revokeSessions: true, reason: lost phone ticket 3302 }
+    mocks:
+      lookup: { id: 00000000-0000-4000-8000-000000000102, userPrincipalName: m.chen@example.com, accountEnabled: true, userType: Member }
+      methods:
+        value:
+          - { "@odata.type": "#microsoft.graph.passwordAuthenticationMethod", id: 28c10230-6103-485e-b985-444c60001490 }
+          - { "@odata.type": "#microsoft.graph.microsoftAuthenticatorAuthenticationMethod", id: 00000000-0000-4000-8000-00000000f202, displayName: Pixel 8 }
+          - { "@odata.type": "#microsoft.graph.fido2AuthenticationMethod", id: 00000000-0000-4000-8000-00000000f201, displayName: YubiKey 5C }
+    expect:
+      status: succeeded
+      plan: [removeMethod, revoke]
+      outputs: { removed: [Microsoft Authenticator (Pixel 8)] }

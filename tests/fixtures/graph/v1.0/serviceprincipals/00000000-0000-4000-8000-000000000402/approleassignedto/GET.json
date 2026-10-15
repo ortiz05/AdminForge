@@ -1,0 +1,14 @@
+{
+  "value": [
+    {
+      "id": "ara-402-1",
+      "principalId": "00000000-0000-4000-8000-000000000203",
+      "principalDisplayName": "All Employees (dynamic)",
+      "principalType": "Group",
+      "appRoleId": "00000000-0000-0000-0000-000000000000",
+      "resourceId": "00000000-0000-4000-8000-000000000402",
+      "resourceDisplayName": "Example Portal",
+      "createdDateTime": "2024-06-13T09:00:00Z"
+    }
+  ]
+}

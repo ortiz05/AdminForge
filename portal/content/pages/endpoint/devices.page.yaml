@@ -1,0 +1,276 @@
+$schema: ../../../packages/schemas/generated/page.schema.json
+kind: page
+id: endpoint.devices
+version: 1.0.0
+title: Managed devices
+summary: >-
+  Devices enrolled in Microsoft Intune — compliance, OS, ownership, management agent, encryption and last check-in.
+  Sync, restart, retire or wipe one device or many.
+owner: endpoint-team
+tags: [endpoint, intune, devices]
+template: list-detail
+nav: { section: endpoint, label: Managed devices, icon: laptop, order: 10 }
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    graph: [DeviceManagementManagedDevices.Read.All]
+  entraRoles: [Intune Administrator]
+  licences: [intune]
+
+params:
+  q: { type: string, default: "", label: Search, placeholder: Device name starts with }
+  user: { type: string, label: Primary user (sign-in name), facet: true, format: upn }
+  os: { type: enum, values: [Any, Windows, macOS, iOS, Android, Linux], default: Any, label: OS, facet: true }
+  compliance:
+    type: enum
+    label: Compliance
+    facet: true
+    default: Any
+    values:
+      - { value: Any, label: Any }
+      - { value: compliant, label: Compliant }
+      - { value: noncompliant, label: Not compliant }
+      - { value: inGracePeriod, label: In grace period }
+      - { value: unknown, label: Not evaluated }
+      - { value: configManager, label: Configuration Manager }
+  ownership: { type: enum, values: [Any, company, personal], default: Any, label: Ownership, facet: true }
+  agent:
+    type: enum
+    label: Managed by
+    facet: true
+    default: Any
+    values:
+      - { value: Any, label: Any }
+      - { value: mdm, label: Intune }
+      - { value: configurationManagerClientMdm, label: Co-managed }
+      - { value: configurationManagerClient, label: Configuration Manager }
+      - { value: easMdm, label: Exchange ActiveSync and Intune }
+  checkin:
+    type: enum
+    label: Last check-in
+    facet: true
+    default: Any
+    values:
+      - { value: Any, label: Any time }
+      - { value: Recent, label: Within 7 days }
+      - { value: Stale30, label: More than 30 days ago }
+      - { value: Stale90, label: More than 90 days ago }
+
+filters:
+  search: q
+  facets: [os, compliance, ownership, agent, checkin, user]
+
+savedViews:
+  enabled: true
+  shared: true
+  presets:
+    - { name: Not compliant, params: { compliance: noncompliant } }
+    - { name: Not checked in for 30 days, params: { checkin: Stale30 } }
+    - { name: Personal devices, params: { ownership: personal } }
+    - { name: Co-managed, params: { agent: configurationManagerClientMdm } }
+
+datasources:
+  devices:
+    source: graph
+    request:
+      path: /deviceManagement/managedDevices
+      query:
+        $select: id,deviceName,userPrincipalName,userDisplayName,userId,operatingSystem,osVersion,complianceState,managementAgent,managedDeviceOwnerType,lastSyncDateTime,enrolledDateTime,model,manufacturer,serialNumber,azureADDeviceId,isEncrypted,jailBroken,deviceEnrollmentType,managementState,totalStorageSpaceInBytes,freeStorageSpaceInBytes,deviceCategoryDisplayName
+        $top: 100
+        $filter: >-
+          ${ $join([
+               params.q ? "startswith(deviceName, " & $odata(params.q) & ")",
+               params.user ? "userPrincipalName eq " & $odata($lowercase(params.user)),
+               params.os != 'Any' ? "operatingSystem eq " & $odata(params.os),
+               params.compliance != 'Any' ? "complianceState eq " & $odata(params.compliance),
+               params.ownership != 'Any' ? "managedDeviceOwnerType eq " & $odata(params.ownership),
+               params.agent != 'Any' ? "managementAgent eq " & $odata(params.agent),
+               params.checkin = 'Recent' ? "lastSyncDateTime ge " & $daysAgo(7),
+               params.checkin = 'Stale30' ? "lastSyncDateTime le " & $daysAgo(30),
+               params.checkin = 'Stale90' ? "lastSyncDateTime le " & $daysAgo(90)
+             ][$], ' and ') }
+    paging: cursor
+    cache: { ttl: 60 }
+    transform: >-
+      ${ $merge([value, { "value": [value.value.$merge([$, {
+           "daysSinceSync": lastSyncDateTime ? -$daysUntil(lastSyncDateTime) : null,
+           "freeStoragePct": totalStorageSpaceInBytes > 0 ? $round(freeStorageSpaceInBytes / totalStorageSpaceInBytes, 3) : null,
+           "pendingAction": managementState in ['retirePending', 'wipePending', 'retireIssued', 'wipeIssued']
+         }])] }]) }
+  overview:
+    source: graphBatch
+    requests:
+      devices: { path: /deviceManagement/managedDeviceOverview }
+      compliance: { path: /deviceManagement/deviceCompliancePolicyDeviceStateSummary }
+    cache: { ttl: 300 }
+    transform: >-
+      ${ {
+        "enrolled": value.devices.enrolledDeviceCount,
+        "coManaged": value.devices.dualEnrolledDeviceCount,
+        "compliant": value.compliance.compliantDeviceCount,
+        "nonCompliant": value.compliance.nonCompliantDeviceCount,
+        "grace": value.compliance.inGracePeriodCount,
+        "byCompliance": $append([], [
+          { "state": "Compliant", "devices": value.compliance.compliantDeviceCount },
+          { "state": "Not compliant", "devices": value.compliance.nonCompliantDeviceCount },
+          { "state": "In grace period", "devices": value.compliance.inGracePeriodCount },
+          { "state": "Not evaluated", "devices": value.compliance.unknownDeviceCount },
+          { "state": "Conflict", "devices": value.compliance.conflictDeviceCount },
+          { "state": "Error", "devices": value.compliance.errorDeviceCount }
+        ][devices > 0]),
+        "byOs": $append([], [
+          { "os": "Windows", "devices": value.devices.deviceOperatingSystemSummary.windowsCount },
+          { "os": "iOS/iPadOS", "devices": value.devices.deviceOperatingSystemSummary.iosCount },
+          { "os": "macOS", "devices": value.devices.deviceOperatingSystemSummary.macOSCount },
+          { "os": "Android", "devices": value.devices.deviceOperatingSystemSummary.androidCount },
+          { "os": "Linux", "devices": value.devices.deviceOperatingSystemSummary.linuxCount },
+          { "os": "Other", "devices": value.devices.deviceOperatingSystemSummary.unknownCount }
+        ][devices > 0])
+      } }
+
+layout:
+  - widget: licenceGate
+    feature: intune
+    title: Intune isn't licensed in this tenant
+  - widget: kpi
+    id: enrolled
+    data: overview.enrolled
+    label: Enrolled devices
+    format: number
+  - widget: kpi
+    id: nonCompliant
+    data: overview.nonCompliant
+    label: Not compliant
+    format: number
+    status: "${ value > 0 ? 'crit' : 'ok' }"
+    href: /p/endpoint.devices?compliance=noncompliant
+  - widget: kpi
+    id: grace
+    data: overview.grace
+    label: In grace period
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+    href: /p/endpoint.devices?compliance=inGracePeriod
+  - widget: kpi
+    id: coManaged
+    data: overview.coManaged
+    label: Co-managed
+    format: number
+    href: /p/endpoint.devices?agent=configurationManagerClientMdm
+  - widget: chart
+    id: byOs
+    title: Devices by platform
+    type: donut
+    span: 6
+    rows: 2
+    data: overview.byOs
+    x: os
+    y: devices
+    format: number
+  - widget: chart
+    id: byCompliance
+    title: Devices by compliance state
+    type: donut
+    span: 6
+    rows: 2
+    data: overview.byCompliance
+    x: state
+    y: devices
+    format: number
+  - widget: table
+    id: devices
+    span: 12
+    data: devices.value
+    rowKey: id
+    selection: multi
+    columns:
+      - { field: deviceName, label: Device, kind: identity, secondary: userPrincipalName, sortable: true }
+      - field: complianceState
+        label: Compliance
+        kind: status
+        map: { compliant: [ok, Compliant], noncompliant: [crit, Not compliant], inGracePeriod: [warn, In grace period], unknown: [neutral, Not evaluated], configManager: [info, Configuration Manager], conflict: [warn, Conflict], error: [crit, Error] }
+        filter: { type: facet, param: compliance }
+      - { field: operatingSystem, label: OS, filter: { type: facet, param: os } }
+      - { field: osVersion, label: OS version }
+      - { field: managedDeviceOwnerType, label: Ownership, kind: status, map: { company: [info, Corporate], personal: [neutral, Personal], unknown: [neutral, Unknown] }, filter: { type: facet, param: ownership } }
+      - { field: managementAgent, label: Managed by, filter: { type: facet, param: agent } }
+      - { field: lastSyncDateTime, label: Last check-in, kind: relativeTime, filter: date }
+      - { field: isEncrypted, label: Encrypted, kind: status, map: { "true": [ok, Encrypted], "false": [warn, Not encrypted] }, filter: facet }
+      - { field: model, label: Model, hidden: true }
+      - { field: manufacturer, label: Manufacturer, hidden: true }
+      - { field: serialNumber, label: Serial number, kind: code, hidden: true }
+      - { field: enrolledDateTime, label: Enrolled, kind: date, hidden: true }
+      - { field: deviceEnrollmentType, label: Enrolment type, hidden: true }
+      - { field: deviceCategoryDisplayName, label: Category, hidden: true }
+      - { field: jailBroken, label: Jailbroken, hidden: true }
+      - { field: freeStoragePct, label: Free storage, kind: percent, hidden: true }
+      - { field: managementState, label: Management state, hidden: true }
+      - { field: azureADDeviceId, label: Entra device id, kind: guid, hidden: true }
+      - { field: id, label: Intune device id, kind: guid, hidden: true }
+    inspect:
+      page: endpoint.device
+      params:
+        id: ${ row.id }
+    rowActions:
+      - playbook: endpoint.sync-device
+        label: Sync
+        icon: arrows-clockwise
+        inputs:
+          managedDeviceId: ${ row.id }
+        when: ${ row.pendingAction = false }
+      - playbook: endpoint.restart-device
+        label: Restart
+        icon: power
+        inputs:
+          managedDeviceId: ${ row.id }
+        when: ${ row.operatingSystem in ['Windows', 'macOS', 'iOS', 'iPadOS'] and row.pendingAction = false }
+      - playbook: endpoint.retire-device
+        label: Retire
+        icon: sign-out
+        inputs:
+          managedDeviceId: ${ row.id }
+        when: ${ row.pendingAction = false }
+      - playbook: endpoint.wipe-device
+        label: Wipe
+        icon: warning-octagon
+        inputs:
+          managedDeviceId: ${ row.id }
+        when: ${ row.managedDeviceOwnerType = 'company' and row.pendingAction = false }
+      - label: Open in Intune admin center
+        icon: arrow-square-out
+        href: "https://intune.microsoft.com/#view/Microsoft_Intune_Devices/DeviceSettingsMenuBlade/~/overview/mdmDeviceId/${ $encode(row.id) }"
+    bulkActions:
+      - playbook: endpoint.sync-device
+        label: Sync
+        icon: arrows-clockwise
+        forEach:
+          inputs:
+            managedDeviceId: ${ row.id }
+          concurrency: 10
+        maxItems: 500
+      - playbook: endpoint.restart-device
+        label: Restart
+        icon: power
+        forEach:
+          inputs:
+            managedDeviceId: ${ row.id }
+          concurrency: 5
+        maxItems: 100
+        when: ${ $count(rows[operatingSystem in ['Windows', 'macOS']]) = $count(rows) }
+      - playbook: endpoint.retire-device
+        label: Retire
+        icon: sign-out
+        forEach:
+          inputs:
+            managedDeviceId: ${ row.id }
+          concurrency: 3
+        maxItems: 25
+    empty:
+      title: No devices match these filters
+      body: Clear a facet or the search. Device search matches the start of the device name.
+
+export:
+  formats: [csv, xlsx]
+  fileName: intune-devices
+  data: devices.value
+  columns: visible

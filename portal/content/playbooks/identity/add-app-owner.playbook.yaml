@@ -1,0 +1,105 @@
+$schema: ../../../packages/schemas/generated/playbook.schema.json
+kind: playbook
+id: identity.add-app-owner
+version: 1.0.0
+title: Add app registration owner
+summary: >-
+  Makes a user an owner of an app registration. Owners can change credentials and redirect URIs, so only add people
+  accountable for the app.
+owner: identity-team
+tags: [identity, apps, governance]
+risk: medium
+mode: write
+requires:
+  portalRoles: [Portal.Operator]
+  scopes:
+    graph: [Application.ReadWrite.All, User.Read.All]
+  entraRoles: [Cloud Application Administrator]
+confirm:
+  type: click
+  message: >-
+    ${ 'Make ' & steps.owner.output.userPrincipalName & ' an owner of ' & steps.app.output.displayName
+       & '? Owners can add secrets and change sign-in settings for this app.' }
+approval:
+  required: false
+
+inputs:
+  appObjectId: { type: string, format: guid, label: App registration (object id), picker: app }
+  ownerId: { type: string, format: guid, label: New owner, picker: user }
+
+steps:
+  - id: app
+    type: graph
+    mode: read
+    describe: Look up the app registration
+    request:
+      method: GET
+      path: /applications/${ $encode($guid(inputs.appObjectId)) }
+      query:
+        $select: id,appId,displayName
+
+  - id: owner
+    type: graph
+    mode: read
+    describe: Look up the new owner
+    request:
+      method: GET
+      path: /users/${ $encode($guid(inputs.ownerId)) }
+      query:
+        $select: id,displayName,userPrincipalName,accountEnabled,userType
+
+  - id: ownerIsMember
+    type: assert
+    that: ${ steps.owner.output.accountEnabled = true and steps.owner.output.userType = 'Member' }
+    message: ${ steps.owner.output.userPrincipalName & ' must be an enabled member account (not a guest) to own an app.' }
+
+  - id: owners
+    type: graph
+    mode: read
+    describe: Read current owners
+    request:
+      method: GET
+      path: /applications/${ $encode($guid(inputs.appObjectId)) }/owners
+      query:
+        $select: id,displayName,userPrincipalName
+
+  - id: notOwnerYet
+    type: assert
+    that: ${ $not($guid(inputs.ownerId) in steps.owners.output.value.id) }
+    message: ${ steps.owner.output.userPrincipalName & ' already owns ' & steps.app.output.displayName & '.' }
+
+  - id: addOwner
+    type: graph
+    mode: write
+    describe: ${ 'Add ' & steps.owner.output.userPrincipalName & ' as owner of ' & steps.app.output.displayName }
+    request:
+      method: POST
+      path: /applications/${ $encode($guid(inputs.appObjectId)) }/owners/$ref
+      body:
+        "@odata.id": https://graph.microsoft.com/v1.0/directoryObjects/${ $guid(inputs.ownerId) }
+    compensate:
+      type: graph
+      describe: Remove the owner again
+      request:
+        method: DELETE
+        path: /applications/${ $encode($guid(inputs.appObjectId)) }/owners/${ $encode($guid(inputs.ownerId)) }/$ref
+
+outputs:
+  summary: ${ steps.owner.output.userPrincipalName & ' now owns the app registration ' & steps.app.output.displayName & '.' }
+
+tests:
+  - name: refuses a guest owner
+    inputs: { appObjectId: 00000000-0000-4000-8000-000000000301, ownerId: 00000000-0000-4000-8000-000000000106 }
+    mocks:
+      app: { id: 00000000-0000-4000-8000-000000000301, appId: 00000000-0000-4000-8001-000000000301, displayName: Example HR Sync }
+      owner: { id: 00000000-0000-4000-8000-000000000106, userPrincipalName: j.doe_partner.example#EXT#@exampleorg.onmicrosoft.com, accountEnabled: true, userType: Guest }
+    expect: { status: failed, failedStep: ownerIsMember }
+  - name: plans adding an owner
+    inputs: { appObjectId: 00000000-0000-4000-8000-000000000301, ownerId: 00000000-0000-4000-8000-000000000102 }
+    mocks:
+      app: { id: 00000000-0000-4000-8000-000000000301, appId: 00000000-0000-4000-8001-000000000301, displayName: Example HR Sync }
+      owner: { id: 00000000-0000-4000-8000-000000000102, userPrincipalName: m.chen@example.com, accountEnabled: true, userType: Member }
+      owners: { value: [{ id: 00000000-0000-4000-8000-000000000101, userPrincipalName: a.lee@example.com }] }
+    expect:
+      status: succeeded
+      plan: [addOwner]

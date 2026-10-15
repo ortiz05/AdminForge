@@ -1,0 +1,12 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#identityProtection/riskyUsers/$entity",
+  "id": "30000000-0000-4000-8000-000000000005",
+  "isDeleted": false,
+  "isProcessing": false,
+  "riskLastUpdatedDateTime": "2026-10-11T09:00:00Z",
+  "riskLevel": "high",
+  "riskState": "confirmedCompromised",
+  "riskDetail": "adminConfirmedUserCompromised",
+  "userDisplayName": "Eli O'Brien",
+  "userPrincipalName": "eli.obrien@example.com"
+}

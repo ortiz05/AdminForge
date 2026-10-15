@@ -1,0 +1,290 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#fixture",
+  "value": [
+    {
+      "id": "ai-ra-01",
+      "principalId": "00000000-0000-4000-8000-000000000110",
+      "roleDefinitionId": "62e90394-69f5-4237-9190-012177145e10",
+      "directoryScopeId": "/",
+      "appScopeId": null,
+      "assignmentType": "Assigned",
+      "memberType": "Direct",
+      "roleAssignmentOriginId": "ra-01",
+      "roleAssignmentScheduleId": "ra-01-schedule",
+      "startDateTime": "2024-01-01T00:00:00Z",
+      "endDateTime": null,
+      "principal": {
+        "@odata.type": "#microsoft.graph.user",
+        "id": "00000000-0000-4000-8000-000000000110",
+        "displayName": "Break Glass 01",
+        "userPrincipalName": "bg01@exampleorg.onmicrosoft.com"
+      },
+      "roleDefinition": {
+        "id": "62e90394-69f5-4237-9190-012177145e10",
+        "displayName": "Global Administrator",
+        "description": "Can manage all aspects of Microsoft Entra ID and Microsoft services that use Microsoft Entra identities.",
+        "isBuiltIn": true,
+        "templateId": "62e90394-69f5-4237-9190-012177145e10"
+      }
+    },
+    {
+      "id": "ai-ra-02",
+      "principalId": "00000000-0000-4000-8000-000000000407",
+      "roleDefinitionId": "62e90394-69f5-4237-9190-012177145e10",
+      "directoryScopeId": "/",
+      "appScopeId": null,
+      "assignmentType": "Assigned",
+      "memberType": "Direct",
+      "roleAssignmentOriginId": "ra-02",
+      "roleAssignmentScheduleId": "ra-02-schedule",
+      "startDateTime": "2024-01-01T00:00:00Z",
+      "endDateTime": null,
+      "principal": {
+        "@odata.type": "#microsoft.graph.servicePrincipal",
+        "id": "00000000-0000-4000-8000-000000000407",
+        "displayName": "Legacy Automation",
+        "appId": "00000000-0000-4000-8001-000000000306"
+      },
+      "roleDefinition": {
+        "id": "62e90394-69f5-4237-9190-012177145e10",
+        "displayName": "Global Administrator",
+        "description": "Can manage all aspects of Microsoft Entra ID and Microsoft services that use Microsoft Entra identities.",
+        "isBuiltIn": true,
+        "templateId": "62e90394-69f5-4237-9190-012177145e10"
+      }
+    },
+    {
+      "id": "ai-ra-03",
+      "principalId": "00000000-0000-4000-8000-000000000109",
+      "roleDefinitionId": "e8611ab8-c189-46e8-94e1-60213ab1f814",
+      "directoryScopeId": "/",
+      "appScopeId": null,
+      "assignmentType": "Assigned",
+      "memberType": "Direct",
+      "roleAssignmentOriginId": "ra-03",
+      "roleAssignmentScheduleId": "ra-03-schedule",
+      "startDateTime": "2024-01-01T00:00:00Z",
+      "endDateTime": null,
+      "principal": {
+        "@odata.type": "#microsoft.graph.user",
+        "id": "00000000-0000-4000-8000-000000000109",
+        "displayName": "Jordan Rivera",
+        "userPrincipalName": "j.rivera@example.com"
+      },
+      "roleDefinition": {
+        "id": "e8611ab8-c189-46e8-94e1-60213ab1f814",
+        "displayName": "Privileged Role Administrator",
+        "description": "Can manage role assignments in Microsoft Entra ID, and all aspects of Privileged Identity Management.",
+        "isBuiltIn": true,
+        "templateId": "e8611ab8-c189-46e8-94e1-60213ab1f814"
+      }
+    },
+    {
+      "id": "ai-ra-04",
+      "principalId": "00000000-0000-4000-8000-000000000208",
+      "roleDefinitionId": "194ae4cb-b126-40b2-bd5b-6091b380977d",
+      "directoryScopeId": "/",
+      "appScopeId": null,
+      "assignmentType": "Assigned",
+      "memberType": "Direct",
+      "roleAssignmentOriginId": "ra-04",
+      "roleAssignmentScheduleId": "ra-04-schedule",
+      "startDateTime": "2024-01-01T00:00:00Z",
+      "endDateTime": null,
+      "principal": {
+        "@odata.type": "#microsoft.graph.group",
+        "id": "00000000-0000-4000-8000-000000000208",
+        "displayName": "SG-PIM-Identity-Admins"
+      },
+      "roleDefinition": {
+        "id": "194ae4cb-b126-40b2-bd5b-6091b380977d",
+        "displayName": "Security Administrator",
+        "description": "Can read security information and reports, and manage configuration in Microsoft Entra ID and Office 365.",
+        "isBuiltIn": true,
+        "templateId": "194ae4cb-b126-40b2-bd5b-6091b380977d"
+      }
+    },
+    {
+      "id": "ai-ra-05",
+      "principalId": "00000000-0000-4000-8000-000000000101",
+      "roleDefinitionId": "fe930be7-5e62-47db-91af-98c3a49a38b1",
+      "directoryScopeId": "/",
+      "appScopeId": null,
+      "assignmentType": "Assigned",
+      "memberType": "Direct",
+      "roleAssignmentOriginId": "ra-05",
+      "roleAssignmentScheduleId": "ra-05-schedule",
+      "startDateTime": "2024-01-01T00:00:00Z",
+      "endDateTime": null,
+      "principal": {
+        "@odata.type": "#microsoft.graph.user",
+        "id": "00000000-0000-4000-8000-000000000101",
+        "displayName": "Adele Lee",
+        "userPrincipalName": "a.lee@example.com"
+      },
+      "roleDefinition": {
+        "id": "fe930be7-5e62-47db-91af-98c3a49a38b1",
+        "displayName": "User Administrator",
+        "description": "Can manage all aspects of users and groups, including resetting passwords for limited admins.",
+        "isBuiltIn": true,
+        "templateId": "fe930be7-5e62-47db-91af-98c3a49a38b1"
+      }
+    },
+    {
+      "id": "ai-ra-06",
+      "principalId": "00000000-0000-4000-8000-0000000000a1",
+      "roleDefinitionId": "f2ef992c-3afb-46b9-b7cf-a126ee74c451",
+      "directoryScopeId": "/",
+      "appScopeId": null,
+      "assignmentType": "Assigned",
+      "memberType": "Direct",
+      "roleAssignmentOriginId": "ra-06",
+      "roleAssignmentScheduleId": "ra-06-schedule",
+      "startDateTime": "2024-01-01T00:00:00Z",
+      "endDateTime": null,
+      "principal": {
+        "@odata.type": "#microsoft.graph.user",
+        "id": "00000000-0000-4000-8000-0000000000a1",
+        "displayName": "Avery Engineer",
+        "userPrincipalName": "avery@example.com"
+      },
+      "roleDefinition": {
+        "id": "f2ef992c-3afb-46b9-b7cf-a126ee74c451",
+        "displayName": "Global Reader",
+        "description": "Can read everything that a Global Administrator can, but not update anything.",
+        "isBuiltIn": true,
+        "templateId": "f2ef992c-3afb-46b9-b7cf-a126ee74c451"
+      }
+    },
+    {
+      "id": "ai-ra-07",
+      "principalId": "00000000-0000-4000-8000-000000000108",
+      "roleDefinitionId": "29232cdf-9323-42fd-ade2-1d097af3e4de",
+      "directoryScopeId": "/",
+      "appScopeId": null,
+      "assignmentType": "Assigned",
+      "memberType": "Direct",
+      "roleAssignmentOriginId": "ra-07",
+      "roleAssignmentScheduleId": "ra-07-schedule",
+      "startDateTime": "2024-01-01T00:00:00Z",
+      "endDateTime": null,
+      "principal": {
+        "@odata.type": "#microsoft.graph.user",
+        "id": "00000000-0000-4000-8000-000000000108",
+        "displayName": "Dana Okafor",
+        "userPrincipalName": "d.okafor@example.com"
+      },
+      "roleDefinition": {
+        "id": "29232cdf-9323-42fd-ade2-1d097af3e4de",
+        "displayName": "Exchange Administrator",
+        "description": "Can manage all aspects of the Exchange product.",
+        "isBuiltIn": true,
+        "templateId": "29232cdf-9323-42fd-ade2-1d097af3e4de"
+      }
+    },
+    {
+      "id": "ai-ra-08",
+      "principalId": "00000000-0000-4000-8000-000000000112",
+      "roleDefinitionId": "4a5d8f65-41da-4de4-8968-e035b65339cf",
+      "directoryScopeId": "/",
+      "appScopeId": null,
+      "assignmentType": "Assigned",
+      "memberType": "Direct",
+      "roleAssignmentOriginId": "ra-08",
+      "roleAssignmentScheduleId": "ra-08-schedule",
+      "startDateTime": "2024-01-01T00:00:00Z",
+      "endDateTime": null,
+      "principal": {
+        "@odata.type": "#microsoft.graph.user",
+        "id": "00000000-0000-4000-8000-000000000112",
+        "displayName": "Svc Reporting",
+        "userPrincipalName": "svc-reporting@example.com"
+      },
+      "roleDefinition": {
+        "id": "4a5d8f65-41da-4de4-8968-e035b65339cf",
+        "displayName": "Reports Reader",
+        "description": "Can read sign-in and audit reports.",
+        "isBuiltIn": true,
+        "templateId": "4a5d8f65-41da-4de4-8968-e035b65339cf"
+      }
+    },
+    {
+      "id": "ai-ra-09",
+      "principalId": "00000000-0000-4000-8000-000000000101",
+      "roleDefinitionId": "729827e3-9c14-49f7-bb1b-9608f156bbb8",
+      "directoryScopeId": "/",
+      "appScopeId": null,
+      "assignmentType": "Assigned",
+      "memberType": "Direct",
+      "roleAssignmentOriginId": "ra-09",
+      "roleAssignmentScheduleId": "ra-09-schedule",
+      "startDateTime": "2024-01-01T00:00:00Z",
+      "endDateTime": null,
+      "principal": {
+        "@odata.type": "#microsoft.graph.user",
+        "id": "00000000-0000-4000-8000-000000000101",
+        "displayName": "Adele Lee",
+        "userPrincipalName": "a.lee@example.com"
+      },
+      "roleDefinition": {
+        "id": "729827e3-9c14-49f7-bb1b-9608f156bbb8",
+        "displayName": "Helpdesk Administrator",
+        "description": "Can reset passwords for non-administrators and Helpdesk Administrators.",
+        "isBuiltIn": true,
+        "templateId": "729827e3-9c14-49f7-bb1b-9608f156bbb8"
+      }
+    },
+    {
+      "id": "ai-ra-10",
+      "principalId": "00000000-0000-4000-8000-000000000108",
+      "roleDefinitionId": "3a2c62db-5318-420d-8d74-23affee5d9d5",
+      "directoryScopeId": "/",
+      "appScopeId": null,
+      "assignmentType": "Assigned",
+      "memberType": "Direct",
+      "roleAssignmentOriginId": "ra-10",
+      "roleAssignmentScheduleId": "ra-10-schedule",
+      "startDateTime": "2024-01-01T00:00:00Z",
+      "endDateTime": null,
+      "principal": {
+        "@odata.type": "#microsoft.graph.user",
+        "id": "00000000-0000-4000-8000-000000000108",
+        "displayName": "Dana Okafor",
+        "userPrincipalName": "d.okafor@example.com"
+      },
+      "roleDefinition": {
+        "id": "3a2c62db-5318-420d-8d74-23affee5d9d5",
+        "displayName": "Intune Administrator",
+        "description": "Can manage all aspects of the Intune product.",
+        "isBuiltIn": true,
+        "templateId": "3a2c62db-5318-420d-8d74-23affee5d9d5"
+      }
+    },
+    {
+      "id": "ai-ra-11",
+      "principalId": "00000000-0000-4000-8000-0000000000a1",
+      "roleDefinitionId": "fe930be7-5e62-47db-91af-98c3a49a38b1",
+      "directoryScopeId": "/",
+      "appScopeId": null,
+      "assignmentType": "Activated",
+      "memberType": "Direct",
+      "roleAssignmentOriginId": "ra-11",
+      "roleAssignmentScheduleId": "ra-11-schedule",
+      "startDateTime": "2026-10-15T03:00:00Z",
+      "endDateTime": "2026-10-15T11:00:00Z",
+      "principal": {
+        "@odata.type": "#microsoft.graph.user",
+        "id": "00000000-0000-4000-8000-0000000000a1",
+        "displayName": "Avery Engineer",
+        "userPrincipalName": "avery@example.com"
+      },
+      "roleDefinition": {
+        "id": "fe930be7-5e62-47db-91af-98c3a49a38b1",
+        "displayName": "User Administrator",
+        "description": "Can manage all aspects of users and groups, including resetting passwords for limited admins.",
+        "isBuiltIn": true,
+        "templateId": "fe930be7-5e62-47db-91af-98c3a49a38b1"
+      }
+    }
+  ]
+}

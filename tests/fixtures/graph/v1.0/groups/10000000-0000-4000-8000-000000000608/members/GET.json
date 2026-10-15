@@ -1,0 +1,38 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#directoryObjects",
+  "value": [
+    {
+      "@odata.type": "#microsoft.graph.user",
+      "id": "10000000-0000-4000-8000-000000000009",
+      "displayName": "Isaac Mensah",
+      "mail": "isaac.mensah@example.com",
+      "userPrincipalName": "isaac.mensah@example.com",
+      "userType": "Member",
+      "accountEnabled": true
+    },
+    {
+      "@odata.type": "#microsoft.graph.user",
+      "id": "30000000-0000-4000-8000-000000000003",
+      "displayName": "Casey Contractor",
+      "mail": "casey@partner.example.net",
+      "userPrincipalName": "casey_partner.example.net#EXT#@exampleorg.onmicrosoft.com",
+      "userType": "Guest",
+      "accountEnabled": true
+    },
+    {
+      "@odata.type": "#microsoft.graph.user",
+      "id": "10000000-0000-4000-8000-00000000000f",
+      "displayName": "Mateo Silva (Fabrikam)",
+      "mail": "mateo.silva@fabrikam.example",
+      "userPrincipalName": "mateo.silva_fabrikam.example#EXT#@exampleorg.onmicrosoft.com",
+      "userType": "Guest",
+      "accountEnabled": true
+    },
+    {
+      "@odata.type": "#microsoft.graph.orgContact",
+      "id": "10000000-0000-4000-8000-00000000063c",
+      "displayName": "Ana Ruiz (Fabrikam)",
+      "mail": "ana.ruiz@fabrikam.example"
+    }
+  ]
+}

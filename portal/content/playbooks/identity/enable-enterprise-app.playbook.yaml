@@ -1,0 +1,74 @@
+$schema: ../../../packages/schemas/generated/playbook.schema.json
+kind: playbook
+id: identity.enable-enterprise-app
+version: 1.0.0
+title: Enable enterprise app sign-in
+summary: Allows users and workloads to sign in to a disabled enterprise application again.
+owner: identity-team
+tags: [identity, apps]
+risk: medium
+mode: write
+requires:
+  portalRoles: [Portal.Operator]
+  scopes:
+    graph: [Application.ReadWrite.All]
+  entraRoles: [Cloud Application Administrator]
+confirm:
+  type: click
+  message: ${ 'Allow sign-in to ' & steps.sp.output.displayName & ' again?' }
+approval:
+  required: false
+
+inputs:
+  servicePrincipalId: { type: string, format: guid, label: Enterprise app (object id), picker: app }
+  reason: { type: string, label: Reason, minLength: 10, multiline: true }
+
+steps:
+  - id: sp
+    type: graph
+    mode: read
+    describe: Look up the enterprise app
+    request:
+      method: GET
+      path: /servicePrincipals/${ $encode($guid(inputs.servicePrincipalId)) }
+      query:
+        $select: id,appId,displayName,accountEnabled
+
+  - id: isDisabled
+    type: assert
+    that: ${ steps.sp.output.accountEnabled = false }
+    message: ${ steps.sp.output.displayName & ' already allows sign-in.' }
+
+  - id: enable
+    type: graph
+    mode: write
+    describe: Set accountEnabled to true on the service principal
+    request:
+      method: PATCH
+      path: /servicePrincipals/${ $encode($guid(inputs.servicePrincipalId)) }
+      body: { accountEnabled: true }
+    compensate:
+      type: graph
+      describe: Disable sign-in again
+      request:
+        method: PATCH
+        path: /servicePrincipals/${ $encode($guid(inputs.servicePrincipalId)) }
+        body: { accountEnabled: false }
+
+outputs:
+  summary: ${ 'Sign-in enabled for ' & steps.sp.output.displayName & '.' }
+
+tests:
+  - name: refuses an app that is already enabled
+    inputs: { servicePrincipalId: 00000000-0000-4000-8000-000000000401, reason: re-enable after review }
+    mocks:
+      sp: { id: 00000000-0000-4000-8000-000000000401, displayName: Example HR Sync, accountEnabled: true }
+    expect: { status: failed, failedStep: isDisabled }
+  - name: plans enabling a disabled app
+    inputs: { servicePrincipalId: 00000000-0000-4000-8000-000000000404, reason: Vendor confirmed safe SEC-311 }
+    mocks:
+      sp: { id: 00000000-0000-4000-8000-000000000404, displayName: PDF Converter Online, accountEnabled: false }
+    expect:
+      status: succeeded
+      plan: [enable]
+      outputs: { summary: Sign-in enabled for PDF Converter Online. }

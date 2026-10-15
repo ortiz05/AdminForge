@@ -1,0 +1,341 @@
+$schema: ../../../packages/schemas/generated/page.schema.json
+kind: page
+id: identity.enterprise-app
+version: 1.0.0
+title: Enterprise app
+summary: >-
+  One enterprise app (service principal) — properties, user and group assignments, granted permissions (admin and
+  user consent), owners, signing certificates and recent sign-ins.
+owner: identity-team
+tags: [identity, apps]
+template: entity
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    graph: [Application.Read.All, Directory.Read.All, AuditLog.Read.All]
+  entraRoles: [Global Reader]
+
+params:
+  id: { type: guid, label: Enterprise app (object id), required: true, hidden: true }
+  appId: { type: string, label: Application (client) id, hidden: true, format: guid }
+
+datasources:
+  sp:
+    source: graph
+    request:
+      path: /servicePrincipals/${ $encode($guid(params.id)) }
+      query:
+        $select: id,appId,displayName,description,accountEnabled,appRoleAssignmentRequired,servicePrincipalType,appOwnerOrganizationId,publisherName,verifiedPublisher,homepage,loginUrl,logoutUrl,replyUrls,servicePrincipalNames,tags,notes,notificationEmailAddresses,preferredSingleSignOnMode,preferredTokenSigningKeyThumbprint,keyCredentials,passwordCredentials,appRoles,alternativeNames,signInAudience
+    cache: { ttl: 120 }
+    transform: >-
+      ${ (
+        $v := value;
+        $merge([$v, {
+          "kind": $v.appOwnerOrganizationId = 'f8cdef31-a31e-4b4a-93e4-5f571e91255a' ? 'Microsoft first-party'
+                  : $v.servicePrincipalType = 'ManagedIdentity' ? 'Managed identity' : $v.servicePrincipalType,
+          "publisher": $v.verifiedPublisher.displayName ? $v.verifiedPublisher.displayName : $v.publisherName,
+          "visibleToUsers": $not('HideApp' in $v.tags),
+          "certificates": [$append(
+            $v.keyCredentials.{ "keyId": keyId, "type": "Certificate", "usage": usage, "name": displayName, "end": endDateTime,
+              "active": customKeyIdentifier = $v.preferredTokenSigningKeyThumbprint,
+              "daysRemaining": endDateTime ? $daysUntil(endDateTime) : 36500 },
+            $v.passwordCredentials.{ "keyId": keyId, "type": "Secret", "usage": "Verify", "name": displayName, "end": endDateTime,
+              "active": false, "daysRemaining": endDateTime ? $daysUntil(endDateTime) : 36500 }
+          ).$merge([$, { "state": daysRemaining < 0 ? 'expired' : daysRemaining <= 30 ? 'expiring' : 'ok' }])],
+          "roles": [$v.appRoles.{ "id": id, "value": value, "displayName": displayName, "allowedMemberTypes": allowedMemberTypes, "isEnabled": isEnabled }]
+        }])
+      ) }
+  assignedTo:
+    source: graph
+    request:
+      path: /servicePrincipals/${ $encode($guid(params.id)) }/appRoleAssignedTo
+      query:
+        $select: id,principalId,principalDisplayName,principalType,appRoleId,createdDateTime
+        $top: 100
+    paging: cursor
+    cache: { ttl: 60 }
+    transform: >-
+      ${ $merge([value, { "value": [value.value.$merge([$, {
+           "role": appRoleId = '00000000-0000-0000-0000-000000000000' ? 'Default access' : appRoleId
+         }])] }]) }
+  owners:
+    source: graph
+    request:
+      path: /servicePrincipals/${ $encode($guid(params.id)) }/owners
+      query:
+        $select: id,displayName,userPrincipalName,accountEnabled
+    cache: { ttl: 60 }
+  delegated:
+    source: graph
+    request:
+      path: /servicePrincipals/${ $encode($guid(params.id)) }/oauth2PermissionGrants
+    cache: { ttl: 120 }
+    transform: >-
+      ${ {
+        "grants": [value.value.{
+          "id": id,
+          "consent": consentType = 'AllPrincipals' ? 'Admin (all users)' : 'User',
+          "principalId": principalId,
+          "resourceId": resourceId,
+          "scopes": [$split($trim(scope), ' ')[$ != '']]
+        }],
+        "adminGrants": $count(value.value[consentType = 'AllPrincipals']),
+        "userGrants": $count(value.value[consentType = 'Principal'])
+      } }
+  application:
+    source: graphBatch
+    requests:
+      granted: { path: "/servicePrincipals/${ $encode($guid(params.id)) }/appRoleAssignments" }
+      graph:
+        path: /servicePrincipals
+        query: { $filter: "appId eq '00000003-0000-0000-c000-000000000000'", $select: "id,appRoles" }
+    cache: { ttl: 300 }
+    transform: >-
+      ${ (
+        $graphRoles := [value.graph.value[0].appRoles];
+        {
+          "rows": [value.granted.value.(
+            $rid := appRoleId;
+            {
+              "id": id,
+              "resource": resourceDisplayName,
+              "permission": $graphRoles[id = $rid][0].value ? $graphRoles[id = $rid][0].value : appRoleId,
+              "granted": createdDateTime
+            }
+          )],
+          "count": $count(value.granted.value)
+        }
+      ) }
+  signIns:
+    source: graph
+    when: ${ $boolean(params.appId) = true }
+    requires: { licences: [signInLogs] }
+    request:
+      path: /auditLogs/signIns
+      query:
+        $filter: ${ 'appId eq ' & $odata($guid(params.appId)) }
+        $top: 50
+    paging: cursor
+    cache: { ttl: 60 }
+    transform: >-
+      ${ $merge([value, { "value": [value.value.$merge([$, {
+           "result": status.errorCode = 0 ? "success" : "failure"
+         }])] }]) }
+
+header:
+  title: ${ sp.displayName }
+  subtitle: "${ sp.kind & (sp.publisher ? ' · ' & sp.publisher : '') }"
+  status: "${ sp.accountEnabled ? 'ok' : 'crit' }"
+  statusLabel: "${ sp.accountEnabled ? 'Sign-in enabled' : 'Sign-in disabled' }"
+  ids:
+    Object id: ${ sp.id }
+    Application (client) id: ${ sp.appId }
+
+actions:
+  - playbook: identity.disable-enterprise-app
+    label: Disable sign-in
+    icon: prohibit
+    inputs:
+      servicePrincipalId: ${ params.id }
+    when: ${ sp.accountEnabled = true and sp.kind != 'Microsoft first-party' }
+  - playbook: identity.enable-enterprise-app
+    label: Enable sign-in
+    icon: check-circle
+    inputs:
+      servicePrincipalId: ${ params.id }
+    when: ${ sp.accountEnabled = false }
+  - label: Open in Entra admin center
+    icon: arrow-square-out
+    href: "https://entra.microsoft.com/#view/Microsoft_AAD_IAM/ManagedAppMenuBlade/~/Overview/objectId/${ $encode(params.id) }/appId/${ $encode(sp.appId) }"
+
+tabs:
+  - id: overview
+    label: Overview
+    layout:
+      - widget: kpi
+        id: adminGrants
+        data: delegated.adminGrants
+        label: Admin-consented grants
+        format: number
+      - widget: kpi
+        id: userGrants
+        data: delegated.userGrants
+        label: User-consented grants
+        format: number
+        status: "${ value > 0 ? 'info' : 'neutral' }"
+      - widget: kpi
+        id: appPermissions
+        data: application.count
+        label: Application permissions granted
+        format: number
+        status: "${ value > 0 ? 'warn' : 'neutral' }"
+      - widget: keyValue
+        id: properties
+        title: Properties
+        span: 6
+        data: sp
+        fields:
+          - { field: kind, label: Type }
+          - { field: publisher, label: Publisher }
+          - { field: accountEnabled, label: Sign-in, kind: status, map: { "true": [ok, Enabled], "false": [crit, Disabled] } }
+          - { field: appRoleAssignmentRequired, label: Assignment required, kind: status, map: { "true": [ok, Required], "false": [warn, Not required — every user can sign in] } }
+          - { field: visibleToUsers, label: Visible in My Apps, kind: boolean }
+          - { field: preferredSingleSignOnMode, label: Single sign-on mode }
+          - { field: signInAudience, label: Audience }
+          - { field: homepage, label: Home page, kind: link }
+          - { field: loginUrl, label: Sign-on URL, kind: link }
+          - { field: notificationEmailAddresses, label: Certificate expiry notifications, kind: tags }
+          - { field: notes, label: Notes }
+      - widget: keyValue
+        id: identifiers
+        title: Identifiers
+        span: 6
+        data: sp
+        fields:
+          - { field: servicePrincipalNames, label: Service principal names, kind: tags }
+          - { field: replyUrls, label: Reply URLs, kind: tags }
+          - { field: alternativeNames, label: Alternative names (managed identity resource), kind: tags }
+          - { field: appOwnerOrganizationId, label: Owner tenant, kind: code }
+
+  - id: assignments
+    label: Users and groups
+    layout:
+      - widget: markdown
+        id: openToAll
+        span: 12
+        when: ${ sp.appRoleAssignmentRequired = false }
+        text: |
+          **Assignment isn't required**, so every user in the tenant can sign in to this app. The assignments below
+          only control which app roles users get and what appears in My Apps.
+      - widget: table
+        id: assignedTo
+        span: 12
+        data: assignedTo.value
+        rowKey: id
+        columns:
+          - { field: principalDisplayName, label: Assigned to }
+          - { field: principalType, label: Type, kind: status, map: { User: [neutral, User], Group: [info, Group], ServicePrincipal: [neutral, Service principal] }, filter: facet }
+          - { field: role, label: App role }
+          - { field: createdDateTime, label: Assigned, kind: date }
+          - { field: principalId, label: Principal id, kind: guid, hidden: true }
+        rowActions:
+          - { label: Open user, icon: user, href: "/p/identity.user?id=${ $encode(row.principalId) }", when: "${ row.principalType = 'User' }" }
+          - { label: Open group, icon: users-three, href: "/p/identity.group?id=${ $encode(row.principalId) }", when: "${ row.principalType = 'Group' }" }
+        empty:
+          title: No assignments
+          body: No users or groups are assigned to this app.
+      - widget: table
+        id: appRoles
+        title: App roles defined by this app
+        span: 12
+        data: sp.roles
+        rowKey: id
+        when: ${ $count(sp.roles) > 0 }
+        columns:
+          - { field: displayName, label: Role }
+          - { field: value, label: Value, kind: code }
+          - { field: allowedMemberTypes, label: Assignable to, kind: tags }
+          - { field: isEnabled, label: Enabled, kind: boolean }
+          - { field: id, label: Role id, kind: guid }
+
+  - id: permissions
+    label: Permissions
+    layout:
+      - widget: table
+        id: delegatedGrants
+        title: Delegated permissions granted
+        span: 12
+        data: delegated.grants
+        rowKey: id
+        columns:
+          - { field: consent, label: Consent, kind: status, map: { "Admin (all users)": [info, Admin consent], User: [warn, User consent] }, filter: facet }
+          - { field: scopes, label: Permissions, kind: tags }
+          - { field: principalId, label: Consented by (user id), kind: guid }
+          - { field: resourceId, label: API (object id), kind: guid, hidden: true }
+        empty:
+          title: No delegated permissions
+          body: Nobody has consented to this app acting on their behalf.
+      - widget: table
+        id: applicationGrants
+        title: Application permissions granted
+        span: 12
+        data: application.rows
+        rowKey: id
+        columns:
+          - { field: resource, label: API }
+          - { field: permission, label: Permission, kind: code }
+          - { field: granted, label: Granted, kind: date }
+        empty:
+          title: No application permissions
+          body: This app can't act without a signed-in user.
+
+  - id: certificates
+    label: Certificates and secrets
+    layout:
+      - widget: table
+        id: certificates
+        span: 12
+        data: sp.certificates
+        rowKey: keyId
+        columns:
+          - { field: name, label: Name }
+          - { field: type, label: Type }
+          - { field: usage, label: Usage }
+          - { field: active, label: Active signing certificate, kind: boolean }
+          - { field: state, label: Status, kind: status, map: { expired: [crit, Expired], expiring: [warn, Expires within 30 days], ok: [ok, Valid] } }
+          - { field: end, label: Expires, kind: date }
+          - { field: daysRemaining, label: Days left, kind: number }
+        empty:
+          title: No certificates or secrets on the enterprise app
+          body: SAML signing certificates and app-instance secrets appear here.
+
+  - id: owners
+    label: Owners
+    layout:
+      - widget: table
+        id: owners
+        span: 12
+        data: owners.value
+        rowKey: id
+        columns:
+          - { field: displayName, label: Owner, kind: identity, secondary: userPrincipalName }
+          - { field: accountEnabled, label: Sign-in, kind: status, map: { "true": [ok, Allowed], "false": [crit, Blocked] } }
+        inspect:
+          page: identity.user
+          params:
+            id: ${ row.id }
+        empty:
+          title: No owners
+          body: Nobody owns this enterprise app.
+
+  - id: signIns
+    label: Sign-ins
+    layout:
+      - widget: licenceGate
+        feature: signInLogs
+        title: Sign-in logs need Microsoft Entra ID P1
+      - widget: markdown
+        id: needAppId
+        span: 12
+        when: ${ $not($boolean(params.appId) = true) }
+        text: Open this app from the **Enterprise apps** list to see its sign-ins.
+      - widget: table
+        id: signIns
+        span: 12
+        data: signIns.value
+        rowKey: id
+        columns:
+          - { field: createdDateTime, label: Time, kind: datetime }
+          - { field: userDisplayName, label: User, kind: identity, secondary: userPrincipalName }
+          - { field: result, label: Result, kind: status, map: { success: [ok, Success], failure: [crit, Failure] }, filter: facet }
+          - { field: status.failureReason, label: Failure reason }
+          - { field: conditionalAccessStatus, label: Conditional Access, kind: status, map: { success: [ok, Success], failure: [crit, Failure], notApplied: [neutral, Not applied] } }
+          - { field: ipAddress, label: IP address, kind: code }
+          - { field: location.countryOrRegion, label: Country }
+        inspect:
+          page: identity.sign-in
+          params:
+            id: ${ row.id }
+        empty:
+          title: No recent sign-ins
+          body: Nobody signed in to this app in the retention window (30 days).

@@ -1,0 +1,14 @@
+{
+  "value": [
+    {
+      "id": "ara-405-1",
+      "principalId": "00000000-0000-4000-8000-000000000201",
+      "principalDisplayName": "SG-App-Payroll-Users",
+      "principalType": "Group",
+      "appRoleId": "00000000-0000-4000-8000-000000000a05",
+      "resourceId": "00000000-0000-4000-8000-000000000405",
+      "resourceDisplayName": "Payroll Online",
+      "createdDateTime": "2023-04-12T09:00:00Z"
+    }
+  ]
+}

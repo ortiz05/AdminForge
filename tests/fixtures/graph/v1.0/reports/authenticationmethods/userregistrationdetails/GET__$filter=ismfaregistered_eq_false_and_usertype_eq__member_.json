@@ -1,0 +1,62 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#fixture",
+  "value": [
+    {
+      "id": "00000000-0000-4000-8000-000000000105",
+      "userPrincipalName": "s.patel@example.com",
+      "userDisplayName": "Sam Patel",
+      "userType": "member",
+      "isAdmin": false,
+      "isSsprRegistered": false,
+      "isSsprEnabled": true,
+      "isSsprCapable": false,
+      "isMfaRegistered": false,
+      "isMfaCapable": false,
+      "isPasswordlessCapable": false,
+      "methodsRegistered": [],
+      "isSystemPreferredAuthenticationMethodEnabled": true,
+      "systemPreferredAuthenticationMethods": [],
+      "userPreferredMethodForSecondaryAuthentication": "none",
+      "defaultMfaMethod": "none",
+      "lastUpdatedDateTime": "2026-10-15T00:00:00Z"
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000111",
+      "userPrincipalName": "c.novak@example.com",
+      "userDisplayName": "Chris Novak",
+      "userType": "member",
+      "isAdmin": false,
+      "isSsprRegistered": false,
+      "isSsprEnabled": true,
+      "isSsprCapable": false,
+      "isMfaRegistered": false,
+      "isMfaCapable": false,
+      "isPasswordlessCapable": false,
+      "methodsRegistered": [],
+      "isSystemPreferredAuthenticationMethodEnabled": true,
+      "systemPreferredAuthenticationMethods": [],
+      "userPreferredMethodForSecondaryAuthentication": "none",
+      "defaultMfaMethod": "none",
+      "lastUpdatedDateTime": "2026-10-15T00:00:00Z"
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000112",
+      "userPrincipalName": "svc-reporting@example.com",
+      "userDisplayName": "Svc Reporting",
+      "userType": "member",
+      "isAdmin": true,
+      "isSsprRegistered": false,
+      "isSsprEnabled": true,
+      "isSsprCapable": false,
+      "isMfaRegistered": false,
+      "isMfaCapable": false,
+      "isPasswordlessCapable": false,
+      "methodsRegistered": [],
+      "isSystemPreferredAuthenticationMethodEnabled": true,
+      "systemPreferredAuthenticationMethods": [],
+      "userPreferredMethodForSecondaryAuthentication": "none",
+      "defaultMfaMethod": "none",
+      "lastUpdatedDateTime": "2026-10-15T00:00:00Z"
+    }
+  ]
+}

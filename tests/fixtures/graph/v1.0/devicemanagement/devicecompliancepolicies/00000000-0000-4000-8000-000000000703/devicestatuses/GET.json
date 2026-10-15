@@ -1,0 +1,26 @@
+{
+  "value": [
+    {
+      "id": "703-604",
+      "deviceDisplayName": "Pixel 8 – M. Chen",
+      "userName": "Morgan Chen",
+      "userPrincipalName": "m.chen@example.com",
+      "deviceModel": "Pixel 8",
+      "platform": 0,
+      "complianceGracePeriodExpirationDateTime": "9999-12-31T23:59:59Z",
+      "status": "compliant",
+      "lastReportedDateTime": "2026-10-15T03:05:00Z"
+    },
+    {
+      "id": "703-605",
+      "deviceDisplayName": "Galaxy S24 – S. Patel",
+      "userName": "Sam Patel",
+      "userPrincipalName": "s.patel@example.com",
+      "deviceModel": "Galaxy S24",
+      "platform": 0,
+      "complianceGracePeriodExpirationDateTime": "2026-10-18T19:00:00Z",
+      "status": "inGracePeriod",
+      "lastReportedDateTime": "2026-10-11T19:00:00Z"
+    }
+  ]
+}

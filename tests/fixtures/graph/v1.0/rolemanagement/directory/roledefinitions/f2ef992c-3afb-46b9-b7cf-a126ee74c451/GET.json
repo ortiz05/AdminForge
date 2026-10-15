@@ -1,0 +1,22 @@
+{
+  "id": "f2ef992c-3afb-46b9-b7cf-a126ee74c451",
+  "templateId": "f2ef992c-3afb-46b9-b7cf-a126ee74c451",
+  "displayName": "Global Reader",
+  "description": "Can read everything that a Global Administrator can, but not update anything.",
+  "isBuiltIn": true,
+  "isEnabled": true,
+  "version": "1",
+  "resourceScopes": [
+    "/"
+  ],
+  "rolePermissions": [
+    {
+      "allowedResourceActions": [
+        "microsoft.directory/users/allProperties/read",
+        "microsoft.directory/groups/allProperties/read",
+        "microsoft.directory/applications/allProperties/read"
+      ],
+      "condition": null
+    }
+  ]
+}

@@ -1,0 +1,169 @@
+$schema: ../../../packages/schemas/generated/report.schema.json
+kind: report
+id: identity.licence-utilization
+version: 1.0.0
+title: Licence utilisation
+summary: >-
+  Purchased versus assigned seats for every subscribed SKU — unused seats to reclaim, SKUs about to run out,
+  suspended or warning subscriptions — and groups whose members hit licence assignment errors.
+owner: identity-team
+tags: [identity, licensing, cost, report]
+nav: { section: reports, label: Licence utilisation, icon: identification-badge, order: 15 }
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    graph: [Organization.Read.All, Group.Read.All]
+  entraRoles: [Global Reader]
+
+params:
+  includeFree: { type: boolean, label: Include free and trial SKUs, default: false, facet: true }
+
+datasources:
+  skus:
+    source: graph
+    request:
+      path: /subscribedSkus
+      query:
+        $select: skuId,skuPartNumber,appliesTo,capabilityStatus,consumedUnits,prepaidUnits
+    cache: { ttl: 900 }
+    transform: >-
+      ${ (
+        $names := {
+          "SPE_E5": "Microsoft 365 E5", "SPE_E3": "Microsoft 365 E3", "SPE_F1": "Microsoft 365 F3", "SPB": "Microsoft 365 Business Premium",
+          "ENTERPRISEPREMIUM": "Office 365 E5", "ENTERPRISEPACK": "Office 365 E3", "STANDARDPACK": "Office 365 E1",
+          "O365_BUSINESS_PREMIUM": "Microsoft 365 Business Standard", "O365_BUSINESS_ESSENTIALS": "Microsoft 365 Business Basic",
+          "EMS": "Enterprise Mobility + Security E3", "EMSPREMIUM": "Enterprise Mobility + Security E5",
+          "AAD_PREMIUM": "Microsoft Entra ID P1", "AAD_PREMIUM_P2": "Microsoft Entra ID P2", "INTUNE_A": "Microsoft Intune Plan 1",
+          "POWER_BI_PRO": "Power BI Pro", "POWER_BI_STANDARD": "Power BI (free)", "FLOW_FREE": "Power Automate (free)",
+          "PROJECTPREMIUM": "Project Plan 5", "VISIOCLIENT": "Visio Plan 2", "Microsoft_Teams_Premium": "Teams Premium",
+          "Microsoft_365_Copilot": "Microsoft 365 Copilot", "WIN_DEF_ATP": "Defender for Endpoint P2", "ATP_ENTERPRISE": "Defender for Office 365 P1",
+          "EXCHANGESTANDARD": "Exchange Online Plan 1", "EXCHANGEENTERPRISE": "Exchange Online Plan 2", "MCOEV": "Teams Phone Standard",
+          "MCOMEETADV": "Microsoft 365 Audio Conferencing", "STREAM": "Microsoft Stream", "WINDOWS_STORE": "Windows Store for Business"
+        };
+        $free := ['FLOW_FREE', 'POWER_BI_STANDARD', 'WINDOWS_STORE', 'STREAM', 'POWERAPPS_VIRAL', 'CCIBOTS_PRIVPREV_VIRAL', 'TEAMS_EXPLORATORY', 'Microsoft_Teams_Exploratory_Dept'];
+        $rows := [value.value.(
+          $total := prepaidUnits.enabled;
+          $used := consumedUnits;
+          {
+            "skuId": skuId,
+            "sku": skuPartNumber,
+            "product": $lookup($names, skuPartNumber) ? $lookup($names, skuPartNumber) : skuPartNumber,
+            "appliesTo": appliesTo,
+            "status": capabilityStatus,
+            "purchased": $total,
+            "assigned": $used,
+            "available": $total - $used,
+            "utilisation": $total > 0 ? $round($used / $total, 3) : null,
+            "suspended": prepaidUnits.suspended,
+            "warning": prepaidUnits.warning,
+            "free": skuPartNumber in $free or $total >= 10000,
+            "state": capabilityStatus != 'Enabled' ? 'attention'
+                     : $total > 0 and $used >= $total ? 'full'
+                     : $total > 0 and $used / $total >= 0.95 ? 'nearlyFull'
+                     : $total > 0 and $used / $total < 0.8 ? 'underused' : 'ok'
+          }
+        )];
+        $paid := $rows[$$.params.includeFree = true or $not(free)];
+        {
+          "rows": [$paid^(state = 'full' ? 0 : state = 'nearlyFull' ? 1 : state = 'attention' ? 2 : 3, product)],
+          "purchased": $sum($paid[status = 'Enabled'].purchased),
+          "assigned": $sum($paid[status = 'Enabled'].assigned),
+          "unassigned": $sum($paid[status = 'Enabled' and available > 0].available),
+          "atLimit": $count($paid[state in ['full', 'nearlyFull']]),
+          "chart": [($paid[status = 'Enabled' and purchased > 0]^(>purchased))[[0..5]].{ "sku": product, "assigned": assigned, "available": available > 0 ? available : 0 }]
+        }
+      ) }
+  errorGroups:
+    source: graph
+    request:
+      path: /groups
+      query:
+        $filter: hasMembersWithLicenseErrors eq true
+        $select: id,displayName,mail
+    cache: { ttl: 900 }
+
+layout:
+  - widget: kpi
+    id: purchased
+    data: skus.purchased
+    label: Paid seats
+    format: number
+  - widget: kpi
+    id: assigned
+    data: skus.assigned
+    label: Assigned
+    format: number
+  - widget: kpi
+    id: unassigned
+    data: skus.unassigned
+    label: Unassigned seats
+    format: number
+    status: "${ value > 0 ? 'info' : 'ok' }"
+  - widget: kpi
+    id: atLimit
+    data: skus.atLimit
+    label: SKUs at or near the limit
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+  - widget: chart
+    id: utilisation
+    title: Largest subscriptions — assigned and available seats
+    type: stackedBar
+    stack: true
+    span: 8
+    rows: 2
+    data: skus.chart
+    x: sku
+    y: [assigned, available]
+    labels: { assigned: Assigned, available: Available }
+    format: number
+  - widget: list
+    id: errorGroups
+    title: Groups with licence assignment errors
+    span: 4
+    rows: 2
+    data: errorGroups.value
+    primary: displayName
+    secondary: mail
+    href: ${ '/p/identity.group?id=' & $encode(row.id) }
+    limit: 8
+    empty:
+      title: No licence errors
+      body: Group-based licensing assigned every licence successfully.
+  - widget: table
+    id: skus
+    span: 12
+    data: skus.rows
+    rowKey: skuId
+    columns:
+      - { field: product, label: Product, kind: identity, secondary: sku, sortable: true }
+      - field: state
+        label: Status
+        kind: status
+        map: { full: [crit, No seats left], nearlyFull: [warn, Over 95% used], underused: [info, Under 80% used], ok: [ok, Healthy], attention: [warn, Subscription not active] }
+        filter: facet
+      - { field: purchased, label: Purchased, kind: number, sortable: true }
+      - { field: assigned, label: Assigned, kind: number, sortable: true }
+      - { field: available, label: Available, kind: number, sortable: true, filter: range }
+      - { field: utilisation, label: Used, kind: percent, sortable: true }
+      - { field: status, label: Subscription, hidden: true }
+      - { field: suspended, label: Suspended seats, kind: number, hidden: true }
+      - { field: warning, label: Seats in warning, kind: number, hidden: true }
+      - { field: appliesTo, label: Applies to, hidden: true }
+      - { field: skuId, label: SKU id, kind: guid, hidden: true }
+    rowActions:
+      - playbook: identity.assign-licence
+        label: Assign to a user
+        icon: user-plus
+        inputs:
+          sku: ${ row.sku }
+        when: ${ row.available > 0 and row.appliesTo = 'User' }
+    empty:
+      title: No subscriptions
+      body: This tenant has no subscribed SKUs (or only free ones — turn on Include free and trial SKUs).
+
+export:
+  formats: [csv, xlsx]
+  fileName: licence-utilisation
+  data: skus.rows
+  columns: all

@@ -1,0 +1,233 @@
+$schema: ../../../packages/schemas/generated/runbook.schema.json
+kind: runbook
+id: identity.leaver
+version: 1.0.0
+title: Leaver process
+summary: >-
+  End-to-end leaver process with HR sign-off: confirm the leave date, hand over owned groups and apps, run the approved
+  offboarding playbook, retire personal devices, then complete the mailbox, OneDrive and hardware tasks.
+owner: identity-team
+tags: [identity, leaver, offboarding, runbook]
+risk: high
+mode: write
+requires:
+  portalRoles: [Portal.Operator]
+  scopes:
+    graph:
+      - User.Read.All
+      - Directory.Read.All
+      - DeviceManagementManagedDevices.Read.All
+      - DeviceManagementManagedDevices.PrivilegedOperations.All
+      - User.EnableDisableAccount.All
+      - User.RevokeSessions.All
+      - GroupMember.ReadWrite.All
+      - LicenseAssignment.ReadWrite.All
+      - UserAuthenticationMethod.ReadWrite.All
+      - RoleManagement.Read.Directory
+      - Mail.Send
+  entraRoles: [User Administrator, Intune Administrator]
+confirm:
+  type: click
+  message: ${ 'Start the leaver process for ' & steps.account.output.userPrincipalName & ' (' & inputs.ticket & ')?' }
+approval:
+  required: false
+timeout: PT4H
+
+inputs:
+  userId: { type: string, format: guid, label: Leaver, picker: user }
+  ticket: { type: string, label: HR reference, minLength: 3 }
+  lastWorkingDay: { type: date, label: Last working day }
+  retirePersonalDevices: { type: boolean, label: Retire the leaver's personal (BYOD) devices, default: true }
+
+sections:
+  - id: signoff
+    title: 1. HR sign-off
+    body: |
+      Don't start before HR has confirmed the leave in writing and the last working day has passed (or HR asked for an
+      immediate cut-off). Check for legal holds before deleting any data.
+    steps:
+      - id: account
+        type: graph
+        mode: read
+        describe: Look up the leaver and their manager
+        request:
+          method: GET
+          path: /users/${ $encode($guid(inputs.userId)) }
+          query:
+            $select: id,displayName,userPrincipalName,mail,accountEnabled,userType,department,onPremisesSyncEnabled
+            $expand: manager($select=id,displayName,mail)
+
+      - id: isMember
+        type: assert
+        that: ${ steps.account.output.userType = 'Member' }
+        message: ${ steps.account.output.userPrincipalName & ' is a guest; remove guest access instead of running the leaver process.' }
+
+      - id: hrSignoff
+        type: manual
+        instructions: |
+          Leaver: **${ steps.account.output.displayName }** (${ steps.account.output.userPrincipalName }),
+          ${ steps.account.output.department }, manager ${ steps.account.output.manager.displayName }.
+          Last working day: **${ inputs.lastWorkingDay }**.
+        checklist:
+          - HR confirmed the leave in writing (${ inputs.ticket })
+          - The last working day has passed, or HR asked for an immediate cut-off
+          - Legal hold checked with Legal / Compliance
+        inputs:
+          hrContact: { type: string, label: HR contact who signed off, minLength: 3 }
+
+  - id: handover
+    title: 2. Hand over ownership
+    body: Groups and apps owned only by the leaver become ownerless. Give them new owners first.
+    steps:
+      - id: ownedGroups
+        type: graph
+        mode: read
+        describe: Groups the leaver owns
+        request:
+          method: GET
+          path: /users/${ $encode($guid(inputs.userId)) }/ownedObjects/microsoft.graph.group
+          query:
+            $select: id,displayName
+
+      - id: ownedApps
+        type: graph
+        mode: read
+        describe: App registrations the leaver owns
+        request:
+          method: GET
+          path: /users/${ $encode($guid(inputs.userId)) }/ownedObjects/microsoft.graph.application
+          query:
+            $select: id,appId,displayName
+
+      - id: devices
+        type: graph
+        mode: read
+        describe: Intune devices with the leaver as primary user (needs Intune)
+        onError: continue
+        request:
+          method: GET
+          path: /users/${ $encode($guid(inputs.userId)) }/managedDevices
+          query:
+            $select: id,deviceName,operatingSystem,managedDeviceOwnerType,serialNumber
+
+      - id: handoverDone
+        type: manual
+        instructions: |
+          Owned groups: ${ $count(steps.ownedGroups.output.value) > 0 ? $join(steps.ownedGroups.output.value.displayName, ', ') : 'none' }.
+          Owned app registrations: ${ $count(steps.ownedApps.output.value) > 0 ? $join(steps.ownedApps.output.value.displayName, ', ') : 'none' }.
+
+          Use **Add group owner** / **Add app registration owner** to hand them to the manager or team.
+        checklist:
+          - Every owned group has another owner
+          - Every owned app registration has another owner
+          - Shared credentials the leaver knew (service accounts, vault secrets) are rotated
+
+  - id: offboard
+    title: 3. Offboard the account
+    body: |
+      Runs **Offboard user** (blocks sign-in, revokes sessions, removes group memberships, direct licences and MFA
+      methods, emails the manager). That playbook needs a second approver.
+    steps:
+      - id: offboardUser
+        type: playbook
+        mode: write
+        describe: Run the Offboard user playbook (approval required)
+        ref: identity.offboard-user
+        inputs:
+          userId: ${ $guid(inputs.userId) }
+          reason: ${ 'Leaver ' & inputs.ticket & ', last working day ' & inputs.lastWorkingDay }
+          ticket: ${ inputs.ticket }
+          removeGroups: true
+          removeLicences: true
+          removeAuthMethods: true
+          notifyManager: true
+
+  - id: deviceTasks
+    title: 4. Devices
+    body: |
+      Personal (BYOD) devices are **retired** — company data and apps are removed, personal data stays. Company-owned
+      devices are collected and wiped or re-provisioned by the service desk.
+    steps:
+      - id: personalDevices
+        type: transform
+        expression: ${ [steps.devices.output.value[managedDeviceOwnerType = 'personal']] }
+
+      - id: retirePersonal
+        type: forEach
+        when: ${ inputs.retirePersonalDevices = true }
+        items: ${ steps.personalDevices.output }
+        as: device
+        concurrency: 3
+        steps:
+          - id: retireDevice
+            type: playbook
+            mode: write
+            describe: ${ 'Retire ' & device.deviceName }
+            onError: continue
+            ref: endpoint.retire-device
+            inputs:
+              managedDeviceId: ${ device.id }
+              reason: ${ 'Leaver ' & inputs.ticket }
+
+      - id: corporateDevices
+        type: manual
+        instructions: |
+          Company-owned devices to collect:
+          ${ $count(steps.devices.output.value[managedDeviceOwnerType = 'company']) > 0
+             ? $join(steps.devices.output.value[managedDeviceOwnerType = 'company'].(deviceName & ' (' & serialNumber & ')'), ', ')
+             : 'none' }.
+        checklist:
+          - Corporate devices returned and logged
+          - Devices wiped (or Autopilot reset) before reissue
+
+  - id: workloads
+    title: 5. Mailbox, OneDrive and access
+    body: These are done in Exchange Online, SharePoint and line-of-business apps.
+    steps:
+      - id: workloadTasks
+        type: manual
+        instructions: Complete the remaining tasks the manager was told about.
+        checklist:
+          - "Exchange: mailbox converted to shared (or forwarding / auto-reply set) and hidden from the address list"
+          - "OneDrive: manager granted access before the retention period ends"
+          - "Apps outside Entra ID SSO: accounts removed (HR, finance, SaaS with local logins)"
+          - "Physical access: badge deactivated"
+
+  - id: close
+    title: 6. Close
+    steps:
+      - id: closeout
+        type: manual
+        instructions: Confirm and close the HR ticket.
+        checklist:
+          - HR ticket ${ inputs.ticket } updated and closed
+          - Manager confirmed the handover is complete
+
+outputs:
+  summary: >-
+    ${ 'Leaver ' & steps.account.output.userPrincipalName & ' (' & inputs.ticket & ') offboarded; '
+       & $count(steps.personalDevices.output) & ' personal device(s) retired, '
+       & $count(steps.devices.output.value[managedDeviceOwnerType = 'company']) & ' company device(s) to collect.' }
+
+tests:
+  - name: refuses a guest account
+    inputs: { userId: 00000000-0000-4000-8000-000000000106, ticket: HR-9001, lastWorkingDay: "2026-01-10" }
+    mocks:
+      account: { id: 00000000-0000-4000-8000-000000000106, userPrincipalName: j.doe_partner.example#EXT#@exampleorg.onmicrosoft.com, userType: Guest, accountEnabled: true }
+    expect: { status: failed, failedStep: isMember }
+  - name: offboards and retires the personal phone
+    inputs: { userId: 00000000-0000-4000-8000-000000000105, ticket: HR-9002, lastWorkingDay: "2026-01-10" }
+    mocks:
+      account: { id: 00000000-0000-4000-8000-000000000105, displayName: Sam Patel, userPrincipalName: s.patel@example.com, userType: Member, accountEnabled: true, department: Finance, manager: { id: 00000000-0000-4000-8000-000000000101, displayName: Avery Lee, mail: a.lee@example.com } }
+      ownedGroups: { value: [{ id: 00000000-0000-4000-8000-000000000201, displayName: SG-App-Payroll-Users }] }
+      ownedApps: { value: [] }
+      devices:
+        value:
+          - { id: 00000000-0000-4000-8000-000000000605, deviceName: Galaxy S24 – S. Patel, operatingSystem: Android, managedDeviceOwnerType: personal, serialNumber: EXSN000605 }
+          - { id: 00000000-0000-4000-8000-000000000606, deviceName: EX-LT-0302, operatingSystem: Windows, managedDeviceOwnerType: company, serialNumber: EXSN000606 }
+      offboardUser: { summary: s.patel@example.com offboarded. }
+      retireDevice: { summary: Retire sent. }
+    expect:
+      status: succeeded
+      steps: { offboardUser: succeeded, hrSignoff: skipped }
+      outputs: { summary: "Leaver s.patel@example.com (HR-9002) offboarded; 1 personal device(s) retired, 1 company device(s) to collect." }

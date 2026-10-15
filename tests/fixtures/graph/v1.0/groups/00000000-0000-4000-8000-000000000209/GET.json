@@ -1,0 +1,27 @@
+{
+  "id": "00000000-0000-4000-8000-000000000209",
+  "displayName": "Sales Team",
+  "description": "Sales (mail-enabled security)",
+  "mail": "sales@example.com",
+  "mailNickname": "SalesTeam",
+  "mailEnabled": true,
+  "securityEnabled": true,
+  "groupTypes": [],
+  "membershipRule": null,
+  "membershipRuleProcessingState": null,
+  "onPremisesSyncEnabled": null,
+  "onPremisesLastSyncDateTime": null,
+  "onPremisesSamAccountName": null,
+  "createdDateTime": "2022-02-14T09:00:00Z",
+  "renewedDateTime": "2022-02-14T09:00:00Z",
+  "expirationDateTime": null,
+  "visibility": null,
+  "isAssignableToRole": null,
+  "classification": null,
+  "proxyAddresses": [
+    "SMTP:sales@example.com"
+  ],
+  "resourceProvisioningOptions": [],
+  "assignedLicenses": [],
+  "hasMembersWithLicenseErrors": false
+}

@@ -1,0 +1,19 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#users",
+  "value": [
+    {
+      "id": "30000000-0000-4000-8000-000000000006",
+      "displayName": "Finley Service",
+      "userPrincipalName": "svc-backup@example.com",
+      "mail": null,
+      "accountEnabled": true,
+      "userType": "Member",
+      "department": "IT Operations",
+      "jobTitle": "Service account",
+      "createdDateTime": "2021-05-05T05:05:00Z",
+      "signInActivity": {
+        "lastSignInDateTime": "2026-10-15T02:00:00Z"
+      }
+    }
+  ]
+}

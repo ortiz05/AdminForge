@@ -1,0 +1,21 @@
+{
+  "id": "b1be1c3e-b65d-4f19-8427-f6fa0d97feb9",
+  "templateId": "b1be1c3e-b65d-4f19-8427-f6fa0d97feb9",
+  "displayName": "Conditional Access Administrator",
+  "description": "Can manage Conditional Access capabilities.",
+  "isBuiltIn": true,
+  "isEnabled": true,
+  "version": "1",
+  "resourceScopes": [
+    "/"
+  ],
+  "rolePermissions": [
+    {
+      "allowedResourceActions": [
+        "microsoft.directory/conditionalAccessPolicies/allProperties/allTasks",
+        "microsoft.directory/namedLocations/allProperties/allTasks"
+      ],
+      "condition": null
+    }
+  ]
+}

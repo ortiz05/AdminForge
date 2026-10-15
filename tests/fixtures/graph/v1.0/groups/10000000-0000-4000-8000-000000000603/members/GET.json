@@ -1,0 +1,32 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#directoryObjects",
+  "value": [
+    {
+      "@odata.type": "#microsoft.graph.user",
+      "id": "30000000-0000-4000-8000-000000000005",
+      "displayName": "Eli O'Brien",
+      "mail": "eli.obrien@example.com",
+      "userPrincipalName": "eli.obrien@example.com",
+      "userType": "Member",
+      "accountEnabled": true
+    },
+    {
+      "@odata.type": "#microsoft.graph.user",
+      "id": "30000000-0000-4000-8000-000000000001",
+      "displayName": "Avery Engineer",
+      "mail": "avery@example.com",
+      "userPrincipalName": "avery@example.com",
+      "userType": "Member",
+      "accountEnabled": true
+    },
+    {
+      "@odata.type": "#microsoft.graph.user",
+      "id": "10000000-0000-4000-8000-00000000000b",
+      "displayName": "Kai Lindqvist",
+      "mail": "kai.lindqvist@example.com",
+      "userPrincipalName": "kai.lindqvist@example.com",
+      "userType": "Member",
+      "accountEnabled": true
+    }
+  ]
+}

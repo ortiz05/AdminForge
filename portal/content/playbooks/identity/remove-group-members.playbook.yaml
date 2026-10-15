@@ -1,0 +1,102 @@
+$schema: ../../../packages/schemas/generated/playbook.schema.json
+kind: playbook
+id: identity.remove-group-members
+version: 1.0.0
+title: Remove group members
+summary: >-
+  Removes users, devices or nested groups from a cloud security or Microsoft 365 group. Refuses dynamic groups, groups
+  synced from on-premises AD, and distribution lists / mail-enabled security groups.
+owner: identity-team
+tags: [identity, groups, bulk]
+risk: medium
+mode: write
+requires:
+  portalRoles: [Portal.Operator]
+  scopes:
+    graph: [Group.Read.All, GroupMember.ReadWrite.All]
+  # Role-assignable groups also need Privileged Role Administrator.
+  entraRoles: [Groups Administrator]
+confirm:
+  type: click
+  message: >-
+    ${ 'Remove ' & $count(inputs.memberIds) & ' member(s) from ' & steps.group.output.displayName
+       & '? They lose any access, licences or roles granted through this group.' }
+approval:
+  required: false
+
+inputs:
+  groupId: { type: string, format: guid, label: Group, picker: group }
+  memberIds:
+    type: user
+    multiple: true
+    maxItems: 500
+    label: Members to remove
+    description: Object ids of users, devices or groups.
+  reason: { type: string, label: Reason, required: false, multiline: true }
+
+steps:
+  - id: group
+    type: graph
+    mode: read
+    describe: Look up the group
+    request:
+      method: GET
+      path: /groups/${ $encode($guid(inputs.groupId)) }
+      query:
+        $select: id,displayName,groupTypes,mailEnabled,securityEnabled,onPremisesSyncEnabled,isAssignableToRole
+
+  - id: notDynamic
+    type: assert
+    that: ${ $not('DynamicMembership' in steps.group.output.groupTypes) }
+    message: ${ steps.group.output.displayName & ' has dynamic membership; change its membership rule instead.' }
+
+  - id: notSynced
+    type: assert
+    that: ${ $not(steps.group.output.onPremisesSyncEnabled = true) }
+    message: ${ steps.group.output.displayName & ' is synced from on-premises AD; change its membership there.' }
+
+  - id: notExchangeManaged
+    type: assert
+    that: ${ $not(steps.group.output.mailEnabled = true and $not('Unified' in steps.group.output.groupTypes)) }
+    message: ${ steps.group.output.displayName & ' is a distribution list or mail-enabled security group; manage its members in Exchange Online.' }
+
+  - id: remove
+    type: forEach
+    items: ${ [inputs.memberIds] }
+    as: memberId
+    concurrency: 5
+    steps:
+      - id: removeMember
+        type: graph
+        mode: write
+        describe: ${ 'Remove ' & memberId & ' from ' & steps.group.output.displayName }
+        onError: continue
+        request:
+          method: DELETE
+          path: /groups/${ $encode($guid(inputs.groupId)) }/members/${ $encode($guid(memberId)) }/$ref
+        compensate:
+          type: graph
+          describe: Add the member back
+          request:
+            method: POST
+            path: /groups/${ $encode($guid(inputs.groupId)) }/members/$ref
+            body:
+              "@odata.id": https://graph.microsoft.com/v1.0/directoryObjects/${ $guid(memberId) }
+
+outputs:
+  summary: ${ 'Requested ' & $count(inputs.memberIds) & ' removal(s) from ' & steps.group.output.displayName & '.' }
+
+tests:
+  - name: refuses a group synced from on-premises AD
+    inputs: { groupId: 00000000-0000-4000-8000-000000000205, memberIds: [00000000-0000-4000-8000-000000000108] }
+    mocks:
+      group: { id: 00000000-0000-4000-8000-000000000205, displayName: GG-Engineering (AD), groupTypes: [], mailEnabled: false, securityEnabled: true, onPremisesSyncEnabled: true }
+    expect: { status: failed, failedStep: notSynced }
+  - name: plans removing a member from a Microsoft 365 group
+    inputs: { groupId: 00000000-0000-4000-8000-000000000202, memberIds: [00000000-0000-4000-8000-000000000103] }
+    mocks:
+      group: { id: 00000000-0000-4000-8000-000000000202, displayName: Project Falcon, groupTypes: [Unified], mailEnabled: true, securityEnabled: false, onPremisesSyncEnabled: null }
+    expect:
+      status: succeeded
+      plan: [removeMember]
+      outputs: { summary: Requested 1 removal(s) from Project Falcon. }

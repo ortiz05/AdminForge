@@ -1,0 +1,168 @@
+$schema: ../../../packages/schemas/generated/page.schema.json
+kind: page
+id: endpoint.apps
+version: 1.0.0
+title: Apps
+summary: >-
+  Apps managed by Intune — Win32, Microsoft Store, Microsoft 365 Apps, line-of-business, store and web apps — by
+  platform and type, with publisher, assignment and last change.
+owner: endpoint-team
+tags: [endpoint, intune, apps]
+template: list-detail
+nav: { section: endpoint, label: Apps, icon: package, order: 40 }
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    graph: [DeviceManagementApps.Read.All]
+  entraRoles: [Intune Administrator]
+  licences: [intune]
+
+params:
+  q: { type: string, default: "", label: Search, placeholder: App name or publisher }
+  platform: { type: enum, values: [Any, Windows, macOS, iOS, Android, Web], default: Any, label: Platform, facet: true }
+  assigned: { type: enum, values: [Any, Assigned, Unassigned], default: Any, label: Assignment, facet: true }
+  kind:
+    type: enum
+    label: App type
+    facet: true
+    default: Any
+    values:
+      - { value: Any, label: Any }
+      - { value: Win32, label: Windows app (Win32) }
+      - { value: Store, label: Store app }
+      - { value: M365, label: Microsoft 365 Apps }
+      - { value: LOB, label: Line-of-business }
+      - { value: Web, label: Web link }
+      - { value: Other, label: Other }
+
+filters:
+  search: q
+  facets: [platform, kind, assigned]
+
+savedViews:
+  enabled: true
+  shared: true
+  presets:
+    - { name: Win32 apps, params: { kind: Win32 } }
+    - { name: Unassigned apps, params: { assigned: Unassigned } }
+
+datasources:
+  apps:
+    source: graph
+    request:
+      path: /deviceAppManagement/mobileApps
+      query:
+        $select: id,displayName,publisher,description,createdDateTime,lastModifiedDateTime,isFeatured,publishingState,isAssigned
+    paging: all
+    maxItems: 10000
+    cache: { ttl: 300 }
+    transform: >-
+      ${ (
+        $q := $lowercase(params.q ? params.q : '');
+        $type := function($t) {
+          $t in ['win32LobApp', 'winGetApp'] ? 'Win32'
+          : $t in ['officeSuiteApp', 'macOSOfficeSuiteApp'] ? 'M365'
+          : $contains($t, 'StoreApp') or $contains($t, 'VppApp') or $t in ['microsoftStoreForBusinessApp', 'androidManagedStoreApp', 'managedAndroidStoreApp', 'managedIOSStoreApp'] ? 'Store'
+          : $contains($t, 'LobApp') or $contains($t, 'MSI') or $t = 'windowsAppX' or $t = 'windowsUniversalAppX' ? 'LOB'
+          : $t in ['webApp', 'windowsWebApp'] ? 'Web' : 'Other'
+        };
+        $platform := function($t) {
+          $t in ['webApp'] ? 'Web'
+          : $contains($t, 'win') or $contains($t, 'Windows') or $t in ['officeSuiteApp', 'microsoftStoreForBusinessApp', 'microsoftEdgeApp', 'winGetApp'] ? 'Windows'
+          : $contains($t, 'macOS') ? 'macOS' : $contains($t, 'ios') or $contains($t, 'IOS') ? 'iOS'
+          : $contains($t, 'ndroid') ? 'Android' : 'Other'
+        };
+        $rows := [value.value.(
+          $t := $substringAfter(`@odata.type`, '#microsoft.graph.');
+          {
+            "id": id,
+            "displayName": displayName,
+            "publisher": publisher,
+            "odataType": $t,
+            "kind": $type($t),
+            "platform": $platform($t),
+            "assigned": isAssigned = true,
+            "featured": isFeatured = true,
+            "state": publishingState,
+            "created": createdDateTime,
+            "modified": lastModifiedDateTime
+          }
+        )];
+        {
+          "rows": [$rows[
+            ($$.params.platform = 'Any' or platform = $$.params.platform)
+            and ($$.params.kind = 'Any' or kind = $$.params.kind)
+            and ($$.params.assigned = 'Any' or ($$.params.assigned = 'Assigned') = assigned)
+            and ($q = '' or $contains($lowercase(displayName), $q) or $contains($lowercase(publisher ? publisher : ''), $q))
+          ]^(displayName)],
+          "total": $count($rows),
+          "win32": $count($rows[kind = 'Win32']),
+          "unassigned": $count($rows[assigned = false]),
+          "byPlatform": [$distinct($rows.platform).(
+            $p := $;
+            { "platform": $p, "apps": $count($rows[platform = $p]) }
+          )^(>apps)]
+        }
+      ) }
+
+layout:
+  - widget: licenceGate
+    feature: intune
+    title: Intune isn't licensed in this tenant
+  - widget: kpi
+    id: total
+    data: apps.total
+    label: Apps
+    format: number
+  - widget: kpi
+    id: win32
+    data: apps.win32
+    label: Windows (Win32) apps
+    format: number
+    href: /p/endpoint.apps?kind=Win32
+  - widget: kpi
+    id: unassigned
+    data: apps.unassigned
+    label: Unassigned
+    format: number
+    status: "${ value > 0 ? 'info' : 'ok' }"
+    href: /p/endpoint.apps?assigned=Unassigned
+  - widget: chart
+    id: byPlatform
+    title: Apps by platform
+    type: bar
+    span: 3
+    rows: 1
+    data: apps.byPlatform
+    x: platform
+    y: apps
+    format: number
+  - widget: table
+    id: apps
+    span: 12
+    data: apps.rows
+    rowKey: id
+    columns:
+      - { field: displayName, label: App, kind: identity, secondary: publisher, sortable: true }
+      - { field: kind, label: Type, filter: { type: facet, param: kind } }
+      - { field: platform, label: Platform, filter: { type: facet, param: platform } }
+      - { field: assigned, label: Assigned, kind: status, map: { "true": [ok, Assigned], "false": [neutral, Not assigned] }, filter: { type: facet, param: assigned } }
+      - { field: state, label: Publishing, hidden: true }
+      - { field: featured, label: Featured in Company Portal, kind: boolean, hidden: true }
+      - { field: modified, label: Modified, kind: relativeTime, sortable: true }
+      - { field: created, label: Created, kind: date, hidden: true }
+      - { field: odataType, label: Graph type, kind: code, hidden: true }
+      - { field: id, label: App id, kind: guid, hidden: true }
+    rowActions:
+      - label: Open in Intune admin center
+        icon: arrow-square-out
+        href: "https://intune.microsoft.com/#view/Microsoft_Intune_Apps/SettingsMenu/~/0/appId/${ $encode(row.id) }"
+    empty:
+      title: No apps match
+      body: Clear a facet or the search.
+
+export:
+  formats: [csv, xlsx]
+  fileName: intune-apps
+  data: apps.rows
+  columns: all

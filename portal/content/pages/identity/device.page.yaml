@@ -1,0 +1,229 @@
+$schema: ../../../packages/schemas/generated/page.schema.json
+kind: page
+id: identity.device
+version: 1.0.0
+title: Device
+summary: One Microsoft Entra device — properties, owner and users, group memberships, BitLocker key escrow and the matching Intune record.
+owner: identity-team
+tags: [identity, devices]
+template: entity
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    graph: [Device.Read.All, Directory.Read.All]
+  entraRoles: [Global Reader]
+
+params:
+  id: { type: guid, label: Device (object id), required: true, hidden: true }
+  deviceId: { type: string, label: Device id, hidden: true, format: guid }
+
+datasources:
+  device:
+    source: graph
+    request:
+      path: /devices/${ $encode($guid(params.id)) }
+      query:
+        $select: id,deviceId,displayName,operatingSystem,operatingSystemVersion,trustType,isCompliant,isManaged,accountEnabled,approximateLastSignInDateTime,registrationDateTime,profileType,manufacturer,model,onPremisesSyncEnabled,onPremisesLastSyncDateTime,mdmAppId,physicalIds,extensionAttributes,complianceExpirationDateTime
+    cache: { ttl: 60 }
+    transform: >-
+      ${ $merge([value, {
+           "daysInactive": value.approximateLastSignInDateTime ? -$daysUntil(value.approximateLastSignInDateTime)
+                           : value.registrationDateTime ? -$daysUntil(value.registrationDateTime) : 0,
+           "autopilot": $count(value.physicalIds[$contains($, '[ZTDID]')]) > 0,
+           "joinLabel": value.trustType = 'AzureAd' ? 'Microsoft Entra joined' : value.trustType = 'ServerAd' ? 'Hybrid joined' : 'Registered'
+         }]) }
+  owners:
+    source: graph
+    request:
+      path: /devices/${ $encode($guid(params.id)) }/registeredOwners
+      query:
+        $select: id,displayName,userPrincipalName,accountEnabled
+    cache: { ttl: 120 }
+  users:
+    source: graph
+    request:
+      path: /devices/${ $encode($guid(params.id)) }/registeredUsers
+      query:
+        $select: id,displayName,userPrincipalName,accountEnabled
+    cache: { ttl: 120 }
+  groups:
+    source: graph
+    request:
+      path: /devices/${ $encode($guid(params.id)) }/memberOf/microsoft.graph.group
+      query:
+        $select: id,displayName,groupTypes,membershipRule
+    cache: { ttl: 120 }
+  keys:
+    source: graph
+    when: ${ $boolean(params.deviceId) = true }
+    requires: { scopes: { graph: [BitlockerKey.ReadBasic.All] } }
+    request:
+      path: /informationProtection/bitlocker/recoveryKeys
+      headers: { ocp-client-name: AdminForge, ocp-client-version: "1.0" }
+      query:
+        $filter: ${ 'deviceId eq ' & $odata($guid(params.deviceId)) }
+    cache: { ttl: 300 }
+  intune:
+    source: graph
+    when: ${ $boolean(params.deviceId) = true }
+    requires: { licences: [intune], scopes: { graph: [DeviceManagementManagedDevices.Read.All] } }
+    request:
+      path: /deviceManagement/managedDevices
+      query:
+        $filter: ${ 'azureADDeviceId eq ' & $odata($guid(params.deviceId)) }
+        $select: id,deviceName,complianceState,lastSyncDateTime,managementAgent,managedDeviceOwnerType,userPrincipalName,serialNumber
+    cache: { ttl: 120 }
+    transform: ${ value.value[0] }
+
+header:
+  title: ${ device.displayName }
+  subtitle: "${ device.joinLabel & ' · ' & device.operatingSystem & ' ' & device.operatingSystemVersion }"
+  status: "${ device.accountEnabled = false ? 'neutral' : device.isCompliant = false ? 'crit' : device.daysInactive > 90 ? 'warn' : 'ok' }"
+  statusLabel: >-
+    ${ device.accountEnabled = false ? 'Disabled' : device.isCompliant = false ? 'Not compliant'
+       : device.daysInactive > 90 ? 'Inactive ' & device.daysInactive & ' days' : 'Active' }
+  ids:
+    Object id: ${ device.id }
+    Device id: ${ device.deviceId }
+
+actions:
+  - playbook: identity.delete-stale-device
+    label: Delete stale device
+    icon: trash
+    inputs:
+      deviceObjectId: ${ params.id }
+    when: ${ device.daysInactive > 90 and device.trustType != 'ServerAd' }
+  - label: Open Intune record
+    icon: devices
+    href: "/p/endpoint.device?id=${ $encode(intune.id) }"
+    when: ${ $exists(intune.id) }
+  - label: Open in Entra admin center
+    icon: arrow-square-out
+    href: "https://entra.microsoft.com/#view/Microsoft_AAD_Devices/DeviceDetailsMenuBlade/~/Properties/objectId/${ $encode(params.id) }/deviceId/${ $encode(device.deviceId) }"
+
+tabs:
+  - id: overview
+    label: Overview
+    layout:
+      - widget: keyValue
+        id: properties
+        title: Device
+        span: 6
+        data: device
+        fields:
+          - { field: joinLabel, label: Join type }
+          - { field: operatingSystem, label: OS }
+          - { field: operatingSystemVersion, label: OS version }
+          - { field: manufacturer, label: Manufacturer }
+          - { field: model, label: Model }
+          - { field: profileType, label: Profile type }
+          - { field: autopilot, label: Autopilot device, kind: boolean }
+          - { field: registrationDateTime, label: Registered, kind: datetime }
+      - widget: keyValue
+        id: state
+        title: State
+        span: 6
+        data: device
+        fields:
+          - { field: accountEnabled, label: Enabled, kind: status, map: { "true": [ok, Enabled], "false": [neutral, Disabled] } }
+          - { field: isCompliant, label: Compliance, kind: status, map: { "true": [ok, Compliant], "false": [crit, Not compliant] } }
+          - { field: isManaged, label: Managed by MDM, kind: boolean }
+          - { field: approximateLastSignInDateTime, label: Last activity, kind: relativeTime }
+          - { field: daysInactive, label: Days inactive, kind: number }
+          - { field: onPremisesSyncEnabled, label: Synced from AD, kind: boolean }
+          - { field: onPremisesLastSyncDateTime, label: Last directory sync, kind: relativeTime }
+      - widget: keyValue
+        id: intune
+        title: Intune
+        span: 12
+        data: intune
+        fields:
+          - { field: deviceName, label: Intune device name }
+          - field: complianceState
+            label: Compliance
+            kind: status
+            map: { compliant: [ok, Compliant], noncompliant: [crit, Not compliant], inGracePeriod: [warn, In grace period], unknown: [neutral, Unknown] }
+          - { field: managementAgent, label: Management agent }
+          - { field: managedDeviceOwnerType, label: Ownership }
+          - { field: userPrincipalName, label: Primary user }
+          - { field: lastSyncDateTime, label: Last check-in, kind: relativeTime }
+        empty:
+          title: Not enrolled in Intune
+          body: No Intune record matches this device id.
+
+  - id: people
+    label: Owner and users
+    layout:
+      - widget: table
+        id: owners
+        title: Registered owner
+        span: 6
+        data: owners.value
+        rowKey: id
+        columns:
+          - { field: displayName, label: Owner, kind: identity, secondary: userPrincipalName }
+          - { field: accountEnabled, label: Sign-in, kind: status, map: { "true": [ok, Allowed], "false": [crit, Blocked] } }
+        inspect:
+          page: identity.user
+          params:
+            id: ${ row.id }
+        empty:
+          title: No owner
+          body: Devices joined by a bulk enrolment token or Autopilot self-deploying mode have no owner.
+      - widget: table
+        id: users
+        title: Registered users
+        span: 6
+        data: users.value
+        rowKey: id
+        columns:
+          - { field: displayName, label: User, kind: identity, secondary: userPrincipalName }
+        inspect:
+          page: identity.user
+          params:
+            id: ${ row.id }
+        empty:
+          title: No registered users
+          body: No users are registered to this device.
+
+  - id: groups
+    label: Groups
+    layout:
+      - widget: table
+        id: groups
+        span: 12
+        data: groups.value
+        rowKey: id
+        columns:
+          - { field: displayName, label: Group }
+          - { field: groupTypes, label: Group types, kind: tags }
+          - { field: membershipRule, label: Membership rule, kind: code, hidden: true }
+        inspect:
+          page: identity.group
+          params:
+            id: ${ row.id }
+        empty:
+          title: Not in any group
+          body: Device groups target Intune policies, apps and Conditional Access filters.
+
+  - id: bitlocker
+    label: BitLocker
+    layout:
+      - widget: markdown
+        id: keyNote
+        span: 12
+        text: |
+          Recovery key **metadata** only — reading a key's value is a separately audited action in the Entra admin center.
+          Deleting this device deletes its escrowed keys.
+      - widget: table
+        id: keys
+        span: 12
+        data: keys.value
+        rowKey: id
+        columns:
+          - { field: id, label: Key id, kind: guid }
+          - { field: volumeType, label: Volume }
+          - { field: createdDateTime, label: Backed up, kind: datetime }
+        empty:
+          title: No recovery keys escrowed
+          body: Either BitLocker isn't enabled, or keys are escrowed elsewhere (AD DS, MBAM). Open this device from the Devices list if you came here directly.

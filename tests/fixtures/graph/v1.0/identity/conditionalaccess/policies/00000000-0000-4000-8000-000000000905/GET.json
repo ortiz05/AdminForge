@@ -1,0 +1,59 @@
+{
+  "id": "00000000-0000-4000-8000-000000000905",
+  "templateId": null,
+  "displayName": "CA005 – Block untrusted countries",
+  "createdDateTime": "2024-03-01T09:00:00Z",
+  "modifiedDateTime": "2026-10-14T15:00:00Z",
+  "state": "enabled",
+  "conditions": {
+    "userRiskLevels": [],
+    "signInRiskLevels": [],
+    "clientAppTypes": [
+      "all"
+    ],
+    "platforms": null,
+    "locations": {
+      "includeLocations": [
+        "00000000-0000-4000-8000-000000000a01"
+      ],
+      "excludeLocations": [
+        "AllTrusted"
+      ]
+    },
+    "devices": null,
+    "clientApplications": null,
+    "servicePrincipalRiskLevels": [],
+    "insiderRiskLevels": null,
+    "users": {
+      "includeUsers": [
+        "All"
+      ],
+      "excludeUsers": [],
+      "includeGroups": [],
+      "excludeGroups": [],
+      "includeRoles": [],
+      "excludeRoles": [],
+      "includeGuestsOrExternalUsers": null,
+      "excludeGuestsOrExternalUsers": null
+    },
+    "applications": {
+      "includeApplications": [
+        "All"
+      ],
+      "excludeApplications": [],
+      "includeUserActions": [],
+      "includeAuthenticationContextClassReferences": [],
+      "applicationFilter": null
+    }
+  },
+  "grantControls": {
+    "operator": "OR",
+    "builtInControls": [
+      "block"
+    ],
+    "customAuthenticationFactors": [],
+    "termsOfUse": [],
+    "authenticationStrength": null
+  },
+  "sessionControls": null
+}

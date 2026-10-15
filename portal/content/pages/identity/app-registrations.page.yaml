@@ -1,0 +1,220 @@
+$schema: ../../../packages/schemas/generated/page.schema.json
+kind: page
+id: identity.app-registrations
+version: 1.0.0
+title: App registrations
+summary: >-
+  Applications registered in this tenant, with credential expiry status, sign-in audience, API permission counts and
+  owners. Find apps with expired or expiring secrets and apps nobody owns.
+owner: identity-team
+tags: [identity, apps, credentials]
+template: list-detail
+nav: { section: identity, label: App registrations, icon: app-window, order: 40 }
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    graph: [Application.Read.All]
+  entraRoles: [Global Reader]
+
+params:
+  q: { type: string, default: "", label: Search, placeholder: App name starts with }
+  credentials:
+    type: enum
+    label: Credentials
+    facet: true
+    default: Any
+    values:
+      - { value: Any, label: Any }
+      - { value: expired, label: Has expired }
+      - { value: expiring, label: Expiring within 30 days }
+      - { value: ok, label: All valid }
+      - { value: none, label: No credentials }
+  audience:
+    type: enum
+    label: Audience
+    facet: true
+    default: Any
+    values:
+      - { value: Any, label: Any }
+      - { value: AzureADMyOrg, label: This organisation only }
+      - { value: AzureADMultipleOrgs, label: Any organisation }
+      - { value: AzureADandPersonalMicrosoftAccount, label: Organisations and personal accounts }
+      - { value: PersonalMicrosoftAccount, label: Personal accounts only }
+  owners: { type: enum, values: [Any, Owned, Ownerless], default: Any, label: Owners, facet: true }
+
+filters:
+  search: q
+  facets: [credentials, audience, owners]
+
+savedViews:
+  enabled: true
+  shared: true
+  presets:
+    - { name: Expired credentials, params: { credentials: expired } }
+    - { name: Expiring in 30 days, params: { credentials: expiring } }
+    - { name: Ownerless apps, params: { owners: Ownerless } }
+    - { name: Multi-tenant apps, params: { audience: AzureADMultipleOrgs } }
+
+datasources:
+  apps:
+    source: graph
+    request:
+      path: /applications
+      # No ConsistencyLevel/$search here: advanced queries can't be combined with $expand.
+      query:
+        $select: id,appId,displayName,createdDateTime,signInAudience,publisherDomain,passwordCredentials,keyCredentials,requiredResourceAccess,web,spa,publicClient,notes,serviceManagementReference,verifiedPublisher
+        $expand: owners($select=id,displayName,userPrincipalName)
+        $top: 100
+        $filter: >-
+          ${ $join([
+               params.audience != 'Any' ? 'signInAudience eq ' & $odata(params.audience),
+               params.q ? 'startswith(displayName, ' & $odata(params.q) & ')'
+             ][$], ' and ') }
+    # All pages are loaded (apps are usually < 10k) so credential and owner facets filter the whole set.
+    paging: all
+    maxItems: 20000
+    cache: { ttl: 300 }
+    transform: >-
+      ${ (
+        $rows := [value.value.(
+          $creds := $append(passwordCredentials.{ "type": "Secret", "end": endDateTime }, keyCredentials.{ "type": "Certificate", "end": endDateTime });
+          $days := [$creds[end].$daysUntil(end)];
+          $next := $count($days[$ >= 0]) > 0 ? $min($days[$ >= 0]) : null;
+          {
+            "id": id,
+            "appId": appId,
+            "displayName": displayName,
+            "audience": signInAudience,
+            "publisherDomain": publisherDomain,
+            "created": createdDateTime,
+            "secrets": $count(passwordCredentials),
+            "certificates": $count(keyCredentials),
+            "nextExpiryDays": $next,
+            "credentialState": $count($creds) = 0 ? 'none'
+                               : $count($days[$ < 0]) > 0 ? 'expired'
+                               : $next != null and $next <= 30 ? 'expiring' : 'ok',
+            "apiPermissions": $count(requiredResourceAccess.resourceAccess),
+            "applicationPermissions": $count(requiredResourceAccess.resourceAccess[type = 'Role']),
+            "platforms": [web.redirectUris ? 'Web', spa.redirectUris ? 'SPA', publicClient.redirectUris ? 'Mobile/desktop'],
+            "ownerCount": $count(owners),
+            "ownerNames": $join(owners.displayName, ', '),
+            "verifiedPublisher": verifiedPublisher.displayName,
+            "serviceManagementReference": serviceManagementReference,
+            "notes": notes
+          }
+        )];
+        $shown := $rows[
+          ($$.params.credentials = 'Any' or credentialState = $$.params.credentials)
+          and ($$.params.owners = 'Owned' ? ownerCount > 0 : $$.params.owners = 'Ownerless' ? ownerCount = 0 : true)
+        ];
+        {
+          "rows": [$shown^(credentialState = 'expired' ? 0 : credentialState = 'expiring' ? 1 : 2, displayName)],
+          "total": $count($rows),
+          "expired": $count($rows[credentialState = 'expired']),
+          "expiring": $count($rows[credentialState = 'expiring']),
+          "ownerless": $count($rows[ownerCount = 0])
+        }
+      ) }
+
+layout:
+  - widget: kpi
+    id: total
+    data: apps.total
+    label: App registrations
+    format: number
+  - widget: kpi
+    id: expired
+    data: apps.expired
+    label: With expired credentials
+    format: number
+    status: "${ value > 0 ? 'crit' : 'ok' }"
+    href: /p/identity.app-registrations?credentials=expired
+  - widget: kpi
+    id: expiring
+    data: apps.expiring
+    label: Expiring within 30 days
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+    href: /p/identity.app-registrations?credentials=expiring
+  - widget: kpi
+    id: ownerless
+    data: apps.ownerless
+    label: Without owners
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+    href: /p/identity.app-registrations?owners=Ownerless
+  - widget: table
+    id: apps
+    span: 12
+    data: apps.rows
+    rowKey: id
+    selection: multi
+    columns:
+      - { field: displayName, label: Application, kind: identity, secondary: appId, sortable: true }
+      - field: credentialState
+        label: Credentials
+        kind: status
+        map: { expired: [crit, Expired], expiring: [warn, Expiring soon], ok: [ok, Valid], none: [neutral, None] }
+        filter: { type: facet, param: credentials }
+      - { field: nextExpiryDays, label: Next expiry (days), kind: number, filter: range, sortable: true }
+      - { field: secrets, label: Secrets, kind: number }
+      - { field: certificates, label: Certificates, kind: number }
+      - field: audience
+        label: Audience
+        kind: status
+        map: { AzureADMyOrg: [neutral, Single tenant], AzureADMultipleOrgs: [info, Multi-tenant], AzureADandPersonalMicrosoftAccount: [warn, Multi-tenant + personal], PersonalMicrosoftAccount: [warn, Personal only] }
+        filter: { type: facet, param: audience }
+      - { field: ownerCount, label: Owners, kind: number, filter: range }
+      - { field: ownerNames, label: Owner names, hidden: true }
+      - { field: apiPermissions, label: API permissions, kind: number }
+      - { field: applicationPermissions, label: Application permissions, kind: number, hidden: true }
+      - { field: platforms, label: Platforms, kind: tags, hidden: true }
+      - { field: verifiedPublisher, label: Verified publisher, hidden: true }
+      - { field: serviceManagementReference, label: Service reference, hidden: true }
+      - { field: created, label: Created, kind: date, filter: date }
+      - { field: id, label: Object id, kind: guid, hidden: true }
+    inspect:
+      page: identity.app-registration
+      params:
+        id: ${ row.id }
+        appId: ${ row.appId }
+    rowActions:
+      - playbook: identity.rotate-app-secret
+        label: Rotate secret
+        icon: key
+        inputs:
+          appObjectId: ${ row.id }
+        when: ${ row.secrets > 0 }
+      - playbook: identity.remove-expired-app-credentials
+        label: Remove expired secrets
+        icon: broom
+        inputs:
+          appObjectId: ${ row.id }
+        when: ${ row.credentialState = 'expired' }
+      - playbook: identity.add-app-owner
+        label: Add owner
+        icon: user-plus
+        inputs:
+          appObjectId: ${ row.id }
+      - label: Open in Entra admin center
+        icon: arrow-square-out
+        href: "https://entra.microsoft.com/#view/Microsoft_AAD_RegisteredApps/ApplicationMenuBlade/~/Overview/appId/${ $encode(row.appId) }"
+    bulkActions:
+      - playbook: identity.remove-expired-app-credentials
+        label: Remove expired secrets
+        icon: broom
+        forEach:
+          inputs:
+            appObjectId: ${ row.id }
+          concurrency: 3
+        maxItems: 100
+        when: ${ $count(rows[credentialState = 'expired']) = $count(rows) }
+    empty:
+      title: No app registrations match
+      body: Clear the filters or the search.
+
+export:
+  formats: [csv, xlsx]
+  fileName: app-registrations
+  data: apps.rows
+  columns: visible

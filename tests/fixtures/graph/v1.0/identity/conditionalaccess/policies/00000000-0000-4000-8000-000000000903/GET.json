@@ -1,0 +1,77 @@
+{
+  "id": "00000000-0000-4000-8000-000000000903",
+  "templateId": null,
+  "displayName": "CA003 – Phishing-resistant MFA for admins",
+  "createdDateTime": "2024-03-01T09:00:00Z",
+  "modifiedDateTime": "2026-09-18T09:00:00Z",
+  "state": "enabled",
+  "conditions": {
+    "userRiskLevels": [],
+    "signInRiskLevels": [],
+    "clientAppTypes": [
+      "all"
+    ],
+    "platforms": null,
+    "locations": null,
+    "devices": null,
+    "clientApplications": null,
+    "servicePrincipalRiskLevels": [],
+    "insiderRiskLevels": null,
+    "users": {
+      "includeUsers": [],
+      "excludeUsers": [
+        "00000000-0000-4000-8000-000000000110"
+      ],
+      "includeGroups": [],
+      "excludeGroups": [],
+      "includeRoles": [
+        "62e90394-69f5-4237-9190-012177145e10",
+        "e8611ab8-c189-46e8-94e1-60213ab1f814",
+        "194ae4cb-b126-40b2-bd5b-6091b380977d",
+        "fe930be7-5e62-47db-91af-98c3a49a38b1"
+      ],
+      "excludeRoles": [],
+      "includeGuestsOrExternalUsers": null,
+      "excludeGuestsOrExternalUsers": null
+    },
+    "applications": {
+      "includeApplications": [
+        "All"
+      ],
+      "excludeApplications": [],
+      "includeUserActions": [],
+      "includeAuthenticationContextClassReferences": [],
+      "applicationFilter": null
+    }
+  },
+  "grantControls": {
+    "operator": "OR",
+    "builtInControls": [],
+    "customAuthenticationFactors": [],
+    "termsOfUse": [],
+    "authenticationStrength": {
+      "id": "00000000-0000-0000-0000-000000000004",
+      "displayName": "Phishing-resistant MFA",
+      "policyType": "builtIn",
+      "requirementsSatisfied": "mfa",
+      "allowedCombinations": [
+        "windowsHelloForBusiness",
+        "fido2",
+        "x509CertificateMultiFactor"
+      ]
+    }
+  },
+  "sessionControls": {
+    "signInFrequency": {
+      "value": 4,
+      "type": "hours",
+      "authenticationType": "primaryAndSecondaryAuthentication",
+      "frequencyInterval": "timeBased",
+      "isEnabled": true
+    },
+    "persistentBrowser": null,
+    "cloudAppSecurity": null,
+    "applicationEnforcedRestrictions": null,
+    "disableResilienceDefaults": false
+  }
+}

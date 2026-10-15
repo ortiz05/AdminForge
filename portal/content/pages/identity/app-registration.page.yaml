@@ -1,0 +1,306 @@
+$schema: ../../../packages/schemas/generated/page.schema.json
+kind: page
+id: identity.app-registration
+version: 1.0.0
+title: App registration
+summary: One app registration — credentials and expiry, federated credentials, API permissions, redirect URIs, owners and its enterprise app.
+owner: identity-team
+tags: [identity, apps, credentials]
+template: entity
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    graph: [Application.Read.All]
+  entraRoles: [Global Reader]
+
+params:
+  id: { type: guid, label: App registration (object id), required: true, hidden: true }
+  appId: { type: string, label: Application (client) id, hidden: true, format: guid }
+
+datasources:
+  app:
+    source: graphBatch
+    requests:
+      app:
+        path: /applications/${ $encode($guid(params.id)) }
+        query:
+          $select: id,appId,displayName,description,createdDateTime,signInAudience,publisherDomain,passwordCredentials,keyCredentials,requiredResourceAccess,web,spa,publicClient,identifierUris,notes,serviceManagementReference,verifiedPublisher,tags
+      # Microsoft Graph's own service principal, to name Graph permission ids (the same in every tenant).
+      graph:
+        path: /servicePrincipals
+        query:
+          $filter: appId eq '00000003-0000-0000-c000-000000000000'
+          $select: id,appId,displayName,appRoles,oauth2PermissionScopes
+    cache: { ttl: 300 }
+    transform: >-
+      ${ (
+        $a := value.app;
+        $g := value.graph.value[0];
+        $resources := {
+          "00000003-0000-0000-c000-000000000000": "Microsoft Graph",
+          "00000002-0000-0ff1-ce00-000000000000": "Office 365 Exchange Online",
+          "00000003-0000-0ff1-ce00-000000000000": "SharePoint",
+          "797f4846-ba00-4fd7-ba43-dac1f8f63013": "Azure Service Management",
+          "00000002-0000-0000-c000-000000000000": "Azure AD Graph (retired)",
+          "ca7f3f0b-7d91-482c-8e09-c5d840d0eac5": "Log Analytics API"
+        };
+        $cred := function($c, $type) {
+          (
+            $d := $c.endDateTime ? $daysUntil($c.endDateTime) : 36500;
+            {
+              "keyId": $c.keyId,
+              "type": $type,
+              "name": $c.displayName ? $c.displayName : $c.keyId,
+              "hint": $c.hint,
+              "start": $c.startDateTime,
+              "end": $c.endDateTime,
+              "daysRemaining": $d,
+              "state": $d < 0 ? 'expired' : $d <= 30 ? 'expiring' : 'ok'
+            }
+          )
+        };
+        $creds := $append([$a.passwordCredentials.$cred($, 'Secret')], [$a.keyCredentials.$cred($, 'Certificate')]);
+        $perms := [$a.requiredResourceAccess.(
+          $res := resourceAppId;
+          resourceAccess.(
+            $pid := id;
+            $isGraph := $res = '00000003-0000-0000-c000-000000000000';
+            $name := type = 'Role' ? $g.appRoles[id = $pid][0].value : $g.oauth2PermissionScopes[id = $pid][0].value;
+            {
+              "key": $res & '|' & $pid,
+              "resource": $lookup($resources, $res) ? $lookup($resources, $res) : $res,
+              "permission": $isGraph and $name ? $name : $pid,
+              "type": type = 'Role' ? 'Application' : 'Delegated'
+            }
+          )
+        )];
+        $merge([$a, {
+          "credentials": [$creds^(daysRemaining)],
+          "credentialState": $count($creds[state = 'expired']) > 0 ? 'expired' : $count($creds[state = 'expiring']) > 0 ? 'expiring' : $count($creds) = 0 ? 'none' : 'ok',
+          "permissions": [$perms^(resource, type, permission)],
+          "applicationPermissionCount": $count($perms[type = 'Application']),
+          "redirects": $append($append(
+            [$a.web.redirectUris.{ "key": 'web|' & $, "platform": "Web", "uri": $ }],
+            [$a.spa.redirectUris.{ "key": 'spa|' & $, "platform": "Single-page app", "uri": $ }]),
+            [$a.publicClient.redirectUris.{ "key": 'public|' & $, "platform": "Mobile and desktop", "uri": $ }]),
+          "implicitIdTokens": $a.web.implicitGrantSettings.enableIdTokenIssuance,
+          "implicitAccessTokens": $a.web.implicitGrantSettings.enableAccessTokenIssuance,
+          "verifiedPublisherName": $a.verifiedPublisher.displayName
+        }])
+      ) }
+  owners:
+    source: graph
+    request:
+      path: /applications/${ $encode($guid(params.id)) }/owners
+      query:
+        $select: id,displayName,userPrincipalName,mail,accountEnabled
+    cache: { ttl: 60 }
+  federated:
+    source: graph
+    request:
+      path: /applications/${ $encode($guid(params.id)) }/federatedIdentityCredentials
+    cache: { ttl: 300 }
+  sp:
+    source: graph
+    when: ${ $boolean(params.appId) = true }
+    request:
+      path: /servicePrincipals
+      query:
+        $filter: ${ 'appId eq ' & $odata($guid(params.appId)) }
+        $select: id,appId,displayName,accountEnabled,appRoleAssignmentRequired,servicePrincipalType,preferredSingleSignOnMode,notificationEmailAddresses
+    cache: { ttl: 300 }
+    transform: ${ value.value[0] }
+
+header:
+  title: ${ app.displayName }
+  subtitle: "${ app.appId & ' · ' & app.signInAudience }"
+  status: "${ app.credentialState = 'expired' ? 'crit' : app.credentialState = 'expiring' ? 'warn' : 'ok' }"
+  statusLabel: "${ app.credentialState = 'expired' ? 'Expired credentials' : app.credentialState = 'expiring' ? 'Credentials expiring soon' : app.credentialState = 'none' ? 'No credentials' : 'Credentials valid' }"
+  ids:
+    Application (client) id: ${ app.appId }
+    Object id: ${ app.id }
+
+actions:
+  - playbook: identity.rotate-app-secret
+    label: Rotate secret
+    icon: key
+    inputs:
+      appObjectId: ${ params.id }
+  - playbook: identity.remove-expired-app-credentials
+    label: Remove expired secrets
+    icon: broom
+    inputs:
+      appObjectId: ${ params.id }
+    when: ${ app.credentialState = 'expired' }
+  - playbook: identity.add-app-owner
+    label: Add owner
+    icon: user-plus
+    inputs:
+      appObjectId: ${ params.id }
+  - label: Open enterprise app
+    icon: app-window
+    href: "/p/identity.enterprise-app?id=${ $encode(sp.id) }&appId=${ $encode(app.appId) }"
+    when: ${ $exists(sp.id) }
+  - label: Open in Entra admin center
+    icon: arrow-square-out
+    href: "https://entra.microsoft.com/#view/Microsoft_AAD_RegisteredApps/ApplicationMenuBlade/~/Overview/appId/${ $encode(app.appId) }"
+
+tabs:
+  - id: overview
+    label: Overview
+    layout:
+      - widget: keyValue
+        id: properties
+        title: Properties
+        span: 6
+        data: app
+        fields:
+          - { field: description, label: Description }
+          - field: signInAudience
+            label: Audience
+            kind: status
+            map: { AzureADMyOrg: [neutral, This organisation only], AzureADMultipleOrgs: [info, Any organisation], AzureADandPersonalMicrosoftAccount: [warn, Organisations and personal accounts], PersonalMicrosoftAccount: [warn, Personal accounts only] }
+          - { field: publisherDomain, label: Publisher domain }
+          - { field: verifiedPublisherName, label: Verified publisher }
+          - { field: identifierUris, label: Application ID URIs, kind: tags }
+          - { field: serviceManagementReference, label: Service reference }
+          - { field: tags, label: Tags, kind: tags }
+          - { field: notes, label: Notes }
+          - { field: createdDateTime, label: Created, kind: datetime }
+      - widget: keyValue
+        id: enterpriseApp
+        title: Enterprise app in this tenant
+        span: 6
+        data: sp
+        fields:
+          - { field: displayName, label: Name }
+          - { field: accountEnabled, label: Sign-in, kind: status, map: { "true": [ok, Enabled], "false": [crit, Disabled] } }
+          - { field: appRoleAssignmentRequired, label: Assignment required, kind: boolean }
+          - { field: preferredSingleSignOnMode, label: Single sign-on mode }
+          - { field: notificationEmailAddresses, label: Notification emails, kind: tags }
+        empty:
+          title: No enterprise app found
+          body: Open this page from the App registrations list to see the matching enterprise app (service principal).
+
+  - id: credentials
+    label: Credentials
+    layout:
+      - widget: table
+        id: credentials
+        title: Secrets and certificates
+        span: 12
+        data: app.credentials
+        rowKey: keyId
+        columns:
+          - { field: name, label: Description }
+          - { field: type, label: Type, filter: facet }
+          - field: state
+            label: Status
+            kind: status
+            map: { expired: [crit, Expired], expiring: [warn, Expires within 30 days], ok: [ok, Valid] }
+            filter: facet
+          - { field: end, label: Expires, kind: date }
+          - { field: daysRemaining, label: Days left, kind: number }
+          - { field: hint, label: Secret hint, kind: code, hidden: true }
+          - { field: start, label: Created, kind: date, hidden: true }
+          - { field: keyId, label: Key id, kind: guid, hidden: true }
+        empty:
+          title: No secrets or certificates
+          body: This app has no client credentials (it may use federated credentials or be a public client).
+      - widget: table
+        id: federated
+        title: Federated credentials (workload identity federation)
+        span: 12
+        data: federated.value
+        rowKey: id
+        columns:
+          - { field: name, label: Name }
+          - { field: issuer, label: Issuer, kind: code }
+          - { field: subject, label: Subject, kind: code }
+          - { field: audiences, label: Audiences, kind: tags, hidden: true }
+          - { field: description, label: Description, hidden: true }
+        empty:
+          title: No federated credentials
+          body: Federated credentials (GitHub Actions, Kubernetes, other clouds) remove the need for secrets.
+
+  - id: permissions
+    label: API permissions
+    layout:
+      - widget: kpi
+        id: applicationPermissions
+        data: app.applicationPermissionCount
+        label: Application permissions requested
+        format: number
+        status: "${ value > 0 ? 'warn' : 'neutral' }"
+      - widget: table
+        id: permissions
+        span: 12
+        data: app.permissions
+        rowKey: key
+        columns:
+          - { field: resource, label: API, filter: facet }
+          - { field: permission, label: Permission, kind: code }
+          - { field: type, label: Type, kind: status, map: { Application: [warn, Application], Delegated: [info, Delegated] }, filter: facet }
+        empty:
+          title: No API permissions requested
+          body: This app requests no permissions (sign-in only).
+      - widget: markdown
+        id: consentNote
+        span: 12
+        text: |
+          These are the permissions the app **requests**. What has actually been **granted** (admin or user consent)
+          is on its enterprise app's *Permissions* tab.
+
+  - id: authentication
+    label: Authentication
+    layout:
+      - widget: table
+        id: redirects
+        title: Redirect URIs
+        span: 8
+        data: app.redirects
+        rowKey: key
+        columns:
+          - { field: platform, label: Platform, filter: facet }
+          - { field: uri, label: Redirect URI, kind: code }
+        empty:
+          title: No redirect URIs
+          body: This app doesn't sign users in interactively.
+      - widget: keyValue
+        id: implicit
+        title: Implicit grant
+        description: Implicit flow is legacy; leave both off unless an old SPA needs it.
+        span: 4
+        data: app
+        fields:
+          - { field: implicitIdTokens, label: ID tokens, kind: status, map: { "true": [warn, On], "false": [ok, Off] } }
+          - { field: implicitAccessTokens, label: Access tokens, kind: status, map: { "true": [crit, On], "false": [ok, Off] } }
+
+  - id: owners
+    label: Owners
+    layout:
+      - widget: table
+        id: owners
+        span: 12
+        data: owners.value
+        rowKey: id
+        columns:
+          - { field: displayName, label: Owner, kind: identity, secondary: userPrincipalName }
+          - { field: accountEnabled, label: Sign-in, kind: status, map: { "true": [ok, Allowed], "false": [crit, Blocked] } }
+          - { field: id, label: Object id, kind: guid, hidden: true }
+        inspect:
+          page: identity.user
+          params:
+            id: ${ row.id }
+        rowActions:
+          - playbook: identity.remove-app-owner
+            label: Remove owner
+            icon: user-minus
+            inputs:
+              appObjectId: ${ params.id }
+              ownerId: ${ row.id }
+            when: ${ $count(owners.value) > 1 }
+        empty:
+          title: No owners
+          body: Nobody is accountable for this app. Add at least two owners.
+          action: { playbook: identity.add-app-owner, label: Add owner, inputs: { appObjectId: "${ params.id }" } }

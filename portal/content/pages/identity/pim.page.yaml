@@ -1,0 +1,243 @@
+$schema: ../../../packages/schemas/generated/page.schema.json
+kind: page
+id: identity.pim
+version: 1.0.0
+title: Privileged Identity Management
+summary: >-
+  Your eligible and active Microsoft Entra roles (activate in one click), plus every eligible assignment, current
+  activation and pending activation request in the tenant.
+owner: identity-team
+tags: [identity, pim, privileged-access]
+template: list-detail
+nav: { section: identity, label: PIM, icon: lightning, order: 35 }
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    graph: [RoleEligibilitySchedule.Read.Directory, RoleAssignmentSchedule.Read.Directory, RoleManagement.Read.Directory, Directory.Read.All]
+  licences: [pim]
+
+params:
+  view:
+    type: enum
+    label: Tenant view
+    facet: true
+    default: Eligible
+    values:
+      - { value: Eligible, label: Eligible assignments }
+      - { value: Activated, label: Current activations }
+      - { value: Pending, label: Pending requests }
+
+filters:
+  facets: [view]
+
+datasources:
+  mine:
+    source: graphBatch
+    requests:
+      eligible:
+        path: /roleManagement/directory/roleEligibilityScheduleInstances
+        query: { $filter: "${ 'principalId eq ' & $odata(user.oid) }", $expand: roleDefinition }
+      active:
+        path: /roleManagement/directory/roleAssignmentScheduleInstances
+        query: { $filter: "${ 'principalId eq ' & $odata(user.oid) }", $expand: roleDefinition }
+    cache: { ttl: 30 }
+    transform: >-
+      ${ (
+        $active := [value.active.value];
+        {
+          "eligible": [value.eligible.value.(
+            $rid := roleDefinitionId;
+            $scope := directoryScopeId;
+            $on := $active[roleDefinitionId = $rid and directoryScopeId = $scope][0];
+            {
+              "id": id,
+              "roleId": roleDefinitionId,
+              "role": roleDefinition.displayName,
+              "scopeId": directoryScopeId,
+              "scope": directoryScopeId = '/' ? 'Directory' : directoryScopeId,
+              "state": $on ? 'Active' : 'Eligible',
+              "activeUntil": $on.endDateTime,
+              "eligibleUntil": endDateTime
+            }
+          )],
+          "active": [$active.{
+            "id": id,
+            "roleId": roleDefinitionId,
+            "role": roleDefinition.displayName,
+            "assignmentType": assignmentType,
+            "scope": directoryScopeId = '/' ? 'Directory' : directoryScopeId,
+            "start": startDateTime,
+            "end": endDateTime
+          }],
+          "eligibleCount": $count(value.eligible.value),
+          "activeCount": $count($active)
+        }
+      ) }
+  tenant:
+    source: graphBatch
+    requests:
+      definitions: { path: /roleManagement/directory/roleDefinitions, query: { $select: "id,displayName" } }
+      eligible: { path: /roleManagement/directory/roleEligibilityScheduleInstances, query: { $expand: principal } }
+      activations: { path: /roleManagement/directory/roleAssignmentScheduleInstances, query: { $filter: "assignmentType eq 'Activated'", $expand: principal } }
+      pending: { path: /roleManagement/directory/roleAssignmentScheduleRequests, query: { $filter: "status eq 'PendingApproval'", $expand: principal } }
+    cache: { ttl: 120 }
+    transform: >-
+      ${ (
+        $defs := [value.definitions.value];
+        $name := function($rid) { $defs[id = $rid][0].displayName };
+        $row := function($i) {
+          {
+            "id": $i.id,
+            "role": $name($i.roleDefinitionId),
+            "roleId": $i.roleDefinitionId,
+            "principalId": $i.principalId,
+            "principalName": $i.principal.displayName,
+            "principalDetail": $i.principal.userPrincipalName ? $i.principal.userPrincipalName : $i.principal.appId,
+            "memberType": $i.memberType,
+            "scope": $i.directoryScopeId = '/' ? 'Directory' : $i.directoryScopeId,
+            "start": $i.startDateTime ? $i.startDateTime : $i.scheduleInfo.startDateTime,
+            "end": $i.endDateTime ? $i.endDateTime : $i.scheduleInfo.expiration.endDateTime,
+            "justification": $i.justification,
+            "created": $i.createdDateTime
+          }
+        };
+        {
+          "eligible": [value.eligible.value.$row($)],
+          "activations": [value.activations.value.$row($)],
+          "pending": [value.pending.value.$row($)],
+          "activationCount": $count(value.activations.value),
+          "pendingCount": $count(value.pending.value)
+        }
+      ) }
+
+layout:
+  - widget: kpi
+    id: myEligible
+    data: mine.eligibleCount
+    label: Roles you can activate
+    format: number
+  - widget: kpi
+    id: myActive
+    data: mine.activeCount
+    label: Roles active for you
+    format: number
+  - widget: kpi
+    id: activationsNow
+    data: tenant.activationCount
+    label: Activations in the tenant now
+    format: number
+  - widget: kpi
+    id: pendingRequests
+    data: tenant.pendingCount
+    label: Requests awaiting approval
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+    href: /p/identity.pim?view=Pending
+
+  - widget: table
+    id: myRoles
+    title: My eligible roles
+    span: 6
+    data: mine.eligible
+    rowKey: id
+    columns:
+      - { field: role, label: Role }
+      - { field: scope, label: Scope }
+      - { field: state, label: State, kind: status, map: { Active: [ok, Active], Eligible: [neutral, Eligible] } }
+      - { field: activeUntil, label: Active until, kind: datetime }
+      - { field: eligibleUntil, label: Eligible until, kind: date, hidden: true }
+    rowActions:
+      - playbook: identity.pim-activate
+        label: Activate
+        icon: lightning
+        inputs:
+          roleDefinitionId: ${ row.roleId }
+          directoryScopeId: ${ row.scopeId }
+        when: ${ row.state = 'Eligible' }
+    empty:
+      title: You have no eligible roles
+      body: Ask a Privileged Role Administrator for an eligible assignment instead of a permanent one.
+  - widget: table
+    id: myActive
+    title: My active roles
+    span: 6
+    data: mine.active
+    rowKey: id
+    columns:
+      - { field: role, label: Role }
+      - { field: assignmentType, label: How, kind: status, map: { Activated: [info, Activated], Assigned: [warn, Permanent] } }
+      - { field: scope, label: Scope }
+      - { field: end, label: Ends, kind: relativeTime }
+    inspect:
+      page: identity.role
+      params:
+        id: ${ row.roleId }
+    empty:
+      title: No active roles
+      body: Activate an eligible role when you need it.
+
+  - widget: table
+    id: tenantEligible
+    title: Eligible assignments
+    span: 12
+    when: ${ params.view = 'Eligible' }
+    data: tenant.eligible
+    rowKey: id
+    columns:
+      - { field: principalName, label: Holder, kind: identity, secondary: principalDetail }
+      - { field: role, label: Role, filter: facet }
+      - { field: memberType, label: Via, filter: facet }
+      - { field: scope, label: Scope }
+      - { field: end, label: Eligible until, kind: date, filter: date }
+      - { field: principalId, label: Principal id, kind: guid, hidden: true }
+    inspect:
+      page: identity.role
+      params:
+        id: ${ row.roleId }
+    empty:
+      title: No eligible assignments
+      body: Nobody is eligible for a directory role. Convert standing admin access to eligible assignments in PIM.
+  - widget: table
+    id: tenantActivations
+    title: Current activations
+    span: 12
+    when: ${ params.view = 'Activated' }
+    data: tenant.activations
+    rowKey: id
+    columns:
+      - { field: principalName, label: Holder, kind: identity, secondary: principalDetail }
+      - { field: role, label: Role, filter: facet }
+      - { field: start, label: Activated, kind: relativeTime }
+      - { field: end, label: Expires, kind: datetime }
+    inspect:
+      page: identity.role
+      params:
+        id: ${ row.roleId }
+    empty:
+      title: No activations right now
+      body: Nobody has an activated role at the moment.
+  - widget: table
+    id: tenantPending
+    title: Pending activation requests
+    span: 12
+    when: ${ params.view = 'Pending' }
+    data: tenant.pending
+    rowKey: id
+    columns:
+      - { field: principalName, label: Requested by, kind: identity, secondary: principalDetail }
+      - { field: role, label: Role }
+      - { field: justification, label: Justification }
+      - { field: created, label: Requested, kind: relativeTime }
+    rowActions:
+      - label: Approve in PIM
+        icon: arrow-square-out
+        href: https://entra.microsoft.com/#view/Microsoft_Azure_PIMCommon/ApproveRequestMenuBlade/~/aadmigratedroles
+    empty:
+      title: Nothing waiting for approval
+      body: Activation requests that need approval appear here.
+
+export:
+  formats: [csv, xlsx]
+  fileName: pim-eligible-assignments
+  data: tenant.eligible
+  columns: all

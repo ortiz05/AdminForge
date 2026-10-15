@@ -1,0 +1,56 @@
+{
+  "@odata.type": "#microsoft.graph.windows10CompliancePolicy",
+  "id": "00000000-0000-4000-8000-000000000701",
+  "displayName": "Windows – Baseline compliance",
+  "description": "BitLocker, Secure Boot, Defender, minimum Windows 11 23H2",
+  "createdDateTime": "2024-01-10T09:00:00Z",
+  "lastModifiedDateTime": "2026-08-01T09:00:00Z",
+  "version": 7,
+  "roleScopeTagIds": [
+    "0"
+  ],
+  "passwordRequired": true,
+  "passwordMinimumLength": 8,
+  "bitLockerEnabled": true,
+  "secureBootEnabled": true,
+  "codeIntegrityEnabled": true,
+  "osMinimumVersion": "10.0.22631",
+  "defenderEnabled": true,
+  "rtpEnabled": true,
+  "antivirusRequired": true,
+  "antiSpywareRequired": true,
+  "deviceThreatProtectionEnabled": true,
+  "deviceThreatProtectionRequiredSecurityLevel": "medium",
+  "tpmRequired": true,
+  "storageRequireEncryption": false,
+  "earlyLaunchAntiMalwareDriverEnabled": false,
+  "assignments": [
+    {
+      "id": "asg-group-207",
+      "target": {
+        "@odata.type": "#microsoft.graph.groupAssignmentTarget",
+        "groupId": "00000000-0000-4000-8000-000000000207"
+      }
+    }
+  ],
+  "scheduledActionsForRule": [
+    {
+      "id": "rule-701",
+      "ruleName": null,
+      "scheduledActionConfigurations": [
+        {
+          "id": "sac-701-1",
+          "gracePeriodHours": 0,
+          "actionType": "block",
+          "notificationTemplateId": "00000000-0000-0000-0000-000000000000"
+        },
+        {
+          "id": "sac-701-2",
+          "gracePeriodHours": 24,
+          "actionType": "notification",
+          "notificationTemplateId": "00000000-0000-4000-8000-0000000007f1"
+        }
+      ]
+    }
+  ]
+}

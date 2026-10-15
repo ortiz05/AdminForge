@@ -1,0 +1,31 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#fixture",
+  "value": [
+    {
+      "id": "00000000-0000-4000-8000-000000000205",
+      "displayName": "GG-Engineering (AD)",
+      "description": "Engineering (synced from Active Directory)",
+      "mail": null,
+      "mailNickname": "GGEngineeringAD",
+      "mailEnabled": false,
+      "securityEnabled": true,
+      "groupTypes": [],
+      "membershipRule": null,
+      "membershipRuleProcessingState": null,
+      "onPremisesSyncEnabled": true,
+      "onPremisesLastSyncDateTime": "2026-10-15T03:30:00Z",
+      "onPremisesSamAccountName": "GG-Engineering",
+      "createdDateTime": "2019-04-02T09:00:00Z",
+      "renewedDateTime": "2019-04-02T09:00:00Z",
+      "expirationDateTime": null,
+      "visibility": null,
+      "isAssignableToRole": null,
+      "classification": null,
+      "proxyAddresses": [],
+      "resourceProvisioningOptions": [],
+      "assignedLicenses": [],
+      "hasMembersWithLicenseErrors": false
+    }
+  ],
+  "@odata.count": 1
+}

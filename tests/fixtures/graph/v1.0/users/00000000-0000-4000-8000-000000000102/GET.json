@@ -1,0 +1,83 @@
+{
+  "id": "00000000-0000-4000-8000-000000000102",
+  "displayName": "Morgan Chen",
+  "givenName": "Morgan",
+  "surname": "Chen",
+  "userPrincipalName": "m.chen@example.com",
+  "mail": "m.chen@example.com",
+  "otherMails": [],
+  "proxyAddresses": [
+    "SMTP:m.chen@example.com",
+    "smtp:m.chen@exampleorg.onmicrosoft.com"
+  ],
+  "accountEnabled": true,
+  "userType": "Member",
+  "department": "Finance",
+  "jobTitle": "Financial Analyst",
+  "companyName": "Example Org",
+  "officeLocation": "London",
+  "city": "London",
+  "country": "United Kingdom",
+  "usageLocation": "GB",
+  "mobilePhone": null,
+  "businessPhones": [],
+  "employeeId": "E2040",
+  "employeeType": "Employee",
+  "employeeHireDate": "2024-01-08T09:00:00Z",
+  "createdDateTime": "2024-01-08T09:00:00Z",
+  "creationType": null,
+  "externalUserState": null,
+  "externalUserStateChangeDateTime": null,
+  "onPremisesSyncEnabled": null,
+  "onPremisesLastSyncDateTime": null,
+  "onPremisesSamAccountName": null,
+  "onPremisesDomainName": null,
+  "onPremisesImmutableId": null,
+  "lastPasswordChangeDateTime": "2025-11-20T10:00:00Z",
+  "passwordPolicies": null,
+  "preferredLanguage": "en-US",
+  "signInSessionsValidFromDateTime": "2025-11-20T10:00:00Z",
+  "assignedLicenses": [
+    {
+      "skuId": "00000000-0000-4000-8000-000000001002",
+      "disabledPlans": []
+    },
+    {
+      "skuId": "00000000-0000-4000-8000-000000001004",
+      "disabledPlans": []
+    }
+  ],
+  "licenseAssignmentStates": [
+    {
+      "skuId": "00000000-0000-4000-8000-000000001002",
+      "assignedByGroup": null,
+      "state": "Active",
+      "error": "None",
+      "disabledPlans": [],
+      "lastUpdatedDateTime": "2026-09-01T09:00:00Z"
+    },
+    {
+      "skuId": "00000000-0000-4000-8000-000000001004",
+      "assignedByGroup": null,
+      "state": "Active",
+      "error": "None",
+      "disabledPlans": [],
+      "lastUpdatedDateTime": "2026-09-01T09:00:00Z"
+    }
+  ],
+  "signInActivity": {
+    "lastSignInDateTime": "2026-10-15T03:02:00Z",
+    "lastSignInRequestId": "00000000-0000-4000-8000-0000000005e1",
+    "lastNonInteractiveSignInDateTime": "2026-10-15T03:30:00Z",
+    "lastNonInteractiveSignInRequestId": "00000000-0000-4000-8000-0000000005e2",
+    "lastSuccessfulSignInDateTime": "2026-10-15T03:02:00Z",
+    "lastSuccessfulSignInRequestId": null
+  },
+  "manager": {
+    "@odata.type": "#microsoft.graph.user",
+    "id": "00000000-0000-4000-8000-000000000101",
+    "displayName": "Adele Lee",
+    "userPrincipalName": "a.lee@example.com",
+    "mail": "a.lee@example.com"
+  }
+}

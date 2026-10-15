@@ -1,0 +1,112 @@
+$schema: ../../../packages/schemas/generated/page.schema.json
+kind: page
+id: identity.named-locations
+version: 1.0.0
+title: Named locations
+summary: IP ranges and countries used by Conditional Access — which are trusted, what they contain, and when they changed.
+owner: identity-team
+tags: [identity, conditional-access]
+template: list-detail
+nav: { section: identity, label: Named locations, icon: map-pin, order: 75 }
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    graph: [Policy.Read.All]
+  entraRoles: [Security Reader]
+  licences: [conditionalAccess]
+
+params:
+  q: { type: string, default: "", label: Search, placeholder: Location name }
+  type: { type: enum, values: [Any, IP ranges, Countries], default: Any, label: Type, facet: true }
+  trusted: { type: enum, values: [Any, Trusted, Untrusted], default: Any, label: Trust, facet: true }
+
+filters:
+  search: q
+  facets: [type, trusted]
+
+datasources:
+  locations:
+    source: graph
+    request:
+      path: /identity/conditionalAccess/namedLocations
+    paging: all
+    maxItems: 2000
+    cache: { ttl: 300 }
+    transform: >-
+      ${ (
+        $q := $lowercase(params.q ? params.q : '');
+        $rows := [value.value.(
+          $ip := `@odata.type` = '#microsoft.graph.ipNamedLocation';
+          {
+            "id": id,
+            "displayName": displayName,
+            "type": $ip ? 'IP ranges' : 'Countries',
+            "trusted": $ip ? isTrusted = true : false,
+            "entries": $ip ? [ipRanges.cidrAddress] : [countriesAndRegions],
+            "count": $ip ? $count(ipRanges) : $count(countriesAndRegions),
+            "unknownCountries": $ip ? null : includeUnknownCountriesAndRegions,
+            "lookup": $ip ? null : countryLookupMethod,
+            "modified": modifiedDateTime,
+            "created": createdDateTime
+          }
+        )];
+        {
+          "rows": [$rows[
+            ($$.params.type = 'Any' or type = $$.params.type)
+            and ($$.params.trusted = 'Any' or ($$.params.trusted = 'Trusted') = trusted)
+            and ($q = '' or $contains($lowercase(displayName), $q))
+          ]^(displayName)],
+          "trusted": $count($rows[trusted]),
+          "ip": $count($rows[type = 'IP ranges']),
+          "countries": $count($rows[type = 'Countries'])
+        }
+      ) }
+
+layout:
+  - widget: kpi
+    id: ip
+    data: locations.ip
+    label: IP range locations
+    format: number
+  - widget: kpi
+    id: trusted
+    data: locations.trusted
+    label: Trusted
+    format: number
+  - widget: kpi
+    id: countries
+    data: locations.countries
+    label: Country locations
+    format: number
+  - widget: table
+    id: locations
+    span: 12
+    data: locations.rows
+    rowKey: id
+    columns:
+      - { field: displayName, label: Name, sortable: true }
+      - { field: type, label: Type, filter: { type: facet, param: type } }
+      - field: trusted
+        label: Trust
+        kind: status
+        map: { "true": [info, Trusted], "false": [neutral, Not trusted] }
+        filter: { type: facet, param: trusted }
+      - { field: count, label: Entries, kind: number }
+      - { field: entries, label: Ranges or countries, kind: tags }
+      - { field: lookup, label: Country lookup, hidden: true }
+      - { field: unknownCountries, label: Includes unknown countries, kind: boolean, hidden: true }
+      - { field: modified, label: Modified, kind: relativeTime }
+      - { field: id, label: Location id, kind: guid, hidden: true }
+    rowActions:
+      - label: Open in Entra admin center
+        icon: arrow-square-out
+        href: https://entra.microsoft.com/#view/Microsoft_AAD_ConditionalAccess/ConditionalAccessBlade/~/NamedLocations
+    empty:
+      title: No named locations
+      body: Named locations let Conditional Access treat office networks or countries differently.
+
+export:
+  formats: [csv, xlsx]
+  fileName: named-locations
+  data: locations.rows
+  columns: all

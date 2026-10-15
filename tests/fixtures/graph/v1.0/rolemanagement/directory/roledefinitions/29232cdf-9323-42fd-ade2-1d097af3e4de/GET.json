@@ -1,0 +1,20 @@
+{
+  "id": "29232cdf-9323-42fd-ade2-1d097af3e4de",
+  "templateId": "29232cdf-9323-42fd-ade2-1d097af3e4de",
+  "displayName": "Exchange Administrator",
+  "description": "Can manage all aspects of the Exchange product.",
+  "isBuiltIn": true,
+  "isEnabled": true,
+  "version": "1",
+  "resourceScopes": [
+    "/"
+  ],
+  "rolePermissions": [
+    {
+      "allowedResourceActions": [
+        "microsoft.office365.exchange/allEntities/basic/allTasks"
+      ],
+      "condition": null
+    }
+  ]
+}

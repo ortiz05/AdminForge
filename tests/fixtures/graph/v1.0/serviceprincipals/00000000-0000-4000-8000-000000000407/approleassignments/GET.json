@@ -1,0 +1,14 @@
+{
+  "value": [
+    {
+      "id": "ara-407-0",
+      "principalId": "00000000-0000-4000-8000-000000000407",
+      "principalType": "ServicePrincipal",
+      "principalDisplayName": "Legacy Automation",
+      "resourceId": "00000000-0000-4000-8000-000000000409",
+      "resourceDisplayName": "Microsoft Graph",
+      "appRoleId": "19dbc75e-c2e2-444c-a770-ec69d8559fc7",
+      "createdDateTime": "2019-08-01T09:00:00Z"
+    }
+  ]
+}

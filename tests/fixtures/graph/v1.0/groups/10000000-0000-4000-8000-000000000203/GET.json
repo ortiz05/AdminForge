@@ -1,0 +1,22 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#groups/$entity",
+  "id": "10000000-0000-4000-8000-000000000203",
+  "displayName": "Marketing Campaigns",
+  "description": "Campaign planning.",
+  "mail": "marketing-campaigns@example.com",
+  "visibility": "Public",
+  "groupTypes": [
+    "Unified"
+  ],
+  "resourceProvisioningOptions": [
+    "Team"
+  ],
+  "createdDateTime": "2025-06-02T09:00:00Z",
+  "renewedDateTime": "2026-06-17T09:00:00Z",
+  "expirationDateTime": "2027-06-17T09:00:00Z",
+  "membershipRule": null,
+  "onPremisesSyncEnabled": null,
+  "classification": null,
+  "mailEnabled": true,
+  "securityEnabled": false
+}

@@ -1,0 +1,43 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#Collection(microsoft.graph.riskyUserHistoryItem)",
+  "value": [
+    {
+      "id": "30000000-0000-4000-8000-000000000005",
+      "isDeleted": false,
+      "isProcessing": false,
+      "riskLastUpdatedDateTime": "2026-10-11T09:00:00Z",
+      "riskLevel": "high",
+      "riskState": "confirmedCompromised",
+      "riskDetail": "adminConfirmedUserCompromised",
+      "userDisplayName": "Eli O'Brien",
+      "userPrincipalName": "eli.obrien@example.com",
+      "userId": "30000000-0000-4000-8000-000000000005",
+      "initiatedBy": "alex.admin@example.com",
+      "activity": {
+        "eventTypes": [],
+        "riskEventTypes": [],
+        "detail": "adminConfirmedUserCompromised"
+      }
+    },
+    {
+      "id": "30000000-0000-4000-8000-000000000005",
+      "isDeleted": false,
+      "isProcessing": false,
+      "riskLastUpdatedDateTime": "2026-09-28T17:00:00Z",
+      "riskLevel": "medium",
+      "riskState": "atRisk",
+      "riskDetail": "none",
+      "userDisplayName": "Eli O'Brien",
+      "userPrincipalName": "eli.obrien@example.com",
+      "userId": "30000000-0000-4000-8000-000000000005",
+      "initiatedBy": null,
+      "activity": {
+        "eventTypes": [],
+        "riskEventTypes": [
+          "anonymizedIPAddress"
+        ],
+        "detail": "none"
+      }
+    }
+  ]
+}

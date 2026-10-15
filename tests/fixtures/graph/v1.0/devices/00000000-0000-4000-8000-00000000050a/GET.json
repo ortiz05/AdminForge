@@ -1,0 +1,24 @@
+{
+  "id": "00000000-0000-4000-8000-00000000050a",
+  "deviceId": "00000000-0000-4000-8001-00000000050a",
+  "displayName": "Galaxy S24 – S. Patel",
+  "operatingSystem": "AndroidForWork",
+  "operatingSystemVersion": "14.0",
+  "trustType": "Workplace",
+  "isCompliant": false,
+  "isManaged": true,
+  "accountEnabled": true,
+  "approximateLastSignInDateTime": "2026-10-11T19:00:00Z",
+  "registrationDateTime": "2025-03-12T09:00:00Z",
+  "profileType": "RegisteredDevice",
+  "manufacturer": "Samsung",
+  "model": "Galaxy S24",
+  "onPremisesSyncEnabled": null,
+  "onPremisesLastSyncDateTime": null,
+  "mdmAppId": "0000000a-0000-0000-c000-000000000000",
+  "complianceExpirationDateTime": null,
+  "physicalIds": [],
+  "extensionAttributes": {
+    "extensionAttribute1": null
+  }
+}

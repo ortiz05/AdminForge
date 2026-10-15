@@ -1,0 +1,216 @@
+$schema: ../../../packages/schemas/generated/report.schema.json
+kind: report
+id: endpoint.stale-devices
+version: 1.0.0
+title: Stale devices
+summary: >-
+  Microsoft Entra devices with no activity for the chosen number of days (cleanup candidates), and Intune-managed
+  devices that stopped checking in. Hybrid-joined devices must be removed in Active Directory.
+owner: endpoint-team
+tags: [endpoint, devices, hygiene, report]
+nav: { section: reports, label: Stale devices, icon: clock-counter-clockwise, order: 30 }
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    graph: [Device.Read.All]
+  entraRoles: [Global Reader]
+
+params:
+  days:
+    type: enum
+    label: Inactive for at least
+    facet: true
+    default: 90
+    values:
+      - { value: 60, label: 60 days }
+      - { value: 90, label: 90 days }
+      - { value: 180, label: 180 days }
+      - { value: 365, label: 1 year }
+  joinType:
+    type: enum
+    label: Join type
+    facet: true
+    default: Any
+    values:
+      - { value: Any, label: Any }
+      - { value: AzureAd, label: Microsoft Entra joined }
+      - { value: ServerAd, label: Hybrid joined }
+      - { value: Workplace, label: Registered }
+
+datasources:
+  entra:
+    source: graph
+    request:
+      path: /devices
+      headers: { ConsistencyLevel: eventual }
+      query:
+        $select: id,deviceId,displayName,operatingSystem,operatingSystemVersion,trustType,accountEnabled,isManaged,isCompliant,approximateLastSignInDateTime,registrationDateTime,model
+        $count: true
+        $top: 999
+        $filter: >-
+          ${ $join([
+               "approximateLastSignInDateTime le " & $daysAgo($number(params.days ? params.days : 90)),
+               params.joinType != 'Any' ? "trustType eq " & $odata(params.joinType)
+             ][$], ' and ') }
+    paging: all
+    maxItems: 100000
+    cache: { ttl: 1800 }
+    transform: >-
+      ${ (
+        $days := $number($$.params.days ? $$.params.days : 90);
+        $rows := [value.value[approximateLastSignInDateTime and $daysUntil(approximateLastSignInDateTime) <= -$days].$merge([$, {
+          "daysInactive": -$daysUntil(approximateLastSignInDateTime),
+          "cleanup": trustType = 'ServerAd' ? 'Delete in AD' : accountEnabled = true ? 'Disable, then delete' : 'Delete'
+        }])];
+        {
+          "rows": [$rows^(>daysInactive)],
+          "total": $count($rows),
+          "enabled": $count($rows[accountEnabled = true]),
+          "hybrid": $count($rows[trustType = 'ServerAd']),
+          "byOs": $append([], [$distinct($rows.operatingSystem).( $o := $; { "os": $o, "devices": $count($rows[operatingSystem = $o]) } )^(>devices)][[0..5]])
+        }
+      ) }
+  intune:
+    source: graph
+    requires: { licences: [intune], scopes: { graph: [DeviceManagementManagedDevices.Read.All] } }
+    request:
+      path: /deviceManagement/managedDevices
+      query:
+        $select: id,deviceName,userPrincipalName,operatingSystem,osVersion,lastSyncDateTime,managedDeviceOwnerType,complianceState,serialNumber
+        $filter: "${ 'lastSyncDateTime le ' & $daysAgo($number(params.days ? params.days : 90)) }"
+        $top: 1000
+    paging: all
+    maxItems: 100000
+    cache: { ttl: 1800 }
+    transform: >-
+      ${ {
+        "rows": [value.value[lastSyncDateTime and $daysUntil(lastSyncDateTime) <= -$number($$.params.days ? $$.params.days : 90)]
+                   .$merge([$, { "daysSinceSync": -$daysUntil(lastSyncDateTime) }])^(>daysSinceSync)],
+        "total": $count(value.value[lastSyncDateTime and $daysUntil(lastSyncDateTime) <= -$number($$.params.days ? $$.params.days : 90)])
+      } }
+
+layout:
+  - widget: kpi
+    id: total
+    data: entra.total
+    label: Stale Entra devices
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+  - widget: kpi
+    id: enabled
+    data: entra.enabled
+    label: Still enabled
+    format: number
+  - widget: kpi
+    id: hybrid
+    data: entra.hybrid
+    label: Hybrid joined (clean up in AD)
+    format: number
+  - widget: kpi
+    id: intune
+    data: intune.total
+    label: Intune devices not checking in
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+  - widget: markdown
+    id: guidance
+    span: 8
+    text: |
+      Microsoft's recommended cleanup: **disable** stale devices first, wait a grace period (for example 30 days) in
+      case someone still needs one, then **delete**. Back up BitLocker recovery keys before deleting Windows devices —
+      they are removed with the device object. Autopilot devices must be deregistered before deletion.
+  - widget: chart
+    id: byOs
+    title: Stale devices by OS
+    type: donut
+    span: 4
+    rows: 2
+    data: entra.byOs
+    x: os
+    y: devices
+  - widget: table
+    id: entra
+    title: Microsoft Entra devices
+    span: 12
+    data: entra.rows
+    rowKey: id
+    selection: multi
+    columns:
+      - { field: displayName, label: Device, kind: identity, secondary: model, sortable: true }
+      - { field: operatingSystem, label: OS, filter: facet }
+      - { field: operatingSystemVersion, label: Version, hidden: true }
+      - field: trustType
+        label: Join type
+        kind: status
+        map: { AzureAd: [info, Entra joined], ServerAd: [info, Hybrid joined], Workplace: [neutral, Registered] }
+        filter: { type: facet, param: joinType }
+      - { field: accountEnabled, label: Enabled, kind: boolean, filter: facet }
+      - { field: daysInactive, label: Days inactive, kind: number, filter: range, sortable: true }
+      - { field: approximateLastSignInDateTime, label: Last activity, kind: date }
+      - { field: cleanup, label: Next step, filter: facet }
+      - { field: isManaged, label: Managed, kind: boolean, hidden: true }
+      - { field: registrationDateTime, label: Registered, kind: date, hidden: true }
+      - { field: deviceId, label: Device id, kind: guid, hidden: true }
+      - { field: id, label: Object id, kind: guid, hidden: true }
+    inspect:
+      page: identity.device
+      params:
+        id: ${ row.id }
+        deviceId: ${ row.deviceId }
+    rowActions:
+      - playbook: identity.delete-stale-device
+        label: Delete
+        icon: trash
+        inputs:
+          deviceObjectId: ${ row.id }
+          minInactiveDays: ${ $number(params.days) }
+        when: ${ row.trustType != 'ServerAd' }
+    bulkActions:
+      - playbook: identity.delete-stale-device
+        label: Delete selected
+        icon: trash
+        forEach:
+          inputs:
+            deviceObjectId: ${ row.id }
+          concurrency: 5
+        maxItems: 500
+        when: ${ $count(rows[trustType = 'ServerAd']) = 0 }
+    empty:
+      title: No stale Entra devices
+      body: Every device signed in within the window.
+  - widget: table
+    id: intune
+    title: Intune devices not checking in
+    span: 12
+    data: intune.rows
+    rowKey: id
+    selection: multi
+    columns:
+      - { field: deviceName, label: Device, kind: identity, secondary: userPrincipalName }
+      - { field: operatingSystem, label: OS, filter: facet }
+      - { field: managedDeviceOwnerType, label: Ownership, filter: facet }
+      - { field: daysSinceSync, label: Days since check-in, kind: number, filter: range }
+      - { field: lastSyncDateTime, label: Last check-in, kind: date }
+      - { field: serialNumber, label: Serial number, kind: code, hidden: true }
+    inspect:
+      page: endpoint.device
+      params:
+        id: ${ row.id }
+    bulkActions:
+      - playbook: endpoint.retire-device
+        label: Retire
+        icon: sign-out
+        forEach:
+          inputs:
+            managedDeviceId: ${ row.id }
+          concurrency: 3
+        maxItems: 50
+    empty:
+      title: Every Intune device is checking in
+      body: No managed device has been silent for the window.
+
+export:
+  formats: [csv, xlsx]
+  fileName: stale-devices-${ params.days }d
+  data: entra.rows
+  columns: all

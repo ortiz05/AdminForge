@@ -1,0 +1,24 @@
+{
+  "id": "00000000-0000-4000-8000-000000000504",
+  "deviceId": "00000000-0000-4000-8001-000000000504",
+  "displayName": "iPhone 15 – R. Castillo",
+  "operatingSystem": "iOS",
+  "operatingSystemVersion": "18.6",
+  "trustType": "Workplace",
+  "isCompliant": true,
+  "isManaged": true,
+  "accountEnabled": true,
+  "approximateLastSignInDateTime": "2026-06-28T08:00:00Z",
+  "registrationDateTime": "2024-10-01T09:00:00Z",
+  "profileType": "RegisteredDevice",
+  "manufacturer": "Apple",
+  "model": "iPhone 15",
+  "onPremisesSyncEnabled": null,
+  "onPremisesLastSyncDateTime": null,
+  "mdmAppId": "0000000a-0000-0000-c000-000000000000",
+  "complianceExpirationDateTime": null,
+  "physicalIds": [],
+  "extensionAttributes": {
+    "extensionAttribute1": null
+  }
+}

@@ -1,0 +1,248 @@
+$schema: ../../../packages/schemas/generated/page.schema.json
+kind: page
+id: endpoint.device
+version: 1.0.0
+title: Managed device
+summary: >-
+  One Intune-managed device — hardware and enrolment, compliance and configuration policy states, detected apps and
+  users, with sync, restart, retire and wipe actions.
+owner: endpoint-team
+tags: [endpoint, intune, devices]
+template: entity
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    graph: [DeviceManagementManagedDevices.Read.All, DeviceManagementConfiguration.Read.All]
+  entraRoles: [Intune Administrator]
+  licences: [intune]
+
+params:
+  id: { type: guid, label: Intune device id, required: true, hidden: true }
+
+datasources:
+  device:
+    source: graph
+    request:
+      path: /deviceManagement/managedDevices/${ $encode($guid(params.id)) }
+      query:
+        $select: id,deviceName,userPrincipalName,userDisplayName,userId,emailAddress,operatingSystem,osVersion,androidSecurityPatchLevel,complianceState,complianceGracePeriodExpirationDateTime,managementAgent,managementState,managedDeviceOwnerType,deviceEnrollmentType,deviceRegistrationState,enrolledDateTime,lastSyncDateTime,model,manufacturer,serialNumber,imei,meid,wiFiMacAddress,ethernetMacAddress,phoneNumber,subscriberCarrier,totalStorageSpaceInBytes,freeStorageSpaceInBytes,physicalMemoryInBytes,isEncrypted,isSupervised,jailBroken,azureADRegistered,azureADDeviceId,deviceCategoryDisplayName,exchangeAccessState,exchangeLastSuccessfulSyncDateTime,managementCertificateExpirationDate,partnerReportedThreatState,managedDeviceName
+    cache: { ttl: 30 }
+    transform: >-
+      ${ $merge([value, {
+           "daysSinceSync": value.lastSyncDateTime ? -$daysUntil(value.lastSyncDateTime) : null,
+           "freeStoragePct": value.totalStorageSpaceInBytes > 0 ? $round(value.freeStorageSpaceInBytes / value.totalStorageSpaceInBytes, 3) : null,
+           "certDays": value.managementCertificateExpirationDate ? $daysUntil(value.managementCertificateExpirationDate) : null,
+           "pendingAction": value.managementState in ['retirePending', 'wipePending', 'retireIssued', 'wipeIssued']
+         }]) }
+  compliance:
+    source: graph
+    request:
+      path: /deviceManagement/managedDevices/${ $encode($guid(params.id)) }/deviceCompliancePolicyStates
+    cache: { ttl: 60 }
+  configuration:
+    source: graph
+    request:
+      path: /deviceManagement/managedDevices/${ $encode($guid(params.id)) }/deviceConfigurationStates
+    cache: { ttl: 60 }
+  apps:
+    source: graph
+    requires: { scopes: { graph: [DeviceManagementManagedDevices.Read.All] } }
+    request:
+      path: /deviceManagement/managedDevices/${ $encode($guid(params.id)) }/detectedApps
+      query:
+        $select: id,displayName,version,publisher,platform,sizeInByte
+        $top: 500
+    paging: cursor
+    cache: { ttl: 300 }
+  users:
+    source: graph
+    request:
+      path: /deviceManagement/managedDevices/${ $encode($guid(params.id)) }/users
+      query:
+        $select: id,displayName,userPrincipalName
+    cache: { ttl: 300 }
+
+header:
+  title: ${ device.deviceName }
+  subtitle: "${ device.operatingSystem & ' ' & device.osVersion & ' · ' & device.manufacturer & ' ' & device.model & (device.userPrincipalName ? ' · ' & device.userPrincipalName : '') }"
+  status: "${ device.complianceState = 'compliant' ? 'ok' : device.complianceState = 'noncompliant' ? 'crit' : device.complianceState = 'inGracePeriod' ? 'warn' : 'neutral' }"
+  statusLabel: >-
+    ${ device.pendingAction ? device.managementState
+       : device.complianceState = 'compliant' ? 'Compliant' : device.complianceState = 'noncompliant' ? 'Not compliant'
+       : device.complianceState = 'inGracePeriod' ? 'In grace period' : device.complianceState }
+  ids:
+    Intune device id: ${ device.id }
+    Entra device id: ${ device.azureADDeviceId }
+    Serial number: ${ device.serialNumber }
+
+actions:
+  - playbook: endpoint.sync-device
+    label: Sync
+    icon: arrows-clockwise
+    inputs:
+      managedDeviceId: ${ params.id }
+    when: ${ device.pendingAction = false }
+  - playbook: endpoint.restart-device
+    label: Restart
+    icon: power
+    inputs:
+      managedDeviceId: ${ params.id }
+    when: ${ device.operatingSystem in ['Windows', 'macOS', 'iOS', 'iPadOS'] and device.pendingAction = false }
+  - playbook: endpoint.retire-device
+    label: Retire
+    icon: sign-out
+    inputs:
+      managedDeviceId: ${ params.id }
+    when: ${ device.pendingAction = false }
+  - playbook: endpoint.wipe-device
+    label: Wipe
+    icon: warning-octagon
+    inputs:
+      managedDeviceId: ${ params.id }
+    when: ${ device.pendingAction = false }
+  - label: Open Entra device
+    icon: identification-card
+    href: "/p/identity.devices?q=${ $encode(device.deviceName) }"
+  - label: Open in Intune admin center
+    icon: arrow-square-out
+    href: "https://intune.microsoft.com/#view/Microsoft_Intune_Devices/DeviceSettingsMenuBlade/~/overview/mdmDeviceId/${ $encode(params.id) }"
+
+tabs:
+  - id: overview
+    label: Overview
+    layout:
+      - widget: kpi
+        id: daysSinceSync
+        data: device.daysSinceSync
+        label: Days since check-in
+        format: number
+        status: "${ value > 30 ? 'crit' : value > 7 ? 'warn' : 'ok' }"
+      - widget: kpi
+        id: freeStorage
+        data: device.freeStoragePct
+        label: Free storage
+        format: percent
+        status: "${ value < 0.1 ? 'warn' : 'ok' }"
+      - widget: kpi
+        id: certDays
+        data: device.certDays
+        label: Days until management certificate expires
+        format: number
+        status: "${ value < 30 ? 'warn' : 'ok' }"
+      - widget: keyValue
+        id: management
+        title: Management
+        span: 6
+        data: device
+        fields:
+          - { field: userPrincipalName, label: Primary user }
+          - { field: managedDeviceOwnerType, label: Ownership, kind: status, map: { company: [info, Corporate], personal: [neutral, Personal] } }
+          - { field: managementAgent, label: Managed by }
+          - { field: managementState, label: Management state }
+          - { field: deviceEnrollmentType, label: Enrolment type }
+          - { field: enrolledDateTime, label: Enrolled, kind: datetime }
+          - { field: lastSyncDateTime, label: Last check-in, kind: relativeTime }
+          - { field: complianceGracePeriodExpirationDateTime, label: Grace period ends, kind: datetime }
+          - { field: deviceCategoryDisplayName, label: Category }
+          - { field: exchangeAccessState, label: Exchange access }
+          - { field: partnerReportedThreatState, label: Defender threat state }
+      - widget: keyValue
+        id: hardware
+        title: Hardware and security
+        span: 6
+        data: device
+        fields:
+          - { field: manufacturer, label: Manufacturer }
+          - { field: model, label: Model }
+          - { field: serialNumber, label: Serial number, kind: code }
+          - { field: physicalMemoryInBytes, label: Memory, kind: bytes }
+          - { field: totalStorageSpaceInBytes, label: Storage, kind: bytes }
+          - { field: freeStorageSpaceInBytes, label: Free storage, kind: bytes }
+          - { field: isEncrypted, label: Encrypted, kind: status, map: { "true": [ok, Encrypted], "false": [warn, Not encrypted] } }
+          - { field: isSupervised, label: Supervised (Apple), kind: boolean }
+          - { field: jailBroken, label: Jailbroken or rooted }
+          - { field: androidSecurityPatchLevel, label: Android security patch }
+          - { field: wiFiMacAddress, label: Wi-Fi MAC, kind: code }
+          - { field: imei, label: IMEI, kind: code }
+          - { field: phoneNumber, label: Phone number }
+
+  - id: compliance
+    label: Compliance
+    layout:
+      - widget: table
+        id: compliancePolicies
+        span: 12
+        data: compliance.value
+        rowKey: id
+        columns:
+          - { field: displayName, label: Policy }
+          - field: state
+            label: State
+            kind: status
+            map: { compliant: [ok, Compliant], nonCompliant: [crit, Not compliant], error: [crit, Error], conflict: [warn, Conflict], notApplicable: [neutral, Not applicable], unknown: [neutral, Unknown], remediated: [ok, Remediated] }
+            filter: facet
+          - { field: platformType, label: Platform }
+          - { field: settingCount, label: Settings, kind: number }
+          - { field: version, label: Version, kind: number, hidden: true }
+        empty:
+          title: No compliance policies assigned
+          body: >-
+            Without a compliance policy the device is marked by the tenant-wide "no policy assigned" setting
+            (see Compliance).
+
+  - id: configuration
+    label: Configuration
+    layout:
+      - widget: table
+        id: configurationProfiles
+        span: 12
+        data: configuration.value
+        rowKey: id
+        columns:
+          - { field: displayName, label: Profile }
+          - field: state
+            label: State
+            kind: status
+            map: { compliant: [ok, Succeeded], nonCompliant: [crit, Failed], error: [crit, Error], conflict: [warn, Conflict], notApplicable: [neutral, Not applicable], unknown: [neutral, Pending], remediated: [ok, Remediated] }
+            filter: facet
+          - { field: platformType, label: Platform }
+          - { field: settingCount, label: Settings, kind: number }
+        empty:
+          title: No configuration profiles reported
+          body: Profiles appear after the device checks in. Settings catalog policies are listed in Configuration.
+
+  - id: apps
+    label: Detected apps
+    layout:
+      - widget: table
+        id: detectedApps
+        span: 12
+        data: apps.value
+        rowKey: id
+        search: true
+        columns:
+          - { field: displayName, label: App, sortable: true }
+          - { field: version, label: Version }
+          - { field: publisher, label: Publisher, filter: facet }
+          - { field: sizeInByte, label: Size, kind: bytes, hidden: true }
+        empty:
+          title: No apps inventoried
+          body: Intune inventories apps on corporate devices; personal devices report managed apps only.
+
+  - id: users
+    label: Users
+    layout:
+      - widget: table
+        id: deviceUsers
+        span: 12
+        data: users.value
+        rowKey: id
+        columns:
+          - { field: displayName, label: User, kind: identity, secondary: userPrincipalName }
+        inspect:
+          page: identity.user
+          params:
+            id: ${ row.id }
+        empty:
+          title: No users
+          body: Shared or userless devices have no primary user.

@@ -1,0 +1,139 @@
+$schema: ../../../packages/schemas/generated/playbook.schema.json
+kind: playbook
+id: identity.remove-licence
+version: 1.0.0
+title: Remove licence
+summary: >-
+  Removes a directly assigned licence from a user. Licences inherited from a group can't be removed per user — remove
+  the user from the licensing group instead. Removing a licence can start data retention timers (mailbox, OneDrive).
+owner: identity-team
+tags: [identity, licensing, bulk]
+risk: medium
+mode: write
+requires:
+  portalRoles: [Portal.Operator]
+  scopes:
+    graph: [User.Read.All, Organization.Read.All, LicenseAssignment.ReadWrite.All]
+  entraRoles: [License Administrator]
+confirm:
+  type: click
+  message: >-
+    ${ 'Remove ' & steps.pick.output.skuPartNumber & ' from ' & steps.lookup.output.userPrincipalName
+       & '? Services in this licence stop for the user, and data retention periods start.' }
+approval:
+  required: false
+
+inputs:
+  userId: { type: string, format: guid, label: User, picker: user }
+  sku:
+    type: string
+    label: Licence
+    placeholder: SPE_E5
+    description: SKU part number or SKU id.
+    minLength: 2
+
+steps:
+  - id: lookup
+    type: graph
+    mode: read
+    describe: Look up the user and how their licences are assigned
+    request:
+      method: GET
+      path: /users/${ $encode($guid(inputs.userId)) }
+      query:
+        $select: id,displayName,userPrincipalName,assignedLicenses,licenseAssignmentStates
+
+  - id: skus
+    type: graph
+    mode: read
+    describe: Read subscribed licences
+    request:
+      method: GET
+      path: /subscribedSkus
+      query:
+        $select: skuId,skuPartNumber
+
+  - id: pick
+    type: transform
+    expression: >-
+      ${ (
+        $want := $lowercase($trim(inputs.sku));
+        steps.skus.output.value[$lowercase(skuPartNumber) = $want or $lowercase(skuId) = $want][0]
+      ) }
+
+  - id: found
+    type: assert
+    that: ${ $exists(steps.pick.output.skuId) }
+    message: ${ 'No subscribed licence matches "' & inputs.sku & '".' }
+
+  - id: hasLicence
+    type: assert
+    that: ${ steps.pick.output.skuId in steps.lookup.output.assignedLicenses.skuId }
+    message: ${ steps.lookup.output.userPrincipalName & ' does not have ' & steps.pick.output.skuPartNumber & '.' }
+
+  - id: direct
+    type: assert
+    that: >-
+      ${ (
+        $sku := steps.pick.output.skuId;
+        $count(steps.lookup.output.licenseAssignmentStates[skuId = $sku and $not($boolean(assignedByGroup) = true)]) > 0
+      ) }
+    message: >-
+      ${ steps.pick.output.skuPartNumber & ' is inherited from a group for ' & steps.lookup.output.userPrincipalName
+         & '. Remove the user from the licensing group instead.' }
+
+  - id: previous
+    type: transform
+    expression: ${ steps.lookup.output.assignedLicenses[skuId = $$.steps.pick.output.skuId][0] }
+
+  - id: remove
+    type: graph
+    mode: write
+    describe: ${ 'Remove ' & steps.pick.output.skuPartNumber }
+    request:
+      method: POST
+      path: /users/${ $encode($guid(inputs.userId)) }/assignLicense
+      body:
+        addLicenses: []
+        removeLicenses: ["${ steps.pick.output.skuId }"]
+    compensate:
+      type: graph
+      describe: Assign the licence again with the same disabled service plans
+      request:
+        method: POST
+        path: /users/${ $encode($guid(inputs.userId)) }/assignLicense
+        body:
+          addLicenses:
+            - skuId: ${ steps.pick.output.skuId }
+              disabledPlans: ${ [steps.previous.output.disabledPlans] }
+          removeLicenses: []
+
+outputs:
+  summary: ${ steps.pick.output.skuPartNumber & ' removed from ' & steps.lookup.output.userPrincipalName & '.' }
+
+tests:
+  - name: refuses a licence inherited from a group
+    inputs: { userId: 00000000-0000-4000-8000-000000000102, sku: SPE_E5 }
+    mocks:
+      lookup:
+        id: 00000000-0000-4000-8000-000000000102
+        userPrincipalName: m.chen@example.com
+        assignedLicenses: [{ skuId: 00000000-0000-4000-8000-000000001001, disabledPlans: [] }]
+        licenseAssignmentStates:
+          - { skuId: 00000000-0000-4000-8000-000000001001, assignedByGroup: 00000000-0000-4000-8000-000000000204, state: Active }
+      skus: { value: [{ skuId: 00000000-0000-4000-8000-000000001001, skuPartNumber: SPE_E5 }] }
+    expect: { status: failed, failedStep: direct }
+  - name: plans removing a direct assignment
+    inputs: { userId: 00000000-0000-4000-8000-000000000102, sku: SPE_E5 }
+    mocks:
+      lookup:
+        id: 00000000-0000-4000-8000-000000000102
+        userPrincipalName: m.chen@example.com
+        assignedLicenses: [{ skuId: 00000000-0000-4000-8000-000000001001, disabledPlans: [] }]
+        licenseAssignmentStates:
+          - { skuId: 00000000-0000-4000-8000-000000001001, assignedByGroup: null, state: Active }
+      skus: { value: [{ skuId: 00000000-0000-4000-8000-000000001001, skuPartNumber: SPE_E5 }] }
+    expect:
+      status: succeeded
+      plan: [remove]
+      outputs: { summary: SPE_E5 removed from m.chen@example.com. }

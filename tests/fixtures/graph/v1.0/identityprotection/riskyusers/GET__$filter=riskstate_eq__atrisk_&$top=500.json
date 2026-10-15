@@ -1,0 +1,27 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#fixture",
+  "value": [
+    {
+      "id": "00000000-0000-4000-8000-000000000102",
+      "isDeleted": false,
+      "isProcessing": false,
+      "riskLastUpdatedDateTime": "2026-10-14T03:25:00Z",
+      "riskLevel": "high",
+      "riskState": "atRisk",
+      "riskDetail": "none",
+      "userDisplayName": "Morgan Chen",
+      "userPrincipalName": "m.chen@example.com"
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000111",
+      "isDeleted": false,
+      "isProcessing": false,
+      "riskLastUpdatedDateTime": "2026-10-13T19:00:00Z",
+      "riskLevel": "medium",
+      "riskState": "atRisk",
+      "riskDetail": "none",
+      "userDisplayName": "Chris Novak",
+      "userPrincipalName": "c.novak@example.com"
+    }
+  ]
+}

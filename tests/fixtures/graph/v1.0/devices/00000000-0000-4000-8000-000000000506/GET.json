@@ -1,0 +1,24 @@
+{
+  "id": "00000000-0000-4000-8000-000000000506",
+  "deviceId": "00000000-0000-4000-8001-000000000506",
+  "displayName": "EX-DT-0031",
+  "operatingSystem": "Windows",
+  "operatingSystemVersion": "10.0.19045.4529",
+  "trustType": "ServerAd",
+  "isCompliant": null,
+  "isManaged": false,
+  "accountEnabled": true,
+  "approximateLastSignInDateTime": "2025-03-01T10:00:00Z",
+  "registrationDateTime": "2021-05-01T09:00:00Z",
+  "profileType": "RegisteredDevice",
+  "manufacturer": "Dell Inc.",
+  "model": "OptiPlex 7090",
+  "onPremisesSyncEnabled": true,
+  "onPremisesLastSyncDateTime": "2026-10-15T03:30:00Z",
+  "mdmAppId": null,
+  "complianceExpirationDateTime": null,
+  "physicalIds": [],
+  "extensionAttributes": {
+    "extensionAttribute1": null
+  }
+}

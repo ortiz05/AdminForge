@@ -1,0 +1,25 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#fixture",
+  "value": [
+    {
+      "id": "ra-08",
+      "principalId": "00000000-0000-4000-8000-000000000112",
+      "roleDefinitionId": "4a5d8f65-41da-4de4-8968-e035b65339cf",
+      "directoryScopeId": "/",
+      "appScopeId": null,
+      "principal": {
+        "@odata.type": "#microsoft.graph.user",
+        "id": "00000000-0000-4000-8000-000000000112",
+        "displayName": "Svc Reporting",
+        "userPrincipalName": "svc-reporting@example.com"
+      },
+      "roleDefinition": {
+        "id": "4a5d8f65-41da-4de4-8968-e035b65339cf",
+        "displayName": "Reports Reader",
+        "description": "Can read sign-in and audit reports.",
+        "isBuiltIn": true,
+        "templateId": "4a5d8f65-41da-4de4-8968-e035b65339cf"
+      }
+    }
+  ]
+}

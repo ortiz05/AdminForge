@@ -1,0 +1,25 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#fixture",
+  "value": [
+    {
+      "id": "ra-03",
+      "principalId": "00000000-0000-4000-8000-000000000109",
+      "roleDefinitionId": "e8611ab8-c189-46e8-94e1-60213ab1f814",
+      "directoryScopeId": "/",
+      "appScopeId": null,
+      "principal": {
+        "@odata.type": "#microsoft.graph.user",
+        "id": "00000000-0000-4000-8000-000000000109",
+        "displayName": "Jordan Rivera",
+        "userPrincipalName": "j.rivera@example.com"
+      },
+      "roleDefinition": {
+        "id": "e8611ab8-c189-46e8-94e1-60213ab1f814",
+        "displayName": "Privileged Role Administrator",
+        "description": "Can manage role assignments in Microsoft Entra ID, and all aspects of Privileged Identity Management.",
+        "isBuiltIn": true,
+        "templateId": "e8611ab8-c189-46e8-94e1-60213ab1f814"
+      }
+    }
+  ]
+}

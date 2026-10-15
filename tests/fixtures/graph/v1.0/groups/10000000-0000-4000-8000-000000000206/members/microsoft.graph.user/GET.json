@@ -1,0 +1,38 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#users",
+  "value": [
+    {
+      "@odata.type": "#microsoft.graph.user",
+      "id": "10000000-0000-4000-8000-00000000000a",
+      "displayName": "Jordan Price",
+      "userPrincipalName": "jordan.price@example.com",
+      "mail": "jordan.price@example.com",
+      "userType": "Member",
+      "accountEnabled": true,
+      "department": "Legal",
+      "jobTitle": "Counsel"
+    },
+    {
+      "@odata.type": "#microsoft.graph.user",
+      "id": "30000000-0000-4000-8000-000000000005",
+      "displayName": "Eli O'Brien",
+      "userPrincipalName": "eli.obrien@example.com",
+      "mail": "eli.obrien@example.com",
+      "userType": "Member",
+      "accountEnabled": true,
+      "department": "IT Operations",
+      "jobTitle": "IT Manager"
+    },
+    {
+      "@odata.type": "#microsoft.graph.user",
+      "id": "10000000-0000-4000-8000-000000000010",
+      "displayName": "Nora Fischer",
+      "userPrincipalName": "nora.fischer@example.com",
+      "mail": "nora.fischer@example.com",
+      "userType": "Member",
+      "accountEnabled": true,
+      "department": "Finance",
+      "jobTitle": "Controller"
+    }
+  ]
+}

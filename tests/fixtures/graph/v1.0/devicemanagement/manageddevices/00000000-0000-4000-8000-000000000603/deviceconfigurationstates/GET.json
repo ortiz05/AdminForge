@@ -1,0 +1,12 @@
+{
+  "value": [
+    {
+      "id": "803-603",
+      "displayName": "iOS – Device restrictions",
+      "version": 2,
+      "platformType": "iOS",
+      "state": "compliant",
+      "settingCount": 6
+    }
+  ]
+}

@@ -1,0 +1,166 @@
+$schema: ../../../packages/schemas/generated/report.schema.json
+kind: report
+id: identity.privileged-role-assignments
+version: 1.0.0
+title: Privileged role assignments
+summary: >-
+  Every active and eligible assignment of a privileged Microsoft Entra role — who, which role, standing or eligible,
+  through a group or directly, and until when. The evidence for a privileged access review.
+owner: identity-team
+tags: [identity, roles, privileged-access, report, review]
+nav: { section: reports, label: Privileged role assignments, icon: crown, order: 14 }
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    graph: [RoleManagement.Read.Directory, RoleEligibilitySchedule.Read.Directory, RoleAssignmentSchedule.Read.Directory, Directory.Read.All]
+  entraRoles: [Global Reader]
+
+params:
+  scope: { type: enum, values: [Privileged, All], default: Privileged, label: Roles, facet: true }
+  assignment: { type: enum, values: [Any, Standing, Eligible, Activated], default: Any, label: Assignment, facet: true }
+  principal: { type: enum, values: [Any, User, Group, Service principal], default: Any, label: Holder type, facet: true }
+
+# Eligible and activated assignments need Entra ID P2; without it those sub-requests fail and only standing ones show.
+datasources:
+  assignments:
+    source: graphBatch
+    requests:
+      definitions: { path: /roleManagement/directory/roleDefinitions }
+      active: { path: /roleManagement/directory/roleAssignments, query: { $expand: principal } }
+      eligible: { path: /roleManagement/directory/roleEligibilityScheduleInstances, query: { $expand: principal } }
+      instances: { path: /roleManagement/directory/roleAssignmentScheduleInstances, query: { $select: "id,roleAssignmentOriginId,assignmentType,memberType,startDateTime,endDateTime" } }
+    cache: { ttl: 600 }
+    transform: >-
+      ${ (
+        $privilegedNames := ['Global Administrator', 'Privileged Role Administrator', 'Privileged Authentication Administrator',
+          'Security Administrator', 'Conditional Access Administrator', 'Application Administrator', 'Cloud Application Administrator',
+          'Authentication Administrator', 'Authentication Policy Administrator', 'User Administrator', 'Helpdesk Administrator',
+          'Password Administrator', 'Hybrid Identity Administrator', 'Intune Administrator', 'Cloud Device Administrator',
+          'Exchange Administrator', 'SharePoint Administrator', 'Domain Name Administrator', 'External Identity Provider Administrator',
+          'Partner Tier2 Support', 'Security Operator', 'Directory Writers', 'Global Reader', 'Lifecycle Workflows Administrator'];
+        $defs := [value.definitions.value];
+        $instances := [value.instances.value];
+        $def := function($rid) { $defs[id = $rid or templateId = $rid][0] };
+        $kind := function($p) {
+          $substringAfter($p.`@odata.type`, '#microsoft.graph.') = 'servicePrincipal' ? 'Service principal'
+          : $substringAfter($p.`@odata.type`, '#microsoft.graph.') = 'group' ? 'Group' : 'User'
+        };
+        $row := function($a, $how, $start, $end, $via) {
+          (
+            $d := $def($a.roleDefinitionId);
+            {
+              "key": $how & '|' & $a.id,
+              "role": $d.displayName ? $d.displayName : $a.roleDefinitionId,
+              "roleId": $a.roleDefinitionId,
+              "privileged": $d.isPrivileged = true or $d.displayName in $privilegedNames,
+              "principalId": $a.principalId,
+              "principal": $a.principal.displayName,
+              "principalDetail": $a.principal.userPrincipalName ? $a.principal.userPrincipalName : $a.principal.appId,
+              "principalType": $kind($a.principal),
+              "assignment": $how,
+              "via": $via ? $via : 'Direct',
+              "scope": $a.directoryScopeId = '/' ? 'Directory' : $a.directoryScopeId,
+              "start": $start,
+              "end": $end,
+              "permanent": $not($boolean($end))
+            }
+          )
+        };
+        $active := [value.active.value.(
+          $aid := id;
+          $inst := $instances[roleAssignmentOriginId = $aid or id = $aid][0];
+          $row($, $inst.assignmentType = 'Activated' ? 'Activated' : 'Standing', $inst.startDateTime, $inst.endDateTime, $inst.memberType)
+        )];
+        $eligible := [value.eligible.value.$row($, 'Eligible', startDateTime, endDateTime, memberType)];
+        $all := $append($active, $eligible);
+        $shown := $all[
+          ($$.params.scope = 'All' or privileged)
+          and ($$.params.assignment = 'Any' or assignment = $$.params.assignment)
+          and ($$.params.principal = 'Any' or principalType = $$.params.principal)
+        ];
+        {
+          "rows": [$shown^(role, assignment, principal)],
+          "standing": $count($all[privileged and assignment = 'Standing']),
+          "eligible": $count($all[privileged and assignment = 'Eligible']),
+          "globalAdmins": $count($all[roleId = '62e90394-69f5-4237-9190-012177145e10' and assignment != 'Eligible']),
+          "servicePrincipals": $count($all[privileged and principalType = 'Service principal']),
+          "pimAvailable": $exists(value.eligible.value),
+          "truncated": $exists(value.active.`@odata.nextLink`) or $exists(value.eligible.`@odata.nextLink`)
+        }
+      ) }
+
+layout:
+  - widget: kpi
+    id: standing
+    data: assignments.standing
+    label: Standing privileged assignments
+    format: number
+    status: "${ value > assignments.globalAdmins + 2 ? 'warn' : 'ok' }"
+  - widget: kpi
+    id: eligible
+    data: assignments.eligible
+    label: Eligible privileged assignments
+    format: number
+  - widget: kpi
+    id: globalAdmins
+    data: assignments.globalAdmins
+    label: Global Administrators (active)
+    format: number
+    status: "${ value < 2 or value > 4 ? 'warn' : 'ok' }"
+  - widget: kpi
+    id: servicePrincipals
+    data: assignments.servicePrincipals
+    label: Service principals holding privileged roles
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+  - widget: markdown
+    id: noPim
+    span: 12
+    when: ${ assignments.pimAvailable = false }
+    text: |
+      **Eligible assignments aren't shown** — Privileged Identity Management needs Microsoft Entra ID P2. Only standing
+      (active) assignments are listed.
+  - widget: markdown
+    id: truncated
+    span: 12
+    when: ${ assignments.truncated = true }
+    text: |
+      **Partial result.** Graph returned more assignments than fit in one page; export from PIM for the complete set.
+  - widget: table
+    id: assignments
+    span: 12
+    data: assignments.rows
+    rowKey: key
+    columns:
+      - { field: role, label: Role, filter: facet, sortable: true }
+      - { field: principal, label: Holder, kind: identity, secondary: principalDetail, sortable: true }
+      - { field: principalType, label: Holder type, filter: { type: facet, param: principal } }
+      - field: assignment
+        label: Assignment
+        kind: status
+        map: { Standing: [warn, Standing], Activated: [info, Activated (PIM)], Eligible: [ok, Eligible] }
+        filter: { type: facet, param: assignment }
+      - { field: via, label: Via, filter: facet }
+      - { field: scope, label: Scope }
+      - { field: start, label: Start, kind: date }
+      - { field: end, label: End, kind: date }
+      - { field: permanent, label: Permanent, kind: boolean, hidden: true }
+      - { field: principalId, label: Holder object id, kind: guid, hidden: true }
+      - { field: roleId, label: Role definition id, kind: guid, hidden: true }
+    inspect:
+      page: identity.role
+      params:
+        id: ${ row.roleId }
+    rowActions:
+      - { label: Open user, icon: user, href: "/p/identity.user?id=${ $encode(row.principalId) }", when: "${ row.principalType = 'User' }" }
+      - { label: Open group, icon: users-three, href: "/p/identity.group?id=${ $encode(row.principalId) }", when: "${ row.principalType = 'Group' }" }
+      - { label: Open enterprise app, icon: app-window, href: "/p/identity.enterprise-app?id=${ $encode(row.principalId) }", when: "${ row.principalType = 'Service principal' }" }
+    empty:
+      title: No privileged assignments
+      body: No one holds a privileged directory role (check the Roles filter).
+
+export:
+  formats: [csv, xlsx]
+  fileName: privileged-role-assignments
+  data: assignments.rows
+  columns: all

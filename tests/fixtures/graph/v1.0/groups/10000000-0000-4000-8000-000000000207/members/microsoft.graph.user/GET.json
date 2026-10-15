@@ -1,0 +1,49 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#users",
+  "value": [
+    {
+      "@odata.type": "#microsoft.graph.user",
+      "id": "10000000-0000-4000-8000-000000000009",
+      "displayName": "Isaac Mensah",
+      "userPrincipalName": "isaac.mensah@example.com",
+      "mail": "isaac.mensah@example.com",
+      "userType": "Member",
+      "accountEnabled": true,
+      "department": "Sales",
+      "jobTitle": "Sales Representative"
+    },
+    {
+      "@odata.type": "#microsoft.graph.user",
+      "id": "10000000-0000-4000-8000-000000000007",
+      "displayName": "Gabriel Nunes",
+      "userPrincipalName": "gabriel.nunes@example.com",
+      "mail": "gabriel.nunes@example.com",
+      "userType": "Member",
+      "accountEnabled": true,
+      "department": "Sales",
+      "jobTitle": "Sales Manager"
+    },
+    {
+      "@odata.type": "#microsoft.graph.user",
+      "id": "30000000-0000-4000-8000-000000000003",
+      "displayName": "Casey Contractor",
+      "userPrincipalName": "casey_partner.example.net#EXT#@exampleorg.onmicrosoft.com",
+      "mail": "casey@partner.example.net",
+      "userType": "Guest",
+      "accountEnabled": true,
+      "department": null,
+      "jobTitle": null
+    },
+    {
+      "@odata.type": "#microsoft.graph.user",
+      "id": "10000000-0000-4000-8000-00000000000f",
+      "displayName": "Mateo Silva (Fabrikam)",
+      "userPrincipalName": "mateo.silva_fabrikam.example#EXT#@exampleorg.onmicrosoft.com",
+      "mail": "mateo.silva@fabrikam.example",
+      "userType": "Guest",
+      "accountEnabled": true,
+      "department": null,
+      "jobTitle": null
+    }
+  ]
+}

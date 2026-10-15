@@ -1,0 +1,63 @@
+$schema: ../../../packages/schemas/generated/playbook.schema.json
+kind: playbook
+id: endpoint.sync-device
+version: 1.0.0
+title: Sync Intune device
+summary: Asks an Intune-managed device to check in now (policies, apps and compliance re-evaluated). Devices that are offline sync when they next connect.
+owner: endpoint-team
+tags: [endpoint, intune, bulk]
+risk: low
+mode: write
+requires:
+  portalRoles: [Portal.Operator]
+  scopes:
+    graph: [DeviceManagementManagedDevices.Read.All, DeviceManagementManagedDevices.PrivilegedOperations.All]
+  entraRoles: [Intune Administrator]
+  licences: [intune]
+approval:
+  required: false
+
+inputs:
+  managedDeviceId: { type: string, format: guid, label: Device (Intune id), picker: device }
+
+steps:
+  - id: device
+    type: graph
+    mode: read
+    describe: Look up the managed device
+    request:
+      method: GET
+      path: /deviceManagement/managedDevices/${ $encode($guid(inputs.managedDeviceId)) }
+      query:
+        $select: id,deviceName,operatingSystem,managementAgent,managementState,lastSyncDateTime,userPrincipalName
+
+  - id: managed
+    type: assert
+    that: ${ $not(steps.device.output.managementState in ['retirePending', 'wipePending', 'retireIssued', 'wipeIssued']) }
+    message: ${ steps.device.output.deviceName & ' is being retired or wiped (' & steps.device.output.managementState & ').' }
+
+  - id: sync
+    type: graph
+    mode: write
+    describe: ${ 'Send a sync request to ' & steps.device.output.deviceName }
+    request:
+      method: POST
+      path: /deviceManagement/managedDevices/${ $encode($guid(inputs.managedDeviceId)) }/syncDevice
+
+outputs:
+  summary: ${ 'Sync requested for ' & steps.device.output.deviceName & ' (last check-in ' & steps.device.output.lastSyncDateTime & ').' }
+
+tests:
+  - name: refuses a device that is being wiped
+    inputs: { managedDeviceId: 00000000-0000-4000-8000-000000000607 }
+    mocks:
+      device: { id: 00000000-0000-4000-8000-000000000607, deviceName: EX-LT-0077, operatingSystem: Windows, managementState: wipePending, lastSyncDateTime: "2026-09-01T10:00:00Z" }
+    expect: { status: failed, failedStep: managed }
+  - name: plans a sync
+    inputs: { managedDeviceId: 00000000-0000-4000-8000-000000000601 }
+    mocks:
+      device: { id: 00000000-0000-4000-8000-000000000601, deviceName: EX-LT-0142, operatingSystem: Windows, managementState: managed, lastSyncDateTime: "2026-10-14T22:10:00Z" }
+    expect:
+      status: succeeded
+      plan: [sync]
+      outputs: { summary: Sync requested for EX-LT-0142 (last check-in 2026-10-14T22:10:00Z). }

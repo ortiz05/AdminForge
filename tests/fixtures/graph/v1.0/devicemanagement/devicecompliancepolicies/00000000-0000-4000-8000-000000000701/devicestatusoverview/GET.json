@@ -1,0 +1,12 @@
+{
+  "id": "00000000-0000-4000-8000-000000000701_overview",
+  "pendingCount": 0,
+  "notApplicableCount": 3,
+  "notApplicablePlatformCount": 3,
+  "successCount": 2,
+  "errorCount": 0,
+  "failedCount": 3,
+  "conflictCount": 0,
+  "lastUpdateDateTime": "2026-10-15T01:30:00Z",
+  "configurationVersion": 7
+}

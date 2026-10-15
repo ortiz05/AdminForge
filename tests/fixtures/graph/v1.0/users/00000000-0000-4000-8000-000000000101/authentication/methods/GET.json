@@ -1,0 +1,26 @@
+{
+  "value": [
+    {
+      "@odata.type": "#microsoft.graph.passwordAuthenticationMethod",
+      "id": "28c10230-6103-485e-b985-444c60001490",
+      "password": null,
+      "createdDateTime": "2026-06-11T10:00:00Z"
+    },
+    {
+      "@odata.type": "#microsoft.graph.microsoftAuthenticatorAuthenticationMethod",
+      "id": "00000000-0000-4000-8000-0000000f1010",
+      "displayName": "iPhone 15",
+      "deviceTag": "SoftwareTokenActivated",
+      "phoneAppVersion": "6.8.20",
+      "createdDateTime": "2025-02-10T09:00:00Z"
+    },
+    {
+      "@odata.type": "#microsoft.graph.fido2AuthenticationMethod",
+      "id": "00000000-0000-4000-8000-0000000f1011",
+      "displayName": "YubiKey 5C NFC",
+      "model": "YubiKey 5 Series",
+      "aaGuid": "cb69481e-8ff7-4039-93ec-0a2729a154a8",
+      "createdDateTime": "2025-06-01T09:00:00Z"
+    }
+  ]
+}

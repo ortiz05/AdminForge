@@ -1,0 +1,43 @@
+{
+  "value": [
+    {
+      "id": "30000000-0000-4000-8000-000000000301",
+      "appId": "30000000-0000-4000-8000-000000000311",
+      "displayName": "Example HR Sync",
+      "passwordCredentials": [
+        {
+          "keyId": "30000000-0000-4000-8000-000000000321",
+          "displayName": "prod",
+          "endDateTime": "2026-10-20T00:00:00Z"
+        }
+      ],
+      "keyCredentials": [
+        {
+          "keyId": "30000000-0000-4000-8000-000000000322",
+          "displayName": "CN=hr-sync.example.com",
+          "endDateTime": "2027-02-01T00:00:00Z"
+        }
+      ]
+    },
+    {
+      "id": "30000000-0000-4000-8000-000000000302",
+      "appId": "30000000-0000-4000-8000-000000000312",
+      "displayName": "Example Portal",
+      "passwordCredentials": [
+        {
+          "keyId": "30000000-0000-4000-8000-000000000323",
+          "displayName": "ci",
+          "endDateTime": "2026-09-30T00:00:00Z"
+        }
+      ],
+      "keyCredentials": []
+    },
+    {
+      "id": "30000000-0000-4000-8000-000000000303",
+      "appId": "30000000-0000-4000-8000-000000000313",
+      "displayName": "Example Reporting",
+      "passwordCredentials": [],
+      "keyCredentials": []
+    }
+  ]
+}

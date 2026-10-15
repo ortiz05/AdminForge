@@ -1,0 +1,32 @@
+{
+  "value": [
+    {
+      "id": "30000000-0000-4000-8000-000000000101",
+      "displayName": "SG-Example-Admins",
+      "mail": null,
+      "groupTypes": [],
+      "securityEnabled": true,
+      "mailEnabled": false
+    },
+    {
+      "id": "30000000-0000-4000-8000-000000000102",
+      "displayName": "Example Finance",
+      "mail": "finance@example.com",
+      "groupTypes": [
+        "Unified"
+      ],
+      "securityEnabled": false,
+      "mailEnabled": true
+    },
+    {
+      "id": "30000000-0000-4000-8000-000000000103",
+      "displayName": "All Example Devices",
+      "mail": null,
+      "groupTypes": [
+        "DynamicMembership"
+      ],
+      "securityEnabled": true,
+      "mailEnabled": false
+    }
+  ]
+}

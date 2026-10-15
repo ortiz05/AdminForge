@@ -1,0 +1,70 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#fixture",
+  "value": [
+    {
+      "@odata.type": "#microsoft.graph.user",
+      "id": "00000000-0000-4000-8000-000000000108",
+      "displayName": "Dana Okafor",
+      "givenName": "Dana",
+      "surname": "Okafor",
+      "userPrincipalName": "d.okafor@example.com",
+      "mail": "d.okafor@example.com",
+      "otherMails": [],
+      "proxyAddresses": [
+        "SMTP:d.okafor@example.com",
+        "smtp:d.okafor@exampleorg.onmicrosoft.com"
+      ],
+      "accountEnabled": true,
+      "userType": "Member",
+      "department": "Engineering",
+      "jobTitle": "Platform Engineer",
+      "companyName": "Example Org",
+      "officeLocation": "Seattle HQ",
+      "city": "Seattle",
+      "country": "United States",
+      "usageLocation": "US",
+      "mobilePhone": null,
+      "businessPhones": [],
+      "employeeId": "E0410",
+      "employeeType": "Employee",
+      "employeeHireDate": "2019-04-02T09:00:00Z",
+      "createdDateTime": "2019-04-02T09:00:00Z",
+      "creationType": null,
+      "externalUserState": null,
+      "externalUserStateChangeDateTime": null,
+      "onPremisesSyncEnabled": true,
+      "onPremisesLastSyncDateTime": "2026-10-15T03:30:00Z",
+      "onPremisesSamAccountName": "dokafor",
+      "onPremisesDomainName": "corp.example.com",
+      "onPremisesImmutableId": "kq5aBdUe3kSWpG0pP1a2Bw==",
+      "lastPasswordChangeDateTime": "2026-09-01T10:00:00Z",
+      "passwordPolicies": null,
+      "preferredLanguage": "en-US",
+      "signInSessionsValidFromDateTime": "2026-09-01T10:00:00Z",
+      "assignedLicenses": [
+        {
+          "skuId": "00000000-0000-4000-8000-000000001001",
+          "disabledPlans": []
+        }
+      ],
+      "licenseAssignmentStates": [
+        {
+          "skuId": "00000000-0000-4000-8000-000000001001",
+          "assignedByGroup": null,
+          "state": "Active",
+          "error": "None",
+          "disabledPlans": [],
+          "lastUpdatedDateTime": "2026-09-01T09:00:00Z"
+        }
+      ],
+      "signInActivity": {
+        "lastSignInDateTime": "2026-10-15T03:20:00Z",
+        "lastSignInRequestId": "00000000-0000-4000-8000-0000000005e1",
+        "lastNonInteractiveSignInDateTime": "2026-10-15T03:50:00Z",
+        "lastNonInteractiveSignInRequestId": "00000000-0000-4000-8000-0000000005e2",
+        "lastSuccessfulSignInDateTime": "2026-10-15T03:20:00Z",
+        "lastSuccessfulSignInRequestId": null
+      }
+    }
+  ]
+}

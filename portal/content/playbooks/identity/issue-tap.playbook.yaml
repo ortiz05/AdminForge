@@ -1,0 +1,168 @@
+$schema: ../../../packages/schemas/generated/playbook.schema.json
+kind: playbook
+id: identity.issue-tap
+version: 1.0.0
+title: Issue Temporary Access Pass
+summary: >-
+  Creates a time-limited Temporary Access Pass so a user can sign in and register MFA or passwordless methods
+  (onboarding, lost device, account recovery). Checks the tenant's TAP policy first; the pass is shown once.
+owner: identity-team
+tags: [identity, users, mfa, helpdesk]
+risk: high
+mode: write
+requires:
+  portalRoles: [Portal.Operator]
+  scopes:
+    graph: [User.Read.All, Policy.Read.All, UserAuthenticationMethod.ReadWrite.All]
+  # Privileged Authentication Administrator is needed when the target holds an admin role.
+  entraRoles: [Authentication Administrator]
+confirm:
+  type: typed
+  value: ${ steps.lookup.output.userPrincipalName }
+  message: >-
+    ${ 'Anyone holding the pass can sign in as this user for ' & inputs.lifetimeMinutes & ' minutes'
+       & (inputs.isUsableOnce = true ? ' (one use)' : '') & '. Verify the requester first. Type the sign-in name to confirm.' }
+approval:
+  required: false
+
+inputs:
+  userId: { type: string, format: guid, label: User, picker: user }
+  lifetimeMinutes: { type: number, label: Valid for, unit: minutes, default: 60, min: 10, max: 43200, integer: true }
+  isUsableOnce: { type: boolean, label: One-time use, default: true }
+  replaceExisting: { type: boolean, label: Replace an existing pass, default: true }
+  reason: { type: string, label: Reason, minLength: 10, multiline: true }
+
+steps:
+  - id: lookup
+    type: graph
+    mode: read
+    describe: Look up the user
+    request:
+      method: GET
+      path: /users/${ $encode($guid(inputs.userId)) }
+      query:
+        $select: id,displayName,userPrincipalName,accountEnabled,userType
+
+  - id: canSignIn
+    type: assert
+    that: ${ steps.lookup.output.accountEnabled = true }
+    message: ${ steps.lookup.output.userPrincipalName & ' is blocked from signing in; enable sign-in first.' }
+
+  - id: policy
+    type: graph
+    mode: read
+    describe: Read the Temporary Access Pass policy
+    request:
+      method: GET
+      path: /policies/authenticationMethodsPolicy/authenticationMethodConfigurations/TemporaryAccessPass
+
+  - id: policyEnabled
+    type: assert
+    that: ${ steps.policy.output.state = 'enabled' }
+    message: The Temporary Access Pass method is turned off in the authentication methods policy (Entra admin center → Authentication methods → Policies).
+
+  - id: lifetimeAllowed
+    type: assert
+    that: >-
+      ${ inputs.lifetimeMinutes >= steps.policy.output.minimumLifetimeInMinutes
+         and inputs.lifetimeMinutes <= steps.policy.output.maximumLifetimeInMinutes }
+    message: >-
+      ${ 'The policy allows passes valid for ' & steps.policy.output.minimumLifetimeInMinutes & '–'
+         & steps.policy.output.maximumLifetimeInMinutes & ' minutes; you asked for ' & inputs.lifetimeMinutes & '.' }
+
+  - id: usageAllowed
+    type: assert
+    that: ${ $not(steps.policy.output.isUsableOnce = true and inputs.isUsableOnce = false) }
+    message: The policy only allows one-time passes; turn on One-time use.
+
+  - id: existing
+    type: graph
+    mode: read
+    describe: Check for an existing pass (a user can hold only one)
+    request:
+      method: GET
+      path: /users/${ $encode($guid(inputs.userId)) }/authentication/temporaryAccessPassMethods
+
+  - id: noConflict
+    type: assert
+    that: ${ $count(steps.existing.output.value) = 0 or inputs.replaceExisting = true }
+    message: ${ steps.lookup.output.userPrincipalName & ' already has a Temporary Access Pass. Turn on Replace to issue a new one.' }
+
+  - id: removeExisting
+    type: forEach
+    items: ${ [steps.existing.output.value] }
+    as: pass
+    steps:
+      - id: removePass
+        type: graph
+        mode: write
+        describe: Delete the existing Temporary Access Pass
+        request:
+          method: DELETE
+          path: /users/${ $encode($guid(inputs.userId)) }/authentication/temporaryAccessPassMethods/${ $encode(pass.id) }
+
+  - id: create
+    type: graph
+    mode: write
+    describe: "${ 'Create a ' & inputs.lifetimeMinutes & '-minute' & (inputs.isUsableOnce = true ? ' one-time' : '') & ' Temporary Access Pass' }"
+    idempotent: false
+    request:
+      method: POST
+      path: /users/${ $encode($guid(inputs.userId)) }/authentication/temporaryAccessPassMethods
+      body:
+        lifetimeInMinutes: ${ inputs.lifetimeMinutes }
+        isUsableOnce: ${ inputs.isUsableOnce }
+    dryRunOutput:
+      temporaryAccessPass: null
+      lifetimeInMinutes: ${ inputs.lifetimeMinutes }
+      isUsableOnce: ${ inputs.isUsableOnce }
+      startDateTime: null
+
+outputs:
+  summary: >-
+    ${ 'Temporary Access Pass issued for ' & steps.lookup.output.userPrincipalName & ', valid ' & inputs.lifetimeMinutes
+       & ' minutes' & (inputs.isUsableOnce = true ? ', one use' : '') & '. Share it over a verified channel; it is not shown again.' }
+  # Returned once by Entra ID. See the report: the engine must treat this output as secret (redact at rest).
+  temporaryAccessPass: ${ steps.create.output.temporaryAccessPass }
+  validUntil: >-
+    ${ steps.create.output.startDateTime
+       ? $fromMillis($toMillis(steps.create.output.startDateTime) + steps.create.output.lifetimeInMinutes * 60000) }
+
+tests:
+  - name: refuses when the TAP method is disabled in policy
+    inputs: { userId: 00000000-0000-4000-8000-000000000102, lifetimeMinutes: 60, isUsableOnce: true, replaceExisting: true, reason: new phone ticket 4401 }
+    mocks:
+      lookup: { id: 00000000-0000-4000-8000-000000000102, userPrincipalName: m.chen@example.com, accountEnabled: true, userType: Member }
+      policy: { id: TemporaryAccessPass, state: disabled, minimumLifetimeInMinutes: 60, maximumLifetimeInMinutes: 480, isUsableOnce: false }
+    expect: { status: failed, failedStep: policyEnabled }
+  - name: refuses a lifetime outside the policy
+    inputs: { userId: 00000000-0000-4000-8000-000000000102, lifetimeMinutes: 1440, isUsableOnce: true, replaceExisting: true, reason: new phone ticket 4402 }
+    mocks:
+      lookup: { id: 00000000-0000-4000-8000-000000000102, userPrincipalName: m.chen@example.com, accountEnabled: true, userType: Member }
+      policy: { id: TemporaryAccessPass, state: enabled, minimumLifetimeInMinutes: 60, maximumLifetimeInMinutes: 480, isUsableOnce: false }
+    expect: { status: failed, failedStep: lifetimeAllowed }
+  - name: refuses to replace an existing pass unless asked
+    inputs: { userId: 00000000-0000-4000-8000-000000000102, lifetimeMinutes: 60, isUsableOnce: true, replaceExisting: false, reason: new phone ticket 4403 }
+    mocks:
+      lookup: { id: 00000000-0000-4000-8000-000000000102, userPrincipalName: m.chen@example.com, accountEnabled: true, userType: Member }
+      policy: { id: TemporaryAccessPass, state: enabled, minimumLifetimeInMinutes: 60, maximumLifetimeInMinutes: 480, isUsableOnce: false }
+      existing: { value: [{ id: 00000000-0000-4000-8000-00000000f301, lifetimeInMinutes: 60 }] }
+    expect: { status: failed, failedStep: noConflict }
+  - name: replaces the existing pass and plans a new one
+    inputs: { userId: 00000000-0000-4000-8000-000000000102, lifetimeMinutes: 120, isUsableOnce: true, replaceExisting: true, reason: new phone ticket 4404 }
+    mocks:
+      lookup: { id: 00000000-0000-4000-8000-000000000102, userPrincipalName: m.chen@example.com, accountEnabled: true, userType: Member }
+      policy: { id: TemporaryAccessPass, state: enabled, minimumLifetimeInMinutes: 60, maximumLifetimeInMinutes: 480, isUsableOnce: false }
+      existing: { value: [{ id: 00000000-0000-4000-8000-00000000f301, lifetimeInMinutes: 60 }] }
+    expect:
+      status: succeeded
+      plan: [removePass, create]
+  - name: plans a pass when none exists
+    inputs: { userId: 00000000-0000-4000-8000-000000000102, lifetimeMinutes: 60, isUsableOnce: true, replaceExisting: true, reason: new phone ticket 4405 }
+    mocks:
+      lookup: { id: 00000000-0000-4000-8000-000000000102, userPrincipalName: m.chen@example.com, accountEnabled: true, userType: Member }
+      policy: { id: TemporaryAccessPass, state: enabled, minimumLifetimeInMinutes: 60, maximumLifetimeInMinutes: 480, isUsableOnce: false }
+      existing: { value: [] }
+    expect:
+      status: succeeded
+      plan: [create]

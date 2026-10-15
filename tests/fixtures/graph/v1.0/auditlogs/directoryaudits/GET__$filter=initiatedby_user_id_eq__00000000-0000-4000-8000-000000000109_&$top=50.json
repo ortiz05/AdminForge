@@ -1,0 +1,79 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#fixture",
+  "value": [
+    {
+      "id": "Directory_06_20261014",
+      "category": "Policy",
+      "correlationId": "00000000-0000-4000-8000-00000000ad06",
+      "result": "success",
+      "resultReason": "",
+      "activityDisplayName": "Update conditional access policy",
+      "activityDateTime": "2026-10-14T15:00:00Z",
+      "loggedByService": "Conditional Access",
+      "operationType": "Update",
+      "initiatedBy": {
+        "app": null,
+        "user": {
+          "id": "00000000-0000-4000-8000-000000000109",
+          "displayName": "Jordan Rivera",
+          "userPrincipalName": "j.rivera@example.com",
+          "ipAddress": "203.0.113.24"
+        }
+      },
+      "targetResources": [
+        {
+          "id": "00000000-0000-4000-8000-000000000905",
+          "displayName": "CA005 – Block untrusted countries",
+          "type": "Policy",
+          "userPrincipalName": null,
+          "groupType": null,
+          "modifiedProperties": [
+            {
+              "displayName": "ConditionalAccessPolicy",
+              "oldValue": "\"…\"",
+              "newValue": "\"…\""
+            }
+          ]
+        }
+      ],
+      "additionalDetails": []
+    },
+    {
+      "id": "Directory_07_20261013",
+      "category": "ApplicationManagement",
+      "correlationId": "00000000-0000-4000-8000-00000000ad07",
+      "result": "success",
+      "resultReason": "",
+      "activityDisplayName": "Add service principal credentials",
+      "activityDateTime": "2026-10-13T11:00:00Z",
+      "loggedByService": "Core Directory",
+      "operationType": "Add",
+      "initiatedBy": {
+        "app": null,
+        "user": {
+          "id": "00000000-0000-4000-8000-000000000109",
+          "displayName": "Jordan Rivera",
+          "userPrincipalName": "j.rivera@example.com",
+          "ipAddress": "203.0.113.24"
+        }
+      },
+      "targetResources": [
+        {
+          "id": "00000000-0000-4000-8000-000000000407",
+          "displayName": "Legacy Automation",
+          "type": "ServicePrincipal",
+          "userPrincipalName": null,
+          "groupType": null,
+          "modifiedProperties": [
+            {
+              "displayName": "KeyDescription",
+              "oldValue": "\"…\"",
+              "newValue": "\"…\""
+            }
+          ]
+        }
+      ],
+      "additionalDetails": []
+    }
+  ]
+}

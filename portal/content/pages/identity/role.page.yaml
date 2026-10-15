@@ -1,0 +1,173 @@
+$schema: ../../../packages/schemas/generated/page.schema.json
+kind: page
+id: identity.role
+version: 1.0.0
+title: Directory role
+summary: One Microsoft Entra role — who holds it (active, activated through PIM, eligible) and what it allows.
+owner: identity-team
+tags: [identity, roles, privileged-access]
+template: entity
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    graph: [RoleManagement.Read.Directory, RoleEligibilitySchedule.Read.Directory, RoleAssignmentSchedule.Read.Directory, Directory.Read.All]
+  entraRoles: [Global Reader]
+
+params:
+  id: { type: guid, label: Role definition, required: true, hidden: true }
+
+datasources:
+  definition:
+    source: graph
+    request:
+      path: /roleManagement/directory/roleDefinitions/${ $encode($guid(params.id)) }
+    cache: { ttl: 3600 }
+    transform: >-
+      ${ $merge([value, {
+           "actions": [value.rolePermissions.allowedResourceActions.{ "action": $ }],
+           "actionCount": $count(value.rolePermissions.allowedResourceActions)
+         }]) }
+  assignments:
+    source: graph
+    request:
+      path: /roleManagement/directory/roleAssignments
+      query:
+        $filter: ${ 'roleDefinitionId eq ' & $odata($guid(params.id)) }
+        $expand: principal
+    paging: cursor
+    cache: { ttl: 120 }
+    transform: >-
+      ${ $merge([value, { "value": [value.value.$merge([$, {
+           "principalName": principal.displayName,
+           "principalDetail": principal.userPrincipalName ? principal.userPrincipalName : principal.appId,
+           "principalType": $substringAfter(principal.`@odata.type`, '#microsoft.graph.') = 'servicePrincipal' ? 'Service principal'
+                            : $substringAfter(principal.`@odata.type`, '#microsoft.graph.') = 'group' ? 'Group' : 'User',
+           "scope": directoryScopeId = '/' ? 'Directory' : directoryScopeId
+         }])] }]) }
+  pim:
+    source: graphBatch
+    requires: { licences: [pim] }
+    requests:
+      eligible:
+        path: /roleManagement/directory/roleEligibilityScheduleInstances
+        query: { $filter: "${ 'roleDefinitionId eq ' & $odata($guid(params.id)) }", $expand: principal }
+      activated:
+        path: /roleManagement/directory/roleAssignmentScheduleInstances
+        query: { $filter: "${ 'roleDefinitionId eq ' & $odata($guid(params.id)) }", $expand: principal }
+    cache: { ttl: 120 }
+    transform: >-
+      ${ (
+        $row := function($i, $state) {
+          {
+            "id": $i.id,
+            "principalId": $i.principalId,
+            "principalName": $i.principal.displayName,
+            "principalDetail": $i.principal.userPrincipalName ? $i.principal.userPrincipalName : $i.principal.appId,
+            "state": $state,
+            "memberType": $i.memberType,
+            "scope": $i.directoryScopeId = '/' ? 'Directory' : $i.directoryScopeId,
+            "start": $i.startDateTime,
+            "end": $i.endDateTime
+          }
+        };
+        {
+          "eligible": [value.eligible.value.$row($, 'Eligible')],
+          "activated": [value.activated.value[assignmentType = 'Activated'].$row($, 'Activated')],
+          "permanent": $count(value.activated.value[assignmentType = 'Assigned' and $not($exists(endDateTime) and endDateTime != null)])
+        }
+      ) }
+
+header:
+  title: ${ definition.displayName }
+  subtitle: ${ definition.description }
+  status: "${ definition.isBuiltIn ? 'neutral' : 'info' }"
+  statusLabel: "${ definition.isBuiltIn ? 'Built-in role' : 'Custom role' }"
+  ids:
+    Role definition id: ${ definition.id }
+    Template id: ${ definition.templateId }
+
+actions:
+  - playbook: identity.pim-activate
+    label: Activate (if eligible)
+    icon: lightning
+    inputs:
+      roleDefinitionId: ${ params.id }
+  - label: Manage in PIM
+    icon: arrow-square-out
+    href: https://entra.microsoft.com/#view/Microsoft_Azure_PIMCommon/CommonMenuBlade/~/quickStart
+
+tabs:
+  - id: holders
+    label: Holders
+    layout:
+      - widget: table
+        id: active
+        title: Active assignments
+        description: Includes permanent assignments and current PIM activations.
+        span: 12
+        data: assignments.value
+        rowKey: id
+        columns:
+          - { field: principalName, label: Holder, kind: identity, secondary: principalDetail }
+          - { field: principalType, label: Type, kind: status, map: { User: [neutral, User], Group: [info, Group], Service principal: [warn, Service principal] }, filter: facet }
+          - { field: scope, label: Scope }
+          - { field: principalId, label: Principal id, kind: guid, hidden: true }
+        # Holders can be users, groups or service principals, so the drill-down is a typed row action (see the report).
+        rowActions:
+          - { label: Open user, icon: user, href: "/p/identity.user?id=${ $encode(row.principalId) }", when: "${ row.principalType = 'User' }" }
+          - { label: Open group, icon: users-three, href: "/p/identity.group?id=${ $encode(row.principalId) }", when: "${ row.principalType = 'Group' }" }
+          - { label: Open enterprise app, icon: app-window, href: "/p/identity.enterprise-app?id=${ $encode(row.principalId) }", when: "${ row.principalType = 'Service principal' }" }
+        empty:
+          title: Nobody holds this role
+          body: No active assignments.
+      - widget: licenceGate
+        feature: pim
+        title: Eligible assignments and activations need Microsoft Entra ID P2
+      - widget: table
+        id: eligible
+        title: Eligible (PIM)
+        span: 6
+        data: pim.eligible
+        rowKey: id
+        columns:
+          - { field: principalName, label: Holder, kind: identity, secondary: principalDetail }
+          - { field: memberType, label: Via }
+          - { field: end, label: Eligible until, kind: date }
+        inspect:
+          page: identity.user
+          params:
+            id: ${ row.principalId }
+        empty:
+          title: No eligible holders
+          body: Nobody can activate this role through PIM.
+      - widget: table
+        id: activated
+        title: Activated now
+        span: 6
+        data: pim.activated
+        rowKey: id
+        columns:
+          - { field: principalName, label: Holder, kind: identity, secondary: principalDetail }
+          - { field: start, label: Activated, kind: relativeTime }
+          - { field: end, label: Expires, kind: datetime }
+        empty:
+          title: No current activations
+          body: Nobody has activated this role right now.
+  - id: permissions
+    label: Permissions
+    layout:
+      - widget: kpi
+        id: actionCount
+        data: definition.actionCount
+        label: Allowed actions
+        format: number
+      - widget: table
+        id: actions
+        title: Allowed resource actions
+        span: 12
+        data: definition.actions
+        rowKey: action
+        search: true
+        pageSize: 100
+        columns:
+          - { field: action, label: Action, kind: code }

@@ -1,0 +1,170 @@
+$schema: ../../../packages/schemas/generated/page.schema.json
+kind: page
+id: endpoint.compliance-policy
+version: 1.0.0
+title: Compliance policy
+summary: One device compliance policy — status per device, assignments, scheduled actions for non-compliance, and its settings.
+owner: endpoint-team
+tags: [endpoint, intune, compliance]
+template: entity
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    graph: [DeviceManagementConfiguration.Read.All]
+  entraRoles: [Intune Administrator]
+  licences: [intune]
+
+params:
+  id: { type: guid, label: Compliance policy, required: true, hidden: true }
+
+datasources:
+  policy:
+    source: graph
+    request:
+      path: /deviceManagement/deviceCompliancePolicies/${ $encode($guid(params.id)) }
+      query:
+        $expand: assignments,scheduledActionsForRule($expand=scheduledActionConfigurations)
+    cache: { ttl: 120 }
+    transform: >-
+      ${ (
+        $p := value;
+        $skip := ['id', 'displayName', 'description', 'createdDateTime', 'lastModifiedDateTime', 'version', 'assignments',
+                  'scheduledActionsForRule', '@odata.context', '@odata.type', 'roleScopeTagIds', 'assignments@odata.context',
+                  'scheduledActionsForRule@odata.context'];
+        $merge([$p, {
+          "platform": $substringAfter($p.`@odata.type`, '#microsoft.graph.'),
+          "settings": [$keys($p)[$not($ in $skip)].(
+            $k := $;
+            $v := $lookup($p, $k);
+            $v != null and $v != false and $v != '' and $v != 0 and $v != 'notConfigured'
+              ? { "setting": $k, "value": $string($v) }
+          )],
+          "targets": [$p.assignments.{
+            "id": id,
+            "kind": target.`@odata.type` = '#microsoft.graph.allDevicesAssignmentTarget' ? 'All devices'
+                    : target.`@odata.type` = '#microsoft.graph.allLicensedUsersAssignmentTarget' ? 'All users'
+                    : target.`@odata.type` = '#microsoft.graph.exclusionGroupAssignmentTarget' ? 'Exclude group' : 'Include group',
+            "groupId": target.groupId
+          }],
+          "actions": [$p.scheduledActionsForRule.scheduledActionConfigurations.{
+            "id": id,
+            "action": actionType,
+            "afterHours": gracePeriodHours,
+            "template": notificationTemplateId
+          }]
+        }])
+      ) }
+  overview:
+    source: graph
+    request:
+      path: /deviceManagement/deviceCompliancePolicies/${ $encode($guid(params.id)) }/deviceStatusOverview
+    cache: { ttl: 120 }
+  statuses:
+    source: graph
+    request:
+      path: /deviceManagement/deviceCompliancePolicies/${ $encode($guid(params.id)) }/deviceStatuses
+      query:
+        $top: 100
+    paging: cursor
+    cache: { ttl: 120 }
+
+header:
+  title: ${ policy.displayName }
+  subtitle: "${ policy.platform & ' · version ' & policy.version }"
+  status: "${ overview.failedCount + overview.errorCount > 0 ? 'warn' : 'ok' }"
+  statusLabel: "${ overview.successCount & ' compliant · ' & (overview.failedCount + overview.errorCount) & ' failing' }"
+  ids:
+    Policy id: ${ policy.id }
+
+actions:
+  - label: Open in Intune admin center
+    icon: arrow-square-out
+    href: https://intune.microsoft.com/#view/Microsoft_Intune_DeviceSettings/DevicesComplianceMenu/~/policies
+
+tabs:
+  - id: status
+    label: Device status
+    layout:
+      - widget: kpi
+        id: succeeded
+        data: overview.successCount
+        label: Compliant
+        format: number
+      - widget: kpi
+        id: failed
+        data: overview.failedCount
+        label: Not compliant
+        format: number
+        status: "${ value > 0 ? 'crit' : 'ok' }"
+      - widget: kpi
+        id: errors
+        data: overview.errorCount
+        label: Errors
+        format: number
+        status: "${ value > 0 ? 'warn' : 'ok' }"
+      - widget: kpi
+        id: pending
+        data: overview.pendingCount
+        label: Pending
+        format: number
+      - widget: table
+        id: statuses
+        span: 12
+        data: statuses.value
+        rowKey: id
+        columns:
+          - { field: deviceDisplayName, label: Device, kind: identity, secondary: userPrincipalName }
+          - field: status
+            label: Status
+            kind: status
+            map: { compliant: [ok, Compliant], nonCompliant: [crit, Not compliant], error: [crit, Error], conflict: [warn, Conflict], inGracePeriod: [warn, In grace period], notApplicable: [neutral, Not applicable], unknown: [neutral, Unknown], remediated: [ok, Remediated], notAssigned: [neutral, Not assigned] }
+            filter: facet
+          - { field: lastReportedDateTime, label: Last reported, kind: relativeTime }
+          - { field: complianceGracePeriodExpirationDateTime, label: Grace period ends, kind: datetime }
+        empty:
+          title: No devices have reported
+          body: Devices report after their next check-in once the policy is assigned.
+  - id: assignments
+    label: Assignments and actions
+    layout:
+      - widget: table
+        id: targets
+        title: Assignments
+        span: 6
+        data: policy.targets
+        rowKey: id
+        columns:
+          - { field: kind, label: Target }
+          - { field: groupId, label: Group id, kind: guid }
+        rowActions:
+          - { label: Open group, icon: users-three, href: "/p/identity.group?id=${ $encode(row.groupId) }", when: "${ $boolean(row.groupId) }" }
+        empty:
+          title: Not assigned
+          body: This policy applies to no devices.
+      - widget: table
+        id: actions
+        title: Actions for non-compliance
+        span: 6
+        data: policy.actions
+        rowKey: id
+        columns:
+          - { field: action, label: Action }
+          - { field: afterHours, label: After (hours), kind: number }
+        empty:
+          title: No actions
+          body: Every policy needs at least "Mark device non-compliant".
+  - id: settings
+    label: Settings
+    layout:
+      - widget: table
+        id: settings
+        span: 12
+        data: policy.settings
+        rowKey: setting
+        search: true
+        columns:
+          - { field: setting, label: Setting, kind: code }
+          - { field: value, label: Value, kind: code }
+        empty:
+          title: No settings configured
+          body: Every setting is left at "Not configured".

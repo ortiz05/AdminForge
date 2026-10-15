@@ -1,0 +1,21 @@
+{
+  "id": "729827e3-9c14-49f7-bb1b-9608f156bbb8",
+  "templateId": "729827e3-9c14-49f7-bb1b-9608f156bbb8",
+  "displayName": "Helpdesk Administrator",
+  "description": "Can reset passwords for non-administrators and Helpdesk Administrators.",
+  "isBuiltIn": true,
+  "isEnabled": true,
+  "version": "1",
+  "resourceScopes": [
+    "/"
+  ],
+  "rolePermissions": [
+    {
+      "allowedResourceActions": [
+        "microsoft.directory/users/password/update",
+        "microsoft.directory/users/invalidateAllRefreshTokens"
+      ],
+      "condition": null
+    }
+  ]
+}

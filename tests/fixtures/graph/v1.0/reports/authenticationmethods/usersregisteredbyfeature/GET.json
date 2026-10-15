@@ -1,0 +1,27 @@
+{
+  "totalUserCount": 1284,
+  "userTypes": "all",
+  "userRoles": "all",
+  "userRegistrationFeatureCounts": [
+    {
+      "feature": "ssprRegistered",
+      "userCount": 1102
+    },
+    {
+      "feature": "ssprEnabled",
+      "userCount": 1231
+    },
+    {
+      "feature": "ssprCapable",
+      "userCount": 1065
+    },
+    {
+      "feature": "passwordlessCapable",
+      "userCount": 412
+    },
+    {
+      "feature": "mfaCapable",
+      "userCount": 1197
+    }
+  ]
+}

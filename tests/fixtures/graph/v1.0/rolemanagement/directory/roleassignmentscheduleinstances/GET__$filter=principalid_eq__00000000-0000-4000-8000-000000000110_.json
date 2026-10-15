@@ -1,0 +1,31 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#fixture",
+  "value": [
+    {
+      "id": "ai-ra-01",
+      "principalId": "00000000-0000-4000-8000-000000000110",
+      "roleDefinitionId": "62e90394-69f5-4237-9190-012177145e10",
+      "directoryScopeId": "/",
+      "appScopeId": null,
+      "assignmentType": "Assigned",
+      "memberType": "Direct",
+      "roleAssignmentOriginId": "ra-01",
+      "roleAssignmentScheduleId": "ra-01-schedule",
+      "startDateTime": "2024-01-01T00:00:00Z",
+      "endDateTime": null,
+      "principal": {
+        "@odata.type": "#microsoft.graph.user",
+        "id": "00000000-0000-4000-8000-000000000110",
+        "displayName": "Break Glass 01",
+        "userPrincipalName": "bg01@exampleorg.onmicrosoft.com"
+      },
+      "roleDefinition": {
+        "id": "62e90394-69f5-4237-9190-012177145e10",
+        "displayName": "Global Administrator",
+        "description": "Can manage all aspects of Microsoft Entra ID and Microsoft services that use Microsoft Entra identities.",
+        "isBuiltIn": true,
+        "templateId": "62e90394-69f5-4237-9190-012177145e10"
+      }
+    }
+  ]
+}

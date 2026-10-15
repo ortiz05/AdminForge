@@ -1,0 +1,57 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#fixture",
+  "value": [
+    {
+      "id": "ai-ra-05",
+      "principalId": "00000000-0000-4000-8000-000000000101",
+      "roleDefinitionId": "fe930be7-5e62-47db-91af-98c3a49a38b1",
+      "directoryScopeId": "/",
+      "appScopeId": null,
+      "assignmentType": "Assigned",
+      "memberType": "Direct",
+      "roleAssignmentOriginId": "ra-05",
+      "roleAssignmentScheduleId": "ra-05-schedule",
+      "startDateTime": "2024-01-01T00:00:00Z",
+      "endDateTime": null,
+      "principal": {
+        "@odata.type": "#microsoft.graph.user",
+        "id": "00000000-0000-4000-8000-000000000101",
+        "displayName": "Adele Lee",
+        "userPrincipalName": "a.lee@example.com"
+      },
+      "roleDefinition": {
+        "id": "fe930be7-5e62-47db-91af-98c3a49a38b1",
+        "displayName": "User Administrator",
+        "description": "Can manage all aspects of users and groups, including resetting passwords for limited admins.",
+        "isBuiltIn": true,
+        "templateId": "fe930be7-5e62-47db-91af-98c3a49a38b1"
+      }
+    },
+    {
+      "id": "ai-ra-09",
+      "principalId": "00000000-0000-4000-8000-000000000101",
+      "roleDefinitionId": "729827e3-9c14-49f7-bb1b-9608f156bbb8",
+      "directoryScopeId": "/",
+      "appScopeId": null,
+      "assignmentType": "Assigned",
+      "memberType": "Direct",
+      "roleAssignmentOriginId": "ra-09",
+      "roleAssignmentScheduleId": "ra-09-schedule",
+      "startDateTime": "2024-01-01T00:00:00Z",
+      "endDateTime": null,
+      "principal": {
+        "@odata.type": "#microsoft.graph.user",
+        "id": "00000000-0000-4000-8000-000000000101",
+        "displayName": "Adele Lee",
+        "userPrincipalName": "a.lee@example.com"
+      },
+      "roleDefinition": {
+        "id": "729827e3-9c14-49f7-bb1b-9608f156bbb8",
+        "displayName": "Helpdesk Administrator",
+        "description": "Can reset passwords for non-administrators and Helpdesk Administrators.",
+        "isBuiltIn": true,
+        "templateId": "729827e3-9c14-49f7-bb1b-9608f156bbb8"
+      }
+    }
+  ]
+}

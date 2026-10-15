@@ -1,0 +1,471 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#fixture",
+  "value": [
+    {
+      "id": "Directory_01_20261015",
+      "category": "RoleManagement",
+      "correlationId": "00000000-0000-4000-8000-00000000ad01",
+      "result": "success",
+      "resultReason": "",
+      "activityDisplayName": "Add member to role completed (PIM activation)",
+      "activityDateTime": "2026-10-15T03:00:00Z",
+      "loggedByService": "PIM",
+      "operationType": "Add",
+      "initiatedBy": {
+        "app": null,
+        "user": {
+          "id": "00000000-0000-4000-8000-0000000000a1",
+          "displayName": "Avery Engineer",
+          "userPrincipalName": "avery@example.com",
+          "ipAddress": "203.0.113.24"
+        }
+      },
+      "targetResources": [
+        {
+          "id": "fe930be7-5e62-47db-91af-98c3a49a38b1",
+          "displayName": "User Administrator",
+          "type": "Role",
+          "userPrincipalName": null,
+          "groupType": null,
+          "modifiedProperties": []
+        },
+        {
+          "id": "00000000-0000-4000-8000-0000000000a1",
+          "displayName": null,
+          "type": "User",
+          "userPrincipalName": "avery@example.com",
+          "groupType": null,
+          "modifiedProperties": []
+        }
+      ],
+      "additionalDetails": []
+    },
+    {
+      "id": "Directory_02_20261014",
+      "category": "UserManagement",
+      "correlationId": "00000000-0000-4000-8000-00000000ad02",
+      "result": "success",
+      "resultReason": "",
+      "activityDisplayName": "Update user",
+      "activityDateTime": "2026-10-14T16:30:00Z",
+      "loggedByService": "Core Directory",
+      "operationType": "Update",
+      "initiatedBy": {
+        "app": null,
+        "user": {
+          "id": "00000000-0000-4000-8000-000000000101",
+          "displayName": "Adele Lee",
+          "userPrincipalName": "a.lee@example.com",
+          "ipAddress": "203.0.113.24"
+        }
+      },
+      "targetResources": [
+        {
+          "id": "00000000-0000-4000-8000-000000000105",
+          "displayName": null,
+          "type": "User",
+          "userPrincipalName": "s.patel@example.com",
+          "groupType": null,
+          "modifiedProperties": [
+            {
+              "displayName": "Department",
+              "oldValue": "\"…\"",
+              "newValue": "\"…\""
+            },
+            {
+              "displayName": "JobTitle",
+              "oldValue": "\"…\"",
+              "newValue": "\"…\""
+            }
+          ]
+        }
+      ],
+      "additionalDetails": []
+    },
+    {
+      "id": "Directory_03_20261014",
+      "category": "GroupManagement",
+      "correlationId": "00000000-0000-4000-8000-00000000ad03",
+      "result": "success",
+      "resultReason": "",
+      "activityDisplayName": "Add member to group",
+      "activityDateTime": "2026-10-14T16:35:00Z",
+      "loggedByService": "Core Directory",
+      "operationType": "Add",
+      "initiatedBy": {
+        "app": null,
+        "user": {
+          "id": "00000000-0000-4000-8000-000000000101",
+          "displayName": "Adele Lee",
+          "userPrincipalName": "a.lee@example.com",
+          "ipAddress": "203.0.113.24"
+        }
+      },
+      "targetResources": [
+        {
+          "id": "00000000-0000-4000-8000-000000000102",
+          "displayName": null,
+          "type": "User",
+          "userPrincipalName": "m.chen@example.com",
+          "groupType": null,
+          "modifiedProperties": []
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000201",
+          "displayName": "SG-App-Payroll-Users",
+          "type": "Group",
+          "userPrincipalName": null,
+          "groupType": null,
+          "modifiedProperties": []
+        }
+      ],
+      "additionalDetails": []
+    },
+    {
+      "id": "Directory_04_20261014",
+      "category": "ApplicationManagement",
+      "correlationId": "00000000-0000-4000-8000-00000000ad04",
+      "result": "success",
+      "resultReason": "",
+      "activityDisplayName": "Consent to application",
+      "activityDateTime": "2026-10-14T03:20:00Z",
+      "loggedByService": "Core Directory",
+      "operationType": "Consent",
+      "initiatedBy": {
+        "app": null,
+        "user": {
+          "id": "00000000-0000-4000-8000-000000000102",
+          "displayName": "Morgan Chen",
+          "userPrincipalName": "m.chen@example.com",
+          "ipAddress": "203.0.113.24"
+        }
+      },
+      "targetResources": [
+        {
+          "id": "00000000-0000-4000-8000-000000000404",
+          "displayName": "PDF Converter Online",
+          "type": "ServicePrincipal",
+          "userPrincipalName": null,
+          "groupType": null,
+          "modifiedProperties": [
+            {
+              "displayName": "ConsentAction.Permissions",
+              "oldValue": "\"…\"",
+              "newValue": "\"…\""
+            }
+          ]
+        }
+      ],
+      "additionalDetails": []
+    },
+    {
+      "id": "Directory_05_20261014",
+      "category": "ApplicationManagement",
+      "correlationId": "00000000-0000-4000-8000-00000000ad05",
+      "result": "success",
+      "resultReason": "",
+      "activityDisplayName": "Add app role assignment grant to user",
+      "activityDateTime": "2026-10-14T03:21:00Z",
+      "loggedByService": "Core Directory",
+      "operationType": "Add",
+      "initiatedBy": {
+        "app": null,
+        "user": {
+          "id": "00000000-0000-4000-8000-000000000102",
+          "displayName": "Morgan Chen",
+          "userPrincipalName": "m.chen@example.com",
+          "ipAddress": "203.0.113.24"
+        }
+      },
+      "targetResources": [
+        {
+          "id": "00000000-0000-4000-8000-000000000404",
+          "displayName": "PDF Converter Online",
+          "type": "ServicePrincipal",
+          "userPrincipalName": null,
+          "groupType": null,
+          "modifiedProperties": []
+        }
+      ],
+      "additionalDetails": []
+    },
+    {
+      "id": "Directory_06_20261014",
+      "category": "Policy",
+      "correlationId": "00000000-0000-4000-8000-00000000ad06",
+      "result": "success",
+      "resultReason": "",
+      "activityDisplayName": "Update conditional access policy",
+      "activityDateTime": "2026-10-14T15:00:00Z",
+      "loggedByService": "Conditional Access",
+      "operationType": "Update",
+      "initiatedBy": {
+        "app": null,
+        "user": {
+          "id": "00000000-0000-4000-8000-000000000109",
+          "displayName": "Jordan Rivera",
+          "userPrincipalName": "j.rivera@example.com",
+          "ipAddress": "203.0.113.24"
+        }
+      },
+      "targetResources": [
+        {
+          "id": "00000000-0000-4000-8000-000000000905",
+          "displayName": "CA005 – Block untrusted countries",
+          "type": "Policy",
+          "userPrincipalName": null,
+          "groupType": null,
+          "modifiedProperties": [
+            {
+              "displayName": "ConditionalAccessPolicy",
+              "oldValue": "\"…\"",
+              "newValue": "\"…\""
+            }
+          ]
+        }
+      ],
+      "additionalDetails": []
+    },
+    {
+      "id": "Directory_07_20261013",
+      "category": "ApplicationManagement",
+      "correlationId": "00000000-0000-4000-8000-00000000ad07",
+      "result": "success",
+      "resultReason": "",
+      "activityDisplayName": "Add service principal credentials",
+      "activityDateTime": "2026-10-13T11:00:00Z",
+      "loggedByService": "Core Directory",
+      "operationType": "Add",
+      "initiatedBy": {
+        "app": null,
+        "user": {
+          "id": "00000000-0000-4000-8000-000000000109",
+          "displayName": "Jordan Rivera",
+          "userPrincipalName": "j.rivera@example.com",
+          "ipAddress": "203.0.113.24"
+        }
+      },
+      "targetResources": [
+        {
+          "id": "00000000-0000-4000-8000-000000000407",
+          "displayName": "Legacy Automation",
+          "type": "ServicePrincipal",
+          "userPrincipalName": null,
+          "groupType": null,
+          "modifiedProperties": [
+            {
+              "displayName": "KeyDescription",
+              "oldValue": "\"…\"",
+              "newValue": "\"…\""
+            }
+          ]
+        }
+      ],
+      "additionalDetails": []
+    },
+    {
+      "id": "Directory_08_20261001",
+      "category": "UserManagement",
+      "correlationId": "00000000-0000-4000-8000-00000000ad08",
+      "result": "success",
+      "resultReason": "",
+      "activityDisplayName": "Disable account",
+      "activityDateTime": "2026-10-01T08:55:00Z",
+      "loggedByService": "Core Directory",
+      "operationType": "Disable",
+      "initiatedBy": {
+        "app": null,
+        "user": {
+          "id": "00000000-0000-4000-8000-000000000101",
+          "displayName": "Adele Lee",
+          "userPrincipalName": "a.lee@example.com",
+          "ipAddress": "203.0.113.24"
+        }
+      },
+      "targetResources": [
+        {
+          "id": "00000000-0000-4000-8000-000000000104",
+          "displayName": null,
+          "type": "User",
+          "userPrincipalName": "r.castillo@example.com",
+          "groupType": null,
+          "modifiedProperties": [
+            {
+              "displayName": "AccountEnabled",
+              "oldValue": "\"…\"",
+              "newValue": "\"…\""
+            }
+          ]
+        }
+      ],
+      "additionalDetails": []
+    },
+    {
+      "id": "Directory_09_20261001",
+      "category": "UserManagement",
+      "correlationId": "00000000-0000-4000-8000-00000000ad09",
+      "result": "success",
+      "resultReason": "",
+      "activityDisplayName": "Reset user password",
+      "activityDateTime": "2026-10-01T08:56:00Z",
+      "loggedByService": "Self-service Password Management",
+      "operationType": "Reset",
+      "initiatedBy": {
+        "app": null,
+        "user": {
+          "id": "00000000-0000-4000-8000-000000000101",
+          "displayName": "Adele Lee",
+          "userPrincipalName": "a.lee@example.com",
+          "ipAddress": "203.0.113.24"
+        }
+      },
+      "targetResources": [
+        {
+          "id": "00000000-0000-4000-8000-000000000104",
+          "displayName": null,
+          "type": "User",
+          "userPrincipalName": "r.castillo@example.com",
+          "groupType": null,
+          "modifiedProperties": []
+        }
+      ],
+      "additionalDetails": []
+    },
+    {
+      "id": "Directory_10_20260929",
+      "category": "ApplicationManagement",
+      "correlationId": "00000000-0000-4000-8000-00000000ad10",
+      "result": "success",
+      "resultReason": "",
+      "activityDisplayName": "Update application – Certificates and secrets management",
+      "activityDateTime": "2026-09-29T10:00:00Z",
+      "loggedByService": "Core Directory",
+      "operationType": "Update",
+      "initiatedBy": {
+        "app": null,
+        "user": {
+          "id": "00000000-0000-4000-8000-000000000101",
+          "displayName": "Adele Lee",
+          "userPrincipalName": "a.lee@example.com",
+          "ipAddress": "203.0.113.24"
+        }
+      },
+      "targetResources": [
+        {
+          "id": "00000000-0000-4000-8000-000000000301",
+          "displayName": "Example HR Sync",
+          "type": "Application",
+          "userPrincipalName": null,
+          "groupType": null,
+          "modifiedProperties": [
+            {
+              "displayName": "KeyDescription",
+              "oldValue": "\"…\"",
+              "newValue": "\"…\""
+            }
+          ]
+        }
+      ],
+      "additionalDetails": []
+    },
+    {
+      "id": "Directory_11_20260301",
+      "category": "UserManagement",
+      "correlationId": "00000000-0000-4000-8000-00000000ad11",
+      "result": "success",
+      "resultReason": "",
+      "activityDisplayName": "Invite external user",
+      "activityDateTime": "2026-03-01T09:00:00Z",
+      "loggedByService": "Invited Users",
+      "operationType": "Invite",
+      "initiatedBy": {
+        "app": null,
+        "user": {
+          "id": "00000000-0000-4000-8000-000000000102",
+          "displayName": "Morgan Chen",
+          "userPrincipalName": "m.chen@example.com",
+          "ipAddress": "203.0.113.24"
+        }
+      },
+      "targetResources": [
+        {
+          "id": "00000000-0000-4000-8000-000000000107",
+          "displayName": null,
+          "type": "User",
+          "userPrincipalName": "t.brooks_vendor.example#EXT#@exampleorg.onmicrosoft.com",
+          "groupType": null,
+          "modifiedProperties": []
+        }
+      ],
+      "additionalDetails": []
+    },
+    {
+      "id": "Directory_12_20261014",
+      "category": "GroupManagement",
+      "correlationId": "00000000-0000-4000-8000-00000000ad12",
+      "result": "failure",
+      "resultReason": "Cannot update a mail-enabled security group or distribution list.",
+      "activityDisplayName": "Add member to group",
+      "activityDateTime": "2026-10-14T16:40:00Z",
+      "loggedByService": "Core Directory",
+      "operationType": "Add",
+      "initiatedBy": {
+        "app": null,
+        "user": {
+          "id": "00000000-0000-4000-8000-000000000101",
+          "displayName": "Adele Lee",
+          "userPrincipalName": "a.lee@example.com",
+          "ipAddress": "203.0.113.24"
+        }
+      },
+      "targetResources": [
+        {
+          "id": "00000000-0000-4000-8000-000000000206",
+          "displayName": "Finance Announcements",
+          "type": "Group",
+          "userPrincipalName": null,
+          "groupType": null,
+          "modifiedProperties": []
+        }
+      ],
+      "additionalDetails": []
+    },
+    {
+      "id": "Directory_13_20261015",
+      "category": "UserManagement",
+      "correlationId": "00000000-0000-4000-8000-00000000ad13",
+      "result": "success",
+      "resultReason": "",
+      "activityDisplayName": "Update user",
+      "activityDateTime": "2026-10-15T01:00:00Z",
+      "loggedByService": "Core Directory",
+      "operationType": "Update",
+      "initiatedBy": {
+        "user": null,
+        "app": {
+          "appId": "00000000-0000-4000-8001-0000000000ec",
+          "displayName": "Microsoft Entra Connect Sync",
+          "servicePrincipalId": "00000000-0000-4000-8000-0000000004ec",
+          "servicePrincipalName": "Microsoft Entra Connect Sync"
+        }
+      },
+      "targetResources": [
+        {
+          "id": "00000000-0000-4000-8000-000000000108",
+          "displayName": null,
+          "type": "User",
+          "userPrincipalName": "d.okafor@example.com",
+          "groupType": null,
+          "modifiedProperties": [
+            {
+              "displayName": "Manager",
+              "oldValue": "\"…\"",
+              "newValue": "\"…\""
+            }
+          ]
+        }
+      ],
+      "additionalDetails": []
+    }
+  ]
+}

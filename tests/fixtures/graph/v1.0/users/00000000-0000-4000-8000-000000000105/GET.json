@@ -1,0 +1,66 @@
+{
+  "id": "00000000-0000-4000-8000-000000000105",
+  "displayName": "Sam Patel",
+  "givenName": "Sam",
+  "surname": "Patel",
+  "userPrincipalName": "s.patel@example.com",
+  "mail": "s.patel@example.com",
+  "otherMails": [],
+  "proxyAddresses": [
+    "SMTP:s.patel@example.com",
+    "smtp:s.patel@exampleorg.onmicrosoft.com"
+  ],
+  "accountEnabled": true,
+  "userType": "Member",
+  "department": "Finance",
+  "jobTitle": "Accounts Payable Clerk",
+  "companyName": "Example Org",
+  "officeLocation": "London",
+  "city": "London",
+  "country": "United Kingdom",
+  "usageLocation": null,
+  "mobilePhone": null,
+  "businessPhones": [],
+  "employeeId": "E2105",
+  "employeeType": "Employee",
+  "employeeHireDate": "2025-03-10T09:00:00Z",
+  "createdDateTime": "2025-03-10T09:00:00Z",
+  "creationType": null,
+  "externalUserState": null,
+  "externalUserStateChangeDateTime": null,
+  "onPremisesSyncEnabled": null,
+  "onPremisesLastSyncDateTime": null,
+  "onPremisesSamAccountName": null,
+  "onPremisesDomainName": null,
+  "onPremisesImmutableId": null,
+  "lastPasswordChangeDateTime": "2025-03-10T09:00:00Z",
+  "passwordPolicies": null,
+  "preferredLanguage": "en-US",
+  "signInSessionsValidFromDateTime": "2025-03-10T09:00:00Z",
+  "assignedLicenses": [],
+  "licenseAssignmentStates": [
+    {
+      "skuId": "00000000-0000-4000-8000-000000001001",
+      "assignedByGroup": "00000000-0000-4000-8000-000000000204",
+      "state": "Error",
+      "error": "UsageLocationNotAllowed",
+      "disabledPlans": [],
+      "lastUpdatedDateTime": "2026-09-01T09:00:00Z"
+    }
+  ],
+  "signInActivity": {
+    "lastSignInDateTime": "2026-05-02T09:12:00Z",
+    "lastSignInRequestId": "00000000-0000-4000-8000-0000000005e1",
+    "lastNonInteractiveSignInDateTime": "2026-05-02T10:00:00Z",
+    "lastNonInteractiveSignInRequestId": "00000000-0000-4000-8000-0000000005e2",
+    "lastSuccessfulSignInDateTime": "2026-05-02T09:12:00Z",
+    "lastSuccessfulSignInRequestId": null
+  },
+  "manager": {
+    "@odata.type": "#microsoft.graph.user",
+    "id": "00000000-0000-4000-8000-000000000102",
+    "displayName": "Morgan Chen",
+    "userPrincipalName": "m.chen@example.com",
+    "mail": "m.chen@example.com"
+  }
+}

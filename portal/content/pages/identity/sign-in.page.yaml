@@ -1,0 +1,130 @@
+$schema: ../../../packages/schemas/generated/page.schema.json
+kind: page
+id: identity.sign-in
+version: 1.0.0
+title: Sign-in
+summary: One sign-in event — result and failure reason, location, device, and the Conditional Access policies that applied.
+owner: identity-team
+tags: [identity, sign-ins, investigation]
+template: entity
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    graph: [AuditLog.Read.All, Directory.Read.All]
+  entraRoles: [Reports Reader]
+  licences: [signInLogs]
+
+params:
+  id: { type: guid, label: Sign-in id, required: true, hidden: true }
+
+datasources:
+  signIn:
+    source: graph
+    request:
+      path: /auditLogs/signIns/${ $encode($guid(params.id)) }
+    cache: { ttl: 3600 }
+    transform: >-
+      ${ $merge([value, {
+           "result": value.status.errorCode = 0 ? 'success' : 'failure',
+           "place": $join([value.location.city, value.location.state, value.location.countryOrRegion][$], ', '),
+           "coordinates": value.location.geoCoordinates.latitude ? value.location.geoCoordinates.latitude & ', ' & value.location.geoCoordinates.longitude : null,
+           "policies": [value.appliedConditionalAccessPolicies.{
+             "id": id,
+             "displayName": displayName,
+             "result": result,
+             "grant": $join(enforcedGrantControls, ', '),
+             "session": $join(enforcedSessionControls, ', ')
+           }^(result = 'failure' ? 0 : result = 'success' ? 1 : 2, displayName)]
+         }]) }
+
+header:
+  title: "${ signIn.userDisplayName & ' → ' & signIn.appDisplayName }"
+  subtitle: "${ signIn.createdDateTime & ' · ' & signIn.ipAddress & (signIn.place ? ' · ' & signIn.place : '') }"
+  status: "${ signIn.result = 'success' ? 'ok' : 'crit' }"
+  statusLabel: "${ signIn.result = 'success' ? 'Success' : 'Failure ' & signIn.status.errorCode }"
+  ids:
+    Request id: ${ signIn.id }
+    Correlation id: ${ signIn.correlationId }
+
+actions:
+  - label: Open user
+    icon: user
+    href: "/p/identity.user?id=${ $encode(signIn.userId) }"
+  - playbook: identity.revoke-sessions
+    label: Revoke the user's sessions
+    icon: sign-out
+    inputs:
+      userId: ${ signIn.userId }
+
+tabs:
+  - id: details
+    label: Details
+    layout:
+      - widget: keyValue
+        id: basics
+        title: Sign-in
+        span: 6
+        data: signIn
+        fields:
+          - { field: createdDateTime, label: Time, kind: datetime }
+          - { field: userPrincipalName, label: User }
+          - { field: appDisplayName, label: Application }
+          - { field: resourceDisplayName, label: Resource }
+          - { field: result, label: Result, kind: status, map: { success: [ok, Success], failure: [crit, Failure] } }
+          - { field: status.errorCode, label: Error code, kind: number }
+          - { field: status.failureReason, label: Failure reason }
+          - { field: status.additionalDetails, label: Additional details }
+          - { field: clientAppUsed, label: Client app }
+          - { field: isInteractive, label: Interactive, kind: boolean }
+          - { field: conditionalAccessStatus, label: Conditional Access, kind: status, map: { success: [ok, Success], failure: [crit, Failure], notApplied: [neutral, Not applied] } }
+      - widget: keyValue
+        id: context
+        title: Location and device
+        span: 6
+        data: signIn
+        fields:
+          - { field: ipAddress, label: IP address, kind: code }
+          - { field: place, label: Location }
+          - { field: coordinates, label: Coordinates }
+          - { field: deviceDetail.displayName, label: Device }
+          - { field: deviceDetail.operatingSystem, label: Operating system }
+          - { field: deviceDetail.browser, label: Browser }
+          - { field: deviceDetail.trustType, label: Join type }
+          - { field: deviceDetail.isCompliant, label: Compliant, kind: boolean }
+          - { field: deviceDetail.isManaged, label: Managed, kind: boolean }
+      - widget: keyValue
+        id: risk
+        title: Risk
+        description: Risk detail needs Entra ID P2 (Identity Protection).
+        span: 12
+        data: signIn
+        fields:
+          - { field: riskLevelDuringSignIn, label: Sign-in risk, kind: status, map: { none: [ok, None], low: [info, Low], medium: [warn, Medium], high: [crit, High], hidden: [neutral, Hidden] } }
+          - { field: riskLevelAggregated, label: Aggregated risk }
+          - { field: riskState, label: Risk state }
+          - { field: riskDetail, label: Risk detail }
+          - { field: riskEventTypes_v2, label: Detections, kind: tags }
+  - id: conditionalAccess
+    label: Conditional Access
+    layout:
+      - widget: table
+        id: policies
+        span: 12
+        data: signIn.policies
+        rowKey: id
+        columns:
+          - { field: displayName, label: Policy }
+          - field: result
+            label: Result
+            kind: status
+            map: { success: [ok, Satisfied], failure: [crit, Blocked or not satisfied], notApplied: [neutral, Not applied], notEnabled: [neutral, Off], reportOnlySuccess: [info, Report-only satisfied], reportOnlyFailure: [warn, Report-only would fail], reportOnlyNotApplied: [neutral, Report-only not applied], reportOnlyInterrupted: [info, Report-only interrupted] }
+            filter: facet
+          - { field: grant, label: Grant controls enforced }
+          - { field: session, label: Session controls enforced }
+        inspect:
+          page: identity.ca-policy
+          params:
+            id: ${ row.id }
+        empty:
+          title: No policies evaluated
+          body: Conditional Access didn't evaluate any policy for this sign-in.

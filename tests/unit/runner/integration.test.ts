@@ -75,7 +75,9 @@ async function startRunner(key: string, preload: PreloadService[], poolSize = 1)
   const address = app.server.address();
   const baseUrl = `http://127.0.0.1:${typeof address === 'object' && address ? address.port : 0}`;
   const health = async () => {
-    const res = await fetch(`${baseUrl}/healthz`, { headers: signRunnerRequest({ key }) });
+    const res = await fetch(`${baseUrl}/healthz`, {
+      headers: signRunnerRequest({ key, method: 'GET', path: '/healthz' }),
+    });
     return { status: res.status, body: (await res.json()) as HealthBody };
   };
   return { app, baseUrl, logs, health };

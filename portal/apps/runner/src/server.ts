@@ -90,6 +90,8 @@ export async function buildRunnerServer(opts: RunnerServerOptions): Promise<Fast
       key: config.sharedKey,
       authorization: request.headers.authorization,
       timestamp: Array.isArray(header) ? header[0] : header,
+      method: request.method,
+      path: request.raw.url ?? request.url,
       body: raw,
       nowSeconds: opts.nowSeconds?.(),
     });

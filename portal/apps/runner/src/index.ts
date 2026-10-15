@@ -6,14 +6,17 @@ export {
   RUNNER_TIMESTAMP_HEADER,
   RunnerRequestError,
   cancelRunnerJob,
+  canonicalRunnerString,
   computeRunnerSignature,
   decodeRunnerKey,
   readNdjson,
+  requestTarget,
   sha256Hex,
   signRunnerRequest,
   submitRunnerJob,
   type RunnerClientOptions,
   type RunnerKey,
+  type RunnerSignatureInput,
   type RunnerSignatureHeaders,
 } from './client';
 export {

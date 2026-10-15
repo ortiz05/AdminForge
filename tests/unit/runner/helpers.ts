@@ -96,7 +96,13 @@ export async function signedInject(
 ) {
   const payload = opts.body === undefined ? '' : JSON.stringify(opts.body);
   const headers: Record<string, string> = {
-    ...signRunnerRequest({ key, body: payload, timestamp: opts.timestamp }),
+    ...signRunnerRequest({
+      key,
+      method: opts.method,
+      path: opts.url,
+      body: payload,
+      timestamp: opts.timestamp,
+    }),
   };
   if (payload) headers['content-type'] = 'application/json';
   return app.inject({ method: opts.method, url: opts.url, payload: payload || undefined, headers });

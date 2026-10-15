@@ -100,7 +100,10 @@ describe('runner server with a fake worker', () => {
       method: 'POST',
       url: '/v1/jobs',
       payload: raw,
-      headers: { ...signRunnerRequest({ key, body: raw }), 'content-type': 'application/json' },
+      headers: {
+        ...signRunnerRequest({ key, method: 'POST', path: '/v1/jobs', body: raw }),
+        'content-type': 'application/json',
+      },
     });
     expect(bad.statusCode).toBe(400);
     expect(bad.json()).toMatchObject({ error: 'invalid_request', message: 'Body is not valid JSON' });
@@ -132,6 +135,11 @@ describe('runner server with a fake worker', () => {
     expect(await cancelRunnerJob({ baseUrl, key, jobId: body.jobId })).toBe(false);
   });
 
+  it('signs percent-encoded job ids exactly as sent (auth passes; the job is unknown)', async () => {
+    // A 401 would surface as RunnerRequestError; false means the signature over /v1/jobs/run-1%3Astep-2/cancel held.
+    expect(await cancelRunnerJob({ baseUrl, key, jobId: 'run-1:step-2' })).toBe(false);
+  });
+
   it('times out a job and kills its worker', async () => {
     const res = await signedInject(app, key, {
       method: 'POST',
@@ -150,7 +158,10 @@ describe('runner server with a fake worker', () => {
     const res = await fetch(`${baseUrl}/v1/jobs`, {
       method: 'POST',
       body: payload,
-      headers: { 'content-type': 'application/json', ...signRunnerRequest({ key, body: payload }) },
+      headers: {
+        'content-type': 'application/json',
+        ...signRunnerRequest({ key, method: 'POST', path: '/v1/jobs', body: payload }),
+      },
       signal: controller.signal,
     });
     const reader = res.body!.getReader();
@@ -165,7 +176,10 @@ describe('runner server with a fake worker', () => {
     const res = await fetch(`${baseUrl}/v1/jobs`, {
       method: 'POST',
       body: payload,
-      headers: { 'content-type': 'application/json', ...signRunnerRequest({ key, body: payload }) },
+      headers: {
+        'content-type': 'application/json',
+        ...signRunnerRequest({ key, method: 'POST', path: '/v1/jobs', body: payload }),
+      },
     });
     const text = await res.text();
     expect(text).toMatch(/\n\n/);

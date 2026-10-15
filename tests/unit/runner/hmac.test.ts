@@ -1,6 +1,12 @@
 import { createHash, createHmac } from 'node:crypto';
 import { verifyRunnerRequest } from '@adminforge/runner/src/auth';
-import { computeRunnerSignature, decodeRunnerKey, signRunnerRequest } from '@adminforge/runner/src/client';
+import {
+  canonicalRunnerString,
+  computeRunnerSignature,
+  decodeRunnerKey,
+  requestTarget,
+  signRunnerRequest,
+} from '@adminforge/runner/src/client';
 import {
   ConfigError,
   buildWorkerCommand,
@@ -16,23 +22,39 @@ describe('runner request signing', () => {
   const keyBytes = decodeRunnerKey(key);
   const body = JSON.stringify({ jobId: 'a', inputs: { x: 1 } });
   const now = 1_800_000_000;
+  const hmac = (canonical: string) => createHmac('sha256', keyBytes).update(canonical).digest('hex');
+  const bodyHash = createHash('sha256').update(body).digest('hex');
+  const emptyHash = createHash('sha256').update('').digest('hex');
 
-  it('signs HMAC-SHA256(key, `${timestamp}.${sha256hex(body)}`) as hex', () => {
-    const expected = createHmac('sha256', keyBytes)
-      .update(`${now}.${createHash('sha256').update(body).digest('hex')}`)
-      .digest('hex');
-    expect(computeRunnerSignature(key, now, body)).toBe(expected);
-    expect(signRunnerRequest({ key, body, timestamp: now })).toEqual({
-      authorization: `AdminForge-HMAC ${expected}`,
+  it('signs HMAC-SHA256(key, `${ts}.${METHOD}.${pathAndQuery}.${sha256hex(body)}`) as hex', () => {
+    const canonical = `${now}.POST./v1/jobs.${bodyHash}`;
+    expect(canonicalRunnerString({ timestamp: now, method: 'post', path: '/v1/jobs', body })).toBe(canonical);
+    expect(computeRunnerSignature({ key, timestamp: now, method: 'POST', path: '/v1/jobs', body })).toBe(
+      hmac(canonical),
+    );
+    expect(signRunnerRequest({ key, method: 'POST', path: '/v1/jobs', body, timestamp: now })).toEqual({
+      authorization: `AdminForge-HMAC ${hmac(canonical)}`,
       'x-adminforge-timestamp': String(now),
     });
   });
 
-  it('signs an empty body for GET requests', () => {
-    const expected = createHmac('sha256', keyBytes)
-      .update(`${now}.${createHash('sha256').update('').digest('hex')}`)
-      .digest('hex');
-    expect(signRunnerRequest({ key, timestamp: now }).authorization).toBe(`AdminForge-HMAC ${expected}`);
+  it('signs an empty body and keeps the query string as sent', () => {
+    expect(
+      signRunnerRequest({ key, method: 'GET', path: '/healthz?verbose=1', timestamp: now }).authorization,
+    ).toBe(`AdminForge-HMAC ${hmac(`${now}.GET./healthz?verbose=1.${emptyHash}`)}`);
+  });
+
+  it('refuses to sign a full URL or a strange method', () => {
+    expect(() => signRunnerRequest({ key, method: 'GET', path: 'http://127.0.0.1:3101/healthz' })).toThrow(
+      /starting with "\/"/,
+    );
+    expect(() => signRunnerRequest({ key, method: 'GE T', path: '/healthz' })).toThrow(/Invalid HTTP method/);
+  });
+
+  it('takes path and query exactly as fetch sends them', () => {
+    expect(
+      requestTarget(new URL(`/v1/jobs/${encodeURIComponent('run-1:step 2')}/cancel?x=1`, 'http://h')),
+    ).toBe('/v1/jobs/run-1%3Astep%202/cancel?x=1');
   });
 
   it('rejects keys shorter than 32 bytes', () => {
@@ -40,16 +62,19 @@ describe('runner request signing', () => {
   });
 
   const verify = (overrides: Partial<Parameters<typeof verifyRunnerRequest>[0]> = {}) => {
-    const headers = signRunnerRequest({ key, body, timestamp: now });
+    const headers = signRunnerRequest({ key, method: 'POST', path: '/v1/jobs', body, timestamp: now });
     return verifyRunnerRequest({
       key: keyBytes,
       authorization: headers.authorization,
       timestamp: headers['x-adminforge-timestamp'],
+      method: 'POST',
+      path: '/v1/jobs',
       body: Buffer.from(body),
       nowSeconds: now,
       ...overrides,
     });
   };
+  const bad = { ok: false, reason: 'bad_signature' };
 
   it('accepts a valid signature inside the ±60 s window', () => {
     expect(verify()).toEqual({ ok: true });
@@ -64,12 +89,17 @@ describe('runner request signing', () => {
   });
 
   it('rejects a tampered body, a wrong key, and a signature for another timestamp', () => {
-    expect(verify({ body: Buffer.from(body.replace('"x":1', '"x":2')) })).toEqual({
-      ok: false,
-      reason: 'bad_signature',
-    });
-    expect(verify({ key: decodeRunnerKey(newKey()) })).toEqual({ ok: false, reason: 'bad_signature' });
-    expect(verify({ timestamp: String(now + 1) })).toEqual({ ok: false, reason: 'bad_signature' });
+    expect(verify({ body: Buffer.from(body.replace('"x":1', '"x":2')) })).toEqual(bad);
+    expect(verify({ key: decodeRunnerKey(newKey()) })).toEqual(bad);
+    expect(verify({ timestamp: String(now + 1) })).toEqual(bad);
+  });
+
+  it('rejects the signature on another method, path or query', () => {
+    expect(verify({ method: 'PUT' })).toEqual(bad);
+    expect(verify({ path: '/v1/jobs/' })).toEqual(bad);
+    expect(verify({ path: '/v1/jobs?x=1' })).toEqual(bad);
+    expect(verify({ path: '/v1/Jobs' })).toEqual(bad);
+    expect(verify({ path: 'v1/jobs' })).toEqual(bad);
   });
 
   it('rejects missing or malformed headers', () => {
@@ -94,6 +124,12 @@ describe('runner server authentication', () => {
   });
   afterAll(() => app.close());
 
+  /** Sends a request whose headers were signed for a (possibly different) method + path. */
+  const replay = (
+    signed: { method: 'GET' | 'POST'; path: string },
+    sent: { method: 'GET' | 'POST'; url: string },
+  ) => app.inject({ method: sent.method, url: sent.url, headers: signRunnerRequest({ key, ...signed }) });
+
   it('refuses unsigned requests on every route', async () => {
     for (const [method, url] of [
       ['GET', '/healthz'],
@@ -109,6 +145,45 @@ describe('runner server authentication', () => {
   it('accepts a signed request', async () => {
     const res = await signedInject(app, key, { method: 'GET', url: '/healthz' });
     expect(res.statusCode).toBe(200);
+  });
+
+  it('accepts a cancel signature on its own path (past auth: 404 for an unknown job)', async () => {
+    const res = await replay(
+      { method: 'POST', path: '/v1/jobs/x/cancel' },
+      { method: 'POST', url: '/v1/jobs/x/cancel' },
+    );
+    expect(res.statusCode).toBe(404);
+    expect(res.json()).toMatchObject({ error: 'job_not_found' });
+  });
+
+  it('rejects a signature for POST /v1/jobs/x/cancel on POST /v1/jobs/y/cancel', async () => {
+    const res = await replay(
+      { method: 'POST', path: '/v1/jobs/x/cancel' },
+      { method: 'POST', url: '/v1/jobs/y/cancel' },
+    );
+    expect(res.statusCode).toBe(401);
+    expect(res.json().message).toBe('Signature does not match');
+  });
+
+  it('rejects a signature for POST /v1/jobs/x/cancel on GET /healthz', async () => {
+    const res = await replay(
+      { method: 'POST', path: '/v1/jobs/x/cancel' },
+      { method: 'GET', url: '/healthz' },
+    );
+    expect(res.statusCode).toBe(401);
+  });
+
+  it('rejects a signature for GET /healthz on POST /healthz-shaped or query-modified requests', async () => {
+    expect(
+      (await replay({ method: 'GET', path: '/healthz' }, { method: 'GET', url: '/healthz?x=1' })).statusCode,
+    ).toBe(401);
+    expect(
+      (await replay({ method: 'GET', path: '/healthz?x=1' }, { method: 'GET', url: '/healthz?x=1' }))
+        .statusCode,
+    ).toBe(200);
+    expect(
+      (await replay({ method: 'POST', path: '/healthz' }, { method: 'GET', url: '/healthz' })).statusCode,
+    ).toBe(401);
   });
 
   it('refuses a signature made with another key', async () => {
@@ -129,7 +204,7 @@ describe('runner server authentication', () => {
 
   it('verifies the exact body bytes before parsing them', async () => {
     const payload = JSON.stringify({ jobId: 'x' });
-    const headers = signRunnerRequest({ key, body: payload });
+    const headers = signRunnerRequest({ key, method: 'POST', path: '/v1/jobs', body: payload });
     const res = await app.inject({
       method: 'POST',
       url: '/v1/jobs',

@@ -7,7 +7,7 @@ const host = process.env.RUNNER_HEALTHCHECK_HOST || '127.0.0.1';
 
 try {
   const res = await fetch(`http://${host}:${port}/healthz`, {
-    headers: signRunnerRequest({ key }),
+    headers: signRunnerRequest({ key, method: 'GET', path: '/healthz' }),
     signal: AbortSignal.timeout(5000),
   });
   process.exit(res.status === 200 ? 0 : 1);

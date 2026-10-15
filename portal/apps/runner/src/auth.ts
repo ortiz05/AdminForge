@@ -10,13 +10,18 @@ const SIGNATURE_RE = new RegExp(`^${RUNNER_AUTH_SCHEME} ([0-9a-f]{64})$`);
 const TIMESTAMP_RE = /^\d{1,12}$/;
 
 /**
- * Verifies `Authorization: AdminForge-HMAC <hex>` + `X-AdminForge-Timestamp` over the raw request body.
+ * Verifies `Authorization: AdminForge-HMAC <hex>` + `X-AdminForge-Timestamp` over the method, request target
+ * (path + query) and raw body — see the canonical string in client.ts.
  * The timestamp must be within ±maxSkewSeconds of now (replay window).
  */
 export function verifyRunnerRequest(opts: {
   key: Buffer;
   authorization: string | undefined;
   timestamp: string | undefined;
+  /** HTTP method of the request as received. */
+  method: string;
+  /** Request target as received (path + query, e.g. request.raw.url). */
+  path: string;
   body: Buffer;
   nowSeconds?: number;
   maxSkewSeconds?: number;
@@ -30,7 +35,19 @@ export function verifyRunnerRequest(opts: {
   if (Math.abs(now - Number(opts.timestamp)) > (opts.maxSkewSeconds ?? RUNNER_MAX_CLOCK_SKEW_SECONDS)) {
     return { ok: false, reason: 'stale_timestamp' };
   }
-  const expected = Buffer.from(computeRunnerSignature(opts.key, opts.timestamp, opts.body), 'hex');
+  let expectedHex: string;
+  try {
+    expectedHex = computeRunnerSignature({
+      key: opts.key,
+      timestamp: opts.timestamp,
+      method: opts.method,
+      path: opts.path,
+      body: opts.body,
+    });
+  } catch {
+    return { ok: false, reason: 'bad_signature' };
+  }
+  const expected = Buffer.from(expectedHex, 'hex');
   const given = Buffer.from(match[1]!, 'hex');
   if (given.length !== expected.length || !timingSafeEqual(given, expected))
     return { ok: false, reason: 'bad_signature' };

@@ -7,9 +7,18 @@ import { type RunnerEvent, type RunnerJobRequest, RunnerEventSchema } from './pr
  * Every request carries:
  *   Authorization:          AdminForge-HMAC <hex>
  *   X-AdminForge-Timestamp: <unix seconds>
- * where <hex> = HMAC-SHA256(key, `${timestamp}.${sha256hex(body)}`), key = base64-decoded RUNNER_SHARED_KEY,
- * and body is the exact request body bytes ('' for GET and body-less POST). The runner accepts timestamps
- * within ±60 s of its clock.
+ * where
+ *   <hex>     = hex(HMAC-SHA256(key, canonical))
+ *   key       = base64-decoded RUNNER_SHARED_KEY (at least 32 bytes)
+ *   canonical = `${timestamp}.${METHOD}.${pathAndQuery}.${sha256hex(body)}`
+ *     timestamp     the X-AdminForge-Timestamp value (unix seconds)
+ *     METHOD        the HTTP method, upper-case (GET, POST)
+ *     pathAndQuery  the request target exactly as sent on the wire: path plus query string, no scheme or
+ *                   host, percent-encoding as sent (e.g. /v1/jobs/run-1%3Astep-2/cancel)
+ *     body          the exact request body bytes ('' for GET and body-less POST)
+ * e.g. "1792034653.POST./v1/jobs/abc/cancel.e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+ * The runner accepts timestamps within ±60 s of its clock. Binding method and path means a captured
+ * signature cannot be replayed against another endpoint or another job.
  */
 export const RUNNER_AUTH_SCHEME = 'AdminForge-HMAC';
 export const RUNNER_TIMESTAMP_HEADER = 'x-adminforge-timestamp';
@@ -34,15 +43,29 @@ export function sha256Hex(body: RunnerBody): string {
   return createHash('sha256').update(body).digest('hex');
 }
 
-/** HMAC-SHA256 over `${timestamp}.${sha256hex(body)}`, hex encoded. */
-export function computeRunnerSignature(
-  key: RunnerKey,
-  timestamp: number | string,
-  body: RunnerBody = '',
-): string {
-  return createHmac('sha256', decodeRunnerKey(key))
-    .update(`${timestamp}.${sha256Hex(body)}`)
-    .digest('hex');
+export interface RunnerSignatureInput {
+  key: RunnerKey;
+  timestamp: number | string;
+  /** HTTP method; upper-cased before signing. */
+  method: string;
+  /** Path plus query exactly as sent, starting with "/" (e.g. "/v1/jobs/abc/cancel"). */
+  path: string;
+  body?: RunnerBody;
+}
+
+/** The string that is signed: `${timestamp}.${METHOD}.${pathAndQuery}.${sha256hex(body)}`. */
+export function canonicalRunnerString(input: Omit<RunnerSignatureInput, 'key'>): string {
+  const method = input.method.toUpperCase();
+  if (!/^[A-Z]+$/.test(method)) throw new Error(`Invalid HTTP method for runner signing: ${input.method}`);
+  if (!input.path.startsWith('/')) {
+    throw new Error('Runner signing needs the request path (and query) starting with "/", not a full URL');
+  }
+  return `${input.timestamp}.${method}.${input.path}.${sha256Hex(input.body ?? '')}`;
+}
+
+/** HMAC-SHA256 over the canonical string, hex encoded. */
+export function computeRunnerSignature(input: RunnerSignatureInput): string {
+  return createHmac('sha256', decodeRunnerKey(input.key)).update(canonicalRunnerString(input)).digest('hex');
 }
 
 export type RunnerSignatureHeaders = Record<string, string> & {
@@ -50,17 +73,28 @@ export type RunnerSignatureHeaders = Record<string, string> & {
   'x-adminforge-timestamp': string;
 };
 
-/** Headers for one runner request. Sign the exact bytes you send (JSON.stringify once, reuse the string). */
+/**
+ * Headers for one runner request. `method` and `path` are required: sign the exact method, path + query
+ * and body bytes you send (JSON.stringify once, reuse the string).
+ */
 export function signRunnerRequest(opts: {
   key: RunnerKey;
+  method: string;
+  path: string;
   body?: RunnerBody;
   timestamp?: number;
 }): RunnerSignatureHeaders {
   const timestamp = opts.timestamp ?? Math.floor(Date.now() / 1000);
+  const signature = computeRunnerSignature({ ...opts, timestamp });
   return {
-    authorization: `${RUNNER_AUTH_SCHEME} ${computeRunnerSignature(opts.key, timestamp, opts.body ?? '')}`,
+    authorization: `${RUNNER_AUTH_SCHEME} ${signature}`,
     'x-adminforge-timestamp': String(timestamp),
   };
+}
+
+/** The path + query of a URL exactly as fetch sends it. */
+export function requestTarget(url: URL): string {
+  return `${url.pathname}${url.search}`;
 }
 
 /**
@@ -132,9 +166,13 @@ export async function* submitRunnerJob(
   opts: RunnerClientOptions & { job: RunnerJobRequest },
 ): AsyncGenerator<RunnerEvent> {
   const body = JSON.stringify(opts.job);
-  const res = await (opts.fetch ?? fetch)(new URL('/v1/jobs', opts.baseUrl), {
+  const url = new URL('/v1/jobs', opts.baseUrl);
+  const res = await (opts.fetch ?? fetch)(url, {
     method: 'POST',
-    headers: { 'content-type': 'application/json', ...signRunnerRequest({ key: opts.key, body }) },
+    headers: {
+      'content-type': 'application/json',
+      ...signRunnerRequest({ key: opts.key, method: 'POST', path: requestTarget(url), body }),
+    },
     body,
     signal: opts.signal,
   });
@@ -147,14 +185,12 @@ export async function* submitRunnerJob(
 
 /** Asks the runner to stop a running job. Returns false when the runner does not know the job. */
 export async function cancelRunnerJob(opts: RunnerClientOptions & { jobId: string }): Promise<boolean> {
-  const res = await (opts.fetch ?? fetch)(
-    new URL(`/v1/jobs/${encodeURIComponent(opts.jobId)}/cancel`, opts.baseUrl),
-    {
-      method: 'POST',
-      headers: signRunnerRequest({ key: opts.key }),
-      signal: opts.signal,
-    },
-  );
+  const url = new URL(`/v1/jobs/${encodeURIComponent(opts.jobId)}/cancel`, opts.baseUrl);
+  const res = await (opts.fetch ?? fetch)(url, {
+    method: 'POST',
+    headers: signRunnerRequest({ key: opts.key, method: 'POST', path: requestTarget(url) }),
+    signal: opts.signal,
+  });
   if (res.status === 404) return false;
   if (res.status !== 202) throw await toRequestError(res);
   return true;

@@ -13,6 +13,14 @@ import { Params } from './params';
 
 export const OnError = z.enum(['fail', 'continue', 'compensate']);
 
+/**
+ * A path into a step's output naming a secret field: dot-separated keys, `*` for every key/element, digits for an
+ * array index — e.g. `temporaryAccessPass`, `newPassword`, `responses.*.secretText`.
+ */
+export const SecretPath = z
+  .string()
+  .regex(/^(\*|[A-Za-z_$][\w$]*)(\.(\*|[A-Za-z_$][\w$]*|\d+))*$/, 'Use a dot path into the output, e.g. temporaryAccessPass or credentials.*.secretText');
+
 /** Absolute https URL whose host is literal, so validate/engine can check it against the http allowlist. */
 const HttpUrl = z
   .string()
@@ -97,6 +105,14 @@ const stepBase = {
   idempotent: z.boolean().optional(),
   /** Output used for this step in dry runs when it is a write (templated). */
   dryRunOutput: z.unknown().optional(),
+  /**
+   * Show-once secrets in this step's output (passwords, Temporary Access Passes, client secrets). The values are shown
+   * once to the person who started the run and replaced by `{ $secret: true, hint }` everywhere else — stored step
+   * output, run outputs, events, audit, and the expression scope of later steps (which may not reference them).
+   */
+  secretOutputs: z.array(SecretPath).min(1).optional(),
+  /** The whole output is a show-once secret (see secretOutputs). */
+  secret: z.boolean().optional(),
   timeout: Duration.optional(),
 };
 
@@ -280,11 +296,59 @@ export const stepMode = (step: Step): Mode => step.mode ?? 'read';
 const requestMethod = (step: Step): string | undefined =>
   step.type === 'graph' || step.type === 'arm' || step.type === 'http' ? step.request.method : undefined;
 
+const STEP_OUTPUT_REF = /steps\.([A-Za-z_][A-Za-z0-9_]*)\.output((?:\s*\.\s*[A-Za-z_$][\w$]*|\s*\.\s*\d+|\[\s*\d+\s*\])*)/g;
+const LOOKUP_REF = /\$lookup\(\s*steps\.([A-Za-z_][A-Za-z0-9_]*)\.output\s*,\s*["']([^"']+)["']/g;
+
+/** Output path segments referenced after `steps.<id>.output` (`.a.b`, `[0]`). */
+const refSegments = (tail: string) => [...tail.matchAll(/\.\s*([A-Za-z_$][\w$]*|\d+)|\[\s*(\d+)\s*\]/g)].map((m) => m[1] ?? m[2]!);
+
+/** True when a reference to `ref` (segments under the output) can read the secret at `secret`. */
+function readsSecret(ref: string[], secret: string[]): boolean {
+  if (ref.length < secret.length) return false;
+  return secret.every((seg, i) => seg === '*' || seg === ref[i]);
+}
+
+/**
+ * Show-once secrets may not flow anywhere: no expression (later steps, outputs, confirm, compensations…) may read a
+ * declared secret path, or any part of an output declared `secret: true`. The engine also masks them at run time.
+ */
+function checkSecrets(def: Record<string, unknown>, groups: Array<{ steps: readonly Step[]; path: (string | number)[] }>, ctx: z.RefinementCtx): void {
+  const secrets = new Map<string, string[][]>();
+  for (const { steps } of groups)
+    walkSteps(steps, (step) => {
+      const paths = [...(step.secret ? [[]] : []), ...(step.secretOutputs ?? []).map((p) => p.split('.'))];
+      if (paths.length) secrets.set(step.id, paths);
+    });
+  if (!secrets.size) return;
+  const visit = (value: unknown, at: (string | number)[]) => {
+    if (typeof value === 'string') {
+      if (!value.includes('${')) return;
+      const hits: Array<[string, string[]]> = [];
+      for (const m of value.matchAll(STEP_OUTPUT_REF)) hits.push([m[1]!, refSegments(m[2] ?? '')]);
+      for (const m of value.matchAll(LOOKUP_REF)) hits.push([m[1]!, m[2]!.split('.')]);
+      for (const [id, ref] of hits) {
+        const bad = secrets.get(id)?.find((secret) => readsSecret(ref, secret));
+        if (bad)
+          ctx.addIssue({
+            code: 'custom',
+            path: at,
+            message: `steps.${id}.output${bad.length ? `.${bad.join('.')}` : ''} is a show-once secret; it is shown to the person who ran the playbook and cannot be used in expressions or outputs.`,
+          });
+      }
+      return;
+    }
+    if (Array.isArray(value)) value.forEach((v, i) => visit(v, [...at, i]));
+    else if (value && typeof value === 'object') for (const [k, v] of Object.entries(value)) if (!(at.length === 0 && k === 'tests')) visit(v, [...at, k]);
+  };
+  visit(def, []);
+}
+
 function checkAutomation(
   def: { mode: Mode; risk: Risk; confirm?: Confirm; approval?: Approval; tests?: PlaybookTest[] },
   groups: Array<{ steps: readonly Step[]; path: (string | number)[] }>,
   ctx: z.RefinementCtx,
 ): void {
+  checkSecrets(def as unknown as Record<string, unknown>, groups, ctx);
   const ids = new Map<string, string>();
   for (const { steps, path } of groups) {
     walkSteps(

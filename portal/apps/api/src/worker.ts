@@ -24,7 +24,8 @@ if (!config.DATABASE_URL) {
 }
 const concurrency = config.RUN_WORKER_CONCURRENCY;
 const ctx = createContext(config, {}, { warn: log.warn });
-const runs = createRunsModule(ctx, { inProcessWorker: true, workerConcurrency: concurrency, log });
+// serveSecrets: false — this process only publishes show-once secrets (sealed NOTIFY) to the API process(es).
+const runs = createRunsModule(ctx, { inProcessWorker: true, workerConcurrency: concurrency, serveSecrets: false, log });
 await runs.start();
 log.info({ concurrency, queue: runs.queue.kind, authMode: config.AUTH_MODE, dataMode: config.DATA_MODE }, 'AdminForge run worker ready');
 

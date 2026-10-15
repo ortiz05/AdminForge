@@ -1,4 +1,6 @@
+import { randomBytes } from 'node:crypto';
 import { Engine, type Clock, type Limits, type RunnerPort } from '@adminforge/engine';
+import { tokenCacheKey } from '../config';
 import type { AppContext } from '../context';
 import type { DefinitionResolver } from '../definitions/types';
 import type { OutboundExecutor } from '../execution/types';
@@ -10,6 +12,7 @@ import { PgRunRepository } from './pg-repository';
 import { createOutboundPort, createRunnerPort } from './ports';
 import { InProcessRunQueue, PgBossRunQueue, type RunQueue } from './queue';
 import { RunWorker } from './run-worker';
+import { SecretBroker } from './secrets';
 import { RunService } from './service';
 import { RepositoryRunStore } from './store';
 import type { RunRepository } from './types';
@@ -28,13 +31,17 @@ export interface RunsOptions {
   queue?: RunQueue;
   definitions?: DefinitionResolver;
   outbound?: OutboundExecutor;
-  /** null disables runner steps; default: RUNNER_URL + RUNNER_SHARED_KEY from the env file. */
+  /** null disables runner steps; default: RUNNER_URL + RUNNER_SHARED_KEY from configuration. */
   runner?: RunnerPort | null;
   /** Consume jobs in this process. Default: RUN_WORKER_IN_PROCESS=true, or always with the in-memory queue. */
   inProcessWorker?: boolean;
   workerConcurrency?: number;
   /** Periodic sweep (approval expiry, lost jobs) in the in-process worker. Default true. */
   sweep?: boolean;
+  /** This process serves browsers and receives show-once secrets (default true; the worker entry passes false). */
+  serveSecrets?: boolean;
+  /** How long an unfetched secret is held (default 5 minutes). */
+  secretTtlMs?: number;
   clock?: Clock;
   env?: () => Record<string, unknown>;
   limits?: Partial<Limits>;
@@ -50,6 +57,7 @@ export interface RunsModule {
   store: RepositoryRunStore;
   identity: SessionIdentityResolver;
   worker: RunWorker;
+  secrets: SecretBroker;
   /** Whether this process consumes run jobs. */
   readonly consuming: boolean;
   start(): Promise<void>;
@@ -98,6 +106,18 @@ export function createRunsModule(ctx: AppContext, opts: RunsOptions = {}): RunsM
   }
 
   const store = new RepositoryRunStore(repo, ctx.audit);
+  const pg = !!ctx.database && !!ctx.config.DATABASE_URL && !(repo instanceof MemoryRunRepository);
+  const secrets = new SecretBroker({
+    repo,
+    audit: ctx.audit,
+    // Cross-process hand-off needs the same key in API and worker (TOKEN_CACHE_KEY); a random key works in-process.
+    key: tokenCacheKey(ctx.config) ?? randomBytes(32),
+    database: pg ? ctx.database : null,
+    listenUrl: pg ? (ctx.config.DATABASE_URL ?? null) : null,
+    serve: opts.serveSecrets ?? true,
+    ...(opts.secretTtlMs ? { ttlMs: opts.secretTtlMs } : {}),
+    ...(log ? { log } : {}),
+  });
   const identity = new SessionIdentityResolver(repo, ctx.sessions, ctx.config, ctx.now);
   const holder: { engine?: Engine } = {};
   const children = new RunChildRunner({ repo, store, identity, definitions, engine: () => holder.engine!, audit: ctx.audit, env, now: ctx.now });
@@ -107,6 +127,7 @@ export function createRunsModule(ctx: AppContext, opts: RunsOptions = {}): RunsM
     outbound: createOutboundPort(outbound),
     ...(runner ? { runner } : {}),
     children,
+    secrets: secrets.sink(),
     env: env(),
     ...(opts.clock ? { clock: opts.clock } : {}),
     ...(opts.limits ? { limits: opts.limits } : {}),
@@ -125,10 +146,12 @@ export function createRunsModule(ctx: AppContext, opts: RunsOptions = {}): RunsM
     store,
     identity,
     worker,
+    secrets,
     consuming,
     async start() {
       if (started) return;
       started = true;
+      await secrets.start();
       if (consuming) await worker.start(opts.workerConcurrency ?? 4, { sweep: opts.sweep ?? !testing });
     },
     async stop() {
@@ -136,6 +159,7 @@ export function createRunsModule(ctx: AppContext, opts: RunsOptions = {}): RunsM
       await worker.stop();
       await queue.stop();
       await bus.stop();
+      await secrets.stop();
     },
   };
 }

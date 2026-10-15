@@ -8,6 +8,7 @@ import type { RunsModule } from '../runs/module';
 import type { Caller } from '../runs/service';
 import { streamRunEvents } from '../runs/sse';
 import { RUN_STATUS_ACTIVE } from '../runs/types';
+import { assertCsrf } from '../security/csrf';
 
 /**
  * Runs API (§9). Request/response shapes:
@@ -20,6 +21,8 @@ import { RUN_STATUS_ACTIVE } from '../runs/types';
  * - POST /api/runs/:id/resume → 202 {runId, status}
  * - POST /api/runs/:id/approvals/:stepId {decision:'approve'|'reject', comment?} → {status, approvals, required}
  * - POST /api/runs/:id/manual/:stepId {confirmed, notes?, values?} → {status}
+ * - GET  /api/runs/:id/secret/:stepPath (+ X-AdminForge-CSRF) → {type:'secret', runId, stepId, stepPath, values, hints, producedAt}
+ *   once, for the initiator's session, within 5 minutes; 404 secret_not_available otherwise
  * `:stepId` is the step path (URL-encoded), e.g. `approve`, `loop[2].approve`, `$approval` (implicit gate).
  */
 
@@ -110,6 +113,20 @@ export function runRoutes(api: FastifyInstance, _ctx: AppContext, runs: RunsModu
     const raw = (Array.isArray(header) ? header[0] : header) ?? request.query.lastEventId ?? '0';
     const last = /^\d{1,15}$/.test(raw) ? Number(raw) : 0;
     await streamRunEvents(request, reply, runs, row.id, last);
+  });
+
+  // Show-once secret that was not delivered live: the first fetch by the initiator's session takes it. Consuming, so
+  // the CSRF header is required even on GET (a cross-site navigation must not burn it).
+  api.get<{ Params: { id: string; stepPath: string } }>('/runs/:id/secret/:stepPath', async (request) => {
+    assertCsrf(request);
+    const caller = callerOf(request);
+    const row = await service.assertViewable(caller, request.params.id);
+    const secret = await runs.secrets.claim(row.id, request.params.stepPath, caller.session.idHash);
+    if (!secret)
+      throw new AppError(404, 'secret_not_available', 'This secret is not available: it was already shown, it expired (5 minutes), or it belongs to another session.', {
+        hint: 'Secrets are shown once to the person who started the run. Run the playbook again to get a new one.',
+      });
+    return secret;
   });
 
   api.post<{ Params: { id: string } }>('/runs/:id/cancel', async (request) => {

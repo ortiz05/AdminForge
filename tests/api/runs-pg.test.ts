@@ -1,9 +1,12 @@
 import { randomUUID } from 'node:crypto';
 import type { HumanTask, StepRecord } from '@adminforge/engine';
+import { PgAuditWriter } from '@adminforge/api/src/audit/writer';
 import { createDatabase, type Database } from '@adminforge/api/src/db/client';
+import { PgListener } from '@adminforge/api/src/definitions/notify';
+import { SECRETS_CHANNEL } from '@adminforge/api/src/runs/secrets';
 import { PgBossRunQueue, PgRunRepository, RunEventBus, type NewRun, type RunNotification } from '@adminforge/api/src/runs';
 import { testDatabaseUrl } from './db';
-import { mockConfig } from './helpers';
+import { mockConfig, TEST_KEY } from './helpers';
 import { AVERY, BLAKE, FakeExecutor, runsApp, StaticDefinitions } from './runs-helpers';
 
 const url = await testDatabaseUrl();
@@ -189,6 +192,54 @@ describe.skipIf(!url)('runs on Postgres', () => {
     expect(sse.body).toContain('"type":"run"');
     expect(sse.body.trimEnd().endsWith('event: end\ndata: {"status":"succeeded"}')).toBe(true);
     await t.close();
+  });
+
+  it('show-once secrets never reach Postgres: sealed NOTIFY hand-off, fetch once, no row anywhere holds the value', async () => {
+    const secret = `Tap-${randomUUID()}`;
+    const definitions = new StaticDefinitions().add({
+      kind: 'playbook',
+      id: 'test.pg-tap',
+      version: '1.0.0',
+      title: 'PG TAP',
+      owner: 'tests',
+      risk: 'low',
+      mode: 'write',
+      steps: [{ id: 'create', type: 'graph', mode: 'write', describe: 'Create TAP', request: { method: 'POST', path: '/users/u/authentication/temporaryAccessPassMethods' }, secretOutputs: ['temporaryAccessPass'] }],
+    } as never);
+    const payloads: string[] = [];
+    const spy = new PgListener(url!, SECRETS_CHANNEL, (p) => payloads.push(p));
+    await spy.start();
+    const appDb = createDatabase(url!);
+    const t = await runsApp({
+      config: mockConfig({ DATABASE_URL: url!, TOKEN_CACHE_KEY: TEST_KEY }),
+      definitions,
+      outbound: new FakeExecutor((c) => (c.method === 'POST' ? { id: 'm1', temporaryAccessPass: secret } : null)),
+      database: appDb,
+      repository: new PgRunRepository(appDb),
+      audit: new PgAuditWriter(appDb.db),
+    });
+    try {
+      expect(t.runs.secrets.transport).toBe('notify');
+      const avery = await t.login(AVERY, ['Portal.Operator'], { armed: true });
+      const { runId } = (await avery.post('/api/runs', { playbook: 'test.pg-tap', inputs: {} })).json();
+      await t.drain();
+      await waitFor(() => t.runs.secrets.heldCount === 1);
+      const got = await avery.get(`/api/runs/${runId}/secret/create`, { 'x-adminforge-csrf': avery.record.csrf });
+      expect(got.json().values).toEqual({ temporaryAccessPass: secret });
+      expect((await avery.get(`/api/runs/${runId}/secret/create`, { 'x-adminforge-csrf': avery.record.csrf })).statusCode).toBe(404);
+      await waitFor(() => payloads.length >= 2); // the sealed secret, then the "revealed" notice
+      expect(payloads.map((p) => JSON.parse(p).t)).toEqual(['secret', 'revealed']);
+      expect(payloads.join('\n')).not.toContain(secret);
+      for (const table of ['runs', 'run_steps', 'run_step_events', 'approvals', 'audit_events']) {
+        const { rows } = await database.pool.query<{ n: string }>(`select count(*) as n from ${table} t where t::text like $1`, [`%${secret}%`]);
+        expect([table, rows[0]!.n]).toEqual([table, '0']);
+      }
+      const { rows } = await database.pool.query<{ action: string }>("select action from audit_events where target_id = $1 and action like 'run.secret.%'", [runId]);
+      expect(rows.map((r) => r.action)).toEqual(['run.secret.revealed']);
+    } finally {
+      await spy.stop();
+      await t.close();
+    }
   });
 
   it('pg-boss queue: enqueue (coalesced per run) → work delivers the run id; startAfter defers', { timeout: 30_000 }, async () => {

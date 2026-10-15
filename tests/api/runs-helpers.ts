@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { buildApp } from '@adminforge/api/src/app';
-import { MemoryAuditWriter } from '@adminforge/api/src/audit/writer';
+import { MemoryAuditWriter, type AuditWriter } from '@adminforge/api/src/audit/writer';
 import { MemoryPreauthStore } from '@adminforge/api/src/auth/preauth-store';
 import { MemorySessionStore, type SessionRecord } from '@adminforge/api/src/auth/session-store';
 import { createTokenCache, MemorySealedBlobStore } from '@adminforge/api/src/auth/token-cache';
@@ -59,6 +59,8 @@ export interface RunsAppOptions {
   outbound?: FakeExecutor;
   database?: Database | null;
   repository?: RunRepository;
+  /** Audit writer (default: in memory). */
+  audit?: AuditWriter;
   runs?: Partial<RunsOptions>;
 }
 
@@ -66,7 +68,8 @@ export interface RunsAppOptions {
 export async function runsApp(o: RunsAppOptions) {
   const clock = new Clock();
   const sessions = new MemorySessionStore();
-  const audit = new MemoryAuditWriter(clock.now);
+  const memoryAudit = new MemoryAuditWriter(clock.now);
+  const audit = o.audit ?? memoryAudit;
   const outbound = o.outbound ?? new FakeExecutor();
   const queue = new InProcessRunQueue(undefined, 10);
   const repository = o.repository ?? new MemoryRunRepository(clock.now);
@@ -126,7 +129,8 @@ export async function runsApp(o: RunsAppOptions) {
     app,
     clock,
     sessions,
-    audit,
+    audit: memoryAudit,
+    auditWriter: audit,
     outbound,
     queue,
     repository,

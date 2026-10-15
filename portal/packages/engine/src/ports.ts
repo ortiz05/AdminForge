@@ -157,6 +157,24 @@ export interface ChildRunner {
   run(req: ChildRunRequest): Promise<ChildRunResult>;
 }
 
+/** One step's show-once secret values, handed to the SecretSink exactly once (never persisted). */
+export interface SecretDelivery {
+  runId: string;
+  stepId: string;
+  stepPath: string;
+  /** Concrete output path (`$` = the whole output) → value. */
+  values: Record<string, unknown>;
+  hints: Record<string, string>;
+  /** Who the step ran as. */
+  producedBy: Actor;
+  producedAt: string;
+}
+
+/** Where secrets go: the API shows them once to the person who started the run (live stream, or one fetch within 5 minutes). */
+export interface SecretSink {
+  deliver(run: RunRecord, secret: SecretDelivery): Promise<{ status: 'delivered' | 'held' | 'sent' | 'discarded'; reason?: string }>;
+}
+
 export interface StepPorts {
   outbound: OutboundPort;
   runner?: RunnerPort;

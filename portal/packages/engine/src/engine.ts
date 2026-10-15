@@ -15,6 +15,7 @@ import type {
   ResolvedIdentity,
   RunnerPort,
   RunStore,
+  SecretSink,
   StepContext,
   StepHandler,
   StepHandlerRegistry,
@@ -22,6 +23,7 @@ import type {
   StepResult,
 } from './ports';
 import { storableOutput } from './redact';
+import { extractSecrets, secretSpec, type SecretSpec } from './secrets';
 import {
   DEFAULT_LIMITS,
   isTerminal,
@@ -72,6 +74,8 @@ export interface EngineOptions {
   rolesOf?: (actor: Actor, run: RunRecord) => string[];
   /** Dry runs also dry-run child playbooks (their reads run, their writes join the plan). Default true. */
   dryRunChildren?: boolean;
+  /** Receives show-once secrets (`secretOutputs` / `secret: true`). Without it they are discarded after masking. */
+  secrets?: SecretSink;
 }
 
 export interface ExecuteOptions {
@@ -476,7 +480,7 @@ class Execution {
     return { rec: undefined };
   }
 
-  private context(stepId: string, path: string, mode: Mode, frame: Frame, signal: AbortSignal, seqRef: { seq: number | null }): StepContext {
+  private context(stepId: string, path: string, mode: Mode, frame: Frame, signal: AbortSignal, seqRef: { seq: number | null }, spec: SecretSpec | null = null): StepContext {
     return {
       run: this.run,
       stepId,
@@ -492,8 +496,45 @@ class Execution {
       correlationId: this.run.correlationId,
       ports: { outbound: this.engine.opts.outbound, notifier: this.notifier, ...(this.engine.opts.runner ? { runner: this.engine.opts.runner } : {}), ...(this.engine.opts.children ? { children: this.engine.opts.children } : {}) },
       limits: this.limits,
-      emit: (e) => this.emit(seqRef.seq, e),
+      // Streamed outputs (runner) of a secret step are masked like the step output.
+      emit: (e) => this.emit(seqRef.seq, spec && e.type === 'output' ? { ...e, data: { ...e.data, data: extractSecrets(e.data.data, spec).masked } } : e),
     };
+  }
+
+  /**
+   * Masks a step's show-once secrets and hands the values to the SecretSink (never to the store). A failed hand-off
+   * does not fail the step — the write already happened — but is recorded (without the value).
+   */
+  private async secure(output: unknown, spec: SecretSpec | null, at: { stepId: string; path: string; seq: number; frame: Frame; deliver: boolean }): Promise<unknown> {
+    const { masked, values, hints } = extractSecrets(output, spec);
+    const fields = Object.keys(values);
+    if (!fields.length || !at.deliver) return masked;
+    let outcome: Awaited<ReturnType<SecretSink['deliver']>> = { status: 'discarded', reason: 'No secret channel is configured.' };
+    if (this.engine.opts.secrets) {
+      try {
+        outcome = await this.engine.opts.secrets.deliver(this.run, {
+          runId: this.run.id,
+          stepId: at.stepId,
+          stepPath: at.path,
+          values,
+          hints,
+          producedBy: at.frame.actor,
+          producedAt: iso(this.clock.now()),
+        });
+      } catch (err) {
+        outcome = { status: 'discarded', reason: (err as Error).message };
+      }
+    }
+    const message =
+      outcome.status === 'discarded'
+        ? `A secret output could not be delivered and was discarded${outcome.reason ? `: ${outcome.reason}` : '.'}`
+        : 'Secret output ready. It is shown once to the person who started the run and is not stored.';
+    await this.emit(at.seq, {
+      type: 'log',
+      level: outcome.status === 'discarded' ? 'warn' : 'info',
+      data: { message, path: at.path, secret: { runId: this.run.id, stepId: at.stepId, stepPath: at.path, fields, hints, status: outcome.status } },
+    });
+    return masked;
   }
 
   private async describe(text: string | undefined, frame: Frame): Promise<string | null> {
@@ -586,6 +627,7 @@ class Execution {
   }): Promise<{ kind: 'ok'; rec: StepRecord } | { kind: 'failed'; rec: StepRecord } | { kind: 'flow'; flow: Flow }> {
     const { frame, handler, path, mode } = a;
     const seqRef: { seq: number | null } = { seq: null };
+    const spec = a.compensation ? null : secretSpec(a.body as { secret?: boolean; secretOutputs?: string[] });
     const fail = async (err: unknown, rec?: StepRecord) => {
       const error = toRunError(err, { stepId: a.stepId, path });
       const r = rec ?? this.newRecord(a.stepId, a.type, path, mode, frame.actor, { attempt: a.existing ? a.existing.attempt + (a.existing.status === 'retried' ? 1 : 0) : 1 });
@@ -619,7 +661,8 @@ class Execution {
       } catch (err) {
         return fail(err, rec);
       }
-      await this.close(rec, frame.actor, { status: 'planned', output: output ?? null });
+      // Dry runs produce no real secrets: mask whatever dryRunOutput/mocks say, deliver nothing.
+      await this.close(rec, frame.actor, { status: 'planned', output: extractSecrets(output ?? null, spec).masked ?? null });
       return { kind: 'ok', rec };
     }
 
@@ -644,7 +687,7 @@ class Execution {
       await this.save(rec, frame.actor);
       const stepAc = new AbortController();
       const signal = AbortSignal.any([this.ac.signal, stepAc.signal]);
-      const ctx = { ...this.context(a.stepId, path, mode, frame, signal, seqRef), identity };
+      const ctx = { ...this.context(a.stepId, path, mode, frame, signal, seqRef, spec), identity };
       try {
         let result: StepResult;
         if (intercepted) {
@@ -659,11 +702,12 @@ class Execution {
         }
         if (result.error) {
           rec.plan = result.plan?.length ? result.plan : null;
-          rec.output = result.output ?? null;
+          rec.output = extractSecrets(result.output ?? null, spec).masked ?? null;
           throw new StepError(result.error.code, result.error.message, result.error.details ? { details: result.error.details } : {});
         }
         const plan = planSelf ? [entry, ...(result.plan ?? [])] : (result.plan ?? []);
-        await this.close(rec, frame.actor, { status: planSelf ? 'planned' : 'succeeded', output: result.output ?? null, plan: plan.length ? plan : null, msRequestId: result.requestId ?? null });
+        const output = await this.secure(result.output ?? null, spec, { stepId: a.stepId, path, seq: rec.seq, frame, deliver: !this.dryRun });
+        await this.close(rec, frame.actor, { status: planSelf ? 'planned' : 'succeeded', output: output ?? null, plan: plan.length ? plan : null, msRequestId: result.requestId ?? null });
         return { kind: 'ok', rec };
       } catch (err) {
         if (err instanceof IdentityUnavailable) {

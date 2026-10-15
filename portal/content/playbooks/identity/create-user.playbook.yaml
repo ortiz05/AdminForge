@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/playbook.schema.json
 kind: playbook
 id: identity.create-user
-version: 1.0.0
+version: 1.0.1
 title: Onboard user
 summary: >-
   Creates a cloud user account with a unique sign-in name, sets the manager, adds group memberships, assigns a licence,
@@ -119,17 +119,6 @@ steps:
     that: ${ $count(steps.existing.output.value) = 0 }
     message: ${ steps.names.output.userPrincipalName & ' is already used by ' & steps.existing.output.value[0].displayName & '. Choose another sign-in name.' }
 
-  # Throwaway initial password: never shown or stored in outputs. The user's first credential is the TAP or a
-  # system-generated password from identity.reset-password. (JSONata $random is not a CSPRNG — see the report.)
-  - id: initialPassword
-    type: transform
-    expression: >-
-      ${ (
-        $sets := ['ABCDEFGHJKLMNPQRSTUVWXYZ', 'abcdefghijkmnopqrstuvwxyz', '23456789', '!@#%^*-_=+?'];
-        $pick := function($s) { $substring($s, $floor($random() * $length($s)), 1) };
-        $join([1..24].( $i := $ % 4; $pick($sets[$i]) ))
-      ) }
-
   - id: create
     type: graph
     mode: write
@@ -151,9 +140,13 @@ steps:
         companyName: ${ inputs.companyName }
         officeLocation: ${ inputs.officeLocation }
         employeeId: ${ inputs.employeeId }
+        # Throwaway initial password, generated inline so it exists only in this request (stored requests, plans and
+        # audit redact `password`; a transform step would have stored it as step output). It is never shown: the
+        # user's first credential is the TAP or a system-generated password from identity.reset-password, both
+        # show-once secrets. $secureRandom draws from a CSPRNG and mixes upper, lower, digits and symbols.
         passwordProfile:
           forceChangePasswordNextSignIn: true
-          password: ${ steps.initialPassword.output }
+          password: ${ $secureRandom(24) }
     dryRunOutput:
       id: 00000000-0000-0000-0000-000000000000
       userPrincipalName: ${ steps.names.output.userPrincipalName }
@@ -237,9 +230,8 @@ outputs:
           '. No first sign-in credential was issued; run Issue Temporary Access Pass when the user starts.') }
   userId: ${ steps.create.output.id }
   userPrincipalName: ${ steps.names.output.userPrincipalName }
-  # Secret outputs from the child playbooks (assumes a playbook step's output is the child's outputs).
-  temporaryAccessPass: ${ steps.tap.output.temporaryAccessPass }
-  temporaryPassword: ${ steps.password.output.temporaryPassword }
+  # The Temporary Access Pass / temporary password are show-once secrets of the child runs (issue-tap, reset-password):
+  # they are shown live to the engineer who started this run and are never part of its outputs.
 
 tests:
   - name: refuses a sign-in name that is already taken

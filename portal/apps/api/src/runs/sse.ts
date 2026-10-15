@@ -1,6 +1,7 @@
 import { isTerminal, type RunStatus } from '@adminforge/engine';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import type { RunEventBus } from './events';
+import type { SecretBroker } from './secrets';
 import { notificationType } from './store';
 import type { EventRow, RunRepository } from './types';
 
@@ -13,6 +14,8 @@ const PAGE = 500;
  * - step: `{ scope:'step', path, stepId, type, status, attempt, error? }`
  * - log: `{ message, level, path? }` (runner `output` events arrive as log with `output`)
  * - progress: `{ path, done, total }` (forEach) or `{ percent, message }` (runner)
+ * Live only, to the initiator's session, never replayed and without an `id:` line:
+ * - secret: `{ type: 'secret', runId, stepId, stepPath, values, hints, producedAt }` — show once, then forget.
  */
 export function sseData(e: EventRow) {
   const type = notificationType(e);
@@ -29,7 +32,7 @@ export function sseData(e: EventRow) {
 export async function streamRunEvents(
   request: FastifyRequest,
   reply: FastifyReply,
-  deps: { repo: RunRepository; bus: RunEventBus },
+  deps: { repo: RunRepository; bus: RunEventBus; secrets?: SecretBroker },
   runId: string,
   lastEventId: number,
 ): Promise<void> {
@@ -55,6 +58,7 @@ export async function streamRunEvents(
   let unsubscribe: () => void = () => undefined;
   let unReconnect: () => void = () => undefined;
   let untrack: () => void = () => undefined;
+  let detach: () => void = () => undefined;
 
   const close = () => {
     if (closed) return;
@@ -63,6 +67,7 @@ export async function streamRunEvents(
     unsubscribe();
     unReconnect();
     untrack();
+    detach();
     raw.end();
   };
   // The response closes when the client goes away (the request's own 'close' fires as soon as its body is read).
@@ -108,6 +113,9 @@ export async function streamRunEvents(
   unsubscribe = deps.bus.subscribe(runId, () => void pump());
   unReconnect = deps.bus.onReconnect(() => void pump());
   untrack = deps.bus.track(close);
+  // Show-once secrets of this run reach only the initiator's own open streams, live, and are never stored (no id).
+  if (deps.secrets && request.session)
+    detach = deps.secrets.attach({ runId, sessionHash: request.session.idHash, send: (m) => void (!closed && raw.write(`data: ${JSON.stringify(m)}\n\n`)) });
   // LISTEN must be up before the replay, or an event landing in between would only show up with the next one.
   await Promise.race([deps.bus.start().catch(() => undefined), new Promise((r) => setTimeout(r, 2_000).unref?.())]);
   await pump();

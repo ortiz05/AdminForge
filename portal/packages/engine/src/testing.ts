@@ -32,6 +32,8 @@ export interface PlaybookTestResult {
   outputs: Record<string, unknown> | null;
   plan: PlanEntry[];
   steps: Record<string, StepStatus>;
+  /** Show-once secrets the run produced (field names only; values are never kept). */
+  secrets: Array<{ stepPath: string; fields: string[] }>;
 }
 
 export interface RunTestsOptions {
@@ -65,7 +67,8 @@ const noMock = (what: string) =>
 export async function runPlaybookTest(def: AutomationDefinition, test: PlaybookTest, index = 0, opts: RunTestsOptions = {}): Promise<PlaybookTestResult> {
   const clock = new VirtualClock(opts.now ?? '2026-01-15T12:00:00.000Z');
   const store = new MemoryRunStore(clock.now);
-  const base = { name: test.name, plan: [] as PlanEntry[], steps: {} as Record<string, StepStatus>, outputs: null, error: null };
+  const base = { name: test.name, plan: [] as PlanEntry[], steps: {} as Record<string, StepStatus>, outputs: null, error: null, secrets: [] };
+  const secrets: PlaybookTestResult['secrets'] = [];
 
   const validated = await validateInputs(def.inputs, test.inputs ?? {}, { now: clock.now(), env: opts.env ?? {} });
   if (!validated.ok) {
@@ -122,6 +125,7 @@ export async function runPlaybookTest(def: AutomationDefinition, test: PlaybookT
     // non-dry tests run them through resolveChild.
     dryRunChildren: false,
     notifier: { send: async () => ({}) },
+    secrets: { deliver: async (_run, s) => (secrets.push({ stepPath: s.stepPath, fields: Object.keys(s.values) }), { status: 'delivered' }) },
     intercept: (step, _path, info) => {
       if (info.runId !== runId || info.compensation) return undefined;
       const e = errors[step.id];
@@ -159,7 +163,7 @@ export async function runPlaybookTest(def: AutomationDefinition, test: PlaybookT
   for (const [id, want] of Object.entries(exp.steps ?? {})) {
     if (steps[id] !== want) failures.push(`steps.${id}: expected ${want}, got ${steps[id] ?? 'not run'}`);
   }
-  return { name: test.name, passed: failures.length === 0, failures, status: run.status, error: run.error, outputs: run.outputs, plan, steps };
+  return { name: test.name, passed: failures.length === 0, failures, status: run.status, error: run.error, outputs: run.outputs, plan, steps, secrets };
 }
 
 /** Runs every `tests:` block of the definition. */

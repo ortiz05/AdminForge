@@ -112,6 +112,8 @@ steps:
       body:
         lifetimeInMinutes: ${ inputs.lifetimeMinutes }
         isUsableOnce: ${ inputs.isUsableOnce }
+    # Shown once to the engineer who ran this (live on the run page); never stored, logged, or visible to later steps.
+    secretOutputs: [temporaryAccessPass]
     dryRunOutput:
       temporaryAccessPass: null
       lifetimeInMinutes: ${ inputs.lifetimeMinutes }
@@ -123,7 +125,6 @@ outputs:
     ${ 'Temporary Access Pass issued for ' & steps.lookup.output.userPrincipalName & ', valid ' & inputs.lifetimeMinutes
        & ' minutes' & (inputs.isUsableOnce = true ? ', one use' : '') & '. Share it over a verified channel; it is not shown again.' }
   # Returned once by Entra ID. See the report: the engine must treat this output as secret (redact at rest).
-  temporaryAccessPass: ${ steps.create.output.temporaryAccessPass }
   validUntil: >-
     ${ steps.create.output.startDateTime
        ? $fromMillis($toMillis(steps.create.output.startDateTime) + steps.create.output.lifetimeInMinutes * 60000) }

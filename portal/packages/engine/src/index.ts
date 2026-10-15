@@ -7,6 +7,7 @@ export * from './ports';
 export * from './errors';
 export * from './clock';
 export * from './redact';
+export * from './secrets';
 export * from './inputs';
 export * from './definition';
 export * from './handlers';

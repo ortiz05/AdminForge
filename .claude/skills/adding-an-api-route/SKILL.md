@@ -16,7 +16,9 @@ need **no** new route — check that first.
 1. Contract first: zod request/response schemas in `portal/packages/schemas/src/` (exported), so web and tests share
    them. Errors use `AppError` → `ApiErrorBody` (`code`, `message`, `hint`).
 2. Route file `src/routes/<area>.ts`; register it in `src/app.ts` inside the `/api` prefix block.
-3. Guards: `requireSession` (GET) / `requireSessionWithCsrf` (state-changing), `requireRole(session, 'Portal.…')`.
+3. Guards: the `/api` block already requires a session, plus the CSRF header on every non-GET. In the handler, get the
+   session with `requireSession(request)` and check roles with `requireRole(session, 'Portal.…', '<what it does>')`
+   (`src/auth/guards.ts`).
 4. Outbound calls only via `ctx.outbound.execute(identity, call)` — never `fetch` Microsoft directly (that would bypass
    the read/write policy, tokens, CAE handling, and provenance).
 5. Audit every state change: `ctx.audit.append({ ...auditActor(ctx, request, session), action, target…, result })`.

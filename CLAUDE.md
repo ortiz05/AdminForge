@@ -18,7 +18,7 @@ extension point — and the reviewer agents in `.claude/agents/`.
 | `portal/apps/runner`    | PowerShell runner (Exchange/Teams/SharePoint) — pinned scripts, forwarded delegated tokens           |
 | `portal/packages/*`     | `design-tokens`, `ui`, `widgets`, `schemas`, `expressions`, `connectors`, `engine`, `config`         |
 | `portal/content`        | Pages, dashboards, reports, playbooks, runbooks, schedules, probes, connections, scripts, navigation |
-| `portal/tools/cli`      | `adminforge` CLI (provision, new, validate, test, publish, fixtures)                                 |
+| `portal/tools/cli`      | `adminforge` CLI (env check, provision, new, validate, test, publish, fixtures)                      |
 | `tests/`                | **All** tests and test-only deps (unit, component, api, content, e2e, live, guards, fixtures)        |
 | `docs/`                 | Plan (`plans/`), ADRs, `widgets.md`, `licensing-review.md`, `backlog.md`, `extending.md`             |
 | `config/example.env`    | Every configuration key, documented. Real values live outside the repo.                              |
@@ -53,19 +53,29 @@ extension point — and the reviewer agents in `.claude/agents/`.
 
 ## Commands
 
-| Task                           | Command                                                                           |
-| ------------------------------ | --------------------------------------------------------------------------------- |
-| Install                        | `pnpm install`                                                                    |
-| Dev (no tenant needed)         | `AUTH_MODE=mock DATA_MODE=fixtures pnpm dev` → http://localhost:5173              |
-| Dev against the tenant         | `pnpm db:up && pnpm dev` (config from the env file)                               |
-| Scaffold content               | `pnpm adminforge new <kind> <section>/<name> [--template list-detail              | dashboard | report | entity]` |
-| Validate content               | `pnpm adminforge validate` (add `--scopes` to compare with the app registrations) |
-| Playbook/runbook tests         | `pnpm adminforge test [pattern]`                                                  |
-| All tests                      | `pnpm test` · e2e: `pnpm test:e2e` · guards: `pnpm guard`                         |
-| Focused tests                  | `pnpm --filter @adminforge/tests exec vitest run --project <unit                  | component | api    | content  | guards> <path>` |
-| Lint / types                   | `pnpm lint` · `pnpm typecheck`                                                    |
-| Publish content to the DB      | `pnpm adminforge publish [--dry-run]`                                             |
-| Live smoke (validation tenant) | `pnpm exec tsx tests/live/scripts/verify-api-live.ts`                             |
+| Task                           | Command                                                                                                                                  |
+| ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| Install                        | `pnpm install`                                                                                                                           |
+| Dev (no tenant needed)         | `ADMINFORGE_ENV_FILE=/dev/null PUBLIC_BASE_URL=http://localhost:5173 AUTH_MODE=mock DATA_MODE=fixtures pnpm dev` → http://localhost:5173 |
+| Check the env file             | `pnpm adminforge env check` (key names and states only, never values)                                                                    |
+| Provisioning status            | `pnpm adminforge provision status` (every provisioned object ✓/✗ plus live token checks)                                                 |
+| Database migrations            | `pnpm --filter @adminforge/api db:migrate`                                                                                               |
+| Dev against the tenant         | `pnpm db:up && pnpm --filter @adminforge/api db:migrate && pnpm dev` (config from the env file; see below)                               |
+| Scaffold content               | `pnpm adminforge new <kind> <section>/<name> [--template list-detail\|dashboard\|report\|entity]`                                        |
+| Validate content               | `pnpm adminforge validate` (add `--scopes` to compare with the app registrations)                                                        |
+| Playbook/runbook tests         | `pnpm adminforge test [pattern]`                                                                                                         |
+| All tests                      | `pnpm test` · e2e: `pnpm test:e2e` · guards: `pnpm guard`                                                                                |
+| Focused tests                  | `pnpm --filter @adminforge/tests exec vitest run --project <unit\|component\|api\|content\|guards> <path>`                               |
+| Lint / types                   | `pnpm lint` · `pnpm typecheck`                                                                                                           |
+| Format                         | `pnpm format` (write) · `pnpm format:check` (CI)                                                                                         |
+| Publish content to the DB      | `pnpm adminforge publish [--dry-run]`                                                                                                    |
+| Live smoke (validation tenant) | `pnpm exec tsx tests/live/scripts/verify-api-live.ts` · full sweep: `pnpm test:live` (see `tests/live/README.md`)                        |
+
+Mock mode ignores the env file (`ADMINFORGE_ENV_FILE=/dev/null`), so it runs on in-memory stores and never touches a
+shared database; `PUBLIC_BASE_URL` has no default and must be set. Against the tenant, playbook runs and schedules need
+`RUN_WORKER_IN_PROCESS=true` and `SCHEDULER_IN_PROCESS=true` in the env file — **unless** the host services
+(`portal/deploy`: worker, scheduler) already run against the same database: then leave both `false`, or the dev API
+consumes their queued runs.
 
 Postgres for dev runs in Docker on `127.0.0.1:55432` (`pnpm db:up`). System Chrome is used by Playwright (no browser
 download).

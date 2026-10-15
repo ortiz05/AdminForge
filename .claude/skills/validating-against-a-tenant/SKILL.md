@@ -8,7 +8,9 @@ description: Use when verifying AdminForge changes against a real Microsoft tena
 ## Overview
 
 Configuration lives in `~/.config/adminforge/<env>.env` (never in the repo; never print values). A dedicated validation
-user (`AF_TEST_USER_UPN`) signs in automatically, answering MFA from a TOTP seed in that file.
+user (`AF_TEST_USER_UPN`) signs in automatically, answering MFA from a TOTP seed. Its credentials and the provisioner's
+live in the admin-only `<env>.admin.env` next to the env file (read by the CLI and the live tests, never by the
+services).
 
 ## Setup (once per tenant)
 
@@ -20,6 +22,8 @@ azure-test` → `pnpm exec tsx tests/live/scripts/register-test-user-mfa.ts` (re
 
 - API end to end (SSO, overview, arm, logout): `pnpm db:up`, start the API, then
   `pnpm exec tsx tests/live/scripts/verify-api-live.ts`.
+- Full sweep (every page, Query Studio, schedules, read-mode refusals, reversible writes, audit chain):
+  `pnpm test:live` — prerequisites and env knobs in `tests/live/README.md`.
 - In a browser test: `openPortalSession()` / `armWriteAccess()` from `tests/live/lib/portal-session.ts`.
 - Writes: **only** against `AF-Test-*` users/groups/resources that provisioning created. Dry run first, then run,
   then run the compensating playbook; check `/audit` (chain verified).

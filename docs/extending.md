@@ -26,15 +26,19 @@ Claude picks the matching skill automatically (or name it: "use the adding-a-pla
 | A new Microsoft API, your own Entra-secured API/Function, a blocked read-only POST                         | `adding-a-service-connector`  | `portal/content/connections`, `portal/packages/connectors`, provisioning |
 | PowerShell (Exchange, distribution lists, Teams, SharePoint)                                               | `adding-a-runner-script`      | `portal/content/scripts`, `tests/runner`                                 |
 | Backend behaviour content can't express                                                                    | `adding-an-api-route`         | `portal/apps/api`, `portal/packages/schemas`                             |
-| The look and feel                                                                                          | `changing-the-design-system`  | `portal/packages/design-tokens`, `packages/ui/src/recipes`               |
+| The look and feel                                                                                          | `changing-the-design-system`  | `portal/packages/design-tokens`, `portal/packages/ui/src/recipes`        |
 | Checking it against a real tenant                                                                          | `validating-against-a-tenant` | `tests/live`, `~/.config/adminforge/*.env`                               |
 
 ## Guardrails that run automatically
 
-- **On every file Claude writes** (`.claude/hooks/after-edit.mjs`): content YAML → `adminforge validate`; UI code → no
-  raw colours / arbitrary Tailwind values; runner scripts → lists content whose pinned sha256 is now stale.
-- **On every commit** (`.githooks/pre-commit`): guard tests — no secrets, no tenant-specific values, tokens-only UI.
-- **In CI**: lint, typecheck, all test projects, build, e2e in mock mode.
+- **On every file Claude writes** (`.claude/hooks/after-edit.mjs`): code and docs (`.ts`, `.tsx`, `.js`, `.mjs`,
+  `.json`, `.css`, `.md`, outside `portal/content`, `tests/fixtures` and `docs/plans`) → Prettier; content YAML →
+  `adminforge validate`; UI code → no raw colours / arbitrary Tailwind values; runner scripts → lists content whose
+  pinned sha256 is now stale.
+- **On every commit** (`.githooks/pre-commit`, enabled by `pnpm install` or `git config core.hooksPath .githooks`):
+  guard tests — no secrets, no tenant-specific values, tokens-only UI.
+- **In CI** (`.github/workflows/ci.yml`): guards, lint, `format:check`, typecheck, database migrations, the unit /
+  component / api / content tests, build, and e2e + visual in mock mode.
 
 ## Reviewers
 

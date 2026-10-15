@@ -215,7 +215,7 @@ for (const theme of THEMES) {
     );
     await dialog.getByRole('button', { name: 'Create probe YAML' }).click();
     const ready = page.getByRole('dialog', { name: 'Your probe file is ready' });
-    await expect(ready.getByText('adding-a-probe')).toBeVisible();
+    await expect(ready.getByText('adding-a-schedule-or-probe')).toBeVisible();
     expect(calls.find((c) => c.path === '/api/query/scaffold')?.body).toMatchObject({
       as: 'probe',
       source: 'resourceGraph',

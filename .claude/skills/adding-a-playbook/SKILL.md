@@ -21,8 +21,9 @@ Markdown sections, manual steps and executable steps.
    then writes. Every write step: `mode: write`, `describe` (plain language — shown in the dry-run plan),
    `compensate` where an undo exists, `idempotent: false` if retrying could double-apply.
    PUT/PATCH/DELETE must be `write`; POST must declare a mode.
-5. **Risk:** `risk: low|medium|high|critical`. `high` needs `confirm` (typed value, e.g. the UPN); `critical` needs
-   `approval.required` (two-person; approver runs the remaining steps as themselves).
+5. **Risk:** `risk: low|medium|high|critical`. `high` and `critical` need a `confirm` block (click, or a typed value
+   such as the UPN); `critical` also needs `approval: { required: true }` (two-person; the approver runs the remaining
+   steps as themselves).
 6. **Secrets** (passwords, TAPs, client secrets): declare `secretOutputs: [path]` on the step; never copy them to
    `outputs`. Generate passwords with `$secureRandom(n)`.
 7. **Paths & queries:** `$encode()` path segments, `$odata()` in filters, `$kql()` in KQL.

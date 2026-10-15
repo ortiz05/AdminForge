@@ -332,7 +332,7 @@ describe('Query Studio (/query)', () => {
     expect(commands).toHaveTextContent('pnpm adminforge validate --scopes');
     expect(commands).toHaveTextContent(`git add ${path}`);
     expect(commands).toHaveTextContent('git switch -c content/azure.inventory-by-type-and-region');
-    expect(within(ready).getByText('adding-a-report')).toBeInTheDocument();
+    expect(within(ready).getByText('adding-a-page-or-report')).toBeInTheDocument();
     expect(await axeViolations()).toEqual([]);
   });
 

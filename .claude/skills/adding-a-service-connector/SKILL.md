@@ -27,9 +27,9 @@ mode) → token for the identity → connector in `portal/packages/connectors`. 
 
 ## A new service (new token audience)
 
-1. `ServiceId` in `connectors/src/types.ts`; client in `connectors/src/<service>.ts` (built on `createHttpClient`:
+1. `ServiceId` in `portal/packages/connectors/src/types.ts`; client in `portal/packages/connectors/src/<service>.ts` (built on `createHttpClient`:
    retries, Retry-After, normalised `ApiError`); fixture routing in `fixtures.ts`.
-2. Resource scope in `apps/api/src/auth/token-broker.ts`; policy rules; executor dispatch in `outbound.ts`.
+2. Resource scope in `portal/apps/api/src/auth/token-broker.ts`; policy rules; executor dispatch in `outbound.ts`.
 3. Delegated permission on the Read/Write apps + application permission on the automation identity (provisioning
    catalog). Licence notes in `docs/licensing-review.md`.
 4. Tests in `tests/unit/connectors/` (fake fetch) and `tests/unit/api/`.

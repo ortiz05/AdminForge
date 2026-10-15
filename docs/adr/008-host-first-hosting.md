@@ -1,6 +1,13 @@
 # ADR-008: Run on this host first; Azure optional
 
-Status: accepted (2026-10-15)
+Status: accepted (2026-10-15); partially implemented
+
+> **Implementation status:** AdminForge runs on one host as systemd **user** units (`portal/deploy/systemd`: api,
+> worker, scheduler, runner, plus `adminforge-proxy`, Caddy with `tls internal` for LAN TLS), built with `pnpm build`
+> and configured from `~/.config/adminforge/<env>.env` (`portal/deploy/README.md`). Docker Compose is used only for
+> PostgreSQL (`portal/deploy/docker-compose.dev.yml` via `pnpm db:up`, which the deploy guide also uses for the host
+> services); the only container image is the runner's (`portal/apps/runner/Dockerfile`), and the deploy guide runs the
+> runner as a user unit instead. There are no API/web/scheduler images and no Azure Container Apps deployment yet.
 
 ## Context
 

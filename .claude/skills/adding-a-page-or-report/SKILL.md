@@ -34,7 +34,7 @@ Pages, dashboards and reports are YAML in `portal/content/{pages,dashboards,repo
 7. **Tests:** content tests run automatically; add a focused test file under `tests/content/` only for page-specific
    logic (e.g. a transform), never append to `validate-all.test.ts`.
 8. **Check:** `pnpm adminforge validate`, `pnpm --filter @adminforge/tests exec vitest run --project content`,
-   `pnpm guard`, then look at it: `AUTH_MODE=mock DATA_MODE=fixtures pnpm dev` → `/p/<key>`.
+   `pnpm guard`, then look at it in mock mode (the one-liner in `CLAUDE.md` › Commands) → `/p/<key>`.
 
 ## Common mistakes
 

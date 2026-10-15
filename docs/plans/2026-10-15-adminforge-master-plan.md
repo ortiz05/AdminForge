@@ -254,7 +254,7 @@ Full ADRs live in `docs/adr/NNN-*.md` (written in Task 1.1). Summary:
 | Expressions | `packages/expressions` | JSONata wrapper: templating, helpers (`$encode`, `$odata`), limits. |
 | Connectors | `packages/connectors` | Graph / ARM / Resource Graph / Log Analytics / Function / Runner clients; paging, batching, retries, throttling; request policy. |
 | Engine | `packages/engine` | Pure playbook execution engine with ports for persistence, tokens, and step handlers. |
-| CLI | `tools/cli` | `adminforge new|validate|test|publish|fixtures` for content and scaffolds. |
+| CLI | `tools/cli` | `adminforge new\|validate\|test\|publish\|fixtures` for content and scaffolds. |
 | Content | `content/` | Pages, dashboards, reports, playbooks, runbooks, scripts, connections, navigation. |
 | Infra | `infra/` | Bicep for Azure and Entra (Graph extension). |
 
@@ -1027,7 +1027,7 @@ indent_size = 4
 # AdminForge
 
 Delegated-auth admin portal for Entra ID, Microsoft 365, and Azure.
-Plan: `docs/plans/2026-10-15-azure-admin-portal.md` · Decisions: `docs/decisions.md`
+Plan: `docs/plans/2026-10-15-adminforge-master-plan.md` · Decisions: `docs/decisions.md`
 ```
 
 **Step 2: Commit**
@@ -1038,7 +1038,7 @@ git add -A
 git commit -m "chore: initialise repository with master plan"
 ```
 
-**Step 3 (after D1 is confirmed):** `gh repo create <org>/azure-admin --private --source . --push`
+**Step 3 (after D1 is confirmed):** `gh repo create <org>/adminforge --private --source . --push`
 
 ### Task 0.3 🔑: Sign in to Azure CLI
 
@@ -2125,11 +2125,11 @@ Implement each with a recipe + component + test (render, keyboard where interact
 | Component | Acceptance criteria |
 |---|---|
 | `IdChip` | Shows `3f2a…9c1d` for a GUID; full value in `title`; copy button labelled "Copy <label> <value>" writes the full value; mono font, tabular. |
-| `StatusPill` | `status: ok|warn|crit|info|neutral` → icon + label (never color alone); uses `-subtle` fill + solid text. |
+| `StatusPill` | `status: ok\|warn\|crit\|info\|neutral` → icon + label (never color alone); uses `-subtle` fill + solid text. |
 | `Panel` | Header (eyebrow + title + actions), body, footer slot; `--af-panel-*` tokens only. |
 | `Kpi` | Value in `--af-kpi-value-font`, label, optional delta and status, loading skeleton, `aria-live="polite"` on refresh. |
 | `ProvenanceFooter` | `service · path · 1.2 s · cached 30 s ago`, muted mono 11 px; relative time updates every 15 s. |
-| `DataTable` | TanStack Table + Virtual; sticky header; sortable headers with `aria-sort`; row height `--af-table-row-h`; column kinds `text|identity|status|relativeTime|number|id`; keyboard row navigation; empty and error states. |
+| `DataTable` | TanStack Table + Virtual; sticky header; sortable headers with `aria-sort`; row height `--af-table-row-h`; column kinds `text\|identity\|status\|relativeTime\|number\|id`; keyboard row navigation; empty and error states. |
 | `EmptyState` / `ErrorState` | Title, one-line guidance, one primary action; error shows code + correlation id (IdChip). |
 | `Skeleton` | Shimmer disabled under reduced motion. |
 | `Tooltip`, `Dialog`, `ConfirmDialog`, `Drawer`, `Menu`, `Tabs`, `Toast` | Radix-based; focus trapped/restored; `ConfirmDialog` typed mode blocks confirm until the exact text is typed. |

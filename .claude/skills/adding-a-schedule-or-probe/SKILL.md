@@ -25,9 +25,19 @@ checks that write time-series results shown on `/monitoring`.
    - Put `// af:<probe id>` as the first KQL line (fixtures match on it).
 4. **Thresholds** `{ warn, crit }` in the direction `PROBE_METRICS` defines for the kind; `intervalHint`, `timeoutMs`.
 5. **Schedules:** `cron` (5/6 fields), `timezone` (IANA), `identity: automation`, `job.kind` =
-   `probe` (`ref` / `refs` / `select.tags`), `report` (`ref`, `params`, `delivery: [{type: file, format}]`),
-   `playbook` (write playbooks need `approvedBy` — enabling them requires a second approver), `contentHealth`.
-   `retry`, `timeoutSeconds`, `overlap: skip`.
+   - `probe` (`ref` / `refs` / `select.tags`, optional `concurrency`);
+   - `report` (`ref`, `params`, `delivery: [{ type: file, format, path, retain }]`). `email` and `teams` delivery
+     targets validate, but the scheduler doesn't send them yet: it records `not_supported` and keeps the file;
+   - `playbook` (`ref`, `inputs`, `mode`; write playbooks need `approvedBy` — enabling them requires a second
+     approver);
+   - `script` (a pinned runner script: `script`, `sha256`, `parameters`, `services`, `timeoutSeconds`, `mode`;
+     `mode: write` needs `approvedBy`). It validates, but runs currently fail with `script_not_supported` — the runner
+     can't yet run scripts as the automation identity (see `docs/backlog.md`), so prefer a `kql` probe or a report;
+   - `contentHealth` (`scopes: true` also checks the automation identity's permissions).
+
+   Plus `retry`, `timeoutSeconds`, `overlap: skip|queue|allow`. `notify.onFailure` / `onSuccess` validate, but nothing
+   is sent yet (failure target types are only noted in the audit entry).
+
 6. **Permissions:** the automation identity needs **application** permissions / Azure RBAC for what it reads. Declare
    them in `requires.scopes` / `requires.azureRoles`; if new, add them to provisioning
    (`portal/tools/cli/src/provision/catalog.ts`) and run `pnpm adminforge provision entra`.

@@ -31,7 +31,71 @@ A `map` turns raw values into status + label: `map: { "true": [ok, Enabled], "fa
 
 ## table
 
-Validated in detail by the schema (`columns`, `rowKey`, `rowActions`, `bulkActions`, `inspect`, `selection`). Column `kind`: `text`, `identity` (primary + `secondary` field), `status` (with `map`), `relativeTime`, `datetime`, `number`, `id` (IdChip), `tags`, `link`, `bytes`, `percent`. Column `filter`: `text`, `facet`, `range`, `date`, or `{ param: <name> }` to bind to a page param (server-side filtering).
+```yaml
+- widget: table
+  id: users # table state in the URL is keyed by this id
+  data: users.value
+  rowKey: id # default: the row's `id`
+  selection: multi # none | single | multi
+  search: true # free-text box over the loaded rows
+  emptyText: No users match # used when the block has no `empty`
+  columns:
+    - { field: displayName, label: Name, kind: identity, secondary: userPrincipalName, filter: text }
+    - { field: accountEnabled, label: Enabled, kind: boolean }
+    - { field: id, label: Object id, kind: guid, hidden: true }
+  rowActions:
+    - playbook: identity.disable-user
+      label: Block sign-in
+      inputs:
+        userId: ${ row.id }
+  bulkActions:
+    - playbook: identity.add-group-members
+      label: Add to group
+      forEach:
+        inputs:
+          userIds: ${ [row.id] }
+  inspect:
+    page: identity.user
+    params:
+      id: ${ row.id }
+```
+
+Validated in detail by the schema (`TableWidgetConfig` in `portal/packages/schemas/src/widgets.ts`).
+
+Column `kind` (default `text`):
+
+| Kind           | Renders                                                                              |
+| -------------- | ------------------------------------------------------------------------------------ |
+| `text`         | Plain text                                                                           |
+| `identity`     | Primary text plus a second line from `secondary` (a field path)                      |
+| `status`       | Icon + label from `map` (`value: [tone, label]` or `{ tone, label }`)                |
+| `relativeTime` | "3 days ago", exact time on hover                                                    |
+| `datetime`     | Short timestamp                                                                      |
+| `date`         | Date only                                                                            |
+| `number`       | Formatted number, right-aligned                                                      |
+| `percent`      | A fraction as a percentage (0.42 → 42%)                                              |
+| `bytes`        | Human-readable size                                                                  |
+| `boolean`      | Yes / No (facet filter by default)                                                   |
+| `guid`         | Id chip (keyValue fields call this kind `id`)                                        |
+| `tags`         | Chips from a list or an object (`{ env: prod }` → `env: prod`)                       |
+| `link`         | Link to `link: { page, params }` (templated with `row`), or to a URL value (new tab) |
+| `code`         | Monospace text                                                                       |
+
+Other column keys: `sortable`, `hidden` (off by default; still in the column chooser and exports), `width` (px),
+`align: start|center|end`. Column `filter`: `text`, `facet`, `range`, `date`, or `{ type, param }` to bind it to a page
+param (server-side filtering).
+
+Table options:
+
+- `selection`: `multi` always shows row checkboxes; `none` never does; unset (or `single`) shows them only when the
+  table has `bulkActions`. `single` is accepted but not implemented yet (it behaves like unset).
+- `search`: show the free-text box that filters the loaded rows. Default: on, unless the page binds a server-side
+  search param (`filters.search`).
+- `pageSize`: 10–1000, accepted but not used by the renderer yet — tables scroll (virtualised) and load further pages
+  with "Load more".
+- `emptyText`: the empty-state title (default "Nothing to show"); a block-level `empty: { title, body }` wins over it.
+- `rowKey` (row id path, default `id`), `rowActions`, `bulkActions` (`forEach.inputs`, `concurrency` 1–10, default 5;
+  `maxItems` default 100), `inspect`, plus `sort` and `maxHeight` (see Optional keys below).
 
 ## chart
 

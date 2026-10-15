@@ -4,8 +4,8 @@ Gaps found while building. Each item names where it lands. Items move to a phase
 
 ## Security (before write playbooks go live)
 
-- [x] **Secret outputs** (done: `secretOutputs`, show-once delivery): temporary passwords, Temporary Access Passes and new app secrets are currently kept in step/run outputs. Add `secret: true` on step outputs → shown once to the initiator over the live stream, never persisted (store a redacted marker), never in audit/export. Applies to identity.reset-password, identity.issue-tap, identity.create-user, identity.rotate-app-secret.
-- [x] `$secureRandom(len)` helper (crypto-backed) — `create-user` currently uses JSONata `$random()` for a throwaway initial password.
+- [x] **Secret outputs** (done): `secretOutputs` on playbook steps. Temporary passwords, Temporary Access Passes and new app secrets are shown once to the initiator over the live stream, never persisted (a redacted marker is stored), never in audit/export. Used by identity.reset-password, identity.issue-tap and identity.rotate-app-secret; identity.create-user issues its first credential through those child runs.
+- [x] `$secureRandom(len)` helper (crypto-backed); `create-user` uses it for the throwaway initial password instead of JSONata `$random()`.
 
 ## Schema / content model
 
@@ -13,13 +13,14 @@ Gaps found while building. Each item names where it lands. Items move to a phase
 - [ ] `graphBatch` paging (`@odata.nextLink` per sub-request).
 - [ ] Per-row `inspect.page` expression (mixed row types).
 - [ ] Playbook `tests` can set `now` and `env`.
-- [ ] Column kind naming: align `id` (docs/widgets.md) vs `guid` (schema) — accept both.
-- [ ] `widgets.md`: document `timeline.heading`, `empty.action` with playbook inputs.
+- [ ] Column kind naming: table columns use `guid`, keyValue fields use `id` (docs/widgets.md now matches both schemas); accept either name in both.
+- [ ] `widgets.md`: document `empty.action` (an action: `label` + `playbook`/`inputs` or `href`). It renders in every widget panel except `table`, whose empty state shows only `title`/`body`.
+- [ ] Table `pageSize` and `selection: single` are accepted by the schema but not implemented by the table widget (it scrolls with "Load more"; `single` behaves like unset).
 - [x] Probe schedules: `job.refs` (list) or a tag selector (`job.select: { tags: [hourly] }`) so one schedule sweeps many probes (today: one schedule per probe).
 - [ ] ARM `apiVersion` from an expression or a per-resource-type lookup, enabling a generic "get resource by id".
 - [x] Expression helpers `$kql(s)` (KQL string literal quoting — R12) and `$uuid()` (fresh GUID, e.g. role assignment names).
 - [ ] Datasource fan-out (one call per row of another datasource) and simple joins.
-- [ ] `logQuery` widget + Query Studio page (`/query`) with save-as report/probe/schedule — R12.
+- [ ] `logQuery` widget — R12. (Query Studio `/query` with save as report/probe/schedule is done.)
 - [x] `kql` probe/check kind over Resource Graph, Log Analytics, advanced hunting — R12.
 - [x] Licence-threshold probe `sku` from `${env.X}` so SKUs aren't literals.
 - [ ] Approval policy for bulk runs: one approval for the whole bulk run (today each child run asks).
@@ -27,7 +28,7 @@ Gaps found while building. Each item names where it lands. Items move to a phase
 
 ## Delivery & notifications
 
-- [ ] Report delivery by email and Teams: config keys (`AF_REPORT_RECIPIENTS`, `AF_TEAMS_WEBHOOK_URL`) and schedule `delivery` support.
+- [ ] Report delivery by email and Teams: the schedule schema already accepts `email` and `teams` delivery targets (and `notify` targets), but the scheduler records them as `not_supported` and keeps the file instead. Needs the senders plus config keys (`AF_REPORT_RECIPIENTS`, `AF_TEAMS_WEBHOOK_URL`).
 - [ ] Notify approvers when an approval gate opens (approver list in the NOTIFY payload + email/Teams).
 
 ## Engine & runner
@@ -41,8 +42,8 @@ Gaps found while building. Each item names where it lands. Items move to a phase
 - [ ] Probe "not configured" state: a probe whose required env key is empty should report `skipped` (not `error`) — e.g. DNS probes without `AF_MAIL_DOMAIN`.
 - [ ] Run datasource `transform`s off the API event loop (worker_threads pool) with a larger budget (today 250 ms on the main thread — large tenants, e.g. >2–4k guests, time out). `identity.inactive-guests` and its Monday schedule `reports.inactive-guests-weekly` hit this first: Graph can't combine a `signInActivity` filter with `userType`, so the 90-day window is applied in the transform.
 - [x] Tenant-data guard and `forbiddenValues` (CLI fixture recording) exempt `https?://localhost.*`, which also lets `http://localhost.<domain>` through; anchor it to `localhost(:port)/?` in both places.
-- [x] Enforce formatting: Prettier check in CI and pre-commit for TS/JSON/CSS/YAML (format the repo once).
-- [ ] Read-mode allowlist: Graph `POST /directoryObjects/getByIds`; ARM `…/config/appsettings/list` with values stripped server-side.
+- [x] Enforce formatting: Prettier (repo formatted once) is checked in CI (`pnpm format:check`) and applied by the Claude Code after-edit hook; the pre-commit hook runs only the guard tests. `portal/content`, fixtures and `docs/plans` are excluded (`.prettierignore`).
+- [x] Read-mode allowlist: Graph `POST /directoryObjects/getByIds`; ARM `…/config/appsettings/list` with values stripped server-side (names only; the read is audited).
 - [ ] Example connection `connections/hr-sync`: env keys for base URL + audience.
 - [x] Default Log Analytics workspace key (`AF_LOG_ANALYTICS_WORKSPACE_ID`).
 
@@ -50,5 +51,5 @@ Gaps found while building. Each item names where it lands. Items move to a phase
 
 - [x] Decide between the content "Probe dashboard" and the coded `/monitoring` page (keep one entry in nav).
 - [ ] Merge `security.compromised-account-response` and `identity.compromised-account` runbooks.
-- [ ] Weekly inactive-users schedule once `identity.inactive-users` report exists.
+- [ ] Weekly schedule for the `identity.inactive-users` report (the report exists; add a schedule like `reports.inactive-guests-weekly`).
 - [ ] `identity.disable-user` typed confirmation asks for the UPN; for guests that is the `…#EXT#@…onmicrosoft.com` form (the "Block sign-in" action on `identity.inactive-guests`). Consider confirming guests on `mail`.

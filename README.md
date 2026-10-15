@@ -23,37 +23,70 @@ Licensing gaps are explained in the UI ("Requires …") and tracked in `docs/lic
 
 ## Repository layout
 
-| Path                 | Contents                                                                                                      |
-| -------------------- | ------------------------------------------------------------------------------------------------------------- |
-| `portal/`            | Everything needed to run AdminForge: apps (web, api, scheduler, runner), packages, content, CLI, deploy files |
-| `tests/`             | Every test and test-only dependency (unit, component, api, content, e2e, visual, live, guards, fixtures)      |
-| `tooling/`           | Developer tooling (lint)                                                                                      |
-| `config/example.env` | Every configuration key, documented. Real values live outside the repo.                                       |
-| `docs/`              | Plan, ADRs, decisions, widget reference, extending guide, licensing review, backlog                           |
+| Path                 | Contents                                                                                                                                               |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `portal/`            | Everything needed to run AdminForge: apps (web, api, scheduler, runner), packages, content, CLI, deploy files                                          |
+| `tests/`             | Every test and test-only dependency (unit, component, api, content, e2e incl. visual baselines, live, guards, runner, fixtures); see `tests/README.md` |
+| `tooling/`           | Developer tooling (lint)                                                                                                                               |
+| `config/example.env` | Every configuration key, documented. Real values live outside the repo.                                                                                |
+| `docs/`              | Plan, ADRs, decisions, widget reference, extending guide, licensing review, backlog                                                                    |
+
+## Prerequisites
+
+- **Node.js 24** (`.nvmrc`) and **pnpm 11.10.0** (`packageManager` in `package.json`; `corepack enable` picks it up).
+- **Docker** with Compose, for the dev PostgreSQL (`pnpm db:up`, `portal/deploy/docker-compose.dev.yml`).
+- **PowerShell 7.4+** (`pwsh`) for the runner (Exchange, Teams, SharePoint) and its Pester tests.
+- **Google Chrome** installed on the system: Playwright uses `channel: 'chrome'` and downloads no browser.
+- **Caddy** (optional) for TLS when other machines on the LAN use the portal (`portal/deploy/README.md`).
 
 ## Quick start
 
 ```bash
-cp config/example.env ~/.config/adminforge/dev.env   # fill in tenant + provisioner credentials (never commit)
-pnpm install
+install -d -m 700 ~/.config/adminforge               # configuration lives outside the repository
+cp config/example.env ~/.config/adminforge/dev.env   # fill in tenant settings (never commit)
+# provisioner credentials go in ~/.config/adminforge/dev.admin.env (mode 600; CLI and live tests only)
+pnpm install                                         # also points git at .githooks (pre-commit guard tests)
+git config core.hooksPath .githooks                  # same, explicitly (needed if install ran outside a git checkout)
 pnpm --filter @adminforge/api init:local             # generates DB password, token-cache key, local defaults
 pnpm db:up && pnpm --filter @adminforge/api db:migrate
+pnpm adminforge env check                            # key names and states only, never values
 pnpm adminforge provision entra                      # Read/Write/Automation apps, groups, consent (idempotent)
+pnpm adminforge provision status                     # every provisioned object ✓/✗ plus live token checks
 pnpm dev                                             # http://localhost:5173
 ```
 
-No tenant handy? `AUTH_MODE=mock DATA_MODE=fixtures pnpm dev` runs everything on synthetic data.
+Playbook runs and schedules in `pnpm dev` need `RUN_WORKER_IN_PROCESS=true` and `SCHEDULER_IN_PROCESS=true` in the env
+file, unless the host services (worker, scheduler) already use the same database — then leave both `false`.
+
+No tenant handy? This runs everything on synthetic data, in memory, ignoring the env file:
+
+```bash
+ADMINFORGE_ENV_FILE=/dev/null PUBLIC_BASE_URL=http://localhost:5173 AUTH_MODE=mock DATA_MODE=fixtures pnpm dev
+```
 
 To run AdminForge as services on this host (API + web, run worker, scheduler, PowerShell runner), see
 `portal/deploy/README.md`.
 
 ## Tests
 
-`pnpm test` (unit, component, api, content, guards) · `pnpm test:e2e` (Playwright, mock mode) ·
-`pnpm guard` (runs on every commit) · live tenant validation: `tests/live` (see the `validating-against-a-tenant` skill).
+`pnpm test` (unit, component, api, content, guards) · `pnpm test:e2e` (Playwright in mock mode, including the visual
+baselines in `tests/e2e`) · `pnpm guard` (runs on every commit) · `pnpm format:check` · live tenant validation:
+`pnpm test:live` (see `tests/live/README.md` and the `validating-against-a-tenant` skill). Details: `tests/README.md`.
 
 ## Extending
 
 Use Claude Code: the rules are in `CLAUDE.md`, one skill per extension point lives in `.claude/skills/`, reviewer
 agents in `.claude/agents/`, and `docs/extending.md` explains the workflow. The full design is in
 `docs/plans/2026-10-15-adminforge-master-plan.md`.
+
+## Documentation
+
+- `SECURITY.md` — security model and policy
+- `docs/architecture.md` — architecture: apps, identities, data flow
+- `docs/access.md` — access: sign-in, portal roles, permissions
+- `docs/operations.md` — operating AdminForge on this host
+- `docs/troubleshooting.md` — troubleshooting
+- `portal/deploy/README.md` — host services, systemd units, Caddy
+- `docs/extending.md`, `docs/widgets.md` — extending AdminForge with Claude Code; widget reference
+- `docs/adr/`, `docs/decisions.md`, `docs/licensing-review.md`, `docs/backlog.md`
+- `tests/README.md`, `tests/live/README.md` — test projects and live validation

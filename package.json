@@ -7,19 +7,20 @@
     "node": ">=24"
   },
   "scripts": {
-    "dev": "turbo run dev --filter=@adminforge/api --filter=@adminforge/web",
+    "dev": "turbo run dev --env-mode=loose --filter=@adminforge/api --filter=@adminforge/web",
     "build": "turbo run build",
     "lint": "tooling/lint/node_modules/.bin/eslint --config tooling/lint/eslint.config.js .",
     "typecheck": "turbo run typecheck",
     "test": "pnpm --filter @adminforge/tests test",
     "test:e2e": "pnpm --filter @adminforge/tests e2e",
-    "test:live": "pnpm --filter @adminforge/tests live",
+    "test:live": "pnpm --filter @adminforge/tests exec playwright test -c live/e2e/playwright.config.ts",
     "guard": "pnpm --filter @adminforge/tests guard",
     "format": "prettier --write .",
     "adminforge": "tsx portal/tools/cli/src/index.ts",
     "db:up": "docker compose --env-file \"${ADMINFORGE_ENV_FILE:-$HOME/.config/adminforge/dev.env}\" -f portal/deploy/docker-compose.dev.yml up -d --wait",
     "db:down": "docker compose --env-file \"${ADMINFORGE_ENV_FILE:-$HOME/.config/adminforge/dev.env}\" -f portal/deploy/docker-compose.dev.yml down",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "prepare": "git rev-parse --git-dir >/dev/null 2>&1 && git config core.hooksPath .githooks || true"
   },
   "devDependencies": {
     "@types/node": "^26.6.5",

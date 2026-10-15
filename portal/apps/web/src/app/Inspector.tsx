@@ -1,5 +1,10 @@
+import { lazy, Suspense, useCallback, useState } from 'react';
 import { useNavigate, useSearch } from '@tanstack/react-router';
-import { Drawer, EmptyState, IdChip, MagnifyingGlassIcon, shorten } from '@adminforge/ui';
+import { Drawer, EmptyState, IdChip, MagnifyingGlassIcon, SkeletonText, shorten } from '@adminforge/ui';
+import { readInspect, withoutInspect } from '../renderer/inspect-url';
+
+// The renderer (widgets, expressions) stays out of the first load: it arrives when something is inspected.
+const InspectorPage = lazy(() => import('../renderer/InspectorPage'));
 
 const KIND_LABEL: Record<string, string> = {
   user: 'User',
@@ -20,32 +25,44 @@ export function parseInspect(value: string): { kind: string; label: string; id: 
 }
 
 /**
- * Entity detail without leaving the list. Deep-linkable through `?inspect=`; non-modal, so the list stays usable.
- * Entity pages (Phase 5) render their detail here; until then it says what will appear.
+ * Entity detail without leaving the list. Deep-linkable and non-modal, so the list stays usable:
+ *   ?inspect=page:<entity page key>&i.<param>=…   renders that content page (e.g. page:identity.user&i.id=…)
+ *   ?inspect=<kind>:<id>                           an object with no entity page yet
  */
 export function Inspector() {
-  const search = useSearch({ strict: false }) as { inspect?: string };
+  const search = useSearch({ strict: false }) as Record<string, unknown>;
   const navigate = useNavigate();
+  const [entityTitle, setEntityTitle] = useState<string | undefined>();
+  const [pageTitle, setPageTitle] = useState<string | undefined>();
+  const page = readInspect(search);
   const value = typeof search.inspect === 'string' ? search.inspect : undefined;
-  const target = value ? parseInspect(value) : null;
+  const target = !page && value ? parseInspect(value) : null;
+  const open = Boolean(page || target);
+  const onTitle = useCallback((t: string | undefined) => setEntityTitle(t), []);
+  const onPageTitle = useCallback((t: string | undefined) => setPageTitle(t), []);
 
   const close = () =>
     void navigate({
       to: '.',
-      search: (prev: Record<string, unknown>) => ({ ...prev, inspect: undefined }),
+      search: ((prev: Record<string, unknown>) => withoutInspect(prev)) as never,
       replace: true,
     });
 
   return (
     <Drawer
-      open={Boolean(target)}
-      onOpenChange={(open) => !open && close()}
+      open={open}
+      onOpenChange={(o) => !o && close()}
       modal={false}
       docked
-      eyebrow="Inspector"
-      title={target ? `${target.label} ${shorten(target.id)}` : 'Inspector'}
-      description="Details open here without leaving the list."
+      eyebrow={page ? `Inspector${pageTitle ? ` · ${pageTitle}` : ''}` : 'Inspector'}
+      title={page ? (entityTitle ?? pageTitle ?? 'Loading…') : target ? `${target.label} ${shorten(target.id)}` : 'Inspector'}
+      description={page ? undefined : 'Details open here without leaving the list.'}
     >
+      {page && (
+        <Suspense fallback={<SkeletonText lines={6} />}>
+          <InspectorPage key={`${page.page}:${JSON.stringify(page.params)}`} target={page} onTitle={onTitle} onPageTitle={onPageTitle} />
+        </Suspense>
+      )}
       {target && (
         <div className="flex flex-col gap-4">
           <IdChip value={target.id} label="Object ID" full />

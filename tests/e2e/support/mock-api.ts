@@ -3,11 +3,32 @@ import type { MeResponse } from '@adminforge/schemas';
 import { overview } from '../fixtures/overview';
 import { FIXED_NOW, me, NAV } from '../fixtures/session';
 
+/** What a handler answers with: JSON (`body`), or raw `text` with its content type (SSE, CSS). */
+export interface MockReply {
+  status?: number;
+  body?: unknown;
+  text?: string;
+  contentType?: string;
+}
+
+export interface MockRequest {
+  method: string;
+  path: string;
+  url: URL;
+  body: unknown;
+  /** The X-AdminForge-CSRF header, when sent. */
+  csrf?: string | null;
+}
+
+/** Feature mocks plug in here; the first handler that answers wins, before the defaults below. */
+export type MockHandler = (req: MockRequest) => MockReply | undefined;
+
 export interface MockOptions {
   me?: MeResponse;
   overview?: unknown;
   /** Status for GET /api/overview (e.g. 503 to exercise the error state). */
   overviewStatus?: number;
+  handlers?: MockHandler[];
 }
 
 const json = (route: Route, body: unknown, status = 200) =>
@@ -30,7 +51,21 @@ export async function mockApi(page: Page, opts: MockOptions = {}) {
       const url = new URL(req.url());
       const method = req.method();
       const body = req.postData() ? JSON.parse(req.postData()!) : undefined;
-      calls.push({ method, path: url.pathname, body, csrf: await req.headerValue('x-adminforge-csrf') });
+      const csrf = await req.headerValue('x-adminforge-csrf');
+      calls.push({ method, path: url.pathname, body, csrf });
+
+      for (const handler of opts.handlers ?? []) {
+        const reply = handler({ method, path: url.pathname, url, body, csrf });
+        if (!reply) continue;
+        if (reply.text !== undefined)
+          return route.fulfill({
+            status: reply.status ?? 200,
+            contentType: reply.contentType ?? 'text/plain',
+            headers: { 'cache-control': 'no-store' },
+            body: reply.text,
+          });
+        return json(route, reply.body ?? {}, reply.status ?? 200);
+      }
 
       switch (`${method} ${url.pathname}`) {
         case 'GET /api/me':
@@ -52,6 +87,8 @@ export async function mockApi(page: Page, opts: MockOptions = {}) {
                 opts.overviewStatus,
               )
             : json(route, opts.overview ?? overview());
+        case 'GET /api/search':
+          return json(route, { query: url.searchParams.get('q') ?? '', results: [], sources: {} });
         case 'PUT /api/me/prefs':
           return json(route, { ok: true });
         case 'POST /auth/arm/extend': {
@@ -62,8 +99,18 @@ export async function mockApi(page: Page, opts: MockOptions = {}) {
         case 'POST /auth/disarm':
           session = { ...session, mode: 'read', armedUntil: null, armExtended: false };
           return json(route, { ok: true });
-        case 'POST /auth/arm':
-          return json(route, { redirect: '/?armed=1' });
+        case 'POST /auth/arm': {
+          // Mock sign-in arms at once and comes back to where the user was (returnTo), like the mock BFF.
+          session = { ...session, mode: 'armed', armedUntil: new Date(FIXED_NOW + (47 * 60 + 12) * 1000).toISOString(), armExtended: false };
+          return json(route, { redirect: url.searchParams.get('returnTo') ?? '/?armed=1' });
+        }
+        case 'GET /api/runs':
+          return json(route, { items: [] });
+        case 'GET /api/events':
+          // One-shot stream; the long retry keeps EventSource from reconnecting during a test.
+          return route.fulfill({ status: 200, contentType: 'text/event-stream', body: 'retry: 600000\n\nevent: ready\ndata: {"mode":"read"}\n\n' });
+        case 'GET /api/appearance.css':
+          return route.fulfill({ status: 200, contentType: 'text/css', body: '/* no overrides */\n' });
         case 'POST /auth/logout':
           return json(route, { redirect: '/signed-out' });
         default:

@@ -7,6 +7,8 @@ import { api, ApiRequestError, ExtendResponse, RedirectResponse } from '../lib/a
 import { browser } from '../lib/browser';
 import { hydratePrefs, pushRecent, updatePrefs, usePrefs } from '../lib/prefs';
 import { meQuery, SessionContext, useNav, useSession } from '../lib/session';
+import { useAppearanceStylesheet } from '../ops/appearance-link';
+import { PlaybookDrawerMount } from '../playbooks/PlaybookDrawerMount';
 import { useArmState, WARN_BEFORE_MS } from './arm';
 import { ArmControl } from './ArmControl';
 import { CommandPalette } from './CommandPalette';
@@ -44,6 +46,7 @@ function SignedInShell({ me, children }: { me: MeResponse; children: ReactNode }
   const narrow = useMediaQuery('(max-width: 1023px)');
   const collapsed = Boolean(prefs.navCollapsed) || narrow;
   const [paletteOpen, setPaletteOpen] = useState(false);
+  useAppearanceStylesheet();
   const [armDialogOpen, setArmDialogOpen] = useState(false);
 
   // Server preferences win once per session load.
@@ -100,7 +103,9 @@ function SignedInShell({ me, children }: { me: MeResponse; children: ReactNode }
   }, [queryClient, refreshMe, toast]);
 
   const onArm = useCallback(async (request: ArmRequest) => {
-    const { redirect } = await api('/auth/arm', { method: 'POST', body: request, schema: RedirectResponse });
+    // Come back to the same page (and any open playbook drawer) after step-up.
+    const returnTo = encodeURIComponent(`${window.location.pathname}${window.location.search}`);
+    const { redirect } = await api(`/auth/arm?returnTo=${returnTo}`, { method: 'POST', body: request, schema: RedirectResponse });
     browser.assign(redirect);
   }, []);
 
@@ -236,6 +241,7 @@ function SignedInShell({ me, children }: { me: MeResponse; children: ReactNode }
         </main>
         <RunDock trailing={<DevToolbar me={me} />} />
         <Inspector />
+        <PlaybookDrawerMount />
         <CommandPalette
           open={paletteOpen}
           onOpenChange={setPaletteOpen}

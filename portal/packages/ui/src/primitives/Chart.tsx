@@ -28,6 +28,10 @@ export interface ChartProps {
   height?: number;
   /** Formats values in tooltips and the table view. */
   valueFormat?: (value: number) => string;
+  /** Formats value-axis labels (default: compact numbers). */
+  axisFormat?: (value: number) => string;
+  /** Bars along the y-axis — for long category names (bar charts only). */
+  horizontal?: boolean;
   /** Header of the first column in the table view ("Day", "Service"). */
   categoryLabel?: string;
   defaultView?: 'chart' | 'table';
@@ -45,6 +49,8 @@ export function Chart({
   stacked,
   height = 240,
   valueFormat = formatNumber,
+  axisFormat = formatCompact,
+  horizontal = false,
   categoryLabel = 'Category',
   defaultView = 'chart',
   className,
@@ -70,8 +76,15 @@ export function Chart({
         valueFormatter: (v: unknown) => (typeof v === 'number' ? valueFormat(v) : '—'),
       },
       aria: { enabled: true, label: { description: title } },
-      xAxis: { type: 'category' as const, data: categories, boundaryGap: kind === 'bar' },
-      yAxis: { type: 'value' as const, axisLabel: { formatter: (v: number) => formatCompact(v) } },
+      ...(horizontal && kind === 'bar'
+        ? {
+            yAxis: { type: 'category' as const, data: categories, inverse: true, axisLabel: { width: 180, overflow: 'truncate' as const } },
+            xAxis: { type: 'value' as const, axisLabel: { formatter: (v: number) => axisFormat(v) } },
+          }
+        : {
+            xAxis: { type: 'category' as const, data: categories, boundaryGap: kind === 'bar' },
+            yAxis: { type: 'value' as const, axisLabel: { formatter: (v: number) => axisFormat(v) } },
+          }),
       series: series.map((sr) =>
         kind === 'bar'
           ? {
@@ -94,7 +107,7 @@ export function Chart({
             },
       ),
     }),
-    [kind, categories, series, stacked, title, valueFormat, reducedMotion],
+    [kind, categories, series, stacked, title, valueFormat, axisFormat, horizontal, reducedMotion],
   );
 
   // Mount the chart once the plot is visible; load the runtime on first use.

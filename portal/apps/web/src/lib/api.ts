@@ -50,6 +50,8 @@ export interface RequestOptions<T> {
   body?: unknown;
   schema?: Parser<T>;
   signal?: AbortSignal;
+  /** Send the CSRF header on a GET too (reads with a side effect, e.g. fetching a show-once secret). */
+  csrf?: boolean;
 }
 
 /**
@@ -58,11 +60,11 @@ export interface RequestOptions<T> {
  */
 export async function api<T = unknown>(
   path: string,
-  { method = 'GET', body, schema, signal }: RequestOptions<T> = {},
+  { method = 'GET', body, schema, signal, csrf }: RequestOptions<T> = {},
 ): Promise<T> {
   const headers: Record<string, string> = { Accept: 'application/json' };
   if (body !== undefined) headers['Content-Type'] = 'application/json';
-  if (method !== 'GET' && csrfToken) headers[CSRF_HEADER] = csrfToken;
+  if ((method !== 'GET' || csrf) && csrfToken) headers[CSRF_HEADER] = csrfToken;
 
   let res: Response;
   try {

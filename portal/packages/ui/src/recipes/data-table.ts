@@ -22,7 +22,7 @@ export const dataTable = tv({
     ],
     body: 'relative',
     row: [
-      'absolute inset-x-0 top-0 grid h-(--af-table-row-h) grid-cols-(--af-dt-cols) items-center border-b border-line text-fg',
+      'group/row absolute inset-x-0 top-0 grid h-(--af-table-row-h) grid-cols-(--af-dt-cols) items-center border-b border-line text-fg',
       'transition-colors duration-(--af-motion-fast) hover:bg-hover focus-visible:-outline-offset-2',
     ],
     td: 'flex h-full min-w-0 items-center px-2 first:pl-(--af-pad-panel) last:pr-(--af-pad-panel)',

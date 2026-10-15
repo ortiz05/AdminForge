@@ -106,7 +106,7 @@ describe('page', () => {
     expect(
       ok<Page>(
         page(
-          `params:\n  q: { type: string }\n  adv: { type: string, hidden: true }\nfilters:\n  search: q\n  advanced: { dialect: odata, param: adv, fields: [{ field: department, label: Department, type: string, operators: [eq, startsWith] }] }\nsavedViews:\n  presets: [{ name: Mine, params: { q: me } }]\n${TABLE}`,
+          `params:\n  q: { type: string }\nfilters:\n  search: q\n  advanced: { dialect: odata, param: adv, fields: [{ field: department, label: Department, type: string, operators: [eq, startsWith] }] }\nsavedViews:\n  presets: [{ name: Mine, params: { q: me } }]\n${TABLE}`,
         ),
       ).savedViews,
     ).toEqual({ enabled: true, shared: true, presets: [{ name: 'Mine', params: { q: 'me' } }] }));

@@ -43,7 +43,7 @@ function renderApp({ session = me(), path = '/', respond }: Options = {}) {
       }
       if (url === '/auth/arm/extend')
         return json({ armedUntil: new Date(Date.now() + 90 * 60_000).toISOString() });
-      if (url === '/auth/arm') return json({ redirect: '/?armed=1' });
+      if (url.startsWith('/auth/arm?')) return json({ redirect: '/?armed=1' });
       if (url === '/auth/logout') return json({ redirect: '/signed-out' });
       return json({ ok: true });
     }),
@@ -110,7 +110,8 @@ describe('AppShell (real routes, mocked API)', () => {
     await userEvent.type(await screen.findByLabelText('Reason'), 'CHG-1042 rotate secret');
     await userEvent.click(screen.getByRole('button', { name: 'Arm now' }));
     await waitFor(() => expect(assign).toHaveBeenCalledWith('/?armed=1'));
-    const arm = calls.find((c) => c.url === '/auth/arm')!;
+    // returnTo brings the engineer back to the same page (and any open playbook drawer) after step-up.
+    const arm = calls.find((c) => c.url === '/auth/arm?returnTo=%2F')!;
     expect(arm.method).toBe('POST');
     expect(JSON.parse(arm.body!)).toEqual({ minutes: 60, reason: 'CHG-1042 rotate secret' });
     assign.mockRestore();

@@ -48,13 +48,20 @@ export {
 } from './primitives/Command';
 export { ConfirmDialog, type ConfirmDialogProps } from './primitives/ConfirmDialog';
 export {
+  DATE_FILTER_PRESETS,
   DataTable,
+  MUTED as TABLE_MUTED_TEXT,
+  matchesDateFilter,
+  type ColumnFilterKind,
   type ColumnKind,
   type DataColumn,
   type DataTableError,
   type DataTableProps,
+  type DataTableView,
   type IdentityValue,
+  type RangeFilterValue,
   type StatusValue,
+  type TableDensity,
 } from './primitives/DataTable';
 export { Dialog, DialogClose, type DialogProps } from './primitives/Dialog';
 export { Drawer, type DrawerProps } from './primitives/Drawer';

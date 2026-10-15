@@ -167,6 +167,11 @@ const LOOKUP = new Map(Object.entries(REGISTRY).map(([k, v]) => [normalise(k), v
 
 export const ICON_NAMES = Object.keys(REGISTRY);
 
+/** The curated glyph for a name, or undefined (callers may then load any Phosphor glyph on demand). */
+export function findIcon(name: string | undefined): PhosphorIcon | undefined {
+  return name ? LOOKUP.get(normalise(name)) : undefined;
+}
+
 /** Resolves an icon name from content; unknown names fall back to a neutral glyph. */
 export function resolveIcon(name: string | undefined): PhosphorIcon {
   return (name && LOOKUP.get(normalise(name))) || SquaresFourIcon;

@@ -285,11 +285,10 @@ actions:
     inputs:
       userId: ${ params.id }
     when: ${ profile.userType = 'Member' }
-  - playbook: identity.compromised-account
-    label: Compromised account response
+  # Runbooks are guided procedures, so this opens the runbook with the user pre-filled.
+  - label: Compromised account response
     icon: siren
-    inputs:
-      userId: ${ params.id }
+    href: ${ '/runbooks/identity.compromised-account?userId=' & $encode(params.id) }
   - label: Open in Entra admin center
     icon: arrow-square-out
     href: "https://entra.microsoft.com/#view/Microsoft_AAD_UsersAndTenants/UserProfileMenuBlade/~/overview/userId/${ $encode(params.id) }"

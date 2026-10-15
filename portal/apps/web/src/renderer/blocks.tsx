@@ -1,0 +1,198 @@
+import { useMemo } from 'react';
+import type { WidgetBlock } from '@adminforge/schemas';
+import { ErrorState, KpiStrip, Panel, ProvenanceFooter, cn, type Provenance } from '@adminforge/ui';
+import { getWidget, parseWidgetConfig, useWhen, type WidgetData, type WidgetRuntime } from '@adminforge/widgets';
+import type { PageData } from './use-page-data';
+
+/** Literal class names so Tailwind sees them. */
+const SPAN: Record<number, string> = {
+  1: 'lg:col-span-1',
+  2: 'lg:col-span-2',
+  3: 'lg:col-span-3',
+  4: 'lg:col-span-4',
+  5: 'lg:col-span-5',
+  6: 'lg:col-span-6',
+  7: 'lg:col-span-7',
+  8: 'lg:col-span-8',
+  9: 'lg:col-span-9',
+  10: 'lg:col-span-10',
+  11: 'lg:col-span-11',
+  12: 'lg:col-span-12',
+};
+/** KPI strip columns by count (xl): up to six in one row; 7–8 as two rows of four; more as rows of six. */
+const stripColumns = (n: number) => (n <= 6 ? n : n <= 8 ? 4 : 6);
+const STRIP_COLS: Record<number, string> = {
+  1: 'md:grid-cols-1 xl:grid-cols-1',
+  2: 'md:grid-cols-2 xl:grid-cols-2',
+  3: 'md:grid-cols-3 xl:grid-cols-3',
+  4: 'md:grid-cols-4 xl:grid-cols-4',
+  5: 'md:grid-cols-3 xl:grid-cols-5',
+  6: 'md:grid-cols-3 xl:grid-cols-6',
+};
+
+export type Block = WidgetBlock & { description?: string };
+
+/** Stable per-page id of a block: its `id`, or `<widget><index>`. Table ids key URL state. */
+export const blockId = (block: Block, index: number, prefix = '') => `${prefix}${block.id ?? `${block.widget}${index}`}`;
+
+const EMPTY: WidgetData = { status: 'ready', value: undefined };
+
+function ConfigProblem({ block, problems }: { block: Block; problems: Array<{ path: string; message: string }> }) {
+  return (
+    <Panel aria-label={`${block.title ?? block.widget} configuration`}>
+      <ErrorState
+        compact
+        title={`The “${block.widget}” widget${block.title ? ` “${block.title}”` : ''} can’t be shown`}
+        message={
+          <ul className="list-disc pl-5 text-left">
+            {problems.slice(0, 5).map((p) => (
+              <li key={p.path + p.message}>
+                <code className="font-mono text-xs">{p.path}</code>: {p.message}
+              </li>
+            ))}
+          </ul>
+        }
+        hint="Fix the page definition, then run pnpm adminforge validate."
+        code="invalid_widget_config"
+      />
+    </Panel>
+  );
+}
+
+interface BlockProps {
+  block: Block;
+  index: number;
+  runtime: WidgetRuntime;
+  data: PageData;
+  variant?: 'tile' | 'cell' | 'inspector';
+  idPrefix?: string;
+  className?: string;
+}
+
+/** One widget: validated against its schema, hidden while `when` is false, given its resolved data. */
+export function WidgetBlockView({ block, index, runtime, data, variant, idPrefix, className }: BlockProps) {
+  const parsed = useMemo(() => parseWidgetConfig(block as Block & Record<string, unknown>), [block]);
+  const visible = useWhen(block.when, runtime.scope);
+  if (!parsed.ok)
+    return (
+      <div className={className}>
+        <ConfigProblem block={block} problems={parsed.problems} />
+      </div>
+    );
+  if (!visible) return null;
+  // A licence gate renders nothing when the feature is licensed; don't leave an empty grid cell behind.
+  if (block.widget === 'licenceGate') {
+    const f = runtime.feature(String((block as { feature?: unknown }).feature));
+    if (!f || f.available !== false) return null;
+  }
+  const def = getWidget(block.widget)!;
+  const widgetData = block.data ? data.resolve(block.data) : EMPTY;
+  const Component = def.component;
+  const content = (
+    <Component config={parsed.config} data={widgetData} runtime={runtime} instanceId={blockId(block, index, idPrefix)} variant={variant} />
+  );
+  return className ? <div className={className}>{content}</div> : content;
+}
+
+/** Consecutive KPIs share one strip; its foot names each distinct source once. */
+function KpiGroup({ items, runtime, data, compact }: { items: Array<{ block: Block; index: number }>; runtime: WidgetRuntime; data: PageData; compact: boolean }) {
+  const provenances = useMemo(() => {
+    const seen = new Map<string, Provenance>();
+    for (const { block } of items) {
+      if (!block.data) continue;
+      const p = data.resolve(block.data).provenance;
+      // One line per distinct source (several datasources can share a service and path, e.g. graph · /$batch).
+      const key = p ? `${p.service} ${p.path}` : '';
+      if (p && !seen.has(key)) seen.set(key, p);
+    }
+    return [...seen.values()];
+  }, [items, data]);
+  const n = compact ? 2 : stripColumns(items.length);
+  // Empty cells keep the panel surface when the last row isn't full (the strip's hairlines are its background).
+  const fillers = (n - (items.length % n)) % n;
+  return (
+    <div className="flex flex-col gap-1.5">
+      <KpiStrip label="Key figures" className={cn('grid-cols-2', compact ? 'md:grid-cols-2 xl:grid-cols-2' : STRIP_COLS[n])}>
+        {items.map(({ block, index }) => (
+          <WidgetBlockView key={blockId(block, index)} block={block} index={index} runtime={runtime} data={data} variant="cell" />
+        ))}
+        {Array.from({ length: fillers }, (_, i) => (
+          <div key={`filler-${i}`} className="hidden bg-panel xl:block" aria-hidden />
+        ))}
+      </KpiStrip>
+      {provenances.length > 0 && (
+        <div className="flex flex-wrap justify-end gap-x-6 gap-y-1 px-1">
+          {provenances.length <= 2 ? (
+            provenances.map((p) => <ProvenanceFooter key={`${p.service}${p.path}`} {...p} />)
+          ) : (
+            // Many sources: one line (services, endpoint count, slowest call); every endpoint in the tooltip.
+            <div title={provenances.map((p) => `${p.service} ${p.path}`).join('\n')}>
+              <ProvenanceFooter
+                service={[...new Set(provenances.map((p) => p.service))].join(', ')}
+                path={`${provenances.length} endpoints`}
+                ms={Math.max(...provenances.map((p) => p.ms ?? 0))}
+                cachedAt={provenances.every((p) => p.cachedAt) ? provenances.map((p) => p.cachedAt!).sort()[0] : undefined}
+              />
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+type Group = { kind: 'kpis'; items: Array<{ block: Block; index: number }> } | { kind: 'block'; block: Block; index: number };
+
+function group(blocks: readonly Block[]): Group[] {
+  const out: Group[] = [];
+  blocks.forEach((block, index) => {
+    const last = out[out.length - 1];
+    if (block.widget === 'kpi') {
+      if (last?.kind === 'kpis') last.items.push({ block, index });
+      else out.push({ kind: 'kpis', items: [{ block, index }] });
+    } else out.push({ kind: 'block', block, index });
+  });
+  return out;
+}
+
+/** The 12-column widget grid (§6.6). In the inspector everything stacks in one column. */
+export function WidgetGrid({
+  blocks,
+  runtime,
+  data,
+  inspector,
+  idPrefix,
+  className,
+}: {
+  blocks: readonly Block[];
+  runtime: WidgetRuntime;
+  data: PageData;
+  inspector?: boolean;
+  idPrefix?: string;
+  className?: string;
+}) {
+  const groups = useMemo(() => group(blocks), [blocks]);
+  return (
+    <div className={cn('grid grid-cols-1 gap-(--af-gap-grid)', !inspector && 'lg:grid-cols-12', className)}>
+      {groups.map((g) =>
+        g.kind === 'kpis' ? (
+          <div key={`kpis-${g.items[0]!.index}`} className={inspector ? undefined : 'lg:col-span-12'}>
+            <KpiGroup items={g.items} runtime={runtime} data={data} compact={Boolean(inspector)} />
+          </div>
+        ) : (
+          <WidgetBlockView
+            key={blockId(g.block, g.index, idPrefix)}
+            block={g.block}
+            index={g.index}
+            runtime={runtime}
+            data={data}
+            idPrefix={idPrefix}
+            variant={inspector ? 'inspector' : 'tile'}
+            // A grid wrapper stretches the panel to the row's height, so neighbouring panels end level.
+            className={inspector ? 'grid min-w-0' : cn('grid min-w-0', SPAN[g.block.span ?? getWidget(g.block.widget)?.span ?? 12])}
+          />
+        ),
+      )}
+    </div>
+  );
+}

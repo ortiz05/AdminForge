@@ -8,7 +8,7 @@ summary: >-
   including accounts that never signed in (older than the window). Candidates for disabling and offboarding.
 owner: identity-team
 tags: [identity, users, hygiene, report]
-nav: { section: reports, label: Inactive users, icon: user-clock, order: 12 }
+nav: { section: reports, label: Inactive users, icon: clock-user, order: 12 }
 requires:
   portalRoles: [Portal.Reader]
   scopes:

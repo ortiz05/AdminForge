@@ -115,3 +115,23 @@ Pages may also set top-level `requires.licences: [intune]`; the renderer then sh
 - widget: probeStatus     # latest result + sparkline per probe (synthetic monitoring)
   probes: [graph-reachability, arm-reachability]   # omit for all
 ```
+
+## Optional keys (beyond the examples above)
+- **kpi**: `field` (number inside an object result, default `value`), `unit`, `statusLabel` (template; default by tone), `deltaFormat`, `deltaGood: up|down` (default up), `deltaPeriod`, `trend` (datasource path of a number list → sparkline), `hint` (template).
+- **table**: `sort: { field, desc? }` (initial sort when the URL has none), `maxHeight` (px). Column filters bound to a param (`filter: { type, param }`) appear in the page filter bar, not on the column.
+- **chart**: `labels` (display names for y fields or series values), `xLabel` (category column header in the Table view). Bar charts with long category names render horizontally.
+- **list / statusGrid / timeline**: field-or-template keys (`primary`, `secondary`, `detail`, `title`) see the row's fields at the root as well as `row`. Values that contain HTML are shown as plain text.
+- **keyValue**: field `format`, `href` (for `kind: link`), `columns: 1|2|3`. `kind: tags` accepts a list or an object (`{ env: prod }` → `env: prod`).
+- **statusGrid**: `detail` (second line), `href`, `sort: severity|none` (default severity).
+- **timeline**: `title` is the per-event title, so the panel heading is `heading`; `limit` (default 20).
+- **licenceGate**: `body` (what the page would show).
+- **markdown**: `text` may contain `${ … }` (page scope); inserted values are plain text, never HTML.
+- `percent` values are fractions (0.42 → 42%).
+
+## Page URLs (renderer)
+`/p/<key>` renders any page, dashboard or report. The URL carries:
+- page params by name (`?userType=Guest&days=90`; defaults are omitted);
+- table state per table block id: `<id>.sort=-field,other`, `<id>.cols=a,b,c` (visible columns in order), `<id>.density=compact`, `<id>.q=text`, `<id>.f={"col":["A"]}`;
+- `view=<saved view id>`, `tab=<tab id>`;
+- the inspector: `inspect=page:<entity page key>&i.<param>=…` (its tab: `itab`);
+- the playbook drawer: `playbook=<key>&inputs=<base64url JSON>` or, for bulk actions, `&items=<base64url JSON array>` (one inputs object per selected row; see `apps/web/src/playbooks/url.ts`).

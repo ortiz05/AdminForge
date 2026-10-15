@@ -1,20 +1,23 @@
 import { useMemo, useState } from 'react';
-import { useNavigate } from '@tanstack/react-router';
 import type { NavItem, NavSection } from '@adminforge/schemas';
 import {
   ClockIcon,
   CommandGroup,
   CommandItem,
   CommandPalette as Palette,
+  ArrowSquareOutIcon,
   Icon,
   LightningIcon,
+  MagnifyingGlassIcon,
   PaletteIcon,
   RowsIcon,
   SidebarSimpleIcon,
   SignOutIcon,
   XIcon,
 } from '@adminforge/ui';
+import { splitHref, useNavigateHref } from '../lib/links';
 import { pushRecent, updatePrefs, usePrefs } from '../lib/prefs';
+import { SEARCH_SECTIONS, useSearch, type SearchResult } from '../lib/search';
 import { DENSITY_OPTIONS, THEME_OPTIONS } from './UserMenu';
 import { useShell } from './shell-context';
 
@@ -36,12 +39,34 @@ export interface CommandPaletteProps {
   canArm: boolean;
 }
 
-/** Ctrl/⌘K: jump to pages (from /api/nav), recent pages, and shell actions. */
+/** One server search hit: in-app pages navigate, Microsoft portal deep links open in a new tab. */
+function ResultItem({ r, icon, search, onGo }: { r: SearchResult; icon: string; search: string; onGo: (href: string) => void }) {
+  return (
+    <CommandItem
+      value={`search ${r.type} ${r.href} ${r.title}`}
+      // Server results already match the query; keep cmdk from filtering them out on fuzzy differences.
+      keywords={[search]}
+      icon={<Icon name={r.icon ?? icon} size={16} />}
+      hint={
+        <span className="inline-flex items-center gap-1">
+          {r.subtitle}
+          {r.external && <ArrowSquareOutIcon size={12} aria-label="Opens in a new tab" />}
+        </span>
+      }
+      onSelect={() => onGo(r.href)}
+    >
+      {r.title}
+    </CommandItem>
+  );
+}
+
+/** Ctrl/⌘K: jump to pages (from /api/nav), recent pages, directory/Azure search (GET /api/search), and shell actions. */
 export function CommandPalette({ open, onOpenChange, sections, canArm }: CommandPaletteProps) {
-  const navigate = useNavigate();
+  const navigateHref = useNavigateHref();
   const prefs = usePrefs();
   const shell = useShell();
   const [search, setSearch] = useState('');
+  const found = useSearch(open ? search : '');
 
   const pages: PaletteEntry[] = useMemo(
     () => [
@@ -63,11 +88,12 @@ export function CommandPalette({ open, onOpenChange, sections, canArm }: Command
   };
   const go = (href: string) => {
     close();
-    pushRecent(href);
-    if (/^https?:\/\//.test(href)) window.open(href, '_blank', 'noreferrer');
-    else if (href === '/') void navigate({ to: '/' });
-    else void navigate({ to: '/$', params: { _splat: href.replace(/^\//, '') } });
+    if (!/^https?:\/\//.test(href)) pushRecent(splitHref(href).pathname);
+    navigateHref(href);
   };
+  // Content pages already listed under Pages aren't repeated from the server search.
+  const navHrefs = new Set(pages.map((p) => p.item.href));
+  const results = found.results.filter((r) => !navHrefs.has(r.href));
   const act = (fn: () => void) => () => {
     close();
     fn();
@@ -77,7 +103,7 @@ export function CommandPalette({ open, onOpenChange, sections, canArm }: Command
     <Palette
       open={open}
       onOpenChange={(next) => (next ? onOpenChange(true) : close())}
-      placeholder="Jump to a page, or type an action like “theme”…"
+      placeholder="Jump to a page, user, group, device or resource…"
       search={search}
       onSearchChange={setSearch}
       footer={
@@ -117,6 +143,23 @@ export function CommandPalette({ open, onOpenChange, sections, canArm }: Command
           </CommandItem>
         ))}
       </CommandGroup>
+      {SEARCH_SECTIONS.map((sec) => {
+        const hits = results.filter((r) => sec.types.includes(r.type));
+        return hits.length ? (
+          <CommandGroup key={sec.heading} heading={sec.heading}>
+            {hits.map((r) => (
+              <ResultItem key={`${r.type}:${r.href}`} r={r} icon={sec.icon} search={search} onGo={go} />
+            ))}
+          </CommandGroup>
+        ) : null;
+      })}
+      {found.error && results.length === 0 && (
+        <CommandGroup heading="Directory and Azure">
+          <CommandItem value={`search status ${search}`} keywords={[search]} disabled icon={<MagnifyingGlassIcon size={16} />}>
+            Directory search didn’t respond — pages and actions still work
+          </CommandItem>
+        </CommandGroup>
+      )}
       <CommandGroup heading="Actions">
         {canArm && !shell.arm.armed && (
           <CommandItem

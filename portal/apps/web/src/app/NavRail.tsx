@@ -1,6 +1,7 @@
 import { Link, useRouterState } from '@tanstack/react-router';
 import type { NavItem, NavSection } from '@adminforge/schemas';
-import { CaretDoubleLeftIcon, CaretDoubleRightIcon, cn, Icon, Skeleton, Tooltip, tv } from '@adminforge/ui';
+import { CaretDoubleLeftIcon, CaretDoubleRightIcon, cn, Icon, LockKeyIcon, Skeleton, Tooltip, tv } from '@adminforge/ui';
+import { contentKeyOf, splitHref } from '../lib/links';
 
 const nav = tv({
   slots: {
@@ -21,6 +22,10 @@ const nav = tv({
     itemIcon: 'shrink-0 text-fg-3 group-hover:text-fg-2',
     label: 'min-w-0 flex-1 truncate nav-collapsed:sr-only',
     badge: 'rounded-pill bg-accent-subtle px-1.5 text-2xs font-semibold text-accent nav-collapsed:hidden',
+    /** "Requires Intune": the page still opens (and explains), so it's a quiet lock, not an alert. */
+    requires:
+      'inline-flex max-w-24 shrink-0 items-center gap-1 rounded-sm border border-line px-1 text-2xs font-medium text-fg-3 nav-collapsed:hidden',
+    requiresDot: 'absolute top-1 right-1 hidden size-3 items-center justify-center text-fg-3 nav-collapsed:flex',
     divider: 'mx-2 hidden h-px bg-line nav-collapsed:block',
     foot: 'border-t border-line p-2',
     toggle: [
@@ -31,8 +36,28 @@ const nav = tv({
 });
 
 export function isActive(href: string, pathname: string): boolean {
-  if (href === '/') return pathname === '/';
-  return pathname === href || pathname.startsWith(`${href}/`);
+  const path = splitHref(href).pathname;
+  if (path === '/') return pathname === '/';
+  return pathname === path || pathname.startsWith(`${path}/`);
+}
+
+/** Short names for licences, service plans and feature keys as they appear in "Requires …" badges. */
+const SHORT: Array<[RegExp, string]> = [
+  [/^(intune|intune_a|intune_edu|intune_smbiz|ems)$/i, 'Intune'],
+  [/^(aad_premium_p2|entrap2|pim|identityprotection)$/i, 'Entra P2'],
+  [/^(aad_premium|entrap1|conditionalaccess|signinlogs)$/i, 'Entra P1'],
+  [/^(exchange|exchange_s_\w+)$/i, 'Exchange'],
+  [/^(teams|teams1)$/i, 'Teams'],
+  [/^(sharepoint|sharepoint\w*)$/i, 'SharePoint'],
+  [/^(defender\w*|windefatp|mde_\w+|atp_enterprise|threat_intelligence|mtp)$/i, 'Defender'],
+];
+
+/** "Requires INTUNE_A or EMS" → "Intune"; null for count badges like "3". */
+export function requiresText(badge: string | undefined): string | null {
+  const m = badge ? /^requires\s+(.+)$/i.exec(badge.trim()) : null;
+  if (!m) return null;
+  const names = m[1]!.split(/\s+or\s+|,\s*/).map((part) => SHORT.find(([re]) => re.test(part.trim()))?.[1] ?? part.trim());
+  return [...new Set(names)].join(' / ');
 }
 
 function NavLink({
@@ -47,7 +72,8 @@ function NavLink({
   collapsed: boolean;
 }) {
   const s = nav();
-  const className = cn(s.item(), active && s.itemActive());
+  const requires = requiresText(item.badge);
+  const className = cn(s.item(), active && s.itemActive(), requires && 'relative');
   const content = (
     <>
       <Icon
@@ -56,31 +82,43 @@ function NavLink({
         weight={active ? 'fill' : 'regular'}
         className={cn(s.itemIcon(), active && 'text-accent group-hover:text-accent')}
       />
-      <span className={s.label()}>{item.label}</span>
-      {item.badge && <span className={s.badge()}>{item.badge}</span>}
+      <span className={cn(s.label(), requires && !active && 'text-fg-3')}>{item.label}</span>
+      {requires ? (
+        <>
+          <span className={s.requires()} title={item.badge}>
+            <LockKeyIcon size={10} weight="bold" aria-hidden className="shrink-0" />
+            <span className="truncate">{requires}</span>
+          </span>
+          <span className={s.requiresDot()} aria-hidden>
+            <LockKeyIcon size={10} weight="bold" />
+          </span>
+          <span className="sr-only">({item.badge})</span>
+        </>
+      ) : (
+        item.badge && <span className={s.badge()}>{item.badge}</span>
+      )}
     </>
   );
   const external = /^https?:\/\//.test(item.href);
+  const { pathname, search } = splitHref(item.href);
+  const key = contentKeyOf(pathname);
+  const current = active ? ('page' as const) : undefined;
   const link = external ? (
     <a href={item.href} target="_blank" rel="noreferrer" className={className}>
       {content}
     </a>
-  ) : item.href === '/' ? (
-    <Link to="/" className={className} aria-current={active ? 'page' : undefined}>
+  ) : key ? (
+    <Link to="/p/$key" params={{ key }} search={search as never} className={className} aria-current={current}>
       {content}
     </Link>
   ) : (
-    <Link
-      to="/$"
-      params={{ _splat: item.href.replace(/^\//, '') }}
-      className={className}
-      aria-current={active ? 'page' : undefined}
-    >
+    // Coded routes (/runs, /admin/audit, …) and the catch-all resolve by path.
+    <Link to={pathname as never} search={search as never} className={className} aria-current={current}>
       {content}
     </Link>
   );
   return (
-    <Tooltip content={item.label} side="right" disabled={!collapsed}>
+    <Tooltip content={requires ? `${item.label} · ${item.badge}` : item.label} side="right" disabled={!collapsed}>
       {link}
     </Tooltip>
   );

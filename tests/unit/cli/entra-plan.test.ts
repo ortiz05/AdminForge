@@ -206,3 +206,30 @@ describe('application diff helpers', () => {
     expect(storedSecretIsLive(app, undefined, NOW)).toBe(false);
   });
 });
+
+describe('buildDesiredEntra with content-declared scopes', () => {
+  it('adds content scopes to the right app and read-only scopes of write playbooks to the Read app', () => {
+    const r = {
+      graph: resource('graph', [...ALL_SCOPES, 'SecurityEvents.Read.All', 'Group.Create'], [...AUTOMATION_GRAPH_ROLES, 'ThreatHunting.Read.All']),
+      arm: resource('arm', ['user_impersonation']),
+      logAnalytics: resource('logAnalytics', ['Data.Read']),
+    };
+    const desired = buildDesiredEntra(settings, r, {
+      read: { graph: ['SecurityEvents.Read.All'] },
+      write: { graph: ['Group.Create', 'AuditLog.Read.All'] },
+      automation: { graph: ['ThreatHunting.Read.All'] },
+    });
+    const grant = (key: string) => desired.apps.find((a) => a.key === key)!.grants.find((g) => g.resource === 'graph')?.scopes ?? [];
+    expect(grant('read')).toEqual(expect.arrayContaining(['SecurityEvents.Read.All', 'AuditLog.Read.All']));
+    expect(grant('read')).not.toContain('Group.Create');
+    expect(grant('write')).toEqual(expect.arrayContaining(['Group.Create', 'AuditLog.Read.All']));
+    expect(JSON.stringify(desired.apps.find((a) => a.key === 'automation')!.appPermissions)).toContain('ThreatHunting.Read.All');
+    expect(desired.skipped.filter((x) => /SecurityEvents|Group\.Create|ThreatHunting/.test(x.title))).toEqual([]);
+  });
+
+  it('skips content scopes for unlicensed workloads instead of failing', () => {
+    const desired = buildDesiredEntra(settings, resources(), { read: { exchange: ['Exchange.Manage'], teams: ['user_impersonation'] } });
+    expect(desired.skipped.some((x) => /Exchange/.test(x.title))).toBe(true);
+    expect(desired.skipped.some((x) => /Teams/.test(x.title))).toBe(true);
+  });
+});

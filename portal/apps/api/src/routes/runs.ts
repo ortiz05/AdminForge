@@ -12,8 +12,12 @@ import { assertCsrf } from '../security/csrf';
 
 /**
  * Runs API (§9). Request/response shapes:
- * - POST /api/runs {playbook, version?, inputs, dryRun} → 202 {runId, status}
- * - POST /api/runs/bulk {playbook, version?, items: object[], inputsTemplate?, dryRun?, concurrency?, stopOnError?} → 202 {runId, status, items}
+ * - POST /api/runs {playbook, version?, inputs, dryRun, previewRunId?, confirmation?} → 202 {runId, status}
+ * - POST /api/runs/bulk {playbook, version?, items: object[], inputsTemplate?, dryRun?, concurrency?, stopOnError?, previewRunId?, confirmation?} → 202 {runId, status, items}
+ *   Executing (dryRun: false) a playbook with a `confirm` block needs `previewRunId` — a succeeded dry run by the same
+ *   person of the same definition version with identical inputs/items, ≤ 15 min old (409 preview_required /
+ *   preview_stale) — and for `confirm.type: typed` the `confirmation` text (bulk: the number of items), compared
+ *   trimmed and case-insensitive (422 confirmation_mismatch; the expected value is never returned).
  * - GET  /api/runs?scope=mine|all&status=active|<s>,<s>&playbook=&from=&to=&parent=&limit=&cursor= → {items: RunSummary[], cursor?}
  * - GET  /api/runs/:id → {run, steps, plan, tasks, children}
  * - GET  /api/runs/:id/events (SSE, Last-Event-ID) → data {id, type:'run'|'step'|'log'|'progress', ts, stepSeq, data}; `event: end` when finished
@@ -30,7 +34,10 @@ const Key = z.string().trim().min(1).max(200);
 const Version = z.string().trim().min(1).max(64);
 const Inputs = z.record(z.string(), z.unknown());
 
-export const CreateRunBody = z.object({ playbook: Key, version: Version.optional(), inputs: Inputs.default({}), dryRun: z.boolean().default(false) });
+/** "Preview then confirm": required for executions of playbooks with a confirm block (see RunService). */
+const Confirmation = { previewRunId: z.uuid().optional(), confirmation: z.string().max(500).optional() };
+
+export const CreateRunBody = z.object({ playbook: Key, version: Version.optional(), inputs: Inputs.default({}), dryRun: z.boolean().default(false), ...Confirmation });
 export const BulkRunBody = z.object({
   playbook: Key,
   version: Version.optional(),
@@ -39,6 +46,7 @@ export const BulkRunBody = z.object({
   dryRun: z.boolean().default(false),
   concurrency: z.number().int().min(1).max(10).optional(),
   stopOnError: z.boolean().optional(),
+  ...Confirmation,
 });
 export const ApprovalBody = z.object({ decision: z.enum(['approve', 'reject']), comment: z.string().trim().max(2000).optional() });
 export const ManualBody = z.object({ confirmed: z.boolean(), notes: z.string().trim().max(4000).optional(), values: Inputs.optional() });

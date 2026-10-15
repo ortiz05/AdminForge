@@ -27,6 +27,8 @@ function setup(opts: Partial<FakeCloudOptions> = {}) {
     out: (l) => lines.push(l),
     fetch: cloud.fetch,
     sleep: async () => {},
+    // The fake Graph publishes a small permission catalog; content-derived scopes are tested in entra-plan tests.
+    contentScopes: {},
   };
   return { cloud, env, written, lines, ctx };
 }

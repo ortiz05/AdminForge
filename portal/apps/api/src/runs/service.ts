@@ -12,6 +12,7 @@ import {
   type RunStatus,
   type RunStore,
 } from '@adminforge/engine';
+import { renderTemplate } from '@adminforge/expressions';
 import { PORTAL_ROLES, type Kind, type PortalRole } from '@adminforge/schemas';
 import type { AuditInput, AuditWriter } from '../audit/writer';
 import { hasRole, requireRole } from '../auth/guards';
@@ -31,14 +32,22 @@ export interface Caller {
   ip: string | null;
 }
 
-export interface CreateRunInput {
+/** Server-side "preview then confirm" for playbooks with a `confirm` block (risk ≥ high). */
+export interface ConfirmationInput {
+  /** The dry run (same person, definition version and inputs, ≤ 15 minutes old) this execution was confirmed from. */
+  previewRunId?: string;
+  /** typed confirms: what the person typed (compared trimmed, case-insensitive). */
+  confirmation?: string;
+}
+
+export interface CreateRunInput extends ConfirmationInput {
   playbook: string;
   version?: string;
   inputs?: Record<string, unknown>;
   dryRun?: boolean;
 }
 
-export interface BulkRunInput {
+export interface BulkRunInput extends ConfirmationInput {
   playbook: string;
   version?: string;
   /** Per-item inputs (merged over inputsTemplate). */
@@ -75,6 +84,27 @@ const SEES_ALL: PortalRole[] = ['Portal.Operator', 'Playbook.Approver', 'Portal.
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const hasAny = (s: SessionRecord, roles: readonly string[]) => roles.some((r) => s.roles.includes(r));
+export const PREVIEW_MAX_AGE_MS = 15 * 60_000;
+
+/** JSON with sorted keys, so equal inputs compare equal whatever their key order. */
+export function canonicalJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`;
+  if (value && typeof value === 'object')
+    return `{${Object.keys(value as object)
+      .filter((k) => (value as Record<string, unknown>)[k] !== undefined)
+      .sort()
+      .map((k) => `${JSON.stringify(k)}:${canonicalJson((value as Record<string, unknown>)[k])}`)
+      .join(',')}}`;
+  return JSON.stringify(value ?? null);
+}
+
+const fold = (s: string) => s.trim().toLocaleLowerCase('en-US');
+
+interface Confirmed {
+  previewRunId: string;
+  confirm: 'typed' | 'click';
+  confirmationMatched: boolean;
+}
 const describeIssues = (issues: InputIssue[], prefix = 'inputs') =>
   issues
     .slice(0, 10)
@@ -155,8 +185,8 @@ export class RunService {
     for (const role of def.requires?.portalRoles ?? []) requireRole(session, role, `Running ${def.title}`);
   }
 
-  private async validate(def: AutomationDefinition, inputs: unknown, prefix = 'inputs') {
-    const v = await validateInputs(def.inputs, inputs ?? {}, { now: this.deps.now(), env: this.deps.env() });
+  private async validate(def: AutomationDefinition, inputs: unknown, prefix = 'inputs', now = this.deps.now()) {
+    const v = await validateInputs(def.inputs, inputs ?? {}, { now, env: this.deps.env() });
     if (!v.ok) throw new AppError(400, 'invalid_inputs', `The inputs are not valid. ${describeIssues(v.errors, prefix)}`);
     return v.values;
   }
@@ -180,6 +210,91 @@ export class RunService {
     return { id: randomUUID(), kind: def.kind, definitionKey: def.id, definitionVersion: pinned.version, definitionSha256: pinned.sha256, parentRunId: null, ...fields };
   }
 
+  // ── preview then confirm ──
+
+  /**
+   * Loads the preview a confirmed execution refers to and checks it is still a valid basis: same initiator, same
+   * definition (key, version, sha256), a top-level dry run of the same trigger that succeeded, at most 15 minutes old.
+   * Errors never say which check failed beyond "stale", and never echo the expected confirmation.
+   */
+  private async loadPreview(caller: Caller, def: AutomationDefinition, pinned: { version: string; sha256: string }, trigger: 'interactive' | 'bulk', previewRunId: string | undefined): Promise<RunRow> {
+    if (!previewRunId)
+      throw new AppError(409, 'preview_required', 'Preview this change first — the confirmation is based on what the preview found.', {
+        hint: 'Run it as a dry run, then send previewRunId (and the confirmation) with the real run.',
+      });
+    const stale = (why: string) => new AppError(409, 'preview_stale', `The preview no longer matches this change (${why}). Preview it again.`);
+    const preview = UUID.test(previewRunId) ? await this.deps.repo.getRun(previewRunId) : null;
+    if (!preview || preview.initiatorOid !== caller.session.userOid) throw stale('not your preview');
+    if (preview.definitionKey !== def.id || preview.definitionVersion !== pinned.version || preview.definitionSha256 !== pinned.sha256) throw stale('the playbook changed');
+    if (!preview.dryRun || preview.trigger !== trigger || preview.parentRunId !== null) throw stale('not a dry run of this kind');
+    if (preview.status !== 'succeeded') throw stale(`the preview ${preview.status === 'failed' ? 'failed' : 'did not finish'}`);
+    const age = this.deps.now().getTime() - preview.createdAt.getTime();
+    if (age > PREVIEW_MAX_AGE_MS || age < -60_000) throw stale('older than 15 minutes');
+    return preview;
+  }
+
+  /** `confirm.value` rendered against the preview: its inputs and its stored (secret-masked) step outputs. */
+  private async previewScope(def: AutomationDefinition, preview: RunRow, session: SessionRecord): Promise<Record<string, unknown>> {
+    const steps: Record<string, { output: unknown; status: string; error: unknown }> = {};
+    for (const r of await this.deps.repo.listSteps(preview.id)) {
+      if (/[[#>]/.test(r.path)) continue; // top-level steps only (latest record wins: listSteps is in seq order)
+      steps[r.stepId] = { output: r.output === null ? undefined : r.output, status: r.status, error: r.error };
+    }
+    return {
+      inputs: preview.inputs,
+      steps,
+      run: { id: preview.id, dryRun: true, definition: { key: def.id, version: preview.definitionVersion } },
+      user: { kind: 'delegated', oid: session.userOid, upn: session.upn, roles: session.roles },
+      env: this.deps.env(),
+      now: preview.createdAt.toISOString(),
+    };
+  }
+
+  private async checkTyped(def: AutomationDefinition, preview: RunRow, caller: Caller, typed: string | undefined, expectedOverride?: string) {
+    const confirm = def.confirm!;
+    let expected = expectedOverride;
+    let scope: Record<string, unknown> | undefined;
+    if (expected === undefined) {
+      scope = await this.previewScope(def, preview, caller.session);
+      let v: unknown;
+      try {
+        v = await renderTemplate(confirm.value, scope);
+      } catch {
+        v = undefined;
+      }
+      // Only plain values can be typed; a masked secret (object) or a missing value can never be the confirmation.
+      if (typeof v !== 'string' && typeof v !== 'number') throw new AppError(409, 'preview_stale', 'The preview did not produce the value to confirm. Preview it again.');
+      expected = String(v);
+    }
+    if (typed !== undefined && fold(typed) === fold(expected) && fold(expected) !== '') return;
+    let message = expectedOverride !== undefined ? 'Type the number of items to confirm this change.' : "The confirmation doesn't match.";
+    if (expectedOverride === undefined && confirm.message) {
+      try {
+        const m = await renderTemplate(confirm.message, scope ?? (await this.previewScope(def, preview, caller.session)));
+        // Never echo the expected value, even if the author's message contains it.
+        if (typeof m === 'string' && m.trim() && !fold(m).includes(fold(expected))) message = m;
+      } catch {
+        // keep the generic message
+      }
+    }
+    throw new AppError(422, 'confirmation_mismatch', message, { hint: 'Type the confirmation exactly as asked (case does not matter).' });
+  }
+
+  /** The audit/event record of a confirmed execution. */
+  private confirmed(def: AutomationDefinition, preview: RunRow): Confirmed {
+    const typed = def.confirm!.type === 'typed';
+    return { previewRunId: preview.id, confirm: typed ? 'typed' : 'click', confirmationMatched: typed };
+  }
+
+  /** Executions of playbooks with a confirm block need a preview (and, for typed confirms, the matching text). */
+  private needsConfirmation(def: AutomationDefinition, dryRun: boolean) {
+    return !dryRun && !!def.confirm && def.confirm.type !== 'none';
+  }
+
+  private async recordPreview(runId: string, c: Confirmed) {
+    await this.deps.store.appendEvent(runId, { type: 'status', data: { scope: 'run', status: 'queued', previewRunId: c.previewRunId, confirm: c.confirm, confirmationMatched: c.confirmationMatched } });
+  }
+
   // ── create ──
 
   async create(caller: Caller, input: CreateRunInput): Promise<RunRow> {
@@ -188,7 +303,17 @@ export class RunService {
     const def = pinned.def;
     this.checkRunnable(def);
     this.authorize(caller.session, def, dryRun);
-    const inputs = await this.validate(def, input.inputs);
+    let inputs: Record<string, unknown>;
+    let confirmed: Confirmed | null = null;
+    if (this.needsConfirmation(def, dryRun)) {
+      const preview = await this.loadPreview(caller, def, pinned, 'interactive', input.previewRunId);
+      // Validate as of the preview, so relative defaults (dates, `now`) resolve exactly as previewed.
+      inputs = await this.validate(def, input.inputs, 'inputs', preview.createdAt);
+      if (canonicalJson(inputs) !== canonicalJson(preview.inputs)) throw new AppError(409, 'preview_stale', 'The preview no longer matches this change (different inputs). Preview it again.');
+      if (def.confirm!.type === 'typed') await this.checkTyped(def, preview, caller, input.confirmation);
+      inputs = preview.inputs;
+      confirmed = this.confirmed(def, preview);
+    } else inputs = await this.validate(def, input.inputs);
     const s = caller.session;
     const row = await this.deps.repo.insertRun(
       this.newRun(def, pinned, {
@@ -208,9 +333,10 @@ export class RunService {
       action: 'run.created',
       targetType: 'run',
       targetId: row.id,
-      details: { definition: def.id, version: pinned.version, sha256: pinned.sha256, kind: def.kind, dryRun, trigger: 'interactive', risk: def.risk, inputs: redactInputs(def.inputs, inputs) },
+      details: { definition: def.id, version: pinned.version, sha256: pinned.sha256, kind: def.kind, dryRun, trigger: 'interactive', risk: def.risk, inputs: redactInputs(def.inputs, inputs), ...(confirmed ?? {}) },
       result: 'success',
     });
+    if (confirmed) await this.recordPreview(row.id, confirmed);
     await this.deps.queue.enqueue(row.id);
     return row;
   }
@@ -227,15 +353,25 @@ export class RunService {
     this.authorize(caller.session, def, dryRun);
     if (!input.items.length) throw new AppError(400, 'invalid_request', 'A bulk action needs at least one item.');
     if (input.items.length > 1000) throw new AppError(400, 'invalid_request', 'A bulk action takes at most 1000 items.');
+    const needsConfirmation = this.needsConfirmation(def, dryRun);
+    const preview = needsConfirmation ? await this.loadPreview(caller, def, pinned, 'bulk', input.previewRunId) : null;
     const items: Array<Record<string, unknown>> = [];
     const problems: string[] = [];
     for (const [i, item] of input.items.entries()) {
-      const v = await validateInputs(def.inputs, { ...(input.inputsTemplate ?? {}), ...item }, { now: this.deps.now(), env: this.deps.env() });
+      const v = await validateInputs(def.inputs, { ...(input.inputsTemplate ?? {}), ...item }, { now: preview?.createdAt ?? this.deps.now(), env: this.deps.env() });
       if (v.ok) items.push(v.values);
       else problems.push(describeIssues(v.errors, `items[${i}]`));
       if (problems.length >= 10) break;
     }
     if (problems.length) throw new AppError(400, 'invalid_inputs', `Some items are not valid. ${problems.join('; ')}`);
+    const bulkInputs = { items, ...(input.concurrency ? { concurrency: input.concurrency } : {}), ...(input.stopOnError ? { stopOnError: true } : {}) };
+    let confirmed: Confirmed | null = null;
+    if (preview) {
+      if (canonicalJson(bulkInputs) !== canonicalJson(preview.inputs)) throw new AppError(409, 'preview_stale', 'The preview no longer matches this change (different items). Preview it again.');
+      // Bulk: type the number of objects changed ("Type 12 to confirm changing 12 objects").
+      if (def.confirm!.type === 'typed') await this.checkTyped(def, preview, caller, input.confirmation, String(items.length));
+      confirmed = this.confirmed(def, preview);
+    }
     const s = caller.session;
     const row = await this.deps.repo.insertRun(
       this.newRun(def, pinned, {
@@ -246,7 +382,7 @@ export class RunService {
         initiatorUpn: s.upn,
         sessionHash: s.idHash,
         scheduleId: null,
-        inputs: { items, ...(input.concurrency ? { concurrency: input.concurrency } : {}), ...(input.stopOnError ? { stopOnError: true } : {}) },
+        inputs: preview ? preview.inputs : bulkInputs,
         correlationId: caller.correlationId,
       }),
     );
@@ -255,9 +391,10 @@ export class RunService {
       action: 'run.created',
       targetType: 'run',
       targetId: row.id,
-      details: { definition: def.id, version: pinned.version, sha256: pinned.sha256, kind: def.kind, dryRun, trigger: 'bulk', risk: def.risk, items: items.length },
+      details: { definition: def.id, version: pinned.version, sha256: pinned.sha256, kind: def.kind, dryRun, trigger: 'bulk', risk: def.risk, items: items.length, ...(confirmed ?? {}) },
       result: 'success',
     });
+    if (confirmed) await this.recordPreview(row.id, confirmed);
     await this.deps.queue.enqueue(row.id);
     return row;
   }
@@ -358,7 +495,8 @@ export class RunService {
   async get(caller: Caller, id: string): Promise<RunDetail> {
     const row = await this.load(caller, id);
     const { repo } = this.deps;
-    const [steps, tasks, children] = await Promise.all([repo.listSteps(id), repo.listTasks({ runId: id }), repo.listRuns({ parentRunId: id, limit: 1000 })]);
+    const [steps, tasks, children, firstEvents] = await Promise.all([repo.listSteps(id), repo.listTasks({ runId: id }), repo.listRuns({ parentRunId: id, limit: 1000 }), repo.listEvents(id, 0, 5)]);
+    const previewRunId = firstEvents.map((e) => e.data.previewRunId).find((v): v is string => typeof v === 'string') ?? null;
     let def: AutomationDefinition | null;
     let params: AutomationDefinition['inputs'];
     try {
@@ -369,7 +507,7 @@ export class RunService {
     }
     const titles = await this.titles(children);
     return {
-      run: runView(row, def, steps, params),
+      run: { ...runView(row, def, steps, params), previewRunId },
       steps: steps.map(stepView),
       plan: runPlan(steps),
       tasks: tasks.map((t) => taskView(t, this.canDecide(caller.session, row, t))),

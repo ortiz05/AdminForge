@@ -1,7 +1,11 @@
 import { randomBytes } from 'node:crypto';
+import path from 'node:path';
+import { repoRoot } from '@adminforge/config';
+import { loadContentDir } from '@adminforge/schemas';
+import { declaredScopes } from '../content/scopes';
 import { RESOURCES, OPTIONAL_RESOURCES, RESOURCE_KEYS } from '../provision/catalog';
 import { buildAuthorizeUrl, checkAuthorizeUrl, clientCredentialToken, pkceChallenge, tokenRoles, TokenError } from '../provision/auth';
-import { buildDesiredEntra } from '../provision/entra-desired';
+import { buildDesiredEntra, type ContentScopes } from '../provision/entra-desired';
 import { applyEntraOps, fetchEntraState, fetchResources } from '../provision/entra-io';
 import { planEntra } from '../provision/entra-plan';
 import { buildDesiredIdentities, planIdentities, type IdentityOp } from '../provision/identities-plan';
@@ -18,10 +22,16 @@ export interface EntraRun {
   ops: EntraOp[];
 }
 
+/** Permissions declared by portal/content (requires.scopes) — provisioning grants exactly these on top of the baseline. */
+export async function contentScopes(contentDir = path.join(repoRoot, 'portal', 'content')): Promise<ContentScopes> {
+  const { definitions } = await loadContentDir(contentDir);
+  return declaredScopes(definitions).scopes;
+}
+
 /** Read-only: fetch → desired → plan. */
 export async function planEntraRun(ctx: CliContext, clients: Clients, settings = provisionSettings(ctx.env)): Promise<EntraRun> {
   const resources = await fetchResources(clients.graph);
-  const desired = buildDesiredEntra(settings, resources);
+  const desired = buildDesiredEntra(settings, resources, ctx.contentScopes ?? (await contentScopes()));
   const state = await fetchEntraState(clients.graph, clients.arm, desired, resources, envSubset(ctx.env));
   return { settings, desired, state, ops: planEntra(desired, state, ctx.now?.() ?? new Date()) };
 }

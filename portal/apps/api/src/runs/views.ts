@@ -63,6 +63,7 @@ export function runView(row: RunRow, def: AutomationDefinition | null, steps: St
     inputs: viewInputs(row, params ?? def?.inputs),
     outputs: row.outputs ? (redact(row.outputs) as Record<string, unknown>) : null,
     error: row.error,
+    previewRunId: null,
     waiting: row.status === 'succeeded' || row.status === 'failed' || row.status === 'cancelled' || row.status === 'compensated' ? null : waitingOf(steps),
   };
 }

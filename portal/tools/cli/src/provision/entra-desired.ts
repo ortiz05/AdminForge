@@ -108,7 +108,30 @@ function appBody(displayName: string, redirectUris: string[], rra: RequiredResou
 }
 
 /** Pure: the full desired Entra/Azure state for one environment label. */
-export function buildDesiredEntra(settings: ProvisionSettings, resources: Resources): DesiredEntra {
+/** Permissions declared by content (`requires.scopes`), per app and service — see content/scopes.ts. */
+export type ContentScopes = Partial<Record<'read' | 'write' | 'automation', Partial<Record<string, Iterable<string>>>>>;
+
+const SERVICE_RESOURCE: Record<string, ResourceKey | undefined> = {
+  graph: 'graph',
+  exchange: 'exchange',
+  teams: 'teams',
+  sharepointAdmin: 'sharepoint',
+};
+
+const union = (...lists: Array<Iterable<string> | undefined>) => {
+  const seen = new Map<string, string>();
+  for (const list of lists) for (const v of list ?? []) if (!seen.has(v.toLowerCase())) seen.set(v.toLowerCase(), v);
+  return [...seen.values()];
+};
+
+/** Read-only scope names (`X.Read.Y`, `X.ReadBasic.Y`) — dry runs of write playbooks execute their reads with the Read app. */
+const readOnly = (scopes: Iterable<string> | undefined) => [...(scopes ?? [])].filter((s) => /\.Read(Basic)?(\.|$)/.test(s) && !/ReadWrite/.test(s));
+
+/**
+ * Desired Entra objects. Each app's permissions = the baseline catalog ∪ what published content declares
+ * (`requires.scopes`), so provisioning and `adminforge validate --scopes` stay in sync (least privilege, verified).
+ */
+export function buildDesiredEntra(settings: ProvisionSettings, resources: Resources, content: ContentScopes = {}): DesiredEntra {
   const { label, baseUrl } = settings;
   const skipped: Skipped[] = [];
   const apps: DesiredApp[] = [];
@@ -132,9 +155,25 @@ export function buildDesiredEntra(settings: ProvisionSettings, resources: Resour
     });
   };
 
+  const extra = (app: 'read' | 'write' | 'automation', type: 'Scope' | 'Role', exclude: string[] = []): PermissionRequest[] =>
+    Object.entries(content[app] ?? {}).flatMap(([service, values]) => {
+      const resource = SERVICE_RESOURCE[service];
+      const list = [...(values ?? [])];
+      return resource && resource !== 'graph' && !exclude.includes(service) && list.length ? [{ resource, values: list, type }] : [];
+    });
+  const mergeByResource = (requests: PermissionRequest[]): PermissionRequest[] => {
+    const byKey = new Map<string, PermissionRequest>();
+    for (const r of requests) {
+      const k = `${r.resource}:${r.type}`;
+      const prev = byKey.get(k);
+      byKey.set(k, prev ? { ...prev, values: union(prev.values, r.values) } : r);
+    }
+    return [...byKey.values()];
+  };
+
   delegatedApp(
     'read',
-    READ_GRAPH_SCOPES,
+    union(READ_GRAPH_SCOPES, content.read?.graph, readOnly(content.write?.graph)),
     // The sign-out landing page doubles as the post_logout_redirect_uri, which must be registered.
     ['/auth/callback', '/auth/signed-out'],
     {
@@ -155,17 +194,29 @@ export function buildDesiredEntra(settings: ProvisionSettings, resources: Resour
         saml2Token: [],
       },
     },
-    [
+    mergeByResource([
       { resource: 'logAnalytics', values: ['Data.Read'], type: 'Scope' },
       { resource: 'exchange', values: ['Exchange.Manage'], type: 'Scope' },
-    ],
+      ...extra('read', 'Scope'),
+    ]),
   );
 
-  delegatedApp('write', WRITE_GRAPH_SCOPES, '/auth/arm/callback', {}, [{ resource: 'exchange', values: ['Exchange.Manage'], type: 'Scope' }]);
+  delegatedApp(
+    'write',
+    union(WRITE_GRAPH_SCOPES, content.write?.graph),
+    '/auth/arm/callback',
+    {},
+    mergeByResource([{ resource: 'exchange', values: ['Exchange.Manage'], type: 'Scope' }, ...extra('write', 'Scope')]),
+  );
 
   {
     const names = appNames(label, 'automation');
-    const { rra, resolved } = resolvePermissions(names.displayName, [{ resource: 'graph', values: AUTOMATION_GRAPH_ROLES, type: 'Role' }], resources, skipped);
+    const { rra, resolved } = resolvePermissions(
+      names.displayName,
+      mergeByResource([{ resource: 'graph', values: union(AUTOMATION_GRAPH_ROLES, content.automation?.graph), type: 'Role' }, ...extra('automation', 'Role')]),
+      resources,
+      skipped,
+    );
     apps.push({
       key: 'automation',
       uniqueName: names.uniqueName,

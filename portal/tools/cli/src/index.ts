@@ -1,11 +1,13 @@
 #!/usr/bin/env -S npx tsx
 import { ApiError } from '@adminforge/connectors';
 import { envFilePath, loadEnv, repoRoot, updateEnvFile } from '@adminforge/config';
+import { createInterface } from 'node:readline/promises';
 import { Command } from 'commander';
 import { contentContext, newDefinition, publishContent, recordFixtures, testContent, validateContent } from './commands/content';
 import { envCheck } from './commands/env';
 import { ConfigError, type CliContext } from './commands/context';
 import { provisionEntra, provisionStatus, provisionTestIdentities } from './commands/provision';
+import { destroyAzureTestRun, provisionAzureTest } from './provision/azure-test-command';
 import { TokenError } from './provision/auth';
 
 /** Real-world context: env file outside the repo (R2), stdout, global fetch. */
@@ -20,6 +22,16 @@ function liveContext(): CliContext {
     },
     out: (line) => console.log(line),
   };
+}
+
+/** One line from the terminal (confirmation prompts). */
+async function ask(question: string): Promise<string> {
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  try {
+    return await rl.question(question);
+  } finally {
+    rl.close();
+  }
 }
 
 const program = new Command()
@@ -50,6 +62,23 @@ provision
   .option('--dry-run', 'print the plan without changing anything')
   .action(async (opts: { dryRun?: boolean }) => {
     await provisionTestIdentities(liveContext(), { dryRun: opts.dryRun });
+  });
+provision
+  .command('azure-test')
+  .description(
+    'Create the Azure test environment for live KQL validation: resource group AF-Test-<label>, a Log Analytics workspace (daily cap 0.1 GB), the subscription activity log export, and read access for the automation identity and the validation user',
+  )
+  .option('--dry-run', 'print the plan without changing anything')
+  .option('--no-verify', 'skip the Log Analytics query check as the automation identity')
+  .option('--destroy', 'delete the resource group, the workspace and the diagnostic setting')
+  .option('--yes', 'with --destroy: do not ask for confirmation')
+  .action(async (opts: { dryRun?: boolean; verify?: boolean; destroy?: boolean; yes?: boolean }) => {
+    if (opts.destroy) {
+      await destroyAzureTestRun(liveContext(), { yes: opts.yes, confirm: process.stdin.isTTY ? ask : undefined });
+      return;
+    }
+    const run = await provisionAzureTest(liveContext(), { dryRun: opts.dryRun, verify: opts.verify });
+    if (run.verify && !run.verify.ok) process.exitCode = 1;
   });
 provision
   .command('status')

@@ -9,12 +9,14 @@ export const RESOURCES = {
   arm: { appId: '797f4846-ba00-4fd7-ba43-dac1f8f63013', name: 'Azure Service Management' },
   logAnalytics: { appId: 'ca7f3f0b-7d91-482c-8e09-c5d840d0eac5', name: 'Log Analytics API' },
   exchange: { appId: '00000002-0000-0ff1-ce00-000000000000', name: 'Office 365 Exchange Online' },
+  teams: { appId: '48ac35b8-9aa8-4d74-927d-1f4a14a0b239', name: 'Skype and Teams Tenant Admin API' },
+  sharepoint: { appId: '00000003-0000-0ff1-ce00-000000000000', name: 'Office 365 SharePoint Online' },
 } as const;
 export type ResourceKey = keyof typeof RESOURCES;
 export const RESOURCE_KEYS = Object.keys(RESOURCES) as ResourceKey[];
 
 /** Resources that only exist in licensed tenants; a missing service principal is skipped with a warning. */
-export const OPTIONAL_RESOURCES: ReadonlySet<ResourceKey> = new Set(['exchange']);
+export const OPTIONAL_RESOURCES: ReadonlySet<ResourceKey> = new Set(['exchange', 'teams', 'sharepoint']);
 
 export const OIDC_SCOPES = ['openid', 'profile', 'offline_access', 'User.Read'] as const;
 

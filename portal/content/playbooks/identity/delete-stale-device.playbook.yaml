@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/playbook.schema.json
 kind: playbook
 id: identity.delete-stale-device
-version: 1.0.0
+version: 1.0.1
 title: Delete stale Entra device
 summary: >-
   Permanently deletes a Microsoft Entra device object that has not signed in for the chosen number of days. Refuses
@@ -14,7 +14,7 @@ mode: write
 requires:
   portalRoles: [Portal.Operator]
   scopes:
-    graph: [Device.Read.All, BitlockerKey.ReadBasic.All, Device.ReadWrite.All]
+    graph: [Device.Read.All, BitlockerKey.ReadBasic.All, Directory.AccessAsUser.All]  # delegated device delete; bounded by the engineer's Cloud Device Administrator role
   entraRoles: [Cloud Device Administrator]
 confirm:
   type: typed

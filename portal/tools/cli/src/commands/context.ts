@@ -11,6 +11,8 @@ export const ARM_SCOPE = 'https://management.azure.com/.default';
 
 /** Everything a command needs from the outside world — injected so tests run without network or files. */
 export interface CliContext {
+  /** Content-declared scopes (tests inject; default: loaded from portal/content). */
+  contentScopes?: import('../provision/entra-desired').ContentScopes;
   /** Configuration values (env file overlaid by process env). Never printed. */
   env: Record<string, string | undefined>;
   /** Upserts keys in the local env file. */

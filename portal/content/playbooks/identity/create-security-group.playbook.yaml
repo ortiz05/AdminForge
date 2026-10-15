@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/playbook.schema.json
 kind: playbook
 id: identity.create-security-group
-version: 1.0.0
+version: 1.0.1
 title: Create security group
 summary: >-
   Creates a cloud security group with assigned membership, owners and initial members. Refuses duplicate names.
@@ -13,7 +13,7 @@ mode: write
 requires:
   portalRoles: [Portal.Operator]
   scopes:
-    graph: [Group.Read.All, Group.Create, GroupMember.ReadWrite.All]
+    graph: [Group.Read.All, Group.ReadWrite.All, GroupMember.ReadWrite.All]  # Group.Create is application-only
   entraRoles: [Groups Administrator]
 confirm:
   type: click

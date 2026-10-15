@@ -151,7 +151,10 @@ const LICENCE_TEXT = /licen[cs]e|subscription (?:is )?required|premium|\bP[12]\b
 /** The hint for a failed call: missing scopes, roles or licences for 401/403, throttling/temporary failures otherwise. */
 export function errorHint(err: ApiError, service: ServiceId, identity: Pick<ExecutionIdentity, 'kind' | 'mode'>, requires?: Requires, connection?: string): { hint: string; licence: boolean } {
   const ref = err.requestId ? ` Microsoft request-id ${err.requestId}.` : '';
-  const licence = (err.status === 401 || err.status === 403 || err.status === 400) && (LICENCE_CODES.test(err.code) || LICENCE_TEXT.test(err.message));
+  const licence =
+    ((err.status === 401 || err.status === 403 || err.status === 400) && (LICENCE_CODES.test(err.code) || LICENCE_TEXT.test(err.message))) ||
+    // Microsoft 365 usage reports answer 404 UnknownTenantId for tenants without Microsoft 365 workloads.
+    (err.status === 404 && /^UnknownTenantId$/i.test(err.code));
   if (licence) {
     const need = requires?.licences?.length ? ` It requires ${requires.licences.join(' or ')}.` : '';
     return { hint: `Your tenant's licences don't include this feature.${need}${ref}`, licence: true };

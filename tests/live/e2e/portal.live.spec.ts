@@ -32,6 +32,25 @@ async function waitRun(id: string | undefined, created?: { status: number; json:
   return { status: 'timeout' };
 }
 
+type RunDetail = { run: { status: string }; steps: Array<{ stepId: string; status: string; output?: unknown }> };
+
+/**
+ * Preview then confirm (enforced server-side for playbooks with a confirm block): dry-run with the same inputs, then
+ * execute with previewRunId and — for typed confirms — the text the UI would ask for, read from the preview's outputs.
+ */
+async function previewThenRun(playbook: string, inputs: Record<string, unknown>, confirmFrom?: (preview: RunDetail) => string | undefined) {
+  const p = await call<{ runId: string }>('POST', '/api/runs', { playbook, inputs, dryRun: true });
+  const preview = await waitRun(p.json?.runId, p);
+  if (preview.status !== 'succeeded') return { preview, created: undefined };
+  const detail = await call<RunDetail>('GET', `/api/runs/${p.json.runId}`);
+  const confirmation = confirmFrom?.(detail.json);
+  const created = await call<{ runId: string }>('POST', '/api/runs', { playbook, inputs, dryRun: false, previewRunId: p.json.runId, ...(confirmation !== undefined ? { confirmation } : {}) });
+  return { preview, created };
+}
+
+/** A step's output from a preview, as the UI reads it for the confirmation prompt. */
+const outputOf = (detail: RunDetail, stepId: string) => detail.steps.filter((s) => s.stepId === stepId && s.status === 'succeeded').at(-1)?.output as Record<string, unknown> | undefined;
+
 test.beforeAll(async ({ browser }) => {
   const context = await browser.newContext();
   page = await context.newPage();
@@ -143,11 +162,14 @@ test('dry run: add group member (read mode)', async () => {
 });
 
 test('write without arming is refused', async () => {
-  const r = await call<{ runId: string }>('POST', '/api/runs', { playbook: 'identity.add-group-members', inputs: { groupId, userIds: [userId] }, dryRun: false });
-  const run = r.status === 202 ? await waitRun(r.json.runId) : { status: `http ${r.status}` };
+  const unconfirmed = await call('POST', '/api/runs', { playbook: 'identity.add-group-members', inputs: { groupId, userIds: [userId], reason: 'AdminForge live validation' }, dryRun: false });
+  console.log('write without a preview', unconfirmed.status);
+  expect(unconfirmed.status).toBe(409);
+  const { preview, created: r } = await previewThenRun('identity.add-group-members', { groupId, userIds: [userId], reason: 'AdminForge live validation' });
+  const run = r?.status === 202 ? await waitRun(r.json.runId) : { status: `preview ${preview.status} / http ${r?.status}` };
   console.log('unarmed write', run.status);
   expect(run.status === 'awaiting_arm' || run.status.startsWith('http 4')).toBeTruthy();
-  if (r.status === 202) await call('POST', `/api/runs/${r.json.runId}/cancel`);
+  if (r?.status === 202) await call('POST', `/api/runs/${r.json.runId}/cancel`);
 });
 
 test('arm write access (step-up sign-in to the Write app)', async () => {
@@ -164,22 +186,23 @@ test('arm write access (step-up sign-in to the Write app)', async () => {
 });
 
 test('write: add then remove group member (AF-Test objects)', async () => {
-  const add = await call<{ runId: string }>('POST', '/api/runs', { playbook: 'identity.add-group-members', inputs: { groupId, userIds: [userId], reason: 'live validation' }, dryRun: false });
-  const a = await waitRun(add.json?.runId, add);
+  const { created: add } = await previewThenRun('identity.add-group-members', { groupId, userIds: [userId], reason: 'live validation' });
+  const a = await waitRun(add?.json?.runId, add);
   console.log('add member', a.status, a.error ?? '');
   expect(a.status).toBe('succeeded');
-  const rem = await call<{ runId: string }>('POST', '/api/runs', { playbook: 'identity.remove-group-members', inputs: { groupId, memberIds: [userId], reason: 'live validation cleanup' }, dryRun: false });
-  const r = await waitRun(rem.json?.runId, rem);
+  const { created: rem } = await previewThenRun('identity.remove-group-members', { groupId, memberIds: [userId], reason: 'live validation cleanup' });
+  const r = await waitRun(rem?.json?.runId, rem);
   console.log('remove member', r.status, r.error ?? '');
   expect(r.status).toBe('succeeded');
 });
 
 test('write: disable then re-enable a test user', async () => {
-  const dis = await call<{ runId: string }>('POST', '/api/runs', { playbook: 'identity.disable-user', inputs: { userId: user2Id, reason: 'AdminForge live validation' }, dryRun: false });
-  const d = await waitRun(dis.json?.runId, dis);
+  // disable-user confirms with a typed sign-in name: the UI shows the previewed user's UPN and the engineer types it.
+  const { created: dis } = await previewThenRun('identity.disable-user', { userId: user2Id, reason: 'AdminForge live validation' }, (p) => outputOf(p, 'lookup')?.userPrincipalName as string | undefined);
+  const d = await waitRun(dis?.json?.runId, dis);
   console.log('disable user', d.status, d.error ?? '');
-  const en = await call<{ runId: string }>('POST', '/api/runs', { playbook: 'identity.enable-user', inputs: { userId: user2Id, reason: 'AdminForge live validation cleanup' }, dryRun: false });
-  const e = await waitRun(en.json?.runId, en);
+  const { created: en } = await previewThenRun('identity.enable-user', { userId: user2Id, reason: 'AdminForge live validation cleanup' });
+  const e = await waitRun(en?.json?.runId, en);
   console.log('enable user', e.status, e.error ?? '');
   expect(d.status).toBe('succeeded');
   expect(e.status).toBe('succeeded');

@@ -186,6 +186,8 @@ export interface RunView extends RunSummary {
   inputs: Record<string, unknown>;
   outputs: Record<string, unknown> | null;
   error: RunError | null;
+  /** The dry run this execution was confirmed from (playbooks with a confirm block), else null. */
+  previewRunId: string | null;
   /** What the run is parked on, when it is. */
   waiting: { kind: 'approval' | 'manual' | 'arm' | 'reauth' | 'wait' | 'child'; path: string; stepId: string; since: string | null; wakeAt?: string | null } | null;
 }

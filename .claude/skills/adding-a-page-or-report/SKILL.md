@@ -21,7 +21,14 @@ Pages, dashboards and reports are YAML in `portal/content/{pages,dashboards,repo
      thread with a 250 ms budget and fail on large tenants.
    - Tenant-wide questions that would need many Graph calls → **KQL** (`resourceGraph`, `logAnalytics`).
    - User input: `$odata()`, `$odataSearch()`, `$kql()`, `$encode()`. Advanced filters: declare
-     `filters.advanced.fields` and use `${ advanced }`; never read the raw param.
+     `filters.advanced.fields` and use `${ advanced }`; never read the raw param. Dialect `odata` (Graph) and `kql`
+     (Resource Graph / Log Analytics) compile into the request; for sources with no query language (`runner`,
+     `static`, `function`) use `dialect: rows` and keep the matching rows in the transform with
+     `$applyAdvanced(<rows>, advanced)` (row fields use `.` paths; computed fields work too).
+   - Defender advanced hunting: `source: graph`, `method: POST`, `path: /security/runHuntingQuery`,
+     `body: { Query: … }` (a read; the KQL lint checks `body.Query` like any query), transform `value.results`,
+     `requires.scopes.graph: [ThreatHunting.Read.All]`. Start a `// af:<page id>#<datasource>` comment line so
+     fixtures can match it (`bodyIncludes`).
    - Later datasources may reference earlier ones (`ds.<name>`).
 4. **Layout:** widgets exactly as in `docs/widgets.md` (kpi, table, chart, list, keyValue, statusGrid, timeline,
    markdown, actionBar, licenceGate, probeStatus). Tables: `columns` (`kind`, `filter`, `hidden`), `rowActions`,

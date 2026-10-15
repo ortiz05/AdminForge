@@ -2,16 +2,16 @@
 
 Every block in a page/dashboard/report `layout:` is a widget. Common keys (validated by `@adminforge/schemas`):
 
-| Key                    | Meaning                                                                                  |
-| ---------------------- | ---------------------------------------------------------------------------------------- |
-| `widget`               | Widget type (below)                                                                      |
-| `id`                   | Optional stable id (needed to pin a widget to "My dashboard": `pageKey#id`)              |
-| `title`, `description` | Panel header text                                                                        |
-| `span`                 | Columns on the 12-column grid (default 12; KPIs default 3)                               |
-| `rows`                 | Height hint in grid rows (charts default 2)                                              |
-| `data`                 | Datasource reference: `<datasource>` or `<datasource>.<path>` (dot path into the result) |
-| `when`                 | `${ … }` expression; widget is hidden when false                                         |
-| `empty`                | `{ title, body, action? }` shown when data is empty                                      |
+| Key                    | Meaning                                                                                                  |
+| ---------------------- | -------------------------------------------------------------------------------------------------------- |
+| `widget`               | Widget type (below)                                                                                      |
+| `id`                   | Optional stable id (`pageKey#id`; reserved for pinning to a personal dashboard, which is in the backlog) |
+| `title`, `description` | Panel header text                                                                                        |
+| `span`                 | Columns on the 12-column grid (default 12; KPIs default 3)                                               |
+| `rows`                 | Height hint in grid rows (charts default 2)                                                              |
+| `data`                 | Datasource reference: `<datasource>` or `<datasource>.<path>` (dot path into the result)                 |
+| `when`                 | `${ … }` expression; widget is hidden when false                                                         |
+| `empty`                | `{ title, body, action? }` shown when data is empty                                                      |
 
 Formats used by several widgets: `number`, `percent`, `bytes`, `duration`, `date`, `datetime`, `relativeTime`, `text`.
 Status values everywhere: `ok`, `warn`, `crit`, `info`, `neutral` (always rendered with icon + label).
@@ -87,12 +87,13 @@ param (server-side filtering).
 
 Table options:
 
-- `selection`: `multi` always shows row checkboxes; `none` never does; unset (or `single`) shows them only when the
-  table has `bulkActions`. `single` is accepted but not implemented yet (it behaves like unset).
+- `selection`: `multi` always shows row checkboxes; `single` shows them but allows one row at a time (no "select
+  all"), for actions that act on exactly one item; `none` never shows them; unset shows them only when the table has
+  `bulkActions`.
 - `search`: show the free-text box that filters the loaded rows. Default: on, unless the page binds a server-side
   search param (`filters.search`).
-- `pageSize`: 10–1000, accepted but not used by the renderer yet — tables scroll (virtualised) and load further pages
-  with "Load more".
+- `pageSize`: 10–1000, accepted for compatibility but has no effect: tables are virtualised and load further pages with
+  "Load more" (docs/decisions.md).
 - `emptyText`: the empty-state title (default "Nothing to show"); a block-level `empty: { title, body }` wins over it.
 - `rowKey` (row id path, default `id`), `rowActions`, `bulkActions` (`forEach.inputs`, `concurrency` 1–10, default 5;
   `maxItems` default 100), `inspect`, plus `sort` and `maxHeight` (see Optional keys below).

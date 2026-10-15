@@ -15,10 +15,12 @@ checks that write time-series results shown on `/monitoring`.
 
 1. **Reuse first.** Probes are swept by tag: tag a new probe (`tags: [hourly]`, `[config-check]`) and an existing
    sweep schedule (`schedules/probes/*.schedule.yaml`, `job.select.tags`) picks it up — often no new schedule needed.
-2. **Scaffold:** `pnpm adminforge new probe <section>/<name>` / `new schedule <section>/<name>`, or design the query
-   in **Query Studio** (`/query`) and use _Save as probe/report/schedule_.
+2. **Scaffold:** `pnpm adminforge new probe <section>/<name>` / `new schedule <section>/<name>`, design the query
+   in **Query Studio** (`/query`) and use _Save as probe/report/schedule_, or build a schedule in the **schedule
+   editor** (`/schedules/new`: cron builder with preview, job, retries, alerts → YAML for review).
 3. **Pick the check:** `check.kind` = `http`, `dnsResolve`, `certExpiry`, `graph`, `arm`, `tokenAcquisition`,
-   `appCredentialExpiry`, `licenseThreshold`, `signInHealth`, `functionHealth`, or **`kql`**.
+   `appCredentialExpiry`, `licenseThreshold`, `signInHealth`, `functionHealth`, `auditChain` (AdminForge's own audit
+   log), or **`kql`**.
    - Tenant-wide configuration questions → `kql` with `source: resourceGraph` (all subscriptions, one query),
      `logAnalytics` (`workspace` defaults to `${env.AF_LOG_ANALYTICS_WORKSPACE_ID}`), or `advancedHunting`
      (Defender licence). `metric: rowCount` or `{ column, aggregate }`; `detailsLimit` keeps the offending rows.
@@ -26,8 +28,10 @@ checks that write time-series results shown on `/monitoring`.
 4. **Thresholds** `{ warn, crit }` in the direction `PROBE_METRICS` defines for the kind; `intervalHint`, `timeoutMs`.
 5. **Schedules:** `cron` (5/6 fields), `timezone` (IANA), `identity: automation`, `job.kind` =
    - `probe` (`ref` / `refs` / `select.tags`, optional `concurrency`);
-   - `report` (`ref`, `params`, `delivery: [{ type: file, format, path, retain }]`). `email` and `teams` delivery
-     targets validate, but the scheduler doesn't send them yet: it records `not_supported` and keeps the file;
+   - `report` (`ref`, `params`, `delivery: [{ type: file, format, path, retain }]`, plus `{ type: email, to }` and
+     `{ type: teams, webhook }`). Recipients and webhooks are **always** `${ env.X }` keys (configuration, never
+     content); email needs `AF_MAIL_SENDER` and the automation identity's Mail.Send, Teams a Workflows webhook on a
+     Microsoft host. The file is always kept with the run;
    - `playbook` (`ref`, `inputs`, `mode`; write playbooks need `approvedBy` — enabling them requires a second
      approver);
    - `script` (a pinned runner script: `script`, `sha256`, `parameters`, `services`, `timeoutSeconds`, `mode`;
@@ -35,8 +39,9 @@ checks that write time-series results shown on `/monitoring`.
      can't yet run scripts as the automation identity (see `docs/backlog.md`), so prefer a `kql` probe or a report;
    - `contentHealth` (`scopes: true` also checks the automation identity's permissions).
 
-   Plus `retry`, `timeoutSeconds`, `overlap: skip|queue|allow`. `notify.onFailure` / `onSuccess` validate, but nothing
-   is sent yet (failure target types are only noted in the audit entry).
+   Plus `retry`, `timeoutSeconds`, `overlap: skip|queue|allow`, and `notify.onFailure` / `onSuccess` (same email/Teams
+   targets; failure alerts are sent only when no retry is left). Scheduled data (report files, probe rows) is visible
+   to Operators by default — widen it deliberately with `requires.portalRoles`.
 
 6. **Permissions:** the automation identity needs **application** permissions / Azure RBAC for what it reads. Declare
    them in `requires.scopes` / `requires.azureRoles`; if new, add them to provisioning

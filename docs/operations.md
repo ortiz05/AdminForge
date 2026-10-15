@@ -73,22 +73,78 @@ Migrations only add; they are safe to apply before restarting the old processes.
 
 ## Backup and restore
 
-Back up the database **and** the files it depends on:
+`adminforge-backup.timer` runs `portal/deploy/backup/adminforge-backup.sh` daily at 02:30 (and catches up after
+downtime). Each backup is a folder in `~/adminforge-backups/<UTC timestamp>/` (mode 700) holding:
+
+- `adminforge.dump` — the services' database (`pg_dump -Fc`), checked to contain the audit table;
+- `config.tgz` — `~/.config/adminforge` (env files incl. client secrets and `TOKEN_CACHE_KEY`);
+- `data.tgz` — report files and Caddy's CA.
+
+Folders older than 14 days are deleted (`AF_BACKUP_KEEP_DAYS`; also `AF_BACKUP_DIR`, `AF_BACKUP_PG_CONTAINER`,
+`AF_BACKUP_DATABASE`). Install it with:
 
 ```sh
-B=~/adminforge-backups/$(date +%F); install -d -m 700 "$B"
-docker exec adminforge-dev-postgres-1 pg_dump -U adminforge -Fc adminforge > "$B/adminforge.dump"
-tar -C ~/.config -czf "$B/config.tgz" adminforge                       # env files incl. TOKEN_CACHE_KEY
-tar -C ~/.local/share -czf "$B/data.tgz" adminforge caddy              # report files, Caddy's CA
-chmod -R go-rwx "$B"
+sed "s#%h/AdminForge#$PWD#g" portal/deploy/systemd/adminforge-backup.service > ~/.config/systemd/user/adminforge-backup.service
+cp portal/deploy/systemd/adminforge-backup.timer ~/.config/systemd/user/
+systemctl --user daemon-reload && systemctl --user enable --now adminforge-backup.timer
+systemctl --user start adminforge-backup     # one now; journalctl --user -u adminforge-backup for the result
 ```
 
-Keep backups encrypted and access-controlled: they contain client secrets and the token-cache key. Without
-`TOKEN_CACHE_KEY` the sealed token cache can't be read (everyone signs in again; nothing else is lost).
+Copy backups off the host (they are the only copy otherwise) and keep them encrypted and access-controlled: they hold
+client secrets and the token-cache key. Without `TOKEN_CACHE_KEY` the sealed token cache can't be read (everyone signs
+in again; nothing else is lost).
 
-Restore: stop the services, `pg_restore -U adminforge -d adminforge --clean` the dump into the container (pipe it
-through `docker exec -i`), put the config and data archives back, start the services. The audit chain verifies after
-a restore of a consistent dump.
+**Restore:** stop the api, worker and scheduler; restore the dump
+(`docker exec -i adminforge-dev-postgres-1 pg_restore -U adminforge -d adminforge --clean --no-owner < adminforge.dump`);
+put `config.tgz` and `data.tgz` back; start the services; run `ADMINFORGE_ENV_OVERLAY=host pnpm adminforge audit verify`.
+
+**Restore drill** — do one after every upgrade that adds a migration, and at least quarterly: restore the newest dump
+into a scratch database (`createdb adminforge_restore_drill`, `pg_restore … -d adminforge_restore_drill`), compare row
+counts of `audit_events`, `runs`, `schedules`, `definitions` with the live database, run `adminforge audit verify`
+against it (point `DATABASE_URL` at the scratch database), then drop it. Record it here.
+
+| Date       | Backup               | Result                                                                                              |
+| ---------- | -------------------- | --------------------------------------------------------------------------------------------------- |
+| 2026-10-15 | 2026-10-15T08-41-14Z | Restored; counts matched (625 audit events, 93 runs, 16 schedules, 194 definitions); chain verified |
+
+## Emergency: switch AdminForge off
+
+If AdminForge or an account using it may be compromised, stop it from acting before investigating:
+
+1. **Disable the enterprise apps** in Entra (Enterprise applications → AdminForge Read / Write / Automation `[<label>]`
+   → Properties → _Enabled for users to sign in?_ = No). Sign-ins and token refreshes stop within minutes; Write first
+   if time is short.
+2. **Stop unattended work:** `systemctl --user stop adminforge-scheduler adminforge-worker`.
+3. **Revoke sessions:** `systemctl --user stop adminforge-api`, then (if needed)
+   `docker exec adminforge-dev-postgres-1 psql -U adminforge -d adminforge -c 'truncate sessions, token_cache'`.
+4. **Rotate secrets** (table below), starting with the automation and Write app secrets and the provisioner.
+5. **Investigate** with the audit log (`adminforge audit verify`, then the Audit page or `audit_events` by
+   `correlation_id`/actor) and the Entra sign-in and audit logs. Re-enable in reverse order.
+
+## Disaster recovery (new host)
+
+1. Install the prerequisites (README), clone the repository at the deployed commit, `pnpm install --frozen-lockfile`,
+   `pnpm build`.
+2. Restore `config.tgz` to `~/.config/adminforge` and `data.tgz` to `~/.local/share`; start Postgres (`pnpm db:up`)
+   and restore the dump as above.
+3. Install the units (portal/deploy/README.md) and start them. If the host name or address changed, update the
+   Caddyfile, `PUBLIC_BASE_URL` overrides and `AF_REDIRECT_BASE_URLS`, then `pnpm adminforge provision entra`.
+4. Check: `/readyz` is `ok`, `adminforge audit verify` passes, the live suite passes (`tests/live/README.md`).
+
+## Go-live checklist
+
+- [ ] Provisioner secret rotated (it was shared during setup) and stored only in `<env>.admin.env`.
+- [ ] People added to the `SG-AdminForge-<label>-*` groups (`docs/access.md`); the validation test user removed or
+      disabled outside test tenants.
+- [ ] TLS: a DNS name and a certificate from your CA (or Caddy's root trusted on every client); address reserved.
+- [ ] Branch protection on `main` with code-owner review (`.github/CODEOWNERS`); CI green.
+- [ ] `WRITE_AUTH_CONTEXT` set if you have Entra ID P1 (Conditional Access step-up), otherwise `auth_time` step-up.
+- [ ] Delivery configured if wanted: `AF_MAIL_SENDER` (+ Mail.Send via `AF_AUTOMATION_ALLOW_WRITE_PERMISSIONS=true`),
+      Teams webhooks, `AF_APPROVALS_*`.
+- [ ] Backups: timer enabled, copied off the host, restore drill recorded above.
+- [ ] Monitoring page green (portal readiness, audit chain, token probes); licence gaps reviewed
+      (`docs/licensing-review.md`).
+- [ ] Run as a dedicated system user with system units for filesystem isolation (recommended; `SECURITY.md`).
 
 ## Secret and key rotation
 

@@ -25,13 +25,19 @@ refuses anything else. Prefer Graph when it can do the job.
 4. Read scripts only call `Get-*` (read mode replaces every other command with a guard). Write scripts are used from
    playbook steps with `mode: write`.
 5. Pin it: `sha256sum portal/content/scripts/<path>` → put `script` + `sha256` in the datasource/step. **Any edit to
-   the script changes the hash — update every reference.**
+   the script changes the hash — update every reference.** Write scripts start with
+   `if ($Context['Mode'] -ne 'write') { throw (New-AdminForgeError -Category readOnly …) }`, read the target first, change
+   only what differs (idempotent), read it back, and return before/after so the run record shows what changed.
 6. Fixture for mock mode: `tests/fixtures/runner/<script path>.json` (the array of output objects; wrap it in
    `{ "$fixture": { "body": …, "variants": [{ "match": { "bodyIncludes": … }, "body": … }] } }` to answer per input —
    format at the top of `portal/packages/connectors/src/fixtures.ts`).
-7. Tests: Pester in `tests/runner/pester/Scripts.Tests.ps1` with stub cmdlets
-   (`pnpm --filter @adminforge/tests exec pwsh -NoLogo -NoProfile -File runner/pester/run.ps1`); runner unit tests in
-   `tests/unit/runner/`.
+7. Tests: Pester with stub cmdlets in a **new** `tests/runner/pester/<Area>.Tests.ps1` that dot-sources
+   `ContentScript.Helpers.ps1` (`Invoke-ContentScript`, `New-Stub`, `Remove-Stubs`) and removes its stubs in `AfterAll`
+   (see `MailboxAdmin.Tests.ps1`); the contract test in `Scripts.Tests.ps1` already covers every script's help, params
+   and strict mode. Cover read mode for write scripts (`readOnly`), input validation (`input`) and idempotency. Stubs
+   inherit the script's strict mode: index hashtables with `ContainsKey`, not missing properties. Run with
+   `pnpm --filter @adminforge/tests exec pwsh -NoLogo -NoProfile -File runner/pester/run.ps1`; runner unit tests are
+   in `tests/unit/runner/`.
 8. New PowerShell module? Pin it in `portal/apps/runner/modules.lock.json` and `pnpm --filter @adminforge/runner modules:install`.
 
 Live Exchange/Teams/SharePoint validation needs licensed workloads — see `docs/licensing-review.md`.

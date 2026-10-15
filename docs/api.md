@@ -1,0 +1,860 @@
+# HTTP API reference
+
+The AdminForge BFF (`portal/apps/api`, Fastify) is the only server the browser talks to. It serves the SPA, the
+sign-in round trips under `/auth/*`, the JSON API under `/api/*`, and the liveness/readiness probes. Microsoft tokens
+never reach the browser: it holds an HttpOnly session cookie, and every Graph / ARM / KQL / runner call is made by the
+BFF with the signed-in engineer's **delegated** tokens (Read app; Write app only while armed). Scheduled work runs in
+the scheduler as the automation identity and is only _observed_ through this API.
+
+This is the contract of the AdminForge web app, not a public integration surface: there are no API keys or bearer
+tokens. Source of truth: `portal/apps/api/src/app.ts`, `src/auth/*.ts`, `src/routes/*.ts`, and the shared schemas in
+`portal/packages/schemas/src/api.ts` and `api-content.ts`. Response objects are non-strict — fields may be added, never
+removed or renamed. Examples use `https://adminforge.example.com`, `avery@example.com` and placeholder GUIDs.
+
+- [Conventions](#conventions) — transport, session, CSRF, errors, problem-page redirects, rate limits, roles
+- [Endpoint index](#endpoint-index)
+- [Session & auth](#session--auth) · [Navigation & content](#navigation--content) · [Datasources](#datasources) ·
+  [Runs & approvals](#runs--approvals) · [Schedules & probes](#schedules--probes) · [Query Studio](#query-studio) ·
+  [Reports & exports](#reports--exports) · [Views](#views) · [Admin & audit](#admin--audit) ·
+  [Events (SSE)](#events-sse) · [Health](#health)
+- [Notes and open questions](#notes-and-open-questions)
+
+## Conventions
+
+### Transport
+
+- JSON in and out (`application/json; charset=utf-8`), except the SSE streams, file downloads and
+  `/api/appearance.css`.
+- Request bodies are limited to **256 KiB** (larger → 413 `ctp_body_too_large`). A bodiless POST that still sends
+  `Content-Type: application/json` is accepted (an empty body counts as no body).
+- `Cache-Control: no-store` on everything under `/api`, `/auth`, `/healthz` and `/readyz`.
+- **Correlation id.** Every response carries `X-Correlation-Id`. A client may send its own `X-Correlation-Id` (it must
+  be a UUID; anything else is replaced with a fresh one). The same value is `error.correlationId`, the audit record's
+  `correlationId`, and the "reference" people read out to an administrator.
+- Security headers (helmet): CSP with `default-src 'self'`, `script-src 'self'`, `frame-ancestors 'none'`;
+  `X-Frame-Options: DENY`; `Referrer-Policy: no-referrer`; HSTS in production.
+- Fastify also answers `HEAD` for every `GET` route below.
+
+### Session
+
+| Item            | Behaviour                                                                                                                                                                                                                                              |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Cookie          | `__Host-adminforge` (production) or `adminforge-dev`; HttpOnly, `SameSite=Lax`, `Secure` on https, `Path=/`. The value is a random id; the server stores only its SHA-256.                                                                             |
+| Lifetime        | Absolute `SESSION_ABSOLUTE_HOURS` (default 12); idle `SESSION_IDLE_MINUTES` (default 60), slid by activity.                                                                                                                                            |
+| Binding         | `<session cookie>-pre` (HttpOnly, 24 h) ties each OAuth round trip to the browser that started it (login-CSRF protection).                                                                                                                             |
+| Roles           | From the ID token's `roles` claim; re-read from Entra every 5 minutes. A session left with no AdminForge role ends (`session.access_revoked`); losing `Portal.Operator` drops write access at once. A session always has at least one AdminForge role. |
+| Mode            | `read` or `armed` (write window until `armedUntil`). Expiry is checked on every request and audited as `session.arm_expired`.                                                                                                                          |
+| Unauthenticated | Every `/api/*` route needs a session → otherwise 401 `unauthenticated` with `login: "/auth/login?returnTo=%2F"`.                                                                                                                                       |
+
+### CSRF
+
+- `GET /api/me` returns `csrf`. Send it as **`X-AdminForge-CSRF`** on every non-`GET`/`HEAD`/`OPTIONS` request to
+  `/api/*`, and on the state-changing auth POSTs: `/auth/arm`, `/auth/arm/extend`, `/auth/disarm`, `/auth/mock/state`,
+  and `/auth/logout` when a session exists.
+- One `GET` also needs it: `GET /api/runs/:id/secret/:stepPath` (reading it consumes the secret).
+- Missing or wrong → 403 `csrf` ("Reload the page, then try again. Nothing was changed."). The token is per session,
+  so signing in again in another tab invalidates the token in tabs that are already open.
+
+### Errors
+
+Every failure from `/api/*` and `/auth/*` has the same body (`ApiErrorBody`):
+
+```json
+{
+  "error": {
+    "code": "upstream_forbidden",
+    "message": "Insufficient privileges to complete the operation.",
+    "hint": "Your Microsoft Entra role may not allow this (check PIM for an eligible role), …",
+    "detail": "Authorization_RequestDenied",
+    "correlationId": "00000000-0000-4000-8000-000000000001"
+  }
+}
+```
+
+- Always: `code`, `message`, `correlationId`. Usually: `hint` (what to do next, plain language).
+- `detail` — an upstream identifier an administrator can look up (an `AADSTS…` number, a Graph error code);
+  `[A-Za-z0-9_]`, at most 40 characters.
+- `login` — on 401s: where to send the browser to sign in. `reauth: {url}` — on a claims challenge (CAE / step-up);
+  the URL is `/auth/login?returnTo=…&claims=<base64url>`.
+
+Codes that can come from (almost) any endpoint:
+
+| Status | `code`                    | Meaning                                                                                                  |
+| ------ | ------------------------- | -------------------------------------------------------------------------------------------------------- |
+| 400    | `invalid_request`         | Body or query failed validation; `message` lists the zod issues (`path: message; …`).                    |
+| 401    | `unauthenticated`         | No session (or it expired / was revoked). Has `login`.                                                   |
+| 401    | `reauth`                  | Microsoft needs a fresh sign-in (claims challenge, refresh token revoked). Has `login` and `reauth.url`. |
+| 403    | `csrf`                    | Missing or stale `X-AdminForge-CSRF`.                                                                    |
+| 403    | `forbidden`               | A portal role is missing; `hint` names the AdminForge group to join.                                     |
+| 403    | `not_armed` / `rearm`     | The request needs write access / the write token needs a fresh verification (arm again).                 |
+| 403    | `policy_denied`           | The default-deny request policy refused the outbound call (`portal/packages/connectors`).                |
+| 403    | `licence_required`        | The tenant lacks a licence the content declares (`requires.licences`) or Microsoft said so.              |
+| 403    | `upstream_forbidden`      | Microsoft answered 401/403 (Entra role, PIM, missing scope).                                             |
+| 404    | `upstream_not_found`      | Microsoft answered 404.                                                                                  |
+| 400    | `upstream_bad_request`    | Microsoft answered 400.                                                                                  |
+| 429    | `throttled`               | Microsoft is throttling (not the portal's own limit).                                                    |
+| 429    | `rate_limited`            | The portal's own per-IP rate limit (see below).                                                          |
+| 502    | `upstream_error`          | Microsoft answered 5xx (or something unexpected).                                                        |
+| 504    | `upstream_unreachable`    | No response from Microsoft (network, timeout).                                                           |
+| 404    | `not_found`               | No such route (non-page paths; page paths get the SPA).                                                  |
+| 500    | `internal`                | Unexpected failure; give an administrator the `correlationId`.                                           |
+| 503    | `content_unavailable`     | `CONTENT_SOURCE=db` without a database.                                                                  |
+| 4xx    | `ctp_…`, `bad_request`, … | Other Fastify 4xx errors keep their status; the code is Fastify's, lower-cased without `FST_ERR_`.       |
+
+### Browser navigations that fail → `/sign-in-problem`
+
+A failing `GET`/`HEAD` to **`/auth/*`** or **`/api/artifacts/*`** that is a top-level navigation
+(`Sec-Fetch-Mode: navigate`, or, without that header, an `Accept` that includes `text/html`) is answered with
+**`303 See Other`** to
+`/sign-in-problem?code=<code>&ref=<correlationId>[&during=arm|download][&detail=<id>]` instead of raw JSON:
+
+- `during=arm` for `/auth/arm*`, `during=download` for `/api/artifacts/*`, absent (= sign-in) otherwise.
+- `detail` only when it matches `^[A-Za-z0-9_]{1,40}$`. The message and hint never travel in the URL.
+- `fetch`/XHR requests to the same paths still get the JSON body.
+
+### Rate limits
+
+Per client IP (`TRUST_PROXY` decides which address counts). Every route shares the global budget of
+`RATE_LIMIT_PER_MINUTE` (default 600 per minute) unless it has its own:
+
+| Route(s)                                                                                 | Limit per minute |
+| ---------------------------------------------------------------------------------------- | ---------------- |
+| `GET /auth/login`, `GET /auth/callback`, `POST /auth/logout`                             | 30               |
+| `POST /auth/arm`, `GET /auth/arm/callback`, `POST /auth/arm/extend`, `POST /auth/disarm` | 10               |
+| `GET /api/search`                                                                        | 240              |
+| `POST /api/query`                                                                        | 60               |
+| `GET /api/events`                                                                        | 60               |
+| `GET /api/artifacts/:scheduleRunId`                                                      | 60               |
+| `POST /api/schedules/:key/run`                                                           | 30               |
+| `POST /api/reports/:key/export`                                                          | 20               |
+| `GET /healthz`, `GET /readyz`                                                            | not limited      |
+
+Over the limit → 429 `rate_limited` ("Wait a minute, then try again"), with `@fastify/rate-limit`'s `x-ratelimit-*` /
+`retry-after` headers. In mock mode `GET /auth/login` has no override (global budget).
+
+### Roles
+
+Portal roles are Entra app roles on the Read app, granted through `SG-AdminForge-<label>-<Role>` groups (see
+[access.md](access.md)). They are flat — none implies another.
+
+| Role                | API surface it unlocks                                                                                                                          |
+| ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Portal.Reader`     | Explicitly required by schedules, probes, Query Studio and artifact downloads; everything else needs only a session.                            |
+| `Portal.Operator`   | Arm write access; execute write playbooks; enable/disable and run schedules; see all runs; probe detail rows; scheduled report files (default). |
+| `Playbook.Approver` | The approvals inbox; approve runs and schedule enablement (never their own); see all runs.                                                      |
+| `Playbook.Author`   | Nothing in the API today (content is authored in git).                                                                                          |
+| `Portal.Admin`      | Audit log, appearance, installation settings; cancel/resume anyone's run; delete others' shared views; see all runs.                            |
+
+Content adds its own gate, `requires.portalRoles`: the caller needs **every** listed role (pages, dashboards, reports,
+definitions, exports, playbooks/runbooks and scheduled data alike).
+
+In the tables below, **Who** is: _Public_ (no session needed), _Session_ (any signed-in user), or a role name (a
+session holding that role). Every non-GET `/api` call additionally needs the CSRF header.
+
+## Endpoint index
+
+**56 routes**: 2 health, 9 auth (`/auth/mock/state` exists only with `AUTH_MODE=mock`; `/auth/callback` and
+`/auth/arm/callback` only with `AUTH_MODE=entra`), and 45 under `/api`. The SPA's public pages `/signed-out` and
+`/sign-in-problem` are client routes served by the SPA fallback.
+
+| Method   | Path                              | Who                    | Section                                             |
+| -------- | --------------------------------- | ---------------------- | --------------------------------------------------- |
+| `GET`    | `/auth/login`                     | Public                 | [Session & auth](#get-authlogin)                    |
+| `GET`    | `/auth/callback`                  | Public (Entra)         | [Session & auth](#get-authcallback)                 |
+| `POST`   | `/auth/logout`                    | Public / Session       | [Session & auth](#post-authlogout)                  |
+| `GET`    | `/auth/signed-out`                | Public                 | [Session & auth](#get-authsigned-out)               |
+| `POST`   | `/auth/arm`                       | Portal.Operator        | [Session & auth](#post-autharm)                     |
+| `GET`    | `/auth/arm/callback`              | Session (same browser) | [Session & auth](#get-autharmcallback)              |
+| `POST`   | `/auth/arm/extend`                | Session (armed)        | [Session & auth](#post-autharmextend)               |
+| `POST`   | `/auth/disarm`                    | Session                | [Session & auth](#post-authdisarm)                  |
+| `POST`   | `/auth/mock/state`                | Session (mock only)    | [Session & auth](#post-authmockstate)               |
+| `GET`    | `/api/me`                         | Session                | [Session & auth](#get-apime)                        |
+| `PUT`    | `/api/me/prefs`                   | Session                | [Session & auth](#put-apimeprefs)                   |
+| `GET`    | `/api/me/capabilities`            | Session                | [Session & auth](#get-apimecapabilities)            |
+| `GET`    | `/api/nav`                        | Session                | [Navigation & content](#get-apinav)                 |
+| `GET`    | `/api/overview`                   | Session                | [Navigation & content](#get-apioverview)            |
+| `GET`    | `/api/search`                     | Session                | [Navigation & content](#get-apisearch)              |
+| `GET`    | `/api/definitions`                | Session                | [Navigation & content](#get-apidefinitions)         |
+| `GET`    | `/api/definitions/:kind/:key`     | Session + content      | [Navigation & content](#get-apidefinitionskindkey)  |
+| `POST`   | `/api/datasources/execute`        | Session + content      | [Datasources](#post-apidatasourcesexecute)          |
+| `POST`   | `/api/datasources/execute-many`   | Session + content      | [Datasources](#post-apidatasourcesexecute-many)     |
+| `POST`   | `/api/runs`                       | Session + content      | [Runs](#post-apiruns)                               |
+| `POST`   | `/api/runs/bulk`                  | Session + content      | [Runs](#post-apirunsbulk)                           |
+| `GET`    | `/api/runs`                       | Session                | [Runs](#get-apiruns)                                |
+| `GET`    | `/api/runs/:id`                   | Session (viewer)       | [Runs](#get-apirunsid)                              |
+| `GET`    | `/api/runs/:id/events`            | Session (viewer)       | [Runs](#get-apirunsidevents)                        |
+| `GET`    | `/api/runs/:id/secret/:stepPath`  | Initiator's session    | [Runs](#get-apirunsidsecretsteppath)                |
+| `POST`   | `/api/runs/:id/cancel`            | Initiator / Admin      | [Runs](#post-apirunsidcancel)                       |
+| `POST`   | `/api/runs/:id/resume`            | Participant / Admin    | [Runs](#post-apirunsidresume)                       |
+| `POST`   | `/api/runs/:id/approvals/:stepId` | Playbook.Approver      | [Runs](#post-apirunsidapprovalsstepid)              |
+| `POST`   | `/api/runs/:id/manual/:stepId`    | Initiator / Operator   | [Runs](#post-apirunsidmanualstepid)                 |
+| `GET`    | `/api/approvals`                  | Playbook.Approver      | [Approvals](#get-apiapprovals)                      |
+| `POST`   | `/api/approvals/:id`              | Playbook.Approver      | [Approvals](#post-apiapprovalsid)                   |
+| `GET`    | `/api/schedules`                  | Portal.Reader          | [Schedules](#get-apischedules)                      |
+| `POST`   | `/api/schedules/preview`          | Portal.Reader          | [Schedules](#post-apischedulespreview)              |
+| `POST`   | `/api/schedules/scaffold`         | Portal.Reader          | [Schedules](#post-apischedulesscaffold)             |
+| `PATCH`  | `/api/schedules/:key`             | Portal.Operator        | [Schedules](#patch-apischeduleskey)                 |
+| `POST`   | `/api/schedules/:key/run`         | Portal.Operator        | [Schedules](#post-apischeduleskeyrun)               |
+| `GET`    | `/api/schedules/:key/runs`        | Portal.Reader          | [Schedules](#get-apischeduleskeyruns)               |
+| `GET`    | `/api/probes`                     | Portal.Reader          | [Probes](#get-apiprobes)                            |
+| `GET`    | `/api/probes/:key/results`        | Portal.Reader          | [Probes](#get-apiprobeskeyresults)                  |
+| `POST`   | `/api/query`                      | Portal.Reader          | [Query Studio](#post-apiquery)                      |
+| `POST`   | `/api/query/scaffold`             | Portal.Reader          | [Query Studio](#post-apiqueryscaffold)              |
+| `POST`   | `/api/reports/:key/export`        | Session + content      | [Reports & exports](#post-apireportskeyexport)      |
+| `GET`    | `/api/artifacts/:scheduleRunId`   | Portal.Reader + more   | [Reports & exports](#get-apiartifactsschedulerunid) |
+| `GET`    | `/api/views`                      | Session                | [Views](#get-apiviews)                              |
+| `POST`   | `/api/views`                      | Session                | [Views](#post-apiviews)                             |
+| `PATCH`  | `/api/views/:id`                  | Owner                  | [Views](#patch-apiviewsid)                          |
+| `DELETE` | `/api/views/:id`                  | Owner / Admin          | [Views](#delete-apiviewsid)                         |
+| `GET`    | `/api/audit`                      | Portal.Admin           | [Admin & audit](#get-apiaudit)                      |
+| `GET`    | `/api/audit/verify`               | Portal.Admin           | [Admin & audit](#get-apiauditverify)                |
+| `GET`    | `/api/admin/appearance`           | Portal.Admin           | [Admin & audit](#get-apiadminappearance)            |
+| `PUT`    | `/api/admin/appearance`           | Portal.Admin           | [Admin & audit](#put-apiadminappearance)            |
+| `GET`    | `/api/appearance.css`             | Session                | [Admin & audit](#get-apiappearancecss)              |
+| `GET`    | `/api/admin/settings`             | Portal.Admin           | [Admin & audit](#get-apiadminsettings)              |
+| `GET`    | `/api/events`                     | Session                | [Events (SSE)](#get-apievents)                      |
+| `GET`    | `/healthz`                        | Public                 | [Health](#get-healthz)                              |
+| `GET`    | `/readyz`                         | Public                 | [Health](#get-readyz)                               |
+
+## Session & auth
+
+Source: `src/auth/routes.ts`, `arm-routes.ts`, `mock-routes.ts`, `flow.ts`, `entra-errors.ts`; `src/routes/me.ts`,
+`content.ts`.
+
+**Entra error mapping.** When Entra redirects back with `error=…`, the AADSTS number (or OAuth error) becomes a
+specific code, with the raw number in `detail`; Entra's own description is logged and audited, never shown:
+
+| Entra says                                         | Sign-in (`/auth/callback`) | Arm (`/auth/arm/callback`) |
+| -------------------------------------------------- | -------------------------- | -------------------------- |
+| AADSTS50105 (not assigned to the app)              | 403 `no_portal_role`       | 403 `no_write_access`      |
+| AADSTS65001 / 65004, `consent_required`            | 403 `consent_required`     | 403 `consent_required`     |
+| AADSTS53000–53003, 530034 (Conditional Access)     | 403 `blocked_by_policy`    | 403 `blocked_by_policy`    |
+| AADSTS50020 / 90072 / 50034 (wrong tenant/account) | 400 `wrong_tenant`         | 400 `wrong_tenant`         |
+| `access_denied` without an AADSTS number           | 400 `signin_cancelled`     | 400 `arm_cancelled`        |
+| `temporarily_unavailable`, `server_error`          | 503 `entra_unavailable`    | 503 `entra_unavailable`    |
+| anything else                                      | 400 `signin_failed`        | 400 `arm_failed`           |
+
+Round trips use the authorization-code flow with PKCE; `state` and `nonce` are random, single use, valid 10 minutes,
+and bound to the browser. A reused, expired, foreign or wrong-kind `state` → 400 `invalid_state` (with `login`).
+
+#### `GET /auth/login`
+
+- **Who:** Public. 30/min.
+- **Query:** `returnTo` — same-origin path to land on (absolute URLs, `//host`, backslashes, control characters and
+  `/auth/*` fall back to `/`; ≤ 2048 chars). `claims` — base64url JSON claims challenge from a CAE `reauth` (ignored if
+  invalid or > 4096 chars). `account=choose` — show Entra's account picker (`prompt=select_account`); otherwise the
+  current session's UPN (if any) is sent as `login_hint`.
+- **Response:** 302 to the Read app's Entra authorize URL; sets the binding cookie.
+- **Mock mode:** ends any current session, signs in as the synthetic `avery@example.com` (tenant `Example Org`) with
+  `MOCK_ROLES`, and 302s to `returnTo`. `claims` and `account` are ignored.
+
+#### `GET /auth/callback`
+
+- **Who:** Public — Entra's redirect (Entra mode only). 30/min.
+- **Query:** `code`, `state`, or `error` + `error_description`.
+- **Response:** 302 to the pending `returnTo`; a **fresh** session id and cookie (an earlier session in this browser
+  ends). Fetches the tenant name/default domain (best effort). Audited `session.signin` (success and failure).
+- **Errors** (a navigation → [problem page](#browser-navigations-that-fail--sign-in-problem)): `invalid_state` 400;
+  the Entra mapping above; `invalid_request` 400 (no code); `signin_failed` 400 (code redemption failed);
+  `invalid_nonce` 400; `wrong_tenant` 400 (`tid` ≠ `AF_TENANT_ID`); `invalid_token` 400 (no `oid`, e.g. guest or
+  personal account); `no_portal_role` 403 (no AdminForge app role).
+
+#### `POST /auth/logout`
+
+- **Who:** Public; when a session exists, `X-AdminForge-CSRF` is required. 30/min.
+- **Request:** no body.
+- **Response:** 200 `{redirect}` — Entra's end-session URL, with the post-logout redirect URI
+  `<PUBLIC_BASE_URL>/auth/signed-out` (Entra mode), or `/signed-out` (mock). The session and both token-cache
+  partitions are deleted and the cookie cleared. Audited `session.signout`.
+
+#### `GET /auth/signed-out`
+
+- **Who:** Public. Entra's post-logout landing (register it on the Read app).
+- **Response:** 302 to the SPA page `/signed-out`, which never auto-redirects to sign-in.
+
+#### `POST /auth/arm`
+
+- **Who:** `Portal.Operator` + CSRF. 10/min.
+- **Query:** `returnTo` (as for login). **Body:** `{minutes: 5–480, reason: string 5–500}` — both audited; `minutes`
+  is capped at `WRITE_SESSION_MAX_MINUTES` (default 60).
+- **Response (Entra):** 200 `{redirect}` — the **Write app** authorize URL; the SPA navigates to it. Step-up: with
+  `WRITE_AUTH_CONTEXT` set, a claims request for that Conditional Access authentication context; without it,
+  `prompt=login` + `max_age=0` (fresh interactive sign-in). `login_hint` is the session's UPN.
+- **Response (mock):** arms immediately and returns 200 `{redirect: returnTo}`.
+- **Errors:** `unauthenticated` 401, `csrf` 403, `forbidden` 403, `invalid_request` 400, `write_app_not_configured`
+  503 (no `AF_WRITE_CLIENT_ID`/`AF_WRITE_CLIENT_SECRET`).
+
+#### `GET /auth/arm/callback`
+
+- **Who:** the same browser **and** session that called `POST /auth/arm` (Entra mode only). 10/min.
+- **Query:** `code`, `state`, or `error` + `error_description`.
+- **Response:** 302 to `returnTo` with the write window open: `armedUntil = now + minutes`, extension unused. Audited
+  `session.armed` (success and failure, with the reason).
+- **Errors** (a navigation → problem page with `during=arm`): `invalid_state` 400; `session_mismatch` 401 (no session,
+  or a different one — e.g. signed in again in another tab); the Entra mapping above; `invalid_request` 400 (no code);
+  `forbidden` 403 (no longer Operator); `arm_failed` 400 (redemption failed); `invalid_nonce` 400; `wrong_tenant` 400;
+  `user_mismatch` 403 (verified with a different account); `step_up_required` 403 (the auth context was not
+  satisfied); `step_up_unverified` 403 (no auth context configured and no `auth_time` claim); `step_up_stale` 403
+  (`auth_time` older than 300 s — Entra reused an SSO session).
+
+#### `POST /auth/arm/extend`
+
+- **Who:** Session + CSRF, currently armed. 10/min.
+- **Body:** `{minutes?: 5–480}` (default and cap `WRITE_SESSION_MAX_MINUTES`). New expiry = the later of the current
+  expiry and `now + minutes`. Allowed **once** per armed window.
+- **Response:** `{armedUntil, armExtended: true}`. Audited `session.arm_extended`.
+- **Errors:** `not_armed` 409, `already_extended` 409, `invalid_request` 400.
+
+#### `POST /auth/disarm`
+
+- **Who:** Session + CSRF. 10/min. Idempotent.
+- **Response:** `{mode: "read", armedUntil: null}`. Drops the Write-app token partition; audited `session.disarmed`
+  when it was armed.
+
+#### `POST /auth/mock/state`
+
+- **Who:** Session + CSRF; registered only with `AUTH_MODE=mock` (refused in production by config). For tests and e2e.
+- **Body:** `{roles?: PortalRole[], armedMinutes?: number (> 0, ≤ 1440, fractions allowed) | null}` — `null` disarms.
+- **Response:** the [`GET /api/me`](#get-apime) body for the updated session.
+
+#### `GET /api/me`
+
+- **Who:** Session.
+- **Response** (`MeResponse`): `user {oid, upn, name, tenantId}`, `tenant {name, domain}`, `roles`, `mode`
+  (`read`/`armed`), `armedUntil`, `canArm` (Operator, and mock mode or a configured Write app), `armExtended`,
+  `armMaxMinutes`, **`csrf`**, `prefs`, `defaults {theme?, density?}` (organisation defaults from Admin → Appearance),
+  `authMode` (`entra`/`mock`), `dataMode` (`live`/`fixtures`).
+
+#### `PUT /api/me/prefs`
+
+- **Who:** Session.
+- **Body:** a partial `UserPrefs`, merged into the stored one: `theme` (`steel`, `daylight`, `contrast`, `system`),
+  `density` (`comfortable`, `compact`), `navCollapsed`, `pinned` (≤ 50 strings), `recents` (≤ 50 strings). Unknown keys
+  → 400 `invalid_request`.
+- **Response:** `{prefs}` (the merged result). Audited `prefs.updated` (changed keys only) when something changed.
+
+#### `GET /api/me/capabilities`
+
+- **Who:** Session. Graph calls use the caller's delegated read token.
+- **Response** (`CapabilitiesResponse`): `features` keyed `conditionalAccess`, `pim`, `identityProtection`, `intune`,
+  `exchange`, `teams`, `sharepoint`, `defender`, `signInLogs` → `{available, reason?, sku?, label?, servicePlans?}`;
+  `roles {active[], eligible[], eligibleAvailable?, activeSource?: pim|assignments|null}` (directory roles, PIM
+  eligibility); `skus?[] {skuPartNumber, capabilityStatus, enabled, consumed}`; `errors?` per section that could not be
+  read; `provenance?`.
+- **Errors:** upstream codes (via the outbound executor) when the whole call fails; partial failures go in `errors`.
+
+#### Public SPA pages
+
+Served by the SPA without a session (the shell would otherwise send the browser to sign-in):
+
+- **`/signed-out`** — after sign-out. Never auto-redirects. Actions: _Sign in_ → `/auth/login?returnTo=%2F`; _Use a
+  different account_ → `/auth/login?account=choose&returnTo=%2F`.
+- **`/sign-in-problem`** — explains a failed sign-in, arm or report download. Query: `code`, `ref` (correlation id),
+  `during` (`arm` or `download`; absent = sign-in), `detail` (Microsoft code). Each value must match
+  `^[A-Za-z0-9_-]{1,64}$` or it is dropped. The text comes from a fixed table keyed by `code`
+  (`portal/apps/web/src/pages/public/sign-in-problems.ts`); only the identifiers are echoed, in "Details for your
+  administrator".
+
+## Navigation & content
+
+Source: `src/routes/nav.ts`, `overview.ts`, `content.ts`, `definitions.ts`.
+
+#### `GET /api/nav`
+
+- **Who:** Session.
+- **Response** (`NavResponse`): `{sections: [{key, label, icon, items: [{key, label, href, icon?, badge?}]}]}`.
+  Sections and labels come from `navigation.yaml`; items from every page, dashboard, report, playbook and runbook with
+  a `nav:` block (not `draft`, `retired` or `hidden`), filtered by `requires.portalRoles` and section/item `roles`.
+  Items whose `requires.licences` the tenant lacks stay, with `badge: "Requires …"`. Empty sections are dropped.
+  `href`: `/p/<key>`, `/playbooks/<key>`, `/runbooks/<key>`.
+
+#### `GET /api/overview`
+
+- **Who:** Session.
+- **Response:** `org {id, name, domains[]}`, `counts {users, groups, apps, devices}`, `skus [{sku, used, total}]`,
+  `health` (`{items: [{service, status}]}` or `{error}`), `errors?`, `provenance` — one Graph `$batch` with the
+  caller's read token.
+  A failing section degrades (count `null`, `errors[section]` with a permission hint) instead of failing the page.
+  `DATA_MODE=fixtures` returns the fixture.
+- **Errors:** `live_data_unavailable` 409 (live data without Entra sign-in), `fixture_missing` 500, `policy_denied`
+  403, upstream codes.
+
+#### `GET /api/search`
+
+- **Who:** Session. 240/min.
+- **Query:** `q` (trimmed, first 100 chars; directory sources need ≥ 2), `type` — one of `page`, `dashboard`,
+  `report`, `playbook`, `runbook`, `user`, `group`, `device`, `app`, `resource` (else 400 `invalid_request`).
+- **Response** (`SearchResponse`): `{query, results, sources}` — `results[]` is
+  `{type, id?, title, subtitle?, href, external?, icon?}`; `sources[<source>]` is `ok`, `timeout`, `error` or
+  `skipped`. Content results honour roles; directory/resource results use the caller's
+  delegated read token and time out per source after `SEARCH_TIMEOUT_MS` (default 2500). `external: true` hrefs are
+  https deep links into the Entra/Azure portals.
+
+#### `GET /api/definitions`
+
+- **Who:** Session; definitions whose `requires.portalRoles` the caller lacks are omitted.
+- **Query:** `kind?` — `page`, `dashboard`, `report`, `playbook`, `runbook`, `schedule`, `probe`, `connection`,
+  `navigation` (unknown → 400 `invalid_request`).
+- **Response:** `{items: DefinitionSummary[]}` — the latest published version of each:
+  `kind, key, version, sha256, title, summary?, tags?, owner, status?, template?, nav?, risk?, mode?, href?, badge?`;
+  sorted by kind, then title.
+
+#### `GET /api/definitions/:kind/:key`
+
+- **Who:** Session + every role in the definition's `requires.portalRoles`.
+- **Query:** `version?` (exact published version; default latest).
+- **Response:** the client-safe definition (editor-only `$schema`, connection `baseUrl`/`audience`/`scopes` and every
+  `webhook` key removed; `${ env.X }` is never resolved here) plus `version` and `sha256` — pin these when starting a
+  run or executing datasources.
+- **Errors:** `definition_not_found` 404 (also for an unknown kind), `forbidden` 403.
+
+## Datasources
+
+Source: `src/routes/datasources.ts`, `src/datasources/executor.ts`. Datasources run server-side with the caller's
+delegated **read** identity; the client names a page and a datasource, never a URL.
+
+#### `POST /api/datasources/execute`
+
+- **Who:** Session + every role in the page's `requires.portalRoles`.
+- **Body:** `{page, version?, datasource, params?, cursor?}` — `page` is a page, dashboard or report key; `params` are
+  validated and defaulted against the page's declared params (the query-builder filter is compiled server-side);
+  `cursor` is the opaque value from the previous page (≤ 8192 chars).
+- **Response** (`DatasourceResult`): `data`; `cursor?` (next page); `provenance`
+  (`{service, path, ms, requestId?, cachedAt?}`, or `null` for static/skipped datasources); `errors?` (graphBatch
+  sub-request failures); `skipped?` (its `when` was false).
+- **Errors:** `definition_not_found` 404, `datasource_not_found` 404, `forbidden` 403, `invalid_params` 400,
+  `licence_required` 403, `policy_denied` 403, `dependency_failed` 424 (a `ds.<name>` it uses failed),
+  `content_error` 500, `runner_not_configured` 503 (PowerShell datasources), `reauth` 401, upstream codes.
+
+#### `POST /api/datasources/execute-many`
+
+- **Who:** as above.
+- **Body:** `{page, version?, datasources? (≤ 50 names; default all, in declared order), params?}`. Independent
+  datasources run in parallel; dependents after what they reference.
+- **Response:** `{page, version, sha256, results}` — `results[<name>]` is a `DatasourceResult` or
+  `{error: {code, message, hint?, correlationId}}`; one datasource failing does not fail the request.
+- **Errors:** page-level only (`definition_not_found`, `forbidden`, `invalid_params`, …).
+
+## Runs & approvals
+
+Source: `src/routes/runs.ts`, `approvals.ts`, `src/runs/service.ts`, `src/runs/sse.ts`.
+
+Run statuses: `queued`, `running`, `awaiting_approval`, `awaiting_input`, `awaiting_arm`, `awaiting_reauth`
+(the "active" set), and `succeeded`, `failed`, `cancelled`, `compensated`, `needs_review`. Runs are **delegated**: each
+step runs with the acting engineer's current session. A write step parks the run in `awaiting_arm` until that person
+is armed; an ended session parks it in `awaiting_reauth`; `POST …/resume` continues it.
+
+Who may **see** a run: its initiator, or anyone with `Portal.Operator`, `Playbook.Approver` or `Portal.Admin`. Anyone
+else gets 404 `run_not_found` (not 403).
+
+#### `POST /api/runs`
+
+- **Who:** Session with an AdminForge role + **every** role in the playbook's `requires.portalRoles`. Executing
+  (`dryRun: false`) a playbook with `mode: write` or any write step also needs `Portal.Operator`. Arming is not needed
+  to _start_ (see `awaiting_arm`).
+- **Body:** `{playbook, version?, inputs (default {}), dryRun (default false), previewRunId?, confirmation?}`.
+  `playbook` is a playbook or runbook key. `version`, if sent, must be the current version.
+- **Preview then confirm:** executing a playbook with a `confirm` block needs `previewRunId` — a **succeeded dry run**
+  by the same person, of the same definition version and sha256, with identical inputs, ≤ 15 minutes old. For
+  `confirm.type: typed` also `confirmation` (≤ 500 chars), compared trimmed and case-insensitively; the expected value
+  is never returned.
+- **Response:** 202 `{runId, status}`. Audited `run.created` (inputs redacted per `redact: true`).
+- **Errors:** `definition_not_found` 404, `version_superseded` 409 (reload), `definition_retired` 409,
+  `limit_exceeded` 422, `forbidden` 403, `invalid_inputs` 400, `preview_required` 409, `preview_stale` 409,
+  `confirmation_mismatch` 422.
+
+#### `POST /api/runs/bulk`
+
+- **Who:** as `POST /api/runs` (playbooks only, not runbooks).
+- **Body:** `playbook`, `version?`, `items` (1–1000 input objects), `inputsTemplate?` (merged under each item),
+  `dryRun?`, `concurrency?` (1–10), `stopOnError?`, `previewRunId?`, `confirmation?`. Every item is validated up
+  front (first 10 problems reported). For a typed confirm, `confirmation` is the **number of items**.
+- **Response:** 202 `{runId, status, items}` — one parent run (`trigger: bulk`) with a child run per item.
+- **Errors:** as `POST /api/runs`; `invalid_inputs` 400 names `items[i]`.
+
+#### `GET /api/runs`
+
+- **Who:** Session; `scope=all` needs `Portal.Operator`, `Playbook.Approver` or `Portal.Admin` (else 403 `forbidden`).
+- **Query:** `scope` (`mine` default, `all`), `status` (comma list of statuses, or `active`), `playbook` (key),
+  `parent` (run id), `from`/`to` (ISO), `limit` (1–200, default 50), `cursor`.
+- **Response:** `{items: RunSummary[], cursor?}`. RunSummary:
+  `id, kind, definitionKey, definitionVersion, title?, status, dryRun, trigger, identity, initiatorOid, initiatorUpn,`
+  `parentRunId, scheduleId, createdAt, startedAt, endedAt, updatedAt` — `trigger` is `interactive`, `bulk` or
+  `schedule`; `identity` is `delegated` or `automation`.
+- **Errors:** `forbidden` 403, `invalid_request` 400 (bad status, date or cursor).
+
+#### `GET /api/runs/:id`
+
+- **Who:** a run viewer (above).
+- **Response:** `{run, steps, plan, tasks, children}`:
+  - `run` — RunSummary plus `definitionSha256, correlationId, inputs, outputs, error, previewRunId, waiting`;
+    `inputs` are redacted per `redact: true`, `outputs` have secrets masked; `waiting` is `null` or
+    `{kind, path, stepId, since, wakeAt?}` with `kind` one of `approval`, `manual`, `wait`, `child`, `arm`, `reauth`.
+  - `steps[]` —
+    `seq, stepId, path, type, status, mode, attempt, actorOid, request, plan, output, error, msRequestId, startedAt, endedAt`.
+  - `plan[]` — dry-run plan entries; `tasks[]` — approval/manual tasks with `canDecide`; `children[]` — RunSummary.
+- **Errors:** `run_not_found` 404.
+
+#### `GET /api/runs/:id/events`
+
+- **Who:** a run viewer. SSE (`text/event-stream`), `retry: 3000`, `: ping` every 15 s.
+- **Resume:** `Last-Event-ID` header, or `?lastEventId=` (integer). Stored events after it are replayed, then new ones
+  stream live.
+- **Messages:** `id: <n>` + `data: {id, type, ts, stepSeq, data}`, where `type` and `data` are:
+  - `run` — `{scope: "run", status, error?, …}` (run status changes);
+  - `step` — `{scope: "step", path, stepId, type, status, attempt, error?}`;
+  - `log` — `{message, level, path?, output?}` (runner output arrives as a log with `output`);
+  - `progress` — `{path, done, total}` (forEach) or `{percent, message}` (runner).
+- **Show-once secrets:** to the initiator's own open streams only, live, with no `id:` line and never stored:
+  `data: {type: "secret", runId, stepId, stepPath, values, hints, producedAt}`.
+- **End:** when the run is terminal, `event: end` / `data: {status}` and the stream closes — call `close()` on the
+  `EventSource`, or it reconnects and receives the replay and `end` again.
+- **Errors (before the stream starts):** `run_not_found` 404.
+
+#### `GET /api/runs/:id/secret/:stepPath`
+
+- **Who:** the run initiator's **same session**, with `X-AdminForge-CSRF` (required on this GET because reading
+  consumes the secret).
+- **Path:** `stepPath` URL-encoded (e.g. `create-key`, `loop%5B2%5D.create-key`).
+- **Response:** `{type: "secret", runId, stepId, stepPath, values, hints, producedAt}` — for a secret that was not
+  delivered live; first fetch only, within 5 minutes of being produced.
+- **Errors:** `csrf` 403, `run_not_found` 404, `secret_not_available` 404 (already shown, expired, or another
+  session).
+
+#### `POST /api/runs/:id/cancel`
+
+- **Who:** the initiator or `Portal.Admin`.
+- **Response:** `{runId, status}`. Cancels the run and its non-terminal descendants and their pending tasks; audited
+  `run.cancelled`. A cancelled child fails its parent's step.
+- **Errors:** `run_not_found` 404, `forbidden` 403, `run_finished` 409.
+
+#### `POST /api/runs/:id/resume`
+
+- **Who:** anyone acting in the run tree (an initiator of a run in it, or someone who decided a task in it), or
+  `Portal.Admin`.
+- **Effect:** rebinds the caller's **current** session wherever they act in the tree (ADR-010) and re-queues the root
+  run — the way out of `awaiting_arm` / `awaiting_reauth`. Audited `run.resumed`.
+- **Response:** 202 `{runId, status}` (of the root run).
+- **Errors:** `run_not_found` 404, `forbidden` 403, `run_finished` 409.
+
+#### `POST /api/runs/:id/approvals/:stepId`
+
+- **Who:** `Playbook.Approver` + one of the gate's `approvers` roles; never the person who started the run (or its
+  root, or requested the approval). Approving a gate followed by write steps (non-dry-run) needs the approver to be
+  **armed** — later steps run as the approver.
+- **Path:** `stepId` is the URL-encoded step path: `approve`, `loop[2].approve`, or `$approval` (the implicit gate).
+- **Body:** `{decision: approve|reject, comment? (≤ 2000)}`.
+- **Response:** `{status: pending|approved|rejected, approvals, required}` (`minApprovals`, default 1). Audited
+  `run.approved` / `run.rejected`.
+- **Errors:** `forbidden` 403, `run_not_found` 404, `approval_not_found` 404, `run_finished` 409, `approval_expired`
+  409, `already_decided` 409 (also for a concurrent decision), `own_run` 403, `not_armed` 403.
+
+#### `POST /api/runs/:id/manual/:stepId`
+
+- **Who:** the initiator or `Portal.Operator`.
+- **Body:** `{confirmed: boolean, notes? (≤ 4000), values? (validated against the step's declared fields)}`.
+- **Response:** `{status}`. Audited.
+- **Errors:** `run_not_found` 404, `task_not_found` 404, `run_finished` 409, `already_decided` 409, `forbidden` 403,
+  `invalid_inputs` 400.
+
+#### `GET /api/approvals`
+
+- **Who:** `Playbook.Approver`. Only items whose `approvers` include one of the caller's roles.
+- **Query:** `status?` — `pending`, `approved`, `rejected`, `expired`, `cancelled` (default: all).
+- **Response:** `{items}`, oldest first, mixing two kinds:
+  - run gates — `subjectType: "run"`, `subjectId` = run id, `stepId` = step path; decide with
+    `POST /api/runs/:subjectId/approvals/:stepId`. Fields:
+    `id, subjectType, subjectId, stepId, kind, title, status, requestedBy (UPN), requestedByOid, createdAt,`
+    `expiresAt, decidedAt, policy, decisions, canDecide`;
+  - schedule enablement (two-person rule): same fields with `subjectType: "schedule"`, `subjectId` = `scheduleKey`,
+    `stepId: null` — decide with `POST /api/approvals/:id`.
+- **Errors:** `forbidden` 403, `invalid_request` 400.
+
+#### `POST /api/approvals/:id`
+
+- **Who:** `Playbook.Approver` + one of the request's `approvers` roles; never the requester.
+- **Body:** `{decision: approve|reject, comment?}`.
+- **Response:** `{status, approvals, required}`. Approval enables the schedule (`approvedBy` = approver).
+- **Errors:** `approval_not_found` 404 (also for run-gate ids — those use the run route), `approval_expired` 409,
+  `already_decided` 409, `own_request` 403, `forbidden` 403, `definition_changed` 409 (the schedule or the playbook it
+  runs changed since the request; the request expires).
+
+## Schedules & probes
+
+Source: `src/routes/schedules.ts`, `probes.ts`, `src/schedules/service.ts`, `scaffold.ts`. Schedules are content
+(YAML); the scheduler runs them as the automation identity. Schedule keys look like `reports.weekly-licences`
+(invalid keys → 404 `schedule_not_found`).
+
+#### `GET /api/schedules`
+
+- **Who:** `Portal.Reader`.
+- **Response:** `{items}`, each
+  `{key, title, summary, cron, cronText, timezone, enabled, identity: "automation", job, nextRunAt, lastRunAt,`
+  `lastStatus, writeCapable, approvedBy?, source, pendingApprovalId}` with `job` = `{kind, ref?, refs?, select?}`.
+
+#### `POST /api/schedules/preview`
+
+- **Who:** `Portal.Reader`. Stores nothing.
+- **Body:** `{cron (≤ 100), timezone (IANA)}`.
+- **Response:** `{valid, text (plain language, or null), next: ISO[5], problem?}` — an invalid expression is a 200 with
+  `valid: false`, not an error.
+- **Errors:** `invalid_request` 400 (missing fields, unknown time zone).
+
+#### `POST /api/schedules/scaffold`
+
+- **Who:** `Portal.Reader`. Stores nothing — the YAML goes through git → `adminforge validate` → publish.
+- **Body:** `title`, `key?`, `section?`, `summary?`, `owner?`, `cron`, `timezone`, `enabled` (default true), `job`,
+  `retries` (0–10, default 2), `timeoutSeconds?` (60–14400), `notifyOnFailure? {emailEnv?, teamsWebhookEnv?}`, where
+  `job` is one of:
+  `{kind: report, ref, format: csv|xlsx|json, retain?, emailEnv?, teamsWebhookEnv?}`, `{kind: probe, tags (1–5)}`,
+  `{kind: playbook, ref, mode: read|write, inputs?, reviewedBy?, dryRun?}`, `{kind: contentHealth, scopes?}`. Recipient
+  and webhook values are **env keys** (`AF_…`), never addresses or URLs.
+- **Response:** `{yaml, path, key, preview}` — `path` is where to commit it
+  (`portal/content/schedules/<section>/<name>.schedule.yaml`); the target's `requires` are copied in.
+- **Errors:** `tenant_value_in_query` 400 (title, summary or inputs hold a configured tenant value, a GUID or an
+  `onmicrosoft.com` domain; the message names the kind, never the value), `invalid_cron` 400, `review_required` 400
+  (write playbook without `reviewedBy`), `definition_not_found` 404 (job `ref` not published), `invalid_scaffold` 400,
+  `invalid_request` 400.
+
+#### `PATCH /api/schedules/:key`
+
+- **Who:** `Portal.Operator`.
+- **Body:** `{enabled: boolean}`.
+- **Response:** 200 `{key, enabled}`; or, for enabling a **write-capable** schedule, 202 `{approvalId}` — a second
+  person approves it in the inbox (an identical pending request is reused). Disabling also cancels pending requests
+  and clears the approval. Audited `schedule.enabled` / `schedule.disabled` / `schedule.enable_requested`.
+- **Errors:** `schedule_not_found` 404, `schedule_inactive` 409 (status `draft`/`retired`), `forbidden` 403.
+
+#### `POST /api/schedules/:key/run`
+
+- **Who:** `Portal.Operator`. 30/min.
+- **Response:** 202 `{scheduleRunId}` — queued for the scheduler (`trigger: manual`); audited
+  `schedule.run_requested`.
+- **Errors:** `schedule_not_found` 404, `approval_required` 403 (write-capable and not enabled with approval),
+  `forbidden` 403.
+
+#### `GET /api/schedules/:key/runs`
+
+- **Who:** `Portal.Reader`.
+- **Query:** `cursor?`, `limit` (1–100, default 25).
+- **Response:** `{items, cursor?}`, each `{id, trigger, status, startedAt, endedAt, runId?, artifact?, error?}` —
+  `artifact` is `{name, href, size}` with `href` = `/api/artifacts/<id>`; `runId` links a playbook job's run.
+- **Errors:** `schedule_not_found` 404, `invalid_request` 400.
+
+#### `GET /api/probes`
+
+- **Who:** `Portal.Reader`.
+- **Response:** `{items}`, each `{key, title, kind, latest, series, thresholds}` — `latest` is
+  `{status, metric, unit, ts, message}` or `null`; `series` is `[{ts, metric, status}]` for the last 24 h;
+  `thresholds` is `{warn, crit, unit, worse}`.
+
+#### `GET /api/probes/:key/results`
+
+- **Who:** `Portal.Reader`; result **rows** only for `Portal.Operator` (they were collected with application
+  permissions).
+- **Query:** `since?` (ISO; default 24 h ago, at most 31 days back).
+- **Response:** `{items}`, newest first, ≤ 500, each `{ts, status, metric, unit, durationMs, message, details,`
+  `scheduleRunId}` — `details` is `{rows, columns?, totalRows?}` or `null`. Without Operator, `details` is `null`
+  and `detailsHidden: true` marks results that had rows.
+- **Errors:** `probe_not_found` 404, `invalid_request` 400.
+
+## Query Studio
+
+Source: `src/routes/query.ts`, `src/query/service.ts`, `src/query/scaffold.ts`.
+
+#### `POST /api/query`
+
+- **Who:** `Portal.Reader`. 60/min. Runs with the caller's **delegated read** identity.
+- **Body:**
+  - `source` — `resourceGraph`, `logAnalytics` or `advancedHunting`; `query` — KQL, ≤ 100 000 characters;
+  - `subscriptions?` (GUIDs, ≤ 1000) and `managementGroups?` (≤ 100) — resourceGraph only;
+  - `workspace?` (GUID) — logAnalytics only, default `AF_LOG_ANALYTICS_WORKSPACE_ID`;
+  - `timespan?` — ISO 8601 duration (`PT1H`, `P7D`); logAnalytics defaults to `P1D`.
+- **Response:** `{columns: [{name, type}], rows, rowCount, truncated, ms, provenance}` — at most 5000 rows.
+- **Audit:** `query.executed` with the query's sha256, its first 200 characters and length (success and failure).
+- **Errors:** `invalid_request` 400, `forbidden` 403, `upstream_*`, `throttled` 429, `licence_required` 403,
+  `policy_denied` 403.
+
+#### `POST /api/query/scaffold`
+
+- **Who:** `Portal.Reader`. Stores nothing.
+- **Body:** `as` (`report`, `probe` or `schedule`), `source`, `query`, `title`, `key?`, `summary?`, `owner?`,
+  `scope?` (`all` = every readable subscription, default; `default` = `${ env.AF_SUBSCRIPTION_ID }`),
+  `workspaceEnv?` (`AF_…`), `timespan?`, `columns? [{name, type?}]` (≤ 60); for probes `metric?`,
+  `thresholds? {warn?, crit?}`, `detailsLimit?` (0–500); for schedules `cron?`, `timezone?`,
+  `job? {kind: probe|report, ref}`. Extra fields are accepted and ignored —
+  literal `subscriptions`/`workspace` never reach the YAML (it references `${ env.AF_SUBSCRIPTION_ID }` /
+  `${ env.AF_LOG_ANALYTICS_WORKSPACE_ID }`).
+- **Response:** `{yaml, path, key}` — content YAML validated against the schemas, to commit through review.
+- **Errors:** `tenant_value_in_query` 400 (query, title, summary, owner, key, column names, job ref or metric column
+  hold a configured tenant value, a GUID or an `onmicrosoft.com` domain), `invalid_request` 400 (e.g. invalid cron),
+  `invalid_scaffold` 400.
+
+## Reports & exports
+
+#### `POST /api/reports/:key/export`
+
+- **Who:** Session + every role in the definition's `requires.portalRoles`. 20/min.
+- **Path:** `key` of a report (or a page/dashboard that declares `export`).
+- **Body:** `{format: csv|xlsx, params?, columns? (field names, ≤ 200; for "visible-column" exports), version?}`.
+- **Response:** the file, streamed — `Content-Disposition: attachment`, `X-Content-Type-Options: nosniff`. At most
+  `EXPORT_MAX_ROWS` (default 100 000) rows. The first page is fetched before headers are sent, so permission, licence
+  and policy errors still return JSON; a failure later truncates the file. Audited `report.exported` (params with
+  `redact: true` masked; rows, truncation).
+- **Errors:** `export_not_supported` 400, `export_format` 400, `invalid_request` 400 (no columns), `invalid_params`
+  400, `definition_not_found` 404, `forbidden` 403, `licence_required` 403, upstream codes.
+
+#### `GET /api/artifacts/:scheduleRunId`
+
+- **Who:** `Portal.Reader` **and** every role in the schedule's `requires.portalRoles` (default `Portal.Operator`)
+  **and**, for report jobs, every role in the report's `requires.portalRoles` — scheduled files were collected with the
+  automation identity's application permissions. 60/min.
+- **Response:** the report file (`Content-Disposition: attachment`, `Content-Length`, `nosniff`). Audited
+  `artifact.downloaded`.
+- **Errors:** `artifact_not_found` 404 (no file, removed by retention, or not a run id), `forbidden` 403. Opened as a
+  link (navigation), any error — including `unauthenticated` — becomes a 303 to `/sign-in-problem?…&during=download`.
+
+## Views
+
+Saved views: per-user page state (params, columns, sort, filters…), optionally shared. Source: `src/routes/views.ts`.
+
+#### `GET /api/views`
+
+- **Who:** Session.
+- **Query:** `page` (required, else 400 `invalid_request`).
+- **Response:** `{items: SavedView[]}` — the caller's views plus views others shared on that page. SavedView:
+  `{id, page, name, state, shared, owner, mine, createdAt, updatedAt}` (`owner` is the owner's object id).
+
+#### `POST /api/views`
+
+- **Who:** Session.
+- **Body:** `{page, name (1–80), state (object, ≤ 16 KB as JSON), shared?}`.
+- **Response:** 201 `SavedView`. Audited `view.created`.
+- **Errors:** `definition_not_found` 404, `views_disabled` 400, `views_not_shareable` 400, `too_many_views` 409 (100
+  per page per person), `view_exists` 409 (name, case-insensitive), `invalid_request` 400.
+
+#### `PATCH /api/views/:id`
+
+- **Who:** the owner.
+- **Body:** any of `{name, state, shared}` (at least one).
+- **Response:** `SavedView`. Audited `view.updated`.
+- **Errors:** `view_not_found` 404 (also someone else's unshared view), `forbidden` 403 (shared but not yours — save a
+  copy), `views_not_shareable` 400, `view_exists` 409.
+
+#### `DELETE /api/views/:id`
+
+- **Who:** the owner, or `Portal.Admin` for a view someone shared.
+- **Response:** 204. Audited `view.deleted`.
+- **Errors:** `view_not_found` 404, `forbidden` 403.
+
+## Admin & audit
+
+Source: `src/routes/admin.ts`, `src/admin/*.ts`.
+
+#### `GET /api/audit`
+
+- **Who:** `Portal.Admin`.
+- **Query:** `actor?` (UPN or oid), `action?` (exact, or a prefix ending in `.` or `*`, e.g. `run.*`), `from?`/`to?`
+  (ISO), `cursor?`, `limit?` (1–500, default 100).
+- **Response** (`AuditPage`): `{items, cursor?}`, newest first, each
+  `{seq, ts, actorUpn, actorOid?, mode, action, targetType, targetId, result, correlationId, details}`.
+- **Errors:** `forbidden` 403, `invalid_request` 400 (bad date).
+
+#### `GET /api/audit/verify`
+
+- **Who:** `Portal.Admin`.
+- **Response:** `{ok, checked, brokenAt?}` — verifies the audit hash chain.
+
+#### `GET /api/admin/appearance`
+
+- **Who:** `Portal.Admin`.
+- **Response:** `{version, overrides, theme?, density?, fontScale?}` — `overrides[<theme>]` is
+  `{accent?, accent-strong?, focus?, radius-scale?}`.
+
+#### `PUT /api/admin/appearance`
+
+- **Who:** `Portal.Admin`.
+- **Body:** the full appearance — `overrides` per theme (`#RRGGBB` colours; `radius-scale` 0–2), `theme?` (a theme or
+  `system`; default for people without a preference), `density?`, `fontScale?` (0.85–1.25) — plus `version`, the
+  version the edit started from.
+- **Response:** `{version, …saved appearance}`. Audited `appearance.updated`; publishes SSE `appearance.changed`.
+- **Errors:** `invalid_appearance` 400 (schema; unknown keys rejected), `contrast` 400 (a colour below 4.5:1 against
+  the theme's canvas or panel), `conflict` 409 (someone saved in between — reload).
+
+#### `GET /api/appearance.css`
+
+- **Who:** Session (any role — every page loads it after `tokens.css`).
+- **Response:** `text/css` with the runtime overrides; `ETag: "appearance-<version>"`; 304 on `If-None-Match`.
+
+#### `GET /api/admin/settings`
+
+- **Who:** `Portal.Admin`.
+- **Response** (`AdminSettingsResponse`): `{authMode, dataMode, contentSource, writeSessionMaxMinutes, apps, tenant}`
+  — `contentSource` is `fs` or `db`; `apps` is `{read, write, automation}` booleans (configured or not — never ids or
+  secrets); `tenant` is `{name, domain}`.
+
+## Events (SSE)
+
+#### `GET /api/events`
+
+- **Who:** Session. 60/min (connections).
+- **Stream:** `text/event-stream`, `retry: 5000`, `: ping` comment every 25 s. The session is re-read every 10 s (and
+  exactly when the write window closes). Each message is `event: <type>` + `data: <json>`; there are no `id:` lines
+  (nothing is replayed — refetch on reconnect).
+
+| Event                 | Data                                                                              | Who receives it                                                  |
+| --------------------- | --------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| `ready`               | `{mode, armedUntil}`                                                              | the connection, on connect                                       |
+| `session.mode`        | `{mode: read or armed, armedUntil}` — armed, disarmed, extended, expired          | the connection                                                   |
+| `session.ended`       | `{}` — signed out or expired; the stream then closes                              | the connection                                                   |
+| `definitions.changed` | `{keys?: ["kind:key"], all?: true}` — content published or reloaded               | everyone                                                         |
+| `run.updated`         | `{v: 1, runId, eventId, type: run or step, status?, initiatorOid?, parentRunId?}` | the run's initiator (or everyone when the payload names no user) |
+| `appearance.changed`  | `{version}`                                                                       | everyone                                                         |
+| `schedule.updated`    | `{key, scheduleRunId?, status?}`                                                  | everyone                                                         |
+| `schedule.failed`     | `{key, title, scheduleRunId, status, error {code, message}, retryAt?}`            | everyone                                                         |
+| `probe.updated`       | `{key, status, metric, ts}`                                                       | everyone                                                         |
+
+`run.updated` carries no log or progress lines — those are only on the run's own stream,
+[`GET /api/runs/:id/events`](#get-apirunsidevents). Schedule and probe events come from the scheduler process through
+Postgres `NOTIFY schedule_events`; run events through `NOTIFY run_events`.
+
+## Health
+
+Both are unauthenticated, not rate limited, `Cache-Control: no-store`.
+
+#### `GET /healthz`
+
+- Liveness: 200 `{status: "ok"}` while the process answers.
+
+#### `GET /readyz`
+
+- Readiness: the database answers, plus the background components' heartbeats (`heartbeat:worker`,
+  `heartbeat:scheduler`, written every 30 s; `stale` after 2 minutes of silence).
+- 200 `{status: "ok", checks: {db: "ok", worker: "ok", scheduler: "ok"}}`.
+- 200 `{status: "degraded", checks: {db: "ok", worker: ok|stale|missing, scheduler: ok|stale|missing}}` — the API
+  works, but runs or schedules are not being processed. If the heartbeats cannot be read, `degraded` with only
+  `{db: "ok"}`.
+- 200 `{status: "ok", checks: {db: "memory"}}` without a database (in-memory dev).
+- 503 `not_ready` when the database does not answer.
+
+#### Static SPA
+
+When the web build (`WEB_DIST_DIR`) exists, the BFF serves it: `/assets/*` with
+`Cache-Control: public, max-age=31536000, immutable`, `index.html` with `no-cache`. Any other `GET`/`HEAD` outside `/api`, `/auth`, `/healthz`,
+`/readyz` that does not look like a file gets `index.html` (client routes such as `/p/identity.users`,
+`/signed-out`). A missing asset is a JSON 404 `not_found`.
+
+## Notes and open questions
+
+Verified against the source on 2026-10-15:
+
+- **Not covered:** the PowerShell runner's internal API (`portal/apps/runner/src/server.ts`: `GET /healthz`,
+  `POST /v1/jobs`, `POST /v1/jobs/:id/cancel`), which the BFF calls with a signed shared key; the browser never does.
+- `GET /api/definitions/:kind/:key` answers an unknown `kind` with 404 `definition_not_found`, while
+  `GET /api/definitions?kind=` answers it with 400 `invalid_request`.
+- `requires.portalRoles` means **every** listed role, everywhere (pages, definitions, datasources, exports, playbooks,
+  scheduled data).
+- `GET /api/views?page=` resolves the page and checks its roles before listing shared views.
+- `POST /auth/arm/extend` requires `Portal.Operator` (and write access is dropped within 5 minutes of losing it).
+- `ApiErrorBody.error.correlationId` is optional in the schema; the server always sets it.
+- The `x-ratelimit-*` / `retry-after` headers come from `@fastify/rate-limit` defaults.

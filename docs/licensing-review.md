@@ -25,15 +25,51 @@ plan), and is listed here for the owner to review. No tenant identifiers are rec
 | Group-based app assignment                        | Verified working: the validation user receives all portal roles in the ID token through `SG-AdminForge-*` group assignments                                                                                                                        | None observed                                                                                                                                                      | —                                                                                                                                                                 | Nothing                                                                                                    |
 | Microsoft Defender for Cloud                      | `Microsoft.Security` registered (free tier)                                                                                                                                                                                                        | Recommendations/secure score available; alerts need paid plans                                                                                                     | Yes                                                                                                                                                               | Enable Defender plans for alert coverage                                                                   |
 
+## Mailbox, Teams, OneDrive and vulnerability features (2026-10-15)
+
+Built and validated with fixtures and Pester only — the validation tenant has no Exchange, Teams, SharePoint, Intune or
+Defender licences. Each is gated (`requires.licences`) and shows the "Requires …" state when the licence is missing.
+
+| Feature                                                                                                         | Licence (service plan)                                                                                        | Delegated permission / role                                                                                                        | Live-validated |
+| --------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- | -------------- |
+| Mailbox page: settings and access (`m365.mailbox`); grant/remove Full Access and Send As                        | Exchange Online (`exchange`)                                                                                  | `Exchange.Manage`; Exchange Recipient Administrator (read: View-Only Recipients / Global Reader)                                   | No             |
+| Clear forwarding, automatic replies, hide from address lists (also offboarding steps)                           | Exchange Online (`exchange`)                                                                                  | `Exchange.Manage`; Exchange Recipient Administrator. Synced accounts may need AD (`msExchHideFromAddressLists`)                    | No             |
+| Inbox rule audit (`m365.inbox-rules`)                                                                           | Exchange Online (`exchange`)                                                                                  | `Exchange.Manage`; `Get-InboxRule` needs Mail Recipients (Exchange Recipient Administrator) or higher                              | No             |
+| Teams policies for a user (`m365.teams-user-policies`)                                                          | Microsoft Teams (`teams`)                                                                                     | Teams `user_impersonation` + Graph `User.Read.All`; Teams Administrator / Communications Administrator                             | No             |
+| Team page: team settings and channels now gated per datasource                                                  | Microsoft Teams (`teams`)                                                                                     | unchanged                                                                                                                          | No             |
+| Give the manager access to a OneDrive (`m365.grant-onedrive-access`, offboarding)                               | SharePoint Online (`sharepoint`)                                                                              | SharePoint `AllSites.FullControl`; SharePoint Administrator; `AF_SPO_TENANT_NAME` must be set                                      | No             |
+| Device vulnerabilities (`security.device-vulnerabilities`, advanced hunting `DeviceTvmSoftwareVulnerabilities`) | Defender for Endpoint Plan 2 (`WINDEFATP`, in M365 E5) or Defender Vulnerability Management (`TVM_PREMIUM_1`) | Graph `ThreatHunting.Read.All`; Security Reader. Defender for Endpoint P1 and Defender for Business don't include advanced hunting | No             |
+| Intune devices: query-builder filters                                                                           | Intune Plan 1 (`intune`)                                                                                      | unchanged (`DeviceManagementManagedDevices.Read.All`)                                                                              | No             |
+
+New Write-app scopes declared by content (added by `pnpm adminforge provision entra`, verify with
+`pnpm adminforge validate --scopes`): SharePoint `AllSites.FullControl` (OneDrive access). New Read-app scope:
+Graph `ThreatHunting.Read.All` (delegated). Exchange `Exchange.Manage` and Teams `user_impersonation` were already
+declared; their service principals are still missing in the validation tenant (see above).
+
+## Directory roles, PIM eligibility, app access and groups (2026-10-15)
+
+Built and covered by playbook tests and fixtures; live validation status in the validation tenant (no Entra ID P1/P2):
+
+| Feature                                                                                                                                                                             | Needs                                                                                      | Live validation                                                                    |
+| ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------- |
+| Assign / remove an active directory role (`identity.assign-directory-role`, `identity.remove-directory-role`)                                                                       | Entra ID Free; Write-app `RoleManagement.ReadWrite.Directory`                              | Possible on `AF-Test-*` users (critical/high risk: approval required)              |
+| Add / remove PIM eligibility (`identity.add-role-eligibility`, `identity.remove-role-eligibility`), eligible tables on role/user pages, eligible part of the privileged-role report | Entra ID P2 (PIM)                                                                          | **Blocked** — licence gate shown                                                   |
+| Assign / remove app access, revoke a consent grant                                                                                                                                  | Entra ID Free; group assignment to apps needs P1                                           | User assignment possible; group assignment **blocked**                             |
+| Create Microsoft 365 / dynamic groups, edit a dynamic rule (`identity.create-group`, `identity.edit-dynamic-rule`)                                                                  | Dynamic membership: Entra ID P1; Microsoft 365 groups provision fully with Exchange Online | Security groups possible; dynamic **blocked** (clear refusal); M365 groups partial |
+| Sign-ins advanced filter; sign-in reads in the compromised-account runbook                                                                                                          | Entra ID P1 (sign-in logs)                                                                 | **Blocked**                                                                        |
+| Identity Protection steps in the compromised-account runbook                                                                                                                        | Entra ID P2                                                                                | **Blocked**                                                                        |
+| Email / Teams delivery, failure alerts, approver notifications                                                                                                                      | Exchange Online mailbox for `AF_MAIL_SENDER` + Mail.Send; Teams (Workflows webhook)        | **Blocked** — unit-tested with fakes                                               |
+
 ## Feature → licence map (general)
 
-| Feature                                         | Requirement                             |
-| ----------------------------------------------- | --------------------------------------- |
-| Users, groups, roles, apps, devices (directory) | Entra ID Free                           |
-| Sign-in logs                                    | Entra ID P1 (Free tenants: limited)     |
-| Conditional Access, authentication context      | Entra ID P1                             |
-| PIM, Identity Protection                        | Entra ID P2                             |
-| Exchange, Teams, SharePoint admin               | The corresponding M365 workload licence |
-| Intune                                          | Intune Plan 1                           |
-| Defender incidents/alerts                       | Defender product licences / M365 E5     |
-| Azure resources, Resource Graph, Monitor        | Azure subscription + RBAC               |
+| Feature                                         | Requirement                                                   |
+| ----------------------------------------------- | ------------------------------------------------------------- |
+| Users, groups, roles, apps, devices (directory) | Entra ID Free                                                 |
+| Sign-in logs                                    | Entra ID P1 (Free tenants: limited)                           |
+| Conditional Access, authentication context      | Entra ID P1                                                   |
+| PIM, Identity Protection                        | Entra ID P2                                                   |
+| Exchange, Teams, SharePoint admin               | The corresponding M365 workload licence                       |
+| Intune                                          | Intune Plan 1                                                 |
+| Defender incidents/alerts                       | Defender product licences / M365 E5                           |
+| Defender vulnerability data (advanced hunting)  | Defender for Endpoint P2 or Defender Vulnerability Management |
+| Azure resources, Resource Graph, Monitor        | Azure subscription + RBAC                                     |

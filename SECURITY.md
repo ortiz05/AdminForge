@@ -77,6 +77,9 @@ restrictions, never privileges.
   redacted from logs.
 - **Injection:** OData/KQL values go through `$odata()` / `$kql()`; advanced filters are compiled server-side from
   structured data; request paths may not contain `?` or `#`; exports neutralise spreadsheet formulas.
+- **Delivery:** email recipients and Teams webhooks are only ever `${ env.X }` configuration; webhooks must be https on
+  Microsoft hosts and never follow redirects; `*WEBHOOK*` keys are hidden from content expressions. Email goes through
+  Graph as the automation identity (Mail.Send needs the explicit write-permission opt-in).
 - **Outbound:** connections may only request tokens for your own app registrations (never Graph, ARM, Exchange or
   other Microsoft first-party audiences) and refuse redirects. Generic `http` steps are disabled. KQL queries ask the
   service for a bounded number of rows.
@@ -89,8 +92,10 @@ stdin. The service reads only `<env>.runner.env` (the shared key), not the API's
 
 ## Audit
 
-Every sign-in, arm/disarm, run, approval, schedule change, sensitive read and download is appended to an append-only
-(database-enforced), hash-chained log. The Audit page verifies the chain.
+Every sign-in, arm/disarm, run, approval, schedule change, content publish, sensitive read, download, notification and
+retention purge is appended to an append-only (database-enforced), hash-chained log. The Audit page,
+`adminforge audit verify` and the hourly `probes.audit-chain` check verify the chain. History (runs, schedule runs,
+probe results, report files) is purged after its retention period; the audit log is never purged.
 
 ## Host and network
 
@@ -102,6 +107,8 @@ Every sign-in, arm/disarm, run, approval, schedule change, sensitive read and do
   `<env>.env` (runtime), `<env>.admin.env` (provisioner and live-test credentials, CLI only), `<env>.host.env`
   (the services' own database) and `<env>.runner.env` (runner key only). The services and `pnpm dev` use separate
   databases, so a developer's API never picks up production jobs.
+- `/readyz` reports the run worker and scheduler from their heartbeats, and every Microsoft call is logged as one
+  structured line (path template, status, duration, throttling, request id) for tracing by Reference.
 - The systemd user units load a hardening drop-in with the seccomp-based restrictions that user units enforce
   (`NoNewPrivileges`, `SystemCallFilter=@system-service`, `RestrictAddressFamilies`, `RestrictNamespaces`, …).
 
@@ -129,6 +136,8 @@ Tracked in `docs/backlog.md`:
 - The audit chain is unkeyed: someone with database write access could rewrite and re-hash its tail. Anchor the head
   outside the database for stronger guarantees.
 - Definitions loaded from the database are trusted as published (not re-validated on load).
+- CSP allows inline **styles** (`style-src 'unsafe-inline'`) because Radix and Monaco inject them; scripts stay
+  `'self'` only, so CSS injection can't execute code.
 - User units can't isolate the filesystem on hosts that restrict unprivileged user namespaces (Ubuntu 24.04): run as a
   dedicated system user with system units for that.
 - Browsers must trust Caddy's local CA for LAN access; use a certificate from your own CA and a DNS name for wider use.

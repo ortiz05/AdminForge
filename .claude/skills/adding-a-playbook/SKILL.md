@@ -25,24 +25,28 @@ Markdown sections, manual steps and executable steps.
    such as the UPN); `critical` also needs `approval: { required: true }` (two-person; the approver runs the remaining
    steps as themselves).
 6. **Secrets** (passwords, TAPs, client secrets): declare `secretOutputs: [path]` on the step; never copy them to
-   `outputs`. Generate passwords with `$secureRandom(n)`.
+   `outputs`. Generate passwords with `$secureRandom(n)`. Sensitive **inputs** get `redact: true` (masked in stored
+   steps, events and audit). A playbook that changes the caller's own permissions (PIM activation) sets
+   `refreshTokens: true` so the new roles apply as soon as it succeeds.
 7. **Paths & queries:** `$encode()` path segments, `$odata()` in filters, `$kql()` in KQL.
 8. **Declare** `requires.portalRoles` (`Portal.Operator` for writes), `requires.scopes` (exact write scopes — they must
    exist on the Write app; check with `pnpm adminforge validate --scopes`), `requires.entraRoles`.
-9. **Tests:** a `tests:` block per behaviour (happy path, each precondition refusal, compensation) with `mocks` per
+9. **Tests:** a `tests:` block per behaviour (a test may set `now` and `env` — e.g. `env: { AF_READ_CLIENT_ID: … }` for guards that read configuration) (happy path, each precondition refusal, compensation) with `mocks` per
    step id and `expect.{status, failedStep, plan}`. Run `pnpm adminforge test <id>`.
 10. **Wire it:** reference it from pages (`rowActions`, `bulkActions`, `actionBar`) — see adding-a-page-or-report.
 11. **Validate live only on `AF-Test-*` objects** (see validating-against-a-tenant): dry run, then run, then compensate.
 
 ## Common mistakes
 
-| Mistake                                                                              | Fix                                                                                  |
-| ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------ |
-| Write step without `describe` / undeclared POST mode                                 | Schema rejects it — describe what changes, in plain words                            |
-| No precondition read → acts on stale data                                            | `graph` read + `assert` before the write                                             |
-| Secret in `outputs` or logs                                                          | `secretOutputs`; it's delivered once to the initiator                                |
-| New write scope not on the Write app                                                 | Add to provisioning desired state, `pnpm adminforge provision entra`, record in docs |
-| Bulk flow as a custom loop                                                           | Page `bulkActions` with `forEach.inputs` — one child run per item                    |
-| Sensitive input echoed into a request or output                                      | Declare it `redact: true` — its value is masked in stored steps, events and audit    |
-| Restricting a playbook with `requires.portalRoles` and expecting previews to be open | Previews check those roles too (their read steps really run)                         |
-| Publishing a new version of a playbook a write schedule runs                         | Expected: that schedule switches off until a second person re-approves it            |
+| Mistake                                                                              | Fix                                                                                             |
+| ------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------- |
+| Write step without `describe` / undeclared POST mode                                 | Schema rejects it — describe what changes, in plain words                                       |
+| No precondition read → acts on stale data                                            | `graph` read + `assert` before the write                                                        |
+| Secret in `outputs` or logs                                                          | `secretOutputs`; it's delivered once to the initiator                                           |
+| New write scope not on the Write app                                                 | Add to provisioning desired state, `pnpm adminforge provision entra`, record in docs            |
+| Bulk flow as a custom loop                                                           | Page `bulkActions` with `forEach.inputs` — one child run per item                               |
+| Sensitive input echoed into a request or output                                      | Declare it `redact: true` — its value is masked in stored steps, events and audit               |
+| Restricting a playbook with `requires.portalRoles` and expecting previews to be open | Previews check those roles too (their read steps really run)                                    |
+| Publishing a new version of a playbook a write schedule runs                         | Expected: that schedule switches off until a second person re-approves it                       |
+| Deleting a playbook/runbook you replaced or merged (it stays live in the database)   | `status: retired` + bump `version`; point page actions and `type: playbook` steps at the new id |
+| `x != 'a'` on a value that may be missing (false when `x` is undefined)              | `$not(x = 'a')`                                                                                 |

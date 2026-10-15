@@ -16,6 +16,36 @@ Decisions taken while building AdminForge, in addition to the ADRs in `docs/adr/
 | D8  | Live validation         | Automated: dedicated test user signs in with password + TOTP (registered once by the live helper); writes only on `AF-Test-*` objects                                                                           |
 | D9  | Content source of truth | Git (`portal/content`) → `adminforge publish` → Postgres; production reads Postgres, dev reads the files with hot reload                                                                                        |
 
+## Plan review (2026-10-15)
+
+The implementation was compared with the master plan section by section; the plan's "Revision 3" block lists the
+outcome. Decisions taken in that review:
+
+- **Content stays in git.** The in-portal YAML editor, drafts and in-app two-person publish (plan §7.9, task 7.3, half of
+  gate G7) are superseded by D9 + R7/ADR-012: content is reviewed in pull requests (`.github/CODEOWNERS` + branch
+  protection), published with the CLI, and `adminforge publish` is audited. The **schedule editor** therefore produces
+  YAML for review rather than saving schedules.
+- **Overview stays coded** (`/api/overview`): it batches many Graph calls into one round trip; a YAML dashboard would
+  be slower. Task 3.11 superseded.
+- **Widgets:** `iframeLink` is covered by `actionBar` links and column links; `logQuery` by the `logAnalytics`
+  datasource with table/chart widgets and Query Studio. Table `pageSize` is moot with virtualised tables (kept in the
+  schema for compatibility); `selection: single` is implemented.
+- **Runbook "Assign to…" handover** is declined: runs act with the starter's live identity (ADR-010), so handing a run
+  to someone else would change who acts. Start a new run instead.
+- **CSP:** `script-src 'self'` only; `style-src` keeps `'unsafe-inline'` because Radix and Monaco inject style
+  elements and attributes at runtime. Accepted risk: CSS injection can't execute script.
+- **Retention:** finished runs and schedule history 180 days, probe results 35 days, report files 90 days (configurable;
+  the audit log is never purged); applied by the API every 6 hours and audited.
+- **Delivery:** email through Graph `sendMail` as the automation identity from `AF_MAIL_SENDER`; Teams through
+  Workflows webhooks on Microsoft hosts only; recipients and webhooks are always `${ env.X }` configuration. Failure
+  alerts fire only when no retry is left. Approval requests notify `AF_APPROVALS_EMAIL` / `AF_APPROVALS_TEAMS_WEBHOOK`.
+- **Self-monitoring:** the worker and scheduler write heartbeats; `/readyz` reports `degraded` when either goes quiet,
+  which the portal-readiness probe catches. `probes.audit-chain` re-walks the audit chain hourly. Every Microsoft call
+  is logged as one structured line (template path, status, duration, throttling, request id). OpenTelemetry export is
+  optional and not built.
+- **Backups:** `adminforge-backup.timer` (daily, 14 days) with a recorded restore drill (docs/operations.md).
+- **Least privilege:** baseline Write-app scopes no content uses were removed; content declares what it needs.
+
 ## Platform
 
 - **TypeScript 7** (native compiler) for all packages; the lint toolchain lives in `tooling/lint` with TypeScript 6 because typescript-eslint needs the classic compiler API.

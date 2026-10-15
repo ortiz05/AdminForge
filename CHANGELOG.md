@@ -4,6 +4,63 @@ All notable changes to AdminForge are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+Closes the gaps found by comparing the build with the original plan (see the plan's "Revision 3" block and
+`docs/decisions.md` → Plan review).
+
+### Added
+
+- **Delivery:** scheduled reports by email (Graph `sendMail` as the automation identity, from `AF_MAIL_SENDER`) and to
+  Teams (Workflows webhooks on Microsoft hosts only); schedule failure/success alerts; approver notifications for run
+  approvals and schedule enable requests. Recipients and webhooks are configuration keys, never content.
+- **Schedule editor** (`/schedules/new`): build a schedule with a live cron preview (next five runs) and get its YAML
+  to commit — schedules stay in git.
+- **PIM indicator** in the session rail: active and eligible directory roles, with "Activate" opening
+  `identity.pim-activate`; activation refreshes the person's tokens so new rights apply without signing out.
+- **Live updates:** publishing content, arming and signing out elsewhere refresh open pages (server-sent events).
+- **Organization defaults:** a default theme alongside default density and text size (Appearance).
+- **Operations:** retention for runs, schedule runs, probe results and report files (`RETENTION_*`); worker and
+  scheduler heartbeats in `/readyz`; `adminforge audit verify` and an hourly `probes.audit-chain` check; content
+  publishes are audited; one structured log line per Microsoft call; history indexes (migration 0005); nightly
+  database backups with a restore drill (`adminforge-backup.timer`).
+- **Entra content:** assign/remove directory roles, add/remove PIM eligibility, assign/remove app access, revoke a
+  consent grant, create Microsoft 365/security/dynamic groups (`identity.create-group` 2.0.0) and edit dynamic rules;
+  new-subscription onboarding runbook; advanced filters on groups, enterprise apps, app registrations, sign-ins and
+  audit logs.
+- **Microsoft 365 content:** mailbox page with Full Access / Send As / Send on Behalf; grant/remove mailbox
+  permissions, clear forwarding, automatic replies, address-list visibility; inbox-rule audit report; Teams policies
+  per user; OneDrive access for a manager; Defender device vulnerabilities (advanced hunting); advanced filters on
+  mailboxes and Intune devices.
+- **Platform:** `selection: single` for tables; a `rows` advanced-filter dialect (`$applyAdvanced`) for runner and
+  static lists; playbook `refreshTokens`; playbook tests may set `now` and `env`; Graph beta sources are badged
+  "preview API".
+- **Repository:** API reference (`docs/api.md`), Dependabot, CODEOWNERS, `pnpm audit` and an initial-bundle budget
+  (`pnpm check:bundle`, 250 KB gzip) in CI.
+
+### Changed
+
+- `identity.offboard-user` 1.1.0 converts the mailbox to shared, sets an automatic reply, hides it from address lists
+  and gives the manager OneDrive access when those workloads are licensed; `identity.leaver` 1.1.0 now only lists what
+  offboarding couldn't do.
+- `identity.compromised-account` 2.0.0 merges `security.compromised-account-response` (retired).
+- Write-app permissions trimmed to what content declares (removed `Policy.ReadWrite.ConditionalAccess`,
+  `DeviceManagementManagedDevices.ReadWrite.All`, `IdentityRiskyUser.Read.All`); new ones added for the new playbooks.
+
+### Security
+
+- `requires.portalRoles` now means **every** listed role everywhere (pages and datasources previously accepted any
+  one of them).
+- Shared saved views are listed only for pages the caller can open.
+- Extending write access re-checks the Operator role.
+
+### Fixed
+
+- Playbook preflight checked licences by SKU name instead of feature key, so licensed features could show as missing.
+- An admin's default density never applied to people without their own preference.
+- The PIM menu and the page renderer shared a query key, so one could overwrite the other's data.
+- `adminforge validate --scopes` didn't read the provisioner credentials from the admin env file.
+
 ## 0.1.0 — 2026-10-15
 
 First release: an admin portal for Microsoft Entra ID, Microsoft 365, Intune, Defender and Azure that runs on its own

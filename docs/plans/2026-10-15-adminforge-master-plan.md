@@ -109,6 +109,44 @@ The owner granted Global Administrator in the test tenant for setup and validati
 
 ---
 
+## Revision 3 (2026-10-15) — implementation status; read with Revision 2
+
+The plan was reviewed against the implementation section by section. Where this block and the text below disagree,
+this block (and the linked decisions) wins. Current behaviour is documented in `README.md`, `SECURITY.md`,
+`docs/architecture.md`, `docs/operations.md`, `docs/access.md`, `docs/troubleshooting.md` and `docs/api.md`.
+
+**Superseded — not to be built** (reasons in `docs/decisions.md` and the ADR status notes):
+
+| Plan item | Replaced by |
+|---|---|
+| Azure Container Apps, Key Vault, managed identity, Runner API app, Bicep (§4.1–4.2, §11, tasks 1.16, 2.1–2.5, gate G2, `portal/infra`) | Host first: systemd user units + Caddy (ADR-008), env-file secrets (ADR-009), HMAC-signed loopback runner, `adminforge provision` (R2) |
+| Phase 0 `az`/Bicep install, `az login`, discovery script (0.1, 0.3, 0.4) | Provisioner credential, `adminforge provision status`, `/api/me/capabilities`, `docs/licensing-review.md` |
+| Publish through the API / CI publish (§4.3, §7.9.6) | `adminforge publish` from git (D9), audited; CI does not publish |
+| In-portal editor, drafts, in-app two-person publish (7.3, §7.9, half of G7) | Git + pull requests with `.github/CODEOWNERS` (enable branch protection) + Claude Code skills (R7, ADR-012) |
+| Coded overview → YAML dashboard (3.11) | Stays coded (one batched round trip) |
+| Widgets `iframeLink`, `logQuery`; table `pageSize` | `actionBar`/column links; `logAnalytics` datasource + Query Studio; virtualised tables |
+| §6.1/§6.2 Graphite/Paper/Glacier/Ignition palette | R4 Steel/Daylight/High contrast |
+| Stylelint | `tests/guards/design-tokens.test.ts` |
+| CLI `new widget/connector/script`, `login --device-code` | Skills in `.claude/skills/`; automated validation user (D8) |
+| Runbook "Assign to…" handover | Declined (ADR-010: runs act as the person who started them) |
+| `GET /auth/arm` | `POST /auth/arm` (CSRF-protected) |
+| R12.5 Log Analytics Reader on the default workspace | Subscription Reader from `provision entra` (enough to query); `provision azure-test` grants it on its own workspace |
+
+**Built since Revision 2** (beyond the phases below): designed sign-in/download problem pages; security review fixes
+(`SECURITY.md`); env-file layering and separate databases for host services and `pnpm dev`; retention; audited
+publishes and `adminforge audit verify`; hourly `probes.audit-chain`; worker/scheduler heartbeats in `/readyz`;
+per-call telemetry logs; schedule editor (YAML for review); email/Teams delivery, failure alerts and approver
+notifications; PIM indicator with in-portal activation and token refresh; organisation default theme; Graph beta
+"preview API" badges; single-row table selection; Entra role/consent/app-assignment and M365/Exchange/Teams/Defender
+content gaps; CI dependency audit, Dependabot, initial-load budget check; daily backups with a restore drill.
+
+**Open** — licence-blocked validation (`docs/licensing-review.md`: Exchange, Teams, SharePoint, Intune, Defender,
+Entra ID P1/P2 incl. Conditional Access gates G4–G6) and the remaining items in `docs/backlog.md` (e.g. app-only
+runner for script schedules, `http` step allowlist, session-id rotation on arm, keyed audit anchor, OpenTelemetry,
+personal dashboards / pinning, graphBatch paging).
+
+---
+
 ## Contents
 
 1. How this plan is used

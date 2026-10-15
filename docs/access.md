@@ -4,13 +4,13 @@ AdminForge roles are Entra **app roles** on the AdminForge Read app, granted by 
 provisioning creates (`SG-AdminForge-<label>-<Role>`, where `<label>` is `AF_ENV_LABEL`, e.g. `dev`). Roles are flat:
 none implies another, so give each person every group they need.
 
-| Role                | Group                                     | Lets the person                                                                                                   |
-| ------------------- | ----------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| `Portal.Reader`     | `SG-AdminForge-<label>-Portal.Reader`     | Sign in, view pages, dashboards and reports, preview (dry-run) playbooks. **Everyone needs this.**                |
-| `Portal.Operator`   | `SG-AdminForge-<label>-Portal.Operator`   | Arm write access and run write playbooks; see scheduled report files and probe result rows                        |
-| `Playbook.Approver` | `SG-AdminForge-<label>-Playbook.Approver` | Approve runs and enabling write-capable schedules (never their own requests)                                      |
-| `Playbook.Author`   | `SG-AdminForge-<label>-Playbook.Author`   | Reserved for content authors; it grants nothing in the portal today (content is authored in git with Claude Code) |
-| `Portal.Admin`      | `SG-AdminForge-<label>-Portal.Admin`      | Appearance, connections, audit export, permission drift                                                           |
+| Role                | Group                                     | Lets the person                                                                                                           |
+| ------------------- | ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `Portal.Reader`     | `SG-AdminForge-<label>-Portal.Reader`     | Sign in, view pages, dashboards and reports, preview (dry-run) playbooks. **Everyone needs this.**                        |
+| `Portal.Operator`   | `SG-AdminForge-<label>-Portal.Operator`   | Arm write access and run write playbooks; see scheduled report files and probe result rows                                |
+| `Playbook.Approver` | `SG-AdminForge-<label>-Playbook.Approver` | Approve runs and enabling write-capable schedules (never their own requests)                                              |
+| `Playbook.Author`   | `SG-AdminForge-<label>-Playbook.Author`   | Reserved for content authors; it grants nothing in the portal today (content is authored in git with Claude Code)         |
+| `Portal.Admin`      | `SG-AdminForge-<label>-Portal.Admin`      | Appearance (accent, radius, density, font size, default theme), installation settings, the audit log and its verification |
 
 Only the Operator group is assigned to the **Write** app, so Entra itself refuses write sign-ins for anyone else.
 

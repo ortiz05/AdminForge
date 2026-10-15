@@ -1,13 +1,13 @@
 $schema: ../../packages/schemas/generated/probe.schema.json
 kind: probe
 id: probes.arm-subscription-access
-version: 1.0.0
+version: 1.0.1
 title: Default subscription access
 summary: >-
   Lists one resource group in the default subscription (AF_SUBSCRIPTION_ID) as the automation identity. Fails when the
   identity has lost its Reader role assignment or the subscription is disabled.
 owner: azure-team
-tags: [synthetic, azure, arm, rbac]
+tags: [synthetic, azure, arm, rbac, sweep-15m]
 check:
   kind: arm
   path: /subscriptions/${ $encode(env.AF_SUBSCRIPTION_ID) }/resourcegroups

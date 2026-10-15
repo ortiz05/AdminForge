@@ -1,0 +1,29 @@
+$schema: ../../packages/schemas/generated/probe.schema.json
+kind: probe
+id: probes.storage-public-blob-access
+version: 1.0.0
+title: Storage accounts allowing public blob access
+summary: >-
+  Storage accounts where anonymous (public) blob access is allowed or was never turned off — any container on them can
+  be made world-readable. Set allowBlobPublicAccess to false (Azure Policy "Storage account public access should be
+  disallowed" enforces it).
+owner: azure-team
+tags: [kql, configuration, azure, storage, security, config-check]
+check:
+  kind: kql
+  source: resourceGraph
+  query: |
+    // af:probes.storage-public-blob-access
+    resources
+    | where type =~ 'microsoft.storage/storageaccounts'
+    | extend allowBlobPublicAccess = tobool(properties.allowBlobPublicAccess)
+    | where isnull(allowBlobPublicAccess) or allowBlobPublicAccess == true
+    | project id, name, resourceGroup, subscriptionId, location, kind, allowBlobPublicAccess
+    | order by name asc
+  metric: rowCount
+  detailsLimit: 50
+thresholds: { warn: 1, crit: 10 }
+intervalHint: PT6H
+timeoutMs: 60000
+requires:
+  azureRoles: [Reader]

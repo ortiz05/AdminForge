@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { DefinitionId, Duration, Expr, Identifier, envelopeShape } from './common';
+import { DefinitionId, Duration, Expr, Identifier, envelopeShape, exprOr } from './common';
 import { Guid } from './params';
 
 /**
@@ -79,10 +79,13 @@ export const AppCredentialExpiryCheck = z.strictObject({
   critDays: z.number().int().min(0).default(7),
   include: z.array(z.enum(['secrets', 'certificates'])).optional(),
 });
+/** A skuPartNumber literal (ENTERPRISEPACK, SPE_E3) or a whole `${ env.X }` expression, so tenants keep their SKUs in configuration. */
+const SkuPartNumber = z.union([z.string().regex(/^[A-Za-z0-9_.+-]+$/, 'Expected a skuPartNumber like SPE_E3, or ${ env.X }'), Expr]);
+
 export const LicenseThresholdCheck = z.strictObject({
   kind: z.literal('licenseThreshold'),
-  /** skuPartNumber, e.g. ENTERPRISEPACK. */
-  sku: z.string().min(1),
+  /** skuPartNumber, e.g. ENTERPRISEPACK, or `${ env.X }`. */
+  sku: SkuPartNumber,
   /** Warn when consumed / enabled exceeds this percentage. */
   maxPercent: z.number().min(1).max(100),
   critPercent: z.number().min(1).max(100).optional(),
@@ -99,6 +102,50 @@ export const SignInHealthCheck = z.strictObject({
   appId: z.union([Guid, Expr]).optional(),
 });
 
+/** Where a `kql` check runs (R12). */
+export const KQL_SOURCES = ['resourceGraph', 'logAnalytics', 'advancedHunting'] as const;
+export const KqlSource = z.enum(KQL_SOURCES);
+export type KqlSource = z.infer<typeof KqlSource>;
+
+/** ISO 8601 duration only (`PT1H`, `P7D`): what Log Analytics and advanced hunting accept as a timespan. */
+const IsoDuration = z.string().regex(/^P(?!$)(\d+Y)?(\d+M)?(\d+W)?(\d+D)?(T(?=\d)(\d+H)?(\d+M)?(\d+(\.\d+)?S)?)?$/, 'Expected an ISO 8601 duration like PT1H or P7D');
+
+/** `rowCount` = number of rows returned; `{ column, aggregate }` = one number from a column of the result. */
+export const KqlMetric = z.union([
+  z.literal('rowCount'),
+  z.strictObject({
+    column: z.string().min(1),
+    /** How the column's numeric values become one metric (default `first`: the value in the first row). */
+    aggregate: z.enum(['max', 'min', 'sum', 'avg', 'first']).default('first'),
+  }),
+]);
+export type KqlMetric = z.infer<typeof KqlMetric>;
+
+/** Default workspace for `source: logAnalytics` checks without `workspace`. */
+export const DEFAULT_LOG_ANALYTICS_WORKSPACE = '${ env.AF_LOG_ANALYTICS_WORKSPACE_ID }';
+
+/**
+ * Configuration check in KQL (R12): Azure Resource Graph, Log Analytics, or Microsoft Defender advanced hunting, run as
+ * the automation identity. `details` on the result are the first `detailsLimit` rows (the offending resources).
+ * Literal text in `query` may contain `${ … }` (env, now); user data must go through `$kql()`.
+ */
+export const KqlCheck = z.strictObject({
+  kind: z.literal('kql'),
+  source: KqlSource,
+  query: z.string().min(1),
+  /** resourceGraph: subscriptions to query (default: every subscription the automation identity can read). */
+  subscriptions: exprOr(z.array(z.string().min(1))).optional(),
+  /** resourceGraph: management groups to query instead of subscriptions. */
+  managementGroups: exprOr(z.array(z.string().min(1))).optional(),
+  /** logAnalytics: workspace (customer) id; default `${ env.AF_LOG_ANALYTICS_WORKSPACE_ID }`. */
+  workspace: z.string().min(1).optional(),
+  /** logAnalytics / advancedHunting: look-back window (default P1D for Log Analytics, the service default for hunting). */
+  timespan: z.union([IsoDuration, Expr]).optional(),
+  metric: KqlMetric.default('rowCount'),
+  /** Rows kept as `details` on each result (the violating resources), capped. */
+  detailsLimit: z.number().int().min(0).max(500).default(50),
+});
+
 export const ProbeCheck = z.discriminatedUnion('kind', [
   HttpCheck,
   GraphCheck,
@@ -110,6 +157,7 @@ export const ProbeCheck = z.discriminatedUnion('kind', [
   AppCredentialExpiryCheck,
   LicenseThresholdCheck,
   SignInHealthCheck,
+  KqlCheck,
 ]);
 export type ProbeCheck = z.infer<typeof ProbeCheck>;
 export type ProbeCheckKind = ProbeCheck['kind'];
@@ -126,6 +174,8 @@ export const PROBE_METRICS: Record<ProbeCheckKind, { metric: string; unit: strin
   appCredentialExpiry: { metric: 'daysRemaining', unit: 'days', worse: 'lower' },
   licenseThreshold: { metric: 'consumed', unit: '%', worse: 'higher' },
   signInHealth: { metric: 'failureRate', unit: '%', worse: 'higher' },
+  /** Row count, or the chosen column's aggregate (unit = the column name). */
+  kql: { metric: 'rows', unit: 'rows', worse: 'higher' },
 };
 
 export const Probe = z
@@ -151,5 +201,17 @@ export const Probe = z
       ctx.addIssue({ code: 'custom', path: ['check', 'critDays'], message: 'critDays must be ≤ warnDays.' });
     if (c.kind === 'tokenAcquisition' && !!c.service === !!c.connection)
       ctx.addIssue({ code: 'custom', path: ['check', 'service'], message: 'Use exactly one of service or connection.' });
+    if (c.kind === 'kql') {
+      const only = (field: 'subscriptions' | 'managementGroups' | 'workspace' | 'timespan', sources: readonly KqlSource[]) => {
+        if (c[field] !== undefined && !sources.includes(c.source))
+          ctx.addIssue({ code: 'custom', path: ['check', field], message: `${field} applies to source ${sources.join(' or ')}, not ${c.source}.` });
+      };
+      only('subscriptions', ['resourceGraph']);
+      only('managementGroups', ['resourceGraph']);
+      only('workspace', ['logAnalytics']);
+      only('timespan', ['logAnalytics', 'advancedHunting']);
+      if (c.subscriptions !== undefined && c.managementGroups !== undefined)
+        ctx.addIssue({ code: 'custom', path: ['check', 'managementGroups'], message: 'Use subscriptions or managementGroups, not both.' });
+    }
   });
 export type Probe = z.infer<typeof Probe>;

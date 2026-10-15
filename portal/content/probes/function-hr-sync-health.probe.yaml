@@ -1,13 +1,13 @@
 $schema: ../../packages/schemas/generated/probe.schema.json
 kind: probe
 id: probes.function-hr-sync-health
-version: 1.0.0
+version: 1.0.1
 title: HR sync Function App health (example)
 summary: >-
   Calls the health operation of the example HR sync connection as the automation identity. Draft until the
   connection points at a real Function App.
 owner: portal-admins
-tags: [synthetic, azure, functions, example]
+tags: [synthetic, azure, functions, example, sweep-15m]
 status: draft
 check:
   kind: functionHealth

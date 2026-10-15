@@ -1,11 +1,11 @@
 $schema: ../../packages/schemas/generated/probe.schema.json
 kind: probe
 id: probes.graph-reachability
-version: 1.0.0
+version: 1.0.1
 title: Microsoft Graph reachability
 summary: Reads the organization object as the automation identity and measures round-trip latency.
 owner: portal-admins
-tags: [synthetic, graph]
+tags: [synthetic, graph, sweep-15m]
 check:
   kind: graph
   path: /organization

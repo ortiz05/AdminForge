@@ -1,0 +1,20 @@
+$schema: ../../../packages/schemas/generated/schedule.schema.json
+kind: schedule
+id: sweep.every-6-hours
+version: 1.0.0
+title: Probe sweep every 6 hours
+summary: >-
+  Every 6 hours (00:20, 06:20, 12:20, 18:20 UTC), runs every active probe tagged sweep-6h (app credential expiry,
+  licence seat usage, the portal's TLS certificate) as the automation identity. Tag a probe sweep-6h to add it.
+owner: portal-admins
+tags: [synthetic, probe-sweep]
+cron: "20 */6 * * *"
+timezone: UTC
+enabled: true
+identity: automation
+job:
+  kind: probe
+  select: { tags: [sweep-6h] }
+  concurrency: 4
+timeoutSeconds: 900
+overlap: skip

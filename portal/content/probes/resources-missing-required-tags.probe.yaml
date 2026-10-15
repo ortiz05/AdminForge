@@ -1,0 +1,29 @@
+$schema: ../../packages/schemas/generated/probe.schema.json
+kind: probe
+id: probes.resources-missing-required-tags
+version: 1.0.0
+title: Resources missing required tags
+summary: >-
+  Top-level Azure resources missing any of the tags listed in AF_REQUIRED_TAGS (comma-separated, compared without
+  case; default owner). Pair it with the Untagged Azure resources report and the Add tags playbook.
+owner: azure-team
+tags: [kql, configuration, azure, governance, tags, config-check]
+check:
+  kind: kql
+  source: resourceGraph
+  query: |
+    // af:probes.resources-missing-required-tags
+    resources
+    | where type !endswith '/extensions' and array_length(split(type, '/')) == 2
+    | extend tagKeys = iff(isnull(tags), dynamic([]), bag_keys(parse_json(tolower(tostring(tags)))))
+    | extend missingTags = set_difference(split(tolower(${ $kql($replace(env.AF_REQUIRED_TAGS ? env.AF_REQUIRED_TAGS : 'owner', /\s+/, '')) }), ','), tagKeys)
+    | where array_length(missingTags) > 0
+    | project id, name, type, resourceGroup, subscriptionId, location, missingTags
+    | order by name asc
+  metric: rowCount
+  detailsLimit: 100
+thresholds: { warn: 1 }
+intervalHint: PT6H
+timeoutMs: 60000
+requires:
+  azureRoles: [Reader]

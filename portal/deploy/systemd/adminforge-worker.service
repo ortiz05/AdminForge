@@ -1,0 +1,20 @@
+# AdminForge run worker (ROLE=worker): executes playbook and runbook runs from the pg-boss queue, including the
+# runs scheduled playbook jobs create. User unit — see portal/deploy/README.md.
+[Unit]
+Description=AdminForge run worker
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/AdminForge/portal/apps/api
+ExecStart=/usr/bin/env node dist/worker.js
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+TimeoutStopSec=60
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+UMask=0027
+
+[Install]
+WantedBy=default.target

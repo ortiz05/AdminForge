@@ -1,0 +1,29 @@
+$schema: ../../packages/schemas/generated/probe.schema.json
+kind: probe
+id: probes.defender-high-severity-recommendations
+version: 1.0.0
+title: Defender for Cloud high-severity recommendations
+summary: >-
+  Microsoft Defender for Cloud recommendations of High severity with at least one unhealthy resource (the free
+  Foundational CSPM tier is enough). The metric is the number of distinct recommendations; details list how many
+  resources each one affects.
+owner: security-team
+tags: [kql, configuration, azure, defender, security, config-check]
+check:
+  kind: kql
+  source: resourceGraph
+  query: |
+    // af:probes.defender-high-severity-recommendations
+    securityresources
+    | where type =~ 'microsoft.security/assessments'
+    | extend status = tostring(properties.status.code), severity = tostring(properties.metadata.severity), recommendation = tostring(properties.displayName)
+    | where status =~ 'Unhealthy' and severity =~ 'High'
+    | summarize unhealthyResources = count(), subscriptions = dcount(subscriptionId) by recommendation, assessmentKey = name
+    | order by unhealthyResources desc
+  metric: rowCount
+  detailsLimit: 50
+thresholds: { warn: 1, crit: 10 }
+intervalHint: PT6H
+timeoutMs: 60000
+requires:
+  azureRoles: [Reader]

@@ -1,11 +1,11 @@
 $schema: ../../packages/schemas/generated/probe.schema.json
 kind: probe
 id: probes.dns-mx
-version: 1.0.0
+version: 1.0.1
 title: Mail exchanger (MX) for the primary domain
 summary: Resolves the MX record of AF_PRIMARY_DOMAIN and expects it to point at Exchange Online Protection.
 owner: m365-team
-tags: [synthetic, m365, exchange, dns]
+tags: [synthetic, m365, exchange, dns, sweep-1h]
 check:
   kind: dnsResolve
   name: ${ env.AF_PRIMARY_DOMAIN }

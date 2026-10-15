@@ -163,7 +163,22 @@ export const PlaybookJob = z
     path: ['approvedBy'],
   });
 
-export const ProbeJob = z.strictObject({ kind: z.literal('probe'), ref: DefinitionId });
+/** Probes a `job: probe` sweep selects by tag: every probe carrying **all** of `tags` (drafts and retired probes are skipped). */
+export const ProbeSelector = z.strictObject({ tags: z.array(z.string().min(1)).min(1) });
+export type ProbeSelector = z.infer<typeof ProbeSelector>;
+
+/** One probe (`ref`), a list (`refs`), or a tag sweep (`select: { tags: [...] }`) — exactly one of them. */
+export const ProbeJob = z
+  .strictObject({
+    kind: z.literal('probe'),
+    ref: DefinitionId.optional(),
+    refs: z.array(DefinitionId).min(1).optional(),
+    select: ProbeSelector.optional(),
+    /** Probes run at the same time within one sweep (default 4). */
+    concurrency: z.number().int().min(1).max(16).optional(),
+  })
+  .refine((j) => [j.ref, j.refs, j.select].filter((v) => v !== undefined).length === 1, { message: 'Use exactly one of ref, refs or select', path: ['ref'] });
+export type ProbeJob = z.infer<typeof ProbeJob>;
 
 export const ScriptJob = z.strictObject({ kind: z.literal('script'), ...RunnerSpec, mode: Mode.default('read'), approvedBy: z.array(z.string().min(1)).optional() });
 

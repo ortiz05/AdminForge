@@ -1,13 +1,13 @@
 $schema: ../../packages/schemas/generated/probe.schema.json
 kind: probe
 id: probes.portal-tls-certificate
-version: 1.0.0
+version: 1.0.1
 title: AdminForge TLS certificate
 summary: >-
   Days until the TLS certificate served at the portal's public host (from PUBLIC_BASE_URL) expires. Caddy renews
   automatically; a warning here means renewal is failing.
 owner: portal-admins
-tags: [synthetic, portal, certificates]
+tags: [synthetic, portal, certificates, sweep-6h]
 check:
   kind: certExpiry
   host: ${ $replace(env.PUBLIC_BASE_URL, /^https?:\/\/([^\/:]+).*$/, '$1') }

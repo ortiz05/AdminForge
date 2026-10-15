@@ -1,4 +1,5 @@
 import { existsSync } from 'node:fs';
+import { homedir } from 'node:os';
 import path from 'node:path';
 import { loadEnv } from '@adminforge/config';
 import { PORTAL_ROLES, type PortalRole } from '@adminforge/schemas';
@@ -75,6 +76,11 @@ const Schema = z
     // Consume run jobs inside the API process (single-process installs); otherwise run `ROLE=worker`.
     RUN_WORKER_IN_PROCESS: z.stringbool().default(false),
     RUN_WORKER_CONCURRENCY: z.coerce.number().int().min(1).max(64).default(4),
+    // Scheduler (R6): run it inside the API process (dev / single-process installs); otherwise run apps/scheduler.
+    SCHEDULER_IN_PROCESS: z.stringbool().default(false),
+    SCHEDULER_CONCURRENCY: z.coerce.number().int().min(1).max(32).default(4),
+    /** Scheduled report files: <dir>/<schedule>/<timestamp>.<ext> (default ~/.local/share/adminforge/artifacts). */
+    ADMINFORGE_ARTIFACTS_DIR: z.string().optional(),
   })
   .superRefine((env, ctx) => {
     const need = (key: keyof typeof env, why: string) => {
@@ -117,6 +123,7 @@ const Schema = z
       CONTENT_SOURCE: env.CONTENT_SOURCE ?? (env.NODE_ENV === 'production' ? ('db' as const) : ('fs' as const)),
       CONTENT_DIR: path.resolve(env.CONTENT_DIR ?? path.join(root, 'portal', 'content')),
       CONTENT_WATCH: env.CONTENT_WATCH ?? env.NODE_ENV === 'development',
+      ADMINFORGE_ARTIFACTS_DIR: path.resolve((env.ADMINFORGE_ARTIFACTS_DIR ?? '~/.local/share/adminforge/artifacts').replace(/^~(?=$|[\\/])/, homedir())),
     };
   });
 

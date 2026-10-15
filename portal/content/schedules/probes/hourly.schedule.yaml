@@ -1,0 +1,21 @@
+$schema: ../../../packages/schemas/generated/schedule.schema.json
+kind: schedule
+id: sweep.hourly
+version: 1.0.0
+title: Hourly probe sweep
+summary: >-
+  Every hour at minute 07, runs every active probe tagged sweep-1h (token acquisition for each service, sign-in
+  failure rates, DNS records for the primary domain, the Azure Activity failed-writes check) as the automation
+  identity. Tag a probe sweep-1h to add it.
+owner: portal-admins
+tags: [synthetic, probe-sweep]
+cron: "7 * * * *"
+timezone: UTC
+enabled: true
+identity: automation
+job:
+  kind: probe
+  select: { tags: [sweep-1h] }
+  concurrency: 4
+timeoutSeconds: 600
+overlap: skip

@@ -1,0 +1,19 @@
+# AdminForge API / BFF (serves the built web app too). User unit — see portal/deploy/README.md.
+[Unit]
+Description=AdminForge API
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/AdminForge/portal/apps/api
+ExecStart=/usr/bin/env node dist/main.js
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+TimeoutStopSec=30
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+UMask=0027
+
+[Install]
+WantedBy=default.target

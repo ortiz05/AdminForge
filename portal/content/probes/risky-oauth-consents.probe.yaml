@@ -1,0 +1,35 @@
+$schema: ../../packages/schemas/generated/probe.schema.json
+kind: probe
+id: probes.risky-oauth-consents
+version: 1.0.0
+title: Risky OAuth app consents (last day)
+summary: >-
+  Consents and permission grants in the last 24 hours that include high-impact permissions (mail, files, sites,
+  directory write, full mailbox access, offline access), from Microsoft Defender XDR advanced hunting
+  (CloudAppEvents). Needs Defender for Cloud Apps data and the ThreatHunting.Read.All application permission; without
+  them the probe reports the licence it needs.
+owner: security-team
+tags: [kql, configuration, identity, apps, consent, security, defender, config-check]
+check:
+  kind: kql
+  source: advancedHunting
+  timespan: P1D
+  query: |
+    // af:probes.risky-oauth-consents
+    CloudAppEvents
+    | where Timestamp > ago(1d)
+    | where ActionType in~ ('Consent to application.', 'Add delegated permission grant.', 'Add app role assignment to service principal.')
+    | extend riskyScopes = extract_all(@'(Mail\.ReadWrite|Mail\.Read|Mail\.Send|MailboxSettings\.ReadWrite|Files\.ReadWrite\.All|Sites\.ReadWrite\.All|Sites\.FullControl\.All|Directory\.ReadWrite\.All|User\.ReadWrite\.All|RoleManagement\.ReadWrite\.Directory|full_access_as_app|offline_access)', tostring(RawEventData))
+    | where array_length(riskyScopes) > 0
+    | mv-expand scope = riskyScopes to typeof(string)
+    | summarize events = dcount(ReportId), scopes = make_set(scope, 20), users = dcount(AccountObjectId), lastSeen = max(Timestamp) by application = ObjectName, ActionType
+    | order by events desc
+  metric: rowCount
+  detailsLimit: 50
+thresholds: { warn: 1, crit: 5 }
+intervalHint: PT6H
+timeoutMs: 60000
+requires:
+  scopes:
+    graph: [ThreatHunting.Read.All]
+  licences: [defender]

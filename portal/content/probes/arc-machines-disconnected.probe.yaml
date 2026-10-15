@@ -1,0 +1,29 @@
+$schema: ../../packages/schemas/generated/probe.schema.json
+kind: probe
+id: probes.arc-machines-disconnected
+version: 1.0.0
+title: Disconnected or expired Azure Arc machines
+summary: >-
+  Azure Arc-enabled servers whose agent is Disconnected, Expired (offline for more than 45 days, needs re-onboarding)
+  or in Error, so policy, Defender, update and ESU coverage has lapsed. The Disconnected Arc machines report lists the
+  same machines with more detail.
+owner: azure-team
+tags: [kql, configuration, azure, arc, config-check]
+check:
+  kind: kql
+  source: resourceGraph
+  query: |
+    // af:probes.arc-machines-disconnected
+    resources
+    | where type =~ 'microsoft.hybridcompute/machines'
+    | extend status = tostring(properties.status), lastStatusChange = todatetime(properties.lastStatusChange)
+    | where status in~ ('Disconnected', 'Expired', 'Error')
+    | project id, name, resourceGroup, subscriptionId, location, status, lastStatusChange, osType = tostring(properties.osType), agentVersion = tostring(properties.agentVersion)
+    | order by lastStatusChange asc
+  metric: rowCount
+  detailsLimit: 100
+thresholds: { warn: 1, crit: 10 }
+intervalHint: PT6H
+timeoutMs: 60000
+requires:
+  azureRoles: [Reader]

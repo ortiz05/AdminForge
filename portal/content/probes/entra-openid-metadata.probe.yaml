@@ -1,13 +1,13 @@
 $schema: ../../packages/schemas/generated/probe.schema.json
 kind: probe
 id: probes.entra-openid-metadata
-version: 1.0.0
+version: 1.0.1
 title: Entra ID sign-in endpoint
 summary: >-
   Fetches the tenant's public OpenID Connect metadata from login.microsoftonline.com. A failure means engineers
   cannot sign in to AdminForge (or the tenant id in configuration is wrong).
 owner: portal-admins
-tags: [synthetic, identity, http]
+tags: [synthetic, identity, http, sweep-15m]
 check:
   kind: http
   url: ${ 'https://login.microsoftonline.com/' & $encode(env.AF_TENANT_ID) & '/v2.0/.well-known/openid-configuration' }

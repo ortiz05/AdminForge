@@ -35,7 +35,7 @@ describe('GET /api/definitions', () => {
     const t = await fixturesApp(env);
     const { cookie, csrf } = await mockLogin(t.app);
     const list = DefinitionListResponse.parse((await t.app.inject({ method: 'GET', url: '/api/definitions?kind=page', headers: { cookie } })).json());
-    expect(list.items.map((i) => i.key)).toEqual(['deps.backwards', 'identity.break-glass', 'deps.chain', 'security.risky-users', 'identity.user', 'identity.users']);
+    expect(list.items.map((i) => i.key)).toEqual(['deps.backwards', 'identity.break-glass', 'deps.chain', 'deps.inventory', 'security.risky-users', 'identity.user', 'identity.users']);
     expect(list.items.find((i) => i.key === 'security.risky-users')).toMatchObject({ href: '/p/security.risky-users', badge: 'Requires AAD_PREMIUM_P2' });
     const all = DefinitionListResponse.parse((await t.app.inject({ method: 'GET', url: '/api/definitions', headers: { cookie } })).json());
     expect(all.items.find((i) => i.kind === 'playbook')).toMatchObject({ key: 'identity.check-user', href: '/playbooks/identity.check-user', mode: 'read', risk: 'low' });

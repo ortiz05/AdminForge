@@ -1,0 +1,27 @@
+$schema: ../../packages/schemas/generated/probe.schema.json
+kind: probe
+id: probes.policy-non-compliance
+version: 1.0.0
+title: Azure Policy non-compliant resources
+summary: >-
+  Resources in a NonCompliant state, per policy assignment and definition (latest policy states from Resource Graph).
+  The metric is the number of non-compliant policy/resource pairs; details list the assignments with the most.
+owner: azure-team
+tags: [kql, configuration, azure, policy, governance, config-check]
+check:
+  kind: kql
+  source: resourceGraph
+  query: |
+    // af:probes.policy-non-compliance
+    policyresources
+    | where type =~ 'microsoft.policyinsights/policystates'
+    | where tostring(properties.complianceState) =~ 'NonCompliant'
+    | summarize nonCompliantResources = dcount(tostring(properties.resourceId)) by policyAssignmentName = tostring(properties.policyAssignmentName), policyDefinitionName = tostring(properties.policyDefinitionName), policyDefinitionAction = tostring(properties.policyDefinitionAction), subscriptionId
+    | order by nonCompliantResources desc
+  metric: { column: nonCompliantResources, aggregate: sum }
+  detailsLimit: 50
+thresholds: { warn: 1, crit: 250 }
+intervalHint: PT6H
+timeoutMs: 60000
+requires:
+  azureRoles: [Reader]

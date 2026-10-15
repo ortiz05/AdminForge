@@ -1,11 +1,11 @@
 $schema: ../../packages/schemas/generated/probe.schema.json
 kind: probe
 id: probes.portal-readiness
-version: 1.0.0
+version: 1.0.1
 title: AdminForge readiness
 summary: Calls the portal's own /readyz endpoint (API up and database reachable) at the configured public URL and measures latency.
 owner: portal-admins
-tags: [synthetic, portal, http]
+tags: [synthetic, portal, http, sweep-15m]
 check:
   kind: http
   url: ${ env.PUBLIC_BASE_URL & '/readyz' }

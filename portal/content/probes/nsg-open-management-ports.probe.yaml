@@ -1,0 +1,37 @@
+$schema: ../../packages/schemas/generated/probe.schema.json
+kind: probe
+id: probes.nsg-open-management-ports
+version: 1.0.0
+title: NSG rules open to the internet on management ports
+summary: >-
+  Inbound Allow rules in network security groups whose source is any address (*, 0.0.0.0/0, Internet) and whose
+  destination ports include SSH (22), RDP (3389) or WinRM (5985-5986), or any port. Use Azure Bastion or just-in-time
+  VM access instead. One open rule is critical.
+owner: azure-team
+tags: [kql, configuration, azure, network, security, config-check]
+check:
+  kind: kql
+  source: resourceGraph
+  query: |
+    // af:probes.nsg-open-management-ports
+    resources
+    | where type =~ 'microsoft.network/networksecuritygroups'
+    | mv-expand rule = properties.securityRules
+    | extend access = tostring(rule.properties.access), direction = tostring(rule.properties.direction)
+    | where access =~ 'Allow' and direction =~ 'Inbound'
+    | extend sources = iff(array_length(rule.properties.sourceAddressPrefixes) > 0, rule.properties.sourceAddressPrefixes, pack_array(rule.properties.sourceAddressPrefix))
+    | extend ports = iff(array_length(rule.properties.destinationPortRanges) > 0, rule.properties.destinationPortRanges, pack_array(rule.properties.destinationPortRange))
+    | mv-expand source = sources to typeof(string)
+    | where source in~ ('*', '0.0.0.0/0', 'Internet', 'Any', '::/0')
+    | mv-expand port = ports to typeof(string)
+    | extend lo = toint(split(port, '-')[0]), hi = toint(split(port, '-')[-1])
+    | where port == '*' or (lo <= 22 and hi >= 22) or (lo <= 3389 and hi >= 3389) or (lo <= 5986 and hi >= 5985)
+    | summarize ports = make_set(port), sources = make_set(source) by id, name, resourceGroup, subscriptionId, location, ruleName = tostring(rule.name), priority = toint(rule.properties.priority)
+    | order by name asc, priority asc
+  metric: rowCount
+  detailsLimit: 100
+thresholds: { warn: 1, crit: 1 }
+intervalHint: PT6H
+timeoutMs: 60000
+requires:
+  azureRoles: [Reader]

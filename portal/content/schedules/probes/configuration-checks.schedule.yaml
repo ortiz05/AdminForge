@@ -1,0 +1,25 @@
+$schema: ../../../packages/schemas/generated/schedule.schema.json
+kind: schedule
+id: sweep.configuration-checks
+version: 1.0.0
+title: KQL configuration checks
+summary: >-
+  Every 6 hours (00:40, 06:40, 12:40, 18:40 UTC), runs every active probe tagged config-check: the KQL configuration
+  checks over Azure Resource Graph and advanced hunting (public blob access, storage transport, open management
+  ports, Key Vault purge protection, Arc connectivity, policy compliance, Defender recommendations, required tags,
+  risky OAuth consents). Offending resources are kept on each result.
+owner: portal-admins
+tags: [synthetic, probe-sweep, kql, configuration]
+cron: "40 */6 * * *"
+timezone: UTC
+enabled: true
+identity: automation
+job:
+  kind: probe
+  select: { tags: [config-check] }
+  concurrency: 3
+timeoutSeconds: 1200
+overlap: skip
+requires:
+  # Resource Graph sees what the automation identity can read: Reader on the subscriptions (or management groups) to check.
+  azureRoles: [Reader]

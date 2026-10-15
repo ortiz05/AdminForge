@@ -138,7 +138,15 @@ export function validateReferences(entries: readonly DefinitionEntry[]): Content
         const pb = find(job.ref, ['playbook'], ['job', 'ref']);
         checkInputs(pb, job.inputs, ['job', 'inputs']);
         if (pb?.kind === 'playbook' && pb.mode !== job.mode) err(['job', 'mode'], `Playbook "${job.ref}" is mode: ${pb.mode}; the job must say mode: ${pb.mode}.`);
-      } else if (job.kind === 'probe') find(job.ref, ['probe'], ['job', 'ref']);
+      } else if (job.kind === 'probe') {
+        if (job.ref) find(job.ref, ['probe'], ['job', 'ref']);
+        job.refs?.forEach((ref, i) => find(ref, ['probe'], ['job', 'refs', i]));
+        if (job.select) {
+          const tags = job.select.tags;
+          const hit = entries.some((e) => e.def.kind === 'probe' && tags.every((t) => e.def.tags?.includes(t)));
+          if (!hit) err(['job', 'select', 'tags'], `No probe has all of the tags ${tags.join(', ')}.`);
+        }
+      }
     }
 
     if (def.kind === 'probe') {

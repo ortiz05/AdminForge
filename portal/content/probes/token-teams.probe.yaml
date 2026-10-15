@@ -1,13 +1,13 @@
 $schema: ../../packages/schemas/generated/probe.schema.json
 kind: probe
 id: probes.token-teams
-version: 1.0.0
+version: 1.0.1
 title: Token acquisition — Skype and Teams Tenant Admin API
 summary: >-
   Acquires an app-only token for Skype and Teams Tenant Admin API as the automation identity (certificate or secret from local configuration).
   Scheduled Teams runner scripts depend on it.
 owner: portal-admins
-tags: [synthetic, identity, tokens]
+tags: [synthetic, identity, tokens, sweep-1h]
 check:
   kind: tokenAcquisition
   service: teams

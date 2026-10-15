@@ -1,0 +1,28 @@
+$schema: ../../packages/schemas/generated/probe.schema.json
+kind: probe
+id: probes.storage-insecure-transport
+version: 1.0.0
+title: Storage accounts without HTTPS-only or TLS 1.2
+summary: >-
+  Storage accounts that accept plain HTTP (supportsHttpsTrafficOnly off) or TLS older than 1.2 (minimumTlsVersion
+  TLS1_0 / TLS1_1, or unset on older accounts, which means TLS 1.0).
+owner: azure-team
+tags: [kql, configuration, azure, storage, security, config-check]
+check:
+  kind: kql
+  source: resourceGraph
+  query: |
+    // af:probes.storage-insecure-transport
+    resources
+    | where type =~ 'microsoft.storage/storageaccounts'
+    | extend httpsOnly = tobool(properties.supportsHttpsTrafficOnly), minimumTlsVersion = tostring(properties.minimumTlsVersion)
+    | where httpsOnly == false or isempty(minimumTlsVersion) or minimumTlsVersion in~ ('TLS1_0', 'TLS1_1')
+    | project id, name, resourceGroup, subscriptionId, location, httpsOnly, minimumTlsVersion
+    | order by name asc
+  metric: rowCount
+  detailsLimit: 50
+thresholds: { warn: 1, crit: 10 }
+intervalHint: PT6H
+timeoutMs: 60000
+requires:
+  azureRoles: [Reader]

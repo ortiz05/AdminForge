@@ -1,0 +1,20 @@
+# AdminForge PowerShell runner (loopback only; needs pwsh and the pinned modules). User unit — see
+# portal/deploy/README.md.
+[Unit]
+Description=AdminForge PowerShell runner
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/AdminForge/portal/apps/runner
+ExecStart=/usr/bin/env node dist/main.js
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+TimeoutStopSec=30
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+UMask=0027
+
+[Install]
+WantedBy=default.target

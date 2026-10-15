@@ -1,0 +1,39 @@
+$schema: ../../packages/schemas/generated/probe.schema.json
+kind: probe
+id: probes.activity-failed-writes-spike
+version: 1.0.0
+title: Failed Azure write operations (last hour)
+summary: >-
+  Failed Azure Resource Manager write and delete operations in the last hour from the AzureActivity table of the
+  default Log Analytics workspace (AF_LOG_ANALYTICS_WORKSPACE_ID; route the Activity Log there with a diagnostic
+  setting). Details compare each resource provider with its hourly average over the previous 7 days, so a spike from
+  a broken pipeline, an expired credential or someone probing permissions stands out.
+owner: azure-team
+tags: [kql, azure, monitoring, security, log-analytics, sweep-1h]
+check:
+  kind: kql
+  source: logAnalytics
+  timespan: P7D
+  query: |
+    // af:probes.activity-failed-writes-spike
+    let window = 1h;
+    let failed = AzureActivity
+      | where CategoryValue =~ 'Administrative' and ActivityStatusValue =~ 'Failure'
+      | where OperationNameValue endswith '/write' or OperationNameValue endswith '/delete';
+    let baseline = failed
+      | where TimeGenerated between (ago(7d) .. ago(window))
+      | summarize baselinePerHour = round(count() / (7.0 * 24.0 - 1.0), 2) by ResourceProviderValue;
+    failed
+    | where TimeGenerated > ago(window)
+    | summarize failures = count(), callers = dcount(Caller), operations = make_set(OperationNameValue, 10) by ResourceProviderValue
+    | join kind=leftouter baseline on ResourceProviderValue
+    | project ResourceProviderValue, failures, baselinePerHour = coalesce(baselinePerHour, 0.0), callers, operations
+    | order by failures desc
+  metric: { column: failures, aggregate: sum }
+  detailsLimit: 25
+thresholds: { warn: 20, crit: 100 }
+intervalHint: PT1H
+timeoutMs: 60000
+requires:
+  # The automation identity reads the workspace through Azure RBAC (provisioning grants Log Analytics Reader on it).
+  azureRoles: [Log Analytics Reader]

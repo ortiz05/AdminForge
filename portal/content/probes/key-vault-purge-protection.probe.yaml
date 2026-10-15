@@ -1,0 +1,28 @@
+$schema: ../../packages/schemas/generated/probe.schema.json
+kind: probe
+id: probes.key-vault-purge-protection
+version: 1.0.0
+title: Key Vaults without purge protection
+summary: >-
+  Key Vaults where purge protection is off, so a deleted vault, key, secret or certificate can be purged before the
+  retention period ends (a ransomware and insider-risk path). Purge protection cannot be turned off once enabled.
+owner: azure-team
+tags: [kql, configuration, azure, key-vault, security, config-check]
+check:
+  kind: kql
+  source: resourceGraph
+  query: |
+    // af:probes.key-vault-purge-protection
+    resources
+    | where type =~ 'microsoft.keyvault/vaults'
+    | extend purgeProtection = tobool(properties.enablePurgeProtection), softDelete = tobool(properties.enableSoftDelete)
+    | where isnull(purgeProtection) or purgeProtection == false
+    | project id, name, resourceGroup, subscriptionId, location, softDelete, purgeProtection
+    | order by name asc
+  metric: rowCount
+  detailsLimit: 50
+thresholds: { warn: 1, crit: 10 }
+intervalHint: PT6H
+timeoutMs: 60000
+requires:
+  azureRoles: [Reader]

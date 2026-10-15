@@ -1,13 +1,13 @@
 $schema: ../../packages/schemas/generated/probe.schema.json
 kind: probe
 id: probes.token-graph
-version: 1.0.0
+version: 1.0.1
 title: Token acquisition — Microsoft Graph
 summary: >-
   Acquires an app-only token for Microsoft Graph as the automation identity (certificate or secret from local configuration).
   Every Graph-backed schedule and probe depends on it.
 owner: portal-admins
-tags: [synthetic, identity, tokens]
+tags: [synthetic, identity, tokens, sweep-1h]
 check:
   kind: tokenAcquisition
   service: graph

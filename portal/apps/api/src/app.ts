@@ -18,8 +18,12 @@ import { meRoutes } from './routes/me';
 import { navRoutes } from './routes/nav';
 import { overviewRoutes } from './routes/overview';
 import { approvalRoutes } from './routes/approvals';
+import { probeRoutes } from './routes/probes';
+import { queryRoutes } from './routes/query';
 import { runRoutes } from './routes/runs';
+import { scheduleRoutes } from './routes/schedules';
 import { createRunsModule } from './runs/module';
+import { createSchedulesModule, type SchedulesOptions } from './schedules/module';
 import { assertCsrf, isSafeMethod } from './security/csrf';
 
 declare module 'fastify' {
@@ -71,7 +75,7 @@ function loggerOptions(config: Config): FastifyServerOptions['logger'] {
 }
 
 /** Builds the BFF. `deps` replaces stores/clients (tests use in-memory stores and a fake AuthClient). */
-export async function buildApp(config: Config, deps: AppDeps = {}): Promise<FastifyInstance> {
+export async function buildApp(config: Config, deps: AppDeps & { schedules?: SchedulesOptions } = {}): Promise<FastifyInstance> {
   const app = Fastify({
     logger: loggerOptions(config),
     trustProxy: config.TRUST_PROXY,
@@ -92,6 +96,11 @@ export async function buildApp(config: Config, deps: AppDeps = {}): Promise<Fast
   app.decorate('runs', runs);
   app.addHook('onReady', () => runs.start());
   app.addHook('preClose', () => runs.stop());
+  // Schedules & probes (R6): store, events, API service; the scheduler itself runs here with SCHEDULER_IN_PROCESS=true.
+  const schedules = createSchedulesModule(ctx, runs, { ...deps.schedules, log: app.log });
+  app.decorate('schedules', schedules);
+  app.addHook('onReady', () => schedules.start());
+  app.addHook('preClose', () => schedules.stop());
 
   registerErrorHandler(app);
 
@@ -166,7 +175,11 @@ export async function buildApp(config: Config, deps: AppDeps = {}): Promise<Fast
       contentRoutes(api, ctx);
       // Runs & approvals (playbook engine).
       runRoutes(api, ctx, runs);
-      approvalRoutes(api, ctx, runs);
+      approvalRoutes(api, ctx, runs, schedules);
+      // Schedules, probes, report artifacts and Query Studio (R6, R12).
+      scheduleRoutes(api, ctx, schedules);
+      probeRoutes(api, ctx, schedules);
+      queryRoutes(api, ctx);
     },
     { prefix: '/api' },
   );

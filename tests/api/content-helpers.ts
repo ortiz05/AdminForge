@@ -46,6 +46,15 @@ params:
   userType: { type: enum, values: [All, Member, Guest], default: All, facet: true }
   department: { type: string, facet: true }
 savedViews: { enabled: true, shared: true }
+filters:
+  advanced:
+    dialect: odata
+    fields:
+      - { field: department, label: Department, type: string, operators: [eq, ne, startsWith, in, isEmpty] }
+      - { field: created, label: Created, type: date, property: createdDateTime, operators: [ge, le] }
+      - { field: accountEnabled, label: Enabled, type: boolean }
+      - { field: manager, label: Manager id, type: guid, property: manager/id }
+      - { field: userType, label: Type, type: enum, values: [Member, Guest] }
 datasources:
   users:
     source: graph
@@ -59,7 +68,8 @@ datasources:
         $filter: >-
           \${ $join([
                params.userType != 'All' ? "userType eq " & $odata(params.userType),
-               params.department ? "department eq " & $odata(params.department)
+               params.department ? "department eq " & $odata(params.department),
+               advanced
              ][$], ' and ') }
         $search: >-
           \${ params.q ? '"displayName:' & $odataSearch(params.q) & '"' }
@@ -248,6 +258,31 @@ layout:
   - { widget: kpi, data: independent }
 `;
 
+const INVENTORY = `kind: page
+id: deps.inventory
+version: 1.0.0
+title: Inventory
+owner: t
+template: list-detail
+filters:
+  advanced:
+    dialect: kql
+    fields:
+      - { field: name, label: Name, type: string, operators: [eq, ne, contains, startsWith, in, isEmpty] }
+      - { field: tagCount, label: Tags, type: number, operators: [eq, gt, le] }
+      - { field: state, label: State, type: string, property: properties.provisioningState, operators: [eq] }
+      - { field: subscriptionId, label: Subscription, type: guid }
+datasources:
+  inv:
+    source: resourceGraph
+    query: |-
+      Resources
+      \${ advanced ? '| where ' & advanced }
+      | project id, name
+layout:
+  - { widget: kpi, data: inv }
+`;
+
 const BACKWARDS = `kind: page
 id: deps.backwards
 version: 1.0.0
@@ -354,6 +389,7 @@ export function setupContent(): ContentEnv {
   content('playbooks/identity/check-user.playbook.yaml', PLAYBOOK);
   content('pages/deps/chain.page.yaml', CHAIN);
   content('pages/deps/backwards.page.yaml', BACKWARDS);
+  content('pages/deps/inventory.page.yaml', INVENTORY);
   const fx = write(fixturesDir);
   for (const [rel, body] of Object.entries(FIXTURES)) fx(rel, typeof body === 'number' ? String(body) : JSON.stringify(body));
   return {

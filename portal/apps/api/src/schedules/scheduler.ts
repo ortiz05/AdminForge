@@ -79,6 +79,8 @@ const PERMANENT = new Set([
   'writes_paused',
   'protected_object',
   'creator_access_removed',
+  // The files were written and delivered (marked incomplete); retrying would send the report again.
+  'report_incomplete',
 ]);
 
 class RunAborted extends Error {

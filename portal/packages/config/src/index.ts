@@ -24,6 +24,7 @@ export const ADMIN_ENV_KEYS = [
   'AF_TEST_USER_UPN',
   'AF_TEST_USER_PASSWORD',
   'AF_TEST_USER_TOTP_SECRET',
+  'AF_TEST_SERVICE_ADMIN_ROLES',
 ] as const;
 
 const isAdminKey = (key: string) => (ADMIN_ENV_KEYS as readonly string[]).includes(key);

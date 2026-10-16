@@ -122,7 +122,16 @@ export function createContentServices(
           })
         : undefined;
   const datasources =
-    deps.datasources ?? new DatasourceRunner({ definitions, outbound, runner, licences, env, now: base.now });
+    deps.datasources ??
+    new DatasourceRunner({
+      definitions,
+      outbound,
+      runner,
+      licences,
+      env,
+      now: base.now,
+      ...(log ? { log } : {}),
+    });
   const events = deps.events ?? new EventBus();
   if (!deps.events)
     events.wire({ definitions, databaseUrl: config.DATABASE_URL, database: base.database, log });

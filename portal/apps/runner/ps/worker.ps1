@@ -46,7 +46,9 @@ function Exit-Worker([string]$Status) {
 }
 
 function Send-WorkerError([string]$Message, [string]$Category) {
-    Send-WorkerLine @{ type = 'error'; message = $Message; category = $Category }
+    # Service errors can embed raw JSON or exception type names; the person in front of the browser gets the text.
+    $text = try { Format-AdminForgeMessage $Message } catch { $Message }
+    Send-WorkerLine @{ type = 'error'; message = $text; category = $Category }
 }
 
 try {
@@ -103,8 +105,11 @@ $line = $stdin.ReadLine()
 if ([string]::IsNullOrWhiteSpace($line)) { exit 0 }
 
 $job = $null
+# Inputs are data: an ISO 8601 string stays a string (ConvertFrom-Json would turn it into a DateTime otherwise, and
+# Get-AdminForgeInput -Type String would refuse it). -DateKind exists from PowerShell 7.5.
+$dateKind = if ((Get-Command ConvertFrom-Json).Parameters.ContainsKey('DateKind')) { @{ DateKind = 'String' } } else { @{} }
 try {
-    $job = ConvertFrom-Json -InputObject $line -AsHashtable -Depth 64
+    $job = ConvertFrom-Json -InputObject $line -AsHashtable -Depth 64 @dateKind
 } catch {
     $job = $null
 }

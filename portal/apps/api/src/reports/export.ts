@@ -8,7 +8,13 @@ import type {
   WidgetBlock,
 } from '@adminforge/schemas';
 import ExcelJS from 'exceljs';
-import type { DatasourceRunner, LoadedPage, RunInput } from '../datasources/executor';
+import {
+  dependencyErrors,
+  type DatasourceRunner,
+  type ErrorInfo,
+  type LoadedPage,
+  type RunInput,
+} from '../datasources/executor';
 import { AppError } from '../errors';
 
 export type ExportFormat = 'csv' | 'xlsx';
@@ -132,12 +138,31 @@ const getPath = (value: unknown, path: readonly string[]): unknown =>
 const asRows = (v: unknown): Record<string, unknown>[] =>
   Array.isArray(v) ? v.filter((r): r is Record<string, unknown> => !!r && typeof r === 'object') : [];
 
+/** One page of an export. */
+export interface ExportPage {
+  rows: Record<string, unknown>[];
+  truncated: boolean;
+  /**
+   * `optional` datasources the exported one depends on that failed (`ds.<name>` → error): the rows were built without
+   * them, so the file is incomplete. Callers record it (audit, schedule run) — it is never silently dropped.
+   */
+  incomplete?: Record<string, ErrorInfo>;
+}
+
+const withIncomplete = (
+  page: Omit<ExportPage, 'incomplete'>,
+  out: { errors?: Record<string, ErrorInfo> },
+) => {
+  const incomplete = dependencyErrors(out);
+  return Object.keys(incomplete).length ? { ...page, incomplete } : page;
+};
+
 /** Pages of rows: cursor paging for streamable datasources, otherwise one collected (and transformed) result. */
 export async function* exportPages(
   runner: DatasourceRunner,
   base: Omit<RunInput, 'datasource' | 'paging' | 'maxItems' | 'noCache'>,
   plan: ExportPlan,
-): AsyncGenerator<{ rows: Record<string, unknown>[]; truncated: boolean }> {
+): AsyncGenerator<ExportPage> {
   if (plan.streamable) {
     let cursor: string | undefined;
     let total = 0;
@@ -152,7 +177,10 @@ export async function* exportPages(
       const take = rows.slice(0, plan.maxRows - total);
       total += take.length;
       cursor = out.cursor;
-      yield { rows: take, truncated: total >= plan.maxRows && (!!cursor || rows.length > take.length) };
+      yield withIncomplete(
+        { rows: take, truncated: total >= plan.maxRows && (!!cursor || rows.length > take.length) },
+        out,
+      );
     } while (cursor && total < plan.maxRows);
     return;
   }
@@ -164,7 +192,24 @@ export async function* exportPages(
     noCache: true,
   });
   const rows = asRows(getPath(out.data, plan.path));
-  yield { rows: rows.slice(0, plan.maxRows), truncated: rows.length > plan.maxRows };
+  yield withIncomplete({ rows: rows.slice(0, plan.maxRows), truncated: rows.length > plan.maxRows }, out);
+}
+
+/** Collects the `incomplete` entries of export pages as they stream past (first failure per datasource kept). */
+export function trackIncomplete(pages: AsyncIterable<ExportPage>): {
+  pages: AsyncGenerator<ExportPage>;
+  incomplete: Record<string, ErrorInfo>;
+} {
+  const incomplete: Record<string, ErrorInfo> = {};
+  return {
+    incomplete,
+    pages: (async function* () {
+      for await (const page of pages) {
+        for (const [k, v] of Object.entries(page.incomplete ?? {})) incomplete[k] ??= v;
+        yield page;
+      }
+    })(),
+  };
 }
 
 /** A cell's export value: status labels, joined lists, JSON for objects, Date for date columns (xlsx). */
@@ -210,7 +255,7 @@ export interface ExportStats {
 export function exportStream(
   format: ExportFormat,
   columns: TableColumn[],
-  pages: AsyncGenerator<{ rows: Record<string, unknown>[]; truncated: boolean }>,
+  pages: AsyncIterable<ExportPage>,
   done: (err: unknown, stats: ExportStats) => void,
 ): Readable {
   const stats: ExportStats = { rows: 0, truncated: false };

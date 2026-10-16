@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { RESOURCES } from '@adminforge/cli/src/provision/catalog';
+import { DIRECTORY_ROLES, RESOURCES } from '@adminforge/cli/src/provision/catalog';
 
 /**
  * In-memory stand-in for the slice of Entra ID token endpoint, Microsoft Graph, and ARM that
@@ -20,7 +20,20 @@ export interface FakeCloudOptions {
   upsertSupported?: boolean;
   /** Number of times a just-created application is "not visible" to the next SP upsert (replication). */
   spReplicationMisses?: number;
+  /** When false, the authentication methods policy answers 403 to the provisioner. Default true. */
+  authMethodsPolicyReadable?: boolean;
+  /** When false, a user's transitive directory roles answer 403. Default true. */
+  directoryRolesReadable?: boolean;
+  /** Service plans of the tenant's one active subscription (`/subscribedSkus`). Default: none (unlicensed). */
+  servicePlans?: string[];
 }
+
+/** Built-in directory role names by template id (Microsoft's well-known ids, the same in every tenant). */
+export const FAKE_ROLE_NAMES: Record<string, string> = {
+  ...Object.fromEntries(Object.entries(DIRECTORY_ROLES).map(([name, id]) => [id, name])),
+  '62e90394-69f5-4237-9190-012177145e10': 'Global Administrator',
+  'e8611ab8-c189-46e8-94e1-60213ab1f814': 'Privileged Role Administrator',
+};
 
 const json = (status: number, body?: unknown, headers: Record<string, string> = {}) =>
   new Response(body === undefined ? null : JSON.stringify(body), {
@@ -111,6 +124,21 @@ export function createFakeCloud(opts: FakeCloudOptions) {
   const secrets = new Map<string, string>(); // clientId → secret (live credentials only)
   const calls: string[] = [];
   let spMisses = opts.spReplicationMisses ?? 0;
+  /** Entra's authentication methods policy: the registration campaign as a new tenant has it (Microsoft-managed). */
+  const authMethodsPolicy = {
+    id: 'authenticationMethodsPolicy',
+    displayName: 'Authentication Methods Policy',
+    registrationEnforcement: {
+      authenticationMethodsRegistrationCampaign: {
+        snoozeDurationInDays: 1,
+        state: 'default',
+        excludeTargets: [] as Json[],
+        includeTargets: [
+          { id: 'all_users', targetType: 'group', targetedAuthenticationMethod: 'microsoftAuthenticator' },
+        ] as Json[],
+      } as Json,
+    },
+  };
 
   const resourceSp = (key: keyof typeof RESOURCES, scopes: string[], roles: string[]) =>
     sps.push({
@@ -207,6 +235,33 @@ export function createFakeCloud(opts: FakeCloudOptions) {
     if (method === 'GET' && path === '/oauth2PermissionGrants') return list(grants, url);
     if (method === 'GET' && path === '/roleManagement/directory/roleAssignments')
       return list(roleAssignments, url);
+    if (path === '/policies/authenticationMethodsPolicy' && (method === 'GET' || method === 'PATCH')) {
+      if (opts.authMethodsPolicyReadable === false)
+        return graphError(403, 'accessDenied', 'Request Authorization failed');
+      if (method === 'GET')
+        return json(200, {
+          '@odata.context': 'https://graph.microsoft.com/v1.0/$metadata#authenticationMethodsPolicy',
+          ...structuredClone(authMethodsPolicy),
+        });
+      // Like Graph: a complex property in a PATCH replaces the stored one as a whole.
+      const enforcement = body?.registrationEnforcement as Json | undefined;
+      if (enforcement?.authenticationMethodsRegistrationCampaign)
+        authMethodsPolicy.registrationEnforcement.authenticationMethodsRegistrationCampaign = structuredClone(
+          enforcement.authenticationMethodsRegistrationCampaign as Json,
+        );
+      return json(204);
+    }
+    if (method === 'GET' && path === '/subscribedSkus')
+      return json(200, {
+        value: opts.servicePlans?.length
+          ? [
+              {
+                capabilityStatus: 'Enabled',
+                servicePlans: opts.servicePlans.map((servicePlanName) => ({ servicePlanName })),
+              },
+            ]
+          : [],
+      });
     if (method === 'GET' && path === '/policies/identitySecurityDefaultsEnforcementPolicy')
       return callerOf(init).appid === opts.provisioner.clientId
         ? graphError(403, 'AccessDenied', 'Insufficient privileges')
@@ -373,6 +428,40 @@ export function createFakeCloud(opts: FakeCloudOptions) {
       users.push(created);
       return json(201, created);
     }
+    if (
+      (m = /^\/users\/([^/]+)\/transitiveMemberOf\/microsoft\.graph\.directoryRole$/.exec(path)) &&
+      method === 'GET'
+    ) {
+      if (opts.directoryRolesReadable === false)
+        return graphError(
+          403,
+          'Authorization_RequestDenied',
+          'Insufficient privileges to complete the operation.',
+        );
+      const principals = new Set([
+        m[1]!,
+        ...members.filter((x) => x.memberId === m![1]).map((x) => x.groupId),
+      ]);
+      const ids = [
+        ...new Set(
+          roleAssignments
+            .filter((r) => principals.has(String(r.principalId)) && r.directoryScopeId === '/')
+            .map((r) => String(r.roleDefinitionId)),
+        ),
+      ];
+      return json(200, {
+        value: ids.map((id) => ({
+          '@odata.type': '#microsoft.graph.directoryRole',
+          id: `directory-role-${id}`,
+          roleTemplateId: id,
+          displayName: FAKE_ROLE_NAMES[id] ?? 'Custom role',
+        })),
+      });
+    }
+    if ((m = /^\/roleManagement\/directory\/roleDefinitions\/([^/]+)$/.exec(path)) && method === 'GET')
+      return FAKE_ROLE_NAMES[m[1]!]
+        ? json(200, { id: m[1], displayName: FAKE_ROLE_NAMES[m[1]!] })
+        : graphError(404, 'Request_ResourceNotFound', 'no such role definition');
     if ((m = /^\/users\/([^/]+)\/memberOf$/.exec(path)) && method === 'GET')
       return json(200, {
         value: members.filter((x) => x.memberId === m![1]).map((x) => ({ id: x.groupId })),
@@ -446,5 +535,6 @@ export function createFakeCloud(opts: FakeCloudOptions) {
     revoked,
     calls,
     secrets,
+    authMethodsPolicy,
   };
 }

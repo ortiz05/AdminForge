@@ -237,16 +237,23 @@ export const capabilitiesQuery = queryOptions({
   retry: false,
 });
 
-/** Feature key for a `requires.licences` entry: a feature key (`intune`) or a service plan / SKU (`INTUNE_A`). */
+/**
+ * Feature key for a `requires.licences` entry: a feature key (`intune`) or a service plan / SKU (`INTUNE_A`).
+ * A service plan in several features resolves to the most specific one (fewest plans): `WINDEFATP` is the Defender for
+ * Endpoint feature, not the broader Defender one that Office 365 E5 also satisfies.
+ */
 export function featureKeyFor(licence: string, caps: Capabilities | undefined): string | undefined {
   if (!caps) return undefined;
   if (caps.features[licence]) return licence;
   const lower = licence.toLowerCase();
+  let best: { key: string; plans: number } | undefined;
   for (const [key, f] of Object.entries(caps.features)) {
     if (key.toLowerCase() === lower) return key;
-    if (f.servicePlans?.some((p) => p.toLowerCase() === lower)) return key;
+    const plans = f.servicePlans ?? [];
+    if (plans.some((p) => p.toLowerCase() === lower) && (!best || plans.length < best.plans))
+      best = { key, plans: plans.length };
   }
-  return undefined;
+  return best?.key;
 }
 
 // ── Probes (shared with the monitoring page's query) ────────────────────────────────────────────────

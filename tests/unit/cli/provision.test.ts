@@ -131,7 +131,8 @@ describe('adminforge provision test-identities and status', () => {
     await provisionEntra(ctx);
     written.length = 0;
     const run = await provisionTestIdentities(ctx);
-    expect(changed(run.ops)).toHaveLength(11);
+    // 11 identity objects + the validation user's exclusion from the registration campaign.
+    expect(changed(run.ops)).toHaveLength(12);
     expect(cloud.users.map((u) => u.userPrincipalName).sort()).toEqual([
       'af-test-user-01@example.com',
       'af-test-user-02@example.com',

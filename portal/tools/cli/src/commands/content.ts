@@ -98,6 +98,33 @@ export interface ValidateReport {
   warnings: string[];
 }
 
+/**
+ * A datasource's `when`, request or runner parameters that name another datasource without `ds.` (`group.id` instead
+ * of `ds.group.id`): there the name is undefined, so the datasource is always skipped or asks for nothing. (Widgets,
+ * headers and actions do use bare names; transforms are left out because row fields can share a datasource's name.)
+ */
+export function bareDatasourceRefs(def: unknown): Array<{ path: string; name: string; datasource: string }> {
+  const all = (def as { datasources?: Record<string, Record<string, unknown>> } | null)?.datasources;
+  if (!all || typeof all !== 'object') return [];
+  const names = Object.keys(all);
+  const out: Array<{ path: string; name: string; datasource: string }> = [];
+  for (const [ds, spec] of Object.entries(all)) {
+    const scoped = Object.fromEntries(
+      ['when', 'request', 'requests', 'parameters']
+        .filter((k) => spec?.[k] !== undefined)
+        .map((k) => [k, spec[k]]),
+    );
+    for (const e of collectExpressions(scoped)) {
+      // String literals can mention a datasource's name harmlessly.
+      const code = e.source.replace(/'(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*"/g, '""');
+      for (const name of names)
+        if (name !== ds && new RegExp(`(?<![\\w.$])${name}\\s*[.[]`).test(code))
+          out.push({ path: `datasources.${ds}.${e.path}`, name, datasource: ds });
+    }
+  }
+  return out;
+}
+
 /** Schema, references, expression compilation, injection lint (OData, KQL, paths), env keys, `$schema` paths. Pure (no network). */
 export async function checkContent(
   ctx: Pick<ContentCliContext, 'contentDir' | 'repoRoot'>,
@@ -114,6 +141,10 @@ export async function checkContent(
     const at = (segments: Array<string | number>) => `${d.file}:${d.locate(segments) ?? '?'}`;
     for (const i of validateExpressions(d.def)) errs.push(`${at(i.segments)} ${i.path}: ${i.message}`);
     for (const w of lintExpressions(d.def)) errs.push(`${at(w.segments)} ${w.path}: ${w.message}`);
+    for (const b of bareDatasourceRefs(d.def))
+      errs.push(
+        `${at(['datasources', b.datasource])} ${b.path}: uses datasource "${b.name}" without ds. — inside a datasource write ds.${b.name} (a bare name is undefined there).`,
+      );
     for (const e of collectExpressions(d.def))
       for (const m of e.source.matchAll(/\benv\.([A-Za-z0-9_]+)/g))
         if (!declaredEnv.has(m[1]!))
@@ -597,12 +628,28 @@ interface Recorded {
 const EXCLUDED_ENV = /SECRET|PASSWORD|TOKEN|WEBHOOK|_KEY$|CERT|TOTP|PRIVATE|^AF_TEST_|^AF_PROVISIONER_/i;
 
 /** Values from the local env file that must never land in a fixture (same rule as the no-tenant-data guard). */
+/** Configuration keys whose values are public Microsoft catalogue names, not tenant data. */
+export const PUBLIC_CATALOGUE_KEY = /^AF_LICENCE_SKU_\d+$/;
+/** What a SKU part number looks like (ENTERPRISEPREMIUM, SPE_E5). Anything else — even a real one — is tenant data. */
+export const SKU_PART_NUMBER = /^[A-Z0-9_]{2,64}$/;
+
+/**
+ * A configuration value that is a public Microsoft catalogue name: an AF_LICENCE_SKU_<n> key whose value looks like a
+ * SKU part number. Anything else under such a key (a domain, an id, a tenant's own name) is still tenant data.
+ */
+export const isPublicCatalogueValue = (key: string, value: string) =>
+  PUBLIC_CATALOGUE_KEY.test(key) && SKU_PART_NUMBER.test(value);
+
 export function forbiddenValues(env: Record<string, string | undefined>): string[] {
   const out = new Set<string>();
   for (const [key, value] of Object.entries(env)) {
     if (!value || !/^[A-Z][A-Z0-9_]*$/.test(key)) continue;
     if (!/^(AF_|DATABASE_URL|POSTGRES_|TOKEN_CACHE_KEY|RUNNER_|ANTHROPIC_|PUBLIC_BASE_URL)/.test(key))
       continue;
+    // Microsoft-published SKU part numbers (ENTERPRISEPREMIUM, SPE_E5, …) are the same in every tenant and appear in
+    // committed code and content legitimately — only when the value looks like one. Same rule as
+    // tests/guards/tenant-values.ts.
+    if (isPublicCatalogueValue(key, value)) continue;
     if (
       value.length >= 8 &&
       !/^(true|false|\d+|https?:\/\/localhost(:\d+)?\/?|https?:\/\/127\.0\.0\.1(:\d+)?\/?|postgres:\/\/.*@127\.0\.0\.1.*)$/i.test(

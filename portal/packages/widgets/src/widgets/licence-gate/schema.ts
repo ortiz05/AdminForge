@@ -10,6 +10,7 @@ export const LICENSED_FEATURES = [
   'teams',
   'sharepoint',
   'defender',
+  'defenderEndpoint',
   'signInLogs',
 ] as const;
 

@@ -74,16 +74,24 @@ const SHORT: Array<[RegExp, string]> = [
   [/^(exchange|exchange_s_\w+)$/i, 'Exchange'],
   [/^(teams|teams1)$/i, 'Teams'],
   [/^(sharepoint|sharepoint\w*)$/i, 'SharePoint'],
+  [/^(defenderendpoint|tvm_premium_1|.*defender for endpoint plan 2.*)$/i, 'Defender for Endpoint'],
   [/^(defender\w*|windefatp|mde_\w+|atp_enterprise|threat_intelligence|mtp)$/i, 'Defender'],
 ];
 
-/** "Requires INTUNE_A or EMS" → "Intune"; null for count badges like "3". */
+const shortName = (s: string) => SHORT.find(([re]) => re.test(s))?.[1];
+
+/**
+ * "Requires INTUNE_A or EMS" → "Intune"; "Requires Microsoft Intune Plan 1 (INTUNE_A)" → "Intune" (the service plan in
+ * parentheses names it when the words don't); null for count badges like "3".
+ */
 export function requiresText(badge: string | undefined): string | null {
   const m = badge ? /^requires\s+(.+)$/i.exec(badge.trim()) : null;
   if (!m) return null;
-  const names = m[1]!
-    .split(/\s+or\s+|,\s*/)
-    .map((part) => SHORT.find(([re]) => re.test(part.trim()))?.[1] ?? part.trim());
+  const names = m[1]!.split(/\s+or\s+|,\s*/).map((part) => {
+    const text = part.trim();
+    const plan = /\(?([A-Za-z0-9_]+)\)?$/.exec(text)?.[1];
+    return shortName(text) ?? (plan ? shortName(plan) : undefined) ?? text;
+  });
   return [...new Set(names)].join(' / ');
 }
 

@@ -65,7 +65,12 @@ describe('validation user: least privilege', () => {
     );
     const testerId = randomUUID();
     const state: IdentityState = {
-      tester: { id: testerId, userPrincipalName: d.tester.upn, accountEnabled: true },
+      tester: {
+        id: testerId,
+        userPrincipalName: d.tester.upn,
+        displayName: 'AF Tester',
+        accountEnabled: true,
+      },
       testerGroupIds: Object.values(groups).map((g) => g.id),
       testerRoleIds: [],
       testerRoleAssignments: Object.values(DIRECTORY_ROLES).map((roleDefinitionId) => ({
@@ -85,6 +90,9 @@ describe('validation user: least privilege', () => {
       'delete AF Tester ∉ SG-AdminForge-test-Playbook.Author',
       'delete AF Tester ∉ SG-AdminForge-test-Playbook.Approver',
       'delete AF Tester: Groups Administrator (directory scope /)',
+      // Service write roles are kept only where the tenant licenses the workload (not in this unlicensed plan).
+      'delete AF Tester: Exchange Recipient Administrator (directory scope /)',
+      'delete AF Tester: SharePoint Administrator (directory scope /)',
       'create AF Tester owns AF-Test-Group-01',
     ]);
     const remove = changes.find((o) => o.kind === 'directoryRoleRemove');
@@ -152,7 +160,12 @@ describe('provision test-identities --enable / --disable', () => {
   it('refuses to enable outside a test environment, but always allows disabling', async () => {
     const { cloud, ctx } = setup('prod');
     await provisionEntra(ctx);
-    cloud.users.push({ id: randomUUID(), userPrincipalName: 'af-tester@example.com', accountEnabled: true });
+    cloud.users.push({
+      id: randomUUID(),
+      userPrincipalName: 'af-tester@example.com',
+      displayName: 'AF Tester',
+      accountEnabled: true,
+    });
     await expect(setTesterEnabled(ctx, true)).rejects.toThrow(ConfigError);
     expect(await setTesterEnabled(ctx, false)).toEqual({ changed: true });
   });

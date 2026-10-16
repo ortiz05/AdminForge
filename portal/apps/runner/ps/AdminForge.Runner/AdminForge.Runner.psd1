@@ -9,7 +9,7 @@
     FunctionsToExport    = @(
         'Set-AdminForgeEventSink', 'Send-AdminForgeEvent', 'Send-AdminForgeStreamRecord',
         'Write-AdminForgeLog', 'Write-AdminForgeProgress', 'Write-AdminForgeOutput',
-        'New-AdminForgeError', 'Get-AdminForgeErrorCategory', 'Get-AdminForgeInput',
+        'New-AdminForgeError', 'Get-AdminForgeErrorCategory', 'Format-AdminForgeMessage', 'Get-AdminForgeInput',
         'Connect-AdminForgeServices', 'Enable-AdminForgeReadOnlyMode', 'Get-AdminForgeMode',
         'Test-AdminForgeReadOnlyScript', 'Assert-AdminForgeReadOnlyScript'
     )

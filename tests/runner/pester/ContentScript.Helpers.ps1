@@ -8,13 +8,15 @@ $script:Repo = (Resolve-Path (Join-Path $PSScriptRoot '../../..')).Path
 $script:ScriptsDir = Join-Path $script:Repo 'portal/content/scripts'
 Import-Module (Join-Path $script:Repo 'portal/apps/runner/ps/AdminForge.Runner/AdminForge.Runner.psd1') -Force
 
-function Invoke-ContentScript([string]$RelativePath, [hashtable]$Inputs = @{}, [string]$Mode = 'read', [hashtable]$Tenant) {
+# $User: who runs the script (Context.User, as the worker passes it); default an engineer without an object id.
+function Invoke-ContentScript([string]$RelativePath, [hashtable]$Inputs = @{}, [string]$Mode = 'read', [hashtable]$Tenant, [hashtable]$User) {
     $events = [System.Collections.Generic.List[object]]::new()
     Set-AdminForgeEventSink -ScriptBlock { param($e) $events.Add($e) }.GetNewClosure()
     if (-not $Tenant) { $Tenant = @{ Id = '0f3a4c2e-8b1d-4e6f-9a7c-2d5b8e1f4a63'; Domain = 'example.onmicrosoft.com'; SpoTenantName = 'example' } }
+    if (-not $User) { $User = @{ Upn = 'engineer@example.com'; ObjectId = $null } }
     $context = @{
         JobId = 'pester'; Mode = $Mode; Services = @('Exchange'); Tenant = $Tenant
-        User = @{ Upn = 'engineer@example.com'; ObjectId = $null }
+        User = $User
     }
     $text = Get-Content -Raw -LiteralPath (Join-Path $script:ScriptsDir $RelativePath)
     $failure = $null

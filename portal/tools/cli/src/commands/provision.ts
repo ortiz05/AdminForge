@@ -17,8 +17,10 @@ import { applyEntraOps, fetchEntraState, fetchResources } from '../provision/ent
 import { planEntra } from '../provision/entra-plan';
 import {
   buildDesiredIdentities,
+  licensedServices,
   planIdentities,
   testIdentitiesExist,
+  unexpectedTesterRoles,
   type IdentityOp,
 } from '../provision/identities-plan';
 import {
@@ -99,9 +101,7 @@ function printBlocked(ctx: CliContext, ops: Array<{ action: string; title: strin
   const other = skipped.filter((o) => !isCeiling(o));
   if (ceiling.length) {
     ctx.out('');
-    ctx.out(
-      'Withheld by a permission ceiling (content declares them; an explicit opt-in in the env file grants them):',
-    );
+    ctx.out('Withheld by a permission ceiling (an explicit opt-in in the env file grants them):');
     for (const s of ceiling) ctx.out(`  ⚠ ${s.title} — ${s.changes?.join(', ') ?? 'skipped'}`);
   }
   if (!other.length) return;
@@ -194,12 +194,30 @@ export interface IdentitiesRun {
 const notTestLabel = (ctx: CliContext, settings: ProvisionSettings) =>
   `Environment "${settings.label}" is not a test environment: test identities are only provisioned for labels in AF_TEST_IDENTITY_LABELS (now: ${testIdentityLabels(ctx.env).join(', ')}).`;
 
+/** Service plans of the tenant's active subscriptions; [] when they can't be read (no extra tester roles then). */
+async function tenantServicePlans(clients: Clients): Promise<string[]> {
+  try {
+    const { data } = await clients.graph.request<{
+      value?: Array<{ capabilityStatus?: string; servicePlans?: Array<{ servicePlanName?: string }> }>;
+    }>({ path: '/subscribedSkus', query: { $select: 'capabilityStatus,servicePlans' } });
+    return (data.value ?? [])
+      .filter((s) => ['enabled', 'warning'].includes((s.capabilityStatus ?? '').toLowerCase()))
+      .flatMap((s) => (s.servicePlans ?? []).map((p) => p.servicePlanName ?? ''))
+      .filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
 async function identityPlan(ctx: CliContext, clients: Clients, settings: ProvisionSettings) {
   if (!settings.primaryDomain) throw new ConfigError('AF_PRIMARY_DOMAIN must be set in the env file.');
   const desired = buildDesiredIdentities({
     label: settings.label,
     domain: settings.primaryDomain,
     testerUpn: ctx.env.AF_TEST_USER_UPN,
+    services: licensedServices(await tenantServicePlans(clients)),
+    // Tenant-wide Exchange / SharePoint admin roles for the validation user: opt-in (admin file), default off.
+    serviceAdminRoles: ctx.env.AF_TEST_SERVICE_ADMIN_ROLES === 'true',
   });
   const env = {
     upn: ctx.env.AF_TEST_USER_UPN || undefined,
@@ -239,6 +257,10 @@ export async function setTesterEnabled(ctx: CliContext, enabled: boolean): Promi
   const clients = provisionerClients(ctx, settings);
   const result = await setUserEnabled(clients.graph, upn, enabled);
   const state = enabled ? 'enabled' : 'disabled';
+  if (result === 'refused')
+    throw new ConfigError(
+      'The account at AF_TEST_USER_UPN was not created by AdminForge provisioning (UPN af-…, display name "AF Tester" or the "AdminForge validation" marker), so it is neither enabled nor disabled here. Fix AF_TEST_USER_UPN.',
+    );
   if (result === 'missing') {
     if (!enabled) {
       ctx.out('Validation user (AF_TEST_USER_UPN): does not exist — nothing to disable.');
@@ -271,6 +293,12 @@ export async function provisionTestIdentities(
   ctx.out('');
   ctx.out('Plan:');
   renderPlan(ops, ctx.out);
+  const refused = ops.find((o) => o.kind === 'tester' && o.refused);
+  if (refused?.kind === 'tester')
+    throw new ConfigError(
+      `Nothing was changed. Refusing to provision the validation user: ${refused.refused}.`,
+    );
+  for (const line of unexpectedTesterRoles(state).lines) ctx.out(`  ⚠ ${line}`);
   const c = counts(ops);
   ctx.out('');
   if (opts.dryRun) ctx.out('Dry run: nothing was changed.');
@@ -343,14 +371,29 @@ export async function provisionStatus(ctx: CliContext): Promise<StatusResult> {
     );
     if (exists) failures.push(line);
   } else {
-    identityOps = (await identityPlan(ctx, clients, settings)).ops;
+    const plan = await identityPlan(ctx, clients, settings);
+    identityOps = plan.ops;
     renderStatus(identityOps, ctx.out);
     failures.push(...identityOps.filter(isChange).map((o) => o.title));
+    const refused = identityOps.find((o) => o.kind === 'tester' && o.refused);
+    if (refused) failures.push(`${refused.title}: not an account provisioning created`);
     const tester = identityOps.find((o) => o.kind === 'tester');
     if (tester?.action === 'noop' && tester.detail === 'account enabled')
       ctx.out(
         '    ⚠ The validation user is enabled: it holds standing directory roles. Disable it between live runs: `pnpm adminforge provision test-identities --disable`.',
       );
+    // Directory roles beyond what provisioning grants or removes (other roles, narrower scopes, through groups).
+    if (plan.state.tester && !refused) {
+      const unexpectedRoles = unexpectedTesterRoles(plan.state);
+      ctx.out('  Validation user: unexpected privilege');
+      if (unexpectedRoles.unknown) ctx.out(`    ⚠ Directory roles — ${unexpectedRoles.unknown}`);
+      else if (!unexpectedRoles.lines.length)
+        ctx.out('    ✓ No directory roles beyond the ones provisioning manages');
+      for (const line of unexpectedRoles.lines) {
+        ctx.out(`    ✗ ${line}`);
+        failures.push(line);
+      }
+    }
   }
 
   ctx.out('  Token checks');
@@ -453,7 +496,8 @@ export async function provisionStatus(ctx: CliContext): Promise<StatusResult> {
 
   const sd = await securityDefaults(ctx, clients, settings);
   ctx.out(`  ${sd === true ? '⚠' : 'ℹ'} ${securityDefaultsLine(sd)}`);
-  printBlocked(ctx, [...run.ops, ...identityOps]);
+  // A refused validation user is a failure above, not something licensing or a ceiling withholds.
+  printBlocked(ctx, [...run.ops, ...identityOps.filter((o) => !(o.kind === 'tester' && o.refused))]);
   ctx.out('');
   ctx.out(
     failures.length

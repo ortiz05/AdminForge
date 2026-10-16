@@ -21,7 +21,7 @@ const empty = (): IdentityState => ({
 function converged(): IdentityState {
   const testerId = randomUUID();
   return {
-    tester: { id: testerId, userPrincipalName: desired.tester.upn },
+    tester: { id: testerId, userPrincipalName: desired.tester.upn, displayName: 'AF Tester' },
     testerGroupIds: desired.testerGroups.map((r) => portalGroups[r]!.id),
     testerRoleIds: ['fe930be7-5e62-47db-91af-98c3a49a38b1', 'f2ef992c-3afb-46b9-b7cf-a126ee74c451'],
     portalGroups: { ...portalGroups },

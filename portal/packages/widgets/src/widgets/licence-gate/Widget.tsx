@@ -20,11 +20,11 @@ export const FEATURE_INFO: Record<string, { label: string; sku: string }> = {
   },
   defender: {
     label: 'Microsoft Defender',
-    sku: 'Microsoft Defender for Endpoint, Office 365 or XDR (WINDEFATP, ATP_ENTERPRISE, MTP)',
+    sku: 'Microsoft Defender XDR (MTP), Defender for Office 365 (THREAT_INTELLIGENCE) or Defender for Endpoint (WINDEFATP)',
   },
   defenderEndpoint: {
-    label: 'Microsoft Defender for Endpoint',
-    sku: 'Microsoft Defender for Endpoint (WINDEFATP or MDE_LITE)',
+    label: 'Microsoft Defender for Endpoint (device data)',
+    sku: 'Microsoft Defender for Endpoint Plan 2 (WINDEFATP)',
   },
   defenderOffice: {
     label: 'Microsoft Defender for Office 365',
@@ -108,7 +108,7 @@ export function LicenceGatePanel({ missing, preview, title, body, className }: L
         </h2>
         <p className="max-w-2xl text-sm text-fg-2">
           {body ? `This page shows ${body}. ` : ''}
-          {reasons.length ? `${reasons.join(' ')} ` : ''}
+          {reasons.length ? `${reasons.map((r) => (/[.!?]$/.test(r) ? r : `${r}.`)).join(' ')} ` : ''}
           Ask your licensing admin to assign {skus.length ? 'it' : 'the licence'}; the page works as soon as
           the licence is active, with no change in AdminForge.
         </p>

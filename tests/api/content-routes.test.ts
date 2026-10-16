@@ -317,6 +317,7 @@ describe('GET /api/me/capabilities', () => {
     expect(Object.keys(caps.features).sort()).toEqual([
       'conditionalAccess',
       'defender',
+      'defenderEndpoint',
       'exchange',
       'identityProtection',
       'intune',

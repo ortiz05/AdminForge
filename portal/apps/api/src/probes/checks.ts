@@ -15,7 +15,7 @@ import { appOnlyScope, type AutomationTokenProvider } from '../auth/automation';
 import { resourceScopes } from '../auth/token-broker';
 import { missingLicences, requiresBadge, type LicenceService } from '../capabilities/licences';
 import { AppError } from '../errors';
-import { OutboundError } from '../execution/outbound';
+import { DEFENDER_NOT_PROVISIONED, OutboundError } from '../execution/outbound';
 import type { ExecutionIdentity, OutboundExecutor } from '../execution/types';
 import type { ProbeStatus } from '../schedules/types';
 import { defaultLookup, isNonPublicAddress, type HostLookup } from './addresses';
@@ -885,6 +885,9 @@ export function probeFailure(
     const hint = err instanceof OutboundError ? ` ${err.hint}` : '';
     if (err instanceof OutboundError && err.licence)
       return { status: 'error', code: 'licence_required', message: `${err.message}${hint}` };
+    // Defender XDR not set up for the tenant yet: the probe can't check, nothing is denied.
+    if (err instanceof OutboundError && err.message === DEFENDER_NOT_PROVISIONED)
+      return { status: 'error', code: 'not_configured', message: `${err.message}${hint}` };
     if (err.status === 401 || err.status === 403)
       return {
         status: 'error',

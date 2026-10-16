@@ -7,6 +7,7 @@ import {
 } from '@adminforge/connectors';
 import { ARM_BASE, findServicePrincipal, listArmAssignments } from './entra-io';
 import { findUser } from './identities-io';
+import { isProvisionedTester } from './identities-plan';
 import { armRoleAssignmentName } from './ids';
 import {
   ENV_LOCATION,
@@ -69,7 +70,10 @@ export async function resolvePrincipals(
     missing.tester = 'AF_TEST_USER_UPN is not set — run `pnpm adminforge provision test-identities` first';
   else {
     const user = await findUser(graph, inputs.testerUpn);
-    if (user) principals.tester = user.id;
+    if (user && isProvisionedTester(user)) principals.tester = user.id;
+    else if (user)
+      missing.tester =
+        'the account at AF_TEST_USER_UPN was not created by `provision test-identities` — no Azure role is given to it';
     else
       missing.tester =
         'the validation user (AF_TEST_USER_UPN) does not exist — run `pnpm adminforge provision test-identities`';

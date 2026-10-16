@@ -48,11 +48,24 @@ export const FEATURES = {
     requires: 'SharePoint Online (SHAREPOINTSTANDARD or SHAREPOINTENTERPRISE)',
     sku: 'SHAREPOINTSTANDARD',
   },
+  /** Defender XDR incidents, alerts (alerts_v2), advanced hunting: any Defender workload (Office 365 E5 included). */
   defender: {
     label: 'Microsoft Defender (incidents and alerts)',
     plans: ['MTP', 'WINDEFATP', 'MDE_LITE', 'MDE_SMB', 'ATP_ENTERPRISE', 'THREAT_INTELLIGENCE'],
-    requires: 'Microsoft Defender XDR / Defender for Endpoint (MTP or WINDEFATP)',
+    requires:
+      'Microsoft Defender XDR (MTP), Defender for Office 365 (THREAT_INTELLIGENCE) or Defender for Endpoint (WINDEFATP)',
     sku: 'MTP',
+  },
+  /**
+   * Device data from Defender for Endpoint Plan 2: advanced hunting on the Device* / DeviceTvm* tables, device and
+   * vulnerability pages in the Defender portal. Office 365 E5 / Defender for Office 365 don't include it; neither do
+   * Defender for Endpoint Plan 1 (MDE_LITE) or Defender for Business (MDE_SMB), which have no advanced hunting.
+   */
+  defenderEndpoint: {
+    label: 'Microsoft Defender for Endpoint (device data)',
+    plans: ['WINDEFATP', 'TVM_PREMIUM_1'],
+    requires: 'Microsoft Defender for Endpoint Plan 2 (WINDEFATP)',
+    sku: 'WINDEFATP',
   },
   signInLogs: {
     label: 'Sign-in logs and sign-in activity',

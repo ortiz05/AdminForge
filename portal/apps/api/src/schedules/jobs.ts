@@ -10,12 +10,19 @@ import { isTerminal } from '@adminforge/engine';
 import type { Delivery, NewsJob, Probe, ProbeJob, Schedule } from '@adminforge/schemas';
 import type { ArtifactStore, WrittenArtifact } from '../artifacts/store';
 import { missingLicences } from '../capabilities/licences';
-import type { DatasourceRunner, LoadedPage, UserScope } from '../datasources/executor';
+import type { DatasourceRunner, ErrorInfo, LoadedPage, UserScope } from '../datasources/executor';
 import type { DefinitionRegistry } from '../definitions/types';
 import { AppError } from '../errors';
 import type { ExecutionIdentity, OutboundExecutor } from '../execution/types';
 import { runProbe, type ProbeDeps, type ProbeOutcome } from '../probes/checks';
-import { cellValue, exportPages, exportStream, planExport, type ExportFormat } from '../reports/export';
+import {
+  cellValue,
+  exportPages,
+  exportStream,
+  planExport,
+  trackIncomplete,
+  type ExportFormat,
+} from '../reports/export';
 import { maskRedacted } from '../reports/catalog';
 import type { NewsService } from '../news/service';
 import type { RunRepository } from '../runs/types';
@@ -86,6 +93,8 @@ export interface JobDeps {
   news?: NewsService | null;
   /** Called after a news collection that added or changed items (events). */
   onNews?: (counts: { new: number; updated: number }) => void;
+  /** Warnings (a scheduled report written without data an `optional` datasource should have supplied). */
+  log?: { warn(obj: object, msg: string): void };
 }
 
 const defaultSleep = (ms: number, signal: AbortSignal) =>
@@ -255,22 +264,27 @@ export function createJobRunner(deps: JobDeps): JobRunner {
     const formats = [...new Set(files.map((f) => f.format))];
     const written: Array<WrittenArtifact & { format: string; rows: number; truncated: boolean }> = [];
     const at = deps.now();
+    // `optional` datasources that failed: the files are written without that data, and the run says so (below).
+    const incomplete: Record<string, ErrorInfo> = {};
     for (const format of formats) {
       const planFormat: ExportFormat =
         format === 'json' ? (spec.formats.includes('csv') ? 'csv' : spec.formats[0]!) : format;
       const plan = await planExport(page, params, planFormat, { maxRows: deps.exportMaxRows });
-      const pages = exportPages(
-        deps.datasources,
-        {
-          identity: AUTOMATION,
-          user: AUTOMATION_USER,
-          page,
-          params,
-          correlationId: ctx.correlationId,
-          signal: ctx.signal,
-        },
-        plan,
+      const tracked = trackIncomplete(
+        exportPages(
+          deps.datasources,
+          {
+            identity: AUTOMATION,
+            user: AUTOMATION_USER,
+            page,
+            params,
+            correlationId: ctx.correlationId,
+            signal: ctx.signal,
+          },
+          plan,
+        ),
       );
+      const pages = tracked.pages;
       let stats = { rows: 0, truncated: false };
       const artifact = await deps.artifacts.write(ctx.schedule.key, at, format, async (out) => {
         if (format === 'json') {
@@ -312,9 +326,18 @@ export function createJobRunner(deps: JobDeps): JobRunner {
         );
       });
       written.push({ ...artifact, format, ...stats });
+      for (const [k, v] of Object.entries(tracked.incomplete)) incomplete[k] ??= v;
       const retain = files.find((f) => f.format === format && f.retain)?.retain;
       if (retain) await deps.artifacts.prune(ctx.schedule.key, format, retain);
     }
+    const missing = Object.entries(incomplete).map(([k, e]) => {
+      const name = k.slice('ds.'.length);
+      const ds = page.def.datasources?.[name];
+      return { datasource: name, label: ds?.label ?? name, code: e.code, message: e.message };
+    });
+    const incompleteNote = missing.length
+      ? `Incomplete: ${missing.map((m) => `${m.label} couldn’t be read (${m.code})`).join('; ')}.`
+      : '';
     // Email and Teams: the report goes out after the file is safely written (the file stays with the run either way).
     for (const d of job.delivery) {
       if (d.type === 'file') continue;
@@ -335,7 +358,7 @@ export function createJobRunner(deps: JobDeps): JobRunner {
           (d.type === 'email' ? d.subject : undefined) ?? `${def.title} — ${at.toISOString().slice(0, 10)}`,
         // A reviewed schedule's own `message` is Markdown as written; everything else is plain text.
         ...(d.message ? { markdown: d.message } : {}),
-        text: `${d.message ? '' : `The scheduled report "${resolved.def.title}" ran: ${file.rows} row(s)${file.truncated ? ' (truncated)' : ''}.\n`}Schedule: ${def.title}. Reference: ${ctx.correlationId}.${byline ? `\n${byline}` : ''}`,
+        text: `${d.message ? '' : `The scheduled report "${resolved.def.title}" ran: ${file.rows} row(s)${file.truncated ? ' (truncated)' : ''}.\n`}${incompleteNote ? `${incompleteNote}\n` : ''}Schedule: ${def.title}. Reference: ${ctx.correlationId}.${byline ? `\n${byline}` : ''}`,
         link: `${deps.delivery.publicBaseUrl}/schedules/${encodeURIComponent(ctx.schedule.key)}`,
       };
       if (d.type === 'email') {
@@ -356,22 +379,46 @@ export function createJobRunner(deps: JobDeps): JobRunner {
         );
       } else notes.push(await postTeams(deps.delivery, d.webhook, msg));
     }
-    return {
-      artifactPath: written[0]!.path,
-      result: {
-        report: job.ref,
-        version: page.version,
-        artifacts: written.map((w) => ({
-          path: w.path,
-          name: w.name,
-          size: w.size,
-          format: w.format,
-          rows: w.rows,
-          truncated: w.truncated,
-        })),
-        ...(notes.length ? { delivery: notes } : {}),
-      },
+    const result = {
+      report: job.ref,
+      version: page.version,
+      artifacts: written.map((w) => ({
+        path: w.path,
+        name: w.name,
+        size: w.size,
+        format: w.format,
+        rows: w.rows,
+        truncated: w.truncated,
+      })),
+      ...(notes.length ? { delivery: notes } : {}),
+      ...(missing.length
+        ? { incomplete: missing.map(({ datasource, code, message }) => ({ datasource, code, message })) }
+        : {}),
     };
+    // A scheduled report never succeeds silently without data it declares: the files and delivery stand (marked
+    // incomplete), and the run fails — permanently, so a retry doesn't send the report again — which notifies the
+    // schedule's onFailure recipients.
+    if (missing.length) {
+      deps.log?.warn(
+        {
+          schedule: ctx.schedule.key,
+          report: job.ref,
+          incomplete: missing.map((m) => `${m.datasource}:${m.code}`),
+        },
+        'scheduled report written without optional data',
+      );
+      return {
+        status: 'failed',
+        artifactPath: written[0]!.path,
+        result,
+        error: {
+          code: 'report_incomplete',
+          message: `The report was written without ${missing.map((m) => `“${m.label}”`).join(', ')}: ${missing[0]!.message}`,
+          hint: 'The automation identity may lack an application permission or licence for that data (check with pnpm adminforge validate --scopes); the files are kept with this run.',
+        },
+      };
+    }
+    return { artifactPath: written[0]!.path, result };
   }
 
   async function playbookJob(

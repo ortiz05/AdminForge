@@ -62,7 +62,10 @@ export interface DatasourceOutput {
   cursor?: string;
   /** null for static and skipped datasources. */
   provenance: Provenance | null;
-  /** graphBatch: failed sub-requests (their value in `data` is null). */
+  /**
+   * graphBatch: failed sub-requests (their value in `data` is null). `ds.<name>`: an `optional: true` datasource this
+   * one uses (directly or further up the chain) failed, so it ran with `null` in its place — the result is incomplete.
+   */
   errors?: Record<string, ErrorInfo>;
   /** `when` was false. */
   skipped?: true;
@@ -85,6 +88,8 @@ export interface RunInput {
   noCache?: boolean;
   /** Results of the datasources this one references as `ds.<name>` (resolved automatically when omitted). */
   deps?: Record<string, unknown>;
+  /** With `deps`: failures of `optional` dependencies behind them (`ds.<name>` → error), recorded in `errors`. */
+  depErrors?: Record<string, ErrorInfo>;
 }
 
 /** A PowerShell job for a `source: runner` datasource (always read mode). */
@@ -163,6 +168,8 @@ export interface DatasourceDeps {
   env: () => Record<string, unknown>;
   now: () => Date;
   cache?: TtlCache<DatasourceOutput>;
+  /** Suppressed failures of `optional` datasources are logged here (names and codes only). */
+  log?: { warn(obj: object, msg: string): void };
 }
 
 const toErrorInfo = (err: unknown): ErrorInfo => {
@@ -214,15 +221,54 @@ export function pathTemplateOf(path: string): string {
 
 const DS_REF = /\bds\.([A-Za-z_][A-Za-z0-9_]*)/g;
 
-const dependencyFailed = (name: string, dep: string, err: unknown) => {
-  const info = toErrorInfo(err);
-  return new AppError(
-    424,
-    'dependency_failed',
-    `Datasource "${name}" needs "${dep}", which failed: ${info.message}`,
-    info.hint ? { hint: info.hint } : {},
-  );
-};
+/** `dependency_failed` (424). Keeps the dependency's own error as `cause`, so `optional` can see what really failed. */
+export class DependencyFailed extends AppError {
+  constructor(
+    readonly datasource: string,
+    readonly dependency: string,
+    readonly cause: unknown,
+  ) {
+    const info = toErrorInfo(cause);
+    super(
+      424,
+      'dependency_failed',
+      `Datasource "${datasource}" needs "${dependency}", which failed: ${info.message}`,
+      info.hint ? { hint: info.hint } : {},
+    );
+    this.name = 'DependencyFailed';
+  }
+}
+
+/**
+ * Failures `optional: true` never turns into `null`: the person (or, for schedules, the operator) has to see them —
+ * a missing portal role, the request policy, a missing tenant licence, or a sign-in / arming problem.
+ */
+const NEVER_OPTIONAL: ReadonlySet<string> = new Set([
+  'forbidden',
+  'policy_denied',
+  'licence_required',
+  'not_armed',
+  'rearm',
+  'reauth',
+]);
+
+/** The first error in a `dependency_failed` chain that must not be swallowed, if any (checked down to the root). */
+export function blockingCause(err: unknown): AppError | undefined {
+  for (let e: unknown = err, depth = 0; depth < 64; depth++) {
+    if (e instanceof DependencyFailed) {
+      e = e.cause;
+      continue;
+    }
+    const mapped = outboundAppError(e);
+    return NEVER_OPTIONAL.has(mapped.code) ? mapped : undefined;
+  }
+  return outboundAppError(err); // an absurdly deep chain is never treated as optional
+}
+
+/** Suppressed dependency failures (`ds.<name>` keys of `errors`), e.g. for exports and scheduled reports. */
+export function dependencyErrors(out: Pick<DatasourceOutput, 'errors'>): Record<string, ErrorInfo> {
+  return Object.fromEntries(Object.entries(out.errors ?? {}).filter(([k]) => k.startsWith('ds.')));
+}
 
 /** Tiny counting semaphore (execute-many concurrency). */
 function limiter(max: number) {
@@ -403,7 +449,8 @@ export class DatasourceRunner {
   /**
    * Several datasources of one page (execute-many): independent ones in parallel (≤ `concurrency`), each dependent
    * after the datasources it references. Failures are per datasource; a dependent of a failed one fails with
-   * `dependency_failed`. Results come back in the order asked.
+   * `dependency_failed` (or, for an `optional` one, runs without it — see `suppress`). Results come back in the order
+   * asked.
    */
   async runMany(
     base: Omit<RunInput, 'datasource' | 'cursor' | 'paging' | 'maxItems' | 'deps'>,
@@ -417,14 +464,17 @@ export class DatasourceRunner {
       if (!p) {
         p = (async () => {
           const deps: Record<string, unknown> = {};
+          const depErrors: Record<string, ErrorInfo> = {};
           for (const d of this.dependencies(base.page, name)) {
             try {
-              deps[d] = (await exec(d)).data;
+              const out = await exec(d);
+              deps[d] = out.data;
+              Object.assign(depErrors, dependencyErrors(out));
             } catch (err) {
-              throw dependencyFailed(name, d, err);
+              deps[d] = this.suppress({ ...base, datasource: name }, d, err, depErrors);
             }
           }
-          return limit(() => this.run({ ...base, datasource: name, deps }));
+          return limit(() => this.run({ ...base, datasource: name, deps, depErrors }));
         })();
         p.catch(() => undefined);
         memo.set(name, p);
@@ -444,25 +494,59 @@ export class DatasourceRunner {
     return Object.fromEntries(settled);
   }
 
-  private async resolveDeps(input: RunInput, names: string[]): Promise<Record<string, unknown>> {
-    const out: Record<string, unknown> = {};
+  private async resolveDeps(
+    input: RunInput,
+    names: string[],
+  ): Promise<{ values: Record<string, unknown>; errors: Record<string, ErrorInfo> }> {
+    const values: Record<string, unknown> = {};
+    const errors: Record<string, ErrorInfo> = {};
     for (const dep of names) {
       try {
-        out[dep] = (
-          await this.run({
-            ...input,
-            datasource: dep,
-            cursor: undefined,
-            paging: undefined,
-            maxItems: undefined,
-            deps: undefined,
-          })
-        ).data;
+        const out = await this.run({
+          ...input,
+          datasource: dep,
+          cursor: undefined,
+          paging: undefined,
+          maxItems: undefined,
+          deps: undefined,
+          depErrors: undefined,
+        });
+        values[dep] = out.data;
+        Object.assign(errors, dependencyErrors(out));
       } catch (err) {
-        throw dependencyFailed(input.datasource, dep, err);
+        values[dep] = this.suppress(input, dep, err, errors);
       }
     }
-    return out;
+    return { values, errors };
+  }
+
+  /**
+   * A dependency failed. `optional: true`: the dependent sees `null` in its place, and the failure is recorded in the
+   * dependent's `errors` (`ds.<name>`) and logged, so the result is visibly incomplete. Never for failures the person
+   * has to see (NEVER_OPTIONAL — a missing portal role, the request policy, a missing licence, sign-in or arming)
+   * anywhere in the chain behind it: those fail the dependent with `dependency_failed`.
+   */
+  private suppress(
+    input: Pick<RunInput, 'page' | 'datasource' | 'correlationId'>,
+    dep: string,
+    err: unknown,
+    into: Record<string, ErrorInfo>,
+  ): null {
+    if (this.datasource(input.page, dep).optional !== true || blockingCause(err))
+      throw new DependencyFailed(input.datasource, dep, err);
+    const info = toErrorInfo(err);
+    into[`ds.${dep}`] = info;
+    this.deps.log?.warn(
+      {
+        page: `${input.page.kind}:${input.page.key}`,
+        datasource: input.datasource,
+        dependency: dep,
+        code: info.code,
+        correlationId: input.correlationId,
+      },
+      'optional datasource failed; its dependents ran without it',
+    );
+    return null;
   }
 
   async run(input: RunInput): Promise<DatasourceOutput> {
@@ -472,7 +556,13 @@ export class DatasourceRunner {
     if (ds.requires?.portalRoles)
       this.assertAccess(user.roles, ds.requires, `Datasource ${input.datasource}`);
     const depNames = this.dependencies(page, input.datasource);
-    const depValues = depNames.length ? (input.deps ?? (await this.resolveDeps(input, depNames))) : {};
+    const resolved = !depNames.length
+      ? { values: {}, errors: {} }
+      : input.deps
+        ? { values: input.deps, errors: input.depErrors ?? {} }
+        : await this.resolveDeps(input, depNames);
+    const depValues: Record<string, unknown> = resolved.values;
+    const incomplete = Object.keys(resolved.errors).length ? resolved.errors : undefined;
     const scope = this.datasourceScope(page, ds, user, input.params, depValues);
 
     if (ds.when !== undefined) {
@@ -480,7 +570,8 @@ export class DatasourceRunner {
         typeof ds.when === 'boolean'
           ? ds.when
           : await this.expr(() => renderString(ds.when as string, scope), 'when');
-      if (ok !== true) return { data: null, provenance: null, skipped: true };
+      if (ok !== true)
+        return { data: null, provenance: null, skipped: true, ...(incomplete ? { errors: incomplete } : {}) };
     }
 
     const paging =
@@ -553,6 +644,7 @@ export class DatasourceRunner {
       const value = out.data;
       out.data = await this.expr(() => renderString(ds.transform!, { ...scope, value }), 'transform');
     }
+    if (incomplete) out.errors = { ...out.errors, ...incomplete };
     if (ttl) this.cache.set(key, out, ttl);
     return out;
   }

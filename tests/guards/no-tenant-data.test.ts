@@ -1,4 +1,5 @@
 import { committableFiles, localEnvFiles, parseEnvFile, readText } from '../lib/repo';
+import { tenantValues } from './tenant-values';
 
 // Nothing tenant- or app-specific may be committed: configuration lives in ~/.config/adminforge/*.env.
 const SECRET_PATTERNS: Array<[string, RegExp]> = [
@@ -23,20 +24,7 @@ describe('no secrets are committed', () => {
 
 describe('no tenant-specific values are committed', () => {
   const values = new Set<string>();
-  for (const file of localEnvFiles()) {
-    for (const [key, value] of Object.entries(parseEnvFile(file))) {
-      // A bare loopback origin (RUNNER_URL=http://127.0.0.1:3101, the config/example.env default) isn't tenant data;
-      // anything with a path still counts. Same rule as forbiddenValues in portal/tools/cli/src/commands/content.ts.
-      if (
-        value.length >= 8 &&
-        !/^(true|false|\d+|https?:\/\/localhost(:\d+)?\/?|https?:\/\/127\.0\.0\.1(:\d+)?\/?|postgres:\/\/.*@127\.0\.0\.1.*)$/i.test(
-          value,
-        )
-      )
-        values.add(value);
-      if (/DOMAIN/.test(key)) values.add(value.toLowerCase());
-    }
-  }
+  for (const file of localEnvFiles()) for (const v of tenantValues(parseEnvFile(file))) values.add(v);
   it.skipIf(values.size === 0)('local configuration values do not appear in any committable file', () => {
     const hits: string[] = [];
     for (const [f, t] of texts) {

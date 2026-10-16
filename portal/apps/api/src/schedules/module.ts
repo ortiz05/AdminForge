@@ -138,6 +138,7 @@ export function createSchedulesModule(
       exportMaxRows: ctx.config.EXPORT_MAX_ROWS,
       now: ctx.now,
       ...(opts.sleep ? { sleep: opts.sleep } : {}),
+      ...(log ? { log } : {}),
       onProbe: (o) =>
         events.publish({
           type: 'probe.updated',

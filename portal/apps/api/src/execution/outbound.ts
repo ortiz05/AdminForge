@@ -336,6 +336,34 @@ export function outboundAppError(err: unknown): AppError {
   return toAppError(err);
 }
 
+/**
+ * Microsoft Defender XDR (Graph `security/incidents`, `alerts_v2`, `runHuntingQuery`) answers 403 "Account is not
+ * provisioned" until the tenant's Defender data exists — also in a licensed tenant, until a Global or Security
+ * Administrator first opens the Defender portal. `$filter` syntax is still checked first (400 before this 403).
+ */
+const isDefenderNotProvisioned = (err: ApiError) =>
+  (err.status === 401 || err.status === 403) && /\baccount is not provisioned\b/i.test(err.message);
+
+/** The message for Defender XDR's "Account is not provisioned" (probes report it as `not_configured`). */
+export const DEFENDER_NOT_PROVISIONED =
+  'Microsoft Defender XDR isn’t set up for this tenant yet, so there are no incidents, alerts or advanced hunting data to read.';
+
+/**
+ * Graph's Teams APIs (`/teams`, `/teams/{id}`, channels) answer delegated calls only for people who hold a Microsoft
+ * Teams licence themselves: "Failed to get license information for the user. Ensure user has a valid Office365
+ * license assigned to them." The tenant is licensed; the signed-in person isn't.
+ */
+const isUserNotLicensed = (err: ApiError) =>
+  err.status >= 400 &&
+  err.status < 500 &&
+  /license information for the user|ensure (?:the )?user has a valid [\w\s]{0,40}licen[cs]e/i.test(
+    err.message,
+  );
+
+/** The message for a call Microsoft answers only for licensed people (Teams Graph APIs). */
+export const USER_NOT_LICENSED =
+  'Microsoft answers this only for people who hold a licence for the service themselves, and your account has none.';
+
 const LICENCE_CODES =
   /AadPremiumLicenseRequired|RequestFromNonPremiumTenant|NotLicensed|LicenseNotFound|Tenant_?License/i;
 const LICENCE_TEXT =
@@ -355,6 +383,21 @@ export function errorHint(
       hint: 'Narrow it down (filters, fewer columns, a shorter time range or a smaller page) so the result is smaller. A portal administrator can raise OUTBOUND_MAX_BYTES.',
       licence: false,
     };
+  if (isDefenderNotProvisioned(err))
+    return {
+      hint: `A Global Administrator or Security Administrator opens the Microsoft Defender portal (security.microsoft.com) once; Microsoft then sets up the tenant's Defender data, which can take a few hours. Without a Defender licence (Microsoft 365 E5, Office 365 E5, Defender for Office 365 Plan 2 or Defender for Endpoint) it isn't available.${ref}`,
+      licence: false,
+      message: DEFENDER_NOT_PROVISIONED,
+    };
+  if (service === 'graph' && isUserNotLicensed(err))
+    return {
+      hint:
+        identity.kind === 'automation'
+          ? `Microsoft treated the automation identity as an unlicensed user; check that the call uses its application permissions.${ref}`
+          : `Ask your licensing admin to assign you a licence that includes the service (for teams and channels: Microsoft Teams, e.g. Office 365 E3 or E5). Other pages are unaffected.${ref}`,
+      licence: false,
+      message: USER_NOT_LICENSED,
+    };
   const licence =
     ((err.status === 401 || err.status === 403 || err.status === 400) &&
       (LICENCE_CODES.test(err.code) || LICENCE_TEXT.test(err.message))) ||
@@ -362,11 +405,13 @@ export function errorHint(
     isUnknownTenant(err);
   if (licence) {
     const need = requires?.licences?.length ? ` It requires ${requires.licences.join(' or ')}.` : '';
-    return {
-      hint: `Your tenant's licences don't include this feature.${need}${ref}`,
-      licence: true,
-      ...(isUnknownTenant(err) ? { message: USAGE_REPORTS_UNAVAILABLE } : {}),
-    };
+    if (isUnknownTenant(err))
+      return {
+        hint: `Microsoft starts the usage reports 24–48 hours after a tenant's first Microsoft 365 subscription and activity, so a newly licensed tenant sees this for a day or two; try again later. Without a Microsoft 365 subscription they never appear.${need}${ref}`,
+        licence: true,
+        message: USAGE_REPORTS_UNAVAILABLE,
+      };
+    return { hint: `Your tenant's licences don't include this feature.${need}${ref}`, licence: true };
   }
   if (err.status === 401 || err.status === 403) {
     const scopes =

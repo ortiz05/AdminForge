@@ -151,6 +151,8 @@ export const DIRECTORY_ROLES = {
   'User Administrator': 'fe930be7-5e62-47db-91af-98c3a49a38b1',
   'Groups Administrator': 'fdd7a751-b60b-444a-984c-02652fe8fa1c',
   'Global Reader': 'f2ef992c-3afb-46b9-b7cf-a126ee74c451',
+  'Exchange Recipient Administrator': '31392ffb-586c-42d1-9346-e59415a2cc4e',
+  'SharePoint Administrator': 'f28a1f50-f6e7-4571-818b-6a12f2af6b6c',
 } as const;
 export type DirectoryRoleName = keyof typeof DIRECTORY_ROLES;
 

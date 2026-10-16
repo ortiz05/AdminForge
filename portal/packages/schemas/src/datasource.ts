@@ -113,6 +113,15 @@ const dsBase = {
   cache: z.strictObject({ ttl: z.number().int().min(0).max(86_400) }).optional(),
   /** Skip this datasource (result `null`) unless true. */
   when: exprOr(z.boolean()).optional(),
+  /**
+   * Datasources that use this one (`ds.<name>`) still run when it fails: they see `null` instead of failing with
+   * `dependency_failed`, and carry the failure in their result's `errors` (`ds.<name>`), so exports and scheduled
+   * reports know they are incomplete (its own widgets still show the error). For enrichment some viewers can't read,
+   * e.g. Teams Graph APIs that answer only people who hold a Teams licence. Never applies to a missing portal role,
+   * the request policy (`policy_denied`), a missing tenant licence (`licence_required`) or a sign-in / arming problem
+   * — here or anywhere further up the chain: those still fail the dependents.
+   */
+  optional: z.boolean().optional(),
   /** Extra requirements of this datasource only (shown per widget). */
   requires: Requires.optional(),
 };

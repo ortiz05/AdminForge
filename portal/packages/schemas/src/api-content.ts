@@ -88,7 +88,10 @@ export const DatasourceResult = z.object({
   cursor: z.string().optional(),
   /** null for static and skipped datasources. */
   provenance: ProvenanceInfo.nullable(),
-  /** graphBatch: failed sub-requests (their values in `data` are null). */
+  /**
+   * graphBatch: failed sub-requests (their values in `data` are null). `ds.<name>`: an `optional: true` datasource it
+   * uses failed, so it ran without it (the result is incomplete).
+   */
   errors: z.record(z.string(), ErrorInfo).optional(),
   /** The datasource's `when` was false; data is null. */
   skipped: z.literal(true).optional(),
@@ -160,6 +163,7 @@ export const FEATURE_KEYS = [
   'teams',
   'sharepoint',
   'defender',
+  'defenderEndpoint',
   'signInLogs',
 ] as const;
 

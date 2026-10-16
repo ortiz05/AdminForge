@@ -11,6 +11,28 @@ export interface TestUserCredentials {
 
 const SECRET_RE = /\b([A-Za-z2-7]{16,64})\b/;
 
+/** Pages of the MFA registration Security Defaults asks for (completed below), not the campaign's nudge. */
+const MFA_REGISTRATION =
+  /Let's keep your account secure|Set up a different authentication app|Scan the QR code/i;
+const NUDGE =
+  /Sign in faster with your face, fingerprint,? or PIN|\b(create|set up|add) a passkey\b|Skip for now \(\d+ days? until this is required\)/i;
+
+/**
+ * Entra's authentication-methods registration campaign: a Microsoft-managed "nudge" to register a passkey or the
+ * Authenticator app ("Sign in faster with your face, fingerprint, or PIN") that interrupts sign-in on
+ * mysignins.microsoft.com. Headless Chrome can't complete it; `provision test-identities` excludes the validation user.
+ */
+export function isRegistrationNudge(url: string, body: string): boolean {
+  return (
+    /mysignins\.microsoft\.com|login\.microsoftonline\.com/.test(url) &&
+    !MFA_REGISTRATION.test(body) &&
+    NUDGE.test(body)
+  );
+}
+
+export const REGISTRATION_NUDGE_MESSAGE =
+  'Entra interrupted the sign-in with its registration campaign ("Sign in faster with your face, fingerprint, or PIN"), which an unattended sign-in cannot complete. Exclude the validation user from the campaign: run `pnpm adminforge provision test-identities` (`provision status` then shows the exclusion ✓).';
+
 /**
  * Drives the Microsoft Entra sign-in pages for the dedicated validation user.
  * With Security Defaults on, the first sign-in forces MFA registration: this registers a
@@ -44,7 +66,9 @@ export async function signInWithEntra(
     if (!isMicrosoft()) return { registeredTotp };
     const body = await text();
 
-    if (await visible('input[name="loginfmt"]:not([aria-hidden="true"])')) {
+    if (isRegistrationNudge(page.url(), body)) {
+      throw new Error(REGISTRATION_NUDGE_MESSAGE);
+    } else if (await visible('input[name="loginfmt"]:not([aria-hidden="true"])')) {
       await page.locator('input[name="loginfmt"]').fill(creds.upn);
       await page.locator('#idSIButton9').click();
     } else if (await visible('input[name="passwd"]')) {

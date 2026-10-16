@@ -75,7 +75,7 @@ function Write-AdminForgeLog {
         [Parameter(Mandatory, Position = 0)][AllowEmptyString()][string]$Message,
         [ValidateSet('Debug', 'Info', 'Warn', 'Error')][string]$Level = 'Info'
     )
-    Send-AdminForgeEvent @{ type = 'log'; level = $Level.ToLowerInvariant(); message = $Message; ts = [DateTime]::UtcNow.ToString('o') }
+    Send-AdminForgeEvent @{ type = 'log'; level = $Level.ToLowerInvariant(); message = (Format-AdminForgeMessage $Message); ts = [DateTime]::UtcNow.ToString('o') }
 }
 
 function Write-AdminForgeProgress {
@@ -176,6 +176,32 @@ function Get-AdminForgeErrorCategory {
     }
     if ($ErrorRecord -is [System.Management.Automation.ErrorRecord] -and $ErrorRecord.FullyQualifiedErrorId -like 'AdminForge.ReadOnlyMode*') { return 'readOnly' }
     'script'
+}
+
+function Format-AdminForgeMessage {
+    <#
+    .SYNOPSIS
+        Makes a service error readable for the person in front of the browser: Exchange Online's REST errors embed the
+        raw OData error JSON, and its remote cmdlets prefix "|Exception.Type|"; keep only the message text.
+    .EXAMPLE
+        Format-AdminForgeMessage $_.Exception.Message
+    #>
+    [CmdletBinding()]
+    [OutputType([string])]
+    param([Parameter(Mandatory, Position = 0)][AllowNull()][AllowEmptyString()][string]$Message)
+    if ([string]::IsNullOrEmpty($Message)) { return $Message }
+    $text = $Message
+    # "An error occurred while processing this request.. {"error":{"code":"NotFound","message":"…",…}}. An error was read
+    # from the payload. See the 'Error' property for more details.." → the OData error's message.
+    $odata = [regex]::Match($text, '(?:An error occurred while processing this request\.*\s*)?\{"error":\{"code":"[^"]*","message":"(?<m>(?:[^"\\]|\\.)*)"[\s\S]*$')
+    if ($odata.Success) {
+        $inner = try { [string](ConvertFrom-Json -InputObject ('"' + $odata.Groups['m'].Value + '"')) } catch { $odata.Groups['m'].Value }
+        $text = $text.Substring(0, $odata.Index) + $inner
+    }
+    # "|Microsoft.Exchange.….ManagementObjectNotFoundException|The operation …" or "||The operation …".
+    $text = [regex]::Replace($text, '(^|\s)\|[A-Za-z0-9_.]*\|', '$1')
+    $text = [regex]::Replace($text, '\.{2,}(\s|$)', '.$1')
+    $text.Trim()
 }
 
 function Get-AdminForgeInput {
@@ -355,10 +381,10 @@ function Connect-AdminForgeServices {
                     Connect-ExchangeOnline @params | Out-Null
                 }
                 'Teams' {
+                    # The tenant comes from the tokens: MicrosoftTeams 8 refuses -TenantId together with -AccessTokens
+                    # ("Not supported tenant type").
                     $teamsTokens = @((& $token 'graph' 'Microsoft Teams'), (& $token 'teams' 'Microsoft Teams'))
-                    $params = @{ AccessTokens = $teamsTokens; ErrorAction = 'Stop' }
-                    if ($tenant.Contains('id') -and $tenant['id']) { $params.TenantId = [string]$tenant['id'] }
-                    Connect-MicrosoftTeams @params | Out-Null
+                    Connect-MicrosoftTeams -AccessTokens $teamsTokens -ErrorAction Stop | Out-Null
                 }
                 'SharePoint' {
                     $name = & $tenantValue 'spoTenantName' 'SharePoint'
@@ -425,8 +451,8 @@ $script:ScriptHelpers = @(
 )
 $script:InternalCommands = @(
     'Set-AdminForgeEventSink', 'Send-AdminForgeEvent', 'Send-AdminForgeStreamRecord', 'Get-AdminForgeErrorCategory',
-    'Connect-AdminForgeServices', 'Enable-AdminForgeReadOnlyMode', 'Test-AdminForgeReadOnlyScript',
-    'Assert-AdminForgeReadOnlyScript',
+    'Format-AdminForgeMessage', 'Connect-AdminForgeServices', 'Enable-AdminForgeReadOnlyMode',
+    'Test-AdminForgeReadOnlyScript', 'Assert-AdminForgeReadOnlyScript',
     # worker.ps1 defines these in the scope the job script runs in.
     'Send-WorkerLine', 'Send-WorkerError', 'Exit-Worker'
 )
@@ -839,7 +865,7 @@ function Get-AdminForgeMode {
 Export-ModuleMember -Function @(
     'Set-AdminForgeEventSink', 'Send-AdminForgeEvent', 'Send-AdminForgeStreamRecord',
     'Write-AdminForgeLog', 'Write-AdminForgeProgress', 'Write-AdminForgeOutput',
-    'New-AdminForgeError', 'Get-AdminForgeErrorCategory', 'Get-AdminForgeInput',
+    'New-AdminForgeError', 'Get-AdminForgeErrorCategory', 'Format-AdminForgeMessage', 'Get-AdminForgeInput',
     'Connect-AdminForgeServices', 'Enable-AdminForgeReadOnlyMode', 'Get-AdminForgeMode',
     'Test-AdminForgeReadOnlyScript', 'Assert-AdminForgeReadOnlyScript'
 )

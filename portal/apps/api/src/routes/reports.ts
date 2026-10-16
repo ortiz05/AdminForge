@@ -6,7 +6,7 @@ import { PAGE_KINDS, type LoadedPage } from '../datasources/executor';
 import { parseBody } from '../errors';
 import { outboundAppError } from '../execution/outbound';
 import { advancedParamOf, describeAdvanced, type AdvancedGroup } from '../datasources/advanced';
-import { contentType, exportPages, exportStream, planExport } from '../reports/export';
+import { contentType, exportPages, exportStream, planExport, trackIncomplete } from '../reports/export';
 import { currentPage, userScope } from './datasources';
 
 const EXPORT_KINDS = ['report', ...PAGE_KINDS.filter((k) => k !== 'report')] as const;
@@ -57,17 +57,24 @@ export function reportRoutes(api: FastifyInstance, ctx: AppContext) {
           .catch((err: unknown) => request.log.error({ err }, 'audit of report export failed'));
 
       // The first page is fetched before the response starts, so permission and policy errors still return JSON.
-      const pages = exportPages(
-        runner,
-        {
-          identity: { kind: 'delegated', session, mode: 'read' },
-          user,
-          page,
-          params,
-          correlationId: request.id,
-        },
-        plan,
+      // `optional` datasources that failed (the rows were built without them) are audited and logged.
+      const { pages, incomplete } = trackIncomplete(
+        exportPages(
+          runner,
+          {
+            identity: { kind: 'delegated', session, mode: 'read' },
+            user,
+            page,
+            params,
+            correlationId: request.id,
+          },
+          plan,
+        ),
       );
+      const incompleteCodes = () =>
+        Object.keys(incomplete).length
+          ? { incomplete: Object.fromEntries(Object.entries(incomplete).map(([k, e]) => [k, e.code])) }
+          : {};
       let first: IteratorResult<{ rows: Record<string, unknown>[]; truncated: boolean }>;
       try {
         first = await pages.next();
@@ -82,9 +89,15 @@ export function reportRoutes(api: FastifyInstance, ctx: AppContext) {
       })();
       const stream = exportStream(body.format, plan.columns, all, (err, stats) => {
         if (err) request.log.warn({ err }, 'report export failed while streaming');
+        if (Object.keys(incomplete).length)
+          request.log.warn(
+            { report: page.key, ...incompleteCodes() },
+            'report exported without optional data',
+          );
         void audit(err ? 'failure' : 'success', {
           rows: stats.rows,
           truncated: stats.truncated,
+          ...incompleteCodes(),
           ...(err ? { error: outboundAppError(err).code } : {}),
         });
       });

@@ -1,0 +1,120 @@
+# 4. Security for contributors
+
+AdminForge holds delegated and application access to Microsoft tenants. A bug here isn't a broken page — it can be a
+tenant-wide change nobody intended, or tenant data in the wrong hands. This page is the contributor's view: the rules
+you apply every day and when to ask for a review. The full model is [`SECURITY.md`](../../SECURITY.md).
+
+## The rules that are never traded for convenience
+
+**Tenant data and secrets**
+
+1. Nothing tenant-specific in git: tenant, client, subscription or workspace ids, domains, UPNs, names, licence SKUs,
+   secrets — not in code, content, fixtures, docs, screenshots, commit messages or PR descriptions. Content refers to
+   installation values as `${env.X}` (and the key must exist in `config/example.env`). Fixtures use `Example Org`,
+   `example.com` and generated GUIDs.
+   - The guard tests check committable **text** files for secrets and for your tenant's values — but only on your
+     machine: the tenant values come from your env file, so the `pre-commit` hook is the only place they are checked
+     (CI has no tenant configuration), and no guard reads images. Screenshots are your responsibility: mock mode only.
+2. Secrets are never printed, logged, committed, put in run outputs (`secretOutputs`), or pasted into chat, issues or
+   AI prompts. `pnpm adminforge env check` shows key **names and states** only — that's the only way to inspect a
+   config file in front of others.
+3. Real configuration lives in `~/.config/adminforge/` (directory 700, files 600). Don't copy it elsewhere, don't put it
+   in the repository, don't share it. Provisioner credentials (`*.admin.env`) are for the CLI and live tests only.
+4. When you report on live work (a PR, a chat, a bug), report **counts and statuses**, not names, UPNs or ids.
+
+**Identity and writes**
+
+5. Interactive work is delegated: the Read app, and the Write app only while armed. Never add app-only permissions to
+   an interactive path. The automation identity never acts **for a person**: it runs unattended work (the scheduler
+   and scheduled runs) and the few platform tasks `SECURITY.md` lists (protected-object lookups, notification mail,
+   checking a portal schedule's creator still has access).
+6. Every write is declared by published content (`mode: write` steps with `describe`, `risk`, `confirm` or
+   `approval`). Never add a generic write proxy, a "raw request" endpoint, or a way to run arbitrary Graph calls.
+7. Every Microsoft call goes through the outbound executor (`ctx.outbound.execute(identity, call, { correlationId })`),
+   which applies the default-deny request policy, picks the right token, carries the correlation id to Microsoft
+   (`client-request-id`) and maps errors. Never `fetch` Microsoft directly. Writes that don't go through `execute`
+   still call `ctx.outbound.assertWritable(...)` (emergency stop, protected objects).
+8. Separation of duties: nobody approves their own request or a change that benefits them; AdminForge's own apps,
+   the groups that grant portal roles and protected accounts are out of reach of writes; scheduled writes need two
+   people. Don't add shortcuts around these, even for admins.
+
+**Untrusted input and output**
+
+9. Anything a person types, or that comes from Microsoft, is untrusted. In content use `$odata()` /
+   `$odataSearch()` for Graph filters and searches, `$kql()` for KQL, `$encode()` for path segments, `$guid()` for
+   ids; advanced filters are compiled on the server (`${ advanced }`), never read raw. In code use the same helpers
+   (`odataLiteral`, `odataSearchEscape`, `kqlLiteral`, `encodePathSegment` in `@adminforge/expressions`) and
+   zod-parse every request body and query.
+10. Text that leaves AdminForge (email, Teams, files) or is shown in the UI is data, never markup or code: no
+    `dangerouslySetInnerHTML` with data, Markdown escaped, CSV formula characters neutralised, links only http(s),
+    `mailto:` or in-app paths.
+11. Traffic that isn't to Microsoft's APIs has its own guarded path — reuse it, don't open a new one: Teams webhooks
+    only on Microsoft webhook hosts, probe targets through `assertProbeTarget`, news feeds only from the
+    `NEWS_FEED_HOSTS` allow-list (ADR-013). A new outbound host is a reviewed code change.
+
+**The API surface**
+
+12. Every `/api` route needs a session and `Portal.Reader`, except the five shell routes in `READER_EXEMPT`
+    (`portal/apps/api/src/app.ts`, pinned by `tests/api/reader-required.test.ts`). Check further roles with
+    `requireRole(...)` in the handler; roles are flat — none implies another.
+13. CSRF: every non-GET `/api` request needs `X-AdminForge-CSRF` (enforced globally — don't exempt routes); the
+    state-changing `/auth` POSTs use `requireSessionWithCsrf`; a GET that consumes state (reading a show-once secret)
+    calls `assertCsrf` itself.
+14. Every state change appends an audit event with the actor and identity. Security-relevant refusals are audited
+    centrally (`request.denied`) for the codes in `AUDITED_DENIALS` (`errors.ts`) — add a new refusal code there if it
+    matters for an investigation.
+15. Errors never contain tokens, stack traces, header names, raw upstream bodies or another person's data.
+
+## What needs a security review
+
+Ask for one — run the `security-reviewer` agent **and** get a code owner's review — when the change touches:
+
+- `portal/apps/**` or `portal/packages/{connectors,engine,expressions}` (the agent's own scope), and in particular
+  `portal/apps/api/src/{auth,security,execution}/`, the request policy, the runner, the scheduler, provisioning
+  (`portal/tools/cli/src/provision`) and `portal/deploy`;
+- content that writes, runs unattended, or calls out: `playbooks/`, `runbooks/`, `schedules/`, `probes/`,
+  `connections/`, `scripts/`, `feeds/` and the news host list;
+- anything that adds a permission, a configuration key holding a secret, a new outbound host, a new way to send
+  data out (email, webhook, file), or a new role check;
+- `.github/`, `.githooks/`, `tooling/` and `.claude/` (they decide what runs on every change).
+
+For content changes, also run the `content-reviewer` agent. `.github/CODEOWNERS` lists these paths, so GitHub
+requests a code owner's review on them — once branch protection with "Require review from Code Owners" is on.
+Today one person owns every path, and nobody can approve their own pull request: until more owners are added,
+a code owner's own changes need another engineer's review by agreement (a known gap in `SECURITY.md`). The
+[checklists](checklists.md#security-review) have the reviewer's questions.
+
+## Dependencies
+
+- Prefer the platform and the packages already in the workspace. A new dependency needs a sentence in the PR on why,
+  its maintenance and licence, and what it can reach (network, filesystem, `eval`, install scripts).
+- npm dependencies use `^` ranges; the committed `pnpm-lock.yaml` and `pnpm install --frozen-lockfile` (CI) make
+  installs reproducible. Install scripts are opt-in (`allowBuilds` in `pnpm-workspace.yaml`), and security fixes for
+  transitive packages go in its `overrides`. Exact pins are used for PowerShell modules
+  (`portal/apps/runner/modules.lock.json`), GitHub Actions (a commit SHA with the version in a comment) and the
+  runner's Docker base image.
+- CI fails on high or critical advisories (`pnpm audit --audit-level high`); Dependabot proposes updates weekly.
+- Test-only dependencies belong to `@adminforge/tests`, never to a runtime package.
+
+## Live tenants
+
+- You test against the **validation tenant**, never production, and only after a code owner gave you access.
+- Writes only on the `AF-Test-*` objects provisioning created (`pnpm adminforge provision test-identities`): dry run →
+  run → compensating playbook → check `/audit` ([`tests/live/README.md`](../../tests/live/README.md)).
+- Live-test output and screenshots stay outside the repository (`AF_LIVE_OUT`).
+- Don't run `adminforge provision entra`, `publish` to a shared database, or anything on the host unless a code owner
+  asked you to ([Releases and operations](13-releases-and-operations.md)).
+- Don't paste tenant output into AI tools, issues or chats. Summaries with counts and statuses are fine.
+
+## If you find a vulnerability or leak
+
+- In AdminForge itself: open a **private** security advisory on the repository (Security → Advisories) or contact the
+  repository owner directly. Never a public issue, PR title or channel.
+- A secret or tenant value got committed or pushed: tell a code owner immediately. Rotating the secret comes first
+  (`docs/operations.md` → Secret and key rotation); rewriting history alone doesn't help once it was pushed.
+- A playbook did something unexpected in a tenant: an Approver or Admin can pause all changes or all automation from
+  **Admin → Settings → Emergency stop**; then tell a code owner with the run's reference.
+
+## Read next
+
+[Coding standards](05-coding-standards.md).

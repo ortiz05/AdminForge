@@ -18,6 +18,10 @@ schedules, synthetic probes, and KQL configuration checks are declarative conten
 - **Automation**: playbooks (dry-run preview → confirm → run; approvals; bulk; show-once secrets), runbooks,
   schedules on this host (automation identity), synthetic probes and KQL checks, Query Studio, reports with
   CSV/XLSX export, audit (hash-chained), appearance and settings.
+- **News and changes**: a breaking-news view of what Microsoft is changing in the services AdminForge manages —
+  your tenant's Message Center and Microsoft 365 / Azure service health, plus Azure Updates, the Microsoft 365 Roadmap,
+  MSRC security updates, product blogs, Learn what's-new pages and PowerShell module releases — collected hourly,
+  classified by area, every item cited and linked to its source (`docs/news.md`).
 
 Licensing gaps are explained in the UI ("Requires …") and tracked in `docs/licensing-review.md`.
 
@@ -27,9 +31,9 @@ Licensing gaps are explained in the UI ("Requires …") and tracked in `docs/lic
 | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `portal/`            | Everything needed to run AdminForge: apps (web, api, scheduler, runner), packages, content, CLI, deploy files                                          |
 | `tests/`             | Every test and test-only dependency (unit, component, api, content, e2e incl. visual baselines, live, guards, runner, fixtures); see `tests/README.md` |
-| `tooling/`           | Developer tooling (lint)                                                                                                                               |
+| `tooling/`           | Developer tooling (lint, CI bundle budget, commit-message check)                                                                                       |
 | `config/example.env` | Every configuration key, documented. Real values live outside the repo.                                                                                |
-| `docs/`              | Plan, ADRs, decisions, widget reference, extending guide, licensing review, backlog                                                                    |
+| `docs/`              | Architecture, API, ADRs, decisions, widget reference, extending guide, licensing review, backlog, engineer onboarding (`docs/onboarding/`)             |
 
 ## Prerequisites
 
@@ -77,11 +81,14 @@ baselines in `tests/e2e`) · `pnpm guard` (runs on every commit) · `pnpm format
 ## Extending
 
 Use Claude Code: the rules are in `CLAUDE.md`, one skill per extension point lives in `.claude/skills/`, reviewer
-agents in `.claude/agents/`, and `docs/extending.md` explains the workflow. The full design is in
-`docs/plans/2026-10-15-adminforge-master-plan.md`.
+agents in `.claude/agents/`, and `docs/extending.md` explains the workflow. The current design is described by
+`SECURITY.md`, `docs/architecture.md` and the decision records (`docs/adr/`, `docs/decisions.md`);
+`docs/plans/2026-10-15-adminforge-master-plan.md` is the original build plan, kept for history.
 
 ## Documentation
 
+- `docs/onboarding/` — **start here if you're joining**: setup, how it works, conventions for code, API, web, content,
+  tests, commits, pull requests and docs (`CONTRIBUTING.md` has the essentials)
 - `SECURITY.md` — security model and policy
 - `docs/architecture.md` — architecture: apps, identities, data flow
 - `docs/access.md` — access: sign-in, portal roles, permissions

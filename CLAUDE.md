@@ -14,13 +14,14 @@ extension point — and the reviewer agents in `.claude/agents/`.
 | ----------------------- | ---------------------------------------------------------------------------------------------------- |
 | `portal/apps/web`       | React SPA: shell, `/p/$key` content renderer, playbook drawer, runs, schedules, Query Studio         |
 | `portal/apps/api`       | BFF (Fastify): auth, sessions, request policy, datasource executor, definitions, runs, schedules API |
-| `portal/apps/scheduler` | Cron service on this host (automation identity): probes, KQL checks, reports, scheduled playbooks    |
+| `portal/apps/scheduler` | Cron service on this host (automation identity): probes, KQL checks, reports, playbooks, news feeds  |
 | `portal/apps/runner`    | PowerShell runner (Exchange/Teams/SharePoint) — pinned scripts, forwarded delegated tokens           |
 | `portal/packages/*`     | `design-tokens`, `ui`, `widgets`, `schemas`, `expressions`, `connectors`, `engine`, `config`         |
-| `portal/content`        | Pages, dashboards, reports, playbooks, runbooks, schedules, probes, connections, scripts, navigation |
+| `portal/content`        | Pages, dashboards, reports, playbooks, runbooks, schedules, probes, connections, feeds, scripts, nav |
 | `portal/tools/cli`      | `adminforge` CLI (env check, provision, new, validate, test, publish, fixtures)                      |
 | `tests/`                | **All** tests and test-only deps (unit, component, api, content, e2e, live, guards, fixtures)        |
-| `docs/`                 | Plan (`plans/`), ADRs, `widgets.md`, `licensing-review.md`, `backlog.md`, `extending.md`             |
+| `docs/`                 | ADRs, `api.md`, `widgets.md`, `news.md`, `licensing-review.md`, `backlog.md`, `extending.md`         |
+| `docs/onboarding/`      | Engineer onboarding: setup, conventions for code, API, web, content, tests, git, docs, security      |
 | `config/example.env`    | Every configuration key, documented. Real values live outside the repo.                              |
 
 ## Non-negotiables
@@ -73,7 +74,7 @@ extension point — and the reviewer agents in `.claude/agents/`.
 | Focused tests                  | `pnpm --filter @adminforge/tests exec vitest run --project <unit\|component\|api\|content\|guards> <path>`                               |
 | Lint / types                   | `pnpm lint` · `pnpm typecheck`                                                                                                           |
 | Format                         | `pnpm format` (write) · `pnpm format:check` (CI)                                                                                         |
-| Publish content to the DB      | `pnpm adminforge publish [--dry-run]`                                                                                                    |
+| Publish content to the DB      | `pnpm adminforge publish [--dry-run]` (runs validate + tests; needs committed content on `origin/main`, else `--allow-unreviewed`)       |
 | Live smoke (validation tenant) | `pnpm exec tsx tests/live/scripts/verify-api-live.ts` · full sweep: `pnpm test:live` (see `tests/live/README.md`)                        |
 
 Mock mode ignores the env file (`ADMINFORGE_ENV_FILE=/dev/null`), so it runs on in-memory stores and never touches a
@@ -85,6 +86,13 @@ only).
 
 Postgres for dev runs in Docker on `127.0.0.1:55432` (`pnpm db:up`). System Chrome is used by Playwright (no browser
 download).
+
+## Commits and pull requests
+
+Conventional Commits with AdminForge's types and scopes — `<type>(<scope>): <summary>`, e.g.
+`fix(scheduler): skip deleted portal schedules` (header ≤ 100 characters, no full stop; body says why). The
+`commit-msg` hook and CI (pull request title) check it with `tooling/git/commit-message.mjs`; the full rules, branch
+naming and review process are in `docs/onboarding/10-git-and-pull-requests.md`. One logical change per commit.
 
 ## Before you say "done"
 

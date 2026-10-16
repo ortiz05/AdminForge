@@ -39,6 +39,13 @@ const nav = tv({
     itemIcon: 'shrink-0 text-fg-3 group-hover:text-fg-2',
     label: 'min-w-0 flex-1 truncate nav-collapsed:sr-only',
     badge: 'rounded-pill bg-accent-subtle px-1.5 text-2xs font-semibold text-accent nav-collapsed:hidden',
+    /** Live counts (unread news): a pill beside the label, a bubble on the icon in the icon rail. */
+    count:
+      'min-w-5 rounded-pill bg-accent px-1.5 text-center text-2xs leading-4 font-semibold text-on-accent tabular-nums nav-collapsed:hidden',
+    countDot: [
+      'absolute top-0.5 right-1 hidden h-3.5 min-w-3.5 items-center justify-center rounded-pill bg-accent px-0.5',
+      'text-2xs leading-none font-semibold text-on-accent tabular-nums nav-collapsed:flex',
+    ],
     /** "Requires Intune": the page still opens (and explains), so it's a quiet lock, not an alert. */
     requires:
       'inline-flex max-w-24 shrink-0 items-center gap-1 rounded-sm border border-line px-1 text-2xs font-medium text-fg-3 nav-collapsed:hidden',
@@ -80,20 +87,32 @@ export function requiresText(badge: string | undefined): string | null {
   return [...new Set(names)].join(' / ');
 }
 
+/** A live count on a navigation item: `count` is shown ("99+" above 99), `label` is what it means. */
+export interface NavCount {
+  count: number;
+  /** "12 unread changes" — the accessible description and the icon-rail tooltip. */
+  label: string;
+}
+
+const countText = (n: number) => (n > 99 ? '99+' : String(n));
+
 function NavLink({
   item,
   section,
   active,
   collapsed,
+  live,
 }: {
   item: NavItem;
   section: NavSection;
   active: boolean;
   collapsed: boolean;
+  live?: NavCount;
 }) {
   const s = nav();
   const requires = requiresText(item.badge);
-  const className = cn(s.item(), active && s.itemActive(), requires && 'relative');
+  const counted = live && live.count > 0 ? live : undefined;
+  const className = cn(s.item(), active && s.itemActive(), (requires || counted) && 'relative');
   const content = (
     <>
       <Icon
@@ -117,6 +136,18 @@ function NavLink({
       ) : (
         item.badge && <span className={s.badge()}>{item.badge}</span>
       )}
+      {counted && (
+        <>
+          <span className={s.count()} aria-hidden>
+            {countText(counted.count)}
+          </span>
+          <span className={s.countDot()} aria-hidden>
+            {countText(counted.count)}
+          </span>
+          {/* The space keeps "News and changes (3 unread changes)" apart in the accessible name. */}{' '}
+          <span className="sr-only">({counted.label})</span>
+        </>
+      )}
     </>
   );
   const external = /^https?:\/\//.test(item.href);
@@ -139,7 +170,9 @@ function NavLink({
   );
   return (
     <Tooltip
-      content={requires ? `${item.label} · ${item.badge}` : item.label}
+      content={
+        requires ? `${item.label} · ${item.badge}` : counted ? `${item.label} · ${counted.label}` : item.label
+      }
       side="right"
       disabled={!collapsed}
     >
@@ -153,9 +186,14 @@ export interface NavRailProps {
   loading?: boolean;
   collapsed: boolean;
   onToggle: () => void;
-  /** Keys of sections the person closed. A closed section still shows the page you're on. */
+  /**
+   * Keys of closed sections (by default all of them). A closed section still shows the page you're on and any page with
+   * a live count (unread news), so nothing that needs attention disappears.
+   */
   closedSections?: readonly string[];
   onToggleSection?: (key: string) => void;
+  /** Live counts by navigation item key (e.g. `news`: unread changes). */
+  counts?: Readonly<Record<string, NavCount>>;
 }
 
 /**
@@ -169,6 +207,7 @@ export function NavRail({
   onToggle,
   closedSections = [],
   onToggleSection,
+  counts,
 }: NavRailProps) {
   const pathname = useRouterState({ select: (st) => st.location.pathname });
   const s = nav();
@@ -186,8 +225,9 @@ export function NavRail({
         {sections?.map((section, i) => {
           const closed = !collapsed && closedSections.includes(section.key);
           const items = closed
-            ? section.items.filter((item) => isActive(item.href, pathname))
+            ? section.items.filter((item) => isActive(item.href, pathname) || counts?.[item.key])
             : section.items;
+          const hidden = section.items.length - items.length;
           return (
             <div key={section.key} className={s.section()}>
               {i > 0 && <div className={s.divider()} aria-hidden />}
@@ -202,15 +242,13 @@ export function NavRail({
                     className={s.headingToggle()}
                     aria-expanded={!closed}
                     aria-controls={`nav-list-${section.key}`}
-                    aria-label={
-                      closed ? `${section.label} (${section.items.length} pages hidden)` : section.label
-                    }
+                    aria-label={closed ? `${section.label} (${hidden} pages hidden)` : section.label}
                     onClick={() => onToggleSection(section.key)}
                   >
                     <span className="min-w-0 flex-1 truncate">{section.label}</span>
-                    {closed && (
+                    {closed && hidden > 0 && (
                       <span className={s.hiddenCount()} aria-hidden>
-                        {section.items.length}
+                        {hidden}
                       </span>
                     )}
                     <CaretDownIcon
@@ -236,6 +274,7 @@ export function NavRail({
                       section={section}
                       active={isActive(item.href, pathname)}
                       collapsed={collapsed}
+                      live={counts?.[item.key]}
                     />
                   </li>
                 ))}

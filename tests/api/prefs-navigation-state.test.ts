@@ -22,18 +22,18 @@ describe('PUT /api/me/prefs and the audit log', () => {
         payload: body,
       });
 
-    expect((await put({ navSections: ['identity', 'azure'] })).statusCode).toBe(200);
+    expect((await put({ navOpenSections: ['identity', 'azure'] })).statusCode).toBe(200);
     expect((await put({ recents: ['/p/azure.resources'] })).statusCode).toBe(200);
     expect(t.audit.rows.filter((r) => r.action === 'prefs.updated')).toEqual([]);
 
-    expect((await put({ density: 'compact', navSections: ['identity'] })).statusCode).toBe(200);
+    expect((await put({ density: 'compact', navOpenSections: ['identity'] })).statusCode).toBe(200);
     expect(t.audit.rows.filter((r) => r.action === 'prefs.updated').map((r) => r.details)).toEqual([
-      { changed: ['density', 'navSections'] },
+      { changed: ['density', 'navOpenSections'] },
     ]);
 
     const { me } = await getMe(t.app, cookie);
     expect(me!.prefs).toEqual({
-      navSections: ['identity'],
+      navOpenSections: ['identity'],
       recents: ['/p/azure.resources'],
       density: 'compact',
     });
@@ -45,7 +45,7 @@ describe('PUT /api/me/prefs and the audit log', () => {
       method: 'PUT',
       url: '/api/me/prefs',
       headers: { cookie, 'x-adminforge-csrf': csrf },
-      payload: { navSections: Array.from({ length: 31 }, (_, i) => `s${i}`) },
+      payload: { navOpenSections: Array.from({ length: 31 }, (_, i) => `s${i}`) },
     });
     expect(res.statusCode).toBe(400);
   });

@@ -40,14 +40,12 @@ for (const { name, width, startsCollapsed } of [
 }
 
 for (const theme of ['steel', 'daylight'] as const) {
-  test(`navigation sections close and reopen · ${theme}`, async ({ page }) => {
+  test(`navigation sections start collapsed, open and stay open · ${theme}`, async ({ page }) => {
     await setPrefs(page, { theme });
     await page.goto('/identity/users');
     await expect(page.getByRole('heading', { level: 1, name: 'Users' })).toBeVisible();
     const nav = page.getByRole('navigation', { name: 'Primary' });
-    await nav.getByRole('button', { name: 'Identity', exact: true }).click();
-    await nav.getByRole('button', { name: 'Microsoft 365', exact: true }).click();
-    // The page you're on stays visible in its closed section; the other section hides everything.
+    // Every section starts collapsed; the page you're on stays visible in its section.
     await expect(nav.getByRole('link', { name: 'Users' })).toBeVisible();
     await expect(nav.getByRole('link', { name: 'Groups' })).toBeHidden();
     await expect(nav.getByRole('link', { name: 'Licences' })).toBeHidden();
@@ -57,7 +55,13 @@ for (const theme of ['steel', 'daylight'] as const) {
     );
     await page.mouse.move(700, 500);
     await expect(nav).toHaveScreenshot(`nav-sections-closed-${theme}.png`);
+
     await nav.getByRole('button', { name: /^Identity \(/ }).click();
     await expect(nav.getByRole('link', { name: 'Groups' })).toBeVisible();
+    await expect(nav.getByRole('link', { name: 'Licences' })).toBeHidden();
+    // The opened section is remembered (the reload itself is covered by the component tests: setPrefs re-seeds storage).
+    expect(
+      await page.evaluate(() => JSON.parse(localStorage.getItem('adminforge.prefs') ?? '{}').navOpenSections),
+    ).toEqual(['identity']);
   });
 }

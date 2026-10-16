@@ -5,7 +5,7 @@ import { hasRole, requireSession } from '../auth/guards';
 import { isArmed, type SessionRecord } from '../auth/session-store';
 import { writeAppConfigured } from '../config';
 import { auditActor, type AppContext } from '../context';
-import { parseBody } from '../errors';
+import { AppError, parseBody } from '../errors';
 
 /** Builds the exact GET /api/me contract for a session. */
 /** Default theme and density from Admin → Appearance (never fails /api/me). */
@@ -47,18 +47,24 @@ export async function buildMe(ctx: AppContext, session: SessionRecord): Promise<
 export function meRoutes(api: FastifyInstance, ctx: AppContext) {
   api.get('/me', async (request) => buildMe(ctx, requireSession(request)));
 
-  const NAVIGATION_STATE = new Set(['recents', 'navSections']);
+  const NAVIGATION_STATE = new Set(['recents', 'navOpenSections', 'navSections', 'newsSeenAt']);
   /** Merges the given keys into the stored prefs; unknown keys are rejected (400). */
   api.put('/me/prefs', async (request) => {
     const session = requireSession(request);
     const patch = parseBody(UserPrefs.strict(), request.body);
+    // "Mark all as read" sets now; a marker in the future would hide news that hasn't happened yet.
+    if (patch.newsSeenAt && Date.parse(patch.newsSeenAt) > ctx.now().getTime() + 5 * 60_000)
+      throw new AppError(400, 'invalid_request', 'The read marker for News and changes is in the future.', {
+        hint: 'Check this computer’s clock, then mark the news as read again.',
+      });
     const current = await ctx.prefs.get(session.userOid);
     const prefs: UserPrefs = { ...current, ...patch };
     await ctx.prefs.put(session.userOid, prefs);
     const changed = Object.keys(patch).filter(
       (k) => JSON.stringify(current[k as keyof UserPrefs]) !== JSON.stringify(patch[k as keyof UserPrefs]),
     );
-    // Settings are audited; navigation state (recent pages, collapsed sections) changes on every click and isn't.
+    // Settings are audited; navigation state (recent pages, open sections, the news read marker) changes on every
+    // click and isn't.
     if (changed.some((k) => !NAVIGATION_STATE.has(k))) {
       await ctx.audit.append({
         ...auditActor(ctx, request, session),

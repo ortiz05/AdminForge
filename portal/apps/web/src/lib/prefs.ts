@@ -18,8 +18,8 @@ function sanitize(input: unknown): UserPrefs {
     theme: THEMES.includes(p.theme as ThemePref) ? (p.theme as ThemePref) : undefined,
     density: DENSITIES.includes(p.density as DensityPref) ? (p.density as DensityPref) : undefined,
     navCollapsed: typeof p.navCollapsed === 'boolean' ? p.navCollapsed : undefined,
-    navSections: Array.isArray(p.navSections)
-      ? p.navSections.filter((x): x is string => typeof x === 'string').slice(0, 30)
+    navOpenSections: Array.isArray(p.navOpenSections)
+      ? p.navOpenSections.filter((x): x is string => typeof x === 'string').slice(0, 30)
       : undefined,
     pinned: Array.isArray(p.pinned)
       ? p.pinned.filter((x): x is string => typeof x === 'string').slice(0, 50)
@@ -27,6 +27,8 @@ function sanitize(input: unknown): UserPrefs {
     recents: Array.isArray(p.recents)
       ? p.recents.filter((x): x is string => typeof x === 'string').slice(0, 50)
       : undefined,
+    newsSeenAt:
+      typeof p.newsSeenAt === 'string' && !Number.isNaN(Date.parse(p.newsSeenAt)) ? p.newsSeenAt : undefined,
   };
 }
 

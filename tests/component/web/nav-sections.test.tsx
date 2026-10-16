@@ -31,35 +31,50 @@ function renderApp(path = '/', prefs: UserPrefs = {}) {
 
 const nav = () => screen.getByRole('navigation', { name: 'Primary' });
 
-describe('navigation sections open and close', () => {
+describe('navigation sections start collapsed, open and close', () => {
   beforeEach(() => localStorage.clear());
   afterEach(() => vi.unstubAllGlobals());
 
-  it('a section heading closes and reopens its section, and the choice is saved', async () => {
+  it('every section starts collapsed; a heading opens it, and the choice is saved', async () => {
     const user = userEvent.setup();
     const { puts } = renderApp();
     await screen.findByRole('navigation', { name: 'Primary' });
-    const identity = await within(nav()).findByRole('button', { name: 'Identity' });
-    expect(identity).toHaveAttribute('aria-expanded', 'true');
-    expect(within(nav()).getByRole('link', { name: 'Groups' })).toBeInTheDocument();
+    const identity = await within(nav()).findByRole('button', { name: 'Identity (6 pages hidden)' });
+    expect(identity).toHaveAttribute('aria-expanded', 'false');
+    expect(
+      within(nav()).getByRole('button', { name: /^Microsoft 365 \(\d+ pages hidden\)$/ }),
+    ).toHaveAttribute('aria-expanded', 'false');
+    expect(within(nav()).queryByRole('link', { name: 'Groups' })).not.toBeInTheDocument();
+    expect(within(nav()).queryByRole('link', { name: 'Licences' })).not.toBeInTheDocument();
 
     await user.click(identity);
-    const closed = within(nav()).getByRole('button', { name: 'Identity (6 pages hidden)' });
-    expect(closed).toHaveAttribute('aria-expanded', 'false');
-    expect(within(nav()).queryByRole('link', { name: 'Groups' })).not.toBeInTheDocument();
-    expect(within(nav()).getByRole('link', { name: 'Licences' })).toBeInTheDocument();
-    expect(JSON.parse(localStorage.getItem('adminforge.prefs')!)).toMatchObject({
-      navSections: ['identity'],
-    });
-    await waitFor(() => expect(puts.at(-1)).toMatchObject({ navSections: ['identity'] }));
-
-    await user.click(closed);
-    expect(within(nav()).getByRole('button', { name: 'Identity' })).toHaveAttribute('aria-expanded', 'true');
+    const open = within(nav()).getByRole('button', { name: 'Identity' });
+    expect(open).toHaveAttribute('aria-expanded', 'true');
     expect(within(nav()).getByRole('link', { name: 'Groups' })).toBeInTheDocument();
+    expect(within(nav()).queryByRole('link', { name: 'Licences' })).not.toBeInTheDocument();
+    expect(JSON.parse(localStorage.getItem('adminforge.prefs')!)).toMatchObject({
+      navOpenSections: ['identity'],
+    });
+    await waitFor(() => expect(puts.at(-1)).toMatchObject({ navOpenSections: ['identity'] }));
+
+    await user.click(open);
+    expect(within(nav()).getByRole('button', { name: 'Identity (6 pages hidden)' })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    );
+    expect(within(nav()).queryByRole('link', { name: 'Groups' })).not.toBeInTheDocument();
+    await waitFor(() => expect(puts.at(-1)).toMatchObject({ navOpenSections: [] }));
   });
 
-  it('a closed section still shows the page you are on', async () => {
-    renderApp('/identity/users', { navSections: ['identity'] });
+  it('remembers opened sections, and ignores the old closed-sections preference', async () => {
+    renderApp('/', { navOpenSections: ['identity'], navSections: ['identity'] });
+    await screen.findByRole('navigation', { name: 'Primary' });
+    expect(await within(nav()).findByRole('link', { name: 'Groups' })).toBeInTheDocument();
+    expect(within(nav()).queryByRole('link', { name: 'Licences' })).not.toBeInTheDocument();
+  });
+
+  it('a collapsed section still shows the page you are on', async () => {
+    renderApp('/identity/users');
     await screen.findByRole('navigation', { name: 'Primary' });
     const users = await within(nav()).findByRole('link', { name: 'Users' });
     expect(users).toHaveAttribute('aria-current', 'page');
@@ -67,7 +82,7 @@ describe('navigation sections open and close', () => {
   });
 
   it('the icon rail shows every page and has no section toggles', async () => {
-    renderApp('/', { navCollapsed: true, navSections: ['identity'] });
+    renderApp('/', { navCollapsed: true });
     await screen.findByRole('navigation', { name: 'Primary' });
     expect(await within(nav()).findByRole('link', { name: 'Groups' })).toBeInTheDocument();
     expect(within(nav()).queryByRole('button', { name: /^Identity/ })).not.toBeInTheDocument();

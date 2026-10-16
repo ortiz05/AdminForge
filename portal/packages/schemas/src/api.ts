@@ -13,10 +13,17 @@ export const UserPrefs = z.object({
   theme: ThemePref.optional(),
   density: DensityPref.optional(),
   navCollapsed: z.boolean().optional(),
-  /** Keys of the navigation sections the person collapsed (Identity, Azure, …). */
+  /**
+   * Keys of the navigation sections the person opened (Identity, Azure, …). Sections start collapsed, so a section
+   * added later starts collapsed too; a collapsed section still shows the page you're on.
+   */
+  navOpenSections: z.array(z.string().max(64)).max(30).optional(),
+  /** Superseded by `navOpenSections` (2026-10-16): the sections closed when everything started open. No longer read. */
   navSections: z.array(z.string().max(64)).max(30).optional(),
   pinned: z.array(z.string()).max(50).optional(),
   recents: z.array(z.string()).max(50).optional(),
+  /** When the person last marked News and changes as read (ISO date-time). */
+  newsSeenAt: z.iso.datetime({ offset: true }).optional(),
 });
 export type UserPrefs = z.infer<typeof UserPrefs>;
 

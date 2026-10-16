@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useLiveUpdates } from './live-updates';
 import { errorDescription } from '../lib/errors';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouterState } from '@tanstack/react-router';
 import type { ArmRequest, MeResponse } from '@adminforge/schemas';
 import { Brand, Button, ErrorState, Skeleton, useMediaQuery, useToast } from '@adminforge/ui';
-import { api, ApiRequestError, ExtendResponse, RedirectResponse } from '../lib/api';
+import { api, ApiRequestError, ExtendResponse, loginUrl, RedirectResponse } from '../lib/api';
 import { browser } from '../lib/browser';
 import {
   NARROW_NAV_QUERY,
@@ -21,10 +21,13 @@ import { meQuery, SessionContext, useNav, useSession } from '../lib/session';
 import { useAppearanceStylesheet } from '../ops/appearance-link';
 import { PlaybookDrawerMount } from '../playbooks/PlaybookDrawerMount';
 import { forgetAllHistory, setHistoryOwner } from '../query/history';
+import { newsSummaryQuery } from '../news/api';
 import { useArmState, WARN_BEFORE_MS } from './arm';
+import { BreakingPill } from './BreakingPill';
 import { ArmControl } from './ArmControl';
 import { CommandPalette } from './CommandPalette';
 import { DevToolbar } from './DevToolbar';
+import { EmergencyBanner } from './EmergencyBanner';
 import { Inspector } from './Inspector';
 import { NavRail } from './NavRail';
 import { RunDock } from './RunDock';
@@ -60,9 +63,30 @@ function SignedInShell({ me, children }: { me: MeResponse; children: ReactNode }
   // Own choice wins; without one the rail follows the window width (applyPrefs keeps data-nav in step).
   const collapsed = prefs.navCollapsed ?? narrow;
   useEffect(() => applyPrefs(getPrefs()), [narrow]);
+  // Sections start collapsed; the person's opened ones are remembered (a section added later starts collapsed too).
+  const openSections = useMemo(() => prefs.navOpenSections ?? [], [prefs.navOpenSections]);
+  const closedSections = useMemo(
+    () => (nav.data?.sections ?? []).map((s) => s.key).filter((k) => !openSections.includes(k)),
+    [nav.data, openSections],
+  );
   const [paletteOpen, setPaletteOpen] = useState(false);
   useAppearanceStylesheet();
   const [armDialogOpen, setArmDialogOpen] = useState(false);
+  // Unread news for the navigation badge and the top-bar pill (polled; `news.updated` refetches it sooner).
+  const news = useQuery(newsSummaryQuery);
+  const unreadNews = news.data?.unread ?? 0;
+  const navCounts = useMemo(
+    () =>
+      unreadNews > 0
+        ? {
+            news: {
+              count: unreadNews,
+              label: `${unreadNews > 99 ? '99+' : unreadNews} unread ${unreadNews === 1 ? 'change' : 'changes'}`,
+            },
+          }
+        : undefined,
+    [unreadNews],
+  );
 
   // Query Studio history belongs to this user (keyed by oid in this browser).
   useEffect(() => setHistoryOwner(me.user.oid), [me.user.oid]);
@@ -232,17 +256,20 @@ function SignedInShell({ me, children }: { me: MeResponse; children: ReactNode }
             />
           }
           userMenu={<UserMenu me={me} onSignOut={() => void signOut()} />}
+          indicators={<BreakingPill count={news.data?.breakingUnread ?? 0} />}
         />
         <NavRail
           sections={nav.data?.sections}
           loading={nav.isPending}
           collapsed={collapsed}
           onToggle={() => updatePrefs({ navCollapsed: !collapsed })}
-          closedSections={prefs.navSections}
+          closedSections={closedSections}
+          counts={navCounts}
           onToggleSection={(key) => {
-            const closed = prefs.navSections ?? [];
             updatePrefs({
-              navSections: closed.includes(key) ? closed.filter((k) => k !== key) : [...closed, key],
+              navOpenSections: openSections.includes(key)
+                ? openSections.filter((k) => k !== key)
+                : [...openSections, key],
             });
           }}
         />
@@ -252,6 +279,7 @@ function SignedInShell({ me, children }: { me: MeResponse; children: ReactNode }
           className="min-h-dvh pt-(--af-layout-rail-h) pb-(--af-layout-dock-h) pl-(--af-layout-nav-w) outline-none transition-all duration-(--af-motion-base) nav-collapsed:pl-(--af-layout-nav-w-collapsed)"
         >
           <div className="mx-auto w-full max-w-(--af-layout-content-max) px-8 pt-7 pb-12">
+            <EmergencyBanner />
             {nav.isError && (
               <div className="mb-6">
                 <ErrorState
@@ -291,8 +319,27 @@ export function AppShell({ children }: { children: ReactNode }) {
   if (session.isPending) return <Splash message="Checking your session…" />;
   if (session.isError) {
     const err = session.error;
-    if (err instanceof ApiRequestError && err.status === 401)
+    if (err instanceof ApiRequestError && err.status === 401 && err.signingIn)
       return <Splash message="Taking you to sign-in…" />;
+    if (err instanceof ApiRequestError && err.status === 401)
+      // Ended while nobody was using the tab: signing in again is the person's call (lib/api.ts).
+      return (
+        <div className="flex min-h-dvh flex-col items-center justify-center gap-8 p-8">
+          <Brand size="lg" />
+          <ErrorState
+            title="You’re signed out"
+            message={err.message}
+            hint={err.hint}
+            code={err.code}
+            correlationId={err.correlationId}
+            action={
+              <Button onClick={() => browser.assign(loginUrl(err.login ?? '/auth/login'))}>
+                Sign in again
+              </Button>
+            }
+          />
+        </div>
+      );
     return (
       <div className="flex min-h-dvh flex-col items-center justify-center gap-8 p-8">
         <Brand size="lg" />

@@ -73,6 +73,10 @@ describe('AppShell (real routes, mocked API)', () => {
     renderApp();
     expect(await screen.findByRole('heading', { level: 1, name: 'Example Org' })).toBeInTheDocument();
     const nav = screen.getByRole('navigation', { name: 'Primary' });
+    // Sections start collapsed; opening one shows its pages.
+    await userEvent.click(
+      await within(nav).findByRole('button', { name: /^Identity \(\d+ pages hidden\)$/ }),
+    );
     expect(await within(nav).findByRole('link', { name: 'Users' })).toHaveAttribute(
       'href',
       '/identity/users',
@@ -126,7 +130,7 @@ describe('AppShell (real routes, mocked API)', () => {
   it('Ctrl+K opens the command palette; choosing a page navigates there', async () => {
     const { router } = renderApp();
     await screen.findByRole('heading', { level: 1, name: 'Example Org' });
-    await screen.findByRole('link', { name: 'Users' });
+    await screen.findByRole('button', { name: /^Identity \(\d+ pages hidden\)$/ });
     await userEvent.keyboard('{Control>}k{/Control}');
     const palette = await screen.findByRole('dialog', { name: 'Command palette' });
     await userEvent.type(within(palette).getByRole('combobox'), 'Function Apps');

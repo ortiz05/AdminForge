@@ -3,17 +3,18 @@ import { randomBytes } from 'node:crypto';
 import { envFilePath, parseEnv, updateEnvFile } from '@adminforge/config';
 
 /**
- * Prepares the local env file for this host: adds ONLY keys that are missing (or empty).
- * Existing values are never changed and no value is ever printed.
+ * Prepares the local env file for this host: adds ONLY keys that are missing, empty, or still hold the
+ * `CHANGE_ME` placeholder from config/example.env (so `cp config/example.env …` then `init:local` works).
+ * Real values are never changed and no value is ever printed.
  *
  *   pnpm --filter @adminforge/api init:local
  */
 export function missingLocalKeys(current: Record<string, string>): Record<string, string> {
-  const has = (k: string) => Boolean(current[k]?.trim());
+  const has = (k: string) => Boolean(current[k]?.trim()) && !current[k]!.includes('CHANGE_ME');
   const add: Record<string, string> = {};
 
   // Postgres password and DATABASE_URL must agree. Reuse whichever exists.
-  let password = current.POSTGRES_PASSWORD?.trim();
+  let password = has('POSTGRES_PASSWORD') ? current.POSTGRES_PASSWORD!.trim() : undefined;
   if (!password && has('DATABASE_URL')) {
     try {
       const url = new URL(current.DATABASE_URL!);

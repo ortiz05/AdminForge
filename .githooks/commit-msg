@@ -1,4 +1,5 @@
 #!/usr/bin/env sh
-# Commit messages follow Conventional Commits with AdminForge's types and scopes
-# (docs/onboarding/10-git-and-pull-requests.md). Never bypass it with --no-verify.
+# Git commit-msg hook (core.hooksPath = .githooks): commit messages follow Conventional Commits with AdminForge's types
+# and scopes (tooling/git/commit-message.mjs; docs/onboarding/10-git-and-pull-requests.md). Never bypass it with
+# --no-verify.
 node tooling/git/commit-message.mjs "$1"

@@ -1,27 +1,26 @@
 import { committableFiles, readText } from '../lib/repo';
+import { findTokenViolations, isUiFile } from '../../tooling/lint/design-token-patterns.mjs';
 
-// Central visual control: UI code may only use design tokens.
-const SCOPES = /^portal\/(apps\/web\/src|packages\/(ui|widgets)\/src)\/.*\.(tsx?|css)$/;
-const RAW_COLOR = /#[0-9a-fA-F]{6}\b|#[0-9a-fA-F]{3}\b(?![\w-])|\brgba?\(|\bhsla?\(|\boklch\(/;
-const ARBITRARY = /\b[a-z][a-z-]*-\[[^\]\s]+\]/;
+// Central visual control: UI code may only use design tokens. The patterns are shared with ESLint and the Claude Code
+// after-edit hook (tooling/lint/design-token-patterns.mjs).
+const files = committableFiles().filter(isUiFile);
 
-const files = committableFiles().filter((f) => SCOPES.test(f));
+function hits(kind: 'rawColour' | 'arbitraryValue'): string[] {
+  return files.flatMap((f) =>
+    findTokenViolations(readText(f) ?? '')
+      .filter((v) => v.kind === kind)
+      .map((v) => `${f}:${v.line}: ${v.text}`),
+  );
+}
 
 describe('UI code uses design tokens only', () => {
+  it('checks the UI source files', () => {
+    expect(files.length).toBeGreaterThan(50);
+  });
   it('has no raw colours', () => {
-    const hits = files.flatMap((f) =>
-      (readText(f) ?? '')
-        .split('\n')
-        .flatMap((line, i) => (RAW_COLOR.test(line) ? [`${f}:${i + 1}: ${line.trim()}`] : [])),
-    );
-    expect(hits).toEqual([]);
+    expect(hits('rawColour')).toEqual([]);
   });
   it('has no arbitrary Tailwind values', () => {
-    const hits = files.flatMap((f) =>
-      (readText(f) ?? '')
-        .split('\n')
-        .flatMap((line, i) => (ARBITRARY.test(line) ? [`${f}:${i + 1}: ${line.trim()}`] : [])),
-    );
-    expect(hits).toEqual([]);
+    expect(hits('arbitraryValue')).toEqual([]);
   });
 });

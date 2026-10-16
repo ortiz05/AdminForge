@@ -1,6 +1,8 @@
 #!/usr/bin/env sh
-# Blocks commits containing secrets, tenant-specific values, or raw UI colours.
-pnpm --silent --filter @adminforge/tests exec vitest run --project guards --reporter=dot || {
+# Git pre-commit hook (core.hooksPath = .githooks, set by `pnpm install`): runs the guard tests (`pnpm guard`, the same
+# step as CI) and blocks commits containing secrets, tenant-specific values, or raw UI colours. Never bypass it with
+# --no-verify.
+pnpm --silent guard --reporter=dot || {
   echo "pre-commit: guard tests failed — see output above." >&2
   exit 1
 }

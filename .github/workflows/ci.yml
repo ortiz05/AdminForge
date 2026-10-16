@@ -1,3 +1,5 @@
+# CI for every pull request and push to main: the same commands engineers run locally (package.json scripts; see
+# tooling/README.md). Synthetic data only — no tenant configuration exists here. pr-title.yml checks the PR title.
 name: ci
 
 on:
@@ -45,7 +47,7 @@ jobs:
       - name: Dependency audit (fails on high or critical advisories)
         run: pnpm audit --audit-level high
       - name: Guards (secrets, tenant data, design tokens)
-        run: pnpm --filter @adminforge/tests exec vitest run --project guards
+        run: pnpm guard
       - run: pnpm lint
       - run: pnpm format:check
       - run: pnpm --filter @adminforge/design-tokens build
@@ -58,7 +60,7 @@ jobs:
         env:
           NODE_ENV: production
       - name: Initial-load budget (≤ 250 KB gzip JS)
-        run: node tooling/ci/check-bundle.mjs
+        run: pnpm check:bundle
       - name: End-to-end and visual (mock mode, system Chrome)
         run: pnpm test:e2e
       - name: Production-build smoke (vite preview of dist/)

@@ -1,26 +1,34 @@
+/**
+ * ESLint flat config for the whole repository (`pnpm lint`, which runs the @adminforge/lint package's `lint` script).
+ *
+ * - TypeScript recommended rules and React hooks rules on every .ts/.tsx file; unused variables are errors unless
+ *   prefixed with `_`.
+ * - UI code (UI_LINT_GLOBS) may not use raw colours or arbitrary Tailwind values in string literals or template text:
+ *   the patterns come from ./design-token-patterns.mjs, shared with tests/guards/design-tokens.test.ts and the
+ *   Claude Code after-edit hook so all three agree.
+ *
+ * Lives in tooling/lint (its own package) because typescript-eslint needs TypeScript 6's classic compiler API while
+ * the workspace uses TypeScript 7 — see package.json there.
+ */
 import js from '@eslint/js';
 import tseslint from 'typescript-eslint';
 import reactHooks from 'eslint-plugin-react-hooks';
 import globals from 'globals';
+import {
+  ARBITRARY_VALUE_SOURCE,
+  MESSAGES,
+  RAW_COLOUR_SOURCE,
+  UI_LINT_GLOBS,
+} from './design-token-patterns.mjs';
 
 // Central visual control: colours and sizes come from @adminforge/design-tokens only.
-const RAW_COLOR = '#[0-9a-fA-F]{6}\\b|#[0-9a-fA-F]{3}\\b|rgba?\\(|hsla?\\(|oklch\\(';
-const ARBITRARY = '\\b[a-z-]+-\\[[^\\]]+\\]';
 const tokenRules = {
   'no-restricted-syntax': [
     'error',
-    {
-      selector: `Literal[value=/${RAW_COLOR}/]`,
-      message: 'Use a design token (bg-panel, text-fg, var(--af-…)) instead of a raw colour.',
-    },
-    {
-      selector: `Literal[value=/${ARBITRARY}/]`,
-      message: 'Arbitrary Tailwind values bypass the design system. Use or add a token.',
-    },
-    {
-      selector: `TemplateElement[value.raw=/${ARBITRARY}/]`,
-      message: 'Arbitrary Tailwind values bypass the design system. Use or add a token.',
-    },
+    { selector: `Literal[value=/${RAW_COLOUR_SOURCE}/]`, message: MESSAGES.rawColour },
+    { selector: `TemplateElement[value.raw=/${RAW_COLOUR_SOURCE}/]`, message: MESSAGES.rawColour },
+    { selector: `Literal[value=/${ARBITRARY_VALUE_SOURCE}/]`, message: MESSAGES.arbitraryValue },
+    { selector: `TemplateElement[value.raw=/${ARBITRARY_VALUE_SOURCE}/]`, message: MESSAGES.arbitraryValue },
   ],
 };
 
@@ -48,7 +56,7 @@ export default tseslint.config(
     },
   },
   {
-    files: ['portal/apps/web/**/*.{ts,tsx}', 'portal/packages/{ui,widgets}/**/*.{ts,tsx}'],
+    files: [...UI_LINT_GLOBS],
     rules: tokenRules,
   },
   { files: ['**/*.{js,mjs,cjs}'], languageOptions: { globals: { ...globals.node, ...globals.browser } } },

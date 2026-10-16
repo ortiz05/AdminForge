@@ -128,6 +128,16 @@ async function main(argv) {
   return 1;
 }
 
-const { pathToFileURL } = await import('node:url');
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href)
+const { fileURLToPath } = await import('node:url');
+const { realpathSync } = await import('node:fs');
+/** True when this file is the script node was started with — also through a symlinked path (argv[1] isn't resolved). */
+function invokedDirectly(argv1, moduleUrl) {
+  try {
+    return realpathSync(argv1) === realpathSync(fileURLToPath(moduleUrl));
+  } catch {
+    return false;
+  }
+}
+
+if (process.argv[1] && invokedDirectly(process.argv[1], import.meta.url))
   process.exitCode = await main(process.argv.slice(2));

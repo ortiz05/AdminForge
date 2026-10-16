@@ -1,5 +1,3 @@
-import { createHash } from 'node:crypto';
-import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fixtureRunner } from '@adminforge/api/src/datasources/executor';
 import { createFixtureFetch } from '@adminforge/connectors';
@@ -10,6 +8,8 @@ import { repoRoot } from '../lib/repo';
 // Mailbox access and settings (m365.mailbox, m365.mailboxes advanced filter), the inbox-rule audit, Teams user policies,
 // Defender device vulnerabilities, and the actions wired into the forwarding and team pages. Datasources run the way
 // DATA_MODE=fixtures runs them: parameters rendered, the fixture variant picked, then the transform.
+// The runner scripts' sha256 pins are checked for every definition by `adminforge validate`
+// (tests/unit/cli/script-pins.test.ts), not here.
 
 const loaded = await loadContentDir(path.join(repoRoot, 'portal/content'));
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -70,42 +70,6 @@ async function runHunting(name: string, params: Record<string, unknown>) {
     out: (await renderString(ds.transform, { ...scope, value: await res.json() })) as Def,
   };
 }
-
-describe('runner scripts are pinned', () => {
-  it('every new datasource and step points at the current sha256 of its script', () => {
-    const refs: Array<{ id: string; script: string; sha256: string }> = [];
-    const walk = (id: string, v: unknown): void => {
-      if (Array.isArray(v)) v.forEach((x) => walk(id, x));
-      else if (v && typeof v === 'object') {
-        const o = v as { script?: unknown; sha256?: unknown };
-        if (typeof o.script === 'string' && typeof o.sha256 === 'string')
-          refs.push({ id, script: o.script, sha256: o.sha256 });
-        Object.values(v).forEach((x) => walk(id, x));
-      }
-    };
-    for (const id of [
-      'm365.mailbox',
-      'm365.inbox-rules',
-      'm365.teams-user-policies',
-      'm365.grant-mailbox-permission',
-      'm365.remove-mailbox-permission',
-      'm365.clear-mailbox-forwarding',
-      'm365.set-mailbox-auto-reply',
-      'm365.set-address-list-visibility',
-      'm365.grant-onedrive-access',
-    ])
-      walk(id, def(id));
-    expect(refs.length).toBeGreaterThan(12);
-    for (const r of refs) {
-      const text = readFileSync(path.join(repoRoot, 'portal/content/scripts', r.script));
-      expect([r.id, r.script, createHash('sha256').update(text).digest('hex')]).toEqual([
-        r.id,
-        r.script,
-        r.sha256,
-      ]);
-    }
-  });
-});
 
 describe('m365.mailbox', () => {
   it('shows settings and access for the mailbox that was asked for', async () => {

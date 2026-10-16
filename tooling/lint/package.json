@@ -5,7 +5,7 @@
   "type": "module",
   "description": "Lint toolchain. Pinned to TypeScript 6 because typescript-eslint needs the classic compiler API, which TypeScript 7 does not ship yet.",
   "scripts": {
-    "lint": "eslint --config eslint.config.js ../.."
+    "lint": "cd ../.. && eslint --config tooling/lint/eslint.config.js ."
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

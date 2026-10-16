@@ -174,13 +174,11 @@ written as `*.gpg` and the plaintext is shredded; restore with `gpg --decrypt` o
 key. Unencrypted backups still hold the services' client secrets and `TOKEN_CACHE_KEY`.
 
 Folders older than 14 days are deleted (`AF_BACKUP_KEEP_DAYS`; also `AF_BACKUP_DIR`, `AF_BACKUP_PG_CONTAINER`,
-`AF_BACKUP_DATABASE`). Install it with:
+`AF_BACKUP_DATABASE`; the container, user, database and port default to `portal/deploy/defaults.env`). Install it with:
 
 ```sh
-sed "s#%h/AdminForge#$PWD#g" portal/deploy/systemd/adminforge-backup.service > ~/.config/systemd/user/adminforge-backup.service
-cp portal/deploy/systemd/adminforge-backup.timer ~/.config/systemd/user/
-mkdir -p ~/.config/systemd/user/adminforge-backup.service.d
-cp portal/deploy/systemd/hardening.conf ~/.config/systemd/user/adminforge-backup.service.d/
+portal/deploy/install-units.sh --dry-run backup   # shows what would change
+portal/deploy/install-units.sh backup             # unit, timer and hardening drop-in; never restarts anything
 systemctl --user daemon-reload && systemctl --user enable --now adminforge-backup.timer
 systemctl --user start adminforge-backup     # one now; journalctl --user -u adminforge-backup for the result
 ```

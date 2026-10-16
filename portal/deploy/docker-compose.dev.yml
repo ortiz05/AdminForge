@@ -1,8 +1,10 @@
-# Local development Postgres for AdminForge.
+# Local development Postgres for AdminForge (and, on this host, the services' database too).
 #   pnpm --filter @adminforge/api init:local   # adds POSTGRES_PASSWORD / DATABASE_URL to your env file (once)
-#   pnpm db:up                                 # passes the env file to compose, waits until healthy
+#   pnpm db:up                                 # passes defaults.env and your env file to compose, waits until healthy
 #   pnpm --filter @adminforge/api db:migrate
-# Bound to loopback on 55432 (5432 is used by the host's own Postgres).
+# Names and port come from portal/deploy/defaults.env (AF_PG_USER, AF_PG_DATABASE, AF_PG_PORT; the container is
+# AF_PG_CONTAINER = <name>-postgres-1): run compose through `pnpm db:up` / `pnpm db:down`, which pass that file.
+# Bound to loopback on AF_PG_PORT (5432 is left to a host Postgres).
 name: adminforge-dev
 
 services:
@@ -10,16 +12,16 @@ services:
     image: postgres:18-alpine
     restart: unless-stopped
     environment:
-      POSTGRES_USER: adminforge
+      POSTGRES_USER: ${AF_PG_USER:?AF_PG_USER is not set - run compose through pnpm db:up (portal/deploy/defaults.env)}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is not set - run pnpm --filter @adminforge/api init:local}
-      POSTGRES_DB: adminforge
+      POSTGRES_DB: ${AF_PG_DATABASE:?AF_PG_DATABASE is not set - run compose through pnpm db:up (portal/deploy/defaults.env)}
     ports:
-      - '127.0.0.1:55432:5432'
+      - '127.0.0.1:${AF_PG_PORT:?AF_PG_PORT is not set - run compose through pnpm db:up (portal/deploy/defaults.env)}:5432'
     volumes:
       # Postgres 18 images keep data under /var/lib/postgresql/<major>/docker; mount the parent.
       - pgdata:/var/lib/postgresql
     healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -U adminforge -d adminforge']
+      test: ['CMD-SHELL', 'pg_isready -U ${AF_PG_USER} -d ${AF_PG_DATABASE}']
       interval: 5s
       timeout: 3s
       retries: 20

@@ -8,12 +8,22 @@
 #
 # Idempotent. Rewrites DATABASE_URL (→ adminforge_app) and DATABASE_MIGRATION_URL (→ the owner) in the env file and
 # prints key names only — never values. Restart the services afterwards.
+#
+# The owner (user, database, host:port) comes from the env file's DATABASE_MIGRATION_URL, else its DATABASE_URL. SQL
+# runs through `docker exec` in the Postgres container: AF_DB_CONTAINER, else AF_PG_CONTAINER from
+# portal/deploy/defaults.env. Passwords go to psql on stdin, never on a command line. Tested against a fake docker in
+# tests/unit/deploy/create-app-role.test.ts.
 set -euo pipefail
 umask 077
 
+DEPLOY_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source-path=SCRIPTDIR source=../lib/defaults.sh
+. "$DEPLOY_DIR/lib/defaults.sh"
+af_load_deploy_defaults
+
 ENV_FILE="${1:-$HOME/.config/adminforge/dev.host.env}"
 ROTATE="${2:-}"
-CONTAINER="${AF_DB_CONTAINER:-adminforge-dev-postgres-1}"
+CONTAINER="${AF_DB_CONTAINER:-$AF_PG_CONTAINER}"
 APP_ROLE="adminforge_app"
 
 [ -f "$ENV_FILE" ] || { echo "✗ $ENV_FILE not found" >&2; exit 1; }

@@ -1,5 +1,24 @@
 # Running AdminForge on this host
 
+Everything needed to run AdminForge as services on one Linux host: systemd user units, the local Postgres, the
+least-privilege database role, backups and the LAN proxy.
+
+| Path                          | What                                                                                              |
+| ----------------------------- | ------------------------------------------------------------------------------------------------- |
+| `defaults.env`                | Deploy constants: Postgres container name, owner role, database, port ([below](#deploy-defaults)) |
+| `lib/defaults.sh`             | Loads `defaults.env` into the shell scripts (environment values win; only `AF_PG_*` keys allowed) |
+| `docker-compose.dev.yml`      | The Postgres container (`pnpm db:up` / `pnpm db:down`)                                            |
+| `install-units.sh`            | Installs the systemd user units, pointed at this checkout                                         |
+| `systemd/`                    | Unit templates (`%h/AdminForge` = the checkout) and `hardening.conf`, every unit's drop-in        |
+| `db/create-app-role.sh`       | The services' least-privilege database role (`adminforge_app`) and their two URLs                 |
+| `db/app-role-grants.sql`      | The grants that role gets (applied by the script and by `tests/api/app-role-pg.test.ts`)          |
+| `backup/adminforge-backup.sh` | Daily backup (run by `adminforge-backup.timer`)                                                   |
+| `caddy/Caddyfile.example`     | TLS reverse proxy for LAN access                                                                  |
+
+Conventions: shell scripts are bash with `set -euo pipefail` and a header saying what they do, what they read and what
+they print (names and sizes, never values or secrets); every script has a test under `tests/unit/deploy/` that runs it
+against fakes (`docker`, `openssl`, a scratch unit directory), never against the real database or `~/.config`.
+
 AdminForge runs as four Node processes next to PostgreSQL (R5, R6):
 
 | Process       | What it does                                                                                     | Entry                                    |
@@ -28,9 +47,53 @@ the services' database with `ADMINFORGE_ENV_OVERLAY=host pnpm adminforge publish
 ## Database
 
 ```sh
-pnpm db:up                                   # dev Postgres (portal/deploy/docker-compose.dev.yml)
+pnpm db:up                                   # Postgres 18 in Docker on 127.0.0.1:55432 (docker-compose.dev.yml)
 pnpm --filter @adminforge/api db:migrate     # tables, including schedules / schedule_runs / probe_results
+pnpm db:down                                 # stop it (the data stays in the adminforge-dev_pgdata volume)
 ```
+
+`pnpm db:up` passes `defaults.env` and then your env file (`ADMINFORGE_ENV_FILE`, default `~/.config/adminforge/dev.env`,
+which holds `POSTGRES_PASSWORD` from `init:local`) to compose. Run compose through those scripts: on its own it refuses
+to start without the defaults.
+
+### Deploy defaults
+
+`defaults.env` is the one place for the local Postgres's names and port:
+
+| Key               | Default                     | Used by                                                                                      |
+| ----------------- | --------------------------- | -------------------------------------------------------------------------------------------- |
+| `AF_PG_CONTAINER` | `adminforge-dev-postgres-1` | `docker exec` in the backup and app-role scripts (compose derives the name from its project) |
+| `AF_PG_USER`      | `adminforge`                | The owner role compose creates; `pg_dump -U` in the backup                                   |
+| `AF_PG_DATABASE`  | `adminforge`                | The database compose creates; the one the backup dumps                                       |
+| `AF_PG_PORT`      | `55432`                     | The loopback port compose publishes                                                          |
+
+Any of them can be overridden from the environment (or, for compose, your env file). `config/example.env`'s
+`DATABASE_URL`, `init:local` and the docs can't read the file; `tests/unit/deploy/deploy-defaults.test.ts` fails when
+they disagree with it, so change them in the same commit.
+
+### The services' database role
+
+The host services connect as `adminforge_app` (row access only, no DDL, insert/select only on the audit log); migrations
+keep using the owner through `DATABASE_MIGRATION_URL`. Create it, or rotate its password, against the services' env
+file — the script prints key names only, never values:
+
+```sh
+portal/deploy/db/create-app-role.sh                                  # ~/.config/adminforge/dev.host.env
+portal/deploy/db/create-app-role.sh ~/.config/adminforge/dev.host.env --rotate
+systemctl --user restart adminforge-api adminforge-worker adminforge-scheduler
+```
+
+It reads the owner from `DATABASE_MIGRATION_URL` (else `DATABASE_URL`), runs SQL in `AF_DB_CONTAINER` (else
+`AF_PG_CONTAINER`) with passwords on stdin, applies `db/app-role-grants.sql`, and rewrites the two URLs in place.
+
+### Backups
+
+`adminforge-backup.timer` runs `backup/adminforge-backup.sh` daily at 02:30: a `pg_dump` of the services' database
+(without the rows of the credential tables `sessions`, `preauth` and `token_cache`), the services' configuration (never
+`*.admin.env`) and report/Caddy data, into `~/adminforge-backups/<UTC timestamp>/` (mode 700, files 600), optionally
+encrypted to an off-host GPG key. Install it with `portal/deploy/install-units.sh backup`, then
+`systemctl --user enable --now adminforge-backup.timer`. Settings (`AF_BACKUP_*`), encryption, restore and the restore
+drill: [docs/operations.md](../../docs/operations.md#backup-and-restore).
 
 ## Build
 
@@ -41,19 +104,23 @@ pnpm build          # turbo: api, worker, scheduler, runner, web
 
 ## Run as user services (systemd)
 
-The units in `systemd/` are **user** units: they run as you, without root, and read your env file.
+The units in `systemd/` are **user** units: they run as you, without root, and read your env file. `install-units.sh`
+copies them to `~/.config/systemd/user`, replacing `%h/AdminForge` with this checkout's path, and adds `hardening.conf`
+(the sandboxing user units enforce; see its comments) as each unit's drop-in. It is idempotent — it writes a file only
+when it changed and prints `installed` / `updated` / `unchanged` per file — leaves your own drop-ins (`override.conf`)
+alone, and never reloads or restarts anything; it prints the commands for that.
 
 ```sh
-mkdir -p ~/.config/systemd/user
-for u in api worker scheduler runner; do   # + proxy for LAN access, below
-  sed "s#%h/AdminForge#$PWD#g" portal/deploy/systemd/adminforge-$u.service > ~/.config/systemd/user/adminforge-$u.service
-  # Sandboxing that user units enforce (seccomp-based; see the comments in hardening.conf)
-  install -D -m 644 portal/deploy/systemd/hardening.conf ~/.config/systemd/user/adminforge-$u.service.d/hardening.conf
-done
+portal/deploy/install-units.sh --dry-run    # what would change
+portal/deploy/install-units.sh              # api worker scheduler runner (add proxy / backup by name)
 systemctl --user daemon-reload
 systemctl --user enable --now adminforge-api adminforge-worker adminforge-scheduler adminforge-runner
 loginctl enable-linger "$USER"      # keep them running when you are not logged in
 ```
+
+Re-run it after pulling changes to `systemd/` (or after moving the checkout: `--checkout <dir>`; the path may only
+contain letters, digits and `. _ / + -`, because it is written into `ExecStart=`), then
+`systemctl --user daemon-reload` and restart the units it updated.
 
 ### Production overrides (this host)
 
@@ -90,7 +157,7 @@ loopback only. Replace `ADDRESS` with the host's LAN IP or DNS name:
 ```sh
 # Caddy: latest release binary from github.com/caddyserver/caddy/releases (verify its sha512) → ~/.local/bin/caddy
 sed 's/ADDRESS/<lan-ip-or-name>/' portal/deploy/caddy/Caddyfile.example > ~/.config/adminforge/Caddyfile
-cp portal/deploy/systemd/adminforge-proxy.service ~/.config/systemd/user/
+portal/deploy/install-units.sh proxy
 systemctl --user daemon-reload && systemctl --user enable --now adminforge-proxy
 ```
 
@@ -118,8 +185,8 @@ certificate. Sign-in works on the public origin only, so use the LAN URL on this
 DHCP-assigned, reserve it (or use a DNS name), since the certificate and the Entra redirect URIs name it.
 Live validation through the proxy: `PUBLIC_BASE_URL=https://… AF_LIVE_INSECURE_TLS=1` (see `tests/live`).
 
-Run the `sed` from the repository root (it points `WorkingDirectory` at your checkout). If `node` comes from
-nvm or fnm, add its `bin` directory to the `Environment=PATH=…` line (`systemctl --user edit adminforge-scheduler`).
+If `node` comes from nvm or fnm, add its `bin` directory to the `Environment=PATH=…` line in a drop-in
+(`systemctl --user edit adminforge-scheduler`), not in the installed unit: `install-units.sh` would overwrite that.
 
 Logs and status:
 

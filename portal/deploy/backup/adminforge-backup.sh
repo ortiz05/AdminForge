@@ -10,12 +10,22 @@
 # The rows of the transient credential tables (signed-in sessions, sign-in round trips, the sealed MSAL token cache with
 # the engineers' refresh tokens) are never dumped, only their definitions: a stolen backup plus TOKEN_CACHE_KEY can't
 # yield refresh tokens, and after a restore everyone simply signs in again.
+#
+# Settings (environment, e.g. the backup unit's Environment= lines): AF_BACKUP_DIR (default ~/adminforge-backups),
+# AF_BACKUP_KEEP_DAYS (14), AF_BACKUP_GPG_RECIPIENT, AF_BACKUP_PG_CONTAINER and AF_BACKUP_DATABASE. The container,
+# database and owner role default to portal/deploy/defaults.env (AF_PG_CONTAINER, AF_PG_DATABASE, AF_PG_USER).
+# Tested against a fake docker in tests/unit/deploy/backup-script.test.ts.
 set -euo pipefail
 umask 077
 
+DEPLOY_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source-path=SCRIPTDIR source=../lib/defaults.sh
+. "$DEPLOY_DIR/lib/defaults.sh"
+af_load_deploy_defaults
+
 DEST_ROOT="${AF_BACKUP_DIR:-$HOME/adminforge-backups}"
-CONTAINER="${AF_BACKUP_PG_CONTAINER:-adminforge-dev-postgres-1}"
-DATABASE="${AF_BACKUP_DATABASE:-adminforge}"
+CONTAINER="${AF_BACKUP_PG_CONTAINER:-$AF_PG_CONTAINER}"
+DATABASE="${AF_BACKUP_DATABASE:-$AF_PG_DATABASE}"
 KEEP_DAYS="${AF_BACKUP_KEEP_DAYS:-14}"
 STAMP="$(date -u +%Y-%m-%dT%H-%M-%SZ)"
 DEST="$DEST_ROOT/$STAMP"
@@ -25,7 +35,7 @@ install -d -m 700 "$DEST_ROOT" "$DEST"
 TRANSIENT_TABLES=(public.sessions public.preauth public.token_cache)
 exclude=()
 for t in "${TRANSIENT_TABLES[@]}"; do exclude+=("--exclude-table-data=$t"); done
-docker exec "$CONTAINER" pg_dump -U adminforge -Fc "${exclude[@]}" "$DATABASE" > "$DEST/$DATABASE.dump"
+docker exec "$CONTAINER" pg_dump -U "$AF_PG_USER" -Fc "${exclude[@]}" "$DATABASE" > "$DEST/$DATABASE.dump"
 # Sanity (before any encryption): the dump must list the audit table's rows, or it isn't a usable backup, and must not
 # hold rows of the credential tables.
 listing="$(docker exec -i "$CONTAINER" pg_restore --list < "$DEST/$DATABASE.dump")"

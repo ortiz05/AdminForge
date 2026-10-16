@@ -3,6 +3,13 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "exports": {
+    "./tooling": "./src/tooling.ts",
+    "./tooling/scheduler": "./src/tooling-scheduler.ts",
+    "./src/definitions": "./src/definitions/index.ts",
+    "./src/runs": "./src/runs/index.ts",
+    "./src/*": "./src/*.ts"
+  },
   "scripts": {
     "dev": "tsx watch --clear-screen=false src/main.ts",
     "build": "tsup",

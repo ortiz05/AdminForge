@@ -89,6 +89,9 @@ each person's Read sign-in falls back to theirs).
   or Azure role, people added to a role-assignable group, a new app owner).
 - Adding someone to a role-assignable group and making someone an app owner always need a second person's approval;
   nobody can add themselves to a group or make themselves an owner through AdminForge.
+- Forwarding a mailbox (`m365.set-mailbox-forwarding`) needs a second person's approval, and neither the person who
+  receives the mail nor the mailbox's owner can approve it. Nobody forwards a mailbox to themselves or gives
+  themselves access to a mailbox or someone's OneDrive through AdminForge.
 - An approver or admin can **pause all changes or all automation** from Admin → Settings (with a reason, audited);
   only a `Portal.Admin` resumes.
 - Content changes are meant to be reviewed: `adminforge publish` refuses content that isn't committed and on

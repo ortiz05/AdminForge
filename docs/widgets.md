@@ -192,11 +192,13 @@ Shown instead of content when a feature isn't licensed (from `/api/me/capabiliti
 
 ```yaml
 - widget: licenceGate
-  feature: intune # conditionalAccess | pim | identityProtection | intune | exchange | teams | sharepoint | defender | signInLogs
+  feature: intune # conditionalAccess | pim | identityProtection | intune | exchange | teams | sharepoint | defender | defenderEndpoint | signInLogs
   title: Intune isn't licensed in this tenant
 ```
 
 Pages may also set top-level `requires.licences: [intune]`; the renderer then shows a gate above the page and keeps fixture previews available in mock mode.
+A service plan name (`WINDEFATP`) resolves to the most specific feature that lists it (`defenderEndpoint`, not `defender`);
+prefer the feature key.
 
 ## probeStatus
 

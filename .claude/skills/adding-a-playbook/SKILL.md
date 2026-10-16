@@ -43,7 +43,11 @@ Markdown sections, manual steps and executable steps.
      holding its app roles (the `SG-AdminForge-*` groups), `AF_PROTECTED_APP_IDS` or `AF_PROTECTED_USER_IDS`
      (`protected_object`), REST or PowerShell. You don't need your own check; add the friendly early asserts
      (`notPortalGroup`, `notPortalApp` — copy them from `add-group-members` / `add-app-owner`) when a playbook targets
-     groups or apps, so people see why before anything runs.
+     groups or apps, so people see why before anything runs. PowerShell writes are matched by the object ids in their
+     parameters only: resolve the accounts through Graph and pass their ids (see adding-a-runner-script, step 10).
+   - A change that hands someone another person's mail or files (mailbox forwarding, mailbox or OneDrive access)
+     refuses the person running it (`notYou` on `user.oid`/`user.upn`); forwarding also needs `approval` with
+     `excludes` naming the recipient and the mailbox's owner (`m365.set-mailbox-forwarding`).
    - A playbook that starts a child with its own confirmation, or a high/critical child, needs a `confirm` block itself
      (validation enforces it). Drafts can be previewed but never run.
    - `redact: true` inputs and manual-step fields are masked everywhere, including run outputs; a step that would send

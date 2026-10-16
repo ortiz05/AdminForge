@@ -23,6 +23,8 @@ portal/apps/runner/modules/
 
 # Local test-runner reports
 tests/.vitest/
+# Scratch files of live scripts (may hold tenant data)
+tests/live/scripts/.tmp-*
 # Claude Code session state
 .claude/scheduled_tasks.lock
 .claude/settings.local.json

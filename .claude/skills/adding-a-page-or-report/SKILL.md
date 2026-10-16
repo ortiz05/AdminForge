@@ -53,13 +53,31 @@ Pages, dashboards and reports are YAML in `portal/content/{pages,dashboards,repo
    - Defender advanced hunting: `source: graph`, `method: POST`, `path: /security/runHuntingQuery`,
      `body: { Query: … }` (a read; the KQL lint checks `body.Query` like any query), transform `value.results`,
      `requires.scopes.graph: [ThreatHunting.Read.All]`. Start a `// af:<page id>#<datasource>` comment line so
-     fixtures can match it (`bodyIncludes`).
-   - Later datasources may reference earlier ones (`ds.<name>`).
+     fixtures can match it (`bodyIncludes`). A 403 "Account is not provisioned" (incidents, alerts, hunting) means
+     Defender XDR isn't set up for the tenant yet, not a bad request — Graph checks `$filter` first (400).
+   - Secure Score: improvement actions come from the latest `secureScores` snapshot's `controlScores` (the controls
+     that count for the tenant), joined to `secureScoreControlProfiles` for titles and maximum points — the profiles
+     also list controls for products the tenant doesn't have. A new tenant has no snapshot for about 48 hours (show
+     empty, not 0 %). `implementationCost` / `userImpact` come in mixed case or `Unknown`, and
+     `averageComparativeScores[].averageScore` is a percentage.
+   - Later datasources may reference earlier ones as `ds.<name>` — in a datasource's `when`, request and runner
+     `parameters` the prefix is required (a bare `group.id` is undefined there, so the datasource is always skipped;
+     `validate` refuses it). Widgets, headers and actions use bare names. A dependency some viewers can't read gets
+     `optional: true`: its dependents then see `null` instead of failing (`dependency_failed`) — e.g. Graph's Teams APIs
+     (`/teams`, team settings, channels) answer delegated calls only for people who hold a Teams licence. Their results
+     carry the failure as `errors["ds.<name>"]`; a scheduled report built on one ends `report_incomplete`. It never
+     hides a missing portal role, `policy_denied`, `licence_required` or a sign-in/arming problem anywhere up the chain.
+   - Microsoft 365 usage reports answer 404 `UnknownTenantId` until Microsoft starts them (24–48 h after the tenant's
+     first subscription). With concealed names (`/admin/reportSettings` `displayConcealedNames`) UPNs and owners are
+     hashes (no `@`) and site URLs are empty or hashes: fall back to `siteId`, and only link rows whose URL starts
+     with `https://`.
 4. **Layout:** widgets exactly as in `docs/widgets.md` (kpi, table, chart, list, keyValue, statusGrid, timeline,
    markdown, actionBar, licenceGate, probeStatus). Tables: `columns` (`kind`, `filter`, `hidden`), `rowActions`,
    `bulkActions` (playbook + `forEach.inputs`), `inspect` (entity page in the drawer), `export` (reports require it).
 5. **Declare** `requires.scopes` (exact Graph/ARM permissions), `requires.licences` (`signInLogs`, `conditionalAccess`,
    `pim`, `intune`, `exchange`, `defender`, …) and `nav: { section, label, icon (Phosphor kebab-case), order }`.
+   Defender: `defender` = incidents, alerts, email hunting (Office 365 E5 is enough); `defenderEndpoint` = anything on
+   devices (`Device*` / `DeviceTvm*` hunting tables, `security.microsoft.com/machines` or `/vulnerabilities` links).
    **Reports** keep `nav: { section: reports, icon, … }` but aren't listed one by one in the rail (the Reports section
    says `listDefinitions: false` and shows "All reports"): they appear in the **Reports catalogue** (`/reports`)
    automatically. There the area is the key's first segment (`identity`, `m365`, `endpoint`, `security`, `azure` — a

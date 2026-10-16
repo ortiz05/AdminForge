@@ -28,7 +28,16 @@ Output is names and counts only.
 
 **Validation user** (live tests): exists only where `AF_ENV_LABEL` is in `AF_TEST_IDENTITY_LABELS` (default
 `dev,test`). It holds Global Reader, User Administrator and Reader/Operator/Admin, owns `AF-Test-Group-01`, is never
-Approver or Groups Administrator, and is **disabled** except while `pnpm test:live` runs.
+Approver or Groups Administrator, and is **disabled** except while `pnpm test:live` runs. Only with
+`AF_TEST_SERVICE_ADMIN_ROLES=true` (admin file; default off) and only where the tenant licenses the workload does it
+also hold Exchange Recipient Administrator and SharePoint Administrator — tenant-wide service admin roles, needed only
+to run the Exchange and SharePoint write playbooks live; without the opt-in, re-provisioning removes them. It is
+excluded from Entra's authentication-methods registration campaign (nobody else is, and the campaign is otherwise
+unchanged) so unattended sign-in isn't interrupted. Provisioning manages only an account it created: the UPN must
+start with `af-` and the account must carry the `employeeType` marker "AdminForge validation" set at creation (or the
+display name "AF Tester"); any other account at `AF_TEST_USER_UPN` is refused before anything changes — no password
+reset, roles, groups, campaign exclusion, enabling or disabling. `provision status` fails on any other directory role
+it holds (other roles, narrower scopes, roles through a group).
 
 ## Signing in
 
@@ -300,7 +309,9 @@ probe results, report files) is purged after its retention period; the audit log
 | Someone adds an owner, secret or assignment to an AdminForge app | `provision status` fails on unexpected privilege                                                                                                                                      |
 | An engineer grants themselves portal roles through AdminForge    | The executor refuses writes naming AdminForge's apps, the principals holding its app roles, `AF_PROTECTED_APP_IDS` and `AF_PROTECTED_USER_IDS`, by id                                 |
 | Unreviewed content is published                                  | `publish` runs `validate` and the playbook tests, and refuses uncommitted content or a commit not on `origin/main` unless `--allow-unreviewed` (audited)                              |
-| Validation user misused                                          | Disabled between live runs, least roles, test labels only                                                                                                                             |
+| Validation user misused                                          | Disabled between live runs, least roles (Exchange / SharePoint admin roles only with `AF_TEST_SERVICE_ADMIN_ROLES=true`), test labels only; `provision status` flags any other role   |
+| Provisioning pointed at someone's real account                   | Only an `af-…` account with the "AdminForge validation" marker (or "AF Tester" name) is managed; any other is refused before a password, role or exclusion changes                    |
+| An `optional` datasource hides a denial                          | Never for a missing role, the request policy, a licence, sign-in or arming anywhere in the chain; suppressed errors are recorded, and a scheduled report fails `report_incomplete`    |
 | A compromised service rewrites the audit log                     | The services' database role can't update, delete or truncate audit events, or alter tables                                                                                            |
 
 ## Known gaps and accepted risks
@@ -312,7 +323,14 @@ Tracked in `docs/backlog.md`:
 - The Read app holds write-capable workload scopes where those workloads are licensed (Exchange, SharePoint, Teams;
   ARM always). Only AdminForge's read policy and the runner's read-mode constraints stop writes through them.
 - The validation user's User Administrator role can manage groups that aren't role-assignable. It stays disabled
-  between live runs; scope it to an administrative unit (Entra ID P1) for a stronger boundary.
+  between live runs; scope it to an administrative unit (Entra ID P1) for a stronger boundary. With
+  `AF_TEST_SERVICE_ADMIN_ROLES=true` it also holds Exchange Recipient Administrator (every mailbox's permissions and
+  forwarding) and SharePoint Administrator (every site, including site collection admins): its stored password is then
+  a tenant-wide Exchange and SharePoint credential while the account is enabled. Keep the opt-in to validation tenants,
+  enable the account only for a live run (`provision test-identities --enable` / `--disable`), and turn the opt-in off
+  when the Exchange and SharePoint write playbooks aren't being validated.
+- The validation user is excluded from Entra's authentication-methods registration campaign, so Entra never nudges it
+  to register a passkey or Authenticator; its MFA (TOTP under Security Defaults) or Conditional Access still applies.
 - Read-mode PowerShell still runs in FullLanguage: the static policy is the boundary, not a sandbox. A
   ConstrainedLanguage runspace needs six read scripts rewritten. Runner answers are authenticated, not encrypted
   (loopback); `/healthz` and cancel answers aren't signed.

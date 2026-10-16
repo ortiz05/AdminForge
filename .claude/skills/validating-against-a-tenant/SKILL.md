@@ -18,7 +18,11 @@ services).
 azure-test` → `pnpm exec tsx tests/live/scripts/register-test-user-mfa.ts` (registers TOTP if Entra asks).
 `pnpm adminforge provision status` must be all ✓ (licence-blocked items are listed separately) and report no
 unexpected privilege. Test identities exist only where `AF_ENV_LABEL` is in `AF_TEST_IDENTITY_LABELS` (default
-`dev,test`). The validation user is **disabled between runs**: `pnpm test:live` enables and disables it itself; wrap
+`dev,test`). `provision test-identities` also excludes the validation user (only it) from Entra's
+authentication-methods registration campaign, whose passkey/Authenticator nudge would stop unattended sign-in. Live
+Exchange / SharePoint write playbooks need `AF_TEST_SERVICE_ADMIN_ROLES=true` in the admin file (tenant-wide service
+admin roles for the validation user; default off). Provisioning refuses any account at `AF_TEST_USER_UPN` it didn't
+create (`af-…` UPN with the "AdminForge validation" marker or "AF Tester" name). The validation user is **disabled between runs**: `pnpm test:live` enables and disables it itself; wrap
 scripts in `pnpm adminforge provision test-identities --enable` / `--disable`.
 
 ## Checks
@@ -33,6 +37,12 @@ scripts in `pnpm adminforge provision test-identities --enable` / `--disable`.
 - Never run `pnpm dev` against the services' database: the host services use the `host` overlay
   (`<env>.host.env`); dev uses the database in `<env>.env`.
 - In a browser test: `openPortalSession()` / `armWriteAccess()` from `tests/live/lib/portal-session.ts`.
+- Playbooks for real: `tests/live/scripts/run-playbook.ts <playbook> '<inputs>'` with placeholders instead of ids —
+  `@user:`, `@group:`, `@mailbox:` (email address), `@dl:` (email address), `@team:` (group id), `@site:` (site id;
+  `#webUrl` for the URL) followed by the `AF-Test-*` name. `check-placeholders.ts` checks they resolve.
+- Schedules and probes as the automation identity: `tests/live/scripts/run-schedule-once.ts` with `--schedule <id>`
+  or `--probe <id>…`. Dev database only (it refuses `ADMINFORGE_ENV_OVERLAY=host`); delivery is suppressed by default,
+  or `--deliver sender` mails `AF_MAIL_SENDER` itself — never a person, never a Teams channel.
 - Writes: **only** against `AF-Test-*` users/groups/resources that provisioning created. Dry run first, then run,
   then run the compensating playbook; check `/audit` (chain verified).
 - Read-only checks with the automation identity: print counts/statuses only — never ids, names, or tokens.
@@ -46,3 +56,5 @@ scripts in `pnpm adminforge provision test-identities --enable` / `--disable`.
 | 401 `reauth`                            | CAE/claims challenge or expired session → sign in again       |
 | 403 `rearm` / `not_armed`               | Write step without an armed session                           |
 | Data empty in Log Analytics             | Activity-log export can take ~15 min after provisioning       |
+| Sign-in stops: "registration campaign"  | Validation user not excluded → `provision test-identities`    |
+| 403 "Defender XDR isn't set up"         | Admin opens security.microsoft.com once; data in hours        |

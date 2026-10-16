@@ -253,7 +253,13 @@ If AdminForge or an account using it may be compromised, stop it from acting bef
       `New-ServicePrincipal -AppId <automation app id> -ObjectId <its service principal id>`,
       `New-ManagementScope -Name AdminForgeSender -RecipientRestrictionFilter "PrimarySmtpAddress -eq '<sender>'"`,
       `New-ManagementRoleAssignment -App <automation app id> -Role "Application Mail.Send" -CustomResourceScope
-AdminForgeSender`. (Granting Entra `Mail.Send` needs `AF_AUTOMATION_ALLOW_WRITE_PERMISSIONS=true`.)
+AdminForgeSender`. (Granting Entra `Mail.Send` needs `AF_AUTOMATION_ALLOW_WRITE_PERMISSIONS=true`.) A tenant that
+      has never been customised refuses `New-ManagementScope` ("you first need to run …
+      Enable-OrganizationCustomization"): run `Enable-OrganizationCustomization` once, then retry the scope —
+      it can keep refusing for hours after `Get-OrganizationConfig` already reports `IsDehydrated: False`. New
+      role assignments take up to an hour or two to apply. Check it (prefix `ADMINFORGE_ENV_OVERLAY=host` for the
+      services' configuration; only the sender itself is mailed): `pnpm exec tsx tests/live/scripts/check-mail-sender.ts --not-as "<another mailbox>"` — the
+      sender's own message `sent`, sending as the other mailbox `refused`.
 - [ ] Backups: timer enabled, encrypted to an off-host key (`AF_BACKUP_GPG_RECIPIENT`), copied off the host, restore
       drill recorded above.
 - [ ] Services connect as `adminforge_app` (`portal/deploy/db/create-app-role.sh`), not the database owner.
@@ -333,7 +339,11 @@ make changes). Changes apply within 5 minutes, also for removals.
 `tests/live/README.md`: the Playwright live suite signs in as the validation user and exercises reads, arming and
 reversible writes on `AF-Test-*` objects only. The validation user is **disabled between runs**: `pnpm test:live`
 enables it in its global setup and disables it (revoking sessions) afterwards; for the scripts in `tests/live/scripts`
-wrap them in `pnpm adminforge provision test-identities --enable` / `--disable`.
+wrap them in `pnpm adminforge provision test-identities --enable` / `--disable`. Live runs of the Exchange and
+SharePoint write playbooks need `AF_TEST_SERVICE_ADMIN_ROLES=true` in `<env>.admin.env` before
+`provision test-identities` (tenant-wide Exchange Recipient Administrator and SharePoint Administrator for the
+validation user; default off, removed again when the key is off). Provisioning manages only the `af-…` account it
+created and refuses any other account at `AF_TEST_USER_UPN`.
 
 ```sh
 PUBLIC_BASE_URL=https://<lan-address>:8443 AF_LIVE_INSECURE_TLS=1 \

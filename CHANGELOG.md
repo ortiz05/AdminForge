@@ -101,6 +101,17 @@ Closes the gaps found by comparing the build with the original plan (see the pla
 
 - Navigation sections (Identity, Microsoft 365, Azure, …) open and close from their headings; the choice is saved per
   person, and a closed section still shows the page you're on.
+- **Live validation tooling:** `provision test-identities` excludes the validation user — and nobody else — from
+  Entra's authentication-methods registration campaign (the Microsoft-managed "Sign in faster with your face,
+  fingerprint, or PIN" nudge stopped its unattended sign-in); the rest of the campaign is sent back unchanged, and
+  `provision status` checks the exclusion ✓/✗. A live sign-in that lands on the nudge anyway fails at once and names
+  the fix. `run-playbook.ts` placeholders now cover mailboxes, distribution lists, teams and sites (`@mailbox:`,
+  `@dl:`, `@team:`, `@site:`, `…#field`; `tests/live/lib/placeholders.ts`, `check-placeholders.ts`).
+  `tests/live/scripts/run-schedule-once.ts` runs a schedule or probes once as the automation identity against the dev
+  database (never the host overlay) with email and Teams delivery suppressed, or email sent only to `AF_MAIL_SENDER`
+  itself; `check-mail-sender.ts` checks report email through the notifier (the sender mails itself; sending as another
+  mailbox must be refused). `docs/operations.md`: Exchange RBAC for Applications needs
+  `Enable-OrganizationCustomization` first, and it can take hours to apply.
 
 ### Changed
 
@@ -112,6 +123,45 @@ Closes the gaps found by comparing the build with the original plan (see the pla
   and gives the manager OneDrive access when those workloads are licensed; `identity.leaver` 1.1.0 now only lists what
   offboarding couldn't do.
 - `identity.compromised-account` 2.0.0 merges `security.compromised-account-response` (retired).
+- **Defender on Office 365 E5 tenants (checked live 2026-10-16).**
+  - New licence feature `defenderEndpoint`: Defender for Endpoint Plan 2 device data (`WINDEFATP` or the
+    `TVM_PREMIUM_1` add-on). `security.device-vulnerabilities` 1.0.1 is gated on it. Before, page gates mapped
+    `WINDEFATP` to `defender`, which Office 365 E5 satisfies; a service plan now resolves to the most specific feature
+    that lists it.
+  - Defender XDR's 403 "Account is not provisioned" now reads "Microsoft Defender XDR isn't set up for this tenant yet",
+    with the fix: an admin opens security.microsoft.com once. It used to say "licence missing". Probes report it as
+    `not_configured`.
+  - Secure Score (`security.secure-score` 1.1.0, `security.secure-score-summary` 1.1.0, `security.overview` 1.0.1):
+    improvement actions come from the controls in the latest score. The control catalogue lists hundreds that don't
+    apply to the tenant; on the live tenant the old approach showed 462 actions worth 2,626 points against a maximum
+    of 8. Other fixes:
+    - The comparison with other tenants is read as the percentage it is.
+    - Cost and impact are normalised (Microsoft mixes `low`, `Low`, `Medium`, `Moderate` and `Unknown`).
+    - A tenant without a score yet shows empty values and a note, not 0 %.
+  - `security.incident` / `security.alert` 1.1.0 name the email evidence types Defender for Office 365 produces (email
+    cluster, user-reported email, mailbox configuration, Teams message, OAuth app, …).
+  - Licence-gate text ends each reason with a full stop.
+- **Teams, SharePoint and OneDrive on Office 365 E5 (checked live 2026-10-16).**
+  - `m365.teams-without-owners` 1.1.0 reads Microsoft Graph instead of Teams PowerShell, so its weekly schedule is
+    enabled and runs as the automation identity. The archive state comes from Graph's Teams API, which answers only
+    people with a Teams licence: without it every team is listed and the report says so. Only people count as team
+    owners there, on `m365.teams` 1.0.1 and on the Microsoft 365 overview (apps can own a group, not manage a team).
+  - New datasource option `optional: true`: datasources that use a failed optional one see `null` instead of failing,
+    and carry the failure in `errors["ds.<name>"]` (limits under Security).
+  - `m365.team` 1.1.1 loads team settings and channels again (its `when` named the group datasource without `ds.`);
+    `adminforge validate` now refuses that mistake. Microsoft's "Failed to get license information for the user" now
+    explains that the signed-in person needs a Teams licence, instead of claiming the tenant lacks one.
+  - OneDrive handover: `m365.grant-onedrive-access` 1.1.0 reads the grant back and undoes it when SharePoint doesn't
+    show it, refuses giving the access to yourself, and new `m365.remove-onedrive-access` takes it away
+    (`sharepoint/Set-SiteCollectionAdmin.ps1`, tenant admin API).
+  - SharePoint sharing (`m365.sharepoint-sharing` 1.1.0, `m365.anyone-link-sites` 1.1.0): readable link settings
+    ("Anyone with the link", "Never" for links without expiry), untitled sites show their URL, group-connected sites
+    link to their group (the site list has no owner for them).
+  - Usage reports: concealed site names fall back to the site id (`m365.sharepoint-sites`,
+    `m365.sharepoint-site-usage`); a newly licensed tenant's 404 `UnknownTenantId` says the reports start 24–48 hours
+    after the first subscription. Service health KPIs count every unresolved issue whatever the table filters.
+  - The runner connects Teams without `-TenantId` (MicrosoftTeams 8 refused it with access tokens: "Not supported
+    tenant type").
 - Write-app permissions trimmed to what content declares (removed `Policy.ReadWrite.ConditionalAccess`,
   `DeviceManagementManagedDevices.ReadWrite.All`, `IdentityRiskyUser.Read.All`); new ones added for the new playbooks.
 
@@ -165,6 +215,23 @@ identity platform guidance, systemd hardening, OpenSSF Scorecard). Fixed:
   without `WRITE_AUTH_CONTEXT`, and the remaining known gaps; ADR-013 records the News feed egress decision; the master
   plan is marked historical. Deferred findings are in `docs/backlog.md` → Platform evaluation.
 
+- **Mailbox, inbox-rule and OneDrive writes** (security and content review 2026-10-16):
+  - `m365.set-mailbox-forwarding` 1.1.0 needs a second engineer's approval; the person receiving the mail and the
+    mailbox's owner can't approve it. It forwards only to user and shared mailboxes (no groups — they can include
+    guests and outside contacts), never to a mailbox that forwards on, to the mailbox itself or to yourself; the script
+    (`Set-MailboxForwarding.ps1`) refuses the same. A hybrid mail user is explained as "no mailbox in Exchange Online",
+    and an unconfirmed change says "submitted; Exchange doesn't show it yet".
+  - `m365.grant-mailbox-permission` 1.1.1 refuses giving yourself access; it and `m365.remove-mailbox-permission`
+    1.1.1 name permissions as "Full Access", "Send As" and "Send on Behalf".
+  - `m365.set-inbox-rule` 1.0.1 never turns on a rule that forwards or redirects outside the organization (script,
+    playbook, and the audit's row actions in `m365.inbox-rules` 1.1.1).
+  - `Set-SiteCollectionAdmin.ps1` works on OneDrives only, requires the owner and confirms it from their SharePoint
+    profile, reads back whether or not it sent anything, and fails loudly if a removal drops anyone else.
+    `m365.grant-onedrive-access` 1.1.1 never takes away access the person already had.
+  - The four PowerShell writes take the Entra object ids of the accounts they change and check them against Exchange
+    or SharePoint, so the protected-object guard (`AF_PROTECTED_USER_IDS`, AdminForge's own principals) covers them.
+  - `identity.leaver` 1.2.1 declares what its Offboard user step needs; `identity.compromised-account` 2.0.1 links the
+    inbox rule audit and Clear forwarding.
 - News and changes fetches public feeds only over https from a code allow-list of Microsoft hosts (public addresses
   only, redirects only within the list, time and size limits, conditional requests), refuses XML with DOCTYPE or entity
   declarations, renders source text as plain text only and keeps citation links only on Microsoft domains. Tenant feeds
@@ -189,8 +256,35 @@ identity platform guidance, systemd hardening, OpenSSF Scorecard). Fixed:
 - Shared saved views are listed only for pages the caller can open.
 - Extending write access re-checks the Operator role.
 
+Security review of the licensed build-out (2026-10-16) fixed:
+
+- **`optional` datasources never hide a denial.** `dependency_failed` keeps its cause, and the whole chain is checked:
+  a missing portal role, `policy_denied`, `licence_required` or a sign-in / arming problem anywhere behind an optional
+  datasource still fails its dependents. What `optional` does suppress is recorded in the dependents' `errors`
+  (`ds.<name>`, also further down the chain) and logged; exports audit it (`incomplete`), and a scheduled report built
+  without it writes and delivers the file marked "Incomplete: …" and ends `failed` with `report_incomplete` (not
+  retried), so it never succeeds silently on a refused call.
+- **Validation user privilege is opt-in and limited to provisioning's own account.** Exchange Recipient Administrator
+  and SharePoint Administrator (tenant-wide) are given only with `AF_TEST_SERVICE_ADMIN_ROLES=true` in the admin file
+  (default off; licensed tenants list them as withheld, and re-provisioning removes them). Provisioning refuses, before
+  changing anything, an existing account it didn't create (UPN not `af-…`, or neither the new `employeeType` marker
+  "AdminForge validation" nor the display name "AF Tester"): no password reset, roles, groups, registration-campaign
+  exclusion, `--enable` or `--disable`, and no Azure test roles. `provision status` also fails on any other directory
+  role the validation user holds — roles outside AdminForge's catalogue, narrower scopes, roles through a group — by
+  name only.
+- **Live scripts.** `run-schedule-once.ts` refuses a `DATABASE_URL` from the process environment, a dev database that is
+  also the host services' (the `host` overlay resolving to the same URL) and playbook schedules;
+  `check-mail-sender.ts` sends only as `AF-Test-*` mailboxes or the configured sender; `run-playbook.ts` prints error
+  codes and masks ids and addresses in messages (`tests/live/lib/mask.ts`); `tests/live/scripts/.tmp-*` is ignored.
+- The tenant-data guard and `fixtures` sanitiser exempt `AF_LICENCE_SKU_<n>` values only when they look like a SKU part
+  number (`^[A-Z0-9_]{2,64}$`). The runner's read-only policy classifies `Format-AdminForgeMessage` as internal.
+
 ### Fixed
 
+- Development hot reload could go quiet for minutes: Node's recursive file watcher on Linux stops reporting a file once
+  it has been replaced by a rename (atomic saves, formatters, `sed -i`), and a content change made while a reload was
+  running was dropped. The file source now also compares file stamps every 2 s and runs a reload again when one was
+  asked for mid-reload.
 - `init:local` replaces the `CHANGE_ME` placeholders of a copied `config/example.env` instead of reusing `CHANGE_ME` as
   the Postgres password (the documented setup path left `env check` complaining).
 - `docs/api.md` no longer says a client may choose its `X-Correlation-Id`; the API always generates it.

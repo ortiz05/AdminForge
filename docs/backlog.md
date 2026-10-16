@@ -41,7 +41,8 @@ Gaps found while building. Each item names where it lands. Items move to a phase
       six read scripts (Generic `List::new()`, `[Math]`, `[Convert]` — listed in the runner fix notes): rewrite them,
       re-pin hashes, and live-check Exchange/Teams/PnP connections in a non-default runspace.
 - [ ] Live-check the runner's read-mode guards (Graph and Az guarded, module auto-loading off) on the Exchange, Teams
-      and SharePoint read pages once those workloads are licensed (`pnpm test:live`).
+      and SharePoint read pages once those workloads are licensed (`pnpm test:live`). SharePoint (PnP) read pages work
+      in read mode (2026-10-16); Teams: see the Teams PowerShell item under Exchange / Teams / OneDrive / Defender.
 - [ ] Sign the runner's `/healthz` and cancel answers; optionally encrypt runner answers.
 - [ ] HTTP probes: close the DNS-rebinding window between the address check and the fetch (pinned-address
       dispatcher); TLS and DNS probe checks can still reach internal hosts and ports.
@@ -59,6 +60,21 @@ Gaps found while building. Each item names where it lands. Items move to a phase
       apps and their secrets).
 - [ ] Scope the validation user's User Administrator role to an administrative unit holding the `AF-Test-*` objects
       (Entra ID P1), or make the privileged groups role-assignable.
+- [x] Security review of the licensed build-out (2026-10-16): `optional` datasources never hide a denial anywhere in
+      the chain and record what they suppress (scheduled reports end `report_incomplete`); the validation user's
+      Exchange / SharePoint admin roles are opt-in (`AF_TEST_SERVICE_ADMIN_ROLES`); provisioning refuses accounts it
+      didn't create; `provision status` flags any other directory role of the validation user; live scripts refuse the
+      services' database, playbook schedules and non-test mailboxes and mask messages.
+- [ ] Replace the validation user's tenant-wide Exchange Recipient Administrator / SharePoint Administrator (opt-in)
+      with scoped grants: an Exchange RBAC management scope over the `AF-Test-*` recipients, and site collection admin
+      on the `AF-Test-*` sites — then retire `AF_TEST_SERVICE_ADMIN_ROLES`.
+- [ ] `provision status` checks the validation user's active and group-held directory roles, not PIM-eligible ones
+      (`roleEligibilitySchedules`, needs Entra ID P2): an eligible role could be activated with its stored password.
+- [ ] Validation users created before the "AdminForge validation" marker are recognised by their display name; set the
+      marker on them (`employeeType`) and then require it.
+- [ ] Show "incomplete" on a page when a datasource ran without a failed `optional` one (`errors["ds.<name>"]` is in
+      the response; the renderer ignores it), and tell the person when an interactive export is incomplete (today it is
+      audited and logged only). graphBatch sub-request failures in exports aren't marked incomplete either.
 - [ ] Trim the automation baseline to what built-in code needs (Application.Read.All, AuditLog.Read.All,
       Organization.Read.All, Policy.Read.All); Device.Read.All is unused.
 - [ ] Move Read-app pages that need `Exchange.Manage`, `AllSites.FullControl` or Teams to a narrower identity.
@@ -147,8 +163,10 @@ Found by the organization and security evaluation; the fixed findings are in CHA
 - [ ] Linux compliance in the compliance-gaps report (Linux policies live in the settings catalog).
 - [ ] Re-check on a licensed tenant: mailbox `recipientType`, team activity `details[]`, the
       `RequireDeviceCompliancePolicyAssigned` setting name, Exchange `AccountDisabled`, PIM requests outside `$batch`.
+      (Team activity: the Office 365 E5 validation tenant still gets 404 `UnknownTenantId` from the usage reports on
+      2026-10-16 — Microsoft starts them 24–48 h after the first subscription.)
 - [ ] Playbooks: revoke an application permission; remove a credential from a service principal; delete orphaned Azure
-      resources (with approval); disable or remove inbox rules; manage Send on Behalf; remove OneDrive access.
+      resources (with approval); disable or remove inbox rules; manage Send on Behalf.
 - [ ] `identity.inactive-guests`: the unredeemed-invitations view should work without Entra ID P1.
 - [ ] Azure: `getByIds` batching beyond 3,000 principals; an option to give the automation identity Reader at a
       management group; review the App Service end-of-support list quarterly; sub-groups in the Reports navigation.
@@ -205,22 +223,90 @@ Found by the organization and security evaluation; the fixed findings are in CHA
 
 ## Exchange / Teams / OneDrive / Defender (fixture-validated only)
 
-- [ ] Inbox rules: a write playbook to disable or remove a rule (`Disable-InboxRule` / `Remove-InboxRule`) wired as a
-      row action on `m365.inbox-rules`. Today the report points people to Outlook or PowerShell.
-- [ ] Send on Behalf (`GrantSendOnBehalfTo`) is shown on the mailbox's Access tab but not managed; add it to
-      `Set-MailboxPermission.ps1` (`Set-Mailbox -GrantSendOnBehalfTo @{Add/Remove}`) and the two playbooks.
-- [ ] OneDrive access: the SharePoint admin API adds site collection admins but can't list or remove secondary ones,
-      so `m365.grant-onedrive-access` can't verify or compensate. Verify/remove through a site-scoped PnP connection
-      (token for `<tenant>-my.sharepoint.com`) once the runner can request one.
+- [x] Inbox rules (2026-10-16): `m365.set-inbox-rule` turns a rule off or back on (compensated) or removes it
+      (`exchange/Set-InboxRuleState.ps1`, by RuleIdentity, `-Force`), wired as row actions on `m365.inbox-rules` 1.1;
+      hidden rules (Exchange's own junk e-mail rule, or ones hidden through MAPI) are flagged and refused. Review fixes
+      (1.0.1): a rule that forwards, forwards as attachment or redirects outside the accepted domains is never turned
+      on — refused by the script, the playbook, and not offered on the audit (`m365.inbox-rules` 1.1.1).
+- [ ] Live-run `m365.set-inbox-rule` on a visible rule: lookup, refusals and parameter binding are verified live, but no
+      test mailbox has a visible rule and AdminForge can't create one (no mailbox for the validation user, no
+      `New-InboxRule` path). Create one on AF-Test-Shared-02 in Outlook on the web (from an account with Full Access),
+      then dry run → turn off → turn on → remove.
+- [x] Send on Behalf (2026-10-16): `Set-MailboxPermission.ps1` adds and removes `GrantSendOnBehalfTo` entries (they hold
+      the recipient's Name, often its Entra object id, so the read-back matches every name of the trustee);
+      `m365.grant-mailbox-permission` / `m365.remove-mailbox-permission` 1.1 offer it and the Access tab can remove it.
+      Verified live between the AF-Test shared mailboxes.
+- [x] OneDrive access verified and removable (2026-10-16): `sharepoint/Set-SiteCollectionAdmin.ps1` adds, reads back
+      and removes one site collection administrator through the tenant admin API (`GetSiteSecondaryAdministrators` /
+      `SetSiteSecondaryAdministrators`), so no site-scoped connection is needed — a site-scoped one wouldn't work anyway:
+      a SharePoint Administrator can't open other people's OneDrives. `m365.grant-onedrive-access` 1.1 reads the grant
+      back and undoes it when SharePoint doesn't show it; `m365.remove-onedrive-access` takes the access away. Verified
+      live on the AF-Test team's site; no test OneDrive exists (the test users are unlicensed).
+- [ ] Live-run the OneDrive playbooks end to end once a licensed test user with a OneDrive exists. Today the refusals
+      (no OneDrive, the owner, yourself) are verified live; `Set-SiteCollectionAdmin.ps1` now refuses team sites, so the
+      earlier team-site check no longer applies. Watch the first real run: the script confirms the owner from their
+      SharePoint profile (`PersonalUrl`, `msOnline-ObjectId` in `UserProfileProperties`) — Pester-validated only. If
+      team sites are ever needed, add a separate, reviewed parameter rather than widening `siteUrl`.
+- [ ] Teams PowerShell in read mode: since the runner stopped passing `-TenantId` with `-AccessTokens` (MicrosoftTeams 8
+      answered "Not supported tenant type"), the connection works, but `Get-CsOnlineUser` fails inside the module's
+      proxy ("GetSteppablePipeline … The expression after '&' … was not valid"), with real tokens only. Not caused by
+      the read-mode guards (the module's private and internal cmdlets resolve under them offline). Debug with a real
+      token in a worker (`m365.teams-user-policies`), then re-check the page.
+- [ ] Graph Teams APIs (`/teams`, team settings, channels) answer delegated calls only for people with a Teams licence.
+      Unlicensed admin accounts see an explanation on `m365.team`; consider reading team settings and channels with the
+      automation identity's application permissions for them (`Team.ReadBasic.All`, `TeamSettings.Read.All`,
+      `Channel.ReadBasic.All`), as `m365.teams-without-owners` already does for the archive state in schedules.
+- [ ] SharePoint sharing: the tenant site list (`Get-PnPTenantSite`) returns no owner; rows of group-connected sites
+      link to the group. Owners of other sites need `-Detailed` (one call per site) — add it as an option if wanted.
+- [ ] `m365.teams-without-owners` counts owners in its transform: about 300 ms at 10,000 teams for ownerless teams and
+      about 550 ms with "Include teams with one owner" (budget 250 ms). Large tenants need the transform off the event
+      loop (see Platform) or a server-side `owners/$count` filter (advanced query; it counts apps too).
+- [x] The executor's protected-object check matches object ids in a runner write's parameters: the mailbox, inbox-rule
+      and OneDrive writes now pass the Entra object ids of every account they touch (`Set-MailboxForwarding`,
+      `Set-MailboxPermission`, `Set-InboxRuleState`, `Set-SiteCollectionAdmin`), and the scripts refuse ids that don't
+      match Exchange's `ExternalDirectoryObjectId` or the owner's SharePoint profile (review 2026-10-16).
 - [ ] Clear forwarding has no automatic undo (by design: restoring a forwarding target should be a decision). The run
-      output keeps the previous targets.
+      output keeps the previous targets. `m365.set-mailbox-forwarding` 1.1 forwards only to user and shared mailboxes
+      that don't forward on themselves, never to yourself, and needs a second engineer's approval (the person receiving
+      the mail and the mailbox's owner can't approve); offboarding could offer "forward the leaver's mail to the
+      manager" with it.
+- [ ] Live-run the write of `m365.set-mailbox-forwarding` 1.1 after approval: it needs a second validation identity
+      with `Playbook.Approver` (the validation user can't approve its own request). The preview, the approval gate and
+      the refusals are verified live; the script's new checks are Pester-validated.
+- [ ] `Set-MailboxPermission.ps1` reads a grant back for about 9 seconds; live, Full Access and Send As didn't show yet
+      within that time (the run says so and the access was there a moment later). Consider a longer read-back.
+- [ ] `m365.convert-to-shared-mailbox`: only the refusal path is verified live (the only user mailbox is the owner's).
+      Convert a licensed test user's mailbox once one exists, then convert it back in the Exchange admin center.
+- [ ] Distribution lists: `ManagedBy` comes back empty for the AF-Test list (created without an owner), so it counts as
+      "Without an owner". Check a list with owners shows them by name (Exchange returns recipient Names, which can be
+      object ids for newer recipients) and resolve them to display names if not.
 - [ ] Intune `managedDevices` `$filter`: the query-builder fields/operators on `endpoint.devices` (eq, OS version
       startsWith, date ranges, enrolment type, management state, encryption) follow Microsoft's documentation but are
       not live-validated (no Intune licence). Trim any Intune rejects.
 - [ ] Defender device links (`security.microsoft.com/machines/v2/<id>/overview`) and CVE links: confirm the URL formats
-      on a licensed tenant.
-- [ ] The leaver runbook (`identity.leaver`, section 5 "Mailbox, OneDrive and access") still lists the mailbox and
-      OneDrive tasks as manual; `identity.offboard-user` 1.1.0 now does them. Identity owners: trim the checklist.
+      on a tenant with Defender for Endpoint. Still unverified (2026-10-16): the validation tenant has Office 365 E5
+      only, and `security.device-vulnerabilities` is gated on `defenderEndpoint`.
+- [ ] Defender XDR isn't set up in the validation tenant: Graph answers 403 "Account is not provisioned" for incidents,
+      alerts and advanced hunting, although Office 365 E5 licenses them. After a Global Administrator opens
+      security.microsoft.com once, live-check the following: `security.overview`, the incidents and alerts pages,
+      `security.open-high-severity-incidents`, `security.alerts-summary` and their schedules, the two Defender probes,
+      and hunting on EmailEvents in Query Studio. Then run `security.assign-incident` / `security.update-incident`
+      (dry run → run → compensate) only on a test incident (for example from an attack-simulation or user-reported
+      test message), never a real one.
+- [ ] `probes.risky-oauth-consents` reads CloudAppEvents. Confirm whether Office 365 Cloud App Security (`ADALLOM_S_O365`,
+      in Office 365 E5) fills it with consent events. If only Defender for Cloud Apps does, declare that licence on the
+      probe.
+- [ ] `defender` lists `ATP_ENTERPRISE` (Defender for Office 365 Plan 1). Plan 1 alone probably doesn't give Defender
+      XDR incidents or advanced hunting: confirm on a Plan 1 tenant and narrow the plan list.
+- [ ] Email threats (Defender for Office 365 Plan 2, licensed now): build a report on EmailEvents /
+      EmailPostDeliveryEvents (phish and malware delivered, ZAP results, user-reported messages) once hunting works in
+      the tenant.
+- [x] The leaver runbook (`identity.leaver` 1.2) no longer lists the mailbox and OneDrive tasks as manual: step 3 says
+      what Offboard user does with them, an optional automatic reply is passed to it, and section 5 keeps only what the
+      offboarding run reports as not done and the tasks outside Microsoft 365. 1.2.1 declares what Offboard user needs
+      (Exchange, SharePoint admin, License / Groups / Exchange Recipient / SharePoint Administrator), with a test.
+- [x] `identity.compromised-account` 2.0.1 points its containment step at the inbox rule audit (turn off / remove
+      rules), the mailbox page and Clear forwarding instead of a manual "remove inbox rules and forwarding" item.
 - [ ] Scheduled (automation) inbox-rule scans need app-only Exchange in the runner (see Engine & runner).
 
 ## Navigation / product

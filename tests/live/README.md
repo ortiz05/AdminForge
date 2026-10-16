@@ -34,6 +34,11 @@ The `validating-against-a-tenant` skill (`.claude/skills/`) is the step-by-step 
   `pnpm adminforge provision test-identities --enable` before, `--disable` after. `AF_LIVE_KEEP_TESTER=1` makes the
   suite leave the account as it is.
 - MFA for the validation user: run the TOTP bootstrap once (below).
+- No registration nudge: Entra's authentication-methods registration campaign (Microsoft-managed: "Sign in faster with
+  your face, fingerprint, or PIN", or the Authenticator nudge) stops sign-in on `mysignins.microsoft.com/register`,
+  which headless Chrome can't complete. `provision test-identities` adds the validation user — only that user — to
+  the campaign's exclusions and leaves the rest of the campaign (state, who it targets, snooze) as it is;
+  `provision status` checks it. If a live sign-in lands on the nudge anyway it fails at once and says so.
 - A running stack whose URL is `PUBLIC_BASE_URL`: `pnpm dev` (with `RUN_WORKER_IN_PROCESS=true` and
   `SCHEDULER_IN_PROCESS=true` if no worker/scheduler service runs) or the host services (`portal/deploy/README.md`).
   Playbook checks need a run worker.
@@ -66,8 +71,47 @@ Run from the repository root with `pnpm exec tsx tests/live/scripts/<script>.ts`
 - **`check-page-datasources.ts <page key>…`** — executes every datasource of the given pages as the validation user and
   prints status + error code per datasource.
 - **`run-playbook.ts <playbook> '<inputs JSON>' [--confirm-from <stepId>.<field>]`** — signs in, arms, previews
-  (retrying through Graph replication lag) and runs one playbook. `@user:AF-Test-User-02` / `@group:AF-Test-Group-01`
-  placeholders resolve through the portal search, so no ids go on the command line.
+  (retrying through Graph replication lag) and runs one playbook. Inputs may name the test objects instead of ids —
+  placeholders resolve as the validation user through the portal itself, so no ids or addresses go on the command
+  line or into the output (also inside arrays):
+
+  | Placeholder                                                                       | Becomes                                                      |
+  | --------------------------------------------------------------------------------- | ------------------------------------------------------------ |
+  | `@user:AF-Test-User-02`, `@group:AF-Test-Group-01`                                | object id (portal search)                                    |
+  | `@mailbox:AF-Test-Shared-01`                                                      | primary email address (search, then the User page's profile) |
+  | `@dl:AF-Test-DL-01`                                                               | the list's email address (search)                            |
+  | `@team:AF-Test-Team-01`                                                           | the team's Microsoft 365 group id (search)                   |
+  | `@site:AF-Test-Team-01`                                                           | SharePoint site id (`m365.sharepoint-sites` search)          |
+  | `…#<field>`, e.g. `@site:AF-Test-Team-01#webUrl`, `@mailbox:AF-Test-Shared-01#id` | another field of the object                                  |
+
+  Example: `run-playbook.ts m365.add-distribution-list-members '{"identity":"@dl:AF-Test-DL-01","addresses":"…"}'`.
+  The resolver is `tests/live/lib/placeholders.ts` (`resolvePlaceholders(session, inputs)` for throwaway scripts).
+  It prints the run status, the error code of a failed run (and of each failed step) and the message with ids and
+  addresses masked (`tests/live/lib/mask.ts`, the same masking `run-schedule-once.ts` uses). Throwaway scripts go in
+  `tests/live/scripts/.tmp-*` (ignored by git).
+
+- **`check-placeholders.ts @<kind>:<name>[#field]…`** — resolves placeholders and prints ok / why not per placeholder,
+  never the value. Run it before a playbook when a test object is new (directory and SharePoint search can lag).
+- **`run-schedule-once.ts --schedule <key> [--deliver none|sender]`** and **`--probe <key>… [--no-store]`** — runs a
+  schedule or probes once **as the automation identity** through the scheduler's own one-shot path, against the
+  **dev** database of the env file. It refuses `ADMINFORGE_ENV_OVERLAY=host`, a `DATABASE_URL` set in the process
+  environment, and a dev database that is also the services' (where `<env>.host.env` exists and resolves to the same
+  `DATABASE_URL`; the URLs are compared, never printed). It refuses **playbook schedules** — use `run-playbook.ts`,
+  which previews first. Delivery never
+  reaches a person: `--deliver none` (default) blanks every recipient list and Teams webhook, so email and Teams report
+  `not_configured`; `--deliver sender` sends the email to `AF_MAIL_SENDER` itself (the report mailbox mails itself) and
+  still never posts to Teams. Prints the run status, reason codes, file row counts and delivery statuses. A report
+  whose `optional` datasource failed ends `failed — report_incomplete` (the file is still written). Keys are
+  definition ids (`probes.graph-reachability`,
+  `reports.secure-score-summary-weekly`). No browser sign-in: it doesn't need the validation user.
+
+- **`check-mail-sender.ts [--not-as <display name>]… [--sender-name <display name>]`** — report email through
+  AdminForge's own notifier as the automation identity, without mailing anyone: one short message from
+  `AF_MAIL_SENDER` to itself (expect `sent`), then, for each `--not-as` mailbox (e.g. `AF-Test-Shared-01`), an attempt
+  to send **as** that mailbox, again only to the sender (expect `refused`: the automation identity may send only as
+  the report mailbox). `--sender-name` checks a mailbox before `AF_MAIL_SENDER` is configured. Both accept only test
+  mailboxes (display name `AF-Test-…`; `--sender-name` also the mailbox `AF_MAIL_SENDER` names), so mail is never sent
+  as a real person's mailbox. Exit code 1 when either expectation fails. It uses no database, so `ADMINFORGE_ENV_OVERLAY=host` (the services' configuration) is fine.
 
 `register-test-user-mfa.ts` and `verify-api-live.ts` take an optional failure-screenshot path; the default is under
 `/tmp`. Keep screenshots out of the repository — they can show tenant data.
@@ -84,6 +128,22 @@ Exactly what the suite needs, nothing standing that it doesn't:
   Administrator assignment left by earlier versions. User Administrator can still manage ordinary (not
   role-assignable) groups, which is why the account is disabled between runs; see `docs/backlog.md` for scoping it to
   an administrative unit.
+- **Exchange and SharePoint admin roles (opt-in):** only with `AF_TEST_SERVICE_ADMIN_ROLES=true` in the admin file
+  (`<env>.admin.env`; default off), and only where the tenant licenses the workload, it also holds Exchange Recipient
+  Administrator and SharePoint Administrator, so the suite can run the Exchange and SharePoint write playbooks on the
+  `AF-Test-*` mailboxes and sites. Both are tenant-wide. Without the opt-in the plan lists them as withheld and
+  re-provisioning removes them; those write playbooks then fail live with a permission error (reads need only Global
+  Reader).
+- **Disabled between runs:** `provision test-identities` creates it disabled; enable it only for a run
+  (`provision test-identities --enable`) and disable it afterwards (`--disable`, which also revokes its sessions).
+  `provision status` warns while it is enabled, and fails if it holds any directory role provisioning didn't give it
+  (another role, a narrower scope, or a role through a group).
+- **Registration campaign:** excluded from Entra's authentication-methods registration campaign, so no passkey or
+  Authenticator nudge interrupts its sign-in. Nobody else is excluded, and the campaign is otherwise left as it is.
+- **Only provisioning's own account:** the UPN must start with `af-`, and the account must carry the "AdminForge
+  validation" marker (`employeeType`, set at creation) or the display name "AF Tester". Any other account at
+  `AF_TEST_USER_UPN` is refused before anything changes: no new password, roles, groups, campaign exclusion,
+  `--enable` or `--disable`.
 
 ## Safety rules
 

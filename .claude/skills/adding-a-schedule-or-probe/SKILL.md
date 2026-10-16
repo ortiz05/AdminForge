@@ -62,8 +62,10 @@ schedule may not use it (`adminforge validate` refuses it).
    (`portal/tools/cli/src/provision/catalog.ts`) and run `pnpm adminforge provision entra`.
 7. **Fixtures** for mock mode (Resource Graph variants in `tests/fixtures/resourceGraph/POST.json`, matched by the
    `// af:` comment); **validate:** `pnpm adminforge validate`, content tests, `pnpm guard`.
-8. **Try it once live (read-only):** run the scheduler sweep for your probe (see `portal/deploy/README.md`) and check
-   `/monitoring`.
+8. **Try it once live (read-only):** against the dev database, as the automation identity, with delivery kept away
+   from people — `pnpm exec tsx tests/live/scripts/run-schedule-once.ts` with `--probe <id>` or `--schedule <id>`
+   (`--deliver sender` mails only `AF_MAIL_SENDER` itself; see `tests/live/README.md`). Then check `/monitoring`. On
+   the host, the scheduler's own one-shot is in `portal/deploy/README.md`.
 
 ## Common mistakes
 

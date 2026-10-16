@@ -45,5 +45,36 @@ refuses anything else. Prefer Graph when it can do the job.
    `pnpm --filter @adminforge/tests exec pwsh -NoLogo -NoProfile -File runner/pester/run.ps1`; runner unit tests are
    in `tests/unit/runner/`.
 8. New PowerShell module? Pin it in `portal/apps/runner/modules.lock.json` and `pnpm --filter @adminforge/runner modules:install`.
+9. SharePoint: a SharePoint Administrator can't open other people's sites or OneDrives, so read and change them through
+   the tenant admin connection (`sharepointAdmin`): `Get-PnPTenantSite -Identity <url>` (SiteId, lock state, storage),
+   and OneDrive site collection administrators with `sharepoint/Set-SiteCollectionAdmin.ps1` (reuse it; it reads them
+   back, and refuses team sites — a team-site mode would be a separate, reviewed parameter). The tenant site list
+   returns no owner for group-connected sites (`GroupId` instead). Calls PnP has no `Get-*` cmdlet for
+   (`Invoke-PnPSPRestMethod`, e.g. `GetSiteSecondaryAdministrators`) only work in write scripts.
+   `Get-PnPUserProfileProperty` returns CSOM `PersonProperties`: `UserProfileProperties` is a generic `Dictionary`
+   whose `Contains` PowerShell can't call — test keys with `@($d.Keys) -contains 'msOnline-ObjectId'`.
+10. **Object ids for the protected-object guard.** The executor refuses a write naming AdminForge's own principals or
+    `AF_PROTECTED_USER_IDS`, but it only sees GUIDs in a runner job's parameters, not UPNs or addresses. A write script
+    that changes something of a person, mailbox or group takes their Entra object ids as required inputs
+    (`mailboxObjectId`, `trusteeObjectId`, `ownerObjectId`, …; the playbook passes ids it resolved through Graph) and
+    refuses to act when they don't match what the service reports (`ExternalDirectoryObjectId` in Exchange, the
+    profile's `msOnline-ObjectId` in SharePoint). Refuse acting for the caller where that grants them access
+    (`$Context['User']` has `Upn` and `ObjectId`); Pester passes it with `Invoke-ContentScript … -User @{ … }`.
+11. Exchange Online (learned live):
+    - Inputs stay as sent: ISO 8601 strings are strings (the worker parses jobs with `-DateKind String`); parse dates
+      in the script.
+    - Error and log text is cleaned for the browser (`Format-AdminForgeMessage` strips Exchange's OData JSON and
+      `|Exception.Type|` prefixes); don't print raw service payloads yourself.
+    - Never return an `if`/`switch` expression that can yield an empty array as a property value — PowerShell unrolls
+      it to `$null` (`findings: null` broke transforms). Use `@(… | Where-Object …)` directly.
+    - `Get-EXOMailboxPermission -User <x>` throws NotFound ("No permissions were found …") when x has none: treat that
+      as "not granted". Recipient links (`GrantSendOnBehalfTo`, `ForwardingAddress`, `ManagedBy`) hold recipient
+      Names, often the Entra object id: compare through `Get-EXORecipient`, not by address.
+    - Inbox rules: address them by `RuleIdentity` with `-Mailbox`; the rule cmdlets need `-Force` (unattended) and
+      can't see hidden rules (every mailbox has Exchange's hidden "Junk E-mail Rule").
+    - Graph `mailboxSettings` of someone else's mailbox answers ErrorAccessDenied with delegated permissions — read
+      mailbox facts (type, forwarding, replies) from Exchange.
+    - "Could not connect to Exchange: Module could not be correctly formed" right after an Exchange role is assigned
+      (or the organization was customized) is RBAC propagation: wait up to an hour.
 
 Live Exchange/Teams/SharePoint validation needs licensed workloads — see `docs/licensing-review.md`.

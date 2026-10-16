@@ -359,7 +359,9 @@ and bound to the browser. A reused, expired, foreign or wrong-kind `state` → 4
 
 - **Who:** Session. Graph calls use the caller's delegated read token.
 - **Response** (`CapabilitiesResponse`): `features` keyed `conditionalAccess`, `pim`, `identityProtection`, `intune`,
-  `exchange`, `teams`, `sharepoint`, `defender`, `signInLogs` → `{available, reason?, sku?, label?, servicePlans?}`;
+  `exchange`, `teams`, `sharepoint`, `defender` (Defender XDR incidents, alerts, hunting — Office 365 E5 is enough),
+  `defenderEndpoint` (Defender for Endpoint Plan 2 device data), `signInLogs` →
+  `{available, reason?, sku?, label?, servicePlans?}`;
   `roles {active[], eligible[], eligibleAvailable?, activeSource?: pim|assignments|null}` (directory roles, PIM
   eligibility); `skus?[] {skuPartNumber, capabilityStatus, enabled, consumed}`; `errors?` per section that could not be
   read; `provenance?`.
@@ -446,9 +448,12 @@ delegated **read** identity; the client names a page and a datasource, never a U
   `cursor` is the opaque value from the previous page (≤ 8192 chars).
 - **Response** (`DatasourceResult`): `data`; `cursor?` (next page); `provenance`
   (`{service, path, ms, requestId?, cachedAt?}`, or `null` for static/skipped datasources); `errors?` (graphBatch
-  sub-request failures); `skipped?` (its `when` was false).
+  sub-request failures, and `ds.<name>` for an `optional: true` datasource it uses — directly or further up the chain —
+  that failed, so it ran with `null` in its place: the result is incomplete); `skipped?` (its `when` was false).
 - **Errors:** `definition_not_found` 404, `datasource_not_found` 404, `forbidden` 403, `invalid_params` 400,
-  `licence_required` 403, `policy_denied` 403, `dependency_failed` 424 (a `ds.<name>` it uses failed),
+  `licence_required` 403, `policy_denied` 403, `dependency_failed` 424 (a `ds.<name>` it uses failed and is not
+  `optional: true` — or failed with `forbidden`, `policy_denied`, `licence_required`, `reauth`, `rearm` or `not_armed`
+  anywhere up the chain, which `optional` never hides),
   `content_error` 500, `runner_not_configured` 503 (PowerShell datasources), `reauth` 401, upstream codes.
 - **Version:** `version`, if sent, must be the current published version: an older one answers 409 `version_superseded` (reload the page), a retired key 409 `definition_retired`.
 
@@ -697,7 +702,10 @@ Schedules a report in the portal. It runs from its next due time — no git revi
   is still an enabled member (not a guest) holding `Portal.Operator` and every role of the schedule and the report's
   current version. The run history then shows `creator_access_removed` (confirmed loss: the schedule was turned off,
   audited `schedule.disabled` with the reason) or `creator_unverified` (couldn't confirm; that run didn't happen).
-  Messages it sends say "Scheduled in AdminForge by <creator>".
+  Messages it sends say "Scheduled in AdminForge by <creator>". Any report run (portal or content) whose `optional`
+  datasource failed writes and delivers the file marked "Incomplete: …", records `result.incomplete[]
+{datasource, code, message}` and ends `failed` with `report_incomplete` (not retried, so the report isn't sent twice;
+  `notify.onFailure` is told).
 
 #### `PUT /api/schedules/:key`
 
@@ -903,7 +911,8 @@ Source: `src/routes/report-catalog.ts`, `reports.ts`, `src/reports/catalog.ts`, 
 - **Response:** the file, streamed — `Content-Disposition: attachment`, `X-Content-Type-Options: nosniff`. At most
   `EXPORT_MAX_ROWS` (default 100 000) rows. The first page is fetched before headers are sent, so permission, licence
   and policy errors still return JSON; a failure later truncates the file. Audited `report.exported` (params with
-  `redact: true` masked; rows, truncation).
+  `redact: true` masked; rows, truncation; `incomplete: {"ds.<name>": code}` when an `optional` datasource the export
+  depends on failed — also logged).
 - **Errors:** `export_not_supported` 400, `export_format` 400, `invalid_request` 400 (no columns), `invalid_params`
   400, `definition_not_found` 404, `forbidden` 403, `licence_required` 403, upstream codes.
 - **Version:** `version`, if sent, must be the current published version: an older one answers 409 `version_superseded` (reload the page), a retired key 409 `definition_retired`.

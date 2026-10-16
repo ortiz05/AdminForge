@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/report.schema.json
 kind: report
 id: m365.sharepoint-site-usage
-version: 1.0.0
+version: 1.0.1
 title: SharePoint site storage and inactive sites
 summary: >-
   SharePoint sites with no activity for the chosen number of days (archive or delete candidates) and sites close to
@@ -80,9 +80,11 @@ datasources:
           $share := storageAllocatedInBytes > 0 ? $round(storageUsedInBytes / storageAllocatedInBytes, 4);
           $inactive := lastActivityDate ? $idle >= $days : true;
           $near := $share ? $share >= $limit : false;
+          $open := $substring(siteUrl ? siteUrl : '', 0, 8) = 'https://';
           {
             "siteId": siteId,
             "siteUrl": siteUrl,
+            "site": $open ? siteUrl : siteId,
             "ownerDisplayName": ownerDisplayName,
             "ownerPrincipalName": ownerPrincipalName,
             "template": rootWebTemplate,
@@ -99,7 +101,7 @@ datasources:
             "pageViewCount": pageViewCount,
             "externalSharing": externalSharing,
             "sensitivityLabel": siteSensitivityLabelId != '' ? siteSensitivityLabelId,
-            "openable": $substring(siteUrl ? siteUrl : '', 0, 8) = 'https://',
+            "openable": $open,
             "reportRefreshDate": reportRefreshDate
           }
         )];
@@ -111,11 +113,11 @@ datasources:
         {
           "rows": [$rows^(state = 'storage' ? 0 : state = 'inactive' ? 1 : 2, nearLimit ? -percentUsed : 0, $exists(daysInactive) ? 1 : 0, >daysInactive, >storageUsedInBytes)],
           "inactive": $count($inactiveRows),
-          "inactiveStorage": $sum($inactiveRows.storageUsedInBytes),
+          "inactiveStorage": $sum([0, $inactiveRows.storageUsedInBytes]),
           "nearLimit": $count($all[nearLimit]),
-          "storage": $sum($all.storageUsedInBytes),
+          "storage": $sum([0, $all.storageUsedInBytes]),
           "sites": $count($all),
-          "largest": [($all^(>storageUsedInBytes))[[0..9]].{ "site": $replace(siteUrl ? siteUrl : siteId, /^https:\/\/[^\/]+/, ''), "storage": storageUsedInBytes }],
+          "largest": [$filter($all^(>storageUsedInBytes), function($v, $i) { $i < 10 }).{ "site": openable ? $replace(siteUrl, /^https:\/\/[^\/]+/, '') : siteId, "storage": storageUsedInBytes }],
           "concealed": $count($all[$not(openable)]) > 0
         }
       ) }
@@ -164,7 +166,7 @@ layout:
     data: sites.rows
     rowKey: siteId
     columns:
-      - { field: siteUrl, label: Site, kind: identity, secondary: ownerDisplayName, sortable: true }
+      - { field: site, label: Site, kind: identity, secondary: ownerDisplayName, sortable: true }
       - field: state
         label: Status
         kind: status

@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/report.schema.json
 kind: report
 id: m365.teams-without-owners
-version: 1.0.0
+version: 1.1.0
 title: Teams without owners
 summary: Teams that have no owner (and optionally only one), with visibility and archive state, so they can be handed to a new owner or retired.
 owner: m365-team
@@ -10,8 +10,7 @@ nav: { section: reports, label: Teams without owners, icon: microsoft-teams-logo
 requires:
   portalRoles: [Portal.Reader]
   scopes:
-    graph: [Group.Read.All, GroupMember.Read.All]
-    teams: [user_impersonation]
+    graph: [Group.Read.All, GroupMember.Read.All, Team.ReadBasic.All]
   entraRoles: [Teams Administrator, Global Reader]
   licences: [teams]
 
@@ -22,39 +21,82 @@ params:
 filters:
   facets: [includeSingleOwner, includeArchived]
 
+# Microsoft Graph only (no PowerShell), so the weekly schedule runs as the automation identity with application
+# permissions. Owners come from the Microsoft 365 group (a team's owners are its group's owners); only people count
+# (apps can own a group but not manage a team). Graph expands at most 20 owners per group, plenty to tell none from one.
+# Graph's Teams APIs answer people only when they hold a Microsoft Teams licence, so the archive state is optional:
+# without it every team is listed and the report says so.
 datasources:
+  archived:
+    source: graph
+    label: Archive state of each team
+    optional: true
+    request:
+      path: /teams
+      query:
+        $select: id,isArchived
+    paging: all
+    maxItems: 10000
+    cache: { ttl: 300 }
+    # value = { value: [{ id, isArchived }] } → the ids of archived teams (a team's id is its group's id).
+    transform: "${ { 'known': true, 'ids': $append([], value.value[isArchived = true].id) } }"
   teams:
-    source: runner
-    label: Teams owner scan (PowerShell)
-    script: teams/Get-TeamsSummary.ps1
-    sha256: 6ea9d9332539ca9be5f0be6a6c01937eca307d1079aeeeee4e66ab277e4e5aa8
-    services: [graph, teams]
-    timeoutSeconds: 1800
-    parameters:
-      includeOwnerCounts: true
-      maxTeamsForOwners: 2000
-      includeTeams: true
-    cache: { ttl: 1800 }
-    # value = [script output] — one object { total, archived, byVisibility, ownerless, teams }. Teams whose owners couldn't be read have ownerCount null.
+    source: graph
+    label: Teams and their owners
+    request:
+      path: /groups
+      query:
+        $filter: "resourceProvisioningOptions/Any(x:x eq 'Team')"
+        $select: id,displayName,mail,mailNickname,visibility,createdDateTime
+        $expand: owners($select=id,displayName,userPrincipalName)
+        $top: 100
+    paging: all
+    maxItems: 10000
+    cache: { ttl: 300 }
+    # value = { value: [group + owners] }; ds.archived = { known, ids } or null when it couldn't be read. Only people
+    # count as owners (users have a userPrincipalName; apps don't). Built for large tenants (transform budget): owners
+    # are counted once per team, and only teams with too few owners are turned into rows, ownerless first.
     transform: >-
       ${ (
-        $v := value[0];  /* runner result = [output data]; one summary object */
         $p := params;
+        $known := ds.archived.known = true;
+        $archivedIds := $known ? $append([], ds.archived.ids){ $: true } : {};
         $limit := $p.includeSingleOwner = true ? 1 : 0;
-        $rows := [$sort($v.teams[
-            $exists(ownerCount) and ownerCount != null and ownerCount <= $limit
-            and ($p.includeArchived != false or archived = false)
-          ].$merge([$, { "ownership": ownerCount = 0 ? 'none' : 'single' }]), function($a, $b) { $a.ownerCount > $b.ownerCount })];
+        $counts := value.value.$count(owners.userPrincipalName);
+        $rows := [value.value[$count(owners.userPrincipalName) <= $limit].(
+          $people := owners[$exists(userPrincipalName)];
+          $n := $count($people);
+          $archived := $known ? $lookup($archivedIds, id) = true : null;
+          ($not($p.includeArchived = false) or $not($archived = true)) ? {
+            "groupId": id,
+            "displayName": displayName,
+            "mail": mail,
+            "mailNickName": mailNickname,
+            "visibility": visibility,
+            "createdDateTime": createdDateTime,
+            "archived": $archived,
+            "ownerCount": $n,
+            "owners": $join($people.displayName, ', '),
+            "ownership": $n = 0 ? 'none' : 'single'
+          }
+        )];
         {
-          "rows": $rows,
-          "ownerless": $count($v.teams[ownerCount = 0]),
-          "singleOwner": $count($v.teams[ownerCount = 1]),
-          "total": $v.total,
-          "notChecked": $count($v.teams[$not($exists(ownerCount)) or ownerCount = null])
+          "rows": [$append($rows[ownerCount = 0], $rows[ownerCount = 1])],
+          "ownerless": $count($counts[$ = 0]),
+          "singleOwner": $count($counts[$ = 1]),
+          "archived": $known ? $count(ds.archived.ids) : null,
+          "archivedKnown": $known,
+          "total": $count(value.value)
         }
       ) }
 
 layout:
+  - widget: markdown
+    span: 12
+    when: ${ teams.archivedKnown = false }
+    text: |
+      **Archive state unknown.** Microsoft Graph tells whether a team is archived only to people who hold a Microsoft
+      Teams licence (scheduled runs read it as the automation identity). Every team is listed, archived or not.
   - widget: kpi
     data: teams.ownerless
     label: Teams without owners
@@ -67,27 +109,29 @@ layout:
     status: "${ value > 0 ? 'warn' : 'ok' }"
   - widget: kpi
     data: teams.total
-    label: Teams scanned
+    label: Teams
     format: number
   - widget: kpi
-    data: teams.notChecked
-    label: Owners not checked
+    data: teams.archived
+    label: Archived teams
     format: number
-    status: "${ value > 0 ? 'info' : 'ok' }"
   - widget: table
     id: teams
     span: 12
     data: teams.rows
     rowKey: groupId
     columns:
-      - { field: displayName, label: Team, kind: identity, secondary: mailNickName }
+      - { field: displayName, label: Team, kind: identity, secondary: mail }
       - field: ownership
         label: Owners
         kind: status
         map: { none: [crit, No owners], single: [warn, One owner] }
         filter: facet
+      - { field: owners, label: Owner }
       - { field: visibility, label: Visibility, filter: facet }
       - { field: archived, label: Archived, kind: boolean, filter: facet }
+      - { field: createdDateTime, label: Created, kind: date, hidden: true }
+      - { field: mailNickName, label: Alias, hidden: true }
       - { field: groupId, label: Group id, kind: guid, hidden: true }
     inspect:
       page: m365.team
@@ -98,8 +142,8 @@ layout:
         icon: arrow-square-out
         href: "https://admin.teams.microsoft.com/teams/manage/${ $encode(row.groupId) }"
     empty:
-      title: Every team has an owner
-      body: No team in the scan is missing an owner. Teams beyond the first 2,000 aren't checked.
+      title: No team in this view
+      body: Every team listed here has an owner (with “Include teams with one owner”, at least two). Archived teams are left out when “Include archived teams” is off.
 
 export:
   formats: [csv, xlsx]

@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/page.schema.json
 kind: page
 id: m365.teams
-version: 1.0.0
+version: 1.0.1
 title: Teams
 summary: Every team in the tenant with its owners, visibility and lifecycle dates — find ownerless and single-owner teams before they become orphaned.
 owner: m365-team
@@ -60,13 +60,15 @@ datasources:
     paging: all
     maxItems: 10000
     cache: { ttl: 300 }
-    # value = { value: [group + owners] }. Owner counts, ownership state, then search/facet filters.
+    # value = { value: [group + owners] }. Owner counts (people only: apps can own a group but not manage a team),
+    # ownership state, then search/facet filters.
     transform: >-
       ${ (
         $p := params;
         $q := $lowercase($trim($p.q ? $p.q : ''));
         $all := [value.value.(
-          $n := $count(owners);
+          $people := owners[$exists(userPrincipalName)];
+          $n := $count($people);
           {
             "id": id,
             "displayName": displayName,
@@ -77,7 +79,7 @@ datasources:
             "renewedDateTime": renewedDateTime,
             "expirationDateTime": expirationDateTime,
             "ownerCount": $n,
-            "owners": $join(owners.displayName, ', '),
+            "owners": $join($people.displayName, ', '),
             "ownership": $n = 0 ? 'none' : $n = 1 ? 'single' : 'healthy'
           }
         )];

@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/report.schema.json
 kind: report
 id: m365.onedrive-usage
-version: 1.0.0
+version: 1.0.1
 title: OneDrive storage and inactive accounts
 summary: >-
   OneDrive accounts with no activity for the chosen number of days (often people who left — hand the files over before
@@ -107,9 +107,9 @@ datasources:
         {
           "rows": [$rows^(state = 'storage' ? 0 : state = 'inactive' ? 1 : 2, nearLimit ? -percentUsed : 0, $exists(daysInactive) ? 1 : 0, >daysInactive, >storageUsedInBytes)],
           "inactive": $count($inactiveRows),
-          "inactiveStorage": $sum($inactiveRows.storageUsedInBytes),
+          "inactiveStorage": $sum([0, $inactiveRows.storageUsedInBytes]),
           "nearLimit": $count($all[nearLimit]),
-          "storage": $sum($all.storageUsedInBytes),
+          "storage": $sum([0, $all.storageUsedInBytes]),
           "accounts": $count($all),
           "concealed": $count($all[$not(openable)]) > 0
         }
@@ -147,8 +147,10 @@ layout:
     span: 12
     text: |
       **Leavers' OneDrives.** When an account is deleted, its OneDrive is kept for the retention period set in the
-      SharePoint admin center (30 days by default) and then deleted. Use **Give someone access to a OneDrive** (from the
-      person's profile) to hand files to their manager first.
+      SharePoint admin center (30 days by default) and then deleted. Hand the files to the person's manager first with
+      [Give someone access to a OneDrive](/playbooks/m365.grant-onedrive-access) (Offboard on the person's profile can
+      do it too), and take that access away with
+      [Remove someone's access to a OneDrive](/playbooks/m365.remove-onedrive-access) once the handover is done.
   - widget: table
     id: accounts
     span: 12

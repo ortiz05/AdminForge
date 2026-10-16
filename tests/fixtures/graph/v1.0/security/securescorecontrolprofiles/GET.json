@@ -11,19 +11,27 @@
       "deprecated": false,
       "implementationCost": "Low",
       "lastModifiedDateTime": null,
-      "maxScore": 10.0,
+      "maxScore": 10,
       "rank": 1,
       "remediation": "<p>Ensure multifactor authentication is enabled for all users in administrative roles.</p>",
       "remediationImpact": "Users in scope may be prompted to complete an extra step.",
       "service": "AzureAD",
       "threats": [
-        "AccountBreach",
-        "ElevationOfPrivilege"
+        "Account breach",
+        "Elevation of Privilege"
       ],
       "tier": "Core",
       "userImpact": "Low",
       "complianceInformation": [],
-      "controlStateUpdates": [],
+      "controlStateUpdates": [
+        {
+          "assignedTo": null,
+          "comment": null,
+          "state": "Default",
+          "updatedBy": null,
+          "updatedDateTime": null
+        }
+      ],
       "vendorInformation": {
         "provider": "SecureScore",
         "providerVersion": null,
@@ -39,21 +47,29 @@
       "controlCategory": "Identity",
       "title": "Ensure multifactor authentication is enabled for all users",
       "deprecated": false,
-      "implementationCost": "Moderate",
+      "implementationCost": "Medium",
       "lastModifiedDateTime": null,
-      "maxScore": 9.0,
+      "maxScore": 9,
       "rank": 2,
       "remediation": "<p>Ensure multifactor authentication is enabled for all users.</p>",
       "remediationImpact": "Users in scope may be prompted to complete an extra step.",
       "service": "AzureAD",
       "threats": [
-        "AccountBreach",
-        "PasswordCracking"
+        "Account breach",
+        "Password Cracking"
       ],
       "tier": "Core",
       "userImpact": "Moderate",
       "complianceInformation": [],
-      "controlStateUpdates": [],
+      "controlStateUpdates": [
+        {
+          "assignedTo": null,
+          "comment": null,
+          "state": "Default",
+          "updatedBy": null,
+          "updatedDateTime": null
+        }
+      ],
       "vendorInformation": {
         "provider": "SecureScore",
         "providerVersion": null,
@@ -71,19 +87,27 @@
       "deprecated": false,
       "implementationCost": "Moderate",
       "lastModifiedDateTime": null,
-      "maxScore": 8.0,
+      "maxScore": 8,
       "rank": 3,
       "remediation": "<p>Enable Conditional Access policies to block legacy authentication.</p>",
       "remediationImpact": "Users in scope may be prompted to complete an extra step.",
       "service": "AzureAD",
       "threats": [
-        "PasswordSpray",
-        "AccountBreach"
+        "Password Cracking",
+        "Account breach"
       ],
       "tier": "Core",
       "userImpact": "Moderate",
       "complianceInformation": [],
-      "controlStateUpdates": [],
+      "controlStateUpdates": [
+        {
+          "assignedTo": null,
+          "comment": null,
+          "state": "Default",
+          "updatedBy": null,
+          "updatedDateTime": null
+        }
+      ],
       "vendorInformation": {
         "provider": "SecureScore",
         "providerVersion": null,
@@ -99,20 +123,28 @@
       "controlCategory": "Identity",
       "title": "Ensure user risk policies are enabled",
       "deprecated": false,
-      "implementationCost": "Moderate",
+      "implementationCost": "High",
       "lastModifiedDateTime": null,
-      "maxScore": 7.0,
+      "maxScore": 7,
       "rank": 4,
       "remediation": "<p>Ensure user risk policies are enabled.</p>",
       "remediationImpact": "Users in scope may be prompted to complete an extra step.",
       "service": "AzureAD",
       "threats": [
-        "AccountBreach"
+        "Account breach"
       ],
       "tier": "Core",
-      "userImpact": "Moderate",
+      "userImpact": "high",
       "complianceInformation": [],
-      "controlStateUpdates": [],
+      "controlStateUpdates": [
+        {
+          "assignedTo": null,
+          "comment": null,
+          "state": "Default",
+          "updatedBy": null,
+          "updatedDateTime": null
+        }
+      ],
       "vendorInformation": {
         "provider": "SecureScore",
         "providerVersion": null,
@@ -130,18 +162,26 @@
       "deprecated": false,
       "implementationCost": "Moderate",
       "lastModifiedDateTime": null,
-      "maxScore": 7.0,
+      "maxScore": 7,
       "rank": 5,
       "remediation": "<p>Ensure sign-in risk policies are enabled.</p>",
       "remediationImpact": "Users in scope may be prompted to complete an extra step.",
       "service": "AzureAD",
       "threats": [
-        "AccountBreach"
+        "Account breach"
       ],
       "tier": "Core",
       "userImpact": "Moderate",
       "complianceInformation": [],
-      "controlStateUpdates": [],
+      "controlStateUpdates": [
+        {
+          "assignedTo": null,
+          "comment": null,
+          "state": "Default",
+          "updatedBy": null,
+          "updatedDateTime": null
+        }
+      ],
       "vendorInformation": {
         "provider": "SecureScore",
         "providerVersion": null,
@@ -159,18 +199,26 @@
       "deprecated": false,
       "implementationCost": "Low",
       "lastModifiedDateTime": null,
-      "maxScore": 1.0,
+      "maxScore": 1,
       "rank": 30,
       "remediation": "<p>Designate more than one Global Administrator.</p>",
       "remediationImpact": "Users in scope may be prompted to complete an extra step.",
       "service": "AzureAD",
       "threats": [
-        "ElevationOfPrivilege"
+        "Elevation of Privilege"
       ],
       "tier": "Core",
       "userImpact": "Low",
       "complianceInformation": [],
-      "controlStateUpdates": [],
+      "controlStateUpdates": [
+        {
+          "assignedTo": null,
+          "comment": null,
+          "state": "Default",
+          "updatedBy": null,
+          "updatedDateTime": null
+        }
+      ],
       "vendorInformation": {
         "provider": "SecureScore",
         "providerVersion": null,
@@ -186,20 +234,28 @@
       "controlCategory": "Identity",
       "title": "Use least privileged administrative roles",
       "deprecated": false,
-      "implementationCost": "Low",
+      "implementationCost": "low",
       "lastModifiedDateTime": null,
-      "maxScore": 1.0,
+      "maxScore": 1,
       "rank": 31,
       "remediation": "<p>Use least privileged administrative roles.</p>",
       "remediationImpact": "Users in scope may be prompted to complete an extra step.",
       "service": "AzureAD",
       "threats": [
-        "ElevationOfPrivilege"
+        "Elevation of Privilege"
       ],
       "tier": "Core",
-      "userImpact": "Low",
+      "userImpact": "low",
       "complianceInformation": [],
-      "controlStateUpdates": [],
+      "controlStateUpdates": [
+        {
+          "assignedTo": null,
+          "comment": null,
+          "state": "Default",
+          "updatedBy": null,
+          "updatedDateTime": null
+        }
+      ],
       "vendorInformation": {
         "provider": "SecureScore",
         "providerVersion": null,
@@ -217,18 +273,26 @@
       "deprecated": false,
       "implementationCost": "Low",
       "lastModifiedDateTime": null,
-      "maxScore": 8.0,
+      "maxScore": 8,
       "rank": 10,
       "remediation": "<p>Set the password expiration policy to never expire.</p>",
       "remediationImpact": "Users in scope may be prompted to complete an extra step.",
       "service": "AzureAD",
       "threats": [
-        "PasswordCracking"
+        "Password Cracking"
       ],
       "tier": "Core",
       "userImpact": "Moderate",
       "complianceInformation": [],
-      "controlStateUpdates": [],
+      "controlStateUpdates": [
+        {
+          "assignedTo": null,
+          "comment": null,
+          "state": "Default",
+          "updatedBy": null,
+          "updatedDateTime": null
+        }
+      ],
       "vendorInformation": {
         "provider": "SecureScore",
         "providerVersion": null,
@@ -246,13 +310,13 @@
       "deprecated": false,
       "implementationCost": "Low",
       "lastModifiedDateTime": null,
-      "maxScore": 1.0,
+      "maxScore": 1,
       "rank": 40,
       "remediation": "<p>Enable self-service password reset.</p>",
       "remediationImpact": "Users in scope may be prompted to complete an extra step.",
       "service": "AzureAD",
       "threats": [
-        "AccountBreach"
+        "Account breach"
       ],
       "tier": "Core",
       "userImpact": "Moderate",
@@ -281,21 +345,29 @@
       "controlCategory": "Apps",
       "title": "Do not allow users to grant consent to unreliable applications",
       "deprecated": false,
-      "implementationCost": "Moderate",
+      "implementationCost": "Unknown",
       "lastModifiedDateTime": null,
-      "maxScore": 4.0,
+      "maxScore": 4,
       "rank": 12,
       "remediation": "<p>Do not allow users to grant consent to unreliable applications.</p>",
       "remediationImpact": "Users in scope may be prompted to complete an extra step.",
       "service": "AzureAD",
       "threats": [
-        "DataExfiltration",
-        "Phishing"
+        "Data Exfiltration",
+        "Account breach"
       ],
       "tier": "Core",
-      "userImpact": "Moderate",
+      "userImpact": null,
       "complianceInformation": [],
-      "controlStateUpdates": [],
+      "controlStateUpdates": [
+        {
+          "assignedTo": null,
+          "comment": null,
+          "state": "Default",
+          "updatedBy": null,
+          "updatedDateTime": null
+        }
+      ],
       "vendorInformation": {
         "provider": "SecureScore",
         "providerVersion": null,
@@ -311,21 +383,29 @@
       "controlCategory": "Apps",
       "title": "Create Safe Links policies for email messages",
       "deprecated": false,
-      "implementationCost": "Low",
+      "implementationCost": "low",
       "lastModifiedDateTime": null,
-      "maxScore": 9.0,
+      "maxScore": 9,
       "rank": 6,
       "remediation": "<p>Create Safe Links policies for email messages.</p>",
       "remediationImpact": "Users in scope may be prompted to complete an extra step.",
       "service": "MDO",
       "threats": [
-        "Phishing",
-        "MaliciousLink"
+        "Account breach",
+        "Data Exfiltration"
       ],
       "tier": "Core",
-      "userImpact": "Low",
+      "userImpact": "low",
       "complianceInformation": [],
-      "controlStateUpdates": [],
+      "controlStateUpdates": [
+        {
+          "assignedTo": null,
+          "comment": null,
+          "state": "Default",
+          "updatedBy": null,
+          "updatedDateTime": null
+        }
+      ],
       "vendorInformation": {
         "provider": "SecureScore",
         "providerVersion": null,
@@ -343,18 +423,26 @@
       "deprecated": false,
       "implementationCost": "Low",
       "lastModifiedDateTime": null,
-      "maxScore": 8.0,
+      "maxScore": 8,
       "rank": 7,
       "remediation": "<p>Turn on Safe Attachments in block mode.</p>",
       "remediationImpact": "Users in scope may be prompted to complete an extra step.",
       "service": "MDO",
       "threats": [
-        "Malware"
+        "Data Deletion"
       ],
       "tier": "Core",
       "userImpact": "Low",
       "complianceInformation": [],
-      "controlStateUpdates": [],
+      "controlStateUpdates": [
+        {
+          "assignedTo": null,
+          "comment": null,
+          "state": "Default",
+          "updatedBy": null,
+          "updatedDateTime": null
+        }
+      ],
       "vendorInformation": {
         "provider": "SecureScore",
         "providerVersion": null,
@@ -370,20 +458,28 @@
       "controlCategory": "Data",
       "title": "Ensure all forms of mail forwarding are blocked and/or disabled",
       "deprecated": false,
-      "implementationCost": "Low",
+      "implementationCost": "low",
       "lastModifiedDateTime": null,
-      "maxScore": 8.0,
+      "maxScore": 8,
       "rank": 9,
       "remediation": "<p>Ensure all forms of mail forwarding are blocked and/or disabled.</p>",
       "remediationImpact": "Users in scope may be prompted to complete an extra step.",
       "service": "EXO",
       "threats": [
-        "DataExfiltration"
+        "Data Exfiltration"
       ],
       "tier": "Core",
-      "userImpact": "Moderate",
+      "userImpact": "medium",
       "complianceInformation": [],
-      "controlStateUpdates": [],
+      "controlStateUpdates": [
+        {
+          "assignedTo": null,
+          "comment": null,
+          "state": "Default",
+          "updatedBy": null,
+          "updatedDateTime": null
+        }
+      ],
       "vendorInformation": {
         "provider": "SecureScore",
         "providerVersion": null,
@@ -401,16 +497,16 @@
       "deprecated": false,
       "implementationCost": "Moderate",
       "lastModifiedDateTime": null,
-      "maxScore": 5.0,
+      "maxScore": 5,
       "rank": 20,
       "remediation": "<p>Turn on data loss prevention policies.</p>",
       "remediationImpact": "Users in scope may be prompted to complete an extra step.",
       "service": "MIP",
       "threats": [
-        "DataExfiltration",
-        "DataDeletion"
+        "Data Exfiltration",
+        "Data Deletion"
       ],
-      "tier": "Defense in depth",
+      "tier": "Defense In Depth",
       "userImpact": "Moderate",
       "complianceInformation": [],
       "controlStateUpdates": [
@@ -439,18 +535,26 @@
       "deprecated": false,
       "implementationCost": "Low",
       "lastModifiedDateTime": null,
-      "maxScore": 6.0,
+      "maxScore": 6,
       "rank": 8,
       "remediation": "<p>Turn on Microsoft Defender Antivirus PUA protection in block mode.</p>",
       "remediationImpact": "Users in scope may be prompted to complete an extra step.",
       "service": "MDATP",
       "threats": [
-        "Malware"
+        "Data Deletion"
       ],
       "tier": "Core",
       "userImpact": "Low",
       "complianceInformation": [],
-      "controlStateUpdates": [],
+      "controlStateUpdates": [
+        {
+          "assignedTo": null,
+          "comment": null,
+          "state": "Default",
+          "updatedBy": null,
+          "updatedDateTime": null
+        }
+      ],
       "vendorInformation": {
         "provider": "SecureScore",
         "providerVersion": null,
@@ -468,18 +572,26 @@
       "deprecated": false,
       "implementationCost": "Moderate",
       "lastModifiedDateTime": null,
-      "maxScore": 7.0,
+      "maxScore": 7,
       "rank": 11,
       "remediation": "<p>Block credential stealing from the Windows local security authority subsystem.</p>",
       "remediationImpact": "Users in scope may be prompted to complete an extra step.",
       "service": "MDATP",
       "threats": [
-        "CredentialTheft"
+        "Account breach"
       ],
       "tier": "Core",
       "userImpact": "Low",
       "complianceInformation": [],
-      "controlStateUpdates": [],
+      "controlStateUpdates": [
+        {
+          "assignedTo": null,
+          "comment": null,
+          "state": "Default",
+          "updatedBy": null,
+          "updatedDateTime": null
+        }
+      ],
       "vendorInformation": {
         "provider": "SecureScore",
         "providerVersion": null,
@@ -497,19 +609,27 @@
       "deprecated": false,
       "implementationCost": "Low",
       "lastModifiedDateTime": null,
-      "maxScore": 6.0,
+      "maxScore": 6,
       "rank": 13,
       "remediation": "<p>Turn on Microsoft Defender for Endpoint tamper protection.</p>",
       "remediationImpact": "Users in scope may be prompted to complete an extra step.",
       "service": "MDATP",
       "threats": [
-        "Malware",
-        "ElevationOfPrivilege"
+        "Data Deletion",
+        "Elevation of Privilege"
       ],
       "tier": "Core",
       "userImpact": "Low",
       "complianceInformation": [],
-      "controlStateUpdates": [],
+      "controlStateUpdates": [
+        {
+          "assignedTo": null,
+          "comment": null,
+          "state": "Default",
+          "updatedBy": null,
+          "updatedDateTime": null
+        }
+      ],
       "vendorInformation": {
         "provider": "SecureScore",
         "providerVersion": null,
@@ -527,7 +647,7 @@
       "deprecated": true,
       "implementationCost": "Low",
       "lastModifiedDateTime": null,
-      "maxScore": 0.0,
+      "maxScore": 0,
       "rank": 99,
       "remediation": "<p>Enable mailbox auditing for all users (retired).</p>",
       "remediationImpact": "Users in scope may be prompted to complete an extra step.",
@@ -536,7 +656,126 @@
       "tier": "Core",
       "userImpact": "Low",
       "complianceInformation": [],
-      "controlStateUpdates": [],
+      "controlStateUpdates": [
+        {
+          "assignedTo": null,
+          "comment": null,
+          "state": "Default",
+          "updatedBy": null,
+          "updatedDateTime": null
+        }
+      ],
+      "vendorInformation": {
+        "provider": "SecureScore",
+        "providerVersion": null,
+        "subProvider": null,
+        "vendor": "Microsoft"
+      }
+    },
+    {
+      "id": "scid_6090",
+      "azureTenantId": "00000000-0000-4000-8000-0000000000f0",
+      "actionType": "Config",
+      "actionUrl": "https://security.microsoft.com/securescore",
+      "controlCategory": "Device",
+      "title": "Turn on tamper protection",
+      "deprecated": false,
+      "implementationCost": "Unknown",
+      "lastModifiedDateTime": null,
+      "maxScore": 9,
+      "rank": 200,
+      "remediation": "<p>Turn on tamper protection.</p>",
+      "remediationImpact": "Unknown",
+      "service": "MDATP",
+      "threats": [
+        "Data Deletion"
+      ],
+      "tier": "Core",
+      "userImpact": "Unknown",
+      "complianceInformation": [],
+      "controlStateUpdates": [
+        {
+          "assignedTo": null,
+          "comment": null,
+          "state": "Default",
+          "updatedBy": null,
+          "updatedDateTime": null
+        }
+      ],
+      "vendorInformation": {
+        "provider": "SecureScore",
+        "providerVersion": null,
+        "subProvider": null,
+        "vendor": "Microsoft"
+      }
+    },
+    {
+      "id": "AATP_UnsecureKerberosDelegation",
+      "azureTenantId": "00000000-0000-4000-8000-0000000000f0",
+      "actionType": "Config",
+      "actionUrl": "https://security.microsoft.com/securescore",
+      "controlCategory": "Identity",
+      "title": "Remove unsecure Kerberos delegation",
+      "deprecated": false,
+      "implementationCost": "Unknown",
+      "lastModifiedDateTime": null,
+      "maxScore": 8,
+      "rank": 201,
+      "remediation": "<p>Remove unsecure Kerberos delegation.</p>",
+      "remediationImpact": "Unknown",
+      "service": "Azure ATP",
+      "threats": [
+        "Elevation of Privilege"
+      ],
+      "tier": "Core",
+      "userImpact": "Unknown",
+      "complianceInformation": [],
+      "controlStateUpdates": [
+        {
+          "assignedTo": null,
+          "comment": null,
+          "state": "Default",
+          "updatedBy": null,
+          "updatedDateTime": null
+        }
+      ],
+      "vendorInformation": {
+        "provider": "SecureScore",
+        "providerVersion": null,
+        "subProvider": null,
+        "vendor": "Microsoft"
+      }
+    },
+    {
+      "id": "MDA_SF_EnforceMfa",
+      "azureTenantId": "00000000-0000-4000-8000-0000000000f0",
+      "actionType": "Config",
+      "actionUrl": "https://security.microsoft.com/securescore",
+      "controlCategory": "Apps",
+      "title": "Require MFA for Salesforce users",
+      "deprecated": false,
+      "implementationCost": "Unknown",
+      "lastModifiedDateTime": null,
+      "maxScore": 5,
+      "rank": 202,
+      "remediation": "<p>Require MFA for Salesforce users.</p>",
+      "remediationImpact": "Unknown",
+      "service": "MDA_SF",
+      "threats": [
+        "Account breach"
+      ],
+      "tier": "Core",
+      "userImpact": "Unknown",
+      "complianceInformation": [],
+      "controlStateUpdates": [
+        {
+          "assignedTo": null,
+          "comment": null,
+          "state": "Default",
+          "updatedBy": null,
+          "updatedDateTime": null
+        }
+      ],
       "vendorInformation": {
         "provider": "SecureScore",
         "providerVersion": null,

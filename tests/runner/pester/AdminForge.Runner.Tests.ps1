@@ -189,11 +189,11 @@ Describe 'Connect-AdminForgeServices' {
         }
     }
 
-    It 'connects Teams with the Graph and Teams tokens' {
+    It 'connects Teams with the Graph and Teams tokens (the tenant comes from the tokens, never -TenantId)' {
         $teamsToken = New-FakeToken 'other@example.com'
         Connect-AdminForgeServices -Context @{ Tenant = $tenantInfo; Tokens = @{ graph = $token; teams = $teamsToken } } -Services Teams | Out-Null
         Should -Invoke -ModuleName AdminForge.Runner Connect-MicrosoftTeams -Times 1 -Exactly -ParameterFilter {
-            $AccessTokens.Count -eq 2 -and $AccessTokens[0] -eq $token -and $AccessTokens[1] -eq $teamsToken -and $TenantId -eq $tenantInfo.id
+            $AccessTokens.Count -eq 2 -and $AccessTokens[0] -eq $token -and $AccessTokens[1] -eq $teamsToken -and -not $TenantId
         }
     }
 

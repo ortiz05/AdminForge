@@ -1,0 +1,171 @@
+$schema: ../../../packages/schemas/generated/playbook.schema.json
+kind: playbook
+id: m365.remove-onedrive-access
+version: 1.0.1
+title: Remove someone's access to a OneDrive
+summary: >-
+  Takes away a person's site collection administrator access to another person's OneDrive — the access "Give someone
+  access to a OneDrive" grants for a handover — and reads the administrators back. The OneDrive's owner and everyone
+  else keep their access.
+owner: m365-team
+tags: [m365, sharepoint, onedrive, offboarding]
+risk: medium
+mode: write
+requires:
+  portalRoles: [Portal.Operator]
+  scopes:
+    graph: [User.Read.All]
+    sharepointAdmin: [AllSites.FullControl]
+  entraRoles: [SharePoint Administrator]
+  licences: [sharepoint]
+confirm:
+  type: click
+  message: >-
+    ${ steps.member.output.displayName & ' loses administrator access to ' & steps.owner.output.displayName
+       & "'s OneDrive. Files they opened stay where they are; links they shared keep working until removed." }
+
+inputs:
+  ownerId: { type: user, label: OneDrive of, description: The person whose OneDrive it is }
+  userId: { type: user, label: Remove access for, description: Usually the manager who received the files }
+  reason: { type: string, label: Reason, minLength: 10, multiline: true, placeholder: e.g. HR-1234 — handover finished }
+
+steps:
+  - id: owner
+    type: graph
+    mode: read
+    describe: Look up the OneDrive owner
+    request:
+      method: GET
+      path: /users/${ $encode($guid(inputs.ownerId)) }
+      query:
+        $select: id,displayName,userPrincipalName
+
+  - id: member
+    type: graph
+    mode: read
+    describe: Look up the person losing access
+    request:
+      method: GET
+      path: /users/${ $encode($guid(inputs.userId)) }
+      query:
+        $select: id,displayName,userPrincipalName
+
+  - id: notOwner
+    type: assert
+    that: ${ $not($lowercase(steps.owner.output.id) = $lowercase(steps.member.output.id)) }
+    message: The owner of a OneDrive always keeps access to it. Pick the person who was given access.
+
+  - id: oneDrive
+    type: runner
+    mode: read
+    describe: Find the OneDrive
+    script: sharepoint/Get-OneDriveSite.ps1
+    sha256: 9dbc14ca7795d6b3df3126fc232edec379d914361069d78271714bf2cb6417d8
+    services: [sharepointAdmin]
+    timeoutSeconds: 300
+    parameters:
+      owner: ${ steps.owner.output.userPrincipalName }
+
+  - id: hasOneDrive
+    type: assert
+    that: ${ $boolean(steps.oneDrive.output[0].oneDriveUrl) and steps.oneDrive.output[0].exists = true }
+    message: >-
+      ${ steps.owner.output.displayName & ' has no OneDrive (never opened, or already deleted), so there is no access to'
+         & ' remove. If it was deleted recently and restored later, run this again after the restore.' }
+
+  # Removes only this person; reads the administrators back and fails if they are still listed or anyone else
+  # disappeared. Nothing is sent when they had no access. The object ids let AdminForge's protected-object guard see
+  # whose OneDrive and whose access this is; the script checks them against SharePoint's profiles.
+  - id: remove
+    type: runner
+    mode: write
+    describe: ${ 'Remove ' & steps.member.output.displayName & ' from the administrators of the OneDrive of ' & steps.owner.output.displayName }
+    script: sharepoint/Set-SiteCollectionAdmin.ps1
+    sha256: f0edb61b5397006fd7f1c9e42c30c2014433c64bd38269d55a1ff11a70ad2ff9
+    services: [sharepointAdmin]
+    timeoutSeconds: 300
+    parameters:
+      siteUrl: ${ steps.oneDrive.output[0].oneDriveUrl }
+      owner: ${ steps.owner.output.userPrincipalName }
+      ownerObjectId: ${ steps.owner.output.id }
+      user: ${ steps.member.output.userPrincipalName }
+      userObjectId: ${ steps.member.output.id }
+      action: remove
+    idempotent: true
+    dryRunOutput:
+      - siteUrl: ${ steps.oneDrive.output[0].oneDriveUrl }
+        user: ${ steps.member.output.userPrincipalName }
+        action: remove
+        before: true
+        after: false
+        changed: true
+        verified: true
+
+  - id: verified
+    type: assert
+    that: ${ steps.remove.output[0].verified = true }
+    message: >-
+      ${ 'SharePoint still lists ' & steps.member.output.displayName & ' as an administrator of the OneDrive. Try again'
+         & ' in a few minutes, or remove it in the SharePoint admin center.' }
+
+outputs:
+  summary: >-
+    ${ steps.remove.output[0].before = false
+       ? steps.member.output.displayName & ' had no administrator access to the OneDrive of ' & steps.owner.output.displayName & '; nothing changed.'
+       : steps.member.output.displayName & ' no longer has access to the OneDrive of ' & steps.owner.output.displayName & '.' }
+  changed: ${ steps.remove.output[0].changed }
+
+tests:
+  - name: removes the manager's access after the handover
+    inputs: { ownerId: 10000000-0000-4000-8000-000000000001, userId: 10000000-0000-4000-8000-000000000007, reason: HR-1001 handover finished }
+    mocks:
+      owner: { id: 10000000-0000-4000-8000-000000000001, displayName: Adele Vance, userPrincipalName: adele.vance@example.com }
+      member: { id: 10000000-0000-4000-8000-000000000007, displayName: Lee Gu, userPrincipalName: lee.gu@example.com }
+      oneDrive:
+        - { owner: adele.vance@example.com, oneDriveUrl: "https://example-my.sharepoint.com/personal/adele_vance_example_com", exists: true }
+    expect:
+      status: succeeded
+      plan: [remove]
+      outputs:
+        summary: Lee Gu no longer has access to the OneDrive of Adele Vance.
+        changed: true
+  - name: says so when the person had no access
+    dryRun: false
+    inputs: { ownerId: 10000000-0000-4000-8000-000000000001, userId: 10000000-0000-4000-8000-000000000007, reason: HR-1001 handover finished }
+    mocks:
+      owner: { id: 10000000-0000-4000-8000-000000000001, displayName: Adele Vance, userPrincipalName: adele.vance@example.com }
+      member: { id: 10000000-0000-4000-8000-000000000007, displayName: Lee Gu, userPrincipalName: lee.gu@example.com }
+      oneDrive:
+        - { owner: adele.vance@example.com, oneDriveUrl: "https://example-my.sharepoint.com/personal/adele_vance_example_com", exists: true }
+      remove:
+        - { siteUrl: "https://example-my.sharepoint.com/personal/adele_vance_example_com", user: lee.gu@example.com, action: remove, before: false, after: false, changed: false, verified: true, administrators: 1 }
+    expect:
+      status: succeeded
+      outputs:
+        summary: Lee Gu had no administrator access to the OneDrive of Adele Vance; nothing changed.
+        changed: false
+  - name: fails when SharePoint still lists the person
+    dryRun: false
+    inputs: { ownerId: 10000000-0000-4000-8000-000000000001, userId: 10000000-0000-4000-8000-000000000007, reason: HR-1001 handover finished }
+    mocks:
+      owner: { id: 10000000-0000-4000-8000-000000000001, displayName: Adele Vance, userPrincipalName: adele.vance@example.com }
+      member: { id: 10000000-0000-4000-8000-000000000007, displayName: Lee Gu, userPrincipalName: lee.gu@example.com }
+      oneDrive:
+        - { owner: adele.vance@example.com, oneDriveUrl: "https://example-my.sharepoint.com/personal/adele_vance_example_com", exists: true }
+      remove:
+        - { siteUrl: "https://example-my.sharepoint.com/personal/adele_vance_example_com", user: lee.gu@example.com, action: remove, before: true, after: true, changed: true, verified: false, administrators: 2 }
+    expect: { status: failed, failedStep: verified }
+  - name: refuses the owner
+    inputs: { ownerId: 10000000-0000-4000-8000-000000000001, userId: 10000000-0000-4000-8000-000000000001, reason: Mistyped request }
+    mocks:
+      owner: { id: 10000000-0000-4000-8000-000000000001, displayName: Adele Vance, userPrincipalName: adele.vance@example.com }
+      member: { id: 10000000-0000-4000-8000-000000000001, displayName: Adele Vance, userPrincipalName: adele.vance@example.com }
+    expect: { status: failed, failedStep: notOwner }
+  - name: refuses someone without a OneDrive
+    inputs: { ownerId: 10000000-0000-4000-8000-000000000001, userId: 10000000-0000-4000-8000-000000000007, reason: HR-1001 handover finished }
+    mocks:
+      owner: { id: 10000000-0000-4000-8000-000000000001, displayName: Adele Vance, userPrincipalName: adele.vance@example.com }
+      member: { id: 10000000-0000-4000-8000-000000000007, displayName: Lee Gu, userPrincipalName: lee.gu@example.com }
+      oneDrive:
+        - { owner: adele.vance@example.com, oneDriveUrl: null, exists: false }
+    expect: { status: failed, failedStep: hasOneDrive }

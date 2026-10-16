@@ -9,7 +9,7 @@ BeforeAll {
     $script:StubNames = @(
         'Get-EXOMailbox', 'Get-EXORecipient', 'Get-AcceptedDomain', 'Get-InboxRule', 'Set-Mailbox',
         'Get-DistributionGroup', 'Get-DistributionGroupMember', 'Add-DistributionGroupMember', 'Remove-DistributionGroupMember',
-        'Get-Team', 'Get-TeamUser', 'Get-PnPTenant', 'Get-PnPTenantSite'
+        'Get-PnPTenant', 'Get-PnPTenantSite'
     )
     $global:AfStub = @{}
 
@@ -58,13 +58,6 @@ BeforeAll {
         $global:AfStub.Members.Add($Member)
     }
     New-Stub 'Remove-DistributionGroupMember' { param($Identity, $Member, [switch]$Confirm, [switch]$BypassSecurityGroupManagerCheck) [void]$global:AfStub.Members.Remove($Member) }
-    New-Stub 'Get-Team' {
-        @(
-            [pscustomobject]@{ GroupId = 'b1f6c0de-0000-4000-8000-000000000001'; DisplayName = 'Project A'; Visibility = 'Private'; Archived = $false; MailNickName = 'projecta' }
-            [pscustomobject]@{ GroupId = 'b1f6c0de-0000-4000-8000-000000000002'; DisplayName = 'Old Team'; Visibility = 'Public'; Archived = $true; MailNickName = 'oldteam' }
-        )
-    }
-    New-Stub 'Get-TeamUser' { param($GroupId, $Role) if ($GroupId -like '*1') { [pscustomobject]@{ User = 'owner@example.com' } } }
     New-Stub 'Get-PnPTenant' { [pscustomobject]@{ SharingCapability = 'ExternalUserSharingOnly'; OneDriveSharingCapability = 'ExistingExternalUserSharingOnly'; DefaultSharingLinkType = 'Internal'; DefaultLinkPermission = 'View'; RequireAnonymousLinksExpireInDays = 30; SharingDomainRestrictionMode = 'None'; PreventExternalUsersFromResharing = $true } }
     New-Stub 'Get-PnPTenantSite' {
         param([switch]$IncludeOneDriveSites, $Template)
@@ -227,17 +220,7 @@ Describe 'Content scripts' {
         }
     }
 
-    Describe 'Teams and SharePoint read scripts' {
-        It 'Get-TeamsSummary reports visibility, archived and ownerless teams' {
-            $r = Invoke-ContentScript 'teams/Get-TeamsSummary.ps1' @{ includeOwnerCounts = $true }
-            $r.Failure | Should -BeNullOrEmpty
-            $o = $r.Output[0]
-            $o.total | Should -Be 2
-            $o.archived | Should -Be 1
-            @($o.ownerless).Count | Should -Be 1
-            $o.ownerless[0].displayName | Should -Be 'Old Team'
-        }
-
+    Describe 'SharePoint read scripts' {
         It 'Get-SiteSharing reports tenant settings and anyone-link sites' {
             $r = Invoke-ContentScript 'sharepoint/Get-SiteSharing.ps1'
             $r.Failure | Should -BeNullOrEmpty

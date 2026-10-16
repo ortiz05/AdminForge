@@ -1,12 +1,12 @@
 $schema: ../../../packages/schemas/generated/playbook.schema.json
 kind: playbook
 id: m365.grant-onedrive-access
-version: 1.0.0
+version: 1.1.1
 title: Give someone access to a OneDrive
 summary: >-
   Gives one person (usually a leaver's manager) full access to another person's OneDrive by adding them as a site
-  collection administrator, so files can be handed over before the OneDrive is deleted. Existing access is kept. Take
-  the access away later in the SharePoint admin center.
+  collection administrator, so files can be handed over before the OneDrive is deleted. Existing access is kept, the
+  access is read back, and "Remove someone's access to a OneDrive" takes it away again.
 owner: m365-team
 tags: [m365, sharepoint, onedrive, offboarding]
 risk: high
@@ -53,8 +53,13 @@ steps:
 
   - id: different
     type: assert
-    that: ${ $lowercase(steps.owner.output.id) != $lowercase(steps.grantee.output.id) }
+    that: ${ $not($lowercase(steps.owner.output.id) = $lowercase(steps.grantee.output.id)) }
     message: Pick someone other than the OneDrive's owner.
+
+  - id: notSelf
+    type: assert
+    that: ${ $not($lowercase(steps.grantee.output.id) = $lowercase(user.oid)) }
+    message: You can't give yourself access to someone's OneDrive. Ask another engineer, or give it to their manager.
 
   - id: granteeCanUseIt
     type: assert
@@ -64,32 +69,88 @@ steps:
          ? ' is a guest. Hand files to a guest by sharing them, not by giving access to the whole OneDrive.'
          : " can't sign in (the account is disabled).") }
 
-  # No compensation: the SharePoint admin API can add site collection administrators but not remove them;
-  # removal is done on the site (SharePoint admin center › Active sites › Permissions).
-  - id: grant
+  - id: oneDrive
     type: runner
-    mode: write
-    describe: ${ 'Give ' & steps.grantee.output.displayName & ' access to the OneDrive of ' & steps.owner.output.displayName }
-    script: sharepoint/Grant-OneDriveAccess.ps1
-    sha256: 4f5490a6e920158abdc1d9731667571c00cf3e6d09ce5d3e92202bcf26f0a360
+    mode: read
+    describe: Find the OneDrive
+    script: sharepoint/Get-OneDriveSite.ps1
+    sha256: 9dbc14ca7795d6b3df3126fc232edec379d914361069d78271714bf2cb6417d8
     services: [sharepointAdmin]
     timeoutSeconds: 300
     parameters:
       owner: ${ steps.owner.output.userPrincipalName }
-      grantee: ${ steps.grantee.output.userPrincipalName }
+
+  - id: hasOneDrive
+    type: assert
+    that: ${ $boolean(steps.oneDrive.output[0].oneDriveUrl) and steps.oneDrive.output[0].exists = true }
+    message: >-
+      ${ steps.owner.output.displayName & ' has no OneDrive: it was never opened, the person has no SharePoint licence,'
+         & ' or it has already been deleted. Nothing was changed. If it was deleted in the last 93 days, restore it in the'
+         & ' SharePoint admin center (Deleted sites) and run this again; otherwise there are no files to hand over.' }
+
+  # Read back by the script; a grant that doesn't show up is taken away again (compensate) — only when this run added
+  # it, never access the person already had. If the undo can't be confirmed either, the run ends needing review rather
+  # than reported as undone. The object ids let AdminForge's protected-object guard see whose OneDrive and whose
+  # access this is; the script checks them against SharePoint's profiles.
+  - id: grant
+    type: runner
+    mode: write
+    describe: ${ 'Give ' & steps.grantee.output.displayName & ' access to the OneDrive of ' & steps.owner.output.displayName }
+    script: sharepoint/Set-SiteCollectionAdmin.ps1
+    sha256: f0edb61b5397006fd7f1c9e42c30c2014433c64bd38269d55a1ff11a70ad2ff9
+    services: [sharepointAdmin]
+    timeoutSeconds: 300
+    parameters:
+      siteUrl: ${ steps.oneDrive.output[0].oneDriveUrl }
+      owner: ${ steps.owner.output.userPrincipalName }
+      ownerObjectId: ${ steps.owner.output.id }
+      user: ${ steps.grantee.output.userPrincipalName }
+      userObjectId: ${ steps.grantee.output.id }
+      action: add
     idempotent: true
+    compensate:
+      type: runner
+      describe: ${ 'Take the access away from ' & steps.grantee.output.displayName & ' again' }
+      script: sharepoint/Set-SiteCollectionAdmin.ps1
+      sha256: f0edb61b5397006fd7f1c9e42c30c2014433c64bd38269d55a1ff11a70ad2ff9
+      services: [sharepointAdmin]
+      timeoutSeconds: 300
+      # force: also when SharePoint doesn't list the grant yet; the script fails if the person is still listed.
+      parameters:
+        siteUrl: ${ steps.oneDrive.output[0].oneDriveUrl }
+        owner: ${ steps.owner.output.userPrincipalName }
+        ownerObjectId: ${ steps.owner.output.id }
+        user: ${ steps.grantee.output.userPrincipalName }
+        userObjectId: ${ steps.grantee.output.id }
+        action: remove
+        force: true
     dryRunOutput:
-      - owner: ${ steps.owner.output.userPrincipalName }
-        grantee: ${ steps.grantee.output.userPrincipalName }
-        oneDriveUrl: null
-        granted: true
+      - siteUrl: ${ steps.oneDrive.output[0].oneDriveUrl }
+        user: ${ steps.grantee.output.userPrincipalName }
+        action: add
+        before: false
+        after: true
+        changed: true
+        verified: true
+
+  # Nothing was sent when the person already had the access (changed = false): that access is never taken away here.
+  - id: verified
+    type: assert
+    that: ${ steps.grant.output[0].changed = false or steps.grant.output[0].verified = true }
+    message: >-
+      ${ 'SharePoint did not list ' & steps.grantee.output.displayName & ' as an administrator of the OneDrive within'
+         & ' 30 seconds, so AdminForge took the access away again. SharePoint can be slow to show changes: check the'
+         & " OneDrive's administrators again in a few minutes (use “Remove someone’s access to a OneDrive” if "
+         & steps.grantee.output.displayName & ' is still listed), then run this again.' }
+    onError: compensate
 
 outputs:
   summary: >-
-    ${ steps.grantee.output.displayName & ' now has access to the OneDrive of ' & steps.owner.output.displayName
-       & (steps.grant.output[0].oneDriveUrl ? ' (' & steps.grant.output[0].oneDriveUrl & ')' : '')
-       & '. Remove the access in the SharePoint admin center once the handover is done.' }
-  oneDriveUrl: ${ steps.grant.output[0].oneDriveUrl }
+    ${ steps.grantee.output.displayName & (steps.grant.output[0].changed = false ? ' already had' : ' now has')
+       & ' access to the OneDrive of ' & steps.owner.output.displayName
+       & (steps.oneDrive.output[0].oneDriveUrl ? ' (' & steps.oneDrive.output[0].oneDriveUrl & ')' : '')
+       & '. Remove it with “Remove someone’s access to a OneDrive” once the handover is done.' }
+  oneDriveUrl: ${ steps.oneDrive.output[0].oneDriveUrl }
 
 tests:
   - name: gives the manager access to a leaver's OneDrive
@@ -97,17 +158,64 @@ tests:
     mocks:
       owner: { id: 10000000-0000-4000-8000-000000000001, displayName: Adele Vance, userPrincipalName: adele.vance@example.com, userType: Member }
       grantee: { id: 10000000-0000-4000-8000-000000000007, displayName: Lee Gu, userPrincipalName: lee.gu@example.com, userType: Member, accountEnabled: true }
+      oneDrive:
+        - { owner: adele.vance@example.com, oneDriveUrl: "https://example-my.sharepoint.com/personal/adele_vance_example_com", exists: true, lockState: Unlock, storageUsedMB: 2048, lastContentModified: "2026-10-01T08:00:00.0000000Z" }
     expect:
       status: succeeded
       plan: [grant]
       outputs:
-        summary: Lee Gu now has access to the OneDrive of Adele Vance. Remove the access in the SharePoint admin center once the handover is done.
+        summary: Lee Gu now has access to the OneDrive of Adele Vance (https://example-my.sharepoint.com/personal/adele_vance_example_com). Remove it with “Remove someone’s access to a OneDrive” once the handover is done.
+        oneDriveUrl: https://example-my.sharepoint.com/personal/adele_vance_example_com
+  - name: undoes a grant SharePoint doesn't confirm
+    dryRun: false
+    inputs: { ownerId: 10000000-0000-4000-8000-000000000001, granteeId: 10000000-0000-4000-8000-000000000007, reason: Leaver HR-1001 handover }
+    mocks:
+      owner: { id: 10000000-0000-4000-8000-000000000001, displayName: Adele Vance, userPrincipalName: adele.vance@example.com, userType: Member }
+      grantee: { id: 10000000-0000-4000-8000-000000000007, displayName: Lee Gu, userPrincipalName: lee.gu@example.com, userType: Member, accountEnabled: true }
+      oneDrive:
+        - { owner: adele.vance@example.com, oneDriveUrl: "https://example-my.sharepoint.com/personal/adele_vance_example_com", exists: true }
+      grant:
+        - { siteUrl: "https://example-my.sharepoint.com/personal/adele_vance_example_com", user: lee.gu@example.com, action: add, before: false, after: false, changed: true, verified: false, administrators: 0 }
+    expect:
+      status: compensated
+      failedStep: verified
+      steps: { grant: compensated }
+  - name: never takes away access the person already had, even when SharePoint is slow to list it
+    dryRun: false
+    inputs: { ownerId: 10000000-0000-4000-8000-000000000001, granteeId: 10000000-0000-4000-8000-000000000007, reason: Leaver HR-1001 handover }
+    mocks:
+      owner: { id: 10000000-0000-4000-8000-000000000001, displayName: Adele Vance, userPrincipalName: adele.vance@example.com, userType: Member }
+      grantee: { id: 10000000-0000-4000-8000-000000000007, displayName: Lee Gu, userPrincipalName: lee.gu@example.com, userType: Member, accountEnabled: true }
+      oneDrive:
+        - { owner: adele.vance@example.com, oneDriveUrl: "https://example-my.sharepoint.com/personal/adele_vance_example_com", exists: true }
+      grant:
+        - { siteUrl: "https://example-my.sharepoint.com/personal/adele_vance_example_com", user: lee.gu@example.com, action: add, before: true, after: false, changed: false, verified: false, administrators: 1, missingAdministrators: [] }
+    expect:
+      status: succeeded
+      steps: { grant: succeeded, verified: succeeded }
+      outputs:
+        summary: Lee Gu already had access to the OneDrive of Adele Vance (https://example-my.sharepoint.com/personal/adele_vance_example_com). Remove it with “Remove someone’s access to a OneDrive” once the handover is done.
+  - name: refuses someone without a OneDrive
+    inputs: { ownerId: 10000000-0000-4000-8000-000000000001, granteeId: 10000000-0000-4000-8000-000000000007, reason: Leaver HR-1001 handover }
+    mocks:
+      owner: { id: 10000000-0000-4000-8000-000000000001, displayName: Adele Vance, userPrincipalName: adele.vance@example.com, userType: Member }
+      grantee: { id: 10000000-0000-4000-8000-000000000007, displayName: Lee Gu, userPrincipalName: lee.gu@example.com, userType: Member, accountEnabled: true }
+      oneDrive:
+        - { owner: adele.vance@example.com, oneDriveUrl: null, exists: false }
+    expect: { status: failed, failedStep: hasOneDrive }
   - name: refuses the owner themselves
     inputs: { ownerId: 10000000-0000-4000-8000-000000000001, granteeId: 10000000-0000-4000-8000-000000000001, reason: Mistyped request }
     mocks:
       owner: { id: 10000000-0000-4000-8000-000000000001, displayName: Adele Vance, userPrincipalName: adele.vance@example.com, userType: Member }
       grantee: { id: 10000000-0000-4000-8000-000000000001, displayName: Adele Vance, userPrincipalName: adele.vance@example.com, userType: Member, accountEnabled: true }
     expect: { status: failed, failedStep: different }
+  - name: refuses giving the access to yourself
+    inputs: { ownerId: 10000000-0000-4000-8000-000000000001, granteeId: 10000000-0000-4000-8000-0000000000a1, reason: Leaver HR-1001 handover }
+    user: { oid: 10000000-0000-4000-8000-0000000000a1, upn: avery@example.com }
+    mocks:
+      owner: { id: 10000000-0000-4000-8000-000000000001, displayName: Adele Vance, userPrincipalName: adele.vance@example.com, userType: Member }
+      grantee: { id: 10000000-0000-4000-8000-0000000000A1, displayName: Avery Engineer, userPrincipalName: avery@example.com, userType: Member, accountEnabled: true }
+    expect: { status: failed, failedStep: notSelf }
   - name: refuses a disabled account
     inputs: { ownerId: 10000000-0000-4000-8000-000000000001, granteeId: 10000000-0000-4000-8000-000000000012, reason: Leaver HR-1001 handover }
     mocks:

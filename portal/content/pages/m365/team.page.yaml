@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/page.schema.json
 kind: page
 id: m365.team
-version: 1.1.0
+version: 1.1.1
 title: Team or Microsoft 365 group
 summary: >-
   One Microsoft 365 group and, when it is team-enabled, its team — owners, members, guests, channels and team settings.
@@ -31,7 +31,7 @@ datasources:
     source: graph
     label: Team settings
     requires: { licences: [teams] }
-    when: ${ group.isTeam = true }
+    when: ${ ds.group.isTeam = true }
     request:
       path: /teams/${ $encode($guid(params.id)) }
     cache: { ttl: 60 }
@@ -67,7 +67,7 @@ datasources:
   channels:
     source: graph
     requires: { licences: [teams] }
-    when: ${ group.isTeam = true }
+    when: ${ ds.group.isTeam = true }
     request:
       path: /teams/${ $encode($guid(params.id)) }/channels
       query:

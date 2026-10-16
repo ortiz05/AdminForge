@@ -1,15 +1,16 @@
 $schema: ../../../packages/schemas/generated/schedule.schema.json
 kind: schedule
 id: reports.teams-without-owners-weekly
-version: 1.0.0
+version: 1.1.0
 title: Weekly teams without owners report
 summary: >-
-  Every Monday at 06:40 UTC, writes teams that have no owner (including archived teams) as XLSX. Disabled until the automation identity is set up for app-only Microsoft Teams PowerShell (certificate credential plus the Graph application permissions below).
+  Every Monday at 06:40 UTC, writes teams that have no owner (including archived teams) as XLSX. The report reads
+  Microsoft Graph only, with the automation identity's application permissions below.
 owner: m365-team
 tags: [m365, teams, governance, report]
 cron: "40 6 * * 1"
 timezone: UTC
-enabled: false
+enabled: true
 identity: automation
 job:
   kind: report
@@ -23,6 +24,7 @@ retry: { max: 2, backoff: exponential, delay: 5m }
 timeoutSeconds: 1800
 overlap: skip
 requires:
+  # Application permissions held by the automation identity (ADR-011).
   scopes:
-    graph: [Group.Read.All, GroupMember.Read.All, Team.ReadBasic.All, TeamSettings.Read.All]
+    graph: [Group.Read.All, GroupMember.Read.All, Team.ReadBasic.All]
   licences: [teams]

@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/page.schema.json
 kind: page
 id: m365.sharepoint-site
-version: 1.0.0
+version: 1.0.1
 title: SharePoint site
 summary: One SharePoint site — storage quota, document libraries and lists.
 owner: m365-team
@@ -55,7 +55,7 @@ datasources:
     cache: { ttl: 300 }
     # Visible lists and libraries only; `template` comes from the list facet.
     transform: >-
-      ${ [value.value[list.hidden != true].{
+      ${ [value.value[$not(list.hidden = true)].{
         "id": id,
         "displayName": displayName,
         "webUrl": webUrl,

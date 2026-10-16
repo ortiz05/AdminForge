@@ -19,7 +19,10 @@
     @{ tenant = @{ sharingCapability; oneDriveSharingCapability; defaultSharingLinkType; defaultLinkPermission;
                    requireAnonymousLinksExpireInDays; sharingDomainRestrictionMode; preventExternalUsersFromResharing };
        summary = @{ total; bySharingCapability = @(@{ sharingCapability; count }); anyoneLinks };
-       sites = @(@{ url; title; template; owner; sharingCapability; lastContentModified; storageUsedMB; lockState }) }
+       sites = @(@{ url; title; template; owner; groupId; sharingCapability; lastContentModified; storageUsedMB;
+                    lockState }) }
+    owner is the owner's email or sign-in name when the site list returns it (it doesn't for group-connected sites,
+    whose owners are the group's owners); groupId is the Microsoft 365 group of a group-connected site, else null.
 
 .NOTES
     Tokens: sharepointAdmin. Mode: read. Role: SharePoint Administrator.
@@ -54,15 +57,19 @@ Write-AdminForgeProgress -Percent 25 -Message 'Reading sites'
 $params = @{}
 if ($includeOneDrive) { $params.IncludeOneDriveSites = $true }
 if ($template) { $params.Template = $template }
-$raw = @(Get-PnPTenantSite @params | Select-Object Url, Title, Template, Owner, SharingCapability, LastContentModifiedDate, StorageUsageCurrent, LockState)
+$raw = @(Get-PnPTenantSite @params | Select-Object Url, Title, Template, Owner, OwnerEmail, GroupId, SharingCapability,
+        LastContentModifiedDate, StorageUsageCurrent, LockState)
 Write-AdminForgeLog "Read $($raw.Count) sites"
 
+$noGroup = '00000000-0000-0000-0000-000000000000'
 $sites = @($raw | ForEach-Object {
+        $groupId = [string]$_.GroupId
         [ordered]@{
             url                 = [string]$_.Url
             title               = [string]$_.Title
             template            = [string]$_.Template
-            owner               = [string]$_.Owner
+            owner               = if ($_.OwnerEmail) { [string]$_.OwnerEmail } else { [string]$_.Owner }
+            groupId             = if ($groupId -and $groupId -ne $noGroup) { $groupId } else { $null }
             sharingCapability   = [string]$_.SharingCapability
             lastContentModified = if ($_.LastContentModifiedDate) { ([datetime]$_.LastContentModifiedDate).ToUniversalTime().ToString('o') } else { $null }
             storageUsedMB       = $_.StorageUsageCurrent

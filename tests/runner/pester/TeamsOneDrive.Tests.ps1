@@ -1,10 +1,10 @@
 #Requires -Version 7.4
-# Teams user policies (portal/content/scripts/teams) and OneDrive access (portal/content/scripts/sharepoint).
-# MicrosoftTeams and PnP cmdlets are global stubs returning synthetic data.
+# Teams user policies (portal/content/scripts/teams). MicrosoftTeams cmdlets are global stubs returning synthetic
+# data. OneDrive and site administrator scripts: SiteCollectionAdmin.Tests.ps1.
 
 BeforeAll {
     . (Join-Path $PSScriptRoot 'ContentScript.Helpers.ps1')
-    $script:StubNames = @('Get-CsOnlineUser', 'Get-CsUserPolicyAssignment', 'Get-PnPUserProfileProperty', 'Set-PnPTenantSite')
+    $script:StubNames = @('Get-CsOnlineUser', 'Get-CsUserPolicyAssignment')
 
     New-Stub 'Get-CsOnlineUser' {
         param($Identity)
@@ -36,24 +36,10 @@ BeforeAll {
             }
         )
     }
-    New-Stub 'Get-PnPUserProfileProperty' {
-        param($Account)
-        switch ($Account) {
-            'adele@example.com' { [pscustomobject]@{ PersonalUrl = 'https://example-my.sharepoint.com/personal/adele_example_com/' } }
-            'nodrive@example.com' { [pscustomobject]@{ PersonalUrl = '' } }
-            'odd@example.com' { [pscustomobject]@{ PersonalUrl = 'https://fabrikam-my.sharepoint.com/personal/odd_example_com/' } }
-            default { throw "User profile for '$Account' not found." }
-        }
-    }
-    New-Stub 'Set-PnPTenantSite' {
-        param($Identity, $Owners)
-        $global:AfOd.Calls.Add("Set-PnPTenantSite $Identity $($Owners -join ',')")
-    }
 }
 
 AfterAll {
     Remove-Stubs $StubNames
-    Remove-Variable -Name AfOd -Scope Global -ErrorAction SilentlyContinue
 }
 
 Describe 'teams/Get-UserTeamsPolicies.ps1' {
@@ -93,38 +79,5 @@ Describe 'teams/Get-UserTeamsPolicies.ps1' {
     It 'reports an unknown user or a malformed name as an input error' {
         (Invoke-ContentScript 'teams/Get-UserTeamsPolicies.ps1' @{ identity = 'ghost@example.com' }).Category | Should -Be 'input'
         (Invoke-ContentScript 'teams/Get-UserTeamsPolicies.ps1' @{ identity = 'adele' }).Category | Should -Be 'input'
-    }
-}
-
-Describe 'sharepoint/Grant-OneDriveAccess.ps1' {
-    BeforeEach { $global:AfOd = @{ Calls = [System.Collections.Generic.List[string]]::new() } }
-
-    It 'refuses to run in read mode' {
-        (Invoke-ContentScript 'sharepoint/Grant-OneDriveAccess.ps1' @{ owner = 'adele@example.com'; grantee = 'lee@example.com' } 'read').Category | Should -Be 'readOnly'
-        $global:AfOd.Calls | Should -BeNullOrEmpty
-    }
-
-    It "adds the grantee as a site collection administrator of the owner's OneDrive" {
-        $r = Invoke-ContentScript 'sharepoint/Grant-OneDriveAccess.ps1' @{ owner = 'adele@example.com'; grantee = 'lee@example.com' } 'write'
-        $r.Failure | Should -BeNullOrEmpty
-        $r.Output[0].oneDriveUrl | Should -Be 'https://example-my.sharepoint.com/personal/adele_example_com'
-        $r.Output[0].granted | Should -BeTrue
-        $global:AfOd.Calls | Should -Be @('Set-PnPTenantSite https://example-my.sharepoint.com/personal/adele_example_com lee@example.com')
-    }
-
-    It 'changes nothing when the OneDrive is missing or belongs to another tenant' {
-        (Invoke-ContentScript 'sharepoint/Grant-OneDriveAccess.ps1' @{ owner = 'nodrive@example.com'; grantee = 'lee@example.com' } 'write').Category | Should -Be 'input'
-        (Invoke-ContentScript 'sharepoint/Grant-OneDriveAccess.ps1' @{ owner = 'ghost@example.com'; grantee = 'lee@example.com' } 'write').Category | Should -Be 'input'
-        $odd = Invoke-ContentScript 'sharepoint/Grant-OneDriveAccess.ps1' @{ owner = 'odd@example.com'; grantee = 'lee@example.com' } 'write'
-        $odd.Category | Should -Be 'script'
-        $odd.Failure.Exception.Message | Should -Match 'not a OneDrive site of this tenant'
-        $global:AfOd.Calls | Should -BeNullOrEmpty
-    }
-
-    It 'validates its inputs and needs the SharePoint tenant name' {
-        (Invoke-ContentScript 'sharepoint/Grant-OneDriveAccess.ps1' @{ owner = 'adele@example.com'; grantee = 'ADELE@example.com' } 'write').Category | Should -Be 'input'
-        (Invoke-ContentScript 'sharepoint/Grant-OneDriveAccess.ps1' @{ owner = 'adele@example.com' } 'write').Category | Should -Be 'input'
-        (Invoke-ContentScript 'sharepoint/Grant-OneDriveAccess.ps1' @{ owner = 'adele@example.com'; grantee = 'lee@example.com' } 'write' @{ Id = 'x'; Domain = 'example.com'; SpoTenantName = $null }).Category | Should -Be 'runner'
-        $global:AfOd.Calls | Should -BeNullOrEmpty
     }
 }

@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/page.schema.json
 kind: page
 id: m365.sharepoint-sites
-version: 1.0.0
+version: 1.1.0
 title: SharePoint sites
 summary: SharePoint sites with their storage, activity and how many Anyone links they hold.
 owner: m365-team
@@ -71,20 +71,23 @@ datasources:
     paging: all
     maxItems: 50000
     cache: { ttl: 3600 }
-    # value = { value: [site usage rows] }. Skips deleted sites; adds inactivity and a short site name for charts.
+    # value = { value: [site usage rows] }. Skips deleted sites; adds inactivity and a short site name for charts. With
+    # concealed report names the URL is empty or a hash and the owner a hash: the site id stands in for the name.
     transform: >-
       ${ (
         $p := params;
-        $all := [value.value[isDeleted != true].(
+        $all := [value.value[$not(isDeleted = true)].(
           $idle := lastActivityDate ? -$daysUntil(lastActivityDate) : null;
+          $open := $substring(siteUrl ? siteUrl : '', 0, 8) = 'https://';
           {
             "siteId": siteId,
             "siteUrl": siteUrl,
-            "site": $reverse($split($replace(siteUrl, /\/$/, ''), '/'))[0],
+            "site": $open ? $reverse($split($replace(siteUrl, /\/$/, ''), '/'))[0] : siteId,
+            "openable": $open,
             "ownerDisplayName": ownerDisplayName,
             "ownerPrincipalName": ownerPrincipalName,
             "rootWebTemplate": rootWebTemplate,
-            "storageUsedInBytes": storageUsedInBytes,
+            "storageUsedInBytes": storageUsedInBytes ? storageUsedInBytes : 0,
             "storageAllocatedInBytes": storageAllocatedInBytes,
             "storageUsed": storageAllocatedInBytes > 0 ? $round(storageUsedInBytes / storageAllocatedInBytes, 4) : 0,
             "fileCount": fileCount,
@@ -108,14 +111,23 @@ datasources:
         {
           "rows": $rows,
           "sites": $count($all),
-          "usedBytes": $sum($all.storageUsedInBytes),
+          "usedBytes": $sum([0, $all.storageUsedInBytes]),
           "inactive": $count($all[inactive]),
           "withAnyoneLinks": $count($all[anonymousLinkCount > 0]),
-          "top": [$sort($all, function($a, $b) { $a.storageUsedInBytes < $b.storageUsedInBytes })[[0..9]].{ "site": site, "storageUsedInBytes": storageUsedInBytes }]
+          "top": [$filter($all^(>storageUsedInBytes), function($v, $i) { $i < 10 }).{ "site": site, "storageUsedInBytes": storageUsedInBytes }],
+          "concealed": $count($all[$not(openable)]) > 0
         }
       ) }
 
 layout:
+  - widget: markdown
+    id: concealed
+    span: 12
+    when: ${ storage.concealed = true }
+    text: |
+      **Site names are concealed in usage reports.** The storage table shows site ids instead of URLs, and owners as
+      hashes. A Global Administrator can turn off *Display concealed user, group, and site names in all reports* in
+      the Microsoft 365 admin center → **Settings → Org settings → Services → Reports**.
   - widget: kpi
     id: sites
     data: storage.sites
@@ -156,7 +168,8 @@ layout:
     data: storage.rows
     rowKey: siteId
     columns:
-      - { field: siteUrl, label: Site, kind: identity, secondary: ownerDisplayName }
+      - { field: site, label: Site, kind: identity, secondary: siteUrl }
+      - { field: ownerDisplayName, label: Owner, hidden: true }
       - { field: rootWebTemplate, label: Template, filter: { type: facet, param: template } }
       - { field: storageUsedInBytes, label: Storage used, kind: bytes, align: end, filter: range, sortable: true }
       - { field: storageUsed, label: Of quota, kind: percent, align: end, filter: range }
@@ -174,10 +187,10 @@ layout:
       - label: Open site
         icon: arrow-square-out
         href: ${ row.siteUrl }
-        when: "${ $contains(row.siteUrl, 'https://') }"
+        when: ${ row.openable = true }
     empty:
       title: No sites match
-      body: Usage data appears 24–48 hours after activity. If names look like hashes, concealed names are on — see Usage.
+      body: Usage data appears 24–48 hours after activity, and only once Microsoft has started the usage reports for the tenant.
   - widget: table
     id: sites
     title: Sites

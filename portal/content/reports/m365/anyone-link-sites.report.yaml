@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/report.schema.json
 kind: report
 id: m365.anyone-link-sites
-version: 1.0.0
+version: 1.1.0
 title: Public and Anyone-link sites
 summary: SharePoint sites whose sharing allows Anyone links (optionally also new guests), plus the sites where Anyone links actually exist.
 owner: m365-team
@@ -27,7 +27,7 @@ datasources:
     source: runner
     label: Site sharing settings (PowerShell)
     script: sharepoint/Get-SiteSharing.ps1
-    sha256: d444a361a681d44bcc1808177b0f071a040e12791097c3c7bda0d84b16ed1cc9
+    sha256: 5875541d03d15d067d7f19c4e326b2d83b87ad2551893918cf77d4213d58e1c3
     services: [sharepointAdmin]
     timeoutSeconds: 900
     parameters:
@@ -40,6 +40,7 @@ datasources:
         $p := params;
         $levels := $p.includeGuestSharing = true ? ['ExternalUserAndGuestSharing', 'ExternalUserSharingOnly'] : ['ExternalUserAndGuestSharing'];
         $rows := [$v.sites[sharingCapability in $levels].$merge([$, {
+          "title": title ? title : url,
           "level": sharingCapability = 'ExternalUserAndGuestSharing' ? 'anyone' : 'guests',
           "storageUsedInBytes": storageUsedMB ? storageUsedMB * 1048576 : 0
         }])];
@@ -64,15 +65,16 @@ datasources:
     cache: { ttl: 3600 }
     transform: >-
       ${ (
-        $rows := [$sort(value.value[isDeleted != true and anonymousLinkCount > 0], function($a, $b) { $a.anonymousLinkCount < $b.anonymousLinkCount }).{
+        $rows := [$sort(value.value[$not(isDeleted = true) and anonymousLinkCount > 0], function($a, $b) { $a.anonymousLinkCount < $b.anonymousLinkCount }).{
           "siteId": siteId,
           "siteUrl": siteUrl,
+          "site": $substring(siteUrl ? siteUrl : '', 0, 8) = 'https://' ? siteUrl : siteId,
           "ownerDisplayName": ownerDisplayName,
           "anonymousLinkCount": anonymousLinkCount,
           "guestLinkCount": secureLinkForGuestCount,
           "lastActivityDate": lastActivityDate
         }];
-        { "rows": $rows, "sites": $count($rows), "links": $sum($rows.anonymousLinkCount) }
+        { "rows": $rows, "sites": $count($rows), "links": $sum([0, $rows.anonymousLinkCount]) }
       ) }
 
 layout:
@@ -114,13 +116,18 @@ layout:
         map: { anyone: [crit, Anyone], guests: [warn, New and existing guests] }
         filter: facet
       - { field: template, label: Template, filter: facet }
-      - { field: owner, label: Owner }
       - { field: storageUsedInBytes, label: Storage, kind: bytes, align: end }
       - { field: lastContentModified, label: Last content change, kind: date, filter: date }
+      - { field: owner, label: Owner, hidden: true }
+      - { field: groupId, label: Microsoft 365 group id, kind: guid, hidden: true }
     rowActions:
       - label: Open site
         icon: arrow-square-out
         href: ${ row.url }
+      - label: Group and owners
+        icon: users-three
+        href: /p/m365.team?id=${ $encode(row.groupId) }
+        when: ${ $boolean(row.groupId) }
     empty:
       title: No site allows Anyone links
       body: Every site restricts sharing to people in the organization or guests.
@@ -131,7 +138,7 @@ layout:
     data: links.rows
     rowKey: siteId
     columns:
-      - { field: siteUrl, label: Site, kind: identity, secondary: ownerDisplayName }
+      - { field: site, label: Site, kind: identity, secondary: ownerDisplayName }
       - { field: anonymousLinkCount, label: Anyone links, kind: number, align: end, sortable: true }
       - { field: guestLinkCount, label: Guest links, kind: number, align: end }
       - { field: lastActivityDate, label: Last activity, kind: date }

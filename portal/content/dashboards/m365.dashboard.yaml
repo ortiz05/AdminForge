@@ -1,7 +1,7 @@
 $schema: ../../packages/schemas/generated/dashboard.schema.json
 kind: dashboard
 id: m365.overview
-version: 1.0.0
+version: 1.0.1
 title: Microsoft 365 overview
 summary: Service health, changes that need action, licence headroom, adoption and team ownership at a glance.
 owner: m365-team
@@ -120,8 +120,8 @@ datasources:
     transform: >-
       ${ {
         "total": $count(value.value),
-        "noOwner": $count(value.value[$count(owners) = 0]),
-        "singleOwner": $count(value.value[$count(owners) = 1])
+        "noOwner": $count(value.value[$count(owners.userPrincipalName) = 0]),
+        "singleOwner": $count(value.value[$count(owners.userPrincipalName) = 1])
       } }
 
 layout:

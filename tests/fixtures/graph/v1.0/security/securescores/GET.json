@@ -20,11 +20,31 @@
       "averageComparativeScores": [
         {
           "basis": "AllTenants",
-          "averageScore": 371.6
+          "averageScore": 51.54,
+          "appsScore": 41.2,
+          "appsScoreMax": 104.5,
+          "dataScore": 1.1,
+          "dataScoreMax": 4.6,
+          "deviceScore": 15.02,
+          "deviceScoreMax": 26.3,
+          "identityScore": 39.75,
+          "identityScoreMax": 60.8,
+          "infrastructureScore": 0,
+          "infrastructureScoreMax": 0
         },
         {
           "basis": "TotalSeats",
-          "averageScore": 402.3,
+          "averageScore": 55.8,
+          "appsScore": 44.9,
+          "appsScoreMax": 110.2,
+          "dataScore": 1.3,
+          "dataScoreMax": 4.6,
+          "deviceScore": 16.4,
+          "deviceScoreMax": 27.1,
+          "identityScore": 41.3,
+          "identityScoreMax": 61.5,
+          "infrastructureScore": 0,
+          "infrastructureScoreMax": 0,
           "seatSizeRangeLowerValue": 1001,
           "seatSizeRangeUpperValue": 5000
         }
@@ -210,11 +230,31 @@
       "averageComparativeScores": [
         {
           "basis": "AllTenants",
-          "averageScore": 371.6
+          "averageScore": 51.54,
+          "appsScore": 41.2,
+          "appsScoreMax": 104.5,
+          "dataScore": 1.1,
+          "dataScoreMax": 4.6,
+          "deviceScore": 15.02,
+          "deviceScoreMax": 26.3,
+          "identityScore": 39.75,
+          "identityScoreMax": 60.8,
+          "infrastructureScore": 0,
+          "infrastructureScoreMax": 0
         },
         {
           "basis": "TotalSeats",
-          "averageScore": 402.3,
+          "averageScore": 55.8,
+          "appsScore": 44.9,
+          "appsScoreMax": 110.2,
+          "dataScore": 1.3,
+          "dataScoreMax": 4.6,
+          "deviceScore": 16.4,
+          "deviceScoreMax": 27.1,
+          "identityScore": 41.3,
+          "identityScoreMax": 61.5,
+          "infrastructureScore": 0,
+          "infrastructureScoreMax": 0,
           "seatSizeRangeLowerValue": 1001,
           "seatSizeRangeUpperValue": 5000
         }
@@ -246,11 +286,31 @@
       "averageComparativeScores": [
         {
           "basis": "AllTenants",
-          "averageScore": 371.6
+          "averageScore": 51.54,
+          "appsScore": 41.2,
+          "appsScoreMax": 104.5,
+          "dataScore": 1.1,
+          "dataScoreMax": 4.6,
+          "deviceScore": 15.02,
+          "deviceScoreMax": 26.3,
+          "identityScore": 39.75,
+          "identityScoreMax": 60.8,
+          "infrastructureScore": 0,
+          "infrastructureScoreMax": 0
         },
         {
           "basis": "TotalSeats",
-          "averageScore": 402.3,
+          "averageScore": 55.8,
+          "appsScore": 44.9,
+          "appsScoreMax": 110.2,
+          "dataScore": 1.3,
+          "dataScoreMax": 4.6,
+          "deviceScore": 16.4,
+          "deviceScoreMax": 27.1,
+          "identityScore": 41.3,
+          "identityScoreMax": 61.5,
+          "infrastructureScore": 0,
+          "infrastructureScoreMax": 0,
           "seatSizeRangeLowerValue": 1001,
           "seatSizeRangeUpperValue": 5000
         }
@@ -282,11 +342,31 @@
       "averageComparativeScores": [
         {
           "basis": "AllTenants",
-          "averageScore": 371.6
+          "averageScore": 51.54,
+          "appsScore": 41.2,
+          "appsScoreMax": 104.5,
+          "dataScore": 1.1,
+          "dataScoreMax": 4.6,
+          "deviceScore": 15.02,
+          "deviceScoreMax": 26.3,
+          "identityScore": 39.75,
+          "identityScoreMax": 60.8,
+          "infrastructureScore": 0,
+          "infrastructureScoreMax": 0
         },
         {
           "basis": "TotalSeats",
-          "averageScore": 402.3,
+          "averageScore": 55.8,
+          "appsScore": 44.9,
+          "appsScoreMax": 110.2,
+          "dataScore": 1.3,
+          "dataScoreMax": 4.6,
+          "deviceScore": 16.4,
+          "deviceScoreMax": 27.1,
+          "identityScore": 41.3,
+          "identityScoreMax": 61.5,
+          "infrastructureScore": 0,
+          "infrastructureScoreMax": 0,
           "seatSizeRangeLowerValue": 1001,
           "seatSizeRangeUpperValue": 5000
         }
@@ -318,11 +398,31 @@
       "averageComparativeScores": [
         {
           "basis": "AllTenants",
-          "averageScore": 371.6
+          "averageScore": 51.54,
+          "appsScore": 41.2,
+          "appsScoreMax": 104.5,
+          "dataScore": 1.1,
+          "dataScoreMax": 4.6,
+          "deviceScore": 15.02,
+          "deviceScoreMax": 26.3,
+          "identityScore": 39.75,
+          "identityScoreMax": 60.8,
+          "infrastructureScore": 0,
+          "infrastructureScoreMax": 0
         },
         {
           "basis": "TotalSeats",
-          "averageScore": 402.3,
+          "averageScore": 55.8,
+          "appsScore": 44.9,
+          "appsScoreMax": 110.2,
+          "dataScore": 1.3,
+          "dataScoreMax": 4.6,
+          "deviceScore": 16.4,
+          "deviceScoreMax": 27.1,
+          "identityScore": 41.3,
+          "identityScoreMax": 61.5,
+          "infrastructureScore": 0,
+          "infrastructureScoreMax": 0,
           "seatSizeRangeLowerValue": 1001,
           "seatSizeRangeUpperValue": 5000
         }
@@ -354,11 +454,31 @@
       "averageComparativeScores": [
         {
           "basis": "AllTenants",
-          "averageScore": 371.6
+          "averageScore": 51.54,
+          "appsScore": 41.2,
+          "appsScoreMax": 104.5,
+          "dataScore": 1.1,
+          "dataScoreMax": 4.6,
+          "deviceScore": 15.02,
+          "deviceScoreMax": 26.3,
+          "identityScore": 39.75,
+          "identityScoreMax": 60.8,
+          "infrastructureScore": 0,
+          "infrastructureScoreMax": 0
         },
         {
           "basis": "TotalSeats",
-          "averageScore": 402.3,
+          "averageScore": 55.8,
+          "appsScore": 44.9,
+          "appsScoreMax": 110.2,
+          "dataScore": 1.3,
+          "dataScoreMax": 4.6,
+          "deviceScore": 16.4,
+          "deviceScoreMax": 27.1,
+          "identityScore": 41.3,
+          "identityScoreMax": 61.5,
+          "infrastructureScore": 0,
+          "infrastructureScoreMax": 0,
           "seatSizeRangeLowerValue": 1001,
           "seatSizeRangeUpperValue": 5000
         }
@@ -390,11 +510,31 @@
       "averageComparativeScores": [
         {
           "basis": "AllTenants",
-          "averageScore": 371.6
+          "averageScore": 51.54,
+          "appsScore": 41.2,
+          "appsScoreMax": 104.5,
+          "dataScore": 1.1,
+          "dataScoreMax": 4.6,
+          "deviceScore": 15.02,
+          "deviceScoreMax": 26.3,
+          "identityScore": 39.75,
+          "identityScoreMax": 60.8,
+          "infrastructureScore": 0,
+          "infrastructureScoreMax": 0
         },
         {
           "basis": "TotalSeats",
-          "averageScore": 402.3,
+          "averageScore": 55.8,
+          "appsScore": 44.9,
+          "appsScoreMax": 110.2,
+          "dataScore": 1.3,
+          "dataScoreMax": 4.6,
+          "deviceScore": 16.4,
+          "deviceScoreMax": 27.1,
+          "identityScore": 41.3,
+          "identityScoreMax": 61.5,
+          "infrastructureScore": 0,
+          "infrastructureScoreMax": 0,
           "seatSizeRangeLowerValue": 1001,
           "seatSizeRangeUpperValue": 5000
         }
@@ -426,11 +566,31 @@
       "averageComparativeScores": [
         {
           "basis": "AllTenants",
-          "averageScore": 371.6
+          "averageScore": 51.54,
+          "appsScore": 41.2,
+          "appsScoreMax": 104.5,
+          "dataScore": 1.1,
+          "dataScoreMax": 4.6,
+          "deviceScore": 15.02,
+          "deviceScoreMax": 26.3,
+          "identityScore": 39.75,
+          "identityScoreMax": 60.8,
+          "infrastructureScore": 0,
+          "infrastructureScoreMax": 0
         },
         {
           "basis": "TotalSeats",
-          "averageScore": 402.3,
+          "averageScore": 55.8,
+          "appsScore": 44.9,
+          "appsScoreMax": 110.2,
+          "dataScore": 1.3,
+          "dataScoreMax": 4.6,
+          "deviceScore": 16.4,
+          "deviceScoreMax": 27.1,
+          "identityScore": 41.3,
+          "identityScoreMax": 61.5,
+          "infrastructureScore": 0,
+          "infrastructureScoreMax": 0,
           "seatSizeRangeLowerValue": 1001,
           "seatSizeRangeUpperValue": 5000
         }
@@ -462,11 +622,31 @@
       "averageComparativeScores": [
         {
           "basis": "AllTenants",
-          "averageScore": 371.6
+          "averageScore": 51.54,
+          "appsScore": 41.2,
+          "appsScoreMax": 104.5,
+          "dataScore": 1.1,
+          "dataScoreMax": 4.6,
+          "deviceScore": 15.02,
+          "deviceScoreMax": 26.3,
+          "identityScore": 39.75,
+          "identityScoreMax": 60.8,
+          "infrastructureScore": 0,
+          "infrastructureScoreMax": 0
         },
         {
           "basis": "TotalSeats",
-          "averageScore": 402.3,
+          "averageScore": 55.8,
+          "appsScore": 44.9,
+          "appsScoreMax": 110.2,
+          "dataScore": 1.3,
+          "dataScoreMax": 4.6,
+          "deviceScore": 16.4,
+          "deviceScoreMax": 27.1,
+          "identityScore": 41.3,
+          "identityScoreMax": 61.5,
+          "infrastructureScore": 0,
+          "infrastructureScoreMax": 0,
           "seatSizeRangeLowerValue": 1001,
           "seatSizeRangeUpperValue": 5000
         }
@@ -498,11 +678,31 @@
       "averageComparativeScores": [
         {
           "basis": "AllTenants",
-          "averageScore": 371.6
+          "averageScore": 51.54,
+          "appsScore": 41.2,
+          "appsScoreMax": 104.5,
+          "dataScore": 1.1,
+          "dataScoreMax": 4.6,
+          "deviceScore": 15.02,
+          "deviceScoreMax": 26.3,
+          "identityScore": 39.75,
+          "identityScoreMax": 60.8,
+          "infrastructureScore": 0,
+          "infrastructureScoreMax": 0
         },
         {
           "basis": "TotalSeats",
-          "averageScore": 402.3,
+          "averageScore": 55.8,
+          "appsScore": 44.9,
+          "appsScoreMax": 110.2,
+          "dataScore": 1.3,
+          "dataScoreMax": 4.6,
+          "deviceScore": 16.4,
+          "deviceScoreMax": 27.1,
+          "identityScore": 41.3,
+          "identityScoreMax": 61.5,
+          "infrastructureScore": 0,
+          "infrastructureScoreMax": 0,
           "seatSizeRangeLowerValue": 1001,
           "seatSizeRangeUpperValue": 5000
         }
@@ -534,11 +734,31 @@
       "averageComparativeScores": [
         {
           "basis": "AllTenants",
-          "averageScore": 371.6
+          "averageScore": 51.54,
+          "appsScore": 41.2,
+          "appsScoreMax": 104.5,
+          "dataScore": 1.1,
+          "dataScoreMax": 4.6,
+          "deviceScore": 15.02,
+          "deviceScoreMax": 26.3,
+          "identityScore": 39.75,
+          "identityScoreMax": 60.8,
+          "infrastructureScore": 0,
+          "infrastructureScoreMax": 0
         },
         {
           "basis": "TotalSeats",
-          "averageScore": 402.3,
+          "averageScore": 55.8,
+          "appsScore": 44.9,
+          "appsScoreMax": 110.2,
+          "dataScore": 1.3,
+          "dataScoreMax": 4.6,
+          "deviceScore": 16.4,
+          "deviceScoreMax": 27.1,
+          "identityScore": 41.3,
+          "identityScoreMax": 61.5,
+          "infrastructureScore": 0,
+          "infrastructureScoreMax": 0,
           "seatSizeRangeLowerValue": 1001,
           "seatSizeRangeUpperValue": 5000
         }
@@ -570,11 +790,31 @@
       "averageComparativeScores": [
         {
           "basis": "AllTenants",
-          "averageScore": 371.6
+          "averageScore": 51.54,
+          "appsScore": 41.2,
+          "appsScoreMax": 104.5,
+          "dataScore": 1.1,
+          "dataScoreMax": 4.6,
+          "deviceScore": 15.02,
+          "deviceScoreMax": 26.3,
+          "identityScore": 39.75,
+          "identityScoreMax": 60.8,
+          "infrastructureScore": 0,
+          "infrastructureScoreMax": 0
         },
         {
           "basis": "TotalSeats",
-          "averageScore": 402.3,
+          "averageScore": 55.8,
+          "appsScore": 44.9,
+          "appsScoreMax": 110.2,
+          "dataScore": 1.3,
+          "dataScoreMax": 4.6,
+          "deviceScore": 16.4,
+          "deviceScoreMax": 27.1,
+          "identityScore": 41.3,
+          "identityScoreMax": 61.5,
+          "infrastructureScore": 0,
+          "infrastructureScoreMax": 0,
           "seatSizeRangeLowerValue": 1001,
           "seatSizeRangeUpperValue": 5000
         }
@@ -606,11 +846,31 @@
       "averageComparativeScores": [
         {
           "basis": "AllTenants",
-          "averageScore": 371.6
+          "averageScore": 51.54,
+          "appsScore": 41.2,
+          "appsScoreMax": 104.5,
+          "dataScore": 1.1,
+          "dataScoreMax": 4.6,
+          "deviceScore": 15.02,
+          "deviceScoreMax": 26.3,
+          "identityScore": 39.75,
+          "identityScoreMax": 60.8,
+          "infrastructureScore": 0,
+          "infrastructureScoreMax": 0
         },
         {
           "basis": "TotalSeats",
-          "averageScore": 402.3,
+          "averageScore": 55.8,
+          "appsScore": 44.9,
+          "appsScoreMax": 110.2,
+          "dataScore": 1.3,
+          "dataScoreMax": 4.6,
+          "deviceScore": 16.4,
+          "deviceScoreMax": 27.1,
+          "identityScore": 41.3,
+          "identityScoreMax": 61.5,
+          "infrastructureScore": 0,
+          "infrastructureScoreMax": 0,
           "seatSizeRangeLowerValue": 1001,
           "seatSizeRangeUpperValue": 5000
         }
@@ -642,11 +902,31 @@
       "averageComparativeScores": [
         {
           "basis": "AllTenants",
-          "averageScore": 371.6
+          "averageScore": 51.54,
+          "appsScore": 41.2,
+          "appsScoreMax": 104.5,
+          "dataScore": 1.1,
+          "dataScoreMax": 4.6,
+          "deviceScore": 15.02,
+          "deviceScoreMax": 26.3,
+          "identityScore": 39.75,
+          "identityScoreMax": 60.8,
+          "infrastructureScore": 0,
+          "infrastructureScoreMax": 0
         },
         {
           "basis": "TotalSeats",
-          "averageScore": 402.3,
+          "averageScore": 55.8,
+          "appsScore": 44.9,
+          "appsScoreMax": 110.2,
+          "dataScore": 1.3,
+          "dataScoreMax": 4.6,
+          "deviceScore": 16.4,
+          "deviceScoreMax": 27.1,
+          "identityScore": 41.3,
+          "identityScoreMax": 61.5,
+          "infrastructureScore": 0,
+          "infrastructureScoreMax": 0,
           "seatSizeRangeLowerValue": 1001,
           "seatSizeRangeUpperValue": 5000
         }
@@ -678,11 +958,31 @@
       "averageComparativeScores": [
         {
           "basis": "AllTenants",
-          "averageScore": 371.6
+          "averageScore": 51.54,
+          "appsScore": 41.2,
+          "appsScoreMax": 104.5,
+          "dataScore": 1.1,
+          "dataScoreMax": 4.6,
+          "deviceScore": 15.02,
+          "deviceScoreMax": 26.3,
+          "identityScore": 39.75,
+          "identityScoreMax": 60.8,
+          "infrastructureScore": 0,
+          "infrastructureScoreMax": 0
         },
         {
           "basis": "TotalSeats",
-          "averageScore": 402.3,
+          "averageScore": 55.8,
+          "appsScore": 44.9,
+          "appsScoreMax": 110.2,
+          "dataScore": 1.3,
+          "dataScoreMax": 4.6,
+          "deviceScore": 16.4,
+          "deviceScoreMax": 27.1,
+          "identityScore": 41.3,
+          "identityScoreMax": 61.5,
+          "infrastructureScore": 0,
+          "infrastructureScoreMax": 0,
           "seatSizeRangeLowerValue": 1001,
           "seatSizeRangeUpperValue": 5000
         }
@@ -714,11 +1014,31 @@
       "averageComparativeScores": [
         {
           "basis": "AllTenants",
-          "averageScore": 371.6
+          "averageScore": 51.54,
+          "appsScore": 41.2,
+          "appsScoreMax": 104.5,
+          "dataScore": 1.1,
+          "dataScoreMax": 4.6,
+          "deviceScore": 15.02,
+          "deviceScoreMax": 26.3,
+          "identityScore": 39.75,
+          "identityScoreMax": 60.8,
+          "infrastructureScore": 0,
+          "infrastructureScoreMax": 0
         },
         {
           "basis": "TotalSeats",
-          "averageScore": 402.3,
+          "averageScore": 55.8,
+          "appsScore": 44.9,
+          "appsScoreMax": 110.2,
+          "dataScore": 1.3,
+          "dataScoreMax": 4.6,
+          "deviceScore": 16.4,
+          "deviceScoreMax": 27.1,
+          "identityScore": 41.3,
+          "identityScoreMax": 61.5,
+          "infrastructureScore": 0,
+          "infrastructureScoreMax": 0,
           "seatSizeRangeLowerValue": 1001,
           "seatSizeRangeUpperValue": 5000
         }
@@ -750,11 +1070,31 @@
       "averageComparativeScores": [
         {
           "basis": "AllTenants",
-          "averageScore": 371.6
+          "averageScore": 51.54,
+          "appsScore": 41.2,
+          "appsScoreMax": 104.5,
+          "dataScore": 1.1,
+          "dataScoreMax": 4.6,
+          "deviceScore": 15.02,
+          "deviceScoreMax": 26.3,
+          "identityScore": 39.75,
+          "identityScoreMax": 60.8,
+          "infrastructureScore": 0,
+          "infrastructureScoreMax": 0
         },
         {
           "basis": "TotalSeats",
-          "averageScore": 402.3,
+          "averageScore": 55.8,
+          "appsScore": 44.9,
+          "appsScoreMax": 110.2,
+          "dataScore": 1.3,
+          "dataScoreMax": 4.6,
+          "deviceScore": 16.4,
+          "deviceScoreMax": 27.1,
+          "identityScore": 41.3,
+          "identityScoreMax": 61.5,
+          "infrastructureScore": 0,
+          "infrastructureScoreMax": 0,
           "seatSizeRangeLowerValue": 1001,
           "seatSizeRangeUpperValue": 5000
         }
@@ -786,11 +1126,31 @@
       "averageComparativeScores": [
         {
           "basis": "AllTenants",
-          "averageScore": 371.6
+          "averageScore": 51.54,
+          "appsScore": 41.2,
+          "appsScoreMax": 104.5,
+          "dataScore": 1.1,
+          "dataScoreMax": 4.6,
+          "deviceScore": 15.02,
+          "deviceScoreMax": 26.3,
+          "identityScore": 39.75,
+          "identityScoreMax": 60.8,
+          "infrastructureScore": 0,
+          "infrastructureScoreMax": 0
         },
         {
           "basis": "TotalSeats",
-          "averageScore": 402.3,
+          "averageScore": 55.8,
+          "appsScore": 44.9,
+          "appsScoreMax": 110.2,
+          "dataScore": 1.3,
+          "dataScoreMax": 4.6,
+          "deviceScore": 16.4,
+          "deviceScoreMax": 27.1,
+          "identityScore": 41.3,
+          "identityScoreMax": 61.5,
+          "infrastructureScore": 0,
+          "infrastructureScoreMax": 0,
           "seatSizeRangeLowerValue": 1001,
           "seatSizeRangeUpperValue": 5000
         }
@@ -822,11 +1182,31 @@
       "averageComparativeScores": [
         {
           "basis": "AllTenants",
-          "averageScore": 371.6
+          "averageScore": 51.54,
+          "appsScore": 41.2,
+          "appsScoreMax": 104.5,
+          "dataScore": 1.1,
+          "dataScoreMax": 4.6,
+          "deviceScore": 15.02,
+          "deviceScoreMax": 26.3,
+          "identityScore": 39.75,
+          "identityScoreMax": 60.8,
+          "infrastructureScore": 0,
+          "infrastructureScoreMax": 0
         },
         {
           "basis": "TotalSeats",
-          "averageScore": 402.3,
+          "averageScore": 55.8,
+          "appsScore": 44.9,
+          "appsScoreMax": 110.2,
+          "dataScore": 1.3,
+          "dataScoreMax": 4.6,
+          "deviceScore": 16.4,
+          "deviceScoreMax": 27.1,
+          "identityScore": 41.3,
+          "identityScoreMax": 61.5,
+          "infrastructureScore": 0,
+          "infrastructureScoreMax": 0,
           "seatSizeRangeLowerValue": 1001,
           "seatSizeRangeUpperValue": 5000
         }
@@ -858,11 +1238,31 @@
       "averageComparativeScores": [
         {
           "basis": "AllTenants",
-          "averageScore": 371.6
+          "averageScore": 51.54,
+          "appsScore": 41.2,
+          "appsScoreMax": 104.5,
+          "dataScore": 1.1,
+          "dataScoreMax": 4.6,
+          "deviceScore": 15.02,
+          "deviceScoreMax": 26.3,
+          "identityScore": 39.75,
+          "identityScoreMax": 60.8,
+          "infrastructureScore": 0,
+          "infrastructureScoreMax": 0
         },
         {
           "basis": "TotalSeats",
-          "averageScore": 402.3,
+          "averageScore": 55.8,
+          "appsScore": 44.9,
+          "appsScoreMax": 110.2,
+          "dataScore": 1.3,
+          "dataScoreMax": 4.6,
+          "deviceScore": 16.4,
+          "deviceScoreMax": 27.1,
+          "identityScore": 41.3,
+          "identityScoreMax": 61.5,
+          "infrastructureScore": 0,
+          "infrastructureScoreMax": 0,
           "seatSizeRangeLowerValue": 1001,
           "seatSizeRangeUpperValue": 5000
         }
@@ -894,11 +1294,31 @@
       "averageComparativeScores": [
         {
           "basis": "AllTenants",
-          "averageScore": 371.6
+          "averageScore": 51.54,
+          "appsScore": 41.2,
+          "appsScoreMax": 104.5,
+          "dataScore": 1.1,
+          "dataScoreMax": 4.6,
+          "deviceScore": 15.02,
+          "deviceScoreMax": 26.3,
+          "identityScore": 39.75,
+          "identityScoreMax": 60.8,
+          "infrastructureScore": 0,
+          "infrastructureScoreMax": 0
         },
         {
           "basis": "TotalSeats",
-          "averageScore": 402.3,
+          "averageScore": 55.8,
+          "appsScore": 44.9,
+          "appsScoreMax": 110.2,
+          "dataScore": 1.3,
+          "dataScoreMax": 4.6,
+          "deviceScore": 16.4,
+          "deviceScoreMax": 27.1,
+          "identityScore": 41.3,
+          "identityScoreMax": 61.5,
+          "infrastructureScore": 0,
+          "infrastructureScoreMax": 0,
           "seatSizeRangeLowerValue": 1001,
           "seatSizeRangeUpperValue": 5000
         }
@@ -930,11 +1350,31 @@
       "averageComparativeScores": [
         {
           "basis": "AllTenants",
-          "averageScore": 371.6
+          "averageScore": 51.54,
+          "appsScore": 41.2,
+          "appsScoreMax": 104.5,
+          "dataScore": 1.1,
+          "dataScoreMax": 4.6,
+          "deviceScore": 15.02,
+          "deviceScoreMax": 26.3,
+          "identityScore": 39.75,
+          "identityScoreMax": 60.8,
+          "infrastructureScore": 0,
+          "infrastructureScoreMax": 0
         },
         {
           "basis": "TotalSeats",
-          "averageScore": 402.3,
+          "averageScore": 55.8,
+          "appsScore": 44.9,
+          "appsScoreMax": 110.2,
+          "dataScore": 1.3,
+          "dataScoreMax": 4.6,
+          "deviceScore": 16.4,
+          "deviceScoreMax": 27.1,
+          "identityScore": 41.3,
+          "identityScoreMax": 61.5,
+          "infrastructureScore": 0,
+          "infrastructureScoreMax": 0,
           "seatSizeRangeLowerValue": 1001,
           "seatSizeRangeUpperValue": 5000
         }
@@ -966,11 +1406,31 @@
       "averageComparativeScores": [
         {
           "basis": "AllTenants",
-          "averageScore": 371.6
+          "averageScore": 51.54,
+          "appsScore": 41.2,
+          "appsScoreMax": 104.5,
+          "dataScore": 1.1,
+          "dataScoreMax": 4.6,
+          "deviceScore": 15.02,
+          "deviceScoreMax": 26.3,
+          "identityScore": 39.75,
+          "identityScoreMax": 60.8,
+          "infrastructureScore": 0,
+          "infrastructureScoreMax": 0
         },
         {
           "basis": "TotalSeats",
-          "averageScore": 402.3,
+          "averageScore": 55.8,
+          "appsScore": 44.9,
+          "appsScoreMax": 110.2,
+          "dataScore": 1.3,
+          "dataScoreMax": 4.6,
+          "deviceScore": 16.4,
+          "deviceScoreMax": 27.1,
+          "identityScore": 41.3,
+          "identityScoreMax": 61.5,
+          "infrastructureScore": 0,
+          "infrastructureScoreMax": 0,
           "seatSizeRangeLowerValue": 1001,
           "seatSizeRangeUpperValue": 5000
         }
@@ -1002,11 +1462,31 @@
       "averageComparativeScores": [
         {
           "basis": "AllTenants",
-          "averageScore": 371.6
+          "averageScore": 51.54,
+          "appsScore": 41.2,
+          "appsScoreMax": 104.5,
+          "dataScore": 1.1,
+          "dataScoreMax": 4.6,
+          "deviceScore": 15.02,
+          "deviceScoreMax": 26.3,
+          "identityScore": 39.75,
+          "identityScoreMax": 60.8,
+          "infrastructureScore": 0,
+          "infrastructureScoreMax": 0
         },
         {
           "basis": "TotalSeats",
-          "averageScore": 402.3,
+          "averageScore": 55.8,
+          "appsScore": 44.9,
+          "appsScoreMax": 110.2,
+          "dataScore": 1.3,
+          "dataScoreMax": 4.6,
+          "deviceScore": 16.4,
+          "deviceScoreMax": 27.1,
+          "identityScore": 41.3,
+          "identityScoreMax": 61.5,
+          "infrastructureScore": 0,
+          "infrastructureScoreMax": 0,
           "seatSizeRangeLowerValue": 1001,
           "seatSizeRangeUpperValue": 5000
         }
@@ -1038,11 +1518,31 @@
       "averageComparativeScores": [
         {
           "basis": "AllTenants",
-          "averageScore": 371.6
+          "averageScore": 51.54,
+          "appsScore": 41.2,
+          "appsScoreMax": 104.5,
+          "dataScore": 1.1,
+          "dataScoreMax": 4.6,
+          "deviceScore": 15.02,
+          "deviceScoreMax": 26.3,
+          "identityScore": 39.75,
+          "identityScoreMax": 60.8,
+          "infrastructureScore": 0,
+          "infrastructureScoreMax": 0
         },
         {
           "basis": "TotalSeats",
-          "averageScore": 402.3,
+          "averageScore": 55.8,
+          "appsScore": 44.9,
+          "appsScoreMax": 110.2,
+          "dataScore": 1.3,
+          "dataScoreMax": 4.6,
+          "deviceScore": 16.4,
+          "deviceScoreMax": 27.1,
+          "identityScore": 41.3,
+          "identityScoreMax": 61.5,
+          "infrastructureScore": 0,
+          "infrastructureScoreMax": 0,
           "seatSizeRangeLowerValue": 1001,
           "seatSizeRangeUpperValue": 5000
         }
@@ -1074,11 +1574,31 @@
       "averageComparativeScores": [
         {
           "basis": "AllTenants",
-          "averageScore": 371.6
+          "averageScore": 51.54,
+          "appsScore": 41.2,
+          "appsScoreMax": 104.5,
+          "dataScore": 1.1,
+          "dataScoreMax": 4.6,
+          "deviceScore": 15.02,
+          "deviceScoreMax": 26.3,
+          "identityScore": 39.75,
+          "identityScoreMax": 60.8,
+          "infrastructureScore": 0,
+          "infrastructureScoreMax": 0
         },
         {
           "basis": "TotalSeats",
-          "averageScore": 402.3,
+          "averageScore": 55.8,
+          "appsScore": 44.9,
+          "appsScoreMax": 110.2,
+          "dataScore": 1.3,
+          "dataScoreMax": 4.6,
+          "deviceScore": 16.4,
+          "deviceScoreMax": 27.1,
+          "identityScore": 41.3,
+          "identityScoreMax": 61.5,
+          "infrastructureScore": 0,
+          "infrastructureScoreMax": 0,
           "seatSizeRangeLowerValue": 1001,
           "seatSizeRangeUpperValue": 5000
         }
@@ -1110,11 +1630,31 @@
       "averageComparativeScores": [
         {
           "basis": "AllTenants",
-          "averageScore": 371.6
+          "averageScore": 51.54,
+          "appsScore": 41.2,
+          "appsScoreMax": 104.5,
+          "dataScore": 1.1,
+          "dataScoreMax": 4.6,
+          "deviceScore": 15.02,
+          "deviceScoreMax": 26.3,
+          "identityScore": 39.75,
+          "identityScoreMax": 60.8,
+          "infrastructureScore": 0,
+          "infrastructureScoreMax": 0
         },
         {
           "basis": "TotalSeats",
-          "averageScore": 402.3,
+          "averageScore": 55.8,
+          "appsScore": 44.9,
+          "appsScoreMax": 110.2,
+          "dataScore": 1.3,
+          "dataScoreMax": 4.6,
+          "deviceScore": 16.4,
+          "deviceScoreMax": 27.1,
+          "identityScore": 41.3,
+          "identityScoreMax": 61.5,
+          "infrastructureScore": 0,
+          "infrastructureScoreMax": 0,
           "seatSizeRangeLowerValue": 1001,
           "seatSizeRangeUpperValue": 5000
         }
@@ -1146,11 +1686,31 @@
       "averageComparativeScores": [
         {
           "basis": "AllTenants",
-          "averageScore": 371.6
+          "averageScore": 51.54,
+          "appsScore": 41.2,
+          "appsScoreMax": 104.5,
+          "dataScore": 1.1,
+          "dataScoreMax": 4.6,
+          "deviceScore": 15.02,
+          "deviceScoreMax": 26.3,
+          "identityScore": 39.75,
+          "identityScoreMax": 60.8,
+          "infrastructureScore": 0,
+          "infrastructureScoreMax": 0
         },
         {
           "basis": "TotalSeats",
-          "averageScore": 402.3,
+          "averageScore": 55.8,
+          "appsScore": 44.9,
+          "appsScoreMax": 110.2,
+          "dataScore": 1.3,
+          "dataScoreMax": 4.6,
+          "deviceScore": 16.4,
+          "deviceScoreMax": 27.1,
+          "identityScore": 41.3,
+          "identityScoreMax": 61.5,
+          "infrastructureScore": 0,
+          "infrastructureScoreMax": 0,
           "seatSizeRangeLowerValue": 1001,
           "seatSizeRangeUpperValue": 5000
         }
@@ -1182,11 +1742,31 @@
       "averageComparativeScores": [
         {
           "basis": "AllTenants",
-          "averageScore": 371.6
+          "averageScore": 51.54,
+          "appsScore": 41.2,
+          "appsScoreMax": 104.5,
+          "dataScore": 1.1,
+          "dataScoreMax": 4.6,
+          "deviceScore": 15.02,
+          "deviceScoreMax": 26.3,
+          "identityScore": 39.75,
+          "identityScoreMax": 60.8,
+          "infrastructureScore": 0,
+          "infrastructureScoreMax": 0
         },
         {
           "basis": "TotalSeats",
-          "averageScore": 402.3,
+          "averageScore": 55.8,
+          "appsScore": 44.9,
+          "appsScoreMax": 110.2,
+          "dataScore": 1.3,
+          "dataScoreMax": 4.6,
+          "deviceScore": 16.4,
+          "deviceScoreMax": 27.1,
+          "identityScore": 41.3,
+          "identityScoreMax": 61.5,
+          "infrastructureScore": 0,
+          "infrastructureScoreMax": 0,
           "seatSizeRangeLowerValue": 1001,
           "seatSizeRangeUpperValue": 5000
         }
@@ -1218,11 +1798,31 @@
       "averageComparativeScores": [
         {
           "basis": "AllTenants",
-          "averageScore": 371.6
+          "averageScore": 51.54,
+          "appsScore": 41.2,
+          "appsScoreMax": 104.5,
+          "dataScore": 1.1,
+          "dataScoreMax": 4.6,
+          "deviceScore": 15.02,
+          "deviceScoreMax": 26.3,
+          "identityScore": 39.75,
+          "identityScoreMax": 60.8,
+          "infrastructureScore": 0,
+          "infrastructureScoreMax": 0
         },
         {
           "basis": "TotalSeats",
-          "averageScore": 402.3,
+          "averageScore": 55.8,
+          "appsScore": 44.9,
+          "appsScoreMax": 110.2,
+          "dataScore": 1.3,
+          "dataScoreMax": 4.6,
+          "deviceScore": 16.4,
+          "deviceScoreMax": 27.1,
+          "identityScore": 41.3,
+          "identityScoreMax": 61.5,
+          "infrastructureScore": 0,
+          "infrastructureScoreMax": 0,
           "seatSizeRangeLowerValue": 1001,
           "seatSizeRangeUpperValue": 5000
         }

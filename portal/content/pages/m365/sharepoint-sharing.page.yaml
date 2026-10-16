@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/page.schema.json
 kind: page
 id: m365.sharepoint-sharing
-version: 1.0.0
+version: 1.1.0
 title: SharePoint sharing
 summary: Tenant-wide SharePoint and OneDrive sharing settings and each site's sharing level — find sites that allow Anyone links.
 owner: m365-team
@@ -16,7 +16,7 @@ requires:
   licences: [sharepoint]
 
 params:
-  q: { type: string, default: "", label: Search, placeholder: "Site title, URL or owner" }
+  q: { type: string, default: "", label: Search, placeholder: "Site title or URL" }
   sharing:
     type: enum
     label: Sharing level
@@ -57,7 +57,7 @@ datasources:
     source: runner
     label: Sharing settings (PowerShell)
     script: sharepoint/Get-SiteSharing.ps1
-    sha256: d444a361a681d44bcc1808177b0f071a040e12791097c3c7bda0d84b16ed1cc9
+    sha256: 5875541d03d15d067d7f19c4e326b2d83b87ad2551893918cf77d4213d58e1c3
     services: [sharepointAdmin]
     timeoutSeconds: 900
     parameters:
@@ -65,7 +65,8 @@ datasources:
       template: "${ params.template != 'All' ? params.template }"
       includeSites: true
     cache: { ttl: 900 }
-    # value = [script output] — one object { tenant, summary, sites }. Labels the sharing levels and converts MB to bytes.
+    # value = [script output] — one object { tenant, summary, sites }. Labels the sharing levels and link settings, gives
+    # untitled sites (OneDrive host, search centre) their URL as title, converts MB to bytes.
     transform: >-
       ${ (
         $v := value[0];  /* runner result = [output data]; one summary object */
@@ -76,19 +77,34 @@ datasources:
           "ExistingExternalUserSharingOnly": "Existing guests only",
           "Disabled": "Only people in the organization"
         };
+        $linkTypes := {
+          "None": "Not set (SharePoint default)",
+          "Direct": "Specific people",
+          "Internal": "People in the organization",
+          "AnonymousAccess": "Anyone with the link"
+        };
+        $permissions := { "None": "Not set (SharePoint default)", "View": "View", "Edit": "Edit" };
+        $domains := { "None": "No domain restriction", "AllowList": "Only the allowed domains", "BlockList": "All but the blocked domains" };
+        $t := $v.tenant;
         $q := $lowercase($trim($p.q ? $p.q : ''));
         $all := [$v.sites.$merge([$, {
+          "title": title ? title : url,
           "storageUsedInBytes": storageUsedMB ? storageUsedMB * 1048576 : 0,
           "sharingLabel": $lookup($labels, sharingCapability)
         }])];
         $rows := [$all[
-            ($q = '' or $contains($lowercase(title & ' ' & url & ' ' & owner), $q))
+            ($q = '' or $contains($lowercase(title & ' ' & url & ' ' & (owner ? owner : '')), $q))
             and ($p.sharing = 'All' or $not($exists($p.sharing)) or sharingCapability = $p.sharing)
           ]];
         {
-          "tenant": $merge([$v.tenant, {
-            "sharingLabel": $lookup($labels, $v.tenant.sharingCapability),
-            "oneDriveSharingLabel": $lookup($labels, $v.tenant.oneDriveSharingCapability)
+          "tenant": $merge([$t, {
+            "sharingLabel": $lookup($labels, $t.sharingCapability),
+            "oneDriveSharingLabel": $lookup($labels, $t.oneDriveSharingCapability),
+            "defaultLinkLabel": $exists($lookup($linkTypes, $t.defaultSharingLinkType)) ? $lookup($linkTypes, $t.defaultSharingLinkType) : $t.defaultSharingLinkType,
+            "defaultPermissionLabel": $exists($lookup($permissions, $t.defaultLinkPermission)) ? $lookup($permissions, $t.defaultLinkPermission) : $t.defaultLinkPermission,
+            "domainRestrictionLabel": $exists($lookup($domains, $t.sharingDomainRestrictionMode)) ? $lookup($domains, $t.sharingDomainRestrictionMode) : $t.sharingDomainRestrictionMode,
+            "anyoneLinkExpiry": $type($t.requireAnonymousLinksExpireInDays) = 'number' and $t.requireAnonymousLinksExpireInDays > 0
+              ? $string($t.requireAnonymousLinksExpireInDays) & ' days' : 'Never'
           }]),
           "rows": $rows,
           "total": $v.summary.total,
@@ -145,10 +161,10 @@ layout:
           ExternalUserSharingOnly: [warn, New and existing guests]
           ExistingExternalUserSharingOnly: [info, Existing guests only]
           Disabled: [ok, Only people in the organization]
-      - { field: defaultSharingLinkType, label: Default link type }
-      - { field: defaultLinkPermission, label: Default link permission }
-      - { field: requireAnonymousLinksExpireInDays, label: Anyone links expire after (days) }
-      - { field: sharingDomainRestrictionMode, label: Domain restriction }
+      - { field: defaultLinkLabel, label: Default link type }
+      - { field: defaultPermissionLabel, label: Default link permission }
+      - { field: anyoneLinkExpiry, label: Anyone links expire after }
+      - { field: domainRestrictionLabel, label: Domain restriction }
       - { field: preventExternalUsersFromResharing, label: Guests can't reshare, kind: boolean }
   - widget: chart
     id: byLevel
@@ -176,14 +192,19 @@ layout:
           Disabled: [ok, Only people in the organization]
         filter: { type: facet, param: sharing }
       - { field: template, label: Template, filter: { type: facet, param: template } }
-      - { field: owner, label: Owner }
       - { field: storageUsedInBytes, label: Storage, kind: bytes, align: end, filter: range, sortable: true }
       - { field: lastContentModified, label: Last content change, kind: relativeTime, filter: date, sortable: true }
       - { field: lockState, label: Lock state, filter: facet, hidden: true }
+      - { field: owner, label: Owner, hidden: true }
+      - { field: groupId, label: Microsoft 365 group id, kind: guid, hidden: true }
     rowActions:
       - label: Open site
         icon: arrow-square-out
         href: ${ row.url }
+      - label: Group and owners
+        icon: users-three
+        href: /p/m365.team?id=${ $encode(row.groupId) }
+        when: ${ $boolean(row.groupId) }
       - label: Open in SharePoint admin center
         icon: arrow-square-out
         href: "${ 'https://' & env.AF_SPO_TENANT_NAME & '-admin.sharepoint.com/_layouts/15/online/AdminHome.aspx#/siteManagement' }"

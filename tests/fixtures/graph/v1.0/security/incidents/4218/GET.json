@@ -68,6 +68,44 @@
           "deliveryAction": "delivered",
           "deliveryLocation": "inbox",
           "internetMessageId": "<msg-0914@invoices-example.net>"
+        },
+        {
+          "@odata.type": "#microsoft.graph.security.mailClusterEvidence",
+          "createdDateTime": "2026-10-12T09:05:00Z",
+          "detailedRoles": [],
+          "verdict": "malicious",
+          "remediationStatus": "remediated",
+          "remediationStatusDetails": null,
+          "roles": [],
+          "tags": [],
+          "clusterBy": "Sender",
+          "clusterByValue": "billing@invoices-example.net",
+          "emailCount": 6,
+          "networkMessageIds": [
+            "7f1c2a10-0000-4000-8000-0000000000a1",
+            "7f1c2a10-0000-4000-8000-0000000000a2"
+          ],
+          "query": "(Sender:\"billing@invoices-example.net\") AND (Timestamp:2026-10-12)",
+          "urn": "urn:MailClusterEntity:00000000000000000000000000000001"
+        },
+        {
+          "@odata.type": "#microsoft.graph.security.submissionMailEvidence",
+          "createdDateTime": "2026-10-12T09:01:00Z",
+          "detailedRoles": [],
+          "verdict": "suspicious",
+          "remediationStatus": "none",
+          "remediationStatusDetails": null,
+          "roles": [],
+          "tags": [],
+          "networkMessageId": "7f1c2a10-0000-4000-8000-0000000000a1",
+          "recipient": "hana.kim@example.com",
+          "reportType": "Phish",
+          "sender": "billing@invoices-example.net",
+          "senderIp": "198.51.100.23",
+          "subject": "Your mailbox is almost full",
+          "submissionDateTime": "2026-10-12T08:58:00Z",
+          "submissionId": "a1b2c3d4-0000-4000-8000-0000000000b1",
+          "submitter": "hana.kim@example.com"
         }
       ],
       "systemTags": []

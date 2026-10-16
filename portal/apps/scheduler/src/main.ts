@@ -9,7 +9,7 @@ import { openOneShot, PROBE_HEADER, probeLine, probeSummary, scheduleRunLines } 
  *
  *   node dist/main.js                       run the service (needs DATABASE_URL)
  *   node dist/main.js --once                run every probe once and print statuses (no tenant data is printed)
- *   node dist/main.js --probe <key> …       run the named probes once
+ *   node dist/main.js --probe <key> …       run the named probes once (one --probe per key)
  *   node dist/main.js --schedule <key>      run one schedule now (as a manual run, audited) and exit
  *   add --no-store to one-shots to skip writing probe_results
  *
@@ -50,7 +50,7 @@ const { values } = parseArgs({
 
 if (values.help) {
   process.stdout.write(
-    'Usage: adminforge-scheduler [--once | --probe <key>… | --schedule <key>] [--no-store]\n',
+    'Usage: adminforge-scheduler [--once | --probe <key> [--probe <key>…] | --schedule <key>] [--no-store]\n',
   );
   process.exit(0);
 }

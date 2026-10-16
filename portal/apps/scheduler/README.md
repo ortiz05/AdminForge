@@ -26,9 +26,10 @@ pnpm --filter @adminforge/scheduler dev                  # the service, from sou
 pnpm --filter @adminforge/scheduler typecheck
 node portal/apps/scheduler/dist/main.js                  # the service, built (needs DATABASE_URL)
 node portal/apps/scheduler/dist/main.js --once           # every probe once
-node portal/apps/scheduler/dist/main.js --probe <key>…   # the named probes once
+node portal/apps/scheduler/dist/main.js --probe <key> [--probe <key>…]   # the named probes once
 node portal/apps/scheduler/dist/main.js --schedule <key> # one schedule now (a manual run, audited)
-#   add --no-store to a one-shot to skip writing probe results
+#   add --no-store to a one-shot to skip writing probe results (no database at all, so it needs
+#   CONTENT_SOURCE=fs: with published content, CONTENT_SOURCE=db, it can't load the probes)
 ```
 
 One-shots print keys, statuses, reason codes, counts, report row counts and delivery statuses — never messages,

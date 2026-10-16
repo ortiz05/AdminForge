@@ -10,13 +10,22 @@
 /portal/content/schedules/          @ortiz05
 /portal/content/connections/        @ortiz05
 /portal/content/scripts/            @ortiz05
+/portal/content/probes/             @ortiz05
+/portal/content/feeds/              @ortiz05
 
 # Security-sensitive code and configuration.
 /portal/apps/api/src/auth/          @ortiz05
 /portal/apps/api/src/security/      @ortiz05
 /portal/apps/api/src/execution/     @ortiz05
 /portal/apps/runner/                @ortiz05
+/portal/apps/scheduler/             @ortiz05
+/portal/packages/connectors/        @ortiz05
+/portal/packages/engine/            @ortiz05
+/portal/packages/expressions/       @ortiz05
+/portal/packages/schemas/src/news.ts @ortiz05
 /portal/tools/cli/src/provision/    @ortiz05
 /portal/deploy/                     @ortiz05
 /.github/                           @ortiz05
 /.claude/                           @ortiz05
+/.githooks/                         @ortiz05
+/tooling/                           @ortiz05

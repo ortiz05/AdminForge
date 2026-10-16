@@ -1,0 +1,25 @@
+name: pr-title
+
+# The pull request title becomes the squash commit on main, so it must be a Conventional Commits header
+# (docs/onboarding/10-git-and-pull-requests.md). Separate from ci.yml so retitling a PR re-runs only this check.
+on:
+  pull_request:
+    types: [opened, edited, reopened, synchronize]
+
+permissions:
+  contents: read
+
+jobs:
+  title:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+      # Passed through the environment, never interpolated into the script (a title is attacker-controlled text).
+      - name: Conventional Commits header
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: node tooling/git/commit-message.mjs --title "$PR_TITLE"

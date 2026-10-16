@@ -5,16 +5,16 @@ reads — **match the surrounding code** when in doubt, and treat the guidance b
 
 ## Enforced by tools
 
-| Tool / check                | Where                                       | What it decides                                                                                                                                        |
-| --------------------------- | ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Prettier                    | `.prettierrc.json`, `.editorconfig`         | Formatting: single quotes, trailing commas, 110 columns, 2-space indent, LF. Don't hand-format.                                                        |
-| ESLint                      | `tooling/lint/eslint.config.js`             | TypeScript recommended rules, React hooks rules, unused vars (prefix `_` to keep one on purpose), raw colours and arbitrary Tailwind values in UI code |
-| TypeScript                  | `tsconfig.base.json` + each package         | `strict`, `noUncheckedIndexedAccess`, `verbatimModuleSyntax`, `isolatedModules`, ES2023                                                                |
-| Guards                      | `tests/guards/`, `.githooks/pre-commit`     | No secrets or tenant values in committable text files; design tokens only in UI code                                                                   |
-| Commit message / PR title   | `.githooks/commit-msg`, `pr-title` workflow | Conventional Commits with our types and scopes ([guide 10](10-git-and-pull-requests.md))                                                               |
-| Dependency audit            | CI                                          | `pnpm audit --audit-level high` fails on high/critical advisories                                                                                      |
-| Initial-load budget         | CI (`tooling/ci/check-bundle.mjs`)          | The web app's initial JavaScript stays ≤ 250 KB gzip                                                                                                   |
-| Claude Code after-edit hook | `.claude/hooks/after-edit.mjs`              | On files Claude writes: Prettier, content validation, token checks, stale script pins                                                                  |
+| Tool / check                | Where                                       | What it decides                                                                                                                                                                          |
+| --------------------------- | ------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Prettier                    | `.prettierrc.json`, `.editorconfig`         | Formatting: single quotes, trailing commas, 110 columns, 2-space indent, LF. Don't hand-format.                                                                                          |
+| ESLint                      | `tooling/lint/eslint.config.js`             | TypeScript recommended rules, React hooks rules, unused vars (prefix `_` to keep one on purpose), raw colours and arbitrary Tailwind values in UI code                                   |
+| TypeScript                  | `tsconfig.base.json` + each package         | `strict`, `noUncheckedIndexedAccess`, `verbatimModuleSyntax`, `isolatedModules`, ES2023                                                                                                  |
+| Guards                      | `tests/guards/`, `.githooks/pre-commit`     | No secrets or tenant values in committable text files; design tokens only in UI code                                                                                                     |
+| Commit message / PR title   | `.githooks/commit-msg`, `pr-title` workflow | Conventional Commits with our types and scopes ([guide 10](10-git-and-pull-requests.md))                                                                                                 |
+| Dependency audit            | CI                                          | `pnpm audit --audit-level high` fails on high/critical advisories                                                                                                                        |
+| Initial-load budget         | CI (`tooling/ci/check-bundle.mjs`)          | The web app's initial JavaScript stays ≤ 250 KB gzip                                                                                                                                     |
+| Claude Code after-edit hook | `.claude/hooks/after-edit.mjs`              | On files Claude writes: Prettier, `adminforge validate` for content YAML and runner scripts (reports stale script pins), design-token checks (patterns shared with ESLint and the guard) |
 
 Before every push: `pnpm lint && pnpm format:check && pnpm typecheck && pnpm guard` (on a machine whose services run
 from the checkout, `pnpm -r run typecheck` — see [setup](01-setup.md#prove-everything-works)).
@@ -92,6 +92,9 @@ throw new AppError(400, 'cron_too_frequent', 'Reports can run at most once an ho
 - Dependencies point down: apps → packages, never the reverse ([Repository map](03-repository-map.md)).
 - `portal/` never imports a test library or anything from `tests/`.
 - Shared contracts (API shapes, content schemas) live in `@adminforge/schemas` so the API, web and tests agree.
+- Tools (the CLI, the scheduler, live scripts) use the API only through its documented entry points
+  `@adminforge/api/tooling` and `@adminforge/api/tooling/scheduler` — never `@adminforge/api/src/...` (tests may, they
+  test internals).
 - Reuse before adding: search for an existing helper (`rg "export function <verb>" portal`) before writing one.
 
 ## Performance habits

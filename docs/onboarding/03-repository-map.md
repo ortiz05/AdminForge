@@ -16,7 +16,7 @@ layout predictable is what lets several engineers (and Claude Code) work in it w
 │   ├── packages/           shared libraries (below)
 │   ├── content/            declarative content: pages, dashboards, reports, playbooks, runbooks, schedules,
 │   │                       probes, connections, feeds, scripts, navigation.yaml
-│   ├── tools/cli/          the `adminforge` CLI (env check, provision, new, validate, test, fixtures, publish, audit)
+│   ├── tools/cli/          the `adminforge` CLI: env check, provision, new, validate, test, fixtures, publish, audit (its README is the command reference)
 │   └── deploy/             systemd units, Caddyfile example, dev Postgres compose file, backup and database-role
 │                           scripts (backup/, db/), host README
 ├── tests/                  ALL tests and test-only dependencies (09-testing.md)

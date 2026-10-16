@@ -94,8 +94,8 @@ internal names (env keys, endpoint paths, header names) in the UI.
 UI changes ship with Playwright screenshots in **steel and daylight** (and a narrow viewport when layout changes),
 committed as baselines under `tests/e2e/__screenshots__/`. Look at every image before you commit it — overflow, clipped
 text, alignment, contrast. Only update baselines your change intentionally altered (`--update-snapshots` on the spec
-you changed). New endpoints need handlers in the mock API (`tests/e2e/support/mock-api.ts`, `mock-automation.ts`) and
-payloads in `tests/e2e/fixtures/`. `pnpm build && pnpm test:e2e:prod` smoke-tests the production bundle. See
+you changed). New endpoints need handlers in the mock API (`tests/e2e/support/mock-api.ts`, or a feature mock such as
+`tests/support/web/mock-automation.ts`) and payloads in `tests/support/web/fixtures/`. `pnpm build && pnpm test:e2e:prod` smoke-tests the production bundle. See
 [Testing](09-testing.md#end-to-end-and-visual).
 
 ## Before you open the PR

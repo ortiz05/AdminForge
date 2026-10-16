@@ -161,8 +161,9 @@ standards](05-coding-standards.md#configuration)).
 
 ## Testing an endpoint
 
-`tests/api/` builds the app with memory stores and a mock session (`tests/api/helpers.ts`; feature harnesses such as
-`tests/api/schedules-helpers.ts`), then calls it with `app.inject`. Cover: the happy path, each refusal code, each role
+`tests/api/` builds the app with memory stores and a mock session (`tests/api/support/app.ts` — `buildTestApp`,
+`sessionFor`; the shared test people in `tests/api/support/people.ts`; feature harnesses such as
+`tests/api/schedules-helpers.ts` build on them), then calls it with `app.inject`. Cover: the happy path, each refusal code, each role
 (including "a Reader is refused"), concurrent-change conflicts, and the audit event. Postgres-specific behaviour
 (transactions, locks, migrations) goes in a `*-pg.test.ts` that skips without a database. See [Testing](09-testing.md).
 

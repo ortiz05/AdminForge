@@ -115,6 +115,28 @@ Closes the gaps found by comparing the build with the original plan (see the pla
 
 ### Changed
 
+- **Tooling reorganised so each tool can be maintained on its own** (plan: `docs/plans/2026-10-16-m365-e5-unlock-and-tooling.md`):
+  - one rule, one place: the tenant-value rule (`tenantValues` in `@adminforge/config`), the design-token patterns
+    (`tooling/lint/design-token-patterns.mjs`, used by ESLint, the guard and the after-edit hook), and runner-script
+    sha256 pins (now checked by `adminforge validate` for every definition);
+  - the `adminforge` CLI: one module per command, layered `shared → provision → content/env → commands` without
+    cycles, header comments throughout and a command reference in `portal/tools/cli/README.md`;
+  - tools use the API through `@adminforge/api/tooling` and `@adminforge/api/tooling/scheduler` instead of deep
+    imports; the scheduler's one-shot run is a reusable module (`@adminforge/scheduler/one-shot`);
+  - the runner's PowerShell module is split by concern (events, errors, inputs, connections, read-only policy) with an
+    unchanged export list; Pester and the module installer share one install routine;
+  - deploy defaults (container, user, database, port) in `portal/deploy/defaults.env`; `portal/deploy/install-units.sh`
+    installs the systemd units (replaces the `sed` step; refuses checkout paths that aren't safe in a unit file, and the
+    defaults file accepts only `AF_PG_*` keys);
+  - live tooling masks every printed message, shares preview/run/poll and credential helpers, and writes to
+    `AF_LIVE_OUT` (default `~/.cache/adminforge/live`; refused inside the repository, also through symlinks); `pnpm live:*`
+    aliases; the after-edit hook, bundle check and commit-message check also run when started through a symlinked path;
+  - test harness: one app/session builder and one people list for API tests (unique object ids), shared helpers under
+    `tests/support/` and `tests/lib/`, content fixtures out of code;
+  - READMEs for the CLI, `tooling/`, the runner, content scripts, the scheduler, hooks and test folders; tests for the
+    bundle check, the after-edit hook, the module installer, the runner health probe and commit-scope sync; CI and the
+    pre-commit hook use `pnpm guard` and `pnpm check:bundle`; the root `lint` script runs the lint package (it had
+    been linting nothing from that folder).
 - **Navigation sections start collapsed.** Every section of the left rail starts closed; a closed section still shows
   the page you're on and pages with something new (the unread-news count), and its heading says how many pages it
   hides. Opened sections are remembered per person (`navOpenSections` in `PUT /api/me/prefs`; the older

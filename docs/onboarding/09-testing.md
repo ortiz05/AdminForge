@@ -70,8 +70,9 @@ runner or a script, run it yourself and say so in the PR.
   the top of `portal/packages/connectors/src/fixtures.ts`. Resource Graph and Log Analytics fixtures usually match on a
   `// af:<id>` comment in the query's first line.
 - Add POST variants rather than overwriting a shared file another page depends on.
-- e2e payloads live in `tests/e2e/fixtures/`, the mock API in `tests/e2e/support/` (`mock-api.ts`,
-  `mock-automation.ts`). A new endpoint needs a mock handler there before its UI can be tested.
+- e2e payloads live in `tests/support/web/fixtures/`; the mock API is `tests/e2e/support/mock-api.ts` plus feature
+  mocks in `tests/support/web/` (`mock-automation.ts`, `mock-reports.ts`). A new endpoint needs a mock handler there
+  before its UI can be tested. Shared helpers are listed in `tests/README.md` → Shared helpers.
 
 ## End-to-end and visual
 

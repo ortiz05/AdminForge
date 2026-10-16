@@ -2,6 +2,10 @@
 
 Gaps found while building. Each item names where it lands. Items move to a phase plan when scheduled.
 
+Plan for the Microsoft 365 E5 features (Entra ID P1/P2, Intune, Defender for Endpoint) and the tooling layout:
+`docs/plans/2026-10-16-m365-e5-unlock-and-tooling.md`. Deferred tooling items from it: a shared helper module for Exchange content
+scripts (needs a read-only allow-list decision), one certificate/PEM implementation shared by the CLI and the API.
+
 ## Security (before write playbooks go live)
 
 - [x] **Secret outputs** (done): `secretOutputs` on playbook steps. Temporary passwords, Temporary Access Passes and new app secrets are shown once to the initiator over the live stream, never persisted (a redacted marker is stored), never in audit/export. Used by identity.reset-password, identity.issue-tap and identity.rotate-app-secret; identity.create-user issues its first credential through those child runs.
@@ -215,7 +219,7 @@ Found by the organization and security evaluation; the fixed findings are in CHA
 
 - [ ] Probe "not configured" state: a probe whose required env key is empty should report `skipped` (not `error`) — e.g. DNS probes without `AF_MAIL_DOMAIN`.
 - [ ] Run datasource `transform`s off the API event loop (worker_threads pool) with a larger budget (today 250 ms on the main thread — large tenants, e.g. >2–4k guests, time out). `identity.inactive-guests` and its Monday schedule `reports.inactive-guests-weekly` hit this first: Graph can't combine a `signInActivity` filter with `userType`, so the 90-day window is applied in the transform.
-- [x] Tenant-data guard and `forbiddenValues` (CLI fixture recording) exempt `https?://localhost.*`, which also lets `http://localhost.<domain>` through; anchor it to `localhost(:port)/?` in both places.
+- [x] Tenant-data guard and the CLI's fixture recording (now one rule: `tenantValues` in `@adminforge/config`) exempt `https?://localhost.*`, which also lets `http://localhost.<domain>` through; anchor it to `localhost(:port)/?` in both places.
 - [x] Enforce formatting: Prettier (repo formatted once) is checked in CI (`pnpm format:check`) and applied by the Claude Code after-edit hook; the pre-commit hook runs only the guard tests. `portal/content`, fixtures and `docs/plans` are excluded (`.prettierignore`).
 - [x] Read-mode allowlist: Graph `POST /directoryObjects/getByIds`; ARM `…/config/appsettings/list` with values stripped server-side (names only; the read is audited).
 - [ ] Example connection `connections/hr-sync`: env keys for base URL + audience.

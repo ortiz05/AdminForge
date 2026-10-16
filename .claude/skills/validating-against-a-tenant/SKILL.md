@@ -36,7 +36,10 @@ scripts in `pnpm adminforge provision test-identities --enable` / `--disable`.
   services never do). Don't put them back in `<env>.env` — `adminforge env check` flags that.
 - Never run `pnpm dev` against the services' database: the host services use the `host` overlay
   (`<env>.host.env`); dev uses the database in `<env>.env`.
-- In a browser test: `openPortalSession()` / `armWriteAccess()` from `tests/live/lib/portal-session.ts`.
+- In a browser test: `openPortalSession()` / `armWriteAccess()` from `tests/live/lib/portal-session.ts`; preview → run →
+  poll through `tests/live/lib/runs.ts`; credentials via `testUserCredentials(env)`. Print everything through
+  `tests/live/lib/mask.ts` (`mask`, `maskError`); files go to `AF_LIVE_OUT` (default `~/.cache/adminforge/live`, never
+  inside the repository).
 - Playbooks for real: `tests/live/scripts/run-playbook.ts <playbook> '<inputs>'` with placeholders instead of ids —
   `@user:`, `@group:`, `@mailbox:` (email address), `@dl:` (email address), `@team:` (group id), `@site:` (site id;
   `#webUrl` for the URL) followed by the `AF-Test-*` name. `check-placeholders.ts` checks they resolve.

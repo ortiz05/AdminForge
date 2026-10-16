@@ -5,6 +5,7 @@ import {
   doublePrecision,
   index,
   integer,
+  json,
   jsonb,
   pgTable,
   primaryKey,
@@ -131,7 +132,8 @@ export const definitions = pgTable(
     status: text('status').notNull(),
     /** git (published from portal/content) | portal (authored in the editor, `local.` namespace) */
     source: text('source').notNull(),
-    body: jsonb('body').notNull(),
+    /** json, not jsonb: the authored key order matters (form field order, datasource order) and jsonb sorts keys. */
+    body: json('body').notNull(),
     sha256: text('sha256').notNull(),
     authorOid: text('author_oid'),
     approverOid: text('approver_oid'),

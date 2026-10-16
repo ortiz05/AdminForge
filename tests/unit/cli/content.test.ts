@@ -301,6 +301,7 @@ describe('adminforge publish', () => {
               })),
               created: 1,
               unchanged: 1,
+              refreshed: 0,
               refused: 0,
               applied: !opts?.dryRun,
               notified: !opts?.dryRun,

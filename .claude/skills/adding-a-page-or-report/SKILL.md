@@ -60,7 +60,9 @@ Pages, dashboards and reports are YAML in `portal/content/{pages,dashboards,repo
      also list controls for products the tenant doesn't have. A new tenant has no snapshot for about 48 hours (show
      empty, not 0 %). `implementationCost` / `userImpact` come in mixed case or `Unknown`, and
      `averageComparativeScores[].averageScore` is a percentage.
-   - Later datasources may reference earlier ones as `ds.<name>` — in a datasource's `when`, request and runner
+   - Later datasources may reference earlier ones as `ds.<name>` (declare dependencies above the datasources that use
+     them — `validate` refuses references to later ones and loops; the runtime follows the references, never key order,
+     because published definitions come back from Postgres) — in a datasource's `when`, request and runner
      `parameters` the prefix is required (a bare `group.id` is undefined there, so the datasource is always skipped;
      `validate` refuses it). Widgets, headers and actions use bare names. A dependency some viewers can't read gets
      `optional: true`: its dependents then see `null` instead of failing (`dependency_failed`) — e.g. Graph's Teams APIs

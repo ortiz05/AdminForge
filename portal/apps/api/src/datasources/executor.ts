@@ -415,33 +415,48 @@ export class DatasourceRunner {
     return ds;
   }
 
+  /** `ds.<name>` references of one datasource (request, `when`, `transform`) that name another datasource of the page. */
+  private directRefs(page: LoadedPage, name: string): string[] {
+    const all = page.def.datasources ?? {};
+    const refs = new Set<string>();
+    for (const e of collectExpressions(this.datasource(page, name)))
+      for (const m of e.source.matchAll(DS_REF)) if (Object.hasOwn(all, m[1]!)) refs.add(m[1]!);
+    return [...refs];
+  }
+
   /**
-   * Datasources this one references as `ds.<name>` in its request, `when` or `transform`. Only datasources declared
-   * earlier may be referenced (they run first); anything else is a content error.
+   * Datasources this one references as `ds.<name>` in its request, `when` or `transform` (they run first).
+   *
+   * The order comes from the references, not from the order of the keys in `datasources`: published definitions are
+   * stored in Postgres, which doesn't keep object key order, so "declared above" can't be trusted at run time. Authors
+   * still declare dependencies first (`adminforge validate` checks that in the file); here a cycle — including a
+   * datasource that references itself — is the only content error.
    */
   dependencies(page: LoadedPage, name: string): string[] {
     const memoKey = `${page.kind}:${page.key}:${page.sha256}:${name}`;
     const hit = this.depCache.get(memoKey);
     if (hit) return hit;
-    const ds = this.datasource(page, name);
-    const order = Object.keys(page.def.datasources ?? {});
-    const self = order.indexOf(name);
-    const refs = new Set<string>();
-    for (const e of collectExpressions(ds)) for (const m of e.source.matchAll(DS_REF)) refs.add(m[1]!);
-    const deps: string[] = [];
-    for (const ref of refs) {
-      const at = order.indexOf(ref);
-      if (at < 0) continue;
-      if (at >= self)
+    // Depth-first walk from `name`: meeting a datasource that is still on the path is a cycle.
+    const path: string[] = [];
+    const done = new Set<string>();
+    const visit = (n: string) => {
+      if (done.has(n)) return;
+      const at = path.indexOf(n);
+      if (at >= 0)
         throw new AppError(
           500,
           'content_error',
-          `Datasource "${name}" references ds.${ref}, which is not declared before it.`,
-          { hint: 'Datasources can only use results of datasources declared above them.' },
+          `Datasources reference each other in a loop: ${[...path.slice(at), n].map((d) => `ds.${d}`).join(' → ')}.`,
+          { hint: 'A datasource can only use results of datasources that don’t depend on it.' },
         );
-      deps.push(ref);
-    }
-    deps.sort((a, b) => order.indexOf(a) - order.indexOf(b));
+      path.push(n);
+      for (const ref of this.directRefs(page, n)) visit(ref);
+      path.pop();
+      done.add(n);
+    };
+    visit(name);
+    const order = Object.keys(page.def.datasources ?? {});
+    const deps = this.directRefs(page, name).sort((a, b) => order.indexOf(a) - order.indexOf(b));
     this.depCache.set(memoKey, deps);
     return deps;
   }

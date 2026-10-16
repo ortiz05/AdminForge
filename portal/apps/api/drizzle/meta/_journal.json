@@ -57,6 +57,13 @@
       "when": 1792123582350,
       "tag": "0007_session_roles_checked",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1792181110056,
+      "tag": "0008_definitions_body_json",
+      "breakpoints": true
     }
   ]
 }

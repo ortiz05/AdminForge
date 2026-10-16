@@ -36,6 +36,11 @@ export interface PublishResult {
   created: number;
   unchanged: number;
   refused: number;
+  /**
+   * Unchanged versions whose stored body was rewritten in the authored key order (same content and sha256). Bodies
+   * published while the column was jsonb came back with sorted keys; the next publish restores their order.
+   */
+  refreshed: number;
   /** Nothing is written when anything is refused (publishing is all-or-nothing). */
   applied: boolean;
   notified: boolean;
@@ -163,9 +168,11 @@ export class DbDefinitionStore {
       created: items.filter((i) => i.action === 'create').length,
       unchanged: items.filter((i) => i.action === 'unchanged').length,
       refused: items.filter((i) => i.action === 'refused').length,
+      refreshed,
       applied,
       notified,
     });
+    let refreshed = 0;
     if (opts.dryRun || !entries.length) {
       const items = await this.plan(entries);
       return summary(items, false, false);
@@ -179,8 +186,17 @@ export class DbDefinitionStore {
       );
       if (items.some((i) => i.action === 'refused')) return summary(items, false, false);
       const now = this.now();
+      const restored = await this.restoreKeyOrder(
+        tx,
+        entries.filter((_, i) => items[i]!.action === 'unchanged'),
+      );
+      refreshed = restored.length;
       const creates = entries.filter((_, i) => items[i]!.action === 'create');
-      if (!creates.length) return summary(items, true, false);
+      if (!creates.length) {
+        if (!restored.length) return summary(items, true, false);
+        await tx.execute(sql`select pg_notify(${DEFINITIONS_CHANNEL}, ${notifyPayload(restored)})`);
+        return summary(items, true, true);
+      }
       await tx.insert(definitions).values(
         creates.map((e) => ({
           kind: e.def.kind,
@@ -196,10 +212,41 @@ export class DbDefinitionStore {
           publishedAt: now,
         })),
       );
-      const keys = [...new Set(creates.map((e) => recordKey(e.def.kind, e.def.id)))].sort();
+      const keys = [...new Set([...creates.map((e) => recordKey(e.def.kind, e.def.id)), ...restored])].sort();
       await tx.execute(sql`select pg_notify(${DEFINITIONS_CHANNEL}, ${notifyPayload(keys)})`);
       return summary(items, true, true);
     });
+  }
+
+  /**
+   * Rewrites the stored body of unchanged versions (same sha256) whose key order differs from the authored file, and
+   * returns their record keys. The content is identical; only the order of object keys is restored.
+   */
+  private async restoreKeyOrder(
+    tx: Pick<Db, 'select' | 'update'>,
+    unchanged: PublishEntry[],
+  ): Promise<string[]> {
+    if (!unchanged.length) return [];
+    const rows = await tx
+      .select({
+        id: definitions.id,
+        kind: definitions.kind,
+        key: definitions.key,
+        version: definitions.version,
+        body: definitions.body,
+      })
+      .from(definitions)
+      .where(inArray(definitions.key, [...new Set(unchanged.map((e) => e.def.id))]));
+    const restored = new Set<string>();
+    for (const e of unchanged) {
+      const row = rows.find(
+        (r) => r.kind === e.def.kind && r.key === e.def.id && r.version === e.def.version,
+      );
+      if (!row || JSON.stringify(row.body) === JSON.stringify(e.def)) continue;
+      await tx.update(definitions).set({ body: e.def }).where(eq(definitions.id, row.id));
+      restored.add(recordKey(e.def.kind, e.def.id));
+    }
+    return [...restored].sort();
   }
 
   /** Exact version (published or retired), or the latest version when it is not retired. */

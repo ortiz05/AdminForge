@@ -67,16 +67,16 @@ describe('datasource dependencies (ds.<name>)', () => {
     await t.app.close();
   });
 
-  it('references to later datasources are content errors; failed dependencies fail their dependents', async () => {
+  // Published definitions come back from Postgres (jsonb) with their keys reordered, so the runtime resolves any order;
+  // `adminforge validate` keeps authors declaring dependencies first (tests/unit/cli/datasource-order.test.ts).
+  it('a datasource declared after its dependent still resolves; failed dependencies fail their dependents', async () => {
     const t = await fixturesApp(env);
     const { cookie, csrf } = await mockLogin(t.app);
     const h = { cookie, 'x-adminforge-csrf': csrf };
     const many = DatasourceExecuteManyResponse.parse(
       (await post(t.app, '/api/datasources/execute-many', h, { page: 'deps.backwards' })).json(),
     );
-    expect(many.results.early).toEqual({
-      error: expect.objectContaining({ code: 'content_error', message: expect.stringContaining('ds.late') }),
-    });
+    expect(many.results.early).toMatchObject({ data: 1 });
     expect(many.results.late).toMatchObject({ data: 1 });
 
     const runner = t.app.ctx.datasources as DatasourceRunner;

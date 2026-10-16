@@ -125,6 +125,34 @@ export function bareDatasourceRefs(def: unknown): Array<{ path: string; name: st
   return out;
 }
 
+/**
+ * `ds.<name>` references to a datasource declared later in the file (or to itself). Authors list a datasource's
+ * dependencies above it, which also rules out loops. (The runtime doesn't rely on this order: published definitions are
+ * stored in Postgres, which doesn't keep key order, so the executor follows the references instead.)
+ */
+export function datasourceOrderProblems(def: unknown): Array<{ datasource: string; message: string }> {
+  const all = (def as { datasources?: Record<string, unknown> } | null)?.datasources;
+  if (!all || typeof all !== 'object') return [];
+  const names = Object.keys(all);
+  const out: Array<{ datasource: string; message: string }> = [];
+  for (const ds of names) {
+    const refs = new Set<string>();
+    for (const e of collectExpressions(all[ds]))
+      for (const m of e.source.matchAll(/\bds\.([A-Za-z_][A-Za-z0-9_]*)/g))
+        if (names.includes(m[1]!)) refs.add(m[1]!);
+    for (const ref of refs) {
+      if (ref === ds)
+        out.push({ datasource: ds, message: `datasource "${ds}" uses its own result (ds.${ds}).` });
+      else if (names.indexOf(ref) > names.indexOf(ds))
+        out.push({
+          datasource: ds,
+          message: `datasource "${ds}" uses ds.${ref}, which is declared after it — declare the datasources it uses above it.`,
+        });
+    }
+  }
+  return out;
+}
+
 /** Schema, references, expression compilation, injection lint (OData, KQL, paths), env keys, `$schema` paths. Pure (no network). */
 export async function checkContent(
   ctx: Pick<ContentCliContext, 'contentDir' | 'repoRoot'>,
@@ -145,6 +173,8 @@ export async function checkContent(
       errs.push(
         `${at(['datasources', b.datasource])} ${b.path}: uses datasource "${b.name}" without ds. — inside a datasource write ds.${b.name} (a bare name is undefined there).`,
       );
+    for (const o of datasourceOrderProblems(d.def))
+      errs.push(`${at(['datasources', o.datasource])} ${o.message}`);
     for (const e of collectExpressions(d.def))
       for (const m of e.source.matchAll(/\benv\.([A-Za-z0-9_]+)/g))
         if (!declaredEnv.has(m[1]!))
@@ -531,7 +561,7 @@ export async function publishContent(
     }
     const verb = opts.dryRun ? 'would publish' : result.applied ? 'published' : 'nothing published';
     ctx.out(
-      `${result.refused ? '✗' : '✓'} ${verb}: ${result.created} new version(s), ${result.unchanged} unchanged, ${result.refused} refused${opts.dryRun ? ' (dry run)' : ''}${result.notified ? '; NOTIFY definitions_changed sent' : ''}.`,
+      `${result.refused ? '✗' : '✓'} ${verb}: ${result.created} new version(s), ${result.unchanged} unchanged, ${result.refused} refused${result.refreshed ? `, ${result.refreshed} restored to their authored key order` : ''}${opts.dryRun ? ' (dry run)' : ''}${result.notified ? '; NOTIFY definitions_changed sent' : ''}.`,
     );
     return result;
   } finally {

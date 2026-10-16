@@ -281,6 +281,14 @@ Security review of the licensed build-out (2026-10-16) fixed:
 
 ### Fixed
 
+- **Published pages lost their authored key order.** Definitions were stored as Postgres `jsonb`, which sorts object
+  keys, so in production (`CONTENT_SOURCE=db`) 15 reports and pages whose datasources reference one declared
+  "above" them failed with a content error (e.g. orphaned role assignments, groups without owners, consent grants,
+  app registration risks, risky users review, Teams without owners), and 61 parameter forms and 64 playbook input forms
+  showed their fields in a different order than in development. The executor now orders datasources by their
+  `ds.<name>` references (a loop is the only content error); `adminforge validate` still requires dependencies to be
+  declared first; migration 0008 stores definitions as `json`, and `adminforge publish` restores the authored order of
+  bodies stored before (reported as "restored to their authored key order", without a new version).
 - Development hot reload could go quiet for minutes: Node's recursive file watcher on Linux stops reporting a file once
   it has been replaced by a rename (atomic saves, formatters, `sed -i`), and a content change made while a reload was
   running was dropped. The file source now also compares file stamps every 2 s and runs a reload again when one was

@@ -55,6 +55,7 @@ function workspace(opts: { git?: boolean } = {}) {
             })),
             created: entries.length - 1,
             unchanged: 1,
+            refreshed: 0,
             refused: 0,
             applied: !o?.dryRun,
             notified: !o?.dryRun,

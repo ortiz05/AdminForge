@@ -1,0 +1,9 @@
+{
+  "$fixture": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/rss+xml; charset=UTF-8"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><rss version=\"2.0\" xmlns:dc=\"http://purl.org/dc/elements/1.1/\"><channel><title>Intune Customer Success articles</title><link>https://techcommunity.microsoft.com/t5/intune-customer-success/bg-p/IntuneCustomerSuccess</link><description>Synthetic fixture feed (Example Org)</description><item><title>Example: Intune settings catalog adds example settings</title><link>https://techcommunity.microsoft.com/t5/intune-customer-success/example-intune-settings/ba-p/9000</link><guid>https://techcommunity.microsoft.com/t5/intune-customer-success/example-intune-settings/ba-p/9000</guid><pubDate>Wed, 07 Oct 2026 16:00:00 GMT</pubDate><dc:creator>Example Author</dc:creator><description><![CDATA[<p>Synthetic post: the Microsoft Intune settings catalog gains example settings for Example Org devices.</p>]]></description></item></channel></rss>"
+  }
+}

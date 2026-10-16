@@ -1,0 +1,25 @@
+$schema: ../../packages/schemas/generated/feed.schema.json
+kind: feed
+id: feeds.azure-governance-blog
+version: 1.0.0
+title: Azure Governance and Management Blog
+summary: >-
+  Announcements about Azure Policy, Resource Graph, Advisor, Cost Management and other governance tooling, posted on Microsoft Tech Community.
+owner: portal-admins
+tags: [news, azure, public, blog]
+publisher: Microsoft Tech Community
+homepage: https://techcommunity.microsoft.com/t5/azure-governance-and-management/bg-p/AzureGovernanceandManagementBlog
+collector:
+  kind: rss
+  url: https://techcommunity.microsoft.com/t5/s/gxcuf89792/rss/board?board.id=AzureGovernanceandManagementBlog
+  lookbackDays: 90
+keep: all
+defaultAreas: [azure]
+classify:
+  - match: { title: [retirement, retiring, retire, deprecation, deprecated, end of support] }
+    kind: retirement
+  - match: { text: [Azure Policy, Resource Graph, Azure Advisor, Cost Management, Azure Resource Manager, governance] }
+    tags: [governance]
+# The feed carries whole articles: only the headline and a short excerpt are kept, with the link back.
+pollMinutes: 360
+retentionDays: 180

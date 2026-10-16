@@ -1,0 +1,11 @@
+{
+  "$fixture": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/rss+xml; charset=utf-8",
+      "etag": "\"fixture-1\"",
+      "last-modified": "Wed, 15 Oct 2026 06:00:00 GMT"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"utf-8\"?><rss version=\"2.0\" xmlns:a10=\"http://www.w3.org/2005/Atom\"><channel><title>Microsoft Graph changelog</title><link>https://developer.microsoft.com/en-us/graph/changelog</link><description>Synthetic fixture feed (Example Org)</description><item><guid isPermaLink=\"false\">900701</guid><link>https://developer.microsoft.com/en-us/graph/changelog/?search=900701</link><category>v1.0</category><category>Identity and access</category><title>Identity and access: example property added to the signIn resource</title><description><![CDATA[<p>Added the <b>exampleProperty</b> property to the signIn resource. Synthetic fixture text.</p>]]></description><pubDate>Tue, 14 Oct 2026 00:00:00 Z</pubDate></item><item><guid isPermaLink=\"false\">900702</guid><link>https://developer.microsoft.com/en-us/graph/changelog/?search=900702</link><category>beta</category><category>Devices and apps</category><title>Devices and apps: example managedDevice action deprecated</title><description><![CDATA[<p>The example action on managedDevice is deprecated and will be removed.</p>]]></description><pubDate>Mon, 13 Oct 2026 00:00:00 Z</pubDate></item><item><guid isPermaLink=\"false\">900703</guid><link>https://developer.microsoft.com/en-us/graph/changelog/?search=900703</link><category>v1.0</category><category>Teamwork and communications</category><title>Teamwork and communications: example channel property</title><description><![CDATA[<p>Added an example property to the channel resource.</p>]]></description><pubDate>Thu, 09 Oct 2026 00:00:00 Z</pubDate></item></channel></rss>"
+  }
+}

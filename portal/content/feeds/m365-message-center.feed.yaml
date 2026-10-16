@@ -1,0 +1,55 @@
+$schema: ../../packages/schemas/generated/feed.schema.json
+kind: feed
+id: feeds.m365-message-center
+version: 1.0.0
+title: Microsoft 365 Message Center
+summary: >-
+  Your tenant's Message Center posts — planned changes, retirements, new features and actions Microsoft asks admins to
+  take — read with Microsoft Graph as the automation identity. Only posts about services AdminForge manages are kept.
+owner: portal-admins
+tags: [news, m365, tenant]
+publisher: Microsoft
+homepage: https://admin.cloud.microsoft/#/MessageCenter
+collector:
+  kind: messageCenter
+  lookbackDays: 60
+# Message Center reports each post's services; these are the ones AdminForge pages, reports and playbooks work with.
+# Kind (change, retirement, feature, advisory, info) and severity come from the post itself.
+keep: matched
+classify:
+  - match: { services: [Microsoft Entra, Microsoft Entra ID, Azure Active Directory, Identity Service] }
+    areas: [identity]
+    tags: [entra]
+  - match: { services: [Exchange Online, Exchange Online Protection] }
+    areas: [m365]
+    tags: [exchange]
+  - match: { services: [Microsoft Teams] }
+    areas: [m365]
+    tags: [teams]
+  - match: { services: [SharePoint Online] }
+    areas: [m365]
+    tags: [sharepoint]
+  - match: { services: [OneDrive for Business] }
+    areas: [m365]
+    tags: [onedrive]
+  - match: { services: [Microsoft 365 suite, Microsoft 365 admin center] }
+    areas: [m365]
+    tags: [m365-admin]
+  - match: { services: [Microsoft Intune, Windows Autopilot] }
+    areas: [endpoint]
+    tags: [intune]
+  - match:
+      services:
+        - Microsoft Defender XDR
+        - Microsoft 365 Defender
+        - Microsoft Defender for Office 365
+        - Microsoft Defender for Endpoint
+        - Microsoft Defender for Identity
+        - Microsoft Defender for Cloud Apps
+    areas: [security]
+    tags: [defender]
+pollMinutes: 60
+retentionDays: 180
+requires:
+  scopes:
+    graph: [ServiceMessage.Read.All]

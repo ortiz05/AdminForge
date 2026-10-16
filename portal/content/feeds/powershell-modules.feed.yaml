@@ -1,0 +1,34 @@
+$schema: ../../packages/schemas/generated/feed.schema.json
+kind: feed
+id: feeds.powershell-modules
+version: 1.0.0
+title: PowerShell module releases
+summary: >-
+  New stable versions, from the PowerShell Gallery, of the Microsoft modules AdminForge's PowerShell runner pins in
+  portal/apps/runner/modules.lock.json (Exchange Online, Microsoft Teams, Microsoft Graph authentication, Az.Accounts).
+  A release here is a prompt to read its notes and bump the pin deliberately.
+owner: portal-admins
+tags: [news, platform, public, powershell]
+publisher: Microsoft
+homepage: https://www.powershellgallery.com
+collector:
+  kind: psGallery
+  packages: [ExchangeOnlineManagement, MicrosoftTeams, Microsoft.Graph.Authentication, Az.Accounts]
+  prerelease: false
+  versions: 5
+keep: all
+defaultAreas: [platform]
+classify:
+  - match: { services: [ExchangeOnlineManagement] }
+    areas: [platform, m365]
+    tags: [exchange]
+  - match: { services: [MicrosoftTeams] }
+    areas: [platform, m365]
+    tags: [teams]
+  - match: { services: [Microsoft.Graph.Authentication] }
+    areas: [platform]
+    tags: [graph-api]
+  - match: { services: [Az.Accounts] }
+    areas: [platform, azure]
+pollMinutes: 360
+retentionDays: 365

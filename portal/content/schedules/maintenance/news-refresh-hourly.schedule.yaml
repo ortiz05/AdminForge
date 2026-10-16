@@ -1,0 +1,26 @@
+$schema: ../../../packages/schemas/generated/schedule.schema.json
+kind: schedule
+id: maintenance.news-refresh-hourly
+version: 1.0.0
+title: News and changes refresh
+summary: >-
+  Every hour at five past, collects the News and changes feeds — your tenant's Message Center, Microsoft 365 and Azure
+  service health, and Microsoft's public update, roadmap, security, blog, documentation and module-release feeds — as
+  the automation identity. Each feed is collected at most as often as its pollMinutes allows (large public feeds every
+  few hours), so most runs only touch the hourly feeds.
+owner: portal-admins
+tags: [maintenance, news]
+cron: "5 * * * *"
+timezone: UTC
+enabled: true
+identity: automation
+job:
+  kind: news
+retry: { max: 1, backoff: fixed, delay: 5m }
+timeoutSeconds: 900
+overlap: skip
+requires:
+  scopes:
+    # Message Center and Microsoft 365 service health (the tenant feeds declare these too).
+    graph: [ServiceMessage.Read.All, ServiceHealth.Read.All]
+  azureRoles: [Reader]

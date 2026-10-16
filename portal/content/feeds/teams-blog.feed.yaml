@@ -1,0 +1,25 @@
+$schema: ../../packages/schemas/generated/feed.schema.json
+kind: feed
+id: feeds.teams-blog
+version: 1.0.0
+title: Microsoft Teams Blog
+summary: >-
+  Feature announcements and monthly what's-new posts from the Microsoft Teams team, posted on Microsoft Tech Community.
+owner: portal-admins
+tags: [news, m365, public, blog]
+publisher: Microsoft Tech Community
+homepage: https://techcommunity.microsoft.com/t5/microsoft-teams-blog/bg-p/MicrosoftTeamsBlog
+collector:
+  kind: rss
+  url: https://techcommunity.microsoft.com/t5/s/gxcuf89792/rss/board?board.id=MicrosoftTeamsBlog
+  lookbackDays: 90
+keep: all
+defaultAreas: [m365]
+classify:
+  - match: { title: [retirement, retiring, retire, deprecation, deprecated, end of support] }
+    kind: retirement
+  - match: { text: [Microsoft Teams, Teams] }
+    tags: [teams]
+# The feed carries whole articles: only the headline and a short excerpt are kept, with the link back.
+pollMinutes: 360
+retentionDays: 180

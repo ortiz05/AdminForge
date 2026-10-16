@@ -1,0 +1,27 @@
+$schema: ../../packages/schemas/generated/feed.schema.json
+kind: feed
+id: feeds.learn-entra-whats-new
+version: 1.0.0
+title: Microsoft Entra what's new (Learn)
+summary: >-
+  Tells you when Microsoft updates the Microsoft Entra releases and announcements page on Microsoft Learn (release notes, deprecations and upcoming changes), with a link to read it.
+owner: portal-admins
+tags: [news, identity, public, docs]
+publisher: Microsoft Learn
+homepage: https://learn.microsoft.com/en-us/entra/fundamentals/whats-new
+collector:
+  kind: rss
+  # Microsoft Learn search RSS (the subscription route Learn documents): one item per matching page, dated by the page's
+  # last update. Only the what's-new page itself is kept, so each item says "this page changed" with a link to it.
+  url: https://learn.microsoft.com/api/search/rss?search=%22Release+notes+-+Azure+Active+Directory%22&locale=en-us
+  lookbackDays: 365
+  linkPrefixes:
+    - https://learn.microsoft.com/en-us/entra/fundamentals/whats-new
+keep: all
+defaultAreas: [identity]
+classify:
+  - match: { title: [Microsoft Entra] }
+    tags: [entra]
+pollMinutes: 1440
+quietAfterDays: 60
+retentionDays: 365

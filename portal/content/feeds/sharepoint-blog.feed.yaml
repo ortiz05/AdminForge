@@ -1,0 +1,28 @@
+$schema: ../../packages/schemas/generated/feed.schema.json
+kind: feed
+id: feeds.sharepoint-blog
+version: 1.0.0
+title: Microsoft SharePoint Blog
+summary: >-
+  Announcements from the SharePoint team, posted on Microsoft Tech Community. Posts about on-premises SharePoint Server releases are dropped; AdminForge manages SharePoint Online.
+owner: portal-admins
+tags: [news, m365, public, blog]
+publisher: Microsoft Tech Community
+homepage: https://techcommunity.microsoft.com/t5/microsoft-sharepoint-blog/bg-p/SPBlog
+collector:
+  kind: rss
+  url: https://techcommunity.microsoft.com/t5/s/gxcuf89792/rss/board?board.id=SPBlog
+  lookbackDays: 90
+keep: all
+defaultAreas: [m365]
+classify:
+  # On-premises SharePoint Server releases.
+  - match: { title: [SharePoint Server Subscription Edition, SharePoint Server 2019, SharePoint Server 2016] }
+    exclude: true
+  - match: { title: [retirement, retiring, retire, deprecation, deprecated, end of support] }
+    kind: retirement
+  - match: { text: [SharePoint Online, SharePoint] }
+    tags: [sharepoint]
+# The feed carries whole articles: only the headline and a short excerpt are kept, with the link back.
+pollMinutes: 360
+retentionDays: 180

@@ -1,0 +1,34 @@
+$schema: ../../packages/schemas/generated/feed.schema.json
+kind: feed
+id: feeds.learn-defender-xdr-whats-new
+version: 1.0.1
+title: Microsoft Defender what's new (Learn)
+summary: >-
+  Tells you when Microsoft updates the what's new pages for Defender XDR, Defender for Office 365, Defender for Endpoint, Defender for Identity and Defender for Cloud Apps on Microsoft Learn, with a link to read them.
+owner: portal-admins
+tags: [news, security, public, docs]
+publisher: Microsoft Learn
+homepage: https://learn.microsoft.com/en-us/defender-xdr/whats-new
+collector:
+  kind: rss
+  # Microsoft Learn search RSS (the subscription route Learn documents): one item per matching page, dated by the page's
+  # last update. Only the what's-new page itself is kept, so each item says "this page changed" with a link to it.
+  url: https://learn.microsoft.com/api/search/rss?search=%22What%27s+new+in+Microsoft+Defender+XDR%22&locale=en-us
+  lookbackDays: 365
+  linkPrefixes:
+    - https://learn.microsoft.com/en-us/defender-xdr/whats-new
+    - https://learn.microsoft.com/en-us/defender-office-365/defender-for-office-365-whats-new
+    - https://learn.microsoft.com/en-us/defender-endpoint/whats-new
+    - https://learn.microsoft.com/en-us/defender-for-identity/whats-new
+    - https://learn.microsoft.com/en-us/defender-cloud-apps/release-notes
+keep: all
+defaultAreas: [security]
+classify:
+  # Archived "what's new" pages also match the prefixes; only the current pages are news.
+  - match: { title: [archive] }
+    exclude: true
+  - match: { title: [Defender] }
+    tags: [defender]
+pollMinutes: 1440
+quietAfterDays: 60
+retentionDays: 365

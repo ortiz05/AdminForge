@@ -1,0 +1,9 @@
+{
+  "$fixture": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/rss+xml; charset=utf-8"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><rss version=\"2.0\" xmlns:dc=\"http://purl.org/dc/elements/1.1/\"><channel><title>Microsoft Learn - &quot;&quot;What's new in Microsoft Intune&quot;&quot;</title><link>https://learn.microsoft.com</link><description>Synthetic fixture feed (Example Org)</description><item><title>What's new in Microsoft Intune - Microsoft Intune</title><link>https://learn.microsoft.com/en-us/intune/whats-new/</link><guid>https://learn.microsoft.com/en-us/intune/whats-new/</guid><pubDate>Mon, 12 Oct 2026 22:34:00 GMT</pubDate><dc:creator>Example Author</dc:creator><description><![CDATA[Example: weekly Microsoft Intune release notes.]]></description></item><item><title>What's new in Windows Autopilot - Windows Autopilot</title><link>https://learn.microsoft.com/en-us/autopilot/whats-new</link><guid>https://learn.microsoft.com/en-us/autopilot/whats-new</guid><pubDate>Mon, 14 Sep 2026 17:34:00 GMT</pubDate><dc:creator>Example Author</dc:creator><description><![CDATA[Example: Windows Autopilot release notes.]]></description></item><item><title>Example question about an example setting - Microsoft Q&amp;A</title><link>https://learn.microsoft.com/en-us/answers/questions/900001/example-question</link><guid>https://learn.microsoft.com/en-us/answers/questions/900001/example-question</guid><pubDate>Mon, 05 Oct 2026 10:00:00 GMT</pubDate><dc:creator>Example Author</dc:creator><description><![CDATA[Synthetic search result that is not the page the feed follows.]]></description></item></channel></rss>"
+  }
+}

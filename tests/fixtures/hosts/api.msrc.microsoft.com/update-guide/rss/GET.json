@@ -1,0 +1,11 @@
+{
+  "$fixture": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/rss+xml; charset=utf-8",
+      "etag": "\"fixture-1\"",
+      "last-modified": "Wed, 15 Oct 2026 06:00:00 GMT"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"utf-8\"?><rss version=\"2.0\" xmlns:a10=\"http://www.w3.org/2005/Atom\"><channel><title>Security Update Guide</title><link>https://msrc.microsoft.com/update-guide</link><description>Synthetic fixture feed (Example Org)</description><item><guid isPermaLink=\"false\">CVE-2026-90001</guid><link>https://msrc.microsoft.com/update-guide/vulnerability/CVE-2026-90001</link><title>CVE-2026-90001 Example Microsoft Exchange Online Spoofing Vulnerability</title><description><![CDATA[Synthetic example advisory for a cloud service. No customer action required.]]></description><pubDate>Tue, 14 Oct 2026 07:00:00 Z</pubDate></item><item><guid isPermaLink=\"false\">CVE-2026-90002</guid><link>https://msrc.microsoft.com/update-guide/vulnerability/CVE-2026-90002</link><title>CVE-2026-90002 Example Microsoft Entra ID Elevation of Privilege Vulnerability</title><description><![CDATA[Synthetic example advisory for a cloud service.]]></description><pubDate>Mon, 13 Oct 2026 07:00:00 Z</pubDate></item><item><guid isPermaLink=\"false\">CVE-2026-90003</guid><link>https://msrc.microsoft.com/update-guide/vulnerability/CVE-2026-90003</link><title>CVE-2026-90003 Example Windows Graphics Component Vulnerability</title><description><![CDATA[Not a service AdminForge manages (the feed rules leave it out).]]></description><pubDate>Mon, 13 Oct 2026 07:00:00 Z</pubDate></item></channel></rss>"
+  }
+}

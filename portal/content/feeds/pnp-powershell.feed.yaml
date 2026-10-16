@@ -1,0 +1,26 @@
+$schema: ../../packages/schemas/generated/feed.schema.json
+kind: feed
+id: feeds.pnp-powershell
+version: 1.0.0
+title: PnP.PowerShell releases
+summary: >-
+  New stable PnP.PowerShell versions from the PowerShell Gallery — the SharePoint module AdminForge's runner pins. PnP
+  is an open-source community project (Microsoft 365 Patterns and Practices), not a Microsoft-supported product; its
+  nightly prereleases are skipped.
+owner: portal-admins
+tags: [news, platform, public, powershell]
+publisher: PnP community (Microsoft 365 Patterns and Practices)
+homepage: https://www.powershellgallery.com/packages/PnP.PowerShell
+collector:
+  kind: psGallery
+  packages: [PnP.PowerShell]
+  prerelease: false
+  versions: 5
+keep: all
+defaultAreas: [platform]
+classify:
+  - match: { services: [PnP.PowerShell] }
+    areas: [platform, m365]
+    tags: [sharepoint]
+pollMinutes: 360
+retentionDays: 365

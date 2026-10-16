@@ -1,0 +1,109 @@
+$schema: ../../packages/schemas/generated/feed.schema.json
+kind: feed
+id: feeds.azure-updates
+version: 1.0.0
+title: Azure Updates
+summary: >-
+  Microsoft's public Azure Updates feed — launches, previews and retirements — kept only for the Azure services
+  AdminForge works with (virtual machines, storage, Key Vault, databases, App Service and Functions, Monitor and Log
+  Analytics, Arc, governance, cost, backup, networking, Defender for Cloud and Microsoft Entra).
+owner: portal-admins
+tags: [news, azure, public]
+publisher: Microsoft
+homepage: https://azure.microsoft.com/updates
+collector:
+  kind: rss
+  url: https://www.microsoft.com/releasecommunications/api/v2/azure/rss
+  lookbackDays: 90
+keep: matched
+classify:
+  # Status categories (every item carries one).
+  - match: { categories: [Retirements] }
+    kind: retirement
+    status: Retiring
+  - match: { categories: [In preview] }
+    kind: preview
+    status: In preview
+  - match: { categories: [Launched] }
+    kind: feature
+    status: Launched
+  # Products AdminForge manages (exact product categories).
+  - match:
+      categories:
+        - Virtual Machines
+        - Linux Virtual Machines
+        - Windows Virtual Machines
+        - Virtual Machine Scale Sets
+        - Azure Disk Storage
+        - Azure Virtual Machines
+    areas: [azure]
+    tags: [vms]
+  - match: { categories: [Storage, Azure Blob Storage, Azure Files, Azure Storage, Azure Data Lake Storage] }
+    areas: [azure]
+    tags: [storage]
+  - match: { categories: [Key Vault, Azure Key Vault] }
+    areas: [azure]
+    tags: [key-vault]
+  - match:
+      categories:
+        - Azure SQL Database
+        - Azure SQL Managed Instance
+        - SQL Server on Azure Virtual Machines
+        - Azure Database for PostgreSQL
+        - Azure Database for MySQL
+        - Azure Cosmos DB
+    areas: [azure]
+    tags: [databases]
+  - match: { categories: [App Service, Azure App Service] }
+    areas: [azure]
+    tags: [app-service]
+  - match: { categories: [Azure Functions] }
+    areas: [azure]
+    tags: [functions]
+  - match: { categories: [Azure Monitor, Application Insights, Log Analytics, Azure Monitor Logs] }
+    areas: [azure]
+    tags: [monitor]
+  - match: { categories: [Azure Arc, Azure Arc-enabled servers, Azure Arc-enabled Kubernetes] }
+    areas: [azure]
+    tags: [arc]
+  - match:
+      categories:
+        - Azure Policy
+        - Azure Resource Graph
+        - Azure Resource Manager
+        - Azure Advisor
+        - Azure Lighthouse
+        - Azure role-based access control
+        - Automation
+        - Azure Automation
+    areas: [azure]
+    tags: [governance]
+  - match: { categories: [Cost Management, Microsoft Cost Management, Azure Cost Management] }
+    areas: [azure]
+    tags: [cost-management]
+  - match: { categories: [Azure Backup, Azure Site Recovery] }
+    areas: [azure]
+    tags: [backup]
+  - match:
+      categories:
+        - Virtual Network
+        - Azure Firewall
+        - VPN Gateway
+        - Application Gateway
+        - Azure Bastion
+        - Azure DNS
+        - Azure NAT Gateway
+        - Azure Private Link
+        - Load Balancer
+        - Azure Load Balancer
+    areas: [azure]
+    tags: [networking]
+  - match: { categories: [Microsoft Defender for Cloud, Microsoft Sentinel] }
+    areas: [azure, security]
+    tags: [defender]
+  - match: { categories: [Microsoft Entra ID, Azure Active Directory] }
+    areas: [identity]
+    tags: [entra]
+# Large feed without conditional requests: Microsoft asks feed readers to cache for 25 minutes; hourly is polite.
+pollMinutes: 60
+retentionDays: 180

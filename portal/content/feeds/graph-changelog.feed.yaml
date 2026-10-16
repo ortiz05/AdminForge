@@ -1,0 +1,52 @@
+$schema: ../../packages/schemas/generated/feed.schema.json
+kind: feed
+id: feeds.graph-changelog
+version: 1.0.0
+title: Microsoft Graph changelog
+summary: >-
+  Microsoft's public changelog of Microsoft Graph API changes (v1.0 and beta), grouped by workload — the API every
+  AdminForge page, report and playbook calls. Items have no link of their own, so the changelog page is cited. Microsoft
+  has posted little here recently; the Learn "What's new in Microsoft Graph" feed is the fresher signal.
+owner: portal-admins
+tags: [news, platform, public]
+publisher: Microsoft
+homepage: https://developer.microsoft.com/graph/changelog
+collector:
+  kind: rss
+  # The whole changelog (about 4.5 MB, back to 2019; gzip is honoured): newest first, last 120 days.
+  url: https://developer.microsoft.com/en-us/graph/changelog/rss
+  lookbackDays: 120
+  maxItems: 300
+keep: all
+defaultAreas: [platform]
+classify:
+  # Every item is a Graph API change; the item title names the workload.
+  - match: { categories: [v1.0, beta] }
+    areas: [platform]
+    tags: [graph-api]
+  - match: { categories: [beta] }
+    tags: [graph-beta]
+  - match:
+      title: [Identity and access, Users, Groups, Applications, Application, Agents, Tenants, Directory management]
+    areas: [identity]
+  - match:
+      title:
+        - Teamwork and communications
+        - Mail
+        - Calendar
+        - Calendars
+        - Files
+        - Sites and lists
+        - Cloud communications
+        - Mailbox import and export
+        - Reports
+    areas: [m365]
+  - match: { title: [Device and app management, Devices and apps] }
+    areas: [endpoint]
+  - match: { title: [Security, Compliance, eDiscovery] }
+    areas: [security]
+  - match: { text: [deprecated, deprecation, retire, retirement, removed] }
+    kind: retirement
+pollMinutes: 1440
+quietAfterDays: 45
+retentionDays: 365

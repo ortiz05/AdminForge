@@ -1,0 +1,9 @@
+{
+  "$fixture": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/rss+xml; charset=UTF-8"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><rss version=\"2.0\" xmlns:dc=\"http://purl.org/dc/elements/1.1/\"><channel><title>Microsoft Entra Blog articles</title><link>https://techcommunity.microsoft.com/t5/microsoft-entra-blog/bg-p/microsoft-entra-blog</link><description>Synthetic fixture feed (Example Org)</description><item><title>Example: What's new in Microsoft Entra this month</title><link>https://techcommunity.microsoft.com/t5/microsoft-entra-blog/example-whats-new-in-entra/ba-p/9000</link><guid>https://techcommunity.microsoft.com/t5/microsoft-entra-blog/example-whats-new-in-entra/ba-p/9000</guid><pubDate>Mon, 12 Oct 2026 16:00:00 GMT</pubDate><dc:creator>Example Author</dc:creator><description><![CDATA[<p>Synthetic round-up of <b>Microsoft Entra</b> changes for Example Org fixtures: new sign-in log fields and a preview of a policy setting.</p>]]></description></item><item><title>Example: Retirement of an example Entra sign-in setting</title><link>https://techcommunity.microsoft.com/t5/microsoft-entra-blog/example-entra-retirement/ba-p/9001</link><guid>https://techcommunity.microsoft.com/t5/microsoft-entra-blog/example-entra-retirement/ba-p/9001</guid><pubDate>Thu, 08 Oct 2026 16:00:00 GMT</pubDate><dc:creator>Example Author</dc:creator><description><![CDATA[<p>Synthetic notice: an example setting in Microsoft Entra retires next year. Plan the move.</p>]]></description></item></channel></rss>"
+  }
+}

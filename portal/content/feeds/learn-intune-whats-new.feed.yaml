@@ -1,0 +1,28 @@
+$schema: ../../packages/schemas/generated/feed.schema.json
+kind: feed
+id: feeds.learn-intune-whats-new
+version: 1.0.0
+title: Microsoft Intune what's new (Learn)
+summary: >-
+  Tells you when Microsoft updates the Intune what's new and in development pages, or the Windows Autopilot what's new page, on Microsoft Learn, with a link to read them.
+owner: portal-admins
+tags: [news, endpoint, public, docs]
+publisher: Microsoft Learn
+homepage: https://learn.microsoft.com/en-us/intune/whats-new/
+collector:
+  kind: rss
+  # Microsoft Learn search RSS (the subscription route Learn documents): one item per matching page, dated by the page's
+  # last update. Only the what's-new page itself is kept, so each item says "this page changed" with a link to it.
+  url: https://learn.microsoft.com/api/search/rss?search=%22What%27s+new+in+Microsoft+Intune%22&locale=en-us
+  lookbackDays: 365
+  linkPrefixes:
+    - https://learn.microsoft.com/en-us/intune/whats-new/
+    - https://learn.microsoft.com/en-us/autopilot/whats-new
+keep: all
+defaultAreas: [endpoint]
+classify:
+  - match: { title: [Intune, Autopilot] }
+    tags: [intune]
+pollMinutes: 1440
+quietAfterDays: 60
+retentionDays: 365

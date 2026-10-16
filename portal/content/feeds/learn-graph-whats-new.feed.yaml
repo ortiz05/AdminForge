@@ -1,0 +1,27 @@
+$schema: ../../packages/schemas/generated/feed.schema.json
+kind: feed
+id: feeds.learn-graph-whats-new
+version: 1.0.0
+title: Microsoft Graph what's new (Learn)
+summary: >-
+  Tells you when Microsoft updates the What's new in Microsoft Graph page on Microsoft Learn — the API changes AdminForge's pages and playbooks are built on — with a link to read it.
+owner: portal-admins
+tags: [news, platform, public, docs]
+publisher: Microsoft Learn
+homepage: https://learn.microsoft.com/en-us/graph/whats-new-overview
+collector:
+  kind: rss
+  # Microsoft Learn search RSS (the subscription route Learn documents): one item per matching page, dated by the page's
+  # last update. Only the what's-new page itself is kept, so each item says "this page changed" with a link to it.
+  url: https://learn.microsoft.com/api/search/rss?search=%22What%27s+new+in+Microsoft+Graph%22&locale=en-us
+  lookbackDays: 365
+  linkPrefixes:
+    - https://learn.microsoft.com/en-us/graph/whats-new-overview
+keep: all
+defaultAreas: [platform]
+classify:
+  - match: { title: [Microsoft Graph] }
+    tags: [graph-api]
+pollMinutes: 1440
+quietAfterDays: 60
+retentionDays: 365

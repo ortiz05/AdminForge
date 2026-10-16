@@ -1,0 +1,11 @@
+{
+  "$fixture": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/rss+xml; charset=utf-8",
+      "etag": "\"fixture-1\"",
+      "last-modified": "Wed, 15 Oct 2026 06:00:00 GMT"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"utf-8\"?><rss version=\"2.0\" xmlns:a10=\"http://www.w3.org/2005/Atom\"><channel><title>Microsoft 365 Roadmap</title><link>https://www.microsoft.com/microsoft-365/roadmap</link><description>Synthetic fixture feed (Example Org)</description><item><guid isPermaLink=\"false\">900601</guid><link>https://www.microsoft.com/microsoft-365/roadmap?id=900601</link><category>Microsoft Teams</category><category>Rolling out</category><category>Web</category><category>Desktop</category><category>General Availability</category><title>Microsoft Teams: Example meeting recap for external participants</title><description><![CDATA[Example roadmap item for the Teams meeting recap. Synthetic fixture text.]]></description><pubDate>Tue, 14 Oct 2026 23:00:00 Z</pubDate></item><item><guid isPermaLink=\"false\">900602</guid><link>https://www.microsoft.com/microsoft-365/roadmap?id=900602</link><category>Exchange</category><category>In development</category><category>Worldwide (Standard Multi-Tenant)</category><title>Exchange Online: Example mailbox auditing improvement</title><description><![CDATA[Example roadmap item for Exchange Online. Synthetic fixture text.]]></description><pubDate>Mon, 13 Oct 2026 23:00:00 Z</pubDate></item><item><guid isPermaLink=\"false\">900603</guid><link>https://www.microsoft.com/microsoft-365/roadmap?id=900603</link><category>Microsoft Intune</category><category>Launched</category><title>Microsoft Intune: Example device query for Windows</title><description><![CDATA[Example roadmap item for Intune. Synthetic fixture text.]]></description><pubDate>Sat, 11 Oct 2026 23:00:00 Z</pubDate></item><item><guid isPermaLink=\"false\">900604</guid><link>https://www.microsoft.com/microsoft-365/roadmap?id=900604</link><category>Microsoft Viva</category><category>In development</category><title>Microsoft Viva: Example engagement update</title><description><![CDATA[Not a service AdminForge manages (the feed rules leave it out).]]></description><pubDate>Fri, 10 Oct 2026 23:00:00 Z</pubDate></item></channel></rss>"
+  }
+}

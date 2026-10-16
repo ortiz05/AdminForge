@@ -1,0 +1,66 @@
+$schema: ../../packages/schemas/generated/feed.schema.json
+kind: feed
+id: feeds.m365-roadmap
+version: 1.0.0
+title: Microsoft 365 Roadmap
+summary: >-
+  Microsoft's public Microsoft 365 Roadmap — features in development, rolling out and launched — kept only for the
+  services AdminForge manages: Microsoft Entra, Exchange, Teams, SharePoint, OneDrive, Intune, Defender and the
+  Microsoft 365 admin center. Cancelled features are dropped.
+owner: portal-admins
+tags: [news, m365, public]
+publisher: Microsoft
+homepage: https://www.microsoft.com/microsoft-365/roadmap
+collector:
+  kind: rss
+  url: https://www.microsoft.com/releasecommunications/api/v2/m365/rss
+  # The feed holds the whole active roadmap (about 2 MB); keep what changed in the last 60 days.
+  lookbackDays: 60
+  maxItems: 400
+keep: matched
+classify:
+  - match: { categories: [Cancelled] }
+    exclude: true
+  # Status (every roadmap item is a feature on its way: the status says where it is).
+  - match: { categories: [Rolling out] }
+    kind: feature
+    status: Rolling out
+  - match: { categories: [In development] }
+    kind: feature
+    status: In development
+  - match: { categories: [Launched] }
+    kind: feature
+    status: Launched
+  # Products AdminForge manages.
+  - match: { categories: [Microsoft Entra] }
+    areas: [identity]
+    tags: [entra]
+  - match: { categories: [Exchange] }
+    areas: [m365]
+    tags: [exchange]
+  - match: { categories: [Microsoft Teams] }
+    areas: [m365]
+    tags: [teams]
+  - match: { categories: [SharePoint] }
+    areas: [m365]
+    tags: [sharepoint]
+  - match: { categories: [OneDrive] }
+    areas: [m365]
+    tags: [onedrive]
+  - match: { categories: [Microsoft 365 admin center] }
+    areas: [m365]
+    tags: [m365-admin]
+  - match: { categories: [Microsoft Intune] }
+    areas: [endpoint]
+    tags: [intune]
+  - match:
+      categories:
+        - Microsoft Defender for Office 365
+        - Microsoft Defender
+        - Microsoft 365 Defender
+        - Microsoft Defender XDR
+    areas: [security]
+    tags: [defender]
+# 2 MB without conditional requests: every 6 hours is enough for a roadmap.
+pollMinutes: 360
+retentionDays: 180

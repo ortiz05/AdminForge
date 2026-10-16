@@ -1,0 +1,99 @@
+$schema: ../../packages/schemas/generated/feed.schema.json
+kind: feed
+id: feeds.msrc-security
+version: 1.0.0
+title: MSRC Security Update Guide
+summary: >-
+  The Microsoft Security Response Center's Security Update Guide feed, kept only for CVEs and advisories in the cloud
+  services and tools AdminForge manages (Microsoft Entra, Exchange Online, SharePoint Online, Teams, OneDrive, Intune,
+  Defender, the Azure services it reports on, PowerShell and Microsoft Graph). On-premises look-alikes are dropped.
+owner: portal-admins
+tags: [news, security, public]
+publisher: Microsoft Security Response Center
+homepage: https://msrc.microsoft.com/update-guide
+collector:
+  kind: rss
+  url: https://api.msrc.microsoft.com/update-guide/rss
+  lookbackDays: 60
+keep: matched
+classify:
+  # On-premises products and unrelated components whose names look like a managed service.
+  - match:
+      title:
+        - Exchange Server
+        - SharePoint Server
+        - Microsoft Office SharePoint
+        - Internet Key Exchange
+        - Windows PowerShell
+        - Windows Defender
+        - Dynamics 365 Business Central
+        - Dynamics 365 On-Premises
+    exclude: true
+  - match:
+      title: [Microsoft Entra ID, Entra ID, Microsoft Entra, Azure Active Directory, Microsoft Entra Connect]
+    kind: security
+    areas: [identity, security]
+    tags: [entra]
+  - match: { title: [Exchange Online] }
+    kind: security
+    areas: [m365, security]
+    tags: [exchange]
+  - match: { title: [SharePoint Online] }
+    kind: security
+    areas: [m365, security]
+    tags: [sharepoint]
+  - match: { title: [Microsoft Teams] }
+    kind: security
+    areas: [m365, security]
+    tags: [teams]
+  - match: { title: [Microsoft OneDrive, OneDrive for Business] }
+    kind: security
+    areas: [m365, security]
+    tags: [onedrive]
+  - match: { title: [Microsoft 365 Admin Center] }
+    kind: security
+    areas: [m365, security]
+    tags: [m365-admin]
+  - match: { title: [Microsoft Intune, Intune] }
+    kind: security
+    areas: [endpoint, security]
+    tags: [intune]
+  - match: { title: [Microsoft Defender, Defender for Endpoint, Defender for Cloud, Microsoft Sentinel] }
+    kind: security
+    areas: [security]
+    tags: [defender]
+  - match:
+      title:
+        - Azure Arc
+        - Azure Connected Machine Agent
+        - Azure Monitor
+        - Azure Monitor Agent
+        - Log Analytics
+        - Azure Key Vault
+        - Azure SQL Database
+        - Azure SQL Managed Instance
+        - Azure Database for PostgreSQL
+        - Azure Database for MySQL
+        - Azure Cosmos DB
+        - Azure App Service
+        - Azure Functions
+        - Azure Storage
+        - Azure Virtual Machines
+        - Azure Resource Manager
+        - Azure Resource Graph
+        - Azure Policy
+        - Azure Backup
+        - Azure Portal
+    kind: security
+    areas: [azure, security]
+  - match: { title: [PowerShell] }
+    kind: security
+    areas: [platform, security]
+    tags: [powershell]
+  - match: { title: [Microsoft Graph] }
+    kind: security
+    areas: [platform, security]
+    tags: [graph-api]
+# Sends ETag and Last-Modified: an unchanged feed costs a 304 with no body.
+pollMinutes: 60
+retentionDays: 180

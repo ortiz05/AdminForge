@@ -1,0 +1,25 @@
+$schema: ../../packages/schemas/generated/feed.schema.json
+kind: feed
+id: feeds.defender-xdr-blog
+version: 1.0.0
+title: Microsoft Defender XDR Blog
+summary: >-
+  Announcements from the Microsoft Defender XDR team (incidents, alerts, hunting and the Defender portal), posted on Microsoft Tech Community.
+owner: portal-admins
+tags: [news, security, public, blog]
+publisher: Microsoft Tech Community
+homepage: https://techcommunity.microsoft.com/t5/microsoft-defender-xdr-blog/bg-p/MicrosoftThreatProtectionBlog
+collector:
+  kind: rss
+  url: https://techcommunity.microsoft.com/t5/s/gxcuf89792/rss/board?board.id=MicrosoftThreatProtectionBlog
+  lookbackDays: 90
+keep: all
+defaultAreas: [security]
+classify:
+  - match: { title: [retirement, retiring, retire, deprecation, deprecated, end of support] }
+    kind: retirement
+  - match: { text: [Microsoft Defender, Defender XDR, Defender for Endpoint, Defender for Office 365] }
+    tags: [defender]
+# The feed carries whole articles: only the headline and a short excerpt are kept, with the link back.
+pollMinutes: 360
+retentionDays: 180

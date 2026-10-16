@@ -1,0 +1,9 @@
+{
+  "$fixture": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/rss+xml; charset=utf-8"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><rss version=\"2.0\" xmlns:dc=\"http://purl.org/dc/elements/1.1/\"><channel><title>Microsoft Learn - &quot;&quot;What's new in Microsoft Graph&quot;&quot;</title><link>https://learn.microsoft.com</link><description>Synthetic fixture feed (Example Org)</description><item><title>What's new in Microsoft Graph - Microsoft Graph</title><link>https://learn.microsoft.com/en-us/graph/whats-new-overview</link><guid>https://learn.microsoft.com/en-us/graph/whats-new-overview</guid><pubDate>Thu, 15 Oct 2026 00:41:00 GMT</pubDate><dc:creator>Example Author</dc:creator><description><![CDATA[Example: highlights of Microsoft Graph API changes.]]></description></item><item><title>Microsoft Graph overview - Microsoft Graph</title><link>https://learn.microsoft.com/en-us/graph/overview</link><guid>https://learn.microsoft.com/en-us/graph/overview</guid><pubDate>Thu, 16 Apr 2026 00:37:00 GMT</pubDate><dc:creator>Example Author</dc:creator><description><![CDATA[Example: an overview page the feed does not follow.]]></description></item></channel></rss>"
+  }
+}

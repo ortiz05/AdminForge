@@ -1,0 +1,56 @@
+$schema: ../../packages/schemas/generated/feed.schema.json
+kind: feed
+id: feeds.azure-service-health
+version: 1.0.0
+title: Azure Service Health
+summary: >-
+  Service issues, planned maintenance, health and security advisories and retirements Azure posts for the subscriptions
+  the automation identity can read, from Azure Resource Graph (servicehealthresources). Security advisory details need
+  an elevated Azure role; the title and summary are shown with Reader.
+owner: portal-admins
+tags: [news, azure, tenant, health]
+publisher: Microsoft
+homepage: https://portal.azure.com/#blade/Microsoft_Azure_Health/AzureHealthBrowseBlade/serviceIssues
+collector:
+  kind: azureServiceHealth
+  lookbackDays: 30
+keep: all
+defaultAreas: [azure]
+classify:
+  - match: { services: [Microsoft Entra ID, Azure Active Directory, Azure Active Directory B2C] }
+    areas: [identity]
+    tags: [entra]
+  - match: { services: [Microsoft Defender for Cloud, Microsoft Sentinel] }
+    areas: [azure, security]
+    tags: [defender]
+  - match: { services: [Virtual Machines, Virtual Machine Scale Sets, Azure Disk Storage], title: [Virtual Machines] }
+    tags: [vms]
+  - match: { services: [Storage, Azure Blob Storage, Azure Files, Azure Storage] }
+    tags: [storage]
+  - match: { services: [Key Vault, Azure Key Vault] }
+    tags: [key-vault]
+  - match: { services: [Azure Monitor, Log Analytics, Application Insights, 'Alerts & Metrics'] }
+    tags: [monitor]
+  - match: { services: [Functions, Azure Functions] }
+    tags: [functions]
+  - match: { services: [App Service, Azure App Service, App Service (Linux), 'App Service \ Web Apps'] }
+    tags: [app-service]
+  - match:
+      services:
+        - SQL Database
+        - Azure SQL Database
+        - Azure SQL Managed Instance
+        - Azure Database for PostgreSQL flexible servers
+        - Azure Database for MySQL flexible servers
+        - Azure Cosmos DB
+    tags: [databases]
+  - match: { services: [Azure Arc enabled servers, Azure Arc-enabled servers, Azure Arc enabled Kubernetes, Azure Arc] }
+    tags: [arc]
+  - match: { services: [Azure Resource Manager, Azure Resource Graph, Azure Policy, Azure Advisor] }
+    tags: [governance]
+  - match: { services: [Cost Management, Microsoft Cost Management] }
+    tags: [cost-management]
+pollMinutes: 60
+retentionDays: 90
+requires:
+  azureRoles: [Reader]

@@ -1,0 +1,9 @@
+{
+  "$fixture": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/rss+xml; charset=UTF-8"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><rss version=\"2.0\" xmlns:dc=\"http://purl.org/dc/elements/1.1/\"><channel><title>Microsoft Defender XDR Blog articles</title><link>https://techcommunity.microsoft.com/t5/microsoft-defender-xdr-blog/bg-p/MicrosoftThreatProtectionBlog</link><description>Synthetic fixture feed (Example Org)</description><item><title>Example: Incident queue filters in Microsoft Defender</title><link>https://techcommunity.microsoft.com/t5/microsoft-defender-xdr-blog/example-defender-filters/ba-p/9000</link><guid>https://techcommunity.microsoft.com/t5/microsoft-defender-xdr-blog/example-defender-filters/ba-p/9000</guid><pubDate>Wed, 23 Sep 2026 16:00:00 GMT</pubDate><dc:creator>Example Author</dc:creator><description><![CDATA[<p>Synthetic post about Microsoft Defender XDR incident filters.</p>]]></description></item></channel></rss>"
+  }
+}

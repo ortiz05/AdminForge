@@ -1,0 +1,9 @@
+{
+  "$fixture": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/rss+xml; charset=UTF-8"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><rss version=\"2.0\" xmlns:dc=\"http://purl.org/dc/elements/1.1/\"><channel><title>Microsoft SharePoint Blog articles</title><link>https://techcommunity.microsoft.com/t5/microsoft-sharepoint-blog/bg-p/SPBlog</link><description>Synthetic fixture feed (Example Org)</description><item><title>Example: SharePoint site sharing report improvements</title><link>https://techcommunity.microsoft.com/t5/microsoft-sharepoint-blog/example-sp-sharing/ba-p/9000</link><guid>https://techcommunity.microsoft.com/t5/microsoft-sharepoint-blog/example-sp-sharing/ba-p/9000</guid><pubDate>Wed, 14 Oct 2026 16:00:00 GMT</pubDate><dc:creator>Example Author</dc:creator><description><![CDATA[<p>Synthetic post about SharePoint Online sharing reports.</p>]]></description></item></channel></rss>"
+  }
+}

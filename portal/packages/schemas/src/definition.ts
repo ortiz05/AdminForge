@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { Kind } from './common';
 import { Connection } from './connection';
+import { Feed } from './news';
 import { Navigation } from './navigation';
 import { Dashboard, Page, Report } from './page';
 import { Playbook, Runbook } from './playbook';
@@ -18,6 +19,7 @@ export const DEFINITION_SCHEMAS = {
   probe: Probe,
   connection: Connection,
   navigation: Navigation,
+  feed: Feed,
 } as const satisfies Record<Kind, z.ZodType>;
 
 /** Any content definition, discriminated on `kind`. */
@@ -31,6 +33,7 @@ export const Definition = z.discriminatedUnion('kind', [
   Probe,
   Connection,
   Navigation,
+  Feed,
 ]);
 export type Definition = z.infer<typeof Definition>;
 export type DefinitionOf<K extends Kind> = Extract<Definition, { kind: K }>;

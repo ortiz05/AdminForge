@@ -1,0 +1,9 @@
+{
+  "$fixture": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/atom+xml;type=feed;charset=utf-8"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"utf-8\"?><feed xml:base=\"https://www.powershellgallery.com/api/v2\" xmlns=\"http://www.w3.org/2005/Atom\" xmlns:d=\"http://schemas.microsoft.com/ado/2007/08/dataservices\" xmlns:m=\"http://schemas.microsoft.com/ado/2007/08/dataservices/metadata\"><id>https://www.powershellgallery.com/api/v2/FindPackagesById</id><title type=\"text\">FindPackagesById</title><entry><id>https://www.powershellgallery.com/api/v2/Packages(Id='Microsoft.Graph.Authentication',Version='2.41.2')</id><title type=\"text\">Microsoft.Graph.Authentication</title><updated>2026-10-14T18:00:00Z</updated><m:properties><d:Id>Microsoft.Graph.Authentication</d:Id><d:Version>2.41.2</d:Version><d:Published m:type=\"Edm.DateTime\">2026-10-14T18:00:00</d:Published><d:IsPrerelease m:type=\"Edm.Boolean\">false</d:IsPrerelease><d:ReleaseNotes>Example: synthetic release notes.</d:ReleaseNotes><d:GalleryDetailsUrl>https://www.powershellgallery.com/packages/Microsoft.Graph.Authentication/2.41.2</d:GalleryDetailsUrl></m:properties></entry><entry><id>https://www.powershellgallery.com/api/v2/Packages(Id='Microsoft.Graph.Authentication',Version='2.41.1')</id><title type=\"text\">Microsoft.Graph.Authentication</title><updated>2026-09-30T18:00:00Z</updated><m:properties><d:Id>Microsoft.Graph.Authentication</d:Id><d:Version>2.41.1</d:Version><d:Published m:type=\"Edm.DateTime\">2026-09-30T18:00:00</d:Published><d:IsPrerelease m:type=\"Edm.Boolean\">false</d:IsPrerelease><d:ReleaseNotes></d:ReleaseNotes><d:GalleryDetailsUrl>https://www.powershellgallery.com/packages/Microsoft.Graph.Authentication/2.41.1</d:GalleryDetailsUrl></m:properties></entry></feed>"
+  }
+}

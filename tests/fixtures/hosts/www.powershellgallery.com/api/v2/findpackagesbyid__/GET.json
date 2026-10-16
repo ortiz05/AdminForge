@@ -1,0 +1,49 @@
+{
+  "$fixture": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/atom+xml;type=feed;charset=utf-8",
+      "etag": null,
+      "last-modified": "Wed, 15 Oct 2026 06:00:00 GMT"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"utf-8\"?><feed xml:base=\"https://www.powershellgallery.com/api/v2\" xmlns=\"http://www.w3.org/2005/Atom\" xmlns:d=\"http://schemas.microsoft.com/ado/2007/08/dataservices\" xmlns:m=\"http://schemas.microsoft.com/ado/2007/08/dataservices/metadata\"><id>https://www.powershellgallery.com/api/v2/FindPackagesById</id><title type=\"text\">FindPackagesById</title></feed>",
+    "variants": [
+      {
+        "match": {
+          "query": {
+            "id": "'ExchangeOnlineManagement'"
+          }
+        },
+        "status": 200,
+        "headers": {
+          "content-type": "application/atom+xml;type=feed;charset=utf-8"
+        },
+        "body": "<?xml version=\"1.0\" encoding=\"utf-8\"?><feed xml:base=\"https://www.powershellgallery.com/api/v2\" xmlns=\"http://www.w3.org/2005/Atom\" xmlns:d=\"http://schemas.microsoft.com/ado/2007/08/dataservices\" xmlns:m=\"http://schemas.microsoft.com/ado/2007/08/dataservices/metadata\"><id>https://www.powershellgallery.com/api/v2/FindPackagesById</id><title type=\"text\">FindPackagesById</title><entry><id>https://www.powershellgallery.com/api/v2/Packages(Id='ExchangeOnlineManagement',Version='4.0.0-Preview1')</id><title type=\"text\">ExchangeOnlineManagement</title><updated>2026-10-10T18:00:00Z</updated><link rel=\"edit\" href=\"https://www.powershellgallery.com/api/v2/Packages(Id='ExchangeOnlineManagement',Version='4.0.0-Preview1')\"/><m:properties><d:Id>ExchangeOnlineManagement</d:Id><d:Version>4.0.0-Preview1</d:Version><d:NormalizedVersion>4.0.0-Preview1</d:NormalizedVersion><d:IsPrerelease m:type=\"Edm.Boolean\">true</d:IsPrerelease><d:Published m:type=\"Edm.DateTime\">2026-10-10T18:00:00</d:Published><d:ReleaseNotes>Example preview build. Synthetic fixture text.</d:ReleaseNotes></m:properties></entry><entry><id>https://www.powershellgallery.com/api/v2/Packages(Id='ExchangeOnlineManagement',Version='4.0.0')</id><title type=\"text\">ExchangeOnlineManagement</title><updated>2026-10-14T18:00:00Z</updated><link rel=\"edit\" href=\"https://www.powershellgallery.com/api/v2/Packages(Id='ExchangeOnlineManagement',Version='4.0.0')\"/><m:properties><d:Id>ExchangeOnlineManagement</d:Id><d:Version>4.0.0</d:Version><d:NormalizedVersion>4.0.0</d:NormalizedVersion><d:IsPrerelease m:type=\"Edm.Boolean\">false</d:IsPrerelease><d:Published m:type=\"Edm.DateTime\">2026-10-14T18:00:00</d:Published><d:ReleaseNotes>Example: new major version; review cmdlet changes. Synthetic fixture text.</d:ReleaseNotes></m:properties></entry><entry><id>https://www.powershellgallery.com/api/v2/Packages(Id='ExchangeOnlineManagement',Version='3.9.2')</id><title type=\"text\">ExchangeOnlineManagement</title><updated>2026-09-02T18:00:00Z</updated><link rel=\"edit\" href=\"https://www.powershellgallery.com/api/v2/Packages(Id='ExchangeOnlineManagement',Version='3.9.2')\"/><m:properties><d:Id>ExchangeOnlineManagement</d:Id><d:Version>3.9.2</d:Version><d:NormalizedVersion>3.9.2</d:NormalizedVersion><d:IsPrerelease m:type=\"Edm.Boolean\">false</d:IsPrerelease><d:Published m:type=\"Edm.DateTime\">2026-09-02T18:00:00</d:Published><d:ReleaseNotes>Example fixes. Synthetic fixture text.</d:ReleaseNotes></m:properties></entry><entry><id>https://www.powershellgallery.com/api/v2/Packages(Id='ExchangeOnlineManagement',Version='3.9.1')</id><title type=\"text\">ExchangeOnlineManagement</title><updated>2026-07-20T18:00:00Z</updated><link rel=\"edit\" href=\"https://www.powershellgallery.com/api/v2/Packages(Id='ExchangeOnlineManagement',Version='3.9.1')\"/><m:properties><d:Id>ExchangeOnlineManagement</d:Id><d:Version>3.9.1</d:Version><d:NormalizedVersion>3.9.1</d:NormalizedVersion><d:IsPrerelease m:type=\"Edm.Boolean\">false</d:IsPrerelease><d:Published m:type=\"Edm.DateTime\">2026-07-20T18:00:00</d:Published><d:ReleaseNotes>Example fixes.</d:ReleaseNotes></m:properties></entry><entry><id>https://www.powershellgallery.com/api/v2/Packages(Id='ExchangeOnlineManagement',Version='3.0.0-unlisted')</id><title type=\"text\">ExchangeOnlineManagement</title><updated>1900-01-01T00:00:00Z</updated><link rel=\"edit\" href=\"https://www.powershellgallery.com/api/v2/Packages(Id='ExchangeOnlineManagement',Version='3.0.0-unlisted')\"/><m:properties><d:Id>ExchangeOnlineManagement</d:Id><d:Version>3.0.0-unlisted</d:Version><d:NormalizedVersion>3.0.0-unlisted</d:NormalizedVersion><d:IsPrerelease m:type=\"Edm.Boolean\">false</d:IsPrerelease><d:Published m:type=\"Edm.DateTime\">1900-01-01T00:00:00</d:Published><d:ReleaseNotes>Unlisted version.</d:ReleaseNotes></m:properties></entry></feed>"
+      },
+      {
+        "match": {
+          "query": {
+            "id": "'MicrosoftTeams'"
+          }
+        },
+        "status": 200,
+        "headers": {
+          "content-type": "application/atom+xml;type=feed;charset=utf-8"
+        },
+        "body": "<?xml version=\"1.0\" encoding=\"utf-8\"?><feed xml:base=\"https://www.powershellgallery.com/api/v2\" xmlns=\"http://www.w3.org/2005/Atom\" xmlns:d=\"http://schemas.microsoft.com/ado/2007/08/dataservices\" xmlns:m=\"http://schemas.microsoft.com/ado/2007/08/dataservices/metadata\"><id>https://www.powershellgallery.com/api/v2/FindPackagesById</id><title type=\"text\">FindPackagesById</title><entry><id>https://www.powershellgallery.com/api/v2/Packages(Id='MicrosoftTeams',Version='7.5.0')</id><title type=\"text\">MicrosoftTeams</title><updated>2026-10-07T17:00:00Z</updated><link rel=\"edit\" href=\"https://www.powershellgallery.com/api/v2/Packages(Id='MicrosoftTeams',Version='7.5.0')\"/><m:properties><d:Id>MicrosoftTeams</d:Id><d:Version>7.5.0</d:Version><d:NormalizedVersion>7.5.0</d:NormalizedVersion><d:IsPrerelease m:type=\"Edm.Boolean\">false</d:IsPrerelease><d:Published m:type=\"Edm.DateTime\">2026-10-07T17:00:00</d:Published><d:ReleaseNotes>&lt;p&gt;Example: new policy cmdlets.&lt;/p&gt; Synthetic fixture text.</d:ReleaseNotes></m:properties></entry><entry><id>https://www.powershellgallery.com/api/v2/Packages(Id='MicrosoftTeams',Version='7.4.0')</id><title type=\"text\">MicrosoftTeams</title><updated>2026-08-25T17:00:00Z</updated><link rel=\"edit\" href=\"https://www.powershellgallery.com/api/v2/Packages(Id='MicrosoftTeams',Version='7.4.0')\"/><m:properties><d:Id>MicrosoftTeams</d:Id><d:Version>7.4.0</d:Version><d:NormalizedVersion>7.4.0</d:NormalizedVersion><d:IsPrerelease m:type=\"Edm.Boolean\">false</d:IsPrerelease><d:Published m:type=\"Edm.DateTime\">2026-08-25T17:00:00</d:Published><d:ReleaseNotes>Example improvements.</d:ReleaseNotes></m:properties></entry></feed>"
+      },
+      {
+        "match": {
+          "query": {
+            "id": "'PnP.PowerShell'"
+          }
+        },
+        "status": 200,
+        "headers": {
+          "content-type": "application/atom+xml;type=feed;charset=utf-8"
+        },
+        "body": "<?xml version=\"1.0\" encoding=\"utf-8\"?><feed xml:base=\"https://www.powershellgallery.com/api/v2\" xmlns=\"http://www.w3.org/2005/Atom\" xmlns:d=\"http://schemas.microsoft.com/ado/2007/08/dataservices\" xmlns:m=\"http://schemas.microsoft.com/ado/2007/08/dataservices/metadata\"><id>https://www.powershellgallery.com/api/v2/FindPackagesById</id><title type=\"text\">FindPackagesById</title><entry><id>https://www.powershellgallery.com/api/v2/Packages(Id='PnP.PowerShell',Version='3.2.0')</id><title type=\"text\">PnP.PowerShell</title><updated>2026-10-01T09:00:00Z</updated><link rel=\"edit\" href=\"https://www.powershellgallery.com/api/v2/Packages(Id='PnP.PowerShell',Version='3.2.0')\"/><m:properties><d:Id>PnP.PowerShell</d:Id><d:Version>3.2.0</d:Version><d:NormalizedVersion>3.2.0</d:NormalizedVersion><d:IsPrerelease m:type=\"Edm.Boolean\">false</d:IsPrerelease><d:Published m:type=\"Edm.DateTime\">2026-10-01T09:00:00</d:Published><d:ReleaseNotes>Example: new site cmdlets. Synthetic fixture text.</d:ReleaseNotes></m:properties></entry><entry><id>https://www.powershellgallery.com/api/v2/Packages(Id='PnP.PowerShell',Version='3.1.0')</id><title type=\"text\">PnP.PowerShell</title><updated>2026-08-15T09:00:00Z</updated><link rel=\"edit\" href=\"https://www.powershellgallery.com/api/v2/Packages(Id='PnP.PowerShell',Version='3.1.0')\"/><m:properties><d:Id>PnP.PowerShell</d:Id><d:Version>3.1.0</d:Version><d:NormalizedVersion>3.1.0</d:NormalizedVersion><d:IsPrerelease m:type=\"Edm.Boolean\">false</d:IsPrerelease><d:Published m:type=\"Edm.DateTime\">2026-08-15T09:00:00</d:Published><d:ReleaseNotes>Example fixes.</d:ReleaseNotes></m:properties></entry></feed>"
+      }
+    ]
+  }
+}

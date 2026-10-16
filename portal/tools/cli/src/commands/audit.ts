@@ -1,17 +1,37 @@
-import { createDatabase, PgAuditWriter } from '../content/api-bridge';
-import { ConfigError } from './context';
-import type { Out } from '../provision/render';
-
 /**
- * `adminforge audit verify` — re-walks the hash chain of the database in DATABASE_URL (use ADMINFORGE_ENV_OVERLAY=host
- * for the services' database). Returns true when every event links to the one before it.
+ * `adminforge audit verify [--env <name>]` — re-walks the tamper-evident audit log's hash chain in the database at
+ * DATABASE_URL and reports whether every event still links to the one before it (the API's PgAuditWriter does the
+ * walk; this command only prints the verdict). ADMINFORGE_ENV_OVERLAY=host checks the services' own database.
+ *
+ * Read-only: one connection, no writes, nothing in the tenant. Exit code 1 when the chain is broken.
  */
-export async function auditVerify(env: Record<string, string | undefined>, out: Out): Promise<boolean> {
+import { createDatabase, PgAuditWriter } from '../content/api-bridge';
+import { ConfigError } from '../shared/errors';
+import type { Out } from '../shared/output';
+
+/** The audit chain a verify walks (injected in tests; default: the database at DATABASE_URL). */
+export interface AuditChain {
+  verify(): Promise<{ ok: true; count: number } | { ok: false; brokenAt: number; seq: number }>;
+  close(): Promise<void>;
+}
+
+function openAuditChain(url: string): AuditChain {
+  const database = createDatabase(url, { max: 1 });
+  const writer = new PgAuditWriter(database.db);
+  return { verify: () => writer.verify(), close: () => database.close() };
+}
+
+/** Re-walks the hash chain. Returns true when every event links to the one before it. */
+export async function auditVerify(
+  env: Record<string, string | undefined>,
+  out: Out,
+  open: (url: string) => AuditChain = openAuditChain,
+): Promise<boolean> {
   const url = env.DATABASE_URL;
   if (!url) throw new ConfigError('DATABASE_URL is not set in the env file.');
-  const database = createDatabase(url, { max: 1 });
+  const chain = open(url);
   try {
-    const result = await new PgAuditWriter(database.db).verify();
+    const result = await chain.verify();
     if (result.ok) {
       out(`✓ Audit chain verified: ${result.count} event(s), every hash links to the one before it.`);
       return true;
@@ -21,6 +41,6 @@ export async function auditVerify(env: Record<string, string | undefined>, out: 
     );
     return false;
   } finally {
-    await database.close();
+    await chain.close();
   }
 }

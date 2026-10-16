@@ -1,21 +1,24 @@
 /**
- * The CLI reuses the BFF's definition store and outbound/datasource code so `publish` and `fixtures record` behave
- * exactly like the portal. @adminforge/api is not a CLI dependency (yet), so these are path imports; their own
- * imports (pg, drizzle, msal, …) resolve from the api package. One file to change when the dependency is added.
+ * The API modules the CLI reuses, so `publish`, `fixtures record` and `audit` behave exactly like the portal: the
+ * definition store, the database client, the outbound executor and automation identity, the datasource runner and
+ * the audit writer. They come from `@adminforge/api/tooling`, the API's supported entry point for tools (a CLI
+ * dependency; see portal/apps/api/src/tooling.ts) — never from `@adminforge/api/src/…` paths. CLI modules import
+ * them from this file, so a change to what the CLI needs from the API is made here.
  */
-export { createDatabase, type Database } from '@adminforge/api/src/db/client';
 export {
+  createAutomationTokenProvider,
+  createDatabase,
+  createOutboundExecutor,
+  DatasourceRunner,
   DbDefinitionStore,
   FsDefinitionSource,
+  PgAuditWriter,
   registryFrom,
+  type AuditInput,
+  type AutomationTokenProvider,
+  type Database,
   type PublishEntry,
   type PublishItem,
   type PublishResult,
-} from '@adminforge/api/src/definitions/index';
-export { createOutboundExecutor } from '@adminforge/api/src/execution/outbound';
-export {
-  createAutomationTokenProvider,
-  type AutomationTokenProvider,
-} from '@adminforge/api/src/auth/automation';
-export { DatasourceRunner, type UserScope } from '@adminforge/api/src/datasources/executor';
-export { PgAuditWriter, type AuditInput } from '@adminforge/api/src/audit/writer';
+  type UserScope,
+} from '@adminforge/api/tooling';

@@ -126,3 +126,6 @@ export function writeEnvKeys(updates: Record<string, string>, env: NodeJS.Proces
 
 /** Repo root, resolved from this file (portal/packages/config/src). */
 export const repoRoot = path.resolve(path.dirname(new URL(import.meta.url).pathname), '../../../..');
+
+// Which local configuration values count as tenant data (the no-tenant-data guard and `adminforge fixtures record`).
+export * from './tenant-values';

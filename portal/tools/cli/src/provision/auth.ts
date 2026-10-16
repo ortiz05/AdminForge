@@ -1,3 +1,15 @@
+/**
+ * OAuth helpers for the CLI's own sign-ins (no MSAL, no user interaction):
+ *   - `clientCredentialToken`: app-only tokens (client secret or RFC 7523 certificate assertion) from the Entra v2
+ *     token endpoint, cached until a minute before expiry — used for the provisioner and AdminForge's own apps
+ *     (provision/clients.ts);
+ *   - `tokenRoles` / `decodeJwtPayload`: read the `roles` claim of our own tokens (`provision status` checks the
+ *     automation identity's application permissions);
+ *   - `buildAuthorizeUrl` / `checkAuthorizeUrl` / `pkceChallenge`: build and check the Read app's auth-code + PKCE
+ *     authorize URL, the way the portal signs people in, without signing anyone in.
+ * A refused token request throws `TokenError` carrying the AADSTS code only; tokens and secrets are never logged or
+ * put into messages.
+ */
 import { createHash } from 'node:crypto';
 import type { TokenProvider } from '@adminforge/connectors';
 

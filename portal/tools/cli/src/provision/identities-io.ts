@@ -1,3 +1,11 @@
+/**
+ * Microsoft Graph I/O for `provision test-identities` and the test-identity part of `provision status`, as the
+ * provisioner identity: reads the validation user, the AF-Test-* targets, group memberships, every directory role the
+ * validation user holds (directly or through groups), the authentication-methods registration campaign and Security
+ * Defaults; applies a plan's operations (`applyIdentityOps`) and turns the validation user's sign-in on or off
+ * (`setUserEnabled`, which refuses any account provisioning did not create). The validation user's password goes to
+ * the admin env file through `writeEnv`, never to output. Decides nothing: provision/identities-plan.ts does.
+ */
 import { ApiError, type GraphClient } from '@adminforge/connectors';
 import { findGroup, odata } from './entra-io';
 import { groupNames } from './entra-desired';

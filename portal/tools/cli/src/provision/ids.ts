@@ -1,9 +1,18 @@
+/**
+ * Deterministic ids and the GUID check the CLI shares: `isGuid` (env-file values, env/env-check.ts, the fixture
+ * sanitizer's pattern via `GUID_PATTERN`), and RFC 4122 version-5 UUIDs in AdminForge's own namespace for app role
+ * ids and Azure role-assignment names, so every run (and every tenant) computes the same id for the same object.
+ * Pure.
+ */
 import { createHash } from 'node:crypto';
 
 /** Fixed namespace for AdminForge's deterministic ids (generated once; not tenant data). */
 export const ADMINFORGE_NAMESPACE = '5b0e6c1e-8f3a-4d7b-9c2e-a41f0d6b7e93';
 
-const GUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+/** A GUID's text (no anchors, no flags), for building search patterns; match case-insensitively. */
+export const GUID_PATTERN = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
+const GUID = new RegExp(`^${GUID_PATTERN}$`, 'i');
+/** Whether `s` is exactly one GUID (any case). */
 export const isGuid = (s: string | undefined): s is string => !!s && GUID.test(s);
 
 /** RFC 4122 version-5 (SHA-1, name-based) UUID. Same inputs → same id, in every run and every tenant. */

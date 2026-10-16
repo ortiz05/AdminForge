@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
-import { ConfigError, originProblem, provisionSettings } from '@adminforge/cli/src/commands/context';
-import { checkEnv } from '@adminforge/cli/src/env-check';
+import { ConfigError } from '@adminforge/cli/src/shared/errors';
+import { originProblem, provisionSettings } from '@adminforge/cli/src/provision/settings';
+import { checkEnv } from '@adminforge/cli/src/env/env-check';
 
 // Redirect URIs carry authorization codes: provisioning registers https origins, and http only on loopback.
 const base = { AF_TENANT_ID: randomUUID() };

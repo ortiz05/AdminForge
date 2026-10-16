@@ -1,3 +1,12 @@
+/**
+ * The provisioning data model: AdminForge's settings for one environment (`ProvisionSettings`), the subset of
+ * Microsoft Graph / ARM shapes provisioning reads and writes, the desired state (`DesiredEntra`), the fetched state
+ * (`EntraState`) and the operations a plan produces (`EntraOp`). Types only (plus `APP_KEYS`): no I/O, no logic.
+ *
+ * Used by every `provision/*` module: `*-desired.ts` builds the desired state, `*-io.ts` fetches state and applies
+ * operations, `*-plan.ts` compares the two. Nothing here is tenant-specific (R2).
+ */
+import type { PlanAction } from '../shared/output';
 import type { PortalRole, ResourceKey } from './catalog';
 
 /** The three AdminForge app registrations. */
@@ -7,8 +16,9 @@ export const APP_KEYS: readonly AppKey[] = ['read', 'write', 'automation'];
 /**
  * What provisioning will do with one object. `skip` = cannot be done here (licensing/permissions/config);
  * `delete` = remove something AdminForge manages that is no longer wanted (a credential, a test-user role).
+ * Defined with the renderers in shared/output.ts.
  */
-export type Action = 'create' | 'update' | 'delete' | 'noop' | 'skip';
+export type Action = PlanAction;
 
 export interface ProvisionSettings {
   /** Environment label used in names (AF_ENV_LABEL, default "dev"). */

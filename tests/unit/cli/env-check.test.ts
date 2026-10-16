@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { parseEnv } from '@adminforge/config';
-import { checkEnv, formatEnvReport, PURPOSES, REQUIRED } from '@adminforge/cli/src/env-check';
+import { checkEnv, formatEnvReport, PURPOSES, REQUIRED } from '@adminforge/cli/src/env/env-check';
 import { repoRoot } from '../../lib/repo';
 
 const EXAMPLE = `

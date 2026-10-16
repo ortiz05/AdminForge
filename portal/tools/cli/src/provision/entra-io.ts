@@ -1,3 +1,12 @@
+/**
+ * Microsoft Graph and ARM I/O for `provision entra` and `provision status`, as the provisioner identity:
+ *   - fetch (read-only): the resource service principals, the AdminForge apps, service principals, groups, grants,
+ *     app-role assignments, owners and the automation identity's Azure role assignments (`fetchEntraState`);
+ *   - apply: executes a plan's operations in order (`applyEntraOps`) with Graph upserts by alternate key
+ *     (`PATCH …(uniqueName='…')`, create-if-missing) and replication retries (provision/retry.ts). New client ids and
+ *     secrets go straight to the env file through `writeEnv` and are never printed.
+ * Decides nothing: what to change comes from provision/entra-plan.ts.
+ */
 import { ApiError, type GraphClient, type HttpClient } from '@adminforge/connectors';
 import { RESOURCE_KEYS, RESOURCES, type PortalRole } from './catalog';
 import { armRoleAssignmentName } from './ids';

@@ -1,3 +1,13 @@
+/**
+ * The test-identities plan (test environments only, AF_TEST_IDENTITY_LABELS): the validation user the live suite
+ * signs in as (portal role groups, the directory roles it needs, excluded from the MFA registration campaign) and the
+ * AF-Test-User-0n / AF-Test-Group-01 write-test targets.
+ *
+ * Pure: desired identities (`buildDesiredIdentities`, from the label, domain and licensed workloads) + fetched state
+ * (provision/identities-io.ts) → operations (`planIdentities`). Also the safety rules: an existing account at
+ * AF_TEST_USER_UPN that provisioning did not create is refused, never modified (`testerRefusal`), and roles the
+ * validation user holds beyond the managed ones are reported (`unexpectedTesterRoles`).
+ */
 import { DIRECTORY_ROLES, PORTAL_ROLES, type DirectoryRoleName, type PortalRole } from './catalog';
 import { groupNames } from './entra-desired';
 import type { Action, GraphGroup, GroupBody, Section } from './model';

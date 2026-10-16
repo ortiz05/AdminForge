@@ -1,11 +1,11 @@
 import { randomUUID } from 'node:crypto';
-import type { CliContext } from '@adminforge/cli/src/commands/context';
 import {
   azureTestStatus,
   destroyAzureTestRun,
   provisionAzureTest,
-} from '@adminforge/cli/src/provision/azure-test-command';
-import { provisionerClients, provisionSettings } from '@adminforge/cli/src/commands/context';
+} from '@adminforge/cli/src/commands/azure-test';
+import { provisionerClients, type CliContext } from '@adminforge/cli/src/provision/clients';
+import { provisionSettings } from '@adminforge/cli/src/provision/settings';
 import { createAzureFake, type AzureFakeOptions } from './azure-test-fake';
 
 const TENANT = randomUUID();

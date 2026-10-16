@@ -1,6 +1,11 @@
 /**
- * Well-known (Microsoft-published, tenant-independent) identifiers and AdminForge's desired permissions.
+ * Well-known (Microsoft-published, tenant-independent) identifiers and AdminForge's desired permissions: resource
+ * app ids, the Read/Write/Automation permission baselines, portal roles, built-in Azure and directory role ids.
  * Nothing in here is tenant-specific (R2): tenant values come from the env file at run time.
+ *
+ * Read by the provisioning planners (`*-desired.ts`, `*-plan.ts`), `validate --scopes` (content/scopes.ts), the
+ * fixture sanitizer (commands/fixtures.ts keeps these GUIDs as they are) and some content tests. Change a baseline
+ * here only together with docs/access.md; content-specific permissions belong in the content's `requires.scopes`.
  */
 
 /** Resource applications the portal apps request permissions on. Keys are stable logical names. */
@@ -136,10 +141,16 @@ export const DEFAULT_ACCESS_ROLE_ID = '00000000-0000-0000-0000-000000000000';
 /** Built-in Azure RBAC "Reader". */
 export const AZURE_READER_ROLE_ID = 'acdd72a7-3385-48ef-bd42-f606fba81ae7';
 
+/**
+ * Built-in Azure RBAC "Log Analytics Reader": what `provision azure-test` grants on the test workspace, and what
+ * `provision status` accepts there without reporting it as unexpected.
+ */
+export const LOG_ANALYTICS_READER_ROLE_ID = '73c42c96-874c-492b-b04d-ab87d138a893';
+
 /** Built-in Azure RBAC roles named in `provision status` (identical in every tenant). */
 export const AZURE_BUILTIN_ROLE_NAMES: Readonly<Record<string, string>> = {
   [AZURE_READER_ROLE_ID]: 'Reader',
-  '73c42c96-874c-492b-b04d-ab87d138a893': 'Log Analytics Reader',
+  [LOG_ANALYTICS_READER_ROLE_ID]: 'Log Analytics Reader',
   '8e3af657-a8ff-443c-a75c-2fe8c4bcb635': 'Owner',
   'b24988ac-6180-49ed-a52f-4b4c8da4bd7f': 'Contributor',
   '18d7d88d-d35e-4fb5-a5c3-7773c20a72d9': 'User Access Administrator',

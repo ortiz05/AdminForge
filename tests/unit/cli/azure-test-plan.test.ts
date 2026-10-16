@@ -1,9 +1,9 @@
 import { randomUUID } from 'node:crypto';
+import { LOG_ANALYTICS_READER_ROLE_ID } from '@adminforge/cli/src/provision/catalog';
 import {
   ACTIVITY_LOG_CATEGORIES,
   buildDesiredAzureTest,
   DAILY_CAP_GB,
-  LOG_ANALYTICS_READER_ROLE_ID,
   notProvisioned,
   planAzureTest,
   type AzureTestState,

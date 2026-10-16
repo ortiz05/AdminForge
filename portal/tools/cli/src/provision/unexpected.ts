@@ -1,13 +1,19 @@
-import { AZURE_BUILTIN_ROLE_NAMES, AZURE_READER_ROLE_ID, RESOURCES } from './catalog';
-import { LOG_ANALYTICS_READER_ROLE_ID } from './azure-test-plan';
+/**
+ * `provision status` checks for privilege AdminForge did not grant: anything here is a way into the tenant that
+ * provisioning would neither create nor notice (extra app-role assignments, permissions, consent grants, owners,
+ * credentials, sign-in surface, Azure RBAC). Pure: desired state + fetched state (provision/entra-io.ts) → checks.
+ * Output is names and counts only — never object ids or UPNs.
+ */
+import {
+  AZURE_BUILTIN_ROLE_NAMES,
+  AZURE_READER_ROLE_ID,
+  LOG_ANALYTICS_READER_ROLE_ID,
+  RESOURCES,
+} from './catalog';
 import { appNames } from './entra-desired';
 import { keyThumbprint, splitScope } from './entra-plan';
 import type { DesiredEntra, EntraState } from './model';
 
-/**
- * `provision status` checks for privilege AdminForge did not grant: anything here is a way into the tenant that
- * provisioning would neither create nor notice. Output is names and counts only — never object ids or UPNs.
- */
 export interface UnexpectedCheck {
   title: string;
   /** Empty = as expected. */

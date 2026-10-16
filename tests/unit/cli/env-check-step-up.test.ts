@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
-import { checkEnv, formatEnvReport } from '@adminforge/cli/src/env-check';
+import { checkEnv, formatEnvReport } from '@adminforge/cli/src/env/env-check';
 import { repoRoot } from '../../lib/repo';
 
 // IAM-04: without WRITE_AUTH_CONTEXT, arming proves a fresh sign-in but not MFA. `adminforge env check` says so as a

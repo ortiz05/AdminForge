@@ -1,3 +1,8 @@
+/**
+ * The validation user's password (`provision test-identities`): random from a CSPRNG, all four character classes
+ * Entra requires, and only symbols that survive env files, shells and compose. Written to the admin env file by the
+ * caller, never printed.
+ */
 import { randomInt } from 'node:crypto';
 
 const UPPER = 'ABCDEFGHJKLMNPQRSTUVWXYZ';

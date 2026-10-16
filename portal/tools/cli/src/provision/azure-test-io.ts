@@ -1,3 +1,10 @@
+/**
+ * Thin ARM / Graph I/O for `provision azure-test`, as the provisioner identity: resolves the automation service
+ * principal and the validation user, reads the resource group, workspace, diagnostic setting and role assignments
+ * (`fetchAzureTestState`), applies a plan's operations (`applyAzureTestOps`, waiting for the workspace to finish
+ * provisioning) and tears it all down for `--destroy` (`destroyAzureTest`). Prints names only; the workspace id goes
+ * to the env file. Everything decided lives in provision/azure-test-plan.ts.
+ */
 import {
   ApiError,
   defaultSleep,
@@ -22,8 +29,6 @@ import {
   type PrincipalKey,
 } from './azure-test-plan';
 import { withReplicationRetry, type RetryOptions } from './retry';
-
-/** Thin ARM / Graph I/O for `provision azure-test`. Everything decided lives in azure-test-plan.ts. */
 
 export const API = {
   resourceGroups: '2021-04-01',

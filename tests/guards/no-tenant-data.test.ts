@@ -1,7 +1,9 @@
+import { tenantValues } from '@adminforge/config';
 import { committableFiles, localEnvFiles, parseEnvFile, readText } from '../lib/repo';
-import { tenantValues } from './tenant-values';
 
-// Nothing tenant- or app-specific may be committed: configuration lives in ~/.config/adminforge/*.env.
+// Nothing tenant- or app-specific may be committed: configuration lives in ~/.config/adminforge/*.env. Which local
+// values count as tenant data is one shared rule (@adminforge/config tenant-values.ts, tested in
+// tenant-values.test.ts) — the same one `adminforge fixtures record` applies to fixtures.
 const SECRET_PATTERNS: Array<[string, RegExp]> = [
   ['Entra client secret', /\b[A-Za-z0-9_\-.]{3,5}[78]Q~[A-Za-z0-9_\-.~]{30,}/],
   ['private key', /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/],

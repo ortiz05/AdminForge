@@ -1,27 +1,40 @@
 #!/usr/bin/env -S npx tsx
-import { ApiError } from '@adminforge/connectors';
-import { auditVerify } from './commands/audit';
-import { loadEnv, repoRoot, writeEnvKeys } from '@adminforge/config';
+/**
+ * The `adminforge` command line (`pnpm adminforge …`): wires each command to its module and turns failures into one
+ * readable line. Command reference, env keys and exit codes: portal/tools/cli/README.md.
+ *
+ * Layers (each imports only from the ones below it):
+ *   index.ts → commands/* (one module per command) → content/*, env/*, provision/* → shared/*.
+ * Every command takes its outside world as a context object (`CliContext`, `ContentCliContext`) built here from the
+ * env file (outside the repo, R2: @adminforge/config `loadEnv`, including <env>.admin.env) and `console.log`, so tests
+ * can run the same functions with fakes.
+ *
+ * Exit codes: 0 success; 1 when a command reports a problem (validation errors, failed tests, drift, a refused
+ * publish) or throws. Thrown errors print as `✗ <message>`: ConfigError and TokenError as they are, ApiError with
+ * its status, code and request id, anything else through `describeFailure`; the stack only with ADMINFORGE_DEBUG=1.
+ */
 import { createInterface } from 'node:readline/promises';
 import { Command } from 'commander';
-import {
-  contentContext,
-  newDefinition,
-  publishContent,
-  recordFixtures,
-  testContent,
-  validateContent,
-} from './commands/content';
+import { loadEnv, repoRoot, writeEnvKeys } from '@adminforge/config';
+import { ApiError } from '@adminforge/connectors';
+import { auditVerify } from './commands/audit';
+import { destroyAzureTestRun, provisionAzureTest } from './commands/azure-test';
 import { envCheck } from './commands/env';
-import { ConfigError, type CliContext } from './commands/context';
+import { recordFixtures } from './commands/fixtures';
+import { newDefinition } from './commands/new';
 import {
   provisionEntra,
   provisionStatus,
   provisionTestIdentities,
   setTesterEnabled,
 } from './commands/provision';
-import { destroyAzureTestRun, provisionAzureTest } from './provision/azure-test-command';
+import { publishContent } from './commands/publish';
+import { testContent } from './commands/test';
+import { validateContent } from './commands/validate';
+import { contentContext } from './content/context';
 import { TokenError } from './provision/auth';
+import type { CliContext } from './provision/clients';
+import { ConfigError, describeFailure } from './shared/errors';
 
 /** Real-world context: env file outside the repo (R2), stdout, global fetch. */
 function liveContext(): CliContext {
@@ -136,7 +149,7 @@ const content = () =>
 program
   .command('validate')
   .description(
-    'Validate portal/content: schema, references, expressions, injection lint ($filter/$search/$orderby, KQL, paths), env keys; --scopes also compares declared scopes with the app registrations',
+    'Validate portal/content: schema, references, expressions, injection lint ($filter/$search/$orderby, KQL, paths), runner script sha256 pins, env keys; --scopes also compares declared scopes with the app registrations',
   )
   .option(
     '--scopes',
@@ -247,22 +260,4 @@ try {
   else console.error(`✗ ${describeFailure(err)}`);
   if (process.env.ADMINFORGE_DEBUG === '1' && err instanceof Error) console.error(err.stack);
   process.exitCode = 1;
-}
-
-/** One line for an unexpected failure, with the usual fix; the stack only with ADMINFORGE_DEBUG=1. */
-function describeFailure(err: unknown): string {
-  // Drivers wrap the real failure (Drizzle: "Failed query: …" with the pg error as `cause`): use the root cause.
-  let root = err as { cause?: unknown } | undefined;
-  for (let i = 0; i < 5 && root?.cause; i++) root = root.cause as { cause?: unknown };
-  const e = root as { code?: string; message?: string; address?: string; port?: number } | undefined;
-  const where = e?.address ? `${e.address}${e.port ? `:${e.port}` : ''}` : 'the configured host';
-  if (e?.code === 'ECONNREFUSED')
-    return `Can't connect to ${where}. If that's Postgres, start it with \`pnpm db:up\` (and check DATABASE_URL).`;
-  if (e?.code === 'ENOTFOUND' || e?.code === 'EAI_AGAIN')
-    return `Can't resolve a host name (${e.message ?? 'DNS lookup failed'}). Check your network or proxy.`;
-  if (e?.code === '28P01') return 'Postgres rejected the password in DATABASE_URL.';
-  if (e?.code === '3D000')
-    return "The database in DATABASE_URL doesn't exist. Run `pnpm --filter @adminforge/api db:migrate`.";
-  const message = (e?.message ?? String(err)).split('\n')[0]!.slice(0, 300);
-  return `${message} (run with ADMINFORGE_DEBUG=1 for details)`;
 }

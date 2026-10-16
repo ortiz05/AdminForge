@@ -1,3 +1,12 @@
+/**
+ * The YAML `adminforge new` writes: one generator per kind (page, dashboard, report, playbook, runbook, connection,
+ * probe, schedule) and page template (list-detail, dashboard, report, entity), each producing a definition that
+ * validates as written — `$schema` for editor autocomplete, `TODO`s where the author decides, injection-safe
+ * expressions — plus, where there is a datasource, a synthetic fixture body for DATA_MODE=fixtures.
+ *
+ * Pure (returns text and paths; commands/new.ts checks and writes them). Change the templates here when the content
+ * conventions change, and keep tests/unit/cli/content.test.ts ("scaffolds every kind and template…") passing.
+ */
 import path from 'node:path';
 
 /** Kinds `adminforge new` scaffolds, and their folder under portal/content. */

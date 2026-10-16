@@ -1,3 +1,10 @@
+/**
+ * The automation identity's certificate (AF_AUTOMATION_CERT_PATH): parses the PEM bundle the API also uses
+ * (certificate, optionally followed by its unencrypted private key) into the public part provisioning registers in
+ * Entra (`CertificateInfo`: base64 DER, SHA-1 thumbprint, validity) and signs RFC 7523 client assertions with the
+ * private key for the CLI's own token requests. Problems throw `CertificateError` (provision/settings.ts turns it into
+ * a ConfigError); messages never contain key material.
+ */
 import { createHash, createPrivateKey, randomUUID, sign, X509Certificate, type KeyObject } from 'node:crypto';
 import type { CertificateInfo } from './model';
 

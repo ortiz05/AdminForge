@@ -2,14 +2,11 @@ import { execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import {
-  newDefinition,
-  publishContent,
-  reviewState,
-  type ContentCliContext,
-  type EngineModule,
-  type ReviewState,
-} from '@adminforge/cli/src/commands/content';
+import type { ContentCliContext } from '@adminforge/cli/src/content/context';
+import type { EngineModule } from '@adminforge/cli/src/content/playbook-tests';
+import { reviewState, type ReviewState } from '@adminforge/cli/src/content/review-state';
+import { newDefinition } from '@adminforge/cli/src/commands/new';
+import { publishContent } from '@adminforge/cli/src/commands/publish';
 import { repoRoot } from '../../lib/repo';
 
 // `adminforge publish` runs the same checks as `validate` and `test`, and publishes only reviewed content (committed,

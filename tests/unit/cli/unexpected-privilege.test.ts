@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { CliContext } from '@adminforge/cli/src/commands/context';
+import type { CliContext } from '@adminforge/cli/src/provision/clients';
 import { provisionEntra, provisionStatus } from '@adminforge/cli/src/commands/provision';
 import { AUTOMATION_GRAPH_ROLES, RESOURCES, type ResourceKey } from '@adminforge/cli/src/provision/catalog';
 import { buildDesiredEntra } from '@adminforge/cli/src/provision/entra-desired';

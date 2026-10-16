@@ -1,3 +1,17 @@
+/**
+ * The desired Entra state for one environment (`buildDesiredEntra`): the Read, Write and Automation app
+ * registrations and their service principals, one security group per portal role, delegated consent grants,
+ * application-permission assignments and the automation identity's Azure Reader role — named from AF_ENV_LABEL
+ * (`appNames`, `groupNames`) and keyed by alternate keys so runs are idempotent.
+ *
+ * Permissions per app = the catalog baseline (provision/catalog.ts) ∪ what content declares (`requires.scopes`),
+ * minus what a permission ceiling withholds (provision/privilege.ts, lifted only by the opt-ins in the env file).
+ * `desiredPermissions` is the shared rule: `adminforge validate --scopes` (content/scopes.ts) uses it too, so
+ * validation and provisioning agree on what is expected.
+ *
+ * Pure: settings + resource service principals (resolved by provision/entra-io.ts) + content scopes → desired state.
+ * The first step of the desired → plan → apply → status pattern; provision/entra-plan.ts compares it with the tenant.
+ */
 import {
   AUTOMATION_GRAPH_ROLES,
   AZURE_READER_ROLE_ID,

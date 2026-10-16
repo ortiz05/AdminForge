@@ -1,3 +1,13 @@
+/**
+ * The Entra plan: compares the desired state (provision/entra-desired.ts) with the fetched state
+ * (provision/entra-io.ts) and returns ordered operations — create, update (with the properties that differ), delete
+ * (a local credential AdminForge no longer wants), noop, or skip (with the reason). Also decides when a local
+ * credential needs a new secret or the automation certificate needs registering (`storedSecretIsLive`,
+ * `keyThumbprint`).
+ *
+ * Pure (the clock is a parameter). `provision entra` renders and applies the plan; `provision status` renders the
+ * same plan as a checklist, so "status is green" means "apply would do nothing".
+ */
 import { AZURE_READER_ROLE_ID, RESOURCES, SECRET_LIFETIME_DAYS } from './catalog';
 import { appNames, groupNames } from './entra-desired';
 import type {

@@ -11,18 +11,14 @@ import {
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { createFixtureFetch, createGraphClient } from '@adminforge/connectors';
-import { ConfigError } from '@adminforge/cli/src/commands/context';
-import {
-  checkContent,
-  contentContext,
-  forbiddenValues,
-  newDefinition,
-  publishContent,
-  recordFixtures,
-  testContent,
-  validateContent,
-  type ContentCliContext,
-} from '@adminforge/cli/src/commands/content';
+import { ConfigError } from '@adminforge/cli/src/shared/errors';
+import { checkContent } from '@adminforge/cli/src/content/check';
+import { contentContext, type ContentCliContext } from '@adminforge/cli/src/content/context';
+import { recordFixtures } from '@adminforge/cli/src/commands/fixtures';
+import { newDefinition } from '@adminforge/cli/src/commands/new';
+import { publishContent } from '@adminforge/cli/src/commands/publish';
+import { testContent } from '@adminforge/cli/src/commands/test';
+import { validateContent } from '@adminforge/cli/src/commands/validate';
 import { Sanitizer } from '@adminforge/cli/src/content/sanitize';
 import {
   compareScopes,
@@ -386,32 +382,6 @@ describe('Sanitizer', () => {
     expect(outUrl).toContain(`/users/${out.value[0]!.id}/memberOf`);
     expect(decodeURIComponent(outUrl)).toContain("mail eq 'user1@example.com'");
     expect(s.leaks(`still has ${TENANT_ID}`)).toEqual([0]);
-  });
-
-  it('forbiddenValues mirrors the no-tenant-data guard', () => {
-    expect(
-      forbiddenValues({
-        AF_TENANT_ID: TENANT_ID,
-        AF_PRIMARY_DOMAIN: 'Contoso.com',
-        API_PORT: '3001',
-        AUTH_MODE: 'entra',
-        PATH: '/usr/bin:/bin:/x/y/z',
-        DATABASE_URL: 'postgres://u:p@127.0.0.1:5432/db',
-      }).sort(),
-    ).toEqual(['Contoso.com', TENANT_ID, 'contoso.com'].sort());
-  });
-
-  it('forbiddenValues allows a bare loopback origin but not a loopback URL with a path', () => {
-    expect(
-      forbiddenValues({
-        RUNNER_URL: 'http://127.0.0.1:3101',
-        RUNNER_BASE: 'http://127.0.0.1:3101/',
-        RUNNER_CALLBACK: `http://127.0.0.1:3101/${TENANT_ID}`,
-      }),
-    ).toEqual([`http://127.0.0.1:3101/${TENANT_ID}`]);
-    expect(forbiddenValues({ RUNNER_URL: 'http://127.0.0.1.example.net:3101' })).toEqual([
-      'http://127.0.0.1.example.net:3101',
-    ]);
   });
 });
 

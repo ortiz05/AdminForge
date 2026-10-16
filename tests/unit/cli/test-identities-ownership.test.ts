@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
-import { ConfigError, type CliContext } from '@adminforge/cli/src/commands/context';
+import type { CliContext } from '@adminforge/cli/src/provision/clients';
+import { ConfigError } from '@adminforge/cli/src/shared/errors';
 import {
   provisionEntra,
   provisionStatus,

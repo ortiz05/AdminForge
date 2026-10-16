@@ -3,7 +3,7 @@ import { createHash, randomUUID, verify, X509Certificate } from 'node:crypto';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import type { CliContext } from '@adminforge/cli/src/commands/context';
+import type { CliContext } from '@adminforge/cli/src/provision/clients';
 import { provisionEntra, provisionStatus } from '@adminforge/cli/src/commands/provision';
 import { clientAssertion, parseCertificatePem } from '@adminforge/cli/src/provision/certificate';
 import { createFakeCloud } from './fake-cloud';

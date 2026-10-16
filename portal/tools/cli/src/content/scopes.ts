@@ -1,3 +1,13 @@
+/**
+ * The permission comparison behind `adminforge validate --scopes`: what content declares (`requires.scopes`, per app:
+ * schedules, probes and feeds → automation identity, write playbooks and runbooks → Write app, everything else → Read
+ * app; `appFor`) versus what is granted in Entra (delegated consent grants and app-role assignments, read with the
+ * provisioner's Graph client) versus what provisioning would grant (`provisionedScopes`: the same
+ * `desiredPermissions` rule as `provision entra`, ceilings included).
+ *
+ * `declaredScopes` and `compareScopes` are pure; `consentedScopes` only reads Graph. Also used by `provision entra`
+ * (which files declare a permission, for its warnings) and by tests that keep the catalog and content aligned.
+ */
 import type { GraphClient } from '@adminforge/connectors';
 import type { LoadedDefinition, Scopes } from '@adminforge/schemas';
 import { AUTOMATION_BUILTIN_USES, RESOURCES, type ResourceKey } from '../provision/catalog';

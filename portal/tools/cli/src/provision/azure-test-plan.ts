@@ -1,15 +1,14 @@
-import { AZURE_READER_ROLE_ID } from './catalog';
-import { appNames } from './entra-desired';
-import type { Action, ArmRoleAssignment, Section } from './model';
-
 /**
  * `adminforge provision azure-test` — the Azure side of live KQL validation (R11, R12): a resource group, a
  * small Log Analytics workspace with a hard daily cap, the subscription activity log exported to it, and read
  * access for the automation identity and the validation user. Pure: desired state + fetched state → operations.
+ *
+ * The desired → plan half of the azure-test pattern; provision/azure-test-io.ts fetches state and applies the
+ * operations, commands/azure-test.ts runs the command.
  */
-
-/** Built-in Azure role "Log Analytics Reader" (identical in every tenant). */
-export const LOG_ANALYTICS_READER_ROLE_ID = '73c42c96-874c-492b-b04d-ab87d138a893';
+import { AZURE_READER_ROLE_ID, LOG_ANALYTICS_READER_ROLE_ID } from './catalog';
+import { appNames } from './entra-desired';
+import type { Action, ArmRoleAssignment, Section } from './model';
 
 export const AZURE_TEST_DEFAULT_LOCATION = 'eastus';
 /** GB per day; ingestion stops for the day once reached, which bounds the cost of the test workspace. */

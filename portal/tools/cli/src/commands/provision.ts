@@ -1,8 +1,22 @@
+/**
+ * `adminforge provision entra [--dry-run]`, `provision test-identities [--dry-run | --enable | --disable]` and
+ * `provision status`.
+ *
+ * Each command follows the provisioning pattern (README.md → Provisioning): validated settings
+ * (provision/settings.ts) → desired state (provision/entra-desired.ts, identities-plan.ts) → fetched state as the
+ * provisioner identity (provision/entra-io.ts, identities-io.ts) → plan (entra-plan.ts, identities-plan.ts) →
+ * apply, unless --dry-run. `provision status` prints the same plan as a checklist, adds checks for privilege nobody
+ * provisioned (provision/unexpected.ts), live token checks for the three apps, the Read app's authorize URL, the Azure
+ * test environment (commands/azure-test.ts) and Security Defaults. Changes only through the provisioner identity;
+ * writes client ids and secrets to the env file (`ctx.writeEnv`), never prints them.
+ */
 import { randomBytes } from 'node:crypto';
 import path from 'node:path';
 import { repoRoot } from '@adminforge/config';
 import { loadContentDir } from '@adminforge/schemas';
 import { declaredScopes, serviceForResource, type Declared } from '../content/scopes';
+import { ConfigError } from '../shared/errors';
+import { counts, isChange, renderPlan, renderStatus, summaryLine } from '../shared/output';
 import { RESOURCES, OPTIONAL_RESOURCES, RESOURCE_KEYS } from '../provision/catalog';
 import {
   buildAuthorizeUrl,
@@ -12,6 +26,14 @@ import {
   tokenRoles,
   TokenError,
 } from '../provision/auth';
+import {
+  appClients,
+  appCredential,
+  GRAPH_SCOPE,
+  provisionerClients,
+  type CliContext,
+  type Clients,
+} from '../provision/clients';
 import { buildDesiredEntra, type ContentScopes } from '../provision/entra-desired';
 import { applyEntraOps, fetchEntraState, fetchResources } from '../provision/entra-io';
 import { planEntra } from '../provision/entra-plan';
@@ -30,21 +52,9 @@ import {
   setUserEnabled,
 } from '../provision/identities-io';
 import type { DesiredEntra, EntraOp, EntraState, ProvisionSettings } from '../provision/model';
-import { counts, isChange, renderPlan, renderStatus, summaryLine } from '../provision/render';
+import { envSubset, provisionSettings, testIdentityLabels } from '../provision/settings';
 import { findUnexpected, unexpectedFailures } from '../provision/unexpected';
-import { azureTestStatus } from '../provision/azure-test-command';
-import {
-  appClients,
-  appCredential,
-  ConfigError,
-  envSubset,
-  GRAPH_SCOPE,
-  provisionerClients,
-  provisionSettings,
-  testIdentityLabels,
-  type CliContext,
-  type Clients,
-} from './context';
+import { azureTestStatus } from './azure-test';
 
 export interface EntraRun {
   settings: ProvisionSettings;

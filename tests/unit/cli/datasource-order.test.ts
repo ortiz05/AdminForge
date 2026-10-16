@@ -1,4 +1,4 @@
-import { datasourceOrderProblems } from '@adminforge/cli/src/commands/content';
+import { datasourceOrderProblems } from '@adminforge/cli/src/content/lint';
 
 // Authors declare a datasource's dependencies above it (readable files, no loops). The runtime doesn't rely on it.
 describe('validate: datasource declaration order', () => {

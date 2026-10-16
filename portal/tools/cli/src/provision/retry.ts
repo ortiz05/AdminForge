@@ -1,3 +1,9 @@
+/**
+ * Retries for Entra and ARM replication delays: an object created a moment ago can be "not found" on the next call
+ * (or PrincipalNotFound in ARM). `withReplicationRetry` retries only those errors (`isReplicationDelay`, or the
+ * caller's `isRetryable`) with backoff; sleep and attempts are injectable so tests run instantly. Used by the
+ * provisioning apply steps.
+ */
 import { ApiError, defaultSleep, type Sleep } from '@adminforge/connectors';
 
 /**

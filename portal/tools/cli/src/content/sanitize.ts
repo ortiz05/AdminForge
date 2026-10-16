@@ -1,15 +1,19 @@
 /**
- * Turns live API responses into synthetic fixtures (R2: nothing tenant-specific is committed).
+ * Turns live API responses into synthetic fixtures for `adminforge fixtures record` (R2: nothing tenant-specific is
+ * committed).
  *
  * Two passes over everything recorded in one run, so replacements are consistent across files:
  *  1. collect: GUIDs, e-mail addresses / UPNs, tenant domains, names (displayName, department, resource names…),
  *     IP addresses and paging tokens get synthetic stand-ins (`Example User 3`, `user3@example.com`,
  *     `5ca1ed00-0000-4000-8000-000000000007`, `192.0.2.4`, `page2`);
  *  2. apply: every string (bodies and URLs) is rewritten with those maps.
- * Finally `assertClean` refuses output that still contains a forbidden value (anything from the local env file).
+ * Finally `leaks` names any forbidden value (anything from the local env file) the output still contains, and the
+ * command refuses to write that file. Microsoft's tenant-independent GUIDs (`keepGuids`) and synthetic values stay.
+ * Pure (no I/O).
  */
+import { GUID_PATTERN } from '../provision/ids';
 
-const GUID_RE = /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi;
+const GUID_RE = new RegExp(`\\b${GUID_PATTERN}\\b`, 'gi');
 /** Local parts may contain an apostrophe (o'brien@…) but never start with one (`'user@…'` inside OData literals). */
 const EMAIL_RE =
   /(?<![A-Za-z0-9._%+#-])[A-Za-z0-9._%+#-][A-Za-z0-9._%+'#-]*@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}/g;

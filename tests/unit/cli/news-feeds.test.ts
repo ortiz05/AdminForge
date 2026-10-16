@@ -2,8 +2,10 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { createFixtureFetch } from '@adminforge/connectors';
-import { checkContent, newDefinition, type ContentCliContext } from '@adminforge/cli/src/commands/content';
-import { ceilingSettings } from '@adminforge/cli/src/commands/context';
+import { checkContent } from '@adminforge/cli/src/content/check';
+import type { ContentCliContext } from '@adminforge/cli/src/content/context';
+import { newDefinition } from '@adminforge/cli/src/commands/new';
+import { ceilingSettings } from '@adminforge/cli/src/provision/settings';
 import { contentDeclarations } from '@adminforge/cli/src/commands/provision';
 import { appFor } from '@adminforge/cli/src/content/scopes';
 import { desiredPermissions } from '@adminforge/cli/src/provision/entra-desired';

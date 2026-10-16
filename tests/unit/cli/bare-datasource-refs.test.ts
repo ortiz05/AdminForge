@@ -1,4 +1,4 @@
-import { bareDatasourceRefs } from '@adminforge/cli/src/commands/content';
+import { bareDatasourceRefs } from '@adminforge/cli/src/content/lint';
 
 // Inside a datasource, other datasources are `ds.<name>`; a bare name is undefined there, so the datasource is silently
 // skipped (`when`) or calls the wrong path. `adminforge validate` reports it.

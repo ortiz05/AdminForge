@@ -1,5 +1,5 @@
 import { desiredPermissions } from '@adminforge/cli/src/provision/entra-desired';
-import { ceilingSettings } from '@adminforge/cli/src/commands/context';
+import { ceilingSettings } from '@adminforge/cli/src/provision/settings';
 
 // Email delivery sends as AF_MAIL_SENDER with the automation identity's Mail.Send application permission. Nothing in
 // content declares it, so provisioning asks for it when a sender is configured — still behind the write opt-in.

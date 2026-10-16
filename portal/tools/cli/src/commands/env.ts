@@ -1,10 +1,22 @@
+/**
+ * `adminforge env check [--for <purposes>]` — checks the local configuration against config/example.env.
+ *
+ * Reads the same layered files the CLI uses (the env file, <env>.admin.env, and the ADMINFORGE_ENV_OVERLAY file if
+ * set; `@adminforge/config` `envFiles`) overlaid by the process environment, then prints each key's name and state
+ * (set, default, missing, invalid) and readiness per purpose (env/env-check.ts). Never prints a value. Also warns when
+ * admin-only keys (provisioner and live-test credentials) sit in the runtime env file, which the services read.
+ *
+ * Read-only: changes nothing locally or in the tenant. Exit code 1 when a purpose selected with --for (default all)
+ * is not ready.
+ */
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { ADMIN_ENV_KEYS, envFiles, envFilePath, parseEnv, repoRoot } from '@adminforge/config';
-import { checkEnv, formatEnvReport, PURPOSES, type Purpose } from '../env-check';
-import { ConfigError } from './context';
-import type { Out } from '../provision/render';
+import { checkEnv, formatEnvReport, PURPOSES, type Purpose } from '../env/env-check';
+import { ConfigError } from '../shared/errors';
+import type { Out } from '../shared/output';
 
+/** `--for` value → purposes: `all` (or nothing) is every purpose; unknown names are a ConfigError. */
 export function parsePurposes(raw: string | undefined): Purpose[] {
   if (!raw || raw === 'all') return [...PURPOSES];
   const list = raw

@@ -1,18 +1,32 @@
+/**
+ * `adminforge provision azure-test [--dry-run] [--no-verify] | --destroy [--yes]` and the Azure block of
+ * `adminforge provision status`.
+ *
+ * The Azure side of live KQL validation (R11, R12): resource group AF-Test-<label>, a Log Analytics workspace capped at
+ * DAILY_CAP_GB a day, the subscription activity log exported to it, and Log Analytics Reader for the automation
+ * identity and the validation user. Follows the provisioning pattern: settings → desired (provision/azure-test-plan.ts)
+ * → fetch (provision/azure-test-io.ts) → plan → apply (unless --dry-run), then a live check: the automation identity
+ * runs `print ok = 1` against the workspace.
+ *
+ * Reads AF_TENANT_ID, AF_SUBSCRIPTION_ID, AF_ENV_LABEL, AF_TEST_LOCATION, AF_LOG_ANALYTICS_WORKSPACE_ID,
+ * AF_AUTOMATION_CLIENT_ID (+ certificate or secret), AF_TEST_USER_UPN and the provisioner credentials. Writes
+ * AF_LOG_ANALYTICS_WORKSPACE_ID and AF_TEST_LOCATION to the env file (the workspace id is cleared by --destroy).
+ */
 import { ApiError, createLogAnalyticsClient } from '@adminforge/connectors';
+import { ConfigError } from '../shared/errors';
+import { counts, renderPlan, renderStatus } from '../shared/output';
+import { TokenError } from '../provision/auth';
 import {
   appClients,
   appToken,
-  ConfigError,
   provisionerClients,
-  provisionSettings,
   type CliContext,
   type Clients,
-} from '../commands/context';
-import { TokenError } from './auth';
-import { ENV_KEYS } from './entra-desired';
-import { ARM_BASE } from './entra-io';
-import { isGuid } from './ids';
-import { counts, renderPlan, renderStatus } from './render';
+} from '../provision/clients';
+import { ENV_KEYS } from '../provision/entra-desired';
+import { ARM_BASE } from '../provision/entra-io';
+import { isGuid } from '../provision/ids';
+import { provisionSettings } from '../provision/settings';
 import {
   AZURE_TEST_DEFAULT_LOCATION,
   buildDesiredAzureTest,
@@ -25,7 +39,7 @@ import {
   type AzureTestSettings,
   type AzureTestState,
   type DesiredAzureTest,
-} from './azure-test-plan';
+} from '../provision/azure-test-plan';
 import {
   API,
   applyAzureTestOps,
@@ -33,7 +47,7 @@ import {
   fetchAzureTestState,
   resolvePrincipals,
   type DestroyResult,
-} from './azure-test-io';
+} from '../provision/azure-test-io';
 
 export const LOG_ANALYTICS_SCOPE = 'https://api.loganalytics.io/.default';
 

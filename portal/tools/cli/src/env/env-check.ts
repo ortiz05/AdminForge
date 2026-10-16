@@ -1,5 +1,19 @@
+/**
+ * The rules behind `adminforge env check`: compares an env file (overlaid by the process environment, as at run time)
+ * with config/example.env and reports, per key, whether it is set, defaulted, missing or invalid — key names and
+ * states only, never values.
+ *
+ * Inputs: the text of config/example.env, the parsed env-file values and the process env. Outputs: an `EnvReport`
+ * (per-key states, unknown keys, readiness per purpose, warnings) and its terminal lines (`formatEnvReport`).
+ * Readiness is decided per purpose — provision, portal, schedules, validation — from the REQUIRED lists below; a
+ * `A|B` entry is satisfied by either key. Value checks reuse the provisioning rules (provision/ids.ts `isGuid`,
+ * provision/settings.ts `originProblem`) so `env check` and `provision` never disagree.
+ *
+ * Pure (no files, no network): commands/env.ts reads the files and prints the result.
+ */
 import { parseEnv } from '@adminforge/config';
-import { originProblem } from './commands/context';
+import { isGuid } from '../provision/ids';
+import { originProblem } from '../provision/settings';
 
 /** What a key is needed for. A key is reported as required when any selected purpose needs it. */
 export type Purpose = 'provision' | 'portal' | 'schedules' | 'validation';
@@ -45,7 +59,6 @@ const GUID_KEYS = new Set([
   'AF_WRITE_CLIENT_ID',
   'AF_AUTOMATION_CLIENT_ID',
 ]);
-const GUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export type KeyState = 'set' | 'default' | 'missing' | 'invalid';
 
@@ -69,7 +82,7 @@ export interface EnvReport {
 }
 
 function validate(key: string, value: string): string | undefined {
-  if (GUID_KEYS.has(key) && !GUID.test(value)) return 'expected a GUID';
+  if (GUID_KEYS.has(key) && !isGuid(value)) return 'expected a GUID';
   if (key === 'RUNNER_URL') {
     try {
       new URL(value);

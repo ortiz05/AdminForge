@@ -1,7 +1,9 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { newDefinition, publishContent, type ContentCliContext } from '@adminforge/cli/src/commands/content';
+import type { ContentCliContext } from '@adminforge/cli/src/content/context';
+import { newDefinition } from '@adminforge/cli/src/commands/new';
+import { publishContent } from '@adminforge/cli/src/commands/publish';
 import { repoRoot } from '../../lib/repo';
 
 // Publishing changes what the portal can do, so it is recorded in the audit chain: who, which versions, which commit.

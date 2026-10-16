@@ -25,7 +25,8 @@ RUN pnpm --filter @adminforge/runner build
 # ── Install exactly the module versions in modules.lock.json (runtime modules only, no Pester) ─────
 FROM ${PWSH_IMAGE} AS modules
 COPY portal/apps/runner/modules.lock.json /build/modules.lock.json
-COPY portal/apps/runner/scripts/install-modules.ps1 /build/scripts/install-modules.ps1
+# install-modules.ps1 dot-sources RunnerModules.ps1 next to it.
+COPY portal/apps/runner/scripts /build/scripts
 RUN pwsh -NoLogo -NoProfile -NonInteractive -File /build/scripts/install-modules.ps1 -Production -Destination /opt/adminforge/modules
 
 # ── Runtime ──────────────────────────────────────────────────────────────────────────────────────

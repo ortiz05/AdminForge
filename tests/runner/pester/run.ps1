@@ -3,8 +3,12 @@
     Runs the AdminForge runner Pester tests with the pinned Pester version.
 
 .DESCRIPTION
-    Puts the runner's pinned module directory first on PSModulePath (so the tests see the same module
-    versions as the workers) and installs the pinned Pester version there if it is missing.
+    Installs the pinned Pester version into the runner's module directory when it is missing or other Pester
+    versions sit next to it (through portal/apps/runner/scripts/install-modules.ps1 -Name Pester),
+    then puts that directory first on PSModulePath the way the workers do (so the tests see the same module
+    versions as jobs) and runs every *.Tests.ps1 here. The helpers come from
+    portal/apps/runner/scripts/RunnerModules.ps1.
+    Prints "PESTER total=… passed=… failed=… skipped=…" (tests/unit/runner/pester.test.ts reads it).
     Exit code = number of failed tests.
 
 .EXAMPLE
@@ -20,17 +24,17 @@ $ProgressPreference = 'SilentlyContinue'
 
 $repo = (Resolve-Path (Join-Path $PSScriptRoot '../../..')).Path
 $runner = Join-Path $repo 'portal/apps/runner'
-$modulesDir = if ($env:ADMINFORGE_RUNNER_MODULES_DIR) { $env:ADMINFORGE_RUNNER_MODULES_DIR } else { Join-Path $runner 'modules' }
-$lock = Get-Content -Raw -LiteralPath (Join-Path $runner 'modules.lock.json') | ConvertFrom-Json -AsHashtable
-$pesterVersion = $lock['devModules']['Pester']
+. (Join-Path $runner 'scripts/RunnerModules.ps1')
 
-New-Item -ItemType Directory -Force -Path $modulesDir | Out-Null
-$env:ADMINFORGE_RUNNER_MODULES_DIR = $modulesDir
-$env:PSModulePath = $modulesDir + [System.IO.Path]::PathSeparator + (Join-Path $PSHOME 'Modules')
-if (-not (Test-Path -LiteralPath (Join-Path $modulesDir "Pester/$pesterVersion/Pester.psd1"))) {
-    Write-Host "Installing Pester $pesterVersion into $modulesDir"
-    Save-PSResource -Name Pester -Version $pesterVersion -Repository PSGallery -Path $modulesDir -TrustRepository -SkipDependencyCheck -Quiet
+$modulesDir = Get-RunnerModulesDir -RunnerRoot $runner
+$pester = Get-PinnedModule -Lock (Read-RunnerModuleLock -Path (Join-Path $runner 'modules.lock.json')) -Name Pester
+if (@(Get-ModuleInstallPlan -Pinned $pester -Destination $modulesDir | Where-Object Action -ne 'ok').Count) {
+    & (Join-Path $runner 'scripts/install-modules.ps1') -Destination $modulesDir -Name Pester
 }
+$pesterVersion = $pester['Pester']
+
+$env:ADMINFORGE_RUNNER_MODULES_DIR = $modulesDir
+Set-RunnerModulePath -ModulesDir $modulesDir
 Import-Module Pester -RequiredVersion $pesterVersion
 
 $config = New-PesterConfiguration

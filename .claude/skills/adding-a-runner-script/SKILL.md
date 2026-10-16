@@ -9,7 +9,8 @@ description: Use when an AdminForge feature needs PowerShell (Exchange Online, d
 
 `portal/apps/runner` executes **pinned** scripts from `portal/content/scripts/<area>/<Verb-Noun>.ps1` in single-use
 pwsh workers, with the engineer's delegated tokens. Content references a script by path **and sha256**; the runner
-refuses anything else. Prefer Graph when it can do the job.
+refuses anything else. Prefer Graph when it can do the job. Conventions in one place:
+`portal/content/scripts/README.md`; how the runner works: `portal/apps/runner/README.md`.
 
 ## Steps
 
@@ -31,7 +32,8 @@ refuses anything else. Prefer Graph when it can do the job.
 -Raw <file>)` (the Pester `Invoke-ContentScript` helper applies it in read mode). Write scripts are used from
    playbook steps with `mode: write`.
 5. Pin it: `sha256sum portal/content/scripts/<path>` → put `script` + `sha256` in the datasource/step. **Any edit to
-   the script changes the hash — update every reference.** Write scripts start with
+   the script changes the hash — update every reference;** `pnpm adminforge validate` lists every stale or missing pin
+   with the new hash (the after-edit hook runs it when a script changes). Write scripts start with
    `if ($Context['Mode'] -ne 'write') { throw (New-AdminForgeError -Category readOnly …) }`, read the target first, change
    only what differs (idempotent), read it back, and return before/after so the run record shows what changed.
 6. Fixture for mock mode: `tests/fixtures/runner/<script path>.json` (the array of output objects; wrap it in
@@ -45,6 +47,9 @@ refuses anything else. Prefer Graph when it can do the job.
    `pnpm --filter @adminforge/tests exec pwsh -NoLogo -NoProfile -File runner/pester/run.ps1`; runner unit tests are
    in `tests/unit/runner/`.
 8. New PowerShell module? Pin it in `portal/apps/runner/modules.lock.json` and `pnpm --filter @adminforge/runner modules:install`.
+   A new helper for scripts belongs in the `AdminForge.Runner` module (`portal/apps/runner/ps/AdminForge.Runner/`, one
+   file per concern; add it to `FunctionsToExport` and `Export-ModuleMember`) — and, for read scripts, to the read-only
+   policy's allow-list in `ReadOnlyPolicy.ps1`, which needs a security review.
 9. SharePoint: a SharePoint Administrator can't open other people's sites or OneDrives, so read and change them through
    the tenant admin connection (`sharepointAdmin`): `Get-PnPTenantSite -Identity <url>` (SiteId, lock state, storage),
    and OneDrive site collection administrators with `sharepoint/Set-SiteCollectionAdmin.ps1` (reuse it; it reads them

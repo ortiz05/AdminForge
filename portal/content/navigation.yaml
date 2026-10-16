@@ -1,7 +1,7 @@
 $schema: ../packages/schemas/generated/navigation.schema.json
 kind: navigation
 id: portal.navigation
-version: 1.0.0
+version: 1.2.0
 title: Navigation
 summary: Section order, labels and icons for the navigation rail. Pages join a section through nav.section.
 owner: portal-admins
@@ -11,6 +11,8 @@ sections:
     label: Overview
     icon: house
     order: 10
+    items:
+      - { key: news, label: News and changes, href: /news, icon: newspaper, order: 5 }
   - key: identity
     label: Identity
     icon: identification-card
@@ -45,6 +47,11 @@ sections:
     label: Reports
     icon: chart-bar
     order: 80
+    # Reports keep `nav: { section: reports, icon }` (the icon is the catalogue's row icon) but aren't listed one by one:
+    # the rail shows the catalogue, where every report can be filtered, opened and scheduled.
+    listDefinitions: false
+    items:
+      - { key: reports-catalog, label: All reports, href: /reports, icon: chart-bar, order: 10 }
   - key: admin
     label: Admin
     icon: gear-six

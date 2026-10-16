@@ -28,6 +28,35 @@ export function nextRuns(cron: string, timezone: string, after: Date, n: number)
   return pattern(cron, timezone).nextRuns(n, after);
 }
 
+/** Shortest interval between two runs of a schedule created in the portal ("at most hourly"). */
+export const PORTAL_MIN_INTERVAL_MS = 3_600_000;
+const FREQUENCY_HORIZON_MS = 8 * 86_400_000;
+
+/**
+ * Whether two consecutive runs of `cron` (in `timezone`) come closer than `minIntervalMs`, looking at ~8 days of runs
+ * from its first run after `after`. Starting at the first run (not at `after`) means a pattern limited to a later
+ * month or day ("* * * 12 *") is judged on the days it actually runs. A pattern that never fires is not too frequent.
+ * Throws on an invalid pattern (validate it first).
+ */
+export function runsTooOften(
+  cron: string,
+  timezone: string,
+  after: Date,
+  minIntervalMs = PORTAL_MIN_INTERVAL_MS,
+): boolean {
+  let prev = nextRun(cron, timezone, after);
+  if (!prev) return false;
+  const end = prev.getTime() + FREQUENCY_HORIZON_MS;
+  // At most one run per interval passes the check, so the loop is bounded by horizon / interval (+ a safety cap).
+  for (let i = 0; i < 2_000; i++) {
+    const next = nextRun(cron, timezone, prev);
+    if (!next || next.getTime() > end) return false;
+    if (next.getTime() - prev.getTime() < minIntervalMs) return true;
+    prev = next;
+  }
+  return false;
+}
+
 const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 const DAY_ABBR: Record<string, number> = { SUN: 0, MON: 1, TUE: 2, WED: 3, THU: 4, FRI: 5, SAT: 6 };
 const NICKNAMES: Record<string, string> = {

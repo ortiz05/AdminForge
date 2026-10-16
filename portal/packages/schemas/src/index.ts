@@ -1,5 +1,6 @@
 export * from './api';
 export * from './api-content';
+export * from './api-reports';
 export * from './common';
 export * from './params';
 export * from './datasource';
@@ -10,6 +11,7 @@ export * from './schedule';
 export * from './probe';
 export * from './connection';
 export * from './navigation';
+export * from './news';
 export * from './definition';
 export * from './references';
 export * from './parse';

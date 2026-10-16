@@ -105,14 +105,18 @@ if (values.schedule) {
     });
     const run = await scheduler.runOnce(values.schedule, `cli:${process.env.USER ?? 'operator'}`);
     const r = run.result ?? {};
-    const counts = ['probes', 'ok', 'warn', 'crit', 'error']
+    const counts = ['probes', 'feeds', 'ok', 'warn', 'crit', 'error', 'failed', 'skipped', 'new', 'updated']
       .filter((k) => typeof r[k] === 'number')
       .map((k) => `${k}=${r[k] as number}`);
     process.stdout.write(
       `${values.schedule}: ${run.status}${counts.length ? ` (${counts.join(' ')})` : ''}${run.error ? ` — ${run.error.code}` : ''}\n`,
     );
-    for (const p of (r.results as Array<{ key: string; status: string; code: string }> | undefined) ?? [])
-      process.stdout.write(`  ${pad(p.key, 48)} ${pad(p.status, 6)} ${p.code}\n`);
+    // Probe and feed results: key, status, reason code and (feeds) item counts — never item contents.
+    type Line = { key: string; status: string; code: string; new?: number; updated?: number };
+    for (const p of (r.results as Line[] | undefined) ?? [])
+      process.stdout.write(
+        `  ${pad(p.key, 48)} ${pad(p.status, 8)} ${pad(p.code, 20)}${typeof p.new === 'number' ? ` new=${p.new} updated=${p.updated ?? 0}` : ''}\n`,
+      );
     await close(run.status === 'succeeded' ? 0 : 1);
   } catch (err) {
     log.error({ err: { message: (err as Error).message } }, 'schedule run failed');

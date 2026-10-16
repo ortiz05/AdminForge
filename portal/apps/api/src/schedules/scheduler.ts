@@ -6,9 +6,11 @@ import type { AuditWriter } from '../audit/writer';
 import { toErrorInfo } from '../datasources/executor';
 import type { DefinitionSource } from '../definitions/types';
 import { AppError } from '../errors';
+import { AUTOMATION_PAUSED } from '../execution/emergency';
 import { nextRun } from './cron';
+import type { CreatorAccessChecker, CreatorVerdict } from './creator-access';
 import type { ScheduleEvents } from './events';
-import type { JobRunner } from './jobs';
+import { scheduledInPortalBy, type JobRunner } from './jobs';
 import { realTimers, type LeaderElector, type Timers } from './leader';
 import type { ScheduleStore } from './store';
 import { contentSchedules, contentSignature, syncSchedules } from './sync';
@@ -49,6 +51,16 @@ export interface SchedulerOptions {
   resyncMs?: number;
   /** Email/Teams for `notify.onFailure` / `notify.onSuccess` (absent: only the audit log and the portal event). */
   delivery?: DeliveryDeps;
+  /**
+   * Emergency stop (Admin → Settings): while true no schedule fires — due and queued occurrences are recorded as
+   * skipped. Runs already going are not stopped (their writes stop when changes are paused too).
+   */
+  automationPaused?: () => Promise<boolean>;
+  /**
+   * Schedules created in the portal: confirms before each run that the creator still holds the roles (null = no
+   * Entra sign-in, e.g. mock mode: not checked, like the sessions' role re-check).
+   */
+  creatorAccess?: CreatorAccessChecker | null;
 }
 
 export const DEFAULT_TIMEOUT_SECONDS = 900;
@@ -64,6 +76,9 @@ const PERMANENT = new Set([
   'definition_not_found',
   'runs_unavailable',
   'two_person_required',
+  'writes_paused',
+  'protected_object',
+  'creator_access_removed',
 ]);
 
 class RunAborted extends Error {
@@ -191,6 +206,7 @@ export class Scheduler {
     if (!this.leading) return;
     const now = this.o.now();
     await this.syncIfNeeded(now);
+    const paused = (await this.o.automationPaused?.()) === true;
     const schedules = await this.o.store.listSchedules();
     const byId = new Map(schedules.map((s) => [s.id, s]));
     const running = await this.o.store.runsInStatus(['running']);
@@ -210,6 +226,11 @@ export class Scheduler {
     for (const s of schedules) {
       if (!this.leading) return;
       if (!s.enabled || !s.nextRunAt || s.nextRunAt.getTime() > now.getTime()) continue;
+      // A retired (deleted) definition never fires, even if a toggle raced its deletion: switch it back off.
+      if (s.definition.status === 'retired') {
+        await this.o.store.updateSchedule(s.id, { enabled: false, nextRunAt: null });
+        continue;
+      }
       let next: Date | null = null;
       try {
         next = nextRun(s.definition.cron, s.definition.timezone, now);
@@ -230,6 +251,10 @@ export class Scheduler {
           { schedule: s.key, due: s.nextRunAt.toISOString() },
           'scheduler: missed run skipped (scheduler was not running)',
         );
+        continue;
+      }
+      if (paused) {
+        await this.skipPaused(claimed, 'cron', now);
         continue;
       }
       await this.fire(claimed, 'cron', now, busy);
@@ -253,13 +278,24 @@ export class Scheduler {
         );
         continue;
       }
-      if (q.trigger !== 'manual' && !s.enabled) {
+      if (paused) {
+        await this.skipPaused(s, q.trigger, now, q);
+        continue;
+      }
+      // A retired (deleted) schedule never runs, not even a run now that was queued before it was deleted.
+      const retired = s.definition.status === 'retired';
+      if (retired || (q.trigger !== 'manual' && !s.enabled)) {
         await this.o.store.updateRun(
           q.id,
           {
             status: 'skipped',
             endedAt: now,
-            result: { ...q.result, reason: 'The schedule was disabled before this run started.' },
+            result: {
+              ...q.result,
+              reason: retired
+                ? 'The schedule was deleted before this run started.'
+                : 'The schedule was disabled before this run started.',
+            },
           },
           'queued',
         );
@@ -307,6 +343,39 @@ export class Scheduler {
         );
       }
     }
+  }
+
+  /** Automation is paused: the occurrence (a due tick, or a queued run) is recorded as skipped with why, and audited. */
+  private async skipPaused(
+    s: ScheduleRow,
+    trigger: ScheduleTrigger,
+    now: Date,
+    queued?: ScheduleRunRow,
+    extra: Record<string, unknown> = {},
+  ) {
+    const error = { ...AUTOMATION_PAUSED };
+    const fields = {
+      status: 'skipped' as const,
+      endedAt: now,
+      result: { ...queued?.result, ...extra, reason: AUTOMATION_PAUSED.message },
+      error,
+    };
+    const run = queued
+      ? await this.o.store.updateRun(queued.id, fields, 'queued')
+      : await this.o.store.insertRun({
+          scheduleId: s.id,
+          scheduleKey: s.key,
+          trigger,
+          startedAt: now,
+          ...fields,
+        });
+    if (!run) return null;
+    await this.auditRun(s, run, 'skipped', 0, error, null);
+    this.o.events.publish({
+      type: 'schedule.updated',
+      data: { key: s.key, scheduleRunId: run.id, status: 'skipped' },
+    });
+    return run;
   }
 
   /** A cron tick: apply the overlap policy and concurrency, then start (or queue / skip) a run. */
@@ -393,10 +462,13 @@ export class Scheduler {
     // Run now (and its retries): who asked, by oid — a UPN can't be compared with an approver's oid.
     const requestedByOid = typeof run.result?.requestedByOid === 'string' ? run.result.requestedByOid : null;
     const attempt = typeof run.result?.attempt === 'number' ? run.result.attempt : 0;
+    // Portal schedules: the creator's UPN (the row keeps their oid; the definition's owner is their UPN).
     const scheduledBy =
       run.trigger === 'manual' && requestedBy
         ? requestedBy
-        : (s.createdBy ?? `content (owner: ${def.owner})`);
+        : s.source === 'portal'
+          ? def.owner
+          : (s.createdBy ?? `content (owner: ${def.owner})`);
     const correlationId = randomUUID();
     const started = this.o.now();
     await this.o.store.updateSchedule(s.id, { lastRunAt: run.startedAt, lastStatus: 'running' });
@@ -417,6 +489,7 @@ export class Scheduler {
           'approval_required',
           'This schedule changes data and runs only after a second person approved enabling it.',
         );
+      if (s.source === 'portal' && this.o.creatorAccess) await this.confirmCreator(s, run, correlationId);
       if (signal.aborted) throw signal.reason;
       const abort = new Promise<never>((_, reject) =>
         signal.addEventListener('abort', () => reject(signal.reason), { once: true }),
@@ -480,6 +553,80 @@ export class Scheduler {
     return row;
   }
 
+  /**
+   * A schedule created in the portal runs only while its creator could still create it: an enabled member holding
+   * Portal.Operator and every role the schedule and the report (current version) require. Confirmed loss → the run
+   * fails with `creator_access_removed` and the schedule is turned off (audited); can't tell → `creator_unverified`
+   * (this run only; the schedule stays on).
+   */
+  private async confirmCreator(s: ScheduleRow, run: ScheduleRunRow, correlationId: string): Promise<void> {
+    const def = s.definition;
+    const ref = def.job.kind === 'report' ? def.job.ref : null;
+    const report = ref ? (await this.o.definitions.list('report')).find((r) => r.key === ref) : undefined;
+    const roles = [
+      ...new Set([
+        'Portal.Operator',
+        ...(def.requires?.portalRoles ?? []),
+        ...(report?.def.requires?.portalRoles ?? []),
+      ]),
+    ];
+    const verdict: CreatorVerdict = s.createdBy
+      ? await this.o.creatorAccess!.check(s.createdBy, roles, correlationId)
+      : { status: 'unverified', problem: 'The schedule has no creator.' };
+    if (verdict.status === 'ok') return;
+    if (verdict.status === 'unverified')
+      throw new AppError(
+        503,
+        'creator_unverified',
+        `AdminForge couldn’t confirm that ${def.owner}, who created this schedule, still has access, so it didn’t run.`,
+        {
+          hint: 'It tries again at its next time. If this keeps happening, an administrator should check that the automation identity can read users, group memberships and enterprise apps (User.Read.All, GroupMember.Read.All, Application.Read.All).',
+        },
+      );
+    const why =
+      verdict.reason === 'not_found'
+        ? 'their account no longer exists'
+        : verdict.reason === 'disabled'
+          ? 'their account is disabled'
+          : verdict.reason === 'guest'
+            ? 'their account is now a guest'
+            : `they no longer hold the ${verdict.missing!.join(' and ')} role`;
+    await this.o.store.updateSchedule(s.id, { enabled: false, nextRunAt: null });
+    await this.o.audit
+      .append({
+        actorOid: 'automation',
+        actorUpn: 'automation identity',
+        mode: 'read',
+        action: 'schedule.disabled',
+        targetType: 'schedule',
+        targetId: s.key,
+        result: 'success',
+        correlationId,
+        details: {
+          reason: 'creator_access_removed',
+          createdBy: def.owner,
+          creatorOid: s.createdBy,
+          detail: verdict.reason,
+          ...(verdict.missing ? { missingRoles: verdict.missing } : {}),
+          scheduleRunId: run.id,
+          version: def.version,
+          sha256: s.sha256,
+        },
+      })
+      .catch((err: unknown) =>
+        this.o.log?.error?.({ err: { message: (err as Error).message } }, 'scheduler: audit failed'),
+      );
+    this.o.events.publish({ type: 'schedules.changed', data: { key: s.key } });
+    throw new AppError(
+      403,
+      'creator_access_removed',
+      `${def.owner} created this schedule, but ${why}, so it was turned off and didn’t run.`,
+      {
+        hint: 'Someone who may open the report can schedule it again from Reports; turning this one back on works only once the creator’s access is restored.',
+      },
+    );
+  }
+
   private async auditRun(
     s: ScheduleRow,
     run: ScheduleRunRow,
@@ -490,7 +637,12 @@ export class Scheduler {
     correlationId = randomUUID(),
   ) {
     const def = s.definition;
-    const by = scheduledBy ?? s.createdBy ?? `content (owner: ${def.owner})`;
+    // Portal schedules: the creator's UPN (the row keeps their oid), also for skipped runs.
+    const by =
+      scheduledBy ??
+      (s.source === 'portal' ? def.owner : null) ??
+      s.createdBy ??
+      `content (owner: ${def.owner})`;
     await this.o.audit
       .append({
         actorOid: 'automation',
@@ -527,11 +679,15 @@ export class Scheduler {
   private async notify(
     s: ScheduleRow,
     targets: readonly NotifyTargetSpec[],
-    msg: { title: string; text: string },
+    message: { title: string; text: string },
     correlationId: string,
   ): Promise<void> {
+    let msg = message;
     const delivery = this.o.delivery;
     const link = delivery ? `${delivery.publicBaseUrl}/schedules/${encodeURIComponent(s.key)}` : undefined;
+    // A schedule created in the portal says who made it.
+    const byline = scheduledInPortalBy(s);
+    if (byline) msg = { ...msg, text: `${msg.text}\n${byline}` };
     const results: DeliveryStatus[] = [];
     for (const t of targets) {
       if (!delivery)
@@ -667,6 +823,10 @@ export class Scheduler {
     await syncSchedules(this.o.store, await contentSchedules(this.o.definitions), now);
     const s = await this.o.store.getSchedule(key);
     if (!s) throw new AppError(404, 'schedule_not_found', `No schedule "${key}".`);
+    if ((await this.o.automationPaused?.()) === true) {
+      const skipped = await this.skipPaused(s, 'manual', now, undefined, { requestedBy });
+      if (skipped) return skipped;
+    }
     const run = await this.o.store.insertRun({
       scheduleId: s.id,
       scheduleKey: s.key,

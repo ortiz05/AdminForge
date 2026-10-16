@@ -73,6 +73,8 @@ describe('schedules API', () => {
       lastStatus: null,
       writeCapable: false,
       source: 'content',
+      createdBy: null,
+      canManage: false,
       pendingApprovalId: null,
     });
     expect(items.find((i) => i.key === 'reports.weekly')).toMatchObject({

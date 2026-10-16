@@ -43,8 +43,9 @@ type Placed = { def: Definition & { nav?: NavPlacement }; kind: NavKind };
 
 /**
  * Navigation from content (§6.5): section order/labels/icons from navigation.yaml, items from every page, dashboard,
- * report, playbook and runbook with a `nav:` block. Sections and items are filtered by portal roles; items whose
- * `requires.licences` the tenant lacks stay visible with a "Requires …" badge (R10). Empty sections are dropped.
+ * report, playbook and runbook with a `nav:` block (not for sections with `listDefinitions: false`). Sections and
+ * items are filtered by portal roles; items whose `requires.licences` the tenant lacks stay visible with a
+ * "Requires …" badge (R10). Empty sections are dropped.
  */
 export function composeNav(input: {
   navigation: Navigation | undefined;
@@ -86,7 +87,8 @@ export function composeNav(input: {
           ...(it.icon ? { icon: it.icon } : {}),
           order: it.order,
         });
-    for (const { def, kind } of placed) {
+    // `listDefinitions: false` (e.g. Reports): only the coded items; the definitions live in their catalogue.
+    for (const { def, kind } of s.listDefinitions === false ? [] : placed) {
       if (def.nav!.section !== s.key) continue;
       const missing = missingLicences(input.licences, def.requires?.licences);
       items.push({
@@ -128,9 +130,13 @@ export async function buildNav(
   const navigation = (navs.find((n) => n.key === 'portal.navigation') ?? navs[0])?.def as
     Navigation | undefined;
   // Only ask Graph for licences when something visible declares one.
-  const needsLicences = definitions.some(
-    (r) => (r.def as Placed['def']).nav && r.def.requires?.licences?.length,
+  const unlisted = new Set(
+    navigation?.sections.filter((s) => s.listDefinitions === false).map((s) => s.key) ?? [],
   );
+  const needsLicences = definitions.some((r) => {
+    const nav = (r.def as Placed['def']).nav;
+    return nav && !unlisted.has(nav.section) && r.def.requires?.licences?.length;
+  });
   const licences = needsLicences
     ? await ctx.licences.get({ kind: 'delegated', session, mode: 'read' }, { correlationId })
     : null;

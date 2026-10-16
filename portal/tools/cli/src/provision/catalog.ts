@@ -92,11 +92,16 @@ export const AUTOMATION_GRAPH_ROLES = [
  * report them as unused. Everything else in AUTOMATION_GRAPH_ROLES is only needed when content declares it.
  */
 export const AUTOMATION_BUILTIN_USES: Readonly<Record<string, string>> = {
-  'Application.Read.All': 'app credential expiry probes and the content-health job',
+  'Application.Read.All':
+    'app credential expiry probes, the content-health job and portal report schedules (who holds the portal roles)',
   'AuditLog.Read.All': 'sign-in health probes',
   'Organization.Read.All': 'licence checks (/subscribedSkus)',
   'Policy.Read.All': 'CLI: Security Defaults check in provision status / test-identities',
   'Mail.Send': 'email delivery of reports and alerts from AF_MAIL_SENDER (only when it is set)',
+  'User.Read.All':
+    'report schedules created in the portal: confirming before each run that the creator is still an enabled member',
+  'GroupMember.Read.All':
+    'report schedules created in the portal: confirming before each run that the creator still holds the portal roles',
 };
 
 /** Portal roles (§5.3) — app roles on the Read app, each backed by a security group. */

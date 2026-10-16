@@ -9,7 +9,10 @@ import type { ArtifactStore, OpenedArtifact } from '../artifacts/store';
 import type { DefinitionSource } from '../definitions/types';
 import type { PlaybookRef } from '../runs/fingerprint';
 import { AppError } from '../errors';
+import { AUTOMATION_PAUSED } from '../execution/emergency';
 import { describeCron, nextRun } from './cron';
+import { deliveryView, type DeliveryView, type NotifyView } from './delivery-keys';
+import { maskRedacted, mayOpen } from '../reports/catalog';
 import type { ScheduleEvents } from './events';
 import type { ScheduleStore } from './store';
 import { contentSchedules, contentSignature, syncSchedules } from './sync';
@@ -43,13 +46,28 @@ export interface ScheduleItem {
   timezone: string;
   enabled: boolean;
   identity: 'automation';
-  job: { kind: Schedule['job']['kind']; ref?: string; refs?: string[]; select?: { tags: string[] } };
+  job: {
+    kind: Schedule['job']['kind'];
+    ref?: string;
+    refs?: string[];
+    select?: { tags: string[] };
+    /** Report jobs: the params the report runs with. */
+    params?: Record<string, unknown>;
+  };
   nextRunAt: string | null;
   lastRunAt: string | null;
   lastStatus: string | null;
   writeCapable: boolean;
   approvedBy?: string[];
   source: 'content' | 'portal';
+  /** The creator's UPN (portal schedules); null for content. */
+  createdBy: string | null;
+  /** Portal schedule, the caller holds Portal.Operator and created it (by oid) or holds Portal.Admin. */
+  canManage: boolean;
+  /** Report jobs: where the file goes (configuration key names, never values). */
+  delivery?: DeliveryView[];
+  /** `notify.onFailure` targets (key names). */
+  notify?: NotifyView[];
   /** Set while an enable request waits for its second approver. */
   pendingApprovalId: string | null;
 }
@@ -86,10 +104,43 @@ export interface ScheduleApprovalView {
 }
 
 export const APPROVAL_TTL_MS = 7 * 86_400_000;
+/** Run now on a portal schedule: not again within this long of the last manual run. */
+export const PORTAL_RUN_NOW_INTERVAL_MS = 15 * 60_000;
+
+/** What `item` needs of a report: who may open it and which params it redacts. */
+export interface ReportAccess {
+  requires?: { portalRoles?: PortalRole[] };
+  params?: Record<string, { redact?: boolean }>;
+}
 const APPROVERS = ['Playbook.Approver'];
 const INACTIVE = new Set(['draft', 'retired']);
 
 const iso = (d: Date | null | undefined) => (d ? d.toISOString() : null);
+
+/** A portal schedule that was deleted (soft delete: kept for its history, hidden everywhere else). */
+export const isDeleted = (row: Pick<ScheduleRow, 'source' | 'definition'>) =>
+  row.source === 'portal' && row.definition.status === 'retired';
+
+/**
+ * Who may edit or delete a schedule created in the portal: a Portal.Operator who created it (by oid) or who is also a
+ * Portal.Admin. Content schedules change through git only. (Any Operator may still turn one off.)
+ */
+export function canManage(row: Pick<ScheduleRow, 'source' | 'createdBy'>, session?: SessionRecord): boolean {
+  if (!session || row.source !== 'portal' || !hasRole(session, 'Portal.Operator')) return false;
+  return (!!row.createdBy && row.createdBy === session.userOid) || hasRole(session, 'Portal.Admin');
+}
+
+/** Audit actor fields for a schedules API caller. */
+export function actorOf(c: Caller): Omit<AuditInput, 'action' | 'result'> {
+  return {
+    actorOid: c.session.userOid,
+    actorUpn: c.session.upn,
+    sessionHash: c.session.idHash,
+    mode: 'read',
+    correlationId: c.correlationId,
+    ip: c.ip,
+  };
+}
 
 export function encodeRunCursor(r: Pick<ScheduleRunRow, 'startedAt' | 'id'>): string {
   return Buffer.from(JSON.stringify({ s: r.startedAt.toISOString(), i: r.id }), 'utf8').toString('base64url');
@@ -121,6 +172,8 @@ export class ScheduleService {
       fingerprint?: (ref: PlaybookRef) => Promise<string>;
       /** Tells approvers a request is waiting (email/Teams); failures never block the request. */
       notifyApprovers?: (request: { title: string; requestedBy: string; key: string }) => Promise<void>;
+      /** The emergency stop (execution/emergency.ts): while automation is paused, Run now is refused up front. */
+      automationPaused?: () => Promise<boolean>;
     },
   ) {}
 
@@ -131,14 +184,7 @@ export class ScheduleService {
   }
 
   private actor(c: Caller): Omit<AuditInput, 'action' | 'result'> {
-    return {
-      actorOid: c.session.userOid,
-      actorUpn: c.session.upn,
-      sessionHash: c.session.idHash,
-      mode: 'read',
-      correlationId: c.correlationId,
-      ip: c.ip,
-    };
+    return actorOf(c);
   }
 
   /** Content → store (only when the content schedules changed since the last sync in this process). Returns the content keys. */
@@ -152,10 +198,11 @@ export class ScheduleService {
     return new Set(content.map((c) => c.key));
   }
 
-  private async row(key: string): Promise<{ row: ScheduleRow; inContent: boolean }> {
+  /** A schedule the API may show: in content, or created in the portal and not deleted. 404 otherwise. */
+  async row(key: string): Promise<{ row: ScheduleRow; inContent: boolean }> {
     const keys = await this.ensureSynced();
     const row = await this.deps.store.getSchedule(key);
-    if (!row || (row.source === 'content' && !keys.has(key)))
+    if (!row || (row.source === 'content' && !keys.has(key)) || isDeleted(row))
       throw new AppError(404, 'schedule_not_found', `No schedule "${key}".`);
     return { row, inContent: keys.has(key) };
   }
@@ -182,9 +229,21 @@ export class ScheduleService {
     return out;
   }
 
-  item(row: ScheduleRow, pendingApprovalId: string | null, now: Date): ScheduleItem {
+  /**
+   * The API view of a row; `session` decides `canManage`. A report job's params, delivery and alerts are shown only to
+   * someone who may open the report (`reports`: the published reports by key), with `redact: true` params masked.
+   */
+  item(
+    row: ScheduleRow,
+    pendingApprovalId: string | null,
+    now: Date,
+    session?: SessionRecord,
+    reports?: ReadonlyMap<string, ReportAccess>,
+  ): ScheduleItem {
     const def = row.definition;
     const job = def.job;
+    const report = job.kind === 'report' ? reports?.get(job.ref) : undefined;
+    const details = job.kind !== 'report' || (!!session && !!report && mayOpen(session, report));
     return {
       key: row.key,
       title: def.title,
@@ -199,6 +258,9 @@ export class ScheduleService {
         ...('ref' in job && job.ref ? { ref: job.ref } : {}),
         ...(job.kind === 'probe' && job.refs ? { refs: job.refs } : {}),
         ...(job.kind === 'probe' && job.select ? { select: { tags: job.select.tags } } : {}),
+        ...(job.kind === 'report' && details && job.params && Object.keys(job.params).length
+          ? { params: maskRedacted(job.params, report?.params) }
+          : {}),
       },
       nextRunAt: iso(this.nextFor(row, now)),
       lastRunAt: iso(row.lastRunAt),
@@ -206,24 +268,36 @@ export class ScheduleService {
       writeCapable: isWriteCapable(def),
       ...(row.approvedBy ? { approvedBy: [row.approvedBy] } : {}),
       source: row.source,
+      // Portal schedules are owned by their creator (definition.owner is the creator's UPN; the row keeps the oid).
+      createdBy: row.source === 'portal' ? def.owner : null,
+      canManage: canManage(row, session),
+      ...(details ? deliveryView(def) : {}),
       pendingApprovalId,
     };
   }
 
-  async list(): Promise<{ items: ScheduleItem[] }> {
+  /** Published reports by key (for `item`). */
+  async reports(): Promise<Map<string, ReportAccess>> {
+    return new Map(
+      (await this.deps.definitions.list('report')).map((r) => [r.key, r.def as unknown as ReportAccess]),
+    );
+  }
+
+  async list(session?: SessionRecord): Promise<{ items: ScheduleItem[] }> {
     const keys = await this.ensureSynced();
     const now = this.deps.now();
     const pending = new Map((await this.pendingApprovals()).map((a) => [a.subjectId, a.id]));
-    const rows = (await this.deps.store.listSchedules()).filter(
-      (r) => r.source === 'portal' || keys.has(r.key),
+    const rows = (await this.deps.store.listSchedules()).filter((r) =>
+      r.source === 'portal' ? !isDeleted(r) : keys.has(r.key),
     );
-    return { items: rows.map((r) => this.item(r, pending.get(r.key) ?? null, now)) };
+    const reports = await this.reports();
+    return { items: rows.map((r) => this.item(r, pending.get(r.key) ?? null, now, session, reports)) };
   }
 
-  async get(key: string): Promise<ScheduleItem> {
+  async get(key: string, session?: SessionRecord): Promise<ScheduleItem> {
     const { row } = await this.row(key);
     const pending = (await this.pendingApprovals()).find((a) => a.subjectId === key);
-    return this.item(row, pending?.id ?? null, this.deps.now());
+    return this.item(row, pending?.id ?? null, this.deps.now(), session, await this.reports());
   }
 
   /** PATCH { enabled }: 200 when done; 202 { approvalId } when a write-capable schedule needs a second person. */
@@ -321,7 +395,8 @@ export class ScheduleService {
     return { statusCode: 200, body: { key, enabled: true } };
   }
 
-  private changed(key: string) {
+  /** Wakes the scheduler (in any process) and tells browsers the schedule changed. */
+  changed(key: string) {
     this.deps.events.publish({ type: 'schedules.changed', data: { key } });
     this.deps.events.publish({ type: 'schedule.updated', data: { key } });
   }
@@ -330,6 +405,13 @@ export class ScheduleService {
   async runNow(c: Caller, key: string): Promise<{ scheduleRunId: string }> {
     requireRole(c.session, 'Portal.Operator', 'Running schedules');
     const { row } = await this.row(key);
+    if ((await this.deps.automationPaused?.()) === true)
+      throw new AppError(
+        409,
+        AUTOMATION_PAUSED.code,
+        'An administrator has paused automation, so schedules can’t run now.',
+        { hint: AUTOMATION_PAUSED.hint },
+      );
     const def = row.definition;
     if (isWriteCapable(def) && !(row.enabled && row.approvedBy))
       throw new AppError(
@@ -338,6 +420,7 @@ export class ScheduleService {
         'This schedule changes data; it can run only after enabling it was approved by a second person.',
         { hint: 'Enable it first; a Playbook.Approver who is not you approves the request.' },
       );
+    if (row.source === 'portal') await this.assertRunNowAllowed(row);
     const run = await this.deps.store.insertRun({
       scheduleId: row.id,
       scheduleKey: key,
@@ -356,6 +439,27 @@ export class ScheduleService {
     });
     this.deps.events.publish({ type: 'schedule.run_requested', data: { key, scheduleRunId: run.id } });
     return { scheduleRunId: run.id };
+  }
+
+  /**
+   * Run now on a schedule created in the portal: not while a run is queued or running, nor within 15 minutes of the
+   * last manual run (every run reads the tenant with application permissions and may email or post the file).
+   */
+  private async assertRunNowAllowed(row: ScheduleRow) {
+    const now = this.deps.now().getTime();
+    if ((await this.deps.store.runsInStatus(['queued', 'running'])).some((r) => r.scheduleId === row.id))
+      throw new AppError(429, 'run_too_soon', 'This schedule is already running or waiting to run.', {
+        hint: 'Wait for that run to finish; its file appears in the schedule’s history.',
+      });
+    const last = (await this.deps.store.listRuns(row.id, { limit: 25 })).find(
+      (r) => r.trigger === 'manual' && now - r.startedAt.getTime() < PORTAL_RUN_NOW_INTERVAL_MS,
+    );
+    if (last) {
+      const minutes = Math.ceil((last.startedAt.getTime() + PORTAL_RUN_NOW_INTERVAL_MS - now) / 60_000);
+      throw new AppError(429, 'run_too_soon', 'This schedule was run by hand less than 15 minutes ago.', {
+        hint: `Try again in ${minutes} minute${minutes === 1 ? '' : 's'}, or open the latest file in its history.`,
+      });
+    }
   }
 
   async runs(

@@ -158,7 +158,12 @@ export async function contentHealth(
     const declared = new Map<string, string[]>();
     const unlicensed: string[] = [];
     for (const e of entries) {
-      if ((e.def.kind !== 'schedule' && e.def.kind !== 'probe') || !ACTIVE(e.def.status)) continue;
+      // Everything the automation identity runs: schedules, probes and News and changes feeds.
+      if (
+        (e.def.kind !== 'schedule' && e.def.kind !== 'probe' && e.def.kind !== 'feed') ||
+        !ACTIVE(e.def.status)
+      )
+        continue;
       if (e.def.kind === 'schedule' && e.def.enabled === false) continue;
       const licences = e.def.requires?.licences;
       if (licences?.length && opts.licensed && (await opts.licensed(licences)) === false) {

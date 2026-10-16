@@ -2,6 +2,7 @@ import {
   DefinitionId,
   formatContentError,
   parseDefinition,
+  PORTAL_SCHEDULE_PREFIX,
   TimeZone,
   validateCron,
 } from '@adminforge/schemas';
@@ -15,6 +16,9 @@ import { describeCron, nextRuns } from './cron';
  * The schedule editor (R6): turns the form into schedule YAML the engineer commits through the normal review workflow
  * (git → `adminforge validate` → publish), exactly as `adminforge new schedule` would. Nothing is written server-side;
  * the YAML is validated with the content schema before it is returned.
+ *
+ * `scheduleDocument` / `reportJobDocument` / `notifyTargets` build the schedule document itself; in-app report
+ * schedules (schedules/portal.ts) use the same builder, so both paths produce the same shape.
  */
 
 const EnvKey = z.string().regex(/^AF_[A-Z0-9_]+$/, 'Expected an env key like AF_TEAMS_ALERTS_WEBHOOK');
@@ -113,6 +117,102 @@ export type RequiresOf = (
   key: string,
 ) => Promise<Record<string, unknown> | null>;
 
+/** What a schedule copies from the report or playbook it runs: its permissions (scopes) and licences. */
+export function copiedRequires(
+  requires: { scopes?: unknown; licences?: unknown } | undefined,
+): Record<string, unknown> | null {
+  return requires?.scopes || requires?.licences
+    ? {
+        ...(requires.scopes ? { scopes: requires.scopes } : {}),
+        ...(requires.licences ? { licences: requires.licences } : {}),
+      }
+    : null;
+}
+
+/** A report job: a file (kept `retain` times), then email/Teams to configuration keys (`${ env.KEY }`, never values). */
+export function reportJobDocument(j: {
+  ref: string;
+  format: 'csv' | 'xlsx' | 'json';
+  retain?: number;
+  params?: Record<string, unknown>;
+  /** Configuration key holding recipient addresses. */
+  emailKey?: string;
+  /** Configuration key holding a Teams workflow webhook URL. */
+  teamsKey?: string;
+}): Record<string, unknown> {
+  const delivery: Record<string, unknown>[] = [
+    { type: 'file', format: j.format, ...(j.retain ? { retain: j.retain } : {}) },
+  ];
+  if (j.emailKey) delivery.push({ type: 'email', to: [env(j.emailKey)], format: j.format });
+  if (j.teamsKey) delivery.push({ type: 'teams', webhook: env(j.teamsKey) });
+  return {
+    kind: 'report',
+    ref: j.ref,
+    ...(j.params && Object.keys(j.params).length ? { params: j.params } : {}),
+    delivery,
+  };
+}
+
+/** `notify.onFailure` targets for configuration keys. */
+export function notifyTargets(n?: { emailKey?: string; teamsKey?: string }): Record<string, unknown>[] {
+  const notify: Record<string, unknown>[] = [];
+  if (n?.emailKey) notify.push({ type: 'email', to: [env(n.emailKey)] });
+  if (n?.teamsKey) notify.push({ type: 'teams', webhook: env(n.teamsKey) });
+  return notify;
+}
+
+export interface ScheduleDocumentInput {
+  key: string;
+  /** Default 1.0.0 (a new schedule). */
+  version?: string;
+  title: string;
+  summary?: string;
+  owner: string;
+  tags?: string[];
+  cron: string;
+  timezone: string;
+  enabled: boolean;
+  job: Record<string, unknown>;
+  /** Retries with exponential backoff from 5 minutes (0/absent = none). */
+  retries?: number;
+  timeoutSeconds?: number;
+  notifyOnFailure?: Record<string, unknown>[];
+  requires?: Record<string, unknown> | null;
+  /** Editor autocomplete path (YAML files only). */
+  $schema?: string;
+}
+
+/** The schedule document (validate it with the Schedule schema / parseDefinition before use). */
+export function scheduleDocument(i: ScheduleDocumentInput): Record<string, unknown> {
+  return {
+    ...(i.$schema ? { $schema: i.$schema } : {}),
+    kind: 'schedule',
+    id: i.key,
+    version: i.version ?? '1.0.0',
+    title: i.title,
+    ...(i.summary ? { summary: i.summary } : {}),
+    owner: i.owner,
+    ...(i.tags?.length ? { tags: i.tags } : {}),
+    cron: i.cron,
+    timezone: i.timezone,
+    enabled: i.enabled,
+    identity: 'automation',
+    job: i.job,
+    ...(i.retries ? { retry: { max: i.retries, backoff: 'exponential', delay: '5m' } } : {}),
+    ...(i.timeoutSeconds ? { timeoutSeconds: i.timeoutSeconds } : {}),
+    overlap: 'skip',
+    ...(i.notifyOnFailure?.length ? { notify: { onFailure: i.notifyOnFailure } } : {}),
+    ...(i.requires ? { requires: i.requires } : {}),
+  };
+}
+
+/** Thrown for an invalid cron expression (the editor and in-app schedules). */
+export function invalidCron(problem: string | undefined): AppError {
+  return new AppError(400, 'invalid_cron', `The cron expression isn’t valid: ${problem}`, {
+    hint: 'Use five fields: minute hour day-of-month month day-of-week, e.g. "15 6 * * 1" for Mondays at 06:15.',
+  });
+}
+
 export async function scaffoldSchedule(
   r: ScheduleScaffoldRequest,
   deps: { known: readonly TenantValue[]; now: Date; requiresOf?: RequiresOf },
@@ -126,26 +226,31 @@ export async function scaffoldSchedule(
     deps.known,
   );
   const preview = previewCron(r.cron, r.timezone, deps.now);
-  if (!preview.valid)
-    throw new AppError(400, 'invalid_cron', `The cron expression isn’t valid: ${preview.problem}`, {
-      hint: 'Use five fields: minute hour day-of-month month day-of-week, e.g. "15 6 * * 1" for Mondays at 06:15.',
-    });
+  if (!preview.valid) throw invalidCron(preview.problem);
 
   const section =
     r.section ?? (r.job.kind === 'probe' ? 'probes' : r.job.kind === 'report' ? 'reports' : 'ops');
   const key = r.key ?? `${section}.${slug(r.title)}`;
+  if (key.startsWith(PORTAL_SCHEDULE_PREFIX))
+    throw new AppError(
+      400,
+      'invalid_request',
+      `Schedule keys starting with "${PORTAL_SCHEDULE_PREFIX}" are reserved for schedules created in the portal.`,
+      { hint: 'Pick another section, e.g. reports or ops.' },
+    );
   const [folder, ...rest] = key.split('.');
   const path = `portal/content/schedules/${folder}/${rest.join('.')}.schedule.yaml`;
 
   let job: Record<string, unknown>;
   let requires: Record<string, unknown> | null = null;
   if (r.job.kind === 'report') {
-    const delivery: Record<string, unknown>[] = [
-      { type: 'file', format: r.job.format, ...(r.job.retain ? { retain: r.job.retain } : {}) },
-    ];
-    if (r.job.emailEnv) delivery.push({ type: 'email', to: [env(r.job.emailEnv)], format: r.job.format });
-    if (r.job.teamsWebhookEnv) delivery.push({ type: 'teams', webhook: env(r.job.teamsWebhookEnv) });
-    job = { kind: 'report', ref: r.job.ref, delivery };
+    job = reportJobDocument({
+      ref: r.job.ref,
+      format: r.job.format,
+      ...(r.job.retain ? { retain: r.job.retain } : {}),
+      ...(r.job.emailEnv ? { emailKey: r.job.emailEnv } : {}),
+      ...(r.job.teamsWebhookEnv ? { teamsKey: r.job.teamsWebhookEnv } : {}),
+    });
     requires = (await deps.requiresOf?.('report', r.job.ref)) ?? null;
   } else if (r.job.kind === 'probe') {
     job = { kind: 'probe', select: { tags: r.job.tags } };
@@ -172,30 +277,24 @@ export async function scaffoldSchedule(
     job = { kind: 'contentHealth', ...(r.job.scopes ? { scopes: true } : {}) };
   }
 
-  const notify: Record<string, unknown>[] = [];
-  if (r.notifyOnFailure?.emailEnv) notify.push({ type: 'email', to: [env(r.notifyOnFailure.emailEnv)] });
-  if (r.notifyOnFailure?.teamsWebhookEnv)
-    notify.push({ type: 'teams', webhook: env(r.notifyOnFailure.teamsWebhookEnv) });
-
-  const doc: Record<string, unknown> = {
+  const doc = scheduleDocument({
     $schema: '../../../packages/schemas/generated/schedule.schema.json',
-    kind: 'schedule',
-    id: key,
-    version: '1.0.0',
+    key,
     title: r.title,
     ...(r.summary ? { summary: r.summary } : {}),
     owner: r.owner ?? 'portal-admins',
     cron: r.cron,
     timezone: r.timezone,
     enabled: r.enabled,
-    identity: 'automation',
     job,
-    ...(r.retries ? { retry: { max: r.retries, backoff: 'exponential', delay: '5m' } } : {}),
+    retries: r.retries,
     ...(r.timeoutSeconds ? { timeoutSeconds: r.timeoutSeconds } : {}),
-    overlap: 'skip',
-    ...(notify.length ? { notify: { onFailure: notify } } : {}),
-    ...(requires ? { requires } : {}),
-  };
+    notifyOnFailure: notifyTargets({
+      ...(r.notifyOnFailure?.emailEnv ? { emailKey: r.notifyOnFailure.emailEnv } : {}),
+      ...(r.notifyOnFailure?.teamsWebhookEnv ? { teamsKey: r.notifyOnFailure.teamsWebhookEnv } : {}),
+    }),
+    requires,
+  });
   const header = [
     `# Made with the schedule editor. Save as ${path}, then: pnpm adminforge validate && pnpm adminforge publish`,
     preview.text ? `# Runs: ${preview.text} (${r.timezone}).` : null,

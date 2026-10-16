@@ -4,7 +4,8 @@ import { IconName, envelopeShape } from './common';
 
 /**
  * navigation.yaml: section order, labels and icons (§6.5). Pages, dashboards, reports, playbooks and runbooks join a
- * section through their `nav.section`; `items` add coded routes (Runs, Schedules, Audit, …).
+ * section through their `nav.section` (unless the section says `listDefinitions: false`); `items` add coded routes
+ * (Runs, Schedules, Audit, the Reports catalogue, …).
  * (Named Navigation* to stay clear of the NavSection/NavItem API response types.)
  */
 
@@ -28,6 +29,12 @@ export const NavigationSection = z.strictObject({
   order: z.number().int().optional(),
   /** Hide the section unless the user holds one of these roles. */
   roles: z.array(PortalRole).optional(),
+  /**
+   * Whether definitions whose `nav.section` is this section are listed in the rail (default true). `false` lists only
+   * `items` (e.g. Reports: one "All reports" entry for the catalogue); the definitions stay reachable by URL, search
+   * and their catalogue.
+   */
+  listDefinitions: z.boolean().optional(),
   items: z.array(NavigationItem).optional(),
 });
 export type NavigationSection = z.infer<typeof NavigationSection>;

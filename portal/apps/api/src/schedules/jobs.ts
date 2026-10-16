@@ -7,7 +7,7 @@ import {
   type DeliveryStatus,
 } from '../delivery/notifier';
 import { isTerminal } from '@adminforge/engine';
-import type { Delivery, Probe, ProbeJob, Schedule } from '@adminforge/schemas';
+import type { Delivery, NewsJob, Probe, ProbeJob, Schedule } from '@adminforge/schemas';
 import type { ArtifactStore, WrittenArtifact } from '../artifacts/store';
 import { missingLicences } from '../capabilities/licences';
 import type { DatasourceRunner, LoadedPage, UserScope } from '../datasources/executor';
@@ -16,6 +16,8 @@ import { AppError } from '../errors';
 import type { ExecutionIdentity, OutboundExecutor } from '../execution/types';
 import { runProbe, type ProbeDeps, type ProbeOutcome } from '../probes/checks';
 import { cellValue, exportPages, exportStream, planExport, type ExportFormat } from '../reports/export';
+import { maskRedacted } from '../reports/catalog';
+import type { NewsService } from '../news/service';
 import type { RunRepository } from '../runs/types';
 import type { RunService } from '../runs/service';
 import { contentHealth } from './content-health';
@@ -80,6 +82,10 @@ export interface JobDeps {
   onProbe?: (outcome: ProbeOutcome) => void;
   /** Email/Teams delivery of report files (absent: those targets are reported as not configured). */
   delivery?: DeliveryDeps;
+  /** News and changes (`job: news`); absent → the job reports that news isn't available here. */
+  news?: NewsService | null;
+  /** Called after a news collection that added or changed items (events). */
+  onNews?: (counts: { new: number; updated: number }) => void;
 }
 
 const defaultSleep = (ms: number, signal: AbortSignal) =>
@@ -97,6 +103,10 @@ const defaultSleep = (ms: number, signal: AbortSignal) =>
   });
 
 const INACTIVE = new Set(['draft', 'retired']);
+
+/** "Scheduled in AdminForge by <upn>." for schedules created in the portal; null for content. */
+export const scheduledInPortalBy = (s: Pick<ScheduleRow, 'source' | 'definition'>): string | null =>
+  s.source === 'portal' ? `Scheduled in AdminForge by ${s.definition.owner}.` : null;
 
 /** The probes a probe job covers: `ref`, `refs`, or every active probe carrying all `select.tags` (sorted by key). */
 export async function selectProbes(
@@ -182,6 +192,43 @@ export function createJobRunner(deps: JobDeps): JobRunner {
     return { result };
   }
 
+  async function newsJob(ctx: JobContext, job: NewsJob): Promise<JobResult> {
+    if (!deps.news)
+      throw new AppError(503, 'news_not_available', 'News collection isn’t available in this process.', {
+        hint: 'Run the schedule on the scheduler service (or the API with SCHEDULER_IN_PROCESS=true).',
+      });
+    const r = await deps.news.refresh({
+      ...(job.refs ? { refs: job.refs } : {}),
+      ...(job.concurrency ? { concurrency: job.concurrency } : {}),
+      // No feed starts that couldn't finish inside the schedule's own time limit (default 900 s).
+      budgetMs: (ctx.def.timeoutSeconds ?? 900) * 1000,
+      signal: ctx.signal,
+      correlationId: ctx.correlationId,
+    });
+    if (r.new || r.updated) deps.onNews?.({ new: r.new, updated: r.updated });
+    const result = { ...r };
+    if (!r.feeds)
+      return {
+        status: 'failed',
+        result,
+        error: {
+          code: 'no_feeds',
+          message: 'There is no active feed to collect.',
+          hint: 'Publish the feed definitions (portal/content/feeds) with pnpm adminforge publish.',
+        },
+      };
+    if (r.failed > 0 && r.failed === r.feeds - r.skipped)
+      return {
+        status: 'failed',
+        result,
+        error: {
+          code: 'feeds_failed',
+          message: `None of the ${r.feeds} feed(s) could be collected (each feed's reason is on News and changes → Sources).`,
+        },
+      };
+    return { result };
+  }
+
   async function reportJob(
     ctx: JobContext,
     job: Extract<Schedule['job'], { kind: 'report' }>,
@@ -227,26 +274,33 @@ export function createJobRunner(deps: JobDeps): JobRunner {
       let stats = { rows: 0, truncated: false };
       const artifact = await deps.artifacts.write(ctx.schedule.key, at, format, async (out) => {
         if (format === 'json') {
-          const rows: Record<string, unknown>[] = [];
-          for await (const p of pages) {
-            stats = { rows: stats.rows + p.rows.length, truncated: stats.truncated || p.truncated };
-            for (const r of p.rows)
-              rows.push(Object.fromEntries(plan.columns.map((c) => [c.field, cellValue(r, c, 'csv')])));
-          }
+          // Streamed page by page (never the whole result in memory); `redact: true` params are masked.
+          const head = JSON.stringify(
+            {
+              report: job.ref,
+              version: page.version,
+              generatedAt: at.toISOString(),
+              params: maskRedacted(params, page.def.params),
+              columns: plan.columns.map((c) => ({ field: c.field, label: c.label })),
+            },
+            null,
+            2,
+          );
           await pipeline(async function* () {
-            yield JSON.stringify(
-              {
-                report: job.ref,
-                version: page.version,
-                generatedAt: at.toISOString(),
-                params,
-                columns: plan.columns.map((c) => ({ field: c.field, label: c.label })),
-                rows,
-                truncated: stats.truncated,
-              },
-              null,
-              2,
-            );
+            yield `${head.slice(0, -2)},\n  "rows": [`;
+            let first = true;
+            for await (const p of pages) {
+              stats = { rows: stats.rows + p.rows.length, truncated: stats.truncated || p.truncated };
+              if (!p.rows.length) continue;
+              const lines = p.rows.map((r) =>
+                JSON.stringify(
+                  Object.fromEntries(plan.columns.map((c) => [c.field, cellValue(r, c, 'csv')])),
+                ),
+              );
+              yield `${first ? '' : ','}\n    ${lines.join(',\n    ')}`;
+              first = false;
+            }
+            yield `${first ? '' : '\n  '}],\n  "truncated": ${stats.truncated}\n}\n`;
           }, out);
           return;
         }
@@ -274,10 +328,14 @@ export function createJobRunner(deps: JobDeps): JobRunner {
       }
       const file = written.find((w) => w.format === (d.format ?? written[0]!.format)) ?? written[0]!;
       const def = ctx.schedule.definition;
+      // A schedule created in the portal says who made it (its name was typed by a person, not reviewed content).
+      const byline = scheduledInPortalBy(ctx.schedule);
       const msg = {
         title:
           (d.type === 'email' ? d.subject : undefined) ?? `${def.title} — ${at.toISOString().slice(0, 10)}`,
-        text: `${d.message ?? `The scheduled report "${resolved.def.title}" ran: ${file.rows} row(s)${file.truncated ? ' (truncated)' : ''}.`}\nSchedule: ${def.title}. Reference: ${ctx.correlationId}.`,
+        // A reviewed schedule's own `message` is Markdown as written; everything else is plain text.
+        ...(d.message ? { markdown: d.message } : {}),
+        text: `${d.message ? '' : `The scheduled report "${resolved.def.title}" ran: ${file.rows} row(s)${file.truncated ? ' (truncated)' : ''}.\n`}Schedule: ${def.title}. Reference: ${ctx.correlationId}.${byline ? `\n${byline}` : ''}`,
         link: `${deps.delivery.publicBaseUrl}/schedules/${encodeURIComponent(ctx.schedule.key)}`,
       };
       if (d.type === 'email') {
@@ -393,6 +451,8 @@ export function createJobRunner(deps: JobDeps): JobRunner {
               hint: 'Run the script from its page instead, or turn this schedule off. (Tracked in docs/backlog.md.)',
             },
           );
+        case 'news':
+          return newsJob(ctx, job);
         case 'contentHealth': {
           const licences = deps.probes.licences;
           const licensed = licences

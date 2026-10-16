@@ -102,6 +102,13 @@ export const NAV: NavResponse = {
       ],
     },
     {
+      // Reports are listed in the catalogue (/reports), not one by one in the rail (navigation.yaml listDefinitions).
+      key: 'reports',
+      label: 'Reports',
+      icon: 'chart-bar',
+      items: [item('reports-catalog', 'All reports', '/reports', 'chart-bar')],
+    },
+    {
       key: 'admin',
       label: 'Admin',
       icon: 'gear-six',

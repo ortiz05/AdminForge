@@ -9,6 +9,8 @@ import type {
   NewSchedule,
   NewScheduleApproval,
   NewScheduleRun,
+  PortalInsertResult,
+  PortalScheduleCaps,
   ProbeResultRow,
   RunCursor,
   ScheduleApprovalPatch,
@@ -113,6 +115,33 @@ export class PgScheduleStore implements ScheduleStore {
       .onConflictDoNothing({ target: schedules.key })
       .returning();
     return r ? toSchedule(r) : null;
+  }
+  async insertPortalSchedule(
+    row: NewSchedule & { createdBy: string },
+    caps: PortalScheduleCaps,
+  ): Promise<PortalInsertResult> {
+    return this.db.transaction(async (tx) => {
+      // One creator at a time across processes, so the counts below stay true until the insert commits.
+      await tx.execute(sql`select pg_advisory_xact_lock(hashtext('adminforge.portal_schedules'))`);
+      const active = sql`coalesce(${schedules.definition}->>'status', 'active') <> 'retired'`;
+      const [c] = await tx
+        .select({
+          total: sql<string>`count(*) filter (where ${active})`,
+          mine: sql<string>`count(*) filter (where ${active} and ${schedules.createdBy} = ${row.createdBy})`,
+          recent: sql<string>`count(*) filter (where ${schedules.createdBy} = ${row.createdBy} and ${schedules.createdAt} >= ${caps.since})`,
+        })
+        .from(schedules)
+        .where(eq(schedules.source, 'portal'));
+      if (Number(c?.total ?? 0) >= caps.total) return { ok: false, reason: 'total' } as const;
+      if (Number(c?.mine ?? 0) >= caps.perCreator) return { ok: false, reason: 'perCreator' } as const;
+      if (Number(c?.recent ?? 0) >= caps.recent) return { ok: false, reason: 'recent' } as const;
+      const [r] = await tx
+        .insert(schedules)
+        .values({ ...row, approvedBy: row.approvedBy ?? null, approvedTarget: row.approvedTarget ?? null })
+        .onConflictDoNothing({ target: schedules.key })
+        .returning();
+      return r ? ({ ok: true, row: toSchedule(r) } as const) : ({ ok: false, reason: 'exists' } as const);
+    });
   }
   async updateSchedule(
     id: string,

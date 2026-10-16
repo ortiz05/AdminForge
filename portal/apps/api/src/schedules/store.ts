@@ -5,6 +5,8 @@ import type {
   NewSchedule,
   NewScheduleApproval,
   NewScheduleRun,
+  PortalInsertResult,
+  PortalScheduleCaps,
   ProbeResultRow,
   RunCursor,
   ScheduleApprovalPatch,
@@ -27,6 +29,14 @@ export interface ScheduleStore {
   getScheduleById(id: string): Promise<ScheduleRow | null>;
   /** null when the key already exists. */
   insertSchedule(row: NewSchedule): Promise<ScheduleRow | null>;
+  /**
+   * Inserts a portal schedule unless one of the caps is reached — counted and inserted atomically (Postgres: one
+   * transaction under an advisory lock), so simultaneous requests can't pass a cap.
+   */
+  insertPortalSchedule(
+    row: NewSchedule & { createdBy: string },
+    caps: PortalScheduleCaps,
+  ): Promise<PortalInsertResult>;
   /** Applies the patch when the row still matches `expect` (sha256 / nextRunAt); null otherwise. */
   updateSchedule(
     id: string,
@@ -106,6 +116,24 @@ export class MemoryScheduleStore implements ScheduleStore {
     };
     this.schedules.set(full.id, full);
     return clone(full);
+  }
+  async insertPortalSchedule(
+    row: NewSchedule & { createdBy: string },
+    caps: PortalScheduleCaps,
+  ): Promise<PortalInsertResult> {
+    // No await between counting and inserting: atomic in this process.
+    const portal = [...this.schedules.values()].filter((s) => s.source === 'portal');
+    const active = portal.filter((s) => s.definition.status !== 'retired');
+    if (active.length >= caps.total) return { ok: false, reason: 'total' };
+    if (active.filter((s) => s.createdBy === row.createdBy).length >= caps.perCreator)
+      return { ok: false, reason: 'perCreator' };
+    if (
+      portal.filter((s) => s.createdBy === row.createdBy && s.createdAt.getTime() >= caps.since.getTime())
+        .length >= caps.recent
+    )
+      return { ok: false, reason: 'recent' };
+    const inserted = await this.insertSchedule(row);
+    return inserted ? { ok: true, row: inserted } : { ok: false, reason: 'exists' };
   }
   async updateSchedule(
     id: string,

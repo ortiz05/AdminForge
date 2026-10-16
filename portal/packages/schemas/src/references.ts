@@ -2,6 +2,7 @@ import { formatPath } from './common';
 import type { Connection } from './connection';
 import type { Definition } from './definition';
 import type { Datasources } from './datasource';
+import { PORTAL_SCHEDULE_PREFIX } from './schedule';
 import { stepMode, walkSteps, type Compensation, type Step } from './playbook';
 import type { TableWidgetConfig, WidgetBlock } from './widgets';
 
@@ -180,6 +181,13 @@ export function validateReferences(entries: readonly DefinitionEntry[]): Content
     }
 
     if (def.kind === 'schedule') {
+      // Schedules created in the portal (Reports → Schedule) live only in the database under `portal.`; a content
+      // schedule with such an id could collide with one, so the namespace is reserved.
+      if (def.id.startsWith(PORTAL_SCHEDULE_PREFIX))
+        err(
+          ['id'],
+          `Schedule ids starting with "${PORTAL_SCHEDULE_PREFIX}" are reserved for schedules created in the portal. Use <section>.<name>, e.g. reports.weekly-inactive-users.`,
+        );
       const job = def.job;
       if (job.kind === 'report') {
         const report = find(job.ref, ['report'], ['job', 'ref']);
@@ -205,6 +213,14 @@ export function validateReferences(entries: readonly DefinitionEntry[]): Content
           );
           if (!hit) err(['job', 'select', 'tags'], `No probe has all of the tags ${tags.join(', ')}.`);
         }
+      } else if (job.kind === 'news') {
+        // News jobs collect feeds: `refs` must name feeds; without refs, at least one feed must exist.
+        job.refs?.forEach((ref, i) => find(ref, ['feed'], ['job', 'refs', i]));
+        if (!job.refs && !entries.some((e) => e.def.kind === 'feed'))
+          err(
+            ['job'],
+            'No feed is defined (portal/content/feeds/*.feed.yaml), so this news job has nothing to collect.',
+          );
       }
     }
 

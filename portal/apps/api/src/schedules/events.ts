@@ -6,7 +6,8 @@ import type { EventBus } from '../events/bus';
 /**
  * Scheduler events across processes. The scheduler service and the API are separate processes (R6), so events go
  * through Postgres `NOTIFY schedule_events`:
- * - to browsers (SSE `GET /api/events`): `schedule.failed`, `schedule.updated`, `probe.updated`;
+ * - to browsers (SSE `GET /api/events`): `schedule.failed`, `schedule.updated`, `probe.updated`, `news.updated`
+ *   (counts only: {new, updated});
  * - to the scheduler: `schedule.run_requested` and `schedules.changed` (wake up now instead of at the next tick).
  * In-process listeners get every event directly; remote copies of our own events are ignored.
  */
@@ -14,14 +15,24 @@ import type { EventBus } from '../events/bus';
 export const SCHEDULE_EVENTS_CHANNEL = 'schedule_events';
 
 export type ScheduleEventType =
-  'schedule.failed' | 'schedule.updated' | 'probe.updated' | 'schedule.run_requested' | 'schedules.changed';
+  | 'schedule.failed'
+  | 'schedule.updated'
+  | 'probe.updated'
+  | 'news.updated'
+  | 'schedule.run_requested'
+  | 'schedules.changed';
 export interface ScheduleEvent {
   type: ScheduleEventType;
   data: Record<string, unknown>;
 }
 
 /** Events browsers see. */
-const PUBLIC = new Set<ScheduleEventType>(['schedule.failed', 'schedule.updated', 'probe.updated']);
+const PUBLIC = new Set<ScheduleEventType>([
+  'schedule.failed',
+  'schedule.updated',
+  'probe.updated',
+  'news.updated',
+]);
 
 type Log = { warn(obj: object, msg: string): void };
 

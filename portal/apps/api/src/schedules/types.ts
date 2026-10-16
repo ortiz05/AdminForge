@@ -33,6 +33,20 @@ export type NewSchedule = Pick<
   'key' | 'source' | 'definition' | 'sha256' | 'enabled' | 'nextRunAt'
 > &
   Partial<Pick<ScheduleRow, 'createdBy' | 'approvedBy' | 'approvedTarget'>>;
+/** Caps on report schedules created in the portal, checked with the insert in one step (store.insertPortalSchedule). */
+export interface PortalScheduleCaps {
+  /** Active (not deleted) portal schedules in total. */
+  total: number;
+  /** Active portal schedules of one creator. */
+  perCreator: number;
+  /** Portal schedules one creator made since `since` (deleted ones included). */
+  recent: number;
+  since: Date;
+}
+
+export type PortalInsertResult =
+  { ok: true; row: ScheduleRow } | { ok: false; reason: 'exists' | 'total' | 'perCreator' | 'recent' };
+
 export type SchedulePatch = Partial<
   Pick<
     ScheduleRow,

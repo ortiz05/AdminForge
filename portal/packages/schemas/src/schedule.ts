@@ -1,12 +1,20 @@
 import { z } from 'zod';
 import { DefinitionId, Expr, Mode, RetryPolicy, Template, envelopeShape } from './common';
 import { RunnerSpec } from './datasource';
+import { NewsJob } from './news';
 
 /**
  * Schedules (R6, ADR-011): cron jobs run on this host by the scheduler service as the configured **automation identity**
  * (application permissions). `requires.scopes` lists the application permissions the job needs; `adminforge validate
  * --scopes` checks them against the automation identity. Write-capable jobs need two-person approval (`approvedBy`).
  */
+
+/**
+ * Key prefix of schedules created in the portal (Reports → Schedule, stored only in the database). Content schedules
+ * may not use it (`validateReferences`); the Schedule schema itself accepts it because portal definitions are
+ * validated with it too.
+ */
+export const PORTAL_SCHEDULE_PREFIX = 'portal.';
 
 const CRON_NICKNAMES = new Set([
   '@yearly',
@@ -233,6 +241,7 @@ export const ScheduleJob = z.discriminatedUnion('kind', [
   ProbeJob,
   ScriptJob,
   ContentHealthJob,
+  NewsJob,
 ]);
 export type ScheduleJob = z.infer<typeof ScheduleJob>;
 

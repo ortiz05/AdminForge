@@ -5,14 +5,25 @@ import { auditActor, type AppContext } from '../context';
 import { AppError, parseBody } from '../errors';
 import type { SchedulesModule } from '../schedules/module';
 import { tenantValuesFor } from '../query/tenant-values';
-import { previewCron, ScheduleScaffoldRequest, scaffoldSchedule } from '../schedules/scaffold';
+import {
+  copiedRequires,
+  previewCron,
+  ScheduleScaffoldRequest,
+  scaffoldSchedule,
+} from '../schedules/scaffold';
 import { TimeZone } from '@adminforge/schemas';
 import type { Caller } from '../schedules/service';
 
 /**
  * Schedules API (R6). Shapes (the web Schedules pages are built against these):
  * - GET   /api/schedules → {items: [{key, title, summary, cron, cronText, timezone, enabled, identity: 'automation',
- *         job: {kind, ref?, refs?, select?}, nextRunAt, lastRunAt, lastStatus, writeCapable, approvedBy?, source, pendingApprovalId}]}
+ *         job: {kind, ref?, refs?, select?, params?}, nextRunAt, lastRunAt, lastStatus, writeCapable, approvedBy?, source,
+ *         createdBy, canManage, delivery?, notify?, pendingApprovalId}]}
+ * - GET   /api/schedules/:key → one item (same shape)
+ * - GET   /api/schedules/delivery-options → {email: {available, lists}, teams: {lists}} (Portal.Operator; key names only)
+ * - POST  /api/schedules (report schedule created in the portal; Portal.Operator; audited) → 201 item
+ * - PUT   /api/schedules/:key (portal schedule; its creator or Portal.Admin; audited) → 200 item
+ * - DELETE /api/schedules/:key (portal schedule; its creator or Portal.Admin; soft delete; audited) → 204
  * - PATCH /api/schedules/:key {enabled} → 200 {key, enabled} | 202 {approvalId} (write-capable: a second person approves
  *         in the approvals inbox; Portal.Operator)
  * - POST  /api/schedules/:key/run → 202 {scheduleRunId} (Portal.Operator; audited)
@@ -48,8 +59,36 @@ export function scheduleRoutes(api: FastifyInstance, ctx: AppContext, schedules:
   const svc = schedules.service;
 
   api.get('/schedules', async (request) => {
-    requireRole(requireSession(request), 'Portal.Reader', 'Schedules');
-    return svc.list();
+    const session = requireSession(request);
+    requireRole(session, 'Portal.Reader', 'Schedules');
+    return svc.list(session);
+  });
+
+  // Report schedules created in the portal (schedules/portal.ts): report jobs only, delivery to configured keys.
+  api.get('/schedules/delivery-options', async (request) =>
+    schedules.portal.deliveryOptions(requireSession(request)),
+  );
+
+  api.post(
+    '/schedules',
+    { config: { rateLimit: { max: 20, timeWindow: '1 minute' } } },
+    async (request, reply) =>
+      reply.status(201).send(await schedules.portal.create(callerOf(request), request.body)),
+  );
+
+  api.get<{ Params: { key: string } }>('/schedules/:key', async (request) => {
+    const session = requireSession(request);
+    requireRole(session, 'Portal.Reader', 'Schedules');
+    return svc.get(key(request.params.key), session);
+  });
+
+  api.put<{ Params: { key: string } }>('/schedules/:key', async (request) =>
+    schedules.portal.update(callerOf(request), key(request.params.key), request.body),
+  );
+
+  api.delete<{ Params: { key: string } }>('/schedules/:key', async (request, reply) => {
+    await schedules.portal.remove(callerOf(request), key(request.params.key));
+    return reply.status(204).send();
   });
 
   // Schedule editor (R6): live cron preview, and YAML for a new schedule. Nothing is stored; the YAML goes through git.
@@ -69,10 +108,7 @@ export function scheduleRoutes(api: FastifyInstance, ctx: AppContext, schedules:
         const def = (await ctx.definitions.resolve(kind, key).catch(() => null))?.def as
           { requires?: { scopes?: unknown; licences?: unknown } } | undefined;
         if (!def) throw new AppError(404, 'definition_not_found', `There is no published ${kind} "${key}".`);
-        const r = def.requires;
-        return r?.scopes || r?.licences
-          ? { ...(r.scopes ? { scopes: r.scopes } : {}), ...(r.licences ? { licences: r.licences } : {}) }
-          : null;
+        return copiedRequires(def.requires);
       },
     });
   });

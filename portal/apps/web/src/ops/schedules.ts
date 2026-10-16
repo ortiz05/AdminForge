@@ -1,6 +1,6 @@
 import { queryOptions } from '@tanstack/react-query';
 import type { StatusTone } from '@adminforge/ui';
-import { api } from '../lib/api';
+import { api, isRecord } from '../lib/api';
 import { arr, bool, listOf, num, parser, pick, query, rec } from '../runs/json';
 
 /**
@@ -11,6 +11,9 @@ import { arr, bool, listOf, num, parser, pick, query, rec } from '../runs/json';
  *   GET   /api/schedules/:key/runs?cursor=    → { items: ScheduleRun[], cursor? }
  *   GET   /api/probes                         → { items: Probe[] }
  *   GET   /api/probes/:key/results?since=     → { items: ProbePoint[] }
+ *   PUT   /api/schedules/:key                 → ScheduleItem (portal report schedules, when `canManage`)
+ *   DELETE /api/schedules/:key                → 204 (portal report schedules, when `canManage`)
+ * Creating a report schedule (POST /api/schedules) lives with the report catalogue (reports/catalog.ts).
  */
 
 export type JobKind = 'report' | 'playbook' | 'probe' | 'script' | 'contentHealth';
@@ -24,7 +27,8 @@ export interface ScheduleItem {
   timezone: string;
   enabled: boolean;
   identity: 'automation';
-  job: { kind: JobKind | string; ref: string | null };
+  /** `params`: report jobs' parameter values (the rest use the report's defaults). */
+  job: { kind: JobKind | string; ref: string | null; params: Record<string, unknown> | null };
   nextRunAt: string | null;
   lastRunAt: string | null;
   lastStatus: string | null;
@@ -33,6 +37,39 @@ export interface ScheduleItem {
   source: 'content' | 'portal';
   /** Set while an enable request waits for its second approver. */
   pendingApprovalId: string | null;
+  /** Who created a portal schedule (UPN); null for content schedules. */
+  createdBy: string | null;
+  /** The caller may edit or delete it: a portal schedule they created, or any portal schedule for a Portal Admin. */
+  canManage: boolean;
+  /** Report jobs: what the file goes to (configuration key names and labels, never addresses). */
+  delivery: ScheduleDelivery[];
+  /** Report jobs: who hears about a failed run. */
+  notify: ScheduleTarget[];
+}
+
+/** An email list or Teams channel, by configuration key name. */
+export interface ScheduleTarget {
+  type: 'email' | 'teams';
+  key: string;
+  label: string;
+}
+
+export type ScheduleDelivery =
+  { type: 'file'; format: string; retain: number | null } | (ScheduleTarget & { format: string | null });
+
+function readTarget(raw: unknown): ScheduleTarget | null {
+  const o = rec(raw);
+  const key = pick(o, 'key');
+  if ((o.type !== 'email' && o.type !== 'teams') || !key) return null;
+  return { type: o.type, key, label: pick(o, 'label') ?? key };
+}
+
+function readDelivery(raw: unknown): ScheduleDelivery | null {
+  const o = rec(raw);
+  if (o.type === 'file')
+    return { type: 'file', format: pick(o, 'format') ?? 'xlsx', retain: num(o.retain) ?? null };
+  const target = readTarget(o);
+  return target ? { ...target, format: pick(o, 'format') ?? null } : null;
 }
 
 export function readSchedule(raw: unknown): ScheduleItem | null {
@@ -51,7 +88,11 @@ export function readSchedule(raw: unknown): ScheduleItem | null {
     timezone: pick(o, 'timezone') ?? 'UTC',
     enabled: bool(o.enabled) ?? false,
     identity: 'automation',
-    job: { kind: pick(job, 'kind') ?? 'report', ref: pick(job, 'ref') ?? null },
+    job: {
+      kind: pick(job, 'kind') ?? 'report',
+      ref: pick(job, 'ref') ?? null,
+      params: isRecord(job.params) ? job.params : null,
+    },
     nextRunAt: pick(o, 'nextRunAt') ?? null,
     lastRunAt: pick(o, 'lastRunAt') ?? null,
     lastStatus: pick(o, 'lastStatus') ?? null,
@@ -62,6 +103,14 @@ export function readSchedule(raw: unknown): ScheduleItem | null {
         : arr(approved).filter((x): x is string => typeof x === 'string'),
     source: o.source === 'portal' ? 'portal' : 'content',
     pendingApprovalId: pick(o, 'pendingApprovalId', 'approvalId') ?? null,
+    createdBy: pick(o, 'createdBy') ?? null,
+    canManage: bool(o.canManage) ?? false,
+    delivery: arr(o.delivery)
+      .map(readDelivery)
+      .filter((d): d is ScheduleDelivery => d !== null),
+    notify: arr(o.notify)
+      .map(readTarget)
+      .filter((t): t is ScheduleTarget => t !== null),
   };
 }
 
@@ -133,6 +182,11 @@ export async function runScheduleNow(key: string): Promise<{ scheduleRunId: stri
     method: 'POST',
     schema: parser((input) => ({ scheduleRunId: pick(rec(input), 'scheduleRunId', 'id') ?? null })),
   });
+}
+
+/** Removes a portal schedule (soft delete: its run history and files stay until retention). */
+export async function deleteSchedule(key: string): Promise<void> {
+  await api(`/api/schedules/${encodeURIComponent(key)}`, { method: 'DELETE' });
 }
 
 /** Run outcomes in words, with their tone. */

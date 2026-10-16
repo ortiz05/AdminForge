@@ -15,7 +15,8 @@ export const RECIPIENT_KEY = /^AF_[A-Z0-9_]*(RECIPIENTS|EMAIL|ALERTS)$/;
 /** Configuration keys delivery passes on for Teams Workflows webhook URLs. */
 export const WEBHOOK_KEY = /^AF_[A-Z0-9_]*WEBHOOK[A-Z0-9_]*$/;
 const ANY_KEY = /^/;
-const SENDER_KEY = 'AF_MAIL_SENDER';
+/** The mailbox scheduled email is sent from (Graph sendMail as the automation identity). */
+export const SENDER_KEY = 'AF_MAIL_SENDER';
 const EMAIL = /^[^\s@,;<>]+@[^\s@,;<>]+\.[^\s@,;<>]+$/;
 /** Microsoft-hosted webhook endpoints (Teams Workflows / Power Automate, legacy connectors). */
 const WEBHOOK_HOSTS =
@@ -107,11 +108,27 @@ export function resolveWebhook(
 }
 
 export interface Message {
+  /** Plain text (Teams: Markdown characters are escaped, so it shows exactly as written). */
   title: string;
+  /** Plain text that may hold untrusted parts — names typed in the portal, error messages (escaped like `title`). */
   text: string;
+  /** Markdown written in reviewed content (a schedule's `message`), shown before `text` as written. */
+  markdown?: string;
   /** Link into AdminForge (absolute). */
   link?: string;
   attachment?: { name: string; contentType: string; bytes: Buffer };
+}
+
+/**
+ * Escapes what Adaptive Card Markdown acts on — emphasis, code, links (`[`/`]`), angle brackets, and list or heading
+ * markers at the start of a line — so untrusted text can't format itself or pose as a link. (Bare URLs are still
+ * linked by Teams; names typed in the portal can't contain one.)
+ */
+export function escapeMarkdown(text: string): string {
+  return text
+    .replace(/[\\`*_[\]<>~]/g, (c) => `\\${c}`)
+    .replace(/^(\s*)([#+-])(?=\s|$)/gm, '$1\\$2')
+    .replace(/^(\s*)(\d+)\.(?=\s|$)/gm, '$1$2\\.');
 }
 
 /** Posts an Adaptive Card to a Teams Workflows webhook. Never follows redirects. */
@@ -132,8 +149,15 @@ export async function postTeams(
           type: 'AdaptiveCard',
           version: '1.4',
           body: [
-            { type: 'TextBlock', text: msg.title, weight: 'Bolder', size: 'Medium', wrap: true },
-            { type: 'TextBlock', text: msg.text, wrap: true },
+            {
+              type: 'TextBlock',
+              text: escapeMarkdown(msg.title),
+              weight: 'Bolder',
+              size: 'Medium',
+              wrap: true,
+            },
+            ...(msg.markdown ? [{ type: 'TextBlock', text: msg.markdown, wrap: true }] : []),
+            ...(msg.text ? [{ type: 'TextBlock', text: escapeMarkdown(msg.text), wrap: true }] : []),
           ],
           ...(msg.link
             ? { actions: [{ type: 'Action.OpenUrl', title: 'Open in AdminForge', url: msg.link }] }
@@ -202,12 +226,13 @@ export async function sendEmail(
         path: `/users/${encodeURIComponent(sender)}/sendMail`,
         pathTemplate: '/users/{sender}/sendMail',
         declaredWrite: true,
+        notification: true,
         body: {
           message: {
             subject: msg.title,
             body: {
               contentType: 'Text',
-              content: `${msg.text}${msg.link && !linkNote ? `\n\n${msg.link}` : ''}${linkNote}`,
+              content: `${[msg.markdown, msg.text].filter(Boolean).join('\n')}${msg.link && !linkNote ? `\n\n${msg.link}` : ''}${linkNote}`,
             },
             toRecipients: to.to.map(address),
             ...(cc.to.length ? { ccRecipients: cc.to.map(address) } : {}),

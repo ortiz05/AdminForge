@@ -26,7 +26,7 @@ const READ_POSTS: Partial<Record<ServiceId, RegExp[]>> = {
   graph: [
     /^\/\$batch$/,
     /^\/security\/runHuntingQuery$/,
-    /^\/users\/[^/]+\/(getMemberGroups|getMemberObjects|checkMemberGroups)$/,
+    /^\/users\/[^/]+\/(getMemberGroups|getMemberObjects|checkMemberGroups|checkMemberObjects)$/,
     /^\/directoryObjects\/getByIds$/,
   ],
   arm: [

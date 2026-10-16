@@ -9,14 +9,15 @@ export interface ParamIssue {
 
 /** 400 with every problem listed (the client renders them next to the filter controls). */
 export class InvalidParams extends AppError {
-  constructor(readonly issues: ParamIssue[]) {
+  constructor(
+    readonly issues: ParamIssue[],
+    hint = 'Check the filter values and try again.',
+  ) {
     super(
       400,
       'invalid_params',
       `Invalid parameters: ${issues.map((i) => `${i.param}: ${i.message}`).join('; ')}`,
-      {
-        hint: 'Check the filter values and try again.',
-      },
+      { hint },
     );
     this.name = 'InvalidParams';
   }

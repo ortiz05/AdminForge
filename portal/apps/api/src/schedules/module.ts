@@ -5,16 +5,21 @@ import { randomUUID } from 'node:crypto';
 import { Heartbeat } from '../health/heartbeat';
 import { ArtifactStore } from '../artifacts/store';
 import type { AppContext } from '../context';
+import { createNewsService, type NewsOptions } from '../news/module';
+import type { NewsService } from '../news/service';
 import type { ProbeDeps } from '../probes/checks';
 import { ProbeViews } from '../probes/views';
 import type { RunsModule } from '../runs/module';
+import { automationGraph, CreatorAccess, type CreatorAccessChecker } from './creator-access';
 import { ScheduleEvents } from './events';
 import { createJobRunner, type JobRunner } from './jobs';
 import { LeaderElector, pgAdvisoryLock, type LeaderLock, type Timers } from './leader';
 import { PgScheduleStore } from './pg-store';
 import { Scheduler } from './scheduler';
+import { PortalSchedules } from './portal';
 import { ScheduleService } from './service';
 import { automationFingerprint } from '../runs/fingerprint';
+import { isPaused } from '../execution/emergency';
 import { MemoryScheduleStore, type ScheduleStore } from './store';
 
 declare module 'fastify' {
@@ -43,6 +48,13 @@ export interface SchedulesOptions {
   log?: Log;
   /** Tests: email/Teams delivery overrides. */
   delivery?: Partial<DeliveryDeps>;
+  /** News and changes: a ready service, or options for the default one. */
+  news?: NewsService | NewsOptions;
+  /**
+   * Portal schedules' creator check before each run (default: Graph as the automation identity when users sign in
+   * with Entra; none in mock mode). Tests inject a fake.
+   */
+  creatorAccess?: CreatorAccessChecker | null;
 }
 
 export interface SchedulesModule {
@@ -50,12 +62,16 @@ export interface SchedulesModule {
   events: ScheduleEvents;
   artifacts: ArtifactStore;
   service: ScheduleService;
+  /** Report schedules created in the portal (POST/PUT/DELETE /api/schedules, delivery options). */
+  portal: PortalSchedules;
   probes: ProbeViews;
   /** Dependencies for running probes directly (CLI one-shots). */
   probeDeps: ProbeDeps;
   jobs: JobRunner;
   /** The scheduler, when it runs in this process. */
   scheduler: Scheduler | null;
+  /** News and changes (collection for the `news` job; reads for /api/news). */
+  news: NewsService;
   start(): Promise<void>;
   stop(): Promise<void>;
 }
@@ -101,9 +117,15 @@ export function createSchedulesModule(
     publicBaseUrl: ctx.config.PUBLIC_BASE_URL,
     ...opts.delivery,
   };
+  const news =
+    opts.news && 'refresh' in opts.news
+      ? opts.news
+      : createNewsService(ctx, (opts.news as NewsOptions | undefined) ?? {}, log);
   const jobs =
     opts.jobs ??
     createJobRunner({
+      news,
+      onNews: (counts) => events.publish({ type: 'news.updated', data: counts }),
       delivery,
       definitions: ctx.definitions,
       store,
@@ -124,6 +146,7 @@ export function createSchedulesModule(
     });
   const service = new ScheduleService({
     store,
+    automationPaused: () => isPaused(ctx.settings, 'automation'),
     definitions: ctx.definitions,
     audit: ctx.audit,
     events,
@@ -145,6 +168,16 @@ export function createSchedulesModule(
             ref,
             async (key) => ctx.definitions.resolve('connection', key),
           ),
+  });
+  const portal = new PortalSchedules({
+    service,
+    store,
+    definitions: ctx.definitions,
+    datasources: ctx.datasources,
+    audit: ctx.audit,
+    // Only key names are checked against it (configured or not); values are never returned.
+    deliveryEnv: () => delivery.env,
+    now: ctx.now,
   });
   // Run views of scheduled runs follow the schedule's `requires.portalRoles` (default Portal.Operator).
   runs?.service.useSchedules(
@@ -171,8 +204,20 @@ export function createSchedulesModule(
           onDemoted: (reason) => scheduler!.demoted(reason),
         })
       : null;
+    // Like the sessions' role re-check: only with Entra sign-in (mock mode has no directory to ask).
+    const creatorAccess =
+      opts.creatorAccess !== undefined
+        ? opts.creatorAccess
+        : ctx.auth
+          ? new CreatorAccess({
+              graph: automationGraph(ctx.outbound),
+              readClientId: ctx.config.AF_READ_CLIENT_ID,
+              now: ctx.now,
+            })
+          : null;
     scheduler = new Scheduler({
       store,
+      creatorAccess,
       definitions: ctx.definitions,
       jobs,
       audit: ctx.audit,
@@ -181,6 +226,8 @@ export function createSchedulesModule(
       concurrency: ctx.config.SCHEDULER_CONCURRENCY,
       leader,
       delivery,
+      // Emergency stop (Admin → Settings): no schedule fires while automation is paused.
+      automationPaused: () => isPaused(ctx.settings, 'automation'),
       ...(opts.timers ? { timers: opts.timers } : {}),
       ...(log ? { log } : {}),
     });
@@ -201,16 +248,25 @@ export function createSchedulesModule(
     events,
     artifacts,
     service,
+    portal,
     probes,
     probeDeps,
     jobs,
     scheduler,
+    news,
     async start() {
       if (started) return;
       started = true;
       await events.start();
       await scheduler?.start();
       if (scheduler) heartbeat?.start();
+      // Mock mode and e2e (fixtures): collect once at start so News and changes has items before the first hourly run.
+      if (ctx.config.DATA_MODE === 'fixtures' && ctx.config.NODE_ENV !== 'test')
+        void news
+          .seedIfEmpty()
+          .catch((err: unknown) =>
+            log?.warn({ err: { message: (err as Error).message } }, 'news seed failed'),
+          );
     },
     async stop() {
       if (!started) return;

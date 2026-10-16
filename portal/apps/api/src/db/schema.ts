@@ -42,6 +42,8 @@ export const sessions = pgTable(
     expiresAt: ts('expires_at').notNull(),
     ip: text('ip'),
     userAgent: text('user_agent'),
+    /** When the roles were last confirmed with Entra (sign-in or the 5-minute re-check, by the API or the worker). */
+    rolesCheckedAt: ts('roles_checked_at'),
   },
   (t) => [index('sessions_user_idx').on(t.userOid), index('sessions_expires_idx').on(t.expiresAt)],
 );
@@ -322,3 +324,76 @@ export const probeResults = pgTable(
   },
   (t) => [index('probe_results_probe_ts_idx').on(t.probeKey, t.ts)],
 );
+
+/**
+ * News and changes: items collected from first-party Microsoft feeds (portal/content/feeds) by the scheduler's `news`
+ * job. Plain text excerpts and citation links only; `audience` lists the portal roles a reader needs (all of them).
+ */
+export const newsItems = pgTable(
+  'news_items',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    feedKey: text('feed_key').notNull(),
+    /** The source's own id (MC123456, a tracking id, an RSS guid, Package@1.2.3). */
+    externalId: text('external_id').notNull(),
+    title: text('title').notNull(),
+    summary: text('summary').notNull().default(''),
+    url: text('url').notNull(),
+    kind: text('kind').notNull(),
+    severity: text('severity').notNull(),
+    areas: text('areas')
+      .array()
+      .notNull()
+      .default(sql`'{}'::text[]`),
+    tags: text('tags')
+      .array()
+      .notNull()
+      .default(sql`'{}'::text[]`),
+    status: text('status'),
+    audience: text('audience')
+      .array()
+      .notNull()
+      .default(sql`'{}'::text[]`),
+    publishedAt: ts('published_at').notNull(),
+    updatedAt: ts('updated_at'),
+    /** coalesce(updated_at, published_at): feed order, day grouping and the `days` filter. */
+    activityAt: ts('activity_at').notNull(),
+    actionRequiredBy: ts('action_required_by'),
+    firstSeenAt: ts('first_seen_at').notNull().defaultNow(),
+    lastSeenAt: ts('last_seen_at').notNull().defaultNow(),
+    /** When the content last changed (first insert: least(now, activity_at)); drives "unread". */
+    changedAt: ts('changed_at').notNull().defaultNow(),
+    contentHash: text('content_hash').notNull(),
+    facts: jsonb('facts')
+      .notNull()
+      .default(sql`'[]'::jsonb`),
+  },
+  (t) => [
+    unique('news_items_feed_external_uq').on(t.feedKey, t.externalId),
+    index('news_items_activity_idx').on(t.activityAt.desc(), t.id.desc()),
+    index('news_items_feed_idx').on(t.feedKey, t.activityAt),
+    index('news_items_changed_idx').on(t.changedAt),
+    index('news_items_areas_idx').using('gin', t.areas),
+  ],
+);
+
+/** One row per feed: the last collection (status, sanitised error, conditional-GET validators, counts). */
+export const newsFeedState = pgTable('news_feed_state', {
+  feedKey: text('feed_key').primaryKey(),
+  lastRunAt: ts('last_run_at'),
+  lastSuccessAt: ts('last_success_at'),
+  /** ok | error */
+  status: text('status'),
+  errorCode: text('error_code'),
+  errorMessage: text('error_message'),
+  etag: text('etag'),
+  lastModified: text('last_modified'),
+  items: integer('items').notNull().default(0),
+  newItems: integer('new_items').notNull().default(0),
+  updatedItems: integer('updated_items').notNull().default(0),
+  durationMs: integer('duration_ms'),
+  /** sha256 of the feed definition the last run used. */
+  definitionSha: text('definition_sha'),
+  /** Something worth knowing from the last successful run that isn't a failure. */
+  note: text('note'),
+});

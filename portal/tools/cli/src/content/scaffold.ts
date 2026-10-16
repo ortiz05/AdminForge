@@ -10,6 +10,7 @@ export const SCAFFOLD_KINDS = {
   connection: 'connections',
   probe: 'probes',
   schedule: 'schedules',
+  feed: 'feeds',
 } as const;
 export type ScaffoldKind = keyof typeof SCAFFOLD_KINDS;
 export const PAGE_TEMPLATES = ['list-detail', 'dashboard', 'report', 'entity'] as const;
@@ -259,7 +260,12 @@ export function scaffold(input: ScaffoldInput): Scaffold {
   const { section, name } = parseTarget(input.target);
   const id = `${section}.${name}`;
   const kind = input.kind;
-  const file = path.join(input.contentDir, SCAFFOLD_KINDS[kind], section, `${name}.${kind}.yaml`);
+  // Feeds keyed feeds.<name> live directly in portal/content/feeds (not feeds/feeds/).
+  const dir =
+    kind === 'feed' && section === SCAFFOLD_KINDS.feed
+      ? path.join(input.contentDir, SCAFFOLD_KINDS[kind])
+      : path.join(input.contentDir, SCAFFOLD_KINDS[kind], section);
+  const file = path.join(dir, `${name}.${kind}.yaml`);
   const schemaRef = path
     .relative(path.dirname(file), path.join(input.schemasDir, `${kind}.schema.json`))
     .split(path.sep)
@@ -401,6 +407,42 @@ timeoutMs: 15000
 requires:
   scopes:
     graph: [Organization.Read.All]
+`,
+    };
+  }
+  if (kind === 'feed') {
+    const url = 'https://techcommunity.microsoft.com/t5/s/gxcuf89792/rss/board?board.id=example-board';
+    return {
+      id,
+      file,
+      navAdded: false,
+      fixture: {
+        method: 'GET',
+        url,
+        body: `<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0"><channel><title>Example board</title><link>https://techcommunity.microsoft.com/</link>
+<item><title>Example: a change to an example service</title><link>https://techcommunity.microsoft.com/t5/example/ba-p/1</link>
+<guid>https://techcommunity.microsoft.com/t5/example/ba-p/1</guid><pubDate>Mon, 12 Oct 2026 09:00:00 GMT</pubDate>
+<description>Synthetic item for DATA_MODE=fixtures.</description></item></channel></rss>
+`,
+      },
+      yaml: `${header}# News and changes feed (docs/news.md). First-party sources only; the URL's host must be in NEWS_FEED_HOSTS
+# (portal/packages/schemas/src/news.ts) — adding a host is a reviewed code change. Draft until reviewed: the news job
+# skips drafts. Then set status: active (or remove it).
+status: draft
+publisher: Microsoft
+homepage: https://techcommunity.microsoft.com/
+collector:
+  kind: rss
+  url: ${url}
+  lookbackDays: 90
+# keep: matched + rules that set areas keeps only items about services AdminForge manages (preferred for broad feeds).
+keep: all
+defaultAreas: [platform]
+classify:
+  - match: { title: [retirement, deprecation, end of support] }
+    kind: retirement
+pollMinutes: 360
 `,
     };
   }

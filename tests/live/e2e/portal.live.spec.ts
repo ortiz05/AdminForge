@@ -196,6 +196,7 @@ for (const route of [
   '/audit',
   '/appearance',
   '/settings',
+  '/news',
 ]) {
   test(`ops page: ${route}`, async () => {
     await page.goto(route);
@@ -237,6 +238,44 @@ test('schedules and probes', async () => {
     counts[i.latest?.status ?? 'none'] = (counts[i.latest?.status ?? 'none'] ?? 0) + 1;
   console.log('probes', counts);
   expect(p.status).toBe(200);
+});
+
+test('news and changes: feeds collected, items listed, detail readable', async () => {
+  const summary = await call<{
+    unread: number;
+    breaking: unknown[];
+    lastUpdatedAt: string | null;
+    feeds: Array<{ status: string; scope: string }>;
+  }>('GET', '/api/news/summary');
+  expect(summary.status).toBe(200);
+  const statuses: Record<string, number> = {};
+  for (const f of summary.json.feeds) statuses[f.status] = (statuses[f.status] ?? 0) + 1;
+  console.log('news feeds', {
+    feeds: summary.json.feeds.length,
+    tenant: summary.json.feeds.filter((f) => f.scope === 'tenant').length,
+    ...statuses,
+    breaking: summary.json.breaking.length,
+    collected: summary.json.lastUpdatedAt !== null,
+  });
+  expect(summary.json.feeds.length).toBeGreaterThan(0);
+  const list = await call<{
+    items: Array<{ id: string; areas: string[]; url: string }>;
+    nextCursor: string | null;
+  }>('GET', '/api/news?days=90&limit=100');
+  expect(list.status).toBe(200);
+  const areas: Record<string, number> = {};
+  for (const i of list.json.items) for (const a of i.areas) areas[a] = (areas[a] ?? 0) + 1;
+  console.log('news items (first page)', {
+    items: list.json.items.length,
+    more: !!list.json.nextCursor,
+    areas,
+  });
+  expect(list.json.items.length).toBeGreaterThan(0);
+  expect(list.json.items.every((i) => i.url.startsWith('https://'))).toBe(true);
+  const detail = await call<{ id: string }>('GET', `/api/news/${list.json.items[0]!.id}`);
+  expect(detail.status).toBe(200);
+  const bad = await call('GET', '/api/news?days=0');
+  expect(bad.status).toBe(400);
 });
 
 let groupId = '';

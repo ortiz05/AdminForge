@@ -64,6 +64,8 @@ export interface EnvReport {
   unknown: string[];
   /** Per purpose: missing/invalid required keys (empty = ready). */
   readiness: Record<Purpose, string[]>;
+  /** Settings that work but are weaker than they could be (key names only; never affects readiness). */
+  warnings: string[];
 }
 
 function validate(key: string, value: string): string | undefined {
@@ -146,7 +148,14 @@ export function checkEnv(
       REQUIRED[p].filter((alt) => !alt.split('|').some(ok)).map((alt) => alt.replace('|', ' or ')),
     ]),
   ) as Record<Purpose, string[]>;
-  return { keys, unknown, readiness };
+  const warnings: string[] = [];
+  // Without an authentication context, arming proves a fresh sign-in — which Entra may complete with a password alone.
+  const authMode = processEnv.AUTH_MODE || fileValues.AUTH_MODE || example.AUTH_MODE;
+  if (authMode !== 'mock' && !ok('WRITE_AUTH_CONTEXT') && 'WRITE_AUTH_CONTEXT' in example)
+    warnings.push(
+      'WRITE_AUTH_CONTEXT is not set: arming write access proves a fresh sign-in, not MFA. Set it to a Conditional Access authentication context that requires MFA (Entra ID P1).',
+    );
+  return { keys, unknown, readiness, warnings };
 }
 
 const LABEL: Record<KeyState, string> = {
@@ -175,6 +184,7 @@ export function formatEnvReport(
   }
   if (report.unknown.length)
     lines.push('', `Not in config/example.env (typo?): ${report.unknown.join(', ')}`);
+  if (report.warnings.length) lines.push('', 'Warnings:', ...report.warnings.map((w) => `  ! ${w}`));
   lines.push('', 'Readiness:');
   let ok = true;
   for (const p of PURPOSES) {

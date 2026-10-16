@@ -11,6 +11,38 @@ export interface CallbackQuery {
 
 const AADSTS = /\bAADSTS\d{4,7}\b/;
 
+/**
+ * OAuth 2.0 / OpenID Connect error codes an authorization response may carry (RFC 6749 §4.1.2.1, OIDC Core §3.1.2.6,
+ * plus token-endpoint codes Entra also redirects with). Anything else is reported as `other`: the query is chosen by
+ * whoever sent the browser to the callback.
+ */
+const OAUTH_ERRORS = new Set([
+  'invalid_request',
+  'unauthorized_client',
+  'access_denied',
+  'unsupported_response_type',
+  'invalid_scope',
+  'server_error',
+  'temporarily_unavailable',
+  'interaction_required',
+  'login_required',
+  'account_selection_required',
+  'consent_required',
+  'invalid_request_uri',
+  'invalid_request_object',
+  'request_not_supported',
+  'request_uri_not_supported',
+  'registration_not_supported',
+  'invalid_client',
+  'invalid_grant',
+  'unsupported_grant_type',
+  'invalid_resource',
+]);
+
+/** The OAuth error when it is a known code, else `other`. */
+const knownError = (error: string | undefined): string =>
+  error && OAUTH_ERRORS.has(error) ? error : 'other';
+
 interface Outcome {
   status: number;
   code: string;
@@ -103,23 +135,36 @@ function outcome(kind: AppKind, aadsts: string | undefined, error: string): Outc
       };
 }
 
+const aadstsOf = (query: CallbackQuery) =>
+  AADSTS.exec((query.error_description ?? '').split(/\r?\n/)[0]!.slice(0, 300))?.[0];
+
 /**
- * Entra error redirect → a specific, plain-language AppError. The AADSTS number (or the OAuth error) travels as
- * `detail` so an administrator can look it up; Entra's own description is logged, never shown.
+ * Entra error redirect → a specific, plain-language AppError. The AADSTS number (or a known OAuth error) travels as
+ * `detail` so an administrator can look it up; Entra's own description is logged, never shown or audited.
  */
 export function providerError(kind: AppKind, query: CallbackQuery): AppError | undefined {
   if (!query.error) return undefined;
   const error = query.error.slice(0, 64);
-  const description = (query.error_description ?? '').split(/\r?\n/)[0]!.slice(0, 300);
-  const aadsts = AADSTS.exec(description)?.[0];
+  const aadsts = aadstsOf(query);
   const o = outcome(kind, aadsts, error);
+  const known = knownError(error);
   return new AppError(o.status, o.code, o.message, {
     hint: o.hint,
-    detail: aadsts ?? error.replace(/[^a-z_]/gi, ''),
+    ...(aadsts || known !== 'other' ? { detail: aadsts ?? known } : {}),
   });
 }
 
-/** Entra's description (first line, no trace) for logs and the audit trail. */
+/**
+ * What the audit log keeps about an Entra error redirect: allow-listed, structured values only — never text from the
+ * query, which anyone can choose (an unauthenticated loop through /auth/login would otherwise write it into the
+ * permanent log).
+ */
+export const providerAuditDetails = (query: CallbackQuery) => ({
+  oauthError: knownError(query.error?.slice(0, 64)),
+  aadsts: aadstsOf(query) ?? null,
+});
+
+/** Entra's description (first line, no trace) for the service log — never the audit log or the browser. */
 export const providerDescription = (query: CallbackQuery) =>
   (query.error_description ?? '')
     .split(/\r?\n/)[0]!

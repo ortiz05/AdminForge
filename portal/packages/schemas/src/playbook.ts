@@ -219,6 +219,20 @@ export const AssertStep = z.strictObject({
   message: Template,
 });
 
+/** Default `expiresIn` of an approval gate that sets none: an unanswered request expires and fails the run. */
+export const DEFAULT_APPROVAL_EXPIRES_IN = 'P3D';
+
+/**
+ * Who may not approve a gate because the change benefits them: an expression yielding one object id or a list of
+ * them (users being added to a group, the principal getting a role and the members of a group getting one). It is
+ * evaluated when the gate opens; the API refuses a decision by anyone listed (403 `own_access`), on top of the rule
+ * that nobody approves a run they started.
+ */
+const ApprovalExcludes = Expr.meta({
+  description:
+    'Object ids that may not decide on this approval because the change grants them access (evaluated when the gate opens; a ${ … } expression yielding an id or a list of ids).',
+});
+
 /** Parks the run in `awaiting_approval`; later steps run as the approver (§7.8). */
 export const ApprovalStep = z.strictObject({
   ...stepBase,
@@ -226,7 +240,9 @@ export const ApprovalStep = z.strictObject({
   message: Template.optional(),
   approvers: z.array(PortalRole).optional(),
   minApprovals: z.number().int().min(1).max(5).optional(),
+  /** How long the request stays open (default P3D = 72 hours); an expired request fails the run. */
   expiresIn: Duration.optional(),
+  excludes: ApprovalExcludes.optional(),
 });
 
 /** A checklist item a human confirms (runbooks), optionally collecting inputs. */
@@ -325,11 +341,17 @@ export const Confirm = z
   });
 export type Confirm = z.infer<typeof Confirm>;
 
+/**
+ * `required: true` adds an implicit approval gate before the first write step. `approvers`, `minApprovals`,
+ * `expiresIn` and `excludes` also apply to explicit approval steps that don't set their own.
+ */
 export const Approval = z.strictObject({
   required: z.boolean(),
   approvers: z.array(PortalRole).optional(),
   minApprovals: z.number().int().min(1).max(5).optional(),
+  /** How long the request stays open (default P3D = 72 hours); an expired request fails the run. */
   expiresIn: Duration.optional(),
+  excludes: ApprovalExcludes.optional(),
 });
 export type Approval = z.infer<typeof Approval>;
 

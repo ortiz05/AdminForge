@@ -2,6 +2,8 @@ import { ApiError, RESPONSE_TOO_LARGE } from '@adminforge/connectors';
 import type { ApiErrorBody } from '@adminforge/schemas';
 import type { FastifyError, FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
+import type { AuditWriter } from './audit/writer';
+import { isArmed, type SessionRecord } from './auth/session-store';
 import { NotArmed, ReauthRequired } from './auth/types';
 
 type ErrorExtras = Omit<ApiErrorBody['error'], 'code' | 'message' | 'correlationId'>;
@@ -134,14 +136,87 @@ export function sendError(request: FastifyRequest, reply: FastifyReply, err: App
 }
 
 /**
+ * Refusals that say something about who is trying what — missing roles, CSRF, the request policy, self-approval,
+ * confirmations that don't match, protected objects, paused writes — as opposed to ordinary mistakes (validation, not
+ * found). Each is appended to the audit log as `request.denied`.
+ */
+export const AUDITED_DENIALS: ReadonlySet<string> = new Set([
+  'forbidden',
+  'csrf',
+  'policy_denied',
+  'own_run',
+  'own_request',
+  'confirmation_mismatch',
+  'preview_required',
+  'preview_stale',
+  'protected_object',
+  'writes_paused',
+  'session_mismatch',
+]);
+
+/** At most one `request.denied` per session (or address, without one) and code in this window; the rest are counted. */
+export const DENIAL_AUDIT_WINDOW_MS = 60_000;
+
+/**
+ * Audits refused requests (AUDITED_DENIALS), rate-limited per session + code so a looping client can't flood the
+ * permanent log: the next event after a quiet window carries how many were not recorded (`suppressed`). Only the
+ * route pattern, the code and the status are kept — never request bodies, query values or path parameters.
+ */
+export class DenialAudit {
+  private readonly last = new Map<string, { at: number; suppressed: number }>();
+
+  constructor(private readonly deps: { audit: Pick<AuditWriter, 'append'>; now: () => Date }) {}
+
+  async record(request: FastifyRequest, err: AppError): Promise<void> {
+    if (!AUDITED_DENIALS.has(err.code)) return;
+    const now = this.deps.now();
+    const t = now.getTime();
+    // (Typed here rather than through the session plugin's augmentation, which not every importer loads.)
+    const session = (request as { session?: SessionRecord | null }).session ?? null;
+    const key = `${session?.idHash ?? `ip:${request.ip}`}|${err.code}`;
+    const prev = this.last.get(key);
+    if (prev && t - prev.at < DENIAL_AUDIT_WINDOW_MS) {
+      prev.suppressed++;
+      return;
+    }
+    if (this.last.size > 10_000)
+      for (const [k, v] of this.last) if (t - v.at >= DENIAL_AUDIT_WINDOW_MS) this.last.delete(k);
+    this.last.set(key, { at: t, suppressed: 0 });
+    const route = request.routeOptions?.url ?? request.url.split(/[?#]/)[0]!.slice(0, 200);
+    await this.deps.audit.append({
+      actorOid: session?.userOid ?? null,
+      actorUpn: session?.upn ?? null,
+      sessionHash: session?.idHash ?? null,
+      mode: session ? (isArmed(session, now) ? 'write' : 'read') : null,
+      action: 'request.denied',
+      targetType: 'route',
+      targetId: `${request.method} ${route}`,
+      result: 'denied',
+      details: {
+        code: err.code,
+        status: err.status,
+        ...(prev?.suppressed ? { suppressed: prev.suppressed } : {}),
+      },
+      correlationId: request.id,
+      ip: request.ip,
+    });
+  }
+}
+
+/**
  * The single error handler: every failure leaves as an ApiErrorBody — except a browser navigation to /auth/* (Entra
  * redirects back there) or to a report download link, which goes to the problem page so nobody sees raw JSON.
+ * With `denials`, security-relevant refusals are also audited.
  */
-export function registerErrorHandler(app: FastifyInstance) {
-  app.setErrorHandler((err, request, reply) => {
+export function registerErrorHandler(app: FastifyInstance, opts: { denials?: DenialAudit } = {}) {
+  app.setErrorHandler(async (err, request, reply) => {
     const appErr = toAppError(err);
     if (appErr.status >= 500) request.log.error({ err }, 'request failed');
     else request.log.info({ code: appErr.code, status: appErr.status }, 'request rejected');
+    if (opts.denials)
+      await opts.denials
+        .record(request, appErr)
+        .catch((auditErr: unknown) => request.log.warn({ err: auditErr }, 'denied request not audited'));
     if (
       (request.url.startsWith('/auth/') || request.url.startsWith('/api/artifacts/')) &&
       isNavigation(request)

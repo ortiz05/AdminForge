@@ -32,24 +32,30 @@ function LinkValue({
   runtime: WidgetRuntime;
 }) {
   const scope = useMemo(() => ({ ...runtime.scope, row, value }), [runtime.scope, row, value]);
-  const href = useTemplate<unknown>(field.href ?? (typeof value === 'string' ? value : undefined), scope);
-  // The target often comes from data: only safe ones (http(s), mailto, in-app paths) become links.
-  const safe = typeof href.value === 'string' ? safeUrl(href.value) : null;
-  const target = safe?.href;
+  const templated = field.href !== undefined;
+  // `href` is content (a template). Without one the target is the value itself, taken literally: tenant data is never
+  // evaluated as an expression (an outside publisher's app homepage could otherwise read the viewer's session and
+  // the page's data into the link).
+  const href = useTemplate<unknown>(field.href, scope, templated);
+  const raw = templated ? href.value : value;
+  // Only safe targets (http(s), mailto, in-app paths) become links; a bare data value only when it is an external URL,
+  // as in table `kind: link` columns — in-app targets come from content.
+  const safe = typeof raw === 'string' ? safeUrl(raw) : null;
+  const link = safe && (templated || safe.external) ? safe : null;
   const label = value == null ? '' : String(value);
   if (!label) return <Dash />;
-  if (!target) return <span className="break-words">{label}</span>;
+  if (!link) return <span className="break-words">{label}</span>;
   const cls = 'break-all text-accent underline-offset-2 hover:underline';
-  if (safe.external)
+  if (link.external)
     return (
-      <a href={target} target="_blank" rel="noreferrer" className={cls}>
+      <a href={link.href} target="_blank" rel="noreferrer" className={cls}>
         {label}
         <span className="sr-only"> (opens in a new tab)</span>
       </a>
     );
   const L = runtime.Link;
   return (
-    <L href={target} className={cls}>
+    <L href={link.href} className={cls}>
       {label}
     </L>
   );

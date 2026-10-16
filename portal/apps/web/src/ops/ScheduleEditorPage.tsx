@@ -14,6 +14,14 @@ import {
 import { api } from '../lib/api';
 import { errorText } from '../lib/errors';
 import { arr, parser, pick, rec, str } from '../runs/json';
+import {
+  CadenceFields,
+  cronFor,
+  DEFAULT_CRON_PARTS,
+  defaultZone,
+  zoneOptions,
+  type CronParts,
+} from './cadence';
 import { describeCron, formatInZone, nextRuns } from './cron';
 import { Callout, useDocumentTitle } from './ui';
 
@@ -23,61 +31,10 @@ import { Callout, useDocumentTitle } from './ui';
  * validated and published like any other change (or handed to Claude Code with the adding-a-schedule-or-probe skill).
  */
 
-type Cadence = 'minutes' | 'hourly' | 'daily' | 'weekdays' | 'weekly' | 'monthly' | 'custom';
 type JobKind = 'report' | 'probe' | 'playbook' | 'contentHealth';
 
-const DAYS = [
-  { value: '1', label: 'Monday' },
-  { value: '2', label: 'Tuesday' },
-  { value: '3', label: 'Wednesday' },
-  { value: '4', label: 'Thursday' },
-  { value: '5', label: 'Friday' },
-  { value: '6', label: 'Saturday' },
-  { value: '0', label: 'Sunday' },
-];
-const ZONES = [
-  'UTC',
-  'Europe/London',
-  'Europe/Berlin',
-  'America/New_York',
-  'America/Chicago',
-  'America/Los_Angeles',
-  'Asia/Singapore',
-  'Australia/Sydney',
-];
-
-export interface CronParts {
-  cadence: Cadence;
-  every: number;
-  minute: number;
-  time: string;
-  day: string;
-  dayOfMonth: number;
-  custom: string;
-}
-
-/** The cron expression for the builder's choices. */
-export function cronFor(p: CronParts): string {
-  const [h = '0', m = '0'] = p.time.split(':');
-  const hh = String(Number(h));
-  const mm = String(Number(m));
-  switch (p.cadence) {
-    case 'minutes':
-      return `*/${p.every} * * * *`;
-    case 'hourly':
-      return `${p.minute} * * * *`;
-    case 'daily':
-      return `${mm} ${hh} * * *`;
-    case 'weekdays':
-      return `${mm} ${hh} * * 1-5`;
-    case 'weekly':
-      return `${mm} ${hh} * * ${p.day}`;
-    case 'monthly':
-      return `${mm} ${hh} ${p.dayOfMonth} * *`;
-    default:
-      return p.custom.trim();
-  }
-}
+// The cron builder is shared with the report schedule form (Reports); re-exported for existing imports.
+export { cronFor, type CronParts } from './cadence';
 
 interface DefinitionOption {
   value: string;
@@ -102,19 +59,10 @@ const ScaffoldResult = parser((input) => {
 
 export function ScheduleEditorPage() {
   useDocumentTitle('New schedule');
-  const browserZone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
   const [title, setTitle] = useState('');
   const [summary, setSummary] = useState('');
-  const [cron, setCron] = useState<CronParts>({
-    cadence: 'weekly',
-    every: 15,
-    minute: 0,
-    time: '06:00',
-    day: '1',
-    dayOfMonth: 1,
-    custom: '0 6 * * 1',
-  });
-  const [timezone, setTimezone] = useState(ZONES.includes(browserZone) ? browserZone : 'UTC');
+  const [cron, setCron] = useState<CronParts>(DEFAULT_CRON_PARTS);
+  const [timezone, setTimezone] = useState(defaultZone);
   const [jobKind, setJobKind] = useState<JobKind>('report');
   const [ref, setRef] = useState('');
   const [format, setFormat] = useState<'xlsx' | 'csv'>('xlsx');
@@ -214,6 +162,24 @@ export function ScheduleEditorPage() {
           </Link>
         }
       />
+      {jobKind === 'report' && (
+        <Callout
+          tone="info"
+          className="mb-6"
+          title="Reports can be scheduled straight from Reports"
+          action={
+            <Link
+              to="/reports"
+              className="text-sm font-semibold text-accent underline-offset-2 hover:underline"
+            >
+              Open Reports
+            </Link>
+          }
+        >
+          Open a report there and choose Schedule: it runs from the next due time, by file, email or Teams,
+          with no YAML or review. Use this editor when the schedule should live in git.
+        </Callout>
+      )}
       <div className="grid gap-6 lg:grid-cols-2">
         <div className="flex flex-col gap-6">
           <Panel eyebrow="What" title="Name and job">
@@ -315,81 +281,12 @@ export function ScheduleEditorPage() {
           </Panel>
           <Panel eyebrow="When" title="Cadence and time zone">
             <div className="flex flex-col gap-4">
-              <Select
-                label="Repeats"
-                value={cron.cadence}
-                onValueChange={(v) => setCron((c) => ({ ...c, cadence: v as Cadence }))}
-                options={[
-                  { value: 'minutes', label: 'Every few minutes' },
-                  { value: 'hourly', label: 'Every hour' },
-                  { value: 'daily', label: 'Every day' },
-                  { value: 'weekdays', label: 'Weekdays' },
-                  { value: 'weekly', label: 'Every week' },
-                  { value: 'monthly', label: 'Every month' },
-                  { value: 'custom', label: 'Custom (cron)' },
-                ]}
-              />
-              {cron.cadence === 'minutes' && (
-                <Select
-                  label="Every"
-                  value={String(cron.every)}
-                  onValueChange={(v) => setCron((c) => ({ ...c, every: Number(v) }))}
-                  options={[5, 10, 15, 30].map((n) => ({ value: String(n), label: `${n} minutes` }))}
-                />
-              )}
-              {cron.cadence === 'hourly' && (
-                <TextField
-                  label="At minute"
-                  value={String(cron.minute)}
-                  inputMode="numeric"
-                  onChange={(e) =>
-                    setCron((c) => ({ ...c, minute: Math.min(59, Math.max(0, Number(e.target.value) || 0)) }))
-                  }
-                />
-              )}
-              {['daily', 'weekdays', 'weekly', 'monthly'].includes(cron.cadence) && (
-                <TextField
-                  label="At"
-                  type="time"
-                  value={cron.time}
-                  onChange={(e) => setCron((c) => ({ ...c, time: e.target.value || '00:00' }))}
-                />
-              )}
-              {cron.cadence === 'weekly' && (
-                <Select
-                  label="On"
-                  value={cron.day}
-                  onValueChange={(v) => setCron((c) => ({ ...c, day: v }))}
-                  options={DAYS}
-                />
-              )}
-              {cron.cadence === 'monthly' && (
-                <TextField
-                  label="On day"
-                  value={String(cron.dayOfMonth)}
-                  inputMode="numeric"
-                  onChange={(e) =>
-                    setCron((c) => ({
-                      ...c,
-                      dayOfMonth: Math.min(28, Math.max(1, Number(e.target.value) || 1)),
-                    }))
-                  }
-                  hint="1–28, so it runs every month."
-                />
-              )}
-              {cron.cadence === 'custom' && (
-                <TextField
-                  label="Cron expression"
-                  value={cron.custom}
-                  onChange={(e) => setCron((c) => ({ ...c, custom: e.target.value }))}
-                  hint="minute hour day-of-month month day-of-week"
-                />
-              )}
+              <CadenceFields value={cron} onChange={setCron} />
               <Select
                 label="Time zone"
                 value={timezone}
                 onValueChange={setTimezone}
-                options={[...new Set([browserZone, ...ZONES])].map((z) => ({ value: z, label: z }))}
+                options={zoneOptions()}
               />
             </div>
           </Panel>

@@ -11,6 +11,7 @@ import type { Database } from '../db/client';
 import { createDefinitionRegistry } from '../definitions/registry';
 import type { DefinitionRegistry } from '../definitions/types';
 import { EventBus } from '../events/bus';
+import { isPaused } from '../execution/emergency';
 import { createOutboundExecutor, templatePath, type SensitiveRead } from '../execution/outbound';
 import type { OutboundExecutor } from '../execution/types';
 import { liveRunner } from './runner';
@@ -84,6 +85,7 @@ export function createContentServices(
       },
     });
   };
+  const settings = deps.settings ?? (db ? new PgSettingsStore(db) : new MemorySettingsStore());
   const outbound =
     deps.outbound ??
     createOutboundExecutor({
@@ -100,6 +102,8 @@ export function createContentServices(
       onSensitiveRead,
       // One line per Microsoft call (template path, status, ms, throttling, request id) for troubleshooting by Reference.
       onCall: log?.info ? (r) => log.info?.({ call: r }, 'microsoft call') : undefined,
+      // Emergency stop (Admin → Settings): declared writes are refused while changes are paused.
+      writesPaused: () => isPaused(settings, 'writes'),
     });
   const licences = deps.licences ?? new LicenceService(outbound, base.now);
   // PowerShell datasources: fixture files in DATA_MODE=fixtures; the runs worker's runner adapter when configured.
@@ -130,7 +134,7 @@ export function createContentServices(
     datasources,
     events,
     views: deps.views ?? (db ? new PgViewStore(db) : new MemoryViewStore()),
-    settings: deps.settings ?? (db ? new PgSettingsStore(db) : new MemorySettingsStore()),
+    settings,
     contentEnv: env,
   };
 }

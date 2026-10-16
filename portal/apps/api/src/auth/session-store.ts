@@ -24,6 +24,11 @@ export interface SessionRecord {
   expiresAt: Date;
   ip: string | null;
   userAgent: string | null;
+  /**
+   * When the roles were last confirmed with Entra (sign-in, then the 5-minute re-check by the API or the run worker).
+   * Null for sessions from before it was recorded.
+   */
+  rolesCheckedAt?: Date | null;
 }
 
 export type SessionPatch = Partial<Omit<SessionRecord, 'idHash' | 'createdAt'>>;

@@ -8,11 +8,12 @@ import Fastify, { type FastifyInstance, type FastifyServerOptions } from 'fastif
 import { armLifecycleRoutes, entraArmRoutes } from './auth/arm-routes';
 import { mockAuthRoutes } from './auth/mock-routes';
 import { entraSignInRoutes, sessionEndRoutes } from './auth/routes';
+import { requireRole } from './auth/guards';
 import { registerSessions } from './auth/session-plugin';
 import { webDistAvailable, type Config } from './config';
 import { createContext, type AppContext, type AppDeps } from './context';
 import { serializeError } from './logging';
-import { AppError, registerErrorHandler, sendError, unauthenticated } from './errors';
+import { AppError, DenialAudit, registerErrorHandler, sendError, unauthenticated } from './errors';
 import { contentRoutes } from './routes/content';
 import { healthRoutes } from './routes/health';
 import { meRoutes } from './routes/me';
@@ -20,7 +21,9 @@ import { navRoutes } from './routes/nav';
 import { overviewRoutes } from './routes/overview';
 import { approvalRoutes } from './routes/approvals';
 import { probeRoutes } from './routes/probes';
+import { newsRoutes } from './routes/news';
 import { queryRoutes } from './routes/query';
+import { reportCatalogRoutes } from './routes/report-catalog';
 import { runRoutes } from './routes/runs';
 import { scheduleRoutes } from './routes/schedules';
 import { createRunsModule } from './runs/module';
@@ -33,10 +36,48 @@ declare module 'fastify' {
   }
 }
 
-/** Query parameters that must never reach the logs (auth codes, state, CAE claims, hints). */
-const SECRET_QUERY = /([?&](?:code|state|session_state|id_token|client_info|claims|login_hint)=)[^&#]*/gi;
+/** Query parameters that must never reach the logs (auth codes, state, CAE claims, hints, Entra's error text). */
+const SECRET_QUERY =
+  /([?&](?:code|state|session_state|id_token|client_info|claims|login_hint|error_description)=)[^&#]*/gi;
+const API_PATH = /^\/api(\/|$|\?)/;
+const PARAM_NAME = /^[A-Za-z][A-Za-z0-9_.[\]-]{0,39}$/;
 
-export const redactUrl = (url: string) => url.replace(SECRET_QUERY, '$1[redacted]');
+/**
+ * The URL as logged. /api query strings carry what people look for (names in the command palette, UPNs in audit
+ * filters), so only parameter names are kept there; elsewhere secrets (auth codes, state, …) are redacted.
+ */
+export function redactUrl(url: string): string {
+  const q = url.indexOf('?');
+  if (q < 0) return url;
+  if (!API_PATH.test(url)) return url.replace(SECRET_QUERY, '$1[redacted]');
+  const params = url
+    .slice(q + 1)
+    .split('#')[0]!
+    .split('&')
+    .filter(Boolean)
+    .map((p) => {
+      const eq = p.indexOf('=');
+      const name = eq < 0 ? '' : p.slice(0, eq);
+      return PARAM_NAME.test(name) ? `${name}=[redacted]` : '[redacted]';
+    });
+  return `${url.slice(0, q)}${params.length ? `?${params.join('&')}` : ''}`;
+}
+
+/** Browser features AdminForge never uses: denied to the page and anything it embeds. */
+export const PERMISSIONS_POLICY = 'camera=(), microphone=(), geolocation=(), payment=(), usb=()';
+
+/**
+ * /api routes that work without Portal.Reader: the shell (who am I, preferences, appearance, the event stream, the
+ * emergency-stop banner) loads so the SPA can explain the missing role instead of failing blank. Everything else needs
+ * Reader (docs/access.md).
+ */
+export const READER_EXEMPT: ReadonlySet<string> = new Set([
+  'GET /api/me',
+  'PUT /api/me/prefs',
+  'GET /api/appearance.css',
+  'GET /api/emergency',
+  'GET /api/events',
+]);
 
 /** TRUST_PROXY → Fastify trustProxy: 'true'/'false' are booleans; anything else is an address/preset list ("true" would be read as a host name). */
 export const trustProxyOption = (value: string): boolean | string =>
@@ -122,7 +163,8 @@ export async function buildApp(
   app.addHook('onReady', () => schedules.start());
   app.addHook('preClose', () => schedules.stop());
 
-  registerErrorHandler(app);
+  // Security-relevant refusals (roles, CSRF, policy, self-approval, …) are audited, rate-limited per session and code.
+  registerErrorHandler(app, { denials: new DenialAudit({ audit: ctx.audit, now: ctx.now }) });
 
   // Bodiless POSTs (disarm, logout) often still carry Content-Type: application/json; treat "" as no body.
   // Everything else goes through Fastify's own parser (prototype-poisoning protection included).
@@ -136,6 +178,7 @@ export async function buildApp(
 
   app.addHook('onRequest', async (request, reply) => {
     reply.header('x-correlation-id', request.id);
+    reply.header('permissions-policy', PERMISSIONS_POLICY);
   });
   app.addHook('onSend', async (request, reply) => {
     if (NO_STORE.test(request.url)) reply.header('cache-control', 'no-store');
@@ -184,10 +227,14 @@ export async function buildApp(
 
   await app.register(
     async (api) => {
-      // Every /api call needs a session; every non-GET also needs the CSRF header.
+      // Every /api call needs a session and (apart from the shell's few) Portal.Reader; every non-GET also needs the
+      // CSRF header.
       api.addHook('preHandler', async (request) => {
         if (!request.session) throw unauthenticated();
         if (!isSafeMethod(request.method)) assertCsrf(request);
+        const method = request.method === 'HEAD' ? 'GET' : request.method;
+        if (!READER_EXEMPT.has(`${method} ${request.routeOptions.url}`))
+          requireRole(request.session, 'Portal.Reader', 'Using AdminForge');
       });
       meRoutes(api, ctx);
       navRoutes(api, ctx);
@@ -199,7 +246,11 @@ export async function buildApp(
       approvalRoutes(api, ctx, runs, schedules);
       // Schedules, probes, report artifacts and Query Studio (R6, R12).
       scheduleRoutes(api, ctx, schedules);
+      // The Reports catalogue (every report, its params, export and schedules).
+      reportCatalogRoutes(api, ctx, schedules);
       probeRoutes(api, ctx, schedules);
+      // News and changes (feeds collected by the scheduler's news job).
+      newsRoutes(api, ctx, schedules);
       queryRoutes(api, ctx);
     },
     { prefix: '/api' },

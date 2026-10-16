@@ -1,6 +1,7 @@
 import type { Mode } from '@adminforge/connectors';
 import { renderTemplate, type Scope } from '@adminforge/expressions';
 import {
+  DEFAULT_APPROVAL_EXPIRES_IN,
   flattenSteps,
   parseDuration,
   stepMode,
@@ -281,6 +282,7 @@ class Execution {
         ...(a.approvers ? { approvers: a.approvers } : {}),
         ...(a.minApprovals ? { minApprovals: a.minApprovals } : {}),
         ...(a.expiresIn ? { expiresIn: a.expiresIn } : {}),
+        ...(a.excludes ? { excludes: a.excludes } : {}),
       } as ApprovalStep;
       steps.splice(at, 0, gate);
     }
@@ -1322,9 +1324,16 @@ class Execution {
     return this.policy(step, error);
   }
 
-  private approvalTask(step: ApprovalStep, path: string, frame: Frame, message: string | null): HumanTask {
+  private approvalTask(
+    step: ApprovalStep,
+    path: string,
+    frame: Frame,
+    message: string | null,
+    excludes: string[],
+  ): HumanTask {
     const a = this.def.approval;
-    const expiresIn = step.expiresIn ?? a?.expiresIn;
+    // Every request expires (ENG-11): an approval left open for weeks would still let the change through.
+    const expiresIn = step.expiresIn ?? a?.expiresIn ?? DEFAULT_APPROVAL_EXPIRES_IN;
     return {
       kind: 'approval',
       path,
@@ -1332,9 +1341,35 @@ class Execution {
       message,
       approvers: step.approvers ?? a?.approvers ?? ['Playbook.Approver'],
       minApprovals: step.minApprovals ?? a?.minApprovals ?? 1,
-      expiresAt: expiresIn ? iso(new Date(this.clock.now().getTime() + parseDuration(expiresIn))) : null,
+      expiresAt: iso(new Date(this.clock.now().getTime() + parseDuration(expiresIn))),
+      ...(excludes.length ? { excludes } : {}),
       requestedBy: frame.actor,
     };
+  }
+
+  /**
+   * `excludes` of an approval gate, evaluated as the gate opens: the lower-cased object ids the change grants access
+   * to (they may not decide on it). Throws when the expression fails or yields something other than ids, so a gate
+   * never opens without the exclusions its author declared.
+   */
+  private async approvalExcludes(step: ApprovalStep, frame: Frame): Promise<string[]> {
+    const expr = step.excludes ?? this.def.approval?.excludes;
+    if (expr === undefined) return [];
+    const value = await this.render(expr, frame);
+    const out = new Set<string>();
+    const add = (v: unknown): void => {
+      if (v === null || v === undefined) return;
+      if (Array.isArray(v)) return v.forEach(add);
+      if (typeof v !== 'string')
+        throw new StepError(
+          'approval_excludes_invalid',
+          'The approval could not tell who it grants access to, so it was not requested.',
+          { hint: "Ask the playbook's owner to fix who its approval excludes (object ids)." },
+        );
+      if (v.trim()) out.add(v.trim().toLowerCase());
+    };
+    add(value);
+    return [...out];
   }
 
   private async runApproval(step: ApprovalStep, frame: Frame): Promise<Flow> {
@@ -1352,6 +1387,13 @@ class Execution {
       return OK;
     }
     if (!rec || rec.status !== 'waiting') {
+      // Evaluated in dry runs too, so a preview (and `adminforge test`) catches an `excludes` that can't be worked out.
+      let excludes: string[];
+      try {
+        excludes = await this.approvalExcludes(step, frame);
+      } catch (err) {
+        return this.failControl(step, frame, toRunError(err, { stepId: step.id, path }));
+      }
       if (this.dryRun) {
         const skipped = this.newRecord(step.id, 'approval', path, 'read', frame.actor, {
           status: 'skipped',
@@ -1367,6 +1409,7 @@ class Execution {
         path,
         frame,
         await this.describe(step.message, frame, { markdown: true }),
+        excludes,
       );
       const { requestedBy: _r, ...request } = task;
       const waiting = this.newRecord(step.id, 'approval', path, 'read', frame.actor, {

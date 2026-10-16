@@ -10,6 +10,7 @@ import {
   beginRoundTrip,
   browserBinding,
   finishRoundTrip,
+  providerAuditDetails,
   providerDescription,
   providerError,
   type CallbackQuery,
@@ -18,13 +19,24 @@ import { requireRole, requireSession, requireSessionWithCsrf } from './guards';
 import { safeReturnTo } from './return-to';
 import { dropWriteAccess } from './session-plugin';
 import { isArmed, type SessionRecord } from './session-store';
-import { guestAccount } from './routes';
-import { isGuestAccount, partitionKey } from './types';
+import { accountStatusMissing, guestAccount } from './routes';
+import { hasAccountStatus, isGuestAccount, partitionKey } from './types';
 
 export const ARM_RATE_LIMIT = { max: 10, timeWindow: '1 minute' };
 
 /** The Write app sign-in must have happened within this many seconds (with or without WRITE_AUTH_CONTEXT). */
 export const STEP_UP_MAX_AGE_SECONDS = 300;
+
+/**
+ * What arming proves on this installation: `authContext` — a fresh interactive sign-in that also satisfied the
+ * Conditional Access authentication context (WRITE_AUTH_CONTEXT, typically MFA); `freshSignIn` — a fresh interactive
+ * sign-in only, which Entra may complete with a password alone; `none` — mock mode. Recorded on every `session.armed`
+ * and shown in the installation settings.
+ */
+export const stepUpStrength = (
+  cfg: Pick<AppContext['config'], 'AUTH_MODE' | 'WRITE_AUTH_CONTEXT'>,
+): 'authContext' | 'freshSignIn' | 'none' =>
+  cfg.AUTH_MODE === 'mock' ? 'none' : cfg.WRITE_AUTH_CONTEXT ? 'authContext' : 'freshSignIn';
 
 /** Body of POST /auth/arm/extend. Without `minutes` the extension is WRITE_SESSION_MAX_MINUTES. */
 export const ExtendRequest = z.object({ minutes: z.number().int().min(5).max(480).optional() });
@@ -171,11 +183,14 @@ export function entraArmRoutes(app: FastifyInstance, ctx: AppContext) {
         return err;
       };
       const entraError = providerError('write', request.query);
-      if (entraError)
-        throw await fail(entraError, {
-          detail: entraError.extras.detail,
-          entra: providerDescription(request.query),
-        });
+      if (entraError) {
+        // Entra's description goes to the service log only; the audit log keeps allow-listed values.
+        request.log.info(
+          { entra: providerDescription(request.query) },
+          'Entra returned a write sign-in error',
+        );
+        throw await fail(entraError, providerAuditDetails(request.query));
+      }
       if (!request.query.code)
         throw await fail(
           new AppError(400, 'invalid_request', 'The verification response from Microsoft was incomplete.', {
@@ -248,6 +263,7 @@ export function entraArmRoutes(app: FastifyInstance, ctx: AppContext) {
         );
       }
       if (isGuestAccount(claims)) throw await reject(guestAccount());
+      if (!hasAccountStatus(claims)) throw await reject(accountStatusMissing('write'));
       const acrs = acrsOf(claims);
       if (cfg.WRITE_AUTH_CONTEXT && !acrs.includes(cfg.WRITE_AUTH_CONTEXT)) {
         throw await reject(
@@ -299,6 +315,7 @@ export function entraArmRoutes(app: FastifyInstance, ctx: AppContext) {
           requestedMinutes: requested,
           reason,
           armedUntil: until.toISOString(),
+          stepUp: stepUpStrength(cfg),
           ...(acrs.length ? { acrs } : {}),
         },
       });

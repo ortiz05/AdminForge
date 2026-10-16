@@ -98,7 +98,8 @@ describe('guest accounts are refused (acct claim)', () => {
     );
   });
 
-  it.each([[0], ['0'], [undefined]])(
+  // (A token without acct is refused: tests/api/auth-account-status.test.ts.)
+  it.each([[0], ['0']])(
     'members keep working (acct %j — e.g. the personal account that owns the tenant)',
     async (acct) => {
       t = await setup();

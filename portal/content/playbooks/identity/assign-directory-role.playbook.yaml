@@ -1,12 +1,13 @@
 $schema: ../../../packages/schemas/generated/playbook.schema.json
 kind: playbook
 id: identity.assign-directory-role
-version: 1.0.0
+version: 1.1.0
 title: Assign directory role
 summary: >-
   Gives a user, role-assignable group or service principal an active (standing) Microsoft Entra role assignment.
   Where the tenant has Entra ID P2, prefer an eligible assignment (Add eligible role assignment). Needs approval by a
-  second engineer, and refuses assigning a role to yourself.
+  second engineer who doesn't get the role (not the principal, nor a member of the group), and refuses assigning a role
+  to yourself.
 owner: identity-team
 tags: [identity, roles, privileged-access]
 risk: critical
@@ -23,11 +24,13 @@ confirm:
     ${ steps.principal.output.displayName & ' gets ' & steps.role.output.displayName & ' at '
        & (inputs.directoryScopeId = '/' ? 'directory' : inputs.directoryScopeId) & ' scope until someone removes it.'
        & ' Type the role name to confirm.' }
+# Nobody who gets the role approves it: the principal, and every member of a role-assignable group.
 approval:
   required: true
   approvers: [Playbook.Approver]
   minApprovals: 1
   expiresIn: PT8H
+  excludes: ${ $append([$guid(inputs.principalId)], steps.members.output.value.id) }
 
 inputs:
   roleDefinitionId: { type: string, format: guid, label: Role (definition id), description: Open the role from Roles & admins to fill this in. }
@@ -87,6 +90,21 @@ steps:
     type: assert
     that: ${ $not($guid(inputs.principalId) = $lowercase(user.oid)) }
     message: You can't assign a role to yourself. Ask another administrator, or activate an eligible role in PIM.
+
+  # The members of a role-assignable group get the role too (see approval.excludes).
+  - id: members
+    type: graph
+    mode: read
+    describe: Read the group's members
+    when: ${ steps.kind.output = 'group' }
+    paging: all
+    maxItems: 5000
+    request:
+      method: GET
+      path: /groups/${ $encode($guid(inputs.principalId)) }/transitiveMembers/microsoft.graph.user
+      query:
+        $select: id
+        $top: 999
 
   # Same request as the user page's Roles tab: the principal's direct assignments with their role definitions.
   - id: current
@@ -166,8 +184,19 @@ tests:
     mocks:
       role: { id: fe930be7-5e62-47db-91af-98c3a49a38b1, displayName: User Administrator, isBuiltIn: true, isEnabled: true }
       principal: { "@odata.type": "#microsoft.graph.group", id: 00000000-0000-4000-8000-000000000208, displayName: SG-PIM-Identity-Admins, isAssignableToRole: true }
+      members: { value: [{ id: 00000000-0000-4000-8000-0000000000b2 }] }
       current: { value: [{ id: ra-20, principalId: 00000000-0000-4000-8000-000000000208, roleDefinitionId: fe930be7-5e62-47db-91af-98c3a49a38b1, directoryScopeId: /administrativeUnits/00000000-0000-4000-8000-000000000c01 }] }
     expect:
       status: succeeded
       plan: [assign]
+      steps: { members: succeeded }
       outputs: { summary: User Administrator assigned to SG-PIM-Identity-Admins. New permissions can take a few minutes to apply across Microsoft services. }
+  - name: waits for a second engineer before assigning the role
+    dryRun: false
+    inputs: { roleDefinitionId: fe930be7-5e62-47db-91af-98c3a49a38b1, principalId: 00000000-0000-4000-8000-000000000102, directoryScopeId: /, reason: New helpdesk lead REQ-3105 }
+    user: { oid: 00000000-0000-4000-8000-0000000000a1, upn: avery@example.com }
+    mocks:
+      role: { id: fe930be7-5e62-47db-91af-98c3a49a38b1, displayName: User Administrator, isBuiltIn: true, isEnabled: true }
+      principal: { "@odata.type": "#microsoft.graph.user", id: 00000000-0000-4000-8000-000000000102, displayName: Morgan Chen, userPrincipalName: m.chen@example.com }
+      current: { value: [] }
+    expect: { status: awaiting_approval, steps: { members: skipped } }

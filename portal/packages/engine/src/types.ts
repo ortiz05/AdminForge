@@ -192,6 +192,8 @@ export type HumanTask =
       approvers: string[];
       minApprovals: number;
       expiresAt: string | null;
+      /** Object ids (lower-case) who may not decide because the change grants them access (`excludes`). */
+      excludes?: string[];
       requestedBy: Actor;
     }
   | {

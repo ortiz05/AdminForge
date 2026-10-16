@@ -1,9 +1,11 @@
 $schema: ../../../packages/schemas/generated/playbook.schema.json
 kind: playbook
 id: identity.remove-group-owner
-version: 1.0.0
+version: 1.1.0
 title: Remove group owner
-summary: Removes an owner from a group. Refuses to remove the last owner, so groups never end up ownerless.
+summary: >-
+  Removes an owner from a group. Refuses to remove the last owner, so groups never end up ownerless, and refuses
+  AdminForge's own role groups and accounts marked as protected (AF_PROTECTED_USER_IDS).
 owner: identity-team
 tags: [identity, groups, governance]
 risk: medium
@@ -32,7 +34,24 @@ steps:
       method: GET
       path: /groups/${ $encode($guid(inputs.groupId)) }
       query:
-        $select: id,displayName
+        $select: id,displayName,uniqueName
+
+  # AdminForge refuses any write naming a portal group or a protected account by id (protected_object); these checks
+  # explain it before anything runs.
+  - id: notPortalGroup
+    type: assert
+    that: >-
+      ${ $not($substring($lowercase(steps.group.output.uniqueName ? steps.group.output.uniqueName : ''), 0, 14) = 'sg-adminforge-' or $substring($lowercase(steps.group.output.displayName), 0, 14) = 'sg-adminforge-') }
+    message: This group grants AdminForge roles. Change its owners in the Microsoft Entra admin center, outside AdminForge, so nobody can change who controls portal access from inside the portal.
+
+  - id: notProtectedOwner
+    type: assert
+    that: >-
+      ${ (
+        $protected := [$split(env.AF_PROTECTED_USER_IDS ? env.AF_PROTECTED_USER_IDS : '', /[\s,]+/).$lowercase($)[$ != ''] ];
+        $not($lowercase(inputs.ownerId) in $protected)
+      ) }
+    message: That account is marked as protected (a break-glass or emergency-access account). Change its group ownerships in the Microsoft Entra admin center, outside AdminForge.
 
   - id: owners
     type: graph
@@ -78,6 +97,17 @@ outputs:
   summary: ${ steps.current.output.userPrincipalName & ' no longer owns ' & steps.group.output.displayName & '.' }
 
 tests:
+  - name: refuses AdminForge's role groups
+    inputs: { groupId: 00000000-0000-4000-8000-0000000002ff, ownerId: 00000000-0000-4000-8000-000000000101 }
+    mocks:
+      group: { id: 00000000-0000-4000-8000-0000000002ff, displayName: SG-AdminForge-dev-Portal.Admin, uniqueName: sg-adminforge-dev-portal-admin }
+    expect: { status: failed, failedStep: notPortalGroup }
+  - name: refuses removing a protected (break-glass) owner
+    env: { AF_PROTECTED_USER_IDS: 00000000-0000-4000-8000-0000000001ff }
+    inputs: { groupId: 00000000-0000-4000-8000-000000000201, ownerId: 00000000-0000-4000-8000-0000000001FF }
+    mocks:
+      group: { id: 00000000-0000-4000-8000-000000000201, displayName: SG-App-Payroll-Users }
+    expect: { status: failed, failedStep: notProtectedOwner }
   - name: refuses to remove the last owner
     inputs: { groupId: 00000000-0000-4000-8000-000000000201, ownerId: 00000000-0000-4000-8000-000000000101 }
     mocks:

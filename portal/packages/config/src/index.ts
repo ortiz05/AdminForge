@@ -28,6 +28,13 @@ export const ADMIN_ENV_KEYS = [
 
 const isAdminKey = (key: string) => (ADMIN_ENV_KEYS as readonly string[]).includes(key);
 
+/**
+ * The database owner's credentials: `DATABASE_MIGRATION_URL` (written to <env>.host.env by
+ * portal/deploy/db/create-app-role.sh) and `POSTGRES_PASSWORD` (the dev container's superuser, read by docker compose
+ * from the env file directly). Only migrations need them; the services connect as the least-privilege role.
+ */
+export const OWNER_ENV_KEYS = ['DATABASE_MIGRATION_URL', 'POSTGRES_PASSWORD'] as const;
+
 /** The admin-only file next to the env file. */
 export const adminEnvFilePath = (env: NodeJS.ProcessEnv = process.env) => sibling(envFilePath(env), 'admin');
 
@@ -43,6 +50,11 @@ export function overlayEnvFilePath(env: NodeJS.ProcessEnv = process.env): string
 export interface LoadEnvOptions {
   /** Also read <env>.admin.env (provisioner and live-test credentials). Admin tooling only. */
   admin?: boolean;
+  /**
+   * Keep the database owner's credentials (OWNER_ENV_KEYS) found in the files. Migrations only (`db:migrate`): the
+   * services, the CLI and `pnpm dev` never get them, even though they read the same files.
+   */
+  owner?: boolean;
 }
 
 /** The files `loadEnv` reads, lowest precedence first (missing files are skipped). */
@@ -66,7 +78,11 @@ export function parseEnv(text: string): Record<string, string> {
   return out;
 }
 
-/** The layered files (see envFilePath) overlaid by process.env. Missing files → process.env only. */
+/**
+ * The layered files (see envFilePath) overlaid by process.env. Missing files → process.env only. Keys from the files
+ * that the caller didn't ask for are dropped: admin keys without `admin` (also from a base file that still holds
+ * them — older layout), owner keys without `owner`. Values set in process.env itself are kept as given.
+ */
 export function loadEnv(
   env: NodeJS.ProcessEnv = process.env,
   opts: LoadEnvOptions = {},
@@ -74,8 +90,8 @@ export function loadEnv(
   const fromFiles: Record<string, string> = {};
   for (const file of envFiles(env, opts))
     if (existsSync(file)) Object.assign(fromFiles, parseEnv(readFileSync(file, 'utf8')));
-  // Without `admin`, admin keys never leak in from a base file that still holds them (older layout).
   if (!opts.admin) for (const key of ADMIN_ENV_KEYS) delete fromFiles[key];
+  if (!opts.owner) for (const key of OWNER_ENV_KEYS) delete fromFiles[key];
   return { ...fromFiles, ...env };
 }
 

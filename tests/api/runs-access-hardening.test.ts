@@ -153,8 +153,8 @@ async function setup() {
 describe('manual steps: values come only from the person the step waits for (M6, L4)', () => {
   it('another Operator may decline but not fill in values; the initiator can', async () => {
     const t = await setup();
-    const avery = await t.login(AVERY, ['Portal.Operator'], { armed: true });
-    const drew = await t.login(DREW, ['Portal.Operator'], { armed: true });
+    const avery = await t.login(AVERY, ['Portal.Reader', 'Portal.Operator'], { armed: true });
+    const drew = await t.login(DREW, ['Portal.Reader', 'Portal.Operator'], { armed: true });
     const { runId } = (await avery.post('/api/runs', { playbook: 'test.secret-runbook', inputs: {} })).json();
     await t.drain();
     const res = await drew.post(`/api/runs/${runId}/manual/ask`, {
@@ -176,7 +176,7 @@ describe('manual steps: values come only from the person the step waits for (M6,
 
   it('values typed into redact fields are masked in the task, step outputs, run outputs, events and audit — and reach the write after a pause', async () => {
     const t = await setup();
-    const avery = await t.login(AVERY, ['Portal.Operator'], { armed: true });
+    const avery = await t.login(AVERY, ['Portal.Reader', 'Portal.Operator'], { armed: true });
     const { runId } = (await avery.post('/api/runs', { playbook: 'test.secret-runbook', inputs: {} })).json();
     await t.drain();
     const ok = await avery.post(`/api/runs/${runId}/manual/ask`, {
@@ -209,17 +209,17 @@ describe('manual steps: values come only from the person the step waits for (M6,
 describe('approvals (L6)', () => {
   it('the steps after an approval run as the approver, who needs the playbook’s roles', async () => {
     const t = await setup();
-    const avery = await t.login(AVERY, ['Portal.Operator']);
+    const avery = await t.login(AVERY, ['Portal.Reader', 'Portal.Operator']);
     const { runId } = (
       await avery.post('/api/runs', { playbook: 'test.guarded', inputs: { userId: USER } })
     ).json();
     await t.drain();
-    const blake = await t.login(BLAKE, ['Playbook.Approver']);
+    const blake = await t.login(BLAKE, ['Portal.Reader', 'Playbook.Approver']);
     const refused = await blake.post(`/api/runs/${runId}/approvals/approve`, { decision: 'approve' });
     expect(refused.statusCode).toBe(403);
     expect(refused.json().error.message).toMatch(/run as you.*Portal\.Operator/);
     // Rejecting needs no roles beyond Approver: nothing runs as the person who rejects.
-    const casey = await t.login(CASEY, ['Playbook.Approver', 'Portal.Operator']);
+    const casey = await t.login(CASEY, ['Portal.Reader', 'Playbook.Approver', 'Portal.Operator']);
     expect(
       (await casey.post(`/api/runs/${runId}/approvals/approve`, { decision: 'approve' })).json(),
     ).toEqual({
@@ -258,14 +258,19 @@ describe('scheduled runs (automation identity) are visible to the schedule’s r
 
   it('Approver or Admin without Operator can’t open or list them; Operators with the playbook’s roles can', async () => {
     const { t, run } = await scheduled();
-    for (const roles of [['Playbook.Approver'], ['Portal.Admin', 'Portal.Reader'], ['Portal.Operator']]) {
-      const who = await t.login(BLAKE, roles);
-      expect((await who.get(`/api/runs/${run.id}`)).statusCode).toBe(404);
-      expect((await who.get(`/api/runs/${run.id}/events`)).statusCode).toBe(404);
+    // An Operator without the playbook's Portal.Reader is refused before the run is even looked up (403).
+    for (const [roles, status] of [
+      [['Portal.Reader', 'Playbook.Approver'], 404],
+      [['Portal.Admin', 'Portal.Reader'], 404],
+      [['Portal.Operator'], 403],
+    ] as const) {
+      const who = await t.login(BLAKE, [...roles]);
+      expect((await who.get(`/api/runs/${run.id}`)).statusCode).toBe(status);
+      expect((await who.get(`/api/runs/${run.id}/events`)).statusCode).toBe(status);
       if (
-        roles.includes('Portal.Operator') ||
-        roles.includes('Playbook.Approver') ||
-        roles.includes('Portal.Admin')
+        (roles as readonly string[]).includes('Portal.Operator') ||
+        (roles as readonly string[]).includes('Playbook.Approver') ||
+        (roles as readonly string[]).includes('Portal.Admin')
       )
         expect(JSON.stringify((await who.get('/api/runs?scope=all')).json())).not.toContain(run.id);
     }
@@ -278,10 +283,11 @@ describe('scheduled runs (automation identity) are visible to the schedule’s r
   });
 
   it('a schedule’s requires.portalRoles decides instead of the Operator default', async () => {
-    const { t, run } = await scheduled({ portalRoles: ['Portal.Reader'] });
-    const reader = await t.login(CASEY, ['Portal.Reader']);
-    expect((await reader.get(`/api/runs/${run.id}`)).statusCode).toBe(200);
-    const op = await t.login(DREW, ['Portal.Operator']);
+    // (Everyone holds Portal.Reader, so the schedule asks for Portal.Admin to tell the two apart.)
+    const { t, run } = await scheduled({ portalRoles: ['Portal.Admin'] });
+    const admin = await t.login(CASEY, ['Portal.Reader', 'Portal.Admin']);
+    expect((await admin.get(`/api/runs/${run.id}`)).statusCode).toBe(200);
+    const op = await t.login(DREW, ['Portal.Reader', 'Portal.Operator']);
     expect((await op.get(`/api/runs/${run.id}`)).statusCode).toBe(404);
     await t.close();
   });
@@ -307,7 +313,7 @@ describe('scheduled runs (automation identity) are visible to the schedule’s r
     expect(own.statusCode).toBe(403);
     expect(own.json().error.code).toBe('own_run');
     // A different approver may decide without being able to open the run's data.
-    const blake = await t.login(BLAKE, ['Playbook.Approver'], { armed: true });
+    const blake = await t.login(BLAKE, ['Portal.Reader', 'Playbook.Approver'], { armed: true });
     expect((await blake.get(`/api/runs/${run.id}`)).statusCode).toBe(404);
     expect(
       (await blake.post(`/api/runs/${run.id}/approvals/approve`, { decision: 'approve' })).json(),
@@ -323,7 +329,7 @@ describe('scheduled runs (automation identity) are visible to the schedule’s r
 describe('what may run (L6)', () => {
   it('a draft can be previewed but not run', async () => {
     const t = await setup();
-    const avery = await t.login(AVERY, ['Portal.Operator'], { armed: true });
+    const avery = await t.login(AVERY, ['Portal.Reader', 'Portal.Operator'], { armed: true });
     const dry = await avery.post('/api/runs', {
       playbook: 'test.draft',
       inputs: { userId: USER },
@@ -398,7 +404,7 @@ describe('child playbooks never start with a masked value (M11)', () => {
       definitions: defs,
       outbound: new FakeExecutor(() => ({ v: `prefix-${SECRET}` })),
     });
-    const avery = await t.login(AVERY, ['Portal.Operator']);
+    const avery = await t.login(AVERY, ['Portal.Reader', 'Portal.Operator']);
     const { runId } = (
       await avery.post('/api/runs', {
         playbook: 'test.parent-secret',
@@ -406,7 +412,7 @@ describe('child playbooks never start with a masked value (M11)', () => {
       })
     ).json();
     await t.drain();
-    const blake = await t.login(BLAKE, ['Playbook.Approver']);
+    const blake = await t.login(BLAKE, ['Portal.Reader', 'Playbook.Approver']);
     expect(
       (await blake.post(`/api/runs/${runId}/approvals/approve`, { decision: 'approve' })).statusCode,
     ).toBe(200);

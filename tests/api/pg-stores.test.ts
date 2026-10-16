@@ -95,8 +95,10 @@ describe.skipIf(!url)('Postgres-backed stores', () => {
       await blobs.set(`write:${id}`, 'sealed');
     }
     await blobs.set('read:orphan', 'sealed');
+    // Relative to the test's fixed clock, not the database's: purge compares with `now`.
     await database.pool.query(
-      "update token_cache set updated_at = now() - interval '2 days' where partition_key = 'read:orphan'",
+      "update token_cache set updated_at = $1::timestamptz - interval '2 days' where partition_key = 'read:orphan'",
+      [now.toISOString()],
     );
 
     expect(await store.purge({ now, idleMinutes: 60 })).toBe(1);

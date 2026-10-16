@@ -1,14 +1,15 @@
 $schema: ../../../packages/schemas/generated/playbook.schema.json
 kind: playbook
 id: identity.add-app-owner
-version: 1.1.0
+version: 1.2.0
 title: Add app registration owner
 summary: >-
-  Makes a user an owner of an app registration. Owners can change credentials and redirect URIs, so only add people
-  accountable for the app.
+  Makes a user an owner of an app registration. Owners can add credentials and sign in as the app with its
+  permissions, so this needs a second engineer's approval (the new owner can't approve it) and refuses making yourself
+  an owner. Only add people accountable for the app.
 owner: identity-team
 tags: [identity, apps, governance]
-risk: medium
+risk: high
 mode: write
 requires:
   portalRoles: [Portal.Operator]
@@ -20,8 +21,14 @@ confirm:
   message: >-
     ${ 'Make ' & steps.owner.output.userPrincipalName & ' an owner of ' & steps.app.output.displayName
        & '? Owners can add secrets and change sign-in settings for this app.' }
+# An owner can add a secret and act as the app with its API permissions: a second engineer approves, and the new
+# owner may not approve it. The change then runs as the approver.
 approval:
-  required: false
+  required: true
+  approvers: [Playbook.Approver]
+  minApprovals: 1
+  expiresIn: PT8H
+  excludes: ${ $guid(inputs.ownerId) }
 
 inputs:
   appObjectId: { type: string, format: guid, label: App registration (object id), picker: app }
@@ -74,6 +81,11 @@ steps:
     that: ${ $not($guid(inputs.ownerId) in steps.owners.output.value.id) }
     message: ${ steps.owner.output.userPrincipalName & ' already owns ' & steps.app.output.displayName & '.' }
 
+  - id: notSelf
+    type: assert
+    that: ${ $not($guid(inputs.ownerId) = $lowercase(user.oid)) }
+    message: You can't make yourself an owner of an app registration. Ask another engineer.
+
   - id: addOwner
     type: graph
     mode: write
@@ -115,3 +127,20 @@ tests:
     expect:
       status: succeeded
       plan: [addOwner]
+  - name: refuses making yourself an owner
+    inputs: { appObjectId: 00000000-0000-4000-8000-000000000301, ownerId: 00000000-0000-4000-8000-0000000000a1 }
+    user: { oid: 00000000-0000-4000-8000-0000000000a1, upn: avery@example.com }
+    mocks:
+      app: { id: 00000000-0000-4000-8000-000000000301, appId: 00000000-0000-4000-8001-000000000301, displayName: Example HR Sync }
+      owner: { id: 00000000-0000-4000-8000-0000000000a1, userPrincipalName: avery@example.com, accountEnabled: true, userType: Member }
+      owners: { value: [{ id: 00000000-0000-4000-8000-000000000101, userPrincipalName: a.lee@example.com }] }
+    expect: { status: failed, failedStep: notSelf }
+  - name: waits for a second engineer before adding the owner
+    dryRun: false
+    inputs: { appObjectId: 00000000-0000-4000-8000-000000000301, ownerId: 00000000-0000-4000-8000-000000000102 }
+    user: { oid: 00000000-0000-4000-8000-0000000000a1, upn: avery@example.com }
+    mocks:
+      app: { id: 00000000-0000-4000-8000-000000000301, appId: 00000000-0000-4000-8001-000000000301, displayName: Example HR Sync }
+      owner: { id: 00000000-0000-4000-8000-000000000102, userPrincipalName: m.chen@example.com, accountEnabled: true, userType: Member }
+      owners: { value: [{ id: 00000000-0000-4000-8000-000000000101, userPrincipalName: a.lee@example.com }] }
+    expect: { status: awaiting_approval }

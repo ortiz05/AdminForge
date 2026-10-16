@@ -1,6 +1,7 @@
 import { MeResponse } from '@adminforge/schemas';
 import { api, ApiRequestError, CSRF_HEADER, loginUrl, rememberCsrf } from '@adminforge/web/src/lib/api';
 import { browser } from '@adminforge/web/src/lib/browser';
+import { noteActivity } from '@adminforge/web/src/lib/activity';
 import {
   __resetPrefsForTests,
   applyPrefs,
@@ -74,6 +75,7 @@ describe('api()', () => {
 
   it('sends the browser to sign in on 401 with error.login, keeping the current page', async () => {
     const assign = vi.spyOn(browser, 'assign').mockImplementation(() => {});
+    noteActivity(); // the person's request (a background one waits for them: signed-out-idle.test.tsx)
     window.history.replaceState(null, '', '/identity/users?inspect=user:1');
     fetchMock.mockResolvedValue(
       json(

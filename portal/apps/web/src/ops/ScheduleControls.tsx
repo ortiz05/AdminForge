@@ -2,9 +2,9 @@ import { useState } from 'react';
 import { errorDescription } from '../lib/errors';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
-import { Button, ConfirmDialog, PlayIcon, StatusPill, Switch, useToast } from '@adminforge/ui';
+import { Button, ConfirmDialog, PlayIcon, StatusPill, Switch, TrashIcon, useToast } from '@adminforge/ui';
 import { formatInZone, nextRuns } from './cron';
-import { runScheduleNow, setScheduleEnabled, type ScheduleItem } from './schedules';
+import { deleteSchedule, runScheduleNow, setScheduleEnabled, type ScheduleItem } from './schedules';
 
 /**
  * Enable / disable a schedule. Read-only jobs switch at once. Write-capable ones (playbook or script jobs that change
@@ -41,6 +41,7 @@ export function ScheduleToggle({ schedule, withLabel }: { schedule: ScheduleItem
         });
       }
       void queryClient.invalidateQueries({ queryKey: ['schedules'] });
+      void queryClient.invalidateQueries({ queryKey: ['reports'] });
       void queryClient.invalidateQueries({ queryKey: ['approvals'] });
     },
     onError: (e) =>
@@ -107,6 +108,7 @@ export function RunNowButton({ schedule, size = 'sm' }: { schedule: ScheduleItem
         description: 'It runs as the automation identity; the result appears in its history.',
       });
       void queryClient.invalidateQueries({ queryKey: ['schedules'] });
+      void queryClient.invalidateQueries({ queryKey: ['reports'] });
       void queryClient.invalidateQueries({ queryKey: ['schedule-runs', schedule.key] });
     },
     onError: (e) =>
@@ -135,5 +137,58 @@ export function RunNowButton({ schedule, size = 'sm' }: { schedule: ScheduleItem
         />
       )}
     </>
+  );
+}
+
+/**
+ * Delete a portal schedule (shown only when `canManage`). It stops running and leaves the lists; its run history and
+ * files stay until retention removes them. Confirms first.
+ */
+export function DeleteScheduleButton({
+  schedule,
+  size = 'sm',
+  onDeleted,
+}: {
+  schedule: Pick<ScheduleItem, 'key' | 'title'>;
+  size?: 'sm' | 'md';
+  onDeleted?: () => void;
+}) {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const mutation = useMutation({
+    mutationFn: () => deleteSchedule(schedule.key),
+    onSuccess: () => {
+      toast({ tone: 'ok', title: 'Schedule deleted', description: `${schedule.title} won’t run again.` });
+      void queryClient.invalidateQueries({ queryKey: ['schedules'] });
+      void queryClient.invalidateQueries({ queryKey: ['reports'] });
+      onDeleted?.();
+    },
+    onError: (e) =>
+      toast({ tone: 'crit', title: 'The schedule wasn’t deleted', description: errorDescription(e) }),
+  });
+  return (
+    <ConfirmDialog
+      trigger={
+        <Button
+          size={size}
+          intent="ghost"
+          aria-label={size === 'sm' ? `Delete ${schedule.title}` : undefined}
+        >
+          <TrashIcon size={size === 'sm' ? 12 : 14} aria-hidden />
+          Delete
+        </Button>
+      }
+      title={`Delete ${schedule.title}?`}
+      description="It stops running and leaves the schedule lists. Its run history and files stay until they age out."
+      confirmLabel="Delete schedule"
+      intent="danger"
+      // A failure is reported in a toast; the dialog closes either way.
+      onConfirm={() =>
+        mutation.mutateAsync().then(
+          () => undefined,
+          () => undefined,
+        )
+      }
+    />
   );
 }

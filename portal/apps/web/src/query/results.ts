@@ -38,13 +38,18 @@ export function cellText(v: unknown): string {
 }
 
 /**
- * CSV for spreadsheets (RFC 4180, CRLF). Cells that a spreadsheet would run as a formula (= + - @, tab, CR)
- * are prefixed with an apostrophe, because query results routinely carry attacker-controlled text
- * (sign-in user agents, email subjects, resource tags).
+ * A cell a spreadsheet would run as a formula (= + - @, tab, CR at the start) gets an apostrophe in front, because
+ * query results routinely carry attacker-controlled text (sign-in user agents, email subjects, resource tags).
+ * Negative numbers (`-5`, `-1.5e3`) stay numbers.
  */
+export function spreadsheetText(raw: string): string {
+  return /^[=+\-@\t\r]/.test(raw) && !/^-?\d+(\.\d+)?([eE][+-]?\d+)?$/.test(raw) ? `'${raw}` : raw;
+}
+
+/** CSV for spreadsheets (RFC 4180, CRLF), formulas neutralised (`spreadsheetText`). */
 export function toCsv(columns: ResultColumn[], rows: Array<Record<string, unknown>>): string {
   const esc = (raw: string) => {
-    const s = /^[=+\-@\t\r]/.test(raw) && !/^-?\d+(\.\d+)?([eE][+-]?\d+)?$/.test(raw) ? `'${raw}` : raw;
+    const s = spreadsheetText(raw);
     return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
   };
   const lines = [columns.map((c) => esc(c.name)).join(',')];
@@ -52,9 +57,12 @@ export function toCsv(columns: ResultColumn[], rows: Array<Record<string, unknow
   return `${lines.join('\r\n')}\r\n`;
 }
 
-/** Tab-separated text for pasting into a spreadsheet or a ticket. Tabs and newlines inside cells become spaces. */
+/**
+ * Tab-separated text for pasting into a spreadsheet or a ticket. Formulas are neutralised as in the CSV export (a
+ * paste runs them just the same); tabs and newlines inside cells become spaces.
+ */
 export function toTsv(columns: ResultColumn[], rows: Array<Record<string, unknown>>): string {
-  const clean = (s: string) => s.replace(/[\t\r\n]+/g, ' ');
+  const clean = (s: string) => spreadsheetText(s).replace(/[\t\r\n]+/g, ' ');
   return [
     columns.map((c) => clean(c.name)).join('\t'),
     ...rows.map((r) => columns.map((c) => clean(cellText(r[c.name]))).join('\t')),

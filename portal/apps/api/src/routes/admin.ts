@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify';
+import { stepUpStrength } from '../auth/arm-routes';
 import { requireRole, requireSession } from '../auth/guards';
 import { APPEARANCE_KEY, appearanceCss, Appearance, validateAppearance } from '../admin/appearance';
 import { queryAudit, verifyAudit } from '../admin/audit-query';
@@ -113,6 +114,8 @@ export function adminRoutes(api: FastifyInstance, ctx: AppContext) {
       dataMode: c.DATA_MODE,
       contentSource: c.CONTENT_SOURCE,
       writeSessionMaxMinutes: c.WRITE_SESSION_MAX_MINUTES,
+      // Whether arming proves MFA (an authentication context) or only a fresh sign-in.
+      writeStepUp: stepUpStrength(c),
       apps: {
         read: Boolean(c.AF_READ_CLIENT_ID && c.AF_READ_CLIENT_SECRET),
         write: writeAppConfigured(c),

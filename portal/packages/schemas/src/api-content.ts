@@ -330,6 +330,11 @@ export const AdminSettingsResponse = z.object({
   dataMode: z.enum(['live', 'fixtures']),
   contentSource: z.enum(['fs', 'db']),
   writeSessionMaxMinutes: z.number(),
+  /**
+   * What arming proves: `authContext` = a fresh sign-in that satisfied the Conditional Access authentication context
+   * (WRITE_AUTH_CONTEXT, e.g. MFA); `freshSignIn` = a fresh interactive sign-in only (not necessarily MFA); `none` = mock.
+   */
+  writeStepUp: z.enum(['authContext', 'freshSignIn', 'none']),
   apps: z.object({ read: z.boolean(), write: z.boolean(), automation: z.boolean() }),
   tenant: z.object({ name: z.string(), domain: z.string() }),
 });

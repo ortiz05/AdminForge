@@ -9,6 +9,7 @@ import {
   validateInputs,
   type AutomationDefinition,
   type InputIssue,
+  type RunError,
   type RunStatus,
   type RunStore,
 } from '@adminforge/engine';
@@ -22,7 +23,7 @@ import type { DefinitionResolver } from '../definitions/types';
 import { AppError } from '../errors';
 import { SCHEDULED_DATA_ROLES } from '../schedules/service';
 import type { RunQueue } from './queue';
-import { pinnedDefinition, rootOf } from './run-worker';
+import { failTree, outdatedRun, pinnedDefinition, rootOf, runOutdated, wroteAnything } from './run-worker';
 import { decisionOf } from './store';
 import { automationFingerprint, writesInTree, type PlaybookRef } from './fingerprint';
 import {
@@ -107,6 +108,10 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const hasAny = (s: SessionRecord, roles: readonly string[]) => roles.some((r) => s.roles.includes(r));
 const hasEvery = (s: SessionRecord, roles: readonly string[]) => roles.every((r) => s.roles.includes(r));
+
+/** Whether an approval gate's `excludes` (object ids the change grants access to) lists `oid`. */
+const grantsAccessTo = (t: TaskRow, oid: string) =>
+  t.policy.kind === 'approval' && (t.policy.excludes ?? []).includes(oid.toLowerCase());
 
 /**
  * The id of the run a preview confirms: derived from the preview's id, so a preview starts at most one run (a second
@@ -960,6 +965,74 @@ export class RunService {
     return (await this.deps.repo.getRun(row.id))!;
   }
 
+  /**
+   * IAM-02: resuming re-checks what starting the run checked.
+   * - Every unfinished run in the tree is still on the current published version; otherwise the run ends
+   *   `run_outdated` (an older version may lack roles, approvals or fixes added since).
+   * - The caller is still allowed to run it: the initiator passes the same check as starting it, anyone else the
+   *   playbook's roles (the check an approver passed).
+   * - A confirmed change parked on arming or signing in before it wrote anything still has a preview (or an approval)
+   *   from the last 15 minutes; otherwise it ends `preview_stale` (nothing changed yet; preview it again).
+   */
+  private async checkContinuable(caller: Caller, root: RunRow, tree: RunRow[], tasks: TaskRow[]) {
+    const s = caller.session;
+    const now = this.deps.now();
+    const { repo, store } = this.deps;
+    const refuse = async (error: RunError, status: number) => {
+      await failTree({ repo, store }, tree, error, now);
+      await this.deps.audit.append({
+        ...this.actor(caller),
+        action: 'run.resumed',
+        targetType: 'run',
+        targetId: root.id,
+        details: { definition: root.definitionKey, version: root.definitionVersion, refused: error.code },
+        result: 'denied',
+      });
+      return new AppError(status, error.code, error.message, error.hint ? { hint: error.hint } : {});
+    };
+    const stale = await outdatedRun(this.deps.definitions(), repo, tree);
+    if (stale)
+      throw await refuse(
+        runOutdated({
+          definition: stale.row.definitionKey,
+          version: stale.row.definitionVersion,
+          current: stale.current,
+        }),
+        409,
+      );
+    const def = await pinnedDefinition(this.deps.definitions(), root);
+    if (tree.some((r) => r.initiatorOid === s.userOid)) this.authorize(s, def, root.dryRun);
+    else for (const role of def.requires?.portalRoles ?? []) requireRole(s, role, `Resuming ${def.title}`);
+
+    if (root.dryRun || (root.status !== 'awaiting_arm' && root.status !== 'awaiting_reauth')) return;
+    // Bulk runs execute a synthesised wrapper: the confirm block is the target playbook's.
+    const target =
+      root.trigger === 'bulk'
+        ? (await this.resolve(root.definitionKey, root.definitionVersion, ['playbook'])).def
+        : def;
+    if (!target.confirm || target.confirm.type === 'none') return;
+    const previewRunId = (await repo.listEvents(root.id, 0, 5))
+      .map((e) => e.data.previewRunId)
+      .find((v): v is string => typeof v === 'string');
+    const preview = previewRunId && UUID.test(previewRunId) ? await repo.getRun(previewRunId) : null;
+    const basis = Math.max(
+      preview?.createdAt.getTime() ?? 0,
+      ...tasks
+        .filter((t) => t.policy.kind === 'approval' && t.status === 'approved' && t.decidedAt)
+        .map((t) => t.decidedAt!.getTime()),
+    );
+    if (now.getTime() - basis <= PREVIEW_MAX_AGE_MS || (await wroteAnything(repo, tree))) return;
+    throw await refuse(
+      {
+        code: 'preview_stale',
+        message:
+          'The preview this change was confirmed from is more than 15 minutes old, so the run stopped before changing anything.',
+        hint: 'Preview it again, then run it.',
+      },
+      409,
+    );
+  }
+
   async resume(caller: Caller, id: string): Promise<RunRow> {
     const row = await this.load(caller, id);
     const root = await rootOf(this.deps.repo, row);
@@ -976,6 +1049,7 @@ export class RunService {
         'forbidden',
         'Only the engineers acting in this run (or a Portal.Admin) can resume it.',
       );
+    await this.checkContinuable(caller, root, tree, tasks);
     // ADR-010: steps run with the actor's *current* session; rebind it everywhere this user acts in the run tree.
     let rebound = 0;
     for (const r of tree) {
@@ -1013,13 +1087,19 @@ export class RunService {
   private canDecide(session: SessionRecord, run: RunRow, t: TaskRow): boolean {
     if (t.status !== 'pending' || isTerminal(run.status)) return false;
     if (t.decisions.some((d) => d.oid === session.userOid)) return false;
+    // Manual steps: the person the step waits for confirms; the initiator or an Operator may also decline.
     if (t.policy.kind === 'manual')
-      return run.initiatorOid === session.userOid || hasRole(session, 'Portal.Operator');
+      return (
+        run.initiatorOid === session.userOid ||
+        t.requestedBy === session.userOid ||
+        hasRole(session, 'Portal.Operator')
+      );
     return (
       hasRole(session, 'Playbook.Approver') &&
       hasAny(session, t.policy.approvers) &&
       run.initiatorOid !== session.userOid &&
-      t.policy.initiatorOid !== session.userOid
+      t.policy.initiatorOid !== session.userOid &&
+      !grantsAccessTo(t, session.userOid)
     );
   }
 
@@ -1056,6 +1136,11 @@ export class RunService {
     const root = row.parentRunId ? await rootOf(this.deps.repo, row) : row;
     if ([row.initiatorOid, root.initiatorOid, task.policy.initiatorOid, task.requestedBy].includes(s.userOid))
       throw new AppError(403, 'own_run', 'You cannot approve a run you started.', {
+        hint: 'Ask another approver.',
+      });
+    // ENG-02: whoever the change grants access to (the gate's `excludes`) can't approve or reject it either.
+    if (grantsAccessTo(task, s.userOid))
+      throw new AppError(403, 'own_access', "This change grants you access, so you can't approve it.", {
         hint: 'Ask another approver.',
       });
     if (!hasAny(s, task.policy.approvers))
@@ -1157,26 +1242,30 @@ export class RunService {
         'already_decided',
         `This step was already ${task.status === 'approved' ? 'confirmed' : task.status}.`,
       );
-    if (row.initiatorOid !== s.userOid && !hasRole(s, 'Portal.Operator'))
+    // The person the step waits for: the run's initiator, or the approver after an approval (null: a scheduled run).
+    const actor = task.requestedBy && task.requestedBy !== 'automation' ? task.requestedBy : null;
+    if (row.initiatorOid !== s.userOid && actor !== s.userOid && !hasRole(s, 'Portal.Operator'))
       throw new AppError(
         403,
         'forbidden',
-        'Only the engineer running this (or a Portal.Operator) can confirm its steps.',
+        'Only the engineer running this (or a Portal.Operator) can answer its steps.',
       );
     let values: Record<string, unknown> = {};
     const def = await pinnedDefinition(this.deps.definitions(), row).catch(() => null);
     const step = def ? findStep(def, stepIdOf(path)) : undefined;
     const params = step?.type === 'manual' ? step.inputs : undefined;
     if (input.confirmed) {
-      // Values feed the steps that follow, which act as the person the step is waiting for (the run's initiator, or
-      // the approver after an approval). Only they may fill them in; anyone else may only decline.
+      // The steps that follow act as the person the step is waiting for, so only they confirm it (and fill in its
+      // values); anyone else may only decline (IAM-10). A scheduled run waits for nobody: its initiator or an
+      // Operator may confirm, without values.
       const takesValues = Object.keys(params ?? {}).length > 0 || Object.keys(input.values ?? {}).length > 0;
-      const actor = task.requestedBy && task.requestedBy !== 'automation' ? task.requestedBy : null;
-      if (takesValues && actor !== s.userOid)
+      if (actor ? actor !== s.userOid : takesValues)
         throw new AppError(
           403,
           'not_your_step',
-          'Only the engineer this step is waiting for can fill it in: the steps after it use these values and run as them.',
+          takesValues
+            ? 'Only the engineer this step is waiting for can fill it in: the steps after it use these values and run as them.'
+            : 'Only the engineer this step is waiting for can confirm it: the steps after it run as them.',
           {
             hint: `Ask ${task.policy.requestedByUpn ?? 'the engineer running it'} to complete it, or mark it as not done.`,
           },

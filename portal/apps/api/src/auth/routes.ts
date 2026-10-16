@@ -9,6 +9,7 @@ import {
   browserBinding,
   decodeClaimsParam,
   finishRoundTrip,
+  providerAuditDetails,
   providerDescription,
   providerError,
   type CallbackQuery,
@@ -17,7 +18,7 @@ import { safeReturnTo } from './return-to';
 import { portalRoles } from './roles';
 import { clearSessionCookie, endSession, startSession } from './session-plugin';
 import { assertCsrf } from '../security/csrf';
-import { isGuestAccount, partitionKey } from './types';
+import { hasAccountStatus, isGuestAccount, partitionKey } from './types';
 
 export const AUTH_RATE_LIMIT = { max: 30, timeWindow: '1 minute' };
 
@@ -26,6 +27,20 @@ export const guestAccount = () =>
   new AppError(403, 'guest_account', 'You signed in with a guest account.', {
     hint: 'Sign in with your work account in this organisation; guest accounts can’t use AdminForge.',
   });
+
+/**
+ * The ID token has no `acct` claim, so AdminForge can't tell a member from a guest: refused (fail closed) until
+ * provisioning adds the claim. A setup error, so the hint is for an administrator.
+ */
+export const accountStatusMissing = (kind: 'read' | 'write') =>
+  new AppError(
+    403,
+    'account_status_missing',
+    'AdminForge couldn’t confirm that your account is a member of this organisation.',
+    {
+      hint: `An administrator needs to run \`pnpm adminforge provision entra\` (it adds the acct claim to the AdminForge apps). Then ${kind === 'write' ? 'arm write access' : 'sign in'} again.`,
+    },
+  );
 
 /** Where Entra sends the browser after end-session (register it on the Read app). */
 export const signedOutUri = (cfg: Pick<Config, 'PUBLIC_BASE_URL'>) =>
@@ -138,11 +153,12 @@ export function entraSignInRoutes(app: FastifyInstance, ctx: AppContext) {
         return err;
       };
       const entraError = providerError('read', request.query);
-      if (entraError)
-        throw await fail(entraError, {
-          detail: entraError.extras.detail,
-          entra: providerDescription(request.query),
-        });
+      if (entraError) {
+        // Anyone can send a browser here with any error text: Entra's description goes to the service log only, and
+        // the audit log keeps allow-listed values (the OAuth error and the AADSTS number).
+        request.log.info({ entra: providerDescription(request.query) }, 'Entra returned a sign-in error');
+        throw await fail(entraError, providerAuditDetails(request.query));
+      }
       if (!request.query.code)
         throw await fail(
           new AppError(400, 'invalid_request', 'The sign-in response from Microsoft was incomplete.', {
@@ -206,6 +222,7 @@ export function entraSignInRoutes(app: FastifyInstance, ctx: AppContext) {
           ),
         );
       if (isGuestAccount(claims)) throw await reject(guestAccount());
+      if (!hasAccountStatus(claims)) throw await reject(accountStatusMissing('read'));
       const roles = portalRoles(claims);
       if (roles.length === 0) {
         throw await reject(

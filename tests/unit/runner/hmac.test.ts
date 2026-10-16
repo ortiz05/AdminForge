@@ -285,7 +285,15 @@ describe('runner configuration', () => {
       DATABASE_URL: 'postgres://user:pw@db/af',
     });
     expect(command.command).toBe('/opt/pwsh/pwsh');
-    expect(command.args).toEqual(['-NoLogo', '-NoProfile', '-NonInteractive', '-File', config.workerScript]);
+    expect(command.args).toEqual([
+      '-NoLogo',
+      '-NoProfile',
+      '-NonInteractive',
+      '-SettingsFile',
+      config.workerScript.replace(/worker\.ps1$/, 'powershell.config.json'),
+      '-File',
+      config.workerScript,
+    ]);
     expect(Object.keys(command.env).sort()).toEqual(
       [
         'ADMINFORGE_RUNNER_MODULES_DIR',

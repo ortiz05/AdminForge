@@ -22,6 +22,15 @@ export interface IdClaims {
 export const isGuestAccount = (claims: Pick<IdClaims, 'acct'>): boolean =>
   claims.acct === 1 || (typeof claims.acct === 'string' && claims.acct.trim() === '1');
 
+/**
+ * True when the token says member (0) or guest (1). Without the optional `acct` claim (not provisioned on the app) a
+ * guest can't be told from a member, so sign-in and arming refuse it rather than let a guest through.
+ */
+export const hasAccountStatus = (claims: Pick<IdClaims, 'acct'>): boolean => {
+  const v = typeof claims.acct === 'string' ? claims.acct.trim() : claims.acct;
+  return v === 0 || v === 1 || v === '0' || v === '1';
+};
+
 export interface AuthUrlInput {
   kind: AppKind;
   state: string;

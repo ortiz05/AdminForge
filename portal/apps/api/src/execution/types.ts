@@ -1,6 +1,7 @@
 import type { Mode, Provenance, ServiceId } from '@adminforge/connectors';
 import type { Requires } from '@adminforge/schemas';
 import type { SessionRecord } from '../auth/session-store';
+import type { WriteTarget } from './protected';
 
 /**
  * Who an outbound call runs as.
@@ -29,6 +30,11 @@ export interface ServiceCall {
   declaredWrite?: boolean;
   /** Set only when a connection declares this POST operation read-only. */
   declaredRead?: boolean;
+  /**
+   * Set only by AdminForge's own notifier (delivery/notifier.ts) for its sendMail as the automation identity: a
+   * message about AdminForge, not a change to the tenant, so the emergency stop doesn't hold it back.
+   */
+  notification?: boolean;
   /** Paging: `none` (single response), `all` (collect up to maxItems), or a cursor page. */
   paging?: 'none' | 'all' | { cursor?: string; pageSize?: number };
   maxItems?: number;
@@ -66,4 +72,9 @@ export interface OutboundExecutor {
     call: ServiceCall,
     opts?: { correlationId?: string; signal?: AbortSignal },
   ): Promise<ServiceCallResult<T>>;
+  /**
+   * Whether a declared write that doesn't go through `execute` (the PowerShell runner) may go ahead: refused while
+   * changes are paused or when it names one of AdminForge's protected objects (./protected.ts).
+   */
+  assertWritable?(identity: ExecutionIdentity, targets: WriteTarget[], correlationId?: string): Promise<void>;
 }

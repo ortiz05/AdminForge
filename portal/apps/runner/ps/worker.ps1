@@ -4,7 +4,8 @@
 
 .DESCRIPTION
     Started by the runner supervisor (pre-forked) as:
-        pwsh -NoLogo -NoProfile -NonInteractive -File worker.ps1
+        pwsh -NoLogo -NoProfile -NonInteractive -SettingsFile powershell.config.json -File worker.ps1
+    (powershell.config.json, next to this file, keeps script-block logging of the modules out of the journal.)
     Protocol (one JSON object per line):
       stdout  {"type":"ready",...} once modules are imported, then the job's events
               (log / progress / output / error) and finally {"type":"exit","status":"succeeded"|"failed"}.

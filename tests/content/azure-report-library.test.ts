@@ -383,43 +383,52 @@ describe('Azure report library: fixtures render', () => {
     expect(ds.orphans.value.map((r: Def) => r.principalId.slice(-3)).sort()).toEqual(['312', '312', '313']);
   });
 
-  it('role assignments to deleted identities: batches of 1000 principals, at most 1000 deleted per query', async () => {
-    const r = def('azure.orphaned-role-assignments').datasources;
-    const guid = (i: number) => `30000000-0000-4000-8000-${String(i).padStart(12, '0')}`;
-    const principals = {
-      value: Array.from({ length: 3500 }, (_, i) => ({ principalId: guid(i), privilegedAssignments: i % 2 })),
-    };
-    const batch = async (n: string) =>
-      (await renderTemplate<Def>(r[n].request.body, { ds: { principals } })).ids;
-    expect((await batch('found1')).slice(0, 2)).toEqual([guid(0), guid(1)]);
-    expect(await batch('found2')).toHaveLength(1000);
-    expect((await batch('found3'))[0]).toBe(guid(2000));
-    expect(await renderString(r.found3.when, { ds: { principals } })).toBe(true);
-    // The whole second batch was deleted, and guid(5); guid(3000) onwards were never looked up.
-    const ids = principals.value.map((x) => x.principalId);
-    const t0 = performance.now();
-    const deleted = (await renderString(r.deleted.transform, {
-      ds: {
-        principals,
-        found1: ids.slice(0, 1000).filter((i) => i !== guid(5)),
-        found2: null,
-        found3: ids.slice(2000, 3000),
-      },
-    })) as Def;
-    expect(performance.now() - t0).toBeLessThan(250);
-    expect(deleted).toMatchObject({ count: 1001, checked: 3000, notChecked: 500, privileged: 501 });
-    const q = (await renderString(r.orphans.query, {
-      params: { privilegedOnly: false },
-      ds: { deleted },
-    })) as string;
-    expect((q.match(/'30000000-0000-4000-8000-\d{12}'/g) ?? []).length).toBe(1000);
-    await expect(
-      renderString(r.orphans.query, { params: {}, ds: { deleted: { count: 1, ids: ["x') or true //"] } } }),
-    ).rejects.toThrow();
-    expect(
-      await renderString(r.orphans.query, { params: {}, ds: { deleted: { count: 0, ids: [] } } }),
-    ).toContain('| where 1 == 0');
-  });
+  // The transform must fit the 250 ms budget, measured in wall-clock time: a saturated machine (the whole suite in
+  // parallel) can miss it once, a regression misses it every time — hence the retries.
+  it(
+    'role assignments to deleted identities: batches of 1000 principals, at most 1000 deleted per query',
+    { retry: 2 },
+    async () => {
+      const r = def('azure.orphaned-role-assignments').datasources;
+      const guid = (i: number) => `30000000-0000-4000-8000-${String(i).padStart(12, '0')}`;
+      const principals = {
+        value: Array.from({ length: 3500 }, (_, i) => ({
+          principalId: guid(i),
+          privilegedAssignments: i % 2,
+        })),
+      };
+      const batch = async (n: string) =>
+        (await renderTemplate<Def>(r[n].request.body, { ds: { principals } })).ids;
+      expect((await batch('found1')).slice(0, 2)).toEqual([guid(0), guid(1)]);
+      expect(await batch('found2')).toHaveLength(1000);
+      expect((await batch('found3'))[0]).toBe(guid(2000));
+      expect(await renderString(r.found3.when, { ds: { principals } })).toBe(true);
+      // The whole second batch was deleted, and guid(5); guid(3000) onwards were never looked up.
+      const ids = principals.value.map((x) => x.principalId);
+      const t0 = performance.now();
+      const deleted = (await renderString(r.deleted.transform, {
+        ds: {
+          principals,
+          found1: ids.slice(0, 1000).filter((i) => i !== guid(5)),
+          found2: null,
+          found3: ids.slice(2000, 3000),
+        },
+      })) as Def;
+      expect(performance.now() - t0).toBeLessThan(250);
+      expect(deleted).toMatchObject({ count: 1001, checked: 3000, notChecked: 500, privileged: 501 });
+      const q = (await renderString(r.orphans.query, {
+        params: { privilegedOnly: false },
+        ds: { deleted },
+      })) as string;
+      expect((q.match(/'30000000-0000-4000-8000-\d{12}'/g) ?? []).length).toBe(1000);
+      await expect(
+        renderString(r.orphans.query, { params: {}, ds: { deleted: { count: 1, ids: ["x') or true //"] } } }),
+      ).rejects.toThrow();
+      expect(
+        await renderString(r.orphans.query, { params: {}, ds: { deleted: { count: 0, ids: [] } } }),
+      ).toContain('| where 1 == 0');
+    },
+  );
 
   it('custom roles, Advisor, policy compliance, Arc and App Service summarise their rows', async () => {
     expect((await run('azure.custom-role-risks')).ds.roles).toMatchObject({

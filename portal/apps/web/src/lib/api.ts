@@ -1,5 +1,6 @@
 import { parseApiError } from './contracts';
 import { browser } from './browser';
+import { isUserActive } from './activity';
 
 /** Anything with zod's `parse` — the contracts in @adminforge/schemas, or a small hand-written guard. */
 export interface Parser<T> {
@@ -15,6 +16,8 @@ export class ApiRequestError extends Error {
     readonly hint?: string,
     readonly correlationId?: string,
     readonly login?: string,
+    /** The browser is on its way to sign in (a 401 on a request the person made). */
+    readonly signingIn = false,
   ) {
     super(message);
     this.name = 'ApiRequestError';
@@ -22,6 +25,8 @@ export class ApiRequestError extends Error {
 }
 
 export const CSRF_HEADER = 'X-AdminForge-CSRF';
+/** Sent (`1`) on requests the person didn't cause, so they don't count as activity for the session's idle timeout. */
+export const BACKGROUND_HEADER = 'X-AdminForge-Background';
 
 let csrfToken: string | undefined;
 
@@ -52,19 +57,27 @@ export interface RequestOptions<T> {
   signal?: AbortSignal;
   /** Send the CSRF header on a GET too (reads with a side effect, e.g. fetching a show-once secret). */
   csrf?: boolean;
+  /**
+   * The request isn't the person's doing (polling, a refetch on focus or after a server event): sent with
+   * `X-AdminForge-Background: 1` so it doesn't keep the session alive. Left out, it is background unless the person
+   * interacted with the page in the last few seconds (`lib/activity.ts`) — every timer and refetch is covered.
+   */
+  background?: boolean;
   /** Internal: a stale CSRF token is refreshed and the request retried once. */
   csrfRetried?: boolean;
 }
 
 /**
  * fetch for the BFF: same-origin cookies, CSRF header on writes, typed errors, contract validation.
- * A 401 that carries `error.login` sends the browser to sign in.
+ * A 401 that carries `error.login` sends the browser to sign in — unless the request was background.
  */
 export async function api<T = unknown>(path: string, options: RequestOptions<T> = {}): Promise<T> {
   const { method = 'GET', body, schema, signal, csrf, csrfRetried } = options;
+  const background = options.background ?? !isUserActive();
   const headers: Record<string, string> = { Accept: 'application/json' };
   if (body !== undefined) headers['Content-Type'] = 'application/json';
   if ((method !== 'GET' || csrf) && csrfToken) headers[CSRF_HEADER] = csrfToken;
+  if (background) headers[BACKGROUND_HEADER] = '1';
 
   let res: Response;
   try {
@@ -102,9 +115,12 @@ export async function api<T = unknown>(path: string, options: RequestOptions<T> 
     }
     const err = parsed.error;
     // The page's CSRF token went stale (signed in again in another tab): take the current one and retry once.
-    if (res.status === 403 && err.code === 'csrf' && !csrfRetried && (await refreshCsrf(signal)))
-      return api(path, { ...options, csrfRetried: true });
-    if (res.status === 401 && err.login) browser.assign(loginUrl(err.login));
+    if (res.status === 403 && err.code === 'csrf' && !csrfRetried && (await refreshCsrf(signal, background)))
+      return api(path, { ...options, background, csrfRetried: true });
+    // Signed out: off to sign-in, but only from a request the person made. An unattended tab never starts a sign-in
+    // (single sign-on would quietly open a new session and defeat the idle timeout); the shell offers it instead.
+    const signingIn = res.status === 401 && Boolean(err.login) && !background;
+    if (signingIn) browser.assign(loginUrl(err.login!));
     throw new ApiRequestError(
       res.status,
       err.code,
@@ -112,6 +128,7 @@ export async function api<T = unknown>(path: string, options: RequestOptions<T> 
       err.hint,
       err.correlationId ?? correlation,
       err.login,
+      signingIn,
     );
   }
 
@@ -130,10 +147,10 @@ export async function api<T = unknown>(path: string, options: RequestOptions<T> 
 }
 
 /** Re-reads the session's CSRF token from /api/me; false when there is no session. */
-async function refreshCsrf(signal?: AbortSignal): Promise<boolean> {
+async function refreshCsrf(signal: AbortSignal | undefined, background: boolean): Promise<boolean> {
   try {
     const res = await fetch('/api/me', {
-      headers: { Accept: 'application/json' },
+      headers: { Accept: 'application/json', ...(background ? { [BACKGROUND_HEADER]: '1' } : {}) },
       credentials: 'same-origin',
       signal,
     });

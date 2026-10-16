@@ -6,8 +6,12 @@ import { api, rememberCsrf } from './api';
 
 export const meQuery = queryOptions({
   queryKey: ['me'] as const,
-  queryFn: async ({ signal }) => {
-    const me = await api('/api/me', { schema: meContract, signal });
+  queryFn: async ({ signal, client, queryKey }) => {
+    // The page's first session check is the person's (they opened the page); later ones (focus, server events) follow
+    // the activity rule, so a signed-out unattended tab waits for them instead of starting a sign-in.
+    const state = client.getQueryState(queryKey);
+    const first = !state || (state.dataUpdatedAt === 0 && state.errorUpdatedAt === 0);
+    const me = await api('/api/me', { schema: meContract, signal, ...(first ? { background: false } : {}) });
     rememberCsrf(me.csrf);
     return me;
   },

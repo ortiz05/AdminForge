@@ -21,6 +21,7 @@ export const KINDS = [
   'probe',
   'connection',
   'navigation',
+  'feed',
 ] as const;
 export const Kind = z.enum(KINDS);
 export type Kind = z.infer<typeof Kind>;

@@ -8,6 +8,7 @@ import { search, SEARCH_TYPES, type SearchType } from '../search/search';
 import { adminRoutes } from './admin';
 import { datasourceRoutes } from './datasources';
 import { definitionRoutes } from './definitions';
+import { emergencyRoutes } from './emergency';
 import { eventRoutes } from './events';
 import { reportRoutes } from './reports';
 import { viewRoutes } from './views';
@@ -29,6 +30,8 @@ export function contentRoutes(api: FastifyInstance, ctx: AppContext) {
   reportRoutes(api, ctx);
   eventRoutes(api, ctx);
   adminRoutes(api, ctx);
+  // Emergency stop: pause all changes / all automation (Admin → Settings; banner state for everyone).
+  emergencyRoutes(api, ctx);
 
   api.get<{ Querystring: { q?: string; type?: string } }>(
     '/search',

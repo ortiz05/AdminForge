@@ -254,7 +254,7 @@ export interface TaskView {
   createdAt: string;
   expiresAt: string | null;
   decidedAt: string | null;
-  policy: DistributiveOmit<TaskPolicy, 'initiatorOid'>;
+  policy: DistributiveOmit<TaskPolicy, 'initiatorOid' | 'excludes'>;
   decisions: Array<Omit<TaskDecision, 'sessionHash'>>;
   /** Whether the caller may decide (role, not the initiator, not already decided). */
   canDecide: boolean;

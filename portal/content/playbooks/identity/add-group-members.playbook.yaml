@@ -1,14 +1,16 @@
 $schema: ../../../packages/schemas/generated/playbook.schema.json
 kind: playbook
 id: identity.add-group-members
-version: 1.1.0
+version: 1.2.0
 title: Add group members
 summary: >-
   Adds one or more users to a cloud security or Microsoft 365 group. Refuses dynamic groups, groups synced from
-  on-premises AD, and distribution lists / mail-enabled security groups (manage those in Exchange Online).
+  on-premises AD, distribution lists / mail-enabled security groups (manage those in Exchange Online), and adding
+  yourself. Role-assignable groups carry Microsoft Entra roles, so adding members to one needs a second engineer's
+  approval, and nobody being added can approve it.
 owner: identity-team
 tags: [identity, groups, bulk]
-risk: medium
+risk: high
 mode: write
 requires:
   portalRoles: [Portal.Operator]
@@ -16,11 +18,17 @@ requires:
     graph: [Group.Read.All, GroupMember.ReadWrite.All]
   # Role-assignable groups also need Privileged Role Administrator.
   entraRoles: [Groups Administrator]
+# Group membership grants access (apps, Azure roles, policies; directory roles for role-assignable groups): type the
+# group's name to confirm.
 confirm:
-  type: click
+  type: typed
+  value: ${ steps.group.output.displayName }
   message: >-
     ${ 'Add ' & $count(inputs.userIds) & ' member(s) to ' & steps.group.output.displayName
-       & (steps.group.output.isAssignableToRole = true ? ' — a role-assignable group: members receive its directory roles.' : '?') }
+       & (steps.group.output.isAssignableToRole = true
+          ? ', a role-assignable group: members receive its Microsoft Entra roles, so a second engineer must approve.'
+          : '.')
+       & ' Type the group name to confirm.' }
 approval:
   required: false
 
@@ -60,6 +68,24 @@ steps:
     type: assert
     that: ${ $not(steps.group.output.mailEnabled = true and $not('Unified' in steps.group.output.groupTypes)) }
     message: ${ steps.group.output.displayName & ' is a distribution list or mail-enabled security group; manage its members in Exchange Online.' }
+
+  - id: notSelf
+    type: assert
+    that: ${ $not($lowercase(user.oid) in [inputs.userIds].$lowercase($)) }
+    message: You can't add yourself to a group. Ask another engineer to add you.
+
+  # Members of a role-assignable group receive its Microsoft Entra roles: a second engineer approves, and nobody being
+  # added may approve it. The additions then run as the approver (who needs Privileged Role Administrator).
+  - id: approve
+    type: approval
+    when: ${ steps.group.output.isAssignableToRole = true }
+    message: >-
+      ${ 'Add ' & $count(inputs.userIds) & ' member(s) to the role-assignable group ' & steps.group.output.displayName
+         & '. Members receive its Microsoft Entra roles.' & (inputs.reason ? ' Reason: ' & inputs.reason : '') }
+    approvers: [Playbook.Approver]
+    minApprovals: 1
+    expiresIn: PT8H
+    excludes: ${ inputs.userIds }
 
   - id: add
     type: forEach
@@ -112,3 +138,23 @@ tests:
       status: succeeded
       plan: [addMember]
       outputs: { summary: Requested 1 addition(s) to SG-App-Payroll-Users. Users who were already members are reported as skipped. }
+  - name: refuses adding yourself
+    inputs: { groupId: 00000000-0000-4000-8000-000000000201, userIds: [00000000-0000-4000-8000-000000000102, 00000000-0000-4000-8000-0000000000A1] }
+    user: { oid: 00000000-0000-4000-8000-0000000000a1, upn: avery@example.com }
+    mocks:
+      group: { id: 00000000-0000-4000-8000-000000000201, displayName: SG-App-Payroll-Users, groupTypes: [], mailEnabled: false, securityEnabled: true, onPremisesSyncEnabled: null, isAssignableToRole: false }
+    expect: { status: failed, failedStep: notSelf }
+  - name: adds members to a group that is not role-assignable without an approval
+    dryRun: false
+    inputs: { groupId: 00000000-0000-4000-8000-000000000201, userIds: [00000000-0000-4000-8000-000000000102] }
+    user: { oid: 00000000-0000-4000-8000-0000000000a1, upn: avery@example.com }
+    mocks:
+      group: { id: 00000000-0000-4000-8000-000000000201, displayName: SG-App-Payroll-Users, groupTypes: [], mailEnabled: false, securityEnabled: true, onPremisesSyncEnabled: null, isAssignableToRole: false }
+    expect: { status: succeeded, steps: { approve: skipped, addMember: succeeded } }
+  - name: waits for a second engineer before adding members to a role-assignable group
+    dryRun: false
+    inputs: { groupId: 00000000-0000-4000-8000-000000000208, userIds: [00000000-0000-4000-8000-000000000102] }
+    user: { oid: 00000000-0000-4000-8000-0000000000a1, upn: avery@example.com }
+    mocks:
+      group: { id: 00000000-0000-4000-8000-000000000208, displayName: SG-PIM-Identity-Admins, groupTypes: [], mailEnabled: false, securityEnabled: true, onPremisesSyncEnabled: null, isAssignableToRole: true }
+    expect: { status: awaiting_approval }

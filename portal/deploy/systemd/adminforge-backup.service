@@ -1,4 +1,6 @@
 # AdminForge backup (database, configuration, data) — run by adminforge-backup.timer. See docs/operations.md.
+# Install hardening.conf as its drop-in too (adminforge-backup.service.d/hardening.conf): docker exec (AF_UNIX to the
+# Docker socket), pg_dump in the container, tar, gpg and shred all run within its seccomp filter.
 [Unit]
 Description=AdminForge backup
 After=network-online.target

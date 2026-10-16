@@ -111,6 +111,24 @@ export async function mockApi(page: Page, opts: MockOptions = {}) {
         }
         case 'GET /api/runs':
           return json(route, { items: [] });
+        case 'GET /api/news/summary':
+          // The shell reads it on every page: nothing unread or breaking unless a spec says otherwise.
+          return json(route, {
+            unread: 0,
+            breakingUnread: 0,
+            breaking: [],
+            lastUpdatedAt: null,
+            seenAt: null,
+            feeds: [],
+          });
+        case 'GET /api/emergency':
+          // The shell's emergency-stop banner reads it on every page: nothing paused unless a spec says otherwise.
+          return json(route, {
+            writes: { paused: false, reason: null, by: null, at: null },
+            automation: { paused: false, reason: null, by: null, at: null },
+            canPause: false,
+            canResume: false,
+          });
         case 'GET /api/events':
           // One-shot stream; the long retry keeps EventSource from reconnecting during a test.
           return route.fulfill({

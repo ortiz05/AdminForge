@@ -1,9 +1,12 @@
 $schema: ../../../packages/schemas/generated/playbook.schema.json
 kind: playbook
 id: azure.assign-role
-version: 1.0.0
+version: 1.1.0
 title: Assign Azure role
-summary: Grants an Azure RBAC role to a user, group or service principal at a management group, subscription, resource group or resource. Needs approval by a second engineer.
+summary: >-
+  Grants an Azure RBAC role to a user, group or service principal at a management group, subscription, resource group
+  or resource. Needs approval by a second engineer who doesn't get the role (not the principal, nor a member of the
+  group), and refuses assigning a role to yourself.
 owner: azure-team
 tags: [azure, rbac, access]
 risk: high
@@ -18,11 +21,13 @@ confirm:
   type: typed
   value: ${ steps.role.output.value[0].properties.roleName }
   message: Type the role name to confirm this assignment.
+# Nobody who gets the role approves it: the principal, and every member of a group.
 approval:
   required: true
   approvers: [Playbook.Approver]
   minApprovals: 1
   expiresIn: PT8H
+  excludes: ${ $append([$guid(inputs.principalId)], steps.members.output.value.id) }
 
 inputs:
   scope:
@@ -73,6 +78,26 @@ steps:
       path: /directoryObjects/${ $encode($guid(inputs.principalId)) }
       query:
         $select: id,displayName,userPrincipalName,appId
+
+  - id: notSelf
+    type: assert
+    that: ${ $not($guid(inputs.principalId) = $lowercase(user.oid)) }
+    message: You can't assign an Azure role to yourself. Ask another engineer, or activate an eligible role in PIM.
+
+  # The members of a group get the role too (see approval.excludes).
+  - id: members
+    type: graph
+    mode: read
+    describe: Read the group's members
+    when: ${ inputs.principalType = 'Group' or steps.principal.output.`@odata.type` = '#microsoft.graph.group' }
+    paging: all
+    maxItems: 5000
+    request:
+      method: GET
+      path: /groups/${ $encode($guid(inputs.principalId)) }/transitiveMembers/microsoft.graph.user
+      query:
+        $select: id
+        $top: 999
 
   - id: existing
     type: arm
@@ -138,6 +163,7 @@ tests:
     mocks:
       role: { value: [{ id: /subscriptions/00000000-0000-4000-8000-0000000000a1/providers/Microsoft.Authorization/roleDefinitions/de139f84-1756-47ae-9be6-808fbbe84772, name: de139f84-1756-47ae-9be6-808fbbe84772, properties: { roleName: Website Contributor } }] }
       principal: { id: 30000000-0000-4000-8000-000000000101, displayName: AF Platform Engineers }
+      members: { value: [{ id: 00000000-0000-4000-8000-0000000000b2 }] }
       existing:
         value:
           - properties:
@@ -149,6 +175,7 @@ tests:
     mocks:
       role: { value: [{ id: /subscriptions/00000000-0000-4000-8000-0000000000a1/providers/Microsoft.Authorization/roleDefinitions/de139f84-1756-47ae-9be6-808fbbe84772, name: de139f84-1756-47ae-9be6-808fbbe84772, properties: { roleName: Website Contributor } }] }
       principal: { id: 30000000-0000-4000-8000-000000000101, displayName: AF Platform Engineers }
+      members: { value: [{ id: 00000000-0000-4000-8000-0000000000b2 }] }
       existing:
         value:
           - properties:
@@ -158,3 +185,19 @@ tests:
       status: succeeded
       plan: [assign]
       outputs: { summary: Website Contributor assigned to AF Platform Engineers at /subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-functions. }
+  - name: refuses assigning a role to yourself
+    inputs: { scope: /subscriptions/00000000-0000-4000-8000-0000000000a1, principalId: 00000000-0000-4000-8000-0000000000a1, principalType: User, roleName: Owner, reason: access request REQ-2044 }
+    user: { oid: 00000000-0000-4000-8000-0000000000a1, upn: avery@example.com }
+    mocks:
+      role: { value: [{ id: /subscriptions/00000000-0000-4000-8000-0000000000a1/providers/Microsoft.Authorization/roleDefinitions/8e3af657-a8ff-443c-a75c-2fe8c4bcb635, name: 8e3af657-a8ff-443c-a75c-2fe8c4bcb635, properties: { roleName: Owner } }] }
+      principal: { "@odata.type": "#microsoft.graph.user", id: 00000000-0000-4000-8000-0000000000a1, displayName: Avery Engineer }
+    expect: { status: failed, failedStep: notSelf }
+  - name: waits for a second engineer before assigning the role
+    dryRun: false
+    inputs: { scope: /subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-functions, principalId: 00000000-0000-4000-8000-000000000102, principalType: User, roleName: Website Contributor, reason: access request REQ-2045 }
+    user: { oid: 00000000-0000-4000-8000-0000000000a1, upn: avery@example.com }
+    mocks:
+      role: { value: [{ id: /subscriptions/00000000-0000-4000-8000-0000000000a1/providers/Microsoft.Authorization/roleDefinitions/de139f84-1756-47ae-9be6-808fbbe84772, name: de139f84-1756-47ae-9be6-808fbbe84772, properties: { roleName: Website Contributor } }] }
+      principal: { "@odata.type": "#microsoft.graph.user", id: 00000000-0000-4000-8000-000000000102, displayName: Morgan Chen }
+      existing: { value: [] }
+    expect: { status: awaiting_approval, steps: { members: skipped } }

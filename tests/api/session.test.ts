@@ -126,7 +126,13 @@ describe('sessions, mock sign-in, /api/me, CSRF', () => {
     const res = await t.app.inject({ method: 'GET', url: '/api/nav', headers: { cookie } });
     const nav = NavResponse.parse(res.json());
     // Section order comes from portal/content/navigation.yaml; empty sections are dropped (content grows over time).
-    expect(nav.sections[0]).toMatchObject({ key: 'overview', items: [{ key: 'overview', href: '/' }] });
+    expect(nav.sections[0]).toMatchObject({
+      key: 'overview',
+      items: [
+        { key: 'overview', href: '/' },
+        { key: 'news', href: '/news' },
+      ],
+    });
     expect(nav.sections.map((s) => s.key)).toEqual(
       expect.arrayContaining(['overview', 'identity', 'automation', 'reports', 'admin']),
     );

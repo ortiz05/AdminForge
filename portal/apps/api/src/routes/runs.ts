@@ -6,7 +6,7 @@ import type { AppContext } from '../context';
 import { AppError, parseBody } from '../errors';
 import type { RunsModule } from '../runs/module';
 import type { Caller } from '../runs/service';
-import { streamRunEvents } from '../runs/sse';
+import { sessionLive, streamRunEvents } from '../runs/sse';
 import { RUN_STATUS_ACTIVE } from '../runs/types';
 import { assertCsrf } from '../security/csrf';
 
@@ -110,7 +110,7 @@ export const callerOf = (request: FastifyRequest): Caller => ({
   ip: request.ip ?? null,
 });
 
-export function runRoutes(api: FastifyInstance, _ctx: AppContext, runs: RunsModule) {
+export function runRoutes(api: FastifyInstance, ctx: AppContext, runs: RunsModule) {
   const { service } = runs;
 
   api.post('/runs', async (request, reply) => {
@@ -145,11 +145,24 @@ export function runRoutes(api: FastifyInstance, _ctx: AppContext, runs: RunsModu
   api.get<{ Params: { id: string }; Querystring: { lastEventId?: string } }>(
     '/runs/:id/events',
     async (request, reply) => {
-      const row = await service.assertViewable(callerOf(request), request.params.id);
+      const caller = callerOf(request);
+      const row = await service.assertViewable(caller, request.params.id);
       const header = request.headers['last-event-id'];
       const raw = (Array.isArray(header) ? header[0] : header) ?? request.query.lastEventId ?? '0';
       const last = /^\d{1,15}$/.test(raw) ? Number(raw) : 0;
-      await streamRunEvents(request, reply, runs, row.id, last);
+      // APP-02: the stream re-reads the session (sign-out, expiry, idle) and the access to the run while it is open.
+      const stillAllowed = async () => {
+        const fresh = await ctx.sessions.get(caller.session.idHash);
+        if (!fresh || !sessionLive(fresh, ctx.now(), ctx.config.SESSION_IDLE_MINUTES)) return false;
+        return service.canView(fresh, (await runs.repo.getRun(row.id)) ?? row);
+      };
+      await streamRunEvents(
+        request,
+        reply,
+        { repo: runs.repo, bus: runs.bus, secrets: runs.secrets, stillAllowed, pollMs: runs.streamPollMs },
+        row.id,
+        last,
+      );
     },
   );
 

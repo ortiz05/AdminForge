@@ -14,13 +14,20 @@ export async function runMigrations(url: string): Promise<void> {
   }
 }
 
-// CLI: `pnpm --filter @adminforge/api db:migrate`. Migrations run as the owner: DATABASE_MIGRATION_URL when set (the
-// host services' DATABASE_URL is a least-privilege role without DDL — portal/deploy/db/create-app-role.sh), else
-// DATABASE_URL.
+/**
+ * Where `db:migrate` connects: as the owner — DATABASE_MIGRATION_URL when set (the host services' DATABASE_URL is a
+ * least-privilege role without DDL — portal/deploy/db/create-app-role.sh), else DATABASE_URL. Only migrations ask
+ * loadEnv for the owner's credentials (`owner: true`); the services never get them.
+ */
+export function migrationUrl(processEnv: NodeJS.ProcessEnv = process.env): string | undefined {
+  const env = loadEnv(processEnv, { owner: true });
+  return env.DATABASE_MIGRATION_URL || env.DATABASE_URL || undefined;
+}
+
+// CLI: `pnpm --filter @adminforge/api db:migrate` (ADMINFORGE_ENV_OVERLAY=host for the services' database).
 const entry = process.argv[1];
 if (entry && /migrate\.[cm]?[jt]s$/.test(entry) && import.meta.url === pathToFileURL(entry).href) {
-  const env = loadEnv();
-  const url = env.DATABASE_MIGRATION_URL || env.DATABASE_URL;
+  const url = migrationUrl();
   if (!url) {
     console.error('DATABASE_URL is not set. Run `pnpm --filter @adminforge/api init:local` first.');
     process.exit(1);

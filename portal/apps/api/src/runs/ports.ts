@@ -8,6 +8,7 @@ import {
   RunnerResponseError,
   type RunnerTokens,
 } from '@adminforge/runner';
+import type { ServiceId } from '@adminforge/connectors';
 import {
   IdentityUnavailable,
   StepError,
@@ -82,6 +83,8 @@ export interface RunnerPortOptions {
   tenant: { id?: string; domain?: string; spoTenantName?: string };
   fetch?: typeof fetch;
   now?: () => Date;
+  /** Write jobs pass the same emergency stop and protected-object guard as REST writes. */
+  outbound?: OutboundExecutor | null;
 }
 
 const RUNNER_SERVICES = new Set(['graph', 'exchange', 'teams', 'sharepointAdmin', 'arm']);
@@ -129,6 +132,21 @@ export function createRunnerPort(opts: RunnerPortOptions): RunnerPort {
           'runner_unavailable',
           'PowerShell steps need Entra sign-in (not available with mock sign-in).',
         );
+      // A write script's inputs are checked like a REST write's body (object ids; names and UPNs aren't matched).
+      if (job.mode === 'write' && opts.outbound?.assertWritable) {
+        const targets = job.services.map((service) => ({
+          service: service as ServiceId,
+          method: 'POST',
+          path: job.script,
+          body: job.parameters,
+        }));
+        try {
+          await opts.outbound.assertWritable(exec, targets);
+        } catch (err) {
+          if (err instanceof AppError) throw stepError(err);
+          throw err;
+        }
+      }
       const tokens: RunnerTokens = {};
       for (const service of job.services) {
         if (!RUNNER_SERVICES.has(service))

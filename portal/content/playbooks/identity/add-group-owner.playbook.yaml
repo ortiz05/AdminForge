@@ -1,12 +1,15 @@
 $schema: ../../../packages/schemas/generated/playbook.schema.json
 kind: playbook
 id: identity.add-group-owner
-version: 1.1.0
+version: 1.2.0
 title: Add group owner
-summary: Makes a user an owner of a group (owners manage membership and settings, and receive access reviews).
+summary: >-
+  Makes a user an owner of a group (owners manage membership and settings, and receive access reviews). Refuses making
+  yourself an owner. Owners of a role-assignable group can add members who receive its Microsoft Entra roles, so that
+  needs a second engineer's approval, and the new owner can't approve it.
 owner: identity-team
 tags: [identity, groups, governance]
-risk: medium
+risk: high
 mode: write
 requires:
   portalRoles: [Portal.Operator]
@@ -14,8 +17,14 @@ requires:
     graph: [Group.ReadWrite.All, User.Read.All]
   entraRoles: [Groups Administrator]
 confirm:
-  type: click
-  message: ${ 'Make ' & steps.owner.output.userPrincipalName & ' an owner of ' & steps.group.output.displayName & '?' }
+  type: typed
+  value: ${ steps.group.output.displayName }
+  message: >-
+    ${ 'Make ' & steps.owner.output.userPrincipalName & ' an owner of ' & steps.group.output.displayName
+       & (steps.group.output.isAssignableToRole = true
+          ? ', a role-assignable group: its owners decide who receives its Microsoft Entra roles, so a second engineer must approve.'
+          : '.')
+       & ' Type the group name to confirm.' }
 approval:
   required: false
 
@@ -70,6 +79,24 @@ steps:
     that: ${ $not($guid(inputs.ownerId) in steps.owners.output.value.id) }
     message: ${ steps.owner.output.userPrincipalName & ' already owns ' & steps.group.output.displayName & '.' }
 
+  - id: notSelf
+    type: assert
+    that: ${ $not($guid(inputs.ownerId) = $lowercase(user.oid)) }
+    message: You can't make yourself an owner of a group. Ask another engineer.
+
+  # Owners of a role-assignable group manage who holds its Microsoft Entra roles: a second engineer approves, and the
+  # new owner may not approve it. The change then runs as the approver (who needs Privileged Role Administrator).
+  - id: approve
+    type: approval
+    when: ${ steps.group.output.isAssignableToRole = true }
+    message: >-
+      ${ 'Make ' & steps.owner.output.userPrincipalName & ' an owner of the role-assignable group '
+         & steps.group.output.displayName & '. Owners decide who receives its Microsoft Entra roles.' }
+    approvers: [Playbook.Approver]
+    minApprovals: 1
+    expiresIn: PT8H
+    excludes: ${ $guid(inputs.ownerId) }
+
   - id: addOwner
     type: graph
     mode: write
@@ -112,3 +139,29 @@ tests:
       status: succeeded
       plan: [addOwner]
       outputs: { summary: m.chen@example.com now owns SG-App-Payroll-Users. }
+  - name: refuses making yourself an owner
+    inputs: { groupId: 00000000-0000-4000-8000-000000000201, ownerId: 00000000-0000-4000-8000-0000000000a1 }
+    user: { oid: 00000000-0000-4000-8000-0000000000a1, upn: avery@example.com }
+    mocks:
+      group: { id: 00000000-0000-4000-8000-000000000201, displayName: SG-App-Payroll-Users, groupTypes: [], isAssignableToRole: false }
+      owner: { id: 00000000-0000-4000-8000-0000000000a1, userPrincipalName: avery@example.com, accountEnabled: true, userType: Member }
+      owners: { value: [{ id: 00000000-0000-4000-8000-000000000101, userPrincipalName: a.lee@example.com }] }
+    expect: { status: failed, failedStep: notSelf }
+  - name: adds an owner to a group that is not role-assignable without an approval
+    dryRun: false
+    inputs: { groupId: 00000000-0000-4000-8000-000000000201, ownerId: 00000000-0000-4000-8000-000000000102 }
+    user: { oid: 00000000-0000-4000-8000-0000000000a1, upn: avery@example.com }
+    mocks:
+      group: { id: 00000000-0000-4000-8000-000000000201, displayName: SG-App-Payroll-Users, groupTypes: [], isAssignableToRole: false }
+      owner: { id: 00000000-0000-4000-8000-000000000102, userPrincipalName: m.chen@example.com, accountEnabled: true, userType: Member }
+      owners: { value: [{ id: 00000000-0000-4000-8000-000000000101, userPrincipalName: a.lee@example.com }] }
+    expect: { status: succeeded, steps: { approve: skipped, addOwner: succeeded } }
+  - name: waits for a second engineer before adding an owner to a role-assignable group
+    dryRun: false
+    inputs: { groupId: 00000000-0000-4000-8000-000000000208, ownerId: 00000000-0000-4000-8000-000000000102 }
+    user: { oid: 00000000-0000-4000-8000-0000000000a1, upn: avery@example.com }
+    mocks:
+      group: { id: 00000000-0000-4000-8000-000000000208, displayName: SG-PIM-Identity-Admins, groupTypes: [], isAssignableToRole: true }
+      owner: { id: 00000000-0000-4000-8000-000000000102, userPrincipalName: m.chen@example.com, accountEnabled: true, userType: Member }
+      owners: { value: [{ id: 00000000-0000-4000-8000-000000000101, userPrincipalName: a.lee@example.com }] }
+    expect: { status: awaiting_approval }

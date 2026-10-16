@@ -121,6 +121,16 @@ export function SchedulesPage() {
                   Changes tenant
                 </Badge>
               )}
+              {s.source === 'portal' && (
+                <Badge
+                  tone="outline"
+                  className="h-4 font-body"
+                  title={s.createdBy ? `Created in the portal by ${s.createdBy}` : 'Created in the portal'}
+                >
+                  Created in portal
+                  {s.createdBy && <span className="sr-only"> by {s.createdBy}</span>}
+                </Badge>
+              )}
             </span>
           </span>
         ),

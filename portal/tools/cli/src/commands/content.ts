@@ -69,6 +69,8 @@ export interface ContentCliContext {
   openStore?: () => Promise<{ store: Pick<DbDefinitionStore, 'publish'>; close: () => Promise<void> }>;
   /** Tests: the engine module (runPlaybookTests). */
   engine?: EngineModule | null;
+  /** Tests: the git review state of the content directory (default: reviewState, from git). */
+  review?: (contentDir: string) => ReviewState;
 }
 
 export function contentContext(
@@ -96,7 +98,7 @@ export interface ValidateReport {
   warnings: string[];
 }
 
-/** Schema, references, expression compilation, `$filter`/`$search` lint, env keys, `$schema` paths. Pure (no network). */
+/** Schema, references, expression compilation, injection lint (OData, KQL, paths), env keys, `$schema` paths. Pure (no network). */
 export async function checkContent(
   ctx: Pick<ContentCliContext, 'contentDir' | 'repoRoot'>,
 ): Promise<ValidateReport & { loaded: LoadedDefinition[] }> {
@@ -230,16 +232,35 @@ async function loadEngine(): Promise<EngineModule | null> {
   }
 }
 
-/** `adminforge test [pattern]` — every playbook/runbook `tests:` block, dry run with mocked step outputs. */
-export async function testContent(ctx: ContentCliContext, opts: { pattern?: string } = {}): Promise<boolean> {
+interface PlaybookTestRun {
+  /** False when the engine could not be loaded (nothing ran). */
+  ran: boolean;
+  passed: number;
+  failed: number;
+  /** Definitions with tests (matching the pattern). */
+  targets: number;
+  /** One line per test (✓/✗), in order. */
+  lines: string[];
+  /** Parse problems of other files (validate reports them). */
+  problems: string[];
+}
+
+/** Runs every playbook/runbook `tests:` block (dry run with mocked step outputs); prints nothing. */
+async function runPlaybookTests(
+  ctx: Pick<ContentCliContext, 'contentDir' | 'engine'>,
+  opts: { pattern?: string; loaded?: LoadedDefinition[] } = {},
+): Promise<PlaybookTestRun> {
+  const run: PlaybookTestRun = { ran: false, passed: 0, failed: 0, targets: 0, lines: [], problems: [] };
   const engine = ctx.engine !== undefined ? ctx.engine : await loadEngine();
-  if (!engine) {
-    ctx.out('⚠ The playbook engine (runPlaybookTests) is not available; no tests were run.');
-    return true;
-  }
+  if (!engine) return run;
+  run.ran = true;
   // Definitions that parsed are tested even when other files have problems (adminforge validate reports those).
-  const { definitions, errors } = await loadContentDir(ctx.contentDir);
-  for (const e of errors) ctx.out(`⚠ ${formatContentError(e)}`);
+  let definitions = opts.loaded;
+  if (!definitions) {
+    const loaded = await loadContentDir(ctx.contentDir);
+    definitions = loaded.definitions;
+    run.problems = loaded.errors.map(formatContentError);
+  }
   const byId = new Map(definitions.map((d) => [d.def.id, d.def]));
   const targets = definitions.filter(
     (d) =>
@@ -247,45 +268,189 @@ export async function testContent(ctx: ContentCliContext, opts: { pattern?: stri
       d.def.tests?.length &&
       (!opts.pattern || d.def.id.includes(opts.pattern) || d.file.includes(opts.pattern)),
   );
-  let passed = 0;
-  let failed = 0;
+  run.targets = targets.length;
   for (const d of targets) {
     let results: Awaited<ReturnType<EngineModule['runPlaybookTests']>>;
     try {
       results = await engine.runPlaybookTests(d.def, { resolveChild: (ref) => byId.get(ref) ?? null });
     } catch (err) {
-      failed++;
-      ctx.out(`✗ ${d.def.id}: tests could not run — ${(err as Error).message}`);
+      run.failed++;
+      run.lines.push(`✗ ${d.def.id}: tests could not run — ${(err as Error).message}`);
       continue;
     }
     for (const r of results) {
-      if (r.passed) passed++;
-      else failed++;
-      ctx.out(
+      if (r.passed) run.passed++;
+      else run.failed++;
+      run.lines.push(
         `${r.passed ? '✓' : '✗'} ${d.def.id} › ${r.name}${r.passed ? '' : ` — ${r.failures.join('; ')}`}`,
       );
     }
   }
+  return run;
+}
+
+/** `adminforge test [pattern]` — every playbook/runbook `tests:` block, dry run with mocked step outputs. */
+export async function testContent(ctx: ContentCliContext, opts: { pattern?: string } = {}): Promise<boolean> {
+  const run = await runPlaybookTests(ctx, opts);
+  if (!run.ran) {
+    ctx.out('⚠ The playbook engine (runPlaybookTests) is not available; no tests were run.');
+    return true;
+  }
+  for (const p of run.problems) ctx.out(`⚠ ${p}`);
+  for (const l of run.lines) ctx.out(l);
   ctx.out(
-    `${failed ? '✗' : '✓'} ${passed} passed, ${failed} failed (${targets.length} definitions with tests${opts.pattern ? ` matching "${opts.pattern}"` : ''}).`,
+    `${run.failed ? '✗' : '✓'} ${run.passed} passed, ${run.failed} failed (${run.targets} definitions with tests${opts.pattern ? ` matching "${opts.pattern}"` : ''}).`,
   );
-  return failed === 0;
+  return run.failed === 0;
 }
 
 // ── publish ───────────────────────────────────────────────────────────────────
 
-/** `adminforge publish [--dry-run]` — new versions to Postgres (idempotent by sha256), then NOTIFY definitions_changed. */
+/** The branch reviewed content is merged to (as last fetched: publish never fetches). */
+export const REVIEWED_REF = 'origin/main';
+
+export type UnreviewedReason = 'not-a-git-checkout' | 'dirty' | 'not-on-origin-main';
+
+/** Whether the content directory is exactly what was reviewed: committed, and that commit merged to origin/main. */
+export interface ReviewState {
+  commit: string | null;
+  /** Uncommitted changes (modified, deleted, untracked, or ignored YAML) under the content directory. */
+  dirty: boolean | null;
+  /** HEAD is contained in origin/main; null when that can't be determined. */
+  onOriginMain: boolean | null;
+  /** Why the content is not the reviewed state (empty = reviewed). */
+  problems: Array<{ reason: UnreviewedReason; message: string }>;
+}
+
+/** Runs git in `cwd`: stdout, or the exit status when git fails. */
+type Git = (args: string[], cwd: string) => { ok: true; out: string } | { ok: false; status: number | null };
+
+const runGit: Git = (args, cwd) => {
+  try {
+    const out = execFileSync('git', args, { cwd, stdio: ['ignore', 'pipe', 'ignore'] }).toString();
+    return { ok: true, out };
+  } catch (err) {
+    return { ok: false, status: (err as { status?: number | null }).status ?? null };
+  }
+};
+
+/** Files publish reads (loadContentDir): YAML outside dot-directories, fixtures, scripts and node_modules. */
+const publishedFile = (file: string) =>
+  /\.ya?ml$/.test(file) &&
+  !file.split('/').some((s) => s.startsWith('.') || ['node_modules', 'fixtures', 'scripts'].includes(s));
+
+/**
+ * The review state of `contentDir` from git (local state only: origin/main as last fetched). Ignored files count as
+ * uncommitted only when publish would read them.
+ */
+export function reviewState(contentDir: string, git: Git = runGit): ReviewState {
+  const state: ReviewState = { commit: null, dirty: null, onOriginMain: null, problems: [] };
+  if (!git(['rev-parse', '--show-toplevel'], contentDir).ok) {
+    state.problems.push({
+      reason: 'not-a-git-checkout',
+      message: `${contentDir} is not in a git checkout, so it can't be matched to reviewed commits.`,
+    });
+    return state;
+  }
+  const head = git(['rev-parse', '--short=12', 'HEAD'], contentDir);
+  state.commit = head.ok ? head.out.trim() : null;
+  const status = git(
+    ['status', '--porcelain=v1', '-z', '--untracked-files=all', '--ignored=traditional', '--', '.'],
+    contentDir,
+  );
+  if (status.ok) {
+    // `XY path` entries; a rename or copy is followed by its original path as a separate entry.
+    const entries = status.out.split('\0');
+    const changed: string[] = [];
+    for (let i = 0; i < entries.length; i++) {
+      const e = entries[i]!;
+      if (e.length < 4) continue;
+      if (/^[RC]|^.[RC]/.test(e)) i++;
+      if (!e.startsWith('!! ') || publishedFile(e.slice(3))) changed.push(e.slice(3));
+    }
+    state.dirty = changed.length > 0;
+    if (state.dirty)
+      state.problems.push({
+        reason: 'dirty',
+        message: `${changed.length} uncommitted change(s) under the content directory (git status).`,
+      });
+  } else {
+    state.dirty = true;
+    state.problems.push({
+      reason: 'dirty',
+      message: "git status failed, so uncommitted changes can't be ruled out.",
+    });
+  }
+  if (!state.commit) {
+    state.onOriginMain = false;
+    state.problems.push({ reason: 'not-on-origin-main', message: 'The checkout has no commit yet.' });
+    return state;
+  }
+  const merged = git(['merge-base', '--is-ancestor', 'HEAD', REVIEWED_REF], contentDir);
+  state.onOriginMain = merged.ok ? true : merged.status === 1 ? false : null;
+  if (!merged.ok)
+    state.problems.push({
+      reason: 'not-on-origin-main',
+      message:
+        merged.status === 1
+          ? `HEAD (${state.commit}) is not on ${REVIEWED_REF}: merge it through review first (git fetch to update ${REVIEWED_REF}).`
+          : `${REVIEWED_REF} is not known in this checkout (git fetch origin), so HEAD can't be matched to reviewed commits.`,
+    });
+  return state;
+}
+
+/**
+ * `adminforge publish [--dry-run] [--allow-unreviewed]` — runs the same checks as `adminforge validate` and
+ * `adminforge test`, publishes only reviewed content (committed, and the commit merged to origin/main) unless
+ * `--allow-unreviewed` (recorded in the audit event), then writes new versions to Postgres (idempotent by sha256) and
+ * sends NOTIFY definitions_changed.
+ */
 export async function publishContent(
   ctx: ContentCliContext,
-  opts: { dryRun?: boolean } = {},
+  opts: { dryRun?: boolean; allowUnreviewed?: boolean } = {},
 ): Promise<PublishResult | null> {
-  const { definitions, errors } = await loadContentDir(ctx.contentDir);
-  if (errors.length) {
-    for (const e of errors) ctx.out(`✗ ${formatContentError(e)}`);
+  // The same gate as `adminforge validate` and `adminforge test`: nothing reaches the database that would fail them.
+  const report = await checkContent(ctx);
+  if (report.errors.length) {
+    for (const e of report.errors) ctx.out(`✗ ${e}`);
     ctx.out('✗ Nothing published: fix the content first (adminforge validate).');
     return null;
   }
-  const entries: PublishEntry[] = definitions.map((d) => ({
+  const tests = await runPlaybookTests(ctx, { loaded: report.loaded });
+  if (!tests.ran || tests.failed) {
+    for (const l of tests.lines) if (l.startsWith('✗')) ctx.out(l);
+    ctx.out(
+      tests.ran
+        ? `✗ Nothing published: ${tests.failed} playbook test(s) failed (adminforge test).`
+        : '✗ Nothing published: the playbook engine is not available, so the playbook tests could not run (adminforge test).',
+    );
+    return null;
+  }
+  ctx.out(
+    `✓ ${report.definitions} definitions valid (schema, references, expressions, lint, env keys); ${tests.passed} playbook test(s) passed.`,
+  );
+
+  // Only reviewed content: committed, and the commit merged to origin/main (as last fetched).
+  const review = (ctx.review ?? reviewState)(ctx.contentDir);
+  const unreviewed = review.problems.length > 0;
+  if (unreviewed) {
+    const mark = opts.allowUnreviewed ? '⚠' : '✗';
+    for (const p of review.problems) ctx.out(`${mark} ${p.message}`);
+    if (opts.allowUnreviewed)
+      ctx.out('⚠ Publishing unreviewed content (--allow-unreviewed): the audit event records it.');
+    else if (opts.dryRun)
+      ctx.out(
+        '⚠ A real publish would be refused: commit the content and merge it to origin/main, or pass --allow-unreviewed.',
+      );
+    else {
+      ctx.out(
+        '✗ Nothing published: publish reviewed content only — commit it and merge it to origin/main (then git fetch), or pass --allow-unreviewed (recorded in the audit log).',
+      );
+      return null;
+    }
+  }
+
+  const entries: PublishEntry[] = report.loaded.map((d) => ({
     def: d.def,
     sha256: d.sha256,
     source: 'git',
@@ -321,7 +486,9 @@ export async function publishContent(
             (i) => `${i.kind}:${i.key}@${i.version}${i.status === 'retired' ? ' (retired)' : ''}`,
           ),
           refused: result.refused,
-          git: gitState(ctx.repoRoot),
+          git: { commit: review.commit, dirty: review.dirty, onOriginMain: review.onOriginMain },
+          unreviewed,
+          ...(unreviewed ? { reasons: [...new Set(review.problems.map((p) => p.reason))] } : {}),
         },
       });
     for (const i of result.items) {
@@ -347,22 +514,6 @@ function publisher(): string {
     return `${userInfo().username}@${hostname()}`;
   } catch {
     return 'unknown@cli';
-  }
-}
-
-/** The commit the content came from, and whether the working tree had uncommitted content changes. */
-function gitState(repoRoot: string): { commit: string | null; dirty: boolean | null } {
-  const git = (args: string[]) =>
-    execFileSync('git', args, { cwd: repoRoot, stdio: ['ignore', 'pipe', 'ignore'] })
-      .toString()
-      .trim();
-  try {
-    return {
-      commit: git(['rev-parse', '--short=12', 'HEAD']),
-      dirty: git(['status', '--porcelain', '--', 'portal/content']).length > 0,
-    };
-  } catch {
-    return { commit: null, dirty: null };
   }
 }
 

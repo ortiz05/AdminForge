@@ -7,6 +7,9 @@
 # stray copies (*.bak*). Caddy's private keys (local CA, site certificate) are included only when the backup is encrypted
 # (AF_BACKUP_GPG_RECIPIENT = a GPG key id/fingerprint whose private key is NOT on this host); unencrypted, a restore
 # issues a new local CA and browsers must trust it again.
+# The rows of the transient credential tables (signed-in sessions, sign-in round trips, the sealed MSAL token cache with
+# the engineers' refresh tokens) are never dumped, only their definitions: a stolen backup plus TOKEN_CACHE_KEY can't
+# yield refresh tokens, and after a restore everyone simply signs in again.
 set -euo pipefail
 umask 077
 
@@ -18,12 +21,25 @@ STAMP="$(date -u +%Y-%m-%dT%H-%M-%SZ)"
 DEST="$DEST_ROOT/$STAMP"
 
 install -d -m 700 "$DEST_ROOT" "$DEST"
-docker exec "$CONTAINER" pg_dump -U adminforge -Fc "$DATABASE" > "$DEST/$DATABASE.dump"
-# Sanity: the dump must list the audit table, or it isn't a usable backup (checked before any encryption).
-if ! docker exec -i "$CONTAINER" pg_restore --list < "$DEST/$DATABASE.dump" | grep -q 'TABLE DATA public audit_events'; then
+# Tables whose rows are credentials, not history (portal/apps/api/src/db/schema.ts): schema only.
+TRANSIENT_TABLES=(public.sessions public.preauth public.token_cache)
+exclude=()
+for t in "${TRANSIENT_TABLES[@]}"; do exclude+=("--exclude-table-data=$t"); done
+docker exec "$CONTAINER" pg_dump -U adminforge -Fc "${exclude[@]}" "$DATABASE" > "$DEST/$DATABASE.dump"
+# Sanity (before any encryption): the dump must list the audit table's rows, or it isn't a usable backup, and must not
+# hold rows of the credential tables.
+listing="$(docker exec -i "$CONTAINER" pg_restore --list < "$DEST/$DATABASE.dump")"
+if ! grep -Eq 'TABLE DATA public audit_events( |$)' <<<"$listing"; then
   echo "✗ $DEST/$DATABASE.dump does not contain audit_events: backup is not usable" >&2
   exit 1
 fi
+for t in "${TRANSIENT_TABLES[@]}"; do
+  if grep -Eq "TABLE DATA ${t%%.*} ${t#*.}( |\$)" <<<"$listing"; then
+    shred -u "$DEST/$DATABASE.dump"
+    echo "✗ the dump held rows of $t (credentials): deleted it, backup failed" >&2
+    exit 1
+  fi
+done
 
 RECIPIENT="${AF_BACKUP_GPG_RECIPIENT:-}"
 tar -C "$HOME/.config" --exclude='*.admin.env' --exclude='*.bak*' -czf "$DEST/config.tgz" adminforge

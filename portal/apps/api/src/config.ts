@@ -28,6 +28,16 @@ export const isLoopbackHost = (host: string): boolean => {
   return h === 'localhost' || h === '::1' || /^127(\.\d{1,3}){3}$/.test(h);
 };
 
+/** Comma-separated object or application ids (AF_PROTECTED_APP_IDS, AF_PROTECTED_USER_IDS); empty entries ignored. */
+const GuidList = z.string().refine(
+  (s) =>
+    s
+      .split(/[\s,]+/)
+      .filter(Boolean)
+      .every((id) => z.guid().safeParse(id).success),
+  'must be ids (GUIDs), comma-separated',
+);
+
 /** Credentials that must never be loaded with mock sign-in (Read/Write app, automation identity, runner key). */
 const MOCK_FORBIDDEN_KEYS = [
   'AF_READ_CLIENT_SECRET',
@@ -92,6 +102,13 @@ const Schema = z
     AF_READ_CLIENT_SECRET: z.string().optional(),
     AF_WRITE_CLIENT_ID: z.guid().optional(),
     AF_WRITE_CLIENT_SECRET: z.string().optional(),
+    /**
+     * Other app ids (e.g. the provisioner) whose app registration and service principal no declared write may name,
+     * like the Read, Write and Automation apps (execution/protected.ts).
+     */
+    AF_PROTECTED_APP_IDS: GuidList.optional(),
+    /** Object ids of break-glass / emergency-access accounts (and others) no declared write may name. */
+    AF_PROTECTED_USER_IDS: GuidList.optional(),
 
     // ── Automation identity, content registry, outbound calls (definitions/datasources) ──
     AF_AUTOMATION_CLIENT_ID: z.guid().optional(),

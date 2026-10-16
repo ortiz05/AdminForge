@@ -37,6 +37,8 @@ import {
 import { NotArmed, partitionKey, ReauthRequired, type AuthClient } from '../auth/types';
 import type { Config } from '../config';
 import { AppError, toAppError } from '../errors';
+import { writesPausedError } from './emergency';
+import { ProtectedObjects, type ProtectedConfig, type WriteTarget } from './protected';
 import type { ExecutionIdentity, OutboundExecutor, ServiceCall, ServiceCallResult } from './types';
 
 /**
@@ -45,6 +47,8 @@ import type { ExecutionIdentity, OutboundExecutor, ServiceCall, ServiceCallResul
  *
  * - Policy: read mode is default-deny (safe methods + allowlisted read POSTs, `$batch` sub-requests checked one by one);
  *   writes leave only when the call says `declaredWrite` — which only code rendering *published* content may set.
+ * - Declared writes are refused while an administrator has paused changes (./emergency.ts) and when they name one of
+ *   AdminForge's protected objects (./protected.ts).
  * - Tokens: delegated → the session's Read/Write app via the TokenBroker (CAE claims challenges handled);
  *   automation → app-only tokens of the automation identity; DATA_MODE=fixtures → no tokens at all.
  * - Paging: `all` collects up to maxItems; cursor pages hand out sealed, opaque cursors (HMAC-bound to the call) so
@@ -59,6 +63,7 @@ const MAX_ITEMS = 100_000;
 const MAX_PAGES = 1000;
 const GUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const PS_SERVICES = new Set<ServiceId>(['exchange', 'teams', 'sharepointAdmin', 'runner']);
+const SAFE_METHODS = new Set(['GET', 'HEAD']);
 
 export type OutboundConfig = Pick<
   Config,
@@ -69,7 +74,8 @@ export type OutboundConfig = Pick<
   | 'OUTBOUND_TIMEOUT_MS'
   | 'TOKEN_CACHE_KEY'
 > &
-  Partial<Pick<Config, 'OUTBOUND_MAX_BYTES' | 'AF_CONNECTION_AUDIENCE_HOSTS'>>;
+  Partial<Pick<Config, 'OUTBOUND_MAX_BYTES' | 'AF_CONNECTION_AUDIENCE_HOSTS'>> &
+  ProtectedConfig;
 
 export interface OutboundDeps {
   config: OutboundConfig;
@@ -94,6 +100,10 @@ export interface OutboundDeps {
   onSensitiveRead?: (info: SensitiveRead) => Promise<void> | void;
   /** Per-call telemetry (service, path template, status, duration, throttling, request id): logged by the API. */
   onCall?: (record: CallRecord) => void;
+  /** Emergency stop: true while an administrator has paused changes (every declared write is refused). */
+  writesPaused?: () => Promise<boolean>;
+  /** Protected-object cache lifetime (tests; default 10 min). */
+  protectedTtlMs?: number;
 }
 
 /** One Microsoft API call, for logs and metrics: never ids, query values or bodies (the path is a template). */
@@ -742,16 +752,50 @@ export class Outbound implements OutboundExecutor {
   private readonly limiter: Limiter;
   private readonly cursors: CursorSeal;
   private readonly now: () => Date;
+  /** The protected-object guard for declared writes (its directory reads go through this executor). */
+  readonly protectedObjects: ProtectedObjects;
 
   constructor(private readonly deps: OutboundDeps) {
     this.limiter = new Limiter(deps.config.OUTBOUND_CONCURRENCY, deps.config.OUTBOUND_USER_CONCURRENCY);
     this.cursors = new CursorSeal(deps.config.TOKEN_CACHE_KEY);
     this.now = deps.now ?? (() => new Date());
+    this.protectedObjects = new ProtectedObjects({
+      config: deps.config,
+      automation: deps.config.DATA_MODE === 'fixtures' || deps.automation !== null,
+      now: this.now,
+      ...(deps.protectedTtlMs !== undefined ? { ttlMs: deps.protectedTtlMs } : {}),
+      read: async (who, path, query, o) => {
+        try {
+          const res = await this.execute(
+            who,
+            {
+              service: 'graph',
+              method: 'GET',
+              path,
+              query,
+              paging: o.all ? 'all' : 'none',
+              maxItems: MAX_ITEMS,
+            },
+            { correlationId: o.correlationId },
+          );
+          return res.data;
+        } catch (err) {
+          if (err instanceof ApiError && err.status === 404) return null;
+          throw err;
+        }
+      },
+    });
   }
 
   /** In-flight calls for a service (tests/metrics). */
   active(service: ServiceId): number {
     return this.limiter.activeFor(service);
+  }
+
+  /** The emergency stop and the protected-object guard for writes sent elsewhere (the PowerShell runner). */
+  async assertWritable(identity: ExecutionIdentity, targets: WriteTarget[], correlationId?: string) {
+    if (await this.deps.writesPaused?.()) throw writesPausedError();
+    await this.protectedObjects.check(identity, targets, correlationId);
   }
 
   async execute<T = unknown>(
@@ -767,6 +811,14 @@ export class Outbound implements OutboundExecutor {
         `${service} work runs through the PowerShell runner, not as a REST call.`,
       );
     const correlationId = opts.correlationId ?? randomUUID();
+    const declaredWrite = call.declaredWrite === true;
+    // Emergency stop: nothing declared as a write leaves while changes are paused (reads keep working). AdminForge's
+    // own notification mail still goes out, so approvers and report recipients hear what's happening.
+    const notification =
+      call.notification === true &&
+      identity.kind === 'automation' &&
+      /^\/users\/[^/]+\/sendMail$/.test(call.path);
+    if (declaredWrite && !notification && (await this.deps.writesPaused?.())) throw writesPausedError();
 
     let method = (call.method || 'GET').toUpperCase();
     let path = call.path;
@@ -789,7 +841,7 @@ export class Outbound implements OutboundExecutor {
       method,
       path,
       body,
-      declaredWrite: call.declaredWrite === true,
+      declaredWrite,
       declaredRead: fn ? fn.mode === 'read' : call.declaredRead === true,
     });
     if (!decision.allowed) throw new PolicyDenied(decision.reason);
@@ -802,10 +854,21 @@ export class Outbound implements OutboundExecutor {
         method,
         path: sent,
         body,
-        declaredWrite: call.declaredWrite === true,
+        declaredWrite,
         declaredRead: fn ? fn.mode === 'read' : call.declaredRead === true,
       });
       if (!again.allowed) throw new PolicyDenied(again.reason);
+    }
+    // Protected objects: what the write would change, as sent (each changing $batch sub-request on its own).
+    if (declaredWrite) {
+      const targets: WriteTarget[] = batch
+        ? batch
+            .filter((i) => !SAFE_METHODS.has((i.method ?? 'GET').toUpperCase()))
+            .map((i) => ({ service, method: i.method ?? 'GET', path: i.path, query: i.query, body: i.body }))
+        : SAFE_METHODS.has(method)
+          ? []
+          : [{ service, method, path: sent, query: call.query, body }];
+      await this.protectedObjects.check(identity, targets, correlationId);
     }
 
     const template = call.pathTemplate ?? fn?.template ?? templatePath(path);

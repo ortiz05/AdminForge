@@ -1,5 +1,6 @@
 import { isTerminal, type RunStatus } from '@adminforge/engine';
 import type { FastifyReply, FastifyRequest } from 'fastify';
+import type { SessionRecord } from '../auth/session-store';
 import type { RunEventBus } from './events';
 import type { SecretBroker } from './secrets';
 import { notificationType } from './store';
@@ -7,6 +8,21 @@ import type { EventRow, RunRepository } from './types';
 
 const HEARTBEAT_MS = 15_000;
 const PAGE = 500;
+/** How often an open run stream re-checks that its session may still watch the run (as GET /api/events does). */
+export const RUN_STREAM_POLL_MS = 10_000;
+
+/** A session that still counts as signed in: not deleted (sign-out), not past its expiry, not idle too long. */
+export function sessionLive(
+  s: Pick<SessionRecord, 'expiresAt' | 'lastSeenAt'> | null | undefined,
+  now: Date,
+  idleMinutes: number,
+): boolean {
+  return (
+    !!s &&
+    now.getTime() < s.expiresAt.getTime() &&
+    now.getTime() - s.lastSeenAt.getTime() <= idleMinutes * 60_000
+  );
+}
 
 /**
  * SSE payload for one stored event: `{ id, type: 'run'|'step'|'log'|'progress', ts, stepSeq, data }`.
@@ -33,11 +49,20 @@ export function sseData(e: EventRow) {
  * ones as `run_events` notifications arrive. Each message carries `id:` (resumable) and JSON `data:` (see sseData).
  * When the run has ended, a final `event: end` is sent and the stream closes — clients should call `close()` on it
  * (otherwise EventSource reconnects, gets the replay, and `end` again).
+ * Every 10 s the stream asks `stillAllowed` (APP-02): after sign-out, session expiry or idle timeout, or losing the
+ * roles to see the run, it sends `event: session.ended` and closes (a reconnect is then refused).
  */
 export async function streamRunEvents(
   request: FastifyRequest,
   reply: FastifyReply,
-  deps: { repo: RunRepository; bus: RunEventBus; secrets?: SecretBroker },
+  deps: {
+    repo: RunRepository;
+    bus: RunEventBus;
+    secrets?: SecretBroker;
+    /** Whether the session may still watch this run (false ends the stream; an error keeps it open). */
+    stillAllowed?: () => Promise<boolean>;
+    pollMs?: number;
+  },
   runId: string,
   lastEventId: number,
 ): Promise<void> {
@@ -64,11 +89,13 @@ export async function streamRunEvents(
   let unReconnect: () => void = () => undefined;
   let untrack: () => void = () => undefined;
   let detach: () => void = () => undefined;
+  let poll: NodeJS.Timeout | null = null;
 
   const close = () => {
     if (closed) return;
     closed = true;
     clearInterval(heartbeat);
+    if (poll) clearInterval(poll);
     unsubscribe();
     unReconnect();
     untrack();
@@ -113,6 +140,27 @@ export async function streamRunEvents(
       pumping = false;
     }
   };
+
+  // APP-02: the access check above happened once; signing out, expiring or losing the role ends the stream.
+  if (deps.stillAllowed) {
+    const stillAllowed = deps.stillAllowed;
+    let checking = false;
+    poll = setInterval(() => {
+      if (closed || checking) return;
+      checking = true;
+      void stillAllowed()
+        .then((ok) => {
+          if (ok || closed) return;
+          raw.write('event: session.ended\ndata: {}\n\n');
+          close();
+        })
+        .catch(() => undefined)
+        .finally(() => {
+          checking = false;
+        });
+    }, deps.pollMs ?? RUN_STREAM_POLL_MS);
+    poll.unref?.();
+  }
 
   // Subscribe before the replay so nothing that lands in between is missed.
   unsubscribe = deps.bus.subscribe(runId, () => void pump());

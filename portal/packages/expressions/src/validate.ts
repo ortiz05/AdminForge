@@ -214,6 +214,42 @@ const isKqlQuery = (segments: readonly PathSegment[]) => {
   return key === 'query' || (key === 'Query' && segments[segments.length - 2] === 'body');
 };
 
+/** OData system query options whose text Microsoft parses as an expression (`$filter`, `$search`, `$orderby`). */
+const ODATA_OPTIONS: Record<string, string> = {
+  $filter: '$filter',
+  $search: '$search',
+  $orderby: '$orderby',
+};
+/** Their unprefixed spellings inside a request body (Intune report exports, `getXxxReport` actions, …). */
+const ODATA_BODY_OPTIONS: Record<string, string> = {
+  filter: '$filter',
+  search: '$search',
+  orderby: '$orderby',
+};
+
+/**
+ * The OData option a string is the text of (or an item of, e.g. `orderBy: ['name asc']`): a `$filter` / `$search` /
+ * `$orderby` key anywhere (request query, ARM query, a body), or `filter` / `search` / `orderBy` inside a request
+ * `body`. Widget settings such as `filter: facet` or `search: true` are not in a body and stay out of scope.
+ */
+function odataOption(segments: readonly PathSegment[]): { key: string; option: string } | undefined {
+  let i = segments.length - 1;
+  while (i >= 0 && typeof segments[i] === 'number') i--;
+  const key = segments[i];
+  if (typeof key !== 'string') return undefined;
+  if (Object.hasOwn(ODATA_OPTIONS, key)) return { key, option: ODATA_OPTIONS[key]! };
+  const lower = key.toLowerCase();
+  if (Object.hasOwn(ODATA_BODY_OPTIONS, lower) && segments.slice(0, i).includes('body'))
+    return { key, option: ODATA_BODY_OPTIONS[lower]! };
+  return undefined;
+}
+
+const ODATA_HELPER: Record<string, string> = {
+  $filter: '$odata() (or another quoting helper such as $guid() or $number())',
+  $search: '$odataSearch()',
+  $orderby: "a literal allowlist (params.x in ['a', 'b'] ? … : …)",
+};
+
 /** Params compiled server-side into safe KQL by the advanced filter builder (`filters.advanced` with `dialect: kql`). */
 function compiledKqlParams(def: unknown): string[] {
   const adv = (def as { filters?: { advanced?: { dialect?: unknown; param?: unknown } } } | null)?.filters
@@ -222,13 +258,14 @@ function compiledKqlParams(def: unknown): string[] {
 }
 
 /**
- * Lint (§5.10, §7.9, R12): user data concatenated into `$filter` / `$search` without `$odata()` / `$odataSearch()`,
- * user data (`params`, `inputs`, `row`, …) reaching a KQL `query` without `$kql()` — either concatenated with `&`
- * or interpolated straight into the query text (`where name == '${ params.q }'`) — and user data placed inside a
- * request `path` / `url` (`/users/${ params.id }`) without `$encode()`. Wrapping the value in a helper
- * (`$kql`, `$guid`, `$number`, …), guarding it with a literal allowlist (`params.x in ['a', 'b'] ? … : …`), or a param
- * the advanced KQL filter builder compiles clears the warning. Returns warnings; expressions that do not compile are
- * skipped (validateExpressions reports them).
+ * Lint (§5.10, §7.9, R12): user data (`params`, `inputs`, `row`, …) reaching OData `$filter` / `$search` /
+ * `$orderby` text (query or request body) without `$odata()` / `$odataSearch()` — either concatenated with `&` or
+ * interpolated straight into the text (`startswith(displayName,'${ params.q }')`) —, user data reaching a KQL `query`
+ * without `$kql()` (the same two forms), and user data placed inside a request `path` / `url`
+ * (`/users/${ params.id }`) without `$encode()`. Wrapping the value in a helper (`$odata`, `$kql`, `$guid`, `$number`,
+ * …), guarding it with a literal allowlist (`params.x in ['a', 'b'] ? … : …`), or a param the advanced KQL filter
+ * builder compiles clears the warning. Returns warnings; expressions that do not compile are skipped
+ * (validateExpressions reports them).
  */
 export function lintExpressions(def: unknown, opts: WalkOptions = {}): ExpressionIssue[] {
   const issues: ExpressionIssue[] = [];
@@ -238,7 +275,7 @@ export function lintExpressions(def: unknown, opts: WalkOptions = {}): Expressio
     def,
     (str, segments) => {
       const key = segments[segments.length - 1];
-      const odata = key === '$filter' || key === '$search';
+      const odata = odataOption(segments);
       const kql = isKqlQuery(segments);
       const pathLike = key === 'path' || key === 'url';
       if (!hasTemplate(str) || (!odata && !kql && !pathLike)) return;
@@ -257,7 +294,14 @@ export function lintExpressions(def: unknown, opts: WalkOptions = {}): Expressio
           if (odata && rawConcat(ast, none))
             issues.push({
               ...at,
-              message: `User data is concatenated into ${key} without ${key === '$filter' ? '$odata()' : '$odataSearch()'}.`,
+              message: `User data is concatenated into ${odata.key} without ${ODATA_HELPER[odata.option]}.`,
+            });
+          // Unlike a path or KQL text, an OData option is never user data as a whole either: that would be a raw
+          // filter param (advanced filters are compiled server-side instead).
+          else if (odata && yieldsUserData(ast, none))
+            issues.push({
+              ...at,
+              message: `User data is placed in ${odata.key} without ${ODATA_HELPER[odata.option]}.`,
             });
           else if (kql && (rawConcat(ast, trustedKql) || (mixed && yieldsUserData(ast, trustedKql))))
             issues.push({

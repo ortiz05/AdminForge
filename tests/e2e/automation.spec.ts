@@ -335,6 +335,7 @@ test('settings: environment facts and provisioned apps', async ({ page }) => {
   await expect(page.getByText('Mock sign-in is on')).toBeVisible();
   await expect(page.getByText('Not provisioned: Automation identity')).toBeVisible();
   await expect(page.getByText('60 minutes')).toBeVisible();
+  await expect(page.getByText(/Fresh sign-in only/)).toBeVisible();
   await noAxeViolations(page);
 });
 

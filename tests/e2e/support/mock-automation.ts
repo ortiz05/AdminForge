@@ -50,6 +50,8 @@ export interface AutomationOptions {
   refuseStaleOnce?: boolean;
   /** The first typed confirmation is refused with 422 confirmation_mismatch. */
   mismatchOnce?: boolean;
+  /** What the viewer may do with the emergency stop (default: an admin — both). */
+  emergency?: { canPause: boolean; canResume: boolean; writesPausedBy?: string };
 }
 
 /** Typed confirmations the mock server expects ("preview then confirm"). */
@@ -81,6 +83,29 @@ export function automationApi(opts: AutomationOptions = {}) {
     secretClaimed: false,
     previews: 0,
     refusals: { stale: Boolean(opts.refuseStaleOnce), mismatch: Boolean(opts.mismatchOnce) },
+    /** Emergency stop: what's paused, and every PUT the UI sent (with whether CSRF came along). */
+    emergency: {
+      writes: opts.emergency?.writesPausedBy
+        ? {
+            paused: true,
+            reason: 'Suspected compromised operator account',
+            by: opts.emergency.writesPausedBy,
+            at: '2026-10-15T11:30:00.000Z',
+          }
+        : {
+            paused: false,
+            reason: null as string | null,
+            by: null as string | null,
+            at: null as string | null,
+          },
+      automation: {
+        paused: false,
+        reason: null as string | null,
+        by: null as string | null,
+        at: null as string | null,
+      },
+    },
+    emergencyPuts: [] as Array<{ body: unknown; csrf: boolean }>,
   };
 
   const runDetail = (id: string): MockReply => {
@@ -336,6 +361,33 @@ export function automationApi(opts: AutomationOptions = {}) {
       return { body: { version: state.appearanceVersion, ...rest } };
     }
     if (method === 'GET' && path === '/api/admin/settings') return { body: settings() };
+    if (method === 'GET' && path === '/api/emergency')
+      return {
+        body: {
+          ...state.emergency,
+          canPause: opts.emergency?.canPause ?? true,
+          canResume: opts.emergency?.canResume ?? true,
+        },
+      };
+    if (method === 'PUT' && path === '/api/admin/emergency') {
+      state.emergencyPuts.push({ body, csrf: Boolean(csrf) });
+      const b = body as { target: 'writes' | 'automation'; paused: boolean; reason?: string };
+      state.emergency[b.target] = b.paused
+        ? {
+            paused: true,
+            reason: b.reason ?? null,
+            by: 'mock.engineer@example.com',
+            at: '2026-10-15T12:00:00.000Z',
+          }
+        : { paused: false, reason: null, by: null, at: null };
+      return {
+        body: {
+          ...state.emergency,
+          canPause: opts.emergency?.canPause ?? true,
+          canResume: opts.emergency?.canResume ?? true,
+        },
+      };
+    }
     return undefined;
   };
 

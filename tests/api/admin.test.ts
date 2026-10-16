@@ -236,6 +236,7 @@ describe('GET /api/admin/settings', () => {
       dataMode: 'fixtures',
       contentSource: 'fs',
       writeSessionMaxMinutes: 60,
+      writeStepUp: 'none',
       apps: { read: false, write: false, automation: false },
       tenant: { name: 'Example Org', domain: 'example.com' },
     });

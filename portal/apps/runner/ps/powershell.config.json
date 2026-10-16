@@ -1,0 +1,15 @@
+{
+  "LogLevel": "Warning",
+  "PowerShellPolicies": {
+    "ScriptBlockLogging": {
+      "EnableScriptBlockLogging": false,
+      "EnableScriptBlockInvocationLogging": false
+    },
+    "ModuleLogging": {
+      "EnableModuleLogging": false
+    },
+    "Transcription": {
+      "EnableTranscripting": false
+    }
+  }
+}

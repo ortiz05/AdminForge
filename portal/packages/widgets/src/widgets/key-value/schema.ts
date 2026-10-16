@@ -25,7 +25,10 @@ export const KeyValueField = z.strictObject({
   /** `status` fields: raw value → [tone, label]. */
   map: StatusMapSchema.optional(),
   format: ValueFormat.optional(),
-  /** `link` fields: target (template; scope `value`, `row` = the object). Defaults to the value when it is a URL. */
+  /**
+   * `link` fields: target (template; scope `value`, `row` = the object). Without it the value itself is the target —
+   * taken literally, never evaluated — when it is an external URL (http(s), mailto).
+   */
   href: Template.optional(),
 });
 

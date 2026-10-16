@@ -138,7 +138,9 @@ export function stepView(s: StepRecord): StepView {
 
 /** A human task as shown; `manualParams` (the manual step's fields) masks values typed into `redact: true` ones. */
 export function taskView(t: TaskRow, canDecide: boolean, manualParams?: Params): TaskView {
-  const { initiatorOid: _i, ...policy } = t.policy;
+  // `excludes` (who the change grants access to) is enforced server-side; `canDecide` already reflects it.
+  const { initiatorOid: _i, ...rest } = t.policy;
+  const { excludes: _e, ...policy } = rest as typeof rest & { excludes?: unknown };
   return {
     id: t.id,
     subjectType: t.subjectType,

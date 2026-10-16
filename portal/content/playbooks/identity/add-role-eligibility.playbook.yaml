@@ -1,12 +1,13 @@
 $schema: ../../../packages/schemas/generated/playbook.schema.json
 kind: playbook
 id: identity.add-role-eligibility
-version: 1.0.0
+version: 1.1.0
 title: Add eligible role assignment (PIM)
 summary: >-
   Makes a user or role-assignable group eligible for a Microsoft Entra role through Privileged Identity Management, so
   the role is activated just in time instead of held permanently. The role's PIM settings decide the maximum
-  eligibility, MFA, justification and approval on activation. Needs approval by a second engineer.
+  eligibility, MFA, justification and approval on activation. Needs approval by a second engineer who doesn't become
+  eligible (not the principal, nor a member of the group), and refuses making yourself eligible.
 owner: identity-team
 tags: [identity, pim, roles, privileged-access]
 risk: high
@@ -24,11 +25,13 @@ confirm:
     ${ steps.principal.output.displayName & ' becomes eligible for ' & steps.role.output.displayName
        & (inputs.expiry = 'Permanent' ? ' with no end date' : ' for ' & $substring(inputs.expiry, 1, $length(inputs.expiry) - 2) & ' days')
        & '. Type the role name to confirm.' }
+# Nobody who becomes eligible approves it: the principal, and every member of a role-assignable group.
 approval:
   required: true
   approvers: [Playbook.Approver]
   minApprovals: 1
   expiresIn: PT8H
+  excludes: ${ $append([$guid(inputs.principalId)], steps.members.output.value.id) }
 
 inputs:
   roleDefinitionId: { type: string, format: guid, label: Role (definition id), description: Open the role from Roles & admins to fill this in. }
@@ -90,6 +93,21 @@ steps:
     type: assert
     that: ${ $not($guid(inputs.principalId) = $lowercase(user.oid)) }
     message: You can't make yourself eligible for a role. Ask another administrator.
+
+  # The members of a role-assignable group become eligible too (see approval.excludes).
+  - id: members
+    type: graph
+    mode: read
+    describe: Read the group's members
+    when: ${ steps.kind.output = 'group' }
+    paging: all
+    maxItems: 5000
+    request:
+      method: GET
+      path: /groups/${ $encode($guid(inputs.principalId)) }/transitiveMembers/microsoft.graph.user
+      query:
+        $select: id
+        $top: 999
 
   # Same request as the user page's Roles tab.
   - id: eligible
@@ -187,4 +205,22 @@ tests:
     expect:
       status: succeeded
       plan: [request]
+      steps: { members: skipped }
       outputs: { status: Provisioned }
+  - name: refuses making yourself eligible
+    inputs: { roleDefinitionId: fe930be7-5e62-47db-91af-98c3a49a38b1, principalId: 00000000-0000-4000-8000-0000000000a1, justification: I need user admin for a migration REQ-3205 }
+    user: { oid: 00000000-0000-4000-8000-0000000000a1, upn: avery@example.com }
+    mocks:
+      role: { id: fe930be7-5e62-47db-91af-98c3a49a38b1, displayName: User Administrator }
+      principal: { "@odata.type": "#microsoft.graph.user", id: 00000000-0000-4000-8000-0000000000a1, displayName: Avery Engineer }
+    expect: { status: failed, failedStep: notSelf }
+  - name: waits for a second engineer before making a role-assignable group eligible
+    dryRun: false
+    inputs: { roleDefinitionId: fe930be7-5e62-47db-91af-98c3a49a38b1, principalId: 00000000-0000-4000-8000-000000000208, justification: Identity admins group REQ-3206 }
+    user: { oid: 00000000-0000-4000-8000-0000000000a1, upn: avery@example.com }
+    mocks:
+      role: { id: fe930be7-5e62-47db-91af-98c3a49a38b1, displayName: User Administrator }
+      principal: { "@odata.type": "#microsoft.graph.group", id: 00000000-0000-4000-8000-000000000208, displayName: SG-PIM-Identity-Admins, isAssignableToRole: true }
+      members: { value: [{ id: 00000000-0000-4000-8000-0000000000b2 }] }
+      eligible: { value: [] }
+    expect: { status: awaiting_approval, steps: { members: succeeded } }

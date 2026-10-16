@@ -20,7 +20,7 @@ async function housekeeping() {
       lastRetention = now.getTime();
       const purged = await applyRetention(
         ctx.database.db,
-        { artifacts: app.schedules.artifacts, audit: ctx.audit, now },
+        { artifacts: app.schedules.artifacts, audit: ctx.audit, now, news: app.schedules.news },
         {
           runDays: config.RETENTION_RUN_DAYS,
           scheduleRunDays: config.RETENTION_SCHEDULE_RUN_DAYS,

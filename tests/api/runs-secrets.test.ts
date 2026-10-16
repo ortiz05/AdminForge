@@ -90,7 +90,9 @@ describe('show-once secrets: live delivery', () => {
       await avery.post('/api/runs', { playbook: 'test.tap-approved', inputs: { userId: USER } })
     ).json();
     await t.drain();
-    const blake = await t.login(BLAKE, ['Playbook.Approver', 'Portal.Operator'], { armed: true });
+    const blake = await t.login(BLAKE, ['Portal.Reader', 'Playbook.Approver', 'Portal.Operator'], {
+      armed: true,
+    });
     const address = await t.app.listen({ port: 0, host: '127.0.0.1' });
     const averyStream = await openStream(address, avery.headers.cookie, runId);
     const blakeStream = await openStream(address, blake.headers.cookie, runId);
@@ -151,7 +153,7 @@ describe('show-once secrets: live delivery', () => {
 describe('show-once secrets: fetch once', () => {
   it('without a live stream it is held for the first fetch by the initiator’s session, then gone', async () => {
     const t = await setup();
-    const avery = await t.login(AVERY, ['Portal.Operator'], { armed: true });
+    const avery = await t.login(AVERY, ['Portal.Reader', 'Portal.Operator'], { armed: true });
     const { runId } = (
       await avery.post('/api/runs', { playbook: 'test.tap', inputs: { userId: USER } })
     ).json();
@@ -176,7 +178,7 @@ describe('show-once secrets: fetch once', () => {
       ).statusCode,
     ).toBe(403);
     // Another session of the same person, or another person, gets nothing (and does not burn it).
-    const averyElsewhere = await t.login(AVERY, ['Portal.Operator']);
+    const averyElsewhere = await t.login(AVERY, ['Portal.Reader', 'Portal.Operator']);
     expect(
       (
         await averyElsewhere.get(`/api/runs/${runId}/secret/create`, {
@@ -219,7 +221,7 @@ describe('show-once secrets: fetch once', () => {
 
   it('is dropped after the hold time (audited as expired)', async () => {
     const t = await setup({ secretTtlMs: 30 });
-    const avery = await t.login(AVERY, ['Portal.Operator'], { armed: true });
+    const avery = await t.login(AVERY, ['Portal.Reader', 'Portal.Operator'], { armed: true });
     const { runId } = (
       await avery.post('/api/runs', { playbook: 'test.tap', inputs: { userId: USER } })
     ).json();
@@ -241,7 +243,7 @@ describe('show-once secrets: fetch once', () => {
 
   it('dry runs and scheduled runs never produce a deliverable secret', async () => {
     const t = await setup();
-    const avery = await t.login(AVERY, ['Portal.Operator']);
+    const avery = await t.login(AVERY, ['Portal.Reader', 'Portal.Operator']);
     const { runId } = (
       await avery.post('/api/runs', { playbook: 'test.tap', inputs: { userId: USER }, dryRun: true })
     ).json();

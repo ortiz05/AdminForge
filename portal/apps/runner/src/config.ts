@@ -132,6 +132,20 @@ export interface WorkerCommand {
 }
 
 /**
+ * PowerShell settings for the workers (ps/powershell.config.json, next to worker.ps1), passed with `-SettingsFile`
+ * in place of the system-wide powershell.config.json. On Linux PowerShell logs to syslog (the journal), and by default
+ * it records every script block it considers suspicious — the pinned modules' source, up to 16 KB per line, at warning
+ * priority, hundreds of MB a day — plus parameter values of some commands at informational priority. The file
+ * turns script-block, module and transcript logging off explicitly and keeps warnings and errors (LogLevel Warning).
+ * The runner's own logs (stdout, protocol events) are unaffected.
+ */
+export const WORKER_SETTINGS_FILE = 'powershell.config.json';
+
+export function workerSettingsFile(config: Pick<RunnerConfig, 'workerScript'>): string {
+  return path.join(path.dirname(config.workerScript), WORKER_SETTINGS_FILE);
+}
+
+/**
  * The pwsh command line of a worker. Nothing job-specific ever appears here: the job, including tokens,
  * is written to the worker's stdin after it has started.
  */
@@ -155,7 +169,15 @@ export function buildWorkerCommand(
   });
   return {
     command: config.pwshPath,
-    args: ['-NoLogo', '-NoProfile', '-NonInteractive', '-File', config.workerScript],
+    args: [
+      '-NoLogo',
+      '-NoProfile',
+      '-NonInteractive',
+      '-SettingsFile',
+      workerSettingsFile(config),
+      '-File',
+      config.workerScript,
+    ],
     env,
   };
 }

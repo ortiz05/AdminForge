@@ -16,5 +16,8 @@
 https://ADDRESS:8443 {
 	tls internal
 	encode zstd gzip
+	# reverse_proxy adds `Via: <version> Caddy` to every response: don't advertise the proxy. (A deletion is applied when
+	# the response is written; `header_down -Via` inside reverse_proxy runs before Caddy adds it and has no effect.)
+	header -Via
 	reverse_proxy 127.0.0.1:3300
 }

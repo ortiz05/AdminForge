@@ -1,11 +1,12 @@
 $schema: ../../../packages/schemas/generated/playbook.schema.json
 kind: playbook
 id: identity.create-user
-version: 1.0.1
+version: 1.1.0
 title: Onboard user
 summary: >-
   Creates a cloud user account with a unique sign-in name, sets the manager, adds group memberships, assigns a licence,
-  and issues first sign-in credentials (a Temporary Access Pass by default — passwordless onboarding).
+  and issues first sign-in credentials (a Temporary Access Pass by default — passwordless onboarding). Refuses
+  role-assignable groups and AdminForge's portal groups: a new account never starts with directory or portal roles.
 owner: identity-team
 tags: [identity, users, onboarding]
 risk: medium
@@ -119,6 +120,44 @@ steps:
     that: ${ $count(steps.existing.output.value) = 0 }
     message: ${ steps.names.output.userPrincipalName & ' is already used by ' & steps.existing.output.value[0].displayName & '. Choose another sign-in name.' }
 
+  # The groups are checked before anything is created. Role-assignable groups grant directory roles and the
+  # SG-AdminForge-* groups grant portal roles: onboarding hands the operator the new account's first credential, so it
+  # must not start with either (an operator could otherwise make themselves a second approver). AdminForge also
+  # refuses any write naming a portal group by id (protected_object); this check explains it before anything runs.
+  - id: groupCheck
+    type: forEach
+    items: ${ [inputs.groupIds] }
+    as: groupId
+    concurrency: 5
+    steps:
+      - id: lookupGroup
+        type: graph
+        mode: read
+        describe: ${ 'Look up group ' & groupId }
+        request:
+          method: GET
+          path: /groups/${ $encode($guid(groupId)) }
+          query:
+            $select: id,displayName,uniqueName,isAssignableToRole
+
+  - id: privilegedGroups
+    type: transform
+    describe: Role-assignable and AdminForge portal groups among the requested groups
+    expression: >-
+      ${ [steps.groupCheck.output.outputs.lookupGroup[
+           isAssignableToRole = true
+           or $substring($lowercase(uniqueName ? uniqueName : ''), 0, 14) = 'sg-adminforge-'
+           or $substring($lowercase(displayName ? displayName : ''), 0, 14) = 'sg-adminforge-'
+         ]] }
+
+  - id: noPrivilegedGroups
+    type: assert
+    that: ${ $count(steps.privilegedGroups.output) = 0 }
+    message: >-
+      ${ 'Onboarding doesn’t add a new account to role-assignable groups or AdminForge portal groups ('
+         & $join([steps.privilegedGroups.output.displayName], ', ')
+         & '). Remove them from Groups and run it again. Once the account exists, use Add group members for a role-assignable group; change AdminForge portal groups only in the Microsoft Entra admin center.' }
+
   - id: create
     type: graph
     mode: write
@@ -179,6 +218,7 @@ steps:
         mode: write
         describe: ${ 'Add to group ' & groupId }
         # Dynamic, synced and Exchange-managed groups refuse direct adds; the rest of onboarding carries on.
+        # (Role-assignable and portal groups were refused before the account was created: noPrivilegedGroups.)
         onError: continue
         request:
           method: POST
@@ -245,6 +285,32 @@ tests:
     mocks:
       org: { value: [{ id: 00000000-0000-4000-8000-00000000e0e0, verifiedDomains: [{ name: example.com }] }] }
     expect: { status: failed, failedStep: domainVerified }
+  - name: refuses a role-assignable group before creating anything
+    inputs:
+      givenName: Kim
+      surname: Novak
+      domain: example.com
+      usageLocation: US
+      groupIds: [00000000-0000-4000-8000-000000000208]
+      firstSignIn: Temporary Access Pass
+    mocks:
+      org: { value: [{ id: 00000000-0000-4000-8000-00000000e0e0, verifiedDomains: [{ name: example.com }] }] }
+      existing: { value: [] }
+      lookupGroup: { id: 00000000-0000-4000-8000-000000000208, displayName: SG-PIM-Identity-Admins, isAssignableToRole: true }
+    expect: { status: failed, failedStep: noPrivilegedGroups, plan: [] }
+  - name: refuses an AdminForge portal group (approver role) before creating anything
+    inputs:
+      givenName: Kim
+      surname: Novak
+      domain: example.com
+      usageLocation: US
+      groupIds: [00000000-0000-4000-8000-0000000002ff]
+      firstSignIn: Temporary Access Pass
+    mocks:
+      org: { value: [{ id: 00000000-0000-4000-8000-00000000e0e0, verifiedDomains: [{ name: example.com }] }] }
+      existing: { value: [] }
+      lookupGroup: { id: 00000000-0000-4000-8000-0000000002ff, displayName: SG-AdminForge-dev-Playbook.Approver, uniqueName: sg-adminforge-dev-playbook-approver, isAssignableToRole: false }
+    expect: { status: failed, failedStep: noPrivilegedGroups, plan: [] }
   - name: plans a full onboarding with groups, licence and a TAP
     inputs:
       givenName: Kim
@@ -260,6 +326,7 @@ tests:
     mocks:
       org: { value: [{ id: 00000000-0000-4000-8000-00000000e0e0, verifiedDomains: [{ name: example.com }, { name: exampleorg.onmicrosoft.com }] }] }
       existing: { value: [] }
+      lookupGroup: { id: 00000000-0000-4000-8000-000000000201, displayName: SG-App-Payroll-Users, isAssignableToRole: false }
       # Child playbooks are mocked with their outputs (their own tests cover their plans).
       licence: { summary: SPE_E5 assigned }
       tap: { summary: Temporary Access Pass issued, temporaryAccessPass: null }

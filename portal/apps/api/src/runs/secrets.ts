@@ -88,6 +88,11 @@ export class SecretBroker {
       serve: boolean;
       ttlMs?: number;
       log?: Log;
+      /**
+       * Whether a session hash still belongs to a signed-in session (not signed out, expired or idle). A secret is
+       * written only to streams of a live session (APP-02); without this check every attached stream counts.
+       */
+      sessionLive?: (sessionHash: string) => Promise<boolean>;
     },
   ) {
     this.transport = deps.database && deps.listenUrl ? 'notify' : 'memory';
@@ -157,11 +162,18 @@ export class SecretBroker {
     return () => this.streams.delete(stream);
   }
 
-  /** Delivers to matching live streams, else holds it for one fetch. */
+  /**
+   * Delivers to matching live streams, else holds it for one fetch. A stream whose session ended (signed out, expired,
+   * idle) since it opened doesn't count: the secret is held instead, and only that session could fetch it.
+   */
   async handoff(h: Held): Promise<'delivered' | 'held'> {
-    const targets = [...this.streams].filter(
+    let targets = [...this.streams].filter(
       (s) => s.sessionHash === h.sessionHash && (s.runId === h.runId || s.runId === h.rootRunId),
     );
+    if (targets.length && this.deps.sessionLive) {
+      const live = await this.deps.sessionLive(h.sessionHash).catch(() => false);
+      if (!live) targets = [];
+    }
     let sent = 0;
     for (const t of targets) {
       try {

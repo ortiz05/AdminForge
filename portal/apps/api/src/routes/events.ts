@@ -2,11 +2,14 @@ import type { FastifyInstance } from 'fastify';
 import { requireSession } from '../auth/guards';
 import { isArmed, type SessionRecord } from '../auth/session-store';
 import type { AppContext } from '../context';
+import { AppError } from '../errors';
 import type { PortalEvent } from '../events/bus';
 
 const HEARTBEAT_MS = 25_000;
 /** How often an open stream re-reads its session (mode changes, sign-out, expiry). */
 export const SESSION_POLL_MS = 10_000;
+/** Open streams per session (one per tab or window); a further one is refused with 429 until one closes. */
+export const MAX_STREAMS_PER_SESSION = 5;
 
 const modeOf = (s: SessionRecord, now: Date) =>
   isArmed(s, now)
@@ -22,9 +25,15 @@ const modeOf = (s: SessionRecord, now: Date) =>
  *   run.updated         <runs worker payload>              relayed from NOTIFY run_events
  * Comment lines (`: ping`) every 25 s keep proxies from closing the stream.
  */
-export function eventRoutes(api: FastifyInstance, ctx: AppContext, opts: { pollMs?: number } = {}) {
+export function eventRoutes(
+  api: FastifyInstance,
+  ctx: AppContext,
+  opts: { pollMs?: number; maxStreams?: number } = {},
+) {
   // Open streams would keep server.close() waiting; end them first.
   const open = new Set<() => void>();
+  /** idHash → streams open for that session. */
+  const perSession = new Map<string, number>();
   api.addHook('preClose', async () => {
     for (const end of [...open]) end();
   });
@@ -33,6 +42,18 @@ export function eventRoutes(api: FastifyInstance, ctx: AppContext, opts: { pollM
     { config: { rateLimit: { max: 60, timeWindow: '1 minute' } } },
     async (request, reply) => {
       let session = requireSession(request);
+      const idHash = session.idHash;
+      const streams = perSession.get(idHash) ?? 0;
+      if (streams >= (opts.maxStreams ?? MAX_STREAMS_PER_SESSION))
+        throw new AppError(
+          429,
+          'too_many_streams',
+          'Live updates are already open in too many tabs or windows.',
+          {
+            hint: 'Close the AdminForge tabs or windows you don’t need, then reload this page.',
+          },
+        );
+      perSession.set(idHash, streams + 1);
       reply.hijack();
       const raw = reply.raw;
       raw.writeHead(200, {
@@ -59,6 +80,9 @@ export function eventRoutes(api: FastifyInstance, ctx: AppContext, opts: { pollM
         if (closed) return;
         closed = true;
         open.delete(end);
+        const left = (perSession.get(idHash) ?? 1) - 1;
+        if (left > 0) perSession.set(idHash, left);
+        else perSession.delete(idHash);
         unsubscribe();
         clearInterval(heartbeat);
         clearInterval(poll);
@@ -106,6 +130,8 @@ export function eventRoutes(api: FastifyInstance, ctx: AppContext, opts: { pollM
       request.raw.on('close', end);
       raw.on('error', end);
       open.add(end);
+      // Gone before the listeners were attached: release its slot now.
+      if (raw.destroyed) end();
     },
   );
 }

@@ -26,6 +26,8 @@ function workspace(audit: Array<Record<string, unknown>>) {
     contentDir,
     fixturesDir: path.join(root, 'fixtures'),
     audit: async (input) => audit.push(input as unknown as Record<string, unknown>),
+    // Reviewed content (publish-review.test.ts covers the git checks themselves).
+    review: () => ({ commit: '0123456789ab', dirty: false, onOriginMain: true, problems: [] }),
     openStore: async () => ({
       store: {
         publish: async (entries, opts) => ({

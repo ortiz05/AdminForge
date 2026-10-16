@@ -20,3 +20,9 @@ portal/apps/web/src/routeTree.gen.ts
 portal/packages/schemas/generated/
 portal/apps/runner/modules/
 .claude/worktrees/
+
+# Local test-runner reports
+tests/.vitest/
+# Claude Code session state
+.claude/scheduled_tasks.lock
+.claude/settings.local.json

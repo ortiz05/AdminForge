@@ -439,9 +439,10 @@ test.describe('navigation and palette', () => {
         },
       },
     });
-    const link = page
-      .getByRole('navigation', { name: 'Primary' })
-      .getByRole('link', { name: /Managed devices/ });
+    // Sections start collapsed: open Endpoint to see its pages.
+    const nav = page.getByRole('navigation', { name: 'Primary' });
+    await nav.getByRole('button', { name: /^Endpoint/ }).click();
+    const link = nav.getByRole('link', { name: /Managed devices/ });
     await expect(link).toContainText('Intune');
     await expect(link).toHaveAccessibleName(/Requires INTUNE_A or EMS/);
   });

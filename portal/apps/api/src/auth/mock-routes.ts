@@ -88,6 +88,7 @@ export function mockAuthRoutes(app: FastifyInstance, ctx: AppContext) {
           requestedMinutes: body.minutes,
           reason: body.reason,
           armedUntil: until.toISOString(),
+          stepUp: 'none',
           mock: true,
         },
       });

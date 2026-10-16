@@ -34,10 +34,12 @@ export interface SessionRailProps {
   onOpenPalette: () => void;
   armControl: ReactNode;
   userMenu: ReactNode;
+  /** Status indicators before PIM (e.g. breaking news). */
+  indicators?: ReactNode;
 }
 
-/** The 48 px session rail: brand, tenant, jump-to, PIM, mode (read / armed), and you. */
-export function SessionRail({ me, onOpenPalette, armControl, userMenu }: SessionRailProps) {
+/** The 48 px session rail: brand, tenant, jump-to, indicators (breaking news), PIM, mode (read / armed), and you. */
+export function SessionRail({ me, onOpenPalette, armControl, userMenu, indicators }: SessionRailProps) {
   const s = rail();
   return (
     <header className={s.root()}>
@@ -68,6 +70,7 @@ export function SessionRail({ me, onOpenPalette, armControl, userMenu }: Session
         </button>
       </div>
       <div className={s.right()}>
+        {indicators}
         <PimIndicator className={s.pim()} />
         <span className={s.divider()} aria-hidden />
         {armControl}

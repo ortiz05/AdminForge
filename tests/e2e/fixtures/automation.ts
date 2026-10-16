@@ -1387,6 +1387,7 @@ export function settings() {
     dataMode: 'fixtures',
     contentSource: 'fs',
     writeSessionMaxMinutes: 60,
+    writeStepUp: 'freshSignIn',
     apps: { read: true, write: true, automation: false },
     tenant: { name: 'Example Org', domain: 'example.com' },
   };

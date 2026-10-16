@@ -14,6 +14,7 @@ import {
 import { api } from '../lib/api';
 import { useMe } from '../lib/session';
 import { bool, num, parser, pick, rec } from '../runs/json';
+import { EmergencyCard } from './EmergencyCard';
 import { Callout, Facts, isForbidden, QueryError, useDocumentTitle } from './ui';
 
 /**
@@ -45,6 +46,8 @@ export interface SettingsResponse {
   content: { watch: boolean | null; definitions: number | null; problems: number | null };
   writeSessionMaxMinutes: number | null;
   writeAuthContext: string | null;
+  /** How arming proves the person: an authentication context (MFA per policy) or only a fresh sign-in. */
+  writeStepUp: 'authContext' | 'freshSignIn' | 'none' | null;
   sessionIdleMinutes: number | null;
   sessionAbsoluteHours: number | null;
   apps: Array<{ key: string; label: string; purpose: string; status: AppStatus }>;
@@ -86,6 +89,9 @@ const readApp = (v: unknown): AppStatus | null => {
   };
 };
 
+const stepUp = (v: string | undefined): SettingsResponse['writeStepUp'] =>
+  v === 'authContext' || v === 'freshSignIn' || v === 'none' ? v : null;
+
 const SettingsParser = parser((input): SettingsResponse => {
   const o = rec(input);
   const auth = rec(o.auth);
@@ -115,6 +121,7 @@ const SettingsParser = parser((input): SettingsResponse => {
     },
     writeSessionMaxMinutes: num(o.writeSessionMaxMinutes) ?? num(rec(o.writeSession).maxMinutes) ?? null,
     writeAuthContext: pick(o, 'writeAuthContext') ?? pick(auth, 'writeAuthContext') ?? null,
+    writeStepUp: stepUp(pick(o, 'writeStepUp')),
     sessionIdleMinutes: num(o.sessionIdleMinutes) ?? num(rec(o.writeSession).idleMinutes) ?? null,
     sessionAbsoluteHours: num(o.sessionAbsoluteHours) ?? num(rec(o.writeSession).absoluteHours) ?? null,
     apps: APPS.flatMap((a) => {
@@ -158,11 +165,15 @@ export function SettingsPage() {
     return (
       <>
         <PageHeader eyebrow="Admin" title="Settings" />
-        <Panel>
-          <EmptyState title="Settings are for Portal Admins" icon={<GearIcon size={20} />}>
-            {me.user.upn} doesn’t have the Portal Admin role.
-          </EmptyState>
-        </Panel>
+        <div className="flex flex-col gap-6">
+          {/* Playbook Approvers may pause (not resume) changes and automation; the card hides itself otherwise. */}
+          <EmergencyCard />
+          <Panel>
+            <EmptyState title="Settings are for Portal Admins" icon={<GearIcon size={20} />}>
+              {me.user.upn} doesn’t have the Portal Admin role.
+            </EmptyState>
+          </Panel>
+        </div>
       </>
     );
 
@@ -203,6 +214,7 @@ export function SettingsPage() {
               registrations; it writes their ids to your local env file.
             </Callout>
           )}
+          <EmergencyCard />
           <div className="grid items-start gap-6 xl:grid-cols-2">
             <Panel eyebrow="Identity" title="Sign-in and write access">
               <Facts
@@ -226,6 +238,16 @@ export function SettingsPage() {
                   [
                     'Write session cap',
                     s.writeSessionMaxMinutes ? `${s.writeSessionMaxMinutes} minutes` : null,
+                  ],
+                  [
+                    'Write step-up',
+                    s.writeStepUp === 'authContext' ? (
+                      'Authentication context (your Conditional Access policy decides, e.g. MFA)'
+                    ) : s.writeStepUp === 'freshSignIn' ? (
+                      <StatusPill key="s" status="warn" size="sm">
+                        Fresh sign-in only — set WRITE_AUTH_CONTEXT to require MFA
+                      </StatusPill>
+                    ) : null,
                   ],
                   ...(s.writeAuthContext !== null
                     ? ([

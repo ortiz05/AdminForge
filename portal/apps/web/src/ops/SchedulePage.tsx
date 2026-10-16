@@ -1,7 +1,8 @@
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
-import { Link } from '@tanstack/react-router';
+import { Link, useNavigate } from '@tanstack/react-router';
 import {
   Badge,
+  button,
   Button,
   cn,
   DownloadSimpleIcon,
@@ -10,6 +11,7 @@ import {
   formatTimestamp,
   PageHeader,
   Panel,
+  PencilSimpleIcon,
   RobotIcon,
   Skeleton,
   SkeletonText,
@@ -20,7 +22,7 @@ import {
 import { RouterLink } from '../app/RouterLink';
 import { formatInZone, nextRuns } from './cron';
 import { cadenceOf } from './SchedulesPage';
-import { RunNowButton, ScheduleToggle } from './ScheduleControls';
+import { DeleteScheduleButton, RunNowButton, ScheduleToggle } from './ScheduleControls';
 import {
   JOB_LABEL,
   runStatusView,
@@ -51,6 +53,12 @@ function JobRef({ s }: { s: ScheduleItem }) {
   if (s.job.kind === 'playbook')
     return (
       <Link to="/playbooks/$key" params={{ key: s.job.ref }} className="text-accent hover:underline">
+        {ref}
+      </Link>
+    );
+  if (s.job.kind === 'report')
+    return (
+      <Link to="/reports" search={{ report: s.job.ref }} className="text-accent hover:underline">
         {ref}
       </Link>
     );
@@ -215,6 +223,7 @@ function History({ s }: { s: ScheduleItem }) {
 
 /** One schedule: identity, cadence with the next runs, the job, and its history with report downloads. */
 export function SchedulePage({ scheduleKey }: { scheduleKey: string }) {
+  const navigate = useNavigate();
   const now = useNow(60_000);
   const q = useQuery(schedulesQuery);
   const s = q.data?.items.find((x) => x.key === scheduleKey);
@@ -265,13 +274,34 @@ export function SchedulePage({ scheduleKey }: { scheduleKey: string }) {
               {s.enabled ? 'Enabled' : 'Disabled'}
             </StatusPill>
             {s.writeCapable && <Badge tone="outline">Changes tenant</Badge>}
-            <Badge>{s.source === 'portal' ? 'Created in the portal' : 'From content'}</Badge>
+            <Badge>
+              {s.source === 'portal'
+                ? `Created in the portal${s.createdBy ? ` by ${s.createdBy}` : ''}`
+                : 'From content'}
+            </Badge>
           </>
         }
         actions={
           <>
             <ScheduleToggle schedule={s} withLabel />
             <RunNowButton schedule={s} size="md" />
+            {s.canManage && s.job.kind === 'report' && s.job.ref && (
+              <>
+                <Link
+                  to="/reports"
+                  search={{ report: s.job.ref, edit: s.key }}
+                  className={button({ intent: 'secondary' })}
+                >
+                  <PencilSimpleIcon size={14} aria-hidden />
+                  Edit
+                </Link>
+                <DeleteScheduleButton
+                  schedule={s}
+                  size="md"
+                  onDeleted={() => void navigate({ to: '/schedules' })}
+                />
+              </>
+            )}
           </>
         }
       />

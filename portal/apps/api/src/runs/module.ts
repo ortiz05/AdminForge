@@ -1,6 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import { loadEnv } from '@adminforge/config';
 import { notifyApprovers, type DeliveryDeps } from '../delivery/notifier';
+import { RoleCheck } from '../auth/session-plugin';
 import { isArmed } from '../auth/session-store';
 import { Heartbeat } from '../health/heartbeat';
 import { Engine, type Clock, type Limits, type RunnerPort } from '@adminforge/engine';
@@ -18,6 +19,7 @@ import { InProcessRunQueue, PgBossRunQueue, type RunQueue } from './queue';
 import { RunWorker } from './run-worker';
 import { SecretBroker } from './secrets';
 import { RunService } from './service';
+import { RUN_STREAM_POLL_MS, sessionLive } from './sse';
 import { RepositoryRunStore } from './store';
 import type { RunRepository } from './types';
 
@@ -52,6 +54,8 @@ export interface RunsOptions {
   serveSecrets?: boolean;
   /** How long an unfetched secret is held (default 5 minutes). */
   secretTtlMs?: number;
+  /** How often an open run stream re-checks its session and access (default 10 s; tests shorten it). */
+  streamPollMs?: number;
   clock?: Clock;
   env?: () => Record<string, unknown>;
   limits?: Partial<Limits>;
@@ -70,6 +74,8 @@ export interface RunsModule {
   secrets: SecretBroker;
   /** Whether this process consumes run jobs. */
   readonly consuming: boolean;
+  /** How often an open run stream re-checks its session and access (ms). */
+  readonly streamPollMs: number;
   start(): Promise<void>;
   stop(): Promise<void>;
 }
@@ -129,6 +135,7 @@ export function createRunsModule(ctx: AppContext, opts: RunsOptions = {}): RunsM
         },
         fetch: ctx.fetch,
         now: ctx.now,
+        outbound: outbound(),
       });
     } catch (err) {
       log?.warn({ err: { message: (err as Error).message } }, 'PowerShell runner disabled');
@@ -164,8 +171,14 @@ export function createRunsModule(ctx: AppContext, opts: RunsOptions = {}): RunsM
     serve: opts.serveSecrets ?? true,
     ...(opts.secretTtlMs ? { ttlMs: opts.secretTtlMs } : {}),
     ...(log ? { log } : {}),
+    sessionLive: async (hash) =>
+      sessionLive(await ctx.sessions.get(hash), ctx.now(), ctx.config.SESSION_IDLE_MINUTES),
   });
-  const identity = new SessionIdentityResolver(repo, ctx.sessions, ctx.config, ctx.now);
+  // Delegated steps re-confirm the session's roles with Entra like browser requests do (RoleCheck).
+  const identity = new SessionIdentityResolver(repo, ctx.sessions, ctx.config, ctx.now, {
+    roleCheck: new RoleCheck(ctx),
+    ...(log ? { log } : {}),
+  });
   const holder: { engine?: Engine } = {};
   const children = new RunChildRunner({
     repo,
@@ -198,6 +211,7 @@ export function createRunsModule(ctx: AppContext, opts: RunsOptions = {}): RunsM
     definitions,
     bus,
     now: ctx.now,
+    audit: ctx.audit,
     ...(log ? { log } : {}),
     // New Entra roles (PIM activation) only reach Microsoft in fresh tokens: refresh Graph and ARM for that session.
     refreshTokens:
@@ -232,6 +246,7 @@ export function createRunsModule(ctx: AppContext, opts: RunsOptions = {}): RunsM
     worker,
     secrets,
     consuming,
+    streamPollMs: opts.streamPollMs ?? RUN_STREAM_POLL_MS,
     async start() {
       if (started) return;
       started = true;

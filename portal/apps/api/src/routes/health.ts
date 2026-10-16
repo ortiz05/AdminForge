@@ -19,7 +19,12 @@ export function healthRoutes(app: FastifyInstance, ctx: AppContext) {
     if (!ctx.database) return { ready: true, body: { status: 'ok', checks: { db: 'memory' } } };
     try {
       await ctx.database.ping();
-    } catch {
+    } catch (err) {
+      // Once per refresh (not per caller): the reason is for administrators, never in the public answer.
+      app.log.warn(
+        { err: { name: (err as Error).name } },
+        'not ready: the database is not reachable (is Postgres running, and is DATABASE_URL correct?)',
+      );
       return { ready: false };
     }
     // The API is ready either way (200); `degraded` tells monitors that runs or schedules aren't being processed.
@@ -47,12 +52,14 @@ export function healthRoutes(app: FastifyInstance, ctx: AppContext) {
     return pending;
   };
 
+  // Public: the answer names no configuration keys or internals; why it isn't ready goes to the service log.
   app.get('/readyz', { config: { rateLimit: READYZ_RATE_LIMIT } }, async () => {
     const state = await readiness();
-    if (!state.ready)
-      throw new AppError(503, 'not_ready', 'The database is not reachable.', {
-        hint: 'Check that Postgres is running (pnpm db:up) and DATABASE_URL is correct.',
+    if (!state.ready) {
+      throw new AppError(503, 'not_ready', 'AdminForge isn’t ready to serve requests.', {
+        hint: 'Try again in a minute. If it persists, an administrator should check the AdminForge service logs.',
       });
+    }
     return state.body;
   });
 }

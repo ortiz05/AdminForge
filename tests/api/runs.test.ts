@@ -224,7 +224,7 @@ describe('POST /api/runs', () => {
 
   it('an unarmed Operator: read steps run, the first write parks awaiting_arm; arming + resume finishes it as them', async () => {
     const t = await setup();
-    const op = await t.login(AVERY, ['Portal.Operator']);
+    const op = await t.login(AVERY, ['Portal.Reader', 'Portal.Operator']);
     const { runId } = (
       await op.post('/api/runs', { playbook: 'test.disable', inputs: { userId: USER } })
     ).json();
@@ -276,7 +276,7 @@ describe('POST /api/runs', () => {
       if (c.method === 'GET') await gate;
       return { upn: 'x@example.com' };
     });
-    const first = await t.login(AVERY, ['Portal.Operator'], { armed: true });
+    const first = await t.login(AVERY, ['Portal.Reader', 'Portal.Operator'], { armed: true });
     const { runId } = (
       await first.post('/api/runs', { playbook: 'test.disable', inputs: { userId: USER } })
     ).json();
@@ -284,12 +284,12 @@ describe('POST /api/runs', () => {
     await t.sessions.delete(first.record.idHash); // signed out while the lookup is in flight
     release();
     await t.drain();
-    const second = await t.login(AVERY, ['Portal.Operator'], { armed: true });
+    const second = await t.login(AVERY, ['Portal.Reader', 'Portal.Operator'], { armed: true });
     expect((await second.get(`/api/runs/${runId}`)).json().run).toMatchObject({
       status: 'awaiting_reauth',
       waiting: { kind: 'reauth', stepId: 'disable' },
     });
-    const outsider = await t.login(DREW, ['Portal.Operator']);
+    const outsider = await t.login(DREW, ['Portal.Reader', 'Portal.Operator']);
     expect((await outsider.post(`/api/runs/${runId}/resume`)).statusCode).toBe(403);
     expect((await second.post(`/api/runs/${runId}/resume`)).statusCode).toBe(202);
     await t.drain();
@@ -307,7 +307,7 @@ describe('POST /api/runs', () => {
         throw new ApiError(403, 'Authorization_RequestDenied', 'Insufficient privileges', 'req-x');
       return { upn: 'x@example.com' };
     });
-    const op = await t.login(AVERY, ['Portal.Operator'], { armed: true });
+    const op = await t.login(AVERY, ['Portal.Reader', 'Portal.Operator'], { armed: true });
     const { runId } = (
       await op.post('/api/runs', { playbook: 'test.disable', inputs: { userId: USER } })
     ).json();
@@ -339,7 +339,7 @@ describe('approvals', () => {
       status: 'awaiting_approval',
       waiting: { kind: 'approval', stepId: 'approve' },
     });
-    const blake = await t.login(BLAKE, ['Playbook.Approver']);
+    const blake = await t.login(BLAKE, ['Portal.Reader', 'Playbook.Approver']);
     const inbox = (await blake.get('/api/approvals?status=pending')).json();
     expect(inbox.items).toEqual([
       expect.objectContaining({
@@ -350,7 +350,8 @@ describe('approvals', () => {
         title: 'Approved disable',
         status: 'pending',
         requestedBy: AVERY.upn,
-        expiresAt: null,
+        // No expiresIn: the default (72 hours) applies — every approval request expires (ENG-11).
+        expiresAt: expect.any(String),
         canDecide: true,
         policy: expect.objectContaining({
           message: 'Disable a.lee@example.com?',
@@ -409,7 +410,7 @@ describe('approvals', () => {
 
   it('only Playbook.Approver holders see the inbox and decide', async () => {
     const { t, runId } = await parked();
-    const op = await t.login(DREW, ['Portal.Operator'], { armed: true });
+    const op = await t.login(DREW, ['Portal.Reader', 'Portal.Operator'], { armed: true });
     expect((await op.get('/api/approvals?status=pending')).statusCode).toBe(403);
     expect((await op.post(`/api/runs/${runId}/approvals/approve`, { decision: 'approve' })).statusCode).toBe(
       403,
@@ -417,7 +418,7 @@ describe('approvals', () => {
     expect((await op.post(`/api/runs/${runId}/approvals/nope`, { decision: 'approve' })).statusCode).toBe(
       403,
     );
-    const blake = await t.login(BLAKE, ['Playbook.Approver']);
+    const blake = await t.login(BLAKE, ['Portal.Reader', 'Playbook.Approver']);
     expect((await blake.post(`/api/runs/${runId}/approvals/nope`, { decision: 'approve' })).statusCode).toBe(
       404,
     );
@@ -429,7 +430,7 @@ describe('approvals', () => {
 
   it('a rejection fails the run', async () => {
     const { t, avery, runId } = await parked();
-    const blake = await t.login(BLAKE, ['Playbook.Approver']);
+    const blake = await t.login(BLAKE, ['Portal.Reader', 'Playbook.Approver']);
     expect(
       (
         await blake.post(`/api/runs/${runId}/approvals/approve`, {
@@ -449,15 +450,21 @@ describe('approvals', () => {
 
   it('cancelling a parked run cancels its approval; cancelling again is a 409', async () => {
     const { t, avery, runId } = await parked();
-    const other = await t.login(DREW, ['Portal.Operator']);
+    const other = await t.login(DREW, ['Portal.Reader', 'Portal.Operator']);
     expect((await other.post(`/api/runs/${runId}/cancel`)).statusCode).toBe(403);
     const res = await avery.post(`/api/runs/${runId}/cancel`);
     expect(res.json()).toEqual({ runId, status: 'cancelled' });
     expect((await avery.post(`/api/runs/${runId}/cancel`)).statusCode).toBe(409);
-    const blake = await t.login(BLAKE, ['Playbook.Approver']);
+    const blake = await t.login(BLAKE, ['Portal.Reader', 'Playbook.Approver']);
     expect((await blake.get('/api/approvals?status=pending')).json().items).toEqual([]);
     expect((await blake.get('/api/approvals?status=cancelled')).json().items).toHaveLength(1);
-    expect(t.audit.rows.map((r) => r.action)).toEqual(['run.created', 'run.completed', 'run.cancelled']);
+    // Drew's refused cancel is audited too (request.denied).
+    expect(t.audit.rows.map((r) => r.action)).toEqual([
+      'run.created',
+      'request.denied',
+      'run.completed',
+      'run.cancelled',
+    ]);
     await t.close();
   });
 });
@@ -465,7 +472,7 @@ describe('approvals', () => {
 describe('manual steps (runbooks)', () => {
   it('parks awaiting_input; the initiator confirms with values and the run continues', async () => {
     const t = await setup();
-    const avery = await t.login(AVERY, ['Portal.Operator']);
+    const avery = await t.login(AVERY, ['Portal.Reader', 'Portal.Operator']);
     const { runId } = (await avery.post('/api/runs', { playbook: 'test.runbook', inputs: {} })).json();
     await t.drain();
     expect((await avery.get(`/api/runs/${runId}`)).json().run).toMatchObject({
@@ -606,7 +613,7 @@ describe('GET /api/runs/:id/events (live)', () => {
     };
     await readUntil('"status":"awaiting_approval"');
     expect(text).not.toContain('event: end');
-    const blake = await t.login(BLAKE, ['Playbook.Approver'], { armed: true });
+    const blake = await t.login(BLAKE, ['Portal.Reader', 'Playbook.Approver'], { armed: true });
     expect(
       (await blake.post(`/api/runs/${runId}/approvals/approve`, { decision: 'approve' })).statusCode,
     ).toBe(200);
@@ -621,7 +628,7 @@ describe('GET /api/runs/:id/events (live)', () => {
 describe('bulk actions', () => {
   it('one parent run with a child run per item (inputsTemplate merged under each item)', async () => {
     const t = await setup();
-    const avery = await t.login(AVERY, ['Portal.Operator'], { armed: true });
+    const avery = await t.login(AVERY, ['Portal.Reader', 'Portal.Operator'], { armed: true });
     const users = [
       '00000000-0000-4000-8000-000000000011',
       '00000000-0000-4000-8000-000000000012',
@@ -702,7 +709,7 @@ describe('bulk actions', () => {
     });
     const childId = parent.children[0].id;
     expect(parent.children[0].status).toBe('awaiting_approval');
-    const blake = await t.login(BLAKE, ['Playbook.Approver'], { armed: true });
+    const blake = await t.login(BLAKE, ['Portal.Reader', 'Playbook.Approver'], { armed: true });
     const inbox = (await blake.get('/api/approvals?status=pending')).json().items;
     expect(inbox).toEqual([
       expect.objectContaining({
@@ -731,7 +738,7 @@ describe('bulk actions', () => {
 
   it('rejects invalid items up front, naming them', async () => {
     const t = await setup();
-    const avery = await t.login(AVERY, ['Portal.Operator']);
+    const avery = await t.login(AVERY, ['Portal.Reader', 'Portal.Operator']);
     const res = await avery.post('/api/runs/bulk', {
       playbook: 'test.disable',
       items: [{ userId: USER }, { userId: 'x' }],

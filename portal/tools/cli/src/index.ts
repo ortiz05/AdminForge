@@ -136,7 +136,7 @@ const content = () =>
 program
   .command('validate')
   .description(
-    'Validate portal/content: schema, references, expressions, $filter/$search lint, env keys; --scopes also compares declared scopes with the app registrations',
+    'Validate portal/content: schema, references, expressions, injection lint ($filter/$search/$orderby, KQL, paths), env keys; --scopes also compares declared scopes with the app registrations',
   )
   .option(
     '--scopes',
@@ -170,13 +170,20 @@ audit
 program
   .command('publish')
   .description(
-    'Publish new definition versions from portal/content to Postgres (idempotent by sha256) and NOTIFY definitions_changed',
+    'Publish new definition versions from portal/content to Postgres (idempotent by sha256) and NOTIFY definitions_changed. Runs the validate and test checks first, and publishes only reviewed content: committed, and the commit merged to origin/main (as last fetched)',
   )
   .option('--env <name>', 'env file to use (~/.config/adminforge/<name>.env)', 'dev')
-  .option('--dry-run', 'show what would be published without writing')
-  .action(async (opts: { env?: string; dryRun?: boolean }) => {
+  .option('--dry-run', 'show what would be published (and whether it would be refused) without writing')
+  .option(
+    '--allow-unreviewed',
+    'publish even with uncommitted content changes or a commit that is not on origin/main (recorded in the audit log)',
+  )
+  .action(async (opts: { env?: string; dryRun?: boolean; allowUnreviewed?: boolean }) => {
     useEnv(opts.env);
-    const result = await publishContent(content(), { dryRun: opts.dryRun });
+    const result = await publishContent(content(), {
+      dryRun: opts.dryRun,
+      allowUnreviewed: opts.allowUnreviewed,
+    });
     if (!result || result.refused) process.exitCode = 1;
   });
 

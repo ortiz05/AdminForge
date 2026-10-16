@@ -286,7 +286,7 @@ describe.skipIf(!url)('runs on Postgres', () => {
       database: appDb,
       repository: new PgRunRepository(appDb),
     });
-    const avery = await t.login(AVERY, ['Portal.Operator'], { armed: true });
+    const avery = await t.login(AVERY, ['Portal.Reader', 'Portal.Operator'], { armed: true });
     const { runId } = (await avery.post('/api/runs', { playbook: 'test.pg', inputs: {} })).json();
     await t.drain();
     const detail = (await avery.get(`/api/runs/${runId}`)).json();
@@ -338,7 +338,7 @@ describe.skipIf(!url)('runs on Postgres', () => {
     });
     try {
       expect(t.runs.secrets.transport).toBe('notify');
-      const avery = await t.login(AVERY, ['Portal.Operator'], { armed: true });
+      const avery = await t.login(AVERY, ['Portal.Reader', 'Portal.Operator'], { armed: true });
       const { runId } = (await avery.post('/api/runs', { playbook: 'test.pg-tap', inputs: {} })).json();
       await t.drain();
       await waitFor(() => t.runs.secrets.heldCount === 1);

@@ -194,13 +194,14 @@ layout:
     }
   });
 
+  // Validates the whole content library (hundreds of definitions, growing): sized for a busy parallel run.
   it('checks portal/content with the same loader as the content tests', async () => {
     const ctx = contentContext({}, () => undefined, repoRoot);
     const report = await checkContent(ctx);
     const loaded = await loadContentDir(ctx.contentDir);
     expect(report.definitions).toBe(loaded.definitions.length);
     expect(report.errors.length).toBeGreaterThanOrEqual(loaded.errors.length);
-  });
+  }, 60_000);
 
   it('--scopes: missing (declared, not granted) fails; unused is reported; ReadWrite satisfies Read', async () => {
     const w = workspace();

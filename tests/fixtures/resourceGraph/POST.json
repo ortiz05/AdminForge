@@ -3,6 +3,186 @@
     "variants": [
       {
         "match": {
+          "bodyIncludes": "af:news.azure-service-health"
+        },
+        "body": {
+          "totalRecords": 6,
+          "count": 6,
+          "resultTruncated": "false",
+          "data": [
+            {
+              "subscriptionId": "aaaaaaaa-0000-4000-8000-000000000001",
+              "properties": {
+                "TrackingId": "EXMP-0001",
+                "EventType": "ServiceIssue",
+                "Status": "Active",
+                "Title": "Example: Azure Functions degraded in West Europe",
+                "Summary": "<p>Starting at 07:40 UTC, a subset of customers may see failures invoking <b>Azure Functions</b>. Synthetic fixture text.</p>",
+                "Header": "Example: Azure Functions degraded in West Europe",
+                "Level": "Warning",
+                "EventLevel": "Warning",
+                "ImpactStartTime": "2026-10-15T07:40:00Z",
+                "ImpactMitigationTime": null,
+                "LastUpdateTime": "2026-10-15T09:10:00Z",
+                "Impact": [
+                  {
+                    "ImpactedService": "Azure Functions",
+                    "ImpactedRegions": [
+                      {
+                        "ImpactedRegion": "West Europe"
+                      }
+                    ]
+                  },
+                  {
+                    "ImpactedService": "App Service",
+                    "ImpactedRegions": [
+                      {
+                        "ImpactedRegion": "West Europe"
+                      }
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "subscriptionId": "aaaaaaaa-0000-4000-8000-000000000002",
+              "properties": {
+                "TrackingId": "EXMP-0001",
+                "EventType": "ServiceIssue",
+                "Status": "Active",
+                "Title": "Example: Azure Functions degraded in West Europe",
+                "Summary": "<p>Starting at 07:40 UTC, a subset of customers may see failures invoking Azure Functions. Synthetic fixture text.</p>",
+                "Header": "Example: Azure Functions degraded in West Europe",
+                "Level": "Warning",
+                "EventLevel": "Warning",
+                "ImpactStartTime": "2026-10-15T07:40:00Z",
+                "ImpactMitigationTime": null,
+                "LastUpdateTime": "2026-10-15T08:20:00Z",
+                "Impact": [
+                  {
+                    "ImpactedService": "Azure Functions",
+                    "ImpactedRegions": [
+                      {
+                        "ImpactedRegion": "West Europe"
+                      }
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "subscriptionId": "aaaaaaaa-0000-4000-8000-000000000001",
+              "properties": {
+                "TrackingId": "EXMP-0002",
+                "EventType": "PlannedMaintenance",
+                "Status": "Active",
+                "Title": "Example: Planned maintenance for Azure Monitor log ingestion",
+                "Summary": "<p>Maintenance may delay log ingestion for up to 10 minutes. Synthetic fixture text.</p>",
+                "Header": "Example: Planned maintenance for Azure Monitor log ingestion",
+                "Level": "Informational",
+                "EventLevel": "Informational",
+                "ImpactStartTime": "2026-10-17T22:00:00Z",
+                "ImpactMitigationTime": null,
+                "LastUpdateTime": "2026-10-14T10:00:00Z",
+                "Impact": [
+                  {
+                    "ImpactedService": "Azure Monitor",
+                    "ImpactedRegions": [
+                      {
+                        "ImpactedRegion": "North Europe"
+                      },
+                      {
+                        "ImpactedRegion": "West Europe"
+                      }
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "subscriptionId": "aaaaaaaa-0000-4000-8000-000000000001",
+              "properties": {
+                "TrackingId": "EXMP-0003",
+                "EventType": "HealthAdvisory",
+                "Status": "Active",
+                "Title": "Example: Retirement of classic alert rules",
+                "Summary": "<p>Classic alert rules are retired. Migrate to log search alerts. Synthetic fixture text.</p>",
+                "Header": "Example: Retirement of classic alert rules",
+                "Level": "Informational",
+                "EventLevel": "Informational",
+                "ImpactStartTime": "2026-10-01T00:00:00Z",
+                "ImpactMitigationTime": null,
+                "LastUpdateTime": "2026-10-12T12:00:00Z",
+                "Impact": [
+                  {
+                    "ImpactedService": "Azure Monitor",
+                    "ImpactedRegions": [
+                      {
+                        "ImpactedRegion": "Global"
+                      }
+                    ]
+                  }
+                ],
+                "EventSubType": "Retirement"
+              }
+            },
+            {
+              "subscriptionId": "aaaaaaaa-0000-4000-8000-000000000001",
+              "properties": {
+                "TrackingId": "EXMP-0004",
+                "EventType": "SecurityAdvisory",
+                "Status": "Active",
+                "Title": "Example: Security advisory for Azure Key Vault access policies",
+                "Summary": "<p>Review access policies on vaults that still use the legacy permission model. Synthetic fixture text.</p>",
+                "Header": "Example: Security advisory for Azure Key Vault access policies",
+                "Level": "Warning",
+                "EventLevel": "Informational",
+                "ImpactStartTime": "2026-10-14T06:00:00Z",
+                "ImpactMitigationTime": null,
+                "LastUpdateTime": "2026-10-14T06:00:00Z",
+                "Impact": [
+                  {
+                    "ImpactedService": "Key Vault",
+                    "ImpactedRegions": [
+                      {
+                        "ImpactedRegion": "Global"
+                      }
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "subscriptionId": "aaaaaaaa-0000-4000-8000-000000000002",
+              "properties": {
+                "TrackingId": "EXMP-0005",
+                "EventType": "ServiceIssue",
+                "Status": "Resolved",
+                "Title": "Example: Azure Resource Manager latency in East US",
+                "Summary": "<p>Resolved: some management operations were slow. Synthetic fixture text.</p>",
+                "Header": "Example: Azure Resource Manager latency in East US",
+                "Level": "Warning",
+                "EventLevel": "Warning",
+                "ImpactStartTime": 1791558000000,
+                "ImpactMitigationTime": 1791561000000,
+                "LastUpdateTime": 1791567000000,
+                "Impact": [
+                  {
+                    "ImpactedService": "Azure Resource Manager",
+                    "ImpactedRegions": [
+                      {
+                        "ImpactedRegion": "East US"
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      },
+      {
+        "match": {
           "bodyIncludes": "af:azure.overview#counts"
         },
         "body": {

@@ -78,7 +78,7 @@ export async function finishRoundTrip(
   return record;
 }
 
-export { providerError, providerDescription, type CallbackQuery } from './entra-errors';
+export { providerAuditDetails, providerDescription, providerError, type CallbackQuery } from './entra-errors';
 
 /** Acr values satisfied by the sign-in, normalised to an array. */
 export const acrsOf = (claims: IdClaims): string[] =>

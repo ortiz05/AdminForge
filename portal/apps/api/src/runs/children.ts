@@ -64,7 +64,17 @@ export class RunChildRunner implements ChildRunner {
     } else {
       // Inputs built from a masked value after the parent paused would start the child with "[redacted]".
       if (containsRedacted(req.inputs)) throw redactedValueError();
-      const resolved = await this.resolve(req.ref, req.version);
+      // ENG-07: a child starts on the current published version only, like a run started directly or a bulk item
+      // (an older version may lack roles, approvals or fixes added since). A pin is honoured while it is current.
+      const resolved = await this.resolve(req.ref);
+      if (req.version && req.version !== resolved.version)
+        throw new StepError(
+          'version_superseded',
+          `${resolved.def.title} was updated to version ${resolved.version}; this playbook pins version ${req.version}, which can no longer run.`,
+          {
+            hint: "Ask the playbook's owner to update the pinned version (or remove the pin to always use the current one).",
+          },
+        );
       def = resolved.def;
       if (def.status === 'retired') throw new StepError('definition_retired', `${req.ref} is retired.`);
       if (def.status === 'draft' && !req.dryRun)
@@ -164,6 +174,7 @@ export class RunChildRunner implements ChildRunner {
     return (await this.deps.repo.listSteps(runId)).flatMap((r) => r.plan ?? []);
   }
 
+  /** The exact version (an existing child run), else the current published one (retired or never published: fails). */
   private async resolve(ref: string, version?: string) {
     try {
       return await this.deps.definitions().resolve('playbook', ref, version);
@@ -171,6 +182,7 @@ export class RunChildRunner implements ChildRunner {
       throw new StepError(
         'child_not_found',
         `Playbook ${ref}${version ? `@${version}` : ''} is not published.`,
+        { hint: "It may have been retired. Ask the playbook's owner to update or remove this step." },
       );
     }
   }

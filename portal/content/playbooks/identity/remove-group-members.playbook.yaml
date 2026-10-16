@@ -1,11 +1,12 @@
 $schema: ../../../packages/schemas/generated/playbook.schema.json
 kind: playbook
 id: identity.remove-group-members
-version: 1.0.0
+version: 1.1.0
 title: Remove group members
 summary: >-
   Removes users, devices or nested groups from a cloud security or Microsoft 365 group. Refuses dynamic groups, groups
-  synced from on-premises AD, and distribution lists / mail-enabled security groups.
+  synced from on-premises AD, distribution lists / mail-enabled security groups, AdminForge's own role groups and
+  accounts marked as protected (AF_PROTECTED_USER_IDS).
 owner: identity-team
 tags: [identity, groups, bulk]
 risk: medium
@@ -43,7 +44,24 @@ steps:
       method: GET
       path: /groups/${ $encode($guid(inputs.groupId)) }
       query:
-        $select: id,displayName,groupTypes,mailEnabled,securityEnabled,onPremisesSyncEnabled,isAssignableToRole
+        $select: id,displayName,uniqueName,groupTypes,mailEnabled,securityEnabled,onPremisesSyncEnabled,isAssignableToRole
+
+  # AdminForge refuses any write naming a portal group or a protected account by id (protected_object); these checks
+  # explain it before anything runs.
+  - id: notPortalGroup
+    type: assert
+    that: >-
+      ${ $not($substring($lowercase(steps.group.output.uniqueName ? steps.group.output.uniqueName : ''), 0, 14) = 'sg-adminforge-' or $substring($lowercase(steps.group.output.displayName), 0, 14) = 'sg-adminforge-') }
+    message: This group grants AdminForge roles. Change its members in the Microsoft Entra admin center, outside AdminForge, so nobody can take portal access away from others (or grant it) from inside the portal.
+
+  - id: notProtectedMembers
+    type: assert
+    that: >-
+      ${ (
+        $protected := [$split(env.AF_PROTECTED_USER_IDS ? env.AF_PROTECTED_USER_IDS : '', /[\s,]+/).$lowercase($)[$ != ''] ];
+        $count([inputs.memberIds][$lowercase($) in $protected]) = 0
+      ) }
+    message: One of these accounts is marked as protected (a break-glass or emergency-access account). Change its group memberships in the Microsoft Entra admin center, outside AdminForge.
 
   - id: notDynamic
     type: assert
@@ -87,12 +105,24 @@ outputs:
   summary: ${ 'Requested ' & $count(inputs.memberIds) & ' removal(s) from ' & steps.group.output.displayName & '.' }
 
 tests:
+  - name: refuses AdminForge's role groups
+    inputs: { groupId: 00000000-0000-4000-8000-0000000002ff, memberIds: [00000000-0000-4000-8000-000000000102] }
+    mocks:
+      group: { id: 00000000-0000-4000-8000-0000000002ff, displayName: SG-AdminForge-dev-Playbook.Approver, uniqueName: sg-adminforge-dev-playbook-approver, groupTypes: [], mailEnabled: false, securityEnabled: true, onPremisesSyncEnabled: null }
+    expect: { status: failed, failedStep: notPortalGroup }
+  - name: refuses removing a protected (break-glass) account
+    env: { AF_PROTECTED_USER_IDS: "00000000-0000-4000-8000-0000000001ff, 00000000-0000-4000-8000-0000000001fe" }
+    inputs: { groupId: 00000000-0000-4000-8000-000000000201, memberIds: [00000000-0000-4000-8000-000000000103, 00000000-0000-4000-8000-0000000001FE] }
+    mocks:
+      group: { id: 00000000-0000-4000-8000-000000000201, displayName: SG-App-Payroll-Users, groupTypes: [], mailEnabled: false, securityEnabled: true, onPremisesSyncEnabled: null }
+    expect: { status: failed, failedStep: notProtectedMembers }
   - name: refuses a group synced from on-premises AD
     inputs: { groupId: 00000000-0000-4000-8000-000000000205, memberIds: [00000000-0000-4000-8000-000000000108] }
     mocks:
       group: { id: 00000000-0000-4000-8000-000000000205, displayName: GG-Engineering (AD), groupTypes: [], mailEnabled: false, securityEnabled: true, onPremisesSyncEnabled: true }
     expect: { status: failed, failedStep: notSynced }
   - name: plans removing a member from a Microsoft 365 group
+    env: { AF_PROTECTED_USER_IDS: 00000000-0000-4000-8000-0000000001ff }
     inputs: { groupId: 00000000-0000-4000-8000-000000000202, memberIds: [00000000-0000-4000-8000-000000000103] }
     mocks:
       group: { id: 00000000-0000-4000-8000-000000000202, displayName: Project Falcon, groupTypes: [Unified], mailEnabled: true, securityEnabled: false, onPremisesSyncEnabled: null }

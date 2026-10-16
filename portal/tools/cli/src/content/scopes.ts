@@ -57,9 +57,9 @@ export interface Declared {
   connections: string[];
 }
 
-/** Which app a definition's `requires.scopes` belong to: schedules/probes → automation identity; write content → Write app. */
+/** Which app a definition's `requires.scopes` belong to: schedules/probes/feeds → automation identity; write content → Write app. */
 export function appFor(def: LoadedDefinition['def']): ScopeApp {
-  if (def.kind === 'schedule' || def.kind === 'probe') return 'automation';
+  if (def.kind === 'schedule' || def.kind === 'probe' || def.kind === 'feed') return 'automation';
   if ((def.kind === 'playbook' || def.kind === 'runbook') && def.mode === 'write') return 'write';
   return 'read';
 }

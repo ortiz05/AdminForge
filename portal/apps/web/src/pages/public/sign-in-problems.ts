@@ -93,6 +93,13 @@ const SIGN_IN: Record<string, ProblemCopy> = {
     next: 'Wait a minute, then try again.',
     primary: 'sign-in',
   },
+  account_status_missing: {
+    title: 'AdminForge couldn’t confirm your account type',
+    body: 'Microsoft’s response didn’t say whether your account is a member or a guest, so AdminForge didn’t sign you in.',
+    next: 'Ask a portal administrator to update the AdminForge apps, then sign in again.',
+    admin: 'Run `pnpm adminforge provision entra`. It adds the acct claim to the Read and Write apps.',
+    primary: 'sign-in',
+  },
 };
 
 const ARM: Record<string, ProblemCopy> = {
@@ -138,6 +145,13 @@ const ARM: Record<string, ProblemCopy> = {
     title: 'Write access needs a fresh verification',
     body: `Microsoft reused an earlier sign-in instead of asking you again. ${STILL_READ_ONLY}`,
     next: 'Arm again and enter your credentials when Microsoft asks.',
+    primary: 'back',
+  },
+  account_status_missing: {
+    title: 'AdminForge couldn’t confirm your account type',
+    body: `Microsoft’s response didn’t say whether your account is a member or a guest, so write access stayed off. ${STILL_READ_ONLY}`,
+    next: 'Ask a portal administrator to update the AdminForge Write app, then arm again.',
+    admin: 'Run `pnpm adminforge provision entra`. It adds the acct claim to the Write app.',
     primary: 'back',
   },
   step_up_unverified: {

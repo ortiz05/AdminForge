@@ -55,7 +55,8 @@ describe('providerError: Entra errors → plain-language AppErrors', () => {
     expect(e.message).not.toMatch(/AADSTS|Trace/);
   });
 
-  it('uses the OAuth error as detail when there is no AADSTS number, stripped to safe characters', () => {
-    expect(err('read', 'access_denied<script>')!.extras.detail).toBe('access_deniedscript');
+  it('uses a known OAuth error as detail when there is no AADSTS number; anything else gives none', () => {
+    expect(err('read', 'access_denied')!.extras.detail).toBe('access_denied');
+    expect(err('read', 'access_denied<script>')!.extras.detail).toBeUndefined();
   });
 });

@@ -173,6 +173,8 @@ export class FakeAuthClient implements AuthClient {
       preferred_username: 'avery@example.com',
       roles: ['Portal.Reader', 'Portal.Operator', 'Not.A.Portal.Role'],
       auth_time: Math.floor(this.now().getTime() / 1000),
+      // A member of the tenant (provisioning adds the optional acct claim to both apps).
+      acct: 0,
       ...this.claims(input.kind),
     };
     return { homeAccountId: `${claims.oid}.${claims.tid}`, claims };

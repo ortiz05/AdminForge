@@ -118,11 +118,13 @@ describe('TRUST_PROXY', () => {
     expect(loadConfig(entra).TRUST_PROXY).toBe('loopback');
   });
 
+  // Importing app.ts loads the whole BFF (every route, Fastify plugins, undici): allow for a cold import under a busy
+  // parallel run.
   it('passes true/false to Fastify as booleans and anything else as an address list', async () => {
     const { trustProxyOption } = await import('@adminforge/api/src/app');
     expect(trustProxyOption('true')).toBe(true);
     expect(trustProxyOption('false')).toBe(false);
     expect(trustProxyOption('loopback')).toBe('loopback');
     expect(trustProxyOption('10.0.0.0/8,127.0.0.1')).toBe('10.0.0.0/8,127.0.0.1');
-  });
+  }, 30_000);
 });

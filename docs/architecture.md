@@ -45,14 +45,14 @@ flowchart LR
 
 ## Processes
 
-| Unit                   | Entry                                    | Listens on        | What it does                                                                                                                                                                                                                                    |
-| ---------------------- | ---------------------------------------- | ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `adminforge-proxy`     | Caddy (`~/.config/adminforge/Caddyfile`) | `:8443` (HTTPS)   | TLS for the LAN with its own CA (`tls internal`), admin API off, no root; proxies to `127.0.0.1:3300`.                                                                                                                                          |
-| `adminforge-api`       | `portal/apps/api` → `dist/main.js`       | `127.0.0.1:3300`  | The backend-for-frontend: serves the built web app, `/auth/*` (sign-in, arming), every `/api` route, `/healthz` and `/readyz`. Holds sessions and tokens, runs datasources, enqueues runs, streams live updates (SSE), serves report downloads. |
-| `adminforge-worker`    | `portal/apps/api` → `dist/worker.js`     | —                 | Consumes the pg-boss run queue and executes playbook and runbook steps (`RUN_WORKER_CONCURRENCY`, default 4), including the runs that schedules start.                                                                                          |
-| `adminforge-scheduler` | `portal/apps/scheduler` → `dist/main.js` | —                 | Runs content schedules as the automation identity: probe sweeps (including KQL configuration checks), report exports, scheduled playbooks (handed to the worker) and content health. One leader at a time; others stand by.                     |
-| `adminforge-runner`    | `portal/apps/runner` → `dist/main.js`    | `127.0.0.1:3101`  | PowerShell for Exchange, Teams and SharePoint: pinned scripts in single-use `pwsh` workers.                                                                                                                                                     |
-| Postgres (Docker)      | `portal/deploy/docker-compose.dev.yml`   | `127.0.0.1:55432` | All application state (below). Started with `pnpm db:up`.                                                                                                                                                                                       |
+| Unit                   | Entry                                    | Listens on        | What it does                                                                                                                                                                                                                                                             |
+| ---------------------- | ---------------------------------------- | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `adminforge-proxy`     | Caddy (`~/.config/adminforge/Caddyfile`) | `:8443` (HTTPS)   | TLS for the LAN with its own CA (`tls internal`), admin API off, no root; proxies to `127.0.0.1:3300`.                                                                                                                                                                   |
+| `adminforge-api`       | `portal/apps/api` → `dist/main.js`       | `127.0.0.1:3300`  | The backend-for-frontend: serves the built web app, `/auth/*` (sign-in, arming), every `/api` route, `/healthz` and `/readyz`. Holds sessions and tokens, runs datasources, enqueues runs, streams live updates (SSE), serves report downloads.                          |
+| `adminforge-worker`    | `portal/apps/api` → `dist/worker.js`     | —                 | Consumes the pg-boss run queue and executes playbook and runbook steps (`RUN_WORKER_CONCURRENCY`, default 4), including the runs that schedules start.                                                                                                                   |
+| `adminforge-scheduler` | `portal/apps/scheduler` → `dist/main.js` | —                 | Runs content schedules as the automation identity: probe sweeps (including KQL configuration checks), report exports, scheduled playbooks (handed to the worker), content health and the News and changes feeds (`docs/news.md`). One leader at a time; others stand by. |
+| `adminforge-runner`    | `portal/apps/runner` → `dist/main.js`    | `127.0.0.1:3101`  | PowerShell for Exchange, Teams and SharePoint: pinned scripts in single-use `pwsh` workers.                                                                                                                                                                              |
+| Postgres (Docker)      | `portal/deploy/docker-compose.dev.yml`   | `127.0.0.1:55432` | All application state (below). Started with `pnpm db:up`.                                                                                                                                                                                                                |
 
 The repository's units (`portal/deploy/systemd/*.service`) carry the entry points; a per-host drop-in sets
 `NODE_ENV=production`, `API_PORT=3300`, `PUBLIC_BASE_URL`, `CONTENT_SOURCE=db`, `RUN_WORKER_IN_PROCESS=false` and
@@ -114,14 +114,15 @@ Microsoft admin centers.
 
 Postgres is the only stateful dependency (ADR-004). Schema: `portal/apps/api/src/db/schema.ts`.
 
-| Area        | Tables                                                                    | Notes                                                                                                         |
-| ----------- | ------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| Sign-in     | `sessions`, `preauth`, `token_cache`                                      | Only the session id's hash is stored; the MSAL cache is sealed with AES-256-GCM (`TOKEN_CACHE_KEY`).          |
-| Content     | `definitions`                                                             | Published versions (key, version, SHA-256); `NOTIFY definitions_changed` on publish.                          |
-| Runs        | `runs`, `run_steps`, `run_step_events`, `approvals`, pg-boss queue tables | `NOTIFY run_events` feeds live timelines; show-once secrets cross processes sealed over `NOTIFY run_secrets`. |
-| Schedules   | `schedules`, `schedule_runs`, `probe_results`                             | Schedules are synced from content; `NOTIFY schedule_events` for live status.                                  |
-| Audit       | `audit_events`                                                            | Append-only (database-enforced), hash-chained; `correlation_id` ties events to the Reference users see.       |
-| Preferences | `user_prefs`, `settings`, `saved_views`                                   | Theme, density, pins; appearance; saved table views.                                                          |
+| Area        | Tables                                                                    | Notes                                                                                                               |
+| ----------- | ------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| Sign-in     | `sessions`, `preauth`, `token_cache`                                      | Only the session id's hash is stored; the MSAL cache is sealed with AES-256-GCM (`TOKEN_CACHE_KEY`).                |
+| Content     | `definitions`                                                             | Published versions (key, version, SHA-256); `NOTIFY definitions_changed` on publish.                                |
+| Runs        | `runs`, `run_steps`, `run_step_events`, `approvals`, pg-boss queue tables | `NOTIFY run_events` feeds live timelines; show-once secrets cross processes sealed over `NOTIFY run_secrets`.       |
+| Schedules   | `schedules`, `schedule_runs`, `probe_results`                             | Schedules are synced from content; `NOTIFY schedule_events` for live status.                                        |
+| News        | `news_items`, `news_feed_state`                                           | News and changes: one row per source item (headline, short excerpt, citation, facts) and per feed (last run, ETag). |
+| Audit       | `audit_events`                                                            | Append-only (database-enforced), hash-chained; `correlation_id` ties events to the Reference users see.             |
+| Preferences | `user_prefs`, `settings`, `saved_views`                                   | Theme, density, pins; appearance; saved table views.                                                                |
 
 Outside Postgres: the env files, report files in `ADMINFORGE_ARTIFACTS_DIR`, the automation certificate and Caddy's
 CA. Back them up together (`docs/operations.md`).
@@ -189,5 +190,6 @@ must be HTTPS, because the production session cookie is `__Host-` and `Secure`.
 | [010](adr/010-runs-need-live-identity.md)           | Interactive runs use the engineer's identity.                              |
 | [011](adr/011-automation-identity-for-schedules.md) | Unattended schedules use an automation identity.                           |
 | [012](adr/012-extend-with-claude-code.md)           | Extend AdminForge with Claude Code, not an in-app AI assistant.            |
+| [013](adr/013-news-feed-egress.md)                  | Public news feeds come only from an allow-list of hosts kept in code.      |
 
 More: `docs/decisions.md` (decision log), `docs/troubleshooting.md` (error codes), `docs/backlog.md` (known gaps).

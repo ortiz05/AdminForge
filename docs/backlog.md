@@ -51,8 +51,8 @@ Gaps found while building. Each item names where it lands. Items move to a phase
 - [ ] Definitions loaded from the database aren't re-validated, so validation-only rules (child confirmation, `$eval`,
       recipient keys) aren't enforced at run time for rows that bypassed the CLI.
 - [ ] Manual steps that take values can't be completed in automation runs.
-- [ ] Key-value `link` fields with no `href` evaluate the data value as a template (the result is URL-checked; data
-      shouldn't be evaluated as an expression).
+- [x] Key-value `link` fields with no `href` used to evaluate the data value as a template; the value is now used
+      literally, and only for external URLs (2026-10-16).
 - [ ] A separate "Write-Privileged" app (own group, own authentication context with phishing-resistant MFA) for the
       tier-0 Write scopes, so routine armed sessions don't hold them.
 - [ ] Separate app registrations per environment label (today `pnpm dev` and the host services share the Read/Write
@@ -66,8 +66,56 @@ Gaps found while building. Each item names where it lands. Items move to a phase
 - [ ] `provision entra` retires stale extra client secrets (status flags them today; nothing removes them).
 - [ ] Re-issue the automation identity's credential as a certificate on this host (`AF_AUTOMATION_CERT_PATH`); move
       `AF_AUTOMATION_*` to an env file only the scheduler and worker read.
-- [ ] Run AdminForge as a dedicated system user with system units (filesystem isolation: `ProtectSystem=strict`,
-      `ProtectHome`, `ReadWritePaths`), which user units can't enforce on Ubuntu 24.04.
+- [ ] **High.** Run AdminForge as a dedicated system user with system units (filesystem isolation:
+      `ProtectSystem=strict`, `ProtectHome`, `ReadWritePaths`), which user units can't enforce on Ubuntu 24.04 — not in
+      the `docker`/`sudo`/`lxd`/`adm` groups, with no other services under it, and with Postgres it can't administer.
+      Until then any process of the same account can read the configuration (SECURITY.md → Host and network).
+
+## Platform evaluation (2026-10-16): not yet done
+
+Found by the organization and security evaluation; the fixed findings are in CHANGELOG.md.
+
+- [ ] Per-user limits: active and queued runs, open run streams (`/api/events` is capped at 5 per session), and rate
+      limits keyed by user rather than IP for signed-in routes.
+- [ ] Bulk-action links can carry `$label`s that are shown next to the real targets: resolve display names in the
+      preview server-side and show only those.
+- [ ] Other Operators see the inputs and outputs of someone else's delegated run (collected with that person's Entra
+      rights): limit them to metadata unless they approve the run, or let content mark outputs sensitive.
+- [ ] Certificate credentials for the Read and Write apps; derive separate keys (HKDF) with a key id from
+      `TOKEN_CACHE_KEY` for the token cache and run-secret hand-offs, so it can be rotated without signing everyone out.
+- [ ] Session management for users: list and end your other sessions; front-channel logout.
+- [ ] Connection operations declared `mode: read` may POST and are callable without arming: require GET, or a reviewed
+      `readPost: true`.
+- [ ] Publishing through its own database role (insert on `definitions` only) and a named publisher/approver on each
+      row; today the services' role can insert and update definitions and schedule approval columns.
+- [ ] Runner modules: record a SHA-256 per package in `modules.lock.json` and verify it at install and at runner start;
+      check Authenticode signatures; pin the runner's base images by digest; install runtimes to root-owned paths.
+- [ ] Alerting on AdminForge itself: probe sweeps and the backup notify on failure; a readiness check from another
+      host; probes for backup freshness and disk space.
+- [ ] CI: SAST (CodeQL), SBOM, secret scanning (gitleaks), a runner image build, and a job that runs the runner's
+      read-mode guards against the pinned modules (today those tests skip without them); skipped Postgres or module
+      tests should fail when `CI=true`.
+- [ ] Runs waiting on a `wait` step stay `running` and aren't version-checked on wake-up; approval `excludes` doesn't
+      cover a service principal's owners.
+- [ ] Datasource transforms on the API thread are also a denial-of-service lever (any Reader, varying parameters to
+      bypass the cache) — see Platform.
+- [ ] Code organization: move db, definitions, audit, outbound, runs, schedules, probes and news from `apps/api` into a
+      server package the scheduler and CLI import (today they deep-import `@adminforge/api/src/*`); split
+      `execution/outbound.ts`, `runs/service.ts`, `engine/src/engine.ts` and `probes/checks.ts` along their seams;
+      share the GUID pattern, `sleep` and backoff helpers; `typecheck` shouldn't build the apps (`turbo.json`); move
+      real-pwsh tests out of the unit project.
+- [ ] Content: merge `identity.licence-utilization` and `m365.licence-utilization`; one SKU-name map (three YAML copies
+      and `web/src/lib/overview.ts`); one spelling of utilisation; `reports.app-credential-expiry` → a cadence suffix.
+- [ ] Docs: a test that every API error code is documented exactly once (`docs/troubleshooting.md`); a skill for
+      adding an expression helper.
+- [ ] Docs: `docs/decisions.md` (D1/D2 and "Validation tenant specifics") records installation details — the repository
+      handle, LAN port, the validation tenant's licences — against the rule in `docs/onboarding/11-documentation.md`;
+      move them to operator notes outside the repository or generalise them.
+- [ ] CI: the failure artifact uploads `tests/playwright-report`, but the e2e reporter is `list`, so it is always
+      empty; add an `html` reporter in CI (or upload `test-results/e2e`).
+- [ ] Repository settings (onboarding guide 10): squash merging only, PR title as the default commit message, branch
+      protection with required reviews and code-owner review once the plan allows it, and more code owners so nobody's
+      sensitive change waits on themselves.
 
 ## Schema / content model
 
@@ -109,7 +157,10 @@ Gaps found while building. Each item names where it lands. Items move to a phase
 - [x] ~~`logQuery` widget~~ — superseded by the `logAnalytics` datasource with table/chart widgets and Query Studio (docs/decisions.md).
 - [x] `kql` probe/check kind over Resource Graph, Log Analytics, advanced hunting — R12.
 - [x] Licence-threshold probe `sku` from `${env.X}` so SKUs aren't literals.
-- [ ] Approval policy for bulk runs: one approval for the whole bulk run (today each child run asks).
+- [ ] Approval policy for bulk runs: one approval for the whole bulk run (today each child run asks). With it, bulk
+      limits enforced server-side: playbooks declare `bulk: { allowed, maxItems }` (today a page's `maxItems` and
+      `when` are client-side only and `POST /api/runs/bulk` takes up to 1,000 items for any playbook), and high or
+      critical playbooks without their own approval need one for a bulk run.
 - [ ] `POST /api/runs/:id/input/:stepId` for input steps (today manual steps accept `values`).
 - [x] Query-builder filters for runner/static lists: `filters.advanced.dialect: rows` + `$applyAdvanced(rows, advanced)`
       (used by `m365.mailboxes`). The `client` dialect is still accepted by the schema but not offered by the renderer.
@@ -122,6 +173,9 @@ Gaps found while building. Each item names where it lands. Items move to a phase
 
 - [x] Report delivery by email and Teams (`delivery/notifier.ts`): Graph sendMail from `AF_MAIL_SENDER`, Teams Workflows webhooks; also `notify.onFailure`/`onSuccess`. Live validation is licence-blocked (no Exchange/Teams in the validation tenant).
 - [x] Notify approvers when an approval gate opens or a write schedule asks to be enabled (`AF_APPROVALS_EMAIL`, `AF_APPROVALS_TEAMS_WEBHOOK`).
+- [x] Report schedules created in the portal (Reports → Schedule; `schedules/portal.ts`, 2026-10-16), hardened after
+      the security review (creator check before each run, atomic caps, plain-text names, Markdown escaping in Teams,
+      redacted params masked everywhere).
 
 ## Engine & runner
 
@@ -171,7 +225,33 @@ Gaps found while building. Each item names where it lands. Items move to a phase
 
 ## Navigation / product
 
-- [x] Decide between the content "Probe dashboard" and the coded `/monitoring` page (keep one entry in nav).
-- [ ] Merge `security.compromised-account-response` and `identity.compromised-account` runbooks — merged into `identity.compromised-account` 2.0.0 (nav moved to Security); still to do: retire `security.compromised-account-response` (`status: retired`, version 1.1.0) so it leaves navigation.
-- [ ] Weekly schedule for the `identity.inactive-users` report (the report exists; add a schedule like `reports.inactive-guests-weekly`).
+- [ ] Decide between the content "Probe dashboard" (`automation.monitoring`, nav: Automation) and the coded
+      `/monitoring` page ("Synthetic monitoring", nav: Overview): both are still in navigation. Keep one.
+- [x] Merge `security.compromised-account-response` into `identity.compromised-account` 2.0.0; the old runbook is
+      retired (`status: retired`, 1.1.0) and out of navigation.
+- [x] Weekly schedule for the `identity.inactive-users` report (`reports.inactive-users-weekly`).
 - [ ] `identity.disable-user` typed confirmation asks for the UPN; for guests that is the `…#EXT#@…onmicrosoft.com` form (the "Block sign-in" action on `identity.inactive-guests`). Consider confirming guests on `mail`.
+
+## News and changes
+
+- [ ] Service health has no documented per-issue link in the Microsoft 365 admin center: items cite the service
+      health page and show the issue id. Switch to a deep link if Microsoft documents one.
+- [ ] MSRC's JSON API (`api.msrc.microsoft.com/sug/v2.0/…`) carries product family, severity, exploited and
+      customer-action flags, but is undocumented; the documented RSS feed is used (severity stays normal, so CVEs
+      don't flood Breaking). Revisit if Microsoft documents the API.
+- [ ] The Microsoft Graph changelog has had no new items since August 2026 (`quietAfterDays: 45` flags it); the Learn
+      "What's new in Microsoft Graph" feed is the live signal. Retire `feeds.graph-changelog` if it stays quiet.
+- [ ] Learn what's-new feeds only say "this page was updated" (Learn search RSS has no per-change items). A per-change
+      feed would need parsing the page, which the terms and the plain-text rule rule out.
+- [ ] Teams/email digest of breaking items (daily, to `AF_…ALERTS` recipients) through the existing delivery path.
+- [ ] Azure Advisor service-retirement recommendations (`advisorresources`) as a tenant feed: retirements that affect
+      resources you actually have.
+- [ ] The Microsoft 365 Roadmap feed doesn't drop items for government clouds only (GCC, GCC High, DoD): a rule can't
+      express "every listed cloud is non-worldwide". Add a generic "only when all categories are in …" match if needed.
+- [ ] Message Center: data-privacy posts are Portal.Admin only because Graph doesn't document whether application
+      reads return them; confirm against a tenant with such a post.
+- [ ] HTTP probes still check the resolved address before connecting rather than pinning it; adopt the news feeds'
+      pinned dispatcher (`news/fetch-feed.ts`) for `http` probes too.
+- [ ] Connector retry waits (`connectors/src/types.ts` `defaultSleep`) don't listen to the abort signal, so a feed's
+      timeout can't cut a `Retry-After` wait short; collection order and the run budget limit the effect for now.
+- [ ] `news.updated` events carry counts over all items, including ones a reader may not see (counts only, no content).

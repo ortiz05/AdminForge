@@ -1,5 +1,10 @@
 # AdminForge — Master Implementation Plan
 
+> **Historical.** This is the original build plan. Where it differs from what was built — hosting (this host, not
+> Azure Container Apps), provisioning (the `adminforge provision` CLI, not Bicep), the runner (HMAC on loopback, not a
+> "Runner API" app), paths (`portal/…`) and configuration (`~/.config/adminforge/`) — the current sources are
+> `SECURITY.md`, `docs/architecture.md`, `docs/adr/` and `docs/decisions.md`.
+
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 > UI work also uses frontend-design:frontend-design and dataviz — but the visual direction is **already decided in §6**. Follow it; do not re-invent it per page.
 > Steps marked 🔑 need the user's tenant access. Never ask the user to paste passwords or secrets into chat — they sign in interactively (`! az login …`) and secrets go to Key Vault or `.env.local` (git-ignored).

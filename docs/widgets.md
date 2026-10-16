@@ -211,7 +211,7 @@ Pages may also set top-level `requires.licences: [intune]`; the renderer then sh
 - **table**: `sort: { field, desc? }` (initial sort when the URL has none), `maxHeight` (px). Column filters bound to a param (`filter: { type, param }`) appear in the page filter bar, not on the column.
 - **chart**: `labels` (display names for y fields or series values), `xLabel` (category column header in the Table view). Bar charts with long category names render horizontally.
 - **list / statusGrid / timeline**: field-or-template keys (`primary`, `secondary`, `detail`, `title`) see the row's fields at the root as well as `row`. Values that contain HTML are shown as plain text.
-- **keyValue**: field `format`, `href` (for `kind: link`), `columns: 1|2|3`. `kind: tags` accepts a list or an object (`{ env: prod }` → `env: prod`).
+- **keyValue**: field `format`, `href` (for `kind: link`; a template), `columns: 1|2|3`. Without `href`, a `link` field links its value as written (never evaluated as a template) and only when it's an external URL (http(s) or mailto) — in-app targets need `href`. `kind: tags` accepts a list or an object (`{ env: prod }` → `env: prod`).
 - **statusGrid**: `detail` (second line), `href`, `sort: severity|none` (default severity).
 - **timeline**: `title` is the per-event title, so the panel heading is `heading`; `limit` (default 20).
 - **licenceGate**: `body` (what the page would show).

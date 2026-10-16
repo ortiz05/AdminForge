@@ -4,15 +4,18 @@ AdminForge roles are Entra **app roles** on the AdminForge Read app, granted by 
 provisioning creates (`SG-AdminForge-<label>-<Role>`, where `<label>` is `AF_ENV_LABEL`, e.g. `dev`). Roles are flat:
 none implies another, so give each person every group they need.
 
-| Role                | Group                                     | Lets the person                                                                                                           |
-| ------------------- | ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| `Portal.Reader`     | `SG-AdminForge-<label>-Portal.Reader`     | Sign in, view pages, dashboards and reports, preview (dry-run) playbooks. **Everyone needs this.**                        |
-| `Portal.Operator`   | `SG-AdminForge-<label>-Portal.Operator`   | Arm write access and run write playbooks; see scheduled report files and probe result rows                                |
-| `Playbook.Approver` | `SG-AdminForge-<label>-Playbook.Approver` | Approve runs and enabling write-capable schedules (never their own requests)                                              |
-| `Playbook.Author`   | `SG-AdminForge-<label>-Playbook.Author`   | Reserved for content authors; it grants nothing in the portal today (content is authored in git with Claude Code)         |
-| `Portal.Admin`      | `SG-AdminForge-<label>-Portal.Admin`      | Appearance (accent, radius, density, font size, default theme), installation settings, the audit log and its verification |
+| Role                | Group                                     | Lets the person                                                                                                                                                   |
+| ------------------- | ----------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Portal.Reader`     | `SG-AdminForge-<label>-Portal.Reader`     | Sign in, view pages, dashboards, reports and News and changes, preview (dry-run) playbooks. **Everyone needs this.**                                              |
+| `Portal.Operator`   | `SG-AdminForge-<label>-Portal.Operator`   | Arm write access and run write playbooks; schedule reports (edit or delete their own); see scheduled report files and probe result rows                           |
+| `Playbook.Approver` | `SG-AdminForge-<label>-Playbook.Approver` | Approve runs and enabling write-capable schedules (never their own requests, nor a change that grants them access); pause changes or automation in an emergency   |
+| `Playbook.Author`   | `SG-AdminForge-<label>-Playbook.Author`   | Reserved for content authors; it grants nothing in the portal today (content is authored in git with Claude Code)                                                 |
+| `Portal.Admin`      | `SG-AdminForge-<label>-Portal.Admin`      | Appearance (accent, radius, density, font size, default theme), installation settings, the audit log and its verification; pause and resume changes or automation |
 
 Only the Operator group is assigned to the **Write** app, so Entra itself refuses write sign-ins for anyone else.
+
+A `Portal.Admin` who is also an Operator can edit or delete anyone's report schedule created in the portal; any
+Operator can turn one off.
 
 ## Typical combinations
 
@@ -36,9 +39,10 @@ Administrator, often activated through PIM). The portal explains when a role or 
 
 ## Offboarding
 
-Remove them from the groups (or disable the account). AdminForge re-checks roles every 5 minutes: a session with no
-AdminForge role left ends, and write access ends as soon as Operator is removed. Disabling the account ends the
-session at the next check as well.
+Remove them from the groups (or disable the account). AdminForge re-checks roles every 5 minutes — in the browser
+session and, for runs they started and left running, in the run worker: a session with no AdminForge role left ends,
+and write access ends within 5 minutes of Operator being removed. Disabling the account ends the session at the next
+check as well. Runs that were waiting for them to arm or sign in again stop after 24 hours.
 
 ## What the apps may do
 
@@ -57,6 +61,36 @@ validate --scopes` compares them), within ceilings that need a deliberate opt-in
   `AF_AUTOMATION_ALLOW_WRITE_PERMISSIONS=true`, sensitive reads (mail, files, sites, chats, calendars, BitLocker keys,
   …) need `AF_AUTOMATION_ALLOW_SENSITIVE_READS=true`. It requires assignment and can use a certificate instead of a
   secret.
+  News and changes (`docs/news.md`) adds no new kind of access: its tenant feeds declare **ServiceMessage.Read.All**
+  (Message Center) and **ServiceHealth.Read.All** (Microsoft 365 service health) — read-only service-announcement
+  permissions, granted without an opt-in — and read Azure Service Health with the identity's existing **Reader** on
+  the subscriptions.
+  Report schedules created in the portal: before each run the automation identity confirms that the person who
+  created the schedule is still an enabled member holding the portal roles it needs. That reads the user
+  (**User.Read.All**), their group memberships (**GroupMember.Read.All**) and the Read app's role assignments
+  (**Application.Read.All**) — all in the default automation permission set.
 
-AdminForge never manages its own access: its playbooks refuse to change the `SG-AdminForge-*` groups, its own app
-registrations and the apps in `AF_PROTECTED_APP_IDS` (the provisioner). Do that in the Microsoft Entra admin center.
+## Who sees News and changes
+
+Everyone with `Portal.Reader` sees the feed. Message Center posts Microsoft tags **Data privacy** are shown only to
+`Portal.Admin` (in Microsoft 365 they are limited to Global Administrators and Message Center Privacy Readers). The
+reason a feed failed (error code and message) is shown to `Portal.Operator`; everyone else sees only its status.
+
+AdminForge never manages its own access. The executor refuses any change that names its own app registrations, the
+groups (and any principal) assigned its app roles — the `SG-AdminForge-*` groups — the apps in `AF_PROTECTED_APP_IDS`
+(the provisioner) or the accounts in `AF_PROTECTED_USER_IDS` (list your break-glass accounts there). Do those changes
+in the Microsoft Entra admin center. Keep portal roles on groups: a person assigned an AdminForge app role directly
+becomes a protected object themselves. To read this set, the automation identity needs **Application.Read.All** (or
+each person's Read sign-in falls back to theirs).
+
+## Separation of duties
+
+- Nobody approves their own run or request, or a change that grants them access (the principal getting a directory
+  or Azure role, people added to a role-assignable group, a new app owner).
+- Adding someone to a role-assignable group and making someone an app owner always need a second person's approval;
+  nobody can add themselves to a group or make themselves an owner through AdminForge.
+- An approver or admin can **pause all changes or all automation** from Admin → Settings (with a reason, audited);
+  only a `Portal.Admin` resumes.
+- Content changes are meant to be reviewed: `adminforge publish` refuses content that isn't committed and on
+  `origin/main` unless `--allow-unreviewed` is given (audited). Protect the branch and add a second code owner so the
+  review is enforced by the repository, not only by the CLI.

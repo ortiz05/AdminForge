@@ -94,6 +94,15 @@ request syntax (it checks `$select`/`$expand`/`$filter` before licensing).
 | Azure Backup (`recoveryservicesresources`)                      | Empty in the validation tenant; query accepted                                                               | VMs without backup, probe                       | Yes — fields from the documented schema     | Reader on the vaults                        |
 | Scheduled Azure coverage                                        | The automation identity has Reader on `AF_SUBSCRIPTION_ID` only                                              | All Azure schedules and probes                  | Yes                                         | Reader at a management group                |
 
+## News and changes (2026-10-15)
+
+| Source                                                                                                         | Finding                                                                                                              | Licence     | Permission / role                                                                 |
+| -------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- | ----------- | --------------------------------------------------------------------------------- |
+| Message Center (`GET /admin/serviceAnnouncement/messages`)                                                     | Application permission supported; data-privacy posts' app-only visibility undocumented (Portal.Admin only)           | None        | ServiceMessage.Read.All (application, admin consent) — in the automation baseline |
+| Service health (`GET /admin/serviceAnnouncement/issues`)                                                       | Application permission supported; no documented per-issue admin-center link (the service health page is cited)       | None        | ServiceHealth.Read.All (application, admin consent) — in the automation baseline  |
+| Azure Service Health (Resource Graph `servicehealthresources`)                                                 | Readable with Reader; security advisory details need an elevated role; emerging issues aren't in Resource Graph      | None (free) | Reader on each subscription (Service Health Security Reader for advisory details) |
+| Public feeds (Azure Updates, Roadmap, MSRC, Graph changelog, Tech Community, Learn search, PowerShell Gallery) | Anonymous https; only MSRC supports conditional requests; the Graph changelog has had no new items since August 2026 | None        | None (outbound https to the feed hosts)                                           |
+
 ## Feature → licence map (general)
 
 | Feature                                         | Requirement                                                   |

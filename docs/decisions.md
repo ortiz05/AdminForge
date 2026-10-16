@@ -23,8 +23,15 @@ outcome. Decisions taken in that review:
 
 - **Content stays in git.** The in-portal YAML editor, drafts and in-app two-person publish (plan §7.9, task 7.3, half of
   gate G7) are superseded by D9 + R7/ADR-012: content is reviewed in pull requests (`.github/CODEOWNERS` + branch
-  protection), published with the CLI, and `adminforge publish` is audited. The **schedule editor** therefore produces
-  YAML for review rather than saving schedules.
+  protection — both need a second person to mean anything), published with the CLI, and `adminforge publish` is
+  audited. Since 2026-10-16 `publish` also runs the `validate` checks and playbook tests and refuses content that
+  isn't committed and on `origin/main` unless `--allow-unreviewed` (audited). The **schedule editor** therefore produces
+  YAML for review rather than saving schedules. **Amended 2026-10-16 (user decision):** _report_ schedules can be
+  created in the portal (Reports → Schedule) and run at once, without git review — they only run a published, reviewed
+  report read-only as the automation identity, at most hourly, deliver only to recipient lists and webhooks named in
+  the installation's configuration, are capped (25 per person, 200 in total) and audited; the creator or a
+  `Portal.Admin` edits or deletes them, any Operator can turn one off. They live in the database (`source: portal`,
+  reserved `portal.` key namespace). Every other schedule kind stays content (YAML through review).
 - **Overview stays coded** (`/api/overview`): it batches many Graph calls into one round trip; a YAML dashboard would
   be slower. Task 3.11 superseded.
 - **Widgets:** `iframeLink` is covered by `actionBar` links and column links; `logQuery` by the `logAnalytics`

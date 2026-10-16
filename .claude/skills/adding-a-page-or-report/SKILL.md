@@ -43,7 +43,8 @@ Pages, dashboards and reports are YAML in `portal/content/{pages,dashboards,repo
    - Fixtures: long queries get hashed file names (find them with `fixtureKey()`); add POST fixtures as `variants`
      rather than overwriting a shared file.
    - User input: `$odata()`, `$odataSearch()`, `$kql()`, `$encode()` (validation flags user data in a `path`/`url`
-     without `$encode()`). `${ }` values in Markdown text show as plain text; links must be http(s), mailto, `/path` or
+     without `$encode()`, and in `$filter` / `$search` / `$orderby` — query or body — without `$odata()` /
+     `$odataSearch()` / `$guid()`, even inside a quoted literal; `$orderby` takes a literal allow-list). `${ }` values in Markdown text show as plain text; links must be http(s), mailto, `/path` or
      `#`. `$eval` is unavailable; ranges are capped at 1,000,000 items and built text at 10 M characters. Advanced filters: declare
      `filters.advanced.fields` and use `${ advanced }`; never read the raw param. Dialect `odata` (Graph) and `kql`
      (Resource Graph / Log Analytics) compile into the request; for sources with no query language (`runner`,
@@ -59,6 +60,14 @@ Pages, dashboards and reports are YAML in `portal/content/{pages,dashboards,repo
    `bulkActions` (playbook + `forEach.inputs`), `inspect` (entity page in the drawer), `export` (reports require it).
 5. **Declare** `requires.scopes` (exact Graph/ARM permissions), `requires.licences` (`signInLogs`, `conditionalAccess`,
    `pim`, `intune`, `exchange`, `defender`, …) and `nav: { section, label, icon (Phosphor kebab-case), order }`.
+   **Reports** keep `nav: { section: reports, icon, … }` but aren't listed one by one in the rail (the Reports section
+   says `listDefinitions: false` and shows "All reports"): they appear in the **Reports catalogue** (`/reports`)
+   automatically. There the area is the key's first segment (`identity`, `m365`, `endpoint`, `security`, `azure` — a
+   navigation section key), `tags` drive the tag filter and search (give every report specific tags), `summary` is its
+   description, `nav.icon` its row icon, `requires` its requirements panel, `export` makes it schedulable, and its
+   params become the schedule form (string/number/boolean/enum params without a picker can be set per schedule; the
+   others run with their default, so give them sensible defaults). Operators schedule reports from the catalogue
+   without YAML (`adding-a-schedule-or-probe` explains when a content schedule is still the right choice).
 6. **Fixtures:** every datasource needs a synthetic fixture so mock mode renders — naming scheme at the top of
    `portal/packages/connectors/src/fixtures.ts`; files under `tests/fixtures/<service>/…`. `Example Org`,
    `example.com`, generated GUIDs only.
@@ -69,10 +78,12 @@ Pages, dashboards and reports are YAML in `portal/content/{pages,dashboards,repo
 
 ## Common mistakes
 
-| Mistake                                              | Fix                                                         |
-| ---------------------------------------------------- | ----------------------------------------------------------- |
-| Fetch everything, filter in `transform`              | Push filters to Graph/KQL; keep transforms tiny             |
-| Raw `&` concatenation of params into `$filter` / KQL | `$odata()` / `$kql()`; advanced filters via `${ advanced }` |
-| Hard-coded tenant ids/domains/SKUs                   | `${env.X}` with a key in `config/example.env`               |
-| Missing fixture → blank page in mock mode            | Add the fixture file for every datasource                   |
-| `signInActivity` etc. without `requires.licences`    | Declare the licence; the renderer gates and explains        |
+| Mistake                                           | Fix                                                                            |
+| ------------------------------------------------- | ------------------------------------------------------------------------------ |
+| Fetch everything, filter in `transform`           | Push filters to Graph/KQL; keep transforms tiny                                |
+| Params in `$filter` / `$search` / KQL unquoted    | `$odata()` / `$odataSearch()` / `$kql()`; advanced filters via `${ advanced }` |
+| Hard-coded tenant ids/domains/SKUs                | `${env.X}` with a key in `config/example.env`                                  |
+| Missing fixture → blank page in mock mode         | Add the fixture file for every datasource                                      |
+| `signInActivity` etc. without `requires.licences` | Declare the licence; the renderer gates and explains                           |
+| A report without `tags` or `summary`              | The Reports catalogue filters and searches on them; add both                   |
+| A required report param without a default         | Scheduled runs can't fill pickers or dates: give it a default                  |

@@ -44,6 +44,7 @@ Sign-in requests are limited to 30 a minute per browser address, write-access re
 | `wrong_tenant`                     | "That account isn’t part of this organisation". The account belongs to another tenant or doesn't exist here (AADSTS50020, 90072, 50034), or the token's tenant isn't `AF_TENANT_ID`.         | **Use a different account**: your work account for this organisation.                                               | Check the person has a member account in this tenant.                                                                                                                                                                               |
 | `invalid_token`                    | "Microsoft didn’t identify your account". The token had no object id.                                                                                                                        | Sign in with your own account in this organisation.                                                                 | Give the person a member account.                                                                                                                                                                                                   |
 | `guest_account`                    | "Guest accounts can’t use AdminForge". The account is a guest in this tenant (`acct` claim 1). Members — including a personal Microsoft account that is a member — can sign in.              | **Use a different account**: your own account in this organisation.                                                 | Give the person a member account, or invite them as a member instead of a guest.                                                                                                                                                    |
+| `account_status_missing`           | "AdminForge couldn’t confirm your account type". The ID token had no `acct` claim (member or guest), so AdminForge refused it rather than guess. The same code can appear when arming.       | Ask a portal administrator to update the AdminForge apps, then sign in again.                                       | Run `pnpm adminforge provision entra`; it adds the `acct` optional claim to the Read and Write apps.                                                                                                                                |
 | `consent_required`                 | "AdminForge isn’t approved in your organisation yet" (AADSTS65001, 65004).                                                                                                                   | Ask a Global Administrator to grant consent, then sign in again.                                                    | Run `pnpm adminforge provision entra` on the host; it grants consent to the AdminForge apps.                                                                                                                                        |
 | `blocked_by_policy`                | "Your organisation’s sign-in policy blocked this sign-in". A Conditional Access policy refused it (AADSTS53000–53003, 530034), for example because of the device or network.                 | Try again from a device and network your organisation allows, or contact your identity team.                        | Look up the sign-in in the Entra sign-in logs with the Microsoft code and time from Details; it names the policy that applied.                                                                                                      |
 | `signin_cancelled`                 | "Sign-in was cancelled". The Microsoft sign-in was cancelled or declined (`access_denied`).                                                                                                  | **Sign in again** when ready.                                                                                       | Nothing.                                                                                                                                                                                                                            |
@@ -86,9 +87,11 @@ These arm errors appear in the portal (Arm dialog or a toast), not on the proble
 
 ### Sessions
 
-Sessions end after 60 minutes idle or 12 hours in total (`SESSION_IDLE_MINUTES`, `SESSION_ABSOLUTE_HOURS`); the portal
-then sends the person to sign in. Roles are re-read from Entra every 5 minutes: added roles apply, a session with no
-AdminForge role left ends, and losing Operator ends write access at once. The write window is
+Sessions end after 60 minutes idle or 12 hours in total (`SESSION_IDLE_MINUTES`, `SESSION_ABSOLUTE_HOURS`). Only
+what the person does counts as activity: a tab left open (polling, live updates) doesn't keep the session alive, and
+when it ends the tab shows "You're signed out" with **Sign in again** instead of signing in by itself. Roles are
+re-read from Entra every 5 minutes — by the portal and by the run worker for unattended runs: added roles apply, a
+session with no AdminForge role left ends, and losing Operator ends write access at once. The write window is
 `WRITE_SESSION_MAX_MINUTES` (default 60) with one extension.
 
 ## Errors inside the portal
@@ -97,24 +100,28 @@ Portal errors show the message, the next step and the Reference. Codes come from
 
 ### Session and requests
 
-| Code              | Meaning and fix                                                                                                                                                                          |
-| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `unauthenticated` | The session ended (idle, expired, or signed out elsewhere). The portal opens sign-in automatically.                                                                                      |
-| `reauth`          | Microsoft wants a fresh sign-in (sign-in frequency, Conditional Access, revoked tokens). The portal opens sign-in automatically; nothing was changed.                                    |
-| `csrf`            | The page is out of date with the sign-in (for example after signing in in another tab). The portal refreshes the token and retries once; otherwise reload the page. Nothing was changed. |
-| `rate_limited`    | Too many requests from this browser this minute (`RATE_LIMIT_PER_MINUTE`, default 600; report downloads 60). Wait a minute.                                                              |
-| `invalid_request` | The request wasn't valid; the message names the field. Fix the value and retry.                                                                                                          |
-| `not_found`       | No such route. Usually an old bookmark: start from the navigation.                                                                                                                       |
+| Code               | Meaning and fix                                                                                                                                                                          |
+| ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `unauthenticated`  | The session ended (idle, expired, or signed out elsewhere). The portal opens sign-in automatically.                                                                                      |
+| `reauth`           | Microsoft wants a fresh sign-in (sign-in frequency, Conditional Access, revoked tokens). The portal opens sign-in automatically; nothing was changed.                                    |
+| `csrf`             | The page is out of date with the sign-in (for example after signing in in another tab). The portal refreshes the token and retries once; otherwise reload the page. Nothing was changed. |
+| `rate_limited`     | Too many requests from this browser this minute (`RATE_LIMIT_PER_MINUTE`, default 600; report downloads 60). Wait a minute.                                                              |
+| `invalid_request`  | The request wasn't valid; the message names the field. Fix the value and retry.                                                                                                          |
+| `not_found`        | No such route. Usually an old bookmark: start from the navigation.                                                                                                                       |
+| `too_many_streams` | More than 5 AdminForge tabs (live-update streams) are open in this session. Close some tabs; the others keep updating.                                                                   |
 
 ### Roles and write access
 
-| Code                       | Meaning and fix                                                                                                                                         |
-| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `forbidden`                | The action needs a portal role you don't have; the hint names the `SG-AdminForge-…` group. Admin: add the person; it applies within 5 minutes.          |
-| `not_armed`                | The action changes data and write access is off. Arm write access, then retry (approvers must be armed when the steps after an approval write as them). |
-| `rearm`                    | The write token needs a fresh verification. Arm again.                                                                                                  |
-| `already_extended`         | See [Turning on write access](#turning-on-write-access-arming).                                                                                         |
-| `write_app_not_configured` | See [Turning on write access](#turning-on-write-access-arming).                                                                                         |
+| Code                            | Meaning and fix                                                                                                                                                                                                                                                                             |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `forbidden`                     | The action needs a portal role you don't have; the hint names the `SG-AdminForge-…` group. Admin: add the person; it applies within 5 minutes.                                                                                                                                              |
+| `not_armed`                     | The action changes data and write access is off. Arm write access, then retry (approvers must be armed when the steps after an approval write as them).                                                                                                                                     |
+| `rearm`                         | The write token needs a fresh verification. Arm again.                                                                                                                                                                                                                                      |
+| `already_extended`              | See [Turning on write access](#turning-on-write-access-arming).                                                                                                                                                                                                                             |
+| `write_app_not_configured`      | See [Turning on write access](#turning-on-write-access-arming).                                                                                                                                                                                                                             |
+| `protected_object`              | The change names one of AdminForge's own apps, a group that grants portal roles, or an account marked protected (`AF_PROTECTED_USER_IDS`, e.g. break-glass). Make it in the Microsoft Entra admin center under your change process.                                                         |
+| `protected_objects_unavailable` | AdminForge couldn't read which objects it must never change, so it refused a change to groups, apps, app-role assignments or authentication methods. Try again; admin: check the automation identity (or the person) can read app registrations and enterprise apps (Application.Read.All). |
+| `writes_paused`                 | An administrator paused all changes (emergency stop). Reads keep working. A `Portal.Admin` resumes under Admin → Settings; the Audit page shows who paused it and why.                                                                                                                      |
 
 ### Microsoft services
 
@@ -159,6 +166,10 @@ The hint says what's missing and includes Microsoft's request-id when there is o
 | `definition_retired`                                    | The playbook is retired and can no longer run.                                                                                                   |
 | `limit_exceeded`                                        | The playbook exceeds an engine limit (named in the message). Content fix.                                                                        |
 | `run_finished`                                          | The run already ended; nothing to cancel, resume or answer.                                                                                      |
+| `run_outdated`                                          | The playbook changed after the run started and the run hadn't changed anything yet, so it can't continue on the old version. Start a new run.    |
+| `run_expired`                                           | The run waited more than 24 hours for write access or a new sign-in, so it was stopped. Start a new run.                                         |
+| `preview_stale` (on resume)                             | The run was confirmed from a preview more than 15 minutes old and hadn't written anything, so it stopped. Preview again, then run it.            |
+| `version_superseded` (child step)                       | The playbook pins an older version of a child playbook, which can no longer run. Owner: update or remove the pin.                                |
 | `secret_not_available`                                  | A show-once secret was already shown, expired (5 minutes) or belongs to another session. Run the playbook again for a new one.                   |
 | `run_not_found`, `approval_not_found`, `task_not_found` | The run, approval or manual step no longer exists (or isn't visible to you). Refresh.                                                            |
 
@@ -172,18 +183,33 @@ Run states that aren't errors:
 
 ### Approvals and schedules
 
-| Code                                    | Meaning and fix                                                                                                                                                                                  |
-| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `own_run`, `own_request`                | You can't approve your own run or request. Ask another approver (`Playbook.Approver`).                                                                                                           |
-| `already_decided`                       | Someone else (or you) already decided this approval or answered this step.                                                                                                                       |
-| `approval_expired`                      | The approval request expired. Ask for it again.                                                                                                                                                  |
-| `approval_required`                     | The schedule changes data and runs only after a second person approved enabling it. Enable it; a `Playbook.Approver` who isn't you approves.                                                     |
-| `two_person_required`                   | A write-capable scheduled run had no second-person approval, so it didn't run.                                                                                                                   |
-| `approval_outdated`                     | The playbook (or a child playbook) changed after the schedule was approved, so the run was refused and the schedule switched off. Enable it again; a second person approves the current version. |
-| `definition_changed`                    | The schedule or its playbook changed after the approval was requested; the request no longer applies. Request it again.                                                                          |
-| `schedule_inactive`                     | The schedule's status in content isn't active. Set it to active and publish first.                                                                                                               |
-| `script_not_supported`                  | Scheduled PowerShell scripts can't run yet (the runner can't sign in as the automation identity). Run the script from its page, or turn the schedule off. Tracked in `docs/backlog.md`.          |
-| `export_not_supported`, `export_format` | The report doesn't declare that export or format. Content fix.                                                                                                                                   |
+| Code                                    | Meaning and fix                                                                                                                                                                                       |
+| --------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `own_run`, `own_request`                | You can't approve your own run or request. Ask another approver (`Playbook.Approver`).                                                                                                                |
+| `own_access`                            | The change grants you access (you're the person getting the role, being added to the group, or becoming the owner), so you can't approve or reject it. Ask another approver.                          |
+| `approval_excludes_invalid`             | The playbook's approval couldn't tell who the change grants access to, so it wasn't requested. Content fix: the approval's `excludes` must yield object ids.                                          |
+| `automation_paused`                     | An administrator paused automation (emergency stop): schedules don't fire and **Run now** is refused. A `Portal.Admin` resumes it under Admin → Settings; the Audit page shows who paused it and why. |
+| `already_decided`                       | Someone else (or you) already decided this approval or answered this step.                                                                                                                            |
+| `approval_expired`                      | The approval request expired (after 72 hours unless the playbook sets `expiresIn`). Ask for it again.                                                                                                 |
+| `approval_required`                     | The schedule changes data and runs only after a second person approved enabling it. Enable it; a `Playbook.Approver` who isn't you approves.                                                          |
+| `two_person_required`                   | A write-capable scheduled run had no second-person approval, so it didn't run.                                                                                                                        |
+| `approval_outdated`                     | The playbook (or a child playbook) changed after the schedule was approved, so the run was refused and the schedule switched off. Enable it again; a second person approves the current version.      |
+| `definition_changed`                    | The schedule or its playbook changed after the approval was requested; the request no longer applies. Request it again.                                                                               |
+| `schedule_inactive`                     | The schedule's status in content isn't active. Set it to active and publish first.                                                                                                                    |
+| `script_not_supported`                  | Scheduled PowerShell scripts can't run yet (the runner can't sign in as the automation identity). Run the script from its page, or turn the schedule off. Tracked in `docs/backlog.md`.               |
+| `export_not_supported`, `export_format` | The report doesn't declare that export or format. Content fix.                                                                                                                                        |
+| `job_not_allowed`                       | Only report schedules can be created from Reports. Make other schedules (probes, playbooks) in Schedules → New schedule and publish the YAML after review.                                            |
+| `cron_too_frequent`                     | Reports scheduled in the portal run at most once an hour. Pick an hourly, daily, weekly or monthly cadence, or a pattern with an hour or more between runs.                                           |
+| `format_not_supported`                  | The report can't be delivered in that format. Pick one it offers (its export formats, or JSON).                                                                                                       |
+| `delivery_not_configured`               | That recipient list or Teams webhook isn't configured, is kept for approvals, or email has no sender. Pick one offered. Admin: set the key named in the hint (and `AF_MAIL_SENDER`).                  |
+| `schedule_limit`                        | Portal report schedules: 25 active per person, 200 in total, 50 created per person in 24 hours (deleted ones count). Delete ones nobody needs; move long-lived ones into content.                     |
+| `schedule_is_content`                   | The schedule is defined in content: change its YAML and publish it. Any Operator can still turn it off or run it now.                                                                                 |
+| `report_cannot_change`                  | A schedule always runs the same report. Schedule the other report from Reports and delete this schedule.                                                                                              |
+| `schedule_changed`                      | Someone saved or deleted the schedule at the same moment. Reload it and try again.                                                                                                                    |
+| `forbidden` (edit/delete)               | Only the person who created a portal schedule, or a `Portal.Admin`, can edit or delete it. Any Operator can turn it off.                                                                              |
+| `run_too_soon`                          | Run now on a portal schedule waits while a run is queued or running and for 15 minutes after the last manual run. Try again later, or open the latest file in its history.                            |
+| `creator_access_removed`                | The person who created this portal schedule lost access (account deleted, disabled, now a guest, or a role removed), so it was turned off. Schedule the report again from Reports.                    |
+| `creator_unverified`                    | AdminForge couldn't confirm the creator still has access, so that run didn't happen. Admin: the automation identity needs User.Read.All, GroupMember.Read.All and Application.Read.All.               |
 
 Schedule run history can also show `timeout` (the job exceeded its timeout, default 15 minutes), `interrupted` (the
 scheduler stopped mid-run), `no_probes` (no active probe matches the job), `probes_errored` (no probe could be
@@ -254,6 +280,19 @@ Scheduled report files open from the Schedules page. When a download fails, the 
 | `unauthenticated`    | "Sign in to download this report"         | Sign in, then select the report again.                                                                                                                                                                                                              |
 | `rate_limited`       | "Too many downloads this minute"          | More than 60 downloads a minute from this browser. Wait a minute.                                                                                                                                                                                   |
 | anything else        | "The report didn’t download"              | Try again from the schedule's run history; if it repeats, send the details.                                                                                                                                                                         |
+
+## News and changes
+
+Feed failures show on `/news` → **Sources** (the reason only for Operators); every code is explained in
+`docs/news.md` → Troubleshooting codes.
+
+| Code / symptom                                      | What the user sees                                   | What to do                                                                                                                                      |
+| --------------------------------------------------- | ---------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `news_not_found`                                    | "That news item isn’t available"                     | It aged out, or it needs a role the person doesn't have (data-privacy Message Center posts are Portal.Admin only). Open News and changes again. |
+| `invalid_request` on `/api/news`                    | "The News and changes filters aren’t valid"          | The hint names the filter; reset the filters.                                                                                                   |
+| Empty page, "The first collection runs on the hour" | No feed has been collected yet                       | Operator: Schedules → News and changes refresh → Run now; check the scheduler is running.                                                       |
+| A feed is _stale_ or shows an error                 | Its last collection failed or hasn't run for 3 hours | Operator: read the code under Sources and follow `docs/news.md`; tenant feeds need the automation app's permissions (`provision status`).       |
+| A source says "no new posts since …"                | The source itself has gone quiet (`quietAfterDays`)  | Nothing to fix in AdminForge; consider retiring the feed (see `docs/backlog.md`).                                                               |
 
 ## Operations symptoms
 

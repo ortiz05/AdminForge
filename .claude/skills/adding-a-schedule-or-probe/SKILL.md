@@ -11,6 +11,18 @@ Schedules (`portal/content/schedules/`) run on this host via `portal/apps/schedu
 (app-only; ADR-011) — never as a person. Probes (`portal/content/probes/`) are synthetic tests and configuration
 checks that write time-series results shown on `/monitoring`.
 
+## Report schedules: often no content at all
+
+An Operator who just wants an existing report delivered (file, email to a configured list, Teams) at most hourly can
+schedule it in the portal: **Reports** (`/reports`) → the report → **Schedule**. Those schedules run at once, live only
+in the database (`source: portal`, keys `portal.<report>-<hex>`), and are edited or deleted by their creator or a
+`Portal.Admin` (API: `POST/PUT/DELETE /api/schedules`, `docs/api.md`). Write content YAML instead when the schedule
+should ship with the product or be reviewed (every installation gets it), needs more than that form offers
+(`notify.onSuccess`, a delivery `path`, subject/message templates, `overlap`, runs more often than hourly, setting a
+picker/date/hidden param), must keep running whoever leaves (a portal schedule stops when its creator loses access),
+or isn't a report (probes, playbooks, content health, news — content only). The `portal.` id namespace is reserved: a content
+schedule may not use it (`adminforge validate` refuses it).
+
 ## Steps
 
 1. **Reuse first.** Probes are swept by tag: tag a new probe (`tags: [hourly]`, `[config-check]`) and an existing
@@ -18,9 +30,9 @@ checks that write time-series results shown on `/monitoring`.
 2. **Scaffold:** `pnpm adminforge new probe <section>/<name>` / `new schedule <section>/<name>`, design the query
    in **Query Studio** (`/query`) and use _Save as probe/report/schedule_, or build a schedule in the **schedule
    editor** (`/schedules/new`: cron builder with preview, job, retries, alerts → YAML for review).
-3. **Pick the check:** `check.kind` = `http`, `dnsResolve`, `certExpiry`, `graph`, `arm`, `tokenAcquisition`,
-   `appCredentialExpiry`, `licenseThreshold`, `signInHealth`, `functionHealth`, `auditChain` (AdminForge's own audit
-   log), or **`kql`**.
+3. **Pick the check:** `check.kind` = `http`, `dnsResolve`, `certExpiry`, `graph`, `graphCount` (how many items a
+   Graph list holds), `arm`, `tokenAcquisition`, `appCredentialExpiry`, `licenseThreshold`, `signInHealth`,
+   `functionHealth`, `auditChain` (AdminForge's own audit log), or **`kql`**.
    - Tenant-wide configuration questions → `kql` with `source: resourceGraph` (all subscriptions, one query),
      `logAnalytics` (`workspace` defaults to `${env.AF_LOG_ANALYTICS_WORKSPACE_ID}`), or `advancedHunting`
      (Defender licence). `metric: rowCount` or `{ column, aggregate }`; `detailsLimit` keeps the offending rows.
@@ -37,7 +49,9 @@ checks that write time-series results shown on `/monitoring`.
    - `script` (a pinned runner script: `script`, `sha256`, `parameters`, `services`, `timeoutSeconds`, `mode`;
      `mode: write` needs `approvedBy`). It validates, but runs currently fail with `script_not_supported` — the runner
      can't yet run scripts as the automation identity (see `docs/backlog.md`), so prefer a `kql` probe or a report;
-   - `contentHealth` (`scopes: true` also checks the automation identity's permissions).
+   - `contentHealth` (`scopes: true` also checks the automation identity's permissions);
+   - `news` (collects the News and changes feeds; optional `refs`, `concurrency`). One hourly schedule
+     (`maintenance.news-refresh-hourly`) already covers every feed — add a feed, not a schedule (`add-news-feed`).
 
    Plus `retry`, `timeoutSeconds`, `overlap: skip|queue|allow`, and `notify.onFailure` / `onSuccess` (same email/Teams
    targets; failure alerts are sent only when no retry is left). Scheduled data (report files, probe rows) is visible
@@ -67,4 +81,5 @@ checks that write time-series results shown on `/monitoring`.
 | Alerting on how many items a Graph list holds (too many or too few) with a latency probe | `kind: graphCount` — `items: ${ value[...] }` selects what to count, `worse: higher                                                                                    | lower`, thresholds on the count, `fields`for the detail rows (see`probes.global-admins-too-few`) |
 | An HTTP probe that POSTs                                                                 | Set `allowPost: true`; HTTP probes never follow redirects or reach private addresses other than the portal                                                             |
 | Literal email addresses in `delivery.to`                                                 | Recipients are configuration: `${ env.AF_REPORT_RECIPIENTS }` (keys ending RECIPIENTS/EMAIL/ALERTS)                                                                    |
+| Content schedule id `portal.…`                                                           | Reserved for report schedules created in the portal; use `<section>.<name>` (e.g. `reports.weekly-…`)                                                                  |
 | New `config-check` KQL probe not in the shipped set                                      | Add its id to `CONFIG_CHECKS` in `tests/content/probes-schedules.test.ts` (the test asserts the exact set)                                                             |

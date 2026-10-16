@@ -23,20 +23,27 @@ Markdown sections, manual steps and executable steps.
    PUT/PATCH/DELETE must be `write`; POST must declare a mode.
 5. **Risk:** `risk: low|medium|high|critical`. `high` and `critical` need a `confirm` block (click, or a typed value
    such as the UPN); `critical` also needs `approval: { required: true }` (two-person; the approver runs the remaining
-   steps as themselves).
+   steps as themselves). A change that **grants access** (a directory or Azure role, membership of a role-assignable
+   group, app ownership) must name who it benefits in `approval.excludes` (an expression yielding object ids — the
+   principal, and a group's members when the principal is a group) so they can't approve it, and refuse adding yourself
+   (`notSelf` assert). Approvals expire after 72 hours unless you set `expiresIn`.
 6. **Secrets** (passwords, TAPs, client secrets): declare `secretOutputs: [path]` on the step; never copy them to
    `outputs`. Generate passwords with `$secureRandom(n)`. Sensitive **inputs** get `redact: true` (masked in stored
    steps, events and audit). A playbook that changes the caller's own permissions (PIM activation) sets
    `refreshTokens: true` so the new roles apply as soon as it succeeds.
-7. **Paths & queries:** `$encode()` path segments, `$odata()` in filters, `$kql()` in KQL.
+7. **Paths & queries:** `$encode()` path segments, `$odata()` / `$odataSearch()` / `$guid()` for any user data in
+   `$filter`, `$search` or `$orderby` (query or body — even inside a quoted literal), a literal allow-list for
+   `$orderby`, `$kql()` in KQL. `validate` and `publish` refuse anything else.
 8. **Declare** `requires.portalRoles` (`Portal.Operator` for writes), `requires.scopes` (exact write scopes — they must
    exist on the Write app; check with `pnpm adminforge validate --scopes`), `requires.entraRoles`. Tier-0 scopes
    (role management/PIM, app credentials and owners, app-role and consent grants, `Directory.AccessAsUser.All`,
    tenant policies — `portal/tools/cli/src/provision/privilege.ts`) are only granted with
    `AF_ALLOW_PRIVILEGED_WRITE_SCOPES=true`: say so in the PR.
-   - Never let a playbook change AdminForge's own access: refuse the `SG-AdminForge-*` groups (`notPortalGroup`) and
-     AdminForge's apps plus `AF_PROTECTED_APP_IDS` (`notPortalApp`) — copy the asserts from `add-group-members` and
-     `add-app-owner`.
+   - AdminForge's own access is protected centrally: the executor refuses any write naming its apps, the principals
+     holding its app roles (the `SG-AdminForge-*` groups), `AF_PROTECTED_APP_IDS` or `AF_PROTECTED_USER_IDS`
+     (`protected_object`), REST or PowerShell. You don't need your own check; add the friendly early asserts
+     (`notPortalGroup`, `notPortalApp` — copy them from `add-group-members` / `add-app-owner`) when a playbook targets
+     groups or apps, so people see why before anything runs.
    - A playbook that starts a child with its own confirmation, or a high/critical child, needs a `confirm` block itself
      (validation enforces it). Drafts can be previewed but never run.
    - `redact: true` inputs and manual-step fields are masked everywhere, including run outputs; a step that would send

@@ -11,6 +11,55 @@ Closes the gaps found by comparing the build with the original plan (see the pla
 
 ### Added
 
+- **Engineer onboarding guide** (`docs/onboarding/`): a reading path for new contributors — setup, how AdminForge
+  works, repository map, security for contributors, coding standards, API and web guides, content, testing, git and
+  pull requests, documentation, Claude Code, releases — plus checklists (first day/week, PR author, reviewer, security
+  review, definition of done), a glossary and templates (ADR, commit message). `CONTRIBUTING.md` points to it.
+- **Commit message and pull request title check**: Conventional Commits with AdminForge's types and scopes
+  (`tooling/git/commit-message.mjs`), enforced by a new `.githooks/commit-msg` hook and a `pr-title` workflow that
+  re-runs when a pull request is retitled (the title is passed through the environment, never interpolated into the
+  script). Merge, revert and autosquash commits pass locally; GitHub's `Revert "…"` titles pass when the reverted header
+  is valid. Dependabot titles use `chore(deps)`, `ci(deps)` and `chore(runner)` prefixes. New
+  `.github/pull_request_template.md`; CODEOWNERS now lists every path the onboarding guide sends to security review
+  (scheduler, connectors, engine, expressions, probes, feeds, the news host list, hooks and tooling).
+- **Reports catalogue and in-app report schedules** (user decision 2026-10-16, `docs/decisions.md` D9 note): the
+  Reports section of the navigation is now one "All reports" entry (`/reports`) instead of every report — navigation
+  sections can say `listDefinitions: false`. `GET /api/reports` lists the reports the caller may open with their area,
+  tags, requirements, licence badge, params, export formats and the schedules that run them; `GET /api/reports/:key`
+  adds the export columns. Operators can schedule a report right there (`POST /api/schedules`, edit with `PUT`, delete
+  with `DELETE`, delivery choices from `GET /api/schedules/delivery-options`): report jobs only, at most hourly
+  (`cron_too_frequent`), params validated as the automation identity, email/Teams only to configured recipient lists
+  and webhooks, 25 per person and 200 in total, audited `schedule.created` / `schedule.updated` / `schedule.deleted`.
+  They run at once (no git review), live in the database under the reserved `portal.` key namespace (content
+  schedules may not use it) and are edited or deleted by their creator or a `Portal.Admin`; any Operator can turn one
+  off. Schedule items gain `createdBy`, `canManage`, `job.params`, `delivery` and `notify` (key names only), and
+  `GET /api/schedules/:key` returns one. The schedule editor and in-app creation share one document builder.
+  Hardened after the security review: before every run the creator's account and portal roles are confirmed as the
+  automation identity (`creator_access_removed` turns the schedule off; `creator_unverified` skips the run); only the
+  params the form offers can be set (pickers, dates, hidden params and the query builder keep the report's default);
+  names and summaries are plain single-line text, Teams cards escape Markdown and messages say "Scheduled in
+  AdminForge by …"; approval keys are never destinations; `redact: true` params are masked in schedule items and JSON
+  files (now streamed), and a schedule's details are shown only to people who may open its report; 50 creations per
+  person in 24 hours, caps counted atomically; Run now on a portal schedule waits 15 minutes (`run_too_soon`);
+  housekeeping removes deleted portal schedules once their history is gone. The read policy allows
+  `checkMemberObjects`; provisioning lists User.Read.All and GroupMember.Read.All as built-in automation uses.
+- **News and changes** (`/news`, `docs/news.md`): what Microsoft is changing in the services AdminForge manages, in a
+  breaking-news layout — a Breaking strip (open incidents, urgent advisories, deadlines in the next 14 days), a
+  day-by-day feed filtered by area, kind, source, tag and text, an unread badge in the navigation and a "breaking" pill
+  in the top bar. Every item is cited and links back to its first-party source; only a headline, a short excerpt and
+  a few facts are kept. 21 feeds (`portal/content/feeds`, new content kind `feed`): your tenant's Message Center and
+  Microsoft 365 service health (Graph, automation identity), Azure Service Health (Resource Graph), Azure Updates, the
+  Microsoft 365 Roadmap, the MSRC Security Update Guide, the Microsoft Graph changelog, seven product blogs on
+  Microsoft Tech Community, five Learn what's-new pages and PowerShell Gallery releases of the modules the runner
+  pins. Broad feeds keep only services AdminForge manages (`keep: matched` classification rules). Collected by the
+  new hourly schedule `maintenance.news-refresh-hourly` (`job.kind: news`, each feed at most every `pollMinutes`).
+  `adminforge new feed`, `validate` (allow-listed hosts, Microsoft citation domains, required permissions, news job
+  references) and the `add-news-feed` skill. Security: feed connections are pinned to checked public addresses (no DNS
+  rebinding), source text is reduced by a linear scanner (no regex backtracking on hostile markup), citation links
+  must stay on the source's own host, future dates are clamped, a feed's portal roles apply when items are read, and
+  the slowest-to-succeed feed is collected first within the schedule's time budget.
+- HTTP probes and news feeds: documentation, translated, NAT64 local-use, Teredo, site-local and other reserved
+  IPv4/IPv6 ranges now count as non-public addresses.
 - **Report library** (~40 new reports, each with a delivery schedule): identity (application permissions, consent
   grants, apps and groups without owners, app credential hygiene, app registration risks, licensed disabled accounts,
   password age, high-impact directory changes, AdminForge role-group changes, tenant settings baseline); Microsoft 365,
@@ -55,6 +104,10 @@ Closes the gaps found by comparing the build with the original plan (see the pla
 
 ### Changed
 
+- **Navigation sections start collapsed.** Every section of the left rail starts closed; a closed section still shows
+  the page you're on and pages with something new (the unread-news count), and its heading says how many pages it
+  hides. Opened sections are remembered per person (`navOpenSections` in `PUT /api/me/prefs`; the older
+  `navSections` — the sections people had closed — is no longer read, so everyone starts collapsed once).
 - `identity.offboard-user` 1.1.0 converts the mailbox to shared, sets an automatic reply, hides it from address lists
   and gives the manager OneDrive access when those workloads are licensed; `identity.leaver` 1.1.0 now only lists what
   offboarding couldn't do.
@@ -67,6 +120,56 @@ Closes the gaps found by comparing the build with the original plan (see the pla
 
 ### Security
 
+Platform evaluation (2026-10-16) — organization and security best practices (OWASP ASVS 5.0, NIST SSDF, Microsoft
+identity platform guidance, systemd hardening, OpenSSF Scorecard). Fixed:
+
+- **Protected objects, enforced centrally.** The executor refuses every write (REST or PowerShell) that names
+  AdminForge's own apps and service principals, any principal holding an AdminForge app role (the `SG-AdminForge-*`
+  groups), `AF_PROTECTED_APP_IDS` or the new `AF_PROTECTED_USER_IDS` (break-glass accounts) — by id, read from Graph
+  and cached for 10 minutes (`protected_object`, `protected_objects_unavailable`). Previously only some playbooks
+  checked group names: `identity.create-user` could add a new account to an approver group and hand its creator the
+  TAP, and nothing stopped removing other approvers.
+- **Separation of duties.** Approval gates exclude the people a change grants access to (`approval.excludes`,
+  `own_access`): the principal getting a directory or Azure role, people added to a role-assignable group, a new app
+  owner. Group and app-owner playbooks refuse adding yourself; role-assignable groups and app owners need approval.
+  Approvals expire after 72 hours by default. Only the person a manual step waits for can confirm it.
+- **Runs follow the current rules.** Resuming re-checks roles and — before anything was changed — the current version
+  (`run_outdated`); child playbooks run their current version only; runs waiting for arming or sign-in stop after 24
+  hours (`run_expired`); a confirmed change with a preview older than 15 minutes stops before writing. The run worker
+  re-checks the initiator's roles every 5 minutes (shared with the API through `sessions.roles_checked_at`, migration
+  0007), so removing someone from Operator stops their unattended writes too.
+- **Emergency stop.** Admin → Settings pauses all changes (`writes_paused`) or all automation (`automation_paused`,
+  including Run now) with a reason; approvers and admins can pause, admins resume; audited and shown in a banner.
+  AdminForge's own notification mail still goes out.
+- **Publishing.** `adminforge publish` runs the `validate` checks and the playbook tests, and refuses content that isn't
+  committed and on `origin/main` unless `--allow-unreviewed` (recorded with its reasons in the audit event).
+- **Injection lint.** User data in OData `$filter`, `$search` and `$orderby` (query or body) must go through
+  `$odata()` / `$odataSearch()` / `$guid()`, even inside a quoted literal (previously only `&` concatenation was caught).
+- **Sessions.** Background polling no longer keeps a session alive (`X-AdminForge-Background`), and an idle tab no
+  longer signs itself back in; live run streams and show-once secret delivery stop when the session ends; at most 5
+  event streams per session; every `/api` route needs `Portal.Reader` (with a few exemptions); a token without the
+  `acct` claim is refused (`account_status_missing`).
+- **Step-up visibility.** `session.armed` records whether arming proved an authentication context or only a fresh
+  sign-in; Admin → Settings shows it and `adminforge env check` warns without `WRITE_AUTH_CONTEXT`.
+- **Audit and logs.** Refused security-relevant requests are audited (`request.denied`, rate-limited); sign-in and arm
+  failures keep only the OAuth error code and AADSTS number (an unauthenticated caller could previously write free text
+  into the audit log); request logs carry the user's object id and never `/api` query values.
+- **Browser.** `Permissions-Policy`; production source maps are no longer served; Query Studio's Copy neutralises
+  spreadsheet formulas; key-value links without `href` no longer evaluate tenant data as a template; `/readyz` no
+  longer names configuration keys; the example Caddyfile drops `Via`.
+- **Host and supply chain.** The services' configuration loader drops the database owner URL and `POSTGRES_PASSWORD`;
+  backups leave out the rows of `sessions`, `preauth` and `token_cache` and the backup unit gets the hardening drop-in;
+  PowerShell workers start with a settings file that keeps script-block and module logging (module source at warning
+  level, ~120 MB a day) out of the journal; CI actions are pinned to commit SHAs.
+- Docs: SECURITY.md now states the host requirement (an account of its own, not in `docker`/`sudo`), the step-up gap
+  without `WRITE_AUTH_CONTEXT`, and the remaining known gaps; ADR-013 records the News feed egress decision; the master
+  plan is marked historical. Deferred findings are in `docs/backlog.md` → Platform evaluation.
+
+- News and changes fetches public feeds only over https from a code allow-list of Microsoft hosts (public addresses
+  only, redirects only within the list, time and size limits, conditional requests), refuses XML with DOCTYPE or entity
+  declarations, renders source text as plain text only and keeps citation links only on Microsoft domains. Tenant feeds
+  use the automation identity's read-only ServiceMessage.Read.All / ServiceHealth.Read.All and Reader; data-privacy
+  Message Center posts are Portal.Admin only; feed errors are Operator only.
 - Second security review (API, runs, runner, identity and RBAC) fixed: connection token scopes and audience allow-list;
   sessions end on `invalid_grant`; guests refused (`acct`); step-up always forces a fresh sign-in; control characters
   in paths; response size caps; HTTP-probe SSRF; expression limits; query parameters kept out of logs; mock mode fenced;
@@ -88,6 +191,12 @@ Closes the gaps found by comparing the build with the original plan (see the pla
 
 ### Fixed
 
+- `init:local` replaces the `CHANGE_ME` placeholders of a copied `config/example.env` instead of reusing `CHANGE_ME` as
+  the Postgres password (the documented setup path left `env check` complaining).
+- `docs/api.md` no longer says a client may choose its `X-Correlation-Id`; the API always generates it.
+- Two load-sensitive tests: a Postgres purge test mixed a fixed date with the database clock (failed from the day after
+  it was written); the 250 ms transform-budget test retries under a saturated machine; the reports catalogue component
+  tests have a larger timeout.
 - Azure pages read Resource Graph flags correctly: computed booleans arrive as 1/0, so the Privileged KPI showed 0, the
   resource Access tab never offered "Remove assignment", and several flag columns and facets were wrong (8 pages).
 - `identity.*` reports: a one-item id list was sent to Graph as a plain string.

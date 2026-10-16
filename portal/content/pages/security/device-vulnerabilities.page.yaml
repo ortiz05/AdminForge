@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/page.schema.json
 kind: page
 id: security.device-vulnerabilities
-version: 1.0.0
+version: 1.0.1
 title: Device vulnerabilities
 summary: >-
   Software vulnerabilities (CVEs) on onboarded devices from Microsoft Defender Vulnerability Management: the most
@@ -15,9 +15,11 @@ requires:
   scopes:
     graph: [ThreatHunting.Read.All]
   entraRoles: [Security Reader, Global Reader]
-  # Advanced hunting with the DeviceTvm* tables: Defender for Endpoint Plan 2 (in Microsoft 365 E5) or the Defender
-  # Vulnerability Management add-on/standalone. Defender for Endpoint Plan 1 and Defender for Business don't include it.
-  licences: [WINDEFATP, TVM_PREMIUM_1]
+  # Advanced hunting with the DeviceTvm* tables: Defender for Endpoint Plan 2 (WINDEFATP, in Microsoft 365 E5) or the
+  # Defender Vulnerability Management add-on (TVM_PREMIUM_1). Office 365 E5 / Defender for Office 365 (the `defender`
+  # feature), Defender for Endpoint Plan 1 and Defender for Business don't include it, so the page is gated on
+  # `defenderEndpoint` rather than `defender`.
+  licences: [defenderEndpoint]
 
 params:
   q: { type: string, default: "", label: Search, placeholder: "Device name, software or CVE id" }

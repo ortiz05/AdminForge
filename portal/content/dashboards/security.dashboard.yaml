@@ -1,7 +1,7 @@
 $schema: ../../packages/schemas/generated/dashboard.schema.json
 kind: dashboard
 id: security.overview
-version: 1.0.0
+version: 1.0.1
 title: Security posture
 summary: Open incidents, new alerts, Secure Score, risky users and Defender for Cloud posture in one view.
 owner: security-team
@@ -100,8 +100,8 @@ datasources:
         }];
         {
           "trend": $rows,
-          "percent": $count($rows) > 0 ? $rows[-1].percent : 0,
-          "delta": $count($rows) > 1 ? $round($rows[-1].percent - $rows[0].percent, 4) : 0
+          "percent": $count($rows) > 0 ? $rows[-1].percent : null,
+          "delta": $count($rows) > 1 ? $round($rows[-1].percent - $rows[0].percent, 4) : null
         }
       ) }
   risky:
@@ -172,7 +172,7 @@ layout:
     label: Secure Score
     format: percent
     delta: score.delta
-    status: "${ value >= 0.7 ? 'ok' : value >= 0.5 ? 'warn' : 'crit' }"
+    status: "${ $type(value) = 'number' ? (value >= 0.7 ? 'ok' : value >= 0.5 ? 'warn' : 'crit') : 'neutral' }"
     href: /p/security.secure-score
   - widget: kpi
     id: high_risk_users
@@ -191,6 +191,9 @@ layout:
     x: day
     y: percent
     format: percent
+    empty:
+      title: No Secure Score yet
+      body: Microsoft calculates the score once a day; a new tenant gets its first score within about 48 hours.
   - widget: chart
     id: incidents_by_severity
     title: Open incidents by severity

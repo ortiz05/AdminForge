@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/page.schema.json
 kind: page
 id: security.incident
-version: 1.0.0
+version: 1.1.0
 title: Incident
 summary: One Microsoft Defender XDR incident — status, correlated alerts, impacted assets and analyst comments.
 owner: security-team
@@ -25,35 +25,71 @@ datasources:
       query:
         $expand: alerts
     cache: { ttl: 30 }
-    # Adds `assets` (evidence across all alerts, one row per alert + entity) and alert counts to the incident.
+    # Adds `assets` (evidence across all alerts, one row per alert + entity) and alert counts to the incident. Evidence
+    # types are labelled for people; email ones (message, cluster, user-reported email, mailbox configuration, Teams
+    # message, OAuth app) are what Defender for Office 365 incidents carry. Unknown types keep their Graph name.
     transform: >-
       ${ (
+        $labels := {
+          "userEvidence": "User", "deviceEvidence": "Device", "ipEvidence": "IP address", "urlEvidence": "URL",
+          "fileEvidence": "File", "fileHashEvidence": "File hash", "processEvidence": "Process",
+          "mailboxEvidence": "Mailbox", "mailboxConfigurationEvidence": "Mailbox configuration",
+          "analyzedMessageEvidence": "Email message", "mailClusterEvidence": "Email cluster",
+          "submissionMailEvidence": "User-reported email", "teamsMessageEvidence": "Teams message",
+          "cloudApplicationEvidence": "Cloud app", "oauthApplicationEvidence": "OAuth app",
+          "securityGroupEvidence": "Security group", "servicePrincipalEvidence": "Service principal",
+          "malwareEvidence": "Malware", "dnsEvidence": "DNS", "registryKeyEvidence": "Registry key",
+          "registryValueEvidence": "Registry value", "azureResourceEvidence": "Azure resource"
+        };
+        $describe := function($e) { (
+          $t := $substringAfter($e.`@odata.type`, 'microsoft.graph.security.');
+          $l := $lookup($labels, $t);
+          $n := $t = 'userEvidence' ? ($e.userAccount.userPrincipalName ? $e.userAccount.userPrincipalName : $e.userAccount.displayName)
+            : $t = 'deviceEvidence' ? $e.deviceDnsName
+            : $t = 'ipEvidence' ? $e.ipAddress & ($e.countryLetterCode ? ' (' & $e.countryLetterCode & ')' : '')
+            : $t = 'urlEvidence' ? $e.url
+            : $t = 'fileEvidence' ? $e.fileDetails.fileName
+            : $t = 'fileHashEvidence' ? $e.value
+            : $t = 'processEvidence' ? $e.imageFile.fileName
+            : $t = 'mailboxEvidence' ? ($e.primaryAddress ? $e.primaryAddress : $e.displayName)
+            : $t = 'mailboxConfigurationEvidence' ? $e.mailboxPrimaryAddress
+            : $t in ['analyzedMessageEvidence', 'submissionMailEvidence'] ? $e.subject
+            : $t = 'mailClusterEvidence' ? ($e.clusterByValue ? $e.clusterByValue : $e.query)
+            : $t = 'teamsMessageEvidence' ? ($e.subject ? $e.subject : $e.senderFromAddress)
+            : $t = 'servicePrincipalEvidence' ? $e.servicePrincipalName
+            : $t = 'malwareEvidence' ? $e.name
+            : $t = 'dnsEvidence' ? $e.domainName
+            : $t = 'registryKeyEvidence' ? $e.registryKey
+            : $t = 'registryValueEvidence' ? $e.registryValueName
+            : $t = 'azureResourceEvidence' ? $e.resourceName
+            : $e.displayName;
+          {
+            "type": $l ? $l : $t,
+            "name": $n ? $n : '—',
+            "detail": $t = 'deviceEvidence' ? 'Risk ' & $e.riskScore & ' · ' & $e.osPlatform
+              : $t = 'fileEvidence' ? $e.fileDetails.filePath
+              : $t = 'userEvidence' ? $e.userAccount.displayName
+              : $t = 'analyzedMessageEvidence' ? 'To ' & $e.recipientEmailAddress
+              : $t = 'submissionMailEvidence' ? 'Reported by ' & $e.submitter
+              : $t = 'mailClusterEvidence' ? $string($e.emailCount) & ' messages by ' & $e.clusterBy
+              : $t = 'teamsMessageEvidence' ? 'From ' & $e.senderFromAddress
+              : $t = 'mailboxConfigurationEvidence' ? $e.configurationType
+              : $t = 'oauthApplicationEvidence' ? $e.publisher
+              : $t = 'malwareEvidence' ? $e.category
+              : $t = 'fileHashEvidence' ? $e.algorithm
+              : null
+          }
+        ) };
         $alerts := [value.alerts];
         $assets := [$alerts.(
           $alert := $;
           evidence.(
-            $t := $substringAfter(`@odata.type`, 'microsoft.graph.security.');
-            {
-              "alertId": $alert.id,
-              "alertTitle": $alert.title,
-              "type": $t = 'userEvidence' ? 'User' : $t = 'deviceEvidence' ? 'Device' : $t = 'ipEvidence' ? 'IP address'
-                : $t = 'urlEvidence' ? 'URL' : $t = 'fileEvidence' ? 'File' : $t = 'processEvidence' ? 'Process'
-                : $t = 'mailboxEvidence' ? 'Mailbox' : $t = 'analyzedMessageEvidence' ? 'Email message'
-                : $t = 'cloudApplicationEvidence' ? 'Cloud app' : $t,
-              "name": $t = 'userEvidence' ? userAccount.userPrincipalName
-                : $t = 'deviceEvidence' ? deviceDnsName
-                : $t = 'ipEvidence' ? ipAddress & (countryLetterCode ? ' (' & countryLetterCode & ')' : '')
-                : $t = 'urlEvidence' ? url
-                : $t = 'fileEvidence' ? fileDetails.fileName
-                : $t = 'processEvidence' ? imageFile.fileName
-                : $t = 'mailboxEvidence' ? primaryAddress
-                : $t = 'analyzedMessageEvidence' ? subject
-                : $t = 'cloudApplicationEvidence' ? displayName
-                : '—',
-              "verdict": verdict,
-              "remediationStatus": remediationStatus,
-              "roles": roles
-            }
+            $e := $;
+            $merge([
+              { "alertId": $alert.id, "alertTitle": $alert.title },
+              $describe($e),
+              { "verdict": $e.verdict, "remediationStatus": $e.remediationStatus, "roles": $e.roles }
+            ])
           )
         )];
         $merge([value, {
@@ -208,7 +244,7 @@ tabs:
           title: No evidence recorded
           body: Defender adds users, devices, mailboxes, files and IP addresses here as alerts are investigated.
         columns:
-          - { field: name, label: Entity, kind: identity, secondary: type }
+          - { field: name, label: Entity, kind: identity, secondary: detail }
           - { field: type, label: Type, filter: facet }
           - field: verdict
             label: Verdict

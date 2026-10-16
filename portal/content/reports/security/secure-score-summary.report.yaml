@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/report.schema.json
 kind: report
 id: security.secure-score-summary
-version: 1.0.0
+version: 1.1.0
 title: Secure Score trend and top improvement actions
 summary: >-
   Microsoft Secure Score today, its change over the last 7 and 30 days, how it compares with other tenants, and the
@@ -44,8 +44,12 @@ savedViews:
     - { name: Quick wins, params: { quickWins: true, top: 1000 } }
     - { name: Identity actions, params: { category: Identity } }
 
-# Microsoft keeps one Secure Score snapshot per day for 90 days. Actions marked "risk accepted" or "resolved through a
-# third party" in Defender are left out (they no longer count against the score).
+# Microsoft keeps one Secure Score snapshot per day for 90 days; a new tenant has none until the score is first
+# calculated (about 48 hours) — the numbers then stay empty. Only the controls in the latest snapshot's
+# `controlScores` count for this tenant (the profiles catalogue also lists controls for products it doesn't have).
+# Actions marked "risk accepted" or "resolved through a third party" in Defender are left out (they no longer count
+# against the score). Cost and user impact come in mixed case or Unknown: normalised to Low / Moderate / High / Unknown.
+# The comparison (`averageComparativeScores[].averageScore`) is a percentage (0–100), not points on this tenant's scale.
 datasources:
   history:
     source: graph
@@ -64,21 +68,25 @@ datasources:
           "maxScore": $round(maxScore, 1)
         }];
         $last := $rows[-1];
-        $at := function($n) { ($rows[day >= $substring($daysAgo($n), 0, 10)])[0] };
+        $at := function($n) { (
+          $r := ($rows[day >= $substring($daysAgo($n), 0, 10)])[0];
+          $r and $r.day <= $substring($daysAgo($n - 1), 0, 10) ? $r : null
+        ) };
         $w := $at(7);
         $m := $at(30);
         $latest := (value.value^(>createdDateTime))[0];
         $all := $latest.averageComparativeScores[basis = 'AllTenants'][0].averageScore;
         $size := $latest.averageComparativeScores[basis = 'TotalSeats'][0].averageScore;
         {
+          "pending": $count($rows) = 0,
           "trend": $rows,
           "percent": $last ? $last.percent : null,
           "score": $last ? $last.score : null,
           "maxScore": $last ? $last.maxScore : null,
           "change7": $w ? $round($last.percent - $w.percent, 4) : null,
           "change30": $m ? $round($last.percent - $m.percent, 4) : null,
-          "allTenants": $all and $latest.maxScore ? $round($all / $latest.maxScore, 4) : null,
-          "similarSize": $size and $latest.maxScore ? $round($size / $latest.maxScore, 4) : null
+          "allTenants": $type($all) = 'number' ? $round($all / 100, 4) : null,
+          "similarSize": $type($size) = 'number' ? $round($size / 100, 4) : null
         }
       ) }
   actions:
@@ -93,14 +101,21 @@ datasources:
         $p := params;
         $top := $p.top ? $number($p.top) : 25;
         $cat := $p.category ? $p.category : 'All';
+        $rate := function($v) { (
+          $l := $type($v) = 'string' ? $lowercase($v) : '';
+          $l = 'low' ? 'Low' : $l in ['medium', 'moderate'] ? 'Moderate' : $l = 'high' ? 'High' : 'Unknown'
+        ) };
         $latest := (value.latest.value^(>createdDateTime))[0];
-        $scores := $latest.controlScores;
-        $open := [value.profiles.value[$not(deprecated = true)].(
-          $pr := $;
-          $got := ($scores[controlName = $pr.id])[0].score;
-          $got := $got ? $round($got, 2) : 0;
-          $state := ($pr.controlStateUpdates^(>updatedDateTime))[0].state;
-          $pr.maxScore > $got and $not($state in ['Ignored', 'ThirdParty']) ? {
+        $profiles := value.profiles.value[$not(deprecated = true)]{ id: $ };
+        $open := [$latest.controlScores.(
+          $cs := $;
+          $pr := $lookup($profiles, $cs.controlName);
+          $got := $type($cs.score) = 'number' ? $round($cs.score, 2) : 0;
+          $dated := $pr.controlStateUpdates[$type(updatedDateTime) = 'string'];
+          $state := $dated ? ($dated^(>updatedDateTime))[0].state : $pr.controlStateUpdates[-1].state;
+          $cost := $rate($pr.implementationCost);
+          $impact := $rate($pr.userImpact);
+          $pr and $pr.maxScore > $got and $not($state in ['Ignored', 'ThirdParty']) ? {
             "id": $pr.id,
             "title": $pr.title,
             "category": $pr.controlCategory,
@@ -108,29 +123,38 @@ datasources:
             "pointsAvailable": $round($pr.maxScore - $got, 2),
             "score": $got,
             "maxScore": $pr.maxScore,
-            "implementationCost": $pr.implementationCost,
-            "userImpact": $pr.userImpact,
-            "quickWin": $pr.implementationCost = 'Low' and $pr.userImpact = 'Low',
+            "implementationCost": $cost,
+            "userImpact": $impact,
+            "quickWin": $cost = 'Low' and $impact = 'Low',
             "tier": $pr.tier,
             "rank": $pr.rank,
             "actionUrl": $pr.actionUrl
           }
         )];
         $ranked := [$open[($cat = 'All' or category = $cat) and ($p.quickWins != true or quickWin)]^(>pointsAvailable, rank)];
+        $pending := $not($exists($latest));
         {
-          "rows": [$ranked[[0..($top - 1)]]],
-          "open": $count($open),
-          "pointsAvailable": $round($sum($open.pointsAvailable), 1),
-          "quickWins": $count($open[quickWin]),
-          "quickWinPoints": $round($sum($open[quickWin].pointsAvailable), 1),
+          "pending": $pending,
+          "rows": [$filter($ranked, function($v, $i) { $i < $top })],
+          "open": $pending ? null : $count($open),
+          "pointsAvailable": $pending ? null : $round($sum([0, $open.pointsAvailable]), 1),
+          "quickWins": $pending ? null : $count($open[quickWin]),
+          "quickWinPoints": $pending ? null : $round($sum([0, $open[quickWin].pointsAvailable]), 1),
           "byCategory": $append([], [$distinct($open.category).(
             $c := $;
-            { "category": $c, "points": $round($sum($open[category = $c].pointsAvailable), 1) }
+            { "category": $c, "points": $round($sum([0, $open[category = $c].pointsAvailable]), 1) }
           )^(>points)])
         }
       ) }
 
 layout:
+  - widget: markdown
+    span: 12
+    when: ${ history.pending = true }
+    text: |
+      **Microsoft hasn't calculated a Secure Score for this tenant yet.** It is calculated once a day; the first score
+      and the improvement actions that count for this tenant's licences appear within about 48 hours of the tenant
+      getting its first Microsoft 365 licences.
   - widget: kpi
     data: history.percent
     label: Secure Score
@@ -138,12 +162,12 @@ layout:
     delta: history.change7
     deltaFormat: percent
     deltaPeriod: vs 7 days ago
-    status: "${ value >= 0.7 ? 'ok' : value >= 0.5 ? 'warn' : 'crit' }"
+    status: "${ $type(value) = 'number' ? (value >= 0.7 ? 'ok' : value >= 0.5 ? 'warn' : 'crit') : 'neutral' }"
   - widget: kpi
     data: history.change30
     label: Change over 30 days
     format: percent
-    status: "${ value < 0 ? 'warn' : 'ok' }"
+    status: "${ $type(value) = 'number' and value < 0 ? 'warn' : 'ok' }"
   - widget: kpi
     data: history.allTenants
     label: Average across all tenants
@@ -163,6 +187,9 @@ layout:
     x: day
     y: percent
     format: percent
+    empty:
+      title: No Secure Score history yet
+      body: Microsoft records one score a day; the trend starts with the first calculated score.
   - widget: chart
     id: byCategory
     title: Points still available by category
@@ -173,6 +200,9 @@ layout:
     x: category
     y: points
     format: number
+    empty:
+      title: No points to show
+      body: Nothing is open, or Microsoft hasn't calculated this tenant's Secure Score yet.
   - widget: table
     id: actions
     title: Improvement actions worth the most points
@@ -187,12 +217,12 @@ layout:
       - field: implementationCost
         label: Cost
         kind: status
-        map: { Low: [ok, Low], Moderate: [warn, Moderate], High: [crit, High] }
+        map: { Low: [ok, Low], Moderate: [warn, Moderate], High: [crit, High], Unknown: [neutral, Not rated] }
         filter: facet
       - field: userImpact
         label: User impact
         kind: status
-        map: { Low: [ok, Low], Moderate: [warn, Moderate], High: [crit, High] }
+        map: { Low: [ok, Low], Moderate: [warn, Moderate], High: [crit, High], Unknown: [neutral, Not rated] }
         filter: facet
       - { field: score, label: Points achieved, kind: number, align: end, hidden: true }
       - { field: maxScore, label: Max points, kind: number, align: end, hidden: true }
@@ -208,7 +238,9 @@ layout:
         when: ${ $exists(row.actionUrl) and row.actionUrl != null }
     empty:
       title: No open improvement actions
-      body: Every action in this view is completed, accepted as a risk or handled by a third party.
+      body: >-
+        Every action in this view is completed, accepted as a risk or handled by a third party — or Microsoft hasn't
+        calculated this tenant's Secure Score yet.
 
 export:
   formats: [csv, xlsx]

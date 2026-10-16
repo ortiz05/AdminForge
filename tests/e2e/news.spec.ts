@@ -1,7 +1,7 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
-import { NAV_WITH_NEWS, NEWS_ITEMS, newsList, newsSummary } from './fixtures/news';
-import { FIXED_NOW } from './fixtures/session';
+import { NAV_WITH_NEWS, NEWS_ITEMS, newsList, newsSummary } from '../support/web/fixtures/news';
+import { FIXED_NOW } from '../support/web/fixtures/session';
 import { growViewportToPage, mockApi, setPrefs, settle, type MockHandler } from './support/mock-api';
 
 // News and changes in mock mode: every /api call is answered here (synthetic items in fixtures/news.ts), so only the

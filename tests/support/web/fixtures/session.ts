@@ -1,3 +1,8 @@
+/**
+ * The signed-in session every mock-mode suite starts from: `FIXED_NOW` (the pinned clock), `me()` / `armedMe()`
+ * (GET /api/me as a read-mode or armed engineer, overridable) and `NAV` (GET /api/nav). Synthetic only. Used by the
+ * other fixtures, tests/e2e (specs and mock-api.ts), the component tests and unit/web.
+ */
 import type { MeResponse, NavResponse } from '@adminforge/schemas';
 
 /** Fixed clock for screenshots: relative times and the arm countdown never drift. */

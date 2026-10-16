@@ -1,0 +1,17 @@
+kind: navigation
+id: portal.navigation
+version: 1.0.0
+title: Navigation
+owner: test-team
+sections:
+  - { key: overview, label: Overview, icon: house, order: 10 }
+  - { key: identity, label: Identity, icon: identification-card, order: 20 }
+  - { key: security, label: Security, icon: shield-check, order: 30 }
+  - { key: empty, label: Empty, icon: folder, order: 40 }
+  - key: admin
+    label: Admin
+    icon: gear-six
+    order: 90
+    roles: [Portal.Admin]
+    items:
+      - { key: audit, label: Audit, href: /admin/audit, icon: scroll }

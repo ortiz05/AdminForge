@@ -1,10 +1,10 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
 import { playbookHref } from '../../portal/apps/web/src/playbooks/url';
-import { CHILD_TAP_VALUE, IDS, TAP_VALUE } from './fixtures/automation';
-import { FIXED_NOW, armedMe, me } from './fixtures/session';
+import { CHILD_TAP_VALUE, IDS, TAP_VALUE } from '../support/web/fixtures/automation';
+import { FIXED_NOW, armedMe, me } from '../support/web/fixtures/session';
 import { mockApi, setPrefs } from './support/mock-api';
-import { automationApi } from './support/mock-automation';
+import { automationApi } from '../support/web/mock-automation';
 
 /**
  * Automation flows end to end in mock mode: the playbook drawer (read, write with arm + typed confirm, bulk), live run

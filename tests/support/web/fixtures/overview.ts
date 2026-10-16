@@ -1,3 +1,8 @@
+/**
+ * GET /api/overview payloads (Example Org, synthetic; times relative to FIXED_NOW): `overview()` with every panel,
+ * `overviewWithoutHealth()` for a partial page (service health refused). Used by mock-api.ts defaults, the shell/news
+ * component tests and unit/web/overview.
+ */
 import { FIXED_NOW, TENANT_ID } from './session';
 
 const ago = (ms: number) => new Date(FIXED_NOW - ms).toISOString();

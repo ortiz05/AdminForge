@@ -1,8 +1,8 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { __resetPrefsForTests } from '@adminforge/web/src/lib/prefs';
-import { FIXED_NOW, me } from '../../e2e/fixtures/session';
-import { reportsApi } from '../../e2e/support/mock-reports';
+import { FIXED_NOW, me } from '../../support/web/fixtures/session';
+import { reportsApi } from '../../support/web/mock-reports';
 import { axeViolations } from '../axe';
 import { renderApp } from '../web/automation/render';
 

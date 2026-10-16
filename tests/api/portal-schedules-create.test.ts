@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { canonical } from '@adminforge/api/src/audit/chain';
 import { ApiErrorBody, Schedule } from '@adminforge/schemas';
-import { flush } from '../unit/scheduler/helpers';
+import { flush } from '../support/scheduler';
 import { FakeJobs } from './schedules-helpers';
 import {
   ALL_ROLES,

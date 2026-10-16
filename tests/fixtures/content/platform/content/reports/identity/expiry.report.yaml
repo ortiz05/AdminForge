@@ -1,0 +1,36 @@
+kind: report
+id: identity.expiry
+version: 1.0.0
+title: Credential expiry
+owner: identity-team
+nav: { section: identity, label: Credential expiry, icon: key, order: 50 }
+params:
+  days: { type: number, default: 30 }
+datasources:
+  creds:
+    source: graph
+    request:
+      path: /applications
+      query: { $select: "id,displayName,passwordCredentials" }
+    paging: all
+    transform: >-
+      ${ (
+        $rows := [value.value.(
+          $app := $;
+          passwordCredentials.{ "app": $app.displayName, "keyId": keyId, "expires": endDateTime, "formula": "=1+1" }
+        )];
+        { "rows": $rows, "total": $count($rows) }
+      ) }
+layout:
+  - widget: table
+    data: creds.rows
+    columns:
+      - { field: app, label: Application }
+      - { field: keyId, label: Key id, kind: guid, hidden: true }
+      - { field: expires, label: Expires, kind: datetime }
+      - { field: formula, label: Note }
+export:
+  formats: [csv, xlsx]
+  fileName: expiry-${ params.days }d
+  data: creds.rows
+  columns: all

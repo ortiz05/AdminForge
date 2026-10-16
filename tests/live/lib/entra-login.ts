@@ -1,12 +1,41 @@
 import type { Page } from '@playwright/test';
 import { writeEnvKeys } from '@adminforge/config';
+import { mask, maskUrl } from './mask';
 import { freshTotp } from './totp';
+
+/**
+ * Drives Microsoft's sign-in pages (login.microsoftonline.com, mysignins.microsoft.com) for the dedicated validation
+ * user in a Playwright page: UPN, password, the TOTP code — and, on the first sign-in, the MFA registration Security
+ * Defaults asks for (it registers an authenticator-app TOTP and stores the seed in the local env file).
+ *
+ * Inputs: the page, already on a Microsoft sign-in URL, and `testUserCredentials(env)` (from `<env>.admin.env`).
+ * Outputs: resolves once the browser has left Microsoft's pages; `registeredTotp` when it registered a seed (written
+ * to AF_TEST_USER_TOTP_SECRET with `writeEnvKeys`, never printed). Errors are masked (`mask`): an AADSTS message or a
+ * last-page URL can carry the tenant id or the UPN.
+ * Used by lib/portal-session.ts, e2e/portal.live.spec.ts and scripts/register-test-user-mfa.ts; the nudge detection is
+ * tested in tests/unit/live/entra-login-nudge.test.ts.
+ */
 
 export interface TestUserCredentials {
   upn: string;
   password: string;
   /** Base32 TOTP seed registered for the dedicated test user (local config only). */
   totpSecret?: string;
+}
+
+/**
+ * The validation user's sign-in from the env (`loadEnv(process.env, { admin: true })`): AF_TEST_USER_UPN,
+ * AF_TEST_USER_PASSWORD and, once the MFA bootstrap ran, AF_TEST_USER_TOTP_SECRET. Throws, naming the keys only, when
+ * provisioning hasn't written them.
+ */
+export function testUserCredentials(env: Readonly<Record<string, string | undefined>>): TestUserCredentials {
+  const upn = env.AF_TEST_USER_UPN?.trim();
+  const password = env.AF_TEST_USER_PASSWORD;
+  if (!upn || !password)
+    throw new Error(
+      'AF_TEST_USER_UPN and AF_TEST_USER_PASSWORD are not set (they live in <env>.admin.env). Run `pnpm adminforge provision test-identities`.',
+    );
+  return { upn, password, totpSecret: env.AF_TEST_USER_TOTP_SECRET?.trim() || undefined };
 }
 
 const SECRET_RE = /\b([A-Za-z2-7]{16,64})\b/;
@@ -146,9 +175,11 @@ export async function signInWithEntra(
         'Consent prompt shown: admin consent for the AdminForge app is missing. Run `pnpm adminforge provision entra`.',
       );
     } else if (/AADSTS\d+/.test(body)) {
-      throw new Error(`Entra sign-in error: ${/AADSTS\d+[^.]*\./.exec(body)?.[0] ?? body.slice(0, 200)}`);
+      throw new Error(
+        `Entra sign-in error: ${mask(/AADSTS\d+[^.]*\./.exec(body)?.[0] ?? body.slice(0, 200))}`,
+      );
     }
     await page.waitForTimeout(1500);
   }
-  throw new Error(`Entra sign-in did not finish in time (last page: ${page.url().replace(/[?#].*/, '')}).`);
+  throw new Error(`Entra sign-in did not finish in time (last page: ${maskUrl(page.url())}).`);
 }

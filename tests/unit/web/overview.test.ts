@@ -1,7 +1,7 @@
 import { plannedPage } from '@adminforge/web/src/lib/catalog';
 import { healthStatus, OverviewResponse, skuName } from '@adminforge/web/src/lib/overview';
 import { isActive } from '@adminforge/web/src/app/NavRail';
-import { overview, overviewWithoutHealth } from '../../e2e/fixtures/overview';
+import { overview, overviewWithoutHealth } from '../../support/web/fixtures/overview';
 
 describe('healthStatus', () => {
   it('maps Microsoft 365 states to plain words and a tone', () => {

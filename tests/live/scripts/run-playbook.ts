@@ -1,15 +1,24 @@
 // Live: run one playbook as the validation user — sign in, arm, preview (retrying through Graph replication lag),
-// then run with the preview id. For typed confirms pass --confirm-from <stepId>.<field>.
-// Usage: pnpm exec tsx tests/live/scripts/run-playbook.ts identity.enable-user '{"userId":"@user:AF-Test-User-02","reason":"…"}'
-// Placeholders (`@user:`, `@group:`, `@mailbox:`, `@dl:`, `@team:`, `@site:` … `[#field]`): tests/live/lib/placeholders.ts.
-// Output: statuses and error codes; any message text is masked (ids → <id>, addresses → <address>).
-import { mask } from '../lib/mask';
+// then run with the preview id and wait for the run to settle (lib/runs.ts).
+//
+// Usage (repository root; the validation user enabled — see tests/live/README.md):
+//   pnpm exec tsx tests/live/scripts/run-playbook.ts <playbook> '<inputs JSON>' [--confirm-from <stepId>.<field>]
+//   e.g. … identity.enable-user '{"userId":"@user:AF-Test-User-02","reason":"…"}'
+// Inputs: placeholders (`@user:`, `@group:`, `@mailbox:`, `@dl:`, `@team:`, `@site:` … `[#field]`) resolve as the
+//   validation user (lib/placeholders.ts), so no ids or addresses go on the command line. --confirm-from answers a
+//   typed confirm with that step's output in the preview (what the UI would show).
+// Output: the run status, the error code of a failed run and of each failed step, messages masked (lib/mask.ts).
+//   Exit code 1 unless the run succeeded.
+// Safety: writes for real once armed — only on AF-Test-* objects (README "Safety rules"); the server enforces preview,
+//   confirm and approval. Disarms afterwards, also when the run or the script fails.
+import { why } from '../lib/mask';
 import { resolvePlaceholders } from '../lib/placeholders';
 import { armWriteAccess, openPortalSession } from '../lib/portal-session';
+import { previewThenRun, settle, stepOutput } from '../lib/runs';
 
 const [playbook, inputsJson, ...rest] = process.argv.slice(2);
-const confirmFrom = rest[rest.indexOf('--confirm-from') + 1];
-if (!playbook || !inputsJson)
+const confirmFrom = rest.includes('--confirm-from') ? rest[rest.indexOf('--confirm-from') + 1] : undefined;
+if (!playbook || !inputsJson || (rest.includes('--confirm-from') && !confirmFrom?.includes('.')))
   throw new Error('usage: run-playbook.ts <playbook> <inputs-json> [--confirm-from step.field]');
 const s = await openPortalSession({ forwardToApi: false });
 
@@ -24,58 +33,31 @@ try {
   throw err;
 }
 
-type RunError = { code?: string; message?: string };
-type Run = {
-  run: { status: string; error?: RunError };
-  steps: Array<{ stepId: string; status: string; output?: Record<string, unknown>; error?: RunError }>;
-};
-/** ` — <code>: <masked message>` for a failed run (or step), or nothing. */
-const why = (e: RunError | undefined) =>
-  e?.code || e?.message
-    ? ` — ${e.code ?? 'error'}${e.message ? `: ${mask(e.message).slice(0, 300)}` : ''}`
-    : '';
-const wait = async (id: string) => {
-  for (let i = 0; i < 90; i++) {
-    const r = await s.api<Run>('GET', `/api/runs/${id}`);
-    if (!['queued', 'running'].includes(r.json.run.status)) return r.json;
-    await new Promise((res) => setTimeout(res, 2000));
-  }
-  throw new Error('run did not finish');
-};
+let armed = false;
 try {
   await armWriteAccess(s, 15, `AdminForge live script: ${playbook}`);
-  let preview: Run | undefined;
-  let previewId = '';
-  for (let attempt = 1; attempt <= 6; attempt++) {
-    const p = await s.api<{ runId: string }>('POST', '/api/runs', { playbook, inputs, dryRun: true });
-    previewId = p.json.runId;
-    preview = await wait(previewId);
-    if (preview.run.status === 'succeeded') break;
-    console.log(
-      `preview attempt ${attempt}: ${preview.run.status}${why(preview.run.error)} (retrying in 10 s)`,
-    );
-    await new Promise((res) => setTimeout(res, 10_000));
-  }
-  if (preview?.run.status !== 'succeeded') throw new Error('preview never succeeded');
-  let confirmation: string | undefined;
-  if (confirmFrom) {
-    const [stepId, field] = confirmFrom.split('.');
-    confirmation = String(
-      preview.steps.filter((x) => x.stepId === stepId && x.status === 'succeeded').at(-1)?.output?.[field!] ??
-        '',
-    );
-  }
-  const created = await s.api<{ runId: string; error?: { code: string; message: string } }>(
-    'POST',
-    '/api/runs',
-    { playbook, inputs, dryRun: false, previewRunId: previewId, ...(confirmation ? { confirmation } : {}) },
-  );
-  if (!created.json.runId) throw new Error(`run not created: ${created.status}${why(created.json.error)}`);
-  const done = await wait(created.json.runId);
+  armed = true;
+  const [stepId, field] = confirmFrom?.split('.') ?? [];
+  const { preview, run } = await previewThenRun(s, playbook, inputs, {
+    onRetry: (attempt, p) =>
+      console.log(`preview attempt ${attempt}: ${p.run.status}${why(p.run.error)} (retrying in 10 s)`),
+    ...(stepId && field
+      ? {
+          confirm: (p) => {
+            const value = stepOutput(p, stepId)?.[field];
+            return value === undefined || value === null ? undefined : String(value);
+          },
+        }
+      : {}),
+  });
+  if (!run) throw new Error(`preview never succeeded: ${preview.run.status}${why(preview.run.error)}`);
+  const done = await settle(s, run);
   console.log(`${playbook}: ${done.run.status}${why(done.run.error)}`);
   for (const step of done.steps)
     if (step.status === 'failed') console.log(`  step ${step.stepId}: failed${why(step.error)}`);
-  await s.api('POST', '/auth/disarm');
+  process.exitCode = done.run.status === 'succeeded' ? 0 : 1;
 } finally {
+  // Disarm whatever happened: write access would otherwise stay on until it expires.
+  if (armed) await s.api('POST', '/auth/disarm').catch(() => undefined);
   await s.close();
 }

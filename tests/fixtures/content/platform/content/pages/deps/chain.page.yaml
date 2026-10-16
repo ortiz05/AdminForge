@@ -1,0 +1,48 @@
+kind: page
+id: deps.chain
+version: 1.0.0
+title: Chain
+owner: t
+template: dashboard
+params:
+  kind: { type: enum, values: [Member, Guest], default: Member }
+datasources:
+  first:
+    source: graph
+    request: { path: /users }
+    transform: ${ value.value[0].id }
+  second:
+    source: graph
+    request:
+      path: /users/${ $encode(ds.first) }/memberOf
+  third:
+    source: static
+    when: ${ ds.second != null }
+    data:
+      firstId: ${ ds.first }
+  independent:
+    source: static
+    data: 42
+  mailboxes:
+    source: runner
+    script: exchange/Get-Test.ps1
+    sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+    services: [exchange]
+    timeoutSeconds: 3600
+    parameters:
+      kinds:
+        - ${ params.kind }
+  settings:
+    source: arm
+    request:
+      method: POST
+      path: /subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example/providers/Microsoft.Web/sites/func-example/config/appsettings/list
+      apiVersion: "2023-12-01"
+    transform: ${ $keys(value.properties) }
+  inventory:
+    source: resourceGraph
+    query: |-
+      // af:deps.chain#inventory
+      Resources | project id, name
+layout:
+  - { widget: kpi, data: independent }

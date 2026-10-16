@@ -1,0 +1,77 @@
+kind: page
+id: identity.users
+version: 1.0.0
+title: Users
+summary: Member and guest accounts.
+owner: identity-team
+tags: [identity, users]
+template: list-detail
+nav: { section: identity, label: Users, icon: users, order: 10 }
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    graph: [User.Read.All]
+  entraRoles: [Directory Readers]
+params:
+  q: { type: string, default: "", label: Search }
+  userType: { type: enum, values: [All, Member, Guest], default: All, facet: true }
+  department: { type: string, facet: true }
+savedViews: { enabled: true, shared: true }
+filters:
+  advanced:
+    dialect: odata
+    fields:
+      - { field: department, label: Department, type: string, operators: [eq, ne, startsWith, in, isEmpty] }
+      - { field: created, label: Created, type: date, property: createdDateTime, operators: [ge, le] }
+      - { field: accountEnabled, label: Enabled, type: boolean }
+      - { field: manager, label: Manager id, type: guid, property: manager/id }
+      - { field: userType, label: Type, type: enum, values: [Member, Guest] }
+datasources:
+  users:
+    source: graph
+    request:
+      path: /users
+      headers: { ConsistencyLevel: eventual }
+      query:
+        $select: id,displayName,userPrincipalName,accountEnabled,userType,department
+        $count: true
+        $top: 5
+        $filter: >-
+          ${ $join([
+               params.userType != 'All' ? "userType eq " & $odata(params.userType),
+               params.department ? "department eq " & $odata(params.department),
+               advanced
+             ][$], ' and ') }
+        $search: >-
+          ${ params.q ? '"displayName:' & $odataSearch(params.q) & '"' }
+    paging: cursor
+    cache: { ttl: 60 }
+  counts:
+    source: graphBatch
+    requests:
+      members: { path: /users/$count, query: { $filter: "userType eq 'Member'" }, headers: { ConsistencyLevel: eventual } }
+      guests: { path: /users/$count, query: { $filter: "userType eq 'Guest'" }, headers: { ConsistencyLevel: eventual } }
+    cache: { ttl: 300 }
+  later:
+    source: static
+    when: ${ params.userType = 'Guest' }
+    data: { shown: true }
+layout:
+  - { widget: kpi, data: counts.members, label: Members }
+  - widget: table
+    id: users
+    data: users.value
+    rowKey: id
+    columns:
+      - { field: displayName, label: Name, kind: identity, secondary: userPrincipalName }
+      - field: accountEnabled
+        label: Status
+        kind: status
+        map: { "true": [ok, Enabled], "false": [crit, Disabled] }
+      - { field: department, label: Department }
+      - { field: id, label: Object id, kind: guid, hidden: true }
+export:
+  formats: [csv, xlsx]
+  fileName: users
+  data: users.value
+  columns: visible

@@ -1,3 +1,13 @@
+/**
+ * The Reports catalogue and portal (in-app) report schedules harness: synthetic report definitions (an Entra report
+ * with every parameter type, an Operator-only cost report, a draft and an invalid one), navigation, a content
+ * schedule, delivery configuration (`DELIVERY_ENV`: key names the API shows, synthetic values), a valid
+ * POST /api/schedules `body()` and `portalApp()` — `schedulesApp` (schedules-helpers.ts) over those fixtures, with
+ * `/subscribedSkus` answered by `skus` for licence checks.
+ *
+ * Used by the portal-schedules-* and reports-catalog API tests. People and role sets come from support/people.ts
+ * (re-exported here).
+ */
 import { Report, type Navigation } from '@adminforge/schemas';
 import {
   FakeDefinitions,
@@ -8,13 +18,9 @@ import {
   type SchedulesAppOptions,
 } from './schedules-helpers';
 
-export { ALL_ROLES, AVERY, BLAKE, READER } from './schedules-helpers';
+export { ADMIN, ALL_ROLES, AVERY, BLAKE, DANA, OPERATOR, READER } from './support/people';
 
 // Synthetic content and configuration for the Reports catalogue and in-app report schedules (Example Org).
-export const OPERATOR = ['Portal.Reader', 'Portal.Operator'];
-export const ADMIN = ['Portal.Reader', 'Portal.Operator', 'Portal.Admin'];
-export const DANA = { oid: '00000000-0000-4000-8000-0000000000d4', upn: 'dana@example.com' };
-
 export const inactiveUsers = Report.parse({
   kind: 'report',
   id: 'identity.inactive-users',
@@ -152,14 +158,14 @@ export function body(over: Record<string, unknown> = {}, job: Record<string, unk
   };
 }
 
-/** The schedules app with the report fixtures, delivery configuration and PUT/DELETE helpers. */
+/** The schedules app with the report fixtures and delivery configuration (sessions also have `put` and `del`). */
 export async function portalApp(
   o: SchedulesAppOptions & { env?: Record<string, string>; skus?: unknown } = {},
 ) {
   const outbound =
     o.outbound ??
     new FakeOutbound((call) => (call.path === '/subscribedSkus' ? (o.skus ?? { value: [] }) : {}));
-  const t = await schedulesApp({
+  return schedulesApp({
     defs: o.defs ?? reportDefs(),
     jobs: o.jobs ?? new FakeJobs(),
     outbound,
@@ -167,14 +173,4 @@ export async function portalApp(
     ...(o.config ? { config: o.config } : {}),
     schedules: { delivery: { env: o.env ?? DELIVERY_ENV }, ...o.schedules },
   });
-  const login = async (user: { oid: string; upn: string }, roles: string[]) => {
-    const u = await t.login(user, roles);
-    return {
-      ...u,
-      put: (url: string, payload: unknown) =>
-        t.app.inject({ method: 'PUT', url, headers: u.headers, payload: payload as Record<string, unknown> }),
-      del: (url: string) => t.app.inject({ method: 'DELETE', url, headers: u.headers }),
-    };
-  };
-  return { ...t, login };
 }

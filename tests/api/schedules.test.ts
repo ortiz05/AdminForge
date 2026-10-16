@@ -1,6 +1,6 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
-import { flush } from '../unit/scheduler/helpers';
+import { flush } from '../support/scheduler';
 import {
   ALL_ROLES,
   AVERY,
@@ -364,7 +364,7 @@ describe('schedules API', () => {
     expect(file.body).toBe('Name\r\nsa1\r\n');
     expect(t.audit.rows.find((r) => r.action === 'artifact.downloaded')).toMatchObject({
       targetId: ok.id,
-      actorUpn: 'casey@example.com',
+      actorUpn: READER.upn,
     });
     for (const id of [
       evil.id,

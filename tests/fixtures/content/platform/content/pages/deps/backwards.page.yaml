@@ -1,0 +1,15 @@
+kind: page
+id: deps.backwards
+version: 1.0.0
+title: Backwards
+owner: t
+template: dashboard
+datasources:
+  early:
+    source: static
+    data: ${ ds.late }
+  late:
+    source: static
+    data: 1
+layout:
+  - { widget: kpi, data: early }

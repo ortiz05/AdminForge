@@ -1,0 +1,13 @@
+kind: page
+id: identity.break-glass
+version: 1.0.0
+title: Break-glass accounts
+owner: identity-team
+template: list-detail
+nav: { section: identity, label: Break-glass, order: 90 }
+requires:
+  portalRoles: [Portal.Admin]
+datasources:
+  rows: { source: static, data: [] }
+layout:
+  - { widget: table, data: rows, columns: [{ field: id, label: Id }] }

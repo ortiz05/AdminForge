@@ -1,3 +1,10 @@
+/**
+ * The PowerShell runner as API tests see it, without a runner process: `readFakeRunnerRequest` opens a job request
+ * the API sent through `fetch` (body, timestamp, the delegated tokens sealed with the shared key) and
+ * `signedRunnerAnswer` / `signedRunnerRefusal` build the signed NDJSON or JSON answers the real runner would send.
+ * Used by runner-port.test.ts and runner-port-write-guard.test.ts (which take keys, tokens and
+ * runner configuration from tests/unit/runner/helpers.ts).
+ */
 import {
   RESPONSE_SIGNATURE_HEADER,
   RunnerEventSigner,

@@ -4,8 +4,8 @@ import userEvent from '@testing-library/user-event';
 import { App, createAppRouter, createQueryClient } from '@adminforge/web/src/app/router';
 import { __resetPrefsForTests } from '@adminforge/web/src/lib/prefs';
 import type { UserPrefs } from '@adminforge/schemas';
-import { overview } from '../../e2e/fixtures/overview';
-import { me, NAV } from '../../e2e/fixtures/session';
+import { overview } from '../../support/web/fixtures/overview';
+import { me, NAV } from '../../support/web/fixtures/session';
 
 const json = (body: unknown) =>
   new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } });

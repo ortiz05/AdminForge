@@ -1,0 +1,11 @@
+{
+  "$fixture": {
+    "status": 403,
+    "body": {
+      "error": {
+        "code": "AadPremiumLicenseRequired",
+        "message": "The tenant needs an AAD Premium 2 license."
+      }
+    }
+  }
+}

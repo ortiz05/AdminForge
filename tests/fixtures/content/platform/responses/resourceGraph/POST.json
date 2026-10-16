@@ -1,0 +1,37 @@
+{
+  "$fixture": {
+    "variants": [
+      {
+        "match": {
+          "bodyIncludes": "// af:deps.chain#inventory"
+        },
+        "body": {
+          "totalRecords": 1,
+          "data": [
+            {
+              "id": "/subscriptions/x/resourceGroups/rg/providers/Microsoft.Web/sites/from-variant",
+              "name": "from-variant"
+            }
+          ]
+        }
+      }
+    ],
+    "body": {
+      "totalRecords": 2,
+      "data": [
+        {
+          "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example/providers/Microsoft.Web/sites/avery-func",
+          "name": "avery-func",
+          "type": "microsoft.web/sites",
+          "resourceGroup": "rg-example"
+        },
+        {
+          "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example/providers/Microsoft.Storage/storageAccounts/stother",
+          "name": "stother",
+          "type": "microsoft.storage/storageaccounts",
+          "resourceGroup": "rg-example"
+        }
+      ]
+    }
+  }
+}

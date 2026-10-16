@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { FIXED_NOW } from './fixtures/session';
+import { FIXED_NOW } from '../support/web/fixtures/session';
 import { mockApi, setPrefs } from './support/mock-api';
 
 // The rail's rendered width is what people see; the Collapse/Expand button must change it at every window width

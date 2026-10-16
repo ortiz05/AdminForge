@@ -1,8 +1,8 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
 import type { NavResponse } from '@adminforge/schemas';
-import { answerQuery, CAPABILITIES_NO_DEFENDER } from './fixtures/query';
-import { NAV } from './fixtures/session';
+import { answerQuery, CAPABILITIES_NO_DEFENDER } from '../support/web/fixtures/query';
+import { NAV } from '../support/web/fixtures/session';
 import { growViewportToPage, mockApi, setPrefs, settle, type MockHandler } from './support/mock-api';
 
 /**

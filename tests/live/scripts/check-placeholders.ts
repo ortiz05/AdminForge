@@ -1,6 +1,14 @@
 // Live: resolves playbook-input placeholders as the validation user and prints, per placeholder, whether it resolved
-// (and to which field) — never the value. Use it before run-playbook.ts to check the AF-Test-* objects are findable.
-// Usage: pnpm exec tsx tests/live/scripts/check-placeholders.ts @mailbox:AF-Test-Shared-01 @dl:AF-Test-DL-01 @team:AF-Test-Team-01 @site:AF-Test-Team-01#webUrl
+// (and to which field) — never the value. Use it before run-playbook.ts to check the AF-Test-* objects are findable
+// (directory and SharePoint search can lag behind a new object).
+//
+// Usage (repository root; the validation user enabled — see tests/live/README.md):
+//   pnpm exec tsx tests/live/scripts/check-placeholders.ts @mailbox:AF-Test-Shared-01 @dl:AF-Test-DL-01 \
+//     @team:AF-Test-Team-01 @site:AF-Test-Team-01#webUrl
+// Inputs: placeholders `@<kind>:<name>[#field]` (lib/placeholders.ts).
+// Output: `<placeholder>: ok (<field>)`, or why not (masked, lib/mask.ts). Exit code 1 when one doesn't resolve.
+// Safety: read-only (portal search and read-mode page datasources); resolved values are never printed.
+import { maskError } from '../lib/mask';
 import { parsePlaceholder, resolvePlaceholders } from '../lib/placeholders';
 import { openPortalSession } from '../lib/portal-session';
 
@@ -19,7 +27,7 @@ try {
       console.log(`${w}: ok (${parsePlaceholder(w)!.field})`);
     } catch (err) {
       failed++;
-      console.log(`${(err as Error).message}`);
+      console.log(maskError(err));
     }
   }
 } finally {

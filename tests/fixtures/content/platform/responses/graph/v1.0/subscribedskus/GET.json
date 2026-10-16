@@ -1,0 +1,48 @@
+{
+  "value": [
+    {
+      "skuPartNumber": "SPE_E3",
+      "capabilityStatus": "Enabled",
+      "consumedUnits": 10,
+      "prepaidUnits": {
+        "enabled": 20
+      },
+      "servicePlans": [
+        {
+          "servicePlanName": "AAD_PREMIUM",
+          "provisioningStatus": "Success"
+        },
+        {
+          "servicePlanName": "INTUNE_A",
+          "provisioningStatus": "Success"
+        },
+        {
+          "servicePlanName": "EXCHANGE_S_ENTERPRISE",
+          "provisioningStatus": "Success"
+        },
+        {
+          "servicePlanName": "TEAMS1",
+          "provisioningStatus": "Success"
+        },
+        {
+          "servicePlanName": "SHAREPOINTENTERPRISE",
+          "provisioningStatus": "Success"
+        }
+      ]
+    },
+    {
+      "skuPartNumber": "EMS",
+      "capabilityStatus": "Suspended",
+      "consumedUnits": 0,
+      "prepaidUnits": {
+        "enabled": 0
+      },
+      "servicePlans": [
+        {
+          "servicePlanName": "AAD_PREMIUM_P2",
+          "provisioningStatus": "Success"
+        }
+      ]
+    }
+  ]
+}

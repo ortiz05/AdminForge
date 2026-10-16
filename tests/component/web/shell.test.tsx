@@ -5,8 +5,8 @@ import type { MeResponse } from '@adminforge/schemas';
 import { App, createAppRouter, createQueryClient } from '@adminforge/web/src/app/router';
 import { browser } from '@adminforge/web/src/lib/browser';
 import { __resetPrefsForTests } from '@adminforge/web/src/lib/prefs';
-import { overview } from '../../e2e/fixtures/overview';
-import { armedMe, FIXED_NOW, me, NAV } from '../../e2e/fixtures/session';
+import { overview } from '../../support/web/fixtures/overview';
+import { armedMe, FIXED_NOW, me, NAV } from '../../support/web/fixtures/session';
 import { axeViolations } from '../axe';
 
 const json = (body: unknown, status = 200) =>
@@ -275,7 +275,7 @@ describe('Overview page', () => {
   });
 
   it('a refused service-health call degrades to a panel error, not a page error', async () => {
-    const { overviewWithoutHealth } = await import('../../e2e/fixtures/overview');
+    const { overviewWithoutHealth } = await import('../../support/web/fixtures/overview');
     renderApp({ respond: (url) => (url === '/api/overview' ? json(overviewWithoutHealth()) : undefined) });
     expect(await screen.findByText('Service health isn’t available')).toBeInTheDocument();
     expect(screen.getByText('Needs ServiceHealth.Read.All')).toBeInTheDocument();

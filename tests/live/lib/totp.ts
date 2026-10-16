@@ -1,5 +1,11 @@
 import { createHmac } from 'node:crypto';
 
+/**
+ * Authenticator-app codes for the validation user's MFA: RFC 6238 TOTP from the base32 seed in
+ * AF_TEST_USER_TOTP_SECRET (registered by scripts/register-test-user-mfa.ts). Pure apart from the clock; codes and
+ * seeds are never printed. Used by lib/entra-login.ts; tested in tests/unit/live/totp.test.ts.
+ */
+
 /** RFC 4648 base32 decode (authenticator-app secrets). */
 export function base32Decode(input: string): Buffer {
   const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';

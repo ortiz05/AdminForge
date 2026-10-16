@@ -2,7 +2,7 @@ import { deliveryEnv, resolveRecipients, sendEmail } from '@adminforge/api/src/d
 import { planSync } from '@adminforge/api/src/schedules/sync';
 import type { ScheduleRow } from '@adminforge/api/src/schedules/types';
 import { Schedule } from '@adminforge/schemas';
-import { flush } from '../unit/scheduler/helpers';
+import { flush } from '../support/scheduler';
 import { AVERY, FakeDefinitions, FakeJobs, schedule, schedulesApp } from './schedules-helpers';
 
 const NOW = new Date('2026-10-15T12:00:00Z');

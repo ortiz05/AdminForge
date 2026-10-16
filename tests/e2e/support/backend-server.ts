@@ -3,6 +3,9 @@
  * published content from portal/content, synthetic connector fixtures from tests/fixtures (DATA_MODE=fixtures),
  * real params validation, transforms, saved views and exports. Requests are injected into the Fastify app with a
  * mock session; no network, no database. Prints `PORT=<n>` once listening.
+ *
+ * The app is built with `makeApp` / `mockLogin` from tests/api/helpers.ts — the API project's test kit — so the e2e
+ * backend and the API tests run the same wiring.
  */
 import { createServer } from 'node:http';
 import { makeApp, mockConfig, mockLogin } from '../../api/helpers';

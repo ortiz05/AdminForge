@@ -1,3 +1,10 @@
+/**
+ * The database for the DB-backed API suites (`*-pg.test.ts`, pg-stores, definitions-db, part of views):
+ * `testDatabaseUrl()` returns a migrated, disposable database — TEST_DATABASE_URL as-is, or `adminforge_test` created
+ * next to the dev DATABASE_URL from the env file — or null when Postgres isn't reachable (the suites then skip);
+ * `resetTables()` empties the mutable tables between tests. Never the dev database itself: test rows must not reach
+ * the dev audit chain.
+ */
 import { loadEnv } from '@adminforge/config';
 import { createDatabase, type Database } from '@adminforge/api/src/db/client';
 import { runMigrations } from '@adminforge/api/src/db/migrate';

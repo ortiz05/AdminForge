@@ -1,4 +1,4 @@
-import { appearance, probes, scheduleRuns, schedules } from '../../e2e/fixtures/automation';
+import { appearance, probes, scheduleRuns, schedules } from '../../support/web/fixtures/automation';
 import {
   accentChecks,
   AppearanceResponse,

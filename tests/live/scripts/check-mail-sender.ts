@@ -2,18 +2,22 @@
 // Graph sendMail as the automation identity) — without mailing anyone: one short message from AF_MAIL_SENDER to
 // AF_MAIL_SENDER itself. With --not-as <display name> (repeatable) it also tries to send AS that mailbox (again only to
 // AF_MAIL_SENDER) and expects Exchange to refuse: the automation identity may send only as the report mailbox
-// (Exchange RBAC for Applications scoped to it, Entra Mail.Send withheld). Prints statuses only.
+// (Exchange RBAC for Applications scoped to it, Entra Mail.Send withheld).
 //
-// No database is used, so it may read the services' configuration too (ADMINFORGE_ENV_OVERLAY=host).
 // Usage (repository root):
 //   pnpm exec tsx tests/live/scripts/check-mail-sender.ts [--not-as AF-Test-Shared-01]…
 //   … --sender-name "AF-Test-…"   check a test mailbox before AF_MAIL_SENDER is set (looked up by display name)
-// Only test mailboxes (display name AF-Test-…) are accepted for --not-as and --sender-name (or, for --sender-name,
-// the mailbox AF_MAIL_SENDER already names): mail is never sent as anyone else's mailbox.
+// Inputs: the env file (automation identity, AF_MAIL_SENDER). No database is used, so it may read the services'
+//   configuration too (ADMINFORGE_ENV_OVERLAY=host). API modules come from `@adminforge/api/tooling`.
+// Output: `sent`, `refused (access denied)` or `failed (other error)` per attempt, with Microsoft's reason (first
+//   sentence, masked — lib/mask.ts). Exit code 1 when an expectation fails.
+// Safety: only test mailboxes (display name AF-Test-…) are accepted for --not-as and --sender-name (or, for
+//   --sender-name, the mailbox AF_MAIL_SENDER already names), and every message goes to the sender itself: mail is
+//   never sent as, or to, anyone else's mailbox.
 import { randomUUID } from 'node:crypto';
 import { parseArgs } from 'node:util';
 import { loadEnv } from '@adminforge/config';
-import { mask } from '../lib/mask';
+import { maskError } from '../lib/mask';
 
 const { values } = parseArgs({
   options: { 'not-as': { type: 'string', multiple: true }, 'sender-name': { type: 'string' } },
@@ -28,9 +32,7 @@ for (const name of values['not-as'] ?? [])
       '--not-as accepts only test mailboxes (display name AF-Test-…): this check sends as the mailbox it names.',
     );
 
-const { loadConfig } = await import('@adminforge/api/src/config');
-const { createContext } = await import('@adminforge/api/src/context');
-const { sendEmail } = await import('@adminforge/api/src/delivery/notifier');
+const { createContext, loadConfig, sendEmail } = await import('@adminforge/api/tooling');
 
 const config = loadConfig();
 const ctx = createContext(config, { database: null }, { warn: () => undefined });
@@ -83,10 +85,7 @@ const message = (n: number) => ({
   text: 'Automated check that AdminForge can send report email from this mailbox (sent to itself). No action needed.',
 });
 /** Microsoft's reason, first sentence only, with addresses and ids masked (it never names the recipient). */
-const reason = (m: string) =>
-  mask(m.split(/(?<=\.)\s/)[0] ?? '')
-    .replace(/[^\s@<>"',;]+@[^\s@<>"',;]+/g, '<address>')
-    .slice(0, 160);
+const reason = (m: string) => maskError(m, { firstSentence: true, max: 160 });
 const refusal = (m: string) =>
   `${/\b403\b|AccessDenied|Access is denied|not allowed|Mail\.Send/i.test(m) ? 'refused (access denied)' : 'failed (other error)'}: ${reason(m)}`;
 

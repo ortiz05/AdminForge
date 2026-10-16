@@ -1,7 +1,7 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
-import { FIXED_NOW, me } from './fixtures/session';
-import { CAPABILITIES_NO_INTUNE, PROBES } from './fixtures/renderer';
+import { FIXED_NOW, me } from '../support/web/fixtures/session';
+import { CAPABILITIES_NO_INTUNE, PROBES } from '../support/web/fixtures/renderer';
 import { backendUrl, routeContentBackend, type BackendOptions } from './support/content-backend';
 import { growViewportToPage, mockApi, setPrefs, settle } from './support/mock-api';
 

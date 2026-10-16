@@ -1,8 +1,8 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
-import { FIXED_NOW, me } from './fixtures/session';
+import { FIXED_NOW, me } from '../support/web/fixtures/session';
 import { growViewportToPage, mockApi, setPrefs, settle } from './support/mock-api';
-import { automationApi, type AutomationOptions } from './support/mock-automation';
+import { automationApi, type AutomationOptions } from '../support/web/mock-automation';
 
 /**
  * Emergency stop (Admin → Settings): an admin pauses changes with a reason, everyone signed in sees the banner, and an

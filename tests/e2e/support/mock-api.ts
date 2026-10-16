@@ -1,27 +1,21 @@
+/**
+ * The mock portal API for the Playwright specs: `mockApi(page, opts)` answers every /api and /auth request in the
+ * browser — feature handlers first (`opts.handlers`, e.g. tests/support/web/mock-automation.ts `automationApi()` or
+ * mock-reports.ts `reportsApi()`), then defaults for the session (`me`, sign-in/out, arm/disarm), navigation,
+ * overview, preferences and capabilities from tests/support/web/fixtures — and records every call so specs can assert
+ * on writes. Also: `setPrefs` (stored preferences before load), `settle` (fonts and animations done) and
+ * `growViewportToPage` (full-page screenshots).
+ *
+ * The handler types live in tests/support/web/mock-handler.ts (shared with the component tests) and are re-exported
+ * here for the specs.
+ */
 import type { Page, Route } from '@playwright/test';
 import type { MeResponse } from '@adminforge/schemas';
-import { overview } from '../fixtures/overview';
-import { FIXED_NOW, me, NAV } from '../fixtures/session';
+import { overview } from '../../support/web/fixtures/overview';
+import { FIXED_NOW, me, NAV } from '../../support/web/fixtures/session';
+import type { MockHandler } from '../../support/web/mock-handler';
 
-/** What a handler answers with: JSON (`body`), or raw `text` with its content type (SSE, CSS). */
-export interface MockReply {
-  status?: number;
-  body?: unknown;
-  text?: string;
-  contentType?: string;
-}
-
-export interface MockRequest {
-  method: string;
-  path: string;
-  url: URL;
-  body: unknown;
-  /** The X-AdminForge-CSRF header, when sent. */
-  csrf?: string | null;
-}
-
-/** Feature mocks plug in here; the first handler that answers wins, before the defaults below. */
-export type MockHandler = (req: MockRequest) => MockReply | undefined;
+export type { MockHandler, MockReply, MockRequest } from '../../support/web/mock-handler';
 
 export interface MockOptions {
   me?: MeResponse;

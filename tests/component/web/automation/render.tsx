@@ -1,11 +1,17 @@
+/**
+ * `renderApp({ path, session, handlers, automation })` for the automation component tests (playbook drawer, runs,
+ * ops, secrets): the real web app rendered in jsdom, with `fetch` stubbed to answer from the shared mock API
+ * (tests/support/web — the same handlers and payloads the Playwright specs use), then a few session defaults. Returns
+ * the rendered view, the router and query client, the automation mock's `state` and every request the UI made (`calls`).
+ */
 import '../ensure-route-tree';
 import { render } from '@testing-library/react';
 import type { MeResponse } from '@adminforge/schemas';
 import { App, createAppRouter, createQueryClient } from '@adminforge/web/src/app/router';
-import { overview } from '../../../e2e/fixtures/overview';
-import { me, NAV } from '../../../e2e/fixtures/session';
-import type { MockHandler } from '../../../e2e/support/mock-api';
-import { automationApi, type AutomationOptions } from '../../../e2e/support/mock-automation';
+import { overview } from '../../../support/web/fixtures/overview';
+import { me, NAV } from '../../../support/web/fixtures/session';
+import type { MockHandler } from '../../../support/web/mock-handler';
+import { automationApi, type AutomationOptions } from '../../../support/web/mock-automation';
 
 const json = (body: unknown, status = 200) =>
   new Response(status === 204 ? null : JSON.stringify(body), {

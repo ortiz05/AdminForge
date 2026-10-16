@@ -2,6 +2,9 @@ import { execFileSync } from 'node:child_process';
 import { repoRoot } from '@adminforge/config';
 
 /**
+ * Playwright global setup for the live suite (playwright.config.ts). Output: the CLI's own status line (no
+ * identifiers). Safety: touches only the validation user provisioning created (the CLI refuses any other account).
+ *
  * The validation user holds standing directory roles (User Administrator, Global Reader), so it stays disabled except
  * while the live suite runs. This enables it (`adminforge provision test-identities --enable`, provisioner credential
  * from <env>.admin.env, no identifiers printed); global-teardown.ts disables it again. AF_LIVE_KEEP_TESTER=1 leaves

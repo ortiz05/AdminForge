@@ -1,7 +1,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { ApiErrorBody } from '@adminforge/schemas';
-import { flush } from '../unit/scheduler/helpers';
+import { flush } from '../support/scheduler';
 import { FakeJobs, schedule } from './schedules-helpers';
 import {
   ADMIN,

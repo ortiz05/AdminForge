@@ -1,3 +1,11 @@
+/**
+ * Mock Reports API (`reportsApi(opts)` → `{ handler, state }`): the report catalogue and portal report schedules —
+ * catalogue and detail, delivery options, create/update/delete/pause schedules, run now and run history — answered
+ * from fixtures/reports.ts with the API's own refusals (e.g. at most hourly). `state` records what the UI sent.
+ *
+ * A transport-free `MockHandler` (mock-handler.ts) used by the reports e2e spec (through
+ * tests/e2e/support/mock-api.ts), component/reports and unit/web/reports-catalog.
+ */
 import {
   DEFAULT_COLUMNS,
   DELIVERY_OPTIONS,
@@ -7,8 +15,8 @@ import {
   reportScheduleRuns,
   reportSchedules,
   type ScheduleFixture,
-} from '../fixtures/reports';
-import type { MockHandler, MockReply } from './mock-api';
+} from './fixtures/reports';
+import type { MockHandler, MockReply } from './mock-handler';
 
 const error = (status: number, code: string, message: string, hint?: string): MockReply => ({
   status,

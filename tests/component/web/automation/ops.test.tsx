@@ -1,7 +1,7 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { __resetPrefsForTests } from '@adminforge/web/src/lib/prefs';
-import { me } from '../../../e2e/fixtures/session';
+import { me } from '../../../support/web/fixtures/session';
 import { axeViolations } from '../../axe';
 import { renderApp } from './render';
 

@@ -2,8 +2,8 @@ import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { __resetPrefsForTests } from '@adminforge/web/src/lib/prefs';
 import { encodeParam } from '@adminforge/web/src/playbooks/url';
-import { IDS } from '../../../e2e/fixtures/automation';
-import { armedMe, FIXED_NOW, me } from '../../../e2e/fixtures/session';
+import { IDS } from '../../../support/web/fixtures/automation';
+import { armedMe, FIXED_NOW, me } from '../../../support/web/fixtures/session';
 import { axeViolations } from '../../axe';
 import { renderApp } from './render';
 

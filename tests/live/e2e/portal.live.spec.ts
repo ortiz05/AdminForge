@@ -1,106 +1,49 @@
-import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 import { loadEnv } from '@adminforge/config';
-import { mkdirSync } from 'node:fs';
-import { signInWithEntra } from '../lib/entra-login';
+import { signInWithEntra, testUserCredentials } from '../lib/entra-login';
+import { why } from '../lib/mask';
+import { liveOutDir } from '../lib/output';
+import { createApiCall, type ApiCall } from '../lib/portal-session';
+import {
+  createRun,
+  previewThenRun,
+  settle,
+  stepOutput,
+  type PreviewThenRunOptions,
+  type RunClient,
+} from '../lib/runs';
 
-// Live sweep: sign in as the validation user, render every area, run read playbooks (dry run), arm, and run
-// reversible writes against AF-Test-* objects only. Prints statuses and counts — never tenant identifiers.
-const env = loadEnv(process.env, { admin: true });
-const creds = {
-  upn: env.AF_TEST_USER_UPN!,
-  password: env.AF_TEST_USER_PASSWORD!,
-  totpSecret: env.AF_TEST_USER_TOTP_SECRET,
-};
-const shots = `${process.env.AF_LIVE_OUT ?? '/tmp/adminforge-live'}/shots`;
-mkdirSync(shots, { recursive: true });
+/**
+ * The live sweep (`pnpm test:live`): sign in as the validation user, render every area, run read playbooks (dry run),
+ * arm, and run reversible writes against AF-Test-* objects only.
+ *
+ * Inputs: a running stack at PUBLIC_BASE_URL (playwright.config.ts), the env file and <env>.admin.env; global-setup.ts
+ * enables the validation user for the run and global-teardown.ts disables it again.
+ * Output: statuses, counts and error codes on the console — never tenant identifiers; messages are masked
+ * (lib/mask.ts). Screenshots go to `<AF_LIVE_OUT>/shots` (lib/output.ts), outside the repository.
+ * Safety: writes only on AF-Test-* objects, each reversed in the same test (add → remove, disable → enable), always
+ * preview first (lib/runs.ts); disarms at the end.
+ */
+const creds = testUserCredentials(loadEnv(process.env, { admin: true }));
+const shots = liveOutDir('shots');
 
 test.describe.configure({ mode: 'serial' });
 let page: Page;
-let api: APIRequestContext;
-let csrf = '';
+let call: ApiCall;
+/** Runs through lib/runs.ts with Playwright's own waits. */
+let runs: RunClient;
 const findings: string[] = [];
-
-async function call<T>(method: string, path: string, body?: unknown): Promise<{ status: number; json: T }> {
-  const res = await api.fetch(path, {
-    method,
-    headers: method === 'GET' ? {} : { 'x-adminforge-csrf': csrf, 'content-type': 'application/json' },
-    data: body === undefined ? undefined : JSON.stringify(body),
-  });
-  const text = await res.text();
-  return { status: res.status(), json: (text ? JSON.parse(text) : undefined) as T };
-}
-
-async function waitRun(
-  id: string | undefined,
-  created?: { status: number; json: unknown },
-): Promise<{ status: string; error?: unknown }> {
-  if (!id)
-    return {
-      status: `not created (${created?.status})`,
-      error: (created?.json as { error?: unknown } | undefined)?.error,
-    };
-  for (let i = 0; i < 90; i++) {
-    const { json } = await call<{ run: { status: string; error?: unknown } }>('GET', `/api/runs/${id}`);
-    if (
-      ['succeeded', 'failed', 'cancelled', 'compensated', 'needs_review'].includes(json.run.status) ||
-      json.run.status.startsWith('awaiting')
-    )
-      return json.run;
-    await page.waitForTimeout(2000);
-  }
-  return { status: 'timeout' };
-}
-
-type RunDetail = {
-  run: { status: string };
-  steps: Array<{ stepId: string; status: string; output?: unknown }>;
-};
-
-/**
- * Preview then confirm (enforced server-side for playbooks with a confirm block): dry-run with the same inputs, then
- * execute with previewRunId and — for typed confirms — the text the UI would ask for, read from the preview's outputs.
- */
-async function previewThenRun(
-  playbook: string,
-  inputs: Record<string, unknown>,
-  confirmFrom?: (preview: RunDetail) => string | undefined,
-) {
-  // Graph is eventually consistent: a preview right after a write may still see the old state, so retry briefly.
-  let p = await call<{ runId: string }>('POST', '/api/runs', { playbook, inputs, dryRun: true });
-  let preview = await waitRun(p.json?.runId, p);
-  for (let attempt = 1; preview.status === 'failed' && attempt <= 5; attempt++) {
-    await page.waitForTimeout(10_000);
-    p = await call<{ runId: string }>('POST', '/api/runs', { playbook, inputs, dryRun: true });
-    preview = await waitRun(p.json?.runId, p);
-  }
-  if (preview.status !== 'succeeded') return { preview, created: undefined };
-  const detail = await call<RunDetail>('GET', `/api/runs/${p.json.runId}`);
-  const confirmation = confirmFrom?.(detail.json);
-  const created = await call<{ runId: string }>('POST', '/api/runs', {
-    playbook,
-    inputs,
-    dryRun: false,
-    previewRunId: p.json.runId,
-    ...(confirmation !== undefined ? { confirmation } : {}),
-  });
-  return { preview, created };
-}
-
-/** A step's output from a preview, as the UI reads it for the confirmation prompt. */
-const outputOf = (detail: RunDetail, stepId: string) =>
-  detail.steps.filter((s) => s.stepId === stepId && s.status === 'succeeded').at(-1)?.output as
-    Record<string, unknown> | undefined;
 
 test.beforeAll(async ({ browser }) => {
   const context = await browser.newContext();
   page = await context.newPage();
-  api = context.request;
+  call = createApiCall(context.request);
+  runs = { api: call, sleep: (ms) => page.waitForTimeout(ms) };
   await page.goto('/auth/login?returnTo=%2F');
   await signInWithEntra(page, creds);
   await page.waitForURL((u) => u.pathname === '/' && !/login\.microsoftonline/.test(u.host), {
     timeout: 60_000,
   });
-  csrf = (await call<{ csrf: string }>('GET', '/api/me')).json.csrf;
 });
 
 test('session: roles and read mode', async () => {
@@ -299,16 +242,17 @@ test('find AF-Test targets', async () => {
 });
 
 test('dry run: add group member (read mode)', async () => {
-  const r = await call<{ runId: string }>('POST', '/api/runs', {
+  const created = await createRun(runs, {
     playbook: 'identity.add-group-members',
     inputs: { groupId, userIds: [userId], reason: 'AdminForge live validation' },
     dryRun: true,
   });
-  expect(r.status).toBe(202);
-  const run = await waitRun(r.json.runId);
-  const detail = await call<{ plan: unknown[] }>('GET', `/api/runs/${r.json.runId}`);
-  console.log('dry run', run.status, { planEntries: detail.json.plan.length });
-  expect(run.status).toBe('succeeded');
+  expect(created.http).toBe(202);
+  const detail = await settle(runs, created);
+  console.log(`dry run: ${detail.run.status}${why(detail.run.error)}`, {
+    planEntries: detail.plan?.length ?? 0,
+  });
+  expect(detail.run.status).toBe('succeeded');
 });
 
 test('write without arming is refused', async () => {
@@ -319,18 +263,20 @@ test('write without arming is refused', async () => {
   });
   console.log('write without a preview', unconfirmed.status);
   expect(unconfirmed.status).toBe(409);
-  const { preview, created: r } = await previewThenRun('identity.add-group-members', {
+  const { preview, run: r } = await previewThenRun(runs, 'identity.add-group-members', {
     groupId,
     userIds: [userId],
     reason: 'AdminForge live validation',
   });
-  const run =
-    r?.status === 202
-      ? await waitRun(r.json.runId)
-      : { status: `preview ${preview.status} / http ${r?.status}` };
-  console.log('unarmed write', run.status);
-  expect(run.status === 'awaiting_arm' || run.status.startsWith('http 4')).toBeTruthy();
-  if (r?.status === 202) await call('POST', `/api/runs/${r.json.runId}/cancel`);
+  // Either the run parks until write access is armed, or the API refuses it outright (4xx).
+  const status = !r
+    ? `preview ${preview.run.status}`
+    : r.runId
+      ? (await settle(runs, r)).run.status
+      : `http ${r.http}`;
+  console.log('unarmed write', status);
+  expect(status === 'awaiting_arm' || status.startsWith('http 4')).toBeTruthy();
+  if (r?.runId) await call('POST', `/api/runs/${r.runId}/cancel`);
 });
 
 test('arm write access (step-up sign-in to the Write app)', async () => {
@@ -349,47 +295,53 @@ test('arm write access (step-up sign-in to the Write app)', async () => {
   expect(me.json.mode).toBe('armed');
 });
 
+/** Preview, run and settle one playbook; prints `<label>: <status>` (errors masked) and returns the status. */
+async function runPlaybook(
+  label: string,
+  playbook: string,
+  inputs: Record<string, unknown>,
+  confirm?: PreviewThenRunOptions['confirm'],
+): Promise<string> {
+  const { preview, run } = await previewThenRun(runs, playbook, inputs, confirm ? { confirm } : {});
+  const done = run ? await settle(runs, run) : preview;
+  console.log(`${label}: ${run ? '' : 'preview '}${done.run.status}${why(done.run.error)}`);
+  return run ? done.run.status : `preview ${done.run.status}`;
+}
+
 test('write: add then remove group member (AF-Test objects)', async () => {
-  const { created: add } = await previewThenRun('identity.add-group-members', {
+  const added = await runPlaybook('add member', 'identity.add-group-members', {
     groupId,
     userIds: [userId],
     reason: 'live validation',
   });
-  const a = await waitRun(add?.json?.runId, add);
-  console.log('add member', a.status, a.error ?? '');
-  expect(a.status).toBe('succeeded');
-  const { created: rem } = await previewThenRun('identity.remove-group-members', {
+  expect(added).toBe('succeeded');
+  const removed = await runPlaybook('remove member', 'identity.remove-group-members', {
     groupId,
     memberIds: [userId],
     reason: 'live validation cleanup',
   });
-  const r = await waitRun(rem?.json?.runId, rem);
-  console.log('remove member', r.status, r.error ?? '');
-  expect(r.status).toBe('succeeded');
+  expect(removed).toBe('succeeded');
 });
 
 test('write: disable then re-enable a test user', async () => {
   // disable-user confirms with a typed sign-in name: the UI shows the previewed user's UPN and the engineer types it.
-  const { created: dis } = await previewThenRun(
+  const disabled = await runPlaybook(
+    'disable user',
     'identity.disable-user',
     { userId: user2Id, reason: 'AdminForge live validation' },
-    (p) => outputOf(p, 'lookup')?.userPrincipalName as string | undefined,
+    (p) => stepOutput(p, 'lookup')?.userPrincipalName as string | undefined,
   );
-  const d = await waitRun(dis?.json?.runId, dis);
-  console.log('disable user', d.status, d.error ?? '');
-  const { created: en } = await previewThenRun('identity.enable-user', {
+  const enabled = await runPlaybook('enable user', 'identity.enable-user', {
     userId: user2Id,
     reason: 'AdminForge live validation cleanup',
   });
-  const e = await waitRun(en?.json?.runId, en);
-  console.log('enable user', e.status, e.error ?? '');
-  expect(d.status).toBe('succeeded');
-  expect(e.status).toBe('succeeded');
+  expect(disabled).toBe('succeeded');
+  expect(enabled).toBe('succeeded');
 });
 
 test('audit chain verifies', async () => {
   const v = await call<{ ok: boolean; checked: number }>('GET', '/api/audit/verify');
-  console.log('audit verify', v.status, v.json);
+  console.log('audit verify', v.status, { ok: v.json?.ok, checked: v.json?.checked });
   expect(v.json.ok).toBe(true);
 });
 

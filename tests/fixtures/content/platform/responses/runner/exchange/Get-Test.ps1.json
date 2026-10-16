@@ -1,0 +1,24 @@
+{
+  "$fixture": {
+    "variants": [
+      {
+        "match": {
+          "bodyIncludes": "\"kinds\":[\"Guest\"]"
+        },
+        "body": [
+          {
+            "name": "guest-box"
+          }
+        ]
+      }
+    ],
+    "body": [
+      {
+        "name": "box-1"
+      },
+      {
+        "name": "box-2"
+      }
+    ]
+  }
+}

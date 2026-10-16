@@ -1,6 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
-import { FIXED_NOW, armedMe } from './fixtures/session';
+import { FIXED_NOW, armedMe } from '../support/web/fixtures/session';
 import { growViewportToPage, mockApi, setPrefs, settle } from './support/mock-api';
 
 const THEMES = ['steel', 'daylight', 'contrast'] as const;

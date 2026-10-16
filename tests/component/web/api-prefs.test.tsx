@@ -12,7 +12,7 @@ import {
   resolveTheme,
   updatePrefs,
 } from '@adminforge/web/src/lib/prefs';
-import { me } from '../../e2e/fixtures/session';
+import { me } from '../../support/web/fixtures/session';
 
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });

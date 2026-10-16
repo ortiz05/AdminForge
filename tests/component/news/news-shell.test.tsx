@@ -4,9 +4,9 @@ import userEvent from '@testing-library/user-event';
 import type { NewsSummaryResponse } from '@adminforge/schemas';
 import { App, createAppRouter, createQueryClient } from '@adminforge/web/src/app/router';
 import { __resetPrefsForTests, readLocalPrefs } from '@adminforge/web/src/lib/prefs';
-import { NAV_WITH_NEWS, newsSummary } from '../../e2e/fixtures/news';
-import { overview } from '../../e2e/fixtures/overview';
-import { FIXED_NOW, me, NAV } from '../../e2e/fixtures/session';
+import { NAV_WITH_NEWS, newsSummary } from '../../support/web/fixtures/news';
+import { overview } from '../../support/web/fixtures/overview';
+import { FIXED_NOW, me, NAV } from '../../support/web/fixtures/session';
 
 // The shell's news signals: an unread count on the News and changes navigation item (pill, or a bubble in the icon
 // rail) and a top-bar pill for unread breaking items. Neither appears when there's nothing — or when the endpoint

@@ -6,8 +6,8 @@ import { api, ApiRequestError, BACKGROUND_HEADER } from '@adminforge/web/src/lib
 import { ACTIVITY_WINDOW_MS, noteActivity } from '@adminforge/web/src/lib/activity';
 import { browser } from '@adminforge/web/src/lib/browser';
 import { __resetPrefsForTests } from '@adminforge/web/src/lib/prefs';
-import { overview } from '../../e2e/fixtures/overview';
-import { me, NAV } from '../../e2e/fixtures/session';
+import { overview } from '../../support/web/fixtures/overview';
+import { me, NAV } from '../../support/web/fixtures/session';
 
 // IAM-05: a session that ended while nobody was using the tab doesn't start a sign-in by itself — with single
 // sign-on that would quietly open a new session and the idle timeout would mean nothing. The person signs in again.

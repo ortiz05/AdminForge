@@ -1,15 +1,21 @@
-import { buildApp } from '@adminforge/api/src/app';
-import { MemoryAuditWriter } from '@adminforge/api/src/audit/writer';
-import { MemoryPreauthStore } from '@adminforge/api/src/auth/preauth-store';
-import { MemorySessionStore } from '@adminforge/api/src/auth/session-store';
-import { createTokenCache, MemorySealedBlobStore } from '@adminforge/api/src/auth/token-cache';
+/**
+ * The API test kit every tests/api suite starts from: configurations (`mockConfig`, `entraConfig`), the app on
+ * in-memory stores (`makeApp`, built on support/app.ts), mock sign-in (`mockLogin`, `getMe`), cookie helpers for the
+ * Entra round trip, a fake Entra client (`FakeAuthClient`) and fetch helpers (`json`, `orgResponse`, `noNetwork`).
+ *
+ * Feature harnesses add their fakes on top: runs-helpers.ts (playbooks), schedules-helpers.ts and
+ * portal-schedules-helpers.ts (schedules, reports), content-helpers.ts (synthetic content + connector fixtures).
+ * Also used by the e2e content backend (tests/e2e/support/backend-server.ts). Synthetic identifiers only.
+ */
 import type { AuthClient, AuthUrlInput, IdClaims } from '@adminforge/api/src/auth/types';
 import { loadConfig, type Config } from '@adminforge/api/src/config';
 import type { AppDeps } from '@adminforge/api/src/context';
-import { MemoryPrefsStore } from '@adminforge/api/src/prefs/prefs-store';
 import { MeResponse } from '@adminforge/schemas';
+import { Clock } from '../lib/clock';
+import { buildTestApp, noNetwork, TEST_KEY, type App } from './support/app';
 
-type App = Awaited<ReturnType<typeof buildApp>>;
+export { Clock, noNetwork, TEST_KEY };
+
 /** The bits of an inject() response these helpers read (fastify's types aren't a tests dependency). */
 export interface InjectResponse {
   headers: Record<string, string | string[] | number | undefined>;
@@ -20,7 +26,6 @@ export const TENANT_ID = '11111111-2222-4333-8444-555555555555';
 export const READ_CLIENT_ID = '22222222-3333-4444-8555-666666666666';
 export const WRITE_CLIENT_ID = '33333333-4444-4555-8666-777777777777';
 export const USER_OID = '44444444-5555-4666-8777-888888888888';
-export const TEST_KEY = Buffer.alloc(32, 7).toString('base64');
 
 export function mockConfig(overrides: Record<string, string> = {}): Config {
   return loadConfig({
@@ -49,46 +54,15 @@ export function entraConfig(overrides: Record<string, string> = {}): Config {
   });
 }
 
-/** Controllable clock. */
-export class Clock {
-  constructor(public t = Date.parse('2026-10-15T12:00:00.000Z')) {}
-  now = () => new Date(this.t);
-  advance(ms: number) {
-    this.t += ms;
-  }
-}
-
 export const MINUTE = 60_000;
-
-/** A fetch that fails loudly: tests must never reach the network. */
-export const noNetwork: typeof fetch = async (input) => {
-  throw new Error(`unexpected network call in test: ${String(input)}`);
-};
 
 export type TestApp = Awaited<ReturnType<typeof makeApp>>;
 
 /** Builds the app on in-memory stores (returned for inspection); `extra` swaps the AuthClient, fetch, or database. */
 export async function makeApp(config: Config, extra: Pick<AppDeps, 'auth' | 'fetch' | 'database'> = {}) {
   const clock = new Clock();
-  const tokenBlobs = new MemorySealedBlobStore();
-  const sessions = new MemorySessionStore();
-  const preauth = new MemoryPreauthStore();
-  const audit = new MemoryAuditWriter(clock.now);
-  const prefs = new MemoryPrefsStore();
-  const tokenCache = createTokenCache(tokenBlobs, Buffer.from(TEST_KEY, 'base64'));
   if (extra.auth instanceof FakeAuthClient) extra.auth.now = clock.now;
-  const app = await buildApp(config, {
-    database: null,
-    now: clock.now,
-    sessions,
-    preauth,
-    audit,
-    prefs,
-    tokenCache,
-    fetch: noNetwork,
-    ...extra,
-  });
-  return { app, clock, tokenBlobs, sessions, preauth, audit, prefs, tokenCache };
+  return buildTestApp(config, { clock, deps: extra });
 }
 
 /** "name=value" from a response's Set-Cookie for `name`. */

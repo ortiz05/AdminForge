@@ -1,0 +1,15 @@
+kind: page
+id: identity.user
+version: 1.0.0
+title: User
+owner: identity-team
+template: entity
+params:
+  id: { type: guid, required: true, hidden: true }
+datasources:
+  user:
+    source: graph
+    request:
+      path: /users/${ $encode($guid(params.id)) }
+layout:
+  - { widget: keyValue, data: user }

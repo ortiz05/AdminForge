@@ -1,3 +1,9 @@
+/**
+ * Repository paths and files for tests that inspect the checkout itself: `repoRoot`, `committableFiles()` (what git
+ * would commit — tracked plus untracked-but-not-ignored), `readText()` (skips binaries), `parseEnvFile()` and
+ * `localEnvFiles()` (the local AdminForge env files the guards compare against; values are never printed). Used by
+ * the guards, the content tests and unit tests across packages that read files from the repository.
+ */
 import { execFileSync } from 'node:child_process';
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';

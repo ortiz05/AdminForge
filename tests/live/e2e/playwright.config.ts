@@ -1,8 +1,10 @@
 import { defineConfig } from '@playwright/test';
 import { loadEnv } from '@adminforge/config';
+import { liveOutDir } from '../lib/output';
 
-// Live validation against a running AdminForge stack and a real tenant (never in CI).
-// Start the stack first (see .claude/skills/validating-against-a-tenant). Output stays outside the repo.
+// Live validation against a running AdminForge stack and a real tenant (never in CI): `pnpm test:live`.
+// Start the stack first (see .claude/skills/validating-against-a-tenant and tests/live/README.md). Results and
+// screenshots go to `<AF_LIVE_OUT>/results` (lib/output.ts: private to the user, outside the repository).
 const env = loadEnv(process.env, { admin: true });
 export default defineConfig({
   testDir: '.',
@@ -11,7 +13,7 @@ export default defineConfig({
   globalTeardown: './global-teardown.ts',
   timeout: 240_000,
   workers: 1,
-  outputDir: `${process.env.AF_LIVE_OUT ?? '/tmp/adminforge-live'}/results`,
+  outputDir: liveOutDir('results'),
   reporter: [['list']],
   use: {
     baseURL: env.PUBLIC_BASE_URL ?? 'http://localhost:5173',

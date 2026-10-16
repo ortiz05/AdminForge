@@ -1,9 +1,9 @@
 import { expect, test, type Page } from '@playwright/test';
 import { playbookHref } from '../../portal/apps/web/src/playbooks/url';
-import { IDS } from './fixtures/automation';
-import { FIXED_NOW, armedMe, me } from './fixtures/session';
+import { IDS } from '../support/web/fixtures/automation';
+import { FIXED_NOW, armedMe, me } from '../support/web/fixtures/session';
 import { growViewportToPage, mockApi, setPrefs, settle } from './support/mock-api';
-import { automationApi } from './support/mock-automation';
+import { automationApi } from '../support/web/mock-automation';
 
 /** Visual baselines for the automation and admin screens, in Steel (dark) and Daylight (light). */
 

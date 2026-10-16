@@ -51,14 +51,14 @@ another) plus its admin-only sibling `<env>.admin.env`, which holds the validati
 live tests read it; the services never do). The process environment overrides both. Never print or commit their
 values.
 
-| Variable                                    | Used by        | Meaning                                                                                                                                               |
-| ------------------------------------------- | -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `PUBLIC_BASE_URL`                           | suite, scripts | The portal origin the browser signs in to (default `http://localhost:5173`)                                                                           |
-| `AF_LIVE_OUT`                               | suite          | Output directory for results and screenshots (default `/tmp/adminforge-live`; keep it outside the repo)                                               |
-| `AF_LIVE_INSECURE_TLS=1`                    | suite          | Accept a private CA, e.g. Caddy `tls internal` for LAN access: `PUBLIC_BASE_URL=https://<lan-name>:8443 AF_LIVE_INSECURE_TLS=1 pnpm test:live`        |
-| `API_PORT`                                  | scripts        | The scripts call the API directly on the `PUBLIC_BASE_URL` host and scheme at this port (default 3001), so they target a dev stack, not the TLS proxy |
-| `AF_TEST_USER_UPN`, `AF_TEST_USER_PASSWORD` | both           | The validation user (written by `provision test-identities`)                                                                                          |
-| `AF_TEST_USER_TOTP_SECRET`                  | both           | Base32 TOTP seed (written by the MFA bootstrap)                                                                                                       |
+| Variable                                    | Used by        | Meaning                                                                                                                                                                                     |
+| ------------------------------------------- | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `PUBLIC_BASE_URL`                           | suite, scripts | The portal origin the browser signs in to (default `http://localhost:5173`)                                                                                                                 |
+| `AF_LIVE_OUT`                               | suite, scripts | Output directory for results and screenshots (default `~/.cache/adminforge/live`, i.e. `$XDG_CACHE_HOME/adminforge/live`; kept 0700; refused inside the repository, also through a symlink) |
+| `AF_LIVE_INSECURE_TLS=1`                    | suite          | Accept a private CA, e.g. Caddy `tls internal` for LAN access: `PUBLIC_BASE_URL=https://<lan-name>:8443 AF_LIVE_INSECURE_TLS=1 pnpm test:live`                                              |
+| `API_PORT`                                  | scripts        | The scripts call the API directly on the `PUBLIC_BASE_URL` host and scheme at this port (default 3001), so they target a dev stack, not the TLS proxy                                       |
+| `AF_TEST_USER_UPN`, `AF_TEST_USER_PASSWORD` | both           | The validation user (written by `provision test-identities`)                                                                                                                                |
+| `AF_TEST_USER_TOTP_SECRET`                  | both           | Base32 TOTP seed (written by the MFA bootstrap)                                                                                                                                             |
 
 ## Scripts
 
@@ -66,10 +66,12 @@ Run from the repository root with `pnpm exec tsx tests/live/scripts/<script>.ts`
 
 - **`register-test-user-mfa.ts`** — one-time, idempotent MFA bootstrap: signs the validation user in to the Read app,
   registers a TOTP authenticator if Entra asks, and stores the seed as `AF_TEST_USER_TOTP_SECRET` in `<env>.admin.env`.
-- **`verify-api-live.ts`** — API end to end: SSO sign-in, `/api/me`, overview, arm, disarm, logout. Needs only the API
-  running (the browser's requests are forwarded to it).
+- **`verify-api-live.ts`** — API end to end: SSO sign-in, `/api/me` (role count and modes, never the user's name),
+  overview (counts and section error codes), arm, disarm, logout. Needs only the API running (the browser's requests
+  are forwarded to it).
 - **`check-page-datasources.ts <page key>…`** — executes every datasource of the given pages as the validation user and
-  prints status + error code per datasource.
+  prints, per datasource, `ok` or the error code with its message masked. Exit code 1 when a page is unknown or a
+  datasource failed (licence-gated ones included — read the codes).
 - **`run-playbook.ts <playbook> '<inputs JSON>' [--confirm-from <stepId>.<field>]`** — signs in, arms, previews
   (retrying through Graph replication lag) and runs one playbook. Inputs may name the test objects instead of ids —
   placeholders resolve as the validation user through the portal itself, so no ids or addresses go on the command
@@ -86,15 +88,17 @@ Run from the repository root with `pnpm exec tsx tests/live/scripts/<script>.ts`
 
   Example: `run-playbook.ts m365.add-distribution-list-members '{"identity":"@dl:AF-Test-DL-01","addresses":"…"}'`.
   The resolver is `tests/live/lib/placeholders.ts` (`resolvePlaceholders(session, inputs)` for throwaway scripts).
-  It prints the run status, the error code of a failed run (and of each failed step) and the message with ids and
-  addresses masked (`tests/live/lib/mask.ts`, the same masking `run-schedule-once.ts` uses). Throwaway scripts go in
-  `tests/live/scripts/.tmp-*` (ignored by git).
+  The preview → run → poll flow is `tests/live/lib/runs.ts`, the same one the suite uses. It prints the run status,
+  the error code of a failed run (and of each failed step) and the message masked (`tests/live/lib/mask.ts`); exit
+  code 1 unless the run succeeded. It disarms afterwards, also when the run or the script fails. Throwaway scripts go
+  in `tests/live/scripts/.tmp-*` (ignored by git).
 
 - **`check-placeholders.ts @<kind>:<name>[#field]…`** — resolves placeholders and prints ok / why not per placeholder,
   never the value. Run it before a playbook when a test object is new (directory and SharePoint search can lag).
 - **`run-schedule-once.ts --schedule <key> [--deliver none|sender]`** and **`--probe <key>… [--no-store]`** — runs a
-  schedule or probes once **as the automation identity** through the scheduler's own one-shot path, against the
-  **dev** database of the env file. It refuses `ADMINFORGE_ENV_OVERLAY=host`, a `DATABASE_URL` set in the process
+  schedule or probes once **as the automation identity** through the scheduler service's own one-shot module
+  (`portal/apps/scheduler/src/one-shot.ts`, the same code and status lines as `node dist/main.js --schedule`),
+  against the **dev** database of the env file. It refuses `ADMINFORGE_ENV_OVERLAY=host`, a `DATABASE_URL` set in the process
   environment, and a dev database that is also the services' (where `<env>.host.env` exists and resolves to the same
   `DATABASE_URL`; the URLs are compared, never printed). It refuses **playbook schedules** — use `run-playbook.ts`,
   which previews first. Delivery never
@@ -113,8 +117,29 @@ Run from the repository root with `pnpm exec tsx tests/live/scripts/<script>.ts`
   mailboxes (display name `AF-Test-…`; `--sender-name` also the mailbox `AF_MAIL_SENDER` names), so mail is never sent
   as a real person's mailbox. Exit code 1 when either expectation fails. It uses no database, so `ADMINFORGE_ENV_OVERLAY=host` (the services' configuration) is fine.
 
-`register-test-user-mfa.ts` and `verify-api-live.ts` take an optional failure-screenshot path; the default is under
-`/tmp`. Keep screenshots out of the repository — they can show tenant data.
+`register-test-user-mfa.ts` and `verify-api-live.ts` take an optional failure-screenshot path; the default is
+`<AF_LIVE_OUT>/<script>-failure.png`; a path given on the command line is refused inside the repository too.
+Screenshots can show tenant data, and the tenant-data guard can't read images.
+
+## Library (`lib/`)
+
+Shared by the suite and the scripts; each module starts with a comment saying what it does, its inputs and outputs,
+and its safety rules. Pure parts are unit-tested in `tests/unit/live/`.
+
+| Module              | What                                                                                                                                                                                                                                |
+| ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `entra-login.ts`    | `signInWithEntra(page, creds)` drives Microsoft's sign-in pages (password, TOTP, first-time MFA registration, the registration-nudge check); `testUserCredentials(env)` reads the validation user's credentials.                    |
+| `portal-session.ts` | `openPortalSession()` signs the validation user in (headless Chrome) and returns `api(method, path, body)`; `createApiCall(request)` is that API caller for any Playwright request context (the suite uses it); `armWriteAccess()`. |
+| `runs.ts`           | Preview → run → poll (`previewThenRun`, `settle`, `waitForRun`, `stepOutput`), with one rule for when a run has settled (the engine's terminal and parked statuses) and preview retries through replication lag.                    |
+| `placeholders.ts`   | `@<kind>:<name>[#field]` placeholders in playbook inputs, resolved as the validation user through the portal (never printed).                                                                                                       |
+| `mask.ts`           | `mask(text)`, `maskError(err)`, `why(err)`, `maskUrl(url)`: GUIDs, addresses and UPNs, tenant hosts masked. **Every** message a live script prints goes through it.                                                                 |
+| `output.ts`         | `liveOutDir(...parts)`: the private output directory (`AF_LIVE_OUT`, see Configuration).                                                                                                                                            |
+| `totp.ts`           | RFC 6238 codes from the TOTP seed.                                                                                                                                                                                                  |
+
+Conventions for a new script: a header comment with the usage line, inputs, output and safety; statuses, codes and
+counts only, any free text through `mask`/`maskError`; files under `liveOutDir()`; API modules only from
+`@adminforge/api/tooling` (and `@adminforge/scheduler/one-shot`), never `@adminforge/api/src/…`; the validation user's
+credentials from `testUserCredentials`.
 
 ## What the validation user can do
 

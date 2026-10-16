@@ -6,7 +6,7 @@ import {
   previewDetail,
   runbookRunDetail,
   runsList,
-} from '../../e2e/fixtures/automation';
+} from '../../support/web/fixtures/automation';
 import { readApprovalItem } from '@adminforge/web/src/runs/approvals';
 import {
   isParked,
@@ -27,7 +27,7 @@ import {
   topLevelKey,
 } from '@adminforge/web/src/runs/useRunLive';
 import { buildTimeline, stepIndex } from '@adminforge/web/src/runs/RunTimeline';
-import { disableUser } from '../../e2e/fixtures/automation';
+import { disableUser } from '../../support/web/fixtures/automation';
 import type { Playbook } from '@adminforge/schemas';
 
 describe('run contracts (GET /api/runs, GET /api/runs/:id)', () => {

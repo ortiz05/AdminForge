@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
-import { FIXED_NOW } from '../fixtures/session';
-import { PROBES } from '../fixtures/renderer';
+import { FIXED_NOW } from '../../support/web/fixtures/session';
+import { PROBES } from '../../support/web/fixtures/renderer';
 import { routeContentBackend } from '../support/content-backend';
 import { mockApi, setPrefs } from '../support/mock-api';
 

@@ -1,34 +1,27 @@
-import { createHash } from 'node:crypto';
+/**
+ * The schedules harness: `schedulesApp` builds the API (support/app.ts) with fake content (`FakeDefinitions` through
+ * the fs registry), a fake job runner (`FakeJobs`), a recording outbound executor (`FakeOutbound`), a temporary
+ * artifacts directory and a `FakeClock` that also drives the scheduler's timers when it runs in-process
+ * (`inProcess: true`). `login(person, roles)` signs people in (support/app.ts `sessionFor`); `close()` removes the
+ * artifacts directory.
+ *
+ * Used by the schedules*, probes, news, emergency, artifact, query and schedule-editor route tests, and by
+ * portal-schedules-helpers.ts. The scheduler fakes come from tests/support/scheduler.ts and the people from
+ * support/people.ts (both re-exported here).
+ */
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { buildApp } from '@adminforge/api/src/app';
-import { MemoryAuditWriter } from '@adminforge/api/src/audit/writer';
-import { MemoryPreauthStore } from '@adminforge/api/src/auth/preauth-store';
-import { MemorySessionStore, type SessionRecord } from '@adminforge/api/src/auth/session-store';
-import { createTokenCache, MemorySealedBlobStore } from '@adminforge/api/src/auth/token-cache';
 import { registryFrom } from '@adminforge/api/src/definitions/registry';
 import type { ExecutionIdentity, OutboundExecutor, ServiceCall } from '@adminforge/api/src/execution/types';
-import { MemoryPrefsStore } from '@adminforge/api/src/prefs/prefs-store';
 import type { SchedulesOptions } from '@adminforge/api/src/schedules/module';
-import { FakeClock, FakeDefinitions, FakeJobs } from '../unit/scheduler/helpers';
-import { mockConfig, noNetwork, TEST_KEY } from './helpers';
+import { FakeClock, FakeDefinitions, FakeJobs } from '../support/scheduler';
+import { mockConfig } from './helpers';
+import { buildTestApp, sessionFor } from './support/app';
+import type { TestPerson } from './support/people';
 
-export { FakeDefinitions, FakeJobs, probe, schedule } from '../unit/scheduler/helpers';
-
-// Synthetic people (never a real tenant).
-export const AVERY = { oid: '00000000-0000-4000-8000-0000000000a1', upn: 'avery@example.com' };
-export const BLAKE = { oid: '00000000-0000-4000-8000-0000000000b2', upn: 'blake@example.com' };
-export const READER = { oid: '00000000-0000-4000-8000-0000000000c3', upn: 'casey@example.com' };
-export const ALL_ROLES = [
-  'Portal.Reader',
-  'Portal.Operator',
-  'Playbook.Author',
-  'Playbook.Approver',
-  'Portal.Admin',
-];
-
-const sha = (s: string) => createHash('sha256').update(s).digest('hex');
+export { FakeDefinitions, FakeJobs, probe, schedule } from '../support/scheduler';
+export { ALL_ROLES, AVERY, BLAKE, READER } from './support/people';
 
 export class FakeOutbound implements OutboundExecutor {
   readonly calls: Array<{ identity: ExecutionIdentity; call: ServiceCall }> = [];
@@ -60,61 +53,18 @@ export async function schedulesApp(o: SchedulesAppOptions = {}) {
   const defs = o.defs ?? new FakeDefinitions();
   const jobs = o.jobs ?? new FakeJobs();
   const outbound = o.outbound ?? new FakeOutbound();
-  const sessions = new MemorySessionStore();
-  const audit = new MemoryAuditWriter(clock.now);
-  const app = await buildApp(mockConfig({ ADMINFORGE_ARTIFACTS_DIR: artifactsDir, ...o.config }), {
-    database: null,
-    now: clock.now,
-    sessions,
-    preauth: new MemoryPreauthStore(),
-    audit,
-    prefs: new MemoryPrefsStore(),
-    tokenCache: createTokenCache(new MemorySealedBlobStore(), Buffer.from(TEST_KEY, 'base64')),
-    fetch: noNetwork,
-    definitions: registryFrom(defs as never, 'fs'),
-    outbound,
-    schedules: { inProcess: o.inProcess ?? false, jobs, timers: clock, ...o.schedules },
-  });
+  const { app, sessions, audit } = await buildTestApp(
+    mockConfig({ ADMINFORGE_ARTIFACTS_DIR: artifactsDir, ...o.config }),
+    {
+      clock,
+      deps: {
+        definitions: registryFrom(defs as never, 'fs'),
+        outbound,
+        schedules: { inProcess: o.inProcess ?? false, jobs, timers: clock, ...o.schedules },
+      },
+    },
+  );
   await app.ready();
-
-  let n = 0;
-  async function login(user: { oid: string; upn: string }, roles: string[]) {
-    const sid = `sid-${++n}-${user.oid}`;
-    const now = clock.now();
-    const record: SessionRecord = {
-      idHash: sha(sid),
-      userOid: user.oid,
-      upn: user.upn,
-      displayName: user.upn,
-      tenantId: '00000000-0000-4000-8000-00000000e0e0',
-      tenantName: 'Example Org',
-      tenantDomain: 'example.com',
-      roles,
-      csrf: `csrf-${n}`,
-      readAccountId: 'mock-read',
-      writeAccountId: null,
-      writeExpiresAt: null,
-      writeExtended: false,
-      writeReason: null,
-      createdAt: now,
-      lastSeenAt: now,
-      expiresAt: new Date(now.getTime() + 12 * 3_600_000),
-      ip: '127.0.0.1',
-      userAgent: 'vitest',
-    };
-    await sessions.create(record);
-    const headers = { cookie: `adminforge-dev=${sid}`, 'x-adminforge-csrf': record.csrf };
-    return {
-      record,
-      headers,
-      get: (url: string, extra: Record<string, string> = {}) =>
-        app.inject({ method: 'GET', url, headers: { ...headers, ...extra } }),
-      post: (url: string, payload: unknown = {}) =>
-        app.inject({ method: 'POST', url, headers, payload: payload as Record<string, unknown> }),
-      patch: (url: string, payload: unknown) =>
-        app.inject({ method: 'PATCH', url, headers, payload: payload as Record<string, unknown> }),
-    };
-  }
 
   return {
     app,
@@ -125,7 +75,9 @@ export async function schedulesApp(o: SchedulesAppOptions = {}) {
     audit,
     artifactsDir,
     schedules: app.schedules,
-    login,
+    /** Creates a session for a synthetic user and returns request headers and helpers for it. */
+    login: (user: TestPerson, roles: string[], opts: { armed?: boolean } = {}) =>
+      sessionFor({ app, sessions, clock }, user, roles, opts),
     close: async () => {
       await app.close();
       rmSync(artifactsDir, { recursive: true, force: true });

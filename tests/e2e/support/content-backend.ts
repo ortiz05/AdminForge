@@ -1,14 +1,16 @@
-import { spawn, type ChildProcess } from 'node:child_process';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-import type { Page, Route } from '@playwright/test';
-import { FIXED_NOW } from '../fixtures/session';
-
 /**
  * Routes content endpoints (definitions, datasources, export, views, search, nav, capabilities) to the real BFF
  * pipeline running in a small local process (backend-server.ts): real content, real transforms, synthetic fixtures.
  * One process per Playwright worker; saved views persist within it like on a real server.
+ *
+ * `routeContentBackend(page, opts)` wires a page's content requests to it (the specs combine it with mockApi for the
+ * session and automation endpoints); `backendUrl()` starts the process on first use.
  */
+import { spawn, type ChildProcess } from 'node:child_process';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import type { Page, Route } from '@playwright/test';
+import { FIXED_NOW } from '../../support/web/fixtures/session';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 let proc: ChildProcess | undefined;

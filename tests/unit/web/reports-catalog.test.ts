@@ -17,8 +17,8 @@ import {
 import { filtersOf, validateReportsSearch } from '@adminforge/web/src/reports/search';
 import { cronFor, DEFAULT_CRON_PARTS, partsFromCron } from '@adminforge/web/src/ops/cadence';
 import { readSchedule } from '@adminforge/web/src/ops/schedules';
-import { DELIVERY_OPTIONS, PORTAL_SCHEDULE_KEY, reportSchedules } from '../../e2e/fixtures/reports';
-import { reportsApi } from '../../e2e/support/mock-reports';
+import { DELIVERY_OPTIONS, PORTAL_SCHEDULE_KEY, reportSchedules } from '../../support/web/fixtures/reports';
+import { reportsApi } from '../../support/web/mock-reports';
 
 // The report catalogue's contract readers, filters and the schedule form → request mapping (reports/catalog.ts).
 

@@ -1,3 +1,12 @@
+/**
+ * Mock automation API (`automationApi(opts)` → `{ handler, state }`): runs and previews ("preview then confirm",
+ * typed confirmations, SSE event streams), approvals, bulk runs, runbooks, schedules, synthetic monitoring, audit,
+ * appearance, settings and the emergency stop, answered from fixtures/automation.ts. `opts` switches on refusal paths
+ * (stale preview, confirmation mismatch, approvals 403); `state` records what the UI sent.
+ *
+ * A transport-free `MockHandler` (mock-handler.ts): the Playwright specs pass it to `mockApi(page, { handlers })`
+ * (tests/e2e/support/mock-api.ts); component tests call it from their fake fetch (component/web/automation/render.tsx).
+ */
 import {
   approvalRunDetail,
   approvalTask,
@@ -28,8 +37,8 @@ import {
   settings,
   tapDetail,
   tapEvents,
-} from '../fixtures/automation';
-import type { MockHandler, MockReply } from './mock-api';
+} from './fixtures/automation';
+import type { MockHandler, MockReply } from './mock-handler';
 
 const previewRefusal = (code: string, message: string): MockReply => ({
   status: 409,

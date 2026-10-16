@@ -10,8 +10,8 @@ import {
   readHistory,
   recordRun,
 } from '@adminforge/web/src/query/history';
-import { overview } from '../../e2e/fixtures/overview';
-import { me, NAV } from '../../e2e/fixtures/session';
+import { overview } from '../../support/web/fixtures/overview';
+import { me, NAV } from '../../support/web/fixtures/session';
 
 // The shell keys Query Studio history to the signed-in user and removes it when they sign out (L15).
 const json = (body: unknown, status = 200) =>

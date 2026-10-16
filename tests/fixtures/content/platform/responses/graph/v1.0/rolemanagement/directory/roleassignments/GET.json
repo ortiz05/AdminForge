@@ -1,0 +1,11 @@
+{
+  "value": [
+    {
+      "roleDefinitionId": "f2ef992c-3afb-46b9-b7cf-a126ee74c451",
+      "directoryScopeId": "/",
+      "roleDefinition": {
+        "displayName": "Global Reader"
+      }
+    }
+  ]
+}

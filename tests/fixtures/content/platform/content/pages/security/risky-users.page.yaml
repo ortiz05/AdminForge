@@ -1,0 +1,15 @@
+kind: page
+id: security.risky-users
+version: 1.0.0
+title: Risky users
+owner: security-team
+template: list-detail
+nav: { section: security, label: Risky users, icon: user-focus, order: 10 }
+requires:
+  licences: [AAD_PREMIUM_P2]
+datasources:
+  risky:
+    source: graph
+    request: { path: /identityProtection/riskyUsers }
+layout:
+  - { widget: table, data: risky.value, columns: [{ field: userDisplayName, label: User }] }

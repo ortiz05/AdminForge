@@ -1,0 +1,13 @@
+kind: playbook
+id: identity.check-user
+version: 1.0.0
+title: Check user
+summary: Looks a user up.
+owner: identity-team
+nav: { section: identity, label: Check user, order: 60 }
+risk: low
+mode: read
+steps:
+  - id: lookup
+    type: graph
+    request: { path: /me }

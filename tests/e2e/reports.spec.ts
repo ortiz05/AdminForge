@@ -1,10 +1,10 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
-import { PORTAL_SCHEDULE_KEY, REPORTS } from './fixtures/reports';
-import { FIXED_NOW, me } from './fixtures/session';
+import { PORTAL_SCHEDULE_KEY, REPORTS } from '../support/web/fixtures/reports';
+import { FIXED_NOW, me } from '../support/web/fixtures/session';
 import { backendUrl, routeContentBackend } from './support/content-backend';
 import { growViewportToPage, mockApi, setPrefs, settle } from './support/mock-api';
-import { reportsApi, type ReportsMockOptions } from './support/mock-reports';
+import { reportsApi, type ReportsMockOptions } from '../support/web/mock-reports';
 
 // The report catalogue (/reports) in mock mode: every /api call is answered by support/mock-reports.ts (synthetic
 // reports and schedules), so only the Vite dev server runs. Filters in the URL, the details panel, scheduling a report

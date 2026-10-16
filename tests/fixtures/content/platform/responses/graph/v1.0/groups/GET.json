@@ -1,0 +1,14 @@
+{
+  "value": [
+    {
+      "id": "30000000-0000-4000-8000-000000000031",
+      "displayName": "Avery Fans",
+      "mail": "fans@example.com"
+    },
+    {
+      "id": "30000000-0000-4000-8000-000000000032",
+      "displayName": "Other Group",
+      "mail": null
+    }
+  ]
+}

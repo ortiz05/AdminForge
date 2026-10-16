@@ -4,7 +4,7 @@ import { pgAdvisoryLock } from '@adminforge/api/src/schedules/leader';
 import { PgScheduleStore } from '@adminforge/api/src/schedules/pg-store';
 import type { ScheduleApprovalPolicy } from '@adminforge/api/src/schedules/types';
 import { syncSchedules } from '@adminforge/api/src/schedules/sync';
-import { schedule } from '../unit/scheduler/helpers';
+import { schedule } from '../support/scheduler';
 import { testDatabaseUrl } from './db';
 
 const url = await testDatabaseUrl();

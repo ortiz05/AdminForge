@@ -5,8 +5,8 @@ import { App, createAppRouter, createQueryClient } from '@adminforge/web/src/app
 import { __resetPrefsForTests } from '@adminforge/web/src/lib/prefs';
 import { __resetHistoryForTests, historyKey } from '@adminforge/web/src/query/history';
 import { GALLERY } from '@adminforge/web/src/query/gallery';
-import { CAPABILITIES_NO_DEFENDER, answerQuery, QIDS } from '../../e2e/fixtures/query';
-import { me, NAV } from '../../e2e/fixtures/session';
+import { CAPABILITIES_NO_DEFENDER, answerQuery, QIDS } from '../../support/web/fixtures/query';
+import { me, NAV } from '../../support/web/fixtures/session';
 import { axeViolations } from '../axe';
 
 /**

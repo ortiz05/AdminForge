@@ -4,7 +4,7 @@ import { App, createAppRouter, createQueryClient } from '@adminforge/web/src/app
 import { __resetPrefsForTests } from '@adminforge/web/src/lib/prefs';
 import { ApiRequestError } from '@adminforge/web/src/lib/api';
 import { isStaleDefinition } from '@adminforge/web/src/renderer/api';
-import { me, NAV } from '../../e2e/fixtures/session';
+import { me, NAV } from '../../support/web/fixtures/session';
 import { DASHBOARD, RESULTS } from './renderer-fixtures';
 
 // The server only answers for the current version of a page (M2): when the page was updated since the tab loaded it,

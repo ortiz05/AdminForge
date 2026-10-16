@@ -1,0 +1,23 @@
+kind: page
+id: deps.inventory
+version: 1.0.0
+title: Inventory
+owner: t
+template: list-detail
+filters:
+  advanced:
+    dialect: kql
+    fields:
+      - { field: name, label: Name, type: string, operators: [eq, ne, contains, startsWith, in, isEmpty] }
+      - { field: tagCount, label: Tags, type: number, operators: [eq, gt, le] }
+      - { field: state, label: State, type: string, property: properties.provisioningState, operators: [eq] }
+      - { field: subscriptionId, label: Subscription, type: guid }
+datasources:
+  inv:
+    source: resourceGraph
+    query: |-
+      Resources
+      ${ advanced ? '| where ' & advanced }
+      | project id, name
+layout:
+  - { widget: kpi, data: inv }

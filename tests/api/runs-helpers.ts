@@ -1,25 +1,27 @@
+/**
+ * The runs harness: `runsApp` builds the API (support/app.ts) with the runs module wired to fakes — published
+ * playbooks/runbooks from `StaticDefinitions`, Microsoft calls answered and recorded by `FakeExecutor`, an in-process
+ * run queue and an in-memory (or given) run repository — and signs people in with `login(person, roles, { armed })`.
+ * `drain()` waits for the worker to go idle.
+ *
+ * Used by the runs* tests, run-role-recheck and schedule-approval-binding. The people and role sets come from
+ * support/people.ts (re-exported here).
+ */
 import { createHash } from 'node:crypto';
-import { buildApp } from '@adminforge/api/src/app';
 import { MemoryAuditWriter, type AuditWriter } from '@adminforge/api/src/audit/writer';
-import { MemoryPreauthStore } from '@adminforge/api/src/auth/preauth-store';
-import { MemorySessionStore, type SessionRecord } from '@adminforge/api/src/auth/session-store';
-import { createTokenCache, MemorySealedBlobStore } from '@adminforge/api/src/auth/token-cache';
 import type { Database } from '@adminforge/api/src/db/client';
 import type { DefinitionResolver } from '@adminforge/api/src/definitions/types';
 import { AppError } from '@adminforge/api/src/errors';
 import type { ExecutionIdentity, OutboundExecutor, ServiceCall } from '@adminforge/api/src/execution/types';
-import { MemoryPrefsStore } from '@adminforge/api/src/prefs/prefs-store';
 import { InProcessRunQueue, MemoryRunRepository, type RunRepository } from '@adminforge/api/src/runs';
 import type { RunsOptions } from '@adminforge/api/src/runs/module';
 import type { Config } from '@adminforge/api/src/config';
 import { Playbook, Runbook, type Kind } from '@adminforge/schemas';
-import { Clock, noNetwork, TEST_KEY } from './helpers';
+import { Clock } from '../lib/clock';
+import { buildTestApp, sessionFor } from './support/app';
+import type { TestPerson } from './support/people';
 
-// Synthetic people (never a real tenant).
-export const AVERY = { oid: '00000000-0000-4000-8000-0000000000a1', upn: 'avery@example.com' };
-export const BLAKE = { oid: '00000000-0000-4000-8000-0000000000b2', upn: 'blake@example.com' };
-export const CASEY = { oid: '00000000-0000-4000-8000-0000000000c3', upn: 'casey@example.com' };
-export const DREW = { oid: '00000000-0000-4000-8000-0000000000d4', upn: 'drew@example.com' };
+export { ALL_ROLES, AVERY, BLAKE, CASEY, DREW } from './support/people';
 
 export const sha = (s: string) => createHash('sha256').update(s).digest('hex');
 
@@ -83,70 +85,20 @@ export interface RunsAppOptions {
 /** The API on in-memory stores with the runs module wired to fakes; sessions for any synthetic user via `login`. */
 export async function runsApp(o: RunsAppOptions) {
   const clock = new Clock();
-  const sessions = new MemorySessionStore();
   const memoryAudit = new MemoryAuditWriter(clock.now);
   const audit = o.audit ?? memoryAudit;
   const outbound = o.outbound ?? new FakeExecutor();
   const queue = new InProcessRunQueue(undefined, 10);
   const repository = o.repository ?? new MemoryRunRepository(clock.now);
-  const app = await buildApp(o.config, {
-    database: o.database ?? null,
-    now: clock.now,
-    sessions,
-    preauth: new MemoryPreauthStore(),
+  const { app, sessions } = await buildTestApp(o.config, {
+    clock,
     audit,
-    prefs: new MemoryPrefsStore(),
-    tokenCache: createTokenCache(new MemorySealedBlobStore(), Buffer.from(TEST_KEY, 'base64')),
-    fetch: noNetwork,
-    runs: { definitions: o.definitions, outbound, queue, repository, sweep: false, ...o.runs },
+    deps: {
+      database: o.database ?? null,
+      runs: { definitions: o.definitions, outbound, queue, repository, sweep: false, ...o.runs },
+    },
   });
   await app.ready();
-
-  let n = 0;
-  /** Creates a session for a synthetic user and returns request headers for it. */
-  async function login(user: { oid: string; upn: string }, roles: string[], opts: { armed?: boolean } = {}) {
-    const sid = `sid-${++n}-${user.oid}`;
-    const now = clock.now();
-    const record: SessionRecord = {
-      idHash: sha(sid),
-      userOid: user.oid,
-      upn: user.upn,
-      displayName: user.upn,
-      tenantId: '00000000-0000-4000-8000-00000000e0e0',
-      tenantName: 'Example Org',
-      tenantDomain: 'example.com',
-      roles,
-      csrf: `csrf-${n}`,
-      readAccountId: 'mock-read',
-      writeAccountId: opts.armed ? 'mock-write' : null,
-      writeExpiresAt: opts.armed ? new Date(now.getTime() + 60 * 60_000) : null,
-      writeExtended: false,
-      writeReason: opts.armed ? 'tests' : null,
-      createdAt: now,
-      lastSeenAt: now,
-      expiresAt: new Date(now.getTime() + 12 * 3_600_000),
-      ip: '127.0.0.1',
-      userAgent: 'vitest',
-    };
-    await sessions.create(record);
-    const headers = { cookie: `adminforge-dev=${sid}`, 'x-adminforge-csrf': record.csrf };
-    return {
-      record,
-      headers,
-      arm: async (on = true) => {
-        await sessions.update(
-          record.idHash,
-          on
-            ? { writeAccountId: 'mock-write', writeExpiresAt: new Date(clock.now().getTime() + 60 * 60_000) }
-            : { writeAccountId: null, writeExpiresAt: null },
-        );
-      },
-      get: (url: string, extra: Record<string, string> = {}) =>
-        app.inject({ method: 'GET', url, headers: { ...headers, ...extra } }),
-      post: (url: string, payload: unknown = {}) =>
-        app.inject({ method: 'POST', url, headers, payload: payload as Record<string, unknown> }),
-    };
-  }
 
   return {
     app,
@@ -158,17 +110,11 @@ export async function runsApp(o: RunsAppOptions) {
     queue,
     repository,
     runs: app.runs,
-    login,
+    /** Creates a session for a synthetic user and returns request headers and helpers for it. */
+    login: (user: TestPerson, roles: string[], opts: { armed?: boolean } = {}) =>
+      sessionFor({ app, sessions, clock }, user, roles, opts),
     /** Waits for the in-process worker to go idle. */
     drain: () => queue.drain(),
     close: () => app.close(),
   };
 }
-
-export const ALL_ROLES = [
-  'Portal.Reader',
-  'Portal.Operator',
-  'Playbook.Author',
-  'Playbook.Approver',
-  'Portal.Admin',
-];

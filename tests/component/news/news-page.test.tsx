@@ -4,8 +4,14 @@ import userEvent from '@testing-library/user-event';
 import type { MeResponse, NewsItemDto, NewsSummaryResponse } from '@adminforge/schemas';
 import { App, createAppRouter, createQueryClient } from '@adminforge/web/src/app/router';
 import { __resetPrefsForTests } from '@adminforge/web/src/lib/prefs';
-import { NAV_WITH_NEWS, NEWS_FEEDS, NEWS_ITEMS, newsList, newsSummary } from '../../e2e/fixtures/news';
-import { FIXED_NOW, me } from '../../e2e/fixtures/session';
+import {
+  NAV_WITH_NEWS,
+  NEWS_FEEDS,
+  NEWS_ITEMS,
+  newsList,
+  newsSummary,
+} from '../../support/web/fixtures/news';
+import { FIXED_NOW, me } from '../../support/web/fixtures/session';
 import { axeViolations } from '../axe';
 
 // News and changes (/news): breaking strip, day grouping, unread and mark-all-read, URL filters, citations, text-only

@@ -1,0 +1,7 @@
+{
+  "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example/providers/Microsoft.Web/sites/func-example/config/appsettings",
+  "properties": {
+    "FUNCTIONS_WORKER_RUNTIME": "node",
+    "STORAGE_CONNECTION": "DefaultEndpointsProtocol=https;AccountName=example;AccountKey=c2VjcmV0"
+  }
+}

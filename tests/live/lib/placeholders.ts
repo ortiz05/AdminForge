@@ -18,6 +18,11 @@ import type { PortalSession } from './portal-session';
  *
  * Example: `{"mailbox":"@mailbox:AF-Test-Shared-01","identity":"@dl:AF-Test-DL-01","teamId":"@team:AF-Test-Team-01",
  * "siteUrl":"@site:AF-Test-Team-01#webUrl"}`.
+ *
+ * Inputs: a signed-in session (`lib/portal-session.ts`) and a JSON value. Output: the value with placeholders replaced
+ * and their count; nothing is printed, and errors name the placeholder as typed, never what it resolved to. Read-only:
+ * search and page datasources in read mode. Used by scripts/run-playbook.ts and scripts/check-placeholders.ts; parsing
+ * and replacement are tested in tests/unit/live/placeholders.test.ts.
  */
 export const PLACEHOLDER_KINDS = ['user', 'mailbox', 'group', 'dl', 'team', 'site', 'device', 'app'] as const;
 export type PlaceholderKind = (typeof PLACEHOLDER_KINDS)[number];

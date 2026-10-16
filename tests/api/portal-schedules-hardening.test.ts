@@ -1,5 +1,5 @@
 import { ApiErrorBody, Schedule } from '@adminforge/schemas';
-import { flush } from '../unit/scheduler/helpers';
+import { flush } from '../support/scheduler';
 import { FakeJobs, schedule } from './schedules-helpers';
 import {
   AVERY,

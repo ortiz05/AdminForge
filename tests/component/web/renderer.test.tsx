@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event';
 import type { MeResponse } from '@adminforge/schemas';
 import { App, createAppRouter, createQueryClient } from '@adminforge/web/src/app/router';
 import { __resetPrefsForTests } from '@adminforge/web/src/lib/prefs';
-import { me, NAV } from '../../e2e/fixtures/session';
+import { me, NAV } from '../../support/web/fixtures/session';
 import { axeViolations } from '../axe';
 import { DEFINITIONS, guid, NEXT_PAGE, RESULTS } from './renderer-fixtures';
 

@@ -2,7 +2,8 @@ import { defineConfig } from '@playwright/test';
 
 /**
  * Visual + accessibility baseline in mock mode. Every /api and /auth call is answered by page.route
- * (fixtures under e2e/fixtures), so only the Vite dev server is needed. Uses the system Chrome.
+ * (e2e/support/mock-api.ts, payloads in support/web/fixtures), so only the Vite dev server is needed. Uses the
+ * system Chrome.
  */
 export default defineConfig({
   testDir: '.',

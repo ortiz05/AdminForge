@@ -1,6 +1,7 @@
-// Live: run one schedule (or probes) once as the automation identity against the DEV database — the scheduler's own
-// one-shot path (`Scheduler.runOnce`, `runProbe`), with email and Teams delivery suppressed or redirected so no real
-// recipient gets anything. Prints statuses, reason codes and counts only.
+// Live: run one schedule (or probes) once as the automation identity against the DEV database — the scheduler
+// service's own one-shot module (portal/apps/scheduler/src/one-shot.ts: `Scheduler.runOnce`, `runProbe`, the same
+// status lines), with email and Teams delivery suppressed or redirected so no real recipient gets anything. This
+// script adds only the safety guards below and the delivery override.
 //
 // Usage (from the repository root, dev env file; never with ADMINFORGE_ENV_OVERLAY=host):
 //   pnpm exec tsx tests/live/scripts/run-schedule-once.ts --schedule <key> [--deliver none|sender]
@@ -13,10 +14,13 @@
 // Refused: playbook schedules (they would enqueue a real run for the dev API's worker — use run-playbook.ts, which
 // previews first), DATABASE_URL from the process environment, and a dev database that is also the host services'
 // (the `host` overlay resolving to the same DATABASE_URL). Database URLs are compared, never printed.
+// Output: a line on database, identity and delivery; then the run status, reason codes, file row counts and delivery
+//   statuses, or one line per probe (key, kind, status, code, metric) — log lines on stderr are masked (lib/mask.ts).
+//   Exit code 1 unless the schedule succeeded / every probe is ok or warn.
 import { existsSync } from 'node:fs';
 import { parseArgs } from 'node:util';
 import { loadEnv, overlayEnvFilePath } from '@adminforge/config';
-import { mask } from '../lib/mask';
+import { mask, maskError } from '../lib/mask';
 
 const { values } = parseArgs({
   options: {
@@ -62,7 +66,10 @@ if (
     'Refusing: the database this script would use is also the host services’ database (the host overlay resolves to the same DATABASE_URL). Give the services their own database in <env>.host.env (portal/deploy).',
   );
 
-const { RECIPIENT_KEY, SENDER_KEY, WEBHOOK_KEY } = await import('@adminforge/api/src/delivery/notifier');
+// API and scheduler modules load only after the guards (and before the configuration is read).
+const { loadConfig, RECIPIENT_KEY, SENDER_KEY, WEBHOOK_KEY } = await import('@adminforge/api/tooling');
+const { openOneShot, PROBE_HEADER, probeFailed, probeLine, probeSummary, scheduleRunLines } =
+  await import('@adminforge/scheduler/one-shot');
 
 // Delivery keys are rewritten in process.env before anything reads the configuration (process.env wins over the files).
 const base = loadEnv();
@@ -83,26 +90,16 @@ for (const key of Object.keys(base)) {
   }
 }
 
-const { loadConfig } = await import('@adminforge/api/src/config');
-const { createContext } = await import('@adminforge/api/src/context');
-const { createRunsModule } = await import('@adminforge/api/src/runs/module');
-const { createSchedulesModule } = await import('@adminforge/api/src/schedules/module');
-const { Scheduler } = await import('@adminforge/api/src/schedules/scheduler');
-const { runProbe } = await import('@adminforge/api/src/probes/checks');
-type Probe = import('@adminforge/schemas').Probe;
-
 const say = (level: string) => (obj: object, msg: string) => {
   if (/No client info in response/.test(msg)) return; // MSAL, expected for app-only tokens
-  const err = (obj as { err?: { message?: string } }).err?.message;
-  process.stderr.write(`[${level}] ${mask(msg)}${err ? ` — ${mask(err)}` : ''}\n`);
+  const err = (obj as { err?: unknown }).err;
+  process.stderr.write(`[${level}] ${mask(msg)}${err ? ` — ${maskError(err)}` : ''}\n`);
 };
 const log = { info: () => undefined, warn: say('warn'), error: say('error') };
 
 const config = loadConfig();
 if (values.schedule && !config.DATABASE_URL)
   throw new Error('No DATABASE_URL in the env file: schedules need the dev database (`pnpm db:up`).');
-const ctx = createContext(config, values['no-store'] ? { database: null } : {}, { warn: log.warn });
-if (!ctx.automation) throw new Error('The automation identity is not configured in the env file.');
 
 // Teams is never posted from here, whatever the configuration says.
 const refuse: typeof fetch = async () => {
@@ -118,14 +115,18 @@ const deliveryConfig = new Proxy({} as Record<string, string | undefined>, {
         ? sender
         : undefined,
 });
-const delivery = {
-  outbound: ctx.outbound,
-  fetch: refuse,
-  env: deliveryConfig,
-  publicBaseUrl: config.PUBLIC_BASE_URL,
-};
-const runs = createRunsModule(ctx, { inProcessWorker: false, log });
-const schedules = createSchedulesModule(ctx, runs, { inProcess: false, log, delivery });
+// The override reaches both the jobs' report delivery and the scheduler's failure/success notifications; email goes
+// through the process's own outbound executor as the automation identity.
+const oneShot = openOneShot(config, {
+  log,
+  noStore: values['no-store'],
+  delivery: { fetch: refuse, env: deliveryConfig },
+});
+const { ctx, schedules } = oneShot;
+if (!ctx.automation) {
+  await oneShot.close();
+  throw new Error('The automation identity is not configured in the env file.');
+}
 
 console.log(
   `database: ${ctx.database ? 'dev (env file)' : 'none (--no-store)'} · identity: automation (${ctx.automation.credential}) · delivery: ${
@@ -135,7 +136,6 @@ console.log(
   }`,
 );
 
-const pad = (s: string, n: number) => (s.length >= n ? s : s + ' '.repeat(n - s.length));
 let exitCode = 0;
 try {
   if (values.schedule) {
@@ -150,76 +150,21 @@ try {
       throw new Error(
         `Refusing ${values.schedule}: it runs a playbook. Run the playbook with tests/live/scripts/run-playbook.ts (preview first) instead.`,
       );
-    const scheduler = new Scheduler({
-      store: schedules.store,
-      definitions: ctx.definitions,
-      jobs: schedules.jobs,
-      audit: ctx.audit,
-      events: schedules.events,
-      now: ctx.now,
-      delivery,
-      log,
-    });
-    const run = await scheduler.runOnce(values.schedule, `live-script:${process.env.USER ?? 'operator'}`);
-    const r = (run.result ?? {}) as Record<string, unknown>;
-    const counts = ['probes', 'feeds', 'ok', 'warn', 'crit', 'error', 'failed', 'skipped', 'new', 'updated']
-      .filter((k) => typeof r[k] === 'number')
-      .map((k) => `${k}=${r[k] as number}`);
-    const artifacts =
-      (r.artifacts as Array<{ format: string; rows: number; truncated: boolean }> | undefined) ?? [];
-    console.log(
-      `${values.schedule}: ${run.status}${counts.length ? ` (${counts.join(' ')})` : ''}${run.error ? ` — ${run.error.code}` : ''}`,
-    );
-    for (const a of artifacts)
-      console.log(`  file ${a.format}: ${a.rows} row(s)${a.truncated ? ' (truncated)' : ''}`);
-    for (const d of (r.delivery as Array<{ type: string; status: string }> | undefined) ?? [])
-      console.log(`  delivery ${d.type}: ${d.status}`);
-    type Line = { key: string; status: string; code: string; new?: number; updated?: number };
-    for (const p of (r.results as Line[] | undefined) ?? [])
-      console.log(
-        `  ${pad(p.key, 48)} ${pad(p.status, 8)} ${pad(p.code, 20)}${typeof p.new === 'number' ? ` new=${p.new} updated=${p.updated ?? 0}` : ''}`,
-      );
-    if (typeof r.runStatus === 'string')
-      console.log(`  playbook run (dev API worker): ${r.runStatus}${r.dryRun ? ' (dry run)' : ''}`);
+    const run = await oneShot.runSchedule(values.schedule, `live-script:${process.env.USER ?? 'operator'}`);
+    for (const line of scheduleRunLines(values.schedule, run)) console.log(line);
     exitCode = run.status === 'succeeded' ? 0 : 1;
   } else {
-    const all = await ctx.definitions.list('probe');
-    for (const key of values.probe!) {
-      const rec = all.find((x) => x.key === key);
-      if (!rec) {
-        console.log(`${pad(key, 48)} unknown probe`);
-        exitCode = 1;
-        continue;
-      }
-      const probe = rec.def as Probe;
-      const o = await runProbe(rec.key, probe, schedules.probeDeps, {});
-      const metric = o.metric === null ? '-' : `${Math.round(o.metric * 10) / 10} ${o.unit}`;
-      console.log(
-        `${pad(o.probeKey, 48)} ${pad(probe.check.kind, 20)} ${pad(o.status, 6)} ${pad(o.code, 20)} ${pad(metric, 16)} ${o.durationMs} ms`,
-      );
-      if (o.status === 'error' || o.status === 'crit') exitCode = 1;
-      if (!values['no-store'] && ctx.database)
-        await schedules.store
-          .insertProbeResult({
-            probeKey: rec.key,
-            ts: o.ts,
-            status: o.status,
-            metric: o.metric,
-            durationMs: o.durationMs,
-            message: o.message.slice(0, 2000),
-            details: o.details,
-            scheduleRunId: null,
-          })
-          .catch((err: unknown) =>
-            log.warn({ err: { message: (err as Error).message } }, 'probe result not stored'),
-          );
-    }
+    const result = await oneShot.runProbes(values.probe);
+    console.log(PROBE_HEADER);
+    for (const key of result.missing) console.log(`${key.padEnd(48)} unknown probe`);
+    for (const r of result.results) console.log(probeLine(r));
+    console.log(probeSummary(result));
+    if (result.missing.length || result.results.some((r) => probeFailed(r.outcome))) exitCode = 1;
   }
+} catch (err) {
+  console.error(`FAILED: ${maskError(err)}`);
+  exitCode = 1;
 } finally {
-  await schedules.stop().catch(() => undefined);
-  await runs.stop().catch(() => undefined);
-  await ctx.events.close().catch(() => undefined);
-  await ctx.definitions.close().catch(() => undefined);
-  await ctx.database?.close().catch(() => undefined);
+  await oneShot.close();
 }
 process.exit(exitCode);

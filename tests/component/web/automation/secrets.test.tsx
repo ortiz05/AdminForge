@@ -2,7 +2,7 @@ import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { __resetPrefsForTests } from '@adminforge/web/src/lib/prefs';
 import { __resetClaimedSecretsForTests } from '@adminforge/web/src/runs/secrets';
-import { CHILD_TAP_VALUE, IDS, secretMessage, TAP_VALUE } from '../../../e2e/fixtures/automation';
+import { CHILD_TAP_VALUE, IDS, secretMessage, TAP_VALUE } from '../../../support/web/fixtures/automation';
 import { axeViolations } from '../../axe';
 import { FakeEventSource } from './fake-event-source';
 import { renderApp } from './render';

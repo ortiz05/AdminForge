@@ -4,8 +4,10 @@
  * `Out` is how commands print: one line per call, injected so tests collect lines instead of writing to stdout
  * (`index.ts` passes `console.log`). The renderers turn a list of planned operations into the two views the
  * provisioning commands share:
- *   - plan view (`provision … [--dry-run]`): `+ create`, `~ update`, `- remove`, `= no-op`, `! skip` per object;
- *   - status view (`provision status`): `✓` in the desired state, `✗` missing or drifted, `⚠` cannot be done here.
+ *   - plan view (`provision … [--dry-run]`): `+ create`, `~ update`, `- remove`, `= no-op`, `! skip` per object
+ *     (`✗ cannot` for a blocked skip);
+ *   - status view (`provision status`): `✓` in the desired state, `✗` missing or drifted (or `blocked`: opted into
+ *     but impossible here, e.g. a permission the provisioner lacks), `⚠` cannot be done here.
  *
  * Operations are structural (`RenderableOp`), so this module depends on nothing else in the CLI; the provisioning
  * model (`provision/model.ts`) reuses `PlanAction` as its `Action`. Lines never contain secret values — callers
@@ -31,6 +33,8 @@ export interface RenderableOp {
   changes?: string[];
   /** Extra non-secret detail for the status view (e.g. a grant's scope string). */
   detail?: string;
+  /** A skip the operator asked for that can't be done here (a missing permission, a refused object): ✗ in status. */
+  blocked?: boolean;
 }
 
 const PLAN_MARK: Record<PlanAction, string> = {
@@ -84,7 +88,7 @@ export function renderPlan(ops: RenderableOp[], out: Out): void {
     out(`  ${section}`);
     for (const op of list) {
       const why = op.changes?.length ? `  (${op.changes.join(', ')})` : '';
-      out(`    ${PLAN_MARK[op.action]}  ${op.title}${why}`);
+      out(`    ${op.blocked ? '✗ cannot' : PLAN_MARK[op.action]}  ${op.title}${why}`);
     }
   }
   out(`  Plan: ${summaryLine(ops)}`);
@@ -103,7 +107,7 @@ export function renderStatus(ops: RenderableOp[], out: Out): void {
             : op.action === 'delete'
               ? ' — to remove'
               : '';
-      out(`    ${STATUS_MARK[op.action]} ${op.title}${why}`);
+      out(`    ${op.blocked ? '✗' : STATUS_MARK[op.action]} ${op.title}${why}`);
       if (op.detail) out(`        ${op.detail}`);
     }
   }

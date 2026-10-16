@@ -10,12 +10,12 @@ contact the repository owner directly. Don't file a public issue.
 
 ## Identities
 
-| Identity                     | Kind                                    | Who uses it                     | Can change data?                                                                                                                                                                                                                                                                                                                                                       |
-| ---------------------------- | --------------------------------------- | ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| AdminForge Read `[<label>]`  | Delegated (signed-in user)              | Everyone with a portal role     | Not through AdminForge: the request policy allows reads only. Workload scopes that can write at the token level (ARM `user_impersonation`; on licensed tenants Exchange `Exchange.Manage`, SharePoint `AllSites.FullControl`, Teams) are flagged by provisioning                                                                                                       |
-| AdminForge Write `[<label>]` | Delegated                               | Operators, only while **armed** | Yes, as the user, within their Entra roles; assigned to the Operator group only. Tier-0 scopes (role management and PIM, app credentials, app-role and consent grants, `Directory.AccessAsUser.All`, tenant policies) only with `AF_ALLOW_PRIVILEGED_WRITE_SCOPES=true`                                                                                                |
-| AdminForge Automation        | Application                             | Scheduler and scheduled runs    | Read-only by default: write permissions need `AF_AUTOMATION_ALLOW_WRITE_PERMISSIONS=true`; reads of mail, files, sites, chats, calendars, contacts, notes, BitLocker keys, meeting transcripts or authentication methods need `AF_AUTOMATION_ALLOW_SENSITIVE_READS=true`. Assignment required; a certificate replaces its secret when `AF_AUTOMATION_CERT_PATH` is set |
-| Provisioner                  | Application (created by you, not by us) | `adminforge provision …` only   | Yes (creates apps, groups, consent). Lives in `<env>.admin.env`, never read by the services and never backed up. Give it Global Administrator only while provisioning; prefer a short-lived secret per run (`docs/operations.md`)                                                                                                                                      |
+| Identity                     | Kind                                    | Who uses it                     | Can change data?                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| ---------------------------- | --------------------------------------- | ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| AdminForge Read `[<label>]`  | Delegated (signed-in user)              | Everyone with a portal role     | Not through AdminForge: the request policy allows reads only. Workload scopes that can write at the token level (ARM `user_impersonation`; on licensed tenants Exchange `Exchange.Manage`, SharePoint `AllSites.FullControl`, Teams) are flagged by provisioning                                                                                                                                                                 |
+| AdminForge Write `[<label>]` | Delegated                               | Operators, only while **armed** | Yes, as the user, within their Entra roles; assigned to the Operator group only. Tier-0 scopes (role management and PIM, app credentials, app-role and consent grants, `Directory.AccessAsUser.All`, tenant policies) only with `AF_ALLOW_PRIVILEGED_WRITE_SCOPES=true`                                                                                                                                                          |
+| AdminForge Automation        | Application                             | Scheduler and scheduled runs    | Read-only by default: write permissions need `AF_AUTOMATION_ALLOW_WRITE_PERMISSIONS=true`; reads of mail, files, sites, chats, calendars, contacts, notes, BitLocker keys, meeting transcripts or authentication methods need `AF_AUTOMATION_ALLOW_SENSITIVE_READS=true`. Assignment required; a certificate replaces its secret when `AF_AUTOMATION_CERT_PATH` is set                                                           |
+| Provisioner                  | Application (created by you, not by us) | `adminforge provision …` only   | Yes (creates apps, groups, consent). Lives in `<env>.admin.env`, never read by the services and never backed up. Give it Global Administrator only while provisioning; prefer a short-lived secret per run (`docs/operations.md`). Graph application permissions granted for the test fixtures (several tier-0) survive removing its directory role: remove them between runs too — `provision status` warns while it holds them |
 
 Delegated calls can never do more than the signed-in person could do in the Entra admin centre; AdminForge adds
 restrictions, never privileges.
@@ -32,12 +32,20 @@ Approver or Groups Administrator, and is **disabled** except while `pnpm test:li
 `AF_TEST_SERVICE_ADMIN_ROLES=true` (admin file; default off) and only where the tenant licenses the workload does it
 also hold Exchange Recipient Administrator and SharePoint Administrator — tenant-wide service admin roles, needed only
 to run the Exchange and SharePoint write playbooks live; without the opt-in, re-provisioning removes them. It is
-excluded from Entra's authentication-methods registration campaign (nobody else is, and the campaign is otherwise
-unchanged) so unattended sign-in isn't interrupted. Provisioning manages only an account it created: the UPN must
+excluded from Entra's authentication-methods registration campaign (so is the approver fixture below; nobody else is,
+and the campaign is otherwise unchanged) so unattended sign-in isn't interrupted. Provisioning manages only an account it created: the UPN must
 start with `af-` and the account must carry the `employeeType` marker "AdminForge validation" set at creation (or the
 display name "AF Tester"); any other account at `AF_TEST_USER_UPN` is refused before anything changes — no password
 reset, roles, groups, campaign exclusion, enabling or disabling. `provision status` fails on any other directory role
-it holds (other roles, narrower scopes, roles through a group).
+it holds (other roles, narrower scopes, roles through a group) and on any PIM-eligible role provisioning didn't grant.
+
+**Approver fixture** (opt-in, `AF_TEST_FIXTURES=approver`, test labels only): "AF Tester 2" holds Portal.Reader and
+Playbook.Approver — never Operator, Author or Admin — and no directory roles, so approval flows can be tested with two
+accounts. It carries its own marker (`employeeType` "AdminForge validation approver"; the validation user's checks
+never accept it, and its checks never accept the validation user's), its UPN must differ from the validation user's,
+it is enabled only with an explicit `provision test-identities --enable --approver` (`--disable` always disables both),
+and it is refused wherever `AF_AUTOMATION_ALLOW_WRITE_PERMISSIONS=true`. A leftover approver fails `provision status`
+until `--remove-fixtures` deletes it (after taking it out of the campaign's exclusions).
 
 ## Signing in
 
@@ -311,6 +319,7 @@ probe results, report files) is purged after its retention period; the audit log
 | Unreviewed content is published                                  | `publish` runs `validate` and the playbook tests, and refuses uncommitted content or a commit not on `origin/main` unless `--allow-unreviewed` (audited)                              |
 | Validation user misused                                          | Disabled between live runs, least roles (Exchange / SharePoint admin roles only with `AF_TEST_SERVICE_ADMIN_ROLES=true`), test labels only; `provision status` flags any other role   |
 | Provisioning pointed at someone's real account                   | Only an `af-…` account with the "AdminForge validation" marker (or "AF Tester" name) is managed; any other is refused before a password, role or exclusion changes                    |
+| One person approves their own request with the approver fixture  | Accepted in test labels only (see Known gaps); refused where automation writes are allowed; enabled only on request (`--enable --approver`); Portal.Reader + Approver only            |
 | An `optional` datasource hides a denial                          | Never for a missing role, the request policy, a licence, sign-in or arming anywhere in the chain; suppressed errors are recorded, and a scheduled report fails `report_incomplete`    |
 | A compromised service rewrites the audit log                     | The services' database role can't update, delete or truncate audit events, or alter tables                                                                                            |
 
@@ -319,7 +328,18 @@ probe results, report files) is purged after its retention period; the audit log
 Tracked in `docs/backlog.md`:
 
 - **The provisioner is powerful while its credential is on the host** (typically Global Administrator, plus a role that can assign Azure roles). Remove its directory role and Owner membership when not
-  provisioning, or use a short-lived secret per run (`docs/operations.md`).
+  provisioning, or use a short-lived secret per run (`docs/operations.md`). **Graph application permissions survive
+  removing the directory role**: the test fixtures' `RoleEligibilitySchedule.ReadWrite.Directory` (PIM),
+  `Policy.ReadWrite.ConditionalAccess` and `DeviceManagementConfiguration.ReadWrite.All` are tier-0, and
+  `LicenseAssignment.ReadWrite.All` and `Team.Create` are standing write access too. Grant them only for a
+  provisioning run and remove them afterwards (`docs/operations.md` → The provisioner); `provision status` shows a ⚠
+  while the provisioner's token still holds any of them.
+- **Two-person approval through one credential file (accepted risk, test labels only).** The approver fixture's
+  password sits in the same `<env>.admin.env` as the validation user's, so whoever holds that file can request and
+  approve alone. That is acceptable for testing approval flows in a validation tenant and nowhere else: the fixture
+  exists only in `AF_TEST_IDENTITY_LABELS`, is refused (plan and status ✗) where `AF_AUTOMATION_ALLOW_WRITE_PERMISSIONS`
+  is true — where two-person approval guards scheduled writes — stays disabled unless `--enable --approver`, and holds
+  no write role.
 - The Read app holds write-capable workload scopes where those workloads are licensed (Exchange, SharePoint, Teams;
   ARM always). Only AdminForge's read policy and the runner's read-mode constraints stop writes through them.
 - The validation user's User Administrator role can manage groups that aren't role-assignable. It stays disabled

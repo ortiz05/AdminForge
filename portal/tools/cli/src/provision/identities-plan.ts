@@ -32,6 +32,11 @@ export interface DesiredIdentities {
   withheldRoles: DirectoryRoleName[];
   targets: UserSpec[];
   testGroup: { uniqueName: string; body: GroupBody };
+  /**
+   * The approver fixture's UPN (AF_TEST_APPROVER_UPN, default af-approver@<domain>): the validation user and the
+   * approver must be two accounts, so the same UPN is refused for both.
+   */
+  approverUpn?: string;
 }
 
 export interface GraphUser {
@@ -119,6 +124,11 @@ const localPart = (upn: string) => upn.split('@')[0]!;
 export const TESTER_DISPLAY_NAME = 'AF Tester';
 /** `employeeType` provisioning sets on the validation user when it creates it. */
 export const TESTER_MARKER = 'AdminForge validation';
+/**
+ * `employeeType` of the approver test fixture ("AF Tester 2", provision/approver-plan.ts). Its own marker: the
+ * validation user's checks never accept an approver account, and the approver's never accept the validation user.
+ */
+export const APPROVER_MARKER = 'AdminForge validation approver';
 
 /** Why AF_TEST_USER_UPN can't be the validation user's UPN, if it can't: validation accounts are `af-…`. */
 export function testerUpnProblem(upn: string): string | undefined {
@@ -138,13 +148,31 @@ export function isProvisionedTester(
 ) {
   return (
     !testerUpnProblem(user.userPrincipalName) &&
+    user.employeeType !== APPROVER_MARKER &&
     (user.employeeType === TESTER_MARKER || user.displayName === TESTER_DISPLAY_NAME)
   );
 }
 
+/**
+ * Whether an existing account is the approver fixture provisioning created: an `af-` UPN and the approver marker
+ * (nothing else — no display-name fallback). The one rule for planning, applying, enabling, disabling and removing it.
+ */
+export const isProvisionedApprover = (user: Pick<GraphUser, 'userPrincipalName' | 'employeeType'>) =>
+  !testerUpnProblem(user.userPrincipalName) && user.employeeType === APPROVER_MARKER;
+
+/** Why the validation user and the approver can't have these UPNs: they must be two different accounts. */
+export const sameAccountProblem = (testerUpn: string, approverUpn: string | undefined) =>
+  approverUpn && testerUpn.toLowerCase() === approverUpn.toLowerCase()
+    ? 'AF_TEST_USER_UPN and AF_TEST_APPROVER_UPN name the same account — the validation user and the approver must be two different accounts (two-person approval)'
+    : undefined;
+
 /** Why provisioning won't touch the account at AF_TEST_USER_UPN, if it won't. */
-export function testerRefusal(upn: string, existing: GraphUser | undefined): string | undefined {
-  const upnProblem = testerUpnProblem(upn);
+export function testerRefusal(
+  upn: string,
+  existing: GraphUser | undefined,
+  approverUpn?: string,
+): string | undefined {
+  const upnProblem = testerUpnProblem(upn) ?? sameAccountProblem(upn, approverUpn);
   if (upnProblem) return upnProblem;
   if (existing && !isProvisionedTester(existing))
     return `the account at AF_TEST_USER_UPN was not created by AdminForge provisioning (its display name isn't "${TESTER_DISPLAY_NAME}" and it has no "${TESTER_MARKER}" marker) — refusing to change it; point AF_TEST_USER_UPN at the validation account, or remove the key to use af-tester@<AF_PRIMARY_DOMAIN>`;
@@ -214,6 +242,8 @@ export function buildDesiredIdentities(opts: {
   services?: { exchange?: boolean; sharepoint?: boolean };
   /** AF_TEST_SERVICE_ADMIN_ROLES=true: the tester gets the licensed workloads' service admin roles. Default off. */
   serviceAdminRoles?: boolean;
+  /** AF_TEST_APPROVER_UPN (default af-approver@<domain>), for the two-accounts check. */
+  approverUpn?: string;
 }): DesiredIdentities {
   const upn = opts.testerUpn || `af-tester@${opts.domain}`;
   const licensed = (['exchange', 'sharepoint'] as const)
@@ -234,6 +264,7 @@ export function buildDesiredIdentities(opts: {
       displayName: `AF-Test-User-0${n}`,
       mailNickname: `af-test-user-0${n}`,
     })),
+    approverUpn: opts.approverUpn || `af-approver@${opts.domain}`,
     testGroup: {
       uniqueName: 'af-test-group-01',
       body: {
@@ -254,7 +285,7 @@ export function planIdentities(desired: DesiredIdentities, state: IdentityState)
   const ops: IdentityOp[] = [];
   const { tester } = desired;
   const envMatches = state.env.upn?.toLowerCase() === tester.upn.toLowerCase();
-  const refused = testerRefusal(tester.upn, state.tester);
+  const refused = testerRefusal(tester.upn, state.tester, desired.approverUpn);
 
   if (refused) {
     // Nothing that touches this account is planned: no password, groups, roles, ownership or campaign exclusion.

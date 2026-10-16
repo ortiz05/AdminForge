@@ -8,9 +8,11 @@ import { freshTotp } from './totp';
  * user in a Playwright page: UPN, password, the TOTP code — and, on the first sign-in, the MFA registration Security
  * Defaults asks for (it registers an authenticator-app TOTP and stores the seed in the local env file).
  *
- * Inputs: the page, already on a Microsoft sign-in URL, and `testUserCredentials(env)` (from `<env>.admin.env`).
+ * Inputs: the page, already on a Microsoft sign-in URL, and `testUserCredentials(env)` — or, for the approver fixture
+ * ("AF Tester 2"), `testApproverCredentials(env)` — from `<env>.admin.env`.
  * Outputs: resolves once the browser has left Microsoft's pages; `registeredTotp` when it registered a seed (written
- * to AF_TEST_USER_TOTP_SECRET with `writeEnvKeys`, never printed). Errors are masked (`mask`): an AADSTS message or a
+ * to the account's TOTP key — AF_TEST_USER_TOTP_SECRET or AF_TEST_APPROVER_TOTP_SECRET — with `writeEnvKeys`, never
+ * printed). Errors are masked (`mask`): an AADSTS message or a
  * last-page URL can carry the tenant id or the UPN.
  * Used by lib/portal-session.ts, e2e/portal.live.spec.ts and scripts/register-test-user-mfa.ts; the nudge detection is
  * tested in tests/unit/live/entra-login-nudge.test.ts.
@@ -21,6 +23,8 @@ export interface TestUserCredentials {
   password: string;
   /** Base32 TOTP seed registered for the dedicated test user (local config only). */
   totpSecret?: string;
+  /** The admin env key a newly registered seed is written to (default AF_TEST_USER_TOTP_SECRET). */
+  totpKey?: 'AF_TEST_USER_TOTP_SECRET' | 'AF_TEST_APPROVER_TOTP_SECRET';
 }
 
 /**
@@ -36,6 +40,29 @@ export function testUserCredentials(env: Readonly<Record<string, string | undefi
       'AF_TEST_USER_UPN and AF_TEST_USER_PASSWORD are not set (they live in <env>.admin.env). Run `pnpm adminforge provision test-identities`.',
     );
   return { upn, password, totpSecret: env.AF_TEST_USER_TOTP_SECRET?.trim() || undefined };
+}
+
+/**
+ * The approver fixture's sign-in ("AF Tester 2", Playbook.Approver only — approval flows need a second person):
+ * AF_TEST_APPROVER_UPN, AF_TEST_APPROVER_PASSWORD and, once its MFA bootstrap ran
+ * (`register-test-user-mfa.ts --approver`), AF_TEST_APPROVER_TOTP_SECRET. Throws, naming the keys only, when
+ * provisioning hasn't written them.
+ */
+export function testApproverCredentials(
+  env: Readonly<Record<string, string | undefined>>,
+): TestUserCredentials {
+  const upn = env.AF_TEST_APPROVER_UPN?.trim();
+  const password = env.AF_TEST_APPROVER_PASSWORD;
+  if (!upn || !password)
+    throw new Error(
+      'AF_TEST_APPROVER_UPN and AF_TEST_APPROVER_PASSWORD are not set (they live in <env>.admin.env). Add "approver" to AF_TEST_FIXTURES and run `pnpm adminforge provision test-identities`.',
+    );
+  return {
+    upn,
+    password,
+    totpSecret: env.AF_TEST_APPROVER_TOTP_SECRET?.trim() || undefined,
+    totpKey: 'AF_TEST_APPROVER_TOTP_SECRET',
+  };
 }
 
 const SECRET_RE = /\b([A-Za-z2-7]{16,64})\b/;
@@ -149,18 +176,23 @@ export async function signInWithEntra(
         .click();
       await page.waitForTimeout(3000);
       registeredTotp = secret;
-      writeEnvKeys({ AF_TEST_USER_TOTP_SECRET: secret });
+      writeEnvKeys({ [creds.totpKey ?? 'AF_TEST_USER_TOTP_SECRET']: secret });
     } else if (
       /Success|was successfully registered|Default sign-in method|Authenticator app added/i.test(body) &&
       /mysignins/.test(page.url())
     ) {
+      // Entra sometimes moves on to "Stay signed in?" by itself while this page is still showing: a short click that
+      // may miss, and the loop handles whichever page comes next.
       await page
         .getByRole('button', { name: /^(Done|Next|Continue)$/ })
         .first()
-        .click();
+        .click({ timeout: 5_000 })
+        .catch(() => undefined);
     } else if (await visible('input[name="otc"]')) {
       if (!secret)
-        throw new Error('Sign-in asked for an authenticator code but AF_TEST_USER_TOTP_SECRET is not set.');
+        throw new Error(
+          `Sign-in asked for an authenticator code but ${creds.totpKey ?? 'AF_TEST_USER_TOTP_SECRET'} is not set.`,
+        );
       await page.locator('input[name="otc"]').fill(await freshTotp(secret));
       await page.locator('#idSubmit_SAOTCC_Continue, input[type=submit]').first().click();
     } else if (/Verify your identity/i.test(body) && /authenticator app|verification code/i.test(body)) {

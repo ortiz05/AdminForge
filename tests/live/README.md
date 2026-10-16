@@ -51,21 +51,23 @@ another) plus its admin-only sibling `<env>.admin.env`, which holds the validati
 live tests read it; the services never do). The process environment overrides both. Never print or commit their
 values.
 
-| Variable                                    | Used by        | Meaning                                                                                                                                                                                     |
-| ------------------------------------------- | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `PUBLIC_BASE_URL`                           | suite, scripts | The portal origin the browser signs in to (default `http://localhost:5173`)                                                                                                                 |
-| `AF_LIVE_OUT`                               | suite, scripts | Output directory for results and screenshots (default `~/.cache/adminforge/live`, i.e. `$XDG_CACHE_HOME/adminforge/live`; kept 0700; refused inside the repository, also through a symlink) |
-| `AF_LIVE_INSECURE_TLS=1`                    | suite          | Accept a private CA, e.g. Caddy `tls internal` for LAN access: `PUBLIC_BASE_URL=https://<lan-name>:8443 AF_LIVE_INSECURE_TLS=1 pnpm test:live`                                              |
-| `API_PORT`                                  | scripts        | The scripts call the API directly on the `PUBLIC_BASE_URL` host and scheme at this port (default 3001), so they target a dev stack, not the TLS proxy                                       |
-| `AF_TEST_USER_UPN`, `AF_TEST_USER_PASSWORD` | both           | The validation user (written by `provision test-identities`)                                                                                                                                |
-| `AF_TEST_USER_TOTP_SECRET`                  | both           | Base32 TOTP seed (written by the MFA bootstrap)                                                                                                                                             |
+| Variable                                                                            | Used by        | Meaning                                                                                                                                                                                     |
+| ----------------------------------------------------------------------------------- | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `PUBLIC_BASE_URL`                                                                   | suite, scripts | The portal origin the browser signs in to (default `http://localhost:5173`)                                                                                                                 |
+| `AF_LIVE_OUT`                                                                       | suite, scripts | Output directory for results and screenshots (default `~/.cache/adminforge/live`, i.e. `$XDG_CACHE_HOME/adminforge/live`; kept 0700; refused inside the repository, also through a symlink) |
+| `AF_LIVE_INSECURE_TLS=1`                                                            | suite          | Accept a private CA, e.g. Caddy `tls internal` for LAN access: `PUBLIC_BASE_URL=https://<lan-name>:8443 AF_LIVE_INSECURE_TLS=1 pnpm test:live`                                              |
+| `API_PORT`                                                                          | scripts        | The scripts call the API directly on the `PUBLIC_BASE_URL` host and scheme at this port (default 3001), so they target a dev stack, not the TLS proxy                                       |
+| `AF_TEST_USER_UPN`, `AF_TEST_USER_PASSWORD`                                         | both           | The validation user (written by `provision test-identities`)                                                                                                                                |
+| `AF_TEST_USER_TOTP_SECRET`                                                          | both           | Base32 TOTP seed (written by the MFA bootstrap)                                                                                                                                             |
+| `AF_TEST_APPROVER_UPN`, `AF_TEST_APPROVER_PASSWORD`, `AF_TEST_APPROVER_TOTP_SECRET` | both           | The approver fixture "AF Tester 2" (written by `provision test-identities` and `register-test-user-mfa.ts --approver`; `testApproverCredentials`)                                           |
 
 ## Scripts
 
 Run from the repository root with `pnpm exec tsx tests/live/scripts/<script>.ts`:
 
-- **`register-test-user-mfa.ts`** — one-time, idempotent MFA bootstrap: signs the validation user in to the Read app,
-  registers a TOTP authenticator if Entra asks, and stores the seed as `AF_TEST_USER_TOTP_SECRET` in `<env>.admin.env`.
+- **`register-test-user-mfa.ts [--approver]`** — one-time, idempotent MFA bootstrap: signs the validation user (with
+  `--approver`: the approver fixture) in to the Read app, registers a TOTP authenticator if Entra asks, and stores the
+  seed as `AF_TEST_USER_TOTP_SECRET` (`AF_TEST_APPROVER_TOTP_SECRET`) in `<env>.admin.env`.
 - **`verify-api-live.ts`** — API end to end: SSO sign-in, `/api/me` (role count and modes, never the user's name),
   overview (counts and section error codes), arm, disarm, logout. Needs only the API running (the browser's requests
   are forwarded to it).
@@ -147,7 +149,8 @@ Exactly what the suite needs, nothing standing that it doesn't:
 
 - **Portal roles:** `Portal.Reader` (pages, Query Studio, schedules, probes), `Portal.Operator` (arm, write
   playbooks) and `Portal.Admin` (audit chain, admin pages). Not `Playbook.Approver`: approvals need a second person,
-  and a single tester who can approve would approve its own requests — approval flows aren't covered by this suite.
+  and a single tester who can approve would approve its own requests — the `approver` fixture ("AF Tester 2",
+  Portal.Reader and Playbook.Approver) is that second account.
 - **Directory roles:** Global Reader (every page reads) and User Administrator (disable/re-enable `AF-Test-User-02`).
   It owns `AF-Test-Group-01` instead of holding Groups Administrator; `provision test-identities` removes a Groups
   Administrator assignment left by earlier versions. User Administrator can still manage ordinary (not
@@ -169,6 +172,48 @@ Exactly what the suite needs, nothing standing that it doesn't:
   validation" marker (`employeeType`, set at creation) or the display name "AF Tester". Any other account at
   `AF_TEST_USER_UPN` is refused before anything changes: no new password, roles, groups, campaign exclusion,
   `--enable` or `--disable`.
+
+## Licensed test fixtures (opt-in)
+
+Data only a licensed tenant has, provisioned by the same `pnpm adminforge provision test-identities` run when opted in
+from `<env>.admin.env` (nothing changes without the opt-in):
+
+| Opt-in                                 | What it provisions                                                                                                       | Provisioner needs (Graph application permission)        |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------- |
+| `AF_TEST_LICENCE_SKU=<part number>`    | the licence (e.g. `SPE_E5`) for the validation user and AF-Test-User-01…03 — mailboxes, OneDrives, Teams settings        | `LicenseAssignment.ReadWrite.All`                       |
+| `pim` in `AF_TEST_FIXTURES`            | PIM eligibility, never active: AF-Test-User-01 → Reports Reader, the validation user → Message Center Reader             | `RoleEligibilitySchedule.ReadWrite.Directory`           |
+| `named-location` in `AF_TEST_FIXTURES` | `AF-Test-Location`, 192.0.2.0/24 (documentation range), not trusted                                                      | `Policy.Read.All`, `Policy.ReadWrite.ConditionalAccess` |
+| `intune` in `AF_TEST_FIXTURES`         | `AF-Test Compliance (Windows)` and `AF-Test Configuration (Windows)`, assigned to AF-Test-Group-01 only                  | `DeviceManagementConfiguration.ReadWrite.All`           |
+| `approver` in `AF_TEST_FIXTURES`       | "AF Tester 2" (`af-approver@<domain>`, or `AF_TEST_APPROVER_UPN`): Portal.Reader + Playbook.Approver, no directory roles | nothing beyond the validation user's                    |
+
+- **Apply:** `pnpm adminforge provision test-identities --dry-run` shows the plan (and a hint for each permission the
+  provisioner's token lacks), then run it without `--dry-run`. Licences need free seats (four); the usage location is
+  set from the organisation's country when missing. PIM eligibility is permanent unless the role's settings forbid it
+  (then 365 days). The approver is created disabled; its password goes to `<env>.admin.env`; register its MFA with
+  `register-test-user-mfa.ts --approver` while it is enabled (`--enable --approver`).
+- **Status:** `provision status` lists every fixture ✓/✗ (with the seats used). A fixture Graph refuses shows `✗` with
+  the permission to grant; the other fixtures still apply, and the run exits 1. An Intune policy is ✓ only when its one
+  assignment includes AF-Test-Group-01 (anything else is re-assigned to exactly that); members of AF-Test-Group-01
+  other than provisioning's test accounts and `AF-Test-*` devices are a ⚠ (they'd get the policies). A ⚠ also lists any
+  fixture permission the provisioner still holds — remove them between runs (`docs/operations.md` → The provisioner).
+- **Enable/disable:** `--enable` enables the validation user only; `--enable --approver` also the approver (approval
+  tests only — `pnpm test:live` never does). `--disable` always disables both, trying each even if the other fails.
+- **The approver is two-person approval in name only:** both passwords are in one file. It is for testing approval
+  flows in a validation tenant: it holds Portal.Reader and Playbook.Approver only, carries its own marker
+  ("AdminForge validation approver" — the validation user's checks never accept it, nor its checks the validation
+  user), must have a different UPN from the validation user, and is refused (plan and status ✗) wherever
+  `AF_AUTOMATION_ALLOW_WRITE_PERMISSIONS=true`. A marked approver left after "approver" is taken out of
+  `AF_TEST_FIXTURES` is ✗ in `provision status` until `--remove-fixtures` deletes it.
+- **Ownership:** only objects provisioning created are changed or removed — users with the validation marker or
+  provisioning's display name (the approver: its own marker only), Intune policies whose description carries the
+  marker, the named location with exactly that range. Same-named objects are refused (`✗ cannot`).
+- **Remove:** `pnpm adminforge provision test-identities --remove-fixtures --dry-run`, then without `--dry-run`:
+  takes the licence back from the test users, removes the eligibility, the named location and the Intune policies,
+  and deletes the approver (first out of the registration campaign's exclusions; restorable for 30 days; its password
+  and TOTP seed are cleared). It covers the opted-in fixtures — keep the keys set until they are removed — and a marked
+  approver in any case. It works in any environment label: it only removes objects carrying provisioning's marks.
+- **Not yet:** a report-only Conditional Access test policy (waits for the Security Defaults vs Conditional Access
+  decision) and a risky user on demand (the Identity Protection live checks) — see the M365 E5 plan.
 
 ## Safety rules
 

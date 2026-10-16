@@ -1,18 +1,21 @@
 /**
- * `adminforge provision entra [--dry-run]`, `provision test-identities [--dry-run | --enable | --disable]` and
- * `provision status`.
+ * `adminforge provision entra [--dry-run]`, `provision test-identities [--dry-run | --enable | --disable |
+ * --remove-fixtures]` and `provision status`.
  *
  * Each command follows the provisioning pattern (README.md → Provisioning): validated settings
  * (provision/settings.ts) → desired state (provision/entra-desired.ts, identities-plan.ts) → fetched state as the
  * provisioner identity (provision/entra-io.ts, identities-io.ts) → plan (entra-plan.ts, identities-plan.ts) →
  * apply, unless --dry-run. `provision status` prints the same plan as a checklist, adds checks for privilege nobody
  * provisioned (provision/unexpected.ts), live token checks for the three apps, the Read app's authorize URL, the Azure
- * test environment (commands/azure-test.ts) and Security Defaults. Changes only through the provisioner identity;
+ * test environment (commands/azure-test.ts) and Security Defaults. The opt-in licensed test fixtures (licences, PIM,
+ * named location, Intune, the approver) are planned, applied and shown next to the test identities through
+ * commands/test-fixtures.ts. Changes only through the provisioner identity;
  * writes client ids and secrets to the env file (`ctx.writeEnv`), never prints them.
  */
 import { randomBytes } from 'node:crypto';
 import path from 'node:path';
 import { repoRoot } from '@adminforge/config';
+import { ApiError, type GraphClient } from '@adminforge/connectors';
 import { loadContentDir } from '@adminforge/schemas';
 import { declaredScopes, serviceForResource, type Declared } from '../content/scopes';
 import { ConfigError } from '../shared/errors';
@@ -39,6 +42,7 @@ import { applyEntraOps, fetchEntraState, fetchResources } from '../provision/ent
 import { planEntra } from '../provision/entra-plan';
 import {
   buildDesiredIdentities,
+  isProvisionedApprover,
   licensedServices,
   planIdentities,
   testIdentitiesExist,
@@ -48,6 +52,7 @@ import {
 import {
   applyIdentityOps,
   fetchIdentityState,
+  findUser,
   readSecurityDefaults,
   setUserEnabled,
 } from '../provision/identities-io';
@@ -55,6 +60,20 @@ import type { DesiredEntra, EntraOp, EntraState, ProvisionSettings } from '../pr
 import { envSubset, provisionSettings, testIdentityLabels } from '../provision/settings';
 import { findUnexpected, unexpectedFailures } from '../provision/unexpected';
 import { azureTestStatus } from './azure-test';
+import {
+  applyFixtures,
+  approverUpnOf,
+  fixturesFailed,
+  fixtureStatusWarnings,
+  permissionHints,
+  planFixturesRun,
+  printFixturesPlan,
+  provisionerStandingLines,
+  setApproverEnabled,
+} from './test-fixtures';
+import { readEligibleRoles, unexpectedEligibleRoles } from '../provision/eligibility';
+import { fixtureSettings } from '../provision/fixtures-plan';
+import { FIXTURE_ROLES, type FixtureOp } from '../provision/fixtures-model';
 
 export interface EntraRun {
   settings: ProvisionSettings;
@@ -198,6 +217,8 @@ export async function provisionEntra(ctx: CliContext, opts: { dryRun?: boolean }
 
 export interface IdentitiesRun {
   ops: IdentityOp[];
+  /** The opted-in test fixtures' operations (empty when none is opted in). */
+  fixtureOps: FixtureOp[];
   securityDefaults: boolean | 'unknown';
 }
 
@@ -225,6 +246,7 @@ async function identityPlan(ctx: CliContext, clients: Clients, settings: Provisi
     label: settings.label,
     domain: settings.primaryDomain,
     testerUpn: ctx.env.AF_TEST_USER_UPN,
+    approverUpn: approverUpnOf(ctx, settings),
     services: licensedServices(await tenantServicePlans(clients)),
     // Tenant-wide Exchange / SharePoint admin roles for the validation user: opt-in (admin file), default off.
     serviceAdminRoles: ctx.env.AF_TEST_SERVICE_ADMIN_ROLES === 'true',
@@ -254,38 +276,79 @@ const securityDefaultsLine = (v: boolean | 'unknown') =>
       ? 'Security Defaults: ENABLED — the test user will be prompted to register MFA, which blocks unattended Playwright sign-in'
       : 'Security Defaults: disabled';
 
-/**
- * `adminforge provision test-identities --enable | --disable`: turns the validation user's sign-in on for a live run
- * and off again (it holds standing directory roles). Idempotent; prints no identifiers.
- */
-export async function setTesterEnabled(ctx: CliContext, enabled: boolean): Promise<{ changed: boolean }> {
-  const settings = provisionSettings(ctx.env);
-  // Disabling is always allowed (it only removes access); enabling only in a test environment.
-  if (enabled && !settings.testIdentitiesAllowed) throw new ConfigError(notTestLabel(ctx, settings));
-  const upn = ctx.env.AF_TEST_USER_UPN || (settings.primaryDomain && `af-tester@${settings.primaryDomain}`);
-  if (!upn) throw new ConfigError('AF_TEST_USER_UPN (or AF_PRIMARY_DOMAIN) must be set in the env file.');
-  const clients = provisionerClients(ctx, settings);
-  const result = await setUserEnabled(clients.graph, upn, enabled);
+/** Turns the validation user's sign-in on or off; prints one line. Throws ConfigError when it can't. */
+async function setValidationUser(ctx: CliContext, graph: GraphClient, upn: string, enabled: boolean) {
+  const result = await setUserEnabled(graph, upn, enabled);
   const state = enabled ? 'enabled' : 'disabled';
   if (result === 'refused')
     throw new ConfigError(
       'The account at AF_TEST_USER_UPN was not created by AdminForge provisioning (UPN af-…, display name "AF Tester" or the "AdminForge validation" marker), so it is neither enabled nor disabled here. Fix AF_TEST_USER_UPN.',
     );
   if (result === 'missing') {
-    if (!enabled) {
-      ctx.out('Validation user (AF_TEST_USER_UPN): does not exist — nothing to disable.');
-      return { changed: false };
-    }
-    throw new ConfigError(
-      'The validation user (AF_TEST_USER_UPN) does not exist. Run `pnpm adminforge provision test-identities` first.',
-    );
+    if (enabled)
+      throw new ConfigError(
+        'The validation user (AF_TEST_USER_UPN) does not exist. Run `pnpm adminforge provision test-identities` first.',
+      );
+    ctx.out('Validation user (AF_TEST_USER_UPN): does not exist — nothing to disable.');
+    return false;
   }
   ctx.out(
     result === 'changed'
       ? `✓ Validation user (AF_TEST_USER_UPN): ${state}${enabled ? ' — Entra can take up to a minute to accept its sign-ins' : ', sign-in sessions revoked'}.`
       : `Validation user (AF_TEST_USER_UPN): already ${state}.`,
   );
-  return { changed: result === 'changed' };
+  return result === 'changed';
+}
+
+/** A failure of one account's step in `--disable`, for the terminal: never a Graph message (it can carry ids). */
+const disableFailure = (err: unknown) =>
+  err instanceof ConfigError
+    ? err.message
+    : err instanceof ApiError
+      ? `Graph answered ${err.status} ${err.code}`
+      : 'failed (run with ADMINFORGE_DEBUG=1 for details)';
+
+/**
+ * `adminforge provision test-identities --enable [--approver] | --disable`: turns the validation user's sign-in on
+ * for a live run and off again (it holds standing directory roles). The approver fixture (AF Tester 2) is enabled only
+ * with an explicit `--approver` (and never where AF_AUTOMATION_ALLOW_WRITE_PERMISSIONS=true); `--disable` always
+ * disables both, trying each even when the other fails, and reports each. Idempotent; prints no identifiers.
+ */
+export async function setTesterEnabled(
+  ctx: CliContext,
+  enabled: boolean,
+  opts: { approver?: boolean } = {},
+): Promise<{ changed: boolean }> {
+  const settings = provisionSettings(ctx.env);
+  // Disabling is always allowed (it only removes access); enabling only in a test environment.
+  if (enabled && !settings.testIdentitiesAllowed) throw new ConfigError(notTestLabel(ctx, settings));
+  if (!enabled && opts.approver)
+    throw new ConfigError('--approver goes with --enable only: --disable always disables both accounts.');
+  const upn = ctx.env.AF_TEST_USER_UPN || (settings.primaryDomain && `af-tester@${settings.primaryDomain}`);
+  if (!upn) throw new ConfigError('AF_TEST_USER_UPN (or AF_PRIMARY_DOMAIN) must be set in the env file.');
+  const clients = provisionerClients(ctx, settings);
+  if (enabled) {
+    const changed = await setValidationUser(ctx, clients.graph, upn, true);
+    const approverChanged = opts.approver
+      ? await setApproverEnabled(ctx, clients.graph, settings, true)
+      : false;
+    return { changed: changed || approverChanged };
+  }
+  const failed: string[] = [];
+  let changed = false;
+  const steps: Array<[string, () => Promise<boolean>]> = [
+    ['Validation user (AF_TEST_USER_UPN)', () => setValidationUser(ctx, clients.graph, upn, false)],
+    ['Approver (AF_TEST_APPROVER_UPN)', () => setApproverEnabled(ctx, clients.graph, settings, false)],
+  ];
+  for (const [who, step] of steps)
+    try {
+      changed = (await step()) || changed;
+    } catch (err) {
+      ctx.out(`✗ ${who}: ${disableFailure(err)}`);
+      failed.push(who);
+    }
+  if (failed.length) throw new ConfigError(`Not disabled: ${failed.join(', ')} — see ✗ above.`);
+  return { changed };
 }
 
 /** `adminforge provision test-identities [--dry-run]` */
@@ -299,7 +362,9 @@ export async function provisionTestIdentities(
   ctx.out(
     `AdminForge provision test-identities — environment "${settings.label}"${opts.dryRun ? ' (dry run)' : ''}`,
   );
-  const { state, ops } = await identityPlan(ctx, clients, settings);
+  // Opt-ins are checked before anything is read: a malformed AF_TEST_FIXTURES changes nothing.
+  const fixtureOptIns = fixtureSettings(ctx.env);
+  const { desired, state, ops } = await identityPlan(ctx, clients, settings);
   ctx.out('');
   ctx.out('Plan:');
   renderPlan(ops, ctx.out);
@@ -309,7 +374,14 @@ export async function provisionTestIdentities(
       `Nothing was changed. Refusing to provision the validation user: ${refused.refused}.`,
     );
   for (const line of unexpectedTesterRoles(state).lines) ctx.out(`  ⚠ ${line}`);
-  const c = counts(ops);
+  const fixtures = await planFixturesRun(ctx, clients, settings, desired);
+  if (fixtures) {
+    printFixturesPlan(fixtures, ctx.out);
+    for (const line of await permissionHints(ctx, settings, fixtureOptIns)) ctx.out(`  ${line}`);
+  }
+  const fixtureOps = fixtures?.ops ?? [];
+  const c = counts([...ops, ...fixtureOps]);
+  let failed: Awaited<ReturnType<typeof applyFixtures>> = [];
   ctx.out('');
   if (opts.dryRun) ctx.out('Dry run: nothing was changed.');
   else if (c.changes === 0) ctx.out('Nothing to do: everything is already in the desired state.');
@@ -321,6 +393,8 @@ export async function provisionTestIdentities(
       log: ctx.out,
       retry: { sleep: ctx.sleep, ...ctx.retry },
     });
+    // After the identities: the fixtures need the test users and AF-Test-Group-01.
+    if (fixtures) failed = await applyFixtures(ctx, clients, fixtures);
     ctx.out('');
     ctx.out(
       `Done: ${c.create} created, ${c.update} updated, ${c.delete ? `${c.delete} removed, ` : ''}${c.noop} unchanged, ${c.skip} skipped.`,
@@ -329,7 +403,14 @@ export async function provisionTestIdentities(
   const sd = await securityDefaults(ctx, clients, settings);
   ctx.out(securityDefaultsLine(sd));
   printBlocked(ctx, ops);
-  return { ops, securityDefaults: sd };
+  // Opted-in fixtures that failed, or can't be done here (✗ cannot): exit code 1 — except for a dry run.
+  const notDone = [...new Set([...failed, ...fixtureOps.filter((o) => o.blocked).map((o) => o.fixture)])];
+  if (notDone.length && !opts.dryRun) throw fixturesFailed(notDone);
+  if (notDone.length)
+    ctx.out(
+      `${notDone.length} fixture(s) can't be provisioned as things stand (${notDone.join(', ')}) — see ✗ above.`,
+    );
+  return { ops, fixtureOps, securityDefaults: sd };
 }
 
 export interface StatusResult {
@@ -359,9 +440,12 @@ export async function provisionStatus(ctx: CliContext): Promise<StatusResult> {
         : `    ${u.problems.length ? '✗' : '✓'} ${u.title}${u.problems.length ? ` — ${u.problems.join('; ')}` : ''}`,
     );
   failures.push(...unexpectedFailures(unexpected));
+  // Test-fixture permissions on the provisioner outlive its directory role: ⚠ while they are held.
+  for (const line of await provisionerStandingLines(ctx, settings)) ctx.out(`    ${line}`);
   for (const w of readAppWriteWarnings(run)) ctx.out(`  ${w}`);
 
   let identityOps: IdentityOp[] = [];
+  let fixtureOps: FixtureOp[] = [];
   if (!settings.primaryDomain) ctx.out('  ⚠ Test identities — AF_PRIMARY_DOMAIN is not set');
   else if (!settings.testIdentitiesAllowed) {
     // Production-like environment: the validation user and AF-Test-* objects must not exist here.
@@ -372,6 +456,8 @@ export async function provisionStatus(ctx: CliContext): Promise<StatusResult> {
     });
     const state = await fetchIdentityState(clients.graph, desired, {});
     const exists = testIdentitiesExist(state);
+    const approverUpn = approverUpnOf(ctx, settings);
+    const approver = approverUpn ? await findUser(clients.graph, approverUpn) : undefined;
     const line = `Test identities in a non-test environment (AF_ENV_LABEL is not in AF_TEST_IDENTITY_LABELS)`;
     ctx.out('  Test identities');
     ctx.out(
@@ -380,6 +466,11 @@ export async function provisionStatus(ctx: CliContext): Promise<StatusResult> {
         : `    ✓ No test identities (environment "${settings.label}" is not a test environment)`,
     );
     if (exists) failures.push(line);
+    if (approver && isProvisionedApprover(approver)) {
+      const left = 'The approver test account (AF Tester 2) is left over in a non-test environment';
+      ctx.out(`    ✗ ${left} — run \`pnpm adminforge provision test-identities --remove-fixtures\``);
+      failures.push(left);
+    }
   } else {
     const plan = await identityPlan(ctx, clients, settings);
     identityOps = plan.ops;
@@ -392,6 +483,14 @@ export async function provisionStatus(ctx: CliContext): Promise<StatusResult> {
       ctx.out(
         '    ⚠ The validation user is enabled: it holds standing directory roles. Disable it between live runs: `pnpm adminforge provision test-identities --disable`.',
       );
+    // The opted-in licensed test fixtures: ✗ when missing, drifted or blocked (no permission, refused object).
+    const fixtures = refused ? undefined : await planFixturesRun(ctx, clients, settings, plan.desired);
+    if (fixtures) {
+      fixtureOps = fixtures.ops;
+      renderStatus(fixtureOps, ctx.out);
+      failures.push(...fixtureOps.filter((o) => isChange(o) || o.blocked).map((o) => o.title));
+      for (const line of fixtureStatusWarnings(fixtures)) ctx.out(`    ${line}`);
+    }
     // Directory roles beyond what provisioning grants or removes (other roles, narrower scopes, through groups).
     if (plan.state.tester && !refused) {
       const unexpectedRoles = unexpectedTesterRoles(plan.state);
@@ -402,6 +501,33 @@ export async function provisionStatus(ctx: CliContext): Promise<StatusResult> {
       for (const line of unexpectedRoles.lines) {
         ctx.out(`    ✗ ${line}`);
         failures.push(line);
+      }
+      // PIM-eligible roles: activatable with the stored password, so the same rule as active ones.
+      const pimFixture = fixtureSettings(ctx.env).fixtures.includes('pim');
+      const eligibilityChecks: Array<{ who: string; id: string; allowed: string[] }> = [
+        {
+          who: plan.state.tester.displayName ?? 'The validation user',
+          id: plan.state.tester.id,
+          allowed: pimFixture ? [FIXTURE_ROLES['Message Center Reader']] : [],
+        },
+      ];
+      const approver = fixtures?.state.approver;
+      // Only an account with the approver marker (a leftover one too): never someone else's at that UPN.
+      if (approver?.user && isProvisionedApprover(approver.user))
+        eligibilityChecks.push({ who: 'AF Tester 2', id: approver.user.id, allowed: [] });
+      for (const c of eligibilityChecks) {
+        const eligible = await readEligibleRoles(clients.graph, c.id);
+        if ('unreadable' in eligible) {
+          ctx.out(`    ⚠ ${c.who}: PIM-eligible roles — ${eligible.unreadable}`);
+          continue;
+        }
+        const lines = unexpectedEligibleRoles(c.who, eligible, c.allowed);
+        if (!lines.length)
+          ctx.out(`    ✓ ${c.who}: no PIM-eligible roles beyond the ones provisioning manages`);
+        for (const line of lines) {
+          ctx.out(`    ✗ ${line}`);
+          failures.push(line);
+        }
       }
     }
   }
@@ -512,7 +638,7 @@ export async function provisionStatus(ctx: CliContext): Promise<StatusResult> {
   ctx.out(
     failures.length
       ? `${failures.length} item(s) not in the desired state. Run \`pnpm adminforge provision entra\` / \`provision test-identities\` / \`provision azure-test\`; remove unexpected privilege in the Entra admin centre.`
-      : `All provisioned items are in the desired state (${summaryLine([...run.ops, ...identityOps, ...azure.ops])}).`,
+      : `All provisioned items are in the desired state (${summaryLine([...run.ops, ...identityOps, ...fixtureOps, ...azure.ops])}).`,
   );
   return { ok: failures.length === 0, failures };
 }

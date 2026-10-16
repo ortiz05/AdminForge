@@ -86,14 +86,17 @@ export async function fetchIdentityState(
 }
 
 /**
- * Every directory role the validation user holds: its own role assignments at any scope, plus the directory roles it
- * is a transitive member of (roles held through a role-assignable group). Read-only; names are resolved for roles
- * outside AdminForge's catalogue. A part that can't be read makes the whole answer "unreadable" (status shows ⚠).
+ * Every directory role a validation account holds (the validation user; the approver fixture too): its own role
+ * assignments at any scope, plus the directory roles it is a transitive member of (roles held through a
+ * role-assignable group). Read-only; names are resolved for roles outside AdminForge's catalogue. A part that can't be
+ * read makes the whole answer "unreadable" (status shows ⚠).
  */
-async function readTesterRoleGrants(
+export async function readTesterRoleGrants(
   graph: GraphClient,
   userId: string,
   direct: Array<{ roleDefinitionId: string; directoryScopeId: string }>,
+  /** For the message when it can't be read. */
+  whose = "the validation user's",
 ): Promise<TesterRoleGrant[] | { unreadable: string }> {
   const grants: TesterRoleGrant[] = direct.map((r) => ({
     roleDefinitionId: r.roleDefinitionId,
@@ -116,7 +119,7 @@ async function readTesterRoleGrants(
   } catch (err) {
     if (!(err instanceof ApiError)) throw err;
     return {
-      unreadable: `the validation user's directory roles held through groups could not be read (${err.status} ${err.code})`,
+      unreadable: `${whose} directory roles held through groups could not be read (${err.status} ${err.code})`,
     };
   }
   const names = new Map<string, string | undefined>();
@@ -220,18 +223,49 @@ export async function excludeFromRegistrationCampaign(
 }
 
 /**
+ * Takes one user out of the registration campaign's `excludeTargets` (the approver fixture, before it is deleted).
+ * Like `excludeFromRegistrationCampaign`, the campaign is sent back exactly as it is, minus this one user. Idempotent.
+ */
+export async function removeFromRegistrationCampaignExclusions(
+  graph: GraphClient,
+  userId: string,
+): Promise<'removed' | 'unchanged'> {
+  const campaign = await readCampaignJson(graph);
+  if (!campaign) return 'unchanged';
+  const excludes = targetsOf(campaign, 'excludeTargets');
+  const rest = excludes.filter((t) => String(t.id).toLowerCase() !== userId.toLowerCase());
+  if (rest.length === excludes.length) return 'unchanged';
+  await graph.request({
+    method: 'PATCH',
+    path: AUTH_METHODS_POLICY,
+    body: {
+      registrationEnforcement: {
+        authenticationMethodsRegistrationCampaign: {
+          ...withoutAnnotations(campaign),
+          includeTargets: targetsOf(campaign, 'includeTargets').map(withoutAnnotations),
+          excludeTargets: rest.map(withoutAnnotations),
+        },
+      },
+    },
+  });
+  return 'removed';
+}
+
+/**
  * `provision test-identities --enable | --disable`: the validation user holds standing directory roles, so it stays
- * disabled except while the live suite runs. Disabling also revokes its sign-in sessions. Idempotent.
+ * disabled except while the live suite runs (the approver fixture likewise, with `isProvisionedApprover` as `owns`).
+ * Disabling also revokes its sign-in sessions. Idempotent.
  */
 export async function setUserEnabled(
   graph: GraphClient,
   upn: string,
   enabled: boolean,
+  owns: (user: GraphUser) => boolean = isProvisionedTester,
 ): Promise<'changed' | 'unchanged' | 'missing' | 'refused'> {
   const user = await findUser(graph, upn);
   if (!user) return 'missing';
-  // Only the validation user provisioning created: never someone's account behind a mistyped AF_TEST_USER_UPN.
-  if (!isProvisionedTester(user)) return 'refused';
+  // Only the account provisioning created: never someone's account behind a mistyped UPN key.
+  if (!owns(user)) return 'refused';
   if ((user.accountEnabled ?? true) === enabled) return 'unchanged';
   await graph.request({ method: 'PATCH', path: `/users/${user.id}`, body: { accountEnabled: enabled } });
   if (!enabled)

@@ -11,6 +11,19 @@ Closes the gaps found by comparing the build with the original plan (see the pla
 
 ### Added
 
+- **Licensed test fixtures** for `adminforge provision test-identities` (opt-in from the admin file;
+  `docs/plans/2026-10-16-m365-e5-unlock-and-tooling.md` Phase 1): `AF_TEST_LICENCE_SKU` licenses the validation user
+  and AF-Test-User-01…03; `AF_TEST_FIXTURES` adds PIM eligibility (never active), the named location
+  `AF-Test-Location` (192.0.2.0/24, not trusted), AF-Test Intune policies assigned to AF-Test-Group-01 only, and the
+  approver account "AF Tester 2" (Portal.Reader + Playbook.Approver, its own marker) for two-account approval tests.
+  Only objects provisioning created are changed; `--remove-fixtures` undoes them in any label; `provision status`
+  lists them ✓/✗ with the seats used. A fixture Graph refuses prints `✗` with the Microsoft Graph application
+  permission the provisioner needs, and the other fixtures still apply. Safeguards from the security review: the
+  approver is enabled only with `--enable --approver` (`--disable` always disables both, each attempted), refused
+  where `AF_AUTOMATION_ALLOW_WRITE_PERMISSIONS=true` or when its UPN is the validation user's, flagged when left over,
+  and taken out of the registration campaign's exclusions before it is deleted; `provision status` warns while the
+  provisioner still holds fixture permissions (they outlive its directory role), flags strangers in AF-Test-Group-01,
+  and checks PIM-eligible roles of both validation accounts.
 - **Engineer onboarding guide** (`docs/onboarding/`): a reading path for new contributors — setup, how AdminForge
   works, repository map, security for contributors, coding standards, API and web guides, content, testing, git and
   pull requests, documentation, Claude Code, releases — plus checklists (first day/week, PR author, reviewer, security
@@ -303,6 +316,8 @@ Security review of the licensed build-out (2026-10-16) fixed:
 
 ### Fixed
 
+- Live sign-in no longer times out when Entra skips the authenticator registration's confirmation page and goes
+  straight to "Stay signed in?" (`tests/live/lib/entra-login.ts`).
 - **Published pages lost their authored key order.** Definitions were stored as Postgres `jsonb`, which sorts object
   keys, so in production (`CONTENT_SOURCE=db`) 15 reports and pages whose datasources reference one declared
   "above" them failed with a content error (e.g. orphaned role assignments, groups without owners, consent grants,

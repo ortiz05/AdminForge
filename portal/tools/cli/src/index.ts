@@ -28,6 +28,7 @@ import {
   provisionTestIdentities,
   setTesterEnabled,
 } from './commands/provision';
+import { removeTestFixtures } from './commands/test-fixtures';
 import { publishContent } from './commands/publish';
 import { testContent } from './commands/test';
 import { validateContent } from './commands/validate';
@@ -95,21 +96,48 @@ provision
 provision
   .command('test-identities')
   .description(
-    'Create the validation user (disabled) and AF-Test-* write-test targets — test environments only (AF_TEST_IDENTITY_LABELS)',
+    'Create the validation user (disabled), AF-Test-* write-test targets and the opted-in licensed test fixtures (AF_TEST_LICENCE_SKU, AF_TEST_FIXTURES) — test environments only (AF_TEST_IDENTITY_LABELS)',
   )
   .option('--dry-run', 'print the plan without changing anything')
   .option('--enable', 'only enable the validation user’s sign-in (before a live run)')
-  .option('--disable', 'only disable the validation user and revoke its sessions (after a live run)')
-  .action(async (opts: { dryRun?: boolean; enable?: boolean; disable?: boolean }) => {
-    if (opts.enable && opts.disable) throw new ConfigError('Use either --enable or --disable, not both.');
-    if (opts.enable || opts.disable) {
-      if (opts.dryRun)
-        throw new ConfigError('--dry-run plans provisioning; it does not combine with --enable/--disable.');
-      await setTesterEnabled(liveContext(), !!opts.enable);
-      return;
-    }
-    await provisionTestIdentities(liveContext(), { dryRun: opts.dryRun });
-  });
+  .option(
+    '--disable',
+    'disable the validation user and the approver fixture, revoking their sessions (after a live run)',
+  )
+  .option(
+    '--approver',
+    'with --enable: also enable the approver fixture (AF Tester 2), only for approval tests',
+  )
+  .option(
+    '--remove-fixtures',
+    'remove what the opted-in test fixtures created (AF_TEST_LICENCE_SKU, AF_TEST_FIXTURES); with --dry-run, only the plan',
+  )
+  .action(
+    async (opts: {
+      dryRun?: boolean;
+      enable?: boolean;
+      disable?: boolean;
+      approver?: boolean;
+      removeFixtures?: boolean;
+    }) => {
+      if (opts.enable && opts.disable) throw new ConfigError('Use either --enable or --disable, not both.');
+      if (opts.approver && !opts.enable)
+        throw new ConfigError('--approver goes with --enable only: --disable always disables both accounts.');
+      if (opts.removeFixtures) {
+        if (opts.enable || opts.disable)
+          throw new ConfigError('--remove-fixtures does not combine with --enable/--disable.');
+        await removeTestFixtures(liveContext(), { dryRun: opts.dryRun });
+        return;
+      }
+      if (opts.enable || opts.disable) {
+        if (opts.dryRun)
+          throw new ConfigError('--dry-run plans provisioning; it does not combine with --enable/--disable.');
+        await setTesterEnabled(liveContext(), !!opts.enable, { approver: opts.approver });
+        return;
+      }
+      await provisionTestIdentities(liveContext(), { dryRun: opts.dryRun });
+    },
+  );
 provision
   .command('azure-test')
   .description(

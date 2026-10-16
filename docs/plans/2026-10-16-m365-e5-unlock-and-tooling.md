@@ -75,6 +75,20 @@ created only) with an opt-in **licensed fixtures** section:
 Each item: idempotent, reversible, in `tests/unit/cli/` with the fake Graph, documented in `tests/live/README.md` and
 the validating-against-a-tenant skill.
 
+**Progress (2026-10-16):** items 1, 2, 3, 5 and 7 are built, opt-in through `AF_TEST_LICENCE_SKU` and
+`AF_TEST_FIXTURES=pim,named-location,intune,approver` (admin file), with `--remove-fixtures` to undo them and
+`provision status` ✓/✗ lines (seats used included). `provision status` now also flags PIM-eligible roles of the
+validation accounts that provisioning didn't grant. Each fixture needs a Microsoft Graph application permission on the
+provisioner (its directory role doesn't cover these APIs app-only): `LicenseAssignment.ReadWrite.All` (granted),
+`RoleEligibilitySchedule.ReadWrite.Directory`, `Policy.Read.All` + `Policy.ReadWrite.ConditionalAccess`,
+`DeviceManagementConfiguration.ReadWrite.All`. Code: `portal/tools/cli/src/provision/fixtures-*.ts`, `approver-*.ts`,
+`eligibility.ts`, `commands/test-fixtures.ts`. Licences, PIM, the named location and Intune are applied to the
+validation tenant (all nine objects created first time; a re-plan shows nothing to do). A security review added
+safeguards for the approver (own marker, Portal.Reader + Playbook.Approver, explicit `--enable --approver`, refused
+with automation writes) and a status ⚠ for fixture permissions the provisioner keeps between runs. **Deferred:**
+item 4 (report-only Conditional Access policy — waits for the Security Defaults vs Conditional Access decision, 0.3)
+and item 6 (a risky user on demand — belongs to the Identity Protection live checks in Phase 2b).
+
 ## Phase 2 — validate and fix, area by area (parallel, one owner per area)
 
 | Area                       | Content                                                                                       | Live checks                                                                                                         |

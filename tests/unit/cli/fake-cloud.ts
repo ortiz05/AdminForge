@@ -426,7 +426,13 @@ export function createFakeCloud(opts: FakeCloudOptions) {
         );
       const created: Obj = { id: randomUUID(), ...body };
       users.push(created);
-      return json(201, created);
+      // Like Graph: the answer carries the default properties only (no employeeType, accountEnabled, passwordProfile).
+      const answer = Object.fromEntries(
+        Object.entries(created).filter(([k]) =>
+          ['id', 'displayName', 'userPrincipalName', 'mail', 'givenName', 'surname'].includes(k),
+        ),
+      );
+      return json(201, answer);
     }
     if (
       (m = /^\/users\/([^/]+)\/transitiveMemberOf\/microsoft\.graph\.directoryRole$/.exec(path)) &&

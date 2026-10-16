@@ -292,6 +292,33 @@ The provisioner is the most powerful credential AdminForge uses, and it lives on
 - `provision test-identities --enable/--disable` (and so `pnpm test:live`) changes a privileged user, which needs
   Global Administrator or Privileged Authentication Administrator at that moment.
 - `AF_PROTECTED_APP_IDS` (runtime env) should list its client id, so AdminForge's own playbooks refuse to touch it.
+- The opt-in licensed test fixtures (`AF_TEST_LICENCE_SKU`, `AF_TEST_FIXTURES`) need Microsoft Graph **application
+  permissions** on it — its directory role doesn't cover those APIs app-only (`LicenseAssignment.ReadWrite.All`,
+  `RoleEligibilitySchedule.ReadWrite.Directory`, `Policy.Read.All` + `Policy.ReadWrite.ConditionalAccess`,
+  `DeviceManagementConfiguration.ReadWrite.All`; table in `tests/live/README.md`), and the Teams test objects need
+  `Team.Create`. **Application permissions survive removing the directory role**, and PIM eligibility, Conditional
+  Access and Intune configuration are tier-0: grant only the ones the run needs, and remove them when it's done.
+  `provision status` shows a ⚠ listing any of them the provisioner's token still holds (it decodes the token; names
+  only). To remove them:
+  - Entra admin centre → **Enterprise applications** → the provisioner → **Permissions**: the granted application
+    permissions are listed there (also under App registrations → API permissions → "Other permissions granted").
+    Revoke each one (… → Revoke admin consent), then confirm with `provision status`.
+  - Or with Microsoft Graph PowerShell, as an administrator:
+
+    ```powershell
+    Connect-MgGraph -Scopes 'AppRoleAssignment.ReadWrite.All','Application.Read.All'
+    $sp = Get-MgServicePrincipal -Filter "appId eq '<provisioner client id>'"
+    $graph = Get-MgServicePrincipal -Filter "appId eq '00000003-0000-0000-c000-000000000000'"
+    $drop = 'LicenseAssignment.ReadWrite.All','RoleEligibilitySchedule.ReadWrite.Directory','Policy.Read.All',
+            'Policy.ReadWrite.ConditionalAccess','DeviceManagementConfiguration.ReadWrite.All','Team.Create'
+    Get-MgServicePrincipalAppRoleAssignment -ServicePrincipalId $sp.Id |
+      Where-Object { $_.ResourceId -eq $graph.Id -and
+        ($graph.AppRoles | Where-Object Id -eq $_.AppRoleId).Value -in $drop } |
+      ForEach-Object { Remove-MgServicePrincipalAppRoleAssignment -ServicePrincipalId $sp.Id -AppRoleAssignmentId $_.Id }
+    ```
+
+    Grant them again (admin consent) before the next fixtures run; until then those fixtures show `✗` with the
+    permission each one needs.
 
 ### The automation identity on a certificate
 

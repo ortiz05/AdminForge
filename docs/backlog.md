@@ -72,8 +72,15 @@ scripts (needs a read-only allow-list decision), one certificate/PEM implementat
 - [ ] Replace the validation user's tenant-wide Exchange Recipient Administrator / SharePoint Administrator (opt-in)
       with scoped grants: an Exchange RBAC management scope over the `AF-Test-*` recipients, and site collection admin
       on the `AF-Test-*` sites — then retire `AF_TEST_SERVICE_ADMIN_ROLES`.
-- [ ] `provision status` checks the validation user's active and group-held directory roles, not PIM-eligible ones
+- [x] `provision status` checks the validation user's active and group-held directory roles, not PIM-eligible ones
       (`roleEligibilitySchedules`, needs Entra ID P2): an eligible role could be activated with its stored password.
+      Done: eligible roles of the validation user and the approver are checked (`provision/eligibility.ts`); the
+      provisioner needs `RoleEligibilitySchedule.Read.Directory` (or the pim fixture's ReadWrite) to read them.
+- [ ] Licensed test fixtures still to build (M365 E5 plan, Phase 1): a report-only Conditional Access test policy
+      `AF-Test-CA` on AF-Test-Group-01 once the owner chooses Conditional Access over Security Defaults, and a risky
+      user on demand ("confirm compromised" then "dismiss" on AF-Test-User-03) with the Identity Protection live checks.
+- [ ] Live suite: approval flows with the approver fixture (`testApproverCredentials`) — the validation user requests,
+      AF Tester 2 approves (mailbox forwarding, critical playbooks, write-capable schedules).
 - [ ] Validation users created before the "AdminForge validation" marker are recognised by their display name; set the
       marker on them (`employeeType`) and then require it.
 - [ ] Show "incomplete" on a page when a datasource ran without a failed `optional` one (`errors["ds.<name>"]` is in

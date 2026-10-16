@@ -8,14 +8,28 @@
  *
  * A value counts when it is at least 8 characters and not an obviously generic one (true/false, a number, a bare
  * loopback origin, a postgres URL on 127.0.0.1); values of *DOMAIN* keys also count lower-cased. Microsoft-published
- * licence SKU part numbers under AF_LICENCE_SKU_<n> are exempt — they are the same in every tenant and appear in
- * committed content — but only when the value looks like a part number.
+ * licence SKU part numbers under AF_LICENCE_SKU_<n> and AF_TEST_LICENCE_SKU are exempt — they are the same in every
+ * tenant and appear in committed content — but only when the value looks like a part number. So is AF_TEST_FIXTURES
+ * when it lists only the literal fixture names (TEST_FIXTURE_NAMES; the documentation shows such lists).
  *
  * Dependency-free (no node: imports) so guards, hooks and the CLI can load it without pulling in anything else.
  */
 
 /** Configuration keys whose values are public Microsoft catalogue names, not tenant data. */
-export const PUBLIC_CATALOGUE_KEY = /^AF_LICENCE_SKU_\d+$/;
+export const PUBLIC_CATALOGUE_KEY = /^(AF_LICENCE_SKU_\d+|AF_TEST_LICENCE_SKU)$/;
+
+/**
+ * The licensed test fixtures `adminforge provision test-identities` knows (AF_TEST_FIXTURES). The CLI uses this list
+ * too (provision/fixtures-model.ts), so the exemption below and the CLI can't drift apart.
+ */
+export const TEST_FIXTURE_NAMES = ['pim', 'named-location', 'intune', 'approver'] as const;
+
+/** Configuration keys whose values are lists of AdminForge option names (the test fixtures), not tenant data. */
+export const OPTION_LIST_KEY = /^AF_TEST_FIXTURES$/;
+
+/** Whether a value is a comma-separated list of the literal fixture names only (case and spaces ignored). */
+export const isFixtureList = (value: string) =>
+  value.split(',').every((n) => (TEST_FIXTURE_NAMES as readonly string[]).includes(n.trim().toLowerCase()));
 
 /** What a SKU part number looks like (ENTERPRISEPREMIUM, SPE_E5). Anything else — even a real one — is tenant data. */
 export const SKU_PART_NUMBER = /^[A-Z0-9_]{2,64}$/;
@@ -39,11 +53,13 @@ const GENERIC_VALUE =
 const MIN_LENGTH = 8;
 
 /**
- * A configuration value that is a public Microsoft catalogue name: an AF_LICENCE_SKU_<n> key whose value looks like a
- * SKU part number. Anything else under such a key (a domain, an id, a tenant's own name) is still tenant data.
+ * A configuration value that is not tenant data: a public Microsoft catalogue name (an AF_LICENCE_SKU_<n> or
+ * AF_TEST_LICENCE_SKU key whose value looks like a SKU part number), or a list of AdminForge option names
+ * (AF_TEST_FIXTURES). Anything else under such a key (a domain, an id, a tenant's own name) is still tenant data.
  */
 export const isPublicCatalogueValue = (key: string, value: string) =>
-  PUBLIC_CATALOGUE_KEY.test(key) && SKU_PART_NUMBER.test(value);
+  (PUBLIC_CATALOGUE_KEY.test(key) && SKU_PART_NUMBER.test(value)) ||
+  (OPTION_LIST_KEY.test(key) && isFixtureList(value));
 
 export interface TenantValuesOptions {
   /**

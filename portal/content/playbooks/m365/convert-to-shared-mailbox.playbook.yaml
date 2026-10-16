@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/playbook.schema.json
 kind: playbook
 id: m365.convert-to-shared-mailbox
-version: 1.0.0
+version: 1.0.1
 title: Convert to shared mailbox
 summary: Converts a user mailbox to a shared mailbox so colleagues keep access to the mail, and blocks direct sign-in to the account. The licence is left in place for a separate review.
 owner: m365-team
@@ -11,7 +11,7 @@ mode: write
 requires:
   portalRoles: [Portal.Operator]
   scopes:
-    graph: [User.Read.All, MailboxSettings.Read, User.EnableDisableAccount.All, User.RevokeSessions.All]
+    graph: [User.Read.All, User.EnableDisableAccount.All, User.RevokeSessions.All]
     exchange: [Exchange.Manage]
   entraRoles: [Exchange Recipient Administrator, User Administrator]
   licences: [exchange]
@@ -48,18 +48,29 @@ steps:
     that: ${ $count(steps.lookup.output.value) = 1 }
     message: ${ 'No single account uses the address ' & inputs.mailbox & '. Check the address, or convert it in the Exchange admin center.' }
 
-  - id: purpose
-    type: graph
+  # From Exchange: Graph's mailboxSettings/userPurpose only answers for the signed-in user's own mailbox with delegated
+  # permissions (ErrorAccessDenied for anyone else's).
+  - id: current
+    type: runner
     mode: read
     describe: Read the mailbox type
-    request:
-      method: GET
-      path: /users/${ $encode($guid(steps.lookup.output.value[0].id)) }/mailboxSettings/userPurpose
+    script: exchange/Get-MailboxConfiguration.ps1
+    sha256: c86c6bf4f6a3ca272389fe8369e8b9137805f491685d69d58855595207aa9d99
+    services: [exchange]
+    timeoutSeconds: 300
+    parameters:
+      identity: ${ inputs.mailbox }
+      includeAutoReply: false
 
   - id: guard
     type: assert
-    that: ${ steps.purpose.output.value = 'user' }
-    message: ${ inputs.mailbox & ' is a ' & steps.purpose.output.value & ' mailbox. Only user mailboxes can be converted.' }
+    that: ${ steps.current.output[0].recipientTypeDetails = 'UserMailbox' }
+    message: >-
+      ${ (
+        $types := { 'SharedMailbox': 'shared mailbox', 'RoomMailbox': 'room mailbox', 'EquipmentMailbox': 'equipment mailbox', 'SchedulingMailbox': 'scheduling mailbox' };
+        $t := steps.current.output[0].recipientTypeDetails;
+        inputs.mailbox & ' is a ' & ($lookup($types, $t) ? $lookup($types, $t) : $t) & '. Only user mailboxes can be converted.'
+      ) }
 
   - id: convert
     type: runner
@@ -121,7 +132,7 @@ tests:
     inputs: { mailbox: adele.vance@example.com, blockSignIn: true, reason: Leaver HR-1001 mailbox kept for marketing }
     mocks:
       lookup: { value: [{ id: 10000000-0000-4000-8000-000000000001, displayName: Adele Vance, userPrincipalName: adele.vance@example.com, mail: adele.vance@example.com, accountEnabled: true }] }
-      purpose: { value: user }
+      current: [{ primarySmtpAddress: adele.vance@example.com, recipientTypeDetails: UserMailbox }]
     expect:
       status: succeeded
       plan: [convert, block, revoke]
@@ -131,7 +142,7 @@ tests:
     inputs: { mailbox: lee.gu@example.com, blockSignIn: false, reason: Mailbox becomes the finance team inbox }
     mocks:
       lookup: { value: [{ id: 10000000-0000-4000-8000-000000000007, displayName: Lee Gu, userPrincipalName: lee.gu@example.com, mail: lee.gu@example.com, accountEnabled: true }] }
-      purpose: { value: user }
+      current: [{ primarySmtpAddress: lee.gu@example.com, recipientTypeDetails: UserMailbox }]
     expect:
       status: succeeded
       plan: [convert]
@@ -140,7 +151,7 @@ tests:
     inputs: { mailbox: reception@example.com, reason: Duplicate request for reception }
     mocks:
       lookup: { value: [{ id: 10000000-0000-4000-8000-000000000012, displayName: Reception, userPrincipalName: reception@example.com, mail: reception@example.com, accountEnabled: false }] }
-      purpose: { value: shared }
+      current: [{ primarySmtpAddress: reception@example.com, recipientTypeDetails: SharedMailbox }]
     expect: { status: failed, failedStep: guard }
   - name: refuses an unknown address
     inputs: { mailbox: nobody@example.com, reason: Typo check for the test suite }

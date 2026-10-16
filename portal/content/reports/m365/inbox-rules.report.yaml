@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/report.schema.json
 kind: report
 id: m365.inbox-rules
-version: 1.0.0
+version: 1.1.1
 title: Inbox rule audit
 summary: >-
   Inbox rules that forward or redirect mail outside the organization, delete it, or move it to folders people rarely
@@ -45,7 +45,7 @@ datasources:
     source: runner
     label: Inbox rules (PowerShell)
     script: exchange/Get-InboxRules.ps1
-    sha256: ef8268fcfc41fe09f7ecfbcb1d87eec7e91659f665d2cff679328be74779366d
+    sha256: 743c48bfd2619f40c2edcfa60341d72badd1a5e609341a6ad5ece1c68fda5bc1
     services: [exchange]
     timeoutSeconds: 1800
     parameters:
@@ -102,9 +102,10 @@ layout:
     span: 12
     text: |
       **What to do.** A rule that sends mail outside the organization, or quietly deletes or files away mail about
-      invoices, payments or sign-ins, is a typical sign of a compromised account. Check the person's recent sign-ins
-      before removing the rule in Outlook or with `Remove-InboxRule`, and reset their password and sessions if the
-      rule wasn't theirs. Mailbox-level forwarding is on the Mail forwarding page.
+      invoices, payments or sign-ins, is a typical sign of a compromised account. Check the person's recent sign-ins,
+      then **turn the rule off** (it stays for a closer look and can be turned on again) or **remove** it from the
+      row's actions, and reset their password and sessions if the rule wasn't theirs. Mailbox-level forwarding is on
+      the Mail forwarding page.
   - widget: table
     id: rules
     span: 12
@@ -126,10 +127,41 @@ layout:
       - { field: markAsRead, label: Marks as read, kind: boolean, hidden: true }
       - { field: stopProcessingRules, label: Stops other rules, kind: boolean, hidden: true }
       - { field: priority, label: Order, kind: number, hidden: true }
+      - { field: hidden, label: Hidden rule, kind: boolean, filter: facet, hidden: true }
+      - { field: ruleIdentity, label: Rule id, hidden: true }
     inspect:
       page: m365.mailbox
       params:
         mailbox: ${ row.mailbox }
+    rowActions:
+      - playbook: m365.set-inbox-rule
+        label: Turn rule off
+        icon: prohibit
+        inputs:
+          mailbox: ${ row.mailbox }
+          ruleIdentity: ${ row.ruleIdentity }
+          ruleName: ${ row.ruleName }
+          action: Disable
+        when: ${ row.enabled = true and $boolean(row.ruleIdentity) and $not(row.hidden = true) }
+      - playbook: m365.set-inbox-rule
+        label: Turn rule on
+        icon: play
+        inputs:
+          mailbox: ${ row.mailbox }
+          ruleIdentity: ${ row.ruleIdentity }
+          ruleName: ${ row.ruleName }
+          action: Enable
+        # A rule that forwards outside the organization is never turned on from here (the playbook refuses it too).
+        when: ${ row.enabled = false and $boolean(row.ruleIdentity) and $not(row.hidden = true) and $not(row.risk = 'high') }
+      - playbook: m365.set-inbox-rule
+        label: Remove rule
+        icon: trash
+        inputs:
+          mailbox: ${ row.mailbox }
+          ruleIdentity: ${ row.ruleIdentity }
+          ruleName: ${ row.ruleName }
+          action: Remove
+        when: ${ $boolean(row.ruleIdentity) and $not(row.hidden = true) }
     empty:
       title: No risky inbox rules
       body: No rule forwards mail outside the organization, deletes it or hides it. Turn on "Show every rule" to see all rules.

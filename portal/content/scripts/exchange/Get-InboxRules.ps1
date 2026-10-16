@@ -9,7 +9,10 @@
       medium  deletes messages, or moves them to Deleted Items, Junk Email, RSS Feeds/Subscriptions or
               Conversation History (common ways to hide mail from the owner after a compromise)
       low     forwards or redirects inside the organization
-    With riskyOnly (default) only high and medium rules are returned. A target is "external" when its domain is not
+    With riskyOnly (default) only high and medium rules are returned; the summary counts every rule read.
+    ruleIdentity (Exchange's RuleIdentity) identifies a rule for Set-InboxRuleState.ps1; names need not be unique.
+    With includeHidden, rules missing from the normal listing are flagged hidden (they can't be changed with the
+    inbox-rule cmdlets). A target is "external" when its domain is not
     one of the tenant's accepted domains.
 
 .PARAMETER Inputs
@@ -24,7 +27,7 @@
 .OUTPUTS
     @{ scope = 'mailbox'|'organization'; acceptedDomains;
        summary = @{ mailboxesScanned; mailboxesFailed; rules; high; medium; low; externalForwarding; deleting; hiding };
-       rules = @(@{ key; mailbox; userPrincipalName; ruleName; enabled; priority; risk; reasons; targets;
+       rules = @(@{ key; mailbox; userPrincipalName; ruleName; ruleIdentity; hidden; enabled; priority; risk; reasons; targets;
                     externalTargets; deletes; moveToFolder; markAsRead; stopProcessingRules; conditions }) }
 
 .NOTES
@@ -48,7 +51,10 @@ Write-AdminForgeProgress -Percent 5 -Message 'Reading accepted domains'
 $acceptedDomains = @(Get-AcceptedDomain | ForEach-Object { ([string]$_.DomainName).ToLowerInvariant() })
 
 function Get-TargetInfo([string]$Text) {
-    # Accepts "smtp:user@contoso.com", "User Name [SMTP:user@contoso.com]" or a bare address.
+    # Accepts "smtp:user@contoso.com", "User Name [SMTP:user@contoso.com]" or a bare address. Recipients of the
+    # organization appear as "User Name [EX:/o=ExchangeLabs/…]" (no address): internal, shown by name.
+    $ex = [regex]::Match($Text, '^\s*"?(?<name>[^"\[]*?)"?\s*\[EX:')
+    if ($ex.Success) { return @{ address = $(if ($ex.Groups['name'].Value) { $ex.Groups['name'].Value } else { 'Recipient in the organization' }); external = $false } }
     $match = [regex]::Match($Text, '[A-Za-z0-9._%+\-'']+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}')
     if (-not $match.Success) { return @{ address = $Text; external = $false } }
     $address = $match.Value.ToLowerInvariant()
@@ -78,6 +84,7 @@ if ($identity) {
 }
 
 $rules = [System.Collections.Generic.List[object]]::new()
+$byRisk = @{ high = 0; medium = 0; low = 0; none = 0 }
 $scanned = 0
 $failed = 0
 $total = 0
@@ -90,8 +97,10 @@ foreach ($mbx in $mailboxes) {
     $params = @{ Mailbox = $address }
     if ($includeHidden) { $params.IncludeHidden = $true }
     try {
-        $raw = @(Get-InboxRule @params | Select-Object Name, Enabled, Priority, ForwardTo, ForwardAsAttachmentTo, RedirectTo, DeleteMessage,
+        $raw = @(Get-InboxRule @params | Select-Object Name, RuleIdentity, Enabled, Priority, ForwardTo, ForwardAsAttachmentTo, RedirectTo, DeleteMessage,
             SoftDeleteMessage, MoveToFolder, MarkAsRead, StopProcessingRules, From, SubjectContainsWords, SubjectOrBodyContainsWords, BodyContainsWords)
+        # Hidden rules (Exchange's own, or ones an app or attacker hid) are those missing from the normal listing.
+        $visibleIds = if ($includeHidden) { @(Get-InboxRule -Mailbox $address | Select-Object RuleIdentity | ForEach-Object { [string]$_.RuleIdentity }) } else { @() }
     } catch {
         $failed++
         Write-AdminForgeLog -Level Warn "Could not read inbox rules of ${address}: $($_.Exception.Message)"
@@ -116,6 +125,7 @@ foreach ($mbx in $mailboxes) {
         if ($targets.Count -and -not $external.Count) { $reasons.Add('Forwards inside the organization') }
         if ([bool]$rule.MarkAsRead -and ($deletes -or $hides)) { $reasons.Add('Marks messages as read') }
         $risk = if ($external.Count) { 'high' } elseif ($deletes -or $hides) { 'medium' } elseif ($targets.Count) { 'low' } else { 'none' }
+        $byRisk[$risk]++
         if ($riskyOnly -and $risk -notin 'high', 'medium') { continue }
 
         $conditions = @(
@@ -125,10 +135,12 @@ foreach ($mbx in $mailboxes) {
             $(if ($rule.BodyContainsWords) { "Body contains: $(Join-Short $rule.BodyContainsWords)" })
         ) | Where-Object { $_ }
         $rules.Add([ordered]@{
-                key                 = "$address|$($rule.Name)|$($rule.Priority)".ToLowerInvariant()
+                key                 = "$address|$(if ($rule.RuleIdentity) { $rule.RuleIdentity } else { "$($rule.Name)|$($rule.Priority)" })".ToLowerInvariant()
                 mailbox             = $address
                 userPrincipalName   = [string]$mbx.UserPrincipalName
                 ruleName            = [string]$rule.Name
+                ruleIdentity        = if ($rule.RuleIdentity) { [string]$rule.RuleIdentity } else { $null }
+                hidden              = [bool]($includeHidden -and $rule.RuleIdentity -and $visibleIds -notcontains [string]$rule.RuleIdentity)
                 enabled             = [bool]$rule.Enabled
                 priority            = $rule.Priority
                 risk                = $risk
@@ -153,9 +165,10 @@ $result = [ordered]@{
         mailboxesScanned   = $scanned - $failed
         mailboxesFailed    = $failed
         rules              = $total
-        high               = @($all | Where-Object { $_.risk -eq 'high' }).Count
-        medium             = @($all | Where-Object { $_.risk -eq 'medium' }).Count
-        low                = @($all | Where-Object { $_.risk -eq 'low' }).Count
+        # Counted over every rule read, also when riskyOnly leaves the low ones out of the list.
+        high               = $byRisk['high']
+        medium             = $byRisk['medium']
+        low                = $byRisk['low']
         externalForwarding = @($all | Where-Object { $_.externalTargets.Count }).Count
         deleting           = @($all | Where-Object { $_.deletes }).Count
         hiding             = @($all | Where-Object { $_.moveToFolder -and $_.moveToFolder -match $hidingFolders }).Count

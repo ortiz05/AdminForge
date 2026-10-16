@@ -27,6 +27,7 @@
                 "permission": "SendOnBehalf",
                 "trustee": "blake@example.com",
                 "trusteeDisplayName": "Blake Analyst",
+                "trusteeAddress": "blake@example.com",
                 "trusteeType": "UserMailbox",
                 "accessRights": [
                   "SendOnBehalf"
@@ -34,7 +35,7 @@
                 "inherited": false,
                 "deny": false,
                 "orphaned": false,
-                "removable": false
+                "removable": true
               }
             ]
           }
@@ -90,6 +91,7 @@
                 "permission": "FullAccess",
                 "trustee": "jordan.price@example.com",
                 "trusteeDisplayName": "Jordan Price",
+                "trusteeAddress": "jordan.price@example.com",
                 "trusteeType": "UserMailbox",
                 "accessRights": [
                   "FullAccess"
@@ -104,6 +106,7 @@
                 "permission": "SendOnBehalf",
                 "trustee": "jordan.price@example.com",
                 "trusteeDisplayName": "Jordan Price",
+                "trusteeAddress": "jordan.price@example.com",
                 "trusteeType": "UserMailbox",
                 "accessRights": [
                   "SendOnBehalf"
@@ -111,7 +114,7 @@
                 "inherited": false,
                 "deny": false,
                 "orphaned": false,
-                "removable": false
+                "removable": true
               }
             ]
           }
@@ -359,6 +362,7 @@
                 "permission": "FullAccess",
                 "trustee": "hana.kim@example.com",
                 "trusteeDisplayName": "Hana Kim",
+                "trusteeAddress": "hana.kim@example.com",
                 "trusteeType": "UserMailbox",
                 "accessRights": [
                   "FullAccess"
@@ -373,6 +377,7 @@
                 "permission": "SendOnBehalf",
                 "trustee": "hana.kim@example.com",
                 "trusteeDisplayName": "Hana Kim",
+                "trusteeAddress": "hana.kim@example.com",
                 "trusteeType": "UserMailbox",
                 "accessRights": [
                   "SendOnBehalf"
@@ -380,7 +385,7 @@
                 "inherited": false,
                 "deny": false,
                 "orphaned": false,
-                "removable": false
+                "removable": true
               }
             ]
           }
@@ -412,6 +417,7 @@
                 "permission": "FullAccess",
                 "trustee": "nora.fischer@example.com",
                 "trusteeDisplayName": "Nora Fischer",
+                "trusteeAddress": "nora.fischer@example.com",
                 "trusteeType": "UserMailbox",
                 "accessRights": [
                   "FullAccess"
@@ -426,6 +432,7 @@
                 "permission": "FullAccess",
                 "trustee": "blake@example.com",
                 "trusteeDisplayName": "Blake Analyst",
+                "trusteeAddress": "blake@example.com",
                 "trusteeType": "UserMailbox",
                 "accessRights": [
                   "FullAccess"
@@ -440,6 +447,7 @@
                 "permission": "FullAccess",
                 "trustee": "S-1-5-21-1004336348-1177238915-682003330-51210",
                 "trusteeDisplayName": null,
+                "trusteeAddress": null,
                 "trusteeType": null,
                 "accessRights": [
                   "FullAccess"
@@ -454,6 +462,7 @@
                 "permission": "SendAs",
                 "trustee": "nora.fischer@example.com",
                 "trusteeDisplayName": "Nora Fischer",
+                "trusteeAddress": "nora.fischer@example.com",
                 "trusteeType": "UserMailbox",
                 "accessRights": [
                   "SendAs"
@@ -468,6 +477,7 @@
                 "permission": "SendOnBehalf",
                 "trustee": "blake@example.com",
                 "trusteeDisplayName": "Blake Analyst",
+                "trusteeAddress": "blake@example.com",
                 "trusteeType": "UserMailbox",
                 "accessRights": [
                   "SendOnBehalf"
@@ -475,7 +485,7 @@
                 "inherited": false,
                 "deny": false,
                 "orphaned": false,
-                "removable": false
+                "removable": true
               }
             ]
           }
@@ -507,6 +517,7 @@
                 "permission": "FullAccess",
                 "trustee": "avery@example.com",
                 "trusteeDisplayName": "Avery Engineer",
+                "trusteeAddress": "avery@example.com",
                 "trusteeType": "UserMailbox",
                 "accessRights": [
                   "FullAccess"
@@ -521,6 +532,7 @@
                 "permission": "FullAccess",
                 "trustee": "kai.lindqvist@example.com",
                 "trusteeDisplayName": "Kai Lindqvist",
+                "trusteeAddress": "kai.lindqvist@example.com",
                 "trusteeType": "UserMailbox",
                 "accessRights": [
                   "FullAccess"
@@ -535,6 +547,7 @@
                 "permission": "FullAccess",
                 "trustee": "farah.haddad@example.com",
                 "trusteeDisplayName": "Farah Haddad",
+                "trusteeAddress": "farah.haddad@example.com",
                 "trusteeType": "UserMailbox",
                 "accessRights": [
                   "FullAccess"
@@ -549,6 +562,7 @@
                 "permission": "SendAs",
                 "trustee": "avery@example.com",
                 "trusteeDisplayName": "Avery Engineer",
+                "trusteeAddress": "avery@example.com",
                 "trusteeType": "UserMailbox",
                 "accessRights": [
                   "SendAs"
@@ -563,6 +577,7 @@
                 "permission": "SendAs",
                 "trustee": "kai.lindqvist@example.com",
                 "trusteeDisplayName": "Kai Lindqvist",
+                "trusteeAddress": "kai.lindqvist@example.com",
                 "trusteeType": "UserMailbox",
                 "accessRights": [
                   "SendAs"
@@ -577,6 +592,7 @@
                 "permission": "FullAccess",
                 "trustee": "eli.obrien@example.com",
                 "trusteeDisplayName": "Eli O'Brien",
+                "trusteeAddress": "eli.obrien@example.com",
                 "trusteeType": "UserMailbox",
                 "accessRights": [
                   "FullAccess",
@@ -617,6 +633,7 @@
                 "permission": "FullAccess",
                 "trustee": "leah.moreau@example.com",
                 "trusteeDisplayName": "Leah Moreau",
+                "trusteeAddress": "leah.moreau@example.com",
                 "trusteeType": "UserMailbox",
                 "accessRights": [
                   "FullAccess"
@@ -631,6 +648,7 @@
                 "permission": "SendAs",
                 "trustee": "leah.moreau@example.com",
                 "trusteeDisplayName": "Leah Moreau",
+                "trusteeAddress": "leah.moreau@example.com",
                 "trusteeType": "UserMailbox",
                 "accessRights": [
                   "SendAs"
@@ -645,6 +663,7 @@
                 "permission": "FullAccess",
                 "trustee": "dana@example.com",
                 "trusteeDisplayName": "Dana Former",
+                "trusteeAddress": "dana@example.com",
                 "trusteeType": "UserMailbox",
                 "accessRights": [
                   "FullAccess"
@@ -684,6 +703,7 @@
                 "permission": "FullAccess",
                 "trustee": "reception@example.com",
                 "trusteeDisplayName": "Reception",
+                "trusteeAddress": "reception@example.com",
                 "trusteeType": "SharedMailbox",
                 "accessRights": [
                   "FullAccess"
@@ -768,6 +788,7 @@
             "permission": "FullAccess",
             "trustee": "avery@example.com",
             "trusteeDisplayName": "Avery Engineer",
+            "trusteeAddress": "avery@example.com",
             "trusteeType": "UserMailbox",
             "accessRights": [
               "FullAccess"
@@ -782,6 +803,7 @@
             "permission": "FullAccess",
             "trustee": "kai.lindqvist@example.com",
             "trusteeDisplayName": "Kai Lindqvist",
+            "trusteeAddress": "kai.lindqvist@example.com",
             "trusteeType": "UserMailbox",
             "accessRights": [
               "FullAccess"
@@ -796,6 +818,7 @@
             "permission": "FullAccess",
             "trustee": "farah.haddad@example.com",
             "trusteeDisplayName": "Farah Haddad",
+            "trusteeAddress": "farah.haddad@example.com",
             "trusteeType": "UserMailbox",
             "accessRights": [
               "FullAccess"
@@ -810,6 +833,7 @@
             "permission": "SendAs",
             "trustee": "avery@example.com",
             "trusteeDisplayName": "Avery Engineer",
+            "trusteeAddress": "avery@example.com",
             "trusteeType": "UserMailbox",
             "accessRights": [
               "SendAs"
@@ -824,6 +848,7 @@
             "permission": "SendAs",
             "trustee": "kai.lindqvist@example.com",
             "trusteeDisplayName": "Kai Lindqvist",
+            "trusteeAddress": "kai.lindqvist@example.com",
             "trusteeType": "UserMailbox",
             "accessRights": [
               "SendAs"
@@ -838,6 +863,7 @@
             "permission": "FullAccess",
             "trustee": "eli.obrien@example.com",
             "trusteeDisplayName": "Eli O'Brien",
+            "trusteeAddress": "eli.obrien@example.com",
             "trusteeType": "UserMailbox",
             "accessRights": [
               "FullAccess",

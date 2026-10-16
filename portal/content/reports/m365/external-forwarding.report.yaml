@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/report.schema.json
 kind: report
 id: m365.external-forwarding
-version: 1.1.0
+version: 1.1.1
 title: Mailbox external forwarding
 summary: Mailboxes and inbox rules that forward or redirect mail to addresses outside the organization's accepted domains.
 owner: m365-team
@@ -33,7 +33,7 @@ datasources:
     source: runner
     label: Forwarding audit (PowerShell)
     script: exchange/Get-MailboxForwarding.ps1
-    sha256: ace0dc4fbff00a81d4874bade56eb0d427cda9d584ccd4b889103d310510daf2
+    sha256: de4228f46fadbbea0040ffab676a92edc15830bed4db096b7471b2ae06950840
     services: [exchange]
     timeoutSeconds: 1800
     parameters:
@@ -44,7 +44,7 @@ datasources:
     transform: >-
       ${ (
         $v := value[0];  /* runner result = [output data]; one summary object */
-        $rows := [$v.findings.$merge([$, {
+        $rows := [$v.findings[$type($) = 'object'].$merge([$, {
           "key": mailbox & '|' & source & '|' & (ruleName ? ruleName : '') & '|' & target,
           "targetDomain": $contains(target, '@') ? $substringAfter(target, '@') : null
         }])];

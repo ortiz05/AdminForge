@@ -1,11 +1,12 @@
 $schema: ../../../packages/schemas/generated/playbook.schema.json
 kind: playbook
 id: m365.grant-mailbox-permission
-version: 1.0.0
+version: 1.1.1
 title: Grant mailbox access
 summary: >-
-  Gives a person Full Access (open and read the mailbox) and/or Send As (send mail as the mailbox) on a user or shared
-  mailbox. Checks what they already have first and grants only what is missing.
+  Gives a person Full Access (open and read the mailbox), Send As (send mail as the mailbox) or Send on Behalf (send
+  mail on the mailbox's behalf) on a user or shared mailbox. Checks what they already have first and grants only what
+  is missing. You can't give yourself access.
 owner: m365-team
 tags: [m365, exchange, mailboxes, permissions]
 risk: high
@@ -24,7 +25,8 @@ confirm:
     ${ steps.person.output.displayName & ' will be able to '
        & $join([
            'FullAccess' in steps.plan.output.add ? 'read everything in',
-           'SendAs' in steps.plan.output.add ? 'send mail as'
+           'SendAs' in steps.plan.output.add ? 'send mail as',
+           'SendOnBehalf' in steps.plan.output.add ? 'send mail on behalf of'
          ], ' and ')
        & ' ' & steps.plan.output.mailbox & '. Type the mailbox address to confirm.' }
 approval:
@@ -40,6 +42,7 @@ inputs:
     values:
       - { value: FullAccess, label: Full Access — open and read the mailbox }
       - { value: SendAs, label: Send As — send mail as the mailbox }
+      - { value: SendOnBehalf, label: Send on Behalf — send mail on the mailbox's behalf }
       - { value: Both, label: Full Access and Send As }
   autoMapping:
     type: boolean
@@ -59,6 +62,11 @@ steps:
       query:
         $select: id,displayName,userPrincipalName,mail,accountEnabled,userType
 
+  - id: notYou
+    type: assert
+    that: ${ $not($lowercase(steps.person.output.id) = $lowercase(user.oid)) }
+    message: You can't give yourself access to a mailbox. Ask another engineer to grant it.
+
   - id: memberWithMailbox
     type: assert
     that: ${ steps.person.output.userType = 'Member' and $boolean(steps.person.output.mail) }
@@ -72,11 +80,21 @@ steps:
     mode: read
     describe: Read who already has access to the mailbox
     script: exchange/Get-MailboxPermissions.ps1
-    sha256: 20458fc49331335910f5668635a47274d7bf54cc48fe72e4ee1dd38132e6ee1a
+    sha256: 88085eb774261034cc6c99b9c9a59dc3f00f63fe2d43a6fa87dbe2b1c5fa9150
     services: [exchange]
     timeoutSeconds: 300
     parameters:
       identity: ${ inputs.mailbox }
+
+  - id: owner
+    type: graph
+    mode: read
+    describe: Look up the mailbox's account
+    request:
+      method: GET
+      path: /users/${ $encode(steps.current.output[0].mailbox.userPrincipalName) }
+      query:
+        $select: id,displayName,userPrincipalName
 
   # Everything the person already holds (directly or inherited) is left alone; only what is missing is granted.
   - id: plan
@@ -84,56 +102,65 @@ steps:
     describe: Work out which access is missing
     expression: >-
       ${ (
+        $label := function($p) { $p = 'FullAccess' ? 'Full Access' : $p = 'SendAs' ? 'Send As' : 'Send on Behalf' };
         $want := inputs.permission = 'Both' ? ['FullAccess', 'SendAs'] : [inputs.permission];
         $me := [$lowercase(steps.person.output.userPrincipalName), $lowercase(steps.person.output.mail)];
         $mbx := steps.current.output[0].mailbox;
-        $has := [steps.current.output[0].permissions[deny != true and $lowercase(trustee) in $me].permission];
+        $has := [steps.current.output[0].permissions[deny != true and ($lowercase(trustee) in $me or $lowercase(trusteeAddress) in $me)].permission];
         {
           "mailbox": $mbx.primarySmtpAddress,
           "displayName": $mbx.displayName,
           "self": $lowercase($mbx.primarySmtpAddress) in $me or $lowercase($mbx.userPrincipalName) in $me,
           "add": [$filter($want, function($p) { $not($p in $has) })],
-          "already": [$filter($want, function($p) { $p in $has })]
+          "already": [$filter($want, function($p) { $p in $has })],
+          "addText": $join([$filter($want, function($p) { $not($p in $has) }).$label($)], ' and '),
+          "alreadyText": $join([$filter($want, function($p) { $p in $has }).$label($)], ' and ')
         }
       ) }
 
   - id: notSelf
     type: assert
-    that: ${ steps.plan.output.self != true }
+    that: ${ $not(steps.plan.output.self = true) }
     message: ${ steps.plan.output.mailbox & " is the person's own mailbox; they already have full access to it." }
 
   - id: somethingToGrant
     type: assert
     that: ${ $count(steps.plan.output.add) > 0 }
     message: >-
-      ${ steps.person.output.displayName & ' already has ' & $join(steps.plan.output.already, ' and ') & ' on '
+      ${ steps.person.output.displayName & ' already has ' & steps.plan.output.alreadyText & ' on '
          & steps.plan.output.mailbox & '. Nothing to grant.' }
 
   - id: grant
     type: runner
     mode: write
-    describe: ${ 'Give ' & steps.person.output.displayName & ' ' & $join(steps.plan.output.add, ' and ') & ' on ' & steps.plan.output.mailbox }
+    describe: ${ 'Give ' & steps.person.output.displayName & ' ' & steps.plan.output.addText & ' on ' & steps.plan.output.mailbox }
     script: exchange/Set-MailboxPermission.ps1
-    sha256: f72a767dd9dc34acd67537c91b79fa3af78c2887a0548c191927225de7fc88b9
+    sha256: cfd5d4a827b19b38a1e28462f4133d0369aaa748f56c043fa9c88f5eced5e6fd
     services: [exchange]
     timeoutSeconds: 300
+    # The object ids let AdminForge's protected-object guard see whose mailbox and whose access this is; the script
+    # checks them against Exchange.
     parameters:
       identity: ${ steps.plan.output.mailbox }
+      mailboxObjectId: ${ steps.owner.output.id }
       trustee: ${ steps.person.output.userPrincipalName }
+      trusteeObjectId: ${ steps.person.output.id }
       action: add
       permissions: ${ steps.plan.output.add }
       autoMapping: ${ inputs.autoMapping }
     idempotent: true
     compensate:
       type: runner
-      describe: ${ 'Remove ' & $join(steps.plan.output.add, ' and ') & ' again' }
+      describe: ${ 'Remove ' & steps.plan.output.addText & ' again' }
       script: exchange/Set-MailboxPermission.ps1
-      sha256: f72a767dd9dc34acd67537c91b79fa3af78c2887a0548c191927225de7fc88b9
+      sha256: cfd5d4a827b19b38a1e28462f4133d0369aaa748f56c043fa9c88f5eced5e6fd
       services: [exchange]
       timeoutSeconds: 300
       parameters:
         identity: ${ steps.plan.output.mailbox }
+        mailboxObjectId: ${ steps.owner.output.id }
         trustee: ${ steps.person.output.userPrincipalName }
+        trusteeObjectId: ${ steps.person.output.id }
         action: remove
         permissions: ${ steps.plan.output.add }
     # The runner returns one element per output event; this script emits one result object.
@@ -148,10 +175,12 @@ steps:
 
 outputs:
   summary: >-
-    ${ steps.person.output.displayName & ' now has ' & $join(steps.grant.output[0].changed, ' and ') & ' on '
-       & steps.plan.output.mailbox
-       & ($count(steps.plan.output.already) > 0 ? ' (they already had ' & $join(steps.plan.output.already, ' and ') & ')' : '')
-       & ('FullAccess' in steps.grant.output[0].changed and inputs.autoMapping = true ? '. It appears in their Outlook within an hour.' : '.') }
+    ${ steps.person.output.displayName & ' now has '
+       & $join([steps.grant.output[0].changed.($ = 'FullAccess' ? 'Full Access' : $ = 'SendAs' ? 'Send As' : 'Send on Behalf')], ' and ')
+       & ' on ' & steps.plan.output.mailbox
+       & ($count(steps.plan.output.already) > 0 ? ' (they already had ' & steps.plan.output.alreadyText & ')' : '')
+       & ('FullAccess' in steps.grant.output[0].changed and inputs.autoMapping = true ? '. It appears in their Outlook within an hour.' : '.')
+       & (steps.grant.output[0].verified = false ? " Exchange doesn't show it yet; check the mailbox's Access tab in a few minutes." : '') }
   granted: ${ steps.grant.output[0].changed }
 
 tests:
@@ -159,6 +188,7 @@ tests:
     inputs: { mailbox: sales@example.com, person: 10000000-0000-4000-8000-000000000002, reason: REQ-2210 cover for the sales inbox }
     mocks:
       person: { id: 10000000-0000-4000-8000-000000000002, displayName: Alex Wilber, userPrincipalName: alex.wilber@example.com, mail: alex.wilber@example.com, accountEnabled: true, userType: Member }
+      owner: { id: 10000000-0000-4000-8000-000000000400, displayName: Sales, userPrincipalName: sales@example.com }
       current:
         - mailbox: { displayName: Sales, primarySmtpAddress: sales@example.com, userPrincipalName: sales@example.com, recipientTypeDetails: SharedMailbox }
           permissions:
@@ -167,12 +197,13 @@ tests:
       status: succeeded
       plan: [grant]
       outputs:
-        summary: Alex Wilber now has FullAccess on sales@example.com. It appears in their Outlook within an hour.
+        summary: Alex Wilber now has Full Access on sales@example.com. It appears in their Outlook within an hour.
         granted: [FullAccess]
   - name: grants only the missing Send As when Full Access is already there
     inputs: { mailbox: sales@example.com, person: 10000000-0000-4000-8000-000000000005, permission: Both, reason: REQ-2211 shared inbox replies }
     mocks:
       person: { id: 10000000-0000-4000-8000-000000000005, displayName: Isaiah Langer, userPrincipalName: isaiah.langer@example.com, mail: isaiah@example.com, accountEnabled: true, userType: Member }
+      owner: { id: 10000000-0000-4000-8000-000000000400, displayName: Sales, userPrincipalName: sales@example.com }
       current:
         - mailbox: { displayName: Sales, primarySmtpAddress: sales@example.com, userPrincipalName: sales@example.com, recipientTypeDetails: SharedMailbox }
           permissions:
@@ -181,12 +212,28 @@ tests:
       status: succeeded
       plan: [grant]
       outputs:
-        summary: Isaiah Langer now has SendAs on sales@example.com (they already had FullAccess).
+        summary: Isaiah Langer now has Send As on sales@example.com (they already had Full Access).
         granted: [SendAs]
+  - name: grants Send on Behalf
+    inputs: { mailbox: sales@example.com, person: 10000000-0000-4000-8000-000000000002, permission: SendOnBehalf, reason: REQ-2216 assistant sends for the team }
+    mocks:
+      person: { id: 10000000-0000-4000-8000-000000000002, displayName: Alex Wilber, userPrincipalName: alex.wilber@example.com, mail: alex.wilber@example.com, accountEnabled: true, userType: Member }
+      owner: { id: 10000000-0000-4000-8000-000000000400, displayName: Sales, userPrincipalName: sales@example.com }
+      current:
+        - mailbox: { displayName: Sales, primarySmtpAddress: sales@example.com, userPrincipalName: sales@example.com, recipientTypeDetails: SharedMailbox }
+          permissions:
+            - { permission: FullAccess, trustee: alex.wilber@example.com, inherited: false, deny: false }
+    expect:
+      status: succeeded
+      plan: [grant]
+      outputs:
+        summary: Alex Wilber now has Send on Behalf on sales@example.com.
+        granted: [SendOnBehalf]
   - name: refuses when the person already has the access
     inputs: { mailbox: sales@example.com, person: 10000000-0000-4000-8000-000000000005, permission: SendAs, reason: REQ-2212 duplicate request }
     mocks:
       person: { id: 10000000-0000-4000-8000-000000000005, displayName: Isaiah Langer, userPrincipalName: isaiah.langer@example.com, mail: isaiah@example.com, accountEnabled: true, userType: Member }
+      owner: { id: 10000000-0000-4000-8000-000000000400, displayName: Sales, userPrincipalName: sales@example.com }
       current:
         - mailbox: { displayName: Sales, primarySmtpAddress: sales@example.com, userPrincipalName: sales@example.com, recipientTypeDetails: SharedMailbox }
           permissions:
@@ -206,7 +253,14 @@ tests:
     inputs: { mailbox: alex.wilber@example.com, person: 10000000-0000-4000-8000-000000000002, reason: REQ-2215 self-service mistake }
     mocks:
       person: { id: 10000000-0000-4000-8000-000000000002, displayName: Alex Wilber, userPrincipalName: alex.wilber@example.com, mail: alex.wilber@example.com, accountEnabled: true, userType: Member }
+      owner: { id: 10000000-0000-4000-8000-000000000002, displayName: Alex Wilber, userPrincipalName: alex.wilber@example.com }
       current:
         - mailbox: { displayName: Alex Wilber, primarySmtpAddress: alex.wilber@example.com, userPrincipalName: alex.wilber@example.com, recipientTypeDetails: UserMailbox }
           permissions: []
     expect: { status: failed, failedStep: notSelf }
+  - name: refuses giving yourself access
+    inputs: { mailbox: sales@example.com, person: 10000000-0000-4000-8000-0000000000a1, reason: REQ-2217 I need the sales inbox }
+    user: { oid: 10000000-0000-4000-8000-0000000000A1, upn: avery@example.com }
+    mocks:
+      person: { id: 10000000-0000-4000-8000-0000000000a1, displayName: Avery Engineer, userPrincipalName: avery@example.com, mail: avery@example.com, accountEnabled: true, userType: Member }
+    expect: { status: failed, failedStep: notYou }

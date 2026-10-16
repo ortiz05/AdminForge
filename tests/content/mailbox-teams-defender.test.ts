@@ -125,6 +125,8 @@ describe('m365.mailbox', () => {
       'fullaccess|nora.fischer@example.com',
       'fullaccess|blake@example.com',
       'sendas|nora.fischer@example.com',
+      // Send on Behalf can be removed too (Set-MailboxPermission.ps1 manages GrantSendOnBehalfTo).
+      'sendonbehalf|blake@example.com',
     ]);
   });
 
@@ -317,9 +319,10 @@ describe('security.device-vulnerabilities', () => {
   });
 
   it('is gated on Defender Vulnerability Management (Defender for Endpoint P2 or the add-on)', () => {
+    // `defenderEndpoint` (WINDEFATP, TVM_PREMIUM_1), not `defender`, which Office 365 E5 alone satisfies.
     expect(def('security.device-vulnerabilities').requires).toMatchObject({
       scopes: { graph: ['ThreatHunting.Read.All'] },
-      licences: ['WINDEFATP', 'TVM_PREMIUM_1'],
+      licences: ['defenderEndpoint'],
     });
   });
 });

@@ -1,12 +1,12 @@
 $schema: ../../../packages/schemas/generated/page.schema.json
 kind: page
 id: m365.mailbox
-version: 1.0.0
+version: 1.1.0
 title: Mailbox
 summary: >-
   One Exchange Online mailbox: forwarding, address-list visibility, holds and automatic replies, and who can open it
-  (Full Access), send as it (Send As) or send on its behalf. Grant or remove access, clear forwarding, set automatic
-  replies.
+  (Full Access), send as it (Send As) or send on its behalf (Send on Behalf). Grant or remove access, forward mail
+  inside the organization or clear forwarding, set automatic replies.
 owner: m365-team
 tags: [m365, exchange, mailboxes, permissions]
 template: entity
@@ -39,14 +39,16 @@ datasources:
         $types := { 'UserMailbox': 'User mailbox', 'SharedMailbox': 'Shared mailbox', 'RoomMailbox': 'Room', 'EquipmentMailbox': 'Equipment', 'SchedulingMailbox': 'Scheduling' };
         $merge([$m, {
           "typeLabel": $lookup($types, $m.recipientTypeDetails) ? $lookup($types, $m.recipientTypeDetails) : $m.recipientTypeDetails,
-          "forwardsTo": $join($m.forwarding.targets, ', ')
+          "forwardsTo": $join($m.forwarding.targets, ', '),
+          /* Exchange keeps the last period even when replies are off or on until turned off: show it only when it applies. */
+          "autoReply": $m.autoReply ? $merge([$m.autoReply, $m.autoReply.state = 'Scheduled' ? {} : { "startTime": null, "endTime": null }])
         }])
       ) }
   permissions:
     source: runner
     label: Mailbox access (PowerShell)
     script: exchange/Get-MailboxPermissions.ps1
-    sha256: 20458fc49331335910f5668635a47274d7bf54cc48fe72e4ee1dd38132e6ee1a
+    sha256: 88085eb774261034cc6c99b9c9a59dc3f00f63fe2d43a6fa87dbe2b1c5fa9150
     services: [exchange]
     timeoutSeconds: 300
     parameters:
@@ -82,6 +84,12 @@ actions:
     inputs:
       mailbox: ${ params.mailbox }
     when: ${ mailbox.forwarding.enabled = true }
+  - playbook: m365.set-mailbox-forwarding
+    label: Forward mail
+    icon: arrow-bend-up-right
+    inputs:
+      mailbox: ${ params.mailbox }
+    when: ${ $not(mailbox.forwarding.enabled = true) }
   - playbook: m365.set-mailbox-auto-reply
     label: Automatic replies
     icon: chat-teardrop-text
@@ -212,4 +220,3 @@ tabs:
         text: |
           **Inherited** access is granted to the whole organization or mailbox database and can't be removed here.
           **Deleted account** entries point at people who no longer exist; remove them in the Exchange admin center.
-          Send on Behalf is managed on the mailbox's delegation settings in the Exchange admin center.

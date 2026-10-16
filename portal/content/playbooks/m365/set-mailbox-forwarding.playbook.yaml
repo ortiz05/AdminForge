@@ -1,0 +1,385 @@
+$schema: ../../../packages/schemas/generated/playbook.schema.json
+kind: playbook
+id: m365.set-mailbox-forwarding
+version: 1.1.0
+title: Forward a mailbox
+summary: >-
+  Forwards a mailbox's mail to a person's or a shared mailbox in the organization (for example a leaver's mail to their
+  manager), keeping a copy unless you turn that off. Groups, guests, outside addresses, mailboxes that forward on and
+  yourself are refused. A second engineer approves; the person receiving the mail and the mailbox's owner can't. A
+  mailbox that already forwards is left alone: clear that first.
+owner: m365-team
+tags: [m365, exchange, mailboxes, forwarding, offboarding]
+risk: high
+mode: write
+requires:
+  portalRoles: [Portal.Operator]
+  scopes:
+    graph: [User.Read.All]
+    exchange: [Exchange.Manage]
+  entraRoles: [Exchange Recipient Administrator]
+  licences: [exchange]
+confirm:
+  type: typed
+  value: ${ steps.current.output[0].primarySmtpAddress }
+  message: >-
+    ${ 'Mail sent to ' & steps.current.output[0].primarySmtpAddress & ' goes to ' & steps.targetMailbox.output[0].primarySmtpAddress
+       & (inputs.keepCopy = false ? ' only — nothing stays in the mailbox' : ' as well (a copy stays in the mailbox)')
+       & ' until the forwarding is cleared. A second engineer must approve it. Type the mailbox address to confirm.' }
+# Forwarding hands someone every message of another mailbox: a second engineer approves, and neither the person
+# receiving the mail nor the mailbox's owner may approve it. The change then runs as the approver.
+approval:
+  required: true
+  approvers: [Playbook.Approver]
+  minApprovals: 1
+  expiresIn: PT24H
+  excludes: ${ [steps.targetUser.output.value[0].id, steps.owner.output.id] }
+
+inputs:
+  mailbox: { type: string, format: email, label: Mailbox, description: Primary email address of the mailbox whose mail is forwarded }
+  target:
+    type: string
+    format: email
+    label: Forward to
+    description: Primary email address of a person's mailbox or a shared mailbox in your organization (not a group).
+  keepCopy: { type: boolean, label: Keep a copy in the mailbox, default: true }
+  reason: { type: string, label: Reason, minLength: 10, multiline: true, placeholder: e.g. Leaver HR-1234 — the manager handles the mail for 30 days }
+
+steps:
+  - id: current
+    type: runner
+    mode: read
+    describe: Read the mailbox's forwarding settings
+    script: exchange/Get-MailboxConfiguration.ps1
+    sha256: c86c6bf4f6a3ca272389fe8369e8b9137805f491685d69d58855595207aa9d99
+    services: [exchange]
+    timeoutSeconds: 300
+    parameters:
+      identity: ${ inputs.mailbox }
+      includeAutoReply: false
+
+  - id: notForwarding
+    type: assert
+    that: ${ $not(steps.current.output[0].forwarding.enabled = true) }
+    message: >-
+      ${ steps.current.output[0].primarySmtpAddress & ' already forwards to ' & $join(steps.current.output[0].forwarding.targets, ', ')
+         & '. Use Clear forwarding on the mailbox first, then forward it again, so the current forwarding is not replaced by accident.' }
+
+  - id: owner
+    type: graph
+    mode: read
+    describe: Look up the mailbox's account
+    request:
+      method: GET
+      path: /users/${ $encode(steps.current.output[0].userPrincipalName) }
+      query:
+        $select: id,displayName,userPrincipalName
+
+  # Checked here too (the script refuses the same) so the preview already says so.
+  - id: targetUser
+    type: graph
+    mode: read
+    describe: Look up who receives the mail
+    request:
+      method: GET
+      path: /users
+      query:
+        $filter: ${ 'mail eq ' & $odata(inputs.target) & ' or userPrincipalName eq ' & $odata(inputs.target) }
+        $select: id,displayName,mail,userPrincipalName,userType
+
+  - id: insideOrganization
+    type: assert
+    that: ${ $count(steps.targetUser.output.value[userType = 'Member' and $boolean(mail)]) = 1 }
+    message: >-
+      ${ inputs.target & " isn't a person's mailbox or a shared mailbox in your organization. Groups, guests and outside"
+         & ' addresses are not offered (a group can include guests and contacts outside the organization). Enter the'
+         & ' primary email address of a user or shared mailbox.' }
+
+  - id: notSelf
+    type: assert
+    that: >-
+      ${ $not($lowercase(steps.targetUser.output.value[0].id) = $lowercase(steps.owner.output.id)
+         or $lowercase(inputs.target) in [$lowercase(steps.current.output[0].primarySmtpAddress), $lowercase(steps.current.output[0].userPrincipalName)]) }
+    message: A mailbox can't forward to itself. Enter the person or shared mailbox that should receive the mail.
+
+  - id: notYou
+    type: assert
+    that: >-
+      ${ $not($lowercase(steps.targetUser.output.value[0].id) = $lowercase(user.oid)
+         or $lowercase(user.upn) in [$lowercase(inputs.target), $lowercase(steps.targetUser.output.value[0].userPrincipalName), $lowercase(steps.targetUser.output.value[0].mail)]) }
+    message: >-
+      You can't forward a mailbox's mail to yourself. If you need this mail, ask another engineer to set the forwarding
+      up (a third person approves it).
+
+  # Graph can't tell a mailbox in Exchange Online from a mail user (a hybrid mailbox still on-premises): Exchange can.
+  - id: targetMailbox
+    type: runner
+    mode: read
+    describe: Check the receiving mailbox in Exchange Online
+    onError: continue
+    script: exchange/Get-MailboxConfiguration.ps1
+    sha256: c86c6bf4f6a3ca272389fe8369e8b9137805f491685d69d58855595207aa9d99
+    services: [exchange]
+    timeoutSeconds: 300
+    parameters:
+      identity: ${ steps.targetUser.output.value[0].mail }
+      includeAutoReply: false
+
+  - id: targetIsMailbox
+    type: assert
+    that: ${ steps.targetMailbox.output[0].recipientTypeDetails in ['UserMailbox', 'SharedMailbox'] }
+    message: >-
+      ${ steps.targetMailbox.status = 'failed'
+         ? ($contains(steps.targetMailbox.error.code ? steps.targetMailbox.error.code : '', 'input')
+            ? inputs.target & ' has no mailbox in Exchange Online (for example a mail user whose mailbox is still'
+              & ' on-premises, or in another organization). Forward to a user or shared mailbox in Exchange Online instead.'
+            : inputs.target & " couldn't be checked in Exchange Online: " & steps.targetMailbox.error.message & ' Try again in a few minutes.')
+         : inputs.target & (steps.targetMailbox.output[0].recipientTypeDetails ? ' is a ' & steps.targetMailbox.output[0].recipientTypeDetails & ',' : ' is')
+           & ' not a user or shared mailbox. Forward to a user or shared mailbox instead.' }
+
+  - id: targetNotForwarding
+    type: assert
+    that: ${ $not(steps.targetMailbox.output[0].forwarding.enabled = true) }
+    message: >-
+      ${ steps.targetMailbox.output[0].primarySmtpAddress & ' forwards its own mail'
+         & ($count(steps.targetMailbox.output[0].forwarding.targets) > 0 ? ' to ' & $join(steps.targetMailbox.output[0].forwarding.targets, ', ') : '')
+         & ", so the mail would travel on from there. Pick another mailbox, or clear that mailbox's forwarding first." }
+
+  # The script checks all of the above again and that the object ids match the mailboxes; the ids are parameters so
+  # AdminForge's protected-object guard sees whose mailboxes these are.
+  - id: forward
+    type: runner
+    mode: write
+    describe: >-
+      ${ 'Forward mail for ' & steps.current.output[0].primarySmtpAddress & ' to ' & steps.targetMailbox.output[0].primarySmtpAddress
+         & (inputs.keepCopy = false ? ' (no copy kept)' : ' (a copy stays in the mailbox)') }
+    script: exchange/Set-MailboxForwarding.ps1
+    sha256: 55d568e73cec4a33720a7993df9cae44844ae65627475b72a7eb01ebbf498671
+    services: [exchange]
+    timeoutSeconds: 300
+    parameters:
+      identity: ${ steps.current.output[0].primarySmtpAddress }
+      mailboxObjectId: ${ steps.owner.output.id }
+      target: ${ steps.targetMailbox.output[0].primarySmtpAddress }
+      targetObjectId: ${ steps.targetUser.output.value[0].id }
+      deliverToMailboxAndForward: ${ $not(inputs.keepCopy = false) }
+    idempotent: true
+    compensate:
+      type: runner
+      describe: Clear the forwarding again
+      script: exchange/Clear-MailboxForwarding.ps1
+      sha256: eeb164379d89b47a08d47b61ba3e1fd41776a3f27d51e876272bd8f3e727eedd
+      services: [exchange]
+      timeoutSeconds: 300
+      parameters:
+        identity: ${ steps.current.output[0].primarySmtpAddress }
+    dryRunOutput:
+      - identity: ${ steps.current.output[0].primarySmtpAddress }
+        primarySmtpAddress: ${ steps.current.output[0].primarySmtpAddress }
+        target:
+          address: ${ steps.targetMailbox.output[0].primarySmtpAddress }
+          recipientTypeDetails: ${ steps.targetMailbox.output[0].recipientTypeDetails }
+        before: { forwardingSmtpAddress: null, forwardingAddress: null, deliverToMailboxAndForward: false }
+        after:
+          forwardingAddress: ${ steps.targetMailbox.output[0].primarySmtpAddress }
+          deliverToMailboxAndForward: ${ $not(inputs.keepCopy = false) }
+        changed: true
+        verified: true
+
+outputs:
+  summary: >-
+    ${ steps.forward.output[0].verified = true
+       ? 'Mail for ' & steps.current.output[0].primarySmtpAddress & ' is forwarded to ' & steps.forward.output[0].target.address
+         & (inputs.keepCopy = false ? '; no copy is kept in the mailbox.' : '; a copy stays in the mailbox.')
+         & ' Use Clear forwarding on the mailbox to stop it.'
+       : 'Forwarding mail for ' & steps.current.output[0].primarySmtpAddress & ' to ' & steps.forward.output[0].target.address
+         & " was submitted; Exchange doesn't show it yet. Open the mailbox in a few minutes to check, and use Clear forwarding there to stop it." }
+  target: ${ steps.forward.output[0].target.address }
+  verified: ${ steps.forward.output[0].verified }
+
+tests:
+  - name: forwards a leaver's mail to the manager and keeps a copy
+    inputs: { mailbox: adele.vance@example.com, target: lee.gu@example.com, reason: Leaver HR-1001 manager covers the inbox }
+    mocks:
+      current:
+        - primarySmtpAddress: adele.vance@example.com
+          userPrincipalName: adele.vance@example.com
+          recipientTypeDetails: UserMailbox
+          forwarding: { enabled: false, forwardingSmtpAddress: null, forwardingAddress: null, deliverToMailboxAndForward: false, targets: [], external: null }
+      owner: { id: 10000000-0000-4000-8000-000000000001, displayName: Adele Vance, userPrincipalName: adele.vance@example.com }
+      targetUser: { value: [{ id: 10000000-0000-4000-8000-000000000007, displayName: Lee Gu, mail: lee.gu@example.com, userPrincipalName: lee.gu@example.com, userType: Member }] }
+      targetMailbox:
+        - primarySmtpAddress: lee.gu@example.com
+          userPrincipalName: lee.gu@example.com
+          recipientTypeDetails: UserMailbox
+          forwarding: { enabled: false, targets: [] }
+      forward:
+        - identity: adele.vance@example.com
+          target: { address: lee.gu@example.com, displayName: Lee Gu, recipientTypeDetails: UserMailbox }
+          changed: true
+          verified: true
+    expect:
+      status: succeeded
+      plan: [forward]
+      outputs:
+        summary: Mail for adele.vance@example.com is forwarded to lee.gu@example.com; a copy stays in the mailbox. Use Clear forwarding on the mailbox to stop it.
+        target: lee.gu@example.com
+        verified: true
+  - name: forwards to a shared mailbox without keeping a copy
+    inputs: { mailbox: reception@example.com, target: frontdesk@example.com, keepCopy: false, reason: Reception desk moved to the front desk team }
+    mocks:
+      current:
+        - primarySmtpAddress: reception@example.com
+          userPrincipalName: reception@example.com
+          forwarding: { enabled: false, targets: [] }
+      owner: { id: 10000000-0000-4000-8000-000000000300, displayName: Reception, userPrincipalName: reception@example.com }
+      targetUser: { value: [{ id: 10000000-0000-4000-8000-000000000301, displayName: Front desk, mail: frontdesk@example.com, userPrincipalName: frontdesk@example.com, userType: Member }] }
+      targetMailbox:
+        - primarySmtpAddress: frontdesk@example.com
+          recipientTypeDetails: SharedMailbox
+          forwarding: { enabled: false, targets: [] }
+      forward:
+        - target: { address: frontdesk@example.com, displayName: Front desk, recipientTypeDetails: SharedMailbox }
+          verified: true
+    expect:
+      status: succeeded
+      plan: [forward]
+      outputs:
+        summary: Mail for reception@example.com is forwarded to frontdesk@example.com; no copy is kept in the mailbox. Use Clear forwarding on the mailbox to stop it.
+  - name: a real run waits for a second engineer's approval before forwarding
+    dryRun: false
+    inputs: { mailbox: reception@example.com, target: frontdesk@example.com, reason: Reception desk moved to the front desk team }
+    mocks:
+      current:
+        - primarySmtpAddress: reception@example.com
+          userPrincipalName: reception@example.com
+          forwarding: { enabled: false, targets: [] }
+      owner: { id: 10000000-0000-4000-8000-000000000300, displayName: Reception, userPrincipalName: reception@example.com }
+      targetUser: { value: [{ id: 10000000-0000-4000-8000-000000000301, displayName: Front desk, mail: frontdesk@example.com, userPrincipalName: frontdesk@example.com, userType: Member }] }
+      targetMailbox:
+        - primarySmtpAddress: frontdesk@example.com
+          recipientTypeDetails: SharedMailbox
+          forwarding: { enabled: false, targets: [] }
+    expect: { status: awaiting_approval, steps: { targetNotForwarding: succeeded } }
+  - name: refuses a mailbox that already forwards
+    inputs: { mailbox: adele.vance@example.com, target: lee.gu@example.com, reason: Leaver HR-1002 duplicate request }
+    mocks:
+      current:
+        - primarySmtpAddress: adele.vance@example.com
+          userPrincipalName: adele.vance@example.com
+          forwarding: { enabled: true, forwardingSmtpAddress: adele.home@outlook.example, targets: [adele.home@outlook.example], external: true }
+    expect: { status: failed, failedStep: notForwarding }
+  - name: refuses forwarding a mailbox to itself
+    inputs: { mailbox: lee.gu@example.com, target: Lee.Gu@example.com, reason: Typo in the request form }
+    mocks:
+      current:
+        - primarySmtpAddress: lee.gu@example.com
+          userPrincipalName: lee.gu@example.com
+          forwarding: { enabled: false, targets: [] }
+      owner: { id: 10000000-0000-4000-8000-000000000007, displayName: Lee Gu, userPrincipalName: lee.gu@example.com }
+      targetUser: { value: [{ id: 10000000-0000-4000-8000-000000000007, displayName: Lee Gu, mail: lee.gu@example.com, userPrincipalName: lee.gu@example.com, userType: Member }] }
+    expect: { status: failed, failedStep: notSelf }
+  - name: refuses forwarding to the person running it
+    inputs: { mailbox: adele.vance@example.com, target: avery@example.com, reason: Leaver HR-1003 I'll cover the inbox }
+    user: { oid: 10000000-0000-4000-8000-0000000000A1, upn: avery@example.com }
+    mocks:
+      current:
+        - primarySmtpAddress: adele.vance@example.com
+          userPrincipalName: adele.vance@example.com
+          forwarding: { enabled: false, targets: [] }
+      owner: { id: 10000000-0000-4000-8000-000000000001, displayName: Adele Vance, userPrincipalName: adele.vance@example.com }
+      targetUser: { value: [{ id: 10000000-0000-4000-8000-0000000000a1, displayName: Avery Engineer, mail: avery@example.com, userPrincipalName: avery@example.com, userType: Member }] }
+    expect: { status: failed, failedStep: notYou }
+  - name: refuses forwarding to the person running it by an alias address
+    inputs: { mailbox: adele.vance@example.com, target: a.engineer@example.com, reason: Leaver HR-1003 I'll cover the inbox }
+    user: { oid: 10000000-0000-4000-8000-0000000000a1, upn: Avery@example.com }
+    mocks:
+      current:
+        - primarySmtpAddress: adele.vance@example.com
+          userPrincipalName: adele.vance@example.com
+          forwarding: { enabled: false, targets: [] }
+      owner: { id: 10000000-0000-4000-8000-000000000001, displayName: Adele Vance, userPrincipalName: adele.vance@example.com }
+      targetUser: { value: [{ id: 10000000-0000-4000-8000-0000000000a1, displayName: Avery Engineer, mail: a.engineer@example.com, userPrincipalName: avery@example.com, userType: Member }] }
+    expect: { status: failed, failedStep: notYou }
+  - name: refuses an address outside the organization before anything changes
+    inputs: { mailbox: adele.vance@example.com, target: someone@fabrikam.example, reason: Request to forward to a partner }
+    mocks:
+      current:
+        - primarySmtpAddress: adele.vance@example.com
+          userPrincipalName: adele.vance@example.com
+          forwarding: { enabled: false, targets: [] }
+      owner: { id: 10000000-0000-4000-8000-000000000001, displayName: Adele Vance, userPrincipalName: adele.vance@example.com }
+      targetUser: { value: [] }
+    expect: { status: failed, failedStep: insideOrganization }
+  - name: refuses a group (no user account has its address)
+    inputs: { mailbox: adele.vance@example.com, target: sales-team@example.com, reason: Leaver HR-1004 team covers the inbox }
+    mocks:
+      current:
+        - primarySmtpAddress: adele.vance@example.com
+          userPrincipalName: adele.vance@example.com
+          forwarding: { enabled: false, targets: [] }
+      owner: { id: 10000000-0000-4000-8000-000000000001, displayName: Adele Vance, userPrincipalName: adele.vance@example.com }
+      targetUser: { value: [] }
+    expect: { status: failed, failedStep: insideOrganization }
+  - name: refuses a guest
+    inputs: { mailbox: adele.vance@example.com, target: partner@fabrikam.example, reason: Request to forward to a partner guest }
+    mocks:
+      current:
+        - primarySmtpAddress: adele.vance@example.com
+          userPrincipalName: adele.vance@example.com
+          forwarding: { enabled: false, targets: [] }
+      owner: { id: 10000000-0000-4000-8000-000000000001, displayName: Adele Vance, userPrincipalName: adele.vance@example.com }
+      targetUser: { value: [{ id: 10000000-0000-4000-8000-000000000020, displayName: Partner, mail: partner@fabrikam.example, userPrincipalName: "partner_fabrikam.example#EXT#@example.onmicrosoft.com", userType: Guest }] }
+    expect: { status: failed, failedStep: insideOrganization }
+  - name: refuses a person without a mailbox in Exchange Online (hybrid mail user)
+    inputs: { mailbox: adele.vance@example.com, target: onprem.user@example.com, reason: Leaver HR-1005 manager covers the inbox }
+    mocks:
+      current:
+        - primarySmtpAddress: adele.vance@example.com
+          userPrincipalName: adele.vance@example.com
+          forwarding: { enabled: false, targets: [] }
+      owner: { id: 10000000-0000-4000-8000-000000000001, displayName: Adele Vance, userPrincipalName: adele.vance@example.com }
+      targetUser: { value: [{ id: 10000000-0000-4000-8000-000000000030, displayName: On-prem User, mail: onprem.user@example.com, userPrincipalName: onprem.user@example.com, userType: Member }] }
+    errors:
+      targetMailbox: { status: 400, code: script_input, message: "Mailbox 'onprem.user@example.com' was not found." }
+    expect: { status: failed, failedStep: targetIsMailbox, steps: { targetMailbox: failed } }
+  - name: refuses a room mailbox
+    inputs: { mailbox: adele.vance@example.com, target: boardroom@example.com, reason: Leaver HR-1006 wrong address picked }
+    mocks:
+      current:
+        - primarySmtpAddress: adele.vance@example.com
+          userPrincipalName: adele.vance@example.com
+          forwarding: { enabled: false, targets: [] }
+      owner: { id: 10000000-0000-4000-8000-000000000001, displayName: Adele Vance, userPrincipalName: adele.vance@example.com }
+      targetUser: { value: [{ id: 10000000-0000-4000-8000-000000000031, displayName: Boardroom, mail: boardroom@example.com, userPrincipalName: boardroom@example.com, userType: Member }] }
+      targetMailbox:
+        - primarySmtpAddress: boardroom@example.com
+          recipientTypeDetails: RoomMailbox
+          forwarding: { enabled: false, targets: [] }
+    expect: { status: failed, failedStep: targetIsMailbox }
+  - name: refuses a target mailbox that forwards its mail on
+    inputs: { mailbox: adele.vance@example.com, target: lee.gu@example.com, reason: Leaver HR-1007 manager covers the inbox }
+    mocks:
+      current:
+        - primarySmtpAddress: adele.vance@example.com
+          userPrincipalName: adele.vance@example.com
+          forwarding: { enabled: false, targets: [] }
+      owner: { id: 10000000-0000-4000-8000-000000000001, displayName: Adele Vance, userPrincipalName: adele.vance@example.com }
+      targetUser: { value: [{ id: 10000000-0000-4000-8000-000000000007, displayName: Lee Gu, mail: lee.gu@example.com, userPrincipalName: lee.gu@example.com, userType: Member }] }
+      targetMailbox:
+        - primarySmtpAddress: lee.gu@example.com
+          recipientTypeDetails: UserMailbox
+          forwarding: { enabled: true, forwardingSmtpAddress: lee.home@outlook.example, targets: [lee.home@outlook.example], external: true }
+    expect: { status: failed, failedStep: targetNotForwarding }
+  - name: explains when Exchange can't be asked about the target
+    inputs: { mailbox: adele.vance@example.com, target: lee.gu@example.com, reason: Mailbox moved during the request }
+    mocks:
+      current:
+        - primarySmtpAddress: adele.vance@example.com
+          userPrincipalName: adele.vance@example.com
+          forwarding: { enabled: false, targets: [] }
+      owner: { id: 10000000-0000-4000-8000-000000000001, displayName: Adele Vance, userPrincipalName: adele.vance@example.com }
+      targetUser: { value: [{ id: 10000000-0000-4000-8000-000000000007, displayName: Lee Gu, mail: lee.gu@example.com, userPrincipalName: lee.gu@example.com, userType: Member }] }
+    errors:
+      targetMailbox: { status: 503, code: script_runner, message: "Exchange Online is busy." }
+    expect: { status: failed, failedStep: targetIsMailbox }

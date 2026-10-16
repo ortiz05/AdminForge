@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/runbook.schema.json
 kind: runbook
 id: identity.compromised-account
-version: 2.0.0
+version: 2.0.1
 title: Compromised account response
 summary: >-
   Guided response to a suspected account compromise: confirm and scope the signal, contain (block sign-in, revoke
@@ -83,7 +83,7 @@ sections:
           method: GET
           path: /users/${ $encode($guid(inputs.userId)) }
           query:
-            $select: id,displayName,userPrincipalName,accountEnabled,userType,onPremisesSyncEnabled,lastPasswordChangeDateTime
+            $select: id,displayName,userPrincipalName,mail,accountEnabled,userType,onPremisesSyncEnabled,lastPasswordChangeDateTime
 
       - id: signIns
         type: graph
@@ -226,9 +226,17 @@ sections:
       - id: containOther
         type: manual
         instructions: |
-          Contain in the other workloads too (these are outside Microsoft Graph's identity APIs):
+          Contain in the other workloads too:
+
+          ${ steps.account.output.mail
+             ? '- **Mail.** Open the [inbox rule audit for this mailbox](/p/m365.inbox-rules?mailbox=' & $encode(steps.account.output.mail)
+               & ") and use *Turn rule off* or *Remove rule* on every rule the user didn't create — above all rules that forward"
+               & ' outside the organization or hide mail. If the [mailbox](/p/m365.mailbox?mailbox=' & $encode(steps.account.output.mail)
+               & ') forwards, [clear the forwarding](/playbooks/m365.clear-mailbox-forwarding?mailbox=' & $encode(steps.account.output.mail)
+               & "), and check its Access tab for delegates the user doesn't know."
+             : '- **Mail.** The account has no mailbox address; nothing to check in Exchange Online.' }
         checklist:
-          - "Exchange Online: remove inbox rules and forwarding the user didn't create; check mailbox delegates"
+          - "Exchange Online: inbox rules the user didn't create turned off or removed, mailbox forwarding cleared, delegates checked"
           - "Defender: isolate any device the attacker used"
           - "Synced account: also disable it and reset the password in on-premises AD"
 
@@ -303,7 +311,7 @@ sections:
         checklist:
           - Malicious directory changes reverted
           - Suspicious app consents revoked and the apps disabled
-          - Inbox rules, forwarding and recently sent mail reviewed (internal phishing warned about)
+          - Inbox rules, forwarding (step 2) and recently sent mail reviewed (internal phishing warned about)
           - Files shared externally or downloaded in bulk reviewed (OneDrive / SharePoint)
           - Devices registered or joined by the user reviewed
           - Azure and Entra role assignments of the user reviewed

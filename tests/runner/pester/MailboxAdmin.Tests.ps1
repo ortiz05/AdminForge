@@ -120,14 +120,17 @@ Describe 'Exchange mailbox administration scripts' {
             Calls      = [System.Collections.Generic.List[string]]::new()
             Mailboxes  = [ordered]@{
                 'adele@example.com'  = & $mailbox 'Adele Vance' 'adele@example.com' 'UserMailbox' @{ ForwardingSmtpAddress = 'smtp:adele.home@fabrikam.example'; DeliverToMailboxAndForward = $true }
-                'sales@example.com'  = & $mailbox 'Sales' 'sales@example.com' 'SharedMailbox' @{ GrantSendOnBehalfTo = @('Lee Gu'); HiddenFromAddressListsEnabled = $true; ForwardingAddress = 'Partner Contact' }
+                'sales@example.com'  = & $mailbox 'Sales' 'sales@example.com' 'SharedMailbox' @{ GrantSendOnBehalfTo = @('Lee Gu'); HiddenFromAddressListsEnabled = $true; ForwardingAddress = 'Partner Contact'; ExternalDirectoryObjectId = '3c1d5e7f-0000-4000-8000-000000000201' }
                 'lee@example.com'    = & $mailbox 'Lee Gu' 'lee@example.com' 'UserMailbox' @{ IsDirSynced = $true }
                 'broken@example.com' = & $mailbox 'Broken' 'broken@example.com' 'UserMailbox'
             }
             Recipients = @{
-                'Lee Gu'          = [pscustomobject]@{ DisplayName = 'Lee Gu'; PrimarySmtpAddress = 'lee@example.com'; RecipientTypeDetails = 'UserMailbox'; ExternalEmailAddress = $null }
-                'lee@example.com' = [pscustomobject]@{ DisplayName = 'Lee Gu'; PrimarySmtpAddress = 'lee@example.com'; RecipientTypeDetails = 'UserMailbox'; ExternalEmailAddress = $null }
-                'kim@example.com' = [pscustomobject]@{ DisplayName = 'Kim Akers'; PrimarySmtpAddress = 'kim@example.com'; RecipientTypeDetails = 'UserMailbox'; ExternalEmailAddress = $null }
+                'Lee Gu'          = [pscustomobject]@{ DisplayName = 'Lee Gu'; PrimarySmtpAddress = 'lee@example.com'; RecipientTypeDetails = 'UserMailbox'; ExternalEmailAddress = $null; ExternalDirectoryObjectId = '3c1d5e7f-0000-4000-8000-000000000102' }
+                'lee@example.com' = [pscustomobject]@{ DisplayName = 'Lee Gu'; PrimarySmtpAddress = 'lee@example.com'; RecipientTypeDetails = 'UserMailbox'; ExternalEmailAddress = $null; ExternalDirectoryObjectId = '3c1d5e7f-0000-4000-8000-000000000102' }
+                'kim@example.com' = [pscustomobject]@{ DisplayName = 'Kim Akers'; PrimarySmtpAddress = 'kim@example.com'; RecipientTypeDetails = 'UserMailbox'; ExternalEmailAddress = $null; ExternalDirectoryObjectId = '3c1d5e7f-0000-4000-8000-000000000101' }
+                # Trustees of Set-MailboxPermission (it checks their object ids).
+                'adele@example.com'  = [pscustomobject]@{ DisplayName = 'Adele Vance'; PrimarySmtpAddress = 'adele@example.com'; RecipientTypeDetails = 'UserMailbox'; ExternalEmailAddress = $null; ExternalDirectoryObjectId = '3c1d5e7f-0000-4000-8000-000000000103' }
+                'broken@example.com' = [pscustomobject]@{ DisplayName = 'Broken'; PrimarySmtpAddress = 'broken@example.com'; RecipientTypeDetails = 'UserMailbox'; ExternalEmailAddress = $null; ExternalDirectoryObjectId = '3c1d5e7f-0000-4000-8000-000000000199' }
                 'Partner Contact' = [pscustomobject]@{ DisplayName = 'Partner'; PrimarySmtpAddress = $null; RecipientTypeDetails = 'MailContact'; ExternalEmailAddress = 'SMTP:orders@fabrikam.example' }
             }
             FullAccess = [System.Collections.Generic.List[object]]::new([object[]]@(
@@ -188,7 +191,9 @@ Describe 'Exchange mailbox administration scripts' {
             $by['fullaccess|s-1-5-21-1111-2222-3333-1105'].orphaned | Should -BeTrue
             $by['fullaccess|s-1-5-21-1111-2222-3333-1105'].removable | Should -BeFalse
             $by['sendonbehalf|lee@example.com'].trustee | Should -Be 'lee@example.com'
-            $by['sendonbehalf|lee@example.com'].removable | Should -BeFalse
+            $by['sendonbehalf|lee@example.com'].removable | Should -BeTrue
+            $by['sendonbehalf|lee@example.com'].trusteeAddress | Should -Be 'lee@example.com'
+            $by['sendas|kim@example.com'].accessRights | Should -Be @('SendAs')
         }
 
         It 'reports an unknown mailbox or a malformed address as an input error' {
@@ -199,20 +204,22 @@ Describe 'Exchange mailbox administration scripts' {
     }
 
     Describe 'Set-MailboxPermission.ps1' {
+        BeforeAll { $SalesId = '3c1d5e7f-0000-4000-8000-000000000201' }
+
         It 'refuses to run in read mode' {
-            $r = Invoke-ContentScript 'exchange/Set-MailboxPermission.ps1' @{ identity = 'sales@example.com'; trustee = 'lee@example.com'; action = 'add'; permissions = @('FullAccess') } 'read'
+            $r = Invoke-ContentScript 'exchange/Set-MailboxPermission.ps1' @{ identity = 'sales@example.com'; mailboxObjectId = $SalesId; trustee = 'lee@example.com'; trusteeObjectId = '3c1d5e7f-0000-4000-8000-000000000102'; action = 'add'; permissions = @('FullAccess') } 'read'
             $r.Category | Should -Be 'readOnly'
             $global:AfMx.Calls | Should -BeNullOrEmpty
         }
 
         It 'grants only what is missing and reads it back' {
-            $r = Invoke-ContentScript 'exchange/Set-MailboxPermission.ps1' @{ identity = 'sales@example.com'; trustee = 'kim@example.com'; action = 'add'; permissions = @('FullAccess', 'SendAs') } 'write'
+            $r = Invoke-ContentScript 'exchange/Set-MailboxPermission.ps1' @{ identity = 'sales@example.com'; mailboxObjectId = $SalesId; trustee = 'kim@example.com'; trusteeObjectId = '3c1d5e7f-0000-4000-8000-000000000101'; action = 'add'; permissions = @('FullAccess', 'SendAs') } 'write'
             $r.Failure | Should -BeNullOrEmpty
             $r.Output[0].changed | Should -BeNullOrEmpty
             @($r.Output[0].skipped).Count | Should -Be 2
             $global:AfMx.Calls | Should -BeNullOrEmpty
 
-            $r = Invoke-ContentScript 'exchange/Set-MailboxPermission.ps1' @{ identity = 'sales@example.com'; trustee = 'adele@example.com'; action = 'add'; permissions = @('fullaccess', 'SendAs'); autoMapping = $false } 'write'
+            $r = Invoke-ContentScript 'exchange/Set-MailboxPermission.ps1' @{ identity = 'sales@example.com'; mailboxObjectId = $SalesId; trustee = 'adele@example.com'; trusteeObjectId = '3c1d5e7f-0000-4000-8000-000000000103'; action = 'add'; permissions = @('fullaccess', 'SendAs'); autoMapping = $false } 'write'
             $r.Failure | Should -BeNullOrEmpty
             $r.Output[0].changed | Should -Be @('FullAccess', 'SendAs')
             $r.Output[0].verified | Should -BeTrue
@@ -222,17 +229,17 @@ Describe 'Exchange mailbox administration scripts' {
         }
 
         It 'removes explicit grants but never inherited ones' {
-            $r = Invoke-ContentScript 'exchange/Set-MailboxPermission.ps1' @{ identity = 'sales@example.com'; trustee = 'kim@example.com'; action = 'remove'; permissions = @('FullAccess', 'SendAs') } 'write'
+            $r = Invoke-ContentScript 'exchange/Set-MailboxPermission.ps1' @{ identity = 'sales@example.com'; mailboxObjectId = $SalesId; trustee = 'kim@example.com'; trusteeObjectId = '3c1d5e7f-0000-4000-8000-000000000101'; action = 'remove'; permissions = @('FullAccess', 'SendAs') } 'write'
             $r.Output[0].changed | Should -Be @('FullAccess', 'SendAs')
             $r.Output[0].verified | Should -BeTrue
-            $r = Invoke-ContentScript 'exchange/Set-MailboxPermission.ps1' @{ identity = 'sales@example.com'; trustee = 'lee@example.com'; action = 'remove'; permissions = @('FullAccess') } 'write'
+            $r = Invoke-ContentScript 'exchange/Set-MailboxPermission.ps1' @{ identity = 'sales@example.com'; mailboxObjectId = $SalesId; trustee = 'lee@example.com'; trusteeObjectId = '3c1d5e7f-0000-4000-8000-000000000102'; action = 'remove'; permissions = @('FullAccess') } 'write'
             $r.Output[0].changed | Should -BeNullOrEmpty
             $r.Output[0].skipped[0].reason | Should -Be 'not granted directly'
             @($global:AfMx.FullAccess | Where-Object { $_.User -eq 'lee@example.com' }).Count | Should -Be 1
         }
 
         It 'reports a failed change and then fails the job' {
-            $r = Invoke-ContentScript 'exchange/Set-MailboxPermission.ps1' @{ identity = 'sales@example.com'; trustee = 'broken@example.com'; action = 'add'; permissions = @('FullAccess', 'SendAs') } 'write'
+            $r = Invoke-ContentScript 'exchange/Set-MailboxPermission.ps1' @{ identity = 'sales@example.com'; mailboxObjectId = $SalesId; trustee = 'broken@example.com'; trusteeObjectId = '3c1d5e7f-0000-4000-8000-000000000199'; action = 'add'; permissions = @('FullAccess', 'SendAs') } 'write'
             $r.Output[0].failed[0].permission | Should -Be 'FullAccess'
             $r.Output[0].changed | Should -Be @('SendAs')
             $r.Category | Should -Be 'script'
@@ -240,12 +247,13 @@ Describe 'Exchange mailbox administration scripts' {
         }
 
         It 'validates its inputs' {
-            $base = @{ identity = 'sales@example.com'; trustee = 'lee@example.com'; action = 'add'; permissions = @('FullAccess') }
+            $base = @{ identity = 'sales@example.com'; mailboxObjectId = $SalesId; trustee = 'lee@example.com'; trusteeObjectId = '3c1d5e7f-0000-4000-8000-000000000102'; action = 'add'; permissions = @('FullAccess') }
             (Invoke-ContentScript 'exchange/Set-MailboxPermission.ps1' ($base + @{}) 'write').Category | Should -BeNullOrEmpty
             foreach ($bad in @(
                     @{ action = 'grant' }, @{ permissions = @('ReadPermission') }, @{ permissions = @() },
                     @{ trustee = 'sales@example.com' }, @{ trustee = 'not an address' }, @{ identity = 'ghost@example.com' },
-                    @{ trustee = 'ghost@example.com' })) {
+                    @{ trustee = 'ghost@example.com' }, @{ mailboxObjectId = 'sales' }, @{ trusteeObjectId = $null },
+                    @{ trusteeObjectId = '3c1d5e7f-0000-4000-8000-000000000101' }, @{ mailboxObjectId = '3c1d5e7f-0000-4000-8000-000000000102' })) {
                 $inputs = $base.Clone(); foreach ($k in $bad.Keys) { $inputs[$k] = $bad[$k] }
                 (Invoke-ContentScript 'exchange/Set-MailboxPermission.ps1' $inputs 'write').Category | Should -Be 'input' -Because ($bad | ConvertTo-Json -Compress)
             }

@@ -1,0 +1,282 @@
+$schema: ../../../packages/schemas/generated/playbook.schema.json
+kind: playbook
+id: m365.set-inbox-rule
+version: 1.0.1
+title: Disable or remove an inbox rule
+summary: >-
+  Turns off, turns back on, or removes one inbox rule of a mailbox — for example a rule that forwards mail outside the
+  organization or hides mail after an account compromise. Disabling keeps the rule so it can be looked at and turned on
+  again; removing deletes it (the run record keeps what it did). A rule that sends mail outside the organization is
+  never turned on here.
+owner: m365-team
+tags: [m365, exchange, security, inbox-rules, data-loss]
+risk: medium
+mode: write
+requires:
+  portalRoles: [Portal.Operator]
+  scopes:
+    graph: [User.Read.All]
+    exchange: [Exchange.Manage]
+  entraRoles: [Exchange Recipient Administrator]
+  licences: [exchange]
+confirm:
+  type: click
+  message: >-
+    ${ (inputs.action = 'Remove' ? 'Remove' : inputs.action = 'Enable' ? 'Turn on' : 'Turn off') & ' the inbox rule "'
+       & steps.rule.output.ruleName & '" in ' & inputs.mailbox & '?'
+       & (inputs.action = 'Remove' ? ' This is not undone automatically; the run keeps what the rule did.' : '')
+       & (steps.rule.output.risk = 'high' and $not(inputs.action = 'Enable') ? ' The rule sends mail outside the organization: check the account for compromise as well (recent sign-ins, password, sessions).' : '') }
+
+inputs:
+  mailbox: { type: string, format: email, label: Mailbox, description: Primary email address of the mailbox }
+  ruleIdentity:
+    type: string
+    label: Rule id
+    description: The rule's id from the inbox rule audit (Exchange's RuleIdentity).
+    pattern: '^\d{1,20}$'
+  ruleName: { type: string, label: Rule name, required: false, description: The name shown in the audit; the run stops if the rule has been renamed since., maxLength: 512 }
+  action:
+    type: enum
+    label: Change
+    default: Disable
+    values:
+      - { value: Disable, label: Turn the rule off }
+      - { value: Remove, label: Remove the rule }
+      - { value: Enable, label: Turn the rule back on }
+  reason: { type: string, label: Reason, minLength: 10, multiline: true, placeholder: e.g. SEC-512 — rule forwards invoices to an outside address }
+
+steps:
+  - id: current
+    type: runner
+    mode: read
+    describe: Read the mailbox's inbox rules
+    script: exchange/Get-InboxRules.ps1
+    sha256: 743c48bfd2619f40c2edcfa60341d72badd1a5e609341a6ad5ece1c68fda5bc1
+    services: [exchange]
+    timeoutSeconds: 300
+    parameters:
+      identity: ${ inputs.mailbox }
+      riskyOnly: false
+      includeHidden: true
+
+  - id: rule
+    type: transform
+    describe: Find the rule
+    expression: >-
+      ${ (
+        $id := inputs.ruleIdentity;
+        $r := steps.current.output[0].rules[ruleIdentity = $id][0];
+        $r ? $r : { "ruleName": inputs.ruleName ? inputs.ruleName : $id, "missing": true }
+      ) }
+
+  - id: found
+    type: assert
+    that: ${ $not(steps.rule.output.missing = true) }
+    message: >-
+      ${ inputs.mailbox & ' has no inbox rule with id ' & inputs.ruleIdentity & ' any more. Refresh the audit and try again.' }
+
+  - id: notHidden
+    type: assert
+    that: ${ $not(steps.rule.output.hidden = true) }
+    message: >-
+      ${ 'The rule "' & steps.rule.output.ruleName & '" is hidden (created by Exchange or an app, not shown in Outlook), so it cannot be changed here. If it is suspicious, remove it with a MAPI editor or ask Microsoft support.' }
+
+  - id: sameRule
+    type: assert
+    that: >-
+      ${ (inputs.ruleName ? inputs.ruleName : '') = '' or steps.rule.output.ruleName = inputs.ruleName }
+    message: >-
+      ${ 'The rule is now called "' & steps.rule.output.ruleName & '", not "' & inputs.ruleName & '". Refresh the audit and check it before changing it.' }
+
+  # Same test as the audit's "high" risk; the script refuses it too.
+  - id: notTurningOnOutsideForwarding
+    type: assert
+    that: ${ $not(inputs.action = 'Enable' and steps.rule.output.risk = 'high') }
+    message: >-
+      ${ 'The rule "' & steps.rule.output.ruleName & '" sends mail outside the organization ('
+         & $join(steps.rule.output.externalTargets, ', ') & "), so AdminForge doesn't turn it on. If the person really"
+         & ' needs it, have the forwarding reviewed first; they can then turn the rule on in Outlook themselves.' }
+
+  - id: somethingToChange
+    type: assert
+    that: ${ inputs.action = 'Remove' or $not(steps.rule.output.enabled = (inputs.action = 'Enable')) }
+    message: >-
+      ${ 'The rule "' & steps.rule.output.ruleName & '" is already ' & (inputs.action = 'Enable' ? 'on' : 'off') & '. Nothing to change; refresh the audit to see its current state.' }
+
+  - id: owner
+    type: graph
+    mode: read
+    describe: Look up the mailbox's account
+    request:
+      method: GET
+      path: /users/${ $encode(steps.rule.output.userPrincipalName) }
+      query:
+        $select: id,displayName,userPrincipalName
+
+  - id: switchRule
+    type: runner
+    mode: write
+    when: ${ $not(inputs.action = 'Remove') }
+    describe: >-
+      ${ (inputs.action = 'Enable' ? 'Turn on' : 'Turn off') & ' the inbox rule "' & steps.rule.output.ruleName & '" in ' & inputs.mailbox }
+    script: exchange/Set-InboxRuleState.ps1
+    sha256: f60a7691730d7ff74ed86c1fa45d4e92dd4db7ae19fef2a4d0ede56c6310c6b9
+    services: [exchange]
+    timeoutSeconds: 300
+    # The object id lets AdminForge's protected-object guard see whose mailbox this is; the script checks it.
+    parameters:
+      mailbox: ${ inputs.mailbox }
+      mailboxObjectId: ${ steps.owner.output.id }
+      ruleIdentity: ${ inputs.ruleIdentity }
+      ruleName: ${ steps.rule.output.ruleName }
+      action: "${ inputs.action = 'Enable' ? 'enable' : 'disable' }"
+    idempotent: true
+    compensate:
+      type: runner
+      describe: >-
+        ${ (inputs.action = 'Enable' ? 'Turn the rule off' : 'Turn the rule back on') & ' again' }
+      script: exchange/Set-InboxRuleState.ps1
+      sha256: f60a7691730d7ff74ed86c1fa45d4e92dd4db7ae19fef2a4d0ede56c6310c6b9
+      services: [exchange]
+      timeoutSeconds: 300
+      # Turning a rule that forwards outside back on is refused by the script; the run then needs review.
+      parameters:
+        mailbox: ${ inputs.mailbox }
+        mailboxObjectId: ${ steps.owner.output.id }
+        ruleIdentity: ${ inputs.ruleIdentity }
+        action: "${ inputs.action = 'Enable' ? 'disable' : 'enable' }"
+    dryRunOutput:
+      - mailbox: ${ inputs.mailbox }
+        ruleIdentity: ${ inputs.ruleIdentity }
+        ruleName: ${ steps.rule.output.ruleName }
+        action: "${ $lowercase(inputs.action) }"
+        changed: true
+        verified: true
+
+  # No compensation: a removed rule can't be restored as it was (the run keeps its description).
+  - id: removeRule
+    type: runner
+    mode: write
+    when: ${ inputs.action = 'Remove' }
+    describe: >-
+      ${ 'Remove the inbox rule "' & steps.rule.output.ruleName & '" from ' & inputs.mailbox }
+    script: exchange/Set-InboxRuleState.ps1
+    sha256: f60a7691730d7ff74ed86c1fa45d4e92dd4db7ae19fef2a4d0ede56c6310c6b9
+    services: [exchange]
+    timeoutSeconds: 300
+    parameters:
+      mailbox: ${ inputs.mailbox }
+      mailboxObjectId: ${ steps.owner.output.id }
+      ruleIdentity: ${ inputs.ruleIdentity }
+      ruleName: ${ steps.rule.output.ruleName }
+      action: remove
+    idempotent: true
+    dryRunOutput:
+      - mailbox: ${ inputs.mailbox }
+        ruleIdentity: ${ inputs.ruleIdentity }
+        ruleName: ${ steps.rule.output.ruleName }
+        action: remove
+        changed: true
+        verified: true
+
+outputs:
+  summary: >-
+    ${ (
+      $done := inputs.action = 'Remove' ? steps.removeRule.output[0] : steps.switchRule.output[0];
+      $what := inputs.action = 'Remove' ? 'removed' : inputs.action = 'Enable' ? 'on again' : 'off';
+      ($done.verified = false
+        ? 'The inbox rule "' & steps.rule.output.ruleName & '" in ' & inputs.mailbox & ' was ' & (inputs.action = 'Remove' ? 'removed' : inputs.action = 'Enable' ? 'turned on' : 'turned off')
+          & " (submitted; Exchange doesn't show it yet). Refresh the inbox rule audit in a few minutes to check."
+        : 'The inbox rule "' & steps.rule.output.ruleName & '" in ' & inputs.mailbox & ' is ' & $what & '.')
+      & (steps.rule.output.risk = 'high' and $not(inputs.action = 'Enable') ? ' It sent mail outside the organization: check the account for compromise.' : '')
+    ) }
+  rule: ${ steps.rule.output }
+
+tests:
+  - name: turns off a rule that forwards outside the organization
+    inputs: { mailbox: adele@example.com, ruleIdentity: "17542359837015228417", ruleName: Send to home, reason: SEC-512 forwarding to a personal address }
+    mocks:
+      current:
+        - rules:
+            - { ruleIdentity: "17542359837015228417", ruleName: Send to home, enabled: true, risk: high, mailbox: adele@example.com, userPrincipalName: adele@example.com }
+            - { ruleIdentity: "17542359837015228418", ruleName: Newsletters, enabled: true, risk: none, mailbox: adele@example.com, userPrincipalName: adele@example.com }
+      owner: { id: 10000000-0000-4000-8000-000000000001, displayName: Adele Vance, userPrincipalName: adele@example.com }
+    expect:
+      status: succeeded
+      plan: [switchRule]
+      steps: { removeRule: skipped }
+      outputs:
+        summary: 'The inbox rule "Send to home" in adele@example.com is off. It sent mail outside the organization: check the account for compromise.'
+  - name: removes a rule
+    inputs: { mailbox: adele@example.com, ruleIdentity: "17542359837015228418", action: Remove, reason: SEC-513 rule hides bank mail }
+    mocks:
+      current:
+        - rules:
+            - { ruleIdentity: "17542359837015228418", ruleName: Hide bank mail, enabled: true, risk: medium, mailbox: adele@example.com, userPrincipalName: adele@example.com }
+      owner: { id: 10000000-0000-4000-8000-000000000001, displayName: Adele Vance, userPrincipalName: adele@example.com }
+    expect:
+      status: succeeded
+      plan: [removeRule]
+      steps: { switchRule: skipped }
+      outputs:
+        summary: The inbox rule "Hide bank mail" in adele@example.com is removed.
+  - name: turns a rule back on
+    inputs: { mailbox: adele@example.com, ruleIdentity: "17542359837015228417", action: Enable, reason: SEC-514 false positive confirmed by the user }
+    mocks:
+      current:
+        - rules:
+            - { ruleIdentity: "17542359837015228417", ruleName: Team copy, enabled: false, risk: low, mailbox: adele@example.com, userPrincipalName: adele@example.com }
+      owner: { id: 10000000-0000-4000-8000-000000000001, displayName: Adele Vance, userPrincipalName: adele@example.com }
+    expect:
+      status: succeeded
+      plan: [switchRule]
+      outputs:
+        summary: The inbox rule "Team copy" in adele@example.com is on again.
+  - name: refuses a rule that is already off
+    inputs: { mailbox: adele@example.com, ruleIdentity: "17542359837015228417", reason: SEC-515 duplicate request }
+    mocks:
+      current:
+        - rules:
+            - { ruleIdentity: "17542359837015228417", ruleName: Team copy, enabled: false, risk: low, mailbox: adele@example.com, userPrincipalName: adele@example.com }
+    expect: { status: failed, failedStep: somethingToChange }
+  - name: refuses a rule that is gone
+    inputs: { mailbox: adele@example.com, ruleIdentity: "17542359837015228499", ruleName: Old rule, reason: SEC-516 stale audit export }
+    mocks:
+      current:
+        - rules: []
+    expect: { status: failed, failedStep: found }
+  - name: refuses a hidden rule
+    inputs: { mailbox: adele@example.com, ruleIdentity: "17542359837015228420", reason: SEC-518 hidden purge rule }
+    mocks:
+      current:
+        - rules:
+            - { ruleIdentity: "17542359837015228420", ruleName: Junk E-mail Rule, enabled: true, hidden: true, risk: none, mailbox: adele@example.com, userPrincipalName: adele@example.com }
+    expect: { status: failed, failedStep: notHidden }
+  - name: refuses a rule that was renamed since the audit
+    inputs: { mailbox: adele@example.com, ruleIdentity: "17542359837015228417", ruleName: Send to home, reason: SEC-517 audit is a day old }
+    mocks:
+      current:
+        - rules:
+            - { ruleIdentity: "17542359837015228417", ruleName: Archive, enabled: true, risk: none, mailbox: adele@example.com, userPrincipalName: adele@example.com }
+    expect: { status: failed, failedStep: sameRule }
+  - name: never turns on a rule that forwards outside the organization
+    inputs: { mailbox: adele@example.com, ruleIdentity: "17542359837015228417", action: Enable, reason: SEC-519 user asks for the rule back }
+    mocks:
+      current:
+        - rules:
+            - { ruleIdentity: "17542359837015228417", ruleName: Send to home, enabled: false, risk: high, externalTargets: [adele.home@fabrikam.example], mailbox: adele@example.com, userPrincipalName: adele@example.com }
+    expect: { status: failed, failedStep: notTurningOnOutsideForwarding }
+  - name: says so when Exchange doesn't show the change yet
+    dryRun: false
+    inputs: { mailbox: adele@example.com, ruleIdentity: "17542359837015228418", reason: SEC-520 rule hides bank mail }
+    mocks:
+      current:
+        - rules:
+            - { ruleIdentity: "17542359837015228418", ruleName: Hide bank mail, enabled: true, risk: medium, mailbox: adele@example.com, userPrincipalName: adele@example.com }
+      owner: { id: 10000000-0000-4000-8000-000000000001, displayName: Adele Vance, userPrincipalName: adele@example.com }
+      switchRule:
+        - { mailbox: adele@example.com, ruleIdentity: "17542359837015228418", ruleName: Hide bank mail, action: disable, changed: true, verified: false }
+    expect:
+      status: succeeded
+      outputs:
+        summary: The inbox rule "Hide bank mail" in adele@example.com was turned off (submitted; Exchange doesn't show it yet). Refresh the inbox rule audit in a few minutes to check.

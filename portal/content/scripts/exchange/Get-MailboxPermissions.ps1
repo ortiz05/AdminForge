@@ -7,8 +7,9 @@
     permissions (Get-EXORecipientPermission) and its GrantSendOnBehalfTo list. The mailbox's own SELF entry and
     built-in system accounts (NT AUTHORITY\*, well-known S-1-5 SIDs) are left out. Inherited entries are kept and
     flagged (they are granted at the organization or database level and can't be removed per mailbox); entries that
-    point at a deleted account show as a SID and are flagged as orphaned. Trustees are resolved to a display name
-    and recipient type with Get-EXORecipient (at most 50 lookups).
+    point at a deleted account show as a SID and are flagged as orphaned. Trustees are resolved to a display name,
+    primary address and recipient type with Get-EXORecipient (at most 50 lookups). Send on Behalf entries are listed by
+    their address once resolved, so they can be removed like the others.
 
 .PARAMETER Inputs
     identity   string  Required. Primary SMTP address or UPN of the mailbox.
@@ -20,7 +21,7 @@
     @{ mailbox = @{ displayName; primarySmtpAddress; userPrincipalName; recipientTypeDetails };
        summary = @{ fullAccess; sendAs; sendOnBehalf; total; inherited; orphaned };
        permissions = @(@{ key; permission = 'FullAccess'|'SendAs'|'SendOnBehalf'; trustee; trusteeDisplayName;
-                         trusteeType; accessRights; inherited; deny; orphaned; removable }) }
+                         trusteeAddress; trusteeType; accessRights; inherited; deny; orphaned; removable }) }
 
 .NOTES
     Tokens: exchange. Mode: read. Exchange role: View-Only Recipients (or higher).
@@ -102,12 +103,13 @@ $permissions = @($entries | ForEach-Object {
             permission         = $e.permission
             trustee            = $trustee
             trusteeDisplayName = if ($r) { [string]$r.DisplayName } else { $null }
+            trusteeAddress     = if ($r -and $r.PrimarySmtpAddress) { [string]$r.PrimarySmtpAddress } else { $null }
             trusteeType        = if ($r) { [string]$r.RecipientTypeDetails } else { $null }
-            accessRights       = $e.accessRights
+            accessRights       = @($e.accessRights)  # a one-right list would otherwise serialize as a string
             inherited          = $e.inherited
             deny               = $e.deny
             orphaned           = $orphaned
-            removable          = ($e.permission -ne 'SendOnBehalf') -and -not $e.inherited -and -not $e.deny -and ($trustee -match $smtp)
+            removable          = -not $e.inherited -and -not $e.deny -and ($trustee -match $smtp)
         }
     })
 

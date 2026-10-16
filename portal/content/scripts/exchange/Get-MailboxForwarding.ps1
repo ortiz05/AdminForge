@@ -41,7 +41,10 @@ Write-AdminForgeProgress -Percent 5 -Message 'Reading accepted domains'
 $acceptedDomains = @(Get-AcceptedDomain | ForEach-Object { ([string]$_.DomainName).ToLowerInvariant() })
 
 function Get-TargetInfo([string]$Text) {
-    # Accepts "smtp:user@contoso.com", "User Name [SMTP:user@contoso.com]" or a bare address.
+    # Accepts "smtp:user@contoso.com", "User Name [SMTP:user@contoso.com]" or a bare address. Recipients of the
+    # organization appear as "User Name [EX:/o=ExchangeLabs/…]" (no address): internal, shown by name.
+    $ex = [regex]::Match($Text, '^\s*"?(?<name>[^"\[]*?)"?\s*\[EX:')
+    if ($ex.Success) { return @{ address = $(if ($ex.Groups['name'].Value) { $ex.Groups['name'].Value } else { 'Recipient in the organization' }); external = $false } }
     $match = [regex]::Match($Text, '[A-Za-z0-9._%+\-'']+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}')
     if (-not $match.Success) { return @{ address = $Text; external = $null } }
     $address = $match.Value.ToLowerInvariant()
@@ -127,7 +130,8 @@ $result = [ordered]@{
         external                 = @($all | Where-Object { $_.external -eq $true }).Count
         mailboxesScannedForRules = $scanned
     }
-    findings        = if ($externalOnly) { @($all | Where-Object { $_.external -eq $true }) } else { $all }
+    # Not an if-expression: PowerShell unrolls an empty array returned from one to $null (findings: null).
+    findings        = @($all | Where-Object { -not $externalOnly -or $_.external -eq $true })
 }
 Write-AdminForgeProgress -Percent 100 -Message 'Done'
 Write-AdminForgeOutput -Data $result

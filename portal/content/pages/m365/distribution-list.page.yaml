@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/page.schema.json
 kind: page
 id: m365.distribution-list
-version: 1.0.0
+version: 1.0.1
 title: Distribution list
 summary: One distribution list or mail-enabled security group — delivery settings, owners and members. Add or remove members.
 owner: m365-team
@@ -56,9 +56,9 @@ datasources:
   members:
     source: graph
     label: Members
-    when: ${ $exists(group.id) }
+    when: ${ $exists(ds.group.id) }
     request:
-      path: /groups/${ $encode($guid(group.id)) }/members
+      path: /groups/${ $encode($guid(ds.group.id)) }/members
       query:
         $select: id,displayName,mail,userPrincipalName,userType,accountEnabled
         $top: 999

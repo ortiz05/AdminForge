@@ -1,11 +1,12 @@
 $schema: ../../../packages/schemas/generated/runbook.schema.json
 kind: runbook
 id: identity.leaver
-version: 1.1.0
+version: 1.2.1
 title: Leaver process
 summary: >-
   End-to-end leaver process with HR sign-off: confirm the leave date, hand over owned groups and apps, run the approved
-  offboarding playbook, retire personal devices, then complete the mailbox, OneDrive and hardware tasks.
+  offboarding playbook (account, groups, licences, mailbox, automatic reply and OneDrive hand-over), retire personal
+  devices, then finish what offboarding couldn't do and the tasks outside Microsoft 365.
 owner: identity-team
 tags: [identity, leaver, offboarding, runbook]
 risk: high
@@ -25,7 +26,16 @@ requires:
       - UserAuthenticationMethod.ReadWrite.All
       - RoleManagement.Read.Directory
       - Mail.Send
-  entraRoles: [User Administrator, Intune Administrator]
+    # Offboard user (step 3) converts the mailbox, sets the automatic reply and gives the manager the OneDrive.
+    exchange: [Exchange.Manage]
+    sharepointAdmin: [AllSites.FullControl]
+  entraRoles:
+    - User Administrator
+    - License Administrator
+    - Groups Administrator
+    - Exchange Recipient Administrator
+    - SharePoint Administrator
+    - Intune Administrator
 confirm:
   type: click
   message: ${ 'Start the leaver process for ' & steps.account.output.userPrincipalName & ' (' & inputs.ticket & ')?' }
@@ -38,6 +48,14 @@ inputs:
   ticket: { type: string, label: HR reference, minLength: 3 }
   lastWorkingDay: { type: date, label: Last working day }
   retirePersonalDevices: { type: boolean, label: Retire the leaver's personal (BYOD) devices, default: true }
+  autoReplyMessage:
+    type: string
+    label: Automatic reply
+    description: Sent to everyone who writes to the leaver's mailbox. Leave empty for no automatic reply.
+    multiline: true
+    required: false
+    maxLength: 4000
+    placeholder: e.g. Sam has left Example Org. Please write to sales@example.com instead.
 
 sections:
   - id: signoff
@@ -126,7 +144,9 @@ sections:
     title: 3. Offboard the account
     body: |
       Runs **Offboard user** (blocks sign-in, revokes sessions, removes group memberships, direct licences and MFA
-      methods, emails the manager). That playbook needs a second approver.
+      methods, emails the manager). When the leaver has them, it also converts the mailbox to a shared mailbox, turns
+      on the automatic reply, hides the mailbox from the address lists and gives the manager access to the OneDrive.
+      That playbook needs a second approver.
     steps:
       - id: offboardUser
         type: playbook
@@ -141,6 +161,7 @@ sections:
           removeLicences: true
           removeAuthMethods: true
           notifyManager: true
+          autoReplyMessage: ${ inputs.autoReplyMessage }
 
   - id: deviceTasks
     title: 4. Devices

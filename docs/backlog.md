@@ -363,7 +363,20 @@ Found by the organization and security evaluation; the fixed findings are in CHA
       Convert a licensed test user's mailbox once one exists, then convert it back in the Exchange admin center.
 - [ ] Distribution lists: `ManagedBy` comes back empty for the AF-Test list (created without an owner), so it counts as
       "Without an owner". Check a list with owners shows them by name (Exchange returns recipient Names, which can be
-      object ids for newer recipients) and resolve them to display names if not.
+      object ids for newer recipients) and resolve them to display names if not. `AF-Test-DL-02`, created with an
+      owner by `m365.create-distribution-list`, is the list to check this with.
+- [ ] Live-validate the Exchange recipient playbooks (`m365.create-shared-mailbox`, `m365.create-room-mailbox`,
+      `m365.create-distribution-list`, `m365.remove-created-recipient`; tests/live/README.md › Exchange recipients
+      created through AdminForge): marking by the `New-*` result's id, the error texts for not found / throttled /
+      "matches multiple entries", owners given by mailbox address, the engineer stepping down, a re-run, and removal.
+      The engineer creating a list needs a mailbox (licence the validation user, `AF_TEST_LICENCE_SKU`).
+- [ ] The "created by AdminForge" mark (`CustomAttribute15`) is a guard rail, not a boundary (SECURITY.md → Known
+      gaps). Follow-up: before finishing or removing, check the recipient's object id against the output of
+      AdminForge's own successful create run (runs store), and refuse marked recipients AdminForge has no run for.
+      Consider an env key to choose which custom attribute holds the mark (one an organization doesn't already use).
+- [ ] Re-creating an address while a removed mailbox is still soft-deleted (30 days): Exchange may refuse the address
+      until the soft-deleted mailbox is purged or restored. Check live and, if so, say so in the create playbooks'
+      availability check.
 - [ ] Intune `managedDevices` `$filter`: the query-builder fields/operators on `endpoint.devices` (eq, OS version
       startsWith, date ranges, enrolment type, management state, encryption) follow Microsoft's documentation but are
       not live-validated (no Intune licence). Trim any Intune rejects.
@@ -435,10 +448,29 @@ Found by the organization and security evaluation; the fixed findings are in CHA
       `identity.app-credential-expiry` (1.2.0: the first 400 apps with a credential in the window, ending within 7 days first),
       `m365.message-center-actions` (2.0.0), `security.risky-users-review` (2.0.0: detections looked up for the first
       1,000 listed).
-- [ ] `identity.app-registration-risks` 2.0.0 sets every finding natively (true/false per finding) but still takes ~270 ms
-      at 20k app registrations: copying the flagged app objects costs the rest. Needs a per-tenant snapshot, or a smaller
-      row (a native projection helper). `reports.app-registration-risks-weekly` stays enabled meanwhile: it works at
-      the sizes real tenants usually have, while `tests/perf/budgets.json` expects it to time out at 20k apps.
+- [x] `identity.app-registration-risks` 2.0.1 runs every finding in one native pass (`$idsWhere`, `containsAny`-style
+      operators), checks plain HTTP per URI only for apps with an http:// URI and builds flags and severities natively
+      (`$flagIn`) — ~400 ms → ~250 ms at 20k apps with two thirds flagged (the synthetic tenant's extreme). It reads
+      15,000 apps (partial note above that) and `identity.password-policies` 2.0.1 40,000 members, so both fit the
+      250 ms budget on a cold run; the weekly schedules run within budget again. 2.0.2 checks critical permissions as
+      before 2.0 again (a critical app role id and an application permission, `type: Role`, requested). After the
+      security review the helpers check the budget while building sets and compiling filters and by work done (rows ×
+      conditions, `$applyAdvanced` too), cap a filter at 64 conditions, `containsAny`-style texts at 256 characters
+      and `$flagIn` at 1,000,000 values across its sets, and take only texts, numbers and true/false as ids.
+- [ ] Lift those two caps: a per-tenant snapshot (precomputed by the automation identity, as above) or transforms off
+      the event loop with a larger budget for reports and exports — the evaluation is near its floor (set lookups and
+      row copies, ~1 µs per row per finding).
+- [ ] The 250 ms transform budget is wall-clock, so a small transform can run out of it while another request holds
+      the event loop: garbage collection and response reading after a large crawl (inactive guests, identity health at
+      100k users) stall it for 250–600 ms. In the load test that failed 0–3 of 1,300–4,300 datasources at 50 engineers
+      and up to 8 of 8,400 at 200 (`content_error`; measured before a timed-out transform ran once more before failing). Count only the
+      transform's own time, or run transforms off the event loop (above). `tests/perf/load.ts` lists the stalls and
+      the datasources that failed.
+- [ ] Beyond the design target (~50 engineers at once): one API process with 48 slots makes ~65–90 Graph calls a
+      second of the default mix; above that the first call of a datasource waits the whole `OUTBOUND_QUEUE_WAIT_MS`
+      (FIFO, so p50 sits at 15 s) and the rest is refused (performance.md → Beyond the design target). If usage ever
+      gets there: more slots or processes within the Read app's Graph budget, and shed load early under a standing
+      queue (newest first / a shorter wait) instead of making every request wait 15 s.
 - [ ] Exports still capped by a transform (JSONata per row), stated on the page and in the schedule summaries:
       `identity.directory-changes` (newest 500 events), `security.risky-users-review` (1,000 users),
       `identity.app-credential-expiry` (400 apps). The third round's `$unnest` / `$attach` can now lift them.

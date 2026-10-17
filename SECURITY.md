@@ -381,6 +381,17 @@ probe results, report files) is purged after its retention period; the audit log
   must not be in the `docker`, `sudo`, `lxd` or `adm` groups: membership of `docker` is root on the host (and a
   superuser on any Postgres container), which would undo every boundary above. Run Postgres where that account can't
   administer it (a dedicated cluster, or rootless containers under the AdminForge account).
+  `portal/deploy/install-service-account.sh` does this on a single host while Postgres stays in Docker under the
+  owner. The api, worker and scheduler run as the `adminforge` system account, and the runner as `adminforge-runner`.
+  Neither account is in docker, sudo, adm or lxd. Both run in sandboxed system units: no capabilities, no Docker
+  socket, and only their own state directory is writable. The configuration in `/etc/adminforge` holds documented keys
+  only, without admin, test-account or database-owner keys. The runner's account can't read it: systemd hands the
+  runner its own `RUNNER_*` file, and `InaccessiblePaths` hides the API's configuration and state. A per-unit
+  `InaccessiblePaths` alone would not do, because a process of the same user can reach another's files through
+  `/proc/<pid>/root`. Write-mode PowerShell therefore sees the runner's shared key, but not the API's secrets. The
+  optional loopback firewall (`--firewall`, nftables by uid) limits both accounts to Postgres, the runner, the API,
+  the proxy and the DNS stub on this host. Until the script has been applied, a process running as the owner's account
+  can reach the database as superuser (Postgres finding C1).
 
 ## Threats and mitigations
 
@@ -455,6 +466,15 @@ Tracked in `docs/backlog.md`:
   its own. Five existing definitions need aligning before the stricter rule can be enforced.
 - HTTP probes check the resolved address before connecting, but not across a DNS change in between (rebinding). News
   feeds pin the connection to the checked addresses; the same dispatcher can be adopted for probes (docs/backlog.md).
+- **The "created by AdminForge" mark on Exchange recipients is a guard rail, not a boundary.** The create playbooks
+  set `CustomAttribute15` ("AdminForge-created by … on …") so a re-run can finish its own recipient and
+  `m365.remove-created-recipient` refuses anything unmarked. Anyone who can edit custom attributes can set it — an
+  Exchange administrator outside AdminForge, or on-premises `extensionAttribute15` for synced objects — and the
+  object ids a run passes come from that same run's lookup, so they don't prove origin. A marked shared mailbox could
+  be "finished" (people given access, sign-in changed) or removed. What holds: the engineer types the address to
+  confirm, sees "on the existing mailbox" in the plan, can't grant themselves access, and Exchange's own roles decide
+  what they may change; every change is audited. Checking the recipient against the object id recorded by
+  AdminForge's own successful create run is the follow-up (`docs/backlog.md`).
 
 - The session id is not rotated when write access is turned on (a cookie stolen while read-only could ride a later
   arm by the real user). Mitigated by the cookie flags and expiry; rotation needs runs and pending secrets re-keyed.
@@ -467,9 +487,12 @@ Tracked in `docs/backlog.md`:
 - Approval gates exclude a group's members and a principal, not a service principal's owners.
 - CSP allows inline **styles** (`style-src 'unsafe-inline'`) because Radix and Monaco inject them; scripts stay
   `'self'` only, so CSS injection can't execute code.
-- User units can't isolate the filesystem on hosts that restrict unprivileged user namespaces (Ubuntu 24.04): run as a
-  dedicated system user with system units for that. Until then, write-mode PowerShell (FullLanguage) and any process of
-  the same account can read the services' configuration.
+- User units can't isolate the filesystem on hosts that restrict unprivileged user namespaces (Ubuntu 24.04). Until
+  `portal/deploy/install-service-account.sh` has moved the services to their system accounts, write-mode PowerShell
+  (FullLanguage) and any process of the same account can read the services' configuration. After it, the runner's
+  account can read only its own env file (`RUNNER_SHARED_KEY`). The owner's account is in the `adminforge` group, so
+  the backup can read the report files, and it can read `/etc/adminforge` too; it already holds the originals in
+  `~/.config/adminforge`.
 - The Read and Write apps authenticate with client secrets (certificates are supported for the automation identity
   only), and one key (`TOKEN_CACHE_KEY`) seals both the token cache and run-secret hand-offs. Blobs name their key
   (key id), so it can be rotated with `TOKEN_CACHE_PREVIOUS_KEYS` without signing everyone out.

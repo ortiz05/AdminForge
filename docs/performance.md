@@ -21,7 +21,10 @@ are in [tests/perf/](../tests/perf/README.md); the limits they exercise are desc
   Budgets in `tests/perf/budgets.json` fail the suite when a datasource gets slower or bigger, or new content doesn't
   meet the default.
 - **A load test** (`tests/perf/load.ts`): N signed-in engineers loading pages through the real API (Fastify,
-  in-process) whose Graph is the fake in separate processes, 120 ms Graph round trip (±30%), 4 s think time.
+  in-process) whose Graph is the fake in separate processes, 120 ms Graph round trip (±30%), a think time between
+  page loads (±50%) and a ramp over which people start; each page load asks for the datasources the browser would.
+  The output lists per page the latency, largest response and the datasources asked for, datasource errors by page
+  with an example message, and event-loop stalls over 250 ms with when they happened.
 
 Azure (ARM, Resource Graph, Log Analytics) and the PowerShell runner are not modelled: their datasources show as
 `unmodelled` and need a separate check.
@@ -65,9 +68,67 @@ audit logs, enterprise apps) are cursor-paged, filter at the source and stay fas
 
 ### Many engineers at once
 
-One API process, 120 ms Graph round trip, 4 s think time, 60 s run (+ drain). "Default mix": lists, entity pages, a
-few dashboards and reports; "light": lists and entity pages only. Every engineer clicks every few seconds — 1,000 such
-sessions is a heavy morning for a company several times that size.
+**Design target: about 50 engineers using AdminForge at the same time.** One API process with the defaults (48 slots
+per Microsoft service, lanes), the 100k-user tenant, 120 ms Graph round trip. Each engineer opens a page, reads it and
+opens the next after a think time (±50%); people start over about one think time (`--ramp`). The default mix is lists
+and entity pages (~80% of page loads), the Microsoft 365, security and identity health dashboards and the
+privileged-roles and inactive-guests reports. Like the browser, each page load asks only for the datasources its
+shown blocks use (an entity page's first tab).
+
+| Engineers                 | Think | Page loads/s | p50    | p95   | p99   | Lists p50 / p95 | Entity pages p50 / p95 | Refused | Event loop p99 / max | Peak RSS |
+| ------------------------- | ----- | ------------ | ------ | ----- | ----- | --------------- | ---------------------- | ------- | -------------------- | -------- |
+| **50**                    | 30 s  | 1.5          | 0.15 s | 1.4 s | 23 s  | 0.14 / 0.32 s   | 0.14 / 0.32 s          | 0       | 31 / 261 ms          | 1.1 GB   |
+| **50**                    | 15 s  | 2.9          | 0.14 s | 1.5 s | 24 s  | 0.13 / 0.29 s   | 0.14 / 0.29 s          | 0       | 37 / 407 ms          | 1.3 GB   |
+| **50**, everyone clicking | 4 s   | 9.7          | 0.15 s | 4.1 s | 27 s  | 0.09 / 0.69 s   | 0.16 / 1.2 s           | 0       | 84 / 458 ms          | 1.5 GB   |
+| 100 (headroom)            | 15 s  | 5.9          | 0.15 s | 3.6 s | 26 s  | 0.14 / 0.44 s   | 0.15 / 0.55 s          | 0       | 64 / 488 ms          | 1.4 GB   |
+| 200 (headroom)            | 15 s  | 11           | 0.18 s | 4.2 s | 33 s  | 0.17 / 0.80 s   | 0.18 / 0.88 s          | 0       | 151 / 575 ms         | 1.5 GB   |
+| 200, everyone clicking    | 4 s   | 19           | 0.32 s | 16 s  | 145 s | 0.24 / 2.1 s    | 0.36 / 1.6 s           | 0       | 190 / 771 ms         | 2.1 GB   |
+
+Lists: users, groups, devices, sign-ins, audit logs, enterprise apps, licences, privileged roles. Entity pages: a
+user, a group, a device. RSS includes about 0.6 GB for the test's own copy of the synthetic tenant (it picks ids
+from it). No page load failed in any run.
+
+What this shows:
+
+- **At the design target nothing waits on anything.** Lists and entity pages answer in about 0.15 s (p95 ≤ 0.3 s at
+  15–30 s think, ≤ 1.2 s when all 50 click every few seconds), nothing is refused, the event loop stays below 40 ms
+  at p99 (84 ms in the burst) and the process at 1.1–1.5 GB. Graph sees 9–16 calls a second (53 in the burst) — far
+  below one app's directory budget.
+- **The p95/p99 are two crawls, not load.** The identity health dashboard (~4 s) and the inactive-guests report
+  (~23 s) read whole collections at 100k users; one engineer alone waits as long. They are content work (counts at
+  the source, snapshots — below), not sizing.
+- **Headroom is about 4×.** 200 engineers at 15 s think: still nothing refused, lists p95 0.8 s. 200 all clicking
+  every 4 s still refuses nothing, but lists reach 2 s at p95 and the crawls queue behind each other (inactive guests
+  145 s at p99).
+- **Datasource errors**: the Defender for Cloud tile (Azure Resource Graph, not modelled by the fake) — and, rarely,
+  a transform that ran out of its 250 ms wall-clock budget while a large crawl's garbage collection or response
+  reading held the event loop for 250–600 ms: 0, 1 and 3 datasources at 50 engineers (of 1,300–4,300), up to 8 of
+  8,400 at 200. These runs predate the API running a timed-out transform once more before failing, which should absorb most of them. Counting only a transform's own
+  time is in the [backlog](backlog.md).
+
+#### Beyond the design target (not acted on)
+
+Runs from the same day with every engineer asking for every datasource of a page (heavier than the browser: the
+inactive-guests report sent 14 MB instead of 1.8 MB):
+
+| Engineers | Think | Slots | Page loads/s | p50    | p95   | Refused | Users list p50 | Event loop p99 | Peak RSS |
+| --------- | ----- | ----- | ------------ | ------ | ----- | ------- | -------------- | -------------- | -------- |
+| 1,000     | 15 s  | 48    | 18           | 15.6 s | 120 s | 25%     | 15.2 s         | 80 ms          | 2.6 GB   |
+| 1,000     | 15 s  | 160   | 22           | 6.0 s  | 120 s | 0       | 4.6 s          | 336 ms         | 3.4 GB   |
+| 2,000     | 45 s  | 48    | 19           | 15.6 s | 120 s | 33%     | 15.2 s         | 55 ms          | 2.3 GB   |
+| 2,000     | 45 s  | 160   | 21           | 5.2 s  | 120 s | 0       | 3.6 s          | 320 ms         | 3.2 GB   |
+| 5,000     | 45 s  | 48    | 53           | 15.2 s | 33 s  | 62%     | 15.1 s         | 101 ms         | 2.5 GB   |
+
+What limits it: one process with 48 slots makes 65–90 Graph calls a second of this mix against the fake (≈ 20 page
+loads a second; more with lighter pages). Asked for more, the first call of a datasource waits the whole `OUTBOUND_QUEUE_WAIT_MS` (15 s)
+for a slot — so p50 sits at 15 s — and the rest is refused `outbound_busy`. 160 slots removed the refusals at 1,000
+and 2,000 engineers, but the crawling dashboards then ran into the 120 s deadline and the event loop p99 rose to
+~330 ms. All processes share the Read app's Graph budget (directory reads ≈ 400–800 calls a second, sign-in and audit
+reports 5 requests per 10 s), so beyond that, fewer calls per page (snapshots, counts at the source) is what scales.
+
+#### Earlier runs: the lanes change (4 s think, every datasource)
+
+One API process, 4 s think time, 60 s run (+ drain). "Light": lists and entity pages only.
 
 **Before** (one pool of 16 slots per service, a slot held for a whole call, every page of a crawl included):
 
@@ -100,11 +161,6 @@ What this shows:
   (before, 16 slots) to 3.9 s with the same 16 slots and 1.3 s with the new default of 48. A dashboard that crawls a
   collection no longer holds every slot: it waits in its lane (the KPI dashboards that crawl whole collections still
   take 35–60 s — a content problem, below).
-- **A 1,000-session storm is a Graph-volume problem, not a slot problem.** Every engineer clicking every 4 s asks for
-  roughly 250 page loads a second — about 2,000 Graph calls a second. One process does 200–320 calls a second at 48–64
-  slots and refuses the rest (`outbound_busy` after 15 s); more processes would only run into Microsoft's own budget
-  for one app in one tenant (directory reads: 8,000 resource units per 10 s, about 400–800 calls a second). What scales
-  past that is fewer calls: snapshots and shared results (below).
 - **The event loop stays responsive** (p99 ≤ 290 ms) and memory at 1.5–2.7 GB RSS.
 - **The per-person cache barely helps** (2–4% hit rate): every engineer has their own cache entries.
 - **The rate limit is per session**, so a NAT address doesn't lock people out (no 429s in the NAT run).
@@ -122,19 +178,26 @@ What this shows:
 4. **Size the slots to Microsoft's limits**, not the CPU: Graph throttles per tenant and app (48 by default), so raise
    `OUTBOUND_CONCURRENCY` while watching `throttled` / `throttledRetries` in the `microsoft call` log lines.
 
-## Sizing guide (draft)
+## Sizing guide
 
-For engineers who load a page every few seconds while they work, one API process with the defaults (48 Graph slots,
-lanes) gives list pages in about a second and entity pages in a few seconds to roughly **200 engineers actively
-clicking at the same moment**;
-dashboards and reports that crawl whole collections are slow at enterprise scale regardless of load until their
-content is reworked (above). Rules of thumb:
+**Design target: about 50 engineers at the same time.** One API process with the defaults serves them with lists and
+entity pages in about 0.15 s (p95 ≤ 0.3 s at a realistic 15–30 s between page loads, ≤ 1.2 s if all 50 click every
+few seconds), nothing refused and the event loop under 40 ms at p99 — with about 4× headroom (200 engineers at 15 s:
+nothing refused, lists p95 0.8 s). Measured above; dashboards and reports that crawl whole collections are slow at
+100k users regardless of load until their content is reworked.
 
-- **Active engineers, not accounts.** 2,000 people with access rarely means more than 100–200 clicking at once.
-- **Slots per process**: the default 48 for up to ~200 active engineers; 64 measured better still and fits a large
-  tenant while Graph doesn't throttle (see operations.md). Above that, more API processes behind the proxy only help
-  until Microsoft's per-app, per-tenant budget is reached (all processes share it) — beyond it, fewer calls per page
-  (snapshots, counts at the source) is what scales.
-- **Memory**: plan 2–4 GB for the API process at enterprise scale (large crawls and the per-process cache, 256 MB by
-  default).
-- **Re-measure** with `pnpm test:perf` after content changes and `tests/perf/load.ts` before a large roll-out.
+- **Count people clicking, not accounts.** Engineers who are signed in but reading cost nothing; a page load every
+  15–30 s per active engineer is a busy morning.
+- **Memory**: plan 2 GB for the API process (1.1–1.5 GB measured at 50–200 engineers, 2.1 GB in the 200-person
+  burst, including large crawls and the per-process cache, 256 MB by default).
+- **If usage grows**, watch three things and change one thing at a time:
+  - **`outbound_busy` refusals or slow lists** (people waiting for a slot): raise `OUTBOUND_CONCURRENCY` [48] — 160
+    removed every refusal at 1,000–2,000 engineers — while the `microsoft call` log lines show no `throttled` /
+    `throttledRetries`. The Read app's Graph budget is shared by every process, so slots × processes is what
+    Microsoft sees.
+  - **A busy event loop** (`eventLoopDelay` p99 above ~250 ms, transform timeouts, the API process near one full
+    core): add API processes behind the proxy — each has its own slots, cache and event loop.
+  - **Heavy dashboards opened by many people** (the same crawl for every engineer): tenant-wide snapshots and counts
+    at the source ([backlog](backlog.md)) — more slots or processes don't make a crawl of 100k objects faster.
+- **Re-measure** with `pnpm test:perf` after content changes and `tests/perf/load.ts` (`--sessions`, `--think`,
+  `--ramp`) before a large roll-out.

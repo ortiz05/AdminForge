@@ -74,10 +74,11 @@
       "mayTimeOut": true
     },
     "identity.app-registration-risks#appList": {
-      "knownError": "content_error at 20k apps (~270 ms): every finding is set natively, copying the flagged app objects costs the rest — per-tenant snapshot (backlog)",
-      "expect": "error",
-      "maxBytes": 19856963,
-      "mayTimeOut": true
+      "knownSlow": "every finding in one native pass ($idsWhere, containsAny-style operators), plain HTTP per URI only for apps with an http:// URI, flags and severities natively ($flagIn); the whole flagged list for the export is copied after the evaluation (outside its 250 ms)",
+      "knownTruncated": "stops at maxItems (15,000 apps, partial note): at 20,000 with two thirds flagged the evaluation sits at the 250 ms budget — per-tenant snapshot or transforms off the event loop (backlog)",
+      "maxRequests": 20,
+      "maxBytes": 14000000,
+      "maxTransformMs": 400
     },
     "identity.app-registrations#credentials": {
       "knownSlow": "credential KPIs: Graph can't filter credentials by expiry; capped read with native filters (partial note)",
@@ -162,13 +163,12 @@
       "knownTruncated": "capped by design to fit the 250 ms transform budget; the report says when it stops (measured 2026-10-17 at enterprise scale)"
     },
     "identity.password-policies#userList": {
-      "knownSlow": "Graph can't filter password age or policies: members read (999 a page) with native filters; the whole list of findings for the export (copied after the evaluation, outside its 250 ms); capped at 60k (partial note) — snapshot follow-up",
-      "knownTruncated": "stops at maxItems: Graph can't filter password age or policies: members read (999 a page) with native filters; the whole list of findings for the export (copied after the evaluation, outside its 250 ms); capped at 60k (partial note) — snapshot follow-up",
-      "maxRequests": 79,
-      "maxBytes": 32400653,
+      "knownSlow": "Graph can not filter password age or policies: members read (999 a page) with native filters; the whole list of findings for the export (copied after the evaluation, outside its 250 ms); capped at 40k (partial note) — snapshot follow-up",
+      "knownTruncated": "stops at maxItems (40,000 members, partial note): at 60,000 the evaluation reached the 250 ms budget — snapshot follow-up",
+      "maxRequests": 50,
+      "maxBytes": 19000000,
       "maxTransformMs": 844,
-      "maxEstimatedLiveMs": 24433,
-      "mayTimeOut": true
+      "maxEstimatedLiveMs": 24433
     },
     "identity.password-policies#users": {
       "knownSlow": "the page's view of userList: copies the list (kept whole for the export) and keeps the figures and the first 10,000 rows",

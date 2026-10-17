@@ -58,7 +58,8 @@ Claude picks the matching skill automatically (or name it: "use the adding-a-pla
 - **Fixtures can't catch scale either:** `pnpm test:perf` (`tests/perf`, not part of `pnpm test`) runs every
   datasource against a synthetic 100k-user tenant with budgets in `tests/perf/budgets.json`. Transforms over big lists
   use the native helpers (`$applyAdvanced`, `$withFields`, `$take`, and for joins and per-item rows `$pluck`,
-  `$unnest`, `$attach`, `$pick`, `$withCount`); a derived datasource passes on the `truncated`
+  `$unnest`, `$attach`, `$pick`, `$withCount`, `$idsWhere`, `$flagIn`, and the `containsAny`-style operators); a derived
+  datasource passes on the `truncated`
   flag of what it reads and says when the data is partial; a capped table exports the whole list — the page skill has
   the rules.
 

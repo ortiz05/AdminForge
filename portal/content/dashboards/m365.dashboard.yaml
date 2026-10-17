@@ -1,7 +1,7 @@
 $schema: ../../packages/schemas/generated/dashboard.schema.json
 kind: dashboard
 id: m365.overview
-version: 1.1.0
+version: 1.1.1
 title: Microsoft 365 overview
 summary: Service health, changes that need action, licence headroom, adoption and team ownership at a glance.
 owner: m365-team
@@ -42,10 +42,8 @@ datasources:
     cache: { ttl: 120 }
     transform: >-
       ${ (
-        $rows := [$sort(value.value[isResolved = false], function($a, $b) {
-          ($a.classification = 'incident' ? 0 : 1) > ($b.classification = 'incident' ? 0 : 1)
-          or (($a.classification = 'incident') = ($b.classification = 'incident') and $a.lastModifiedDateTime < $b.lastModifiedDateTime)
-        }).{ "id": id, "title": title, "service": service, "classification": classification, "lastModifiedDateTime": lastModifiedDateTime }];
+        $open := value.value[isResolved = false]^((classification = 'incident' ? 0 : 1), >lastModifiedDateTime);
+        $rows := [$open.{ "id": id, "title": title, "service": service, "classification": classification, "lastModifiedDateTime": lastModifiedDateTime }];
         { "rows": $rows, "incidents": $count($rows[classification = 'incident']), "advisories": $count($rows[classification = 'advisory']) }
       ) }
   messages:
@@ -68,7 +66,7 @@ datasources:
           "daysToAct": $daysUntil(actionRequiredByDateTime),
           "urgency": $daysUntil(actionRequiredByDateTime) < 0 ? 'overdue' : $daysUntil(actionRequiredByDateTime) <= 30 ? 'soon' : 'later'
         }];
-        { "actionRequired": [$sort($act, function($a, $b) { $a.actBy > $b.actBy })], "count": $count($act), "dueSoon": $count($act[daysToAct <= 30]) }
+        { "actionRequired": [$act^(actBy)], "count": $count($act), "dueSoon": $count($act[daysToAct <= 30]) }
       ) }
   skus:
     source: graph

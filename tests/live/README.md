@@ -297,6 +297,28 @@ from `<env>.admin.env` (nothing changes without the opt-in):
   frequency fails parked delegated runs; the device and location examples block the validation user.
 - **Not yet:** a risky user on demand (the Identity Protection live checks) — see the M365 E5 plan.
 
+### Exchange recipients created through AdminForge
+
+Made in the portal, not by the CLI, so the create playbooks themselves are what's tested. With
+`AF_TEST_SERVICE_ADMIN_ROLES=true` (re-run `provision test-identities`), the validation user enabled and armed, dry
+run then run, in an accepted domain:
+
+| Recipient           | Playbook                        | Inputs                                                          |
+| ------------------- | ------------------------------- | --------------------------------------------------------------- |
+| `AF-Test-Shared-03` | `m365.create-shared-mailbox`    | **Allow sign-in** on (the case the Shared mailboxes page flags) |
+| `AF-Test-Room-01`   | `m365.create-room-mailbox`      | capacity, booking options as you like                           |
+| `AF-Test-DL-02`     | `m365.create-distribution-list` | owner `AF-Test-User-01` (licensed — an owner needs a mailbox)   |
+
+Every create asks for the address to be typed. The distribution list needs the validation user to have a mailbox
+(`AF_TEST_LICENCE_SKU` licenses it): Exchange only lets a list's owners change it, so the engineer is an owner while
+it is set up and is taken off once everything worked.
+
+`check-accuracy.ts m365.` then compares them (the Exchange recipients block); before they exist those checks read
+"not knowable". Running a create playbook again for the same address finishes it (the plan says "on the existing …").
+Remove them with `m365.remove-created-recipient`, which refuses anything without AdminForge's mark. Removing
+`AF-Test-DL-02` after the validation user stepped down needs Organization Management (tick "I'm not an owner"), which
+it doesn't hold — create it with **Keep me as an owner** when you mean to remove it later.
+
 ## Safety rules
 
 - **Writes only on `AF-Test-*` objects** that provisioning created. Dry run first, then run, then run the compensating

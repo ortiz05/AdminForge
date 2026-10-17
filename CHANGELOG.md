@@ -203,6 +203,20 @@ Closes the gaps found by comparing the build with the original plan (see the pla
   itself; `check-mail-sender.ts` checks report email through the notifier (the sender mails itself; sending as another
   mailbox must be refused). `docs/operations.md`: Exchange RBAC for Applications needs
   `Enable-OrganizationCustomization` first, and it can take hours to apply.
+- **Create Exchange recipients:** `m365.create-shared-mailbox` (high risk: people get Full Access and optionally Send
+  As — never the engineer, only user mailboxes in the organization; sign-in to its account blocked unless allowed),
+  `m365.create-room-mailbox` (capacity, auto-accept, overlaps, booking window, longest booking) and
+  `m365.create-distribution-list` (owners required — user mailboxes; members; internal senders only by default; the
+  engineer, who needs a mailbox, is a temporary owner and steps down once everything worked). Each checks the accepted
+  domain and that the address and alias are free first (`exchange/Get-RecipientAvailability.ps1`; a failed lookup
+  never counts as free), plans one write in a dry run, needs the address typed to confirm, passes people as Entra
+  object ids the script checks before anything changes, and marks what it creates straight away. A second run for the
+  same address says it changes the existing recipient and finishes it. `m365.remove-created-recipient` removes only
+  recipients carrying that mark (a guard rail against mistakes, not a permission — SECURITY.md → Known gaps), and
+  lists only for their owners. Offered on the Mailboxes, Shared mailboxes and Distribution lists pages; removal only on
+  marked recipients (`Get-MailboxConfiguration` and `Get-DistributionLists` now return `createdByAdminForge`). Pester
+  (`RecipientProvisioning.Tests.ps1`), content tests (`exchange-recipient-provisioning.test.ts`) and mock-mode
+  fixtures.
 
 ### Changed
 
@@ -376,6 +390,21 @@ adminforge-<process>`) and a configurable pool size (`DATABASE_POOL_MAX` [10]); 
 
 ### Security
 
+- **Dedicated service accounts** (Postgres finding C1): `portal/deploy/install-service-account.sh` (dry run by default;
+  `--apply`, `--release`, `--rollback` and `--sync-config` need root) moves the api, worker and scheduler from the
+  owner's login account — in the docker/sudo groups, so any of its processes could reach Postgres as superuser — to the
+  `adminforge` system account, and the runner to `adminforge-runner`, which gets only its own `RUNNER_*` file (read by
+  systemd) and can't see the API's configuration or state. Sandboxed system units (`ProtectSystem=strict`,
+  `ProtectHome`, no capabilities, `StateDirectory` the only writable path, no Docker socket, only the API and the runner
+  may bind), a read-only release per deploy under `/opt/adminforge` (newest three kept, `--rollback` to the previous),
+  node and PowerShell copied out of the owner's home. `/etc/adminforge` gets only keys documented in
+  `config/example.env` (never admin, test-account or database-owner keys, or the owner's `DATABASE_URL`), with
+  certificates from the owner's home copied next to them. Root never writes through a path the services control and
+  reads owner files as the owner, never through symlinks; later modes run the root-owned released copy. `--firewall`
+  adds an nftables loopback policy for both accounts; the backup archives their report files (`state.tgz`) and fails
+  when it can't read them. Nothing starts until the printed switch-over is run; a verification checklist and a
+  rollback are printed. The runbook's incident and rotation steps now name the system-unit commands and
+  `--sync-config`.
 - **Rate limits and sign-in**: `/auth/login` and `/auth/callback` count per client address whatever cookie comes
   with them (`RATE_LIMIT_SIGNIN_PER_ADDRESS_PER_MINUTE`), requests without a valid session share
   `RATE_LIMIT_ANONYMOUS_PER_ADDRESS_PER_MINUTE`, IPv6 counts per /64, and the background allowance no longer doubles a

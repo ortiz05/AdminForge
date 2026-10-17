@@ -173,7 +173,16 @@ export interface RowsFilterCondition {
     | 'in'
     | 'notIn'
     | 'isEmpty'
-    | 'notEmpty';
+    | 'notEmpty'
+    | 'containsAny'
+    | 'startsWithAny'
+    | 'notContainsAny'
+    | 'notStartsWithAny';
+  /**
+   * `containsAny` / `startsWithAny` / `notContainsAny` / `notStartsWithAny` (text, content filters only): `value` is a
+   * list and the field matches when it contains (starts with) any of them — or, negated, none — in one pass over the
+   * field instead of one clause per value.
+   */
   value: string | number | boolean | Array<string | number | boolean> | null;
   /**
    * Compare with another field of the same row instead of `value` (`{ "path": "storageUsedInBytes", "type": "number",
@@ -210,7 +219,18 @@ const ROWS_OPS = new Set([
   'notEmpty',
   'notContains',
   'notIn',
+  'containsAny',
+  'startsWithAny',
+  'notContainsAny',
+  'notStartsWithAny',
 ]);
+/** Operators whose `value` is a list of texts any of which may match (never with `field`). */
+const MAX_ANY_VALUES = 256;
+/** Longest text in such a list (as the query builder's): their pattern stays small — 256 × 256 characters at most. */
+const MAX_ANY_TEXT = 256;
+/** Conditions in one filter, nested groups included (the query builder sends at most 20). */
+const MAX_CONDITIONS = 64;
+const ANY_OPS = new Set(['containsAny', 'startsWithAny', 'notContainsAny', 'notStartsWithAny']);
 const ROWS_PATH = /^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)*$/;
 
 /** A JSONata function value: a lambda or a built-in (objects with internal flags), or a host function. */
@@ -300,10 +320,32 @@ interface Compiled {
   values: Array<string | number | boolean | undefined>;
   /** `in` / `notIn` on long lists (thousands of ids): a set, not a scan per row. */
   valueSet: Set<string | number | boolean | undefined>;
+  /**
+   * `containsAny` / `startsWithAny` (and their negations): one expression of the escaped texts — an alternation of
+   * literals, linear in the text — tested against the lower-cased value, ~3× faster than one `includes` per text.
+   */
+  anyRe?: RegExp;
 }
 
-function compileCondition(c: RowsFilterCondition): Compiled {
-  const values = (Array.isArray(c.value) ? c.value : [c.value]).map((v) => comparable(c.type, v));
+const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/** The texts of a `containsAny`-style condition as one pattern; never echoes them (they can be long). */
+function anyPattern(texts: string[], prefix: boolean): RegExp {
+  try {
+    return new RegExp(prefix ? `^(?:${texts.join('|')})` : texts.join('|'));
+  } catch {
+    throw new Error('containsAny / startsWithAny: the texts could not be compiled');
+  }
+}
+
+function compileCondition(c: RowsFilterCondition, budget?: Budget): Compiled {
+  const given = Array.isArray(c.value) ? c.value : [c.value];
+  // `in` lists can hold every id of a collection: made comparable with the budget checked on the way.
+  const values: Compiled['values'] = new Array(given.length);
+  for (let i = 0; i < given.length; i++) {
+    if (i > 0 && i % DEADLINE_STRIDE === 0) checkBudget(budget);
+    values[i] = comparable(c.type, given[i]);
+  }
   const other =
     typeof c.field === 'string'
       ? {
@@ -315,6 +357,13 @@ function compileCondition(c: RowsFilterCondition): Compiled {
               : 0,
         }
       : undefined;
+  const texts = values.filter((v): v is string => typeof v === 'string').map(escapeRegExp);
+  const anyRe =
+    texts.length && (c.op === 'containsAny' || c.op === 'notContainsAny')
+      ? anyPattern(texts, false)
+      : texts.length && (c.op === 'startsWithAny' || c.op === 'notStartsWithAny')
+        ? anyPattern(texts, true)
+        : undefined;
   return {
     keys: c.path.split('.'),
     type: c.type,
@@ -323,6 +372,7 @@ function compileCondition(c: RowsFilterCondition): Compiled {
     values,
     valueSet: new Set(values),
     ...(other ? { other } : {}),
+    ...(anyRe ? { anyRe } : {}),
   };
 }
 
@@ -343,6 +393,9 @@ function matchOne(
       return typeof a === 'string' && typeof want === 'string' && a.startsWith(want);
     case 'contains':
       return typeof a === 'string' && typeof want === 'string' && a.includes(want);
+    case 'containsAny':
+    case 'startsWithAny':
+      return typeof a === 'string' && c.anyRe !== undefined && c.anyRe.test(a);
     case 'gt':
       return want !== undefined && a > want;
     case 'ge':
@@ -377,6 +430,8 @@ function matchCondition(c: Compiled, row: unknown): boolean {
     if (c.op === 'ne') return !matchOne(c, 'eq', actual, want);
     if (c.op === 'notContains') return !matchOne(c, 'contains', actual, want);
     if (c.op === 'notIn') return !matchOne(c, 'in', actual, want);
+    if (c.op === 'notContainsAny') return !matchOne(c, 'containsAny', actual, want);
+    if (c.op === 'notStartsWithAny') return !matchOne(c, 'startsWithAny', actual, want);
     return matchOne(c, c.op, actual, want);
   }
   const list = actual;
@@ -387,67 +442,123 @@ function matchCondition(c: Compiled, row: unknown): boolean {
   // No value contains the text (a row without the field doesn't either).
   if (c.op === 'notContains') return !list.some((v) => matchOne(c, 'contains', v, want));
   if (c.op === 'notIn') return !list.some((v) => matchOne(c, 'in', v, want));
+  if (c.op === 'notContainsAny') return !list.some((v) => matchOne(c, 'containsAny', v, want));
+  if (c.op === 'notStartsWithAny') return !list.some((v) => matchOne(c, 'startsWithAny', v, want));
   return list.some((v) => matchOne(c, c.op, v, want));
 }
 
-function checkRowsFilter(g: unknown, depth: number): RowsFilterGroup {
+/**
+ * A query-builder filter, checked before it is compiled: and/or groups nested at most twice, at most
+ * `MAX_CONDITIONS` conditions, known paths and operators. `where` names the caller (and the filter) in errors.
+ */
+function checkRowsFilter(filter: unknown, where = '$applyAdvanced'): RowsFilterGroup {
   const bad = (why: string): never => {
-    throw new Error(`$applyAdvanced: not a query-builder filter (${why})`);
+    throw new Error(`${where}: not a query-builder filter (${why})`);
   };
-  if (!g || typeof g !== 'object' || Array.isArray(g)) return bad('expected an object');
-  const { join, clauses } = g as { join?: unknown; clauses?: unknown };
-  if (join !== 'and' && join !== 'or') return bad('join must be and/or');
-  if (!Array.isArray(clauses)) return bad('clauses must be a list');
-  for (const c of clauses as unknown[]) {
-    if (c && typeof c === 'object' && 'join' in c) {
-      if (depth >= 2) bad('nested too deeply');
-      checkRowsFilter(c, depth + 1);
-      continue;
+  let conditions = 0;
+  const check = (g: unknown, depth: number): void => {
+    if (!g || typeof g !== 'object' || Array.isArray(g)) return bad('expected an object');
+    const { join, clauses } = g as { join?: unknown; clauses?: unknown };
+    if (join !== 'and' && join !== 'or') return bad('join must be and/or');
+    if (!Array.isArray(clauses)) return bad('clauses must be a list');
+    for (const c of clauses as unknown[]) {
+      if (c && typeof c === 'object' && 'join' in c) {
+        if (depth >= 2) bad('nested too deeply');
+        check(c, depth + 1);
+        continue;
+      }
+      if (++conditions > MAX_CONDITIONS) bad(`at most ${MAX_CONDITIONS} conditions`);
+      const { path, op } = (c ?? {}) as { path?: unknown; op?: unknown };
+      if (typeof path !== 'string' || !ROWS_PATH.test(path)) bad('invalid path');
+      if (typeof op !== 'string' || !ROWS_OPS.has(op)) bad('invalid operator');
+      const { field } = c as { field?: unknown };
+      if (field !== undefined && (typeof field !== 'string' || !ROWS_PATH.test(field))) bad('invalid field');
+      if (ANY_OPS.has(op as string)) {
+        const { value, type: t } = c as { value?: unknown; type?: unknown };
+        if (field !== undefined) bad(`${String(op)} compares with values, not a field`);
+        if (
+          t !== 'string' ||
+          !Array.isArray(value) ||
+          !value.length ||
+          !value.every((v) => typeof v === 'string')
+        )
+          bad(`${String(op)} needs type string and a non-empty list of texts`);
+        if ((value as unknown[]).length > MAX_ANY_VALUES)
+          bad(`${String(op)} takes at most ${MAX_ANY_VALUES} values`);
+        if ((value as string[]).some((v) => v.length > MAX_ANY_TEXT))
+          bad(`${String(op)} texts are at most ${MAX_ANY_TEXT} characters`);
+      }
+      const { times } = c as { times?: unknown };
+      if (
+        times !== undefined &&
+        (field === undefined || typeof times !== 'number' || !Number.isFinite(times))
+      )
+        bad('times needs a field and a finite number');
+      const { days, type } = c as { days?: unknown; type?: unknown };
+      if (
+        days !== undefined &&
+        (field === undefined || type !== 'date' || typeof days !== 'number' || !Number.isFinite(days))
+      )
+        bad('days needs a field, type date and a finite number');
     }
-    const { path, op } = (c ?? {}) as { path?: unknown; op?: unknown };
-    if (typeof path !== 'string' || !ROWS_PATH.test(path)) bad('invalid path');
-    if (typeof op !== 'string' || !ROWS_OPS.has(op)) bad('invalid operator');
-    const { field } = c as { field?: unknown };
-    if (field !== undefined && (typeof field !== 'string' || !ROWS_PATH.test(field))) bad('invalid field');
-    const { times } = c as { times?: unknown };
-    if (times !== undefined && (field === undefined || typeof times !== 'number' || !Number.isFinite(times)))
-      bad('times needs a field and a finite number');
-    const { days, type } = c as { days?: unknown; type?: unknown };
-    if (
-      days !== undefined &&
-      (field === undefined || type !== 'date' || typeof days !== 'number' || !Number.isFinite(days))
-    )
-      bad('days needs a field, type date and a finite number');
-  }
-  return g as RowsFilterGroup;
+  };
+  check(filter, 1);
+  return filter as RowsFilterGroup;
 }
 
 type Matcher = (row: unknown) => boolean;
 
-/** The filter as one function over a row: every condition compiled once (applyAdvanced runs it on every row). */
-function compileGroup(g: RowsFilterGroup): Matcher {
+/**
+ * The filter as one function over a row: every condition compiled once (applyAdvanced runs it on every row). `cost`:
+ * the work of one row in budget units — one per condition, more for a `containsAny`-style list (one pattern of up to
+ * 256 texts) — so callers check the budget by work done, not by rows.
+ */
+interface RowFilter {
+  match: Matcher;
+  cost: number;
+}
+function compileGroup(g: RowsFilterGroup, budget?: Budget): RowFilter {
+  let cost = 0;
   const tests: Matcher[] = g.clauses.map((c) => {
-    if ('join' in c) return compileGroup(c);
-    const compiled = compileCondition(c);
+    if ('join' in c) {
+      const inner = compileGroup(c, budget);
+      cost += inner.cost;
+      return inner.match;
+    }
+    const compiled = compileCondition(c, budget);
+    cost += compiled.anyRe ? 1 + Math.ceil(compiled.values.length / 16) : 1;
     return (row) => matchCondition(compiled, row);
   });
-  return g.join === 'and' ? (row) => tests.every((f) => f(row)) : (row) => tests.some((f) => f(row));
+  const match: Matcher =
+    g.join === 'and' ? (row) => tests.every((f) => f(row)) : (row) => tests.some((f) => f(row));
+  return { match, cost: Math.max(1, cost) };
 }
 
 /**
  * Rows that match the query builder's filter (`filters.advanced.dialect: rows`): `$applyAdvanced(rows, advanced)` in
  * a datasource transform. No filter (`advanced` undefined/null) returns the rows unchanged. Text comparisons ignore
  * case; dates compare as instants; a row without the field matches only the negated operators (`ne`, `notContains`,
- * `notIn`) — and `isEmpty`. `isEmpty` / `notEmpty` look at plain values (a list counts its items; an object is never
+ * `notIn`, `notContainsAny`, `notStartsWithAny`) — and `isEmpty`. `containsAny` / `startsWithAny` / `notContainsAny` /
+ * `notStartsWithAny` take a list of texts (at most 256, each at most 256 characters) and test them in one pass over the field. A filter holds at most 64 conditions; the budget is checked by work done (rows × conditions). `isEmpty` / `notEmpty` look at plain values (a list counts its items; an object is never
  * empty). Content may also pass a filter of
  * its own (`{ "join": "and", "clauses": [{ "path": "accountEnabled", "type": "boolean", "op": "eq", "value": true }] }`):
  * it runs natively, so filtering tens of thousands of rows costs milliseconds instead of JSONata's ~15 µs a row.
  */
-export function applyAdvanced(rows: unknown, filter: unknown): unknown[] {
+export function applyAdvanced(rows: unknown, filter: unknown, budget?: Budget): unknown[] {
   const list = rows === undefined || rows === null ? [] : Array.isArray(rows) ? rows : [rows];
   if (filter === undefined || filter === null) return [...list];
-  const match = compileGroup(checkRowsFilter(filter, 1));
-  return list.filter(match);
+  const { match, cost } = compileGroup(checkRowsFilter(filter), budget);
+  checkBudget(budget);
+  const out: unknown[] = [];
+  let work = 0;
+  for (let i = 0; i < list.length; i++) {
+    if ((work += cost) >= DEADLINE_STRIDE) {
+      work = 0;
+      checkBudget(budget);
+    }
+    if (match(list[i])) out.push(list[i]);
+  }
+  return out;
 }
 
 /**
@@ -547,6 +658,157 @@ export function pluck(rows: unknown, path: unknown, budget?: Budget): unknown[] 
     else push(v);
   }
   return out;
+}
+
+/**
+ * `$idsWhere(rows, path, { "publicClient": filter, "multiTenant": filter, … })`: for each named query-builder filter
+ * (as `$applyAdvanced` takes), the values at `path` (usually `id`) of the rows it matches — every filter compiled once
+ * and all of them checked in one pass over the rows, where one `$applyAdvanced` per finding walks the rows again each
+ * time. Names are plain field names (≤ 64); rows without a text, number or true/false at `path` are skipped. The budget is
+ * checked while the filters compile and by work done (rows × conditions) while they run.
+ */
+export function idsWhere(
+  rows: unknown,
+  path: unknown,
+  filters: unknown,
+  budget?: Budget,
+): Record<string, unknown[]> {
+  const keys = pathKeys(path, '$idsWhere');
+  if (!isRecord(filters))
+    throw new Error('$idsWhere: the filters must be an object of query-builder filters');
+  const names = Object.keys(filters);
+  if (names.length > MAX_NAMES) throw new Error(`$idsWhere: at most ${MAX_NAMES} filters`);
+  // One compiled filter per filter object: names that share one (`{ "a": $f, "b": $f }`) share its work.
+  const byFilter = new Map<unknown, { filter: RowFilter; names: string[] }>();
+  for (const name of names) {
+    writableField(name, '$idsWhere', 'each filter name');
+    const given = filters[name];
+    const known = byFilter.get(given);
+    if (known) {
+      known.names.push(name);
+      continue;
+    }
+    byFilter.set(given, {
+      filter: compileGroup(checkRowsFilter(given, `$idsWhere: filter "${name}"`), budget),
+      names: [name],
+    });
+    checkBudget(budget);
+  }
+  const tests = [...byFilter.values()];
+  // At least 1 a row: with no filters the rows are still read.
+  const cost = Math.max(
+    1,
+    tests.reduce((sum, t) => sum + t.filter.cost, 0),
+  );
+  const out: Record<string, unknown[]> = {};
+  for (const name of names) out[name] = [];
+  const list = asRows(rows);
+  let work = 0;
+  for (let i = 0; i < list.length; i++) {
+    if ((work += cost) >= DEADLINE_STRIDE) {
+      work = 0;
+      checkBudget(budget);
+    }
+    const row = list[i];
+    if (!isRecord(row)) continue;
+    // Only plain values are ids: never an object, a list or a function (which would leave by reference).
+    const id = readPath(row, keys);
+    if (typeof id !== 'string' && typeof id !== 'number' && typeof id !== 'boolean') continue;
+    for (const { filter, names: shared } of tests) {
+      if (!filter.match(row)) continue;
+      for (const name of shared) {
+        const ids = out[name]!;
+        if (ids.length >= MAX_SEQUENCE)
+          throw new Error(`$idsWhere: at most ${MAX_SEQUENCE} values per filter`);
+        ids.push(id);
+      }
+    }
+  }
+  return out;
+}
+
+/**
+ * `$flagIn(rows, path, { "wildcardUri": [ids…], "publicClient": [ids…] })`: every object row copied once with one
+ * true/false field per set — whether the row's value at `path` (a dot path; for a list, any of its values) is in that
+ * set — natively, in one pass. Values compare as text (as `$attach` and `$withCount` do); a single value counts as a
+ * one-item set. Replaces one `$withFields` copy per set (`$reduce` over findings) — at 13k flagged rows and ten
+ * findings, ~180 ms in JSONata, a few ms here. Set names are plain field names (≤ 64), at most 1,000,000 values across
+ * the sets; only texts, numbers and true/false match; function rows pass through.
+ */
+export function flagIn(rows: unknown, path: unknown, sets: unknown, budget?: Budget): unknown[] {
+  const keys = pathKeys(path, '$flagIn');
+  if (!isRecord(sets)) throw new Error('$flagIn: the sets must be an object of lists');
+  const names = Object.keys(sets);
+  if (names.length > MAX_NAMES) throw new Error(`$flagIn: at most ${MAX_NAMES} sets`);
+  // One Set per list (names may share one), at most MAX_SEQUENCE values across all of them, the budget checked while
+  // they are built.
+  const built = new Map<unknown, Set<string>>();
+  let total = 0;
+  const compiled = names.map((name) => {
+    writableField(name, '$flagIn', 'each set name');
+    const given = sets[name];
+    const known = built.get(given);
+    if (known) return [name, known] as const;
+    const values = asRows(given);
+    if ((total += values.length) > MAX_SEQUENCE)
+      throw new Error(`$flagIn: at most ${MAX_SEQUENCE} values across the sets`);
+    const set = new Set<string>();
+    for (let j = 0; j < values.length; j++) {
+      if (j % DEADLINE_STRIDE === 0) checkBudget(budget);
+      const v = values[j];
+      if (v === null || v === undefined) continue;
+      const k = flagText(v);
+      if (k === undefined)
+        throw new Error(`$flagIn: "${name}" must be a list of texts, numbers or true/false`);
+      set.add(k);
+    }
+    built.set(given, set);
+    return [name, set] as const;
+  });
+  const list = asRows(rows);
+  if (list.length > MAX_SEQUENCE) throw new Error(`$flagIn: at most ${MAX_SEQUENCE} rows`);
+  const out: unknown[] = new Array(list.length);
+  let work = 0;
+  for (let i = 0; i < list.length; i++) {
+    const row = list[i];
+    // Function items pass through unchanged: a copy of a lambda would be a forged, callable function.
+    if (!isRecord(row)) {
+      out[i] = row;
+      continue;
+    }
+    const v = readPath(row, keys);
+    if ((work += Math.max(1, compiled.length) * (Array.isArray(v) ? v.length + 1 : 1)) >= DEADLINE_STRIDE) {
+      work = 0;
+      checkBudget(budget);
+    }
+    // Object spread copies own properties as data; the names were checked (never "__proto__" or a JSONata internal).
+    const copy: Record<string, unknown> = { ...row };
+    if (Array.isArray(v)) {
+      const own: string[] = [];
+      for (const x of v) {
+        const k = flagText(x);
+        if (k !== undefined) own.push(k);
+      }
+      for (let j = 0; j < compiled.length; j++) {
+        const set = compiled[j]![1];
+        copy[compiled[j]![0]] = own.some((x) => set.has(x));
+      }
+    } else {
+      // The usual case (an id): no lists to build.
+      const k = flagText(v);
+      for (let j = 0; j < compiled.length; j++)
+        copy[compiled[j]![0]] = k !== undefined && compiled[j]![1].has(k);
+    }
+    out[i] = copy;
+  }
+  return out;
+}
+
+/** The text a `$flagIn` value compares as: texts, numbers and true/false only (an object or a function never matches). */
+function flagText(v: unknown): string | undefined {
+  if (typeof v === 'string') return v;
+  if (typeof v === 'number' || typeof v === 'boolean') return String(v);
+  return undefined;
 }
 
 /** A shallow copy without `key`: object rest copies own enumerable properties as data (a "__proto__" key stays a key). */
@@ -801,6 +1063,8 @@ export const HELPER_NAMES = [
   'attach',
   'pick',
   'withCount',
+  'flagIn',
+  'idsWhere',
 ] as const;
 
 /** Registers the helpers on a compiled expression. */
@@ -823,7 +1087,9 @@ export function registerHelpers(expr: jsonata.Expression): void {
   expr.registerFunction('daysUntil', function (this: jsonata.Focus, v: unknown) {
     return daysUntil(v, scopeNow(this));
   });
-  expr.registerFunction('applyAdvanced', (rows: unknown, filter: unknown) => applyAdvanced(rows, filter));
+  expr.registerFunction('applyAdvanced', function (this: jsonata.Focus, rows: unknown, filter: unknown) {
+    return applyAdvanced(rows, filter, budgetOf(this));
+  });
   expr.registerFunction('withFields', (rows: unknown, fields: unknown) => withFields(rows, fields), '<xo:a>');
   expr.registerFunction('take', (rows: unknown, n: unknown) => take(rows, n));
   expr.registerFunction(
@@ -867,5 +1133,19 @@ export function registerHelpers(expr: jsonata.Expression): void {
       return withCount(rows, path, as, budgetOf(this));
     },
     '<xss:a>',
+  );
+  expr.registerFunction(
+    'flagIn',
+    function (this: jsonata.Focus, rows: unknown, path: unknown, sets: unknown) {
+      return flagIn(rows, path, sets, budgetOf(this));
+    },
+    '<xso:a>',
+  );
+  expr.registerFunction(
+    'idsWhere',
+    function (this: jsonata.Focus, rows: unknown, path: unknown, filters: unknown) {
+      return idsWhere(rows, path, filters, budgetOf(this));
+    },
+    '<xso:o>',
   );
 }

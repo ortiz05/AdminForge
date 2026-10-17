@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/report.schema.json
 kind: report
 id: identity.app-registration-risks
-version: 2.0.0
+version: 2.0.2
 title: App registration configuration risks
 summary: >-
   App registrations configured in ways that make token theft or misuse easier — wildcard or plain-HTTP redirect URIs,
@@ -46,7 +46,7 @@ datasources:
         $select: id,appId,displayName,createdDateTime,signInAudience,web,spa,publicClient,isFallbackPublicClient,requiredResourceAccess
         $top: 999
     paging: all
-    maxItems: 20000
+    maxItems: 15000
     cache: { ttl: 900 }
     # Every check runs natively ($applyAdvanced reads through the redirect URI lists), giving a set of apps per
     # finding; each app that has any finding gets one true/false field per finding and its worst severity — no
@@ -65,56 +65,58 @@ datasources:
         $roles := ds.graphApi ? ds.graphApi : {};
         $criticalIds := [$keys($roles)[$lookup($roles, $) in $critical]];
         $apps := value.value;
-        $any := function($paths, $op, $values) { { "join": "or", "clauses": [$paths.( $p := $; $values.{ "path": $p, "type": "string", "op": $op, "value": $ } )] } };
+        $local := ['localhost', '127.0.0.1', '[::1]'];
         $all3 := ['web.redirectUris', 'spa.redirectUris', 'publicClient.redirectUris'];
         $web2 := ['web.redirectUris', 'spa.redirectUris'];
-        $local := ['localhost', '127.0.0.1', '[::1]'];
-        $checks := [
-          { "field": "wildcardUri", "severity": "crit", "filter": $any($all3, 'contains', ['*']) },
-          { "field": "plainHttpUri", "severity": "crit", "filter": { "join": "and", "clauses": [
-            $any($web2, 'startsWith', ['http://']),
-            { "join": "and", "clauses": [$web2.( $p := $; $local.{ "path": $p, "type": "string", "op": "notContains", "value": $ } )] }
-          ] } },
-          { "field": "sharedHostingUri", "severity": "warn", "filter": $any($all3, 'contains', ['.azurewebsites.net', '.cloudapp.net',
-            '.cloudapp.azure.com', '.trafficmanager.net', '.blob.core.windows.net', '.herokuapp.com', '.ngrok.io', '.ngrok-free.app',
-            '.ngrok.app', '.glitch.me', '.vercel.app', '.netlify.app', '.github.io']) },
-          { "field": "implicitAccessTokens", "severity": "warn", "filter": { "join": "and", "clauses": [
-            { "path": "web.implicitGrantSettings.enableAccessTokenIssuance", "type": "boolean", "op": "eq", "value": true }] } },
-          { "field": "publicClient", "severity": "warn", "filter": { "join": "and", "clauses": [
-            { "path": "isFallbackPublicClient", "type": "boolean", "op": "eq", "value": true }] } },
-          { "field": "personalAccounts", "severity": "warn", "filter": { "join": "and", "clauses": [
-            { "path": "signInAudience", "type": "string", "op": "in", "value": ['AzureADandPersonalMicrosoftAccount', 'PersonalMicrosoftAccount'] }] } },
-          { "field": "criticalPermissions", "severity": "warn", "filter": { "join": "and", "clauses": [
+        /* Any of these URI lists holds a URI that contains (starts with) any of the texts. */
+        $any := function($paths, $op, $values) { { "join": "or", "clauses": [$paths.{ "path": $, "type": "string", "op": $op, "value": $values }] } };
+        $is := function($path, $type, $op, $value) { { "join": "and", "clauses": [{ "path": $path, "type": $type, "op": $op, "value": $value }] } };
+        /* Every finding's filter, all checked in one native pass over the apps ($idsWhere): the app ids per finding. */
+        $severity := {
+          "wildcardUri": "crit", "plainHttpUri": "crit", "sharedHostingUri": "warn", "implicitAccessTokens": "warn",
+          "publicClient": "warn", "personalAccounts": "warn", "criticalPermissions": "warn", "implicitIdTokens": "info",
+          "multiTenant": "info", "localhostUri": "info"
+        };
+        $sets := $idsWhere($apps, 'id', {
+          "wildcardUri": $any($all3, 'containsAny', ['*']),
+          "sharedHostingUri": $any($all3, 'containsAny', ['.azurewebsites.net', '.cloudapp.net', '.cloudapp.azure.com',
+            '.trafficmanager.net', '.blob.core.windows.net', '.herokuapp.com', '.ngrok.io', '.ngrok-free.app', '.ngrok.app',
+            '.glitch.me', '.vercel.app', '.netlify.app', '.github.io']),
+          "localhostUri": $any($web2, 'containsAny', $local),
+          "httpCandidate": $any($web2, 'startsWithAny', ['http://']),
+          "implicitAccessTokens": $is('web.implicitGrantSettings.enableAccessTokenIssuance', 'boolean', 'eq', true),
+          "publicClient": $is('isFallbackPublicClient', 'boolean', 'eq', true),
+          "personalAccounts": $is('signInAudience', 'string', 'in', ['AzureADandPersonalMicrosoftAccount', 'PersonalMicrosoftAccount']),
+          /* As before 2.0: a critical app role id requested, and an application permission (type Role) requested. */
+          "criticalPermissions": { "join": "and", "clauses": [
             { "path": "requiredResourceAccess.resourceAccess.id", "type": "string", "op": "in", "value": $append(['-'], $criticalIds) },
-            { "path": "requiredResourceAccess.resourceAccess.type", "type": "string", "op": "eq", "value": "Role" }] } },
-          { "field": "implicitIdTokens", "severity": "info", "filter": { "join": "and", "clauses": [
-            { "path": "web.implicitGrantSettings.enableIdTokenIssuance", "type": "boolean", "op": "eq", "value": true }] } },
-          { "field": "multiTenant", "severity": "info", "filter": { "join": "and", "clauses": [
-            { "path": "signInAudience", "type": "string", "op": "eq", "value": "AzureADMultipleOrgs" }] } },
-          { "field": "localhostUri", "severity": "info", "filter": $any($web2, 'contains', $local) }
-        ];
+            { "path": "requiredResourceAccess.resourceAccess.type", "type": "string", "op": "eq", "value": "Role" }] },
+          "implicitIdTokens": $is('web.implicitGrantSettings.enableIdTokenIssuance', 'boolean', 'eq', true),
+          "multiTenant": $is('signInAudience', 'string', 'eq', 'AzureADMultipleOrgs')
+        });
+        /* Plain HTTP: a web or SPA redirect URI on http:// that isn't localhost (http://localhost, :port or /path; also
+           127.0.0.1 and [::1]) — checked per URI, only for the apps with an http:// URI. */
+        $candidates := $applyAdvanced($apps, $is('id', 'string', 'in', $append(['-'], $sets.httpCandidate)));
+        $uri := function($list) { $unnest($pick($candidates, ['id', $list]), $list & '.redirectUris', 'uri') };
+        $plainHttp := $distinct($pluck($applyAdvanced($append($uri('web'), $uri('spa')), { "join": "and", "clauses": [
+          { "path": "uri", "type": "string", "op": "startsWith", "value": "http://" },
+          { "path": "uri", "type": "string", "op": "notStartsWithAny", "value": $append($local.('http://' & $ & ':'), $local.('http://' & $ & '/')) },
+          { "path": "uri", "type": "string", "op": "notIn", "value": $local.('http://' & $) }
+        ] }), 'id'));
         $level := params.severity ? params.severity : 'warn';
-        $levels := $level = 'crit' ? ['crit'] : $level = 'warn' ? ['crit', 'warn'] : ['crit', 'warn', 'info'];
-        $localUri := /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:|\/|$)/i;
-        $httpAndLocal := $applyAdvanced($apps, { "join": "and", "clauses": [$any($web2, 'startsWith', ['http://']), $any($web2, 'contains', $local)] });
-        $httpExact := [$httpAndLocal[$count($append(web.redirectUris, spa.redirectUris)[$contains($, /^http:\/\//i) and $not($contains($, $localUri))]) > 0].id];
-        $found := $append($checks.{ "field": field, "severity": severity, "ids": $append(['-'], $applyAdvanced($apps, filter).id) },
-          [{ "field": "plainHttpUri", "severity": "crit", "ids": $append(['-'], $httpExact) }]);
-        $idsOf := function($sev) { $append(['-'], $found[severity = $sev].ids) };
-        $byId := function($rows, $op, $ids) { $applyAdvanced($rows, { "join": "and", "clauses": [{ "path": "id", "type": "string", "op": $op, "value": $ids }] }) };
-        /* One copy of each app with a finding at the levels shown; then true on each finding it has (copies only the
-           apps that have that finding). */
-        $flagged := $reduce($found, function($rows, $c) {
-          $append($withFields($byId($rows, 'in', $c.ids), { $c.field: true }), $byId($rows, 'notIn', $c.ids))
-        }, $withFields($byId($apps, 'in', $append(['-'], [$levels.$idsOf($)])), {
-          "wildcardUri": false, "plainHttpUri": false, "sharedHostingUri": false, "implicitAccessTokens": false,
-          "publicClient": false, "personalAccounts": false, "criticalPermissions": false, "implicitIdTokens": false,
-          "multiTenant": false, "localhostUri": false }));
-        $crit := $withFields($byId($flagged, 'in', $idsOf('crit')), { "severity": "crit" });
-        $warn := $withFields($byId($byId($flagged, 'notIn', $idsOf('crit')), 'in', $idsOf('warn')), { "severity": "warn" });
-        $info := $level = 'all' ? $withFields($byId($byId($flagged, 'notIn', $append($idsOf('crit'), $idsOf('warn'))), 'in', $idsOf('info')), { "severity": "info" }) : [];
-        $shown := $append([], $append($append($crit^(displayName), $level = 'crit' ? [] : $warn^(displayName)), $level = 'all' ? $info^(displayName) : []));
-        $appsWith := function($field) { $count($found[field = $field].ids) - $count($found[field = $field]) };
+        /* Every app once, small (only the fields the table and export show — not the redirect URI lists or permissions),
+           with one true/false field per finding (one native pass); then each severity is a native filter on those
+           fields — no lists of ids through JSONata. */
+        $flagged := $flagIn($pick($apps, ['id', 'appId', 'displayName', 'signInAudience', 'createdDateTime']), 'id',
+          $merge($keys($severity).{ $: $append(['-'], $ = 'plainHttpUri' ? $plainHttp : $lookup($sets, $)) }));
+        $fields := function($sev) { [$keys($severity)[$lookup($severity, $) = $sev]] };
+        $anyTrue := function($sev) { { "join": "or", "clauses": [$fields($sev).{ "path": $, "type": "boolean", "op": "eq", "value": true }] } };
+        $noneTrue := function($sev) { { "join": "and", "clauses": [$fields($sev).{ "path": $, "type": "boolean", "op": "ne", "value": true }] } };
+        $crit := $withFields($applyAdvanced($flagged, $anyTrue('crit')), { "severity": "crit" });
+        $warn := $level = 'crit' ? [] : $withFields($applyAdvanced($flagged, { "join": "and", "clauses": [$noneTrue('crit'), $anyTrue('warn')] }), { "severity": "warn" });
+        $info := $level = 'all' ? $withFields($applyAdvanced($flagged, { "join": "and", "clauses": [$noneTrue('crit'), $noneTrue('warn'), $anyTrue('info')] }), { "severity": "info" }) : [];
+        $shown := $append([], $append($append($crit^(displayName), $warn^(displayName)), $info^(displayName)));
+        $appsWith := function($field) { $count($lookup($sets, $field)) };
         {
           "rows": $shown,
           "listed": $count($shown),
@@ -138,7 +140,7 @@ layout:
     span: 12
     when: ${ apps.partial = true }
     text: >-
-      **Partial data.** The tenant has more app registrations than this report reads (20,000); the figures and the
+      **Partial data.** The tenant has more app registrations than this report reads (15,000); the figures and the
       list cover the ones read.
   - widget: markdown
     span: 12
@@ -215,5 +217,5 @@ export:
   formats: [csv, xlsx]
   fileName: app-registration-risks
   data: appList.rows
-  maxRows: 20000
+  maxRows: 15000
   columns: all

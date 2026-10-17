@@ -75,6 +75,16 @@ Pages, dashboards and reports are YAML in `portal/content/{pages,dashboards,repo
        keep one per key (split on `$withCount(…)` `n eq 1`, group the rest with `{ k: $[0] }`).
      - `$pick(rows, ['id', 'displayName'])`: top-level fields only (keep joined objects and exports small).
      - `$withCount(rows, 'appId', 'n')`: each row with how many rows share its value (as text, like `$attach`).
+     - `$idsWhere(rows, 'id', { "publicClient": filter, … })`: the ids (texts, numbers, true/false) each
+       `$applyAdvanced`-style filter matches, all filters in one pass — for many findings over the same rows. Names
+       that share one filter object share its work.
+     - `$flagIn(rows, 'id', { "publicClient": [ids…], … })`: each row copied once with one true/false field per set
+       (then pick severities with boolean filters, no id lists through JSONata).
+     - Several texts in one condition: `containsAny` / `startsWithAny` / `notContainsAny` / `notStartsWithAny` with
+       `"type": "string"` and a list `value` (≤ 256 literal texts of ≤ 256 characters, case ignored; a filter holds
+       ≤ 64 conditions) — one pass over a field (a list path
+       too) instead of one clause per text. Use them over a URI list path rather than `$unnest`-ing every URI; unnest
+       only the few rows that need a per-item check (identity.app-registration-risks).
    - Each `$withFields` / `$attach` / `$unnest` pass copies every row: classify with `$applyAdvanced` first and label
      only the subsets you show; build a list in its display order (most severe subset first) rather than sorting tens
      of thousands of rows. Ages and lifetimes: `"field": "startDateTime", "days": 365` on a date condition shifts the

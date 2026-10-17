@@ -9,12 +9,14 @@
  *   - `pim`: AF-Test-User-01 and the validation user eligible (never active) for a read-only directory role;
  *   - `named-location`: AF-Test-Location, the documentation range 192.0.2.0/24, not trusted;
  *   - `intune`: a Windows compliance policy and configuration profile assigned to AF-Test-Group-01;
- *   - `approver`: a second validation account, "AF Tester 2", that holds only the Playbook.Approver portal role.
+ *   - `approver`: a second validation account, "AF Tester 2", that holds only the Playbook.Approver portal role;
+ *   - `ca-audit`: example Conditional Access policies, report-only — never enforced (provision/ca-audit-catalog.ts).
  * Opt-in: nothing here is planned unless AF_TEST_LICENCE_SKU is set or AF_TEST_FIXTURES names the fixture.
  *
  * Ownership: provisioning only changes or removes objects it created — users with the validation marker
  * (employeeType "AdminForge validation") or provisioning's display name, Intune policies whose description carries
- * the marker, the named location with exactly provisioning's range. A same-named object without that is refused.
+ * the marker, the named location with exactly provisioning's range, Conditional Access policies with a catalogue name
+ * that are not on (enforced). A same-named object without that is refused.
  */
 import { TEST_FIXTURE_NAMES } from '@adminforge/config';
 import type { PortalRole } from './catalog';
@@ -22,6 +24,7 @@ import type { GraphGroup, Action } from './model';
 import {
   APPROVER_MARKER,
   TESTER_MARKER,
+  isProvisionedTester,
   type GraphUser,
   type RegistrationCampaign,
   type TesterRoleGrant,
@@ -48,6 +51,10 @@ export const FIXTURE_PERMISSIONS: Readonly<Record<FixtureKey, readonly string[]>
   'named-location': ['Policy.Read.All', 'Policy.ReadWrite.ConditionalAccess'],
   intune: ['DeviceManagementConfiguration.ReadWrite.All'],
   approver: [],
+  // Creating, updating and deleting policies. Graph also requires Application.Read.All to add or edit an application
+  // condition (the Azure management policy names an app) — it answers 403 "Application.Read.All scope is required".
+  // Role template ids and the authentication strength are well-known ids, so nothing else needs reading.
+  'ca-audit': ['Policy.Read.All', 'Policy.ReadWrite.ConditionalAccess', 'Application.Read.All'],
 };
 
 /** Broader Graph application permissions that include a fixture's (Microsoft's documented alternatives). */
@@ -76,6 +83,38 @@ export const heldPermission = (roles: readonly string[], permission: string) =>
 /** How to opt out of a fixture (for messages). */
 export const optOut = (fixture: FixtureKey) =>
   fixture === 'licences' ? 'unset AF_TEST_LICENCE_SKU' : `remove "${fixture}" from AF_TEST_FIXTURES`;
+
+/**
+ * Microsoft Graph permission names a refusal's message mentions (e.g. "Application.Read.All scope is required to
+ * add/edit application condition"): `Resource.Action[.Qualifier]`, the action a Graph verb.
+ */
+export function namedPermissions(message: string): string[] {
+  const found =
+    message.match(
+      /\b[A-Z][A-Za-z]+\.(?:Read|ReadWrite|ReadBasic|Write|Create|Manage|Send|Invite|Export|Import|Assign)[A-Za-z]*(?:\.[A-Z][A-Za-z]*)?\b/g,
+    ) ?? [];
+  return [...new Set(found)];
+}
+
+/**
+ * The message for a fixture Graph refused (401/403). When Graph's message names a permission the fixture needs (one in
+ * FIXTURE_PERMISSIONS — e.g. a policy with an application condition needs Application.Read.All), Graph's message
+ * (masked by the caller, control characters removed) and that permission; it is more precise than the whole list.
+ * Anything else Graph names is not trusted as advice: the fixture's own permissions then.
+ */
+export function refusalHint(fixture: FixtureKey, graphMessage: string): string {
+  const named = namedPermissions(graphMessage).filter((p) => FIXTURE_PERMISSIONS[fixture].includes(p));
+  // Control characters (C0, DEL, C1) become spaces: Graph's text reaches the terminal.
+  const clean = [...graphMessage]
+    .map((ch) => {
+      const c = ch.codePointAt(0)!;
+      return c < 0x20 || (c >= 0x7f && c <= 0x9f) ? ' ' : ch;
+    })
+    .join('');
+  return named.length
+    ? `Graph: "${clean}" — grant the provisioner the Microsoft Graph application permission ${named.join(' or ')} (with admin consent), or ${optOut(fixture)}`
+    : permissionHint(fixture);
+}
 
 /** The message for a fixture Graph refused (401/403): which permission the provisioner needs. */
 export function permissionHint(fixture: FixtureKey): string {
@@ -188,6 +227,8 @@ export interface DesiredFixtures {
    * protects real changes — the approver fixture (both passwords in one file) is refused here.
    */
   automationWrites: boolean;
+  /** AF_PROTECTED_USER_IDS (break-glass accounts): excluded from the ca-audit policies. */
+  protectedUserIds: string[];
 }
 
 /** A part of the state that couldn't be read; `forbidden` when Graph answered 401/403. */
@@ -268,10 +309,25 @@ export interface FixtureState {
   namedLocations?: NamedLocationState[] | Unreadable;
   intune?: Record<IntuneKind, IntunePolicyState[]> | Unreadable;
   testGroupId?: string;
-  /** Members of AF-Test-Group-01 (Intune only). */
+  /** Members of AF-Test-Group-01 (Intune and ca-audit: both target the group). */
   testGroupMembers?: GroupMember[] | Unreadable;
+  /** Whether AF-Test-Group-01 uses dynamic membership (ca-audit: then anyone can end up in its policies' scope). */
+  testGroupDynamic?: boolean | Unreadable;
   /** The approver: fully read when the fixture is opted in, otherwise only whether a leftover account exists. */
   approver?: ApproverState;
+  /** Conditional Access policies (ca-audit only). */
+  caPolicies?: CaPolicyState[] | Unreadable;
+}
+
+/** A Conditional Access policy as the ca-audit fixture reads it. */
+export interface CaPolicyState {
+  id: string;
+  displayName: string;
+  /** enabled (on, enforced), enabledForReportingButNotEnforced (report-only) or disabled (off). */
+  state: string;
+  conditions?: Record<string, unknown> | null;
+  grantControls?: Record<string, unknown> | null;
+  sessionControls?: Record<string, unknown> | null;
 }
 
 interface OpBase {
@@ -283,6 +339,8 @@ interface OpBase {
   fixture: FixtureKey;
   /** Opted in but can't be done (missing permission, refused object, no seat): ✗ in `provision status`. */
   blocked?: boolean;
+  /** A failure doesn't skip the fixture's later operations (each Conditional Access policy stands alone). */
+  independent?: boolean;
 }
 
 export type FixtureOp = OpBase &
@@ -302,6 +360,8 @@ export type FixtureOp = OpBase &
     | { kind: 'approverRoleRemove'; assignmentIds: string[] }
     | { kind: 'approverCampaignExclusion' }
     | { kind: 'approverRemove'; id: string }
+    | { kind: 'caPolicy'; displayName: string; existingId?: string }
+    | { kind: 'caPolicyRemove'; displayName: string; id: string }
   );
 
 const localPart = (upn: string) => upn.split('@')[0]!;
@@ -324,6 +384,27 @@ export const isProvisionedLocation = (l: NamedLocationState) =>
   !l.isTrusted &&
   l.cidrs.length === 1 &&
   l.cidrs[0] === NAMED_LOCATION.cidr;
+
+/**
+ * Pure: how many members of AF-Test-Group-01 are not provisioning's test accounts (the validation user,
+ * AF-Test-User-0n) or AF-Test-* devices (the enrolled test device). The group receives the AF-Test Intune policies and
+ * the group-scoped audit Conditional Access policies, so anyone else in it would get them too. A count, never names.
+ */
+export function unexpectedGroupMembers(members: readonly GroupMember[]): number {
+  return members.filter((m) => {
+    const type = m.type.toLowerCase();
+    if (type.endsWith('.device')) return !(m.displayName ?? '').startsWith('AF-Test-');
+    if (!type.endsWith('.user') || !m.userPrincipalName) return true;
+    const user = {
+      userPrincipalName: m.userPrincipalName,
+      displayName: m.displayName,
+      employeeType: m.employeeType,
+    };
+    const target =
+      /^af-test-user-\d+@/i.test(m.userPrincipalName) && /^AF-Test-User-\d+$/.test(m.displayName ?? '');
+    return !(isProvisionedTester(user) || target || isProvisionedAccount({ displayName: '' }, user));
+  }).length;
+}
 
 /** Whether an Intune policy is provisioning's: an AF-Test name and the marker in its description. */
 export const isProvisionedPolicy = (p: Pick<IntunePolicyState, 'displayName' | 'description'>) =>

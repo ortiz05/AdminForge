@@ -12,6 +12,7 @@
 import { SKU_PART_NUMBER } from '@adminforge/config';
 import { ConfigError } from '../shared/errors';
 import { planApprover, planApproverRemoval, planLeftoverApprover } from './approver-plan';
+import { planCaAudit } from './ca-audit-plan';
 import {
   APPROVER_DISPLAY_NAME,
   FIXTURE_NAMES,
@@ -30,10 +31,9 @@ import {
   type FixtureOp,
   type FixtureSettings,
   type FixtureState,
-  type GroupMember,
   type IntuneKind,
 } from './fixtures-model';
-import { TESTER_MARKER, isProvisionedTester, type DesiredIdentities, type UserSpec } from './identities-plan';
+import { TESTER_MARKER, type DesiredIdentities, type UserSpec } from './identities-plan';
 
 /** The opt-ins from the env file. Throws (naming the key, never its value) on a malformed one. */
 export function fixtureSettings(env: Readonly<Record<string, string | undefined>>): FixtureSettings {
@@ -62,6 +62,8 @@ export function buildDesiredFixtures(opts: {
   approverUpn?: string;
   /** AF_AUTOMATION_ALLOW_WRITE_PERMISSIONS=true for this label (the approver fixture is refused then). */
   automationWrites?: boolean;
+  /** AF_PROTECTED_USER_IDS (excluded from the ca-audit policies). */
+  protectedUserIds?: string[];
 }): DesiredFixtures {
   const { identities } = opts;
   const approverUpn = opts.approverUpn || `af-approver@${opts.domain}`;
@@ -85,6 +87,7 @@ export function buildDesiredFixtures(opts: {
       mailNickname: approverUpn.split('@')[0]!.replace(/[^A-Za-z0-9._-]/g, ''),
     },
     automationWrites: !!opts.automationWrites,
+    protectedUserIds: opts.protectedUserIds ?? [],
     testGroup: {
       uniqueName: identities.testGroup.uniqueName,
       displayName: identities.testGroup.body.displayName,
@@ -98,6 +101,7 @@ const SECTIONS: Record<FixtureKey, string> = {
   'named-location': 'Test fixtures: named location',
   intune: 'Test fixtures: Intune',
   approver: 'Test fixtures: approver',
+  'ca-audit': 'Test fixtures: Conditional Access (report-only)',
 };
 
 const lower = (s: string) => s.toLowerCase();
@@ -337,10 +341,18 @@ export function planFixtureRemoval(desired: DesiredFixtures, state: FixtureState
 
 function plan(d: DesiredFixtures, s: FixtureState, remove: boolean): FixtureOp[] {
   const ops: FixtureOp[] = [];
+  // The audit policies come after the named location when provisioning (the location example excludes it) and before
+  // it when removing (Graph refuses to delete a named location a policy still refers to).
+  const caAudit = () =>
+    wants(d.settings, 'ca-audit')
+      ? planCaAudit(d, s, { remove, locationPlanned: wants(d.settings, 'named-location') })
+      : [];
+  if (remove) ops.push(...caAudit());
   if (wants(d.settings, 'licences')) ops.push(...planLicences(d, s, remove));
   if (wants(d.settings, 'pim')) ops.push(...planEligibility(d, s, remove));
   if (wants(d.settings, 'named-location')) ops.push(...planNamedLocation(s, remove));
   if (wants(d.settings, 'intune')) ops.push(...planIntune(d, s, remove));
+  if (!remove) ops.push(...caAudit());
   // The approver: provisioned when opted in; removed by --remove-fixtures and flagged as left over even when not.
   if (s.approver) {
     if (remove) ops.push(...planApproverRemoval(d, s.approver));
@@ -350,23 +362,5 @@ function plan(d: DesiredFixtures, s: FixtureState, remove: boolean): FixtureOp[]
   return ops;
 }
 
-/**
- * Pure: how many members of AF-Test-Group-01 are not provisioning's test accounts (the validation user,
- * AF-Test-User-0n) or AF-Test-* devices (the enrolled test device). The group receives the AF-Test Intune policies,
- * so anyone else in it would get them too. A count, never names.
- */
-export function unexpectedGroupMembers(members: readonly GroupMember[]): number {
-  return members.filter((m) => {
-    const type = m.type.toLowerCase();
-    if (type.endsWith('.device')) return !(m.displayName ?? '').startsWith('AF-Test-');
-    if (!type.endsWith('.user') || !m.userPrincipalName) return true;
-    const user = {
-      userPrincipalName: m.userPrincipalName,
-      displayName: m.displayName,
-      employeeType: m.employeeType,
-    };
-    const target =
-      /^af-test-user-\d+@/i.test(m.userPrincipalName) && /^AF-Test-User-\d+$/.test(m.displayName ?? '');
-    return !(isProvisionedTester(user) || target || isProvisionedAccount({ displayName: '' }, user));
-  }).length;
-}
+/** Re-exported for the callers that import it from here (it lives in fixtures-model.ts with the other rules). */
+export { unexpectedGroupMembers } from './fixtures-model';

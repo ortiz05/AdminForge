@@ -47,6 +47,25 @@ it is enabled only with an explicit `provision test-identities --enable --approv
 and it is refused wherever `AF_AUTOMATION_ALLOW_WRITE_PERMISSIONS=true`. A leftover approver fails `provision status`
 until `--remove-fixtures` deletes it (after taking it out of the campaign's exclusions).
 
+**Audit Conditional Access fixture** (opt-in, `AF_TEST_FIXTURES=ca-audit`, test labels only): example policies named
+`AF-Audit: …` that are **report-only, never enforced**. A create's body can only be report-only (type and a runtime
+check); an update carries no state at all, and is made only to a policy that is report-only when re-checked right
+before each attempt (writes go without client retries; a throttled write is re-checked before it is sent again) and
+is read back afterwards. A same-named policy that is on, off or in an unknown state is left alone (`✗`). Most target
+all users (minus `AF_PROTECTED_USER_IDS` and the Directory Synchronization Accounts role; the two that block also
+minus Global Administrator, which Graph requires), so real sign-ins produce report-only results; the device and
+location examples target AF-Test-Group-01 only, and are refused while that group has other members or dynamic
+membership. `provision status` warns while `AF_PROTECTED_USER_IDS` is empty. Anyone with Conditional Access
+Administrator (or the provisioner's `Policy.ReadWrite.ConditionalAccess`) can still switch one on — from then on
+provisioning leaves it alone. **If one were switched on:**
+
+| Policy                                            | Risk if enforced                                                                                                    |
+| ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| Require phishing-resistant MFA for administrators | locks out every admin without a passkey, Windows Hello for Business or certificate-based authentication             |
+| Block unknown device platforms                    | may end AdminForge sessions — first check its report-only results for the Read/Write apps' non-interactive sign-ins |
+| Admin sign-in frequency and no persistent browser | admins re-authenticate every 4 hours; parked delegated runs fail when their token outlives it                       |
+| Device and location examples (AF-Test-Group-01)   | block the validation user (no compliant device, not inside the documentation range)                                 |
+
 ## Signing in
 
 - Authorization code flow with PKCE (S256), a single-use `state` that expires after 10 minutes, and a `nonce` checked

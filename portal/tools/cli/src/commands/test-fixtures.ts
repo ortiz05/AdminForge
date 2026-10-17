@@ -12,6 +12,7 @@ import { ConfigError } from '../shared/errors';
 import { counts, renderPlan } from '../shared/output';
 import { clientCredentialToken, tokenRoles } from '../provision/auth';
 import { GRAPH_SCOPE, provisionerClients, type CliContext, type Clients } from '../provision/clients';
+import { protectedUserIds } from '../provision/ca-audit-catalog';
 import { applyFixtureOps, fetchFixtureState } from '../provision/fixtures-io';
 import {
   FIXTURE_NAMES,
@@ -72,6 +73,8 @@ export async function planFixturesRun(
     domain: settings.primaryDomain!,
     approverUpn: ctx.env.AF_TEST_APPROVER_UPN || undefined,
     automationWrites: !!settings.allowAutomationWrites,
+    // Break-glass accounts: excluded from the ca-audit policies (read only when that fixture is opted in).
+    protectedUserIds: wants(fixtures, 'ca-audit') ? protectedUserIds(ctx.env) : [],
   });
   const state = await fetchFixtureState(clients.graph, desired, {
     upn: ctx.env.AF_TEST_APPROVER_UPN || undefined,
@@ -143,17 +146,28 @@ export async function provisionerStandingLines(
     : ['✓ Provisioner holds no test-fixture application permissions between runs'];
 }
 
+/** ⚠ lines for the plan and `provision status`: the audit policies without a break-glass exclusion. */
+export function fixtureWarnings(run: FixturesRun): string[] {
+  return wants(run.desired.settings, 'ca-audit') && !run.desired.protectedUserIds.length
+    ? [
+        '⚠ The AF-Audit Conditional Access policies have no break-glass exclusion — set AF_PROTECTED_USER_IDS if the tenant has emergency-access accounts',
+      ]
+    : [];
+}
+
 /** Prints the fixtures' plan under its own heading (plan view). */
 export function printFixturesPlan(run: FixturesRun, out: (line: string) => void): void {
   out('');
   out('Test fixtures (AF_TEST_LICENCE_SKU, AF_TEST_FIXTURES):');
   renderPlan(run.ops, out);
+  for (const line of fixtureWarnings(run)) out(`  ${line}`);
 }
 
 /** Applies the fixtures' operations; returns the fixtures that failed (each printed as ✗). */
 export function applyFixtures(ctx: CliContext, clients: Clients, run: FixturesRun): Promise<FixtureKey[]> {
   return applyFixtureOps(run.ops, run.desired, run.state, {
     graph: clients.graph,
+    graphOnce: clients.graphOnce,
     writeEnv: ctx.writeEnv,
     log: ctx.out,
     retry: { sleep: ctx.sleep, ...ctx.retry },
@@ -167,19 +181,23 @@ export const fixturesFailed = (failed: FixtureKey[]) =>
     `${failed.length} fixture(s) could not be provisioned (${failed.join(', ')}) — see the ✗ lines above; everything else was applied.`,
   );
 
-/** Status lines beyond the checklist: the approver left enabled; strangers in AF-Test-Group-01 (Intune). */
+/**
+ * Status lines beyond the checklist: the approver left enabled; strangers in AF-Test-Group-01 (Intune and the
+ * group-scoped audit policies target it); the audit policies without a break-glass exclusion.
+ */
 export function fixtureStatusWarnings(run: FixturesRun): string[] {
-  const lines: string[] = [];
+  const lines: string[] = [...fixtureWarnings(run)];
   if (run.ops.some((o) => o.fixture === 'approver' && o.kind === 'note' && o.detail === 'account enabled'))
     lines.push(
       '⚠ The approver (AF Tester 2) is enabled. Disable it between live runs: `pnpm adminforge provision test-identities --disable`.',
     );
   const members = run.state.testGroupMembers;
-  if (wants(run.desired.settings, 'intune') && members && !isUnreadable(members)) {
+  const targeted = wants(run.desired.settings, 'intune') || wants(run.desired.settings, 'ca-audit');
+  if (targeted && members && !isUnreadable(members)) {
     const others = unexpectedGroupMembers(members);
     if (others)
       lines.push(
-        `⚠ ${run.desired.testGroup.displayName} has ${others} member(s) that aren't provisioning's test accounts or AF-Test-* devices — they receive the AF-Test Intune policies; remove them from the group`,
+        `⚠ ${run.desired.testGroup.displayName} has ${others} member(s) that aren't provisioning's test accounts or AF-Test-* devices — they receive the AF-Test Intune and group-scoped AF-Audit policies; remove them from the group`,
       );
   }
   return lines;

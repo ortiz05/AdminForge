@@ -73,7 +73,9 @@ Run from the repository root with `pnpm exec tsx tests/live/scripts/<script>.ts`
   are forwarded to it).
 - **`check-page-datasources.ts <page key>…`** — executes every datasource of the given pages as the validation user and
   prints, per datasource, `ok` or the error code with its message masked. Exit code 1 when a page is unknown or a
-  datasource failed (licence-gated ones included — read the codes).
+  datasource failed (licence-gated ones included — read the codes). Entity pages take their params after a `?`, as
+  placeholders (`'identity.user?id=@user:AF-Test-User-01'`; a literal id works but stays in your shell history); params are
+  never printed, and a placeholder that doesn't resolve fails that page only.
 - **`run-playbook.ts <playbook> '<inputs JSON>' [--confirm-from <stepId>.<field>]`** — signs in, arms, previews
   (retrying through Graph replication lag) and runs one playbook. Inputs may name the test objects instead of ids —
   placeholders resolve as the validation user through the portal itself, so no ids or addresses go on the command
@@ -178,13 +180,14 @@ Exactly what the suite needs, nothing standing that it doesn't:
 Data only a licensed tenant has, provisioned by the same `pnpm adminforge provision test-identities` run when opted in
 from `<env>.admin.env` (nothing changes without the opt-in):
 
-| Opt-in                                 | What it provisions                                                                                                       | Provisioner needs (Graph application permission)        |
-| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------- |
-| `AF_TEST_LICENCE_SKU=<part number>`    | the licence (e.g. `SPE_E5`) for the validation user and AF-Test-User-01…03 — mailboxes, OneDrives, Teams settings        | `LicenseAssignment.ReadWrite.All`                       |
-| `pim` in `AF_TEST_FIXTURES`            | PIM eligibility, never active: AF-Test-User-01 → Reports Reader, the validation user → Message Center Reader             | `RoleEligibilitySchedule.ReadWrite.Directory`           |
-| `named-location` in `AF_TEST_FIXTURES` | `AF-Test-Location`, 192.0.2.0/24 (documentation range), not trusted                                                      | `Policy.Read.All`, `Policy.ReadWrite.ConditionalAccess` |
-| `intune` in `AF_TEST_FIXTURES`         | `AF-Test Compliance (Windows)` and `AF-Test Configuration (Windows)`, assigned to AF-Test-Group-01 only                  | `DeviceManagementConfiguration.ReadWrite.All`           |
-| `approver` in `AF_TEST_FIXTURES`       | "AF Tester 2" (`af-approver@<domain>`, or `AF_TEST_APPROVER_UPN`): Portal.Reader + Playbook.Approver, no directory roles | nothing beyond the validation user's                    |
+| Opt-in                                 | What it provisions                                                                                                       | Provisioner needs (Graph application permission)                                                                                               |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `AF_TEST_LICENCE_SKU=<part number>`    | the licence (e.g. `SPE_E5`) for the validation user and AF-Test-User-01…03 — mailboxes, OneDrives, Teams settings        | `LicenseAssignment.ReadWrite.All`                                                                                                              |
+| `pim` in `AF_TEST_FIXTURES`            | PIM eligibility, never active: AF-Test-User-01 → Reports Reader, the validation user → Message Center Reader             | `RoleEligibilitySchedule.ReadWrite.Directory`                                                                                                  |
+| `named-location` in `AF_TEST_FIXTURES` | `AF-Test-Location`, 192.0.2.0/24 (documentation range), not trusted                                                      | `Policy.Read.All`, `Policy.ReadWrite.ConditionalAccess`                                                                                        |
+| `intune` in `AF_TEST_FIXTURES`         | `AF-Test Compliance (Windows)` and `AF-Test Configuration (Windows)`, assigned to AF-Test-Group-01 only                  | `DeviceManagementConfiguration.ReadWrite.All`                                                                                                  |
+| `approver` in `AF_TEST_FIXTURES`       | "AF Tester 2" (`af-approver@<domain>`, or `AF_TEST_APPROVER_UPN`): Portal.Reader + Playbook.Approver, no directory roles | nothing beyond the validation user's                                                                                                           |
+| `ca-audit` in `AF_TEST_FIXTURES`       | 14 example Conditional Access policies named `AF-Audit: …`, **report-only** (never enforced) — see below                 | `Policy.Read.All`, `Policy.ReadWrite.ConditionalAccess`, `Application.Read.All` (Graph requires it for a policy with an application condition) |
 
 - **Apply:** `pnpm adminforge provision test-identities --dry-run` shows the plan (and a hint for each permission the
   provisioner's token lacks), then run it without `--dry-run`. Licences need free seats (four); the usage location is
@@ -212,8 +215,36 @@ from `<env>.admin.env` (nothing changes without the opt-in):
   and deletes the approver (first out of the registration campaign's exclusions; restorable for 30 days; its password
   and TOTP seed are cleared). It covers the opted-in fixtures — keep the keys set until they are removed — and a marked
   approver in any case. It works in any environment label: it only removes objects carrying provisioning's marks.
-- **Not yet:** a report-only Conditional Access test policy (waits for the Security Defaults vs Conditional Access
-  decision) and a risky user on demand (the Identity Protection live checks) — see the M365 E5 plan.
+- **Audit Conditional Access policies (`ca-audit`):** examples modelled on Microsoft's recommended baseline and
+  templates (catalogue: `portal/tools/cli/src/provision/ca-audit-catalog.ts`) — MFA for admins, phishing-resistant MFA
+  for admins, MFA for all users, block legacy authentication, MFA for Azure management, MFA for guests, MFA to
+  register devices, sign-in risk and user risk (Entra ID P2), block unknown platforms, admin sign-in frequency, and
+  three scoped examples (compliant or hybrid-joined device, app protection on mobile, block outside
+  AF-Test-Location). They are **report-only**: evaluated at every sign-in and logged (each sign-in's Conditional
+  Access results, Conditional Access insights) but never enforced — the code can't create or update a policy in any
+  other state, and works with Security Defaults on. Scope: most target all users (or the admin roles, or guests) so
+  real sign-ins produce data, excluding the break-glass accounts in `AF_PROTECTED_USER_IDS` (a ⚠ in the plan and
+  status while it is empty) and, as Microsoft's templates do, the Directory Synchronization Accounts role. The two that
+  **block** all users (legacy authentication, unknown platforms) also exclude Global Administrator: Graph refuses a
+  block that could lock everyone out (`1032 … BlockEveryonePolicy`). The device-dependent
+  ones (compliant/hybrid-joined device, app protection) target **AF-Test-Group-01 only**: Microsoft documents that
+  report-only device-state policies can prompt macOS, iOS and Android users to pick a device certificate. The location
+  example targets AF-Test-Group-01 too (everyone is "outside" a documentation range) and needs the `named-location`
+  fixture; the group-scoped ones are refused (`✗ cannot`) while AF-Test-Group-01 has members other than the test
+  accounts or uses dynamic membership. Ownership is an allow-list of name and state (policies have no description):
+  only a catalogue-named policy that is **report-only** is updated; one that is on, off or in an unknown state is left
+  alone (`✗ cannot`). A report-only policy someone changed or widened is put back: Graph merges a PATCH into nested
+  objects, so the update sends every list it doesn't set explicitly empty, carries no state, is re-checked before
+  each attempt (writes go without client retries; a throttled one waits and re-checks), and is read back — `✓` only
+  when Graph now holds the catalogue policy. One rejected policy prints `✗` and the others are still created. When Graph's refusal names the permission it wants (e.g. "Application.Read.All
+  scope is required to add/edit application condition"), the `✗` line shows Graph's (masked) reason and that
+  permission (only permissions the fixture needs) — for every fixture. Remove them with `--remove-fixtures`
+  (catalogue-named ones that are report-only or off; before the named location, which Graph won't delete while a
+  policy refers to it). If one were switched on: phishing-resistant MFA for admins locks out every admin without a
+  passkey, Windows Hello or certificate-based authentication; blocking unknown platforms may end AdminForge sessions
+  (check its report-only results for the Read/Write apps' non-interactive sign-ins first); the admin 4-hour sign-in
+  frequency fails parked delegated runs; the device and location examples block the validation user.
+- **Not yet:** a risky user on demand (the Identity Protection live checks) — see the M365 E5 plan.
 
 ## Safety rules
 

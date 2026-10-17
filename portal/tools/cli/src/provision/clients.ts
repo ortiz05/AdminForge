@@ -55,6 +55,11 @@ export interface CliContext {
 /** A Graph client and an ARM client signed in as the same identity. */
 export interface Clients {
   graph: GraphClient;
+  /**
+   * The same Graph identity without the client's own retries (429, 5xx): for writes that must be preceded by a check
+   * on every attempt (the ca-audit fixture's Conditional Access writes).
+   */
+  graphOnce: GraphClient;
   arm: HttpClient;
 }
 
@@ -64,8 +69,10 @@ function clientsFor(ctx: CliContext, tenantId: string, clientId: string, credent
   const common = { fetch: ctx.fetch, sleep: ctx.sleep, timeoutMs: 60_000 };
   const token = (scope: string) =>
     clientCredentialToken({ tenantId, clientId, ...credential, scope, fetch: ctx.fetch });
+  const graphToken = token(GRAPH_SCOPE);
   return {
-    graph: createGraphClient({ ...common, getToken: token(GRAPH_SCOPE) }),
+    graph: createGraphClient({ ...common, getToken: graphToken }),
+    graphOnce: createGraphClient({ ...common, getToken: graphToken, maxRetries: 0 }),
     arm: createHttpClient({
       ...common,
       getToken: token(ARM_SCOPE),

@@ -10,12 +10,14 @@
  */
 import { ApiError, type GraphClient } from '@adminforge/connectors';
 import { applyApproverOp, fetchApproverState } from './approver-io';
+import { applyCaAuditOp, readCaPolicies } from './ca-audit-io';
 import { findGroup, odata } from './entra-io';
 import {
   INTUNE_POLICIES,
   NAMED_LOCATION,
   isProvisionedAccount,
-  permissionHint,
+  isProvisionedLocation,
+  refusalHint,
   wants,
   type ApproverState,
   type DesiredFixtures,
@@ -26,6 +28,7 @@ import {
   type GroupMember,
   type IntuneKind,
   type IntunePolicyState,
+  type NamedLocationState,
   type SkuInfo,
   type Unreadable,
 } from './fixtures-model';
@@ -35,10 +38,16 @@ import { withReplicationRetry, type RetryOptions } from './retry';
 const USER_SELECT =
   'id,userPrincipalName,displayName,accountEnabled,employeeType,usageLocation,assignedLicenses';
 
+const GUID = new RegExp(GUID_PATTERN, 'gi');
+const ADDRESS = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+/g;
+/** A Graph message for the terminal: first line, ids and addresses masked, cut short. */
+const quiet = (message: string) =>
+  message.split('\n')[0]!.replace(GUID, '<id>').replace(ADDRESS, '<address>').slice(0, 200);
+
 /** A refused or failed read, as the plan shows it. */
 function unreadable(fixture: FixtureKey, err: ApiError): Unreadable {
   return err.status === 401 || err.status === 403
-    ? { unreadable: permissionHint(fixture), forbidden: true }
+    ? { unreadable: refusalHint(fixture, quiet(err.message)), forbidden: true }
     : { unreadable: `could not be read (${err.status} ${err.code})` };
 }
 
@@ -115,6 +124,36 @@ async function readIntune(graph: GraphClient): Promise<Record<IntuneKind, Intune
   return out;
 }
 
+async function readNamedLocations(graph: GraphClient): Promise<NamedLocationState[]> {
+  return (
+    await graph.all<{
+      id: string;
+      displayName: string;
+      isTrusted?: boolean;
+      ipRanges?: Array<{ cidrAddress?: string }>;
+    }>({ path: '/identity/conditionalAccess/namedLocations' })
+  ).map((l) => ({
+    id: l.id,
+    displayName: l.displayName,
+    isTrusted: !!l.isTrusted,
+    cidrs: (l.ipRanges ?? []).map((r) => r.cidrAddress ?? '').filter(Boolean),
+  }));
+}
+
+async function readGroupMembers(graph: GraphClient, groupId: string): Promise<GroupMember[]> {
+  return (
+    await graph.all<GroupMember & { '@odata.type'?: string }>({
+      path: `/groups/${groupId}/members`,
+      query: { $select: 'id,displayName,userPrincipalName,employeeType' },
+    })
+  ).map((m) => ({
+    type: m['@odata.type'] ?? 'unknown',
+    ...(m.userPrincipalName ? { userPrincipalName: m.userPrincipalName } : {}),
+    ...(m.displayName ? { displayName: m.displayName } : {}),
+    employeeType: m.employeeType ?? null,
+  }));
+}
+
 /** Reads everything the opted-in fixtures compare against. Read-only. */
 export async function fetchFixtureState(
   graph: GraphClient,
@@ -149,39 +188,30 @@ export async function fetchFixtureState(
       return out;
     });
   if (wants(s, 'named-location'))
-    state.namedLocations = await readPart('named-location', async () =>
-      (
-        await graph.all<{
-          id: string;
-          displayName: string;
-          isTrusted?: boolean;
-          ipRanges?: Array<{ cidrAddress?: string }>;
-        }>({ path: '/identity/conditionalAccess/namedLocations' })
-      ).map((l) => ({
-        id: l.id,
-        displayName: l.displayName,
-        isTrusted: !!l.isTrusted,
-        cidrs: (l.ipRanges ?? []).map((r) => r.cidrAddress ?? '').filter(Boolean),
-      })),
-    );
+    state.namedLocations = await readPart('named-location', () => readNamedLocations(graph));
   if (wants(s, 'intune')) {
     state.intune = await readPart('intune', () => readIntune(graph));
     state.testGroupId = (await findGroup(graph, desired.testGroup.uniqueName))?.id;
     const groupId = state.testGroupId;
-    if (groupId)
-      state.testGroupMembers = await readPart('intune', async () =>
-        (
-          await graph.all<GroupMember & { '@odata.type'?: string }>({
-            path: `/groups/${groupId}/members`,
-            query: { $select: 'id,displayName,userPrincipalName,employeeType' },
-          })
-        ).map((m) => ({
-          type: m['@odata.type'] ?? 'unknown',
-          ...(m.userPrincipalName ? { userPrincipalName: m.userPrincipalName } : {}),
-          ...(m.displayName ? { displayName: m.displayName } : {}),
-          employeeType: m.employeeType ?? null,
-        })),
-      );
+    if (groupId) state.testGroupMembers = await readPart('intune', () => readGroupMembers(graph, groupId));
+  }
+  if (wants(s, 'ca-audit')) {
+    state.caPolicies = await readPart('ca-audit', () => readCaPolicies(graph));
+    // The ids the policies refer to: AF-Test-Group-01 and AF-Test-Location (when it exists).
+    state.testGroupId ??= (await findGroup(graph, desired.testGroup.uniqueName))?.id;
+    state.namedLocations ??= await readPart('ca-audit', () => readNamedLocations(graph));
+    // The group-scoped examples apply to whoever is in AF-Test-Group-01: its members and membership type.
+    const groupId = state.testGroupId;
+    if (groupId) {
+      state.testGroupMembers ??= await readPart('ca-audit', () => readGroupMembers(graph, groupId));
+      state.testGroupDynamic = await readPart('ca-audit', async () => {
+        const { data } = await graph.request<{ groupTypes?: string[]; membershipRule?: string | null }>({
+          path: `/groups/${groupId}`,
+          query: { $select: 'groupTypes,membershipRule' },
+        });
+        return (data.groupTypes ?? []).includes('DynamicMembership') || !!data.membershipRule;
+      });
+    }
   }
   // Always looked up: opted in, it is read in full; otherwise only whether a leftover approver exists.
   state.approver = await fetchApproverState(graph, desired, approverEnv, wants(s, 'approver'));
@@ -190,6 +220,8 @@ export async function fetchFixtureState(
 
 export interface FixtureApplyContext {
   graph: GraphClient;
+  /** The same identity without client retries (Conditional Access writes; default: `graph`). */
+  graphOnce?: GraphClient;
   writeEnv: (updates: Record<string, string>) => void;
   log: (line: string) => void;
   retry?: RetryOptions;
@@ -197,16 +229,10 @@ export interface FixtureApplyContext {
   now?: () => Date;
 }
 
-const GUID = new RegExp(GUID_PATTERN, 'gi');
-const ADDRESS = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+/g;
-/** A Graph message for the terminal: first line, ids and addresses masked, cut short. */
-const quiet = (message: string) =>
-  message.split('\n')[0]!.replace(GUID, '<id>').replace(ADDRESS, '<address>').slice(0, 200);
-
 /** One line for a failed fixture operation. */
 export function describeFixtureFailure(fixture: FixtureKey, err: ApiError): string {
   return err.status === 401 || err.status === 403
-    ? permissionHint(fixture)
+    ? refusalHint(fixture, quiet(err.message))
     : `${err.status} ${err.code}: ${quiet(err.message)}`;
 }
 
@@ -293,7 +319,7 @@ export async function applyFixtureOps(
 
   for (const op of ops) {
     if (op.action === 'noop' || op.action === 'skip') continue;
-    if (failed.has(op.fixture)) {
+    if (failed.has(op.fixture) && !op.independent) {
       log(`  – not attempted: ${op.title} (an earlier step of this fixture failed)`);
       continue;
     }
@@ -424,6 +450,21 @@ export async function applyFixtureOps(
           log(`  ✓ removed: ${op.title}`);
           break;
         }
+        case 'caPolicy':
+        case 'caPolicyRemove':
+          await applyCaAuditOp(op, desired, {
+            graph,
+            graphOnce: ctx.graphOnce ?? graph,
+            log,
+            sleep: ctx.retry?.sleep ?? ((ms) => new Promise((r) => setTimeout(r, ms))),
+            testGroupId,
+            testLocationId: () =>
+              retry(async () => {
+                const own = (await readNamedLocations(graph)).find(isProvisionedLocation);
+                return own?.id ?? Promise.reject(notVisible(NAMED_LOCATION.displayName));
+              }),
+          });
+          break;
         case 'note':
           break;
         default:

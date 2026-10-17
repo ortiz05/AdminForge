@@ -26,8 +26,9 @@ create (`af-…` UPN with the "AdminForge validation" marker or "AF Tester" name
 scripts in `pnpm adminforge provision test-identities --enable` / `--disable`.
 
 Licensed test data (opt-in, admin file): `AF_TEST_LICENCE_SKU=SPE_E5` (licence for the validation user and
-AF-Test-User-01…03) and `AF_TEST_FIXTURES=pim,named-location,intune,approver` (PIM eligibility, `AF-Test-Location`,
-AF-Test Intune policies on AF-Test-Group-01, the approver "AF Tester 2" (Portal.Reader + Playbook.Approver) for
+AF-Test-User-01…03) and `AF_TEST_FIXTURES=pim,named-location,intune,approver,ca-audit` (PIM eligibility,
+`AF-Test-Location`, AF-Test Intune policies on AF-Test-Group-01, 14 report-only `AF-Audit: …` Conditional Access
+policies whose results show in each sign-in's Conditional Access tab, the approver "AF Tester 2" (Portal.Reader + Playbook.Approver) for
 approval flows — enable it with `provision test-identities --enable --approver` (plain `--enable` never does; `--disable`
 covers both); its MFA: `register-test-user-mfa.ts --approver`; its sign-in: `testApproverCredentials(env)`; refused
 where `AF_AUTOMATION_ALLOW_WRITE_PERMISSIONS=true`). Each needs a Graph application

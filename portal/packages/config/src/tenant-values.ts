@@ -22,7 +22,7 @@ export const PUBLIC_CATALOGUE_KEY = /^(AF_LICENCE_SKU_\d+|AF_TEST_LICENCE_SKU)$/
  * The licensed test fixtures `adminforge provision test-identities` knows (AF_TEST_FIXTURES). The CLI uses this list
  * too (provision/fixtures-model.ts), so the exemption below and the CLI can't drift apart.
  */
-export const TEST_FIXTURE_NAMES = ['pim', 'named-location', 'intune', 'approver'] as const;
+export const TEST_FIXTURE_NAMES = ['pim', 'named-location', 'intune', 'approver', 'ca-audit'] as const;
 
 /** Configuration keys whose values are lists of AdminForge option names (the test fixtures), not tenant data. */
 export const OPTION_LIST_KEY = /^AF_TEST_FIXTURES$/;

@@ -55,26 +55,32 @@ Every configuration key is documented in `config/example.env`.
   `--enable` / `--disable` only turn the validation user's sign-in on before a live run and off afterwards
   (`--disable` also revokes its sessions; enabling only in test environments).
 - **Licensed test fixtures (opt-in):** with `AF_TEST_LICENCE_SKU` (a SKU part number such as `SPE_E5`) and/or
-  `AF_TEST_FIXTURES` (`pim`, `named-location`, `intune`, `approver`) in the admin file, the same run also provisions
+  `AF_TEST_FIXTURES` (`pim`, `named-location`, `intune`, `approver`, `ca-audit`) in the admin file, the same run also provisions
   — after the identities — a licence for the validation user and AF-Test-User-01…03, PIM eligibility (AF-Test-User-01:
   Reports Reader; the validation user: Message Center Reader; never active), the named location `AF-Test-Location`
   (192.0.2.0/24, not trusted), an `AF-Test` Intune compliance policy and configuration profile assigned to
   AF-Test-Group-01 only, and the approver account "AF Tester 2" (Portal.Reader and Playbook.Approver, its own
   marker, created disabled; refused where `AF_AUTOMATION_ALLOW_WRITE_PERMISSIONS=true` or when its UPN is the
-  validation user's). Only objects provisioning created are changed (markers, provisioning's names, the exact range);
-  same-named others are refused. `--enable` enables the validation user only, `--enable --approver` also the
+  validation user's), and 14 example Conditional Access policies `AF-Audit: …` that are only ever **report-only**
+  (device-dependent and location examples on AF-Test-Group-01 only — refused while it has other members or dynamic
+  membership — the rest on all users / admin roles / guests minus `AF_PROTECTED_USER_IDS` and the sync accounts;
+  catalogue in `provision/ca-audit-catalog.ts`; updates are checked before each attempt and read back). Only objects
+  provisioning created are changed (markers, provisioning's names, the exact range; for Conditional Access, a catalogue
+  name on a policy that is report-only); same-named others are refused. `--enable` enables the validation user only, `--enable --approver` also the
   approver; `--disable` always disables both (each attempted, each reported). `--remove-fixtures` removes what the
   opted-in fixtures created and a marked approver in any case, in any environment label (with `--dry-run`: the plan
-  only). A fixture Graph refuses prints `✗` with the permission the provisioner needs, the others go on, and the run
-  exits 1. Without the opt-in nothing changes (a leftover approver is still flagged).
+  only). A fixture Graph refuses prints `✗` with the permission the provisioner needs (Graph's own reason and the
+  permission it names, when its message names one), the others go on, and the run exits 1. Without the opt-in nothing changes (a leftover approver is still flagged).
 - **Options:** `--dry-run` (plan only), `--enable`, `--disable` (mutually exclusive; not with `--dry-run`),
   `--approver` (with `--enable` only), `--remove-fixtures` (not with `--enable`/`--disable`).
 - **Reads:** `AF_TENANT_ID`, `AF_ENV_LABEL`, `AF_PRIMARY_DOMAIN`, `AF_TEST_IDENTITY_LABELS`, the provisioner
   credentials, and from the admin file `AF_TEST_USER_UPN`, `AF_TEST_USER_PASSWORD`, `AF_TEST_SERVICE_ADMIN_ROLES`
   (Exchange/SharePoint admin roles for the validation user; off unless `true`), `AF_TEST_LICENCE_SKU`,
-  `AF_TEST_FIXTURES`, `AF_TEST_APPROVER_UPN`, `AF_TEST_APPROVER_PASSWORD`.
+  `AF_TEST_FIXTURES`, `AF_TEST_APPROVER_UPN`, `AF_TEST_APPROVER_PASSWORD`; with `ca-audit`, `AF_PROTECTED_USER_IDS`
+  (excluded from the audit policies).
 - **Changes:** Entra ID users, group memberships, directory roles and the registration campaign's exclusions; with
-  the fixtures, licences, PIM eligibility, a named location and Intune policies; writes `AF_TEST_USER_UPN`,
+  the fixtures, licences, PIM eligibility, a named location, Intune policies and report-only Conditional Access
+  policies; writes `AF_TEST_USER_UPN`,
   `AF_TEST_USER_PASSWORD` (and `AF_TEST_APPROVER_UPN`, `AF_TEST_APPROVER_PASSWORD`) to `<env>.admin.env`. **Safe:**
   only with `--dry-run`.
 - **Provisioner permissions for the fixtures** (Microsoft Graph application permissions with admin consent — its
@@ -82,13 +88,14 @@ Every configuration key is documented in `config/example.env`.
   the directory role and several are tier-0, so remove them between runs — `provision status` warns while they're
   held):
 
-  | Fixture          | Permission                                                       |
-  | ---------------- | ---------------------------------------------------------------- |
-  | licences         | `LicenseAssignment.ReadWrite.All`                                |
-  | `pim`            | `RoleEligibilitySchedule.ReadWrite.Directory`                    |
-  | `named-location` | `Policy.Read.All` and `Policy.ReadWrite.ConditionalAccess`       |
-  | `intune`         | `DeviceManagementConfiguration.ReadWrite.All`                    |
-  | `approver`       | none beyond the validation user's (its directory role covers it) |
+  | Fixture          | Permission                                                                                                         |
+  | ---------------- | ------------------------------------------------------------------------------------------------------------------ |
+  | licences         | `LicenseAssignment.ReadWrite.All`                                                                                  |
+  | `pim`            | `RoleEligibilitySchedule.ReadWrite.Directory`                                                                      |
+  | `named-location` | `Policy.Read.All` and `Policy.ReadWrite.ConditionalAccess`                                                         |
+  | `intune`         | `DeviceManagementConfiguration.ReadWrite.All`                                                                      |
+  | `approver`       | none beyond the validation user's (its directory role covers it)                                                   |
+  | `ca-audit`       | `Policy.Read.All`, `Policy.ReadWrite.ConditionalAccess` and `Application.Read.All` (for the application condition) |
 
 ### `provision azure-test [--dry-run] [--no-verify] | --destroy [--yes]`
 

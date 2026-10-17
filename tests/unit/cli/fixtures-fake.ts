@@ -5,8 +5,10 @@ import { createFakeCloud, type FakeCloudOptions } from './fake-cloud';
 /**
  * The fake cloud (fake-cloud.ts) plus the Microsoft Graph endpoints the licensed test fixtures use: subscriptions and
  * `assignLicense`, the organisation's country, PIM eligibility requests and schedules, named locations, Intune
- * compliance policies and configuration profiles (with assignments), and deleting users. `forbid` makes a fixture's
- * endpoints answer 403, like a provisioner without the Graph application permission. Synthetic data only.
+ * compliance policies and configuration profiles (with assignments), Conditional Access policies (stored and answered
+ * the way Graph does: every list present, unset parts null, the authentication strength expanded), and deleting users.
+ * `forbid` makes a fixture's endpoints answer 403, like a provisioner without the Graph application permission.
+ * Synthetic data only.
  */
 
 type Json = Record<string, unknown>;
@@ -27,6 +29,31 @@ export interface FixturesCloudOptions extends FakeCloudOptions {
   country?: string;
   /** When false, eligibility without expiration is refused with an ExpirationRule error. Default true. */
   permanentEligibility?: boolean;
+  /** Conditional Access policy names whose create Graph rejects (400), to show one failure doesn't stop the rest. */
+  caReject?: string[];
+  /**
+   * Like a provisioner without Application.Read.All: a policy with an application condition (an app id, not "All")
+   * is refused 403, with Graph's message naming the scope.
+   */
+  caNoApplicationRead?: boolean;
+  /**
+   * Answer the next `times` Conditional Access writes with 429 (Retry-After), calling `then` on each — e.g. to switch a
+   * policy on meanwhile, like an administrator.
+   */
+  caThrottle?: { times: number; then?: () => void };
+  /** A PATCH that answers 204 but changes nothing (to show the read-back after an update catches it). */
+  caPatchNoop?: boolean;
+}
+
+/** Like Graph's PATCH: nested objects are merged, anything else (lists, null, text) replaced. */
+export function mergePatch(target: Json, patch: Json): Json {
+  const out: Json = { ...target };
+  for (const [k, v] of Object.entries(patch)) {
+    const t = out[k];
+    const plain = (x: unknown): x is Json => !!x && typeof x === 'object' && !Array.isArray(x);
+    out[k] = plain(v) && plain(t) ? mergePatch(t, v) : v;
+  }
+  return out;
 }
 
 const json = (status: number, body?: unknown) =>
@@ -36,6 +63,72 @@ const json = (status: number, body?: unknown) =>
   });
 const graphError = (status: number, code: string, message: string) =>
   json(status, { error: { code, message } });
+
+/** A Conditional Access policy the way Graph answers it: every list present, unset parts null. */
+export function asGraphStores(p: Json): Json {
+  const c = (p.conditions ?? {}) as Json;
+  const users = (c.users ?? {}) as Json;
+  const apps = (c.applications ?? {}) as Json;
+  const grant = p.grantControls as Json | null | undefined;
+  const session = p.sessionControls as Json | null | undefined;
+  const strength = grant?.authenticationStrength as Json | undefined;
+  return {
+    displayName: p.displayName,
+    state: p.state,
+    conditions: {
+      userRiskLevels: [],
+      signInRiskLevels: [],
+      servicePrincipalRiskLevels: [],
+      platforms: null,
+      locations: null,
+      devices: null,
+      clientApplications: null,
+      ...c,
+      users: {
+        includeUsers: [],
+        excludeUsers: [],
+        includeGroups: [],
+        excludeGroups: [],
+        includeRoles: [],
+        excludeRoles: [],
+        includeGuestsOrExternalUsers: null,
+        excludeGuestsOrExternalUsers: null,
+        ...users,
+      },
+      applications: {
+        includeApplications: [],
+        excludeApplications: [],
+        includeUserActions: [],
+        includeAuthenticationContextClassReferences: [],
+        applicationFilter: null,
+        ...apps,
+      },
+    },
+    grantControls: grant
+      ? {
+          builtInControls: [],
+          customAuthenticationFactors: [],
+          termsOfUse: [],
+          ...grant,
+          authenticationStrength: strength
+            ? { ...strength, displayName: 'Phishing-resistant MFA', policyType: 'builtIn' }
+            : null,
+        }
+      : null,
+    sessionControls: session
+      ? {
+          disableResilienceDefaults: null,
+          applicationEnforcedRestrictions: null,
+          cloudAppSecurity: null,
+          persistentBrowser: null,
+          ...session,
+          signInFrequency: session.signInFrequency
+            ? { value: null, type: null, ...(session.signInFrequency as Json) }
+            : null,
+        }
+      : null,
+  };
+}
 
 export function createFixturesCloud(opts: FixturesCloudOptions) {
   const cloud = createFakeCloud(opts);
@@ -52,6 +145,8 @@ export function createFixturesCloud(opts: FixturesCloudOptions) {
     expiration: Json;
   }> = [];
   const namedLocations: Json[] = [];
+  /** Conditional Access policies, as Graph stores them. */
+  const caPolicies: Json[] = [];
   const intune: Record<'deviceCompliancePolicies' | 'deviceConfigurations', Json[]> = {
     deviceCompliancePolicies: [],
     deviceConfigurations: [],
@@ -63,6 +158,28 @@ export function createFixturesCloud(opts: FixturesCloudOptions) {
   const extraMembers: Json[] = [];
   const denied = () =>
     graphError(403, 'Authorization_RequestDenied', 'Insufficient privileges to complete the operation.');
+
+  /** Graph's own checks on a Conditional Access policy create or update (seen live). */
+  function caRefusal(p: Json): Response | undefined {
+    const c = (p.conditions ?? {}) as Json;
+    const users = (c.users ?? {}) as Record<string, unknown[] | undefined>;
+    const apps = ((c.applications ?? {}) as Json).includeApplications as string[] | undefined;
+    if (opts.caNoApplicationRead && (apps ?? []).some((a) => a !== 'All'))
+      return graphError(
+        403,
+        'AccessDenied',
+        'Insufficient privileges to create or update policy. Application.Read.All scope is required to add/edit application condition.',
+      );
+    const grant = (p.grantControls ?? {}) as { builtInControls?: string[] };
+    const excludes = ['excludeUsers', 'excludeGroups', 'excludeRoles'].some((k) => (users[k] ?? []).length);
+    if ((users.includeUsers ?? []).includes('All') && grant.builtInControls?.includes('block') && !excludes)
+      return graphError(
+        400,
+        'BadRequest',
+        '1032: ConditionalActionPolicy validation failed due to BlockEveryonePolicy.',
+      );
+    return undefined;
+  }
 
   function handle(method: string, path: string, body: Json | undefined): Response | undefined {
     let m: RegExpExecArray | null;
@@ -166,6 +283,17 @@ export function createFixturesCloud(opts: FixturesCloudOptions) {
       ) {
         const i = namedLocations.findIndex((l) => l.id === m![1]);
         if (i < 0) return graphError(404, 'Request_ResourceNotFound', 'no such location');
+        // Like Graph: a location a Conditional Access policy still refers to can't be deleted.
+        if (
+          JSON.stringify(caPolicies.map((p) => (p.conditions as Json | undefined)?.locations)).includes(
+            m![1]!,
+          )
+        )
+          return graphError(
+            400,
+            'BadRequest',
+            'The named location is referenced by a Conditional Access policy.',
+          );
         namedLocations.splice(i, 1);
         return json(204);
       }
@@ -202,6 +330,44 @@ export function createFixturesCloud(opts: FixturesCloudOptions) {
         if (i < 0) return graphError(404, 'ResourceNotFound', 'no such policy');
         list.splice(i, 1);
         policyAssignments.delete(id);
+        return json(204);
+      }
+    }
+    if (path.startsWith('/identity/conditionalAccess/policies')) {
+      if (forbid.has('ca-audit')) return denied();
+      const id = /^\/identity\/conditionalAccess\/policies\/([^/]+)$/.exec(path)?.[1];
+      if (!id && method === 'GET') return json(200, { value: caPolicies });
+      if (method !== 'GET' && opts.caThrottle && opts.caThrottle.times > 0) {
+        opts.caThrottle.times--;
+        opts.caThrottle.then?.();
+        return new Response(
+          JSON.stringify({ error: { code: 'TooManyRequests', message: 'Too many requests.' } }),
+          {
+            status: 429,
+            headers: { 'content-type': 'application/json', 'retry-after': '1' },
+          },
+        );
+      }
+      const refused = body && caRefusal(body);
+      if (refused) return refused;
+      if (!id && method === 'POST') {
+        if (opts.caReject?.includes(String(body!.displayName)))
+          return graphError(400, 'BadRequest', '1054: Invalid policy for this tenant.');
+        const created = { id: randomUUID(), ...asGraphStores(body!) };
+        caPolicies.push(created);
+        return json(201, created);
+      }
+      const i = caPolicies.findIndex((p) => p.id === id);
+      if (i < 0) return graphError(404, 'ResourceNotFound', 'no such policy');
+      if (method === 'GET') return json(200, caPolicies[i]);
+      if (method === 'PATCH') {
+        if (opts.caPatchNoop) return json(204);
+        // Graph merges nested objects: a list the PATCH leaves out keeps its old value.
+        caPolicies[i] = { id: caPolicies[i]!.id, ...asGraphStores(mergePatch(caPolicies[i]!, body!)) };
+        return json(204);
+      }
+      if (method === 'DELETE') {
+        caPolicies.splice(i, 1);
         return json(204);
       }
     }
@@ -266,6 +432,7 @@ export function createFixturesCloud(opts: FixturesCloudOptions) {
     namedLocations,
     intune,
     policyAssignments,
+    caPolicies,
     /** Adds a non-user member (a device or group) to a group. */
     addMember(groupId: string, member: Json & { id: string }) {
       extraMembers.push(member);

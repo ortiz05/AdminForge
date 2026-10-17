@@ -226,7 +226,9 @@ describe('Intune assignments', () => {
     lines.length = 0;
     await provisionStatus(ctx);
     const line = lines.find((l) => l.includes("aren't provisioning's"))!;
-    expect(line).toMatch(/⚠ AF-Test-Group-01 has 2 member\(s\) .* receive the AF-Test Intune policies/);
+    expect(line).toMatch(
+      /⚠ AF-Test-Group-01 has 2 member\(s\) .* receive the AF-Test Intune and group-scoped AF-Audit policies/,
+    );
     expect(line).not.toMatch(/Jane|LAPTOP/);
   });
 });

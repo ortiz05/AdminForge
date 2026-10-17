@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/report.schema.json
 kind: report
 id: azure.vms-without-backup
-version: 1.0.0
+version: 1.0.1
 title: Virtual machines without backup
 summary: Azure virtual machines that no Recovery Services vault protects, whose protection was stopped, or whose last backup failed or is older than the chosen age — from the Azure Backup items in Resource Graph.
 owner: azure-team
@@ -39,6 +39,20 @@ params:
   subscriptionId: { type: string, format: guid, label: Subscription, picker: subscription, facet: true }
 
 datasources:
+  # Subscription names, read once and joined to the rows natively ($attach): Resource Graph allows one join to another
+  # table in a query, and the rows already need theirs.
+  subs:
+    source: resourceGraph
+    query: |
+      // af:azure.vms-without-backup#subs
+      resourcecontainers
+      | where type =~ 'microsoft.resources/subscriptions'
+      ${ params.subscriptionId ? "| where subscriptionId == '" & $guid(params.subscriptionId) & "'" }
+      | project subscriptionId, subscriptionName = name
+    paging: all
+    maxItems: 10000
+    cache: { ttl: 3600 }
+    transform: "${ $count(value.value) > 0 ? value.value{ subscriptionId: { 'subscriptionName': subscriptionName } } : {} }"
   vms:
     source: resourceGraph
     query: |
@@ -62,11 +76,11 @@ datasources:
           isnull(hoursSinceBackup) or hoursSinceBackup >= ${ $number(params.overdueHours) in [26, 48, 168] ? $string($number(params.overdueHours)) : '48' }, 'Backup overdue',
           'Protected')
       ${ params.state = 'any' ? '' : params.state in ['Not protected', 'Protection stopped', 'Last backup failed', 'Backup overdue'] ? "| where backup == '" & params.state & "'" : "| where backup != 'Protected'" }
-      | join kind=leftouter (resourcecontainers | where type =~ 'microsoft.resources/subscriptions' | project subscriptionId, subscriptionName = name) on subscriptionId
-      | project id, name, backup, vaultName, policyName, protectionState, lastBackupStatus, lastBackupTime, hoursSinceBackup, powerState, osType, vmSize, resourceGroup, subscriptionId, subscriptionName, location, tags
+      | project id, name, backup, vaultName, policyName, protectionState, lastBackupStatus, lastBackupTime, hoursSinceBackup, powerState, osType, vmSize, resourceGroup, subscriptionId, location, tags
       | order by backup asc, name asc
     paging: all
     maxItems: 50000
+    transform: "${ value.value ? $merge([value, { 'value': $attach(value.value, 'subscriptionId', ds.subs, { 'subscriptionName': null }) }]) : value }"
     cache: { ttl: 300 }
   summary:
     source: resourceGraph

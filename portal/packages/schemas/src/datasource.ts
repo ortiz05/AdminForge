@@ -48,12 +48,58 @@ export const startsWithUnion = (kql: string) => /^\s*union\b/i.test(kql.replace(
 export const RESOURCE_GRAPH_UNION_MESSAGE =
   "Resource Graph can't start a query with union: pipe one table into the other, e.g. resources | union (resourcecontainers | where …).";
 
+/**
+ * Resource Graph's join and union limits (learn.microsoft.com › Resource Graph › query language): at most three `join`
+ * or `union` operations in a query, counted together; only one of them may bring in another table (a cross-table
+ * join), unless every one is between `resources` and `resourcecontainers`; and a `union` stays within one table or
+ * between those two. Azure refuses the query otherwise, so validate says so before anyone runs it. Returns the problem,
+ * or null. Expressions (`${ … }`), strings and comments are left out; the first table after any `let` statements is the
+ * query's own table.
+ */
+export function resourceGraphJoinProblem(kql: string): string | null {
+  let text = kql.replace(/'(?:[^'\\\n]|\\.)*'|"(?:[^"\\\n]|\\.)*"/g, "''");
+  // ${ … } expressions, with nested braces.
+  let out = '';
+  for (let i = 0; i < text.length; i++) {
+    if (text[i] === '$' && text[i + 1] === '{') {
+      let depth = 0;
+      for (i++; i < text.length; i++) {
+        if (text[i] === '{') depth++;
+        else if (text[i] === '}' && --depth === 0) break;
+      }
+      out += "''";
+    } else out += text[i];
+  }
+  text = out.replace(/\/\/.*$/gm, '').replace(/^\s*(let\b[^;]*;\s*)+/i, '');
+  const own = /^\s*([A-Za-z_][A-Za-z0-9_]*)/.exec(text)?.[1]?.toLowerCase() ?? 'resources';
+  const ops = [
+    ...text.matchAll(
+      /\|\s*(join|union)\b(?:\s+(?:kind|withsource|isfuzzy|hint\.[A-Za-z]+)\s*=\s*[A-Za-z0-9_]+)*\s*\(?\s*([A-Za-z_][A-Za-z0-9_]*)?/gi,
+    ),
+  ].map((m) => ({ op: m[1]!.toLowerCase(), table: (m[2] ?? own).toLowerCase() }));
+  if (ops.length > 3)
+    return `Resource Graph allows at most three join or union operations in one query (counted together); this one has ${ops.length}. Split it into datasources and combine them in a transform.`;
+  const pair = new Set(['resources', 'resourcecontainers']);
+  const inPair = (t: string) => pair.has(t) && pair.has(own);
+  const cross = ops.filter((o) => o.table !== own);
+  const badUnion = cross.find((o) => o.op === 'union' && !inPair(o.table));
+  if (badUnion)
+    return `Resource Graph only unions within one table or between resources and resourcecontainers, not ${own} and ${badUnion.table}. Use a separate datasource for ${badUnion.table}.`;
+  if (cross.length > 1 && !cross.every((o) => inPair(o.table)))
+    return `Resource Graph allows only one join to another table in a query (unless every one is between resources and resourcecontainers); this one joins ${own} to ${cross.map((o) => o.table).join(', ')}. Read the others in their own datasource (e.g. subscription names) and combine them in a transform.`;
+  return null;
+}
+
 export const ResourceGraphSpec = {
   /** KQL over Resource Graph tables (resources, resourcecontainers, …). */
   query: z
     .string()
     .min(1)
-    .refine((q) => !startsWithUnion(q), RESOURCE_GRAPH_UNION_MESSAGE),
+    .refine((q) => !startsWithUnion(q), RESOURCE_GRAPH_UNION_MESSAGE)
+    .superRefine((q, ctx) => {
+      const problem = resourceGraphJoinProblem(q);
+      if (problem) ctx.addIssue({ code: 'custom', message: problem });
+    }),
   subscriptions: IdList.optional(),
   managementGroups: IdList.optional(),
 };

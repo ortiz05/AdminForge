@@ -152,12 +152,10 @@ describe('Azure report library: shape', () => {
     ['azure.orphaned-resources', 'orphans'],
     ['azure.storage-account-security', 'accounts'],
     ['azure.databases-public-access', 'servers'],
-    ['azure.vms-without-backup', 'vms'],
     ['azure.key-vault-configuration', 'vaults'],
     ['azure.advisor-recommendations', 'recommendations'],
     ['azure.policy-compliance', 'policies'],
     ['azure.arc-agent-health', 'machines'],
-    ['azure.app-service-security', 'apps'],
     ['azure.orphaned-role-assignments', 'orphans'],
   ])('%s keeps its rows untransformed (large tenants, streamed export); KPIs come from KQL', (id, ds) => {
     const r = def(id);
@@ -168,6 +166,23 @@ describe('Azure report library: shape', () => {
         k.data,
         false,
       ]);
+  });
+
+  // Rows that already join another table (Recovery Services, App Service configuration) can't also join
+  // resourcecontainers: Resource Graph allows one cross-table join. Their subscription names come from a small lookup
+  // joined natively ($attach) — the only transform, so the export is complete up to maxItems, though not streamed.
+  it.each([
+    ['azure.vms-without-backup', 'vms'],
+    ['azure.app-service-security', 'apps'],
+  ])('%s names subscriptions with a native lookup only; KPIs come from KQL', async (id, ds) => {
+    const r = def(id);
+    expect(r.datasources[ds].transform).toBe(
+      "${ value.value ? $merge([value, { 'value': $attach(value.value, 'subscriptionId', ds.subs, { 'subscriptionName': null }) }]) : value }",
+    );
+    expect(r.datasources.subs.query).toContain('resourcecontainers');
+    expect(r.export.data).toBe(`${ds}.value`);
+    for (const k of r.layout.filter((b: Def) => b.widget === 'kpi'))
+      expect(k.data.startsWith(`${ds}.`)).toBe(false);
   });
 
   it('subscription filters only take GUIDs and enum filters only take their values', async () => {

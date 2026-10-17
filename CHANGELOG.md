@@ -28,6 +28,9 @@ Closes the gaps found by comparing the build with the original plan (see the pla
   The server page gains Updates and Defender tabs. Four new configuration checks (failed extensions, critical or
   security updates overdue for 30 days, not assessed for 3 days, agents 6+ releases behind), each with a remedy and a
   link.
+- **Resource Graph join limits in validate:** a query with more than three `join`/`union` operations, more than one
+  join to another table (unless all are `resources` ↔ `resourcecontainers`) or a union across other tables is refused
+  before Azure refuses it (`resourceGraphJoinProblem`, Resource Graph datasources and KQL probes).
 - **A probe's result says what failed, why, and what to do.** Its detail on Synthetic monitoring shows **What it
   found** (the rows behind the result, e.g. which SAML apps' certificates expire and when; Operators only, since the
   automation identity collected them), **What to do** (new probe field `remedy`) with a button to the AdminForge page
@@ -666,6 +669,9 @@ Security review of the licensed build-out (2026-10-16) fixed:
 
 ### Fixed
 
+- VMs without backup (1.0.1) and App Service security (1.0.1) joined two other tables in one Resource Graph query,
+  which Azure refuses: subscription names now come from a small lookup joined with `$attach`. The same limit is fixed
+  in the new AVD and Arc views before release.
 - Opening a sign-in event in the inspector froze the browser: the drawer's title flipped hundreds of times a second
   (no requests, no URL change). An entity page whose header title is an expression reported it to the inspector, the
   inspector rebuilt the page's params on every render, and the new data scope evaluated the title again. The inspector

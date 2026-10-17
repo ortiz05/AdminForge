@@ -25,7 +25,7 @@ Pages, dashboards and reports are YAML in `portal/content/{pages,dashboards,repo
      `adminforge validate` rejects the leading form.
    - Resource Graph returns **computed** booleans as `1`/`0` (`tostring()` gives `True`/`False`); raw `properties.*`
      booleans stay `true`/`false`. Project flags you compare or map as `iff(cond, 'true', 'false')` in the final `project` (keep the boolean for KQL `where`/`order by`), compare with `= 'true'`, show them with `kind: status` (never `kind: boolean`), and make fixtures
-     match what Resource Graph really returns. Only `leftouter`/`inner`/`innerunique` joins (≤ 3): use `leftouter` +
+     match what Resource Graph really returns. Only `leftouter`/`inner`/`innerunique` joins, and at most three `join` + `union` together; only **one** may join another table (unless every one is `resources` ↔ `resourcecontainers`), and a `union` stays in one table or that pair — `validate` refuses the rest. Rows that already join another table (`patchassessmentresources`, `recoveryservicesresources`, …) get subscription names from a small `resourcecontainers` datasource joined with `$attach` (`azure.vms-without-backup`: `subs`). Joins: use `leftouter` +
      `where isnull(x)` instead of `leftanti`; every union branch must project the columns used after it.
    - Results that can reach thousands of rows: a rows datasource without a transform (transforms have a 250 ms budget)
      plus a second Resource Graph `summarize` query for KPIs; `<ds>.totalRecords` works directly as a KPI.

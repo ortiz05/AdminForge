@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/report.schema.json
 kind: report
 id: azure.app-service-security
-version: 1.0.0
+version: 1.0.1
 title: App Service security settings
 summary: Web apps and Function Apps that accept plain HTTP, allow TLS below 1.2, allow unencrypted FTP, have remote debugging on or run a language version past (or near) its end of support — each setting per app, from the site configuration in Resource Graph.
 owner: azure-team
@@ -27,6 +27,20 @@ params:
   subscriptionId: { type: string, format: guid, label: Subscription, picker: subscription, facet: true }
 
 datasources:
+  # Subscription names, read once and joined to the rows natively ($attach): Resource Graph allows one join to another
+  # table in a query, and the rows already need theirs.
+  subs:
+    source: resourceGraph
+    query: |
+      // af:azure.app-service-security#subs
+      resourcecontainers
+      | where type =~ 'microsoft.resources/subscriptions'
+      ${ params.subscriptionId ? "| where subscriptionId == '" & $guid(params.subscriptionId) & "'" }
+      | project subscriptionId, subscriptionName = name
+    paging: all
+    maxItems: 10000
+    cache: { ttl: 3600 }
+    transform: "${ $count(value.value) > 0 ? value.value{ subscriptionId: { 'subscriptionName': subscriptionName } } : {} }"
   apps:
     source: resourceGraph
     # The language version comes from the site configuration (linuxFxVersion on Linux; netFrameworkVersion, PHP, Python,
@@ -75,11 +89,11 @@ datasources:
           'Supported')
       | extend findings = iff(httpsOnly, 0, 1) + iff(minTlsVersion in ('1.0', '1.1'), 1, 0) + iff(ftpsState =~ 'AllAllowed', 1, 0) + iff(remoteDebugging, 1, 0) + iff(runtimeSupport == 'Ended', 1, 0)
       ${ params.findingsOnly = false ? '' : "| where findings > 0 or runtimeSupport == 'Ending soon'" }
-      | join kind=leftouter (resourcecontainers | where type =~ 'microsoft.resources/subscriptions' | project subscriptionId, subscriptionName = name) on subscriptionId
-      | project id, name, appKind, defaultHostName, state, httpsOnly = iff(httpsOnly, 'true', 'false'), minTlsVersion, ftpsState, remoteDebugging = iff(remoteDebugging, 'true', 'false'), runtime, runtimeSupport, publicNetworkAccess, findings, resourceGroup, subscriptionId, subscriptionName, location, tags
+      | project id, name, appKind, defaultHostName, state, httpsOnly = iff(httpsOnly, 'true', 'false'), minTlsVersion, ftpsState, remoteDebugging = iff(remoteDebugging, 'true', 'false'), runtime, runtimeSupport, publicNetworkAccess, findings, resourceGroup, subscriptionId, location, tags
       | order by findings desc, name asc
     paging: all
     maxItems: 20000
+    transform: "${ value.value ? $merge([value, { 'value': $attach(value.value, 'subscriptionId', ds.subs, { 'subscriptionName': null }) }]) : value }"
     cache: { ttl: 300 }
   summary:
     source: resourceGraph

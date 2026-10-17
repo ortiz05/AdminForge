@@ -5746,7 +5746,6 @@
               "vmSize": "Standard_D2s_v5",
               "resourceGroup": "rg-example-data",
               "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
-              "subscriptionName": "Example Org Production",
               "location": "westeurope",
               "tags": null
             },
@@ -5765,7 +5764,6 @@
               "vmSize": "Standard_D2s_v5",
               "resourceGroup": "rg-example-web",
               "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
-              "subscriptionName": "Example Org Production",
               "location": "westeurope",
               "tags": null
             },
@@ -5784,7 +5782,6 @@
               "vmSize": "Standard_D2s_v5",
               "resourceGroup": "rg-example-web",
               "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
-              "subscriptionName": "Example Org Production",
               "location": "westeurope",
               "tags": null
             },
@@ -5803,7 +5800,6 @@
               "vmSize": "Standard_D2s_v5",
               "resourceGroup": "rg-example-batch",
               "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
-              "subscriptionName": "Example Org Production",
               "location": "westeurope",
               "tags": null
             }
@@ -6495,7 +6491,6 @@
               "findings": 3,
               "resourceGroup": "rg-example-web",
               "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
-              "subscriptionName": "Example Org Production",
               "location": "westeurope",
               "tags": null
             },
@@ -6515,7 +6510,6 @@
               "findings": 2,
               "resourceGroup": "rg-example-functions",
               "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
-              "subscriptionName": "Example Org Production",
               "location": "westeurope",
               "tags": null
             },
@@ -6535,7 +6529,6 @@
               "findings": 1,
               "resourceGroup": "rg-example-web",
               "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
-              "subscriptionName": "Example Org Production",
               "location": "westeurope",
               "tags": null
             }
@@ -7987,6 +7980,38 @@
               "status": "Disconnected",
               "agentVersion": "1.45.02800.1101",
               "lastStatusChange": "2026-01-02T08:00:00Z"
+            }
+          ]
+        }
+      },
+      {
+        "match": {
+          "bodyIncludes": "af:azure.vms-without-backup#subs"
+        },
+        "body": {
+          "totalRecords": 1,
+          "count": 1,
+          "resultTruncated": "false",
+          "data": [
+            {
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "subscriptionName": "Example Org Production"
+            }
+          ]
+        }
+      },
+      {
+        "match": {
+          "bodyIncludes": "af:azure.app-service-security#subs"
+        },
+        "body": {
+          "totalRecords": 1,
+          "count": 1,
+          "resultTruncated": "false",
+          "data": [
+            {
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "subscriptionName": "Example Org Production"
             }
           ]
         }

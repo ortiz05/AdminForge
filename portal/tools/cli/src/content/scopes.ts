@@ -1,7 +1,7 @@
 /**
- * The permission comparison behind `adminforge validate --scopes`: what content declares (`requires.scopes`, per app:
- * schedules, probes and feeds → automation identity, write playbooks and runbooks → Write app, everything else → Read
- * app; `appFor`) versus what is granted in Entra (delegated consent grants and app-role assignments, read with the
+ * The permission comparison behind `adminforge validate --scopes`: what content declares (`requires.scopes` of every
+ * definition that isn't retired, per app: schedules, probes and feeds → automation identity, write playbooks and
+ * runbooks → Write app, everything else → Read app; `appFor`) versus what is granted in Entra (delegated consent grants and app-role assignments, read with the
  * provisioner's Graph client) versus what provisioning would grant (`provisionedScopes`: the same
  * `desiredPermissions` rule as `provision entra`, ceilings included).
  *
@@ -89,6 +89,8 @@ export function declaredScopes(defs: readonly LoadedDefinition[]): Declared {
     for (const id of Object.keys(s?.connections ?? {})) connections.add(id);
   };
   for (const d of defs) {
+    // Retired definitions are out of use (they stay published only for run and audit history): no permissions.
+    if (d.def.status === 'retired') continue;
     add(appFor(d.def), d.def.requires?.scopes, d.file);
     // Datasource-level requirements belong to the same app as their page.
     if ('datasources' in d.def)

@@ -1,5 +1,5 @@
 /**
- * `adminforge provision entra [--dry-run]`, `provision test-identities [--dry-run | --enable | --disable |
+ * `adminforge provision entra [--dry-run] [--prune]`, `provision test-identities [--dry-run | --enable | --disable |
  * --remove-fixtures]` and `provision status`.
  *
  * Each command follows the provisioning pattern (README.md → Provisioning): validated settings
@@ -39,7 +39,7 @@ import {
 } from '../provision/clients';
 import { buildDesiredEntra, type ContentScopes } from '../provision/entra-desired';
 import { applyEntraOps, fetchEntraState, fetchResources } from '../provision/entra-io';
-import { planEntra } from '../provision/entra-plan';
+import { planEntra, unwantedAppPermissions, type PlanEntraOptions } from '../provision/entra-plan';
 import {
   buildDesiredIdentities,
   isProvisionedApprover,
@@ -99,11 +99,12 @@ export async function contentScopes(
   return (await contentDeclarations(contentDir)).scopes;
 }
 
-/** Read-only: fetch → desired → plan. */
+/** Read-only: fetch → desired → plan (`prune`: also plan removing the application permissions it doesn't grant). */
 export async function planEntraRun(
   ctx: CliContext,
   clients: Clients,
   settings = provisionSettings(ctx.env),
+  opts: PlanEntraOptions = {},
 ): Promise<EntraRun> {
   const declared = ctx.contentScopes
     ? { scopes: ctx.contentScopes, files: ctx.contentFiles ?? new Map<string, string[]>() }
@@ -115,7 +116,7 @@ export async function planEntraRun(
     settings,
     desired,
     state,
-    ops: planEntra(desired, state, ctx.now?.() ?? new Date()),
+    ops: planEntra(desired, state, ctx.now?.() ?? new Date(), opts),
     files: declared.files,
   };
 }
@@ -169,14 +170,21 @@ export function readAppWriteWarnings(run: Pick<EntraRun, 'desired' | 'files'>): 
   return lines;
 }
 
-/** `adminforge provision entra [--dry-run]` */
-export async function provisionEntra(ctx: CliContext, opts: { dryRun?: boolean } = {}): Promise<EntraRun> {
+/**
+ * `adminforge provision entra [--dry-run] [--prune]`. Without --prune, application permissions provisioning doesn't
+ * grant stay (one hint line counts them; `provision status` lists them as unexpected privilege); with it they are
+ * removed — on the resources provisioning knows only.
+ */
+export async function provisionEntra(
+  ctx: CliContext,
+  opts: { dryRun?: boolean; prune?: boolean } = {},
+): Promise<EntraRun> {
   const settings = provisionSettings(ctx.env);
   const clients = provisionerClients(ctx, settings);
   ctx.out(
-    `AdminForge provision entra — environment "${settings.label}", redirect base ${settings.baseUrl}${opts.dryRun ? ' (dry run)' : ''}`,
+    `AdminForge provision entra — environment "${settings.label}", redirect base ${settings.baseUrl}${opts.dryRun ? ' (dry run)' : ''}${opts.prune ? ' (prune)' : ''}`,
   );
-  const run = await planEntraRun(ctx, clients, settings);
+  const run = await planEntraRun(ctx, clients, settings, { prune: opts.prune });
   for (const key of RESOURCE_KEYS)
     if (!run.state.resources[key])
       ctx.out(
@@ -185,6 +193,13 @@ export async function provisionEntra(ctx: CliContext, opts: { dryRun?: boolean }
   ctx.out('');
   ctx.out('Plan:');
   renderPlan(run.ops, ctx.out);
+  if (!opts.prune) {
+    const leftovers = unwantedAppPermissions(run.desired, run.state).length;
+    if (leftovers)
+      ctx.out(
+        `  ⚠ ${leftovers} application permission(s) provisioning doesn't grant — run with --prune to remove them (provision status lists them)`,
+      );
+  }
   const warnings = readAppWriteWarnings(run);
   if (warnings.length) ctx.out('');
   for (const w of warnings) ctx.out(w);
@@ -440,6 +455,11 @@ export async function provisionStatus(ctx: CliContext): Promise<StatusResult> {
         : `    ${u.problems.length ? '✗' : '✓'} ${u.title}${u.problems.length ? ` — ${u.problems.join('; ')}` : ''}`,
     );
   failures.push(...unexpectedFailures(unexpected));
+  const prunable = unwantedAppPermissions(run.desired, run.state).length;
+  if (prunable)
+    ctx.out(
+      `    ℹ \`pnpm adminforge provision entra --prune\` removes ${prunable} of these application permission(s) (the ones on resources provisioning knows); dry run first`,
+    );
   // Test-fixture permissions on the provisioner outlive its directory role: ⚠ while they are held.
   for (const line of await provisionerStandingLines(ctx, settings)) ctx.out(`    ${line}`);
   for (const w of readAppWriteWarnings(run)) ctx.out(`  ${w}`);

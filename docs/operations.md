@@ -338,6 +338,13 @@ pnpm adminforge provision status
 (application permissions that change data) and `AF_AUTOMATION_ALLOW_SENSITIVE_READS` (mail, files, sites, chats, …)
 are deliberate decisions: set them in `<env>.admin.env`, review `provision entra --dry-run`, and record the decision in your change record (not in this repository: it's installation state). `provision status` fails on privilege that provisioning didn't grant.
 
+Removing permissions: `provision entra` drops delegated scopes nothing needs any more, but leaves application
+permissions it no longer grants (after content is retired, a baseline permission is dropped, or a ceiling is turned
+back off) — `provision status` lists them under unexpected privilege. Remove them with
+`pnpm adminforge provision entra --dry-run --prune` (review the `- remove` lines), then `pnpm adminforge provision entra --prune`.
+It removes only roles on the resources provisioning knows, including ones a ceiling withholds that someone granted by
+hand; anything else (another resource) is left for you to remove in the Entra admin centre.
+
 ## Certificates (LAN access)
 
 Caddy issues short-lived server certificates from its own root (`~/.local/share/caddy/pki/authorities/local/root.crt`,

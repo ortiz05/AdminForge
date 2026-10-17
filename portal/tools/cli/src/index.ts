@@ -90,8 +90,12 @@ provision
     'Create or update the AdminForge Read/Write/Automation apps, groups, consent, and automation RBAC',
   )
   .option('--dry-run', 'print the plan without changing anything')
-  .action(async (opts: { dryRun?: boolean }) => {
-    await provisionEntra(liveContext(), { dryRun: opts.dryRun });
+  .option(
+    '--prune',
+    "also remove application permissions on AdminForge's apps that provisioning doesn't grant (retired content, dropped baseline permissions, ones a ceiling withholds, ones added by hand); permissions on resources provisioning doesn't know are left alone",
+  )
+  .action(async (opts: { dryRun?: boolean; prune?: boolean }) => {
+    await provisionEntra(liveContext(), { dryRun: opts.dryRun, prune: opts.prune });
   });
 provision
   .command('test-identities')

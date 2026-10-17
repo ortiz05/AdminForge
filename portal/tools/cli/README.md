@@ -30,14 +30,20 @@ Every configuration key is documented in `config/example.env`.
 - **Reads:** every key in `config/example.env`. Never prints a value.
 - **Changes:** nothing. **Safe:** yes. **Exit 1:** a selected purpose is not ready.
 
-### `provision entra [--dry-run]`
+### `provision entra [--dry-run] [--prune]`
 
 - **Does:** creates or updates the Read, Write and Automation app registrations and service principals, their local
   credentials (client secrets; the automation certificate when `AF_AUTOMATION_CERT_PATH` is set), one security group
   per portal role, delegated consent, application permissions — the catalog baseline plus every content
   `requires.scopes`, under the permission ceilings — and the automation identity's Azure Reader role. Prints the plan,
-  then applies it.
-- **Options:** `--dry-run` — print the plan only.
+  then applies it. Delegated consent is converged both ways (scopes no longer wanted are dropped); application
+  permissions are only added unless `--prune` is given — without it, the plan ends with one ⚠ line counting the
+  application permissions provisioning doesn't grant.
+- **Options:** `--dry-run` — print the plan only. `--prune` — also remove the application permissions (app-role
+  assignments) on the three apps that provisioning doesn't grant: left over from retired content or a dropped baseline
+  permission, withheld by a ceiling (a permission a ceiling withholds is removed even when someone granted it by
+  hand), or added by hand. Only roles on the resources provisioning knows (Microsoft Graph, Exchange Online, …) are
+  touched; anything else stays and `provision status` keeps flagging it. Run `--dry-run --prune` first.
 - **Reads:** `AF_TENANT_ID`, `AF_ENV_LABEL`, `PUBLIC_BASE_URL`, `AF_REDIRECT_BASE_URLS`, `AF_SUBSCRIPTION_ID`,
   `AF_PRIMARY_DOMAIN`, `AF_PROVISIONER_CLIENT_ID` / `_SECRET` (admin file), `AF_READ_` / `AF_WRITE_` /
   `AF_AUTOMATION_CLIENT_ID` and `_SECRET`, `AF_AUTOMATION_CERT_PATH`, the ceiling opt-ins

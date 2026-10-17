@@ -163,7 +163,7 @@ describe('adminforge provision test-identities and status', () => {
     expect(status.failures).toEqual([]);
     expect(status.ok).toBe(true);
     const output = lines.join('\n');
-    expect(output).toContain('app-only token carries 17/17 expected roles');
+    expect(output).toContain('app-only token carries 15/15 expected roles');
     expect(output).toContain('authorize URL is well-formed');
     expect(output).not.toContain('✗');
     for (const k of [

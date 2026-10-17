@@ -11,6 +11,14 @@ Closes the gaps found by comparing the build with the original plan (see the pla
 
 ### Added
 
+- **`provision entra --prune`:** removes application permissions on AdminForge's three apps that provisioning no longer
+  grants (retired content, a dropped baseline permission, a ceiling turned back off, or added by hand) — only roles on
+  the resources provisioning knows; review with `--dry-run --prune` first. Without it the plan counts them in one ⚠ line
+  and `provision status` points at the flag; delegated consent was already converged both ways.
+- **`AF_QUERY_SOURCES`:** an installation can switch off Query Studio sources (`resourceGraph`, `logAnalytics`,
+  `advancedHunting`; empty = all). The API refuses a switched-off source before any call to Microsoft (403
+  `source_off`), `/api/me` lists the enabled ones, Query Studio hides the rest (an old link opens the first enabled
+  source and says why), and `adminforge env check` flags unknown names.
 - **`ca-audit` test fixture:** 14 example Conditional Access policies (`AF-Audit: …`) modelled on Microsoft's baseline
   and templates, only ever report-only: creates are checked, updates never send a state and are read back, only
   report-only policies are updated, and ownership is re-checked before every write. Device and location examples on
@@ -213,6 +221,19 @@ Closes the gaps found by comparing the build with the original plan (see the pla
 
 - Recent pages and closed navigation sections are saved without an audit event; every page visit used to add a
   `prefs.updated` entry. Settings changes (theme, density, pins) are still audited.
+
+### Removed
+
+- **Microsoft Defender portal content retired:** AdminForge no longer reads security.microsoft.com. Incidents, alerts,
+  advanced hunting, Secure Score and device vulnerabilities (6 pages), the incident playbooks, the alerts, incidents and
+  Secure Score reports with their schedules and the two Defender probes are `status: retired` (kept for run and audit
+  history); the Defender XDR news feeds stay (public web pages, not portal data). The security overview (2.0.0) keeps users at risk and Defender for
+  Cloud; `identity.compromised-account` 3.0.0 drops the optional Defender incident comment. Retired content no longer
+  earns permissions (the Read app and automation baselines lose `SecurityIncident.Read.All` and
+  `SecurityAlert.Read.All` too): `provision entra` drops the delegated `SecurityIncident.*`, `SecurityAlert.Read.All`,
+  `SecurityEvents.Read.All` and `ThreatHunting.Read.All` from the Read and Write apps, and the automation identity's
+  Defender application permissions are removed with `provision entra --prune` (run `--dry-run --prune` first). Query Studio's advanced hunting can be switched off with
+  `AF_QUERY_SOURCES` (above). A content test keeps active definitions from linking to retired ones.
 
 ### Security
 

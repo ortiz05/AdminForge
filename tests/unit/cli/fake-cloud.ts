@@ -69,6 +69,7 @@ const SCOPES = [
   'Organization.Read.All',
   'SecurityIncident.Read.All',
   'SecurityAlert.Read.All',
+  'ThreatHunting.Read.All',
   'IdentityRiskyUser.Read.All',
   'Sites.Read.All',
   'Team.ReadBasic.All',
@@ -394,6 +395,16 @@ export function createFakeCloud(opts: FakeCloudOptions) {
     if (method === 'POST' && path === '/oauth2PermissionGrants') {
       grants.push({ id: randomUUID(), ...body });
       return json(201, body);
+    }
+    if (
+      (m = /^\/servicePrincipals\/([^/]+)\/appRoleAssignments\/([^/]+)$/.exec(path)) &&
+      method === 'DELETE'
+    ) {
+      // Like Graph: an application permission is removed through the principal that holds it.
+      const i = assignments.findIndex((a) => a.id === m![2] && a.principalId === m![1]);
+      if (i < 0) return graphError(404, 'Request_ResourceNotFound', 'Resource does not exist.');
+      assignments.splice(i, 1);
+      return json(204);
     }
     if ((m = /^\/servicePrincipals\/([^/]+)\/(appRoleAssignedTo|appRoleAssignments)$/.exec(path))) {
       const spId = m[1]!;

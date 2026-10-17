@@ -51,6 +51,10 @@ export const ceilingSettings = (env: Env): CeilingSettings => ({
   allowPrivilegedWriteScopes: env.AF_ALLOW_PRIVILEGED_WRITE_SCOPES === 'true',
   allowAutomationSensitiveReads: env.AF_AUTOMATION_ALLOW_SENSITIVE_READS === 'true',
   emailDelivery: Boolean(env.AF_MAIL_SENDER?.trim()),
+  // Unset or blank = every Query Studio source, the API's default (apps/api/src/config.ts).
+  advancedHunting:
+    !env.AF_QUERY_SOURCES?.trim() ||
+    env.AF_QUERY_SOURCES.split(',').some((s) => s.trim() === 'advancedHunting'),
 });
 
 /** Environment labels that may hold the validation user and AF-Test-* objects (AF_TEST_IDENTITY_LABELS). */

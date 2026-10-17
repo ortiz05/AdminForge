@@ -8,9 +8,10 @@
  * Pure (the clock is a parameter). `provision entra` renders and applies the plan; `provision status` renders the
  * same plan as a checklist, so "status is green" means "apply would do nothing".
  */
-import { AZURE_READER_ROLE_ID, RESOURCES, SECRET_LIFETIME_DAYS } from './catalog';
+import { AZURE_READER_ROLE_ID, RESOURCES, SECRET_LIFETIME_DAYS, type ResourceKey } from './catalog';
 import { appNames, groupNames } from './entra-desired';
 import type {
+  AppKey,
   ApplicationBody,
   AppRole,
   CertificateInfo,
@@ -23,6 +24,7 @@ import type {
   GraphGroup,
   GraphServicePrincipal,
   GroupBody,
+  ResourceServicePrincipal,
   ServicePrincipalBody,
 } from './model';
 
@@ -276,8 +278,55 @@ function planApp(desired: DesiredApp, state: EntraState, label: string, now: Dat
   return ops;
 }
 
+/**
+ * Application permissions (app-role assignments) AdminForge's apps hold on a resource provisioning knows (Graph,
+ * Exchange, SharePoint, …) that provisioning doesn't grant: content that needed them was retired, a baseline
+ * permission was dropped, a ceiling withholds them, or someone added them by hand. Assignments to resources
+ * provisioning doesn't know are left alone (`provision status` still lists them). Pure.
+ */
+export function unwantedAppPermissions(
+  desired: DesiredEntra,
+  state: EntraState,
+): Array<{ app: AppKey; assignmentId: string; title: string }> {
+  const known = new Map<string, { key: ResourceKey; sp: ResourceServicePrincipal }>();
+  for (const key of Object.keys(state.resources) as ResourceKey[]) {
+    const sp = state.resources[key];
+    if (sp) known.set(sp.id, { key, sp });
+  }
+  const out: Array<{ app: AppKey; assignmentId: string; title: string }> = [];
+  for (const app of desired.apps) {
+    const wanted = new Set(
+      app.appPermissions.flatMap((p) => {
+        const id = state.resources[p.resource]?.id;
+        return id ? p.roles.map((r) => `${id}|${r.id.toLowerCase()}`) : [];
+      }),
+    );
+    for (const a of state.appPermissions[app.key] ?? []) {
+      const resource = known.get(a.resourceId);
+      if (!resource || wanted.has(`${a.resourceId}|${a.appRoleId.toLowerCase()}`)) continue;
+      const role = resource.sp.appRoles.find((r) => r.id.toLowerCase() === a.appRoleId.toLowerCase())?.value;
+      out.push({
+        app: app.key,
+        assignmentId: a.id,
+        title: `${app.body.displayName} → ${RESOURCES[resource.key].name}: ${role ?? 'a permission'}`,
+      });
+    }
+  }
+  return out;
+}
+
+export interface PlanEntraOptions {
+  /** `provision entra --prune`: also remove the application permissions provisioning doesn't grant. */
+  prune?: boolean;
+}
+
 /** Pure: desired state + fetched state → ordered operations (create/update/noop/skip per object). */
-export function planEntra(desired: DesiredEntra, state: EntraState, now: Date = new Date()): EntraOp[] {
+export function planEntra(
+  desired: DesiredEntra,
+  state: EntraState,
+  now: Date = new Date(),
+  opts: PlanEntraOptions = {},
+): EntraOp[] {
   const { label } = desired.settings;
   const ops: EntraOp[] = [];
   const appOps = desired.apps.map((a) => planApp(a, state, label, now));
@@ -382,6 +431,16 @@ export function planEntra(desired: DesiredEntra, state: EntraState, now: Date = 
       }
     }
   }
+  if (opts.prune)
+    for (const u of unwantedAppPermissions(desired, state))
+      ops.push({
+        kind: 'appRoleRemove',
+        action: 'delete',
+        section: 'App role assignments',
+        title: u.title,
+        app: u.app,
+        assignmentId: u.assignmentId,
+      });
 
   if (desired.arm) {
     const sp = state.sps.automation;

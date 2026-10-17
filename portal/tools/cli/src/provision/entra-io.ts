@@ -511,6 +511,19 @@ export async function applyEntraOps(ops: EntraOp[], state: EntraState, ctx: Appl
         }
         break;
       }
+      case 'appRoleRemove': {
+        const spId = need(refs.sp[op.app], `${op.app} service principal`);
+        try {
+          await graph.request({
+            method: 'DELETE',
+            path: `/servicePrincipals/${spId}/appRoleAssignments/${op.assignmentId}`,
+          });
+        } catch (err) {
+          if (!(err instanceof ApiError && err.status === 404)) throw err; // already gone: removed
+        }
+        log(`  ✓ removed application permission: ${op.title}`);
+        continue;
+      }
       case 'skipped':
         continue;
     }

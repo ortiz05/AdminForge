@@ -51,6 +51,11 @@ export interface ProvisionSettings {
    * application permission — a write permission, so still only with AF_AUTOMATION_ALLOW_WRITE_PERMISSIONS=true.
    */
   emailDelivery?: boolean;
+  /**
+   * Query Studio offers Defender advanced hunting (AF_QUERY_SOURCES unset, or listing `advancedHunting`): it runs as the
+   * signed-in user through the Read app, which then needs the delegated ThreatHunting.Read.All.
+   */
+  advancedHunting?: boolean;
   /** AF_AUTOMATION_CERT_PATH: the automation identity authenticates with this certificate instead of a secret. */
   automationCertificate?: CertificateInfo;
   /** Whether AF_ENV_LABEL is a test environment (AF_TEST_IDENTITY_LABELS, default dev,test): test identities allowed. */
@@ -335,6 +340,8 @@ export type EntraOp =
   | (OpBase & { kind: 'group'; role: PortalRole; uniqueName: string; body: GroupBody })
   | (OpBase & { kind: 'grant'; app: AppKey; resource: ResourceKey; scope: string; grantId?: string })
   | (OpBase & { kind: 'appRoleAssignment'; principal: PrincipalRef; target: ResourceRef; appRoleId: string })
+  /** `provision entra --prune`: an application permission on one of AdminForge's apps that provisioning doesn't grant. */
+  | (OpBase & { kind: 'appRoleRemove'; app: AppKey; assignmentId: string })
   | (OpBase & { kind: 'armRoleAssignment'; scope: string; roleDefinitionId: string })
   | (OpBase & { kind: 'skipped' });
 

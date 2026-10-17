@@ -247,7 +247,11 @@ export interface Withheld {
 
 export type CeilingSettings = Pick<
   ProvisionSettings,
-  'allowAutomationWrites' | 'allowPrivilegedWriteScopes' | 'allowAutomationSensitiveReads' | 'emailDelivery'
+  | 'allowAutomationWrites'
+  | 'allowPrivilegedWriteScopes'
+  | 'allowAutomationSensitiveReads'
+  | 'emailDelivery'
+  | 'advancedHunting'
 >;
 
 /** Which ceiling (if any) withholds `value` from `app`. */
@@ -302,6 +306,10 @@ export function desiredPermissions(
           ...baseline.read,
           ...declared('read', 'Scope'),
           { resource: 'graph', values: readOnly(content.write?.graph), type: 'Scope' },
+          // Built-in Query Studio advanced hunting (query/service.ts), only where AF_QUERY_SOURCES offers it.
+          ...(settings.advancedHunting
+            ? [{ resource: 'graph' as const, values: ['ThreatHunting.Read.All'], type: 'Scope' as const }]
+            : []),
         ]),
       ),
       write: ceiling('write', mergeByResource([...baseline.write, ...declared('write', 'Scope')])),

@@ -46,8 +46,6 @@ export const READ_GRAPH_SCOPES = [
   'ServiceHealth.Read.All',
   'ServiceMessage.Read.All',
   'Organization.Read.All',
-  'SecurityIncident.Read.All',
-  'SecurityAlert.Read.All',
   'IdentityRiskyUser.Read.All',
   'Sites.Read.All',
   'Team.ReadBasic.All',
@@ -87,8 +85,6 @@ export const AUTOMATION_GRAPH_ROLES = [
   'Organization.Read.All',
   'Device.Read.All',
   'DeviceManagementManagedDevices.Read.All',
-  'SecurityIncident.Read.All',
-  'SecurityAlert.Read.All',
   'IdentityRiskyUser.Read.All',
 ] as const;
 

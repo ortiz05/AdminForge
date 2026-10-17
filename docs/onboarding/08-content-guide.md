@@ -126,6 +126,7 @@ pnpm adminforge validate              # every definition: schema, references, ex
 pnpm adminforge validate --scopes     # + compare scopes with the app registrations (provisioner credentials)
 pnpm adminforge test [pattern]        # playbook and runbook tests
 pnpm --filter @adminforge/tests exec vitest run --project content
+pnpm --filter @adminforge/tests exec vitest run --project scale   # wall-clock budgets at enterprise size (files in tests/vitest.config.ts SCALE)
 pnpm guard
 # then look at it in mock mode: /p/<id>
 ```

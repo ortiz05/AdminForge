@@ -11,6 +11,13 @@ Closes the gaps found by comparing the build with the original plan (see the pla
 
 ### Added
 
+- **`ca-audit` test fixture:** 14 example Conditional Access policies (`AF-Audit: …`) modelled on Microsoft's baseline
+  and templates, only ever report-only: creates are checked, updates never send a state and are read back, only
+  report-only policies are updated, and ownership is re-checked before every write. Device and location examples on
+  AF-Test-Group-01 only (refused if the group has other members or is dynamic); break-glass accounts
+  (`AF_PROTECTED_USER_IDS`) and the Directory Synchronization Accounts role excluded; the policies that block all
+  users also exclude the Global Administrator role. Needs `Application.Read.All` on the provisioner for app
+  conditions.
 - **Licensed test fixtures** for `adminforge provision test-identities` (opt-in from the admin file;
   `docs/plans/2026-10-16-m365-e5-unlock-and-tooling.md` Phase 1): `AF_TEST_LICENCE_SKU` licenses the validation user
   and AF-Test-User-01…03; `AF_TEST_FIXTURES` adds PIM eligibility (never active), the named location
@@ -128,6 +135,10 @@ Closes the gaps found by comparing the build with the original plan (see the pla
 
 ### Changed
 
+- The inspector drawer is three times wider, never over the navigation: it covers the list (with a scrim that closes
+  it) when too little would be left, and lays out the entity page's widgets and KPIs in columns. "Open full page"
+  moved to its header and keeps the current tab.
+- `check-page-datasources.ts` takes entity-page params after `?` (placeholders or literal values, never printed).
 - **Tooling reorganised so each tool can be maintained on its own** (plan: `docs/plans/2026-10-16-m365-e5-unlock-and-tooling.md`):
   - one rule, one place: the tenant-value rule (`tenantValues` in `@adminforge/config`), the design-token patterns
     (`tooling/lint/design-token-patterns.mjs`, used by ESLint, the guard and the after-edit hook), and runner-script
@@ -316,6 +327,22 @@ Security review of the licensed build-out (2026-10-16) fixed:
 
 ### Fixed
 
+- The inspector no longer gets stuck in a sign-in/refresh loop when Microsoft keeps asking for a fresh sign-in: the
+  app follows a 401 to sign-in at most once per tab per minute, then says "Sign-in didn't finish" with "Sign in again";
+  capabilities lookups never start a sign-in themselves.
+- When a page's data needs a fresh sign-in, one "Sign in again" banner replaces repeated widget errors with dead "Try
+  again" buttons, and the `reauth` error says what to do.
+- Closing the inspector returns focus to the row (the list no longer re-mounts when the inspector opens), and a
+  header whose data failed no longer shows a guessed status such as "Sign-in blocked".
+- The sign-in page (and the inspector) loads in seconds: it filters the sign-ins list on the id, bounded to five
+  minutes around the sign-in's time, instead of `GET /auditLogs/signIns/{id}`, which took minutes and timed out
+  (`identity.sign-in` 1.1.0; the sign-ins, user and enterprise app pages pass the time). Links without the time search
+  the last 7 days, and a sign-in that isn't in the log says so.
+- Intune apps loads on Graph v1.0: assignment state comes from `assignments` (`isAssigned` is beta-only)
+  (`endpoint.apps` 1.0.1).
+- Dismiss and confirm-compromised, and the compromised-account runbooks, read only the requested user's risk
+  (filtering `riskyUsers` instead of `riskyUsers/{id}`, an unreadable 404). Dismiss says there's nothing to dismiss,
+  confirm no longer skips real errors, and the response summary says whether the MFA methods were removed.
 - Live sign-in no longer times out when Entra skips the authenticator registration's confirmation page and goes
   straight to "Stay signed in?" (`tests/live/lib/entra-login.ts`).
 - **Published pages lost their authored key order.** Definitions were stored as Postgres `jsonb`, which sorts object

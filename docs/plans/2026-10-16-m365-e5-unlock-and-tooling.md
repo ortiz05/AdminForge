@@ -75,7 +75,9 @@ created only) with an opt-in **licensed fixtures** section:
 Each item: idempotent, reversible, in `tests/unit/cli/` with the fake Graph, documented in `tests/live/README.md` and
 the validating-against-a-tenant skill.
 
-**Progress (2026-10-16):** items 1, 2, 3, 5 and 7 are built, opt-in through `AF_TEST_LICENCE_SKU` and
+**Progress (2026-10-16):** item 4 is built as the `ca-audit` fixture at the owner's request — 14 example policies
+(`AF-Audit: …`) modelled on Microsoft's baseline, only ever report-only, which works with Security Defaults on
+(enforcing any of them still needs 0.3). Items 1, 2, 3, 5 and 7 are built, opt-in through `AF_TEST_LICENCE_SKU` and
 `AF_TEST_FIXTURES=pim,named-location,intune,approver` (admin file), with `--remove-fixtures` to undo them and
 `provision status` ✓/✗ lines (seats used included). `provision status` now also flags PIM-eligible roles of the
 validation accounts that provisioning didn't grant. Each fixture needs a Microsoft Graph application permission on the
@@ -101,6 +103,15 @@ and item 6 (a risky user on demand — belongs to the Identity Protection live c
 
 Schedules and probes of each area are checked once as the automation identity with
 `tests/live/scripts/run-schedule-once.ts` (dev database, delivery suppressed).
+
+**Progress (2026-10-16):** 2a, 2b and 2c validated live — every read path works (31 list pages, dashboards and
+reports, 60 of 63 datasources; the other 3 were Defender XDR (2d) and Intune apps, now fixed) and the entity pages
+show the Phase 1 fixtures. Fixes: the sign-in page filters the sign-ins list instead of `GET /auditLogs/signIns/{id}`
+(minutes, then a timeout — it kept the inspector loading), Intune apps reads `assignments` (`isAssigned` is beta-only),
+risky-user playbooks and runbooks filter `riskyUsers` instead of reading a user who was never at risk. PIM activation
+ran for real. Open: Identity Protection writes need Security Operator for the validation user (owner decision), device
+pages and actions wait for 0.4, `userRegistrationDetails` reports need 24–48 h, report-only CA results need sign-ins
+after the `AF-Audit:` policies; 2d waits for 0.2. Details: `docs/licensing-review.md`, `docs/backlog.md`.
 
 ## Phase 3 — unattended work and delivery
 

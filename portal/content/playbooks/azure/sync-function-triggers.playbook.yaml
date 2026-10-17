@@ -1,9 +1,12 @@
 $schema: ../../../packages/schemas/generated/playbook.schema.json
 kind: playbook
 id: azure.sync-function-triggers
-version: 1.0.0
+version: 1.1.0
 title: Sync Function App triggers
-summary: Re-registers a Function App's triggers with the scale controller — use after a deployment when timer, queue or event triggers stop firing.
+summary: Retired — AdminForge doesn't manage Azure Functions at this time. Re-registers a Function App's triggers with the scale controller — use after a deployment when timer, queue or event triggers stop firing.
+# Retired 2026-10-17: Azure Functions aren't managed in AdminForge at this time. To bring it back, set
+# status: active and bump the version.
+status: retired
 owner: azure-team
 tags: [azure, functions]
 risk: low

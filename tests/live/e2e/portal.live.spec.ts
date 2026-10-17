@@ -82,7 +82,7 @@ const PAGES = [
   'azure.overview',
   'azure.resources',
   'azure.arc-servers',
-  'azure.function-apps',
+  'azure.arc-fleet',
   'azure.rbac',
   'identity.app-credential-expiry',
   'identity.privileged-roles',

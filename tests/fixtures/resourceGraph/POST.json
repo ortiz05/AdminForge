@@ -193,9 +193,8 @@
             {
               "resources": 27,
               "untagged": 10,
+              "arcServers": 7,
               "arcDisconnected": 3,
-              "functionApps": 4,
-              "stoppedFunctionApps": 1,
               "subscriptions": 2,
               "resourceGroups": 9
             }
@@ -1565,27 +1564,33 @@
           "bodyIncludes": "af:azure.arc-servers#machines"
         },
         "body": {
-          "totalRecords": 6,
-          "count": 6,
+          "totalRecords": 7,
+          "count": 7,
           "resultTruncated": "false",
           "data": [
             {
               "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-arc/providers/Microsoft.HybridCompute/machines/srv-example-01",
               "name": "srv-example-01",
               "status": "Connected",
+              "lastStatusChange": "2026-10-15T06:12:00Z",
+              "hoursSinceChange": 2,
               "agentVersion": "1.48.02881.1941",
+              "agentCurrency": "current",
+              "releasesBehind": 0,
+              "newestVersion": "1.48.02881.1941",
+              "autoUpgrade": "On",
               "osType": "windows",
               "osName": "Windows Server 2022 Datacenter",
               "osSku": "Windows Server 2022 Datacenter",
               "osVersion": "10.0.20348.2762",
-              "lastStatusChange": "2026-10-15T06:12:00Z",
-              "hoursSinceChange": 2,
               "machineFqdn": "srv-example-01.corp.example.com",
               "domainName": "corp.example.com",
               "manufacturer": "Dell Inc.",
               "model": "PowerEdge R650",
               "cloudProvider": "N/A",
-              "esuState": "",
+              "esuEligibility": "Ineligible",
+              "esuLicence": "NotAssigned",
+              "esuKey": "Inactive",
               "errorCount": 0,
               "extensions": 3,
               "failedExtensions": 0,
@@ -1602,20 +1607,26 @@
               "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-arc/providers/Microsoft.HybridCompute/machines/srv-example-02",
               "name": "srv-example-02",
               "status": "Disconnected",
+              "lastStatusChange": "2026-10-12T08:00:00Z",
+              "hoursSinceChange": 76,
               "agentVersion": "1.45.02800.1101",
+              "agentCurrency": "behind",
+              "releasesBehind": 3,
+              "newestVersion": "1.48.02881.1941",
+              "autoUpgrade": "Off",
               "osType": "linux",
               "osName": "Ubuntu 22.04.4 LTS",
               "osSku": "Ubuntu",
               "osVersion": "22.04",
-              "lastStatusChange": "2026-10-12T08:00:00Z",
-              "hoursSinceChange": 73,
               "machineFqdn": "srv-example-02",
               "domainName": "",
               "manufacturer": "VMware, Inc.",
-              "model": "VMware7,1",
+              "model": "VMware Virtual Platform",
               "cloudProvider": "N/A",
-              "esuState": "",
-              "errorCount": 1,
+              "esuEligibility": "",
+              "esuLicence": "",
+              "esuKey": "",
+              "errorCount": 0,
               "extensions": 2,
               "failedExtensions": 1,
               "location": "westeurope",
@@ -1628,19 +1639,25 @@
               "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-arc/providers/Microsoft.HybridCompute/machines/srv-example-03",
               "name": "srv-example-03",
               "status": "Connected",
+              "lastStatusChange": "2026-10-14T21:03:00Z",
+              "hoursSinceChange": 15,
               "agentVersion": "1.47.02866.1847",
+              "agentCurrency": "behind",
+              "releasesBehind": 1,
+              "newestVersion": "1.48.02881.1941",
+              "autoUpgrade": "On",
               "osType": "windows",
               "osName": "Windows Server 2012 R2 Datacenter",
               "osSku": "Windows Server 2012 R2 Datacenter",
-              "osVersion": "6.3.9600.21620",
-              "lastStatusChange": "2026-10-14T21:03:00Z",
-              "hoursSinceChange": 11,
+              "osVersion": "6.3.9600",
               "machineFqdn": "srv-example-03.corp.example.com",
               "domainName": "corp.example.com",
               "manufacturer": "HPE",
-              "model": "ProLiant DL380 Gen10",
+              "model": "ProLiant DL380 Gen9",
               "cloudProvider": "N/A",
-              "esuState": "Assigned",
+              "esuEligibility": "Eligible",
+              "esuLicence": "Assigned",
+              "esuKey": "Active",
               "errorCount": 0,
               "extensions": 2,
               "failedExtensions": 0,
@@ -1649,28 +1666,33 @@
               "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
               "subscriptionName": "Example Org Production",
               "tags": {
-                "env": "prod",
-                "owner": "infra-team"
+                "env": "prod"
               }
             },
             {
               "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-arc/providers/Microsoft.HybridCompute/machines/srv-example-04",
               "name": "srv-example-04",
               "status": "Expired",
+              "lastStatusChange": "2026-08-20T10:00:00Z",
+              "hoursSinceChange": 1346,
               "agentVersion": "1.39.02628.1214",
+              "agentCurrency": "outdated",
+              "releasesBehind": 9,
+              "newestVersion": "1.48.02881.1941",
+              "autoUpgrade": "Off",
               "osType": "linux",
               "osName": "Red Hat Enterprise Linux 9.4",
-              "osSku": "rhel",
+              "osSku": "Red Hat Enterprise Linux",
               "osVersion": "9.4",
-              "lastStatusChange": "2026-08-20T10:00:00Z",
-              "hoursSinceChange": 1343,
               "machineFqdn": "srv-example-04",
               "domainName": "",
               "manufacturer": "Amazon EC2",
               "model": "m5.large",
               "cloudProvider": "AWS",
-              "esuState": "",
-              "errorCount": 1,
+              "esuEligibility": "",
+              "esuLicence": "",
+              "esuKey": "",
+              "errorCount": 0,
               "extensions": 1,
               "failedExtensions": 0,
               "location": "northeurope",
@@ -1685,56 +1707,101 @@
               "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-arc/providers/Microsoft.HybridCompute/machines/srv-example-05",
               "name": "srv-example-05",
               "status": "Error",
+              "lastStatusChange": "2026-10-14T22:40:00Z",
+              "hoursSinceChange": 13,
               "agentVersion": "1.48.02881.1941",
+              "agentCurrency": "current",
+              "releasesBehind": 0,
+              "newestVersion": "1.48.02881.1941",
+              "autoUpgrade": "On",
               "osType": "windows",
               "osName": "Windows Server 2019 Standard",
               "osSku": "Windows Server 2019 Standard",
               "osVersion": "10.0.17763.6414",
-              "lastStatusChange": "2026-10-14T22:40:00Z",
-              "hoursSinceChange": 10,
               "machineFqdn": "srv-example-05.corp.example.com",
               "domainName": "corp.example.com",
-              "manufacturer": "Microsoft Corporation",
-              "model": "Virtual Machine",
+              "manufacturer": "Dell Inc.",
+              "model": "PowerEdge R640",
               "cloudProvider": "N/A",
-              "esuState": "",
+              "esuEligibility": "Ineligible",
+              "esuLicence": "NotAssigned",
+              "esuKey": "Inactive",
               "errorCount": 1,
               "extensions": 2,
-              "failedExtensions": 0,
+              "failedExtensions": 1,
               "location": "westeurope",
               "resourceGroup": "rg-example-arc",
               "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
               "subscriptionName": "Example Org Production",
-              "tags": {
-                "env": "prod",
-                "owner": "infra-team"
-              }
+              "tags": null
             },
             {
               "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-arc/providers/Microsoft.HybridCompute/machines/srv-example-06",
               "name": "srv-example-06",
               "status": "Connected",
-              "agentVersion": "1.46.02840.1673",
+              "lastStatusChange": "2026-10-15T05:55:00Z",
+              "hoursSinceChange": 6,
+              "agentVersion": "1.41.02700.1500",
+              "agentCurrency": "outdated",
+              "releasesBehind": 7,
+              "newestVersion": "1.48.02881.1941",
+              "autoUpgrade": "Off",
               "osType": "linux",
               "osName": "Rocky Linux 9.3",
-              "osSku": "rocky",
+              "osSku": "Rocky Linux",
               "osVersion": "9.3",
-              "lastStatusChange": "2026-10-15T05:55:00Z",
-              "hoursSinceChange": 3,
               "machineFqdn": "srv-example-06",
               "domainName": "",
               "manufacturer": "Nutanix",
               "model": "AHV",
               "cloudProvider": "N/A",
-              "esuState": "",
+              "esuEligibility": "",
+              "esuLicence": "",
+              "esuKey": "",
               "errorCount": 0,
-              "extensions": 1,
-              "failedExtensions": 0,
+              "extensions": 2,
+              "failedExtensions": 1,
               "location": "northeurope",
               "resourceGroup": "rg-example-arc",
               "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
               "subscriptionName": "Example Org Production",
-              "tags": null
+              "tags": {
+                "env": "test"
+              }
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a2/resourceGroups/rg-example-arc-legacy/providers/Microsoft.HybridCompute/machines/srv-example-07",
+              "name": "srv-example-07",
+              "status": "Connected",
+              "lastStatusChange": "2026-10-13T09:30:00Z",
+              "hoursSinceChange": 50,
+              "agentVersion": "1.47.02866.1847",
+              "agentCurrency": "behind",
+              "releasesBehind": 1,
+              "newestVersion": "1.48.02881.1941",
+              "autoUpgrade": "On",
+              "osType": "windows",
+              "osName": "Windows Server 2012 Standard",
+              "osSku": "Windows Server 2012 Standard",
+              "osVersion": "6.2.9200",
+              "machineFqdn": "srv-example-07.corp.example.com",
+              "domainName": "corp.example.com",
+              "manufacturer": "Dell Inc.",
+              "model": "PowerEdge R620",
+              "cloudProvider": "N/A",
+              "esuEligibility": "Eligible",
+              "esuLicence": "NotAssigned",
+              "esuKey": "Inactive",
+              "errorCount": 0,
+              "extensions": 2,
+              "failedExtensions": 0,
+              "location": "westeurope",
+              "resourceGroup": "rg-example-arc-legacy",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a2",
+              "subscriptionName": "Example Org Legacy",
+              "tags": {
+                "env": "legacy"
+              }
             }
           ]
         }
@@ -1792,7 +1859,22 @@
                     "message": "Network error: the agent could not reach gbl.his.arc.azure.com (proxy refused the connection)."
                   }
                 ],
-                "provisioningState": "Succeeded"
+                "provisioningState": "Succeeded",
+                "agentUpgrade": {
+                  "enableAutomaticUpgrade": false,
+                  "lastAttemptStatus": "Failed",
+                  "lastAttemptTimestamp": "2026-10-11T03:00:00Z",
+                  "lastAttemptMessage": "Download of the agent package failed: the proxy refused the connection."
+                },
+                "osProfile": {
+                  "computerName": "srv-example-02",
+                  "linuxConfiguration": {
+                    "patchSettings": {
+                      "assessmentMode": "AutomaticByPlatform",
+                      "patchMode": "ImageDefault"
+                    }
+                  }
+                }
               }
             }
           ]
@@ -1841,12 +1923,30 @@
                 "vmUuid": "30000000-0000-4000-8000-000000000601",
                 "licenseProfile": {
                   "esuProfile": {
-                    "licenseAssignmentState": "NotAssigned"
+                    "licenseAssignmentState": "NotAssigned",
+                    "esuEligibility": "Ineligible",
+                    "esuKeyState": "Inactive"
                   }
                 },
                 "privateLinkScopeResourceId": "",
                 "errorDetails": [],
-                "provisioningState": "Succeeded"
+                "provisioningState": "Succeeded",
+                "agentUpgrade": {
+                  "enableAutomaticUpgrade": true,
+                  "desiredVersion": "1.48.02881.1941",
+                  "lastAttemptStatus": "Success",
+                  "lastAttemptTimestamp": "2026-10-02T03:00:00Z",
+                  "lastAttemptMessage": ""
+                },
+                "osProfile": {
+                  "computerName": "srv-example-01",
+                  "windowsConfiguration": {
+                    "patchSettings": {
+                      "assessmentMode": "AutomaticByPlatform",
+                      "patchMode": "AutomaticByPlatform"
+                    }
+                  }
+                }
               }
             }
           ]
@@ -2828,7 +2928,6 @@
               "ftpsState": "AllAllowed",
               "resourceGroup": "rg-example-dev",
               "subscriptionId": "00000000-0000-4000-8000-0000000000a2",
-              "subscriptionName": "Example Org Development",
               "location": "westeurope"
             },
             {
@@ -2843,7 +2942,6 @@
               "ftpsState": "FtpsOnly",
               "resourceGroup": "rg-example-functions",
               "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
-              "subscriptionName": "Example Org Production",
               "location": "westeurope"
             },
             {
@@ -2858,7 +2956,6 @@
               "ftpsState": "Disabled",
               "resourceGroup": "rg-example-functions",
               "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
-              "subscriptionName": "Example Org Production",
               "location": "westeurope"
             }
           ]
@@ -5362,6 +5459,1074 @@
               "outdated": 1,
               "noAutoUpgrade": 2,
               "newest": "1.48.02881.1941"
+            }
+          ]
+        }
+      },
+      {
+        "match": {
+          "bodyIncludes": "af:azure.arc-servers#summary"
+        },
+        "body": {
+          "totalRecords": 1,
+          "count": 1,
+          "resultTruncated": "false",
+          "data": [
+            {
+              "total": 7,
+              "connected": 4,
+              "notConnected": 3,
+              "expired": 1,
+              "outdatedAgents": 2,
+              "failedExtensions": 3
+            }
+          ]
+        }
+      },
+      {
+        "match": {
+          "bodyIncludes": "af:azure.arc-disconnected#summary"
+        },
+        "body": {
+          "totalRecords": 1,
+          "count": 1,
+          "resultTruncated": "false",
+          "data": [
+            {
+              "total": 3,
+              "expired": 1,
+              "expiringSoon": 0,
+              "error": 1
+            }
+          ]
+        }
+      },
+      {
+        "match": {
+          "bodyIncludes": "af:azure.arc-server#assessment"
+        },
+        "body": {
+          "totalRecords": 1,
+          "count": 1,
+          "resultTruncated": "false",
+          "data": [
+            {
+              "assessedAt": "2026-10-15T03:10:00Z",
+              "assessmentStatus": "Succeeded",
+              "critical": 0,
+              "security": 2,
+              "otherUpdates": 1,
+              "rebootPending": "false",
+              "patchService": "WU-WSUS",
+              "startedBy": "Platform",
+              "assessmentError": null
+            }
+          ]
+        }
+      },
+      {
+        "match": {
+          "bodyIncludes": "af:azure.arc-server#updates"
+        },
+        "body": {
+          "totalRecords": 3,
+          "count": 3,
+          "resultTruncated": "false",
+          "data": [
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-arc/providers/Microsoft.HybridCompute/machines/srv-example-01/patchAssessmentResults/latest/softwarePatches/aa000000-0000-4000-8000-000000000001",
+              "patchName": "2026-10 Cumulative Update for Microsoft server operating system version 21H2 for x64-based Systems (KB5066782)",
+              "kbId": "5066782",
+              "version": "",
+              "classifications": [
+                "Security"
+              ],
+              "published": "2026-10-14T17:00:00Z",
+              "rebootRequired": "true"
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-arc/providers/Microsoft.HybridCompute/machines/srv-example-01/patchAssessmentResults/latest/softwarePatches/aa000000-0000-4000-8000-000000000002",
+              "patchName": "2026-10 Security Update for Microsoft .NET Framework 4.8.1 (KB5066999)",
+              "kbId": "5066999",
+              "version": "",
+              "classifications": [
+                "Security"
+              ],
+              "published": "2026-10-14T17:00:00Z",
+              "rebootRequired": "false"
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-arc/providers/Microsoft.HybridCompute/machines/srv-example-01/patchAssessmentResults/latest/softwarePatches/aa000000-0000-4000-8000-000000000003",
+              "patchName": "Windows Malicious Software Removal Tool x64 - v5.135 (KB890830)",
+              "kbId": "890830",
+              "version": "",
+              "classifications": [
+                "UpdateRollUp"
+              ],
+              "published": "2026-10-14T17:00:00Z",
+              "rebootRequired": "false"
+            }
+          ]
+        }
+      },
+      {
+        "match": {
+          "bodyIncludes": "af:azure.arc-server#installs"
+        },
+        "body": {
+          "totalRecords": 2,
+          "count": 2,
+          "resultTruncated": "false",
+          "data": [
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-arc/providers/Microsoft.HybridCompute/machines/srv-example-01/patchInstallationResults/bb000000-0000-4000-8000-000000000001",
+              "startedAt": "2026-10-10T02:00:00Z",
+              "status": "Succeeded",
+              "installed": 5,
+              "failed": 0,
+              "pending": 0,
+              "rebootStatus": "Completed",
+              "startedBy": "Platform",
+              "windowExceeded": "false"
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-arc/providers/Microsoft.HybridCompute/machines/srv-example-01/patchInstallationResults/bb000000-0000-4000-8000-000000000002",
+              "startedAt": "2026-09-26T02:00:00Z",
+              "status": "CompletedWithWarnings",
+              "installed": 3,
+              "failed": 1,
+              "pending": 0,
+              "rebootStatus": "Completed",
+              "startedBy": "Platform",
+              "windowExceeded": "true"
+            }
+          ]
+        }
+      },
+      {
+        "match": {
+          "bodyIncludes": "af:azure.arc-server#defenderplan"
+        },
+        "body": {
+          "totalRecords": 1,
+          "count": 1,
+          "resultTruncated": "false",
+          "data": [
+            {
+              "plan": "On",
+              "subPlan": "P2"
+            }
+          ]
+        }
+      },
+      {
+        "match": {
+          "bodyIncludes": "af:azure.arc-server#recommendations"
+        },
+        "body": {
+          "totalRecords": 2,
+          "count": 2,
+          "resultTruncated": "false",
+          "data": [
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-arc/providers/Microsoft.HybridCompute/machines/srv-example-01/providers/Microsoft.Security/assessments/cc000000-0000-4000-8000-000000000001",
+              "recommendation": "Windows machines should meet requirements of the Azure compute security baseline",
+              "severity": "Medium",
+              "cause": "",
+              "description": "",
+              "remediation": "Remediate the failed baseline rules on the machine.",
+              "statusChanged": "2026-10-01T08:00:00Z",
+              "portalLink": "portal.azure.com/#blade/Microsoft_Azure_Security/RecommendationsBlade/assessmentKey/cc000000-0000-4000-8000-000000000001"
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-arc/providers/Microsoft.HybridCompute/machines/srv-example-01/providers/Microsoft.Security/assessments/cc000000-0000-4000-8000-000000000002",
+              "recommendation": "Guest Configuration extension should be installed on machines",
+              "severity": "Low",
+              "cause": "",
+              "description": "",
+              "remediation": "Install the Machine Configuration extension.",
+              "statusChanged": "2026-09-20T08:00:00Z",
+              "portalLink": ""
+            }
+          ]
+        }
+      },
+      {
+        "match": {
+          "bodyIncludes": "af:azure.arc-extensions#extensions"
+        },
+        "body": {
+          "totalRecords": 4,
+          "count": 4,
+          "resultTruncated": "false",
+          "data": [
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-arc/providers/Microsoft.HybridCompute/machines/srv-example-02/extensions/AzureMonitorLinuxAgent",
+              "machineName": "srv-example-02",
+              "machineId": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourcegroups/rg-example-arc/providers/microsoft.hybridcompute/machines/srv-example-02",
+              "name": "AzureMonitorLinuxAgent",
+              "extensionType": "AzureMonitorLinuxAgent",
+              "publisher": "Microsoft.Azure.Monitor",
+              "version": "1.31.1",
+              "health": "Failed",
+              "rank": 0,
+              "provisioningState": "Failed",
+              "statusLevel": "Error",
+              "statusCode": "failed",
+              "statusMessage": "Enable failed: unable to reach the data collection endpoint (timeout).",
+              "autoUpgrade": "On",
+              "machineStatus": "Disconnected",
+              "osName": "Ubuntu 22.04.4 LTS",
+              "resourceGroup": "rg-example-arc",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "subscriptionName": "Example Org Production",
+              "location": "westeurope"
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-arc/providers/Microsoft.HybridCompute/machines/srv-example-06/extensions/AzureMonitorLinuxAgent",
+              "machineName": "srv-example-06",
+              "machineId": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourcegroups/rg-example-arc/providers/microsoft.hybridcompute/machines/srv-example-06",
+              "name": "AzureMonitorLinuxAgent",
+              "extensionType": "AzureMonitorLinuxAgent",
+              "publisher": "Microsoft.Azure.Monitor",
+              "version": "1.29.4",
+              "health": "Failed",
+              "rank": 0,
+              "provisioningState": "Failed",
+              "statusLevel": "Error",
+              "statusCode": "failed",
+              "statusMessage": "Enable failed: package azuremonitoragent conflicts with an installed package.",
+              "autoUpgrade": "Off",
+              "machineStatus": "Connected",
+              "osName": "Rocky Linux 9.3",
+              "resourceGroup": "rg-example-arc",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "subscriptionName": "Example Org Production",
+              "location": "northeurope"
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-arc/providers/Microsoft.HybridCompute/machines/srv-example-05/extensions/MDE.Windows",
+              "machineName": "srv-example-05",
+              "machineId": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourcegroups/rg-example-arc/providers/microsoft.hybridcompute/machines/srv-example-05",
+              "name": "MDE.Windows",
+              "extensionType": "MDE.Windows",
+              "publisher": "Microsoft.Azure.AzureDefenderForServers",
+              "version": "1.0.11.0",
+              "health": "Failed",
+              "rank": 0,
+              "provisioningState": "Failed",
+              "statusLevel": "Error",
+              "statusCode": "failed",
+              "statusMessage": "Onboarding to Microsoft Defender for Endpoint failed: the onboarding package could not be downloaded (proxy).",
+              "autoUpgrade": "On",
+              "machineStatus": "Error",
+              "osName": "Windows Server 2019 Standard",
+              "resourceGroup": "rg-example-arc",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "subscriptionName": "Example Org Production",
+              "location": "westeurope"
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a2/resourceGroups/rg-example-arc-legacy/providers/Microsoft.HybridCompute/machines/srv-example-07/extensions/AzureMonitorWindowsAgent",
+              "machineName": "srv-example-07",
+              "machineId": "/subscriptions/00000000-0000-4000-8000-0000000000a2/resourcegroups/rg-example-arc-legacy/providers/microsoft.hybridcompute/machines/srv-example-07",
+              "name": "AzureMonitorWindowsAgent",
+              "extensionType": "AzureMonitorWindowsAgent",
+              "publisher": "Microsoft.Azure.Monitor",
+              "version": "1.30.0.0",
+              "health": "In progress",
+              "rank": 2,
+              "provisioningState": "Updating",
+              "statusLevel": "Information",
+              "statusCode": "transitioning",
+              "statusMessage": "ExtensionOperation:update. Status:Transitioning",
+              "autoUpgrade": "On",
+              "machineStatus": "Connected",
+              "osName": "Windows Server 2012 Standard",
+              "resourceGroup": "rg-example-arc-legacy",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a2",
+              "subscriptionName": "Example Org Legacy",
+              "location": "westeurope"
+            }
+          ]
+        }
+      },
+      {
+        "match": {
+          "bodyIncludes": "af:azure.arc-extensions#summary"
+        },
+        "body": {
+          "totalRecords": 1,
+          "count": 1,
+          "resultTruncated": "false",
+          "data": [
+            {
+              "extensions": 14,
+              "failed": 3,
+              "inProgress": 1,
+              "autoUpgradeOff": 4,
+              "machines": 7,
+              "machinesWithFailure": 3
+            }
+          ]
+        }
+      },
+      {
+        "match": {
+          "bodyIncludes": "af:azure.arc-extensions#bytype"
+        },
+        "body": {
+          "totalRecords": 2,
+          "count": 2,
+          "resultTruncated": "false",
+          "data": [
+            {
+              "extensionType": "AzureMonitorLinuxAgent",
+              "failed": 2
+            },
+            {
+              "extensionType": "MDE.Windows",
+              "failed": 1
+            }
+          ]
+        }
+      },
+      {
+        "match": {
+          "bodyIncludes": "af:azure.arc-patching#machines"
+        },
+        "body": {
+          "totalRecords": 4,
+          "count": 4,
+          "resultTruncated": "false",
+          "data": [
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-arc/providers/Microsoft.HybridCompute/machines/srv-example-03",
+              "name": "srv-example-03",
+              "patchState": "Overdue",
+              "rank": 0,
+              "critical": 1,
+              "security": 3,
+              "otherUpdates": 2,
+              "assessedAt": "2026-10-15T01:00:00Z",
+              "daysSinceAssessment": 0,
+              "assessmentStatus": "Succeeded",
+              "lastInstall": "Failed",
+              "lastRun": "2026-10-08T01:00:00Z",
+              "lastSucceeded": null,
+              "runs": 1,
+              "failedUpdates": 4,
+              "rebootPending": "false",
+              "osType": "windows",
+              "resourceGroup": "rg-example-arc",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "location": "westeurope"
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-arc/providers/Microsoft.HybridCompute/machines/srv-example-05",
+              "name": "srv-example-05",
+              "patchState": "Installation failed",
+              "rank": 1,
+              "critical": 0,
+              "security": 0,
+              "otherUpdates": 0,
+              "assessedAt": "2026-10-15T02:00:00Z",
+              "daysSinceAssessment": 0,
+              "assessmentStatus": "Succeeded",
+              "lastInstall": "Failed",
+              "lastRun": "2026-10-14T02:00:00Z",
+              "lastSucceeded": "2026-09-30T02:00:00Z",
+              "runs": 2,
+              "failedUpdates": 2,
+              "rebootPending": "false",
+              "osType": "windows",
+              "resourceGroup": "rg-example-arc",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "location": "westeurope"
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-arc/providers/Microsoft.HybridCompute/machines/srv-example-01",
+              "name": "srv-example-01",
+              "patchState": "Pending",
+              "rank": 2,
+              "critical": 0,
+              "security": 2,
+              "otherUpdates": 1,
+              "assessedAt": "2026-10-15T03:10:00Z",
+              "daysSinceAssessment": 0,
+              "assessmentStatus": "Succeeded",
+              "lastInstall": "Succeeded",
+              "lastRun": "2026-10-10T02:00:00Z",
+              "lastSucceeded": "2026-10-10T02:00:00Z",
+              "runs": 2,
+              "failedUpdates": 1,
+              "rebootPending": "false",
+              "osType": "windows",
+              "resourceGroup": "rg-example-arc",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "location": "westeurope"
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-arc/providers/Microsoft.HybridCompute/machines/srv-example-06",
+              "name": "srv-example-06",
+              "patchState": "Restart pending",
+              "rank": 3,
+              "critical": 0,
+              "security": 0,
+              "otherUpdates": 0,
+              "assessedAt": "2026-10-15T04:00:00Z",
+              "daysSinceAssessment": 0,
+              "assessmentStatus": "Succeeded",
+              "lastInstall": "Succeeded",
+              "lastRun": "2026-10-12T02:00:00Z",
+              "lastSucceeded": "2026-10-12T02:00:00Z",
+              "runs": 1,
+              "failedUpdates": 0,
+              "rebootPending": "true",
+              "osType": "linux",
+              "resourceGroup": "rg-example-arc",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "location": "northeurope"
+            }
+          ]
+        }
+      },
+      {
+        "match": {
+          "bodyIncludes": "af:azure.arc-patching#unassessed"
+        },
+        "body": {
+          "totalRecords": 3,
+          "count": 3,
+          "resultTruncated": "false",
+          "data": [
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-arc/providers/Microsoft.HybridCompute/machines/srv-example-02",
+              "name": "srv-example-02",
+              "status": "Disconnected",
+              "assessmentMode": "AutomaticByPlatform",
+              "patchMode": "AutomaticByPlatform",
+              "lastAssessed": "2026-10-11T04:00:00Z",
+              "osType": "linux",
+              "osName": "Ubuntu 22.04.4 LTS",
+              "resourceGroup": "rg-example-arc",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "location": "westeurope"
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-arc/providers/Microsoft.HybridCompute/machines/srv-example-04",
+              "name": "srv-example-04",
+              "status": "Expired",
+              "assessmentMode": "Not set",
+              "patchMode": "",
+              "lastAssessed": null,
+              "osType": "linux",
+              "osName": "Red Hat Enterprise Linux 9.4",
+              "resourceGroup": "rg-example-arc",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "location": "northeurope"
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a2/resourceGroups/rg-example-arc-legacy/providers/Microsoft.HybridCompute/machines/srv-example-07",
+              "name": "srv-example-07",
+              "status": "Connected",
+              "assessmentMode": "ImageDefault",
+              "patchMode": "Manual",
+              "lastAssessed": "2026-10-11T23:00:00Z",
+              "osType": "windows",
+              "osName": "Windows Server 2012 Standard",
+              "resourceGroup": "rg-example-arc-legacy",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a2",
+              "location": "westeurope"
+            }
+          ]
+        }
+      },
+      {
+        "match": {
+          "bodyIncludes": "af:azure.arc-patching#summary"
+        },
+        "body": {
+          "totalRecords": 1,
+          "count": 1,
+          "resultTruncated": "false",
+          "data": [
+            {
+              "assessed": 4,
+              "overdue": 1,
+              "pending": 2,
+              "criticalUpdates": 1,
+              "securityUpdates": 5,
+              "installFailed": 2,
+              "rebootPending": 1
+            }
+          ]
+        }
+      },
+      {
+        "match": {
+          "bodyIncludes": "af:azure.arc-patching#coverage"
+        },
+        "body": {
+          "totalRecords": 1,
+          "count": 1,
+          "resultTruncated": "false",
+          "data": [
+            {
+              "machines": 7,
+              "notAssessed": 3,
+              "notAssessedConnected": 1
+            }
+          ]
+        }
+      },
+      {
+        "match": {
+          "bodyIncludes": "af:azure.arc-patching#topupdates"
+        },
+        "body": {
+          "totalRecords": 4,
+          "count": 4,
+          "resultTruncated": "false",
+          "data": [
+            {
+              "patchName": "Security Update for Windows Server 2012 R2 (KB5066873)",
+              "machines": 2,
+              "kbId": "5066873",
+              "classification": "Security",
+              "published": "2026-10-14T17:00:00Z"
+            },
+            {
+              "patchName": "2026-10 Cumulative Update for Microsoft server operating system version 21H2 for x64-based Systems (KB5066782)",
+              "machines": 1,
+              "kbId": "5066782",
+              "classification": "Security",
+              "published": "2026-10-14T17:00:00Z"
+            },
+            {
+              "patchName": "Servicing Stack Update for Windows Server 2012 R2 (KB5066900)",
+              "machines": 1,
+              "kbId": "5066900",
+              "classification": "Critical",
+              "published": "2026-10-14T17:00:00Z"
+            },
+            {
+              "patchName": "openssl",
+              "machines": 1,
+              "kbId": "",
+              "classification": "Security",
+              "published": null
+            }
+          ]
+        }
+      },
+      {
+        "match": {
+          "bodyIncludes": "af:azure.arc-defender-coverage#plans"
+        },
+        "body": {
+          "totalRecords": 2,
+          "count": 2,
+          "resultTruncated": "false",
+          "data": [
+            {
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "tier": "Standard",
+              "subPlan": "P2"
+            },
+            {
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a2",
+              "tier": "Free",
+              "subPlan": ""
+            }
+          ]
+        }
+      },
+      {
+        "match": {
+          "bodyIncludes": "af:azure.arc-defender-coverage#machines"
+        },
+        "body": {
+          "totalRecords": 4,
+          "count": 4,
+          "resultTruncated": "false",
+          "data": [
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-arc/providers/Microsoft.HybridCompute/machines/srv-example-05",
+              "name": "srv-example-05",
+              "coverage": "Sensor failed",
+              "rank": 0,
+              "plan": "On (P2)",
+              "sensorState": "Failed",
+              "sensorMessage": "Onboarding to Microsoft Defender for Endpoint failed: the onboarding package could not be downloaded (proxy).",
+              "highRecommendations": 0,
+              "openRecommendations": 1,
+              "status": "Error",
+              "osType": "windows",
+              "osName": "Windows Server 2019 Standard",
+              "resourceGroup": "rg-example-arc",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "location": "westeurope"
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-arc/providers/Microsoft.HybridCompute/machines/srv-example-03",
+              "name": "srv-example-03",
+              "coverage": "Sensor missing",
+              "rank": 1,
+              "plan": "On (P2)",
+              "sensorState": "",
+              "sensorMessage": "",
+              "highRecommendations": 1,
+              "openRecommendations": 4,
+              "status": "Connected",
+              "osType": "windows",
+              "osName": "Windows Server 2012 R2 Datacenter",
+              "resourceGroup": "rg-example-arc",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "location": "westeurope"
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-arc/providers/Microsoft.HybridCompute/machines/srv-example-04",
+              "name": "srv-example-04",
+              "coverage": "Sensor missing",
+              "rank": 1,
+              "plan": "On (P2)",
+              "sensorState": "",
+              "sensorMessage": "",
+              "highRecommendations": 0,
+              "openRecommendations": 2,
+              "status": "Expired",
+              "osType": "linux",
+              "osName": "Red Hat Enterprise Linux 9.4",
+              "resourceGroup": "rg-example-arc",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "location": "northeurope"
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a2/resourceGroups/rg-example-arc-legacy/providers/Microsoft.HybridCompute/machines/srv-example-07",
+              "name": "srv-example-07",
+              "coverage": "Plan off",
+              "rank": 2,
+              "plan": "Off",
+              "sensorState": "",
+              "sensorMessage": "",
+              "highRecommendations": 2,
+              "openRecommendations": 5,
+              "status": "Connected",
+              "osType": "windows",
+              "osName": "Windows Server 2012 Standard",
+              "resourceGroup": "rg-example-arc-legacy",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a2",
+              "location": "westeurope"
+            }
+          ]
+        }
+      },
+      {
+        "match": {
+          "bodyIncludes": "af:azure.arc-defender-coverage#summary"
+        },
+        "body": {
+          "totalRecords": 1,
+          "count": 1,
+          "resultTruncated": "false",
+          "data": [
+            {
+              "machines": 7,
+              "protected": 3,
+              "planOff": 1,
+              "sensorMissing": 2,
+              "sensorFailed": 1,
+              "withHigh": 2
+            }
+          ]
+        }
+      },
+      {
+        "match": {
+          "bodyIncludes": "af:azure.arc-fleet#counts"
+        },
+        "body": {
+          "totalRecords": 1,
+          "count": 1,
+          "resultTruncated": "false",
+          "data": [
+            {
+              "total": 7,
+              "connected": 4,
+              "notConnected": 3,
+              "expired": 1,
+              "offline30": 1,
+              "windows": 4,
+              "linux": 3,
+              "outdatedAgents": 2,
+              "autoUpgradeOff": 3,
+              "failedExtensions": 3,
+              "esuEligible": 2,
+              "esuUnlicensed": 1,
+              "newest": "1.48.02881.1941"
+            }
+          ]
+        }
+      },
+      {
+        "match": {
+          "bodyIncludes": "af:azure.arc-fleet#patching"
+        },
+        "body": {
+          "totalRecords": 1,
+          "count": 1,
+          "resultTruncated": "false",
+          "data": [
+            {
+              "overdue": 1,
+              "pending": 2,
+              "installFailed": 2
+            }
+          ]
+        }
+      },
+      {
+        "match": {
+          "bodyIncludes": "af:azure.arc-fleet#assessment"
+        },
+        "body": {
+          "totalRecords": 1,
+          "count": 1,
+          "resultTruncated": "false",
+          "data": [
+            {
+              "notAssessedConnected": 1
+            }
+          ]
+        }
+      },
+      {
+        "match": {
+          "bodyIncludes": "af:azure.arc-fleet#defender"
+        },
+        "body": {
+          "totalRecords": 1,
+          "count": 1,
+          "resultTruncated": "false",
+          "data": [
+            {
+              "protected": 3,
+              "gaps": 4
+            }
+          ]
+        }
+      },
+      {
+        "match": {
+          "bodyIncludes": "af:azure.arc-fleet#byos"
+        },
+        "body": {
+          "totalRecords": 7,
+          "count": 7,
+          "resultTruncated": "false",
+          "data": [
+            {
+              "os": "Windows Server 2022 Datacenter",
+              "machines": 1
+            },
+            {
+              "os": "Ubuntu",
+              "machines": 1
+            },
+            {
+              "os": "Windows Server 2012 R2 Datacenter",
+              "machines": 1
+            },
+            {
+              "os": "Red Hat Enterprise Linux",
+              "machines": 1
+            },
+            {
+              "os": "Windows Server 2019 Standard",
+              "machines": 1
+            },
+            {
+              "os": "Rocky Linux",
+              "machines": 1
+            },
+            {
+              "os": "Windows Server 2012 Standard",
+              "machines": 1
+            }
+          ]
+        }
+      },
+      {
+        "match": {
+          "bodyIncludes": "af:azure.arc-fleet#byagent"
+        },
+        "body": {
+          "totalRecords": 5,
+          "count": 5,
+          "resultTruncated": "false",
+          "data": [
+            {
+              "release": "1.48",
+              "machines": 2
+            },
+            {
+              "release": "1.47",
+              "machines": 2
+            },
+            {
+              "release": "1.45",
+              "machines": 1
+            },
+            {
+              "release": "1.41",
+              "machines": 1
+            },
+            {
+              "release": "1.39",
+              "machines": 1
+            }
+          ]
+        }
+      },
+      {
+        "match": {
+          "bodyIncludes": "af:azure.arc-fleet#byregion"
+        },
+        "body": {
+          "totalRecords": 2,
+          "count": 2,
+          "resultTruncated": "false",
+          "data": [
+            {
+              "location": "westeurope",
+              "machines": 5
+            },
+            {
+              "location": "northeurope",
+              "machines": 2
+            }
+          ]
+        }
+      },
+      {
+        "match": {
+          "bodyIncludes": "af:azure.arc-fleet#bysubscription"
+        },
+        "body": {
+          "totalRecords": 2,
+          "count": 2,
+          "resultTruncated": "false",
+          "data": [
+            {
+              "subscription": "Example Org Production",
+              "connected": 3,
+              "notConnected": 3,
+              "machines": 6
+            },
+            {
+              "subscription": "Example Org Legacy",
+              "connected": 1,
+              "notConnected": 0,
+              "machines": 1
+            }
+          ]
+        }
+      },
+      {
+        "match": {
+          "bodyIncludes": "af:azure.arc-fleet#byresourcegroup"
+        },
+        "body": {
+          "totalRecords": 2,
+          "count": 2,
+          "resultTruncated": "false",
+          "data": [
+            {
+              "resourceGroup": "rg-example-arc",
+              "connected": 3,
+              "notConnected": 3,
+              "machines": 6
+            },
+            {
+              "resourceGroup": "rg-example-arc-legacy",
+              "connected": 1,
+              "notConnected": 0,
+              "machines": 1
+            }
+          ]
+        }
+      },
+      {
+        "match": {
+          "bodyIncludes": "af:azure.arc-fleet#offline"
+        },
+        "body": {
+          "totalRecords": 3,
+          "count": 3,
+          "resultTruncated": "false",
+          "data": [
+            {
+              "since": "1–24 hours",
+              "machines": 1
+            },
+            {
+              "since": "1–7 days",
+              "machines": 1
+            },
+            {
+              "since": "Expired",
+              "machines": 1
+            }
+          ]
+        }
+      },
+      {
+        "match": {
+          "bodyIncludes": "af:probes.arc-machines-disconnected"
+        },
+        "body": {
+          "totalRecords": 3,
+          "count": 3,
+          "resultTruncated": "false",
+          "data": [
+            {
+              "name": "srv-example-04",
+              "status": "Expired",
+              "lastStatusChange": "2026-08-20T10:00:00Z",
+              "hoursNotConnected": 1346,
+              "daysToExpiry": 0,
+              "machineFqdn": "srv-example-04",
+              "osName": "Red Hat Enterprise Linux 9.4",
+              "agentVersion": "1.39.02628.1214",
+              "resourceGroup": "rg-example-arc",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "location": "northeurope",
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-arc/providers/Microsoft.HybridCompute/machines/srv-example-04"
+            },
+            {
+              "name": "srv-example-02",
+              "status": "Disconnected",
+              "lastStatusChange": "2026-10-12T08:00:00Z",
+              "hoursNotConnected": 76,
+              "daysToExpiry": 42,
+              "machineFqdn": "srv-example-02",
+              "osName": "Ubuntu 22.04.4 LTS",
+              "agentVersion": "1.45.02800.1101",
+              "resourceGroup": "rg-example-arc",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "location": "westeurope",
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-arc/providers/Microsoft.HybridCompute/machines/srv-example-02"
+            },
+            {
+              "name": "srv-example-05",
+              "status": "Error",
+              "lastStatusChange": "2026-10-14T22:40:00Z",
+              "hoursNotConnected": 13,
+              "daysToExpiry": 45,
+              "machineFqdn": "srv-example-05.corp.example.com",
+              "osName": "Windows Server 2019 Standard",
+              "agentVersion": "1.48.02881.1941",
+              "resourceGroup": "rg-example-arc",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "location": "westeurope",
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-arc/providers/Microsoft.HybridCompute/machines/srv-example-05"
+            }
+          ]
+        }
+      },
+      {
+        "match": {
+          "bodyIncludes": "af:probes.arc-extensions-failed"
+        },
+        "body": {
+          "totalRecords": 1,
+          "count": 1,
+          "resultTruncated": "false",
+          "data": [
+            {
+              "name": "srv-example-06",
+              "failedExtensions": [
+                "AzureMonitorLinuxAgent"
+              ],
+              "failedCount": 1,
+              "firstMessage": "Enable failed: package azuremonitoragent conflicts with an installed package.",
+              "osName": "Rocky Linux 9.3",
+              "resourceGroup": "rg-example-arc",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "location": "northeurope",
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-arc/providers/Microsoft.HybridCompute/machines/srv-example-06"
+            }
+          ]
+        }
+      },
+      {
+        "match": {
+          "bodyIncludes": "af:probes.arc-critical-updates-overdue"
+        },
+        "body": {
+          "totalRecords": 1,
+          "count": 1,
+          "resultTruncated": "false",
+          "data": [
+            {
+              "name": "srv-example-03",
+              "critical": 1,
+              "security": 3,
+              "assessedAt": "2026-10-15T01:00:00Z",
+              "lastSucceeded": null,
+              "lastRun": "2026-10-08T01:00:00Z",
+              "osType": "Windows",
+              "resourceGroup": "rg-example-arc",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "location": "westeurope",
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-arc/providers/Microsoft.HybridCompute/machines/srv-example-03"
+            }
+          ]
+        }
+      },
+      {
+        "match": {
+          "bodyIncludes": "af:probes.arc-not-assessed"
+        },
+        "body": {
+          "totalRecords": 1,
+          "count": 1,
+          "resultTruncated": "false",
+          "data": [
+            {
+              "name": "srv-example-07",
+              "assessmentMode": "ImageDefault",
+              "lastAssessed": "2026-10-11T23:00:00Z",
+              "osName": "Windows Server 2012 Standard",
+              "resourceGroup": "rg-example-arc-legacy",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a2",
+              "location": "westeurope",
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a2/resourceGroups/rg-example-arc-legacy/providers/Microsoft.HybridCompute/machines/srv-example-07"
+            }
+          ]
+        }
+      },
+      {
+        "match": {
+          "bodyIncludes": "af:probes.arc-agents-outdated"
+        },
+        "body": {
+          "totalRecords": 1,
+          "count": 1,
+          "resultTruncated": "false",
+          "data": [
+            {
+              "name": "srv-example-06",
+              "agentVersion": "1.41.02700.1500",
+              "newestVersion": "1.48.02881.1941",
+              "releasesBehind": 7,
+              "autoUpgrade": "Off",
+              "osName": "Rocky Linux 9.3",
+              "resourceGroup": "rg-example-arc",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "location": "northeurope",
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-arc/providers/Microsoft.HybridCompute/machines/srv-example-06"
             }
           ]
         }

@@ -32,7 +32,6 @@ export function representativeParams(key: string, t: SyntheticTenant): Record<st
     'm365.distribution-list': { address: 'all-staff@example.com' },
     'm365.mailbox': { mailbox: t.users[member]!.mail },
     'azure.subscription': { id: sub },
-    'azure.function-app': { subscriptionId: sub, resourceGroup: 'rg-apps', name: 'func-hr-sync' },
     'azure.arc-server': {
       id: `/subscriptions/${sub}/resourceGroups/rg-arc/providers/Microsoft.HybridCompute/machines/arc-01`,
     },

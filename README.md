@@ -14,8 +14,9 @@ schedules, synthetic probes, and KQL configuration checks are declarative conten
 - **Endpoint & Security**: Intune devices/compliance/configuration/apps/autopilot; risky users (Identity Protection),
   Defender for Cloud. The Microsoft Defender portal (incidents, alerts, hunting, Secure Score) is out of scope; that
   content is retired.
-- **Azure**: subscriptions, Resource Graph inventory, resource detail, Azure Arc, monitoring (alerts, metrics,
-  Log Analytics), Function Apps, RBAC.
+- **Azure**: subscriptions, Resource Graph inventory, resource detail, hybrid Azure Arc servers at fleet scale
+  (connectivity, extensions, Update Manager patching, Defender for Servers coverage, ESU), monitoring (alerts,
+  metrics, Log Analytics), RBAC. Function Apps and Arc-enabled Kubernetes are retired (not needed at this time).
 - **Automation**: playbooks (dry-run preview → confirm → run; approvals; bulk; show-once secrets), runbooks,
   schedules on this host (automation identity), synthetic probes and KQL checks, Query Studio, reports with
   CSV/XLSX export, audit (hash-chained), appearance and settings.

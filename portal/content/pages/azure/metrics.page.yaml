@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/page.schema.json
 kind: page
 id: azure.metrics
-version: 1.0.0
+version: 1.0.1
 title: Metrics
 summary: Azure Monitor platform metrics for one resource — pick a resource, then the metrics, aggregation and interval to chart.
 owner: azure-team
@@ -102,7 +102,7 @@ layout:
     span: 12
     when: ${ $not($boolean(params.resourceId)) }
     text: |
-      **Pick a resource** to chart its platform metrics. You can also open this page from the **Metrics** action on any resource, Function App or Arc server.
+      **Pick a resource** to chart its platform metrics. You can also open this page from the **Metrics** action on any resource.
 
       Metrics come from Azure Monitor and need *Monitoring Reader* (or Reader) on the resource. Platform metrics are kept for 93 days.
   - widget: chart

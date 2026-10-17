@@ -133,11 +133,11 @@ describe('AppShell (real routes, mocked API)', () => {
     await screen.findByRole('button', { name: /^Identity \(\d+ pages hidden\)$/ });
     await userEvent.keyboard('{Control>}k{/Control}');
     const palette = await screen.findByRole('dialog', { name: 'Command palette' });
-    await userEvent.type(within(palette).getByRole('combobox'), 'Function Apps');
+    await userEvent.type(within(palette).getByRole('combobox'), 'Arc servers');
     await userEvent.keyboard('{Enter}');
-    await waitFor(() => expect(router.state.location.pathname).toBe('/azure/function-apps'));
-    expect(await screen.findByRole('heading', { level: 1, name: 'Function Apps' })).toBeInTheDocument();
-    expect(screen.getByText(/Azure Function Apps and their functions/)).toBeInTheDocument();
+    await waitFor(() => expect(router.state.location.pathname).toBe('/azure/arc'));
+    expect(await screen.findByRole('heading', { level: 1, name: 'Arc servers' })).toBeInTheDocument();
+    expect(screen.getByText(/Hybrid servers connected through Azure Arc/)).toBeInTheDocument();
   });
 
   it('the command palette switches theme', async () => {

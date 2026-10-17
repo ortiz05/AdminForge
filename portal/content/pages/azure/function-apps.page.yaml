@@ -1,9 +1,12 @@
 $schema: ../../../packages/schemas/generated/page.schema.json
 kind: page
 id: azure.function-apps
-version: 1.0.1
+version: 1.1.0
 title: Function Apps
-summary: Azure Function Apps across subscriptions — state, hosting plan, OS, HTTPS and identity settings — with restart, start, stop and trigger sync.
+summary: Retired — AdminForge doesn't manage Azure Functions at this time. Azure Function Apps across subscriptions — state, hosting plan, OS, HTTPS and identity settings — with restart, start, stop and trigger sync.
+# Retired 2026-10-17: Azure Functions aren't managed in AdminForge at this time. To bring it back, set
+# status: active and bump the version.
+status: retired
 owner: azure-team
 tags: [azure, functions, app-service]
 template: list-detail

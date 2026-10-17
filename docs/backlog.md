@@ -223,7 +223,8 @@ Found by the organization and security evaluation; the fixed findings are in CHA
 - [ ] Capabilities: Azure RBAC on a scope and "missing scopes" in `/api/me/capabilities` (PIM-aware preflight for ARM).
 - [ ] CAE claims challenge during a write: carry the claims through re-arm and return to the page.
 - [ ] Personal dashboards: pin widgets to "My dashboard" and arrange them (plan 7.4).
-- [ ] Function App logs/traces on the Function App page; Function Apps health dashboard; domain-expiry probe (RDAP).
+- [ ] Domain-expiry probe (RDAP). (Function App logs and a Function Apps health dashboard were dropped 2026-10-17
+      with the Function App content, see Hybrid Azure Arc servers below.)
 - [ ] Delta queries for large Graph lists.
 
 - [ ] Probe "not configured" state: a probe whose required env key is empty should report `skipped` (not `error`) — e.g. DNS probes without `AF_MAIL_DOMAIN`.
@@ -231,7 +232,8 @@ Found by the organization and security evaluation; the fixed findings are in CHA
 - [x] Tenant-data guard and the CLI's fixture recording (now one rule: `tenantValues` in `@adminforge/config`) exempt `https?://localhost.*`, which also lets `http://localhost.<domain>` through; anchor it to `localhost(:port)/?` in both places.
 - [x] Enforce formatting: Prettier (repo formatted once) is checked in CI (`pnpm format:check`) and applied by the Claude Code after-edit hook; the pre-commit hook runs only the guard tests. `portal/content`, fixtures and `docs/plans` are excluded (`.prettierignore`).
 - [x] Read-mode allowlist: Graph `POST /directoryObjects/getByIds`; ARM `…/config/appsettings/list` with values stripped server-side (names only; the read is audited).
-- [ ] Example connection `connections/hr-sync`: env keys for base URL + audience.
+- [x] Dropped 2026-10-17: the example connection `connections/hr-sync` is retired with the Function App content (the
+      generic `function` datasource and `functionHealth` probe stay; `adminforge new connection` scaffolds a new one).
 - [x] Default Log Analytics workspace key (`AF_LOG_ANALYTICS_WORKSPACE_ID`).
 
 ## Engineer report library (plan 2026-10-17, phase E)
@@ -599,6 +601,34 @@ First run of `tests/live/scripts/check-accuracy.ts` against the host services (d
 - [ ] Scheduled finance files are visible to Operators only (scheduled data rule); finance users with
       `Portal.Reader` get the email but can't browse the archive. Decide whether billing schedules widen
       `requires.portalRoles`.
+
+## Hybrid Azure Arc servers (2026-10-17)
+
+- [x] **Function Apps and Arc Kubernetes retired 2026-10-17** (not needed at this time; the estate will be AVD and
+      thousands of hybrid Arc servers). Retired, kept for run and audit history: `azure.function-apps`,
+      `azure.function-app`, `azure.function-apps-without-auth` with `reports.function-apps-without-auth-weekly` (also
+      turned off), `azure.function-app-incident-triage`, `azure.sync-function-triggers`, `probes.function-hr-sync-health`,
+      `integrations.hr-sync` and `azure.arc-kubernetes`. **To bring them back:** set each to `status: active` with a
+      version bump (the schedule also `enabled: true`), put the links back on `azure.overview` (KPI "Function Apps
+      stopped" and the "Where to next" links) and `azure.resource` ("Open Function App view" on `microsoft.web/sites`),
+      restore the Log Analytics "Function App errors" query (`azure.log-analytics` 1.0.1), and drop them from the
+      retired list in `tests/content/arc-fleet.test.ts`. Restart, start and stop (`azure.restart-app`, `start-app`,
+      `stop-app`) stay active for App Service web apps; the App Service security report still covers Function Apps.
+- [ ] **Validate live** once a subscription has Arc servers: every Arc view, the server page's Updates and Defender
+      tabs and the five Arc probes, read-only. Fixture-only so far: the Update Manager record types (summary = types
+      without `softwarepatches`), the assessment `status` / `errorDetails` fields, `kbId` / `classifications` on
+      per-update records, `licenseProfile.esuProfile` in Resource Graph, the Defender assessment ids under a machine,
+      and `arg_max` with several columns in a join subquery.
+- [ ] Agent currency from Microsoft's latest release: Advisor's "Upgrade to the latest version of the Azure Connected
+      Machine agent" recommendation (`advisorresources`, `extendedProperties.latestVersion`) instead of the newest
+      version in the fleet (wrong when every server is behind).
+- [ ] Defender for Servers enabled per machine (resource-level pricing) and servers onboarded to Defender for Endpoint
+      without the MDE extension: both show as gaps today.
+- [ ] ESU licences (`microsoft.hybridcompute/licenses`: cores, edition, state) and which servers each one covers.
+- [ ] A weekly patch-compliance report and schedule from `azure.arc-patching` (overdue, failed installs, not assessed)
+      for the change board; the page exports it today.
+- [ ] Physical site: Arc's `properties.locationData` (name, city, country) as a fleet chart and filter, if the
+      servers are onboarded with it (the fleet charts use the Azure region today).
 
 ## Navigation / product
 

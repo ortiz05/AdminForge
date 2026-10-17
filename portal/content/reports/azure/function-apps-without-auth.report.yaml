@@ -1,9 +1,12 @@
 $schema: ../../../packages/schemas/generated/report.schema.json
 kind: report
 id: azure.function-apps-without-auth
-version: 1.0.1
+version: 1.1.1
 title: Function Apps without authentication
-summary: Function Apps where App Service authentication (Easy Auth) is off, with their HTTPS, TLS and public network settings — candidates for Microsoft Entra authentication or private access.
+summary: Retired — AdminForge doesn't manage Azure Functions at this time. Function Apps where App Service authentication (Easy Auth) is off, with their HTTPS, TLS and public network settings — candidates for Microsoft Entra authentication or private access.
+# Retired 2026-10-17: Azure Functions aren't managed in AdminForge at this time. To bring it back, set
+# status: active and bump the version.
+status: retired
 owner: azure-team
 tags: [azure, functions, security, authentication]
 nav: { section: reports, label: Function Apps without authentication, icon: lock-open, order: 175 }
@@ -35,8 +38,7 @@ datasources:
       ${ params.publicOnly = true ? "| where publicNetworkAccess != 'Disabled'" }
       ${ params.includeStopped = false ? "| where state == 'Running'" }
       | extend plan = case(skuName =~ 'Dynamic', 'Consumption', skuName =~ 'FlexConsumption', 'Flex Consumption', skuName =~ 'ElasticPremium', 'Premium', 'Dedicated')
-      | join kind=leftouter (resourcecontainers | where type =~ 'microsoft.resources/subscriptions' | project subscriptionId, subscriptionName = name) on subscriptionId
-      | project id, name, defaultHostName, state, plan, httpsOnly = iff(coalesce(httpsOnly, false), 'true', 'false'), publicNetworkAccess, minTlsVersion, ftpsState, resourceGroup, subscriptionId, subscriptionName, location
+      | project id, name, defaultHostName, state, plan, httpsOnly = iff(coalesce(httpsOnly, false), 'true', 'false'), publicNetworkAccess, minTlsVersion, ftpsState, resourceGroup, subscriptionId, location
       | order by name asc
     paging: all
     maxItems: 10000
@@ -103,7 +105,7 @@ layout:
         filter: facet
       - { field: plan, label: Plan, filter: facet }
       - { field: resourceGroup, label: Resource group, filter: facet }
-      - { field: subscriptionName, label: Subscription, filter: facet }
+      - { field: subscriptionId, label: Subscription, filter: facet }
       - { field: location, label: Location, hidden: true }
       - { field: id, label: Resource id, kind: code, hidden: true }
     inspect:

@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/report.schema.json
 kind: report
 id: azure.arc-agent-health
-version: 1.0.0
+version: 1.1.0
 title: Azure Arc agent and extension health
 summary: Arc-enabled servers with failed extensions (monitoring, Defender, update and policy agents) or a Connected Machine agent several releases behind the newest version in your fleet, with automatic agent upgrade and connection state.
 owner: azure-team
@@ -31,7 +31,8 @@ datasources:
     source: resourceGraph
     # "Newest" is the highest agent version among your Arc servers (Resource Graph has no catalogue of agent releases);
     # the agent ships roughly monthly as 1.<minor>, so the minor number counts releases. Three joins: newest version,
-    # extensions, subscription names.
+    # extensions (failed = provisioning failed or the extension reports an error, as on the Arc servers and extensions
+    # views), subscription names.
     query: |
       // af:azure.arc-agent-health#rows
       resources
@@ -40,7 +41,7 @@ datasources:
       | extend lid = tolower(id), status = tostring(properties.status), agentVersion = tostring(properties.agentVersion), osName = tostring(properties.osName), osType = tostring(properties.osType), lastStatusChange = todatetime(properties.lastStatusChange), autoUpgrade = iff(coalesce(tobool(properties.agentUpgrade.enableAutomaticUpgrade), false), 'On', 'Off'), k = 1
       | extend minor = toint(split(agentVersion, '.')[1])
       | join kind=leftouter (resources | where type =~ 'microsoft.hybridcompute/machines' | extend newestVersion = tostring(properties.agentVersion), v = parse_version(tostring(properties.agentVersion)) | where isnotempty(newestVersion) | summarize arg_max(v, newestVersion) | project newestVersion, k = 1) on k
-      | join kind=leftouter (resources | where type =~ 'microsoft.hybridcompute/machines/extensions' | extend machineId = tolower(tostring(split(id, '/extensions/')[0])), extState = tostring(properties.provisioningState) | summarize extensions = count(), failedExtensions = countif(extState =~ 'Failed'), failedNames = make_set_if(name, extState =~ 'Failed', 10) by machineId) on $left.lid == $right.machineId
+      | join kind=leftouter (resources | where type =~ 'microsoft.hybridcompute/machines/extensions' | extend machineId = tolower(tostring(split(id, '/extensions/')[0])), extFailed = tostring(properties.provisioningState) =~ 'Failed' or tostring(properties.instanceView.status.level) =~ 'Error' | summarize extensions = count(), failedExtensions = countif(extFailed), failedNames = make_set_if(name, extFailed, 10) by machineId) on $left.lid == $right.machineId
       | extend extensions = coalesce(extensions, 0), failedExtensions = coalesce(failedExtensions, 0), releasesBehind = toint(split(newestVersion, '.')[1]) - minor
       | extend agent = case(isempty(agentVersion), 'Unknown', releasesBehind >= ${ $number(params.behind) in [3, 6, 12] ? $string($number(params.behind)) : '6' }, 'Outdated', releasesBehind > 0, 'Behind', 'Current')
       | extend health = case(failedExtensions > 0, 'Extension failed', agent == 'Outdated', 'Agent outdated', status !~ 'Connected', 'Not connected', 'Healthy')
@@ -63,7 +64,7 @@ datasources:
       | extend lid = tolower(id), status = tostring(properties.status), agentVersion = tostring(properties.agentVersion), osName = tostring(properties.osName), osType = tostring(properties.osType), lastStatusChange = todatetime(properties.lastStatusChange), autoUpgrade = iff(coalesce(tobool(properties.agentUpgrade.enableAutomaticUpgrade), false), 'On', 'Off'), k = 1
       | extend minor = toint(split(agentVersion, '.')[1])
       | join kind=leftouter (resources | where type =~ 'microsoft.hybridcompute/machines' | extend newestVersion = tostring(properties.agentVersion), v = parse_version(tostring(properties.agentVersion)) | where isnotempty(newestVersion) | summarize arg_max(v, newestVersion) | project newestVersion, k = 1) on k
-      | join kind=leftouter (resources | where type =~ 'microsoft.hybridcompute/machines/extensions' | extend machineId = tolower(tostring(split(id, '/extensions/')[0])), extState = tostring(properties.provisioningState) | summarize extensions = count(), failedExtensions = countif(extState =~ 'Failed'), failedNames = make_set_if(name, extState =~ 'Failed', 10) by machineId) on $left.lid == $right.machineId
+      | join kind=leftouter (resources | where type =~ 'microsoft.hybridcompute/machines/extensions' | extend machineId = tolower(tostring(split(id, '/extensions/')[0])), extFailed = tostring(properties.provisioningState) =~ 'Failed' or tostring(properties.instanceView.status.level) =~ 'Error' | summarize extensions = count(), failedExtensions = countif(extFailed), failedNames = make_set_if(name, extFailed, 10) by machineId) on $left.lid == $right.machineId
       | extend extensions = coalesce(extensions, 0), failedExtensions = coalesce(failedExtensions, 0), releasesBehind = toint(split(newestVersion, '.')[1]) - minor
       | extend agent = case(isempty(agentVersion), 'Unknown', releasesBehind >= ${ $number(params.behind) in [3, 6, 12] ? $string($number(params.behind)) : '6' }, 'Outdated', releasesBehind > 0, 'Behind', 'Current')
       | extend health = case(failedExtensions > 0, 'Extension failed', agent == 'Outdated', 'Agent outdated', status !~ 'Connected', 'Not connected', 'Healthy')

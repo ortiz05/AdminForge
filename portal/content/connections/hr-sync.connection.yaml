@@ -1,15 +1,17 @@
 $schema: ../../packages/schemas/generated/connection.schema.json
 kind: connection
 id: integrations.hr-sync
-version: 1.0.0
+version: 1.1.0
 title: HR sync Function App (example)
 summary: >-
-  Example connection to an Entra-secured Azure Function that syncs employees from the HR system. It stays a draft until
+  Retired — AdminForge doesn't manage Azure Functions at this time. Example connection to an Entra-secured Azure Function that syncs employees from the HR system. It stays a draft until
   you point baseUrl and audience at your own Function App (Easy Auth with Entra ID, exposing user_impersonation) and
   publish it. Only the named operations below can ever be called; read sessions may only call read operations.
+# Retired 2026-10-17: Azure Functions aren't managed in AdminForge at this time. To bring it back, set
+# status: active and bump the version.
+status: retired
 owner: portal-admins
 tags: [integration, functions, example]
-status: draft
 baseUrl: https://func-hr-sync.example.com
 audience: api://example-hr-sync
 scopes: [user_impersonation]

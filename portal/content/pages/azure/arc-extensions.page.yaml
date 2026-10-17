@@ -1,0 +1,221 @@
+$schema: ../../../packages/schemas/generated/page.schema.json
+kind: page
+id: azure.arc-extensions
+version: 1.0.0
+title: Azure Arc extensions
+summary: >-
+  Every VM extension on every Azure Arc server — Azure Monitor Agent, Defender for Endpoint, Update Manager, Machine
+  Configuration and the rest — with the ones that failed, report an error or are stuck installing first, and the
+  extension's own status message, so you can see what broke and where without opening each server.
+owner: azure-team
+tags: [azure, arc, hybrid, servers, extensions]
+template: list-detail
+nav: { section: azure, label: Arc extensions, icon: puzzle-piece, order: 52 }
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    arm: [user_impersonation]
+  azureRoles: [Reader]
+
+params:
+  q: { type: string, default: "", label: Search, placeholder: Machine name contains… }
+  state:
+    type: enum
+    label: State
+    facet: true
+    default: Problems
+    values:
+      - { value: Problems, label: Needs attention }
+      - { value: Failed, label: Failed or reporting an error }
+      - { value: InProgress, label: "Installing, updating or removing" }
+      - { value: Healthy, label: Healthy }
+      - { value: All, label: Any state }
+  extension: { type: string, label: Extension, facet: true, placeholder: e.g. AzureMonitorWindowsAgent }
+  autoUpgrade:
+    type: enum
+    label: Automatic upgrade
+    facet: true
+    default: All
+    values:
+      - { value: All, label: Any }
+      - { value: "On", label: "On" }
+      - { value: "Off", label: "Off" }
+  machineStatus:
+    type: enum
+    label: Machine
+    facet: true
+    default: All
+    values:
+      - { value: All, label: Any machine }
+      - { value: Connected, label: Connected }
+      - { value: NotConnected, label: Not connected }
+  subscriptionId: { type: string, format: guid, label: Subscription, picker: subscription, facet: true }
+
+filters:
+  search: q
+  facets: [state, extension, autoUpgrade, machineStatus, subscriptionId]
+
+savedViews:
+  enabled: true
+  shared: true
+  presets:
+    - { name: Needs attention, params: { state: Problems } }
+    - { name: Failed on connected machines, params: { state: Failed, machineStatus: Connected } }
+    - { name: Azure Monitor Agent, params: { state: All, extension: AzureMonitor } }
+    - { name: Defender for Endpoint, params: { state: All, extension: MDE } }
+    - { name: Automatic upgrade off, params: { state: All, autoUpgrade: "Off" } }
+
+datasources:
+  # One row per extension (thousands of servers × several extensions), paged and filtered in Resource Graph, no
+  # transform. "Needs attention" = provisioning failed, the extension reports an error, or it is still installing,
+  # updating or removing. Two joins: the machine (connection state, OS) and subscription names.
+  extensions:
+    source: resourceGraph
+    query: |
+      // af:azure.arc-extensions#extensions
+      resources
+      | where type =~ 'microsoft.hybridcompute/machines/extensions'
+      ${ params.subscriptionId ? "| where subscriptionId == '" & $guid(params.subscriptionId) & "'" }
+      | extend machineId = tolower(tostring(split(id, '/extensions/')[0])), machineName = tostring(split(id, '/')[8]), publisher = tostring(properties.publisher), extensionType = tostring(properties.type), version = tostring(properties.typeHandlerVersion), provisioningState = tostring(properties.provisioningState), statusLevel = tostring(properties.instanceView.status.level), statusCode = tostring(properties.instanceView.status.code), statusMessage = substring(tostring(properties.instanceView.status.message), 0, 500), autoUpgrade = iff(coalesce(tobool(properties.enableAutomaticUpgrade), false), 'On', 'Off')
+      ${ params.q ? "| where machineName contains " & $kql(params.q) }
+      ${ params.extension ? "| where extensionType contains " & $kql(params.extension) & " or name contains " & $kql(params.extension) }
+      ${ params.autoUpgrade in ['On', 'Off'] ? "| where autoUpgrade == '" & params.autoUpgrade & "'" }
+      | extend health = case(provisioningState =~ 'Failed', 'Failed', statusLevel =~ 'Error', 'Error reported', provisioningState in~ ('Creating', 'Updating', 'Deleting'), 'In progress', provisioningState =~ 'Succeeded', 'Healthy', 'Unknown')
+      ${ params.state = 'Failed' ? "| where health in ('Failed', 'Error reported')" : params.state = 'InProgress' ? "| where health == 'In progress'" : params.state = 'Healthy' ? "| where health == 'Healthy'" : params.state = 'All' ? '' : "| where health != 'Healthy'" }
+      | join kind=leftouter (resources | where type =~ 'microsoft.hybridcompute/machines' | project machineId = tolower(id), machineStatus = tostring(properties.status), osName = tostring(properties.osName)) on machineId
+      ${ params.machineStatus = 'Connected' ? "| where machineStatus == 'Connected'" : params.machineStatus = 'NotConnected' ? "| where machineStatus != 'Connected'" }
+      | join kind=leftouter (resourcecontainers | where type =~ 'microsoft.resources/subscriptions' | project subscriptionId, subscriptionName = name) on subscriptionId
+      | extend rank = case(health == 'Failed', 0, health == 'Error reported', 1, health == 'In progress', 2, health == 'Unknown', 3, 4)
+      | project id, machineName, machineId, name, extensionType, publisher, version, health, rank, provisioningState, statusLevel, statusCode, statusMessage, autoUpgrade, machineStatus, osName, resourceGroup, subscriptionId, subscriptionName, location
+      | order by rank asc, extensionType asc, machineName asc
+    paging: cursor
+    cache: { ttl: 120 }
+  # Fleet-wide counts in Resource Graph: per machine first, so "servers with a problem" is exact (no dcount).
+  summary:
+    source: resourceGraph
+    query: |
+      // af:azure.arc-extensions#summary
+      resources
+      | where type =~ 'microsoft.hybridcompute/machines/extensions'
+      | extend machineId = tolower(tostring(split(id, '/extensions/')[0])), provisioningState = tostring(properties.provisioningState), statusLevel = tostring(properties.instanceView.status.level), autoUpgradeOff = not(coalesce(tobool(properties.enableAutomaticUpgrade), false))
+      | extend failed = provisioningState =~ 'Failed' or statusLevel =~ 'Error', inProgress = provisioningState in~ ('Creating', 'Updating', 'Deleting')
+      | summarize n = count(), failed = countif(failed), inProgress = countif(inProgress), autoUpgradeOff = countif(autoUpgradeOff) by machineId
+      | summarize extensions = sum(n), failed = sum(failed), inProgress = sum(inProgress), autoUpgradeOff = sum(autoUpgradeOff), machines = count(), machinesWithFailure = countif(failed > 0)
+    transform: "${ $merge([{ 'extensions': 0, 'failed': 0, 'inProgress': 0, 'autoUpgradeOff': 0, 'machines': 0, 'machinesWithFailure': 0 }, value.value[0]]) }"
+    cache: { ttl: 300 }
+  byType:
+    source: resourceGraph
+    query: |
+      // af:azure.arc-extensions#bytype
+      resources
+      | where type =~ 'microsoft.hybridcompute/machines/extensions'
+      | extend extensionType = tostring(properties.type), provisioningState = tostring(properties.provisioningState), statusLevel = tostring(properties.instanceView.status.level)
+      | where provisioningState =~ 'Failed' or statusLevel =~ 'Error'
+      | summarize failed = count() by extensionType
+      | top 10 by failed desc
+    transform: "${ [value.value] }"
+    cache: { ttl: 300 }
+
+layout:
+  - widget: kpi
+    span: 2
+    data: summary.failed
+    label: Failed or reporting an error
+    format: number
+    status: "${ value > 0 ? 'crit' : 'ok' }"
+    href: /p/azure.arc-extensions?state=Failed
+  - widget: kpi
+    span: 2
+    data: summary.machinesWithFailure
+    label: Servers with a failed extension
+    format: number
+    status: "${ value > 0 ? 'crit' : 'ok' }"
+  - widget: kpi
+    span: 2
+    data: summary.inProgress
+    label: Installing, updating or removing
+    format: number
+    status: "${ value > 0 ? 'info' : 'ok' }"
+    href: /p/azure.arc-extensions?state=InProgress
+  - widget: kpi
+    span: 2
+    data: summary.autoUpgradeOff
+    label: Automatic upgrade off
+    format: number
+    status: "${ value > 0 ? 'info' : 'ok' }"
+    href: /p/azure.arc-extensions?state=All&autoUpgrade=Off
+  - widget: kpi
+    span: 2
+    data: summary.extensions
+    label: Extensions
+    format: number
+    href: /p/azure.arc-extensions?state=All
+  - widget: kpi
+    span: 2
+    data: summary.machines
+    label: Servers with extensions
+    format: number
+  - widget: chart
+    title: Failures by extension
+    span: 12
+    rows: 2
+    type: bar
+    data: byType
+    x: extensionType
+    y: failed
+    labels: { failed: Failed or reporting an error }
+    format: number
+    empty:
+      title: No failed extensions
+      body: Every extension on every Arc server installed and reports no error.
+  - widget: table
+    id: extensions
+    span: 12
+    data: extensions.value
+    rowKey: id
+    columns:
+      - { field: machineName, label: Machine, kind: identity, secondary: osName, sortable: true }
+      - { field: extensionType, label: Extension, kind: identity, secondary: publisher, sortable: true }
+      - field: health
+        label: State
+        kind: status
+        map: { Failed: [crit, Failed], Error reported: [crit, Error reported], In progress: [info, In progress], Healthy: [ok, Healthy], Unknown: [neutral, Unknown] }
+        filter: { type: facet, param: state }
+      - { field: statusMessage, label: Status message }
+      - { field: version, label: Version }
+      - { field: autoUpgrade, label: Automatic upgrade, filter: { type: facet, param: autoUpgrade } }
+      - field: machineStatus
+        label: Machine
+        kind: status
+        map: { Connected: [ok, Connected], Disconnected: [warn, Disconnected], Expired: [crit, Expired], Error: [crit, Error], AwaitingConnection: [info, Awaiting connection] }
+        filter: { type: facet, param: machineStatus }
+      - { field: provisioningState, label: Provisioning state, hidden: true }
+      - { field: statusLevel, label: Status level, hidden: true }
+      - { field: statusCode, label: Status code, kind: code, hidden: true }
+      - { field: name, label: Extension name, hidden: true }
+      - { field: resourceGroup, label: Resource group, filter: facet, hidden: true }
+      - { field: subscriptionName, label: Subscription, filter: facet, hidden: true }
+      - { field: location, label: Location, hidden: true }
+      - { field: id, label: Extension resource id, kind: code, hidden: true }
+    inspect:
+      page: azure.arc-server
+      params:
+        id: ${ row.machineId }
+    rowActions:
+      - label: Troubleshoot extensions (guide)
+        icon: book-open
+        href: https://learn.microsoft.com/azure/azure-arc/servers/troubleshoot-vm-extensions
+      - label: Open the machine's extensions in Azure portal
+        icon: arrow-square-out
+        href: https://portal.azure.com/#resource${ row.machineId }/extensions
+    empty:
+      title: No extensions match
+      body: >-
+        Nothing needs attention: every extension installed and reports no error. Pick "Any state" to list them all.
+
+export:
+  formats: [csv, xlsx]
+  fileName: azure-arc-extensions
+  data: extensions.value
+  columns: visible
+  maxRows: 100000

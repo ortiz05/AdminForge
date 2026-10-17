@@ -31,6 +31,11 @@ const CONFIG_CHECKS = [
   'probes.privileged-rbac-direct-users',
   'probes.custom-roles-wildcard',
   'probes.databases-public-network-access',
+  // Hybrid Azure Arc servers (tests/content/arc-fleet.test.ts)
+  'probes.arc-extensions-failed',
+  'probes.arc-critical-updates-overdue',
+  'probes.arc-not-assessed',
+  'probes.arc-agents-outdated',
 ];
 
 describe('probe sweeps', () => {

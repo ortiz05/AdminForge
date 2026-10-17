@@ -11,6 +11,13 @@ Closes the gaps found by comparing the build with the original plan (see the pla
 
 ### Added
 
+- **Hybrid Azure Arc servers at fleet size:** an Arc fleet dashboard (connection and time offline, OS, agent versions,
+  regions, subscriptions, resource groups, failed extensions, patching, Defender coverage, ESU), and Arc extensions,
+  Arc patching (Azure Update Manager: assessed and not-assessed servers) and Arc Defender coverage pages. Every list is
+  filtered and paged in Resource Graph and every number counted there, so thousands of servers cost the same as ten.
+  The server page gains Updates and Defender tabs. Four new configuration checks (failed extensions, critical or
+  security updates overdue for 30 days, not assessed for 3 days, agents 6+ releases behind), each with a remedy and a
+  link.
 - **A probe's result says what failed, why, and what to do.** Its detail on Synthetic monitoring shows **What it
   found** (the rows behind the result, e.g. which SAML apps' certificates expire and when; Operators only, since the
   automation identity collected them), **What to do** (new probe field `remedy`) with a button to the AdminForge page
@@ -289,6 +296,12 @@ Closes the gaps found by comparing the build with the original plan (see the pla
 
 ### Changed
 
+- `azure.arc-servers` 2.0.0 pages in Resource Graph with no transform and new filters (not connected, agent, failed
+  extensions, ESU, query builder); `azure.arc-disconnected` 1.1.0 counts in Resource Graph;
+  `probes.arc-machines-disconnected` 1.1.0 gives Disconnected servers an hour's grace, shows hours offline and days to
+  expiry and is critical at 25 servers; `azure.overview` 1.1.0 counts Arc servers instead of Function Apps. A failed
+  Arc extension means the same everywhere (provisioning failed or it reports an error), including
+  `azure.arc-agent-health` 1.1.0. Free text reaches the Arc and AVD queries only as `$kql()` literals.
 - A bulk run's `run.created` audit event records the inputs every item shares (`inputsTemplate`, redacted), so the
   reason for a bulk change is kept.
 - **Shared mailbox sign-in state comes from Microsoft Entra ID:** the Shared mailboxes page (1.4) and the Shared
@@ -457,6 +470,10 @@ adminforge-<process>`) and a configurable pool size (`DATABASE_POOL_MAX` [10]); 
 
 ### Removed
 
+- **Function Apps and Azure Arc-enabled Kubernetes retired** (not needed for now): their pages, report and weekly
+  schedule (turned off), triage runbook, trigger-sync playbook, the example HR-sync connection and probe, and Log
+  Analytics' "Function App errors" query. The generic `functionHealth` probe kind and `function` datasource stay;
+  `docs/backlog.md` says how to bring the content back.
 - **Microsoft Defender portal content retired:** AdminForge no longer reads security.microsoft.com. Incidents, alerts,
   advanced hunting, Secure Score and device vulnerabilities (6 pages), the incident playbooks, the alerts, incidents and
   Secure Score reports with their schedules and the two Defender probes are `status: retired` (kept for run and audit

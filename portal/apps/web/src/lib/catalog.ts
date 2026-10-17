@@ -182,17 +182,12 @@ export const PLANNED: Record<string, PlannedPage> = {
       'Open any resource in the inspector',
     ],
   },
-  'function-apps': {
-    summary: 'Azure Function Apps and their functions.',
-    capabilities: [
-      'Failures, latency, and top errors',
-      'Functions without Entra authentication',
-      'Restart, stop, start, or sync triggers (armed)',
-    ],
-  },
   arc: {
-    summary: 'Azure Arc-enabled servers and Kubernetes clusters.',
-    capabilities: ['Connectivity status and agent version', 'Installed extensions'],
+    summary: 'Hybrid servers connected through Azure Arc, at fleet size.',
+    capabilities: [
+      'Connection status, time offline and agent version',
+      'Failed extensions, missing updates and Defender coverage',
+    ],
   },
   monitoring: {
     summary: 'Azure Monitor alerts, metrics, and Log Analytics queries.',

@@ -1,0 +1,41 @@
+$schema: ../../packages/schemas/generated/probe.schema.json
+kind: probe
+id: probes.arc-extensions-failed
+version: 1.0.0
+title: Azure Arc servers with a failed extension
+summary: >-
+  Connected Azure Arc servers where a VM extension failed to install or update, or reports an error (Azure Monitor
+  Agent, Defender for Endpoint, Update Manager, Machine Configuration…), so monitoring, protection or patching there
+  isn't working. Each row names the failed extensions and the first status message. Servers that aren't connected
+  are left out (see the disconnected check). Critical from 25 servers: usually one rollout failing everywhere.
+owner: azure-team
+tags: [kql, configuration, azure, arc, extensions, config-check]
+group: azure
+remedy: >-
+  Read the failed extension's status message (Arc server → Extensions tab). Run "azcmagent show" on the server: if a
+  dependent service is stopped, restart it. Otherwise remove the extension and install it again; when the same
+  extension fails on many servers, roll back the version or policy that deployed it. Logs: C:\ProgramData\GuestConfig
+  (Windows) or /var/lib/GuestConfig (Linux), extension service log ext_mgr_logs/gc_ext.log. On hardened Linux, a
+  noexec mount on /var blocks every extension.
+link: { label: Open failed Arc extensions, href: "/p/azure.arc-extensions?state=Failed&machineStatus=Connected" }
+check:
+  kind: kql
+  source: resourceGraph
+  query: |
+    // af:probes.arc-extensions-failed
+    resources
+    | where type =~ 'microsoft.hybridcompute/machines/extensions'
+    | extend provisioningState = tostring(properties.provisioningState), statusLevel = tostring(properties.instanceView.status.level)
+    | where provisioningState =~ 'Failed' or statusLevel =~ 'Error'
+    | extend machineId = tolower(tostring(split(id, '/extensions/')[0])), extensionType = tostring(properties.type), message = substring(tostring(properties.instanceView.status.message), 0, 300)
+    | summarize failedExtensions = make_set(extensionType, 10), failedCount = count(), firstMessage = take_any(message) by machineId
+    | join kind=inner (resources | where type =~ 'microsoft.hybridcompute/machines' and tostring(properties.status) == 'Connected' | project machineId = tolower(id), name, osName = tostring(properties.osName), resourceGroup, subscriptionId, location, id) on machineId
+    | project name, failedExtensions, failedCount, firstMessage, osName, resourceGroup, subscriptionId, location, id
+    | order by failedCount desc, name asc
+  metric: rowCount
+  detailsLimit: 100
+thresholds: { warn: 1, crit: 25 }
+intervalHint: PT6H
+timeoutMs: 60000
+requires:
+  azureRoles: [Reader]

@@ -1,9 +1,9 @@
 $schema: ../../packages/schemas/generated/dashboard.schema.json
 kind: dashboard
 id: azure.overview
-version: 1.0.0
+version: 1.1.0
 title: Azure overview
-summary: Inventory, tagging hygiene, Azure Arc connectivity, Function App state and Azure Monitor alerts across every subscription you can read.
+summary: Inventory, tagging hygiene, Azure Arc servers and Azure Monitor alerts across every subscription you can read.
 owner: azure-team
 tags: [azure, dashboard]
 nav: { section: azure, label: Overview, icon: gauge, order: 5 }
@@ -23,13 +23,12 @@ datasources:
       resources
       | summarize resources = count(),
           untagged = countif(isnull(tags) or array_length(bag_keys(tags)) == 0),
-          arcDisconnected = countif(type =~ 'microsoft.hybridcompute/machines' and tostring(properties.status) != 'Connected'),
-          functionApps = countif(type =~ 'microsoft.web/sites' and kind contains 'functionapp'),
-          stoppedFunctionApps = countif(type =~ 'microsoft.web/sites' and kind contains 'functionapp' and tostring(properties.state) =~ 'Stopped')
+          arcServers = countif(type =~ 'microsoft.hybridcompute/machines'),
+          arcDisconnected = countif(type =~ 'microsoft.hybridcompute/machines' and tostring(properties.status) != 'Connected')
       | extend joinKey = 1
       | join kind=leftouter (resourcecontainers | summarize subscriptions = countif(type =~ 'microsoft.resources/subscriptions'), resourceGroups = countif(type =~ 'microsoft.resources/subscriptions/resourcegroups') | extend joinKey = 1) on joinKey
-      | project resources, untagged, arcDisconnected, functionApps, stoppedFunctionApps, subscriptions, resourceGroups
-    transform: "${ $merge([{ 'resources': 0, 'untagged': 0, 'arcDisconnected': 0, 'functionApps': 0, 'stoppedFunctionApps': 0, 'subscriptions': 0, 'resourceGroups': 0 }, value.value[0]]) }"
+      | project resources, untagged, arcServers, arcDisconnected, subscriptions, resourceGroups
+    transform: "${ $merge([{ 'resources': 0, 'untagged': 0, 'arcServers': 0, 'arcDisconnected': 0, 'subscriptions': 0, 'resourceGroups': 0 }, value.value[0]]) }"
     cache: { ttl: 300 }
   alerts:
     source: resourceGraph
@@ -99,11 +98,17 @@ layout:
     href: /p/azure.resources?tagState=Untagged
   - widget: kpi
     span: 2
+    data: counts.arcServers
+    label: Azure Arc servers
+    format: number
+    href: /p/azure.arc-fleet
+  - widget: kpi
+    span: 2
     data: counts.arcDisconnected
     label: Arc servers not connected
     format: number
     status: "${ value > 0 ? 'crit' : 'ok' }"
-    href: /p/azure.arc-servers?status=Disconnected
+    href: /p/azure.arc-servers?status=NotConnected
   - widget: kpi
     span: 2
     data: alerts.critical
@@ -111,13 +116,6 @@ layout:
     format: number
     status: "${ value > 0 ? 'crit' : 'ok' }"
     href: /p/azure.alerts?severity=Sev0&condition=Fired
-  - widget: kpi
-    span: 2
-    data: counts.stoppedFunctionApps
-    label: Function Apps stopped
-    format: number
-    status: "${ value > 0 ? 'warn' : 'ok' }"
-    href: /p/azure.function-apps?state=Stopped
   - widget: chart
     id: resourcesByType
     title: Top resource types
@@ -159,6 +157,5 @@ layout:
 
       - [Resources](/p/azure.resources) — inventory with type, location, resource group and tag filters
       - [Role assignments](/p/azure.role-assignments) — who holds Owner and other privileged roles
-      - [Arc servers](/p/azure.arc-servers) and [Arc Kubernetes](/p/azure.arc-kubernetes) — hybrid connectivity
-      - [Function Apps](/p/azure.function-apps) — restart, start, stop and sync triggers
-      - Reports: [Untagged resources](/p/azure.untagged-resources), [Function Apps without authentication](/p/azure.function-apps-without-auth), [Disconnected Arc servers](/p/azure.arc-disconnected)
+      - [Azure Arc fleet](/p/azure.arc-fleet) — every hybrid server at a glance; then [Arc servers](/p/azure.arc-servers), [extensions](/p/azure.arc-extensions), [patching](/p/azure.arc-patching) and [Defender for Servers coverage](/p/azure.arc-defender-coverage)
+      - Reports: [Untagged resources](/p/azure.untagged-resources), [Disconnected Arc servers](/p/azure.arc-disconnected), [Arc agent and extension health](/p/azure.arc-agent-health)

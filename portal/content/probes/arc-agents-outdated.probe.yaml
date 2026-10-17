@@ -1,0 +1,41 @@
+$schema: ../../packages/schemas/generated/probe.schema.json
+kind: probe
+id: probes.arc-agents-outdated
+version: 1.0.0
+title: Azure Arc servers with an outdated agent
+summary: >-
+  Connected Azure Arc servers whose Connected Machine agent is six or more releases behind the newest agent in your
+  fleet (the agent ships about monthly, so roughly half a year old — Microsoft supports only agent versions released
+  within the last year), with whether automatic agent upgrade is on. Resource Graph has no catalogue of agent
+  releases, so "newest" is the newest version installed on one of your servers.
+owner: azure-team
+tags: [kql, configuration, azure, arc, config-check]
+group: azure
+remedy: >-
+  Upgrade the Connected Machine agent on these servers (no restart needed). Windows: let Microsoft Update deliver it
+  ("Install updates for other Microsoft products" in Group Policy, or the Azure Connected Machine Agent product in
+  WSUS / Configuration Manager). Linux: apt, yum or zypper upgrade azcmagent from packages.microsoft.com. Agents from
+  1.57 can upgrade themselves: assign the Azure Policy "Configure Azure Arc-enabled Servers to enable automatic
+  upgrades" (preview).
+link: { label: Open outdated Arc agents, href: "/p/azure.arc-servers?agent=outdated&status=Connected" }
+check:
+  kind: kql
+  source: resourceGraph
+  query: |
+    // af:probes.arc-agents-outdated
+    resources
+    | where type =~ 'microsoft.hybridcompute/machines' and tostring(properties.status) == 'Connected'
+    | extend agentVersion = tostring(properties.agentVersion), autoUpgrade = iff(coalesce(tobool(properties.agentUpgrade.enableAutomaticUpgrade), false), 'On', 'Off'), k = 1
+    | where isnotempty(agentVersion)
+    | join kind=leftouter (resources | where type =~ 'microsoft.hybridcompute/machines' | extend newestVersion = tostring(properties.agentVersion), v = parse_version(tostring(properties.agentVersion)) | where isnotempty(newestVersion) | summarize arg_max(v, newestVersion) | project newestVersion, k = 1) on k
+    | extend releasesBehind = toint(split(newestVersion, '.')[1]) - toint(split(agentVersion, '.')[1])
+    | where releasesBehind >= 6
+    | project name, agentVersion, newestVersion, releasesBehind, autoUpgrade, osName = tostring(properties.osName), resourceGroup, subscriptionId, location, id
+    | order by releasesBehind desc, name asc
+  metric: rowCount
+  detailsLimit: 100
+thresholds: { warn: 1 }
+intervalHint: PT6H
+timeoutMs: 60000
+requires:
+  azureRoles: [Reader]

@@ -1,0 +1,43 @@
+$schema: ../../packages/schemas/generated/probe.schema.json
+kind: probe
+id: probes.arc-critical-updates-overdue
+version: 1.0.0
+title: Azure Arc servers with critical or security updates overdue
+summary: >-
+  Azure Arc servers whose Azure Update Manager assessment (from the last 3 days) lists pending critical or security
+  updates and that have had no successful update installation in 30 days: the patch window missed them, their
+  installations fail, or nothing schedules them. Each row gives the counts and when the server was last assessed and
+  last installed updates. Critical from 25 servers.
+owner: azure-team
+tags: [kql, configuration, azure, arc, patching, update-manager, config-check]
+group: azure
+remedy: >-
+  Check that each server is in a maintenance configuration (Update Manager → Machines → Schedule updates) and that its
+  last runs didn't fail: open the server's Updates tab for the failing updates and error. Install the critical and
+  security updates now with a one-time update, then fix the schedule. Servers that must stay unpatched need an
+  exception agreed with security.
+link: { label: Open overdue Arc servers, href: "/p/azure.arc-patching?state=Overdue" }
+check:
+  kind: kql
+  source: resourceGraph
+  query: |
+    // af:probes.arc-critical-updates-overdue
+    patchassessmentresources
+    | where type has 'hybridcompute' and type !has 'softwarepatches'
+    | extend machineId = substring(id, 0, indexof(tolower(id), '/patchassessmentresults/')), assessedAt = todatetime(properties.lastModifiedDateTime)
+    | extend lid = tolower(machineId)
+    | summarize arg_max(assessedAt, properties, machineId, resourceGroup, subscriptionId, location) by lid
+    | extend critical = coalesce(toint(properties.availablePatchCountByClassification.critical), 0), security = coalesce(toint(properties.availablePatchCountByClassification.security), 0)
+    | where critical + security > 0 and assessedAt >= ago(3d)
+    | join kind=leftouter (patchinstallationresources | where type has 'hybridcompute' and type !has 'softwarepatches' | extend lid = tolower(tostring(split(tolower(id), '/patchinstallationresults/')[0])), startedAt = todatetime(properties.startDateTime), installStatus = tostring(properties.status) | summarize lastSucceeded = maxif(startedAt, installStatus in~ ('Succeeded', 'CompletedWithWarnings')), lastRun = max(startedAt) by lid) on lid
+    | where isnull(lastSucceeded) or lastSucceeded < ago(30d)
+    | extend name = tostring(split(machineId, '/')[8]), osType = tostring(properties.osType), id = machineId
+    | project name, critical, security, assessedAt, lastSucceeded, lastRun, osType, resourceGroup, subscriptionId, location, id
+    | order by critical desc, security desc, name asc
+  metric: rowCount
+  detailsLimit: 100
+thresholds: { warn: 1, crit: 25 }
+intervalHint: PT6H
+timeoutMs: 60000
+requires:
+  azureRoles: [Reader]

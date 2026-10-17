@@ -1,0 +1,224 @@
+$schema: ../../../packages/schemas/generated/page.schema.json
+kind: page
+id: azure.arc-defender-coverage
+version: 1.0.0
+title: Azure Arc Defender for Servers coverage
+summary: >-
+  Which Azure Arc servers Microsoft Defender for Servers protects — the plan on each server's subscription (Defender for
+  Cloud), the Defender for Endpoint extension (MDE.Windows / MDE.Linux) and its state, and open high-severity Defender
+  for Cloud recommendations — with the gaps first. Read from Azure Resource Graph only; nothing comes from the
+  Microsoft Defender portal. The plan is read per subscription: a plan set on a single server isn't shown.
+owner: azure-team
+tags: [azure, arc, hybrid, servers, defender-for-cloud, security]
+template: list-detail
+nav: { section: azure, label: Arc Defender coverage, icon: shield-check, order: 54 }
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    arm: [user_impersonation]
+  # Reader shows Defender for Cloud plans and assessments in Resource Graph (Security Reader also works).
+  azureRoles: [Reader]
+
+params:
+  q: { type: string, default: "", label: Search, placeholder: Machine name contains… }
+  coverage:
+    type: enum
+    label: Coverage
+    facet: true
+    default: Gaps
+    values:
+      - { value: Gaps, label: Not fully protected }
+      - { value: PlanOff, label: Defender for Servers off }
+      - { value: SensorMissing, label: Defender for Endpoint not installed }
+      - { value: SensorFailed, label: Defender for Endpoint failed }
+      - { value: Protected, label: Protected }
+      - { value: All, label: Any }
+  osType:
+    type: enum
+    label: OS
+    facet: true
+    default: All
+    values:
+      - { value: All, label: Any }
+      - { value: windows, label: Windows }
+      - { value: linux, label: Linux }
+  subscriptionId: { type: string, format: guid, label: Subscription, picker: subscription, facet: true }
+
+filters:
+  search: q
+  facets: [coverage, osType, subscriptionId]
+
+savedViews:
+  enabled: true
+  shared: true
+  presets:
+    - { name: Not fully protected, params: { coverage: Gaps } }
+    - { name: Defender for Endpoint failed, params: { coverage: SensorFailed } }
+    - { name: Subscriptions without the plan, params: { coverage: PlanOff } }
+
+datasources:
+  # The Defender for Servers plan of each subscription (Defender for Cloud pricings in securityresources: the
+  # subscription-level VirtualMachines entry), as four lists of subscription ids (each subscription in one) for the
+  # queries below — Resource Graph
+  # allows one join to another table per query, and that one reads the recommendations. A plan set on a single
+  # resource (per-resource Defender for Servers) isn't read: such servers show their subscription's plan.
+  plans:
+    source: resourceGraph
+    query: |
+      // af:azure.arc-defender-coverage#plans
+      securityresources
+      | where type =~ 'microsoft.security/pricings' and tolower(id) == strcat('/subscriptions/', tolower(subscriptionId), '/providers/microsoft.security/pricings/virtualmachines')
+      | summarize tier = take_any(tostring(properties.pricingTier)), subPlan = take_any(tostring(properties.subPlan)) by subscriptionId
+    transform: >-
+      ${ (
+        $rows := [value.value];
+        $on := $rows[$lowercase(tier) = 'standard'];
+        {
+          'p2': $append([], $on[$uppercase(subPlan) = 'P2'].subscriptionId),
+          'p1': $append([], $on[$uppercase(subPlan) = 'P1'].subscriptionId),
+          'on': $append([], $on[$not($uppercase(subPlan) in ['P1', 'P2'])].subscriptionId),
+          'off': $append([], $rows[$lowercase(tier) != 'standard'].subscriptionId)
+        }
+      ) }
+    cache: { ttl: 900 }
+  # Per server: its subscription's plan (from the lists above), the Defender for Endpoint extension (resources,
+  # MDE.Windows / MDE.Linux) and open Defender for Cloud recommendations on the machine (securityresources
+  # assessments under the machine's id). Paged, no transform.
+  machines:
+    source: resourceGraph
+    query: |
+      // af:azure.arc-defender-coverage#machines
+      resources
+      | where type =~ 'microsoft.hybridcompute/machines'
+      ${ params.subscriptionId ? "| where subscriptionId == '" & $guid(params.subscriptionId) & "'" }
+      ${ params.q ? "| where name contains " & $kql(params.q) }
+      | extend lid = tolower(id), status = tostring(properties.status), osType = tolower(tostring(properties.osType)), osName = tostring(properties.osName)
+      ${ params.osType in ['windows', 'linux'] ? "| where osType == '" & params.osType & "'" }
+      ${ (
+        $list := function($ids) { '(' & $join([$map($append(['00000000-0000-0000-0000-000000000000'], $ids), function($s) { "'" & $guid($s) & "'" })], ', ') & ')' };
+        "| extend plan = case(subscriptionId in~ " & $list(ds.plans.p2) & ", 'On (P2)', subscriptionId in~ " & $list(ds.plans.p1) & ", 'On (P1)', subscriptionId in~ " & $list(ds.plans.on) & ", 'On', subscriptionId in~ " & $list(ds.plans.off) & ", 'Off', 'Unknown')"
+      ) }
+      | join kind=leftouter (resources | where type =~ 'microsoft.hybridcompute/machines/extensions' | extend extensionType = tostring(properties.type) | where extensionType in~ ('MDE.Windows', 'MDE.Linux') | extend machineId = tolower(tostring(split(id, '/extensions/')[0])), sensorState = tostring(properties.provisioningState), sensorMessage = substring(tostring(properties.instanceView.status.message), 0, 300), healthy = iff(tostring(properties.provisioningState) =~ 'Succeeded', 1, 0) | summarize arg_max(healthy, sensorState, sensorMessage) by machineId) on $left.lid == $right.machineId
+      | join kind=leftouter (securityresources | where type =~ 'microsoft.security/assessments' and tolower(id) contains '/providers/microsoft.hybridcompute/machines/' | where tostring(properties.status.code) =~ 'Unhealthy' | extend assessed = tolower(tostring(split(tolower(id), '/providers/microsoft.security/assessments/')[0])), severity = tostring(properties.metadata.severity) | summarize openRecommendations = count(), highRecommendations = countif(severity =~ 'High') by assessed) on $left.lid == $right.assessed
+      | extend sensorState = coalesce(sensorState, ''), openRecommendations = coalesce(openRecommendations, 0), highRecommendations = coalesce(highRecommendations, 0)
+      | extend coverage = case(plan == 'Unknown', 'Plan unknown', plan == 'Off', 'Plan off', isempty(sensorState), 'Sensor missing', sensorState !~ 'Succeeded', 'Sensor failed', 'Protected')
+      ${ params.coverage = 'PlanOff' ? "| where coverage in ('Plan off', 'Plan unknown')" : params.coverage = 'SensorMissing' ? "| where coverage == 'Sensor missing'" : params.coverage = 'SensorFailed' ? "| where coverage == 'Sensor failed'" : params.coverage = 'Protected' ? "| where coverage == 'Protected'" : params.coverage = 'All' ? '' : "| where coverage != 'Protected'" }
+      | extend rank = case(coverage == 'Sensor failed', 0, coverage == 'Sensor missing', 1, coverage == 'Plan off', 2, coverage == 'Plan unknown', 3, 4)
+      | project id, name, coverage, rank, plan, sensorState, sensorMessage, highRecommendations, openRecommendations, status, osType, osName, resourceGroup, subscriptionId, location
+      | order by rank asc, highRecommendations desc, name asc
+    paging: cursor
+    cache: { ttl: 300 }
+  summary:
+    source: resourceGraph
+    query: |
+      // af:azure.arc-defender-coverage#summary
+      resources
+      | where type =~ 'microsoft.hybridcompute/machines'
+      | extend lid = tolower(id)
+      ${ (
+        $list := function($ids) { '(' & $join([$map($append(['00000000-0000-0000-0000-000000000000'], $ids), function($s) { "'" & $guid($s) & "'" })], ', ') & ')' };
+        "| extend plan = case(subscriptionId in~ " & $list(ds.plans.p2) & ", 'On (P2)', subscriptionId in~ " & $list(ds.plans.p1) & ", 'On (P1)', subscriptionId in~ " & $list(ds.plans.on) & ", 'On', subscriptionId in~ " & $list(ds.plans.off) & ", 'Off', 'Unknown')"
+      ) }
+      | join kind=leftouter (resources | where type =~ 'microsoft.hybridcompute/machines/extensions' | extend extensionType = tostring(properties.type) | where extensionType in~ ('MDE.Windows', 'MDE.Linux') | extend machineId = tolower(tostring(split(id, '/extensions/')[0])), sensorState = tostring(properties.provisioningState), healthy = iff(tostring(properties.provisioningState) =~ 'Succeeded', 1, 0) | summarize arg_max(healthy, sensorState) by machineId) on $left.lid == $right.machineId
+      | join kind=leftouter (securityresources | where type =~ 'microsoft.security/assessments' and tolower(id) contains '/providers/microsoft.hybridcompute/machines/' | where tostring(properties.status.code) =~ 'Unhealthy' and tostring(properties.metadata.severity) =~ 'High' | extend assessed = tolower(tostring(split(tolower(id), '/providers/microsoft.security/assessments/')[0])) | summarize highRecommendations = count() by assessed) on $left.lid == $right.assessed
+      | extend sensorState = coalesce(sensorState, ''), planOn = plan startswith 'On'
+      | summarize machines = count(), protected = countif(planOn and sensorState =~ 'Succeeded'), planOff = countif(not(planOn)), sensorMissing = countif(planOn and isempty(sensorState)), sensorFailed = countif(planOn and isnotempty(sensorState) and sensorState !~ 'Succeeded'), withHigh = countif(coalesce(highRecommendations, 0) > 0)
+    transform: "${ $merge([{ 'machines': 0, 'protected': 0, 'planOff': 0, 'sensorMissing': 0, 'sensorFailed': 0, 'withHigh': 0 }, value.value[0]]) }"
+    cache: { ttl: 300 }
+
+layout:
+  - widget: kpi
+    span: 2
+    data: summary.protected
+    label: Protected
+    format: number
+    status: ok
+    href: /p/azure.arc-defender-coverage?coverage=Protected
+  - widget: kpi
+    span: 2
+    data: summary.planOff
+    label: Defender for Servers off
+    format: number
+    status: "${ value > 0 ? 'crit' : 'ok' }"
+    href: /p/azure.arc-defender-coverage?coverage=PlanOff
+  - widget: kpi
+    span: 2
+    data: summary.sensorMissing
+    label: Defender for Endpoint not installed
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+    href: /p/azure.arc-defender-coverage?coverage=SensorMissing
+  - widget: kpi
+    span: 2
+    data: summary.sensorFailed
+    label: Defender for Endpoint failed
+    format: number
+    status: "${ value > 0 ? 'crit' : 'ok' }"
+    href: /p/azure.arc-defender-coverage?coverage=SensorFailed
+  - widget: kpi
+    span: 2
+    data: summary.withHigh
+    label: With high-severity recommendations
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+  - widget: kpi
+    span: 2
+    data: summary.machines
+    label: Arc servers
+    format: number
+  - widget: table
+    id: machines
+    span: 12
+    data: machines.value
+    rowKey: id
+    selection: multi
+    columns:
+      - { field: name, label: Machine, kind: identity, secondary: osName, sortable: true }
+      - field: coverage
+        label: Coverage
+        kind: status
+        map: { Protected: [ok, Protected], Plan off: [crit, Defender for Servers off], Plan unknown: [neutral, Plan unknown], Sensor missing: [warn, Defender for Endpoint not installed], Sensor failed: [crit, Defender for Endpoint failed] }
+        filter: { type: facet, param: coverage }
+      - { field: plan, label: Plan on the subscription, filter: facet }
+      - { field: sensorState, label: Defender for Endpoint extension, filter: facet }
+      - { field: sensorMessage, label: Extension status message, hidden: true }
+      - { field: highRecommendations, label: High-severity recommendations, kind: number, sortable: true }
+      - { field: openRecommendations, label: Open recommendations, kind: number, sortable: true, hidden: true }
+      - field: status
+        label: Connection
+        kind: status
+        map: { Connected: [ok, Connected], Disconnected: [warn, Disconnected], Expired: [crit, Expired], Error: [crit, Error], AwaitingConnection: [info, Awaiting connection] }
+        filter: facet
+      - { field: resourceGroup, label: Resource group, filter: facet }
+      - { field: subscriptionId, label: Subscription id, kind: guid, hidden: true }
+      - { field: location, label: Location, hidden: true }
+      - { field: id, label: Resource id, kind: code, hidden: true }
+    inspect:
+      page: azure.arc-server
+      params:
+        id: ${ row.id }
+    rowActions:
+      - label: Turn on Defender for Servers (guide)
+        icon: book-open
+        href: https://learn.microsoft.com/azure/defender-for-cloud/tutorial-enable-servers-plan
+        when: ${ row.coverage = 'Plan off' or row.coverage = 'Plan unknown' }
+      - label: Defender for Endpoint on Arc servers (guide)
+        icon: book-open
+        href: https://learn.microsoft.com/azure/defender-for-cloud/integration-defender-for-endpoint
+        when: ${ row.coverage = 'Sensor missing' or row.coverage = 'Sensor failed' }
+      - label: Open the machine's extensions in Azure portal
+        icon: arrow-square-out
+        href: https://portal.azure.com/#resource${ row.id }/extensions
+    empty:
+      title: Every Arc server is protected
+      body: >-
+        Defender for Servers is on for every Arc server's subscription and the Defender for Endpoint extension
+        installed. Pick "Any" to list them all. Servers onboarded to Defender for Endpoint by hand, without the
+        extension, show as "not installed".
+
+export:
+  formats: [csv, xlsx]
+  fileName: azure-arc-defender-coverage
+  data: machines.value
+  columns: visible
+  maxRows: 100000

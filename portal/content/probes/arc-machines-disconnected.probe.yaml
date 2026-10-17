@@ -1,15 +1,23 @@
 $schema: ../../packages/schemas/generated/probe.schema.json
 kind: probe
 id: probes.arc-machines-disconnected
-version: 1.0.1
+version: 1.1.0
 title: Disconnected or expired Azure Arc machines
 summary: >-
-  Azure Arc-enabled servers whose agent is Disconnected, Expired (offline for more than 45 days, needs re-onboarding)
-  or in Error, so policy, Defender, update and ESU coverage has lapsed. The Disconnected Arc machines report lists the
-  same machines with more detail.
+  Azure Arc-enabled servers whose agent is Disconnected for more than an hour (a restart or patch reboot is shorter),
+  Expired (offline for more than 45 days, needs re-onboarding) or in Error, so policy, Defender, update and ESU
+  coverage has lapsed. Each row says how long the server has been offline and how many days remain before it expires.
+  Critical from 25 servers: that many at once points at a network, proxy or private link problem rather than single
+  servers.
 owner: azure-team
 tags: [kql, configuration, azure, arc, config-check]
 group: azure
+remedy: >-
+  These servers stopped reporting to Azure Arc. On each one, run "azcmagent show" and "azcmagent check" to see whether
+  the Connected Machine agent services run and can reach the Arc endpoints (proxy, firewall, private link scope).
+  Servers that were decommissioned: delete their Arc resource. Expired servers must be re-onboarded (azcmagent
+  disconnect, then connect again). Many at once: check the site's network path to Azure first.
+link: { label: Open disconnected Arc servers, href: "/p/azure.arc-disconnected" }
 check:
   kind: kql
   source: resourceGraph
@@ -18,12 +26,14 @@ check:
     resources
     | where type =~ 'microsoft.hybridcompute/machines'
     | extend status = tostring(properties.status), lastStatusChange = todatetime(properties.lastStatusChange)
-    | where status in~ ('Disconnected', 'Expired', 'Error')
-    | project id, name, resourceGroup, subscriptionId, location, status, lastStatusChange, osType = tostring(properties.osType), agentVersion = tostring(properties.agentVersion)
-    | order by lastStatusChange asc
+    | where status in~ ('Expired', 'Error') or (status =~ 'Disconnected' and lastStatusChange < ago(1h))
+    | extend hoursNotConnected = datetime_diff('hour', now(), lastStatusChange)
+    | extend daysToExpiry = iff(status =~ 'Expired', 0, max_of(0, 45 - hoursNotConnected / 24))
+    | project name, status, lastStatusChange, hoursNotConnected, daysToExpiry, machineFqdn = tostring(properties.machineFqdn), osName = tostring(properties.osName), agentVersion = tostring(properties.agentVersion), resourceGroup, subscriptionId, location, id
+    | order by daysToExpiry asc, hoursNotConnected desc
   metric: rowCount
   detailsLimit: 100
-thresholds: { warn: 1, crit: 10 }
+thresholds: { warn: 1, crit: 25 }
 intervalHint: PT6H
 timeoutMs: 60000
 requires:

@@ -1,0 +1,335 @@
+$schema: ../../../packages/schemas/generated/page.schema.json
+kind: page
+id: azure.arc-patching
+version: 1.0.0
+title: Azure Arc patching
+summary: >-
+  Azure Update Manager across every Azure Arc server — pending critical and security updates, the result of each
+  server's latest update installation and restarts still pending, with overdue servers (critical or security updates
+  waiting and nothing installed successfully for 30 days) first — and, in a second list, the servers Update Manager
+  hasn't assessed in 3 days, with their connection state and assessment mode.
+owner: azure-team
+tags: [azure, arc, hybrid, servers, patching, update-manager]
+template: list-detail
+nav: { section: azure, label: Arc patching, icon: arrows-clockwise, order: 53 }
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    arm: [user_impersonation]
+  azureRoles: [Reader]
+
+params:
+  q: { type: string, default: "", label: Search, placeholder: Machine name contains… }
+  state:
+    type: enum
+    label: Patch state
+    facet: true
+    default: All
+    values:
+      - { value: All, label: Any }
+      - { value: Overdue, label: Overdue (30 days) }
+      - { value: Pending, label: Critical or security updates pending }
+      - { value: InstallFailed, label: Latest installation failed }
+      - { value: NotAssessed, label: Not assessed for 3 days }
+      - { value: RebootPending, label: Restart pending }
+      - { value: UpToDate, label: Up to date }
+  osType:
+    type: enum
+    label: OS
+    facet: true
+    default: All
+    values:
+      - { value: All, label: Any }
+      - { value: windows, label: Windows }
+      - { value: linux, label: Linux }
+  machineStatus:
+    type: enum
+    label: Connection (not assessed)
+    description: Filters the servers not assessed in 3 days by their Arc connection state.
+    facet: true
+    default: All
+    values:
+      - { value: All, label: Any machine }
+      - { value: Connected, label: Connected }
+      - { value: NotConnected, label: Not connected }
+  subscriptionId: { type: string, format: guid, label: Subscription, picker: subscription, facet: true }
+
+filters:
+  search: q
+  facets: [state, osType, machineStatus, subscriptionId]
+
+savedViews:
+  enabled: true
+  shared: true
+  presets:
+    - { name: Overdue, params: { state: Overdue } }
+    - { name: Latest installation failed, params: { state: InstallFailed } }
+    - { name: Connected but not assessed, params: { state: NotAssessed, machineStatus: Connected } }
+    - { name: Restart pending, params: { state: RebootPending } }
+
+datasources:
+  # Update Manager writes its results to Resource Graph (docs: update-manager/query-logs): the latest assessment per
+  # machine in patchassessmentresources (kept 7 days) and each installation run in patchinstallationresources (kept 30
+  # days); summary records are the types without "softwarepatches". Resource Graph allows one join to another table per
+  # query, so the servers assessed in the last 3 days (assessment joined to installations; name, subscription and
+  # resource group come from the record) and the servers that weren't (Arc machines joined to assessments, with their
+  # connection state and assessment mode) are two lists. Paged, no transform.
+  machines:
+    source: resourceGraph
+    when: "${ params.state != 'NotAssessed' }"
+    query: |
+      // af:azure.arc-patching#machines
+      patchassessmentresources
+      | where type has 'hybridcompute' and type !has 'softwarepatches'
+      ${ params.subscriptionId ? "| where subscriptionId == '" & $guid(params.subscriptionId) & "'" }
+      | extend machineId = substring(id, 0, indexof(tolower(id), '/patchassessmentresults/')), assessedAt = todatetime(properties.lastModifiedDateTime)
+      | extend lid = tolower(machineId)
+      | summarize arg_max(assessedAt, properties, machineId, resourceGroup, subscriptionId, location) by lid
+      | where assessedAt >= ago(3d)
+      | extend name = tostring(split(machineId, '/')[8]), osType = tolower(tostring(properties.osType)), c = properties.availablePatchCountByClassification
+      ${ params.q ? "| where name contains " & $kql(params.q) }
+      ${ params.osType in ['windows', 'linux'] ? "| where osType == '" & params.osType & "'" }
+      | extend assessmentStatus = tostring(properties.status), critical = coalesce(toint(c.critical), 0), security = coalesce(toint(c.security), 0), otherUpdates = coalesce(toint(c.updateRollup), 0) + coalesce(toint(c.featurePack), 0) + coalesce(toint(c.servicePack), 0) + coalesce(toint(c.definition), 0) + coalesce(toint(c.tools), 0) + coalesce(toint(c.updates), 0) + coalesce(toint(c.other), 0), rebootPending = iff(coalesce(tobool(properties.rebootPending), false), 'true', 'false')
+      | join kind=leftouter (patchinstallationresources | where type has 'hybridcompute' and type !has 'softwarepatches' | extend lid = tolower(tostring(split(tolower(id), '/patchinstallationresults/')[0])), startedAt = todatetime(properties.startDateTime), installStatus = tostring(properties.status) | summarize lastRun = max(startedAt), lastSucceeded = maxif(startedAt, installStatus in~ ('Succeeded', 'CompletedWithWarnings')), lastFailed = maxif(startedAt, installStatus =~ 'Failed'), runs = count(), failedUpdates = sum(coalesce(toint(properties.failedPatchCount), 0)) by lid) on lid
+      | extend runs = coalesce(runs, 0), failedUpdates = coalesce(failedUpdates, 0), daysSinceAssessment = datetime_diff('day', now(), assessedAt)
+      | extend lastInstall = case(isnull(lastRun), 'None in 30 days', lastRun == lastFailed, 'Failed', lastRun == lastSucceeded, 'Succeeded', 'Other')
+      | extend patchState = case(critical + security > 0 and (isnull(lastSucceeded) or lastSucceeded < ago(30d)), 'Overdue', lastInstall == 'Failed', 'Installation failed', critical + security > 0, 'Pending', rebootPending == 'true', 'Restart pending', 'Up to date')
+      ${ params.state = 'Overdue' ? "| where patchState == 'Overdue'" : params.state = 'Pending' ? '| where critical + security > 0' : params.state = 'InstallFailed' ? "| where lastInstall == 'Failed'" : params.state = 'RebootPending' ? "| where rebootPending == 'true'" : params.state = 'UpToDate' ? "| where patchState == 'Up to date'" }
+      | extend rank = case(patchState == 'Overdue', 0, patchState == 'Installation failed', 1, patchState == 'Pending', 2, patchState == 'Restart pending', 3, 4)
+      | project id = machineId, name, patchState, rank, critical, security, otherUpdates, assessedAt, daysSinceAssessment, assessmentStatus, lastInstall, lastRun, lastSucceeded, runs, failedUpdates, rebootPending, osType, resourceGroup, subscriptionId, location
+      | order by rank asc, critical desc, security desc, name asc
+    paging: cursor
+    cache: { ttl: 300 }
+  # Arc servers with no assessment in 3 days (none at all, or older): pending updates on them are unknown.
+  unassessed:
+    source: resourceGraph
+    when: "${ params.state in ['All', 'NotAssessed'] }"
+    query: |
+      // af:azure.arc-patching#unassessed
+      resources
+      | where type =~ 'microsoft.hybridcompute/machines'
+      ${ params.subscriptionId ? "| where subscriptionId == '" & $guid(params.subscriptionId) & "'" }
+      ${ params.q ? "| where name contains " & $kql(params.q) }
+      | extend lid = tolower(id), status = tostring(properties.status), osType = tolower(tostring(properties.osType)), osName = tostring(properties.osName), assessmentMode = coalesce(tostring(properties.osProfile.windowsConfiguration.patchSettings.assessmentMode), tostring(properties.osProfile.linuxConfiguration.patchSettings.assessmentMode)), patchMode = coalesce(tostring(properties.osProfile.windowsConfiguration.patchSettings.patchMode), tostring(properties.osProfile.linuxConfiguration.patchSettings.patchMode))
+      ${ params.osType in ['windows', 'linux'] ? "| where osType == '" & params.osType & "'" }
+      ${ params.machineStatus = 'Connected' ? "| where status == 'Connected'" : params.machineStatus = 'NotConnected' ? "| where status != 'Connected'" }
+      | join kind=leftouter (patchassessmentresources | where type has 'hybridcompute' and type !has 'softwarepatches' | extend machineId = tolower(tostring(split(tolower(id), '/patchassessmentresults/')[0])), assessedAt = todatetime(properties.lastModifiedDateTime) | summarize lastAssessed = max(assessedAt) by machineId) on $left.lid == $right.machineId
+      | where isnull(lastAssessed) or lastAssessed < ago(3d)
+      | project id, name, status, assessmentMode = iff(isempty(assessmentMode), 'Not set', assessmentMode), patchMode, lastAssessed, osType, osName, resourceGroup, subscriptionId, location
+      | order by name asc
+    paging: cursor
+    cache: { ttl: 300 }
+  # Fleet-wide counts with the same rules, in Resource Graph: the assessed servers (assessment and installations)…
+  summary:
+    source: resourceGraph
+    query: |
+      // af:azure.arc-patching#summary
+      patchassessmentresources
+      | where type has 'hybridcompute' and type !has 'softwarepatches'
+      | extend lid = tolower(tostring(split(tolower(id), '/patchassessmentresults/')[0])), assessedAt = todatetime(properties.lastModifiedDateTime)
+      | summarize arg_max(assessedAt, properties) by lid
+      | where assessedAt >= ago(3d)
+      | extend c = properties.availablePatchCountByClassification
+      | extend critical = coalesce(toint(c.critical), 0), security = coalesce(toint(c.security), 0), rebootPending = coalesce(tobool(properties.rebootPending), false)
+      | join kind=leftouter (patchinstallationresources | where type has 'hybridcompute' and type !has 'softwarepatches' | extend lid = tolower(tostring(split(tolower(id), '/patchinstallationresults/')[0])), startedAt = todatetime(properties.startDateTime), installStatus = tostring(properties.status) | summarize lastRun = max(startedAt), lastSucceeded = maxif(startedAt, installStatus in~ ('Succeeded', 'CompletedWithWarnings')), lastFailed = maxif(startedAt, installStatus =~ 'Failed'), runs = count(), failedUpdates = sum(coalesce(toint(properties.failedPatchCount), 0)) by lid) on lid
+      | summarize assessed = count(), overdue = countif(critical + security > 0 and (isnull(lastSucceeded) or lastSucceeded < ago(30d))), pending = countif(critical + security > 0), criticalUpdates = sum(critical), securityUpdates = sum(security), installFailed = countif(isnotnull(lastRun) and lastRun == lastFailed), rebootPending = countif(rebootPending)
+    transform: "${ $merge([{ 'assessed': 0, 'overdue': 0, 'pending': 0, 'criticalUpdates': 0, 'securityUpdates': 0, 'installFailed': 0, 'rebootPending': 0 }, value.value[0]]) }"
+    cache: { ttl: 300 }
+  # …and every Arc server against its latest assessment, for the ones not assessed in 3 days.
+  coverage:
+    source: resourceGraph
+    query: |
+      // af:azure.arc-patching#coverage
+      resources
+      | where type =~ 'microsoft.hybridcompute/machines'
+      | extend lid = tolower(id), status = tostring(properties.status)
+      | join kind=leftouter (patchassessmentresources | where type has 'hybridcompute' and type !has 'softwarepatches' | extend machineId = tolower(tostring(split(tolower(id), '/patchassessmentresults/')[0])), assessedAt = todatetime(properties.lastModifiedDateTime) | summarize lastAssessed = max(assessedAt) by machineId) on $left.lid == $right.machineId
+      | extend notAssessed = isnull(lastAssessed) or lastAssessed < ago(3d)
+      | summarize machines = count(), notAssessed = countif(notAssessed), notAssessedConnected = countif(notAssessed and status == 'Connected')
+    transform: "${ $merge([{ 'machines': 0, 'notAssessed': 0, 'notAssessedConnected': 0 }, value.value[0]]) }"
+    cache: { ttl: 300 }
+  # The critical and security updates missing on the most servers (one softwarepatches record per update and server).
+  topUpdates:
+    source: resourceGraph
+    query: |
+      // af:azure.arc-patching#topupdates
+      patchassessmentresources
+      | where type has 'hybridcompute' and type has 'softwarepatches'
+      ${ params.subscriptionId ? "| where subscriptionId == '" & $guid(params.subscriptionId) & "'" }
+      | extend classes = tostring(properties.classifications)
+      | where classes contains 'Critical' or classes contains 'Security'
+      | extend patchName = tostring(properties.patchName), kbId = tostring(properties.kbId), published = todatetime(properties.publishedDateTime), classification = iff(classes contains 'Critical', 'Critical', 'Security')
+      | summarize machines = count(), kbId = take_any(kbId), classification = take_any(classification), published = min(published) by patchName
+      | top 20 by machines desc
+    cache: { ttl: 600 }
+
+layout:
+  - widget: kpi
+    span: 2
+    data: summary.overdue
+    label: Overdue (30 days)
+    format: number
+    status: "${ value > 0 ? 'crit' : 'ok' }"
+    href: /p/azure.arc-patching?state=Overdue
+  - widget: kpi
+    span: 2
+    data: summary.pending
+    label: Critical or security pending
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+    href: /p/azure.arc-patching?state=Pending
+  - widget: kpi
+    span: 2
+    data: summary.installFailed
+    label: Latest installation failed
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+    href: /p/azure.arc-patching?state=InstallFailed
+  - widget: kpi
+    span: 2
+    data: coverage.notAssessedConnected
+    label: Connected, not assessed for 3 days
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+    href: /p/azure.arc-patching?state=NotAssessed&machineStatus=Connected
+  - widget: kpi
+    span: 2
+    data: summary.rebootPending
+    label: Restart pending
+    format: number
+    status: "${ value > 0 ? 'info' : 'ok' }"
+    href: /p/azure.arc-patching?state=RebootPending
+  - widget: kpi
+    span: 2
+    data: coverage.machines
+    label: Arc servers
+    format: number
+    hint: "${ $string(summary.assessed) & ' assessed in 3 days' }"
+  - widget: table
+    id: topUpdates
+    title: Critical and security updates missing on the most servers
+    span: 12
+    data: topUpdates.value
+    rowKey: patchName
+    columns:
+      - { field: patchName, label: Update, kind: identity, secondary: kbId }
+      - field: classification
+        label: Classification
+        kind: status
+        map: { Critical: [crit, Critical], Security: [warn, Security] }
+      - { field: machines, label: Servers missing it, kind: number, sortable: true }
+      - { field: published, label: Published, kind: date, sortable: true }
+    empty:
+      title: No critical or security updates pending
+      body: The latest Update Manager assessments found no critical or security update missing on any Arc server.
+  - widget: table
+    id: machines
+    title: Servers assessed in the last 3 days
+    when: "${ params.state != 'NotAssessed' }"
+    span: 12
+    data: machines.value
+    rowKey: id
+    selection: multi
+    columns:
+      - { field: name, label: Machine, kind: identity, secondary: resourceGroup, sortable: true }
+      - field: patchState
+        label: Patch state
+        kind: status
+        map: { Overdue: [crit, Overdue], Installation failed: [crit, Installation failed], Pending: [warn, Updates pending], Restart pending: [info, Restart pending], Up to date: [ok, Up to date] }
+      - { field: critical, label: Critical, kind: number, sortable: true }
+      - { field: security, label: Security, kind: number, sortable: true }
+      - { field: otherUpdates, label: Other updates, kind: number, hidden: true }
+      - { field: assessedAt, label: Last assessed, kind: relativeTime, sortable: true }
+      - field: lastInstall
+        label: Latest installation
+        kind: status
+        map: { Succeeded: [ok, Succeeded], Failed: [crit, Failed], Other: [info, In progress or with warnings], None in 30 days: [neutral, None in 30 days] }
+      - { field: lastSucceeded, label: Last successful installation, kind: relativeTime, sortable: true }
+      - { field: rebootPending, label: Restart, kind: status, map: { "true": [info, Restart pending], "false": [neutral, "No"] } }
+      - { field: osType, label: OS, filter: { type: facet, param: osType } }
+      - { field: assessmentStatus, label: Assessment result, hidden: true }
+      - { field: runs, label: Installation runs (30 days), kind: number, hidden: true }
+      - { field: failedUpdates, label: Failed updates (30 days), kind: number, hidden: true }
+      - { field: resourceGroup, label: Resource group, filter: facet, hidden: true }
+      - { field: subscriptionId, label: Subscription, hidden: true }
+      - { field: location, label: Location, hidden: true }
+      - { field: id, label: Resource id, kind: code, hidden: true }
+    inspect:
+      page: azure.arc-server
+      params:
+        id: ${ row.id }
+    rowActions:
+      - label: Open in Update Manager
+        icon: arrow-square-out
+        href: https://portal.azure.com/#resource${ row.id }/updates
+      - label: Troubleshoot Update Manager (guide)
+        icon: book-open
+        href: https://learn.microsoft.com/azure/update-manager/troubleshoot
+        when: ${ row.lastInstall = 'Failed' }
+    bulkActions:
+      - playbook: azure.add-tags
+        label: Add or update a tag
+        icon: tag
+        forEach:
+          inputs:
+            resourceId: ${ row.id }
+          concurrency: 5
+        maxItems: 500
+    empty:
+      title: No assessed Arc servers match
+      body: >-
+        Clear a filter. Servers appear here once Update Manager has assessed them in the last 3 days (periodic
+        assessment or a one-time check); the ones it hasn't are listed separately.
+  - widget: table
+    id: unassessed
+    title: Servers not assessed in the last 3 days
+    when: "${ params.state in ['All', 'NotAssessed'] }"
+    span: 12
+    data: unassessed.value
+    rowKey: id
+    selection: multi
+    columns:
+      - { field: name, label: Machine, kind: identity, secondary: osName, sortable: true }
+      - { field: lastAssessed, label: Last assessed, kind: relativeTime, sortable: true }
+      - { field: assessmentMode, label: Assessment mode, filter: facet }
+      - { field: patchMode, label: Patch orchestration, filter: facet, hidden: true }
+      - field: status
+        label: Connection
+        kind: status
+        map: { Connected: [ok, Connected], Disconnected: [warn, Disconnected], Expired: [crit, Expired], Error: [crit, Error], AwaitingConnection: [info, Awaiting connection] }
+        filter: { type: facet, param: machineStatus }
+      - { field: osType, label: OS, hidden: true }
+      - { field: resourceGroup, label: Resource group, filter: facet }
+      - { field: subscriptionId, label: Subscription, hidden: true }
+      - { field: location, label: Location, hidden: true }
+      - { field: id, label: Resource id, kind: code, hidden: true }
+    inspect:
+      page: azure.arc-server
+      params:
+        id: ${ row.id }
+    rowActions:
+      - label: Open in Update Manager
+        icon: arrow-square-out
+        href: https://portal.azure.com/#resource${ row.id }/updates
+      - label: Turn on periodic assessment (guide)
+        icon: book-open
+        href: https://learn.microsoft.com/azure/update-manager/assessment-options
+    bulkActions:
+      - playbook: azure.add-tags
+        label: Add or update a tag
+        icon: tag
+        forEach:
+          inputs:
+            resourceId: ${ row.id }
+          concurrency: 5
+        maxItems: 500
+    empty:
+      title: Every Arc server was assessed in the last 3 days
+      body: Update Manager has a recent assessment for every Arc server that matches the filters.
+
+export:
+  formats: [csv, xlsx]
+  fileName: azure-arc-patching
+  data: machines.value
+  columns: visible
+  maxRows: 100000

@@ -1,15 +1,17 @@
 $schema: ../../packages/schemas/generated/probe.schema.json
 kind: probe
 id: probes.function-hr-sync-health
-version: 1.0.2
+version: 1.1.0
 title: HR sync Function App health (example)
 summary: >-
-  Calls the health operation of the example HR sync connection as the automation identity. Draft until the
+  Retired — AdminForge doesn't manage Azure Functions at this time. Calls the health operation of the example HR sync connection as the automation identity. Draft until the
   connection points at a real Function App.
+# Retired 2026-10-17: Azure Functions aren't managed in AdminForge at this time. To bring it back, set
+# status: active and bump the version.
+status: retired
 owner: portal-admins
 tags: [synthetic, azure, functions, example, sweep-15m]
 group: azure
-status: draft
 check:
   kind: functionHealth
   connection: integrations.hr-sync

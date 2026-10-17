@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/page.schema.json
 kind: page
 id: azure.log-analytics
-version: 1.0.1
+version: 1.1.0
 title: Log Analytics
 summary: Log Analytics workspaces (retention, daily cap, network access) and a gallery of tested KQL queries to run against the selected workspace.
 owner: azure-team
@@ -26,7 +26,6 @@ params:
       - { value: ingestion, label: Billable ingestion by table }
       - { value: heartbeat, label: Machines not sending heartbeats }
       - { value: activity, label: Failed Azure operations }
-      - { value: functionErrors, label: Function App errors }
       - { value: signInFailures, label: Sign-in failures by reason }
   range: { type: dateRange, label: Time range, default: P1D, presets: [PT1H, PT6H, P1D, P7D, P30D], max: P30D }
 
@@ -95,19 +94,6 @@ datasources:
       | where ActivityStatusValue == 'Failure'
       | project TimeGenerated, OperationNameValue, ResourceGroup, ResourceId = _ResourceId, Caller, ActivitySubstatusValue, CorrelationId, Key = strcat(CorrelationId, '|', OperationNameValue, '|', TimeGenerated)
       | top 200 by TimeGenerated desc
-    cache: { ttl: 120 }
-  functionErrors:
-    source: logAnalytics
-    when: ${ $boolean(params.workspace) and params.query = 'functionErrors' }
-    workspace: ${ $guid(params.workspace) }
-    timespan: ${ params.range.timespan }
-    query: |
-      // af:azure.log-analytics#functionerrors
-      FunctionAppLogs
-      | where Level in ('Error', 'Critical')
-      | summarize Errors = count(), LastSeen = max(TimeGenerated), Sample = take_any(Message) by AppName, FunctionName, ExceptionType
-      | extend Key = strcat(AppName, '|', FunctionName, '|', ExceptionType)
-      | top 50 by Errors desc
     cache: { ttl: 120 }
   signInFailures:
     source: logAnalytics
@@ -242,23 +228,6 @@ layout:
     empty:
       title: No failed operations
       body: Nothing failed in this range, or the activity log isn't exported to this workspace (Diagnostic settings on the subscription).
-  # ── Function App errors ───────────────────────────────────────────────
-  - widget: table
-    title: Function App errors (FunctionAppLogs)
-    span: 12
-    when: ${ $boolean(params.workspace) and params.query = 'functionErrors' }
-    data: functionErrors.value
-    rowKey: Key
-    search: true
-    columns:
-      - { field: AppName, label: Function App, kind: identity, secondary: FunctionName, filter: facet }
-      - { field: ExceptionType, label: Exception, kind: code, filter: facet }
-      - { field: Errors, label: Errors, kind: number, sortable: true }
-      - { field: LastSeen, label: Last seen, kind: relativeTime, sortable: true }
-      - { field: Sample, label: Sample message }
-    empty:
-      title: No Function App errors
-      body: No errors were logged, or Function Apps don't send FunctionAppLogs to this workspace.
   # ── Sign-in failures ──────────────────────────────────────────────────
   - widget: table
     title: Sign-in failures by reason (SigninLogs)

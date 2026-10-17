@@ -41,7 +41,7 @@ describe('OverviewResponse contract', () => {
 describe('plannedPage', () => {
   it('finds a description by nav key, then by the last path segment', () => {
     expect(plannedPage('users', '/identity/users')?.summary).toMatch(/Every user/);
-    expect(plannedPage('unknown-key', '/azure/function-apps')?.summary).toMatch(/Function Apps/);
+    expect(plannedPage('unknown-key', '/azure/arc')?.summary).toMatch(/Azure Arc/);
     expect(plannedPage(undefined, '/nothing/here')).toBeUndefined();
   });
 });

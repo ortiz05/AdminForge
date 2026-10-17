@@ -1,9 +1,12 @@
 $schema: ../../../packages/schemas/generated/page.schema.json
 kind: page
 id: azure.arc-kubernetes
-version: 1.0.0
+version: 1.1.1
 title: Azure Arc Kubernetes
-summary: Kubernetes clusters connected through Azure Arc — connectivity, Kubernetes and agent versions, size, and cluster extensions.
+summary: Retired — AdminForge doesn't manage Azure Arc-enabled Kubernetes at this time. Kubernetes clusters connected through Azure Arc — connectivity, Kubernetes and agent versions, size, and cluster extensions.
+# Retired 2026-10-17: Azure Arc-enabled Kubernetes isn't managed in AdminForge at this time. To bring it back,
+# set status: active and bump the version.
+status: retired
 owner: azure-team
 tags: [azure, arc, hybrid, kubernetes]
 template: list-detail
@@ -50,9 +53,8 @@ datasources:
       ${ params.connectivity in ['Connected', 'Connecting', 'Offline', 'Expired'] ? "| where connectivityStatus == '" & params.connectivity & "'" }
       | extend lid = tolower(id)
       | join kind=leftouter (kubernetesconfigurationresources | where type =~ 'microsoft.kubernetesconfiguration/extensions' | extend clusterId = tostring(split(tolower(id), '/providers/microsoft.kubernetesconfiguration/')[0]), extFailed = tostring(properties.provisioningState) != 'Succeeded' | summarize extensions = count(), failedExtensions = countif(extFailed), extensionTypes = make_set(tostring(properties.extensionType)) by clusterId) on $left.lid == $right.clusterId
-      | join kind=leftouter (resourcecontainers | where type =~ 'microsoft.resources/subscriptions' | project subscriptionId, subscriptionName = name) on subscriptionId
       | extend extensions = coalesce(extensions, 0), failedExtensions = coalesce(failedExtensions, 0)
-      | project id, name, connectivityStatus, kubernetesVersion, agentVersion, distribution, infrastructure, totalNodeCount, totalCoreCount, lastConnectivityTime, certificateExpiry, provisioningState, extensions, failedExtensions, extensionTypes, location, resourceGroup, subscriptionId, subscriptionName, tags
+      | project id, name, connectivityStatus, kubernetesVersion, agentVersion, distribution, infrastructure, totalNodeCount, totalCoreCount, lastConnectivityTime, certificateExpiry, provisioningState, extensions, failedExtensions, extensionTypes, location, resourceGroup, subscriptionId, tags
       | order by name asc
     paging: all
     maxItems: 5000
@@ -114,7 +116,7 @@ layout:
       - { field: extensionTypes, label: Extension types, kind: tags, hidden: true }
       - { field: certificateExpiry, label: Identity certificate expires, kind: date, hidden: true }
       - { field: resourceGroup, label: Resource group, filter: facet }
-      - { field: subscriptionName, label: Subscription, filter: facet, hidden: true }
+      - { field: subscriptionId, label: Subscription, filter: facet, hidden: true }
       - { field: location, label: Location, filter: facet, hidden: true }
       - { field: tags, label: Tags, kind: tags, hidden: true }
       - { field: id, label: Resource id, kind: code, hidden: true }

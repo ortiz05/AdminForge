@@ -93,7 +93,7 @@ export const NAV: NavResponse = {
       icon: 'cloud',
       items: [
         item('resources', 'Resources', '/azure/resources', 'cube'),
-        item('function-apps', 'Function Apps', '/azure/function-apps', 'function'),
+        item('arc', 'Arc servers', '/azure/arc', 'hard-drives'),
       ],
     },
     {

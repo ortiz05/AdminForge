@@ -1,0 +1,346 @@
+$schema: ../../../packages/schemas/generated/dashboard.schema.json
+kind: dashboard
+id: azure.arc-fleet
+version: 1.0.0
+title: Azure Arc fleet
+summary: >-
+  Every hybrid server connected through Azure Arc at a glance — connection state and how long servers have been
+  offline, operating systems, agent versions and currency, regions, subscriptions and resource groups, failed
+  extensions, Azure Update Manager patching, Defender for Servers coverage and Windows Server ESU licences. Every
+  number is counted in Azure Resource Graph, so it stays fast with thousands of servers; each one opens the list behind
+  it.
+owner: azure-team
+tags: [azure, arc, hybrid, servers, dashboard]
+nav: { section: azure, label: Arc fleet, icon: squares-four, order: 45 }
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    arm: [user_impersonation]
+  azureRoles: [Reader]
+
+refresh: 300
+
+datasources:
+  # Connection, agent, extension and ESU counts. Agent currency is relative to the newest agent in the fleet (the
+  # agent ships about monthly as 1.<minor>); two joins within resources: newest version, failed extensions per machine
+  # (provisioning failed or the extension reports an error — the same rule as the extensions view and its check).
+  counts:
+    source: resourceGraph
+    query: |
+      // af:azure.arc-fleet#counts
+      resources
+      | where type =~ 'microsoft.hybridcompute/machines'
+      | extend status = tostring(properties.status), agentVersion = tostring(properties.agentVersion), lastStatusChange = todatetime(properties.lastStatusChange), osType = tolower(tostring(properties.osType)), esuEligibility = tostring(properties.licenseProfile.esuProfile.esuEligibility), esuLicence = tostring(properties.licenseProfile.esuProfile.licenseAssignmentState), autoUpgrade = coalesce(tobool(properties.agentUpgrade.enableAutomaticUpgrade), false), lid = tolower(id), k = 1
+      | join kind=leftouter (resources | where type =~ 'microsoft.hybridcompute/machines' | extend newestVersion = tostring(properties.agentVersion), v = parse_version(tostring(properties.agentVersion)) | where isnotempty(newestVersion) | summarize arg_max(v, newestVersion) | project newestVersion, k = 1) on k
+      | join kind=leftouter (resources | where type =~ 'microsoft.hybridcompute/machines/extensions' | extend machineId = tolower(tostring(split(id, '/extensions/')[0])), extFailed = tostring(properties.provisioningState) =~ 'Failed' or tostring(properties.instanceView.status.level) =~ 'Error' | summarize failedExtensions = countif(extFailed) by machineId) on $left.lid == $right.machineId
+      | extend releasesBehind = toint(split(newestVersion, '.')[1]) - toint(split(agentVersion, '.')[1]), failedExtensions = coalesce(failedExtensions, 0)
+      | summarize total = count(), connected = countif(status == 'Connected'), notConnected = countif(status != 'Connected'), expired = countif(status == 'Expired'), offline30 = countif(status != 'Connected' and datetime_diff('hour', now(), lastStatusChange) >= 720), windows = countif(osType == 'windows'), linux = countif(osType == 'linux'), outdatedAgents = countif(isnotempty(agentVersion) and releasesBehind >= 6), autoUpgradeOff = countif(not(autoUpgrade)), failedExtensions = countif(failedExtensions > 0), esuEligible = countif(esuEligibility =~ 'Eligible'), esuUnlicensed = countif(esuEligibility =~ 'Eligible' and esuLicence !~ 'Assigned'), newest = take_any(newestVersion)
+    transform: "${ $merge([{ 'total': 0, 'connected': 0, 'notConnected': 0, 'expired': 0, 'offline30': 0, 'windows': 0, 'linux': 0, 'outdatedAgents': 0, 'autoUpgradeOff': 0, 'failedExtensions': 0, 'esuEligible': 0, 'esuUnlicensed': 0 }, value.value[0]]) }"
+    cache: { ttl: 300 }
+  # Azure Update Manager, same rules as azure.arc-patching (docs: update-manager/query-logs). Resource Graph allows one
+  # join to another table per query: the servers assessed in 3 days (assessment and installations) are counted here…
+  patching:
+    source: resourceGraph
+    query: |
+      // af:azure.arc-fleet#patching
+      patchassessmentresources
+      | where type has 'hybridcompute' and type !has 'softwarepatches'
+      | extend lid = tolower(tostring(split(tolower(id), '/patchassessmentresults/')[0])), assessedAt = todatetime(properties.lastModifiedDateTime)
+      | summarize arg_max(assessedAt, properties) by lid
+      | where assessedAt >= ago(3d)
+      | extend c = properties.availablePatchCountByClassification
+      | extend critical = coalesce(toint(c.critical), 0), security = coalesce(toint(c.security), 0)
+      | join kind=leftouter (patchinstallationresources | where type has 'hybridcompute' and type !has 'softwarepatches' | extend lid = tolower(tostring(split(tolower(id), '/patchinstallationresults/')[0])), startedAt = todatetime(properties.startDateTime), installStatus = tostring(properties.status) | summarize lastRun = max(startedAt), lastSucceeded = maxif(startedAt, installStatus in~ ('Succeeded', 'CompletedWithWarnings')), lastFailed = maxif(startedAt, installStatus =~ 'Failed') by lid) on lid
+      | summarize overdue = countif(critical + security > 0 and (isnull(lastSucceeded) or lastSucceeded < ago(30d))), pending = countif(critical + security > 0), installFailed = countif(isnotnull(lastRun) and lastRun == lastFailed)
+    transform: "${ $merge([{ 'overdue': 0, 'pending': 0, 'installFailed': 0 }, value.value[0]]) }"
+    cache: { ttl: 300 }
+  # …and connected servers without an assessment in 3 days here (Arc machines against their latest assessment).
+  assessment:
+    source: resourceGraph
+    query: |
+      // af:azure.arc-fleet#assessment
+      resources
+      | where type =~ 'microsoft.hybridcompute/machines' and tostring(properties.status) == 'Connected'
+      | extend lid = tolower(id)
+      | join kind=leftouter (patchassessmentresources | where type has 'hybridcompute' and type !has 'softwarepatches' | extend machineId = tolower(tostring(split(tolower(id), '/patchassessmentresults/')[0])), assessedAt = todatetime(properties.lastModifiedDateTime) | summarize lastAssessed = max(assessedAt) by machineId) on $left.lid == $right.machineId
+      | summarize notAssessedConnected = countif(isnull(lastAssessed) or lastAssessed < ago(3d))
+    transform: "${ $merge([{ 'notAssessedConnected': 0 }, value.value[0]]) }"
+    cache: { ttl: 300 }
+  # Defender for Servers, same rules as azure.arc-defender-coverage (Defender for Cloud in Resource Graph only).
+  defender:
+    source: resourceGraph
+    query: |
+      // af:azure.arc-fleet#defender
+      resources
+      | where type =~ 'microsoft.hybridcompute/machines'
+      | extend lid = tolower(id)
+      | join kind=leftouter (securityresources | where type =~ 'microsoft.security/pricings' and tolower(id) == strcat('/subscriptions/', tolower(subscriptionId), '/providers/microsoft.security/pricings/virtualmachines') | project subscriptionId, tier = tostring(properties.pricingTier)) on subscriptionId
+      | join kind=leftouter (resources | where type =~ 'microsoft.hybridcompute/machines/extensions' | extend extensionType = tostring(properties.type) | where extensionType in~ ('MDE.Windows', 'MDE.Linux') | extend machineId = tolower(tostring(split(id, '/extensions/')[0])), sensorState = tostring(properties.provisioningState), healthy = iff(tostring(properties.provisioningState) =~ 'Succeeded', 1, 0) | summarize arg_max(healthy, sensorState) by machineId) on $left.lid == $right.machineId
+      | extend sensorState = coalesce(sensorState, '')
+      | summarize protected = countif(tier =~ 'Standard' and sensorState =~ 'Succeeded'), gaps = countif(tier !~ 'Standard' or sensorState !~ 'Succeeded')
+    transform: "${ $merge([{ 'protected': 0, 'gaps': 0 }, value.value[0]]) }"
+    cache: { ttl: 300 }
+  byStatus:
+    source: static
+    data: {}
+    transform: >-
+      ${ (
+        $c := ds.counts;
+        $rows := [
+          { 'status': 'Connected', 'machines': $c.connected },
+          { 'status': 'Not connected', 'machines': $c.notConnected - $c.expired },
+          { 'status': 'Expired', 'machines': $c.expired }
+        ];
+        [$rows[machines > 0]]
+      ) }
+  byOs:
+    source: resourceGraph
+    query: |
+      // af:azure.arc-fleet#byos
+      resources
+      | where type =~ 'microsoft.hybridcompute/machines'
+      | extend osSku = tostring(properties.osSku), osName = tostring(properties.osName)
+      | extend os = case(isnotempty(osSku), osSku, isnotempty(osName), osName, 'Unknown')
+      | summarize machines = count() by os
+      | top 10 by machines desc
+    transform: "${ [value.value] }"
+    cache: { ttl: 600 }
+  byAgent:
+    source: resourceGraph
+    query: |
+      // af:azure.arc-fleet#byagent
+      resources
+      | where type =~ 'microsoft.hybridcompute/machines'
+      | extend agentVersion = tostring(properties.agentVersion)
+      | extend release = iff(isempty(agentVersion), 'Unknown', strcat(tostring(split(agentVersion, '.')[0]), '.', tostring(split(agentVersion, '.')[1])))
+      | summarize machines = count() by release
+      | top 12 by machines desc
+    transform: "${ [value.value] }"
+    cache: { ttl: 600 }
+  byRegion:
+    source: resourceGraph
+    # Donuts show at most six slices: the five largest regions, and everything else folded into "Other" in Resource
+    # Graph (one join within resources: the five largest).
+    query: |
+      // af:azure.arc-fleet#byregion
+      resources
+      | where type =~ 'microsoft.hybridcompute/machines'
+      | summarize machines = count() by location
+      | join kind=leftouter (resources | where type =~ 'microsoft.hybridcompute/machines' | summarize n = count() by location | top 5 by n desc | project location, keep = 1) on location
+      | extend location = iff(keep == 1, location, 'Other')
+      | summarize machines = sum(machines) by location
+      | extend other = iff(location == 'Other', 1, 0)
+      | order by other asc, machines desc
+      | project location, machines
+    transform: "${ [value.value] }"
+    cache: { ttl: 600 }
+  bySubscription:
+    source: resourceGraph
+    query: |
+      // af:azure.arc-fleet#bysubscription
+      resources
+      | where type =~ 'microsoft.hybridcompute/machines'
+      | summarize machines = count(), notConnected = countif(tostring(properties.status) != 'Connected') by subscriptionId
+      | top 10 by machines desc
+      | join kind=leftouter (resourcecontainers | where type =~ 'microsoft.resources/subscriptions' | project subscriptionId, subscriptionName = name) on subscriptionId
+      | project subscription = coalesce(subscriptionName, subscriptionId), connected = machines - notConnected, notConnected, machines
+      | order by machines desc
+    transform: "${ [value.value] }"
+    cache: { ttl: 600 }
+  byResourceGroup:
+    source: resourceGraph
+    query: |
+      // af:azure.arc-fleet#byresourcegroup
+      resources
+      | where type =~ 'microsoft.hybridcompute/machines'
+      | summarize machines = count(), notConnected = countif(tostring(properties.status) != 'Connected') by resourceGroup = tolower(resourceGroup)
+      | top 10 by machines desc
+      | project resourceGroup, connected = machines - notConnected, notConnected, machines
+    transform: "${ [value.value] }"
+    cache: { ttl: 600 }
+  # How long servers that aren't connected have been offline (last status change). Arc marks a server Expired after
+  # 45 days without a connection; it must then be re-onboarded.
+  offline:
+    source: resourceGraph
+    query: |
+      // af:azure.arc-fleet#offline
+      resources
+      | where type =~ 'microsoft.hybridcompute/machines'
+      | extend status = tostring(properties.status), changed = todatetime(properties.lastStatusChange)
+      | where status != 'Connected'
+      | extend bucket = case(status == 'Expired', 6, changed > ago(1h), 1, changed > ago(1d), 2, changed > ago(7d), 3, changed > ago(30d), 4, 5)
+      | summarize machines = count() by bucket
+      | extend since = case(bucket == 1, 'Under an hour', bucket == 2, '1–24 hours', bucket == 3, '1–7 days', bucket == 4, '7–30 days', bucket == 5, '30–45 days (expiring)', 'Expired')
+      | order by bucket asc
+      | project since, machines
+    transform: "${ [value.value] }"
+    cache: { ttl: 300 }
+
+layout:
+  - widget: kpi
+    span: 2
+    data: counts.total
+    label: Arc servers
+    format: number
+    href: /p/azure.arc-servers
+  - widget: kpi
+    span: 2
+    data: counts.notConnected
+    label: Not connected
+    format: number
+    status: "${ value > 0 ? 'crit' : 'ok' }"
+    href: /p/azure.arc-servers?status=NotConnected
+  - widget: kpi
+    span: 2
+    data: counts.offline30
+    label: Offline 30+ days
+    format: number
+    status: "${ value > 0 ? 'crit' : 'ok' }"
+    href: /p/azure.arc-disconnected?hours=720
+  - widget: kpi
+    span: 2
+    data: counts.expired
+    label: Expired
+    format: number
+    status: "${ value > 0 ? 'crit' : 'ok' }"
+    href: /p/azure.arc-servers?status=Expired
+  - widget: kpi
+    span: 2
+    data: counts.outdatedAgents
+    label: Outdated agents
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+    hint: "${ '6+ releases behind ' & (counts.newest ? counts.newest : 'the newest') }"
+    href: /p/azure.arc-servers?agent=outdated
+  - widget: kpi
+    span: 2
+    data: counts.failedExtensions
+    label: With a failed extension
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+    href: /p/azure.arc-servers?extensions=Failed
+  - widget: kpi
+    span: 2
+    data: patching.overdue
+    label: Patching overdue
+    format: number
+    status: "${ value > 0 ? 'crit' : 'ok' }"
+    href: /p/azure.arc-patching?state=Overdue
+  - widget: kpi
+    span: 2
+    data: patching.pending
+    label: Security updates due
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+    href: /p/azure.arc-patching?state=Pending
+  - widget: kpi
+    span: 2
+    data: patching.installFailed
+    label: Update installs failed
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+    href: /p/azure.arc-patching?state=InstallFailed
+  - widget: kpi
+    span: 2
+    data: assessment.notAssessedConnected
+    label: Not assessed (3 days)
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+    href: /p/azure.arc-patching?state=NotAssessed&machineStatus=Connected
+  - widget: kpi
+    span: 2
+    data: defender.gaps
+    label: Defender gaps
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+    href: /p/azure.arc-defender-coverage
+  - widget: kpi
+    span: 2
+    data: counts.esuUnlicensed
+    label: ESU without a licence
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+    hint: "${ $string(counts.esuEligible) & ' eligible for ESU' }"
+    href: /p/azure.arc-servers?esu=Unlicensed
+  - widget: chart
+    title: Connection
+    span: 4
+    rows: 3
+    type: donut
+    data: byStatus
+    x: status
+    y: machines
+    format: number
+    empty:
+      title: No Arc servers yet
+      body: Onboard servers with the Azure Connected Machine agent (Azure Arc → Machines → Add).
+  - widget: chart
+    title: How long servers have been offline
+    span: 8
+    rows: 3
+    type: bar
+    data: offline
+    x: since
+    y: machines
+    format: number
+    empty:
+      title: Every Arc server is connected
+      body: No server has lost its connection to Azure Arc.
+  - widget: chart
+    title: Operating systems
+    span: 6
+    rows: 3
+    type: bar
+    data: byOs
+    x: os
+    y: machines
+    format: number
+  - widget: chart
+    title: Connected Machine agent versions
+    span: 6
+    rows: 3
+    type: bar
+    data: byAgent
+    x: release
+    y: machines
+    format: number
+  - widget: chart
+    title: Subscriptions with the most Arc servers
+    span: 8
+    rows: 3
+    type: stackedBar
+    data: bySubscription
+    x: subscription
+    y: [connected, notConnected]
+    labels: { connected: Connected, notConnected: Not connected }
+    format: number
+  - widget: chart
+    title: Azure regions
+    span: 4
+    rows: 3
+    type: donut
+    data: byRegion
+    x: location
+    y: machines
+    format: number
+  - widget: chart
+    title: Resource groups with the most Arc servers
+    span: 6
+    rows: 3
+    type: stackedBar
+    data: byResourceGroup
+    x: resourceGroup
+    y: [connected, notConnected]
+    labels: { connected: Connected, notConnected: Not connected }
+    format: number
+  - widget: markdown
+    span: 6
+    text: |
+      **Where to next**
+
+      - [Arc servers](/p/azure.arc-servers) — every server, filtered and paged in Resource Graph
+      - [Arc extensions](/p/azure.arc-extensions) — failed, erroring and stuck extensions with their status messages
+      - [Arc patching](/p/azure.arc-patching) — Azure Update Manager assessments and installations
+      - [Arc Defender coverage](/p/azure.arc-defender-coverage) — Defender for Servers plan and Defender for Endpoint
+      - Reports: [Disconnected Arc servers](/p/azure.arc-disconnected), [Arc agent and extension health](/p/azure.arc-agent-health)
+      - [Azure configuration checks](/monitoring?group=azure) — the Arc probes and what each found

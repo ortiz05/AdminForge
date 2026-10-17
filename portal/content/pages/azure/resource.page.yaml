@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/page.schema.json
 kind: page
 id: azure.resource
-version: 1.1.1
+version: 1.2.0
 title: Azure resource
 summary: One Azure resource or resource group — properties, tags, who has access and recent activity.
 owner: azure-team
@@ -49,7 +49,7 @@ datasources:
           'zoneList': $r.zones ? $join($r.zones, ', '),
           'tagRows': $r.tags ? [$each($r.tags, function($v, $k) { { 'key': $k, 'value': $v } })] : [],
           'propertiesJson': $string($r.properties, true),
-          'isWebSite': $lowercase($r.type) = 'microsoft.web/sites'
+          'isArcServer': $lowercase($r.type) = 'microsoft.hybridcompute/machines'
         }])
       ) }
     cache: { ttl: 60 }
@@ -107,10 +107,10 @@ actions:
     icon: tag
     inputs:
       resourceId: ${ params.id }
-  - label: Open Function App view
-    icon: function
-    href: /p/azure.function-app?subscriptionId=${ $encode(resource.subscriptionId) }&resourceGroup=${ $encode(resource.resourceGroup) }&name=${ $encode(resource.name) }
-    when: ${ resource.isWebSite = true }
+  - label: Open Arc server view
+    icon: hard-drives
+    href: /p/azure.arc-server?id=${ $encode(params.id) }
+    when: ${ resource.isArcServer = true }
   - label: Metrics
     icon: chart-line
     href: /p/azure.metrics?resourceId=${ $encode(params.id) }

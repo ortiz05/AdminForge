@@ -206,6 +206,44 @@ is retried after Microsoft's Retry-After and otherwise shows "Microsoft is limit
 are in the billing currency (a view across billing accounts in different currencies says so). Offers without Cost
 Management (some CSP and sponsorship offers) answer with a clear error; see `docs/licensing-review.md` › Azure Billing.
 
+## Azure Arc servers
+
+Hybrid servers are managed under **Azure**: **Arc fleet** (dashboard: connection and time offline, operating systems,
+agent versions, regions, subscriptions and resource groups, failed extensions, patching, Defender coverage, ESU),
+**Arc servers**, **Arc extensions**, **Arc patching** (Azure Update Manager) and **Arc Defender coverage** (Defender
+for Servers, from Defender for Cloud). Each server opens in the inspector with Updates and Defender tabs. The reports
+_Disconnected Arc servers_ (`reports.arc-disconnected-daily`, 06:20 UTC) and _Arc agent and extension health_
+(weekly) run as schedules; five configuration checks (disconnected or expired servers, failed extensions, critical or
+security updates overdue for 30 days, servers not assessed for 3 days, agents six or more releases behind) appear
+under Azure › Configuration checks with what each found, what to do and a link to the list.
+
+Everything is filtered, counted and paged in **Azure Resource Graph**: the lists load a page at a time and export up
+to 100,000 rows, the numbers come from `summarize` queries, so thousands of servers cost the same as ten. The fleet
+dashboard sends ten queries (cached 5–10 minutes), within Resource Graph's per-person quota. Resource Graph allows one
+join to another table per query, so **Arc patching** has two lists: servers Update Manager assessed in the last 3 days
+(patch state from the assessment and installation records, which carry the server's name, subscription and resource
+group) and servers it didn't (with their connection state and assessment mode); the export holds the first. A **failed
+extension** means the same everywhere — provisioning failed or the extension reports an error — on the fleet
+dashboard, the server list, the extensions view, the check and the agent health report. **Defender coverage** reads
+Defender for Servers per subscription: a plan set on a single server (per-resource Defender for Servers) isn't read,
+so such a server shows its subscription's plan.
+
+**Access.** Engineers need **Reader** on the subscriptions (or a management group) that hold the Arc servers. The
+checks and schedules run as the automation identity, which provisioning makes Reader on `AF_SUBSCRIPTION_ID` only: for
+servers in other subscriptions assign it Reader at the management group —
+`az role assignment create --assignee <automation app id> --role Reader --scope /providers/Microsoft.Management/managementGroups/<group id>`.
+
+**Prerequisites in Azure.** Patching data exists only for servers with **periodic assessment** on (Azure Policy
+"Configure periodic checking for missing system updates on Azure Arc-enabled servers", one assignment per OS type, with
+a remediation task) and in subscriptions registered for `Microsoft.Compute`. Update Manager is billed per Arc server
+and connected day unless the server has ESUs enabled by Arc, Defender for Servers Plan 2 covers its subscription, or
+Windows Server Software Assurance / pay-as-you-go by Arc applies. Defender coverage counts a server as protected when
+Defender for Servers is on for its subscription and the `MDE.Windows` / `MDE.Linux` extension installed. Details and
+sources: `docs/licensing-review.md` › Hybrid Azure Arc servers at scale.
+
+Function Apps and Azure Arc-enabled Kubernetes are retired (not needed at this time): their pages, report, schedule,
+runbook, trigger-sync playbook, example connection and probe stay in the history but are hidden.
+
 ## Sizing for a large tenant
 
 **Design target: about 50 engineers using AdminForge at the same time**, which one API process with the defaults

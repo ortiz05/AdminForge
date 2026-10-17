@@ -1,9 +1,12 @@
 $schema: ../../../packages/schemas/generated/runbook.schema.json
 kind: runbook
 id: azure.function-app-incident-triage
-version: 1.0.0
+version: 1.1.0
 title: Function App incident triage
-summary: Guided triage for a failing Function App — rule out a platform incident, check resource and host health, read recent errors and HTTP 5xx, then decide between sync triggers, restart or rollback.
+summary: Retired — AdminForge doesn't manage Azure Functions at this time. Guided triage for a failing Function App — rule out a platform incident, check resource and host health, read recent errors and HTTP 5xx, then decide between sync triggers, restart or rollback.
+# Retired 2026-10-17: Azure Functions aren't managed in AdminForge at this time. To bring it back, set
+# status: active and bump the version.
+status: retired
 owner: azure-team
 tags: [azure, functions, incident, runbook]
 nav: { section: azure, label: Function App triage, icon: first-aid-kit, order: 90 }

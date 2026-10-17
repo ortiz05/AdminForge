@@ -1,0 +1,39 @@
+$schema: ../../packages/schemas/generated/probe.schema.json
+kind: probe
+id: probes.arc-not-assessed
+version: 1.0.0
+title: Connected Azure Arc servers not assessed for updates in 3 days
+summary: >-
+  Connected Azure Arc servers with no Azure Update Manager assessment in the last 3 days (periodic assessment runs
+  every 24 hours when it is on), so pending updates on them are unknown and the patching view can't judge them. Each
+  row shows the server's assessment mode — ImageDefault means periodic assessment is off — and when it was last
+  assessed (Update Manager keeps assessments 7 days, so "never" means none for a week).
+owner: azure-team
+tags: [kql, configuration, azure, arc, patching, update-manager, config-check]
+group: azure
+remedy: >-
+  Turn on periodic assessment for these servers: assign the built-in Azure Policy "Configure periodic checking for
+  missing system updates on Azure Arc-enabled servers" (once for Windows, once for Linux) with a remediation task at
+  the subscription or management group, or set it per server in Update Manager → Update settings. The servers'
+  subscription must be registered for the Microsoft.Compute resource provider. Where it is already on, check the
+  server's Update Manager extensions (WindowsPatchExtension / LinuxPatchExtension) on the Arc extensions view.
+link: { label: Open servers not assessed, href: "/p/azure.arc-patching?state=NotAssessed&machineStatus=Connected" }
+check:
+  kind: kql
+  source: resourceGraph
+  query: |
+    // af:probes.arc-not-assessed
+    resources
+    | where type =~ 'microsoft.hybridcompute/machines' and tostring(properties.status) == 'Connected'
+    | extend lid = tolower(id), assessmentMode = coalesce(tostring(properties.osProfile.windowsConfiguration.patchSettings.assessmentMode), tostring(properties.osProfile.linuxConfiguration.patchSettings.assessmentMode)), osName = tostring(properties.osName)
+    | join kind=leftouter (patchassessmentresources | where type has 'hybridcompute' and type !has 'softwarepatches' | extend machineId = tolower(tostring(split(tolower(id), '/patchassessmentresults/')[0])), assessedAt = todatetime(properties.lastModifiedDateTime) | summarize lastAssessed = max(assessedAt) by machineId) on $left.lid == $right.machineId
+    | where isnull(lastAssessed) or lastAssessed < ago(3d)
+    | project name, assessmentMode = iff(isempty(assessmentMode), 'Not set', assessmentMode), lastAssessed, osName, resourceGroup, subscriptionId, location, id
+    | order by name asc
+  metric: rowCount
+  detailsLimit: 100
+thresholds: { warn: 1 }
+intervalHint: PT6H
+timeoutMs: 60000
+requires:
+  azureRoles: [Reader]

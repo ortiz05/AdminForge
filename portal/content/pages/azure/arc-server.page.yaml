@@ -1,9 +1,9 @@
 $schema: ../../../packages/schemas/generated/page.schema.json
 kind: page
 id: azure.arc-server
-version: 1.0.1
+version: 1.1.0
 title: Azure Arc server
-summary: One Arc-enabled server — connectivity, agent, operating system, extensions and agent errors.
+summary: One Arc-enabled server — connectivity, agent and automatic upgrade, operating system, ESU licence, extensions, Azure Update Manager updates and installations, Defender for Servers coverage and agent errors.
 owner: azure-team
 tags: [azure, arc, hybrid, servers]
 template: entity
@@ -22,7 +22,7 @@ datasources:
     query: |
       // af:azure.arc-server#machine
       resources
-      | where type =~ 'microsoft.hybridcompute/machines' and tolower(id) == '${ $lowercase($replace(params.id, /[^A-Za-z0-9._()\/-]/, '')) }'
+      | where type =~ 'microsoft.hybridcompute/machines' and tolower(id) == ${ $kql($lowercase(params.id)) }
       | project id, name, location, resourceGroup, subscriptionId, tags, identity, properties
       | take 1
     transform: >-
@@ -40,6 +40,12 @@ datasources:
           'status': $p.status,
           'lastStatusChange': $p.lastStatusChange,
           'agentVersion': $p.agentVersion,
+          'autoUpgrade': $p.agentUpgrade.enableAutomaticUpgrade = true ? 'On' : 'Off',
+          'upgradeStatus': $p.agentUpgrade.lastAttemptStatus,
+          'upgradeMessage': $p.agentUpgrade.lastAttemptMessage,
+          'upgradeAttempted': $p.agentUpgrade.lastAttemptTimestamp,
+          'assessmentMode': $p.osProfile.windowsConfiguration.patchSettings.assessmentMode ? $p.osProfile.windowsConfiguration.patchSettings.assessmentMode : $p.osProfile.linuxConfiguration.patchSettings.assessmentMode,
+          'patchMode': $p.osProfile.windowsConfiguration.patchSettings.patchMode ? $p.osProfile.windowsConfiguration.patchSettings.patchMode : $p.osProfile.linuxConfiguration.patchSettings.patchMode,
           'osName': $p.osName,
           'osSku': $p.osSku,
           'osVersion': $p.osVersion,
@@ -51,8 +57,10 @@ datasources:
           'cloudProvider': $p.cloudMetadata.provider,
           'vmUuid': $p.vmUuid,
           'esuState': $p.licenseProfile.esuProfile.licenseAssignmentState,
+          'esuEligibility': $p.licenseProfile.esuProfile.esuEligibility,
+          'esuKey': $p.licenseProfile.esuProfile.esuKeyState,
           'privateLinkScope': $p.privateLinkScopeResourceId,
-          'errors': [$p.errorDetails.{ 'code': code, 'message': message }]
+          'errors': [$map($p.errorDetails, function($e, $i) { { 'key': $string($i), 'code': $e.code, 'message': $e.message } })]
         }
       ) }
     cache: { ttl: 60 }
@@ -63,10 +71,67 @@ datasources:
     query: |
       // af:azure.arc-server#extensions
       resources
-      | where type =~ 'microsoft.hybridcompute/machines/extensions' and tolower(id) startswith strcat('${ $lowercase($replace(params.id, /[^A-Za-z0-9._()\/-]/, '')) }', '/extensions/')
+      | where type =~ 'microsoft.hybridcompute/machines/extensions' and tolower(id) startswith strcat(${ $kql($lowercase(params.id)) }, '/extensions/')
       | project id, name, publisher = tostring(properties.publisher), extensionType = tostring(properties.type), version = tostring(properties.typeHandlerVersion), provisioningState = tostring(properties.provisioningState), autoUpgrade = iff(coalesce(tobool(properties.enableAutomaticUpgrade), false), 'true', 'false'), statusCode = tostring(properties.instanceView.status.code), statusLevel = tostring(properties.instanceView.status.level), statusMessage = tostring(properties.instanceView.status.message)
       | order by name asc
     cache: { ttl: 60 }
+  # Azure Update Manager results for this machine (docs: update-manager/query-logs and sample-query-logs: summary
+  # records are the types without "softwarepatches"). The latest assessment is kept 7 days, installation runs 30 days.
+  assessment:
+    source: resourceGraph
+    query: |
+      // af:azure.arc-server#assessment
+      patchassessmentresources
+      | where type !has 'softwarepatches' and tolower(id) startswith strcat(${ $kql($lowercase(params.id)) }, '/patchassessmentresults/')
+      | extend c = properties.availablePatchCountByClassification
+      | project assessedAt = todatetime(properties.lastModifiedDateTime), assessmentStatus = tostring(properties.status), critical = coalesce(toint(c.critical), 0), security = coalesce(toint(c.security), 0), otherUpdates = coalesce(toint(c.updateRollup), 0) + coalesce(toint(c.featurePack), 0) + coalesce(toint(c.servicePack), 0) + coalesce(toint(c.definition), 0) + coalesce(toint(c.tools), 0) + coalesce(toint(c.updates), 0) + coalesce(toint(c.other), 0), rebootPending = iff(coalesce(tobool(properties.rebootPending), false), 'true', 'false'), patchService = tostring(properties.patchServiceUsed), startedBy = tostring(properties.startedBy), assessmentError = coalesce(tostring(properties.errorDetails.details[0].message), tostring(properties.errorDetails.message))
+      | order by assessedAt desc
+      | take 1
+    transform: "${ value.value[0] }"
+    cache: { ttl: 300 }
+  updates:
+    source: resourceGraph
+    query: |
+      // af:azure.arc-server#updates
+      patchassessmentresources
+      | where type has 'softwarepatches' and tolower(id) startswith strcat(${ $kql($lowercase(params.id)) }, '/patchassessmentresults/')
+      | extend urgent = tostring(properties.classifications) contains 'Critical' or tostring(properties.classifications) contains 'Security', published = todatetime(properties.publishedDateTime)
+      | order by urgent desc, published asc
+      | project id, patchName = tostring(properties.patchName), kbId = tostring(properties.kbId), version = tostring(properties.version), classifications = properties.classifications, published, rebootRequired = iff(coalesce(tobool(properties.rebootRequired), false), 'true', 'false')
+    cache: { ttl: 300 }
+  installs:
+    source: resourceGraph
+    query: |
+      // af:azure.arc-server#installs
+      patchinstallationresources
+      | where type !has 'softwarepatches' and tolower(id) startswith strcat(${ $kql($lowercase(params.id)) }, '/patchinstallationresults/')
+      | project id, startedAt = todatetime(properties.startDateTime), status = tostring(properties.status), installed = toint(properties.installedPatchCount), failed = toint(properties.failedPatchCount), pending = toint(properties.pendingPatchCount), rebootStatus = tostring(properties.rebootStatus), startedBy = tostring(properties.startedBy), windowExceeded = iff(coalesce(tobool(properties.maintenanceWindowExceeded), false), 'true', 'false')
+      | order by startedAt desc
+    cache: { ttl: 300 }
+  # Defender for Servers: the subscription's plan (Defender for Cloud pricing) and the open Defender for Cloud
+  # recommendations on this machine. Nothing here reads the Microsoft Defender portal.
+  defenderPlan:
+    source: resourceGraph
+    query: |
+      // af:azure.arc-server#defenderplan
+      securityresources
+      | where type =~ 'microsoft.security/pricings' and tolower(id) == strcat('/subscriptions/', '${ $lowercase($guid($substring(params.id, 15, 36))) }', '/providers/microsoft.security/pricings/virtualmachines')
+      | project plan = iff(tostring(properties.pricingTier) =~ 'Standard', 'On', 'Off'), subPlan = tostring(properties.subPlan)
+      | take 1
+    transform: "${ $merge([{ 'plan': 'Unknown' }, value.value[0]]) }"
+    cache: { ttl: 900 }
+  recommendations:
+    source: resourceGraph
+    query: |
+      // af:azure.arc-server#recommendations
+      securityresources
+      | where type =~ 'microsoft.security/assessments' and tolower(id) startswith strcat(${ $kql($lowercase(params.id)) }, '/providers/microsoft.security/assessments/')
+      | where tostring(properties.status.code) =~ 'Unhealthy'
+      | extend severity = tostring(properties.metadata.severity)
+      | extend sevRank = case(severity =~ 'High', 0, severity =~ 'Medium', 1, 2)
+      | order by sevRank asc
+      | project id, recommendation = tostring(properties.displayName), severity, cause = tostring(properties.status.cause), description = tostring(properties.status.description), remediation = tostring(properties.metadata.remediationDescription), statusChanged = todatetime(properties.status.statusChangeDate), portalLink = tostring(properties.links.azurePortal)
+    cache: { ttl: 300 }
 
 header:
   title: ${ machine.name }
@@ -105,9 +170,15 @@ tabs:
             map: { Connected: [ok, Connected], Disconnected: [crit, Disconnected], Error: [crit, Error], Expired: [crit, Expired] }
           - { field: lastStatusChange, label: Status since, kind: relativeTime }
           - { field: agentVersion, label: Agent version }
+          - { field: autoUpgrade, label: Automatic agent upgrade }
+          - { field: upgradeStatus, label: Last upgrade attempt }
+          - { field: upgradeAttempted, label: Upgrade attempted, kind: relativeTime }
+          - { field: upgradeMessage, label: Upgrade message }
           - { field: identityType, label: Managed identity }
           - { field: privateLinkScope, label: Private link scope, kind: id }
+          - { field: esuEligibility, label: ESU eligibility }
           - { field: esuState, label: ESU licence }
+          - { field: esuKey, label: ESU key }
       - widget: keyValue
         span: 6
         title: Machine
@@ -123,6 +194,8 @@ tabs:
           - { field: cloudProvider, label: Hosted in }
           - { field: location, label: Azure region }
           - { field: resourceGroup, label: Resource group }
+          - { field: assessmentMode, label: Update assessment mode }
+          - { field: patchMode, label: Patch orchestration }
   - id: extensions
     label: Extensions
     layout:
@@ -150,13 +223,130 @@ tabs:
         empty:
           title: No extensions installed
           body: Install Azure Monitor Agent, Defender for Servers or Update Manager extensions from the Azure portal or with Azure Policy.
+  - id: updates
+    label: Updates
+    layout:
+      - widget: kpi
+        data: assessment.critical
+        label: Critical updates pending
+        format: number
+        status: "${ value > 0 ? 'crit' : 'ok' }"
+      - widget: kpi
+        data: assessment.security
+        label: Security updates pending
+        format: number
+        status: "${ value > 0 ? 'warn' : 'ok' }"
+      - widget: kpi
+        data: assessment.otherUpdates
+        label: Other updates pending
+        format: number
+      - widget: kpi
+        data: assessment.assessedAt
+        label: Last assessed
+        format: relativeTime
+      - widget: markdown
+        when: "${ $exists(assessment.assessedAt) = false }"
+        text: >-
+          **No Azure Update Manager assessment in the last 7 days.** Turn on periodic assessment for this machine (Update
+          Manager → Update settings, or the Azure Policy "Configure periodic checking for missing system updates on
+          Azure Arc-enabled servers"), or run "Check for updates" once. The machine must be connected and its
+          subscription registered for the Microsoft.Compute resource provider.
+      - widget: keyValue
+        span: 12
+        title: Latest assessment
+        data: assessment
+        fields:
+          - { field: assessmentStatus, label: Result }
+          - { field: rebootPending, label: Restart pending, kind: status, map: { "true": [warn, Restart pending], "false": [ok, "No"] } }
+          - { field: patchService, label: Update service }
+          - { field: startedBy, label: Started by }
+          - { field: assessmentError, label: Error }
+      - widget: table
+        span: 12
+        title: Pending updates
+        data: updates.value
+        rowKey: id
+        search: true
+        columns:
+          - { field: patchName, label: Update, kind: identity, secondary: kbId, sortable: true }
+          - { field: classifications, label: Classification, kind: tags }
+          - { field: published, label: Published, kind: date, sortable: true }
+          - { field: rebootRequired, label: Restart, kind: status, map: { "true": [info, Needs a restart], "false": [neutral, "No"] }, filter: facet }
+          - { field: version, label: Version, hidden: true }
+        empty:
+          title: No pending updates
+          body: The latest Update Manager assessment found nothing to install, or the machine hasn't been assessed in the last 7 days.
+      - widget: table
+        span: 12
+        title: Update installations (last 30 days)
+        data: installs.value
+        rowKey: id
+        columns:
+          - { field: startedAt, label: Started, kind: datetime, sortable: true }
+          - field: status
+            label: Result
+            kind: status
+            map: { Succeeded: [ok, Succeeded], CompletedWithWarnings: [warn, Completed with warnings], Failed: [crit, Failed], InProgress: [info, In progress], NotStarted: [neutral, Not started] }
+            filter: facet
+          - { field: installed, label: Installed, kind: number }
+          - { field: failed, label: Failed, kind: number }
+          - { field: pending, label: Still pending, kind: number }
+          - { field: rebootStatus, label: Restart }
+          - { field: windowExceeded, label: Maintenance window, kind: status, map: { "true": [warn, Exceeded], "false": [ok, Within] } }
+          - { field: startedBy, label: Started by, hidden: true }
+        rowActions:
+          - label: Open Update Manager history
+            icon: arrow-square-out
+            href: https://portal.azure.com/#resource${ params.id }/updates
+        empty:
+          title: No installations in the last 30 days
+          body: Schedule updates with a maintenance configuration in Azure Update Manager, or run a one-time update.
+  - id: defender
+    label: Defender
+    layout:
+      - widget: keyValue
+        span: 6
+        title: Defender for Servers
+        data: defenderPlan
+        fields:
+          - { field: plan, label: Plan on the subscription, kind: status, map: { "On": [ok, "On"], "Off": [warn, "Off"], Unknown: [neutral, Unknown] } }
+          - { field: subPlan, label: Plan }
+      - widget: markdown
+        span: 6
+        text: >-
+          Defender for Servers is turned on per subscription in Defender for Cloud and deploys the Defender for Endpoint
+          extension (MDE.Windows or MDE.Linux, on the Extensions tab). Recommendations below come from Defender for Cloud;
+          the [Defender coverage](/p/azure.arc-defender-coverage) view shows every Arc server.
+      - widget: table
+        span: 12
+        title: Open Defender for Cloud recommendations
+        data: recommendations.value
+        rowKey: id
+        search: true
+        columns:
+          - { field: recommendation, label: Recommendation, kind: identity, secondary: description }
+          - field: severity
+            label: Severity
+            kind: status
+            map: { High: [crit, High], Medium: [warn, Medium], Low: [info, Low] }
+            filter: facet
+          - { field: statusChanged, label: Unhealthy since, kind: relativeTime, sortable: true }
+          - { field: cause, label: Cause, hidden: true }
+          - { field: remediation, label: How to fix, hidden: true }
+        rowActions:
+          - label: Open in Defender for Cloud
+            icon: arrow-square-out
+            href: "${ row.portalLink ? ($substring(row.portalLink, 0, 4) = 'http' ? row.portalLink : 'https://' & row.portalLink) : 'https://portal.azure.com/#view/Microsoft_Azure_Security/SecurityMenuBlade/~/5' }"
+        empty:
+          title: No open recommendations
+          body: Defender for Cloud has no unhealthy assessment for this machine, or Defender for Cloud isn't set up on its subscription.
   - id: errors
     label: Agent errors
     layout:
       - widget: table
         span: 12
         data: machine.errors
-        rowKey: code
+        rowKey: key
         columns:
           - { field: code, label: Code, kind: code }
           - { field: message, label: Message }

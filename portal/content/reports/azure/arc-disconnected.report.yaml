@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/report.schema.json
 kind: report
 id: azure.arc-disconnected
-version: 1.0.0
+version: 1.1.0
 title: Disconnected Azure Arc servers
 summary: Arc-enabled servers that are disconnected, in error or expired for longer than the chosen threshold. Servers expire after 45 days offline and must be re-onboarded.
 owner: azure-team
@@ -44,44 +44,50 @@ datasources:
       | order by hoursNotConnected desc
     paging: all
     maxItems: 20000
-    transform: >-
-      ${ (
-        $rows := [value.value];
-        {
-          'rows': $rows,
-          'total': $count($rows),
-          'expired': $count($rows[status = 'Expired']),
-          'expiringSoon': $count($rows[status != 'Expired' and daysToExpiry <= 7]),
-          'error': $count($rows[status = 'Error'])
-        }
-      ) }
+    cache: { ttl: 300 }
+  # The same machines counted in Resource Graph: the rows have no transform, so thousands of servers stay within the
+  # 250 ms transform budget and the export streams them as they are.
+  summary:
+    source: resourceGraph
+    query: |
+      // af:azure.arc-disconnected#summary
+      resources
+      | where type =~ 'microsoft.hybridcompute/machines'
+      ${ params.subscriptionId ? "| where subscriptionId == '" & $guid(params.subscriptionId) & "'" }
+      | extend status = tostring(properties.status), lastStatusChange = todatetime(properties.lastStatusChange)
+      | where status != 'Connected'
+      | extend hoursNotConnected = datetime_diff('hour', now(), lastStatusChange)
+      | where hoursNotConnected >= ${ $number(params.hours) in [1, 24, 168, 720] ? $string($number(params.hours)) : '1' }
+      | extend daysToExpiry = iff(status == 'Expired', 0, max_of(0, 45 - hoursNotConnected / 24))
+      | summarize total = count(), expired = countif(status == 'Expired'), expiringSoon = countif(status != 'Expired' and daysToExpiry <= 7), error = countif(status == 'Error')
+    transform: "${ $merge([{ 'total': 0, 'expired': 0, 'expiringSoon': 0, 'error': 0 }, value.value[0]]) }"
     cache: { ttl: 300 }
 
 layout:
   - widget: kpi
-    data: machines.total
+    data: summary.total
     label: Not connected
     format: number
     status: "${ value > 0 ? 'crit' : 'ok' }"
   - widget: kpi
-    data: machines.expiringSoon
+    data: summary.expiringSoon
     label: Expire within 7 days
     format: number
     status: "${ value > 0 ? 'crit' : 'ok' }"
   - widget: kpi
-    data: machines.expired
+    data: summary.expired
     label: Expired (re-onboard)
     format: number
     status: "${ value > 0 ? 'crit' : 'ok' }"
   - widget: kpi
-    data: machines.error
+    data: summary.error
     label: In error
     format: number
     status: "${ value > 0 ? 'warn' : 'ok' }"
   - widget: table
     id: machines
     span: 12
-    data: machines.rows
+    data: machines.value
     rowKey: id
     selection: multi
     columns:
@@ -128,5 +134,6 @@ layout:
 export:
   formats: [csv, xlsx]
   fileName: azure-arc-disconnected
-  data: machines.rows
+  data: machines.value
   columns: all
+  maxRows: 20000

@@ -1,23 +1,29 @@
-import { missingLocalKeys } from '@adminforge/api/src/scripts/init-local';
+import { localKeys, missingLocalKeys } from '@adminforge/api/src/scripts/init-local';
 
 describe('init:local', () => {
-  it('adds every missing key with matching Postgres credentials', () => {
-    const add = missingLocalKeys({});
-    expect(Object.keys(add).sort()).toEqual([
+  it('adds every missing key: the dev role URL in the env file, the superuser password in the owner file', () => {
+    const add = localKeys({});
+    expect(Object.keys(add.env).sort()).toEqual([
       'AF_ENV_LABEL',
       'API_PORT',
       'AUTH_MODE',
       'DATABASE_URL',
       'DATA_MODE',
-      'POSTGRES_PASSWORD',
       'PUBLIC_BASE_URL',
       'TOKEN_CACHE_KEY',
     ]);
-    expect(add.DATABASE_URL).toBe(
-      `postgres://adminforge:${encodeURIComponent(add.POSTGRES_PASSWORD!)}@127.0.0.1:55432/adminforge`,
-    );
-    expect(Buffer.from(add.TOKEN_CACHE_KEY!, 'base64')).toHaveLength(32);
-    expect(add).toMatchObject({
+    expect(Object.keys(add.owner)).toEqual(['POSTGRES_PASSWORD']);
+    // The development database's own non-superuser owner (pnpm db:harden creates it with this password).
+    const url = new URL(add.env.DATABASE_URL!);
+    expect([url.username, url.hostname, url.port, url.pathname]).toEqual([
+      'adminforge_dev',
+      '127.0.0.1',
+      '55432',
+      '/adminforge_dev',
+    ]);
+    expect(decodeURIComponent(url.password)).not.toBe(add.owner.POSTGRES_PASSWORD);
+    expect(Buffer.from(add.env.TOKEN_CACHE_KEY!, 'base64')).toHaveLength(32);
+    expect(add.env).toMatchObject({
       PUBLIC_BASE_URL: 'http://localhost:5173',
       API_PORT: '3001',
       AUTH_MODE: 'entra',
@@ -33,11 +39,13 @@ describe('init:local', () => {
     expect(add.DATA_MODE).toBe('live');
   });
 
-  it('reuses the password from an existing local DATABASE_URL', () => {
-    const add = missingLocalKeys({
-      DATABASE_URL: 'postgres://adminforge:abc%2Fdef@127.0.0.1:55432/adminforge',
+  it('keeps an existing DATABASE_URL and a superuser password wherever it already is', () => {
+    const existing = 'postgres://adminforge_dev:abc%2Fdef@127.0.0.1:55432/adminforge_dev';
+    expect(localKeys({ DATABASE_URL: existing }, { POSTGRES_PASSWORD: 'kept' })).toMatchObject({
+      env: expect.not.objectContaining({ DATABASE_URL: expect.anything() }),
+      owner: {},
     });
-    expect(add.POSTGRES_PASSWORD).toBe('abc/def');
-    expect(add.DATABASE_URL).toBeUndefined();
+    // An older env file with POSTGRES_PASSWORD keeps it (pnpm db:harden moves it to the owner file).
+    expect(localKeys({ DATABASE_URL: existing, POSTGRES_PASSWORD: 'legacy' }).owner).toEqual({});
   });
 });

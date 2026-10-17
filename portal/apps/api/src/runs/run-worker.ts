@@ -248,7 +248,7 @@ export class RunWorker {
       this.deps.store.bind(runId, def);
       // `user.roles` for the initiator's first steps.
       if (row.identity === 'delegated')
-        await this.deps.identity.liveSession(row.sessionHash).catch(() => null);
+        await this.deps.identity.liveSession(row.sessionHash, {}, row.initiatorOid).catch(() => null);
       const outcome = await this.deps.engine.execute(runId, def, { signal: ac.signal });
       if (outcome.wakeAt) await this.deps.queue.enqueue(runId, { startAfter: outcome.wakeAt });
       if (
@@ -293,7 +293,9 @@ export class RunWorker {
       return false;
     }
     if (row.identity !== 'delegated') return true;
-    const session = await this.deps.identity.liveSession(row.sessionHash).catch(() => null);
+    const session = await this.deps.identity
+      .liveSession(row.sessionHash, {}, row.initiatorOid)
+      .catch(() => null);
     if (!session) return true;
     const needs = [
       ...(def.requires?.portalRoles ?? []),

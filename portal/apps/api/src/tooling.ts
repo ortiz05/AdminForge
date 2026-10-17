@@ -32,8 +32,8 @@ export { createContext, type AppContext, type AppDeps } from './context';
 /** Log fields with bound database values stripped (the scheduler's JSON log lines). */
 export { safeLogFields } from './logging';
 
-// Database (CLI: publish, audit).
-export { createDatabase, type Database } from './db/client';
+// Database (CLI: publish, audit; the scheduler's startup role check).
+export { assertDatabaseRole, createDatabase, type Database } from './db/client';
 
 // Definitions: the Postgres store `publish` writes and the file source it reads (CLI).
 export {

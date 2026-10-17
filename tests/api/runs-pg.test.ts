@@ -93,7 +93,7 @@ describe.skipIf(!url)('runs on Postgres', () => {
     repo = new PgRunRepository(database);
   });
   beforeEach(async () => {
-    await database.pool.query('truncate runs, run_steps, run_step_events, approvals');
+    await database.pool.query('truncate runs, run_steps, run_step_events, approvals cascade');
   });
   afterAll(async () => {
     await database?.close();

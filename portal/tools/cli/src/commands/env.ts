@@ -11,7 +11,15 @@
  */
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
-import { ADMIN_ENV_KEYS, envFiles, envFilePath, parseEnv, repoRoot } from '@adminforge/config';
+import {
+  ADMIN_ENV_KEYS,
+  envFiles,
+  envFilePath,
+  overlayEnvFilePath,
+  OWNER_ENV_KEYS,
+  parseEnv,
+  repoRoot,
+} from '@adminforge/config';
 import { checkEnv, formatEnvReport, PURPOSES, type Purpose } from '../env/env-check';
 import { ConfigError } from '../shared/errors';
 import type { Out } from '../shared/output';
@@ -35,9 +43,10 @@ export function envCheck(out: Out, opts: { for?: string; env?: NodeJS.ProcessEnv
   const file = envFilePath(procEnv);
   const exampleText = readFileSync(path.join(repoRoot, 'config', 'example.env'), 'utf8');
   if (!existsSync(file)) out(`Env file not found: ${file} (copy config/example.env there and fill it in)`);
-  // The same layers the CLI reads: the env file, <env>.admin.env, and the overlay if ADMINFORGE_ENV_OVERLAY is set.
+  // The layers the CLI and migrations read: the env file, <env>.admin.env, the owner files and the overlay if
+  // ADMINFORGE_ENV_OVERLAY is set (key states only — values are never printed).
   const fileValues: Record<string, string> = {};
-  for (const f of envFiles(procEnv, { admin: true }))
+  for (const f of envFiles(procEnv, { admin: true, owner: true }))
     if (existsSync(f)) Object.assign(fileValues, parseEnv(readFileSync(f, 'utf8')));
   const report = checkEnv(exampleText, fileValues, procEnv);
   const { lines, ok } = formatEnvReport(report, file, parsePurposes(opts.for));
@@ -49,5 +58,15 @@ export function envCheck(out: Out, opts: { for?: string; env?: NodeJS.ProcessEnv
     out(
       `Move ${misplaced.join(', ')} from ${path.basename(file)} to ${path.basename(file).replace(/\.env$/, '')}.admin.env (mode 600): the services read ${path.basename(file)}, and only the CLI and live tests need these.`,
     );
+  // The database owner's credentials belong in the owner files, which only migrations and the database scripts read.
+  const overlay = overlayEnvFilePath(procEnv);
+  for (const f of [file, ...(overlay ? [overlay] : [])]) {
+    const values = existsSync(f) ? parseEnv(readFileSync(f, 'utf8')) : {};
+    const owner = OWNER_ENV_KEYS.filter((k) => values[k]);
+    if (owner.length)
+      out(
+        `Move ${owner.join(', ')} from ${path.basename(f)} to ${path.basename(f).replace(/\.env$/, '')}.owner.env (mode 600), or run \`pnpm db:harden\`: the services read ${path.basename(f)}, and only migrations need these.`,
+      );
+  }
   return ok;
 }

@@ -1,23 +1,28 @@
 import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
-import { missingLocalKeys } from '@adminforge/api/src/scripts/init-local';
+import { DEV_DATABASE, missingLocalKeys } from '@adminforge/api/src/scripts/init-local';
 import { committableFiles, parseEnvFile, readText, repoRoot } from '../../lib/repo';
 
-// portal/deploy/defaults.env is the one place for the local Postgres's container name, owner role, database and port.
+// portal/deploy/defaults.env is the one place for the local Postgres's container name, roles, databases and port.
 // Compose and the deploy shell scripts read it; what can't read it (config/example.env, init:local, the docs) must
 // agree with it — these tests say where to look when a value changes.
 const DEFAULTS = parseEnvFile(path.join(repoRoot, 'portal/deploy/defaults.env'));
 const read = (rel: string) => readFileSync(path.join(repoRoot, rel), 'utf8');
 
 describe('deploy defaults', () => {
-  it('define the container, owner role, database and port', () => {
+  it('define the container, the superuser, the owner roles, the databases and the port', () => {
     expect(Object.keys(DEFAULTS).sort()).toEqual([
       'AF_PG_CONTAINER',
       'AF_PG_DATABASE',
+      'AF_PG_DEV_DATABASE',
+      'AF_PG_DEV_USER',
+      'AF_PG_OWNER',
       'AF_PG_PORT',
       'AF_PG_USER',
     ]);
+    // The owners are never the bootstrap superuser.
+    expect(new Set([DEFAULTS.AF_PG_USER, DEFAULTS.AF_PG_OWNER, DEFAULTS.AF_PG_DEV_USER]).size).toBe(3);
     expect(DEFAULTS.AF_PG_PORT).toMatch(/^\d+$/);
   });
 
@@ -31,13 +36,14 @@ describe('deploy defaults', () => {
     expect(yaml).not.toMatch(/POSTGRES_(USER|DB): [a-z]/);
   });
 
-  it('are passed to compose first by pnpm db:up and db:down, so the env file can override them', () => {
+  it('are passed to compose first by pnpm db:up and db:down, so the env file (and its owner file) can override them', () => {
     const scripts = (JSON.parse(read('package.json')) as { scripts: Record<string, string> }).scripts;
-    for (const name of ['db:up', 'db:down']) {
-      expect(scripts[name]).toMatch(
-        /^docker compose --env-file portal\/deploy\/defaults\.env --env-file "\$\{ADMINFORGE_ENV_FILE:-[^}]+\}" -f portal\/deploy\/docker-compose\.dev\.yml /,
-      );
-    }
+    expect(scripts['db:up']).toBe('bash portal/deploy/db/compose.sh up -d --wait');
+    expect(scripts['db:down']).toBe('bash portal/deploy/db/compose.sh down');
+    const wrapper = read('portal/deploy/db/compose.sh');
+    expect(wrapper).toContain('args=(--env-file "$DEPLOY_DIR/defaults.env" --env-file "$ENV_FILE")');
+    expect(wrapper).toContain('[ -f "$OWNER_FILE" ] && args+=(--env-file "$OWNER_FILE")');
+    expect(wrapper).toContain('-f "$DEPLOY_DIR/docker-compose.dev.yml"');
   });
 
   it('are loaded by the deploy shell scripts instead of literals', () => {
@@ -52,18 +58,24 @@ describe('deploy defaults', () => {
     }
   });
 
-  it('match the DATABASE_URL of config/example.env and of init:local', () => {
+  it('match the development DATABASE_URL of config/example.env and of init:local (the dev owner, never the superuser)', () => {
     const expectUrl = (raw: string) => {
       const url = new URL(raw);
       expect([url.username, url.hostname, url.port, url.pathname]).toEqual([
-        DEFAULTS.AF_PG_USER,
+        DEFAULTS.AF_PG_DEV_USER,
         '127.0.0.1',
         DEFAULTS.AF_PG_PORT,
-        `/${DEFAULTS.AF_PG_DATABASE}`,
+        `/${DEFAULTS.AF_PG_DEV_DATABASE}`,
       ]);
     };
     expectUrl(parseEnvFile(path.join(repoRoot, 'config/example.env')).DATABASE_URL!);
     expectUrl(missingLocalKeys({}).DATABASE_URL!);
+    expect(DEV_DATABASE).toEqual({
+      user: DEFAULTS.AF_PG_DEV_USER,
+      database: DEFAULTS.AF_PG_DEV_DATABASE,
+      host: '127.0.0.1',
+      port: DEFAULTS.AF_PG_PORT,
+    });
   });
 
   it('match the container name and port the docs give', () => {

@@ -2,7 +2,7 @@ import type { ICacheClient, IPartitionManager } from '@azure/msal-node';
 import { eq } from 'drizzle-orm';
 import type { Db } from '../db/client';
 import { tokenCache } from '../db/schema';
-import { open, seal } from '../security/envelope';
+import { open, seal, type EnvelopeKey } from '../security/envelope';
 
 /** Raw storage of sealed blobs by partition key. */
 export interface SealedBlobStore {
@@ -25,7 +25,7 @@ export interface TokenCacheLogger {
 
 export function createTokenCache(
   store: SealedBlobStore,
-  key: Buffer,
+  key: EnvelopeKey,
   log?: TokenCacheLogger,
 ): TokenCacheStore {
   return {

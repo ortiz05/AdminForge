@@ -1,5 +1,5 @@
 import { parseArgs } from 'node:util';
-import { createContext, loadConfig, safeLogFields } from '@adminforge/api/tooling';
+import { assertDatabaseRole, createContext, loadConfig, safeLogFields } from '@adminforge/api/tooling';
 import { createRunsModule, createSchedulesModule } from '@adminforge/api/tooling/scheduler';
 import { openOneShot, PROBE_HEADER, probeLine, probeSummary, scheduleRunLines } from './one-shot';
 
@@ -89,7 +89,15 @@ if (!config.DATABASE_URL) {
   process.exit(1);
 }
 
-const ctx = createContext(config, {}, { warn: log.warn });
+const ctx = createContext(config, { databaseName: 'scheduler' }, { warn: log.warn });
+if (ctx.database)
+  await assertDatabaseRole(ctx.database, {
+    production: config.NODE_ENV === 'production',
+    warn: (msg) => log.warn({}, msg),
+  }).catch((err: unknown) => {
+    log.error({}, (err as Error).message);
+    process.exit(1);
+  });
 // Scheduled playbook runs are enqueued for the run worker (ROLE=worker); this process does not execute them.
 const runs = createRunsModule(ctx, { inProcessWorker: false, log });
 const schedules = createSchedulesModule(ctx, runs, { inProcess: true, log });

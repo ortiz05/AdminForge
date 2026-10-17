@@ -1,23 +1,22 @@
-import { missingLocalKeys } from '@adminforge/api/src/scripts/init-local';
+import { localKeys } from '@adminforge/api/src/scripts/init-local';
 
 // The onboarding path copies config/example.env and runs init:local: the example's CHANGE_ME placeholders must be
-// replaced, not reused as the Postgres password.
+// replaced, not reused as a password.
 describe('init:local with a copied example env file', () => {
-  it('replaces CHANGE_ME placeholders with generated, matching credentials', () => {
-    const add = missingLocalKeys({
-      DATABASE_URL: 'postgres://adminforge:CHANGE_ME@127.0.0.1:55432/adminforge',
+  it('replaces CHANGE_ME placeholders with generated credentials', () => {
+    const add = localKeys({
+      DATABASE_URL: 'postgres://adminforge_dev:CHANGE_ME@127.0.0.1:55432/adminforge_dev',
       POSTGRES_PASSWORD: 'CHANGE_ME',
     });
-    expect(add.POSTGRES_PASSWORD).toBeDefined();
-    expect(add.POSTGRES_PASSWORD).not.toContain('CHANGE_ME');
-    expect(add.DATABASE_URL).toBe(
-      `postgres://adminforge:${encodeURIComponent(add.POSTGRES_PASSWORD!)}@127.0.0.1:55432/adminforge`,
-    );
+    expect(add.env.DATABASE_URL).toBeDefined();
+    expect(add.env.DATABASE_URL).not.toContain('CHANGE_ME');
+    expect(add.owner.POSTGRES_PASSWORD).toBeDefined();
+    expect(add.owner.POSTGRES_PASSWORD).not.toContain('CHANGE_ME');
   });
 
-  it('still keeps a real password and only fills the missing half', () => {
-    const add = missingLocalKeys({ POSTGRES_PASSWORD: 'real-secret', DATABASE_URL: 'CHANGE_ME' });
-    expect(add.POSTGRES_PASSWORD).toBeUndefined();
-    expect(add.DATABASE_URL).toBe('postgres://adminforge:real-secret@127.0.0.1:55432/adminforge');
+  it('still keeps a real value and only fills the missing one', () => {
+    const add = localKeys({ POSTGRES_PASSWORD: 'real-secret', DATABASE_URL: 'CHANGE_ME' });
+    expect(add.owner).toEqual({});
+    expect(add.env.DATABASE_URL).toMatch(/^postgres:\/\/adminforge_dev:[^@]+@127\.0\.0\.1:55432\/adminforge_dev$/);
   });
 });

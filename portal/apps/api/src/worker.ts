@@ -1,6 +1,7 @@
 import { loadConfig } from './config';
 import { safeLogFields } from './logging';
 import { createContext } from './context';
+import { assertDatabaseRole } from './db/client';
 import { createRunsModule } from './runs/module';
 
 /**
@@ -30,7 +31,15 @@ if (!config.DATABASE_URL) {
   process.exit(1);
 }
 const concurrency = config.RUN_WORKER_CONCURRENCY;
-const ctx = createContext(config, {}, { warn: log.warn });
+const ctx = createContext(config, { databaseName: 'worker' }, { warn: log.warn });
+if (ctx.database)
+  await assertDatabaseRole(ctx.database, {
+    production: config.NODE_ENV === 'production',
+    warn: (msg) => log.warn({}, msg),
+  }).catch((err: unknown) => {
+    log.error({}, (err as Error).message);
+    process.exit(1);
+  });
 // serveSecrets: false — this process only publishes show-once secrets (sealed NOTIFY) to the API process(es).
 const runs = createRunsModule(ctx, {
   inProcessWorker: true,

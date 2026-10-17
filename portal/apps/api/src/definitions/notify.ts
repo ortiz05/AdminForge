@@ -1,4 +1,5 @@
 import pg from 'pg';
+import { connectionConfig } from '../db/client';
 
 export interface ListenerOptions {
   /** Called after every (re)connect: notifications sent while disconnected are lost, so callers resync. */
@@ -39,7 +40,7 @@ export class PgListener {
 
   private async connect(): Promise<void> {
     if (this.stopped) return;
-    const client = new pg.Client({ connectionString: this.url, connectionTimeoutMillis: 5_000 });
+    const client = new pg.Client(connectionConfig(this.url, { name: `listen-${this.channel}` }));
     const retry = () => {
       if (this.client === client) this.client = null;
       client.removeAllListeners();

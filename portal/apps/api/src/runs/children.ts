@@ -158,7 +158,7 @@ export class RunChildRunner implements ChildRunner {
     const required = def.requires?.portalRoles ?? [];
     if (!required.length) return;
     const who = actor.upn ?? 'The engineer running this';
-    const session = await this.deps.identity.liveSession(sessionHash);
+    const session = await this.deps.identity.liveSession(sessionHash, {}, actor.oid ?? null);
     if (!session)
       throw new IdentityUnavailable('reauth', `${who} needs to sign in again, then resume the run.`);
     const missing = required.filter((r) => !session.roles.includes(r));

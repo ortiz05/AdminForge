@@ -10,5 +10,8 @@ After=network-online.target
 Type=oneshot
 ExecStart=%h/AdminForge/portal/deploy/backup/adminforge-backup.sh
 Environment=PATH=/usr/local/bin:/usr/bin:/bin
+# Backups are encrypted: put the recipient in a drop-in (systemctl --user edit adminforge-backup.service):
+#   Environment=AF_BACKUP_GPG_RECIPIENT=<key fingerprint; its private half kept off this host>
+# Without one the backup fails, unless the drop-in accepts plaintext explicitly: Environment=AF_BACKUP_ALLOW_PLAINTEXT=1
 NoNewPrivileges=true
 UMask=0077

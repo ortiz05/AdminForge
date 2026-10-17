@@ -1,4 +1,4 @@
-import { asc, desc, sql } from 'drizzle-orm';
+import { asc, desc, gt, sql } from 'drizzle-orm';
 import type { Db } from '../db/client';
 import { auditEvents } from '../db/schema';
 import { chainHash, GENESIS, verifyChain } from './chain';
@@ -46,10 +46,31 @@ export interface AuditRow extends AuditEvent {
   hash: string;
 }
 
+export type VerifyResult =
+  | { ok: true; count: number; /** The tail when the walk ended (absent for an empty chain). */ tail?: Checkpoint }
+  | { ok: false; brokenAt: number; seq: number };
+
+/** A point in the chain: the last verified event's seq and hash. */
+export interface Checkpoint {
+  seq: number;
+  hash: string;
+}
+
+/**
+ * Where a verified tail is recorded outside the database (the external anchor): by default one JSON line on stdout,
+ * which journald keeps for the host services. Someone who rewrites the table can re-hash the chain, but not the
+ * checkpoints already in the journal (or forwarded off-host): compare them with `adminforge audit verify`.
+ */
+export type CheckpointSink = (checkpoint: Checkpoint & { count: number; ts: string }) => void;
+
+export const stdoutCheckpoints: CheckpointSink = (cp) => {
+  process.stdout.write(`${JSON.stringify({ level: 'info', msg: 'audit chain checkpoint', ...cp })}\n`);
+};
+
 export interface AuditWriter {
   append(input: AuditInput): Promise<AuditRow>;
   /** Re-walks the whole chain (the Audit page, `adminforge audit verify`, and the probes.audit-chain check). */
-  verify(): Promise<{ ok: true; count: number } | { ok: false; brokenAt: number; seq: number }>;
+  verify(): Promise<VerifyResult>;
 }
 
 export function toAuditEvent(input: AuditInput, now: Date): AuditEvent {
@@ -72,12 +93,18 @@ export function toAuditEvent(input: AuditInput, now: Date): AuditEvent {
 
 const eventOf = ({ seq: _seq, prevHash: _p, hash: _h, ...event }: AuditRow): AuditEvent => event;
 
-function verifyRows(rows: AuditRow[]) {
-  const res = verifyChain(rows.map((r) => ({ ...eventOf(r), prevHash: r.prevHash, hash: r.hash })));
-  return res.ok
-    ? { ok: true as const, count: rows.length }
-    : { ok: false as const, brokenAt: res.brokenAt, seq: rows[res.brokenAt]!.seq };
+function verifyRows(rows: AuditRow[], genesis = GENESIS, offset = 0): VerifyResult {
+  const res = verifyChain(
+    rows.map((r) => ({ ...eventOf(r), prevHash: r.prevHash, hash: r.hash })),
+    genesis,
+  );
+  if (!res.ok) return { ok: false, brokenAt: offset + res.brokenAt, seq: rows[res.brokenAt]!.seq };
+  const last = rows.at(-1);
+  return { ok: true, count: rows.length, ...(last ? { tail: { seq: last.seq, hash: last.hash } } : {}) };
 }
+
+/** Rows per round trip when walking the chain: memory stays flat however long the audit log grows. */
+export const VERIFY_BATCH = 2_000;
 
 /** Lock key shared by every writer of the chain (pg_advisory_xact_lock). */
 const AUDIT_LOCK = sql`select pg_advisory_xact_lock(hashtext('adminforge.audit_events'))`;
@@ -86,6 +113,8 @@ export class PgAuditWriter implements AuditWriter {
   constructor(
     private readonly db: Db,
     private readonly now: () => Date = () => new Date(),
+    private readonly checkpoints: CheckpointSink | null = stdoutCheckpoints,
+    private readonly batch = VERIFY_BATCH,
   ) {}
 
   async append(input: AuditInput): Promise<AuditRow> {
@@ -108,15 +137,38 @@ export class PgAuditWriter implements AuditWriter {
     });
   }
 
-  async verify() {
-    const rows = await this.db.select().from(auditEvents).orderBy(asc(auditEvents.seq));
-    return verifyRows(
-      rows.map((r) => ({
-        ...r,
-        ts: r.ts.toISOString(),
-        details: (r.details as Record<string, unknown> | null) ?? null,
-      })),
-    );
+  /** Walks the chain in seq order, `batch` rows at a time (keyset paging), then records the verified tail. */
+  async verify(): Promise<VerifyResult> {
+    let prev = GENESIS;
+    let after = 0;
+    let count = 0;
+    let tail: Checkpoint | undefined;
+    for (;;) {
+      const rows = await this.db
+        .select()
+        .from(auditEvents)
+        .where(gt(auditEvents.seq, after))
+        .orderBy(asc(auditEvents.seq))
+        .limit(this.batch);
+      if (!rows.length) break;
+      const res = verifyRows(
+        rows.map((r) => ({
+          ...r,
+          ts: r.ts.toISOString(),
+          details: (r.details as Record<string, unknown> | null) ?? null,
+        })),
+        prev,
+        count,
+      );
+      if (!res.ok) return res;
+      count += res.count;
+      tail = res.tail;
+      prev = tail!.hash;
+      after = tail!.seq;
+      if (rows.length < this.batch) break;
+    }
+    if (tail) this.checkpoints?.({ ...tail, count, ts: this.now().toISOString() });
+    return { ok: true, count, ...(tail ? { tail } : {}) };
   }
 }
 

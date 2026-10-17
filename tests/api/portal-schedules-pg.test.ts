@@ -57,10 +57,10 @@ describe.skipIf(!url)('portal report schedules on Postgres', () => {
     });
   });
   beforeEach(async () => {
-    await db.pool.query('truncate schedules, schedule_runs');
+    await db.pool.query('truncate schedules, schedule_runs cascade');
   });
   afterAll(async () => {
-    await db.pool.query('truncate schedules, schedule_runs');
+    await db.pool.query('truncate schedules, schedule_runs cascade');
     await db.close();
     rmSync(dir, { recursive: true, force: true });
   });

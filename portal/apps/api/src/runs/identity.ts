@@ -53,16 +53,26 @@ export class SessionIdentityResolver implements IdentityResolver {
 
   /**
    * The live session for a hash with its roles confirmed, or null when it is gone, expired or idle — or ended by the
-   * role re-check (no AdminForge role left, account disabled or a guest, roles unconfirmed for too long).
+   * role re-check (no AdminForge role left, account disabled or a guest, roles unconfirmed for too long). With
+   * `expectOid`, also null when the session belongs to someone else: a session hash recorded for a person (as initiator
+   * or on their approval decision) only ever acts as that person, whatever the stored row says.
    */
   async liveSession(
     hash: string | null,
     origin: { correlationId?: string; runId?: string } = {},
+    expectOid?: string | null,
   ): Promise<SessionRecord | null> {
     if (!hash) return null;
     const s = await this.sessions.get(hash);
     const at = this.now();
     const now = at.getTime();
+    if (s && expectOid !== undefined && s.userOid !== expectOid) {
+      this.opts.log?.warn(
+        { runId: origin.runId },
+        'a run step was bound to a session of another person; refusing to act with it',
+      );
+      return null;
+    }
     if (
       !s ||
       s.expiresAt.getTime() <= now ||
@@ -85,10 +95,11 @@ export class SessionIdentityResolver implements IdentityResolver {
     if (run.identity === 'automation')
       return { actor, mode, handle: { kind: 'automation', mode } satisfies ExecutionIdentity };
     const who = actor.upn ?? 'The engineer running this';
-    const session = await this.liveSession(await this.sessionFor(run.id, actor), {
-      correlationId: run.correlationId,
-      runId: run.id,
-    });
+    const session = await this.liveSession(
+      await this.sessionFor(run.id, actor),
+      { correlationId: run.correlationId, runId: run.id },
+      actor.oid ?? null,
+    );
     if (!session)
       throw new IdentityUnavailable('reauth', `${who} needs to sign in again, then resume the run.`);
     if (mode === 'write' && !isArmed(session, this.now()))

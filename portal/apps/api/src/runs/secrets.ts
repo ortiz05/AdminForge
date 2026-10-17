@@ -2,7 +2,7 @@ import type { SecretDelivery, SecretSink } from '@adminforge/engine';
 import type { AuditWriter } from '../audit/writer';
 import type { Database } from '../db/client';
 import { PgListener } from '../definitions/notify';
-import { open, seal } from '../security/envelope';
+import { open, seal, type EnvelopeKey } from '../security/envelope';
 import { rootOf } from './run-worker';
 import type { RunRepository } from './types';
 
@@ -79,8 +79,8 @@ export class SecretBroker {
     private readonly deps: {
       repo: RunRepository;
       audit: AuditWriter;
-      /** 32-byte envelope key (TOKEN_CACHE_KEY) for the cross-process hand-off. */
-      key: Buffer;
+      /** 32-byte envelope key (TOKEN_CACHE_KEY, with any previous keys) for the cross-process hand-off. */
+      key: EnvelopeKey;
       /** Postgres for NOTIFY; null keeps everything in this process. */
       database: Database | null;
       listenUrl?: string | null;

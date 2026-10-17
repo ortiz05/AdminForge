@@ -11,13 +11,17 @@ import type { Out } from '../shared/output';
 
 /** The audit chain a verify walks (injected in tests; default: the database at DATABASE_URL). */
 export interface AuditChain {
-  verify(): Promise<{ ok: true; count: number } | { ok: false; brokenAt: number; seq: number }>;
+  verify(): Promise<
+    | { ok: true; count: number; tail?: { seq: number; hash: string } }
+    | { ok: false; brokenAt: number; seq: number }
+  >;
   close(): Promise<void>;
 }
 
 function openAuditChain(url: string): AuditChain {
-  const database = createDatabase(url, { max: 1 });
-  const writer = new PgAuditWriter(database.db);
+  const database = createDatabase(url, { max: 1, name: 'cli' });
+  // The verdict is printed here; the services' own verifications write the journal's checkpoint lines.
+  const writer = new PgAuditWriter(database.db, undefined, null);
   return { verify: () => writer.verify(), close: () => database.close() };
 }
 
@@ -34,6 +38,11 @@ export async function auditVerify(
     const result = await chain.verify();
     if (result.ok) {
       out(`✓ Audit chain verified: ${result.count} event(s), every hash links to the one before it.`);
+      // The external anchor: earlier "audit chain checkpoint" lines in the services' journal must agree with this chain.
+      if (result.tail)
+        out(
+          `  Tail: seq ${result.tail.seq}, hash ${result.tail.hash}. Compare with the checkpoints the services logged (the audit-chain probe runs in the scheduler, the Audit page in the API): journalctl --user -u adminforge-scheduler -u adminforge-api | grep 'audit chain checkpoint'.`,
+        );
       return true;
     }
     out(

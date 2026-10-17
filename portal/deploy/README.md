@@ -3,17 +3,20 @@
 Everything needed to run AdminForge as services on one Linux host: systemd user units, the local Postgres, the
 least-privilege database role, backups and the LAN proxy.
 
-| Path                          | What                                                                                              |
-| ----------------------------- | ------------------------------------------------------------------------------------------------- |
-| `defaults.env`                | Deploy constants: Postgres container name, owner role, database, port ([below](#deploy-defaults)) |
-| `lib/defaults.sh`             | Loads `defaults.env` into the shell scripts (environment values win; only `AF_PG_*` keys allowed) |
-| `docker-compose.dev.yml`      | The Postgres container (`pnpm db:up` / `pnpm db:down`)                                            |
-| `install-units.sh`            | Installs the systemd user units, pointed at this checkout                                         |
-| `systemd/`                    | Unit templates (`%h/AdminForge` = the checkout) and `hardening.conf`, every unit's drop-in        |
-| `db/create-app-role.sh`       | The services' least-privilege database role (`adminforge_app`) and their two URLs                 |
-| `db/app-role-grants.sql`      | The grants that role gets (applied by the script and by `tests/api/app-role-pg.test.ts`)          |
-| `backup/adminforge-backup.sh` | Daily backup (run by `adminforge-backup.timer`)                                                   |
-| `caddy/Caddyfile.example`     | TLS reverse proxy for LAN access                                                                  |
+| Path                          | What                                                                                                |
+| ----------------------------- | --------------------------------------------------------------------------------------------------- |
+| `defaults.env`                | Deploy constants: Postgres container name, owner role, database, port ([below](#deploy-defaults))   |
+| `lib/defaults.sh`             | Loads `defaults.env` into the shell scripts (environment values win; only `AF_PG_*` keys allowed)   |
+| `docker-compose.dev.yml`      | The Postgres container (`pnpm db:up` / `pnpm db:down`)                                              |
+| `install-units.sh`            | Installs the systemd user units, pointed at this checkout                                           |
+| `systemd/`                    | Unit templates (`%h/AdminForge` = the checkout) and `hardening.conf`, every unit's drop-in          |
+| `db/create-app-role.sh`       | The services' least-privilege database role (`adminforge_app`) and their two URLs                   |
+| `db/harden-postgres.sh`       | `pnpm db:harden`: non-superuser owners, the app role's limits, PUBLIC closed, superuser socket-only |
+| `db/compose.sh`               | `pnpm db:up` / `db:down`: compose with defaults.env, your env file and its owner file               |
+| `db/initdb/`                  | New clusters: the superuser may not sign in over TCP (also applied by `db:harden`)                  |
+| `db/app-role-grants.sql`      | The grants that role gets (applied by the script and by `tests/api/app-role-pg.test.ts`)            |
+| `backup/adminforge-backup.sh` | Daily backup (run by `adminforge-backup.timer`)                                                     |
+| `caddy/Caddyfile.example`     | TLS reverse proxy for LAN access                                                                    |
 
 Conventions: shell scripts are bash with `set -euo pipefail` and a header saying what they do, what they read and what
 they print (names and sizes, never values or secrets); every script has a test under `tests/unit/deploy/` that runs it
@@ -39,8 +42,8 @@ Configuration lives outside the repository in `~/.config/adminforge/` (mode 700,
 | `dev.runner.env` | runner only (`EnvironmentFile=`)             | `RUNNER_SHARED_KEY`                                                       |
 
 On a host that also runs `pnpm dev`, keep the two apart: the services use the `adminforge` database (its URL in
-`dev.host.env`), and `dev.env` points at a second one, `adminforge_dev`
-(`docker exec adminforge-dev-postgres-1 createdb -U adminforge adminforge_dev`). Migrate both
+`dev.host.env`), and `dev.env` points at a second one, `adminforge_dev`, owned by its own role (`pnpm db:harden`
+creates both). Migrate both
 (`pnpm --filter @adminforge/api db:migrate`, then the same with `ADMINFORGE_ENV_OVERLAY=host`) and publish content to
 the services' database with `ADMINFORGE_ENV_OVERLAY=host pnpm adminforge publish`.
 
@@ -48,24 +51,29 @@ the services' database with `ADMINFORGE_ENV_OVERLAY=host pnpm adminforge publish
 
 ```sh
 pnpm db:up                                   # Postgres 18 in Docker on 127.0.0.1:55432 (docker-compose.dev.yml)
+pnpm db:harden --dry-run && pnpm db:harden   # roles and limits (docs/operations.md → Postgres hardening)
 pnpm --filter @adminforge/api db:migrate     # tables, including schedules / schedule_runs / probe_results
 pnpm db:down                                 # stop it (the data stays in the adminforge-dev_pgdata volume)
 ```
 
-`pnpm db:up` passes `defaults.env` and then your env file (`ADMINFORGE_ENV_FILE`, default `~/.config/adminforge/dev.env`,
-which holds `POSTGRES_PASSWORD` from `init:local`) to compose. Run compose through those scripts: on its own it refuses
-to start without the defaults.
+`pnpm db:up` (`db/compose.sh`) passes `defaults.env`, then your env file (`ADMINFORGE_ENV_FILE`, default
+`~/.config/adminforge/dev.env`) and, when it exists, its owner file (`dev.owner.env`, which holds `POSTGRES_PASSWORD`
+from `init:local` — compose reads it only when it creates a new cluster). Run compose through those scripts: on its own
+it refuses to start without the defaults.
 
 ### Deploy defaults
 
 `defaults.env` is the one place for the local Postgres's names and port:
 
-| Key               | Default                     | Used by                                                                                      |
-| ----------------- | --------------------------- | -------------------------------------------------------------------------------------------- |
-| `AF_PG_CONTAINER` | `adminforge-dev-postgres-1` | `docker exec` in the backup and app-role scripts (compose derives the name from its project) |
-| `AF_PG_USER`      | `adminforge`                | The owner role compose creates; `pg_dump -U` in the backup                                   |
-| `AF_PG_DATABASE`  | `adminforge`                | The database compose creates; the one the backup dumps                                       |
-| `AF_PG_PORT`      | `55432`                     | The loopback port compose publishes                                                          |
+| Key                  | Default                     | Used by                                                                                      |
+| -------------------- | --------------------------- | -------------------------------------------------------------------------------------------- |
+| `AF_PG_CONTAINER`    | `adminforge-dev-postgres-1` | `docker exec` in the backup and app-role scripts (compose derives the name from its project) |
+| `AF_PG_USER`         | `adminforge`                | The superuser compose creates (socket only); `pg_dump -U` in the backup, `docker exec psql`  |
+| `AF_PG_DATABASE`     | `adminforge`                | The services' database compose creates; the one the backup dumps                             |
+| `AF_PG_OWNER`        | `adminforge_owner`          | Owns the services' database and runs its migrations (`db:harden`)                            |
+| `AF_PG_DEV_USER`     | `adminforge_dev`            | Owns the dev and test databases (`pnpm dev`, the DB tests)                                   |
+| `AF_PG_DEV_DATABASE` | `adminforge_dev`            | The development database                                                                     |
+| `AF_PG_PORT`         | `55432`                     | The loopback port compose publishes                                                          |
 
 Any of them can be overridden from the environment (or, for compose, your env file). `config/example.env`'s
 `DATABASE_URL`, `init:local` and the docs can't read the file; `tests/unit/deploy/deploy-defaults.test.ts` fails when
@@ -74,7 +82,7 @@ they disagree with it, so change them in the same commit.
 ### The services' database role
 
 The host services connect as `adminforge_app` (row access only, no DDL, insert/select only on the audit log); migrations
-keep using the owner through `DATABASE_MIGRATION_URL`. Create it, or rotate its password, against the services' env
+use the owner through `DATABASE_MIGRATION_URL` in the owner file (`dev.host.owner.env`). Create it, or rotate its password, against the services' env
 file — the script prints key names only, never values:
 
 ```sh
@@ -83,15 +91,18 @@ portal/deploy/db/create-app-role.sh ~/.config/adminforge/dev.host.env --rotate
 systemctl --user restart adminforge-api adminforge-worker adminforge-scheduler
 ```
 
-It reads the owner from `DATABASE_MIGRATION_URL` (else `DATABASE_URL`), runs SQL in `AF_DB_CONTAINER` (else
-`AF_PG_CONTAINER`) with passwords on stdin, applies `db/app-role-grants.sql`, and rewrites the two URLs in place.
+It reads the owner from the owner file's `DATABASE_MIGRATION_URL` (else the env file's, else `DATABASE_URL`), runs SQL
+in `AF_DB_CONTAINER` (else `AF_PG_CONTAINER`) as the container's superuser over its socket with passwords on stdin,
+applies `db/app-role-grants.sql`, and writes `DATABASE_URL` to the env file and `DATABASE_MIGRATION_URL` to the owner
+file. Then run `pnpm db:harden` (limits, ownership, `pg_hba`).
 
 ### Backups
 
 `adminforge-backup.timer` runs `backup/adminforge-backup.sh` daily at 02:30: a `pg_dump` of the services' database
 (without the rows of the credential tables `sessions`, `preauth` and `token_cache`), the services' configuration (never
-`*.admin.env`) and report/Caddy data, into `~/adminforge-backups/<UTC timestamp>/` (mode 700, files 600), optionally
-encrypted to an off-host GPG key. Install it with `portal/deploy/install-units.sh backup`, then
+`*.admin.env`, never the database owner's credentials) and report/Caddy data, into `~/adminforge-backups/<UTC
+timestamp>/` (mode 700, files 600), encrypted to an off-host GPG key — it refuses to run without one unless
+`AF_BACKUP_ALLOW_PLAINTEXT=1`. Install it with `portal/deploy/install-units.sh backup`, then
 `systemctl --user enable --now adminforge-backup.timer`. Settings (`AF_BACKUP_*`), encryption, restore and the restore
 drill: [docs/operations.md](../../docs/operations.md#backup-and-restore).
 

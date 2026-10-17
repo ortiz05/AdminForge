@@ -64,6 +64,27 @@
       "when": 1792181110056,
       "tag": "0008_definitions_body_json",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1792206670664,
+      "tag": "0009_integrity",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1792206706564,
+      "tag": "0010_approvals_append_only",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1792210541645,
+      "tag": "0011_approvals_integrity",
+      "breakpoints": true
     }
   ]
 }

@@ -1,7 +1,9 @@
 import { sql } from 'drizzle-orm';
 import {
+  type AnyPgColumn,
   bigserial,
   boolean,
+  check,
   doublePrecision,
   index,
   integer,
@@ -16,6 +18,52 @@ import {
 } from 'drizzle-orm/pg-core';
 
 const ts = (name: string) => timestamp(name, { withTimezone: true, mode: 'date' });
+
+/**
+ * Status values the database accepts (CHECK constraints, migration 0009). They mirror the code's own lists —
+ * RUN_STATUSES / STEP_STATUSES (@adminforge/engine), SCHEDULE_RUN_STATUSES and TaskStatus (apps/api) — and
+ * tests/unit/api/db-status-checks.test.ts keeps them equal: a new status needs a migration (`pnpm db:generate`).
+ */
+export const DB_RUN_STATUSES = [
+  'queued',
+  'running',
+  'awaiting_approval',
+  'awaiting_input',
+  'awaiting_arm',
+  'awaiting_reauth',
+  'succeeded',
+  'failed',
+  'cancelled',
+  'compensated',
+  'needs_review',
+] as const;
+export const DB_STEP_STATUSES = [
+  'running',
+  'waiting',
+  'succeeded',
+  'failed',
+  'skipped',
+  'planned',
+  'retried',
+  'cancelled',
+  'compensated',
+  'needs_review',
+] as const;
+export const DB_SCHEDULE_RUN_STATUSES = [
+  'queued',
+  'running',
+  'succeeded',
+  'failed',
+  'timeout',
+  'skipped',
+] as const;
+export const DB_APPROVAL_STATUSES = ['pending', 'approved', 'rejected', 'expired', 'cancelled'] as const;
+export const DB_PROBE_STATUSES = ['ok', 'warn', 'crit', 'error'] as const;
+export const DB_DEFINITION_STATUSES = ['draft', 'in_review', 'published', 'retired'] as const;
+
+/** `<column> in ('a', 'b', …)` for a CHECK constraint (the values are the fixed lists above, never input). */
+const oneOf = (column: AnyPgColumn, values: readonly string[]) =>
+  sql`${column} in (${sql.raw(values.map((v) => `'${v}'`).join(', '))})`;
 
 /** Signed-in sessions. The cookie carries a random id; only sha256(id) is stored (§5.5). */
 export const sessions = pgTable(
@@ -143,6 +191,7 @@ export const definitions = pgTable(
   (t) => [
     unique('definitions_kind_key_version').on(t.kind, t.key, t.version),
     index('definitions_lookup_idx').on(t.kind, t.key, t.status),
+    check('definitions_status_check', oneOf(t.status, DB_DEFINITION_STATUSES)),
   ],
 );
 
@@ -182,8 +231,9 @@ export const runs = pgTable(
     initiatorOid: text('initiator_oid'),
     initiatorUpn: text('initiator_upn'),
     sessionHash: text('session_hash'),
-    scheduleId: uuid('schedule_id'),
-    parentRunId: uuid('parent_run_id'),
+    // A purged schedule or parent leaves the run's history in place (retention removes runs on its own clock).
+    scheduleId: uuid('schedule_id').references((): AnyPgColumn => schedules.id, { onDelete: 'set null' }),
+    parentRunId: uuid('parent_run_id').references((): AnyPgColumn => runs.id, { onDelete: 'set null' }),
     inputs: jsonb('inputs').notNull().default({}),
     outputs: jsonb('outputs'),
     error: jsonb('error'),
@@ -200,6 +250,7 @@ export const runs = pgTable(
     // Child runs of a parent (bulk items, nested playbooks) and retention by age.
     index('runs_parent_idx').on(t.parentRunId),
     index('runs_created_idx').on(t.createdAt),
+    check('runs_status_check', oneOf(t.status, DB_RUN_STATUSES)),
   ],
 );
 
@@ -207,7 +258,9 @@ export const runs = pgTable(
 export const runSteps = pgTable(
   'run_steps',
   {
-    runId: uuid('run_id').notNull(),
+    runId: uuid('run_id')
+      .notNull()
+      .references(() => runs.id, { onDelete: 'cascade' }),
     seq: integer('seq').notNull(),
     stepId: text('step_id').notNull(),
     /** Dotted path for nested steps, e.g. "loop[3].disable" */
@@ -225,7 +278,10 @@ export const runSteps = pgTable(
     startedAt: ts('started_at'),
     endedAt: ts('ended_at'),
   },
-  (t) => [primaryKey({ columns: [t.runId, t.seq] })],
+  (t) => [
+    primaryKey({ columns: [t.runId, t.seq] }),
+    check('run_steps_status_check', oneOf(t.status, DB_STEP_STATUSES)),
+  ],
 );
 
 /** Streamed step events (logs, progress, outputs) — also written by the PowerShell runner bridge. */
@@ -233,7 +289,9 @@ export const runStepEvents = pgTable(
   'run_step_events',
   {
     id: bigserial('id', { mode: 'number' }).primaryKey(),
-    runId: uuid('run_id').notNull(),
+    runId: uuid('run_id')
+      .notNull()
+      .references(() => runs.id, { onDelete: 'cascade' }),
     stepSeq: integer('step_seq'),
     ts: ts('ts').notNull().defaultNow(),
     /** log | progress | output | status */
@@ -265,48 +323,59 @@ export const approvals = pgTable(
   (t) => [
     index('approvals_subject_idx').on(t.subjectType, t.subjectId),
     index('approvals_status_idx').on(t.status),
+    check('approvals_status_check', oneOf(t.status, DB_APPROVAL_STATUSES)),
   ],
 );
 
 /** Schedules executed on this host by the scheduler (R6, ADR-011). */
-export const schedules = pgTable('schedules', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  key: text('key').notNull().unique(),
-  /** content (portal/content/schedules) | portal (created in the UI / Forge assistant) */
-  source: text('source').notNull(),
-  definition: jsonb('definition').notNull(),
-  sha256: text('sha256').notNull(),
-  enabled: boolean('enabled').notNull().default(false),
-  createdBy: text('created_by'),
-  approvedBy: text('approved_by'),
-  /** Fingerprint of the playbook (and its child playbooks) the approval covered; a changed playbook voids it. */
-  approvedTarget: text('approved_target'),
-  nextRunAt: ts('next_run_at'),
-  lastRunAt: ts('last_run_at'),
-  lastStatus: text('last_status'),
-  createdAt: ts('created_at').notNull().defaultNow(),
-  updatedAt: ts('updated_at').notNull().defaultNow(),
-});
+export const schedules = pgTable(
+  'schedules',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    key: text('key').notNull().unique(),
+    /** content (portal/content/schedules) | portal (created in the UI / Forge assistant) */
+    source: text('source').notNull(),
+    definition: jsonb('definition').notNull(),
+    sha256: text('sha256').notNull(),
+    enabled: boolean('enabled').notNull().default(false),
+    createdBy: text('created_by'),
+    approvedBy: text('approved_by'),
+    /** Fingerprint of the playbook (and its child playbooks) the approval covered; a changed playbook voids it. */
+    approvedTarget: text('approved_target'),
+    nextRunAt: ts('next_run_at'),
+    lastRunAt: ts('last_run_at'),
+    lastStatus: text('last_status'),
+    createdAt: ts('created_at').notNull().defaultNow(),
+    updatedAt: ts('updated_at').notNull().defaultNow(),
+  },
+  (t) => [check('schedules_last_status_check', oneOf(t.lastStatus, DB_SCHEDULE_RUN_STATUSES))],
+);
 
 /** Every execution of a schedule (cron or "run now"). */
 export const scheduleRuns = pgTable(
   'schedule_runs',
   {
     id: uuid('id').primaryKey().defaultRandom(),
-    scheduleId: uuid('schedule_id').notNull(),
+    // NO ACTION: a schedule with history can't be deleted (retention removes portal schedules only once it has none).
+    scheduleId: uuid('schedule_id')
+      .notNull()
+      .references(() => schedules.id),
     scheduleKey: text('schedule_key').notNull(),
     /** cron | manual | retry */
     trigger: text('trigger').notNull(),
     /** running | succeeded | failed | timeout | skipped */
     status: text('status').notNull(),
-    runId: uuid('run_id'),
+    runId: uuid('run_id').references(() => runs.id, { onDelete: 'set null' }),
     result: jsonb('result'),
     error: jsonb('error'),
     artifactPath: text('artifact_path'),
     startedAt: ts('started_at').notNull().defaultNow(),
     endedAt: ts('ended_at'),
   },
-  (t) => [index('schedule_runs_schedule_idx').on(t.scheduleId, t.startedAt)],
+  (t) => [
+    index('schedule_runs_schedule_idx').on(t.scheduleId, t.startedAt),
+    check('schedule_runs_status_check', oneOf(t.status, DB_SCHEDULE_RUN_STATUSES)),
+  ],
 );
 
 /** Synthetic probe results (time series for monitoring dashboards). */
@@ -322,9 +391,14 @@ export const probeResults = pgTable(
     durationMs: integer('duration_ms'),
     message: text('message'),
     details: jsonb('details'),
-    scheduleRunId: uuid('schedule_run_id'),
+    scheduleRunId: uuid('schedule_run_id').references((): AnyPgColumn => scheduleRuns.id, {
+      onDelete: 'set null',
+    }),
   },
-  (t) => [index('probe_results_probe_ts_idx').on(t.probeKey, t.ts)],
+  (t) => [
+    index('probe_results_probe_ts_idx').on(t.probeKey, t.ts),
+    check('probe_results_status_check', oneOf(t.status, DB_PROBE_STATUSES)),
+  ],
 );
 
 /**

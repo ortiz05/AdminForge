@@ -79,7 +79,7 @@ describe('audit chain', () => {
     });
     expect(first.prevHash).toBe(GENESIS);
     expect(second.prevHash).toBe(first.hash);
-    expect(await writer.verify()).toEqual({ ok: true, count: 2 });
+    expect(await writer.verify()).toMatchObject({ ok: true, count: 2 });
     writer.rows[0]!.actorOid = 'someone-else';
     expect(await writer.verify()).toEqual({ ok: false, brokenAt: 0, seq: 1 });
   });

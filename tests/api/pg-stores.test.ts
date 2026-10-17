@@ -123,7 +123,8 @@ describe.skipIf(!url)('Postgres-backed stores', () => {
     );
     expect(rows).toHaveLength(1);
     expect(rows[0]!.sealed).not.toContain('refresh-token-plaintext');
-    expect(rows[0]!.sealed.startsWith('1.')).toBe(true);
+    // Envelope v2: sealed with a named key (security/envelope.ts), so TOKEN_CACHE_KEY can rotate.
+    expect(rows[0]!.sealed.startsWith('2.')).toBe(true);
 
     // A blob copied to another session's partition does not open (AAD = partition key).
     await blobs.set('read:other', rows[0]!.sealed);
@@ -204,7 +205,7 @@ describe.skipIf(!url)('Postgres-backed stores', () => {
     );
     const ordered = rows.reverse();
     for (let i = 1; i < ordered.length; i++) expect(ordered[i]!.prev_hash).toBe(ordered[i - 1]!.hash);
-    expect(await writer.verify()).toEqual({ ok: true, count: Number(before.rows[0]!.n) + 12 });
+    expect(await writer.verify()).toMatchObject({ ok: true, count: Number(before.rows[0]!.n) + 12 });
 
     await expect(
       database.pool.query("update audit_events set result = 'tampered' where seq = $1", [seqs[0]]),

@@ -1,4 +1,5 @@
 import pg from 'pg';
+import { connectionConfig } from '../db/client';
 
 /**
  * Single active scheduler (R6): leader election with a Postgres session-level advisory lock held on a dedicated
@@ -146,11 +147,7 @@ export function pgAdvisoryLock(url: string, name = SCHEDULER_LOCK_NAME): LeaderL
     if (client && !broken) return client;
     await drop();
     broken = false;
-    const c = new pg.Client({
-      connectionString: url,
-      connectionTimeoutMillis: 5_000,
-      application_name: 'adminforge-scheduler-lock',
-    });
+    const c = new pg.Client(connectionConfig(url, { name: 'scheduler-lock' }));
     c.on('error', () => {
       broken = true;
     });

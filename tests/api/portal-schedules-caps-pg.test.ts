@@ -43,10 +43,10 @@ describe.skipIf(!url)('portal schedules on Postgres: caps and housekeeping', () 
     store = new PgScheduleStore(db.db);
   });
   beforeEach(async () => {
-    await db.pool.query('truncate schedules, schedule_runs');
+    await db.pool.query('truncate schedules, schedule_runs cascade');
   });
   afterAll(async () => {
-    await db.pool.query('truncate schedules, schedule_runs');
+    await db.pool.query('truncate schedules, schedule_runs cascade');
     await db.close();
   });
 

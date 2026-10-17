@@ -94,7 +94,7 @@ export async function publishContent(
   else {
     const url = ctx.env.DATABASE_URL;
     if (!url) throw new ConfigError('DATABASE_URL is not set in the env file.');
-    const database = createDatabase(url, { max: 2 });
+    const database = createDatabase(url, { max: 2, name: 'cli' });
     target = { store: new DbDefinitionStore(database.db), close: () => database.close() };
     const writer = new PgAuditWriter(database.db, ctx.now);
     audit ??= (input) => writer.append(input);

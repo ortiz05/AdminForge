@@ -12,7 +12,25 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { scramVerifier } from '../../../portal/deploy/db/scram.mjs';
 import { parseEnvFile, repoRoot } from '../../lib/repo';
+
+/**
+ * The role statement a run sent: statement logging off for the session, a lock timeout, and the password only as a
+ * SCRAM-SHA-256 verifier — one that PASSWORD really matches.
+ */
+function expectRoleStatement(sql: string, verb: 'CREATE' | 'ALTER') {
+  expect(sql).toContain("SET log_statement = 'none';");
+  expect(sql).toContain('SET log_min_duration_statement = -1;');
+  expect(sql).toContain('SET log_min_error_statement = panic;');
+  expect(sql).toContain("SET lock_timeout = '10s';");
+  expect(sql).not.toContain(PASSWORD);
+  const m = new RegExp(
+    `${verb} ROLE adminforge_app WITH LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS PASSWORD '(SCRAM-SHA-256\\$4096:([^$]+)\\$[^']+)';`,
+  ).exec(sql);
+  expect(m).not.toBeNull();
+  expect(scramVerifier(PASSWORD, { salt: Buffer.from(m![2]!, 'base64') })).toBe(m![1]);
+}
 
 // portal/deploy/db/create-app-role.sh against a fake `docker` and `openssl` (never a real database): how it reads the
 // env file and the owner URL, which SQL it sends (on stdin, never on a command line), and how it rewrites the two
@@ -77,6 +95,9 @@ function sandbox(envFile: string | null) {
     sql,
     calls,
     env: () => parseEnvFile(file),
+    /** The owner file next to the env file (dev.host.owner.env): the services never read it. */
+    ownerFile: path.join(root, 'dev.host.owner.env'),
+    owner: () => parseEnvFile(path.join(root, 'dev.host.owner.env')),
     text: () => readFileSync(file, 'utf8'),
     cleanup: () => rmSync(root, { recursive: true, force: true }),
   };
@@ -96,9 +117,9 @@ describe.skipIf(!hasTools)('create-app-role.sh', () => {
       expect(r.stderr).toBe('');
       expect(r.status).toBe(0);
       expect(r.stdout.trim()).toBe(
-        `✓ adminforge_app ready on adminforge (row access, audit log insert/select only); ${s.file}: DATABASE_URL → adminforge_app, DATABASE_MIGRATION_URL → owner`,
+        `✓ adminforge_app ready on adminforge (row access, audit log insert/select only); ${s.file}: DATABASE_URL → adminforge_app; ${s.ownerFile}: DATABASE_MIGRATION_URL → owner`,
       );
-      // Every statement goes through the owner in the default container; no secret on a command line.
+      // Every statement goes through the container's superuser over its socket; no secret on a command line.
       for (const call of s.calls()) {
         expect(call).toMatch(
           /^exec -i adminforge-dev-postgres-1 psql -v ON_ERROR_STOP=1 -q -U adminforge -d adminforge/,
@@ -107,23 +128,24 @@ describe.skipIf(!hasTools)('create-app-role.sh', () => {
         expect(call).not.toContain('owner-secret');
       }
       const [create, grants] = s.sql();
-      expect(create).toBe(
-        `CREATE ROLE adminforge_app WITH LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS PASSWORD '${PASSWORD}';\n`,
-      );
+      expectRoleStatement(create!, 'CREATE');
+      // Both scripts run as one transaction each.
+      expect(s.calls().filter((c) => / -1$/.test(c))).toHaveLength(2);
       expect(grants).not.toContain('{{');
       expect(grants).toContain('GRANT CONNECT ON DATABASE "adminforge" TO adminforge_app;');
       expect(grants).toContain('ALTER DEFAULT PRIVILEGES FOR ROLE "adminforge" IN SCHEMA public');
       expect(grants).toContain('REVOKE UPDATE, DELETE, TRUNCATE ON audit_events FROM adminforge_app;');
       expect(grants).toContain('CREATE SCHEMA IF NOT EXISTS pgboss AUTHORIZATION adminforge_app;');
-      // The env file keeps everything else, gets the two URLs, and stays private.
+      // The env file keeps everything else and gets the services' URL; the owner's goes to the owner file. Both private.
       expect(s.env()).toEqual({
         AF_ENV_LABEL: 'example',
         AF_NOTE: 'a=b',
         DATABASE_URL: `postgres://adminforge_app:${PASSWORD}@127.0.0.1:55432/adminforge`,
-        DATABASE_MIGRATION_URL: OWNER_URL,
       });
+      expect(s.owner()).toEqual({ DATABASE_MIGRATION_URL: OWNER_URL });
       expect(s.text()).toContain('# synthetic host overlay\n');
       expect(statSync(s.file).mode & 0o777).toBe(0o600);
+      expect(statSync(s.ownerFile).mode & 0o777).toBe(0o600);
       expect(r.stdout).not.toContain(PASSWORD);
     } finally {
       s.cleanup();
@@ -140,7 +162,9 @@ describe.skipIf(!hasTools)('create-app-role.sh', () => {
       expect(sql).toHaveLength(1);
       expect(sql[0]).toContain('GRANT CONNECT ON DATABASE');
       expect(sql.join('')).not.toMatch(/CREATE ROLE|ALTER ROLE/);
-      expect(s.env()).toEqual({ DATABASE_URL: appUrl, DATABASE_MIGRATION_URL: OWNER_URL });
+      // An older layout's DATABASE_MIGRATION_URL moves from the env file to the owner file.
+      expect(s.env()).toEqual({ DATABASE_URL: appUrl });
+      expect(s.owner()).toEqual({ DATABASE_MIGRATION_URL: OWNER_URL });
     } finally {
       s.cleanup();
     }
@@ -155,11 +179,9 @@ describe.skipIf(!hasTools)('create-app-role.sh', () => {
       const s = sandbox(env);
       try {
         expect(s.run([...args], { FAKE_ROLE_EXISTS: '1' }).status).toBe(0);
-        expect(s.sql()[0]).toBe(
-          `ALTER ROLE adminforge_app WITH LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS PASSWORD '${PASSWORD}';\n`,
-        );
+        expectRoleStatement(s.sql()[0]!, 'ALTER');
         expect(s.env().DATABASE_URL).toBe(`postgres://adminforge_app:${PASSWORD}@127.0.0.1:55432/adminforge`);
-        expect(s.env().DATABASE_MIGRATION_URL).toBe(OWNER_URL);
+        expect(s.owner().DATABASE_MIGRATION_URL).toBe(OWNER_URL);
       } finally {
         s.cleanup();
       }
@@ -173,14 +195,30 @@ describe.skipIf(!hasTools)('create-app-role.sh', () => {
     );
     try {
       expect(s.run().status).toBe(0);
-      expect(s.calls()[0]).toMatch(/ -U af_owner -d adminforge_dev -Atc /);
+      // SQL runs as the container superuser on the owner's database; the owner gets the default privileges.
+      expect(s.calls()[0]).toMatch(/ -U adminforge -d adminforge_dev -Atc /);
       const grants = s.sql()[1]!;
       expect(grants).toContain('GRANT CONNECT ON DATABASE "adminforge_dev" TO adminforge_app;');
       expect(grants).toContain('ALTER DEFAULT PRIVILEGES FOR ROLE "af_owner"');
       expect(s.env().DATABASE_URL).toMatch(
         new RegExp(`^postgres://adminforge_app:${PASSWORD}@db\\.internal:6543/adminforge_dev`),
       );
-      expect(s.env().DATABASE_MIGRATION_URL).toBe(owner);
+      expect(s.owner().DATABASE_MIGRATION_URL).toBe(owner);
+    } finally {
+      s.cleanup();
+    }
+  });
+
+  it('prefers the owner file\'s DATABASE_MIGRATION_URL (written by db:harden) to the env file', () => {
+    const owner = 'postgres://adminforge_owner:owner-secret@127.0.0.1:55432/adminforge';
+    const s = sandbox(`DATABASE_URL=${OWNER_URL}\nDATABASE_MIGRATION_URL=${OWNER_URL}\n`);
+    try {
+      writeFileSync(s.ownerFile, `# kept\nDATABASE_MIGRATION_URL=${owner}\nOTHER=1\n`, { mode: 0o600 });
+      expect(s.run().status).toBe(0);
+      expect(s.calls()[0]).toMatch(/ -U adminforge -d adminforge -Atc /);
+      expect(s.sql()[1]).toContain('ALTER DEFAULT PRIVILEGES FOR ROLE "adminforge_owner"');
+      expect(s.owner()).toEqual({ DATABASE_MIGRATION_URL: owner, OTHER: '1' });
+      expect(s.env()).not.toHaveProperty('DATABASE_MIGRATION_URL');
     } finally {
       s.cleanup();
     }

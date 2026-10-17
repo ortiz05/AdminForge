@@ -269,7 +269,7 @@ describe('sessions, mock sign-in, /api/me, CSRF', () => {
       t.clock.advance(6 * MINUTE);
       expect((await getMe(t.app, cookie)).me).toMatchObject({ mode: 'read', armedUntil: null });
       expect(t.audit.rows.at(-1)!.action).toBe('session.arm_expired');
-      expect(await t.audit.verify()).toEqual({ ok: true, count: 3 });
+      expect(await t.audit.verify()).toMatchObject({ ok: true, count: 3 });
     });
   });
 

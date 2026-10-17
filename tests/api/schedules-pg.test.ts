@@ -19,12 +19,12 @@ describe.skipIf(!url)('scheduler on Postgres', () => {
   });
   beforeEach(async () => {
     await db.pool.query(
-      "truncate schedules, schedule_runs, probe_results; delete from approvals where subject_type = 'schedule'",
+      "truncate schedules, schedule_runs, probe_results cascade; delete from approvals where subject_type = 'schedule'",
     );
   });
   afterAll(async () => {
     await db.pool.query(
-      "truncate schedules, schedule_runs, probe_results; delete from approvals where subject_type = 'schedule'",
+      "truncate schedules, schedule_runs, probe_results cascade; delete from approvals where subject_type = 'schedule'",
     );
     await db.close();
   });

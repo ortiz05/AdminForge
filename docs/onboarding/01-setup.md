@@ -55,15 +55,18 @@ The DB-backed API tests and `pnpm dev` against a tenant need Postgres. Configura
 ```bash
 install -d -m 700 ~/.config/adminforge
 cp config/example.env ~/.config/adminforge/dev.env && chmod 600 ~/.config/adminforge/dev.env
-pnpm --filter @adminforge/api init:local   # fills missing keys and replaces the CHANGE_ME placeholders: DB password,
-                                           # token-cache key, local defaults (never prints values)
+pnpm --filter @adminforge/api init:local   # fills missing keys and replaces the CHANGE_ME placeholders: your dev database
+                                           # URL, token-cache key, local defaults; the container's superuser password goes
+                                           # to dev.owner.env (never prints values)
 pnpm db:up                                 # Postgres 18 in Docker on 127.0.0.1:55432
+pnpm db:harden                             # your own non-superuser role for adminforge_dev / adminforge_test (idempotent)
 pnpm --filter @adminforge/api db:migrate
 pnpm adminforge env check                  # key names and states only — it never prints values
 ```
 
-The API tests create and migrate their own `adminforge_test` database next to the one in your env file, so test rows
-never mix with your dev data. When Postgres isn't running, those suites **skip silently** — start it (`pnpm db:up`)
+The API tests migrate their own `adminforge_test` database next to the one in your env file, so test rows never mix
+with your dev data. You connect as `adminforge_dev`, which owns both databases and is never a superuser (the
+container's superuser is for `docker exec` only; see `docs/operations.md` → Postgres hardening). When Postgres isn't running, those suites **skip silently** — start it (`pnpm db:up`)
 before you rely on an API test run.
 
 ## Prove everything works

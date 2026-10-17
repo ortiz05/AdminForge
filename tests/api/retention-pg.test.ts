@@ -43,7 +43,7 @@ describe.skipIf(!url)('applyRetention (Postgres)', () => {
   });
   beforeEach(async () => {
     await database.pool.query(
-      'truncate runs, run_steps, run_step_events, approvals, schedule_runs, probe_results',
+      'truncate runs, run_steps, run_step_events, approvals, schedule_runs, probe_results cascade',
     );
   });
   afterAll(async () => {

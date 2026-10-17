@@ -1,5 +1,11 @@
 import { randomBytes } from 'node:crypto';
-import { MemoryAuditWriter, PgAuditWriter, type AuditInput, type AuditWriter } from './audit/writer';
+import {
+  MemoryAuditWriter,
+  PgAuditWriter,
+  stdoutCheckpoints,
+  type AuditInput,
+  type AuditWriter,
+} from './audit/writer';
 import { createMsalAuthClient, type MsalLogger } from './auth/msal-client';
 import { MemoryPreauthStore, PgPreauthStore, type PreauthStore } from './auth/preauth-store';
 import {
@@ -18,7 +24,7 @@ import {
 } from './auth/token-cache';
 import type { AuthClient } from './auth/types';
 import { tokenCacheKey, type Config } from './config';
-import { createDatabase, type Database } from './db/client';
+import { createDatabase, databaseOptions, type Database } from './db/client';
 import { createContentServices, type ContentServices } from './datasources/services';
 import { MemoryPrefsStore, PgPrefsStore, type PrefsStore } from './prefs/prefs-store';
 import type { RunsOptions } from './runs/module';
@@ -45,7 +51,11 @@ export interface AppContext extends ContentServices {
 }
 
 /** `runs` overrides the runs module's repository/queue/ports (tests, worker entry point). */
-export type AppDeps = Partial<Omit<AppContext, 'config' | 'broker'>> & { runs?: RunsOptions };
+export type AppDeps = Partial<Omit<AppContext, 'config' | 'broker'>> & {
+  runs?: RunsOptions;
+  /** The process's name in pg_stat_activity (`adminforge-<name>`): api (default), worker, scheduler. */
+  databaseName?: string;
+};
 
 export function createContext(config: Config, deps: AppDeps = {}, log?: MsalLogger): AppContext {
   const now = deps.now ?? (() => new Date());
@@ -53,7 +63,7 @@ export function createContext(config: Config, deps: AppDeps = {}, log?: MsalLogg
     deps.database !== undefined
       ? deps.database
       : config.DATABASE_URL
-        ? createDatabase(config.DATABASE_URL)
+        ? createDatabase(config.DATABASE_URL, databaseOptions(config, deps.databaseName ?? 'api'))
         : null;
   const db = database?.db;
   // Mock mode never stores real tokens; an ephemeral key keeps the code path identical.
@@ -68,7 +78,9 @@ export function createContext(config: Config, deps: AppDeps = {}, log?: MsalLogg
         ? createMsalAuthClient(config, tokenCache, log)
         : null;
   const broker = auth ? new TokenBroker(auth, config, now) : null;
-  const audit = deps.audit ?? (db ? new PgAuditWriter(db, now) : new MemoryAuditWriter(now));
+  // Each verification leaves its tail in the service log (journald): the audit chain's external anchor.
+  const checkpoints = log?.info ? (cp: object) => log.info!(cp, 'audit chain checkpoint') : stdoutCheckpoints;
+  const audit = deps.audit ?? (db ? new PgAuditWriter(db, now, checkpoints) : new MemoryAuditWriter(now));
   const content = createContentServices(
     config,
     { database, broker, auth, audit, fetch: deps.fetch ?? fetch, now },

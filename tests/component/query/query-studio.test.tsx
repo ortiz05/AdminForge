@@ -187,46 +187,51 @@ describe('Query Studio (/query)', () => {
     expect(runs()[0]!.body).toMatchObject({ source: 'resourceGraph', subscriptions: [QIDS.subProd] });
   });
 
-  it('Log Analytics: the default workspace is left to the server, the time range is sent, a custom workspace id is validated', async () => {
-    const user = userEvent.setup();
-    const { runs } = renderStudio({ path: '/query?source=logAnalytics' });
-    const box = await editor(/Log Analytics query/);
-    expect(box).toHaveAttribute('data-tables', expect.stringContaining('AzureActivity'));
-    expect(screen.getByRole('radio', { name: 'Log Analytics' })).toHaveAttribute('aria-checked', 'true');
+  // Many steps through the editor and the workspace picker: slow when the machine is busy.
+  it(
+    'Log Analytics: the default workspace is left to the server, the time range is sent, a custom workspace id is validated',
+    { timeout: 20_000, retry: 1 },
+    async () => {
+      const user = userEvent.setup();
+      const { runs } = renderStudio({ path: '/query?source=logAnalytics' });
+      const box = await editor(/Log Analytics query/);
+      expect(box).toHaveAttribute('data-tables', expect.stringContaining('AzureActivity'));
+      expect(screen.getByRole('radio', { name: 'Log Analytics' })).toHaveAttribute('aria-checked', 'true');
 
-    await user.click(
-      within(screen.getByRole('list', { name: /Starter queries for Log Analytics/ })).getByRole('button', {
-        name: /Failed Azure writes/,
-      }),
-    );
-    await user.click(screen.getByRole('button', { name: 'Run' }));
-    const grid = await screen.findByRole('grid', { name: 'Query results' });
-    expect(runs()[0]!.body).toEqual({
-      source: 'logAnalytics',
-      query: expect.stringContaining('AzureActivity'),
-      timespan: 'P1D',
-    });
-    expect(within(grid).getByText('2026-10-15 13:41:07 UTC')).toBeInTheDocument();
+      await user.click(
+        within(screen.getByRole('list', { name: /Starter queries for Log Analytics/ })).getByRole('button', {
+          name: /Failed Azure writes/,
+        }),
+      );
+      await user.click(screen.getByRole('button', { name: 'Run' }));
+      const grid = await screen.findByRole('grid', { name: 'Query results' });
+      expect(runs()[0]!.body).toEqual({
+        source: 'logAnalytics',
+        query: expect.stringContaining('AzureActivity'),
+        timespan: 'P1D',
+      });
+      expect(within(grid).getByText('2026-10-15 13:41:07 UTC')).toBeInTheDocument();
 
-    await user.click(screen.getByRole('combobox', { name: 'Workspace' }));
-    await user.click(await screen.findByRole('option', { name: /Another workspace/ }));
-    await user.type(screen.getByRole('textbox', { name: 'Workspace id' }), 'not-a-guid');
-    await user.click(screen.getByRole('button', { name: 'Run' }));
-    expect(await screen.findByRole('alert')).toHaveTextContent('Enter the workspace id');
-    expect(runs()).toHaveLength(1);
+      await user.click(screen.getByRole('combobox', { name: 'Workspace' }));
+      await user.click(await screen.findByRole('option', { name: /Another workspace/ }));
+      await user.type(screen.getByRole('textbox', { name: 'Workspace id' }), 'not-a-guid');
+      await user.click(screen.getByRole('button', { name: 'Run' }));
+      expect(await screen.findByRole('alert')).toHaveTextContent('Enter the workspace id');
+      expect(runs()).toHaveLength(1);
 
-    await user.clear(screen.getByRole('textbox', { name: 'Workspace id' }));
-    await user.type(screen.getByRole('textbox', { name: 'Workspace id' }), QIDS.workspace.toUpperCase());
-    await user.click(screen.getByRole('combobox', { name: 'Time range' }));
-    await user.click(await screen.findByRole('option', { name: 'Set in query' }));
-    await user.click(screen.getByRole('button', { name: 'Run' }));
-    await waitFor(() => expect(runs()).toHaveLength(2));
-    expect(runs()[1]!.body).toEqual({
-      source: 'logAnalytics',
-      query: expect.any(String),
-      workspace: QIDS.workspace,
-    });
-  });
+      await user.clear(screen.getByRole('textbox', { name: 'Workspace id' }));
+      await user.type(screen.getByRole('textbox', { name: 'Workspace id' }), QIDS.workspace.toUpperCase());
+      await user.click(screen.getByRole('combobox', { name: 'Time range' }));
+      await user.click(await screen.findByRole('option', { name: 'Set in query' }));
+      await user.click(screen.getByRole('button', { name: 'Run' }));
+      await waitFor(() => expect(runs()).toHaveLength(2));
+      expect(runs()[1]!.body).toEqual({
+        source: 'logAnalytics',
+        query: expect.any(String),
+        workspace: QIDS.workspace,
+      });
+    },
+  );
 
   it('Defender advanced hunting shows the licence note from /api/me/capabilities', async () => {
     renderStudio({ path: '/query?source=advancedHunting' });

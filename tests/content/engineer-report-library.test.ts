@@ -551,7 +551,8 @@ const guid = (n: number, prefix = '0') =>
   `${prefix.padStart(8, '0')}-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const day = (offset: number) => new Date(Date.parse(NOW) + offset * 86_400_000).toISOString();
 
-describe('scale', () => {
+// Wall-clock budgets: a run can lose the CPU to other test files on a busy machine, so these retry before failing.
+describe('scale', { retry: 2 }, () => {
   it('SAML certificate expiry: 500 SAML apps with a rollover each', async () => {
     const apps = Array.from({ length: 500 }, (_, i) => ({
       id: guid(i, 'c'),

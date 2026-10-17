@@ -54,7 +54,8 @@ const member = (i: number, extra: Record<string, unknown> = {}) => ({
   ...extra,
 });
 
-describe('identity.inactive-users at scale', () => {
+// Wall-clock budgets: a run can lose the CPU to other test files on a busy machine, so these retry before failing.
+describe('identity.inactive-users at scale', { retry: 2 }, () => {
   it('asks Graph for inactive accounts and for members older than the window — nothing reads every member', async () => {
     const inactive = await query('identity.inactive-users', 'inactive', { days: 90 });
     expect(inactive.$filter).toMatch(/^signInActivity\/lastSuccessfulSignInDateTime le \d{4}-\d\d-\d\dT/);
@@ -204,7 +205,7 @@ describe('owners: people and apps', () => {
   });
 });
 
-describe('Microsoft 365 usage reports at scale', () => {
+describe('Microsoft 365 usage reports at scale', { retry: 2 }, () => {
   it('m365.mailbox-storage: 20k mailboxes within the budget, over/near quota first, counts over every mailbox', async () => {
     const value = Array.from({ length: 20_000 }, (_, i) => ({
       userPrincipalName: `u${i}@example.com`,

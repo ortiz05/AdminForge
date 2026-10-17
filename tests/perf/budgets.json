@@ -10,51 +10,28 @@
   },
   "datasources": {
     "endpoint.apps#apps": {
-      "knownError": "content_error: every app with $expand=assignments, search in the transform",
-      "expect": "error",
-      "maxRequests": 40,
-      "mayTimeOut": true
+      "knownSlow": "10,000 apps with their assignments expanded (100 a page); typed once per Graph type and filtered natively",
+      "maxRequests": 40
     },
     "endpoint.autopilot-not-enrolled#devices": {
-      "knownError": "content_error: every managed/Entra device with a per-row transform; needs Intune report exports or untransformed rows",
-      "expect": "error",
+      "knownSlow": "every Autopilot identity is read (Autopilot filters only on serial number and group tag); filtered and sorted natively",
       "maxRequests": 55,
-      "mayTimeOut": true,
-      "maxEstimatedLiveMs": 17133
+      "maxEstimatedLiveMs": 16819
     },
-    "endpoint.device-security-gaps#devices": {
-      "knownError": "content_error: every managed/Entra device with a per-row transform; needs Intune report exports or untransformed rows",
-      "expect": "error",
+    "endpoint.device-security-gaps#deviceList": {
+      "knownSlow": "every managed device is read (Intune can't filter on encryption or jailbreak); native filters, the page shows 10,000",
       "maxRequests": 40,
-      "maxBytes": 18815120,
-      "mayTimeOut": true
-    },
-    "endpoint.non-compliant-devices#devices": {
-      "knownError": "content_error: every managed/Entra device with a per-row transform; needs Intune report exports or untransformed rows",
-      "expect": "error",
-      "mayTimeOut": true
+      "maxBytes": 18815120
     },
     "endpoint.os-versions#devices": {
-      "knownError": "content_error: every managed/Entra device with a per-row transform; needs Intune report exports or untransformed rows",
-      "expect": "error",
-      "maxRequests": 40,
-      "mayTimeOut": true
+      "knownSlow": "every managed device is read; grouped natively per OS and version, release names worked out per version",
+      "maxRequests": 40
     },
     "endpoint.recovery-key-escrow#devices": {
       "knownTruncated": "capped by design to fit the 250 ms transform budget; the report says when it stops (measured 2026-10-17 at enterprise scale)"
     },
     "endpoint.recovery-key-escrow#keys": {
       "knownTruncated": "capped by design to fit the 250 ms transform budget; the report says when it stops (measured 2026-10-17 at enterprise scale)"
-    },
-    "endpoint.stale-devices#entra": {
-      "knownError": "content_error: every managed/Entra device with a per-row transform; needs Intune report exports or untransformed rows",
-      "expect": "error",
-      "mayTimeOut": true
-    },
-    "endpoint.stale-devices#intune": {
-      "knownError": "content_error: every managed/Entra device with a per-row transform; needs Intune report exports or untransformed rows",
-      "expect": "error",
-      "mayTimeOut": true
     },
     "endpoint.windows-laps-coverage#backups": {
       "knownError": "SyntheticNotModelled: measured 2026-10-17 at enterprise scale",
@@ -64,17 +41,26 @@
       "knownTruncated": "capped by design to fit the 250 ms transform budget; the report says when it stops (measured 2026-10-17 at enterprise scale)"
     },
     "identity.app-credential-expiry#credentials": {
-      "knownError": "content_error: every app/service principal credential flattened in the transform; needs a snapshot",
-      "expect": "error",
+      "knownSlow": "apps with a credential in the window are picked natively (ending within 7 days first); the credentials of the first 400 become rows with JSONata",
       "mayTimeOut": true
     },
     "identity.app-credential-hygiene#apps": {
       "knownSlow": "every app/service principal credential flattened in the transform; needs a snapshot",
       "maxBytes": 15750986
     },
-    "identity.app-credential-hygiene#credentials": {
-      "knownError": "content_error: every app/service principal credential flattened in the transform; needs a snapshot",
-      "expect": "error",
+    "identity.app-credential-hygiene#exportList": {
+      "knownSlow": "every flagged credential, labelled (the export only); the expression fits; most of the time is the engine copying rows in and out (outside the expression budget)",
+      "maxTransformMs": 694,
+      "mayTimeOut": true
+    },
+    "identity.app-credential-hygiene#page": {
+      "knownSlow": "the page: classifies every credential natively, labels the first 2,000; may time out on a busy host; the expression fits; most of the time is the engine copying rows in and out (outside the expression budget)",
+      "maxTransformMs": 634,
+      "mayTimeOut": true
+    },
+    "identity.app-credential-hygiene#secrets": {
+      "knownSlow": "every live app secret, one row each (unnest + count natively); on the page path (the page view reads it), so it may time out on a busy host; the expression fits; most of the time is the engine copying rows in and out (outside the expression budget)",
+      "maxTransformMs": 714,
       "mayTimeOut": true
     },
     "identity.app-permissions#grants": {
@@ -82,13 +68,13 @@
       "maxRequests": 41,
       "maxBytes": 16580834
     },
-    "identity.app-permissions#holders": {
-      "knownError": "content_error: every grant/app role assignment; getByIds covers only the first 1,000 ids",
-      "expect": "error",
+    "identity.app-permissions#permissionList": {
+      "knownSlow": "every grant joined to its permission and holder (the export), and the page view is built from it, so every page load runs it; the expression fits; most of the time is the engine copying rows in and out (outside the expression budget)",
+      "maxTransformMs": 794,
       "mayTimeOut": true
     },
-    "identity.app-registration-risks#apps": {
-      "knownError": "content_error: every app/service principal credential flattened in the transform; needs a snapshot",
+    "identity.app-registration-risks#appList": {
+      "knownError": "content_error at 20k apps (~270 ms): every finding is set natively, copying the flagged app objects costs the rest — per-tenant snapshot (backlog)",
       "expect": "error",
       "maxBytes": 19856963,
       "mayTimeOut": true
@@ -96,11 +82,6 @@
     "identity.app-registrations#credentials": {
       "knownSlow": "credential KPIs: Graph can't filter credentials by expiry; capped read with native filters (partial note)",
       "knownTruncated": "stops at maxItems: credential KPIs: Graph can't filter credentials by expiry; capped read with native filters (partial note)"
-    },
-    "identity.apps-without-owners#report": {
-      "knownError": "content_error: measured 2026-10-17 at enterprise scale",
-      "expect": "error",
-      "mayTimeOut": true
     },
     "identity.auth-method-strength#weak": {
       "knownTruncated": "capped by design to fit the 250 ms transform budget; the report says when it stops (measured 2026-10-17 at enterprise scale)"
@@ -112,27 +93,22 @@
       "knownSlow": "measured 2026-10-17 at enterprise scale",
       "mayTimeOut": true
     },
+    "identity.consent-grants#grantList": {
+      "knownSlow": "every grant joined to its scopes, client, API and user (the export), and the page view is built from it, so every page load runs it; the expression fits; most of the time is the engine copying rows in and out (outside the expression budget)",
+      "maxTransformMs": 988,
+      "mayTimeOut": true
+    },
     "identity.consent-grants#grants": {
       "knownSlow": "every grant/app role assignment; getByIds covers only the first 1,000 ids",
       "maxRequests": 66,
       "maxBytes": 19469526,
       "maxEstimatedLiveMs": 20125
     },
-    "identity.consent-grants#objects": {
-      "knownError": "content_error: every grant/app role assignment; getByIds covers only the first 1,000 ids",
-      "expect": "error",
-      "mayTimeOut": true
-    },
     "identity.directory-changes#audits": {
-      "knownError": "content_error: a 20k cap over 7 days of audit events is exceeded in a large tenant; transform over all rows",
-      "expect": "error",
-      "knownTruncated": "stops at maxItems 20000: a 20k cap over 7 days of audit events is exceeded in a large tenant; transform over all rows",
+      "knownSlow": "areas labelled natively over every event, the newest 500 described with JSONata",
+      "knownTruncated": "stops at maxItems 20000: 7 days of high-impact audit events exceed it in a large tenant (partial-data note)",
       "maxBytes": 22545158,
-      "mayTimeOut": true
-    },
-    "identity.disabled-users-with-licences#users": {
-      "knownError": "content_error: transform over every disabled user",
-      "expect": "error",
+      "maxTransformMs": 642,
       "mayTimeOut": true
     },
     "identity.group-lifecycle#deleted": {
@@ -163,12 +139,15 @@
       "knownSlow": "inactive-account KPI: Graph can count neither by last sign-in; capped read (partial note)",
       "knownTruncated": "stops at maxItems: inactive-account KPI: Graph can count neither by last sign-in; capped read (partial note)"
     },
-    "identity.inactive-guests#guests": {
-      "knownError": "content_error: every guest with a per-row transform",
-      "expect": "error",
-      "maxRequests": 87,
-      "mayTimeOut": true,
-      "maxEstimatedLiveMs": 26880
+    "identity.inactive-guests#inactive": {
+      "knownSlow": "signInActivity caps pages at 120 and Graph can't combine its filter with userType, so every inactive account is read; guests are picked natively",
+      "maxRequests": 114,
+      "maxEstimatedLiveMs": 34377
+    },
+    "identity.inactive-guests#never": {
+      "knownSlow": "guests created before the window, 120 a page (signInActivity selected)",
+      "maxRequests": 85,
+      "maxEstimatedLiveMs": 25752
     },
     "identity.inactive-users#inactive": {
       "knownSlow": "Graph filters on the last successful sign-in (signInActivity caps pages at 120): only inactive accounts are read",
@@ -176,15 +155,15 @@
       "maxEstimatedLiveMs": 34378
     },
     "identity.inactive-users#never": {
-      "knownSlow": "never-signed-in accounts can only be found by reading members older than the window; capped (partial note) \u2014 snapshot follow-up",
-      "knownTruncated": "stops at maxItems: never-signed-in accounts can only be found by reading members older than the window; capped (partial note) \u2014 snapshot follow-up"
+      "knownSlow": "never-signed-in accounts can only be found by reading members older than the window; capped (partial note) — snapshot follow-up",
+      "knownTruncated": "stops at maxItems: never-signed-in accounts can only be found by reading members older than the window; capped (partial note) — snapshot follow-up"
     },
     "identity.licence-assignment-errors#noLocation": {
       "knownTruncated": "capped by design to fit the 250 ms transform budget; the report says when it stops (measured 2026-10-17 at enterprise scale)"
     },
     "identity.password-policies#userList": {
-      "knownSlow": "Graph can't filter password age or policies: members read (999 a page) with native filters; the whole list of findings for the export (copied after the evaluation, outside its 250 ms); capped at 60k (partial note) \u2014 snapshot follow-up",
-      "knownTruncated": "stops at maxItems: Graph can't filter password age or policies: members read (999 a page) with native filters; the whole list of findings for the export (copied after the evaluation, outside its 250 ms); capped at 60k (partial note) \u2014 snapshot follow-up",
+      "knownSlow": "Graph can't filter password age or policies: members read (999 a page) with native filters; the whole list of findings for the export (copied after the evaluation, outside its 250 ms); capped at 60k (partial note) — snapshot follow-up",
+      "knownTruncated": "stops at maxItems: Graph can't filter password age or policies: members read (999 a page) with native filters; the whole list of findings for the export (copied after the evaluation, outside its 250 ms); capped at 60k (partial note) — snapshot follow-up",
       "maxRequests": 79,
       "maxBytes": 32400653,
       "maxTransformMs": 844,
@@ -193,11 +172,6 @@
     },
     "identity.password-policies#users": {
       "knownSlow": "the page's view of userList: copies the list (kept whole for the export) and keeps the figures and the first 10,000 rows",
-      "mayTimeOut": true
-    },
-    "identity.privileged-role-assignments#assignments": {
-      "knownError": "content_error: measured 2026-10-17 at enterprise scale",
-      "expect": "error",
       "mayTimeOut": true
     },
     "identity.unused-apps#activity": {
@@ -210,44 +184,34 @@
     "identity.unused-apps#grants": {
       "knownTruncated": "capped by design to fit the 250 ms transform budget; the report says when it stops (measured 2026-10-17 at enterprise scale)"
     },
-    "identity.users-without-mfa#report": {
-      "knownError": "content_error: transform and sort over every registration row",
-      "expect": "error",
-      "mayTimeOut": true
-    },
     "m365.anyone-link-sites#links": {
-      "knownSlow": "per-row transform, capped at 1,500 rows (partial note) \u2014 rewrite natively (backlog)",
-      "knownTruncated": "stops at maxItems: per-row transform, capped at 1,500 rows (partial note) \u2014 rewrite natively (backlog)"
+      "knownSlow": "per-row transform, capped at 1,500 rows (partial note) — rewrite natively (backlog)",
+      "knownTruncated": "stops at maxItems: per-row transform, capped at 1,500 rows (partial note) — rewrite natively (backlog)"
     },
     "m365.inactive-licensed-users#userList": {
-      "knownSlow": "usage report rows with native filters; the whole list of the view for the export (copied after the evaluation, outside its 250 ms); capped at 30k (partial note) \u2014 snapshot follow-up",
-      "knownTruncated": "stops at maxItems: usage report rows with native filters; the whole list of the view for the export (copied after the evaluation, outside its 250 ms); capped at 30k (partial note) \u2014 snapshot follow-up",
+      "knownSlow": "usage report rows with native filters; the whole list of the view for the export (copied after the evaluation, outside its 250 ms); capped at 30k (partial note) — snapshot follow-up",
+      "knownTruncated": "stops at maxItems: usage report rows with native filters; the whole list of the view for the export (copied after the evaluation, outside its 250 ms); capped at 30k (partial note) — snapshot follow-up",
       "maxBytes": 28107764,
-      "mayTimeOut": true
-    },
-    "m365.mailbox-storage#mailboxList": {
-      "knownSlow": "usage report rows with native filters; the whole list of the view for the export (copied after the evaluation, outside its 250 ms); capped at 40k (partial note) \u2014 snapshot follow-up",
-      "knownTruncated": "stops at maxItems: usage report rows with native filters; the whole list of the view for the export (copied after the evaluation, outside its 250 ms); capped at 40k (partial note) \u2014 snapshot follow-up",
-      "maxBytes": 30537537,
-      "maxTransformMs": 632,
       "mayTimeOut": true
     },
     "m365.mailbox-storage#mailboxes": {
       "knownSlow": "the page's view of mailboxList: copies the list (kept whole for the export) and keeps the figures and the first 10,000 rows",
       "mayTimeOut": true
     },
+    "m365.mailbox-storage#mailboxList": {
+      "knownSlow": "usage report rows with native filters; the whole list of the view for the export (copied after the evaluation, outside its 250 ms); capped at 40k (partial note) — snapshot follow-up",
+      "knownTruncated": "stops at maxItems: usage report rows with native filters; the whole list of the view for the export (copied after the evaluation, outside its 250 ms); capped at 40k (partial note) — snapshot follow-up",
+      "maxBytes": 30537537,
+      "maxTransformMs": 632,
+      "mayTimeOut": true
+    },
     "m365.mailbox-storage#storage": {
       "knownError": "SyntheticNotModelled: Microsoft's daily storage summary report (one small request) isn't in the fake Graph yet",
       "expect": "unmodelled"
     },
-    "m365.message-center-actions#messages": {
-      "knownError": "content_error: every message through a transform",
-      "expect": "error",
-      "mayTimeOut": true
-    },
     "m365.onedrive-usage#accountList": {
-      "knownSlow": "usage report rows with native filters; the whole list of the view for the export (copied after the evaluation, outside its 250 ms); capped at 40k (partial note) \u2014 snapshot follow-up",
-      "knownTruncated": "stops at maxItems: usage report rows with native filters; the whole list of the view for the export (copied after the evaluation, outside its 250 ms); capped at 40k (partial note) \u2014 snapshot follow-up",
+      "knownSlow": "usage report rows with native filters; the whole list of the view for the export (copied after the evaluation, outside its 250 ms); capped at 40k (partial note) — snapshot follow-up",
+      "knownTruncated": "stops at maxItems: usage report rows with native filters; the whole list of the view for the export (copied after the evaluation, outside its 250 ms); capped at 40k (partial note) — snapshot follow-up",
       "maxBytes": 22306811,
       "maxTransformMs": 652,
       "mayTimeOut": true
@@ -261,8 +225,8 @@
       "knownTruncated": "stops at maxItems 1000: measured 2026-10-17 at enterprise scale"
     },
     "m365.sharepoint-site-usage#siteList": {
-      "knownSlow": "usage report rows with native filters; the whole list of the view for the export (copied after the evaluation, outside its 250 ms); capped at 40k (partial note) \u2014 snapshot follow-up",
-      "knownTruncated": "stops at maxItems: usage report rows with native filters; the whole list of the view for the export (copied after the evaluation, outside its 250 ms); capped at 40k (partial note) \u2014 snapshot follow-up",
+      "knownSlow": "usage report rows with native filters; the whole list of the view for the export (copied after the evaluation, outside its 250 ms); capped at 40k (partial note) — snapshot follow-up",
+      "knownTruncated": "stops at maxItems: usage report rows with native filters; the whole list of the view for the export (copied after the evaluation, outside its 250 ms); capped at 40k (partial note) — snapshot follow-up",
       "maxBytes": 35890938,
       "mayTimeOut": true
     },
@@ -275,8 +239,8 @@
       "expect": "unmodelled"
     },
     "m365.sharepoint-sites#siteList": {
-      "knownSlow": "usage report rows with native filters; the whole list of the view for the export (copied after the evaluation, outside its 250 ms); capped at 40k (partial note) \u2014 snapshot follow-up",
-      "knownTruncated": "stops at maxItems: usage report rows with native filters; the whole list of the view for the export (copied after the evaluation, outside its 250 ms); capped at 40k (partial note) \u2014 snapshot follow-up",
+      "knownSlow": "usage report rows with native filters; the whole list of the view for the export (copied after the evaluation, outside its 250 ms); capped at 40k (partial note) — snapshot follow-up",
+      "knownTruncated": "stops at maxItems: usage report rows with native filters; the whole list of the view for the export (copied after the evaluation, outside its 250 ms); capped at 40k (partial note) — snapshot follow-up",
       "maxBytes": 35890908,
       "maxTransformMs": 646,
       "mayTimeOut": true
@@ -304,8 +268,12 @@
       "maxEstimatedLiveMs": 19377
     },
     "security.risky-users-review#detections": {
-      "knownError": "content_error: risk detections through a deep transform",
-      "expect": "error"
+      "knownSlow": "grouped natively by user; each user's summary is JSONata (~150 ms at 20k detections)",
+      "mayTimeOut": true
+    },
+    "security.risky-users-review#review": {
+      "knownSlow": "users filtered, split and sorted natively; detections looked up with JSONata for the first 1,000 listed",
+      "mayTimeOut": true
     }
   }
 }

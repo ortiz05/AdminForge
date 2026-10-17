@@ -1,4 +1,5 @@
 import type jsonata from 'jsonata';
+import { DEADLINE_BINDING, checkDeadline } from './budget';
 import { MAX_SEQUENCE } from './limits';
 import type * as NodeCrypto from 'node:crypto';
 
@@ -182,6 +183,12 @@ export interface RowsFilterCondition {
    */
   field?: string;
   times?: number;
+  /**
+   * With `field` and `type: date`: compare with the other field shifted by this many days (`{ "path": "endDateTime",
+   * "type": "date", "op": "gt", "field": "startDateTime", "days": 365 }` = lives longer than a year). For dates `days`
+   * is used instead of `times`. A row without the other field matches as if the field itself were missing.
+   */
+  days?: number;
 }
 /** `advanced` in the expression scope of a `dialect: rows` page: conditions joined with and/or (nesting ≤ 2). */
 export interface RowsFilterGroup {
@@ -206,18 +213,27 @@ const ROWS_OPS = new Set([
 ]);
 const ROWS_PATH = /^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)*$/;
 
+/** A JSONata function value: a lambda or a built-in (objects with internal flags), or a host function. */
+const isLambda = (v: unknown) =>
+  typeof v === 'function' ||
+  (!!v && typeof v === 'object' && ('_jsonata_lambda' in v || '_jsonata_function' in v));
+/** A plain data object (not a list, not a function): the only thing the native helpers read into or copy. */
+const isRecord = (v: unknown): v is Record<string, unknown> =>
+  !!v && typeof v === 'object' && !Array.isArray(v) && !isLambda(v);
+
 /**
  * The value at a dot path (split into `keys`). A list on the way (`passwordCredentials.endDateTime`) is read item by
  * item, so the result is every value found (a condition then matches when any of them does); a single value stands
  * for itself.
  */
 function readPath(row: unknown, keys: readonly string[]): unknown {
-  // The usual case — fields of objects, no list on the way — without the bookkeeping.
+  // The usual case — fields of objects, no list on the way — without the bookkeeping. Functions (JSONata lambdas
+  // and built-ins are objects too) are never read into: their fields are the evaluator's, not data.
   let v: unknown = row;
   let i = 0;
   for (; i < keys.length; i++) {
-    if (v === null || typeof v !== 'object' || Array.isArray(v) || !Object.hasOwn(v, keys[i]!)) break;
-    v = (v as Record<string, unknown>)[keys[i]!];
+    if (!isRecord(v) || !Object.hasOwn(v, keys[i]!)) break;
+    v = v[keys[i]!];
   }
   if (i === keys.length) return v;
   if (!Array.isArray(v) || i === 0) return undefined;
@@ -225,10 +241,11 @@ function readPath(row: unknown, keys: readonly string[]): unknown {
   for (; i < keys.length; i++) {
     const next: unknown[] = [];
     for (const x of values) {
-      if (x === null || typeof x !== 'object' || Array.isArray(x) || !Object.hasOwn(x, keys[i]!)) continue;
-      const y = (x as Record<string, unknown>)[keys[i]!];
+      if (!isRecord(x) || !Object.hasOwn(x, keys[i]!)) continue;
+      const y = x[keys[i]!];
       if (Array.isArray(y)) for (const z of y) next.push(z);
       else next.push(y);
+      if (next.length > MAX_SEQUENCE) throw new Error(`a path read more than ${MAX_SEQUENCE} values`);
     }
     values = next;
   }
@@ -236,19 +253,25 @@ function readPath(row: unknown, keys: readonly string[]): unknown {
 }
 
 /**
- * Parsed dates of the running `$applyAdvanced` call: report rows repeat a few hundred day values across tens of
- * thousands of rows, so each is parsed once. Reset per call (bounded).
+ * Parsed dates (text → epoch ms), shared by every `$applyAdvanced` call: report rows repeat a few hundred day values
+ * across tens of thousands of rows and one transform filters the same rows several times, so each value is parsed
+ * once. A pure function of the text, bounded (cleared when full).
  */
-let dateMemo: Map<string, number> | undefined;
+const dateMemo = new Map<string, number>();
+const DATE_MEMO_MAX = 200_000;
 
 /** Comparable form of one value: lower-cased text, epoch ms for dates, numbers and booleans as they are. */
 function comparable(type: RowsFilterCondition['type'], v: unknown): string | number | boolean | undefined {
   if (v === undefined || v === null || v === '') return undefined;
-  if (type === 'date' && typeof v === 'string' && dateMemo) {
+  if (type === 'date' && typeof v === 'string') {
     let ms = dateMemo.get(v);
     if (ms === undefined) {
       ms = Date.parse(v);
-      if (dateMemo.size < 50_000) dateMemo.set(v, ms);
+      // Bounded by entries and by size: an ISO timestamp is at most ~35 characters.
+      if (v.length <= 40) {
+        if (dateMemo.size >= DATE_MEMO_MAX) dateMemo.clear();
+        dateMemo.set(v, ms);
+      }
     }
     return Number.isNaN(ms) ? undefined : ms;
   }
@@ -269,8 +292,8 @@ function comparable(type: RowsFilterCondition['type'], v: unknown): string | num
 /** A condition with its path split and its values made comparable once, not once per row. */
 interface Compiled {
   keys: string[];
-  /** `field`: the other field's path, and its `times`. */
-  other?: { keys: string[]; times: number };
+  /** `field`: the other field's path, its `times` (numbers) and its `days` shift (dates, in ms). */
+  other?: { keys: string[]; times: number; shift: number };
   type: RowsFilterCondition['type'];
   op: RowsFilterCondition['op'];
   want: string | number | boolean | undefined;
@@ -286,6 +309,10 @@ function compileCondition(c: RowsFilterCondition): Compiled {
       ? {
           keys: c.field.split('.'),
           times: typeof c.times === 'number' && Number.isFinite(c.times) ? c.times : 1,
+          shift:
+            c.type === 'date' && typeof c.days === 'number' && Number.isFinite(c.days)
+              ? c.days * 86_400_000
+              : 0,
         }
       : undefined;
   return {
@@ -335,7 +362,9 @@ const blank = (v: unknown) => v === undefined || v === null || v === '';
 function wantFor(c: Compiled, row: unknown): string | number | boolean | undefined {
   if (!c.other) return c.want;
   const v = comparable(c.type, readPath(row, c.other.keys));
-  return typeof v === 'number' && c.other.times !== 1 ? v * c.other.times : v;
+  if (typeof v !== 'number') return v;
+  if (c.other.shift) return v + c.other.shift;
+  return c.other.times !== 1 ? v * c.other.times : v;
 }
 
 function matchCondition(c: Compiled, row: unknown): boolean {
@@ -383,6 +412,12 @@ function checkRowsFilter(g: unknown, depth: number): RowsFilterGroup {
     const { times } = c as { times?: unknown };
     if (times !== undefined && (field === undefined || typeof times !== 'number' || !Number.isFinite(times)))
       bad('times needs a field and a finite number');
+    const { days, type } = c as { days?: unknown; type?: unknown };
+    if (
+      days !== undefined &&
+      (field === undefined || type !== 'date' || typeof days !== 'number' || !Number.isFinite(days))
+    )
+      bad('days needs a field, type date and a finite number');
   }
   return g as RowsFilterGroup;
 }
@@ -412,12 +447,7 @@ export function applyAdvanced(rows: unknown, filter: unknown): unknown[] {
   const list = rows === undefined || rows === null ? [] : Array.isArray(rows) ? rows : [rows];
   if (filter === undefined || filter === null) return [...list];
   const match = compileGroup(checkRowsFilter(filter, 1));
-  dateMemo = new Map();
-  try {
-    return list.filter(match);
-  } finally {
-    dateMemo = undefined;
-  }
+  return list.filter(match);
 }
 
 /**
@@ -438,7 +468,8 @@ export function withFields(rows: unknown, fields: unknown): unknown[] {
       throw new Error(`$withFields: "${k}" can't be a function`);
   }
   if (list.length > MAX_SEQUENCE) throw new Error(`$withFields: at most ${MAX_SEQUENCE} rows`);
-  return list.map((r) => (r && typeof r === 'object' && !Array.isArray(r) ? { ...r, ...fields } : r));
+  // Function items pass through unchanged: a copy of a lambda would be a forged, callable function.
+  return list.map((r) => (isRecord(r) ? { ...r, ...fields } : r));
 }
 
 /**
@@ -450,6 +481,293 @@ export function take(rows: unknown, n: unknown): unknown[] {
   if (typeof n !== 'number' || !Number.isInteger(n) || n < 0)
     throw new Error('$take: n must be a whole number ≥ 0');
   return list.slice(0, n);
+}
+
+/** Field names a native helper may write into a row: an identifier, never a prototype key or a JSONata internal. */
+const WRITABLE_FIELD = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
+const RESERVED_FIELDS = new Set(['__proto__', 'constructor', 'prototype']);
+function writableField(name: unknown, fn: string, what: string): string {
+  if (
+    typeof name !== 'string' ||
+    !WRITABLE_FIELD.test(name) ||
+    RESERVED_FIELDS.has(name) ||
+    name.startsWith('_jsonata')
+  )
+    throw new Error(`${fn}: ${what} must be a plain field name`);
+  return name;
+}
+function pathKeys(path: unknown, fn: string): string[] {
+  if (typeof path !== 'string' || !ROWS_PATH.test(path))
+    throw new Error(`${fn}: the path must be field names joined with dots`);
+  const keys = path.split('.');
+  if (keys.some((k) => RESERVED_FIELDS.has(k))) throw new Error(`${fn}: the path can't name ${path}`);
+  return keys;
+}
+const asRows = (rows: unknown): unknown[] =>
+  rows === undefined || rows === null ? [] : Array.isArray(rows) ? rows : [rows];
+/** Checks the evaluation's budget every `DEADLINE_STRIDE` rows (or rows written). */
+const DEADLINE_STRIDE = 4096;
+/** Fields one `$pick` may name and paths one `$attach` may join (content uses a handful). */
+const MAX_NAMES = 64;
+/**
+ * The evaluation's budget as the registered helpers see it: JSONata's own guardrails (its timeout and depth checks,
+ * as the native group-by and sort call them) and the absolute deadline (budget.ts). Tests pass a deadline number.
+ */
+type Budget = number | (() => void) | undefined;
+const checkBudget = (budget: unknown) =>
+  typeof budget === 'function' ? (budget as () => void)() : checkDeadline(budget, 0);
+const budgetOf = (focus: jsonata.Focus | undefined): Budget => {
+  const env = focus?.environment as
+    { lookup(name: string): unknown; base?: { guardrails?: () => void } } | undefined;
+  return () => {
+    env?.base?.guardrails?.();
+    checkDeadline(env?.lookup(DEADLINE_BINDING), 0);
+  };
+};
+
+/**
+ * `$pluck(rows, path)`: the values at `path` (a dot path through own properties; a list on the way is read item by
+ * item) of every row, flattened — natively, where `rows.path` over tens of thousands of rows costs much of a
+ * transform's budget. Missing and `null` values are left out, so `$distinct($pluck(rows, 'principalId'))` lists ids.
+ * Unlike a JSONata path, a list directly inside a list isn't read into (Graph data has none on these paths).
+ */
+export function pluck(rows: unknown, path: unknown, budget?: Budget): unknown[] {
+  const keys = pathKeys(path, '$pluck');
+  const list = asRows(rows);
+  const out: unknown[] = [];
+  const push = (x: unknown) => {
+    if (x === undefined || x === null) return;
+    if (out.length >= MAX_SEQUENCE) throw new Error(`$pluck: at most ${MAX_SEQUENCE} values`);
+    out.push(x);
+  };
+  for (let i = 0; i < list.length; i++) {
+    if (i % DEADLINE_STRIDE === 0) checkBudget(budget);
+    const v = readPath(list[i], keys);
+    if (Array.isArray(v)) for (const x of v) push(x);
+    else push(v);
+  }
+  return out;
+}
+
+/** A shallow copy without `key`: object rest copies own enumerable properties as data (a "__proto__" key stays a key). */
+function omit(row: Record<string, unknown>, key: string): Record<string, unknown> {
+  const { [key]: _omitted, ...rest } = row;
+  return rest;
+}
+
+/**
+ * `$unnest(rows, path, as, key?)`: one row per item of the list at `path` — a shallow copy of the row with that item
+ * under `as` — natively. The new rows leave the list out (each carries its own item, not every item again): for a
+ * one-field path the field is dropped; for a dotted path the objects along it are copied without the list, and when
+ * the path runs through another list on the way, its first field is dropped whole. Rows whose list is missing or
+ * empty are left out; a single value counts as a one-item list. With `key`, each new row also gets that field — the
+ * row's `id` (`#<n>` for a numeric id, `@<position>` without one), the list's path and the item's position, e.g.
+ * `"<id>:passwordCredentials:1"` — unique within the result, for a table's `rowKey`. (`$u := $; list.( … $u … )` per
+ * row is what this replaces.)
+ */
+export function unnest(rows: unknown, path: unknown, as: unknown, budget?: Budget, key?: unknown): unknown[] {
+  const keys = pathKeys(path, '$unnest');
+  const name = writableField(as, '$unnest', 'the name for each item');
+  const keyName = key === undefined || key === null ? null : writableField(key, '$unnest', 'the key field');
+  const list = asRows(rows);
+  const out: Record<string, unknown>[] = [];
+  for (let i = 0; i < list.length; i++) {
+    if (i % DEADLINE_STRIDE === 0) checkBudget(budget);
+    const row = list[i];
+    if (!isRecord(row)) continue;
+    const v = readPath(row, keys);
+    const items = v === undefined || v === null ? [] : Array.isArray(v) ? v : [v];
+    if (items.length === 0) continue;
+    const base = keyName ? keyBase(row, i) : '';
+    const shared = withoutPath(row, keys);
+    for (let j = 0; j < items.length; j++) {
+      if (out.length >= MAX_SEQUENCE) throw new Error(`$unnest: at most ${MAX_SEQUENCE} rows`);
+      // By work done, not only by input row: one row can hold a long list.
+      if ((out.length & (DEADLINE_STRIDE - 1)) === DEADLINE_STRIDE - 1) checkBudget(budget);
+      const copy: Record<string, unknown> = { ...shared, [name]: items[j] };
+      if (keyName) copy[keyName] = `${base}:${path}:${j}`;
+      out.push(copy);
+    }
+  }
+  return out;
+}
+
+/**
+ * A row's part of an `$unnest` key, distinct for text ids, numeric ids and positions: a text id as it is (prefixed
+ * with `!` when it starts with `#`, `@` or `!`), `#<n>` for a numeric id, `@<position>` without an id.
+ */
+function keyBase(row: Record<string, unknown>, i: number): string {
+  const id = Object.hasOwn(row, 'id') ? row.id : undefined;
+  if (typeof id === 'string') return /^[#@!]/.test(id) ? `!${id}` : id;
+  if (typeof id === 'number') return `#${id}`;
+  return `@${i}`;
+}
+
+/** A shallow copy of `row` without the list at `keys` (see `$unnest`): only the objects along the path are copied. */
+function withoutPath(row: Record<string, unknown>, keys: readonly string[]): Record<string, unknown> {
+  const [head, ...rest] = keys;
+  if (!rest.length) return omit(row, head!);
+  const inner = row[head!];
+  if (!isRecord(inner) || !Object.hasOwn(row, head!)) return omit(row, head!);
+  return { ...row, [head!]: withoutPath(inner, rest) };
+}
+
+/**
+ * `$attach(rows, path, lookup, defaults?, as?)`: each row with the fields of `lookup[<the row's value at path>]` added
+ * (a shallow copy; the lookup's fields win) — natively, for joining rows with a table built once per distinct value
+ * (e.g. a grouping `ids{ $: { … } }`). A row without a matching entry gets `defaults` when given (`null` for none),
+ * else stays as it is. With `as`, the entry is not merged but put under that one field (`row.as.…`), so a lookup of
+ * whole objects (`objects{ id: $ }`) joins without building an entry per object. The value at `path` is compared as
+ * text (1 joins "1", as `$lookup` does). Entries are read as own properties only and must be objects; merged, their
+ * fields replace the row's (any key but JSONata's internal `_jsonata…` flags, e.g. `@odata.type`). A key that a
+ * grouping repeated holds a list, not an object: that row gets the default.
+ */
+export function attach(
+  rows: unknown,
+  path: unknown,
+  lookup: unknown,
+  defaults?: unknown,
+  budget?: Budget,
+  as?: unknown,
+): unknown[] {
+  if (!lookup || typeof lookup !== 'object' || Array.isArray(lookup) || isLambda(lookup))
+    throw new Error('$attach: the lookup must be an object');
+  const table = lookup as Record<string, unknown>;
+  // Several id fields joined against the same lookup in one copy per row: `path` and `as` are lists of the same
+  // length, `defaults` (optional) an object of per-name defaults.
+  const many = Array.isArray(path);
+  if (many && (!Array.isArray(as) || as.length !== (path as unknown[]).length || !as.length))
+    throw new Error('$attach: with a list of paths, name one field per path');
+  if (many && (path as unknown[]).length > MAX_NAMES)
+    throw new Error(`$attach: at most ${MAX_NAMES} paths in one call`);
+  const joins = (many ? (path as unknown[]) : [path]).map((p, i) => {
+    const name = many ? (as as unknown[])[i] : as;
+    const nest =
+      name === undefined || name === null ? null : writableField(name, '$attach', 'the name to attach under');
+    return { keys: pathKeys(p, '$attach'), nest };
+  });
+  if (many && joins.some((j) => !j.nest))
+    throw new Error('$attach: with a list of paths, name one field per path');
+  const fallbackFor = (nest: string | null): Record<string, unknown> | null => {
+    if (defaults === undefined || defaults === null) return null;
+    if (!many) return nest ? safeNested(defaults, 'the defaults') : safeEntry(defaults, 'the defaults');
+    if (typeof defaults !== 'object' || Array.isArray(defaults) || isLambda(defaults))
+      throw new Error('$attach: the defaults must be an object of one default per name');
+    const d = Object.hasOwn(defaults, nest!) ? (defaults as Record<string, unknown>)[nest!] : undefined;
+    return d === undefined || d === null ? null : safeNested(d, `the default for "${nest}"`);
+  };
+  const fallbacks = joins.map((j) => fallbackFor(j.nest));
+  const checked = new Map<string, Record<string, unknown> | null>();
+  const nestedOk = joins.every((j) => j.nest);
+  const entry = (key: string) => {
+    if (checked.has(key)) return checked.get(key)!;
+    let e: Record<string, unknown> | null = null;
+    if (Object.hasOwn(table, key)) {
+      const v = table[key];
+      if (v && typeof v === 'object' && !Array.isArray(v) && !isLambda(v))
+        e = nestedOk ? safeNested(v, `"${key}"`) : safeEntry(v, `"${key}"`);
+    }
+    checked.set(key, e);
+    return e;
+  };
+  const list = asRows(rows);
+  if (list.length > MAX_SEQUENCE) throw new Error(`$attach: at most ${MAX_SEQUENCE} rows`);
+  return list.map((row, i) => {
+    if (i % DEADLINE_STRIDE === 0) checkBudget(budget);
+    if (!isRecord(row)) return row;
+    if (!many) {
+      // One join (the usual case): a single spread copy.
+      const v = readPath(row, joins[0]!.keys);
+      const e =
+        typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean' ? entry(String(v)) : null;
+      const add = e ?? fallbacks[0];
+      if (!add) return row;
+      const nest = joins[0]!.nest;
+      return nest ? { ...row, [nest]: add } : { ...row, ...add };
+    }
+    let out: Record<string, unknown> | null = null;
+    for (let j = 0; j < joins.length; j++) {
+      const { keys, nest } = joins[j]!;
+      const v = readPath(row, keys);
+      const e =
+        typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean' ? entry(String(v)) : null;
+      const add = e ?? fallbacks[j];
+      if (!add) continue;
+      out ??= { ...row };
+      out[nest!] = add;
+    }
+    return out ?? row;
+  });
+}
+
+/**
+ * `$withCount(rows, path, as)`: each row with `as` = how many rows share its value at `path`, compared as text like
+ * `$attach` (rows without one get 0) — natively, e.g. "apps with several live secrets" as `$applyAdvanced($withCount(secrets, 'id', 'n'), n > 1)`.
+ */
+export function withCount(rows: unknown, path: unknown, as: unknown, budget?: Budget): unknown[] {
+  const keys = pathKeys(path, '$withCount');
+  const name = writableField(as, '$withCount', 'the count field');
+  const list = asRows(rows);
+  if (list.length > MAX_SEQUENCE) throw new Error(`$withCount: at most ${MAX_SEQUENCE} rows`);
+  const keyOf = (row: unknown) => {
+    const v = readPath(row, keys);
+    return typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean' ? String(v) : null;
+  };
+  const counts = new Map<string, number>();
+  for (let i = 0; i < list.length; i++) {
+    if (i % DEADLINE_STRIDE === 0) checkBudget(budget);
+    const k = keyOf(list[i]);
+    if (k !== null) counts.set(k, (counts.get(k) ?? 0) + 1);
+  }
+  return list.map((row, i) => {
+    if (i % DEADLINE_STRIDE === 0) checkBudget(budget);
+    if (!isRecord(row)) return row;
+    const k = keyOf(row);
+    return { ...row, [name]: k === null ? 0 : counts.get(k)! };
+  });
+}
+
+/**
+ * `$pick(rows, fields)`: each row with only the named top-level fields (own properties; missing ones left out) —
+ * natively, to keep big objects (a service principal from `getByIds`) small before they are joined or returned.
+ */
+export function pick(rows: unknown, fields: unknown, budget?: Budget): unknown[] {
+  const list = asRows(rows);
+  const given = Array.isArray(fields) ? fields : [fields];
+  if (given.length > MAX_NAMES) throw new Error(`$pick: at most ${MAX_NAMES} fields`);
+  const names = given.map((f) => writableField(f, '$pick', 'each field'));
+  if (!names.length) throw new Error('$pick: name at least one field');
+  if (list.length > MAX_SEQUENCE) throw new Error(`$pick: at most ${MAX_SEQUENCE} rows`);
+  return list.map((row, i) => {
+    if (i % DEADLINE_STRIDE === 0) checkBudget(budget);
+    if (!isRecord(row)) return row;
+    const out: Record<string, unknown> = {};
+    for (const n of names) if (Object.hasOwn(row, n)) out[n] = row[n];
+    return out;
+  });
+}
+
+/** An object nested whole under one field: no functions at its top level (it is data, not merged into the row). */
+function safeNested(v: unknown, what: string): Record<string, unknown> {
+  if (!v || typeof v !== 'object' || Array.isArray(v) || isLambda(v))
+    throw new Error(`$attach: ${what} must be an object`);
+  for (const [k, x] of Object.entries(v))
+    if (isLambda(x)) throw new Error(`$attach: "${k}" can't be a function`);
+  return v as Record<string, unknown>;
+}
+
+/**
+ * An object of fields to merge into rows (by spread, so any key — `@odata.type`, even `__proto__` — stays a plain
+ * key): no JSONata internal flags (they would mark the row as a function), no functions.
+ */
+function safeEntry(v: unknown, what: string): Record<string, unknown> {
+  if (!v || typeof v !== 'object' || Array.isArray(v) || isLambda(v))
+    throw new Error(`$attach: ${what} must be an object`);
+  for (const [k, x] of Object.entries(v)) {
+    if (k.startsWith('_jsonata')) throw new Error(`$attach: "${k}" can't be a field name`);
+    if (isLambda(x)) throw new Error(`$attach: "${k}" can't be a function`);
+  }
+  return v as Record<string, unknown>;
 }
 
 /** `now` from the evaluation scope when present (tests, consistent run timestamps), else the clock. */
@@ -478,6 +796,11 @@ export const HELPER_NAMES = [
   'applyAdvanced',
   'withFields',
   'take',
+  'pluck',
+  'unnest',
+  'attach',
+  'pick',
+  'withCount',
 ] as const;
 
 /** Registers the helpers on a compiled expression. */
@@ -503,4 +826,46 @@ export function registerHelpers(expr: jsonata.Expression): void {
   expr.registerFunction('applyAdvanced', (rows: unknown, filter: unknown) => applyAdvanced(rows, filter));
   expr.registerFunction('withFields', (rows: unknown, fields: unknown) => withFields(rows, fields), '<xo:a>');
   expr.registerFunction('take', (rows: unknown, n: unknown) => take(rows, n));
+  expr.registerFunction(
+    'pluck',
+    function (this: jsonata.Focus, rows: unknown, path: unknown) {
+      return pluck(rows, path, budgetOf(this));
+    },
+    '<xs:a>',
+  );
+  expr.registerFunction(
+    'unnest',
+    function (this: jsonata.Focus, rows: unknown, path: unknown, as: unknown, key?: unknown) {
+      return unnest(rows, path, as, budgetOf(this), key);
+    },
+    '<xss(sl)?:a>',
+  );
+  expr.registerFunction(
+    'attach',
+    function (
+      this: jsonata.Focus,
+      rows: unknown,
+      path: unknown,
+      lookup: unknown,
+      defaults?: unknown,
+      as?: unknown,
+    ) {
+      return attach(rows, path, lookup, defaults, budgetOf(this), as);
+    },
+    '<xxox?x?:a>',
+  );
+  expr.registerFunction(
+    'pick',
+    function (this: jsonata.Focus, rows: unknown, fields: unknown) {
+      return pick(rows, fields, budgetOf(this));
+    },
+    '<xx:a>',
+  );
+  expr.registerFunction(
+    'withCount',
+    function (this: jsonata.Focus, rows: unknown, path: unknown, as: unknown) {
+      return withCount(rows, path, as, budgetOf(this));
+    },
+    '<xss:a>',
+  );
 }

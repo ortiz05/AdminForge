@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/report.schema.json
 kind: report
 id: identity.privileged-role-assignments
-version: 1.2.0
+version: 2.0.0
 title: Privileged role assignments
 summary: >-
   Every active and eligible assignment of a privileged Microsoft Entra role — who, which role, standing or eligible,
@@ -34,6 +34,9 @@ datasources:
       eligible: { path: /roleManagement/directory/roleEligibilityScheduleInstances, query: { $expand: principal } }
       instances: { path: /roleManagement/directory/roleAssignmentScheduleInstances, query: { $select: "id,roleAssignmentOriginId,assignmentType,memberType,startDateTime,endDateTime" } }
     cache: { ttl: 600 }
+    # Built natively: roles and schedule instances are keyed lookups joined onto the assignments ($attach), holder
+    # kinds, assignment kinds and account findings are row subsets labelled with $withFields. A JSONata block per
+    # assignment doesn't fit the budget at a few hundred assignments.
     transform: >-
       ${ (
         $privilegedNames := ['Global Administrator', 'Privileged Role Administrator', 'Privileged Authentication Administrator',
@@ -42,63 +45,118 @@ datasources:
           'Password Administrator', 'Hybrid Identity Administrator', 'Intune Administrator', 'Cloud Device Administrator',
           'Exchange Administrator', 'SharePoint Administrator', 'Domain Name Administrator', 'External Identity Provider Administrator',
           'Partner Tier2 Support', 'Security Operator', 'Directory Writers', 'Global Reader', 'Lifecycle Workflows Administrator'];
+        $c := function($path, $type, $op, $v) { { "path": $path, "type": $type, "op": $op, "value": $v } };
+        $and := function($clauses) { { "join": "and", "clauses": $clauses } };
+        $where := function($rows, $clauses) { $applyAdvanced($rows, $and($clauses)) };
+        /* Grouping keys must be text: only rows that have one. */
+        $having := function($rows, $path) { $where($rows, [$c($path, 'string', 'notEmpty', null)]) };
+        $first := function($v) { $type($v) = 'array' ? $v[0] : $v };
         $defs := [value.definitions.value];
-        $instances := [value.instances.value];
-        $def := function($rid) { $defs[id = $rid or templateId = $rid][0] };
-        $kind := function($p) {
-          $substringAfter($p.`@odata.type`, '#microsoft.graph.') = 'servicePrincipal' ? 'Service principal'
-          : $substringAfter($p.`@odata.type`, '#microsoft.graph.') = 'group' ? 'Group' : 'User'
-        };
-        $row := function($a, $how, $start, $end, $via) {
-          (
-            $d := $def($a.roleDefinitionId);
-            $p := $a.principal;
-            $isUser := $kind($p) = 'User';
-            {
-              "key": $how & '|' & $a.id,
-              "role": $d.displayName ? $d.displayName : $a.roleDefinitionId,
-              "roleId": $a.roleDefinitionId,
-              "privileged": $d.isPrivileged = true or $d.displayName in $privilegedNames,
-              "principalId": $a.principalId,
-              "principal": $a.principal.displayName,
-              "principalDetail": $a.principal.userPrincipalName ? $a.principal.userPrincipalName : $a.principal.appId,
-              "principalType": $kind($a.principal),
-              "assignment": $how,
-              "via": $via ? $via : 'Direct',
-              "scope": $a.directoryScopeId = '/' ? 'Directory' : $a.directoryScopeId,
-              "start": $start,
-              "end": $end,
-              "permanent": $not($boolean($end)),
-              "source": $isUser ? ($p.onPremisesSyncEnabled = true ? 'Synced' : 'Cloud') : null,
-              "accountEnabled": $p.accountEnabled,
-              "findings": $isUser ? [
-                $p.onPremisesSyncEnabled = true ? 'Synced from AD',
-                $p.userType = 'Guest' ? 'Guest account',
-                $p.accountEnabled = false ? 'Sign-in blocked',
-                $count($p.assignedLicenses) > 0 ? 'Licensed (daily-use account?)'
-              ] : []
-            }
-          )
-        };
-        $active := [value.active.value.(
-          $aid := id;
-          $inst := $instances[roleAssignmentOriginId = $aid or id = $aid][0];
-          $row($, $inst.assignmentType = 'Activated' ? 'Activated' : 'Standing', $inst.startDateTime, $inst.endDateTime, $inst.memberType)
-        )];
-        $eligible := [value.eligible.value.$row($, 'Eligible', startDateTime, endDateTime, memberType)];
-        $all := $append($active, $eligible);
-        $shown := $all[
-          ($$.params.scope = 'All' or privileged)
-          and ($$.params.assignment = 'Any' or assignment = $$.params.assignment)
-          and ($$.params.principal = 'Any' or principalType = $$.params.principal)
+        $withId := $having($defs, 'id');
+        $withTemplate := $having($defs, 'templateId');
+        $defById := $withId{ id: $ };
+        $defByTemplate := $withTemplate{ templateId: $ };
+        $active := value.active.value;
+        $eligibleRaw := value.eligible.value;
+        /* Each role (a few dozen) resolved once: its name and whether it is privileged. */
+        $roleIds := $distinct($pluck($append($active, $eligibleRaw), 'roleDefinitionId'));
+        $roleInfo := $roleIds{ $: (
+          $byId := $first($lookup($defById, $));
+          $d := $byId ? $byId : $first($lookup($defByTemplate, $));
+          { "role": $d.displayName ? $d.displayName : $, "privileged": $d.isPrivileged = true or $d.displayName in $privilegedNames }
+        ) };
+        /* The schedule instance of each active assignment (by its origin, else by its id); an origin listed twice keeps
+           its first instance. */
+        $fields := ['assignmentType', 'memberType', 'startDateTime', 'endDateTime'];
+        $instances := $withCount($having(value.instances.value, 'roleAssignmentOriginId'), 'roleAssignmentOriginId', 'n');
+        $once := $pick($where($instances, [$c('n', 'number', 'eq', 1)]), $append(['roleAssignmentOriginId'], $fields));
+        $twice := $pick($where($instances, [$c('n', 'number', 'gt', 1)]), $append(['roleAssignmentOriginId'], $fields));
+        $byOrigin := $merge([$once{ roleAssignmentOriginId: $ }, $twice{ roleAssignmentOriginId: $[0] }]);
+        $instancesWithId := $pick($having(value.instances.value, 'id'), $append(['id'], $fields));
+        $byInstanceId := $instancesWithId{ id: $ };
+        $joined := $attach($active, 'id', $byOrigin);
+        $matched := $where($joined, [$c('roleAssignmentOriginId', 'string', 'notEmpty', null)]);
+        $unmatched := $where($joined, [$c('roleAssignmentOriginId', 'string', 'isEmpty', null)]);
+        $withInstance := $append($matched, $attach($unmatched, 'id', $byInstanceId));
+        $kinds := $append($append(
+          $withFields($where($withInstance, [$c('assignmentType', 'string', 'eq', 'Activated')]), { "assignment": "Activated" }),
+          $withFields($where($withInstance, [$c('assignmentType', 'string', 'ne', 'Activated')]), { "assignment": "Standing" })),
+          $withFields($eligibleRaw, { "assignment": "Eligible" }));
+        $all := $attach($kinds, 'roleDefinitionId', $roleInfo, { "privileged": false });
+        /* Holder kinds from each holder's @odata.type (a few distinct values), then each kind's assignments picked
+           natively by holder id; a holder Graph no longer returns counts as a user, as before. */
+        $holders := $pluck($all, 'principal');
+        $idsByType := $holders{ `@odata.type`: id };
+        $idsOf := function($type) { $append([], $lookup($idsByType, '#microsoft.graph.' & $type)) };
+        $groupIds := $idsOf('group');
+        $spIds := $idsOf('servicePrincipal');
+        $sp := $where($all, [$c('principalId', 'string', 'in', $spIds)]);
+        $groups := $where($all, [$c('principalId', 'string', 'in', $groupIds)]);
+        $usersRaw := $where($all, [$c('principalId', 'string', 'notIn', $append($spIds, $groupIds))]);
+        /* The holder's second line: a user's UPN, an app's app id — one entry per holder (a holder with several
+           assignments takes its first). */
+        $userRows := $withCount($usersRaw, 'principalId', 'n');
+        $spRows := $withCount($sp, 'principalId', 'n');
+        $once := function($rows) { $where($rows, [$c('n', 'number', 'eq', 1)]) };
+        $many := function($rows) { $where($rows, [$c('n', 'number', 'gt', 1)]) };
+        $u1 := $once($userRows);
+        $uN := $many($userRows);
+        $s1 := $once($spRows);
+        $sN := $many($spRows);
+        $detail := $merge([
+          $u1{ principalId: { "principalDetail": principal.userPrincipalName } },
+          $uN{ principalId: { "principalDetail": $[0].principal.userPrincipalName } },
+          $s1{ principalId: { "principalDetail": principal.appId } },
+          $sN{ principalId: { "principalDetail": $[0].principal.appId } }
+        ]);
+        /* Account findings for users: each subset of the four signals labelled with its list. */
+        $signals := [
+          { "yes": $c('principal.onPremisesSyncEnabled', 'boolean', 'eq', true), "no": $c('principal.onPremisesSyncEnabled', 'boolean', 'ne', true), "finding": "Synced from AD" },
+          { "yes": $c('principal.userType', 'string', 'eq', 'Guest'), "no": $c('principal.userType', 'string', 'ne', 'Guest'), "finding": "Guest account" },
+          { "yes": $c('principal.accountEnabled', 'boolean', 'eq', false), "no": $c('principal.accountEnabled', 'boolean', 'ne', false), "finding": "Sign-in blocked" },
+          { "yes": $c('principal.assignedLicenses.skuId', 'string', 'notEmpty', null), "no": $c('principal.assignedLicenses.skuId', 'string', 'isEmpty', null), "finding": "Licensed (daily-use account?)" }
         ];
+        $parts := $reduce($signals, function($parts, $s) {
+          [$parts.(
+            $p := $;
+            $yes := $where($p.rows, [$s.yes]);
+            $no := $where($p.rows, [$s.no]);
+            [$count($yes) > 0 ? { "rows": $yes, "findings": $append($p.findings, $s.finding) },
+             $count($no) > 0 ? { "rows": $no, "findings": $p.findings }]
+          )]
+        }, [{ "rows": $usersRaw, "findings": [] }]);
+        $users := $append([], $parts.$withFields(rows, { "findings": findings }));
+        $synced := $where($users, [$c('principal.onPremisesSyncEnabled', 'boolean', 'eq', true)]);
+        $cloud := $where($users, [$c('principal.onPremisesSyncEnabled', 'boolean', 'ne', true)]);
+        $labelled := $append($append($append(
+          $withFields($synced, { "principalType": "User", "source": "Synced" }),
+          $withFields($cloud, { "principalType": "User", "source": "Cloud" })),
+          $withFields($groups, { "principalType": "Group", "findings": [] })),
+          $withFields($sp, { "principalType": "Service principal", "findings": [] }));
+        $detailed := $attach($labelled, 'principalId', $detail);
+        $rows := $append(
+          $withFields($where($detailed, [$c('endDateTime', 'date', 'isEmpty', null)]), { "permanent": true }),
+          $withFields($where($detailed, [$c('endDateTime', 'date', 'notEmpty', null)]), { "permanent": false }));
+        $p := $$.params;
+        $shown := $where($rows, $append($append(
+          $p.scope = 'All' ? [] : [$c('privileged', 'boolean', 'eq', true)],
+          $p.assignment = 'Any' ? [] : [$c('assignment', 'string', 'eq', $p.assignment)]),
+          $p.principal = 'Any' ? [] : [$c('principalType', 'string', 'eq', $p.principal)]));
+        $privileged := $where($rows, [$c('privileged', 'boolean', 'eq', true)]);
         {
-          "rows": [$shown^(role, assignment, principal)],
-          "standing": $count($all[privileged and assignment = 'Standing']),
-          "eligible": $count($all[privileged and assignment = 'Eligible']),
-          "globalAdmins": $count($all[roleId = '62e90394-69f5-4237-9190-012177145e10' and assignment != 'Eligible']),
-          "servicePrincipals": $count($all[privileged and principalType = 'Service principal']),
-          "accountFindings": $count($distinct($all[privileged and principalType = 'User' and (source = 'Synced' or 'Guest account' in findings or 'Sign-in blocked' in findings)].principalId)),
+          /* A sort key must not be empty: holders without a name go last. */
+          "rows": $append(
+            [$where($shown, [$c('principal.displayName', 'string', 'notEmpty', null)])^(role, assignment, principal.displayName)],
+            [$where($shown, [$c('principal.displayName', 'string', 'isEmpty', null)])^(role, assignment)]),
+          "standing": $count($where($privileged, [$c('assignment', 'string', 'eq', 'Standing')])),
+          "eligible": $count($where($privileged, [$c('assignment', 'string', 'eq', 'Eligible')])),
+          "globalAdmins": $count($where($rows, [
+            $c('roleDefinitionId', 'string', 'eq', '62e90394-69f5-4237-9190-012177145e10'), $c('assignment', 'string', 'ne', 'Eligible')
+          ])),
+          "servicePrincipals": $count($where($privileged, [$c('principalType', 'string', 'eq', 'Service principal')])),
+          "accountFindings": $count($distinct($pluck($where($privileged, [
+            $c('principalType', 'string', 'eq', 'User'), $c('findings', 'string', 'in', ['Synced from AD', 'Guest account', 'Sign-in blocked'])
+          ]), 'principalId'))),
           "pimAvailable": $exists(value.eligible.value),
           "truncated": $exists(value.active.`@odata.nextLink`) or $exists(value.eligible.`@odata.nextLink`)
         }
@@ -155,30 +213,31 @@ layout:
     id: assignments
     span: 12
     data: assignments.rows
-    rowKey: key
+    rowKey: id
     columns:
       - { field: role, label: Role, filter: facet, sortable: true }
-      - { field: principal, label: Holder, kind: identity, secondary: principalDetail, sortable: true }
+      - { field: principal.displayName, label: Holder, kind: identity, secondary: principalDetail, sortable: true }
       - { field: principalType, label: Holder type, filter: { type: facet, param: principal } }
       - field: assignment
         label: Assignment
         kind: status
         map: { Standing: [warn, Standing], Activated: [info, Activated (PIM)], Eligible: [ok, Eligible] }
         filter: { type: facet, param: assignment }
-      - { field: via, label: Via, filter: facet }
+      - { field: memberType, label: Via, filter: facet }
       - { field: findings, label: Account findings, kind: tags }
       - { field: source, label: Source, filter: facet, hidden: true }
-      - { field: accountEnabled, label: Sign-in, kind: status, map: { "true": [ok, Allowed], "false": [warn, Blocked] }, hidden: true }
-      - { field: scope, label: Scope }
-      - { field: start, label: Start, kind: date }
-      - { field: end, label: End, kind: date }
+      - { field: principal.accountEnabled, label: Sign-in, kind: status, map: { "true": [ok, Allowed], "false": [warn, Blocked] }, hidden: true }
+      - { field: directoryScopeId, label: Scope, kind: status, map: { "/": [neutral, Directory] } }
+      - { field: startDateTime, label: Start, kind: date }
+      - { field: endDateTime, label: End, kind: date }
       - { field: permanent, label: Permanent, kind: boolean, hidden: true }
       - { field: principalId, label: Holder object id, kind: guid, hidden: true }
-      - { field: roleId, label: Role definition id, kind: guid, hidden: true }
+      - { field: principal.appId, label: App id, kind: guid, hidden: true }
+      - { field: roleDefinitionId, label: Role definition id, kind: guid, hidden: true }
     inspect:
       page: identity.role
       params:
-        id: ${ row.roleId }
+        id: ${ row.roleDefinitionId }
     rowActions:
       - { label: Open user, icon: user, href: "/p/identity.user?id=${ $encode(row.principalId) }", when: "${ row.principalType = 'User' }" }
       - { label: Open group, icon: users-three, href: "/p/identity.group?id=${ $encode(row.principalId) }", when: "${ row.principalType = 'Group' }" }

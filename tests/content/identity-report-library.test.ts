@@ -251,17 +251,19 @@ describe('identity.app-permissions', () => {
       'high',
     ]);
     expect(p.rows.find((r: Out) => r.permission === 'full_access_as_app')).toMatchObject({
-      app: 'Legacy Automation',
-      api: 'Office 365 Exchange Online',
-      holder: 'This organisation',
+      principalDisplayName: 'Legacy Automation',
+      resourceDisplayName: 'Office 365 Exchange Online',
+      sp: expect.objectContaining({ holder: 'This organisation' }),
     });
-    expect(p.rows.find((r: Out) => r.app === 'func-example')).toMatchObject({
-      holder: 'Managed identity',
+    expect(p.rows.find((r: Out) => r.principalDisplayName === 'func-example')).toMatchObject({
+      sp: expect.objectContaining({ holder: 'Managed identity' }),
       permission: 'Mail.ReadWrite',
     });
-    expect(p.rows.find((r: Out) => r.app === 'PDF Converter Online')).toMatchObject({
-      holder: 'Other organisation',
-      publisher: 'Unverified publisher',
+    expect(p.rows.find((r: Out) => r.principalDisplayName === 'PDF Converter Online')).toMatchObject({
+      sp: expect.objectContaining({
+        holder: 'Other organisation',
+        verifiedPublisher: { displayName: 'Unverified publisher' },
+      }),
     });
   });
 
@@ -286,11 +288,11 @@ describe('identity.app-permissions', () => {
   it("never offers to disable AdminForge's own apps", async () => {
     const env = { AF_AUTOMATION_CLIENT_ID: '00000000-0000-4000-8001-000000000306' };
     const rows = (await run('identity.app-permissions', {}, env)).out.permissions.rows;
-    const legacy = rows.find((r: Out) => r.app === 'Legacy Automation');
-    expect(legacy.adminforge).toBe(true);
+    const legacy = rows.find((r: Out) => r.principalDisplayName === 'Legacy Automation');
+    expect(legacy.sp.adminforge).toBe(true);
     const disable = action('identity.app-permissions', 'identity.disable-enterprise-app');
     expect(await when(disable, legacy)).toBe(false);
-    expect(await when(disable, { ...legacy, adminforge: false })).toBe(true);
+    expect(await when(disable, { ...legacy, sp: { ...legacy.sp, adminforge: false } })).toBe(true);
   });
 });
 
@@ -299,19 +301,19 @@ describe('identity.consent-grants', () => {
     const r = (await run('identity.consent-grants')).out.report;
     expect(r).toMatchObject({ critical: 2, adminRisky: 2, userRisky: 3, apps: 4, truncated: false });
     expect(r.rows[0]).toMatchObject({
-      app: 'Legacy Automation',
-      consent: 'Admin',
-      user: 'All users',
-      tier: 'critical',
+      client: expect.objectContaining({ displayName: 'Legacy Automation' }),
+      consentType: 'AllPrincipals',
+      who: { displayName: 'All users' },
+      sc: expect.objectContaining({ tier: 'critical' }),
     });
     expect(r.rows.find((g: Out) => g.id === 'grant-pdf-spatel')).toMatchObject({
-      user: 'Sam Patel',
-      origin: 'Other organisation',
-      risky: ['Files.ReadWrite.All', 'Mail.Read'],
+      who: expect.objectContaining({ displayName: 'Sam Patel' }),
+      client: expect.objectContaining({ origin: 'Other organisation' }),
+      sc: expect.objectContaining({ risky: ['Files.ReadWrite.All', 'Mail.Read'] }),
     });
     expect(r.rows.find((g: Out) => g.id === 'grant-exo-jrivera')).toMatchObject({
-      api: 'Office 365 Exchange Online',
-      tier: 'critical',
+      resource: expect.objectContaining({ displayName: 'Office 365 Exchange Online' }),
+      sc: expect.objectContaining({ tier: 'critical' }),
     });
     expect((await run('identity.consent-grants', { risk: 'all' })).out.report.rows).toHaveLength(8);
     expect((await run('identity.consent-grants', { consent: 'User' })).out.report.rows).toHaveLength(3);
@@ -322,7 +324,7 @@ describe('identity.consent-grants', () => {
     expect(await renderTemplate(revoke.inputs, { row: { id: 'grant-x' } })).toEqual({ grantId: 'grant-x' });
     const env = { AF_PROTECTED_APP_IDS: ' 00000000-0000-4000-8001-000000000306 , other' };
     const row = (await run('identity.consent-grants', {}, env)).out.report.rows[0];
-    expect(row.adminforge).toBe(true);
+    expect(row.client.adminforge).toBe(true);
     expect(await when(revoke, row)).toBe(false);
   });
 
@@ -342,12 +344,12 @@ describe('identity.apps-without-owners', () => {
     const r = (await run('identity.apps-without-owners')).out.report;
     expect(r).toMatchObject({ registrations: 3, withAccess: 1, enterprise: 2, openToAll: 1 });
     expect(r.rows[0]).toMatchObject({
-      name: 'Example Data Pipeline',
+      displayName: 'Example Data Pipeline',
       attention: 'high',
-      activeCredentials: 1,
-      applicationPermissions: 2,
+      reason: 'Live credentials',
     });
-    expect(r.rows.map((x: Out) => x.name)).not.toContain('Example Reporting'); // its registration is covered
+    expect(r.rows.map((x: Out) => x.displayName)).not.toContain('Example Reporting'); // its registration is covered
+    expect(new Set(r.rows.map((x: Out) => x.id)).size).toBe(r.rows.length); // each app once
     const regs = (await run('identity.apps-without-owners', { kind: 'App registrations' })).out;
     expect(regs.sps).toBeNull();
     expect(regs.report.rows.every((x: Out) => x.kind === 'App registration')).toBe(true);
@@ -362,26 +364,26 @@ describe('identity.apps-without-owners', () => {
 
 describe('identity.app-credential-hygiene', () => {
   it('finds long-lived secrets, several active secrets and credentials on enterprise apps', async () => {
-    const c = (await run('identity.app-credential-hygiene')).out.credentials;
+    const c = (await run('identity.app-credential-hygiene')).out.page;
     expect(c).toMatchObject({ long: 4, onServicePrincipals: 2, several: 1, secretOnly: 2 });
     expect(c.rows[0]).toMatchObject({
-      app: 'Example Data Pipeline',
-      findings: ['Practically never expires'],
+      displayName: 'Example Data Pipeline',
+      finding: 'Practically never expires',
       severity: 'crit',
     });
-    const onSp = c.rows.filter((r: Out) => r.onServicePrincipal).map((r: Out) => r.app);
+    const onSp = c.rows.filter((r: Out) => r.onServicePrincipal).map((r: Out) => r.displayName);
     expect(onSp.sort()).toEqual(['Example Reporting', 'Office 365 Exchange Online']); // not the SAML app or the managed identity
-    expect(c.rows.find((r: Out) => r.name === 'ci-old').findings).toEqual([
-      'Longer than allowed',
-      'Several active secrets',
-    ]);
+    // 2.0: one finding per credential (the most severe) and the app's live secret count.
+    const ciOld = c.rows.find((r: Out) => r.c.displayName === 'ci-old');
+    expect(ciOld).toMatchObject({ finding: 'Longer than allowed', long: true });
+    expect(ciOld.liveSecrets).toBeGreaterThan(1);
+    expect(new Set(c.rows.map((r: Out) => r.key)).size).toBe(c.rows.length);
   });
 
   it('applies the allowed lifetime and the finding filter', async () => {
-    const two = (await run('identity.app-credential-hygiene', { maxDays: 730 })).out.credentials;
-    expect(two.rows.map((r: Out) => r.name)).not.toContain('prod');
-    const sp = (await run('identity.app-credential-hygiene', { finding: 'servicePrincipal' })).out
-      .credentials;
+    const two = (await run('identity.app-credential-hygiene', { maxDays: 730 })).out.page;
+    expect(two.rows.map((r: Out) => r.c.displayName)).not.toContain('prod');
+    const sp = (await run('identity.app-credential-hygiene', { finding: 'servicePrincipal' })).out.page;
     expect(sp.rows).toHaveLength(2);
   });
 });
@@ -391,17 +393,14 @@ describe('identity.app-registration-risks', () => {
     const a = (await run('identity.app-registration-risks')).out.apps;
     expect(a).toMatchObject({ critical: 1, implicit: 1, publicClient: 1, personal: 1 });
     expect(a.rows[0]).toMatchObject({ displayName: 'Example Portal', severity: 'crit' });
-    expect(a.rows[0].findings).toEqual(
-      expect.arrayContaining(['Wildcard redirect URI', 'Redirect URI over plain HTTP']),
-    );
-    expect(a.rows.find((r: Out) => r.displayName === 'Example Reporting').findings).toContain(
-      'Redirect URI on a shared hosting domain',
-    );
-    expect(a.rows.find((r: Out) => r.displayName === 'Legacy Automation').criticalPermissions).toEqual([
-      'RoleManagement.ReadWrite.Directory',
-      'Application.ReadWrite.All',
-      'Directory.ReadWrite.All',
-    ]);
+    // 2.0: one true/false field per finding, set natively (no JSONata per app).
+    expect(a.rows[0]).toMatchObject({ wildcardUri: true, plainHttpUri: true });
+    expect(a.rows.find((r: Out) => r.displayName === 'Example Reporting')).toMatchObject({
+      sharedHostingUri: true,
+    });
+    expect(a.rows.find((r: Out) => r.displayName === 'Legacy Automation')).toMatchObject({
+      criticalPermissions: true,
+    });
     expect((await run('identity.app-registration-risks', { severity: 'crit' })).out.apps.rows).toHaveLength(
       1,
     );
@@ -435,16 +434,26 @@ describe('identity.groups-without-owners', () => {
 describe('identity.disabled-users-with-licences', () => {
   it('lists one row per licence and how it was assigned', async () => {
     const u = (await run('identity.disabled-users-with-licences')).out.users;
-    expect(u).toMatchObject({ accounts: 2, licences: 4, direct: 3 });
+    expect(u).toMatchObject({ accounts: 2, licences: 5, direct: 4 });
     expect(u.rows.map((r: Out) => [r.displayName, r.sku, r.assignment])).toEqual([
+      // A SKU the tenant's list doesn't name shows (and is removed) by its id; the failed group assignment
+      // (CountViolation) holds no seat and is left out.
+      ['Dana Former', '30000000-0000-4000-8000-000000000499', 'Direct'],
       ['Dana Former', 'SPE_E3', 'Direct'],
       ['Rafael Castillo', 'POWER_BI_PRO', 'Direct'],
       ['Rafael Castillo', 'SPE_E5', 'Group'],
-      ['Rafael Castillo', 'VISIOCLIENT', 'Direct and group'],
+      // 2.0: one row per assignment — a licence held directly and through a group is two rows.
+      ['Rafael Castillo', 'VISIOCLIENT', 'Direct'],
+      ['Rafael Castillo', 'VISIOCLIENT', 'Group'],
     ]);
+    expect(new Set(u.rows.map((r: Out) => r.key)).size).toBe(u.rows.length);
     const remove = action('identity.disabled-users-with-licences', 'identity.remove-licence');
     expect(await when(remove, { assignment: 'Group' })).toBe(false);
-    expect(await renderTemplate(remove.inputs, { row: u.rows[1] })).toEqual({
+    expect(await renderTemplate(remove.inputs, { row: u.rows[0] })).toEqual({
+      userId: '30000000-0000-4000-8000-000000000004',
+      sku: '30000000-0000-4000-8000-000000000499',
+    });
+    expect(await renderTemplate(remove.inputs, { row: u.rows[2] })).toEqual({
       userId: '00000000-0000-4000-8000-000000000104',
       sku: 'POWER_BI_PRO',
     });
@@ -569,12 +578,20 @@ describe('identity.tenant-baseline', () => {
 describe('identity.privileged-role-assignments account findings', () => {
   it('flags privileged users synced from AD, guests and blocked accounts', async () => {
     const a = (await run('identity.privileged-role-assignments')).out.assignments;
-    expect(def('identity.privileged-role-assignments').version).toBe('1.2.0');
+    expect(def('identity.privileged-role-assignments').version).toBe('2.0.0');
     expect(a.accountFindings).toBe(1);
-    const dana = a.rows.find((r: Out) => r.principal === 'Dana Okafor');
+    // 2.0: the holder is the expanded principal object; rows are keyed by assignment id.
+    const dana = a.rows.find((r: Out) => r.principal.displayName === 'Dana Okafor');
     expect(dana).toMatchObject({ source: 'Synced' });
     expect(dana.findings).toContain('Synced from AD');
-    expect(a.rows.find((r: Out) => r.principalType === 'Service principal').findings).toEqual([]);
+    const sp = a.rows.find((r: Out) => r.principalType === 'Service principal');
+    expect(sp.findings).toEqual([]);
+    expect(sp.principalDetail).toBe(sp.principal.appId); // an app's second line is its app id
+    expect(dana.principalDetail).toBe(dana.principal.userPrincipalName);
+    // Holder kinds come from @odata.type: a group without securityEnabled in the response is still a group.
+    const all = (await run('identity.privileged-role-assignments', { scope: 'All' })).out.assignments;
+    const group = all.rows.find((r: Out) => r.principal.displayName === 'SG-PIM-Identity-Admins');
+    expect(group).toMatchObject({ principalType: 'Group', findings: [] });
   });
 });
 

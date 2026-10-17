@@ -281,9 +281,8 @@ Found by the organization and security evaluation; the fixed findings are in CHA
       applications 1,000 apps/sign-in records (2,000 grants), authentication method strength 1,000 users, licence
       assignment errors 500 rows per list, group lifecycle 2,000 per list, SAML 500 apps, the manager check 5,000 users.
       Each transform is tested at its cap against the 250 ms budget (+20 %) in `tests/content/engineer-report-library.test.ts`.
-- [ ] `reports.stale-devices-weekly` and `reports.non-compliant-devices-daily` ship `enabled: false`: their reports'
-      transforms time out at enterprise scale (`tests/perf/budgets.json`). Turn them on when the content-fix stream's
-      rework of `endpoint.stale-devices` and `endpoint.non-compliant-devices` meets its perf budget.
+- [x] `reports.stale-devices-weekly` and `reports.non-compliant-devices-daily` are on (1.1.0): `endpoint.stale-devices`
+      and `endpoint.non-compliant-devices` 2.0.0 filter natively and meet their perf budgets at enterprise scale.
 - [ ] Conditional Access report-only impact through Log Analytics (`SigninLogs`, `mv-expand ConditionalAccessPolicies`)
       is untested live: no workspace receives the validation tenant's sign-in logs. Check it once a workspace is set.
 - [ ] BitLocker escrow and Windows LAPS coverage aren't scheduled: the automation identity would need
@@ -426,6 +425,49 @@ Found by the organization and security evaluation; the fixed findings are in CHA
 - [ ] Live tooling: for ~10 minutes after `provision test-identities --enable` every Graph call can answer `reauth`
       (Continuous Access Evaluation still applies the session revocation from `--disable`), and the session then fails
       CSRF. The live scripts should recognise it and say "wait a few minutes after enabling", or retry.
+
+## Content at enterprise scale, second round (2026-10-17)
+
+- [x] Native rewrites (`$applyAdvanced`, `$withFields`, native sort and grouping) that now meet their perf budgets at
+      enterprise scale: `endpoint.os-versions`, `endpoint.device-security-gaps`, `endpoint.non-compliant-devices`,
+      `endpoint.stale-devices`, `endpoint.autopilot-not-enrolled` (2.0.0), `endpoint.apps` (2.0.0), `identity.inactive-guests`
+      (2.0.0), `identity.directory-changes` (2.0.0: figures over every event, the newest 500 described),
+      `identity.app-credential-expiry` (1.2.0: the first 400 apps with a credential in the window, ending within 7 days first),
+      `m365.message-center-actions` (2.0.0), `security.risky-users-review` (2.0.0: detections looked up for the first
+      1,000 listed).
+- [ ] `identity.app-registration-risks` 2.0.0 sets every finding natively (true/false per finding) but still takes ~270 ms
+      at 20k app registrations: copying the flagged app objects costs the rest. Needs a per-tenant snapshot, or a smaller
+      row (a native projection helper). `reports.app-registration-risks-weekly` stays enabled meanwhile: it works at
+      the sizes real tenants usually have, while `tests/perf/budgets.json` expects it to time out at 20k apps.
+- [ ] Exports still capped by a transform (JSONata per row), stated on the page and in the schedule summaries:
+      `identity.directory-changes` (newest 500 events), `security.risky-users-review` (1,000 users),
+      `identity.app-credential-expiry` (400 apps). The third round's `$unnest` / `$attach` can now lift them.
+- [x] Over the transform budget at enterprise scale in this round, reworked in the third round (below):
+      `identity.app-credential-hygiene#credentials`, `identity.app-permissions#holders`,
+      `identity.apps-without-owners#report`, `identity.consent-grants#objects`,
+      `identity.disabled-users-with-licences#users`, `identity.privileged-role-assignments#assignments`,
+      `identity.users-without-mfa#report`.
+- [ ] Grouping keys must be text: a native grouping throws on a `null` key (missing keys are skipped). The rewritten
+      reports group only rows that have the key; check other content that groups on optional fields.
+
+## Content at enterprise scale, third round (2026-10-17)
+
+- [x] Native rewrites with the new row helpers (`$pluck`, `$unnest`, `$attach`, `$pick`, `$withCount`, date `days`
+      shift in `$applyAdvanced`) that now meet their perf budgets: `identity.app-permissions` (2.0.0: `permissionList`
+      for the export, the page shows 2,000), `identity.consent-grants` (2.0.0: `grantList` / 2,000 on the page),
+      `identity.app-credential-hygiene` (2.0.0: `secrets`, `page` labels the first 2,000, `exportList` has every
+      flagged credential), `identity.apps-without-owners`, `identity.users-without-mfa`,
+      `identity.disabled-users-with-licences`, `identity.privileged-role-assignments` (all 2.0.0).
+- [ ] The full lists pass but take 250–460 ms end to end at enterprise scale (`tests/perf/budgets.json` `knownSlow`,
+      `mayTimeOut`): `identity.app-permissions#permissionList`, `identity.consent-grants#grantList`,
+      `identity.app-credential-hygiene#secrets` / `#page` / `#exportList`. Most of it is the engine copying rows into
+      and out of each datasource (`plain()`), outside the expression budget. The page views
+      (`app-permissions#permissions`, `consent-grants#report`) are built from those lists, so every page load pays for
+      the full list; the hygiene `secrets` and `page` sit on the page path and may time out on a busy host. A
+      copy-free hand-over between datasources would bring them under the page budget.
+- [ ] Derived datasources don't carry `truncated`: the four reports pass their reads' flag on as `partial` with a
+      "Partial read" note on the page, but an export of `permissionList` / `grantList` / `exportList` can't say it
+      was cut. The engine should pass `truncated` through derived datasources so exports can flag it.
 
 ## Live accuracy (2026-10-17)
 

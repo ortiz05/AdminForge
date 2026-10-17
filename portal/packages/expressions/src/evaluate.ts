@@ -154,9 +154,20 @@ function fastPaths(compiled: jsonata.Expression, timeout: number, stack: number)
 export const compileCacheSize = (): number => cache.size;
 export const clearCompileCache = (): void => cache.clear();
 
-/** Converts JSONata sequences to plain arrays and drops functions, so results are plain JSON-like data. */
-function plain(v: unknown): unknown {
-  if (Array.isArray(v)) return v.map(plain);
+/**
+ * Values one result may hold (every row, field and nested value counted; a shared object counts each time it is
+ * copied): far above any page or export, well below what would exhaust the process's memory.
+ */
+export const MAX_RESULT_VALUES = 10_000_000;
+
+/**
+ * Converts JSONata sequences to plain arrays and drops functions, so results are plain JSON-like data. Bounded by
+ * `MAX_RESULT_VALUES`: one object referenced from every row would otherwise be copied once per row.
+ */
+function plain(v: unknown, left: { n: number } = { n: MAX_RESULT_VALUES }): unknown {
+  if (--left.n < 0)
+    throw new Error(`The result is too large (more than ${MAX_RESULT_VALUES.toLocaleString('en')} values)`);
+  if (Array.isArray(v)) return v.map((x) => plain(x, left));
   if (typeof v === 'function') return undefined;
   if (v && typeof v === 'object') {
     if ('_jsonata_lambda' in v || '_jsonata_function' in v) return undefined;
@@ -166,12 +177,12 @@ function plain(v: unknown): unknown {
       // A data key "__proto__" (a grouping by a value from the tenant) stays a key, never the copy's prototype.
       if (k === '__proto__')
         Object.defineProperty(out, k, {
-          value: plain(val),
+          value: plain(val, left),
           enumerable: true,
           writable: true,
           configurable: true,
         });
-      else out[k] = plain(val);
+      else out[k] = plain(val, left);
     }
     return out;
   }

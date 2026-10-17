@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/report.schema.json
 kind: report
 id: identity.disabled-users-with-licences
-version: 1.0.0
+version: 2.0.0
 title: Licensed disabled accounts
 summary: >-
   Accounts whose sign-in is blocked but that still hold licences — seats paid for and not used. One row per account and
@@ -50,46 +50,49 @@ datasources:
     paging: all
     maxItems: 50000
     cache: { ttl: 900 }
+    # One row per licence assignment (licenseAssignmentStates: direct, or through a group), built natively
+    # ($unnest): a per-user, per-licence JSONata block doesn't fit the budget at tens of thousands of accounts.
     transform: >-
       ${ (
-        $names := $merge([[ds.skus.value].{ skuId: skuPartNumber }]);
-        $all := [value.value.(
-          $u := $;
-          assignedLicenses.(
-            $sku := skuId;
-            $states := [$u.licenseAssignmentStates[skuId = $sku]];
-            $direct := $count($states[$not($exists(assignedByGroup)) or assignedByGroup = null]) > 0;
-            $groups := [$states[assignedByGroup].assignedByGroup];
-            {
-              "key": $u.id & '|' & $sku,
-              "userId": $u.id,
-              "displayName": $u.displayName,
-              "userPrincipalName": $u.userPrincipalName,
-              "userType": $u.userType,
-              "department": $u.department,
-              "source": $u.onPremisesSyncEnabled = true ? 'Synced' : 'Cloud',
-              "skuId": $sku,
-              "sku": $lookup($names, $sku) ? $lookup($names, $sku) : $sku,
-              "assignment": $direct and $count($groups) > 0 ? 'Direct and group' : $direct ? 'Direct' : 'Group',
-              "groupId": $groups[0],
-              "groups": $count($groups),
-              "errors": [$states[error and error != 'None'].error],
-              "created": $u.createdDateTime
-            }
-          )
-        )];
-        $shown := $all[
-          $$.params.assignment = 'Any'
-          or ($$.params.assignment = 'Direct' and assignment in ['Direct', 'Direct and group'])
-          or ($$.params.assignment = 'Group' and assignment in ['Group', 'Direct and group'])
-        ];
-        $bySku := $distinct($all.sku);
+        $skus := ds.skus.value;
+        $partNumbers := $applyAdvanced($skus, { "join": "and", "clauses": [{ "path": "skuId", "type": "string", "op": "notEmpty", "value": null }] }){ skuId: skuPartNumber };
+        $users := value.value;
+        $c := function($path, $type, $op, $v) { { "path": $path, "type": $type, "op": $op, "value": $v } };
+        $where := function($rows, $clauses) { $applyAdvanced($rows, { "join": "and", "clauses": $clauses }) };
+        /* One slim row per licence assignment (the user's licence lists stay out of every row and copy). */
+        $states := $unnest($pick($users, ['id', 'displayName', 'userPrincipalName', 'userType', 'department', 'createdDateTime',
+          'onPremisesSyncEnabled', 'licenseAssignmentStates']), 'licenseAssignmentStates', 'st', 'key');
+        $synced := $c('onPremisesSyncEnabled', 'boolean', 'eq', true);
+        $cloud := $c('onPremisesSyncEnabled', 'boolean', 'ne', true);
+        $byHand := $c('st.assignedByGroup', 'string', 'isEmpty', null);
+        $byGroup := $c('st.assignedByGroup', 'string', 'notEmpty', null);
+        /* A failed assignment (a group licence that hit CountViolation, …) holds no seat: left out. */
+        $held := $c('st.state', 'string', 'ne', 'Error');
+        $direct := $append(
+          $withFields($where($states, [$synced, $byHand, $held]), { "source": "Synced", "assignment": "Direct" }),
+          $withFields($where($states, [$cloud, $byHand, $held]), { "source": "Cloud", "assignment": "Direct" }));
+        $group := $append(
+          $withFields($where($states, [$synced, $byGroup, $held]), { "source": "Synced", "assignment": "Group" }),
+          $withFields($where($states, [$cloud, $byGroup, $held]), { "source": "Cloud", "assignment": "Group" }));
+        /* Each SKU's part number, its id when the tenant's SKU list doesn't have it (Remove licence needs one). */
+        $skuIds := $distinct($pluck($states, 'st.skuId'));
+        $names := $count($skuIds) > 0 ? $skuIds{ $: { "sku": ($n := $lookup($partNumbers, $); $n ? $n : $) } } : {};
+        $shown := $attach(
+          $$.params.assignment = 'Direct' ? $direct : $$.params.assignment = 'Group' ? $group : $append($direct, $group),
+          'st.skuId', $names);
+        $assigned := $pluck($users, 'assignedLicenses');
+        $bySku := $assigned{ skuId: $count($) };
         {
-          "rows": [$shown^(displayName, sku)],
-          "accounts": $count($distinct($all.userId)),
-          "licences": $count($all),
-          "direct": $count($all[assignment != 'Group']),
-          "chart": $append([], [($bySku.( $s := $; { "sku": $s, "seats": $count($all[sku = $s]) } ))^(>seats, sku)][[0..5]])
+          /* A sort key must not be empty: accounts without a name go last. */
+          "rows": $append(
+            [$where($shown, [$c('displayName', 'string', 'notEmpty', null)])^(displayName, sku)],
+            [$where($shown, [$c('displayName', 'string', 'isEmpty', null)])^(sku)]),
+          "accounts": $count($users),
+          "licences": $count($assigned),
+          "direct": $count($direct),
+          "chart": $take($each($bySku, function($v, $k) {
+            { "sku": $lookup($names, $k).sku ? $lookup($names, $k).sku : $k, "seats": $v }
+          })^(>seats, sku), 6)
         }
       ) }
 
@@ -133,36 +136,36 @@ layout:
       - field: assignment
         label: Assigned
         kind: status
-        map: { Direct: [warn, Directly], Group: [info, Through a group], "Direct and group": [warn, Directly and through a group] }
+        map: { Direct: [warn, Directly], Group: [info, Through a group] }
         filter: facet
       - { field: department, label: Department, filter: facet }
       - { field: source, label: Source, filter: facet }
       - { field: userType, label: Type, hidden: true }
-      - { field: groups, label: Groups assigning it, kind: number, hidden: true }
-      - { field: errors, label: Assignment errors, kind: tags, hidden: true }
-      - { field: created, label: Created, kind: date, hidden: true }
-      - { field: skuId, label: SKU id, kind: guid, hidden: true }
-      - { field: userId, label: Object id, kind: guid, hidden: true }
+      - { field: st.assignedByGroup, label: Assigning group id, kind: guid, hidden: true }
+      - { field: st.error, label: Assignment error, hidden: true }
+      - { field: createdDateTime, label: Created, kind: date, hidden: true }
+      - { field: st.skuId, label: SKU id, kind: guid, hidden: true }
+      - { field: id, label: Object id, kind: guid, hidden: true }
     inspect:
       page: identity.user
       params:
-        id: ${ row.userId }
+        id: ${ row.id }
     rowActions:
       - playbook: identity.remove-licence
         label: Remove licence
         icon: minus-circle
         inputs:
-          userId: ${ row.userId }
+          userId: ${ row.id }
           sku: ${ row.sku }
         when: ${ row.assignment != 'Group' }
-      - { label: Open licensing group, icon: users-three, href: "/p/identity.group?id=${ $encode(row.groupId) }", when: "${ $boolean(row.groupId) }" }
+      - { label: Open licensing group, icon: users-three, href: "/p/identity.group?id=${ $encode(row.st.assignedByGroup) }", when: "${ $boolean(row.st.assignedByGroup) }" }
     bulkActions:
       - playbook: identity.remove-licence
         label: Remove licence
         icon: minus-circle
         forEach:
           inputs:
-            userId: ${ row.userId }
+            userId: ${ row.id }
             sku: ${ row.sku }
           concurrency: 5
         maxItems: 200

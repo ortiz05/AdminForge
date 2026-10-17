@@ -206,6 +206,17 @@ Closes the gaps found by comparing the build with the original plan (see the pla
 
 ### Changed
 
+- **More reports fit an enterprise tenant:** the endpoint device reports (OS versions, security gaps, non-compliant,
+  stale, Autopilot), the Intune apps page, inactive guests, directory changes, message center actions, the risky-users
+  review and app credential expiry filter, sort and group natively instead of mapping every row with JSONata and say
+  "Partial data" when a read or a list stopped at its cap. Device security gaps, non-compliant and stale devices and
+  app registration risks export every row while the page shows a capped list; where a row still needs JSONata the
+  list and its export are capped and the report and its schedule say so — directory changes (the newest 500 events),
+  the risky-users review (1,000 users), app credential expiry (400 apps, credentials ending within 7 days first). App
+  registration risks report one true/false field per finding. Inactive guests (2.0) key on the last _successful_
+  sign-in, like inactive users: a guest with only older interactive sign-ins is listed as "No successful sign-in
+  recorded". The stale and non-compliant device schedules are on again.
+
 - **Content rewritten for large tenants** (100k users; measured with `pnpm test:perf`): the licence page, teams page
   and app registrations page page through Graph with server-side search and filters (one request instead of 50–350);
   the identity health and Microsoft 365 dashboards count at the source (`$count`, batched windows) instead of reading
@@ -251,6 +262,15 @@ adminforge-<process>`) and a configurable pool size (`DATABASE_POOL_MAX` [10]); 
   - `paging: all` and `$batch` collections say when they're partial (`truncated`).
   - Order-by (`^( … )`) and a constant slice after it run natively: 100k rows sort in a few hundred ms (JSONata's
     own sort took over a second for 10k rows and ran out of memory at 50k).
+  - Joins and per-item rows run natively too: new `$pluck`, `$unnest`, `$attach`, `$pick` and `$withCount`, and
+    `$applyAdvanced` compares a date with another field shifted by `days` (dates it parses are cached across calls).
+    With them, the app permissions, consent grants, app credential hygiene, ownerless apps, users without MFA,
+    disabled users with licences and privileged role assignments reports fit the transform budget at enterprise scale
+    (they failed or timed out). Their rows show Graph's own fields, so columns, row keys and the export changed (major
+    versions); the permission, consent and credential lists export every row read and the page shows the first 2,000
+    with a "Partial data" note, and a "Partial read" note says when Graph's read stopped at its cap (scale tests in
+    `tests/content/content-at-scale-round3.test.ts`). The helpers never read into or copy function values, check the
+    time budget by work done, and a result is bounded by the values it holds.
   - Request limits count per session (background requests apart, `RATE_LIMIT_BACKGROUND_PER_MINUTE`) with a coarse
     per-address cap (`RATE_LIMIT_PER_ADDRESS_PER_MINUTE`): behind a NAT, one busy engineer no longer locks out the rest.
   - Retried throttling shows in the `microsoft call` log line (`retries`, `throttledRetries`). Sizing:

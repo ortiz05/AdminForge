@@ -677,17 +677,18 @@ add(
 );
 
 add(
-  'identity.app-credential-hygiene#credentials',
+  'identity.app-credential-hygiene#page',
   'AF-Test-App-Hygiene: three secrets, one long-lived',
-  using('identity.app-credential-hygiene', 'credentials', {}, (v) => {
-    const rows = rowsOf(v).filter((r) => r.app === 'AF-Test-App-Hygiene');
+  using('identity.app-credential-hygiene', 'page', {}, (v) => {
+    // 2.0: one row per flagged credential, with the app's live secret count.
+    const rows = rowsOf(v).filter((r) => r.displayName === 'AF-Test-App-Hygiene');
     const spec = FIXTURE_APPS.find((a) => a.key === 'hygiene')!;
     return [
       ...compareValue('hygiene secrets', spec.secrets.length, rows.length),
       ...compareValue(
         'several secrets flagged',
         spec.secrets.length,
-        rows.filter((r) => r.several === true).length,
+        rows.filter((r) => typeof r.liveSecrets === 'number' && r.liveSecrets > 1).length,
       ),
       ...compareValue(
         'long-lived (> 1 year) flagged',

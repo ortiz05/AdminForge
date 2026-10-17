@@ -38,7 +38,7 @@ Pages, dashboards and reports are YAML in `portal/content/{pages,dashboards,repo
      inside a list, such as `details[0].x`, isn't exported: flatten those rows in the transform). Measure with
      `AF_PERF_ONLY=<key> pnpm test:perf` (`tests/perf`).
    - `$applyAdvanced` rules: ops `eq ne gt ge lt le startsWith contains notContains in notIn isEmpty notEmpty`;
-     `field` (+ `times`, a finite number) compares two fields of a row; paths are `.`-separated names and read through
+     `field` (+ `times`, a finite number; or `days` for dates) compares two fields of a row; paths are `.`-separated names and read through
      lists (`passwordCredentials.endDateTime` matches when any credential does) — no `[n]` indexes and no keys that
      contain a dot (`@odata.type`). `isEmpty` / `notEmpty` look at plain values (null, `''`, a list without items; an
      object is never empty). A row without the field matches only the negated operators (`ne`, `notContains`,
@@ -59,6 +59,31 @@ Pages, dashboards and reports are YAML in `portal/content/{pages,dashboards,repo
      and scale when their source is a plain path or variable and the keys/values don't use `$$`, `%`, `#` or `@` —
      otherwise (a function call, a block or a condition as the source) JSONata runs them, ~15 µs a row. `in` over a
      long list is a set lookup inside `$applyAdvanced` only.
+   - Joins and lists without a JSONata block per row (native, own properties only, never into functions, within the
+     time budget; at most 64 fields or paths a call):
+     - `$pluck(rows, 'a.b')`: every value at a path, lists on the way read item by item (not a list directly inside
+       a list), nulls skipped; `$distinct($pluck(grants, 'principalId'))` lists ids.
+     - `$unnest(rows, 'licenseAssignmentStates', 'st', 'key')`: one row per item under `st`; rows with a missing or
+       empty list are dropped. The new rows leave the list out (a dotted path copies the objects along it without
+       the list; through another list on the way its first field is dropped). The optional `key` field is unique:
+       `<id>:<path>:<n>` (`#<n>` for a numeric id, `@<position>` without one).
+     - `$attach(rows, 'skuId', lookup, defaults?, as?)`: joins a lookup built once per distinct value
+       (`$names := $skus{ skuId: { "sku": skuPartNumber } }`). Merged, the entry's fields overwrite the row's (any
+       key but `_jsonata…`); with `as` it is nested under that name. A list of paths with a list of names joins
+       several ids in one copy. Values are compared as text (1 joins "1"). An entry must be an object: group only
+       rows that have the key (`notEmpty` first); a key that repeats holds a list and the row gets the default, so
+       keep one per key (split on `$withCount(…)` `n eq 1`, group the rest with `{ k: $[0] }`).
+     - `$pick(rows, ['id', 'displayName'])`: top-level fields only (keep joined objects and exports small).
+     - `$withCount(rows, 'appId', 'n')`: each row with how many rows share its value (as text, like `$attach`).
+   - Each `$withFields` / `$attach` / `$unnest` pass copies every row: classify with `$applyAdvanced` first and label
+     only the subsets you show; build a list in its display order (most severe subset first) rather than sorting tens
+     of thousands of rows. Ages and lifetimes: `"field": "startDateTime", "days": 365` on a date condition shifts the
+     other field (`days` replaces `times` for dates); a row without the other field matches like one without the
+     field, so build "the rest" as a complement by key (`notIn`), not with the opposite operator. A list too big for
+     one transform: a list datasource for the export plus a page view that labels only the first rows it shows
+     (`identity.app-credential-hygiene`: `page` / `exportList`); each datasource has its own budget, but a page view
+     built from a list datasource still runs that list on every page load. Pass the reads' `truncated` on as a
+     `partial` flag with a note: the export can't say it was cut.
    - Check every new request once against a real tenant, read-only (fixtures can't catch a request Microsoft
      rejects). Graph checks `$select`/`$expand`/`$filter` before licence checks, so even an unlicensed tenant
      confirms the syntax.

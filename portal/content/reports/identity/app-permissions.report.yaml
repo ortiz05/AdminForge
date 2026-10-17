@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/report.schema.json
 kind: report
 id: identity.app-permissions
-version: 1.0.0
+version: 2.0.0
 title: Application permissions
 summary: >-
   Application permissions (app roles) granted to service principals on Microsoft Graph, Exchange Online and SharePoint
@@ -78,21 +78,23 @@ datasources:
       method: POST
       path: /directoryObjects/getByIds
       body:
-        ids: ${ $append([], [$distinct($append(ds.grants.value, ds.apis.grants).principalId)][[0..999]]) }
+        ids: ${ $take($distinct($pluck($append(ds.grants.value, ds.apis.grants), 'principalId')), 1000) }
         types: [servicePrincipal]
     cache: { ttl: 3600 }
-  permissions:
+  # The full list (every grant at the chosen impact, sorted, with who holds it) for the export and the page view.
+  permissionList:
     source: static
     data: >-
       ${ {
         "grants": $append(ds.grants.value, ds.apis.grants),
         "roles": ds.apis.roles,
         "org": ds.apis.org,
-        "holders": ds.holders.value,
-        "truncated": ds.apis.truncated
+        "holders": ds.holders.value
       } }
     # Critical = can take over the tenant or every mailbox/site (role, app, policy, group or credential control);
     # high = reads or changes content (mail, files, chats, calendars) or writes anything; medium = reads the directory.
+    # Each distinct permission and each holder is classified once and joined onto the grants natively ($attach):
+    # a JSONata block per grant doesn't fit the budget at tens of thousands of grants.
     transform: >-
       ${ (
         $critical := ['RoleManagement.ReadWrite.Directory', 'AppRoleAssignment.ReadWrite.All', 'Application.ReadWrite.All',
@@ -111,51 +113,87 @@ datasources:
           : $contains($p, /\.Read(Basic)?\.(All|Directory)$/) ? 'medium' : 'low'
         };
         $roles := value.roles ? value.roles : {};
-        $own := [$append([env.AF_READ_CLIENT_ID, env.AF_WRITE_CLIENT_ID, env.AF_AUTOMATION_CLIENT_ID],
-          env.AF_PROTECTED_APP_IDS ? [$split(env.AF_PROTECTED_APP_IDS, ',').$trim($)] : [])[$ != '']];
-        $org := value.org;
-        $holders := $merge([[value.holders].{ id: $ }]);
-        $all := [value.grants.(
-          $h := $lookup($holders, principalId);
-          $name := $lookup($roles, appRoleId);
-          $p := $name ? $name : appRoleId;
-          $owner := $h.appOwnerOrganizationId;
-          $holder := $h.servicePrincipalType = 'ManagedIdentity' ? 'Managed identity'
-                     : $owner in $microsoft ? 'Microsoft'
-                     : $owner and $owner = $org ? 'This organisation'
-                     : $h ? 'Other organisation' : 'Unknown';
-          {
-            "id": id,
-            "app": principalDisplayName,
-            "principalId": principalId,
-            "appId": $h.appId,
-            "permission": $p,
-            "api": resourceDisplayName,
-            "tier": $tier($p),
-            "holder": $holder,
-            "publisher": $h.verifiedPublisher.displayName ? $h.verifiedPublisher.displayName
-                         : $holder = 'Other organisation' ? 'Unverified publisher' : null,
-            "enabled": $h ? $h.accountEnabled != false : null,
-            "adminforge": $h.appId in $own,
-            "granted": createdDateTime
-          }
-        )];
+        $own := $append([], [$append([env.AF_READ_CLIENT_ID, env.AF_WRITE_CLIENT_ID, env.AF_AUTOMATION_CLIENT_ID],
+          env.AF_PROTECTED_APP_IDS ? [$split(env.AF_PROTECTED_APP_IDS, ',').$trim($)] : [])[$ != '']]);
+        $org := value.org ? value.org : '-';
         $rank := { "critical": 0, "high": 1, "medium": 2, "low": 3 };
-        $shown := $all[
-          ($$.params.tier = 'all' or tier = 'critical' or ($$.params.tier = 'high' and tier = 'high'))
-          and ($$.params.holder = 'Any' or holder = $$.params.holder)
-        ];
-        $risky := $all[tier in ['critical', 'high']];
+        $eq := function($path, $op, $v) { { "join": "and", "clauses": [{ "path": $path, "type": "string", "op": $op, "value": $v }] } };
+        $grants := value.grants;
+        $holders := value.holders;
+        $roleIds := $distinct($pluck($grants, 'appRoleId'));
+        $perm := $roleIds{ $: (
+          $name := $lookup($roles, $);
+          $p := $name ? $name : $;
+          $t := $tier($p);
+          { "permission": $p, "tier": $t, "rank": $lookup($rank, $t) }
+        ) };
+        $mi := $applyAdvanced($holders, $eq('servicePrincipalType', 'eq', 'ManagedIdentity'));
+        $spApps := $applyAdvanced($holders, $eq('servicePrincipalType', 'ne', 'ManagedIdentity'));
+        $ms := $applyAdvanced($spApps, $eq('appOwnerOrganizationId', 'in', $microsoft));
+        $notMs := $applyAdvanced($spApps, $eq('appOwnerOrganizationId', 'notIn', $microsoft));
+        $other := $applyAdvanced($notMs, $eq('appOwnerOrganizationId', 'ne', $org));
+        $labelled := $append($append($append($append(
+          $withFields($mi, { "holder": "Managed identity" }),
+          $withFields($ms, { "holder": "Microsoft" })),
+          $withFields($applyAdvanced($notMs, $eq('appOwnerOrganizationId', 'eq', $org)), { "holder": "This organisation" })),
+          $withFields($applyAdvanced($other, $eq('verifiedPublisher.displayName', 'notEmpty', null)), { "holder": "Other organisation" })),
+          $withFields($applyAdvanced($other, $eq('verifiedPublisher.displayName', 'isEmpty', null)),
+            { "holder": "Other organisation", "verifiedPublisher": { "displayName": "Unverified publisher" } }));
+        $marked := $append(
+          $withFields($applyAdvanced($labelled, $eq('appId', 'in', $own)), { "adminforge": true }),
+          $withFields($applyAdvanced($labelled, $eq('appId', 'notIn', $own)), { "adminforge": false }));
+        $small := $pick($marked, ['id', 'appId', 'holder', 'verifiedPublisher', 'accountEnabled', 'adminforge']);
+        $holder := $small{ id: $ };
+        /* Critical, then high (then medium and low) grants, each picked natively by their permission ids: the list
+           comes out in impact order without sorting tens of thousands of rows (the page sorts the rows it shows), and
+           only the grants shown get their permission attached. */
+        $tierIds := function($t) { $append([], $keys($perm)[$lookup($perm, $).tier = $t]) };
+        $ofTier := function($t) { $applyAdvanced($grants, $eq('appRoleId', 'in', $tierIds($t))) };
+        $criticalGrants := $ofTier('critical');
+        $highGrants := $ofTier('high');
+        $risky := $attach($append($criticalGrants, $highGrants), 'appRoleId', $perm);
+        $base := $$.params.tier = 'all'
+            ? $append($risky, $attach($append($ofTier('medium'), $ofTier('low')), 'appRoleId', $perm))
+          : $$.params.tier = 'high' ? $risky
+          : $take($risky, $count($criticalGrants));
+        $joined := $attach($base, 'principalId', $holder, { "holder": "Unknown", "adminforge": false }, 'sp');
+        $shown := $$.params.holder = 'Any' ? $joined : $applyAdvanced($joined, $eq('sp.holder', 'eq', $$.params.holder));
+        /* The figures cover every grant, whatever the filters. */
+        $third := $applyAdvanced($risky, $eq('principalId', 'in', $append([], $pluck($other, 'id'))));
+        $byPermission := $risky{ permission: $count($distinct($pluck($, 'principalId'))) };
         {
-          "rows": [$shown^($lookup($rank, tier), app, permission)],
-          "critical": $count($all[tier = 'critical']),
-          "criticalApps": $count($distinct($all[tier = 'critical'].principalId)),
-          "thirdParty": $count($distinct($risky[holder = 'Other organisation'].principalId)),
-          "total": $count($all),
-          "top": $append([], [($distinct($risky.permission).( $q := $; { "permission": $q, "apps": $count($distinct($risky[permission = $q].principalId)) } ))^(>apps, permission)][[0..5]]),
-          "truncated": value.truncated = true or $count($distinct($all.principalId)) > 1000
+          "rows": $append([], $shown),
+          "figures": {
+            "critical": $count($criticalGrants),
+            "criticalApps": $count($distinct($pluck($criticalGrants, 'principalId'))),
+            "thirdParty": $count($distinct($pluck($third, 'principalId'))),
+            "total": $count($grants),
+            "top": $take($each($byPermission, function($v, $k) { { "permission": $k, "apps": $v } })^(>apps, permission), 6)
+          }
         }
       ) }
+  # The page: the figures over every grant and the first 2,000 rows of the list (the export has them all).
+  permissions:
+    source: static
+    data: >-
+      ${ {
+        "first": $take(ds.permissionList.rows, 2000),
+        "count": $count(ds.permissionList.rows),
+        "figures": ds.permissionList.figures,
+        "truncated": ds.apis.truncated = true or $count($distinct($pluck($append(ds.grants.value, ds.apis.grants), 'principalId'))) > 1000,
+        "partial": ds.grants.truncated = true
+      } }
+    transform: >-
+      ${ $merge([value.figures, {
+        /* A sort key must not be empty: grants of an app without a name go last. */
+        "rows": $append(
+          [$applyAdvanced(value.first, { "join": "and", "clauses": [{ "path": "principalDisplayName", "type": "string", "op": "notEmpty", "value": null }] })^(rank, principalDisplayName, permission)],
+          [$applyAdvanced(value.first, { "join": "and", "clauses": [{ "path": "principalDisplayName", "type": "string", "op": "isEmpty", "value": null }] })^(rank, permission)]),
+        "listCapped": value.count > 2000,
+        "listTotal": value.count,
+        "truncated": value.truncated,
+        "partial": value.partial
+      }]) }
 
 layout:
   - widget: kpi
@@ -195,6 +233,20 @@ layout:
       title: No high-impact permissions
       body: No app holds a critical or high-impact application permission.
   - widget: markdown
+    id: capped
+    span: 12
+    when: ${ permissions.listCapped = true }
+    text: |
+      **Partial data.** ${ $formatNumber(permissions.listTotal, '#,##0') } grants match; the table shows the first 2,000
+      (critical first). The export has every grant read.
+  - widget: markdown
+    id: partial
+    span: 12
+    when: ${ permissions.partial = true }
+    text: |
+      **Partial read.** Microsoft Graph has more application permission grants than this report reads (50,000): the
+      figures, the table and the export cover those only. Review the rest in the Entra admin center.
+  - widget: markdown
     id: truncated
     span: 12
     when: ${ permissions.truncated = true }
@@ -207,42 +259,42 @@ layout:
     data: permissions.rows
     rowKey: id
     columns:
-      - { field: app, label: App, kind: identity, secondary: publisher, sortable: true }
+      - { field: principalDisplayName, label: App, kind: identity, secondary: sp.verifiedPublisher.displayName, sortable: true }
       - { field: permission, label: Permission, kind: code, filter: facet, sortable: true }
-      - { field: api, label: API, filter: facet }
+      - { field: resourceDisplayName, label: API, filter: facet }
       - field: tier
         label: Impact
         kind: status
         map: { critical: [crit, Critical], high: [warn, High], medium: [info, Medium], low: [neutral, Low] }
         filter: { type: facet, param: tier }
-      - field: holder
+      - field: sp.holder
         label: Held by
         kind: status
         map: { "This organisation": [neutral, This organisation], "Other organisation": [warn, Third party], "Managed identity": [info, Managed identity], Microsoft: [neutral, Microsoft], Unknown: [neutral, Unknown] }
         filter: { type: facet, param: holder }
-      - { field: enabled, label: Sign-in, kind: status, map: { "true": [ok, Enabled], "false": [neutral, Disabled] } }
-      - { field: granted, label: Granted, kind: date, filter: date, sortable: true }
-      - { field: publisher, label: Verified publisher, hidden: true }
-      - { field: adminforge, label: AdminForge app, kind: boolean, hidden: true }
-      - { field: appId, label: Application (client) id, kind: guid, hidden: true }
+      - { field: sp.accountEnabled, label: Sign-in, kind: status, map: { "true": [ok, Enabled], "false": [neutral, Disabled] } }
+      - { field: createdDateTime, label: Granted, kind: date, filter: date, sortable: true }
+      - { field: sp.verifiedPublisher.displayName, label: Verified publisher, hidden: true }
+      - { field: sp.adminforge, label: AdminForge app, kind: boolean, hidden: true }
+      - { field: sp.appId, label: Application (client) id, kind: guid, hidden: true }
       - { field: principalId, label: Service principal object id, kind: guid, hidden: true }
       - { field: id, label: Assignment id, hidden: true }
     inspect:
       page: identity.enterprise-app
       params:
         id: ${ row.principalId }
-        appId: ${ row.appId }
+        appId: ${ row.sp.appId }
     rowActions:
       - playbook: identity.disable-enterprise-app
         label: Disable sign-in
         icon: prohibit
         inputs:
           servicePrincipalId: ${ row.principalId }
-        when: ${ row.enabled = true and row.adminforge != true and row.holder in ['This organisation', 'Other organisation'] }
+        when: ${ row.sp.accountEnabled = true and row.sp.adminforge != true and row.sp.holder in ['This organisation', 'Other organisation'] }
       - label: Review in Entra admin center
         icon: arrow-square-out
-        href: "https://entra.microsoft.com/#view/Microsoft_AAD_IAM/ManagedAppMenuBlade/~/Permissions/objectId/${ $encode(row.principalId) }/appId/${ $encode(row.appId) }"
-        when: ${ $boolean(row.appId) }
+        href: "https://entra.microsoft.com/#view/Microsoft_AAD_IAM/ManagedAppMenuBlade/~/Permissions/objectId/${ $encode(row.principalId) }/appId/${ $encode(row.sp.appId) }"
+        when: ${ $boolean(row.sp.appId) }
     empty:
       title: No application permissions match
       body: No app holds an application permission at this impact level (check the Impact and Held by filters).
@@ -250,5 +302,5 @@ layout:
 export:
   formats: [csv, xlsx]
   fileName: application-permissions-${ params.tier }
-  data: permissions.rows
+  data: permissionList.rows
   columns: all

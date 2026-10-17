@@ -71,6 +71,10 @@
         {
           "skuId": "30000000-0000-4000-8000-000000000402",
           "disabledPlans": []
+        },
+        {
+          "skuId": "30000000-0000-4000-8000-000000000499",
+          "disabledPlans": []
         }
       ],
       "licenseAssignmentStates": [
@@ -79,6 +83,22 @@
           "state": "Active",
           "error": "None",
           "skuId": "30000000-0000-4000-8000-000000000402",
+          "disabledPlans": [],
+          "lastUpdatedDateTime": "2026-05-02T10:00:00Z"
+        },
+        {
+          "assignedByGroup": null,
+          "state": "Active",
+          "error": "None",
+          "skuId": "30000000-0000-4000-8000-000000000499",
+          "disabledPlans": [],
+          "lastUpdatedDateTime": "2026-05-02T10:00:00Z"
+        },
+        {
+          "assignedByGroup": "00000000-0000-4000-8000-000000000204",
+          "state": "Error",
+          "error": "CountViolation",
+          "skuId": "30000000-0000-4000-8000-000000000401",
           "disabledPlans": [],
           "lastUpdatedDateTime": "2026-05-02T10:00:00Z"
         }

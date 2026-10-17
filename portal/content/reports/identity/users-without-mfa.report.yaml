@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/report.schema.json
 kind: report
 id: identity.users-without-mfa
-version: 1.0.0
+version: 2.0.0
 title: Users without MFA
 summary: >-
   Accounts that have not registered any MFA method, admins first — the accounts a password spray or phishing
@@ -35,24 +35,23 @@ datasources:
     paging: all
     maxItems: 100000
     cache: { ttl: 1800 }
+    # Graph already filters to accounts without MFA: the transform only counts and orders them, natively (a
+    # per-row JSONata block doesn't fit the budget at tens of thousands of rows) — admins first, then by name.
     transform: >-
       ${ (
-        $rows := [value.value[isMfaRegistered = false].{
-          "id": id,
-          "userDisplayName": userDisplayName,
-          "userPrincipalName": userPrincipalName,
-          "userType": userType,
-          "isAdmin": isAdmin = true,
-          "isSsprRegistered": isSsprRegistered = true,
-          "methods": [methodsRegistered],
-          "isPasswordlessCapable": isPasswordlessCapable = true,
-          "lastUpdated": lastUpdatedDateTime
-        }];
+        $f := function($path, $op, $v) { { "join": "and", "clauses": [{ "path": $path, "type": "boolean", "op": $op, "value": $v }] } };
+        $all := value.value;
+        $named := { "join": "and", "clauses": [{ "path": "userDisplayName", "type": "string", "op": "notEmpty", "value": null }] };
+        $unnamed := { "join": "and", "clauses": [{ "path": "userDisplayName", "type": "string", "op": "isEmpty", "value": null }] };
+        $byName := function($rows) { $append([$applyAdvanced($rows, $named)^(userDisplayName)], $applyAdvanced($rows, $unnamed)) };
+        $admins := $applyAdvanced($all, $f('isAdmin', 'eq', true));
+        $others := $applyAdvanced($all, $f('isAdmin', 'ne', true));
         {
-          "rows": [$rows^(>(isAdmin ? 1 : 0), userDisplayName)],
-          "total": $count($rows),
-          "admins": $count($rows[isAdmin]),
-          "ssprOnly": $count($rows[isSsprRegistered])
+          /* A sort key must not be empty: records without a name go last in their group. */
+          "rows": $append($byName($admins), $byName($others)),
+          "total": $count($all),
+          "admins": $count($admins),
+          "ssprOnly": $count($applyAdvanced($all, $f('isSsprRegistered', 'eq', true)))
         }
       ) }
 
@@ -92,8 +91,8 @@ layout:
       - { field: isAdmin, label: Admin, kind: status, map: { "true": [crit, Admin], "false": [neutral, User] }, filter: facet }
       - { field: userType, label: Type, filter: facet }
       - { field: isSsprRegistered, label: SSPR registered, kind: boolean }
-      - { field: methods, label: Methods registered, kind: tags }
-      - { field: lastUpdated, label: Report updated, kind: relativeTime, hidden: true }
+      - { field: methodsRegistered, label: Methods registered, kind: tags }
+      - { field: lastUpdatedDateTime, label: Report updated, kind: relativeTime, hidden: true }
       - { field: id, label: Object id, kind: guid, hidden: true }
     inspect:
       page: identity.user

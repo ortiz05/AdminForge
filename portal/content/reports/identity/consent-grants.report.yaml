@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/report.schema.json
 kind: report
 id: identity.consent-grants
-version: 1.0.0
+version: 2.0.0
 title: Delegated permission grants
 summary: >-
   OAuth delegated permission grants — admin consent on behalf of all users and consent individual users gave
@@ -63,15 +63,25 @@ datasources:
       path: /directoryObjects/getByIds
       body:
         ids: >-
-          ${ $append([], [$append($distinct($append(ds.grants.value.clientId, ds.grants.value.resourceId)), $distinct(ds.grants.value.principalId[$ != null]))][[0..999]]) }
+          ${ $take($append($distinct($append($pluck(ds.grants.value, 'clientId'), $pluck(ds.grants.value, 'resourceId'))), $distinct($pluck(ds.grants.value, 'principalId'))), 1000) }
         types: [servicePrincipal, user]
     cache: { ttl: 900 }
-  report:
+  # The full list (every grant matching the filters, sorted, with app, API and user) for the export and the page.
+  grantList:
     source: static
+    # Whether the names lookup (≤ 1,000 ids) missed some is counted here: each expression has its own time budget.
     data: >-
-      ${ { "grants": ds.grants.value, "objects": ds.objects.value, "org": ds.org.value[0].id } }
+      ${ {
+        "grants": ds.grants.value,
+        "objects": ds.objects.value,
+        "org": ds.org.value[0].id,
+        "truncated": $count($distinct($append($append($pluck(ds.grants.value, 'clientId'), $pluck(ds.grants.value, 'resourceId')),
+          $pluck(ds.grants.value, 'principalId')))) > 1000,
+        "partial": ds.grants.truncated = true
+      } }
     # critical = directory/role/app/policy control or full mailbox/site access as the user; high = content (mail,
     # files, sites, chats, calendars), anything that writes, sends, or impersonates the user on an API.
+    # Each distinct scope string and each object is classified once and joined onto the grants natively ($attach).
     transform: >-
       ${ (
         $critical := ['Directory.ReadWrite.All', 'Directory.AccessAsUser.All', 'RoleManagement.ReadWrite.Directory',
@@ -84,53 +94,110 @@ datasources:
           or $contains($s, /^(Mail|Files|Sites|Notes|Chat|ChannelMessage|MailboxSettings|Calendars|Contacts|OnlineMeeting\w*|EAS|IMAP|POP|SMTP)\./)
         };
         $microsoft := ['f8cdef31-a31e-4b4a-93e4-5f571e91255a', '72f988bf-86f1-41af-91ab-2d7cd011db47'];
-        $byId := $merge([[value.objects].{ id: $ }]);
-        $org := value.org;
-        $own := [$append([env.AF_READ_CLIENT_ID, env.AF_WRITE_CLIENT_ID, env.AF_AUTOMATION_CLIENT_ID],
-          env.AF_PROTECTED_APP_IDS ? [$split(env.AF_PROTECTED_APP_IDS, ',').$trim($)] : [])[$ != '']];
-        $all := [value.grants.(
-          $scopes := scope ? [$split($trim(scope), ' ')[$ != '']] : [];
+        $org := value.org ? value.org : '-';
+        $own := $append([], [$append([env.AF_READ_CLIENT_ID, env.AF_WRITE_CLIENT_ID, env.AF_AUTOMATION_CLIENT_ID],
+          env.AF_PROTECTED_APP_IDS ? [$split(env.AF_PROTECTED_APP_IDS, ',').$trim($)] : [])[$ != '']]);
+        $rank := { "critical": 0, "high": 1, "low": 2 };
+        $eq := function($path, $op, $v) { { "join": "and", "clauses": [{ "path": $path, "type": "string", "op": $op, "value": $v }] } };
+        $g := value.grants;
+        $objects := value.objects;
+        $scopeStrings := $distinct($pluck($g, 'scope'));
+        $scopeTable := $scopeStrings{ $: (
+          $scopes := [$split($trim($), ' ')[$ != '']];
           $crit := [$scopes[$ in $critical]];
           $hi := [$scopes[$not($ in $critical) and $high($)]];
-          $client := $lookup($byId, clientId);
-          $owner := $client.appOwnerOrganizationId;
-          $who := principalId ? $lookup($byId, principalId) : null;
-          $origin := $owner in $microsoft ? 'Microsoft'
-                     : $owner and $owner = $org ? 'This organisation'
-                     : $client ? 'Other organisation' : 'Unknown';
-          {
-            "id": id,
-            "clientId": clientId,
-            "app": $client.displayName ? $client.displayName : clientId,
-            "appId": $client.appId,
-            "publisher": $client.verifiedPublisher.displayName ? $client.verifiedPublisher.displayName
-                         : $origin = 'Other organisation' ? 'Unverified publisher' : null,
-            "origin": $origin,
-            "api": $lookup($byId, resourceId).displayName ? $lookup($byId, resourceId).displayName : resourceId,
-            "resourceId": resourceId,
-            "consent": consentType = 'AllPrincipals' ? 'Admin' : 'User',
-            "principalId": principalId,
-            "user": principalId ? ($who.displayName ? $who.displayName : principalId) : 'All users',
-            "userPrincipalName": $who.userPrincipalName,
-            "risky": $append($crit, $hi),
-            "scopes": $scopes,
-            "tier": $count($crit) > 0 ? 'critical' : $count($hi) > 0 ? 'high' : 'low',
-            "adminforge": $client.appId in $own
-          }
-        )];
-        $rank := { "critical": 0, "high": 1, "low": 2 };
-        $shown := $all[
-          ($$.params.consent = 'Any' or consent = $$.params.consent)
-          and ($$.params.risk = 'all' or tier != 'low')
-        ];
+          $t := $count($crit) > 0 ? 'critical' : $count($hi) > 0 ? 'high' : 'low';
+          { "scopes": $scopes, "risky": $append($crit, $hi), "tier": $t, "rank": $lookup($rank, $t) }
+        ) };
+        $sps := $applyAdvanced($objects, $eq('appId', 'notEmpty', null));
+        $other := $applyAdvanced($sps, $eq('appOwnerOrganizationId', 'notIn', $append($microsoft, $org)));
+        $clients := $append($append($append($append(
+          $withFields($applyAdvanced($sps, $eq('appOwnerOrganizationId', 'in', $microsoft)), { "origin": "Microsoft" }),
+          $withFields($applyAdvanced($sps, $eq('appOwnerOrganizationId', 'eq', $org)), { "origin": "This organisation" })),
+          $withFields($applyAdvanced($other, $eq('verifiedPublisher.displayName', 'notEmpty', null)), { "origin": "Other organisation" })),
+          $withFields($applyAdvanced($other, $eq('verifiedPublisher.displayName', 'isEmpty', null)),
+            { "origin": "Other organisation", "verifiedPublisher": { "displayName": "Unverified publisher" } })),
+          $withFields($applyAdvanced($objects, $eq('appId', 'isEmpty', null)), { "origin": "Unknown" }));
+        $marked := $append(
+          $withFields($applyAdvanced($clients, $eq('appId', 'in', $own)), { "adminforge": true }),
+          $withFields($applyAdvanced($clients, $eq('appId', 'notIn', $own)), { "adminforge": false }));
+        $small := $pick($marked, ['id', 'displayName', 'appId', 'verifiedPublisher', 'origin', 'adminforge', 'userPrincipalName']);
+        $byId := $small{ id: $ };
+        /* Critical, then high (then low) grants, each picked natively: the list comes out in impact order without
+           sorting tens of thousands of rows (the page sorts the rows it shows). */
+        $tierStrings := function($t) { $append([], $keys($scopeTable)[$lookup($scopeTable, $).tier = $t]) };
+        $criticalGrants := $applyAdvanced($g, $eq('scope', 'in', $tierStrings('critical')));
+        $highGrants := $applyAdvanced($g, $eq('scope', 'in', $tierStrings('high')));
+        $lowGrants := $$.params.risk = 'all'
+          ? $applyAdvanced($g, $eq('scope', 'notIn', $append($tierStrings('critical'), $tierStrings('high'))))
+          : [];
+        /* An admin grant is for every user: "All users" (page and export), set per tier to keep the order. */
+        $forAll := function($rows) { $append(
+          $withFields($applyAdvanced($rows, $eq('consentType', 'eq', 'AllPrincipals')), { "who": { "displayName": "All users" } }),
+          $applyAdvanced($rows, $eq('consentType', 'ne', 'AllPrincipals'))) };
+        $tiered := $append($append($forAll($criticalGrants), $forAll($highGrants)), $forAll($lowGrants));
+        $consented := $$.params.consent = 'Any' ? $tiered
+          : $applyAdvanced($tiered, $eq('consentType', 'eq', $$.params.consent = 'Admin' ? 'AllPrincipals' : 'Principal'));
+        /* Its scope's tier, app, API and user in one pass over one lookup (scope strings and object ids never
+           collide); an admin grant keeps its "All users". */
+        $joined := $attach($consented, ['scope', 'clientId', 'resourceId', 'principalId'], $merge([$scopeTable, $byId]),
+          { "sc": { "scopes": [], "risky": [], "tier": "low", "rank": 2 }, "client": { "origin": "Unknown", "adminforge": false } },
+          ['sc', 'client', 'resource', 'who']);
+        /* The figures cover every grant, whatever the filters. */
+        $riskyAll := $append($criticalGrants, $highGrants);
+        $admin := $applyAdvanced($riskyAll, $eq('consentType', 'eq', 'AllPrincipals'));
         {
-          "rows": [$shown^($lookup($rank, tier), consent, app)],
-          "critical": $count($all[tier = 'critical']),
-          "adminRisky": $count($all[consent = 'Admin' and tier != 'low']),
-          "userRisky": $count($all[consent = 'User' and tier != 'low']),
-          "apps": $count($distinct($all[tier != 'low'].clientId)),
-          "truncated": $count($distinct($append($all.clientId, $all.resourceId))) + $count($distinct($all.principalId[$ != null])) > 1000
+          "rows": $joined,
+          "figures": {
+            "critical": $count($criticalGrants),
+            "adminRisky": $count($admin),
+            "userRisky": $count($riskyAll) - $count($admin),
+            "apps": $count($distinct($pluck($riskyAll, 'clientId'))),
+            "truncated": value.truncated = true,
+            "partial": value.partial = true
+          }
         }
+      ) }
+  # The page: the figures over every grant and the first 2,000 rows of the list (the export has them all).
+  report:
+    source: static
+    data: >-
+      ${ {
+        "first": $take(ds.grantList.rows, 2000),
+        "count": $count(ds.grantList.rows),
+        "figures": ds.grantList.figures
+      } }
+    transform: >-
+      ${ (
+        $f := function($path, $op, $v) { { "join": "and", "clauses": [{ "path": $path, "type": "string", "op": $op, "value": $v }] } };
+        $named := function($rows, $path) { $applyAdvanced($rows, $f($path, 'notEmpty', null)) };
+        $nameless := function($rows, $path) { $applyAdvanced($rows, $f($path, 'isEmpty', null)) };
+        /* Apps, APIs and users the names lookup (≤ 1,000 ids) didn't resolve show by their object id. */
+        $clients := $nameless(value.first, 'client.displayName');
+        $clientIds := $distinct($pluck($clients, 'clientId'));
+        $step1 := $append($named(value.first, 'client.displayName'), $attach($clients, 'clientId',
+          $count($clientIds) > 0 ? $clientIds{ $: { "displayName": $, "origin": "Unknown", "adminforge": false } } : {}, null, 'client'));
+        $apis := $nameless($step1, 'resource.displayName');
+        $apiIds := $distinct($pluck($apis, 'resourceId'));
+        $step2 := $append($named($step1, 'resource.displayName'), $attach($apis, 'resourceId',
+          $count($apiIds) > 0 ? $apiIds{ $: { "displayName": $ } } : {}, null, 'resource'));
+        $users := $applyAdvanced($step2, { "join": "and", "clauses": [
+          { "path": "who.displayName", "type": "string", "op": "isEmpty", "value": null },
+          { "path": "principalId", "type": "string", "op": "notEmpty", "value": null }
+        ] });
+        $userIds := $distinct($pluck($users, 'principalId'));
+        $page := $append($applyAdvanced($step2, { "join": "or", "clauses": [
+          { "path": "who.displayName", "type": "string", "op": "notEmpty", "value": null },
+          { "path": "principalId", "type": "string", "op": "isEmpty", "value": null }
+        ] }), $attach($users, 'principalId', $count($userIds) > 0 ? $userIds{ $: { "displayName": $ } } : {}, null, 'who'));
+        $merge([value.figures, {
+          /* A sort key must not be empty: grants of an app without a name or id go last. */
+          "rows": $append(
+            [$named($page, 'client.displayName')^(sc.rank, consentType, client.displayName)],
+            [$nameless($page, 'client.displayName')^(sc.rank, consentType)]),
+          "listCapped": value.count > 2000,
+          "listTotal": value.count
+        }])
       ) }
 
 layout:
@@ -166,54 +233,70 @@ layout:
       apps, allow user consent only for verified publishers and low-impact permissions and turn on the admin consent
       workflow — see the **Identity settings baseline** report.
   - widget: markdown
+    id: capped
+    span: 12
+    when: ${ report.listCapped = true }
+    text: |
+      **Partial data.** ${ $formatNumber(report.listTotal, '#,##0') } grants match; the table shows the first 2,000
+      (critical first). The export has every grant read.
+  - widget: markdown
     id: truncated
     span: 12
     when: ${ report.truncated = true }
     text: |
-      **Partial names.** More apps, APIs and users are involved than one lookup covers (1,000); some show as ids.
+      **Partial names.** More apps, APIs and users are involved than one lookup covers (1,000): the rest show by their
+      object id on this page and are blank in the export (its id columns have them).
+  - widget: markdown
+    id: partial
+    span: 12
+    when: ${ report.partial = true }
+    text: |
+      **Partial read.** Microsoft Graph has more delegated permission grants than this report reads (50,000): the
+      figures, the table and the export cover those only. Review the rest in the Entra admin center.
   - widget: table
     id: grants
     span: 12
     data: report.rows
     rowKey: id
     columns:
-      - { field: app, label: App, kind: identity, secondary: publisher, sortable: true }
-      - field: origin
+      - { field: client.displayName, label: App, kind: identity, secondary: client.verifiedPublisher.displayName, sortable: true }
+      - field: client.origin
         label: Publisher
         kind: status
         map: { "This organisation": [neutral, This organisation], "Other organisation": [warn, Third party], Microsoft: [neutral, Microsoft], Unknown: [neutral, Unknown] }
         filter: facet
-      - field: consent
+      - field: consentType
         label: Consent
         kind: status
-        map: { Admin: [info, Admin (all users)], User: [neutral, User] }
+        map: { AllPrincipals: [info, Admin (all users)], Principal: [neutral, User] }
         filter: { type: facet, param: consent }
-      - { field: user, label: Consented for, kind: identity, secondary: userPrincipalName }
-      - { field: api, label: API, filter: facet }
-      - field: tier
+      - { field: who.displayName, label: Consented for, kind: identity, secondary: who.userPrincipalName }
+      - { field: resource.displayName, label: API, filter: facet }
+      - field: sc.tier
         label: Impact
         kind: status
         map: { critical: [crit, Critical], high: [warn, High], low: [ok, Low] }
         filter: facet
-      - { field: risky, label: High-impact permissions, kind: tags }
-      - { field: scopes, label: All permissions, kind: tags, hidden: true }
-      - { field: adminforge, label: AdminForge app, kind: boolean, hidden: true }
-      - { field: appId, label: Application (client) id, kind: guid, hidden: true }
+      - { field: sc.risky, label: High-impact permissions, kind: tags }
+      - { field: sc.scopes, label: All permissions, kind: tags, hidden: true }
+      - { field: client.adminforge, label: AdminForge app, kind: boolean, hidden: true }
+      - { field: client.appId, label: Application (client) id, kind: guid, hidden: true }
       - { field: clientId, label: App object id, kind: guid, hidden: true }
+      - { field: resourceId, label: API object id, kind: guid, hidden: true }
       - { field: principalId, label: User object id, kind: guid, hidden: true }
       - { field: id, label: Grant id, hidden: true }
     inspect:
       page: identity.enterprise-app
       params:
         id: ${ row.clientId }
-        appId: ${ row.appId }
+        appId: ${ row.client.appId }
     rowActions:
       - playbook: identity.revoke-consent-grant
         label: Revoke grant
         icon: prohibit
         inputs:
           grantId: ${ row.id }
-        when: ${ row.adminforge != true }
+        when: ${ row.client.adminforge != true }
       - { label: Open user, icon: user, href: "/p/identity.user?id=${ $encode(row.principalId) }", when: "${ $boolean(row.principalId) }" }
     empty:
       title: No grants match
@@ -222,5 +305,5 @@ layout:
 export:
   formats: [csv, xlsx]
   fileName: delegated-permission-grants
-  data: report.rows
+  data: grantList.rows
   columns: all

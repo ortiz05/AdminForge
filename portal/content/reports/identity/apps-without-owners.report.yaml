@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/report.schema.json
 kind: report
 id: identity.apps-without-owners
-version: 1.0.0
+version: 2.0.0
 title: Apps without owners
 summary: >-
   App registrations and third-party enterprise apps that nobody owns — no one to rotate their secrets, answer for their
@@ -68,51 +68,64 @@ datasources:
   report:
     source: static
     data: >-
-      ${ { "apps": ds.apps.value, "sps": ds.sps.value, "org": ds.org.value[0].id } }
+      ${ {
+        "apps": ds.apps.value,
+        "sps": ds.sps.value,
+        "org": ds.org.value[0].id,
+        "partial": ds.apps.truncated = true or ds.sps.truncated = true
+      } }
+    # Classified natively ($applyAdvanced, $withFields, $attach): a JSONata block per app doesn't fit the budget at
+    # tens of thousands of ownerless apps. Rows come out highest attention first.
     transform: >-
       ${ (
         $microsoft := ['f8cdef31-a31e-4b4a-93e4-5f571e91255a', '72f988bf-86f1-41af-91ab-2d7cd011db47'];
-        $org := value.org;
-        $registrations := [value.apps.(
-          $active := [$append(passwordCredentials, keyCredentials)[endDateTime and $daysUntil(endDateTime) >= 0]];
-          $appPerms := $count(requiredResourceAccess.resourceAccess[type = 'Role']);
-          {
-            "key": 'app|' & id,
-            "kind": 'App registration',
-            "id": id,
-            "appId": appId,
-            "name": displayName,
-            "detail": signInAudience = 'AzureADMyOrg' ? 'Single tenant'
-                      : signInAudience = 'AzureADMultipleOrgs' ? 'Multi-tenant'
-                      : signInAudience = 'PersonalMicrosoftAccount' ? 'Personal accounts' : 'Multi-tenant and personal accounts',
-            "activeCredentials": $count($active),
-            "applicationPermissions": $appPerms,
-            "created": createdDateTime,
-            "reference": serviceManagementReference,
-            "attention": $count($active) > 0 or $appPerms > 0 ? 'high' : signInAudience != 'AzureADMyOrg' ? 'medium' : 'low'
-          }
-        )];
-        $enterprise := [value.sps[
-          servicePrincipalType = 'Application' and $not(appOwnerOrganizationId in $microsoft) and appOwnerOrganizationId != $org
-        ].{
-          "key": 'sp|' & id,
-          "kind": 'Enterprise app',
-          "id": id,
-          "appId": appId,
-          "name": displayName,
-          "detail": verifiedPublisher.displayName ? verifiedPublisher.displayName : 'Unverified publisher',
-          "enabled": accountEnabled,
-          "assignmentRequired": appRoleAssignmentRequired,
-          "attention": accountEnabled != false and appRoleAssignmentRequired = false ? 'medium' : 'low'
-        }];
-        $all := $append($registrations, $enterprise);
-        $rank := { "high": 0, "medium": 1, "low": 2 };
+        $org := value.org ? value.org : '-';
+        $c := function($path, $type, $op, $v) { { "path": $path, "type": $type, "op": $op, "value": $v } };
+        $all := function($clauses) { { "join": "and", "clauses": $clauses } };
+        $any := function($clauses) { { "join": "or", "clauses": $clauses } };
+        $now := $iso();
+        $audience := {
+          "AzureADMyOrg": { "detail": "Single tenant" },
+          "AzureADMultipleOrgs": { "detail": "Multi-tenant" },
+          "PersonalMicrosoftAccount": { "detail": "Personal accounts" }
+        };
+        $regs := $attach($withFields(value.apps, { "kind": "App registration" }), 'signInAudience', $audience,
+          { "detail": "Multi-tenant and personal accounts" });
+        $live := $any([
+          $c('passwordCredentials.endDateTime', 'date', 'ge', $now),
+          $c('keyCredentials.endDateTime', 'date', 'ge', $now)
+        ]);
+        $role := $all([$c('requiredResourceAccess.resourceAccess.type', 'string', 'eq', 'Role')]);
+        $withCreds := $withFields($applyAdvanced($regs, $live), { "attention": "high", "reason": "Live credentials" });
+        /* The rest are the complement by id (a list path matches when any value does, so "no live credential"
+           can't be written as one condition). */
+        $except := function($rows, $taken) { $applyAdvanced($rows, $all([$c('id', 'string', 'notIn', $append([], $pluck($taken, 'id')))])) };
+        $quiet := $except($regs, $withCreds);
+        $withPerms := $withFields($applyAdvanced($quiet, $role), { "attention": "high", "reason": "Application permissions requested" });
+        $calm := $except($quiet, $withPerms);
+        $wide := $withFields($applyAdvanced($calm, $all([$c('signInAudience', 'string', 'ne', 'AzureADMyOrg')])), { "attention": "medium" });
+        $single := $withFields($applyAdvanced($calm, $all([$c('signInAudience', 'string', 'eq', 'AzureADMyOrg')])), { "attention": "low" });
+        $third := $withFields($applyAdvanced(value.sps, $all([
+          $c('servicePrincipalType', 'string', 'eq', 'Application'),
+          $c('appOwnerOrganizationId', 'string', 'notIn', $append($microsoft, $org))
+        ])), { "kind": "Enterprise app" });
+        $publishers := $distinct($pluck($third, 'verifiedPublisher.displayName'));
+        $byPublisher := $publishers{ $: { "detail": $ } };
+        $sps := $attach($third, 'verifiedPublisher.displayName', $byPublisher, { "detail": "Unverified publisher" });
+        $open := $withFields($applyAdvanced($sps, $all([
+          $c('accountEnabled', 'boolean', 'ne', false), $c('appRoleAssignmentRequired', 'boolean', 'eq', false)
+        ])), { "attention": "medium" });
+        $closed := $withFields($except($sps, $open), { "attention": "low" });
+        $high := $append($withCreds, $withPerms);
+        $medium := $append($wide, $open);
+        $low := $append($single, $closed);
         {
-          "rows": [$all^($lookup($rank, attention), kind, name)],
-          "registrations": $count($registrations),
-          "withAccess": $count($registrations[attention = 'high']),
-          "enterprise": $count($enterprise),
-          "openToAll": $count($enterprise[attention = 'medium'])
+          "rows": $append($append([$high^(displayName)], [$medium^(kind, displayName)]), [$low^(kind, displayName)]),
+          "registrations": $count($regs),
+          "withAccess": $count($high),
+          "enterprise": $count($sps),
+          "openToAll": $count($open),
+          "partial": value.partial = true
         }
       ) }
 
@@ -141,13 +154,20 @@ layout:
     label: Ownerless enterprise apps open to every user
     format: number
     status: "${ value > 0 ? 'warn' : 'ok' }"
+  - widget: markdown
+    id: partial
+    span: 12
+    when: ${ report.partial = true }
+    text: |
+      **Partial read.** The tenant has more ownerless app registrations or enterprise apps than this report reads
+      (20,000 each): the figures, the table and the export cover those only.
   - widget: table
     id: apps
     span: 12
     data: report.rows
-    rowKey: key
+    rowKey: id
     columns:
-      - { field: name, label: App, kind: identity, secondary: appId, sortable: true }
+      - { field: displayName, label: App, kind: identity, secondary: appId, sortable: true }
       - { field: kind, label: Type, filter: { type: facet, param: kind } }
       - field: attention
         label: Attention
@@ -155,12 +175,11 @@ layout:
         map: { high: [crit, Can act on its own], medium: [warn, Broad sign-in], low: [neutral, Review] }
         filter: facet
       - { field: detail, label: Audience or publisher }
-      - { field: activeCredentials, label: Live credentials, kind: number, sortable: true }
-      - { field: applicationPermissions, label: App permissions requested, kind: number }
-      - { field: assignmentRequired, label: Assignment required, kind: boolean, hidden: true }
-      - { field: enabled, label: Sign-in enabled, kind: boolean, hidden: true }
-      - { field: created, label: Created, kind: date, filter: date }
-      - { field: reference, label: Service reference, hidden: true }
+      - { field: reason, label: Why it needs an owner }
+      - { field: appRoleAssignmentRequired, label: Assignment required, kind: boolean, hidden: true }
+      - { field: accountEnabled, label: Sign-in enabled, kind: boolean, hidden: true }
+      - { field: createdDateTime, label: Created, kind: date, filter: date }
+      - { field: serviceManagementReference, label: Service reference, hidden: true }
       - { field: id, label: Object id, kind: guid, hidden: true }
     rowActions:
       - playbook: identity.add-app-owner

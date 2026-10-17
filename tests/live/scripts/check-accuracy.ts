@@ -712,11 +712,19 @@ add(
         ['AF-Test-App-Risky'],
         fixtureNames(rows.map(nameOf)).filter((n) => appNames.includes(n)),
       ),
-      ...compareRange('http or wildcard redirect URIs', risky.wildcardOrHttp, 1, 1),
+      // 2.0: one true/false field per finding (the fixture: http redirect, implicit grant, public client, a critical
+      // permission requested — Mail.ReadWrite — and multi-tenant because Graph refused personal accounts).
       ...compareValue(
-        'critical permission requested',
-        ['Mail.ReadWrite'],
-        (risky.criticalPermissions as unknown[] | undefined)?.map(String) ?? [],
+        'findings flagged',
+        ['criticalPermissions', 'implicitGrant', 'multiTenant', 'plainHttpUri', 'publicClient'],
+        [
+          ...['criticalPermissions', 'multiTenant', 'plainHttpUri', 'publicClient'].filter(
+            (f) => risky[f] === true,
+          ),
+          ...(risky.implicitAccessTokens === true || risky.implicitIdTokens === true
+            ? ['implicitGrant']
+            : []),
+        ].sort(),
       ),
     ];
   }),

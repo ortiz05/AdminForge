@@ -399,11 +399,15 @@ health: health
     };
   }
   if (kind === 'probe') {
+    // Synthetic monitoring groups probes by service: the section when it is one, else a placeholder to fill in.
+    const group = hasNav
+      ? `group: ${section}\n`
+      : '# group: <navigation section key, or platform> — where Synthetic monitoring lists it\n';
     return {
       id,
       file,
       navAdded: false,
-      yaml: `${header}check:
+      yaml: `${header}${group}check:
   kind: graph
   path: /organization
   query:

@@ -1,0 +1,26 @@
+$schema: ../../packages/schemas/generated/probe.schema.json
+kind: probe
+id: probes.sharepoint-sign-ins
+version: 1.0.0
+title: SharePoint Online sign-in failure rate
+summary: >-
+  Failure rate of interactive sign-ins to SharePoint Online over the last hour (Entra sign-in logs, filtered to the
+  SharePoint Online resource). A jump while the tenant-wide rate stays flat points at that workload — an outage, a
+  Conditional Access policy that targets it, or a client that broke.
+owner: m365-team
+tags: [synthetic, sign-ins, sharepoint, sweep-1h]
+group: sharepoint
+check:
+  kind: signInHealth
+  window: PT1H
+  maxFailurePercent: 30
+  minSignIns: 20
+  # The resource application (SharePoint Online) — the same id in every tenant.
+  resourceId: 00000003-0000-0ff1-ce00-000000000000
+thresholds: { warn: 15, crit: 30 }
+intervalHint: PT1H
+timeoutMs: 60000
+requires:
+  scopes:
+    graph: [AuditLog.Read.All]
+  licences: [signInLogs]

@@ -1,7 +1,7 @@
 $schema: ../../packages/schemas/generated/feed.schema.json
 kind: feed
 id: feeds.m365-message-center
-version: 1.0.0
+version: 1.1.0
 title: Microsoft 365 Message Center
 summary: >-
   Your tenant's Message Center posts — planned changes, retirements, new features and actions Microsoft asks admins to
@@ -29,7 +29,8 @@ classify:
   - match: { services: [SharePoint Online] }
     areas: [m365]
     tags: [sharepoint]
-  - match: { services: [OneDrive for Business] }
+  # Microsoft renamed it "Microsoft OneDrive" in service health; older items say "OneDrive for Business".
+  - match: { services: [Microsoft OneDrive, OneDrive for Business] }
     areas: [m365]
     tags: [onedrive]
   - match: { services: [Microsoft 365 suite, Microsoft 365 admin center] }

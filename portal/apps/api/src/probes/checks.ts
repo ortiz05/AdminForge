@@ -20,6 +20,7 @@ import type { ExecutionIdentity, OutboundExecutor } from '../execution/types';
 import type { ProbeStatus } from '../schedules/types';
 import { defaultLookup, isNonPublicAddress, type HostLookup } from './addresses';
 import { aggregate, detailRows, runKql } from './kql';
+import { fileRoundTrip, mailFlow, onlineMeeting } from './transactions';
 import { classify, describeThresholds, effectiveThresholds, worst, type Thresholds } from './thresholds';
 
 /**
@@ -93,6 +94,10 @@ export interface ProbeDeps {
   audit?: Pick<AuditWriter, 'verify'>;
   /** Host → addresses for the HTTP probe SSRF guard (tests); default: the system resolver. */
   lookup?: HostLookup;
+  /** Waits between polls in synthetic transactions (tests); default a timer that stops on abort. */
+  sleep?: (ms: number, signal: AbortSignal) => Promise<void>;
+  /** The marker a synthetic transaction puts on its test item (tests); default a random id. */
+  randomId?: () => string;
 }
 
 const AUTOMATION: ExecutionIdentity = { kind: 'automation', mode: 'read' };
@@ -101,7 +106,7 @@ const GUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export const DEFAULT_PROBE_TIMEOUT_MS = 30_000;
 
 /** What a check reports; status defaults to the metric against the thresholds. */
-interface CheckResult {
+export interface CheckResult {
   metric: number | null;
   message: string;
   status?: ProbeStatus;
@@ -109,10 +114,13 @@ interface CheckResult {
   details?: ProbeDetails | null;
 }
 
-interface CheckContext {
+export interface CheckContext {
   key: string;
   probe: Probe;
   deps: ProbeDeps;
+  /** When the probe started (performance.now()) and how long it may take: synthetic transactions budget their waits. */
+  startedAt: number;
+  timeoutMs: number;
   /** Who the checks call Microsoft as: the schedule's identity (default the automation identity, ADR-014). */
   identity: ExecutionIdentity;
   scope: Scope;
@@ -138,16 +146,23 @@ const text = async (v: string, scope: Scope) => {
  * nothing to look at: "not configured", naming the setting, instead of a failed call to a broken path.
  */
 function requireConfiguredPath(template: string, scope: Scope): void {
+  const missing = unsetEnvKeys(template, scope);
+  if (missing.length) throw nothingToLookAt(missing);
+}
+
+/** The `env.X` keys a template names that this installation doesn't set. */
+function unsetEnvKeys(template: string, scope: Scope): string[] {
   const env = (scope.env ?? {}) as Record<string, unknown>;
-  const missing = [...new Set([...template.matchAll(/\benv\.([A-Z][A-Z0-9_]*)/g)].map((m) => m[1]!))].filter(
+  return [...new Set([...template.matchAll(/\benv\.([A-Z][A-Z0-9_]*)/g)].map((m) => m[1]!))].filter(
     (k) => env[k] === undefined || env[k] === null || String(env[k]).trim() === '',
   );
-  if (missing.length)
-    throw new NotConfigured(
-      `${missing.join(', ')} ${missing.length === 1 ? 'is' : 'are'} not set, so this check has nothing to look at.`,
-      'Set it in the env file, or turn the probe off.',
-    );
 }
+
+const nothingToLookAt = (missing: string[]) =>
+  new NotConfigured(
+    `${missing.join(', ')} ${missing.length === 1 ? 'is' : 'are'} not set, so this check has nothing to look at.`,
+    'Set it in the env file, or turn the probe off.',
+  );
 
 type Query = Record<string, string | number | boolean>;
 const cleanQuery = (q: unknown): Query | undefined => {
@@ -237,7 +252,16 @@ async function assertProbeTarget(url: URL, x: CheckContext): Promise<void> {
 }
 
 async function http(c: Extract<ProbeCheck, { kind: 'http' }>, x: CheckContext): Promise<CheckResult> {
-  const raw = await text(c.url, x.scope);
+  let raw: string;
+  try {
+    raw = await text(c.url, x.scope);
+  } catch (err) {
+    // A URL built from a setting this installation doesn't have (`$encode(env.X)` of nothing): not configured, naming
+    // it. (Checked only when the URL fails: a URL may fall back to another key, e.g. the mail domain or the primary.)
+    const missing = err instanceof ExpressionError ? unsetEnvKeys(c.url, x.scope) : [];
+    if (missing.length) throw nothingToLookAt(missing);
+    throw err;
+  }
   if (!/^https?:\/\/[^\s/]+/.test(raw))
     throw new NotConfigured(
       'The probe URL is empty or not an http(s) URL.',
@@ -782,6 +806,15 @@ async function signInHealth(
         'Set the env key the probe uses (for example AF_READ_CLIENT_ID).',
       );
   }
+  let resourceId: string | undefined;
+  if (c.resourceId) {
+    resourceId = await text(c.resourceId, x.scope);
+    if (!GUID.test(resourceId))
+      throw new NotConfigured(
+        'The resource id to check is not configured.',
+        'Set the env key the probe uses, or use the resource application id itself.',
+      );
+  }
   const max = 20_000;
   const res = await x.deps.outbound.execute<{ value?: GraphSignIn[] }>(
     x.identity,
@@ -790,7 +823,7 @@ async function signInHealth(
       method: 'GET',
       path: '/auditLogs/signIns',
       query: {
-        $filter: `createdDateTime ge ${since}${appId ? ` and appId eq '${appId.toLowerCase()}'` : ''}`,
+        $filter: `createdDateTime ge ${since}${appId ? ` and appId eq '${appId.toLowerCase()}'` : ''}${resourceId ? ` and resourceId eq '${resourceId.toLowerCase()}'` : ''}`,
         $select: 'id,status,createdDateTime',
         $top: 999,
       },
@@ -979,6 +1012,9 @@ const CHECKS: {
   signInHealth,
   kql,
   auditChain,
+  mailFlow,
+  fileRoundTrip,
+  onlineMeeting,
 };
 
 /** Runs one probe and evaluates it. Never throws: failures become `crit` or `error` outcomes. */
@@ -1018,6 +1054,8 @@ export async function runProbe(
       key,
       probe,
       deps,
+      startedAt: t0,
+      timeoutMs,
       identity: opts.identity ?? AUTOMATION,
       scope,
       signal,

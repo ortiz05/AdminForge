@@ -73,7 +73,7 @@ export interface ReportItem {
   tags: string[];
   owner: string;
   version: string;
-  /** First segment of the key: identity, m365, endpoint, security, azure. */
+  /** The report's `area` (a navigation section key), else the first segment of its key: identity, m365, exchange, … */
   area: string;
   icon: string | null;
   href: string;

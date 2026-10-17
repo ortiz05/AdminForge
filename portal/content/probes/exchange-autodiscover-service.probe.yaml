@@ -1,0 +1,26 @@
+$schema: ../../packages/schemas/generated/probe.schema.json
+kind: probe
+id: probes.exchange-autodiscover-service
+version: 1.0.0
+title: Exchange Autodiscover for the mail domain
+summary: >-
+  Asks Exchange Online's Autodiscover service where mail for the primary mail domain lives, the way Outlook and phones
+  do when they set up an account (AF_MAIL_DOMAIN, or the primary domain when it isn't set). Expects Exchange Online's
+  answer; a redirect or error means new profiles can't find their mailbox (or the domain isn't an Exchange Online
+  domain).
+owner: m365-team
+tags: [synthetic, exchange, http, autodiscover, sweep-15m]
+group: exchange
+check:
+  kind: http
+  # Any address in the domain works; Autodiscover answers by domain (the mail domain, else the primary domain).
+  url: "${ 'https://outlook.office365.com/autodiscover/autodiscover.json/v1.0/' & $encode('adminforge-check@' & (env.AF_MAIL_DOMAIN ? env.AF_MAIL_DOMAIN : env.AF_PRIMARY_DOMAIN)) & '?Protocol=AutodiscoverV1' }"
+  method: GET
+  headers:
+    Accept: application/json
+  expect:
+    status: 200
+    bodyContains: outlook.office365.com
+thresholds: { warn: 2000, crit: 6000 }
+intervalHint: PT15M
+timeoutMs: 15000

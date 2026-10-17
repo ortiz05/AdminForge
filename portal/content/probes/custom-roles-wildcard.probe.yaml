@@ -1,7 +1,7 @@
 $schema: ../../packages/schemas/generated/probe.schema.json
 kind: probe
 id: probes.custom-roles-wildcard
-version: 1.0.0
+version: 1.0.1
 title: Custom Azure roles that allow everything or can grant access
 summary: >-
   Custom Azure RBAC roles whose actions include "*" (every action, like Owner) or Microsoft.Authorization writes (they
@@ -9,6 +9,7 @@ summary: >-
   permissions report also lists provider-wide wildcards and how many assignments use each role.
 owner: azure-team
 tags: [kql, configuration, azure, rbac, security, config-check]
+group: azure
 check:
   kind: kql
   source: resourceGraph

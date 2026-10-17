@@ -1,12 +1,12 @@
 $schema: ../../packages/schemas/generated/dashboard.schema.json
 kind: dashboard
 id: automation.monitoring
-version: 1.1.0
+version: 1.2.0
 title: Synthetic monitoring
 summary: >-
-  Latest result and recent trend of every synthetic probe the scheduler runs as the automation identity — portal and
-  Microsoft cloud reachability, token acquisition per service, mail-flow DNS, certificate and credential expiry,
-  licence seats and sign-in health.
+  Latest result and recent trend of every synthetic probe the scheduler runs as the automation identity, one panel per
+  service — Microsoft 365 workloads (mail flow, SharePoint files, Teams meetings, front doors, incidents, sign-ins),
+  identity, Intune, Azure configuration checks and AdminForge itself (readiness, tokens, certificates, audit chain).
 owner: portal-admins
 tags: [synthetic, monitoring, automation]
 nav: { section: automation, label: Probe dashboard, icon: heartbeat, order: 35 }
@@ -19,79 +19,61 @@ layout:
     id: intro
     span: 12
     text: |
-      Each probe runs hourly from this host as the **automation identity** (see *Automation › Schedules*, tag
-      `probe-sweep`). A probe turns **warn** or **crit** when its main measurement crosses the thresholds in its
-      definition — latency for reachability checks, days remaining for certificates and credentials, seats in use for
-      licences, failure rate for sign-ins. Select a probe to see its history and the last error.
+      The scheduler runs these probes from this host as the **automation identity** — every 15 minutes, hourly or every
+      6 hours, by their sweep (*Automation › Schedules*, tag `probe-sweep`). A probe turns **warn** or **crit** when its
+      main measurement crosses its thresholds — latency for reachability checks, delivery time for mail flow, days
+      remaining for certificates and credentials, seats in use for licences, failure rate for sign-ins, open incidents
+      or offending resources for the rest. [Synthetic monitoring](/monitoring) shows the same probes with their history.
 
-      A failing *Token acquisition* probe usually means the automation identity's certificate or secret expired, or
-      admin consent was removed. Failing *DNS* probes point at mail-flow records for the primary domain. The licence
-      probe checks every SKU the tenant has; *Subscriptions lapsed or trial ending* warns before access is lost.
+      *Synthetic transactions* — mail flow, a SharePoint file round trip, a Teams meeting — run against test objects
+      named in configuration and remove what they made; until those are set up they show *not configured*. A failing
+      token check under *AdminForge* usually means the automation identity's certificate or secret expired, or admin
+      consent was removed.
 
   - widget: probeStatus
-    id: portal_and_cloud
-    title: Portal and Microsoft cloud reachability
+    id: m365
+    title: Microsoft 365
     span: 6
-    probes:
-      - probes.portal-readiness
-      - probes.entra-openid-metadata
-      - probes.graph-reachability
-      - probes.arm-reachability
-      - probes.arm-subscription-access
-      - probes.m365-service-health
+    group: m365
 
   - widget: probeStatus
-    id: tokens
-    title: Token acquisition (automation identity)
+    id: identity_sign_in
+    title: Sign-in and identity
     span: 6
-    probes:
-      - probes.token-graph
-      - probes.token-arm
-      - probes.token-log-analytics
-      - probes.token-exchange
-      - probes.token-teams
-      - probes.token-sharepoint-admin
+    group: identity
 
   - widget: probeStatus
-    id: sign_ins_and_licences
-    title: Sign-ins and licence seats
+    id: exchange
+    title: Exchange Online
     span: 6
-    probes:
-      - probes.sign-in-health
-      - probes.sign-in-health-adminforge
-      - probes.licence-seats-nearly-full
-      - probes.subscription-lifecycle
+    group: exchange
 
   - widget: probeStatus
-    id: expiry
-    title: Certificates and credentials
+    id: sharepoint
+    title: SharePoint Online and OneDrive
     span: 6
-    probes:
-      - probes.portal-tls-certificate
-      - probes.app-credential-expiry
-      - probes.saml-certificates-expiring
-      - probes.saml-certificates-expired
-      - probes.intune-apple-tokens
-      - probes.intune-vpp-tokens
+    group: sharepoint
 
   - widget: probeStatus
-    id: mail_dns
-    title: Mail-flow DNS for the primary domain
+    id: teams
+    title: Teams
     span: 6
-    probes:
-      - probes.dns-mx
-      - probes.dns-autodiscover
-      - probes.dns-spf
-      - probes.dns-dmarc
+    group: teams
 
   - widget: probeStatus
-    id: functions
-    title: Function App connections
+    id: endpoint
+    title: Endpoint (Intune)
     span: 6
-    probes:
-      - probes.function-hr-sync-health
+    group: endpoint
 
   - widget: probeStatus
-    id: all_probes
-    title: All probes
-    span: 12
+    id: platform
+    title: AdminForge
+    span: 6
+    group: platform
+
+  - widget: probeStatus
+    id: azure
+    title: Azure
+    span: 6
+    group: azure

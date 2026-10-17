@@ -40,6 +40,10 @@
     "endpoint.windows-laps-coverage#devices": {
       "knownTruncated": "capped by design to fit the 250 ms transform budget; the report says when it stops (measured 2026-10-17 at enterprise scale)"
     },
+    "exchange.overview#storage": {
+      "knownError": "SyntheticNotModelled: Microsoft's daily storage summary report (one small request) isn't in the fake Graph yet",
+      "expect": "unmodelled"
+    },
     "identity.app-credential-expiry#credentials": {
       "knownSlow": "apps with a credential in the window are picked natively (ending within 7 days first); the credentials of the first 400 become rows with JSONata",
       "mayTimeOut": true
@@ -266,6 +270,14 @@
       "knownSlow": "teams read with owners expanded (owner types can't be filtered); 100 a page",
       "maxRequests": 64,
       "maxEstimatedLiveMs": 19377
+    },
+    "sharepoint.overview#oneDriveStorage": {
+      "knownError": "SyntheticNotModelled: Microsoft's daily storage summary report (one small request) isn't in the fake Graph yet",
+      "expect": "unmodelled"
+    },
+    "sharepoint.overview#siteStorage": {
+      "knownError": "SyntheticNotModelled: Microsoft's daily storage summary report (one small request) isn't in the fake Graph yet",
+      "expect": "unmodelled"
     },
     "security.risky-users-review#detections": {
       "knownSlow": "grouped natively by user; each user's summary is JSONata (~150 ms at 20k detections)",

@@ -312,6 +312,14 @@ export const Report = z
     ...pageShape,
     template: z.literal('report').default('report'),
     export: ExportSpec,
+    /**
+     * Reports catalogue area: a navigation section key (`exchange`, `billing`, …). Default: the key's first segment, so
+     * a report can move to a new area without changing its key (schedules and links keep working).
+     */
+    area: z
+      .string()
+      .regex(/^[a-z][a-z0-9-]*$/)
+      .optional(),
   })
   .superRefine(checkPage);
 export type Report = z.infer<typeof Report>;

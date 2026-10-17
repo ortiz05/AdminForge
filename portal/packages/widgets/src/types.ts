@@ -69,6 +69,8 @@ export type ProbeHealth = 'ok' | 'warn' | 'crit' | 'error' | 'unknown';
 export interface ProbeSummary {
   key: string;
   title: string;
+  /** The service it watches (the probe's `group`), when it names one. */
+  group?: string | null;
   status: ProbeHealth;
   metric?: number | null;
   unit?: string;

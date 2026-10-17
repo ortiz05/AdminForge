@@ -1,13 +1,13 @@
 $schema: ../../../packages/schemas/generated/page.schema.json
 kind: page
 id: m365.sharepoint-sharing
-version: 1.1.0
+version: 1.2.0
 title: SharePoint sharing
 summary: Tenant-wide SharePoint and OneDrive sharing settings and each site's sharing level — find sites that allow Anyone links.
 owner: m365-team
 tags: [m365, sharepoint, sharing, security]
 template: list-detail
-nav: { section: m365, label: SharePoint sharing, icon: share-network, order: 85 }
+nav: { section: sharepoint, label: Sharing, icon: share-network, order: 20 }
 requires:
   portalRoles: [Portal.Reader]
   scopes:

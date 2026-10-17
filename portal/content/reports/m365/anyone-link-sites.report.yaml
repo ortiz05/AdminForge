@@ -1,12 +1,14 @@
 $schema: ../../../packages/schemas/generated/report.schema.json
 kind: report
 id: m365.anyone-link-sites
-version: 1.2.0
+version: 1.3.0
 title: Public and Anyone-link sites
 summary: SharePoint sites whose sharing allows Anyone links (optionally also new guests), plus the sites where Anyone links actually exist.
 owner: m365-team
 tags: [m365, sharepoint, sharing, security]
 nav: { section: reports, label: Public and Anyone-link sites, icon: globe, order: 140 }
+# Reports catalogue area (the key keeps its m365. prefix so schedules and links keep working).
+area: sharepoint
 requires:
   portalRoles: [Portal.Reader]
   scopes:

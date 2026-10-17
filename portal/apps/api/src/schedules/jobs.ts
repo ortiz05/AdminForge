@@ -7,7 +7,14 @@ import {
   type DeliveryStatus,
 } from '../delivery/notifier';
 import { isTerminal } from '@adminforge/engine';
-import type { Delivery, NewsJob, Probe, ProbeJob, Schedule } from '@adminforge/schemas';
+import {
+  TRANSACTION_KINDS,
+  type Delivery,
+  type NewsJob,
+  type Probe,
+  type ProbeJob,
+  type Schedule,
+} from '@adminforge/schemas';
 import type { ArtifactStore, WrittenArtifact } from '../artifacts/store';
 import { missingLicences } from '../capabilities/licences';
 import type { DatasourceRunner, ErrorInfo, LoadedPage, UserScope } from '../datasources/executor';
@@ -121,6 +128,11 @@ const defaultSleep = (ms: number, signal: AbortSignal) =>
 
 const INACTIVE = new Set(['draft', 'retired']);
 
+/** A synthetic transaction probe (it sends, uploads or creates on its test objects). */
+const isTransaction = (probe: Probe) => (TRANSACTION_KINDS as readonly string[]).includes(probe.check.kind);
+/** Outcomes that mean the probe stopped before calling Microsoft (nothing was changed). */
+const NO_CALL_CODES = new Set(['not_configured', 'content_error', 'licence_required', 'writes_paused']);
+
 /** The named app identity a schedule runs as, or null (the automation identity, or the creator). */
 export const appIdentityOf = (def: Pick<Schedule, 'identity'>): string | null =>
   def.identity !== 'automation' && def.identity && 'app' in def.identity ? def.identity.app : null;
@@ -176,6 +188,8 @@ export function createJobRunner(deps: JobDeps): JobRunner {
       };
     const counts = { ok: 0, warn: 0, crit: 0, error: 0 };
     const results: Array<{ key: string; status: string; metric: number | null; code: string }> = [];
+    // Synthetic transactions that got as far as acting on the tenant (ADR-015): the run is audited as a write.
+    const transactions: Record<string, string> = {};
     await eachLimited(probes, job.concurrency ?? 4, async ({ key, probe }) => {
       if (ctx.signal.aborted) return;
       const outcome = await runProbe(
@@ -186,6 +200,7 @@ export function createJobRunner(deps: JobDeps): JobRunner {
       );
       counts[outcome.status]++;
       results.push({ key, status: outcome.status, metric: outcome.metric, code: outcome.code });
+      if (isTransaction(probe) && !NO_CALL_CODES.has(outcome.code)) transactions[key] = outcome.code;
       await deps.store.insertProbeResult({
         probeKey: key,
         ts: outcome.ts,
@@ -200,7 +215,17 @@ export function createJobRunner(deps: JobDeps): JobRunner {
     });
     if (ctx.signal.aborted) throw ctx.signal.reason;
     results.sort((a, b) => a.key.localeCompare(b.key));
-    const result = { probes: probes.length, ...counts, results };
+    const acted = Object.keys(transactions).length;
+    const result = {
+      probes: probes.length,
+      ...counts,
+      results,
+      ...(acted ? { transactions: acted, transactionCodes: transactions } : {}),
+    };
+    // Every probe waiting for a setting this installation hasn't made (e.g. the synthetic transactions before their
+    // test objects exist): nothing failed, there is just nothing to check yet — each probe says what to set.
+    if (results.length && results.every((r) => r.code === 'not_configured'))
+      return { result: { ...result, waiting: 'Every probe in this job is waiting for its configuration.' } };
     if (counts.error === probes.length)
       return {
         status: 'failed',

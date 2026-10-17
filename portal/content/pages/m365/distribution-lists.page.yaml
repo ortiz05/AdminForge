@@ -1,13 +1,13 @@
 $schema: ../../../packages/schemas/generated/page.schema.json
 kind: page
 id: m365.distribution-lists
-version: 1.1.0
+version: 1.2.0
 title: Distribution lists
 summary: Distribution lists and mail-enabled security groups — owners, who can join, whether outside senders can mail them. Add members in bulk, or create a list.
 owner: m365-team
 tags: [m365, exchange, distribution-lists]
 template: list-detail
-nav: { section: m365, label: Distribution lists, icon: address-book, order: 60 }
+nav: { section: exchange, label: Distribution lists, icon: address-book, order: 30 }
 requires:
   portalRoles: [Portal.Reader]
   scopes:

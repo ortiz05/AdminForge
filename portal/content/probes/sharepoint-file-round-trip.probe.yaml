@@ -1,0 +1,26 @@
+$schema: ../../packages/schemas/generated/probe.schema.json
+kind: probe
+id: probes.sharepoint-file-round-trip
+version: 1.0.0
+title: SharePoint files — upload, download, delete
+summary: >-
+  Synthetic transaction: uploads a 16 KB test file to the default document library of a dedicated test site
+  (AF_SYNTHETIC_SITE_ID), downloads it from SharePoint, checks it's the same file and deletes it; leftovers from
+  earlier runs are removed too. The metric is the whole round trip. Needs Sites.Selected with write access to that one
+  site (docs/operations.md › Synthetic transactions); until then it reports "not configured".
+owner: m365-team
+tags: [synthetic, synthetic-transaction, sharepoint, files]
+group: sharepoint
+check:
+  kind: fileRoundTrip
+  site: ${ env.AF_SYNTHETIC_SITE_ID }
+  folder: AdminForge synthetic checks
+  sizeKb: 16
+thresholds: { warn: 5000, crit: 15000 }
+intervalHint: PT15M
+timeoutMs: 60000
+requires:
+  licences: [sharepoint]
+  # Granted per site: the identity can reach only the sites an administrator grants it (write on the test site).
+  scopes:
+    graph: [Sites.Selected]

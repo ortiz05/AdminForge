@@ -274,6 +274,7 @@ export function toProbeSummary(p: ProbeItem): ProbeSummary {
   return {
     key: p.key,
     title: p.title,
+    group: p.group,
     status: p.latest?.status ?? 'unknown',
     metric: p.latest?.metric ?? null,
     unit: p.latest?.unit ?? p.thresholds.unit ?? undefined,

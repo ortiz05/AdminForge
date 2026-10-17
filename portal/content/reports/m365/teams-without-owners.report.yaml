@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/report.schema.json
 kind: report
 id: m365.teams-without-owners
-version: 2.0.0
+version: 2.1.0
 title: Teams without owners
 summary: >-
   Teams with no person as owner — no owner at all, or owned only by apps — and optionally teams with one person as
@@ -9,6 +9,8 @@ summary: >-
 owner: m365-team
 tags: [m365, teams, governance]
 nav: { section: reports, label: Teams without owners, icon: microsoft-teams-logo, order: 130 }
+# Reports catalogue area (the key keeps its m365. prefix so schedules and links keep working).
+area: teams
 requires:
   portalRoles: [Portal.Reader]
   scopes:

@@ -1,0 +1,167 @@
+$schema: ../../packages/schemas/generated/dashboard.schema.json
+kind: dashboard
+id: teams.overview
+version: 1.0.0
+title: Teams overview
+summary: >-
+  Microsoft Teams at a glance — Microsoft's service health and open issues for Teams, how many teams there are and
+  how many have no owner, chat, call and meeting activity, and the synthetic meeting, presence, channel, endpoint and
+  sign-in checks — with links to the Teams pages and reports.
+owner: m365-team
+tags: [teams, m365, overview, collaboration]
+template: dashboard
+nav: { section: teams, label: Overview, icon: squares-four, order: 5 }
+refresh: 300
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    graph: [ServiceHealth.Read.All, Reports.Read.All, Group.Read.All, GroupMember.Read.All]
+  # Service health needs Service Support Administrator or Global Reader; the usage reports need Reports Reader or Global Reader.
+  entraRoles: [Global Reader]
+  licences: [teams]
+
+datasources:
+  # The same requests as the Microsoft 365 overview (shared cache), narrowed to Microsoft Teams here.
+  health:
+    source: graph
+    request:
+      path: /admin/serviceAnnouncement/healthOverviews
+      query:
+        $select: id,service,status
+    cache: { ttl: 120 }
+    transform: >-
+      ${ (
+        $mine := ['Microsoft Teams'];
+        $healthy := ['serviceOperational', 'serviceRestored', 'falsePositive', 'postIncidentReviewPublished', 'resolved', 'resolvedExternal', 'mitigated', 'mitigatedExternal'];
+        $words := { 'serviceDegradation': 'Degraded', 'serviceInterruption': 'Interrupted', 'investigating': 'Investigating', 'restoringService': 'Restoring service', 'extendedRecovery': 'Extended recovery', 'verifyingService': 'Verifying' };
+        $rows := [value.value[service in $mine]];
+        $bad := [$rows[$not(status in $healthy)]];
+        $worst := $count($bad[status = 'serviceInterruption']) > 0 ? 'serviceInterruption' : $bad[0].status;
+        {
+          "value": $rows,
+          "label": $count($rows) = 0 ? 'Not reported' : $count($bad) = 0 ? 'Healthy' : ($lookup($words, $worst) ? $lookup($words, $worst) : 'Advisory'),
+          "tone": $count($rows) = 0 ? 'neutral' : $worst = 'serviceInterruption' ? 'crit' : $count($bad) > 0 ? 'warn' : 'ok',
+          "services": $count($bad) = 0 ? $join($mine, ' and ') : $join($bad.service, ' and ')
+        }
+      ) }
+  issues:
+    source: graph
+    request:
+      path: /admin/serviceAnnouncement/issues
+      query:
+        $filter: isResolved eq false
+        $orderby: lastModifiedDateTime desc
+        $top: 100
+    paging: all
+    maxItems: 500
+    cache: { ttl: 120 }
+    transform: >-
+      ${ (
+        $mine := ['Microsoft Teams'];
+        $open := value.value[isResolved = false and service in $mine]^((classification = 'incident' ? 0 : 1), >lastModifiedDateTime);
+        $rows := [$open.{ "id": id, "title": title, "service": service, "classification": classification, "lastModifiedDateTime": lastModifiedDateTime }];
+        { "rows": $rows, "incidents": $count($rows[classification = 'incident']), "advisories": $count($rows[classification = 'advisory']) }
+      ) }
+  # Counted by Graph (advanced queries): no list of every team is read for three numbers.
+  teams:
+    source: graphBatch
+    requests:
+      total:
+        path: /groups/$count
+        query: { $filter: "resourceProvisioningOptions/Any(x:x eq 'Team')" }
+        headers: { ConsistencyLevel: eventual }
+      noOwner:
+        path: /groups/$count
+        query: { $filter: "resourceProvisioningOptions/Any(x:x eq 'Team') and owners/$count eq 0" }
+        headers: { ConsistencyLevel: eventual }
+      singleOwner:
+        path: /groups/$count
+        query: { $filter: "resourceProvisioningOptions/Any(x:x eq 'Team') and owners/$count eq 1" }
+        headers: { ConsistencyLevel: eventual }
+    cache: { ttl: 600 }
+  activity:
+    source: graph
+    label: Teams activity (usage report)
+    request:
+      beta: true
+      path: /reports/getTeamsUserActivityCounts(period='D30')
+      query: { $format: application/json }
+    cache: { ttl: 3600 }
+    transform: >-
+      ${ { "days": [value.value^(reportDate)] } }
+
+layout:
+  - widget: kpi
+    id: health
+    data: health.label
+    label: Microsoft Teams health
+    format: text
+    status: "${ health.tone }"
+    statusLabel: "${ health.services }"
+    href: /p/m365.service-health?service=Microsoft%20Teams
+  - widget: kpi
+    id: incidents
+    data: issues.incidents
+    label: Active incidents
+    format: number
+    status: "${ value > 0 ? 'crit' : 'ok' }"
+    hint: "${ issues.advisories = 1 ? '1 advisory open' : issues.advisories & ' advisories open' }"
+    href: /p/m365.service-health?service=Microsoft%20Teams
+  - widget: kpi
+    id: total
+    data: teams.total
+    label: Teams
+    format: number
+    hint: "${ teams.singleOwner = 1 ? '1 team has a single owner' : teams.singleOwner & ' teams have a single owner' }"
+    href: /p/m365.teams
+  - widget: kpi
+    id: noOwner
+    data: teams.noOwner
+    label: Teams without any owner
+    format: number
+    status: "${ value > 0 ? 'crit' : 'ok' }"
+    hint: Teams owned only by apps (no person) are in the Teams without owners report.
+    href: /p/m365.teams-without-owners
+  - widget: probeStatus
+    id: checks
+    title: Synthetic checks
+    description: Meeting creation, presence, channel reads, the Teams web endpoint, sign-ins and the Teams admin token — on a schedule, as the automation identity.
+    span: 7
+    group: teams
+    empty:
+      title: No Teams checks have reported yet
+      body: The checks report here after their first scheduled run. Every check is on the Synthetic monitoring page.
+  - widget: list
+    id: activeIssues
+    title: Microsoft Teams incidents and advisories
+    span: 5
+    data: issues.rows
+    primary: title
+    secondary: lastModifiedDateTime
+    secondaryFormat: relativeTime
+    status: { field: classification, map: { incident: [crit, Incident], advisory: [info, Advisory] } }
+    href: ${ '/p/m365.service-issue?id=' & $encode(row.id) }
+    limit: 8
+    empty:
+      title: No active Microsoft Teams issues
+      body: Microsoft isn't tracking any Microsoft Teams incident or advisory for this tenant.
+  - widget: chart
+    id: activity
+    title: Teams activity (30 days)
+    span: 7
+    type: line
+    data: activity.days
+    x: reportDate
+    y: [teamChatMessages, privateChatMessages, calls, meetings]
+    labels: { teamChatMessages: Channel messages, privateChatMessages: Chat messages, calls: Calls, meetings: Meetings }
+    format: number
+  - widget: markdown
+    id: links
+    title: Pages and reports
+    span: 5
+    text: |
+      **Pages:** [All teams](/p/m365.teams) · [User policies](/p/m365.teams-user-policies)
+
+      **Reports:** [Team activity and exposure](/p/m365.teams-activity) · [Teams without owners](/p/m365.teams-without-owners) · [Every Teams report](/reports?area=teams)
+
+      **Monitoring:** [Teams checks](/monitoring?group=teams) · [Microsoft Teams service health](/p/m365.service-health?service=Microsoft%20Teams)

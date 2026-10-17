@@ -18,20 +18,21 @@ Claude picks the matching skill automatically (or name it: "use the adding-a-pla
 
 ## Extension points
 
-| You want…                                                                                                                   | Skill                         | Usually touches                                                          |
-| --------------------------------------------------------------------------------------------------------------------------- | ----------------------------- | ------------------------------------------------------------------------ |
-| A page, dashboard, entity view, list, report; new columns, filters, KPIs, row/bulk actions                                  | `adding-a-page-or-report`     | `portal/content/{pages,dashboards,reports}`, `tests/fixtures`            |
-| Query-builder filters on a list (Graph → `odata`, KQL → `kql`, PowerShell/static rows → `rows`)                             | `adding-a-page-or-report`     | the page's `filters.advanced`                                            |
-| An action or guided procedure (disable user, reset MFA, restart app, runbook)                                               | `adding-a-playbook`           | `portal/content/{playbooks,runbooks}`                                    |
-| Something that runs on a schedule on this host; monitoring; a configuration/compliance check; KQL at scale                  | `adding-a-schedule-or-probe`  | `portal/content/{schedules,probes}`                                      |
-| A recurring delivery of an existing report (file, email or Teams), at most hourly — no change to the repository             | none: in the portal           | Reports → the report → Schedule (Operator; stored in the database)       |
-| A source in News and changes (Microsoft blog, roadmap, update/security feed, Learn what's-new page, module releases)        | `add-news-feed`               | `portal/content/feeds`, `tests/fixtures/hosts`, `docs/news.md`           |
-| A visualisation or interaction the widgets can't express                                                                    | `adding-a-widget`             | `portal/packages/widgets`, `docs/widgets.md`                             |
-| A new Microsoft API, your own Entra-secured API/Function, a blocked read-only POST                                          | `adding-a-service-connector`  | `portal/content/connections`, `portal/packages/connectors`, provisioning |
-| PowerShell (Exchange, distribution lists, Teams, SharePoint); write scripts take the object ids of the accounts they change | `adding-a-runner-script`      | `portal/content/scripts`, `tests/runner`                                 |
-| Backend behaviour content can't express                                                                                     | `adding-an-api-route`         | `portal/apps/api`, `portal/packages/schemas`                             |
-| The look and feel                                                                                                           | `changing-the-design-system`  | `portal/packages/design-tokens`, `portal/packages/ui/src/recipes`        |
-| Checking it against a real tenant                                                                                           | `validating-against-a-tenant` | `tests/live`, `~/.config/adminforge/*.env`                               |
+| You want…                                                                                                                       | Skill                         | Usually touches                                                          |
+| ------------------------------------------------------------------------------------------------------------------------------- | ----------------------------- | ------------------------------------------------------------------------ |
+| A page, dashboard, entity view, list, report; new columns, filters, KPIs, row/bulk actions                                      | `adding-a-page-or-report`     | `portal/content/{pages,dashboards,reports}`, `tests/fixtures`            |
+| Query-builder filters on a list (Graph → `odata`, KQL → `kql`, PowerShell/static rows → `rows`)                                 | `adding-a-page-or-report`     | the page's `filters.advanced`                                            |
+| An action or guided procedure (disable user, reset MFA, restart app, runbook)                                                   | `adding-a-playbook`           | `portal/content/{playbooks,runbooks}`                                    |
+| Something that runs on a schedule on this host; monitoring; a configuration/compliance check; KQL at scale                      | `adding-a-schedule-or-probe`  | `portal/content/{schedules,probes}`                                      |
+| A service check on Synthetic monitoring (endpoint, incidents, sign-ins; mail flow, file or meeting transaction on test objects) | `adding-a-schedule-or-probe`  | `portal/content/probes` (`group:` = the service's section)               |
+| A recurring delivery of an existing report (file, email or Teams), at most hourly — no change to the repository                 | none: in the portal           | Reports → the report → Schedule (Operator; stored in the database)       |
+| A source in News and changes (Microsoft blog, roadmap, update/security feed, Learn what's-new page, module releases)            | `add-news-feed`               | `portal/content/feeds`, `tests/fixtures/hosts`, `docs/news.md`           |
+| A visualisation or interaction the widgets can't express                                                                        | `adding-a-widget`             | `portal/packages/widgets`, `docs/widgets.md`                             |
+| A new Microsoft API, your own Entra-secured API/Function, a blocked read-only POST                                              | `adding-a-service-connector`  | `portal/content/connections`, `portal/packages/connectors`, provisioning |
+| PowerShell (Exchange, distribution lists, Teams, SharePoint); write scripts take the object ids of the accounts they change     | `adding-a-runner-script`      | `portal/content/scripts`, `tests/runner`                                 |
+| Backend behaviour content can't express                                                                                         | `adding-an-api-route`         | `portal/apps/api`, `portal/packages/schemas`                             |
+| The look and feel                                                                                                               | `changing-the-design-system`  | `portal/packages/design-tokens`, `portal/packages/ui/src/recipes`        |
+| Checking it against a real tenant                                                                                               | `validating-against-a-tenant` | `tests/live`, `~/.config/adminforge/*.env`                               |
 
 ## Guardrails that run automatically
 

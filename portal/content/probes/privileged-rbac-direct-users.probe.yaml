@@ -1,7 +1,7 @@
 $schema: ../../packages/schemas/generated/probe.schema.json
 kind: probe
 id: probes.privileged-rbac-direct-users
-version: 1.0.0
+version: 1.0.1
 title: Privileged Azure roles assigned directly to users
 summary: >-
   Owner, User Access Administrator or Role Based Access Control Administrator assigned straight to a user (not a group
@@ -10,6 +10,7 @@ summary: >-
   assignments report resolves that with Microsoft Graph.
 owner: azure-team
 tags: [kql, configuration, azure, rbac, security, config-check]
+group: azure
 check:
   kind: kql
   source: resourceGraph

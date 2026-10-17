@@ -1,8 +1,9 @@
 import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { useNavigate } from '@tanstack/react-router';
+import { Link, useNavigate } from '@tanstack/react-router';
 import {
   ArrowClockwiseIcon,
+  button,
   Chart,
   cn,
   Drawer,
@@ -32,12 +33,20 @@ import {
   type ProbeItem,
   type ProbeStatus,
 } from './schedules';
+import { useNav } from '../lib/session';
 import { Callout, Facts, QueryError, useDocumentTitle } from './ui';
 
 export interface MonitoringSearch {
   probe?: string;
   show?: 'all' | 'problems';
+  /** Only the probes of one service (a probe `group`: `exchange`, `teams`, …). */
+  group?: string;
+  /** Group the tiles by check type instead of by service. */
+  by?: 'check';
 }
+
+/** Probes without a `group`. */
+const OTHER_GROUP = { key: 'other', label: 'Other checks', icon: 'pulse' };
 
 const TONE_TEXT = {
   ok: 'text-ok',
@@ -65,7 +74,8 @@ export function formatMetric(value: number | null | undefined, rawUnit: string |
   const unit = humanUnit(rawUnit);
   if (!unit) return n;
   if (unit === '%') return `${n}%`;
-  if (unit === 'days') return `${n} day${value === 1 ? '' : 's'}`;
+  // Counted units read in the singular for one: 1 day, 1 item, 1 row.
+  if (value === 1 && /^(days|items|rows|events|failures)$/.test(unit)) return `${n} ${unit.slice(0, -1)}`;
   return `${n} ${unit}`;
 }
 
@@ -105,7 +115,18 @@ function MetricValue({ value, unit }: { value: number | null | undefined; unit: 
   );
 }
 
-function ProbeTile({ p, now, onOpen }: { p: ProbeItem; now: number; onOpen: () => void }) {
+function ProbeTile({
+  p,
+  now,
+  onOpen,
+  context,
+}: {
+  p: ProbeItem;
+  now: number;
+  onOpen: () => void;
+  /** What kind of check it is (grouped by service) or which service it watches (grouped by check type). */
+  context?: string;
+}) {
   const status = statusOf(p);
   const tone = PROBE_TONE[status];
   const metrics = p.series.map((x) => x.metric).filter((m): m is number => m !== null);
@@ -123,7 +144,10 @@ function ProbeTile({ p, now, onOpen }: { p: ProbeItem; now: number; onOpen: () =
       aria-label={`${p.title}: ${PROBE_LABEL[status]}${p.latest ? `, ${formatMetric(p.latest.metric, unit)}` : ''}. Open details.`}
     >
       <span className="flex items-start justify-between gap-3">
-        <span className="min-w-0 text-sm font-medium text-fg group-hover:underline">{p.title}</span>
+        <span className="flex min-w-0 flex-col gap-0.5">
+          {context && <span className="af-eyebrow truncate">{context}</span>}
+          <span className="text-sm font-medium text-fg group-hover:underline">{p.title}</span>
+        </span>
         <StatusPill status={tone} size="sm" className="shrink-0">
           {PROBE_LABEL[status]}
         </StatusPill>
@@ -154,7 +178,7 @@ function ProbeTile({ p, now, onOpen }: { p: ProbeItem; now: number; onOpen: () =
   );
 }
 
-function ProbeDetail({ p, onClose }: { p: ProbeItem; onClose: () => void }) {
+function ProbeDetail({ p, service, onClose }: { p: ProbeItem; service?: string; onClose: () => void }) {
   const now = useNow(60_000);
   // Rounded to 5 minutes so the query key (and the fetch) only changes every few minutes.
   const since = new Date(Math.floor((now - DAY_MS) / 300_000) * 300_000).toISOString();
@@ -195,6 +219,7 @@ function ProbeDetail({ p, onClose }: { p: ProbeItem; onClose: () => void }) {
               ) : null,
             ],
             ['Thresholds', thresholdText(p) ?? 'None — pass or fail only'],
+            ['Service', service ?? null],
             [
               'Probe',
               <code key="k" className="font-mono text-xs">
@@ -254,32 +279,62 @@ function ProbeDetail({ p, onClose }: { p: ProbeItem; onClose: () => void }) {
   );
 }
 
-/** Synthetic monitoring (R6): probe tiles grouped by kind, worst first, with sparkline and thresholds; detail chart. */
+/**
+ * Synthetic monitoring (R6): probe tiles grouped by the service they watch (Exchange Online, Teams, sign-in, …; or by
+ * check type), worst group first, with sparkline and thresholds; detail chart. `?group=` narrows it to one service —
+ * the "Service checks" item of each service's section links there.
+ */
 export function MonitoringPage({ search }: { search: MonitoringSearch }) {
   const navigate = useNavigate();
   const now = useNow(30_000);
   const q = useQuery(probesQuery);
-  useDocumentTitle('Synthetic monitoring');
+  const nav = useNav();
   const show = search.show ?? 'all';
-  const probes = useMemo(() => q.data?.items ?? [], [q.data]);
+  // One service on its own is grouped by check (its own section heading would only repeat the title).
+  const byCheck = search.by === 'check' || !!search.group;
+  const services = useMemo(() => {
+    const m = new Map((q.data?.groups ?? []).map((g) => [g.key, g]));
+    m.set(OTHER_GROUP.key, OTHER_GROUP);
+    return m;
+  }, [q.data]);
+  /** The service a probe watches, or undefined when it names none ("Other checks" is a heading, not a service). */
+  const serviceOf = (p: ProbeItem) => (p.group ? (services.get(p.group)?.label ?? p.group) : undefined);
+  // The service's name comes from the probes, else from the navigation (a section without probes yet).
+  const focus = search.group
+    ? (services.get(search.group)?.label ??
+      nav.data?.sections.find((sec) => sec.key === search.group)?.label ??
+      search.group)
+    : undefined;
+  useDocumentTitle(focus ? `Service checks · ${focus}` : 'Synthetic monitoring');
+  const probes = useMemo(
+    () => (q.data?.items ?? []).filter((p) => !search.group || (p.group ?? OTHER_GROUP.key) === search.group),
+    [q.data, search.group],
+  );
   const counts = { ok: 0, warn: 0, crit: 0, unknown: 0 } as Record<ProbeStatus, number>;
   for (const p of probes) counts[statusOf(p)]++;
   const visible =
     show === 'problems' ? probes.filter((p) => statusOf(p) === 'warn' || statusOf(p) === 'crit') : probes;
+  const order = useMemo(() => [...services.keys()], [services]);
   const groups = useMemo(() => {
     const by = new Map<string, ProbeItem[]>();
-    for (const p of visible) by.set(p.kind, [...(by.get(p.kind) ?? []), p]);
+    const keyOf = (p: ProbeItem) => (byCheck ? p.kind : (p.group ?? OTHER_GROUP.key));
+    for (const p of visible) by.set(keyOf(p), [...(by.get(keyOf(p)) ?? []), p]);
+    const labelOf = (key: string) =>
+      byCheck ? (PROBE_KIND_LABEL[key] ?? key) : (services.get(key) ?? OTHER_GROUP).label;
+    const rank = (key: string) => (byCheck ? 0 : order.indexOf(key) < 0 ? order.length : order.indexOf(key));
     return [...by.entries()]
-      .map(([kind, items]) => ({
-        kind,
+      .map(([key, items]) => ({
+        key,
+        label: labelOf(key),
         items: items.sort((a, b) => severity(b) - severity(a) || a.title.localeCompare(b.title)),
       }))
       .sort(
         (a, b) =>
           Math.max(...b.items.map(severity)) - Math.max(...a.items.map(severity)) ||
-          (PROBE_KIND_LABEL[a.kind] ?? a.kind).localeCompare(PROBE_KIND_LABEL[b.kind] ?? b.kind),
+          rank(a.key) - rank(b.key) ||
+          a.label.localeCompare(b.label),
       );
-  }, [visible]);
+  }, [visible, byCheck, services, order]);
   const selected = search.probe ? probes.find((p) => p.key === search.probe) : undefined;
   const setSearch = (patch: Partial<MonitoringSearch>) =>
     void navigate({
@@ -291,11 +346,34 @@ export function MonitoringPage({ search }: { search: MonitoringSearch }) {
   return (
     <>
       <PageHeader
-        eyebrow="Automation"
-        title="Synthetic monitoring"
-        description="Probes that check Microsoft Graph and Azure reachability, token acquisition, sign-in health, certificates, DNS and licence seats — on a schedule, as the automation identity."
+        eyebrow={focus ?? 'Automation'}
+        title={focus ? 'Service checks' : 'Synthetic monitoring'}
+        description={
+          focus
+            ? `Synthetic tests and health checks of ${focus}, run on a schedule as the automation identity.`
+            : 'Scheduled synthetic tests of Microsoft 365, Azure and AdminForge itself, run as the automation identity.'
+        }
         actions={
           <>
+            {search.group ? (
+              <Link
+                to="/monitoring"
+                search={(prev: MonitoringSearch) => ({ ...prev, group: undefined, probe: undefined })}
+                className={button({ intent: 'ghost' })}
+              >
+                All services
+              </Link>
+            ) : (
+              <SegmentedControl
+                aria-label="Group probes by"
+                value={byCheck ? 'check' : 'service'}
+                onValueChange={(v) => setSearch({ by: v === 'check' ? 'check' : undefined })}
+                options={[
+                  { value: 'service', label: 'By service' },
+                  { value: 'check', label: 'By check' },
+                ]}
+              />
+            )}
             <SegmentedControl
               aria-label="Show probes"
               value={show}
@@ -356,11 +434,19 @@ export function MonitoringPage({ search }: { search: MonitoringSearch }) {
           </div>
         ) : groups.length === 0 ? (
           <Panel>
-            <EmptyState title={show === 'problems' ? 'Every probe is healthy' : 'No probes yet'}>
-              {show === 'problems'
-                ? 'Nothing is degraded or failing right now.'
-                : 'Add one with pnpm adminforge new probe, then schedule it.'}
-            </EmptyState>
+            {probes.length === 0 ? (
+              <EmptyState title={focus ? `No checks for ${focus} yet` : 'No probes yet'}>
+                Add one with{' '}
+                <code className="font-mono text-xs">
+                  pnpm adminforge new probe {search.group ?? '<section>'}/&lt;name&gt;
+                </code>
+                , then schedule it.
+              </EmptyState>
+            ) : (
+              <EmptyState title="Every probe is healthy">
+                Nothing is degraded or failing right now.
+              </EmptyState>
+            )}
           </Panel>
         ) : (
           // Groups flow into columns (worst group first), so one probe of a kind doesn't take a whole row.
@@ -370,20 +456,29 @@ export function MonitoringPage({ search }: { search: MonitoringSearch }) {
               const Glyph = STATUS_ICON[PROBE_TONE[worst]];
               return (
                 <section
-                  key={g.kind}
-                  aria-labelledby={`probes-${g.kind}`}
+                  key={g.key}
+                  aria-labelledby={`probes-${g.key}`}
                   className="mb-6 flex break-inside-avoid flex-col gap-3"
                 >
                   <h2
-                    id={`probes-${g.kind}`}
+                    id={`probes-${g.key}`}
                     className="flex items-center gap-2 text-sm font-semibold text-fg"
                   >
                     <Glyph size={15} weight="fill" aria-hidden className={TONE_TEXT[PROBE_TONE[worst]]} />
-                    {PROBE_KIND_LABEL[g.kind] ?? g.kind}
-                    <span className="font-normal text-fg-3">· {g.items.length}</span>
+                    {g.label}{' '}
+                    <span className="font-normal text-fg-3">
+                      · {g.items.length}
+                      <span className="sr-only"> {g.items.length === 1 ? 'probe' : 'probes'}</span>
+                    </span>
                   </h2>
                   {g.items.map((p) => (
-                    <ProbeTile key={p.key} p={p} now={now} onOpen={() => setSearch({ probe: p.key })} />
+                    <ProbeTile
+                      key={p.key}
+                      p={p}
+                      now={now}
+                      context={byCheck && !search.group ? serviceOf(p) : undefined}
+                      onOpen={() => setSearch({ probe: p.key })}
+                    />
                   ))}
                 </section>
               );
@@ -392,7 +487,12 @@ export function MonitoringPage({ search }: { search: MonitoringSearch }) {
         )}
       </div>
       {selected && (
-        <ProbeDetail key={selected.key} p={selected} onClose={() => setSearch({ probe: undefined })} />
+        <ProbeDetail
+          key={selected.key}
+          p={selected}
+          service={serviceOf(selected)}
+          onClose={() => setSearch({ probe: undefined })}
+        />
       )}
     </>
   );

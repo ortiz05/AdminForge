@@ -184,6 +184,24 @@ Run states that aren't errors:
 | "Paused: Microsoft asked you to sign in again"                     | The session needs fresh credentials. **Sign in again**, then **Resume run**.                                                                             |
 | "Needs review: a step may or may not have happened"                | A step that can't be retried safely was in flight when the worker stopped. Check the target in the Microsoft admin center before running anything again. |
 
+### Synthetic monitoring
+
+Probe tiles show a status and the latest message; the codes below appear in the probe's results and on the
+schedule's run (`/monitoring`, or `/monitoring?group=<service>` for one service).
+
+| Code                 | Meaning and fix                                                                                                                                                                                                             |
+| -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `not_configured`     | The setting the probe needs isn't set (the message names it, e.g. `AF_SYNTHETIC_MAILBOX`), or isn't a mailbox address / Graph site id / object id. Synthetic transactions do nothing until set (docs/operations.md).        |
+| `forbidden`          | Microsoft refused the identity. For a transaction the message names what to assign: the Exchange role and scope, the site grant, or the Teams application access policy; otherwise run `pnpm adminforge validate --scopes`. |
+| `not_delivered`      | The mail flow test message didn't reach the test mailbox in time. Check Exchange service health, the sender's outbound limits and transport rules; the result's Exchange timing says whether it arrived late.               |
+| `junk`               | The test message landed in Junk Email: delivery works, filtering doesn't trust the sender. Check SPF, DKIM and DMARC for its domain and the anti-spam policies.                                                             |
+| `cleanup_failed`     | The check worked but its test item stayed (message, file or meeting): the identity can create but not delete. Grant read-write (not only send/create); the next run removes leftovers it recognises.                        |
+| `expectation_failed` | The service answered, but not as expected — another status, missing text, a different file back from SharePoint, a meeting without a join link.                                                                             |
+| `writes_paused`      | The emergency stop is on, so synthetic transactions pause with every other change. Read-only checks keep running.                                                                                                           |
+| `protected_object`   | A synthetic transaction's test object is a protected account (`AF_PROTECTED_USER_IDS`), so nothing was sent. Point `AF_SYNTHETIC_*` at a dedicated test object.                                                             |
+| `schedule_disabled`  | **Run now** on a schedule that runs synthetic transactions while it is turned off. Turn it on first, once its test objects are set up.                                                                                      |
+| `insufficient_data`  | Too few sign-ins (or rows) in the window to judge; shown as healthy. Small tenants see this for the per-workload sign-in checks.                                                                                            |
+
 ### Approvals and schedules
 
 | Code                                    | Meaning and fix                                                                                                                                                                                                                                              |
@@ -217,7 +235,8 @@ Run states that aren't errors:
 
 Schedule run history can also show `timeout` (the job exceeded its timeout, default 15 minutes), `interrupted` (the
 scheduler stopped mid-run), `no_probes` (no active probe matches the job), `probes_errored` (no probe could be
-evaluated; see each probe's message), `run_failed` (the scheduled playbook run failed; open the run) and
+evaluated; see each probe's message — a job whose probes are all only "not configured" succeeds instead, with a
+note), `run_failed` (the scheduled playbook run failed; open the run) and
 `content_unhealthy` (content problems, or permissions the automation identity lacks).
 
 ### PowerShell runner

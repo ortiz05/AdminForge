@@ -1,13 +1,13 @@
 $schema: ../../../packages/schemas/generated/page.schema.json
 kind: page
 id: m365.sharepoint-sites
-version: 2.0.0
+version: 2.1.0
 title: SharePoint sites
 summary: SharePoint sites with their storage, activity and how many Anyone links they hold.
 owner: m365-team
 tags: [m365, sharepoint, storage]
 template: list-detail
-nav: { section: m365, label: SharePoint sites, icon: globe-hemisphere-west, order: 80 }
+nav: { section: sharepoint, label: Sites, icon: globe-hemisphere-west, order: 10 }
 requires:
   portalRoles: [Portal.Reader]
   scopes:

@@ -1,7 +1,7 @@
 $schema: ../../packages/schemas/generated/probe.schema.json
 kind: probe
 id: probes.adminforge-group-changes
-version: 1.0.0
+version: 1.0.1
 title: AdminForge role group changes (last 2 hours)
 summary: >-
   Critical when someone added or removed members or owners, or changed app-role assignments, on an SG-AdminForge-*
@@ -9,6 +9,7 @@ summary: >-
   name the change and who made it; the identity.adminforge-group-changes report has the full week.
 owner: portal-admins
 tags: [identity, portal, audit, security, sweep-1h]
+group: platform
 check:
   kind: graphCount
   path: /auditLogs/directoryAudits

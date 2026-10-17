@@ -204,7 +204,10 @@ prefer the feature key.
 
 ```yaml
 - widget: probeStatus # latest result + sparkline per probe (synthetic monitoring)
-  probes: [graph-reachability, arm-reachability] # omit for all
+  probes: [probes.graph-reachability, probes.arm-reachability] # by key; omit for all
+- widget: probeStatus
+  title: Synthetic checks
+  group: exchange # every probe whose `group` is exchange (a service's own checks)
 ```
 
 ## Optional keys (beyond the examples above)

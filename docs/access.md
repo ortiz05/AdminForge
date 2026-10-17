@@ -60,7 +60,12 @@ validate --scopes` compares them), within ceilings that need a deliberate opt-in
 - **Automation identity** (schedules): read-only application permissions; writes need
   `AF_AUTOMATION_ALLOW_WRITE_PERMISSIONS=true`, sensitive reads (mail, files, sites, chats, calendars, BitLocker keys,
   …) need `AF_AUTOMATION_ALLOW_SENSITIVE_READS=true`. It requires assignment and can use a certificate instead of a
-  secret.
+  secret. **Sites.Selected** (and the `…SelectedOperations.Selected` list and file permissions) is granted without
+  the write opt-in: it reaches nothing until a SharePoint administrator grants the app one site.
+  Synthetic monitoring adds, for the synthetic transactions (ADR-015), **Sites.Selected** with write on one test site, **OnlineMeetings.ReadWrite.All** (a write
+  permission: only with the opt-in) narrowed by a Teams application access policy to one test user, and Exchange RBAC
+  for Applications on the test mailbox ("Application Mail.ReadWrite") — no Entra mail permission
+  (docs/operations.md › Synthetic transactions).
   News and changes (`docs/news.md`) adds no new kind of access: its tenant feeds declare **ServiceMessage.Read.All**
   (Message Center) and **ServiceHealth.Read.All** (Microsoft 365 service health) — read-only service-announcement
   permissions, granted without an opt-in — and read Azure Service Health with the identity's existing **Reader** on

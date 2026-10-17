@@ -1,0 +1,28 @@
+$schema: ../../packages/schemas/generated/probe.schema.json
+kind: probe
+id: probes.exchange-service-incidents
+version: 1.0.0
+title: Exchange Online without an open incident
+summary: >-
+  Critical while Microsoft has an open service incident for Exchange Online (mail flow, mailbox access, Outlook),
+  listed with its id and title. Advisories are left to the Service health page.
+owner: m365-team
+tags: [synthetic, service-health, exchange, sweep-15m]
+group: exchange
+check:
+  kind: graphCount
+  path: /admin/serviceAnnouncement/issues
+  query:
+    $filter: >-
+      isResolved eq false and classification eq 'incident' and service eq 'Exchange Online'
+    $select: id,title,service,classification,startDateTime,lastModifiedDateTime
+  fields: [id, title, service, startDateTime, lastModifiedDateTime]
+  detailsLimit: 20
+# Any open incident (not an advisory) is critical.
+thresholds: { crit: 1 }
+intervalHint: PT15M
+timeoutMs: 15000
+requires:
+  # Application permission held by the automation identity (ADR-011).
+  scopes:
+    graph: [ServiceHealth.Read.All]

@@ -1,0 +1,26 @@
+$schema: ../../packages/schemas/generated/probe.schema.json
+kind: probe
+id: probes.teams-online-meeting
+version: 1.0.0
+title: Teams meetings — create and delete
+summary: >-
+  Synthetic transaction: creates a Teams online meeting for a dedicated test user (AF_SYNTHETIC_USER_ID) an hour
+  ahead, checks Teams returned a join link and deletes it. No invitation is sent. The metric is how long creating it
+  took. Needs OnlineMeetings.ReadWrite.All with a Teams application access policy that allows only the test user
+  (docs/operations.md › Synthetic transactions); until then it reports "not configured".
+owner: m365-team
+tags: [synthetic, synthetic-transaction, teams, meetings]
+group: teams
+check:
+  kind: onlineMeeting
+  organizer: ${ env.AF_SYNTHETIC_USER_ID }
+thresholds: { warn: 4000, crit: 10000 }
+intervalHint: PT15M
+timeoutMs: 45000
+requires:
+  licences: [teams]
+  # An application write permission: granted only with AF_AUTOMATION_ALLOW_WRITE_PERMISSIONS=true, which also grants
+  # every other write permission content declares for the automation identity (and stops the approver test fixture).
+  # The Teams application access policy limits it to the users it is granted to.
+  scopes:
+    graph: [OnlineMeetings.ReadWrite.All]

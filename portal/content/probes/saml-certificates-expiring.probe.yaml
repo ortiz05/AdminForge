@@ -1,7 +1,7 @@
 $schema: ../../packages/schemas/generated/probe.schema.json
 kind: probe
 id: probes.saml-certificates-expiring
-version: 1.0.0
+version: 1.0.1
 title: SAML signing certificates expiring within 30 days
 summary: >-
   Counts the enabled SAML enterprise applications whose newest token-signing certificate expires within 30 days, so a
@@ -10,6 +10,7 @@ summary: >-
   the details.
 owner: identity-team
 tags: [identity, apps, saml, certificates, sweep-6h]
+group: identity
 check:
   kind: graphCount
   path: /servicePrincipals

@@ -1,7 +1,7 @@
 $schema: ../../packages/schemas/generated/probe.schema.json
 kind: probe
 id: probes.global-admins-too-few
-version: 1.0.0
+version: 1.0.1
 title: Global Administrators (at least two)
 summary: >-
   Counts the user accounts that hold the Global Administrator role directly and is critical when fewer than two do,
@@ -9,6 +9,7 @@ summary: >-
   principals don't count.
 owner: identity-team
 tags: [identity, privileged, roles, sweep-6h]
+group: identity
 check:
   kind: graphCount
   path: /directoryRoles(roleTemplateId='62e90394-69f5-4237-9190-012177145e10')/members

@@ -117,24 +117,27 @@ export function ProbeStatusWidget({ config, runtime }: WidgetProps<ProbeStatusCo
   const state = runtime.useProbes(config.probes);
   const now = useNow(30_000);
   const probes = useMemo(() => {
+    const picked = config.group ? state.probes.filter((p) => p.group === config.group) : state.probes;
     if (config.probes) {
       const order = new Map(config.probes.map((k, i) => [k, i]));
-      return [...state.probes].sort((a, b) => (order.get(a.key) ?? 999) - (order.get(b.key) ?? 999));
+      return [...picked].sort((a, b) => (order.get(a.key) ?? 999) - (order.get(b.key) ?? 999));
     }
-    return [...state.probes].sort(
+    return [...picked].sort(
       (a, b) =>
         STATUS_SEVERITY[TONE[b.status]] - STATUS_SEVERITY[TONE[a.status]] || a.title.localeCompare(b.title),
     );
-  }, [state.probes, config.probes]);
+  }, [state.probes, config.probes, config.group]);
   const data: WidgetData = {
     status: state.status,
-    value: state.probes,
+    value: probes,
     error: state.error,
     provenance: state.provenance,
     retry: state.retry,
   };
   const failing = probes.filter((p) => p.status === 'crit' || p.status === 'error').length;
   const degraded = probes.filter((p) => p.status === 'warn').length;
+  // "All passing" only when something has passed: probes that haven't run yet say so.
+  const passing = probes.filter((p) => p.status === 'ok').length;
   return (
     <WidgetPanel
       config={config}
@@ -150,8 +153,16 @@ export function ProbeStatusWidget({ config, runtime }: WidgetProps<ProbeStatusCo
       actions={
         state.status === 'ready' &&
         probes.length > 0 && (
-          <StatusPill status={failing ? 'crit' : degraded ? 'warn' : 'ok'} size="sm">
-            {failing ? `${failing} failing` : degraded ? `${degraded} degraded` : 'All passing'}
+          <StatusPill status={failing ? 'crit' : degraded ? 'warn' : passing ? 'ok' : 'neutral'} size="sm">
+            {failing
+              ? `${failing} failing`
+              : degraded
+                ? `${degraded} degraded`
+                : passing === probes.length
+                  ? 'All passing'
+                  : passing
+                    ? `${passing} of ${probes.length} passing`
+                    : 'No results yet'}
           </StatusPill>
         )
       }

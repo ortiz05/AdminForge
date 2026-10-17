@@ -1,13 +1,14 @@
 $schema: ../../packages/schemas/generated/probe.schema.json
 kind: probe
 id: probes.key-vault-purge-protection
-version: 1.0.0
+version: 1.0.1
 title: Key Vaults without purge protection
 summary: >-
   Key Vaults where purge protection is off, so a deleted vault, key, secret or certificate can be purged before the
   retention period ends (a ransomware and insider-risk path). Purge protection cannot be turned off once enabled.
 owner: azure-team
 tags: [kql, configuration, azure, key-vault, security, config-check]
+group: azure
 check:
   kind: kql
   source: resourceGraph

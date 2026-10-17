@@ -277,7 +277,8 @@ test('synthetic monitoring: grouped probe tiles, worst first, detail chart', asy
   await mockApi(page, { handlers: [auto.handler] });
   await page.goto('/monitoring');
   const headings = page.getByRole('main').getByRole('heading', { level: 2 });
-  await expect(headings.first()).toHaveText(/App credentials/);
+  // Grouped by service: Identity holds the failing app-credential check.
+  await expect(headings.first()).toHaveText(/Identity/);
   await expect(page.getByRole('button', { name: /Microsoft Graph reachability: Healthy/ })).toBeVisible();
   await page.getByRole('button', { name: /Portal TLS certificate: Degraded/ }).click();
   const drawer = page.getByRole('dialog', { name: 'Portal TLS certificate' });

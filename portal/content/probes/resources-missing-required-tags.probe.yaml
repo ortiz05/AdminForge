@@ -1,13 +1,14 @@
 $schema: ../../packages/schemas/generated/probe.schema.json
 kind: probe
 id: probes.resources-missing-required-tags
-version: 1.0.0
+version: 1.0.1
 title: Resources missing required tags
 summary: >-
   Top-level Azure resources missing any of the tags listed in AF_REQUIRED_TAGS (comma-separated, compared without
   case; default owner). Pair it with the Untagged Azure resources report and the Add tags playbook.
 owner: azure-team
 tags: [kql, configuration, azure, governance, tags, config-check]
+group: azure
 check:
   kind: kql
   source: resourceGraph

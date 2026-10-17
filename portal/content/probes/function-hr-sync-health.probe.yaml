@@ -1,13 +1,14 @@
 $schema: ../../packages/schemas/generated/probe.schema.json
 kind: probe
 id: probes.function-hr-sync-health
-version: 1.0.1
+version: 1.0.2
 title: HR sync Function App health (example)
 summary: >-
   Calls the health operation of the example HR sync connection as the automation identity. Draft until the
   connection points at a real Function App.
 owner: portal-admins
 tags: [synthetic, azure, functions, example, sweep-15m]
+group: azure
 status: draft
 check:
   kind: functionHealth
@@ -16,7 +17,7 @@ check:
     status: 200
     bodyContains: Healthy
 thresholds: { warn: 1500, crit: 5000 }
-intervalHint: PT5M
+intervalHint: PT15M
 timeoutMs: 15000
 requires:
   scopes:

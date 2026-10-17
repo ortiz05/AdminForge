@@ -1,7 +1,7 @@
 $schema: ../../packages/schemas/generated/probe.schema.json
 kind: probe
 id: probes.databases-public-network-access
-version: 1.0.0
+version: 1.0.1
 title: Databases with public network access on
 summary: >-
   Azure SQL servers, SQL Managed Instances (public data endpoint), PostgreSQL and MySQL flexible servers, Cosmos DB
@@ -10,6 +10,7 @@ summary: >-
   report shows network rules, authentication and TLS per server.
 owner: azure-team
 tags: [kql, configuration, azure, databases, network, security, config-check]
+group: azure
 check:
   kind: kql
   source: resourceGraph

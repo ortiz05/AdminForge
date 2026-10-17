@@ -1,0 +1,28 @@
+$schema: ../../packages/schemas/generated/probe.schema.json
+kind: probe
+id: probes.onedrive-service-incidents
+version: 1.0.0
+title: OneDrive without an open incident
+summary: >-
+  Critical while Microsoft has an open service incident for OneDrive (Microsoft's service health calls it "Microsoft
+  OneDrive", earlier "OneDrive for Business"; it runs on SharePoint Online), listed with its id and title.
+owner: m365-team
+tags: [synthetic, service-health, onedrive, sweep-15m]
+group: sharepoint
+check:
+  kind: graphCount
+  path: /admin/serviceAnnouncement/issues
+  query:
+    $filter: >-
+      isResolved eq false and classification eq 'incident' and (service eq 'Microsoft OneDrive' or service eq 'OneDrive for Business')
+    $select: id,title,service,classification,startDateTime,lastModifiedDateTime
+  fields: [id, title, service, startDateTime, lastModifiedDateTime]
+  detailsLimit: 20
+# Any open incident (not an advisory) is critical.
+thresholds: { crit: 1 }
+intervalHint: PT15M
+timeoutMs: 15000
+requires:
+  # Application permission held by the automation identity (ADR-011).
+  scopes:
+    graph: [ServiceHealth.Read.All]

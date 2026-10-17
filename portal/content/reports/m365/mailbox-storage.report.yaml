@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/report.schema.json
 kind: report
 id: m365.mailbox-storage
-version: 2.0.0
+version: 2.1.0
 title: Mailbox storage and inactive mailboxes
 summary: >-
   Mailboxes near (90% by default) or over their send quota, and mailboxes with no activity for the chosen number of days, from the
@@ -9,6 +9,8 @@ summary: >-
 owner: m365-team
 tags: [m365, exchange, usage, storage, hygiene, report]
 nav: { section: reports, label: Mailbox storage and inactivity, icon: tray, order: 114 }
+# Reports catalogue area (the key keeps its m365. prefix so schedules and links keep working).
+area: exchange
 requires:
   portalRoles: [Portal.Reader]
   scopes:

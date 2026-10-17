@@ -1,7 +1,7 @@
 $schema: ../../packages/schemas/generated/probe.schema.json
 kind: probe
 id: probes.licence-seats-nearly-full
-version: 1.0.0
+version: 1.0.1
 title: Licence seats nearly full or lapsed
 summary: >-
   Counts the tenant's own paid licence SKUs that are at least 90 % assigned, or where people still hold licences while
@@ -10,6 +10,7 @@ summary: >-
   Power BI free, Teams Exploratory, …) are left out. Licence utilization shows the seat counts.
 owner: m365-team
 tags: [synthetic, m365, licences, sweep-6h]
+group: m365
 check:
   kind: graphCount
   path: /subscribedSkus

@@ -1,7 +1,7 @@
 $schema: ../../packages/schemas/generated/feed.schema.json
 kind: feed
 id: feeds.m365-service-health
-version: 1.0.0
+version: 1.1.0
 title: Microsoft 365 service health
 summary: >-
   Incidents and advisories Microsoft posts for your tenant's Microsoft 365 services, read with Microsoft Graph as the
@@ -29,7 +29,8 @@ classify:
   - match: { services: [SharePoint Online] }
     areas: [m365]
     tags: [sharepoint]
-  - match: { services: [OneDrive for Business] }
+  # Microsoft renamed it "Microsoft OneDrive" in service health; older items say "OneDrive for Business".
+  - match: { services: [Microsoft OneDrive, OneDrive for Business] }
     areas: [m365]
     tags: [onedrive]
   - match: { services: [Microsoft Intune, Mobile Device Management for Office 365] }

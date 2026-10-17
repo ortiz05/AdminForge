@@ -1,7 +1,7 @@
 $schema: ../../packages/schemas/generated/probe.schema.json
 kind: probe
 id: probes.subscription-lifecycle
-version: 1.0.0
+version: 1.0.1
 title: Subscriptions lapsed or trial ending
 summary: >-
   Counts the Microsoft cloud subscriptions in their grace period (Warning), Suspended or Locked out, and trials that end
@@ -9,6 +9,7 @@ summary: >-
   Subscription renewals report shows each one with its date and assigned licences.
 owner: m365-team
 tags: [m365, licensing, subscriptions, sweep-6h]
+group: m365
 check:
   kind: graphCount
   path: /directory/subscriptions

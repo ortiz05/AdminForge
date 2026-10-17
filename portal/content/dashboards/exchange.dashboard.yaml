@@ -1,0 +1,163 @@
+$schema: ../../packages/schemas/generated/dashboard.schema.json
+kind: dashboard
+id: exchange.overview
+version: 1.0.0
+title: Exchange Online overview
+summary: >-
+  Exchange Online at a glance — Microsoft's service health and open issues for Exchange, mailbox storage and email
+  traffic, and the synthetic mail-flow, Autodiscover, DNS and sign-in checks — with links to the mailbox pages and
+  Exchange reports.
+owner: m365-team
+tags: [exchange, m365, overview, mail-flow]
+template: dashboard
+nav: { section: exchange, label: Overview, icon: squares-four, order: 5 }
+refresh: 300
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    graph: [ServiceHealth.Read.All, Reports.Read.All]
+  # Service health needs Service Support Administrator or Global Reader; the usage reports need Reports Reader or Global Reader.
+  entraRoles: [Global Reader]
+  licences: [exchange]
+
+datasources:
+  # The same requests as the Microsoft 365 overview (shared cache), narrowed to Exchange Online here.
+  health:
+    source: graph
+    request:
+      path: /admin/serviceAnnouncement/healthOverviews
+      query:
+        $select: id,service,status
+    cache: { ttl: 120 }
+    transform: >-
+      ${ (
+        $mine := ['Exchange Online'];
+        $healthy := ['serviceOperational', 'serviceRestored', 'falsePositive', 'postIncidentReviewPublished', 'resolved', 'resolvedExternal', 'mitigated', 'mitigatedExternal'];
+        $words := { 'serviceDegradation': 'Degraded', 'serviceInterruption': 'Interrupted', 'investigating': 'Investigating', 'restoringService': 'Restoring service', 'extendedRecovery': 'Extended recovery', 'verifyingService': 'Verifying' };
+        $rows := [value.value[service in $mine]];
+        $bad := [$rows[$not(status in $healthy)]];
+        $worst := $count($bad[status = 'serviceInterruption']) > 0 ? 'serviceInterruption' : $bad[0].status;
+        {
+          "value": $rows,
+          "label": $count($rows) = 0 ? 'Not reported' : $count($bad) = 0 ? 'Healthy' : ($lookup($words, $worst) ? $lookup($words, $worst) : 'Advisory'),
+          "tone": $count($rows) = 0 ? 'neutral' : $worst = 'serviceInterruption' ? 'crit' : $count($bad) > 0 ? 'warn' : 'ok',
+          "services": $count($bad) = 0 ? $join($mine, ' and ') : $join($bad.service, ' and ')
+        }
+      ) }
+  issues:
+    source: graph
+    request:
+      path: /admin/serviceAnnouncement/issues
+      query:
+        $filter: isResolved eq false
+        $orderby: lastModifiedDateTime desc
+        $top: 100
+    paging: all
+    maxItems: 500
+    cache: { ttl: 120 }
+    transform: >-
+      ${ (
+        $mine := ['Exchange Online'];
+        $open := value.value[isResolved = false and service in $mine]^((classification = 'incident' ? 0 : 1), >lastModifiedDateTime);
+        $rows := [$open.{ "id": id, "title": title, "service": service, "classification": classification, "lastModifiedDateTime": lastModifiedDateTime }];
+        { "rows": $rows, "incidents": $count($rows[classification = 'incident']), "advisories": $count($rows[classification = 'advisory']) }
+      ) }
+  storage:
+    source: graph
+    label: Mailbox storage (usage report)
+    request:
+      beta: true
+      path: /reports/getMailboxUsageStorage(period='D7')
+      query: { $format: application/json }
+    cache: { ttl: 3600 }
+    transform: >-
+      ${ { "used": (value.value^(>reportDate))[0].storageUsedInBytes } }
+  email:
+    source: graph
+    label: Email activity (usage report)
+    request:
+      beta: true
+      path: /reports/getEmailActivityCounts(period='D30')
+      query: { $format: application/json }
+    cache: { ttl: 3600 }
+    transform: >-
+      ${ (
+        $days := [value.value^(reportDate)];
+        { "days": $days, "sent": $sum([0, $days.send]), "sentTrend": [$days.send] }
+      ) }
+
+layout:
+  - widget: kpi
+    id: health
+    data: health.label
+    label: Exchange Online health
+    format: text
+    status: "${ health.tone }"
+    statusLabel: "${ health.services }"
+    href: /p/m365.service-health?service=Exchange%20Online
+  - widget: kpi
+    id: incidents
+    data: issues.incidents
+    label: Active incidents
+    format: number
+    status: "${ value > 0 ? 'crit' : 'ok' }"
+    hint: "${ issues.advisories = 1 ? '1 advisory open' : issues.advisories & ' advisories open' }"
+    href: /p/m365.service-health?service=Exchange%20Online
+  - widget: kpi
+    id: sent
+    data: email.sent
+    label: Emails sent (30 days)
+    format: number
+    trend: email.sentTrend
+    hint: Usage reports lag by about two days.
+    href: /p/m365.usage
+  - widget: kpi
+    id: storage
+    data: storage.used
+    label: Mailbox storage used
+    format: bytes
+    hint: Every mailbox, from the latest usage report.
+    href: /p/m365.mailbox-storage
+  - widget: probeStatus
+    id: checks
+    title: Synthetic checks
+    description: Mail flow, Autodiscover, Outlook on the web, DNS records, sign-ins and the Exchange token — on a schedule, as the automation identity.
+    span: 7
+    group: exchange
+    empty:
+      title: No Exchange Online checks have reported yet
+      body: The checks report here after their first scheduled run. Every check is on the Synthetic monitoring page.
+  - widget: list
+    id: activeIssues
+    title: Exchange Online incidents and advisories
+    span: 5
+    data: issues.rows
+    primary: title
+    secondary: lastModifiedDateTime
+    secondaryFormat: relativeTime
+    status: { field: classification, map: { incident: [crit, Incident], advisory: [info, Advisory] } }
+    href: ${ '/p/m365.service-issue?id=' & $encode(row.id) }
+    limit: 8
+    empty:
+      title: No active Exchange Online issues
+      body: Microsoft isn't tracking any Exchange Online incident or advisory for this tenant.
+  - widget: chart
+    id: email
+    title: Email activity (30 days)
+    span: 7
+    type: line
+    data: email.days
+    x: reportDate
+    y: [send, receive, read]
+    labels: { send: Sent, receive: Received, read: Read }
+    format: number
+  - widget: markdown
+    id: links
+    title: Pages and reports
+    span: 5
+    text: |
+      **Pages:** [Mailboxes](/p/m365.mailboxes) · [Shared mailboxes](/p/m365.shared-mailboxes) · [Distribution lists](/p/m365.distribution-lists) · [Mail forwarding](/p/m365.mail-forwarding)
+
+      **Reports:** [Mailbox storage and inactivity](/p/m365.mailbox-storage) · [Mailbox external forwarding](/p/m365.external-forwarding) · [Inbox rule audit](/p/m365.inbox-rules) · [Shared mailboxes with sign-in allowed](/p/m365.shared-mailbox-sign-in) · [Every Exchange Online report](/reports?area=exchange)
+
+      **Monitoring:** [Exchange Online checks](/monitoring?group=exchange) · [Exchange Online service health](/p/m365.service-health?service=Exchange%20Online)

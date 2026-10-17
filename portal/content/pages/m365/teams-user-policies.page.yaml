@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/page.schema.json
 kind: page
 id: m365.teams-user-policies
-version: 1.0.0
+version: 1.1.0
 title: Teams policies for a user
 summary: >-
   The Teams policies in effect for one person — messaging, meetings, calling, app setup and more — and where each comes
@@ -9,7 +9,7 @@ summary: >-
 owner: m365-team
 tags: [m365, teams, policies, users]
 template: list-detail
-nav: { section: m365, label: Teams user policies, icon: user-gear, order: 78 }
+nav: { section: teams, label: User policies, icon: user-gear, order: 20 }
 requires:
   portalRoles: [Portal.Reader]
   scopes:

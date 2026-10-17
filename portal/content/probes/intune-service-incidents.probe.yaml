@@ -1,0 +1,28 @@
+$schema: ../../packages/schemas/generated/probe.schema.json
+kind: probe
+id: probes.intune-service-incidents
+version: 1.0.0
+title: Microsoft Intune without an open incident
+summary: >-
+  Critical while Microsoft has an open service incident for Microsoft Intune (enrolment, policy, app delivery), listed
+  with its id and title.
+owner: endpoint-team
+tags: [synthetic, service-health, intune, sweep-15m]
+group: endpoint
+check:
+  kind: graphCount
+  path: /admin/serviceAnnouncement/issues
+  query:
+    $filter: >-
+      isResolved eq false and classification eq 'incident' and service eq 'Microsoft Intune'
+    $select: id,title,service,classification,startDateTime,lastModifiedDateTime
+  fields: [id, title, service, startDateTime, lastModifiedDateTime]
+  detailsLimit: 20
+# Any open incident (not an advisory) is critical.
+thresholds: { crit: 1 }
+intervalHint: PT15M
+timeoutMs: 15000
+requires:
+  # Application permission held by the automation identity (ADR-011).
+  scopes:
+    graph: [ServiceHealth.Read.All]

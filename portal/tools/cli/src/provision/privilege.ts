@@ -68,6 +68,8 @@ export const SENSITIVE_READ_PATTERNS: readonly RegExp[] = [
   /^BitlockerKey\.Read\.All$/i,
   /^UserAuthenticationMethod\.Read/i,
   /^People\.Read/i,
+  // Everyone's real-time presence (in a call, presenting, away): personal, and it can't be narrowed to a test user.
+  /^Presence\.Read/i,
   /^Tasks\.Read/i,
   /^eDiscovery\.Read/i,
 ];

@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/report.schema.json
 kind: report
 id: m365.teams-activity
-version: 2.0.0
+version: 2.1.0
 title: Inactive, public and guest-active teams
 summary: >-
   Teams with no activity for the chosen number of days (archive or delete candidates), public teams anyone in the
@@ -10,6 +10,8 @@ summary: >-
 owner: m365-team
 tags: [m365, teams, governance, guests, usage, report]
 nav: { section: reports, label: Team activity and exposure, icon: microsoft-teams-logo, order: 132 }
+# Reports catalogue area (the key keeps its m365. prefix so schedules and links keep working).
+area: teams
 requires:
   portalRoles: [Portal.Reader]
   scopes:

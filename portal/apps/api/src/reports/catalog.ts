@@ -29,6 +29,7 @@ import { planExport } from './export';
 type ReportDef = LoadedPage['def'] & {
   nav?: { icon?: string };
   export?: { formats: string[] };
+  area?: string;
 };
 
 const SCHEDULABLE_TYPES = new Set(['string', 'number', 'boolean', 'enum']);
@@ -97,7 +98,8 @@ function scopesOf(scopes: Record<string, unknown> | undefined): Record<string, s
   return out;
 }
 
-export const reportArea = (key: string) => key.split('.')[0] ?? key;
+/** The catalogue area: the report's `area` (a navigation section key), else its key's first segment. */
+export const reportArea = (key: string, area?: string) => area ?? key.split('.')[0] ?? key;
 
 /** Whether the caller holds every role in `requires.portalRoles` (the rule pages, exports and nav apply). */
 export const mayOpen = (
@@ -147,7 +149,7 @@ export function catalogItem(
     tags: def.tags ?? [],
     owner: def.owner,
     version: rec.version,
-    area: reportArea(rec.key),
+    area: reportArea(rec.key, def.area),
     icon: def.nav?.icon ?? null,
     href: `/p/${rec.key}`,
     requires: {

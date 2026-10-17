@@ -1117,6 +1117,39 @@ function series(base: number, spread: number, n: number, status: (v: number, i: 
   });
 }
 
+/** The service each mock probe watches (a probe's `group`). */
+const GROUP_OF: Record<string, string> = {
+  'probes.graph-reachability': 'm365',
+  'probes.arm-reachability': 'azure',
+  'probes.token-graph': 'platform',
+  'probes.token-exchange': 'exchange',
+  'probes.portal-readiness': 'platform',
+  'probes.portal-tls-certificate': 'platform',
+  'probes.app-credential-expiry': 'identity',
+  'probes.sign-in-health': 'identity',
+  'probes.licence-seats-spe-e5': 'm365',
+  'probes.dns-mx': 'exchange',
+  'probes.function-hr-sync-health': 'azure',
+  'probes.exchange-mail-flow': 'exchange',
+  'probes.exchange-autodiscover-service': 'exchange',
+  'probes.sharepoint-file-round-trip': 'sharepoint',
+  'probes.sharepoint-service-incidents': 'sharepoint',
+  'probes.teams-online-meeting': 'teams',
+  'probes.teams-sign-ins': 'teams',
+  'probes.entra-home-realm-discovery': 'identity',
+};
+
+/** GET /api/probes `groups`: the services in navigation order, then AdminForge itself. */
+export const PROBE_GROUPS = [
+  { key: 'identity', label: 'Identity', icon: 'identification-card' },
+  { key: 'm365', label: 'Microsoft 365', icon: 'squares-four' },
+  { key: 'exchange', label: 'Exchange Online', icon: 'envelope-simple' },
+  { key: 'sharepoint', label: 'SharePoint Online', icon: 'globe-hemisphere-west' },
+  { key: 'teams', label: 'Teams', icon: 'microsoft-teams-logo' },
+  { key: 'azure', label: 'Azure', icon: 'cloud' },
+  { key: 'platform', label: 'AdminForge', icon: 'gauge' },
+];
+
 export function probes() {
   const lat = (warn: number, crit: number) => (v: number) => (v >= crit ? 'crit' : v >= warn ? 'warn' : 'ok');
   const mk = (
@@ -1133,7 +1166,15 @@ export function probes() {
     const latest = { ...last, unit: t.unit, message: null as string | null, ...override };
     if (override?.metric !== undefined || override?.status)
       s[s.length - 1] = { ...last, metric: latest.metric, status: latest.status };
-    return { key, title, kind, latest, series: s, thresholds: { warn: t.warn, crit: t.crit } };
+    return {
+      key,
+      title,
+      kind,
+      group: GROUP_OF[key] ?? null,
+      latest,
+      series: s,
+      thresholds: { warn: t.warn, crit: t.crit },
+    };
   };
   const days = (warn: number, crit: number) => (v: number) =>
     v <= crit ? 'crit' : v <= warn ? 'warn' : 'ok';
@@ -1172,6 +1213,7 @@ export function probes() {
         key: 'probes.portal-tls-certificate',
         title: 'Portal TLS certificate',
         kind: 'certExpiry',
+        group: 'platform',
         latest: {
           ts: at(-40 * MIN),
           metric: 12,
@@ -1190,6 +1232,7 @@ export function probes() {
         key: 'probes.app-credential-expiry',
         title: 'App credentials expiring',
         kind: 'appCredentialExpiry',
+        group: 'identity',
         latest: {
           ts: at(-3 * HOUR),
           metric: 3,
@@ -1227,11 +1270,71 @@ export function probes() {
         key: 'probes.function-hr-sync-health',
         title: 'Function app: HR sync',
         kind: 'functionHealth',
+        group: 'azure',
         latest: null,
         series: [],
         thresholds: { warn: 2000, crit: 8000 },
       },
+      mk('probes.exchange-mail-flow', 'Mail flow — end-to-end delivery', 'mailFlow', 7.5, 2.5, {
+        warn: 30,
+        crit: 75,
+        unit: 's',
+      }),
+      mk(
+        'probes.exchange-autodiscover-service',
+        'Exchange Autodiscover for the mail domain',
+        'http',
+        520,
+        140,
+        {
+          warn: 2000,
+          crit: 6000,
+          unit: 'ms',
+        },
+      ),
+      mk(
+        'probes.sharepoint-file-round-trip',
+        'SharePoint files — upload, download, delete',
+        'fileRoundTrip',
+        2100,
+        600,
+        { warn: 5000, crit: 15000, unit: 'ms' },
+        {
+          status: 'warn',
+          metric: 6240,
+          message:
+            'Uploaded, downloaded and deleted a 16 KB file in 6240 ms (upload 4410 ms, download 1290 ms, delete 540 ms).',
+        },
+      ),
+      mk(
+        'probes.sharepoint-service-incidents',
+        'SharePoint Online without an open incident',
+        'graphCount',
+        0,
+        0,
+        {
+          warn: 1,
+          crit: 1,
+          unit: 'items',
+        },
+      ),
+      mk('probes.teams-online-meeting', 'Teams meetings — create and delete', 'onlineMeeting', 1300, 300, {
+        warn: 4000,
+        crit: 10000,
+        unit: 'ms',
+      }),
+      mk('probes.teams-sign-ins', 'Microsoft Teams sign-in failure rate', 'signInHealth', 3.1, 1.2, {
+        warn: 15,
+        crit: 30,
+        unit: '%',
+      }),
+      mk('probes.entra-home-realm-discovery', 'Entra ID sign-in — realm discovery', 'http', 160, 40, {
+        warn: 1000,
+        crit: 4000,
+        unit: 'ms',
+      }),
     ],
+    groups: PROBE_GROUPS,
   };
 }
 

@@ -69,7 +69,7 @@ export const ReportCatalogItem = z.object({
   tags: z.array(z.string()),
   owner: z.string(),
   version: z.string(),
-  /** First segment of the key (identity, m365, endpoint, security, azure, …). */
+  /** The report's `area`, else the first segment of its key (identity, m365, exchange, endpoint, billing, …). */
   area: z.string(),
   /** `nav.icon` (Phosphor kebab name). */
   icon: z.string().nullable(),

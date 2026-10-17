@@ -62,7 +62,24 @@ describe('Reports catalogue over the real content', () => {
     expect(catalogue.items).toHaveLength(active.length);
     expect(catalogue.items.length).toBeGreaterThan(50);
     expect(catalogue.areas.filter((a) => a.icon === 'folder')).toEqual([]);
-    expect(catalogue.areas.map((a) => a.key)).toEqual(['identity', 'm365', 'endpoint', 'security', 'azure']);
+    // Areas follow the navigation's section order; each Microsoft 365 workload is an area of its own.
+    const order = [...navigation.sections]
+      .sort((a, b) => (a.order ?? 1000) - (b.order ?? 1000))
+      .map((s) => s.key)
+      .filter((k) => catalogue.areas.some((a) => a.key === k));
+    expect(catalogue.areas.map((a) => a.key)).toEqual(order);
+    expect(order).toEqual(
+      expect.arrayContaining([
+        'identity',
+        'm365',
+        'exchange',
+        'sharepoint',
+        'teams',
+        'endpoint',
+        'security',
+        'azure',
+      ]),
+    );
     for (const item of catalogue.items) {
       expect(item.schedulable, item.key).toBe(true);
       expect(item.icon, item.key).toBeTruthy();

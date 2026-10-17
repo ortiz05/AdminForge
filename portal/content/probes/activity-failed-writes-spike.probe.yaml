@@ -1,7 +1,7 @@
 $schema: ../../packages/schemas/generated/probe.schema.json
 kind: probe
 id: probes.activity-failed-writes-spike
-version: 1.0.0
+version: 1.0.1
 title: Failed Azure write operations (last hour)
 summary: >-
   Failed Azure Resource Manager write and delete operations in the last hour from the AzureActivity table of the
@@ -10,6 +10,7 @@ summary: >-
   a broken pipeline, an expired credential or someone probing permissions stands out.
 owner: azure-team
 tags: [kql, azure, monitoring, security, log-analytics, sweep-1h]
+group: azure
 check:
   kind: kql
   source: logAnalytics

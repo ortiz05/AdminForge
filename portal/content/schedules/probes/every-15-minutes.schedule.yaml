@@ -1,12 +1,13 @@
 $schema: ../../../packages/schemas/generated/schedule.schema.json
 kind: schedule
 id: sweep.every-15-minutes
-version: 1.0.1
+version: 1.0.2
 title: Probe sweep every 15 minutes
 summary: >-
-  Every 15 minutes, runs every active probe tagged sweep-15m (Microsoft Graph and Azure Resource Manager reachability,
-  default subscription access, the Entra sign-in endpoint, AdminForge readiness, Microsoft 365 service health) as the
-  automation identity. Tag a probe sweep-15m to add it.
+  Every 15 minutes, runs every active probe tagged sweep-15m as the automation identity: Microsoft Graph and Azure
+  Resource Manager reachability, subscription access, the Entra sign-in endpoint and realm discovery, AdminForge
+  readiness, Microsoft 365 service health, open incidents per workload, the Exchange, SharePoint, Teams and Microsoft
+  365 web front doors, Autodiscover, Intune through Graph and the test team's channels. Tag a probe sweep-15m to add it.
 owner: portal-admins
 tags: [synthetic, probe-sweep]
 every: every 15 minutes

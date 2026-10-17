@@ -1,0 +1,27 @@
+$schema: ../../packages/schemas/generated/probe.schema.json
+kind: probe
+id: probes.exchange-mail-flow
+version: 1.0.0
+title: Mail flow — end-to-end delivery
+summary: >-
+  Synthetic transaction: sends a test message from the report sender (AF_MAIL_SENDER) to a dedicated test mailbox
+  (AF_SYNTHETIC_MAILBOX), waits for it to arrive, checks it didn't land in Junk Email and deletes it. The metric is
+  the delivery time in seconds; not arriving within 90 seconds is critical. Needs Exchange RBAC for Applications scoped
+  to those two mailboxes (docs/operations.md › Synthetic transactions); until they're configured it reports "not
+  configured".
+owner: m365-team
+tags: [synthetic, synthetic-transaction, exchange, mail-flow]
+group: exchange
+check:
+  kind: mailFlow
+  from: ${ env.AF_MAIL_SENDER }
+  to: ${ env.AF_SYNTHETIC_MAILBOX }
+  waitSeconds: 90
+  cleanup: true
+thresholds: { warn: 30, crit: 75 }
+intervalHint: PT15M
+timeoutMs: 110000
+# No Entra permission: the identity sends and reads through Exchange RBAC for Applications ("Application Mail.Send" on
+# the sender, "Application Mail.ReadWrite" on the test mailbox), which scope it to those mailboxes only.
+requires:
+  licences: [exchange]

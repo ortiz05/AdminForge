@@ -75,6 +75,7 @@ describe('probes API', () => {
       key: 'probes.graph-reachability',
       title: 'Probe probes.graph-reachability',
       kind: 'graph',
+      group: null,
       latest: {
         status: 'warn',
         metric: 1800,

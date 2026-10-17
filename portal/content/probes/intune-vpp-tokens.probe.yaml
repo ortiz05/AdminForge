@@ -1,7 +1,7 @@
 $schema: ../../packages/schemas/generated/probe.schema.json
 kind: probe
 id: probes.intune-vpp-tokens
-version: 1.0.0
+version: 1.0.1
 title: Apple Volume Purchase (VPP) tokens expiring or failing
 summary: >-
   Counts the Apple Volume Purchase (VPP) tokens that are expired or invalid, expire within 30 days, belong to another
@@ -9,6 +9,7 @@ summary: >-
   No tokens (Apple not set up) is healthy.
 owner: endpoint-team
 tags: [endpoint, intune, apple, apps, sweep-6h]
+group: endpoint
 check:
   kind: graphCount
   path: /deviceAppManagement/vppTokens

@@ -1,0 +1,24 @@
+$schema: ../../packages/schemas/generated/probe.schema.json
+kind: probe
+id: probes.sharepoint-endpoint
+version: 1.0.0
+title: SharePoint Online front door
+summary: >-
+  Calls the tenant's SharePoint REST endpoint (<tenant>.sharepoint.com/_api/web) without signing in. SharePoint
+  answering 401 — asking for a sign-in — means the tenant's front door is up; anything else or no answer means sites,
+  OneDrive and Teams files are unreachable. Needs AF_SPO_TENANT_NAME.
+owner: m365-team
+tags: [synthetic, sharepoint, http, sweep-15m]
+group: sharepoint
+check:
+  kind: http
+  url: ${ 'https://' & $encode(env.AF_SPO_TENANT_NAME) & '.sharepoint.com/_api/web' }
+  method: GET
+  headers:
+    Accept: application/json
+  expect:
+    # Tenants answer anonymous calls with 401 or 403; both mean the front door is up.
+    status: [401, 403]
+thresholds: { warn: 2000, crit: 6000 }
+intervalHint: PT15M
+timeoutMs: 10000

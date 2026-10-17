@@ -1,0 +1,30 @@
+$schema: ../../packages/schemas/generated/probe.schema.json
+kind: probe
+id: probes.m365-suite-incidents
+version: 1.0.0
+title: Microsoft 365 suite and apps without an open incident
+summary: >-
+  Critical while Microsoft has an open service incident (not an advisory) for the Microsoft 365 suite or the Microsoft
+  365 apps — problems that span the workloads — listed with its id and title. Exchange, SharePoint, OneDrive, Teams,
+  Entra and Intune each have their own incident check.
+owner: m365-team
+tags: [synthetic, service-health, m365, sweep-15m]
+group: m365
+check:
+  kind: graphCount
+  path: /admin/serviceAnnouncement/issues
+  query:
+    $filter: >-
+      isResolved eq false and classification eq 'incident' and (service eq 'Microsoft 365 suite' or service eq
+      'Microsoft 365 apps')
+    $select: id,title,service,classification,startDateTime,lastModifiedDateTime
+  fields: [id, title, service, startDateTime, lastModifiedDateTime]
+  detailsLimit: 20
+# Any open incident (not an advisory) is critical.
+thresholds: { crit: 1 }
+intervalHint: PT15M
+timeoutMs: 15000
+requires:
+  # Application permission held by the automation identity (ADR-011).
+  scopes:
+    graph: [ServiceHealth.Read.All]

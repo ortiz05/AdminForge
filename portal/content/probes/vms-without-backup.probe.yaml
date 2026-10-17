@@ -1,7 +1,7 @@
 $schema: ../../packages/schemas/generated/probe.schema.json
 kind: probe
 id: probes.vms-without-backup
-version: 1.0.0
+version: 1.0.1
 title: Virtual machines without Azure Backup
 summary: >-
   Azure virtual machines that no Recovery Services vault protects (no AzureIaasVM backup item points at them). A vault
@@ -9,6 +9,7 @@ summary: >-
   also shows stopped protection and failed or overdue backups.
 owner: azure-team
 tags: [kql, configuration, azure, backup, resilience, config-check]
+group: azure
 check:
   kind: kql
   source: resourceGraph

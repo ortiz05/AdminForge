@@ -1,13 +1,13 @@
 $schema: ../../../packages/schemas/generated/page.schema.json
 kind: page
 id: m365.teams
-version: 2.0.0
+version: 2.1.0
 title: Teams
 summary: Every team in the tenant with its owners, visibility and lifecycle dates — find ownerless and single-owner teams before they become orphaned.
 owner: m365-team
 tags: [m365, teams, collaboration, governance]
 template: list-detail
-nav: { section: m365, label: Teams, icon: microsoft-teams-logo, order: 75 }
+nav: { section: teams, label: All teams, icon: microsoft-teams-logo, order: 10 }
 requires:
   portalRoles: [Portal.Reader]
   scopes:

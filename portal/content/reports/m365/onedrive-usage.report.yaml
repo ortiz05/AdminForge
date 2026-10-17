@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/report.schema.json
 kind: report
 id: m365.onedrive-usage
-version: 2.0.0
+version: 2.1.0
 title: OneDrive storage and inactive accounts
 summary: >-
   OneDrive accounts with no activity for the chosen number of days (often people who left — hand the files over before
@@ -9,6 +9,8 @@ summary: >-
 owner: m365-team
 tags: [m365, onedrive, sharepoint, storage, offboarding, usage, report]
 nav: { section: reports, label: OneDrive storage and activity, icon: cloud, order: 144 }
+# Reports catalogue area (the key keeps its m365. prefix so schedules and links keep working).
+area: sharepoint
 requires:
   portalRoles: [Portal.Reader]
   scopes:

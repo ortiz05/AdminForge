@@ -859,9 +859,12 @@ for custom shapes), timezone (the zone used), next: ISO[5] (DST-aware, the sched
 #### `GET /api/probes`
 
 - **Who:** `Portal.Reader`.
-- **Response:** `{items}`, each `{key, title, kind, latest, series, thresholds}` — `latest` is
+- **Response:** `{items, groups}`. Items: `{key, title, kind, group, latest, series, thresholds}` — `group` is the
+  service the probe watches (a navigation section key or `platform`) or `null`; `latest` is
   `{status, metric, unit, ts, message}` or `null`; `series` is `[{ts, metric, status}]` for the last 24 h;
-  `thresholds` is `{warn, crit, unit, worse}`.
+  `thresholds` is `{warn, crit, unit, worse}`. Groups: `[{key, label, icon}]` for the groups the probes use, in
+  navigation order (labels from navigation.yaml; `platform` is "AdminForge"), for Synthetic monitoring's "by service"
+  view (`/monitoring?group=<key>` shows one).
 
 #### `GET /api/probes/:key/results`
 
@@ -961,7 +964,8 @@ Source: `src/routes/report-catalog.ts`, `reports.ts`, `src/reports/catalog.ts`, 
 - **Response:** `{items: ReportCatalogItem[], areas: [{key, label, icon}]}`, items sorted by title.
   `ReportCatalogItem` = `{key, title, summary, tags, owner, version, area, icon, href, requires, badge, exportFormats,`
   `schedulable, params, schedules}`:
-  - `area`: the key's first segment (`identity`, `m365`, `endpoint`, `security`, `azure`); `areas` lists the areas
+  - `area`: the report's `area` (a navigation section key) when it sets one, else the key's first segment
+    (`identity`, `m365`, `exchange`, `sharepoint`, `teams`, `endpoint`, `security`, `azure`, `billing`); `areas` lists the areas
     present in navigation order with the label and icon of the navigation section of the same key (unknown: the
     capitalised key and `folder`). `icon`: the report's `nav.icon`. `href`: `/p/<key>`.
   - `requires`: `{licences, entraRoles, portalRoles, scopes: {graph?: [...], arm?: [...], …}}` (Entra-secured

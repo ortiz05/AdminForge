@@ -1,7 +1,7 @@
 $schema: ../../packages/schemas/generated/probe.schema.json
 kind: probe
 id: probes.storage-public-blob-access
-version: 1.0.0
+version: 1.0.1
 title: Storage accounts allowing public blob access
 summary: >-
   Storage accounts where anonymous (public) blob access is allowed or was never turned off — any container on them can
@@ -9,6 +9,7 @@ summary: >-
   disallowed" enforces it).
 owner: azure-team
 tags: [kql, configuration, azure, storage, security, config-check]
+group: azure
 check:
   kind: kql
   source: resourceGraph

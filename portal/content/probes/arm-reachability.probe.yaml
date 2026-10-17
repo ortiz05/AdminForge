@@ -1,11 +1,12 @@
 $schema: ../../packages/schemas/generated/probe.schema.json
 kind: probe
 id: probes.arm-reachability
-version: 1.0.1
+version: 1.0.2
 title: Azure Resource Manager reachability
 summary: Lists subscriptions visible to the automation identity and measures round-trip latency.
 owner: portal-admins
 tags: [synthetic, azure, sweep-15m]
+group: azure
 check:
   kind: arm
   path: /subscriptions
@@ -13,7 +14,7 @@ check:
   expect:
     status: 200
 thresholds: { warn: 2000, crit: 8000 }
-intervalHint: PT5M
+intervalHint: PT15M
 timeoutMs: 20000
 requires:
   azureRoles: [Reader]

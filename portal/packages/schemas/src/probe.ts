@@ -136,7 +136,82 @@ export const SignInHealthCheck = z.strictObject({
   minSignIns: z.number().int().min(1).optional(),
   /** Restrict to one application (appId). */
   appId: z.union([Guid, Expr]).optional(),
+  /**
+   * Restrict to sign-ins to one resource (its appId: Office 365 Exchange Online `00000002-0000-0ff1-ce00-000000000000`,
+   * Office 365 SharePoint Online `00000003-0000-0ff1-ce00-000000000000`, Microsoft Teams Services
+   * `cc15fd57-2c6c-4117-a88c-83b1d56b4bbe`) — a workload's own sign-in failure rate.
+   */
+  resourceId: z.union([Guid, Expr]).optional(),
 });
+
+/**
+ * What a synthetic transaction acts on: one whole `${ env.AF_SYNTHETIC_… }` reference — configuration naming a
+ * dedicated test object, never an address or id in content, and never another configured list (recipients, approvers).
+ * A mail check may also send from the report sender (`AF_MAIL_SENDER`).
+ */
+export function syntheticTargetKey(template: string, opts: { sender?: boolean } = {}): string | null {
+  const key = /^\$\{\s*env\.([A-Z][A-Z0-9_]*)\s*\}$/.exec(template)?.[1];
+  if (!key) return null;
+  return /^AF_SYNTHETIC_[A-Z0-9_]+$/.test(key) || (opts.sender && key === 'AF_MAIL_SENDER') ? key : null;
+}
+
+const SyntheticTarget = (opts: { sender?: boolean } = {}) =>
+  z
+    .string()
+    .refine(
+      (v) => syntheticTargetKey(v, opts) !== null,
+      opts.sender
+        ? 'Use ${ env.AF_MAIL_SENDER } or one ${ env.AF_SYNTHETIC_… } reference: synthetic transactions act only on test objects named in configuration.'
+        : 'Use one ${ env.AF_SYNTHETIC_… } reference: synthetic transactions act only on test objects named in configuration.',
+    );
+
+/**
+ * Synthetic transaction — mail flow: sends a test message from one mailbox to a dedicated test mailbox, reads it back
+ * there and deletes it. The metric is how long delivery took (seconds, end to end). Built in: content picks only the
+ * two mailboxes (configuration) and the waits; the calls themselves are fixed.
+ */
+export const MailFlowCheck = z.strictObject({
+  kind: z.literal('mailFlow'),
+  /** Sending mailbox (default the report sender, which the automation identity may already send as). */
+  from: SyntheticTarget({ sender: true }).default('${ env.AF_MAIL_SENDER }'),
+  /** Receiving test mailbox, read back and cleaned up (never a person's mailbox). */
+  to: SyntheticTarget().default('${ env.AF_SYNTHETIC_MAILBOX }'),
+  /** Longest wait for the message to arrive, in seconds (also bounded by the probe's timeoutMs). */
+  waitSeconds: z.number().int().min(10).max(110).default(90),
+  /** Delete the test message once it arrived (needs read-write on the test mailbox). */
+  cleanup: z.boolean().default(true),
+});
+
+/**
+ * Synthetic transaction — files: uploads a small JSON file to a test site's default document library (SharePoint
+ * Online through Microsoft Graph), downloads it from SharePoint, compares it and deletes it. Metric: the round trip.
+ */
+export const FileRoundTripCheck = z.strictObject({
+  kind: z.literal('fileRoundTrip'),
+  /** The test site's Graph id (`<host>,<site collection id>,<web id>`). */
+  site: SyntheticTarget().default('${ env.AF_SYNTHETIC_SITE_ID }'),
+  /** Folder in the library root that holds the test files while a check runs. */
+  folder: z
+    .string()
+    .regex(/^[A-Za-z0-9][A-Za-z0-9 _-]{0,63}$/, 'Use letters, digits, spaces, _ and - (at most 64)')
+    .default('AdminForge synthetic checks'),
+  /** Size of the test file in KB. */
+  sizeKb: z.number().int().min(1).max(1024).default(16),
+});
+
+/**
+ * Synthetic transaction — Teams meetings: creates an online meeting for a test user (an hour from now, half an hour
+ * long) and deletes it again. Metric: how long creating it took. App-only access needs a Teams application access
+ * policy granted to that user.
+ */
+export const OnlineMeetingCheck = z.strictObject({
+  kind: z.literal('onlineMeeting'),
+  /** The organiser: a test user's object id. */
+  organizer: SyntheticTarget().default('${ env.AF_SYNTHETIC_USER_ID }'),
+});
+
+/** Check kinds that change something (they create and remove their own test items): synthetic transactions. */
+export const TRANSACTION_KINDS = ['mailFlow', 'fileRoundTrip', 'onlineMeeting'] as const;
 
 /** AdminForge's own audit log: re-walks the hash chain (crit when an event was changed or removed). */
 export const AuditChainCheck = z.strictObject({ kind: z.literal('auditChain') });
@@ -204,6 +279,9 @@ export const ProbeCheck = z.discriminatedUnion('kind', [
   SignInHealthCheck,
   KqlCheck,
   AuditChainCheck,
+  MailFlowCheck,
+  FileRoundTripCheck,
+  OnlineMeetingCheck,
 ]);
 export type ProbeCheck = z.infer<typeof ProbeCheck>;
 export type ProbeCheckKind = ProbeCheck['kind'];
@@ -229,6 +307,12 @@ export const PROBE_METRICS: Record<
   kql: { metric: 'rows', unit: 'rows', worse: 'higher' },
   /** Events verified; the status comes from the verification, not thresholds. */
   auditChain: { metric: 'events', unit: 'events', worse: 'lower' },
+  /** Seconds from sending the test message to seeing it in the test mailbox. */
+  mailFlow: { metric: 'delivery', unit: 's', worse: 'higher' },
+  /** Upload, download and delete together. */
+  fileRoundTrip: { metric: 'latency', unit: 'ms', worse: 'higher' },
+  /** Creating the meeting. */
+  onlineMeeting: { metric: 'latency', unit: 'ms', worse: 'higher' },
 };
 
 export const Probe = z
@@ -236,6 +320,15 @@ export const Probe = z
     kind: z.literal('probe'),
     ...envelopeShape,
     check: ProbeCheck,
+    /**
+     * The service the probe watches, as Synthetic monitoring groups it (and `probeStatus` widgets with `group` pick it):
+     * a navigation section key (`identity`, `m365`, `exchange`, `sharepoint`, `teams`, `endpoint`, `azure`, …) or
+     * `platform` for AdminForge itself. Without it the probe is listed under "Other checks".
+     */
+    group: z
+      .string()
+      .regex(/^[a-z][a-z0-9-]*$/)
+      .optional(),
     /** On the primary metric (PROBE_METRICS); for days-remaining metrics they override warnDays/critDays. */
     thresholds: z.strictObject({ warn: z.number().optional(), crit: z.number().optional() }).optional(),
     /** Suggested interval when scheduled without an explicit cron, e.g. PT5M. */
@@ -267,6 +360,13 @@ export const Probe = z
     const c = def.check;
     if ((c.kind === 'certExpiry' || c.kind === 'appCredentialExpiry') && c.critDays > c.warnDays)
       ctx.addIssue({ code: 'custom', path: ['check', 'critDays'], message: 'critDays must be ≤ warnDays.' });
+    // The runner's default probe timeout is 30 s (DEFAULT_PROBE_TIMEOUT_MS); a mail check waits longer than that.
+    if (c.kind === 'mailFlow' && (def.timeoutMs ?? 30_000) < c.waitSeconds * 1000 + 10_000)
+      ctx.addIssue({
+        code: 'custom',
+        path: ['timeoutMs'],
+        message: `A mail flow check waits up to waitSeconds (${c.waitSeconds} s) and then cleans up: set timeoutMs to at least ${c.waitSeconds * 1000 + 10_000}.`,
+      });
     if (c.kind === 'tokenAcquisition' && !!c.service === !!c.connection)
       ctx.addIssue({
         code: 'custom',

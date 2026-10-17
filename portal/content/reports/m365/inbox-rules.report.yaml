@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/report.schema.json
 kind: report
 id: m365.inbox-rules
-version: 1.1.1
+version: 1.2.0
 title: Inbox rule audit
 summary: >-
   Inbox rules that forward or redirect mail outside the organization, delete it, or move it to folders people rarely
@@ -10,6 +10,8 @@ summary: >-
 owner: m365-team
 tags: [m365, exchange, security, data-loss, inbox-rules]
 nav: { section: reports, label: Inbox rule audit, icon: funnel, order: 125 }
+# Reports catalogue area (the key keeps its m365. prefix so schedules and links keep working).
+area: exchange
 requires:
   portalRoles: [Portal.Reader]
   scopes:

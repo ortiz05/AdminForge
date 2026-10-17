@@ -1,0 +1,20 @@
+$schema: ../../packages/schemas/generated/probe.schema.json
+kind: probe
+id: probes.exchange-outlook-web
+version: 1.0.0
+title: Outlook on the web front door
+summary: >-
+  Opens Outlook on the web (outlook.office365.com/owa) without signing in and expects Exchange Online to send the
+  browser on to the mail app (302). An error or no answer means people can't reach webmail.
+owner: m365-team
+tags: [synthetic, exchange, http, outlook, sweep-15m]
+group: exchange
+check:
+  kind: http
+  url: https://outlook.office365.com/owa/
+  method: GET
+  expect:
+    status: 302
+thresholds: { warn: 1500, crit: 5000 }
+intervalHint: PT15M
+timeoutMs: 10000

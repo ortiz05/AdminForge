@@ -1,0 +1,25 @@
+$schema: ../../packages/schemas/generated/probe.schema.json
+kind: probe
+id: probes.entra-home-realm-discovery
+version: 1.0.0
+title: Entra ID sign-in — realm discovery for the primary domain
+summary: >-
+  Asks login.microsoftonline.com how people in the primary domain sign in — the first call of every interactive
+  sign-in, before the password or passkey prompt. Expects the domain to be known (managed or federated); "unknown"
+  or an error means sign-ins for that domain fail before they start.
+owner: identity-team
+tags: [synthetic, identity, sign-ins, http, sweep-15m]
+group: identity
+check:
+  kind: http
+  url: ${ 'https://login.microsoftonline.com/common/userrealm/?user=' & $encode('adminforge-check@' & env.AF_PRIMARY_DOMAIN) & '&api-version=2.1' }
+  method: GET
+  headers:
+    Accept: application/json
+  expect:
+    status: 200
+    # Only known domains carry a DomainName; an unknown one answers NameSpaceType Unknown without it.
+    bodyContains: '"DomainName"'
+thresholds: { warn: 1000, crit: 4000 }
+intervalHint: PT15M
+timeoutMs: 10000

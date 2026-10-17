@@ -1,0 +1,21 @@
+$schema: ../../packages/schemas/generated/probe.schema.json
+kind: probe
+id: probes.m365-web-portal
+version: 1.0.0
+title: Microsoft 365 web portal
+summary: >-
+  Loads the Microsoft 365 web portal (m365.cloud.microsoft — where office.com and microsoft365.com now lead), without
+  signing in, and expects its page. An error or no answer means people can't reach the Microsoft 365 apps in a browser.
+owner: m365-team
+tags: [synthetic, m365, http, sweep-15m]
+group: m365
+check:
+  kind: http
+  url: https://m365.cloud.microsoft/
+  method: GET
+  expect:
+    status: 200
+    bodyContains: <html
+thresholds: { warn: 2000, crit: 6000 }
+intervalHint: PT15M
+timeoutMs: 10000

@@ -34,13 +34,28 @@ schedule may not use it (`adminforge validate` refuses it).
    alerts → YAML for review).
 3. **Pick the check:** `check.kind` = `http`, `dnsResolve`, `certExpiry`, `graph`, `graphCount` (how many items a
    Graph list holds), `arm`, `tokenAcquisition`, `appCredentialExpiry`, `licenseThreshold`, `signInHealth`,
-   `functionHealth`, `auditChain` (AdminForge's own audit log), or **`kql`**.
+   `functionHealth`, `auditChain` (AdminForge's own audit log), **`kql`**, or a synthetic transaction (`mailFlow`,
+   `fileRoundTrip`, `onlineMeeting`).
    - Tenant-wide configuration questions → `kql` with `source: resourceGraph` (all subscriptions, one query),
      `logAnalytics` (`workspace` defaults to `${env.AF_LOG_ANALYTICS_WORKSPACE_ID}`), or `advancedHunting`
      (Defender licence). `metric: rowCount` or `{ column, aggregate }`; `detailsLimit` keeps the offending rows.
    - Put `// af:<probe id>` as the first KQL line (fixtures match on it).
-4. **Thresholds** `{ warn, crit }` in the direction `PROBE_METRICS` defines for the kind; `intervalHint`, `timeoutMs`.
-5. **Schedules:** when it runs as `every:` in plain English — `every weekday at 07:00`, `every Monday at 08:30`,
+   - A workload's own sign-in failure rate → `signInHealth` with `resourceId` (Exchange Online
+     `00000002-0000-0ff1-ce00-000000000000`, SharePoint Online `00000003-0000-0ff1-ce00-000000000000`, Teams Services
+     `cc15fd57-2c6c-4117-a88c-83b1d56b4bbe`).
+   - **Synthetic transactions** (ADR-015) — `mailFlow`, `fileRoundTrip`, `onlineMeeting` — are built in: they send,
+     upload or create on **test objects named in configuration only** (`from`/`to`/`site`/`organizer` must be one
+     whole `${ env.AF_… }` reference) and remove what they made. Tag them `synthetic-transaction`
+     (`sweep.synthetic-transactions` runs them every 15 minutes). A mail check needs `timeoutMs` ≥ `waitSeconds` ×
+     1000 + 10000. The identity's access to the test objects is an administrator's step (docs/operations.md ›
+     Synthetic transactions). Content can't define new transactions: a new kind is code in
+     `portal/apps/api/src/probes/transactions.ts` with a security review — never a generic write probe.
+4. **Group** every probe by the service it watches: `group:` a navigation section key (`identity`, `m365`,
+   `exchange`, `sharepoint`, `teams`, `endpoint`, `azure`, `billing`, …) or `platform` for AdminForge itself.
+   Synthetic monitoring groups tiles by it, each section's "Service checks" item (`/monitoring?group=<key>`) and a
+   dashboard's `probeStatus` with `group:` show it; without it the probe lands under "Other checks".
+5. **Thresholds** `{ warn, crit }` in the direction `PROBE_METRICS` defines for the kind; `intervalHint`, `timeoutMs`.
+6. **Schedules:** when it runs as `every:` in plain English — `every weekday at 07:00`, `every Monday at 08:30`,
    `mon, wed and fri at 18:00`, `first Monday of the month at 08:30`, `last Friday of the month at 17:00`, `last day
 of the month at 23:00`, `on the 15th of every month at 06:00`, `every 4 hours`, `every hour at :15`, `every 15
 minutes` — or `cron` (5/6 fields; one of the two). Validation compiles `every` to cron and names any word it doesn't
@@ -63,7 +78,7 @@ minutes` — or `cron` (5/6 fields; one of the two). Validation compiles `every`
    targets; failure alerts are sent only when no retry is left). Scheduled data (report files, probe rows) is visible
    to Operators by default — widen it deliberately with `requires.portalRoles`.
 
-6. **Permissions:** the automation identity needs **application** permissions / Azure RBAC for what it reads. Declare
+7. **Permissions:** the automation identity needs **application** permissions / Azure RBAC for what it reads. Declare
    them in `requires.scopes` / `requires.azureRoles`; if new, add them to provisioning
    (`portal/tools/cli/src/provision/catalog.ts`) and run `pnpm adminforge provision entra`.
    **Who it runs as** (ADR-014): keep `identity: automation` unless the schedule needs permissions the shared identity
@@ -73,9 +88,9 @@ minutes` — or `cron` (5/6 fields; one of the two). Validation compiles `every`
    `AF_IDENTITY_<NAME>_ALLOW_*` opt-in. `news` and `contentHealth` jobs always use `automation`. `{ user: creator }`
    is only for report schedules created in the portal ("Run as: Me") — content can't use it. Runner (PowerShell)
    datasources work only as the automation identity.
-7. **Fixtures** for mock mode (Resource Graph variants in `tests/fixtures/resourceGraph/POST.json`, matched by the
+8. **Fixtures** for mock mode (Resource Graph variants in `tests/fixtures/resourceGraph/POST.json`, matched by the
    `// af:` comment); **validate:** `pnpm adminforge validate`, content tests, `pnpm guard`.
-8. **Try it once live (read-only):** against the dev database, as the automation identity, with delivery kept away
+9. **Try it once live (read-only):** against the dev database, as the automation identity, with delivery kept away
    from people — `pnpm exec tsx tests/live/scripts/run-schedule-once.ts` with `--probe <id>` or `--schedule <id>`
    (`--deliver sender` mails only `AF_MAIL_SENDER` itself; see `tests/live/README.md`). Then check `/monitoring`. On
    the host, the scheduler's own one-shot is in `portal/deploy/README.md`.
@@ -97,4 +112,8 @@ minutes` — or `cron` (5/6 fields; one of the two). Validation compiles `every`
 | An HTTP probe that POSTs                                                                 | Set `allowPost: true`; HTTP probes never follow redirects or reach private addresses other than the portal                                                             |
 | Literal email addresses in `delivery.to`                                                 | Recipients are configuration: `${ env.AF_REPORT_RECIPIENTS }` (keys ending RECIPIENTS/EMAIL/ALERTS)                                                                    |
 | Content schedule id `portal.…`                                                           | Reserved for report schedules created in the portal; use `<section>.<name>` (e.g. `reports.weekly-…`)                                                                  |
+| A probe without `group`                                                                  | `group: <nav section key>` (or `platform`) — otherwise it shows under "Other checks", not on its service's page                                                        |
+| An anonymous HTTP probe expecting one exact status                                       | Tenants differ (SharePoint answers 401 or 403): accept every status that means "up", e.g. `status: [401, 403]`; check with curl first                                  |
+| Filtering service health on a name from a fixture                                        | Names change ("OneDrive for Business" is now "Microsoft OneDrive"): read `healthOverviews` live and filter on both names                                               |
+| A "degraded services" count                                                              | Advisories keep several services at `serviceDegradation` most days; alert on `serviceInterruption` or open incidents (`classification eq 'incident'`)                  |
 | New `config-check` KQL probe not in the shipped set                                      | Add its id to `CONFIG_CHECKS` in `tests/content/probes-schedules.test.ts` (the test asserts the exact set)                                                             |

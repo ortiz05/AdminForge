@@ -187,6 +187,15 @@ const idTokenClaims = (...names: string[]) =>
 /** Application permissions that only read: the verb after the resource is Read or ReadBasic (User.Read.All). */
 export const isReadOnlyAppRole = (value: string) => ['Read', 'ReadBasic'].includes(value.split('.')[1] ?? '');
 
+/**
+ * Application permissions that reach nothing until an administrator grants a specific site, list or file to the app
+ * (`POST /sites/{id}/permissions`): Sites.Selected and its Lists/ListItems/Files `SelectedOperations` siblings. What
+ * the app may do is set per resource by that grant, so provisioning may add them without the write opt-in; the grants
+ * themselves stay a deliberate step (docs/operations.md › Synthetic transactions).
+ */
+export const isPerResourceAppRole = (value: string) =>
+  /^Sites\.Selected$/i.test(value) || /^(Lists|ListItems|Files)\.SelectedOperations\.Selected$/i.test(value);
+
 /** Permissions declared by content (`requires.scopes`), per app and service — see content/scopes.ts. */
 export type ContentScopes = Partial<Record<AppKey, Partial<Record<string, Iterable<string>>>>>;
 
@@ -320,7 +329,11 @@ export function ceilingFor(
     const lifted = (global: boolean | undefined, mine: boolean | undefined) => !!global && (!named || !!mine);
     if (isPrivilegedDelegatedScope(value) && !lifted(settings.allowAppPrivileged, own?.allowPrivileged))
       return named ? 'identityPrivileged' : 'appPrivileged';
-    if (!isReadOnlyAppRole(value) && !lifted(settings.allowAutomationWrites, own?.allowWrites))
+    if (
+      !isReadOnlyAppRole(value) &&
+      !isPerResourceAppRole(value) &&
+      !lifted(settings.allowAutomationWrites, own?.allowWrites)
+    )
       return named ? 'identityWrite' : 'automationWrite';
     if (
       isSensitiveReadAppRole(value) &&

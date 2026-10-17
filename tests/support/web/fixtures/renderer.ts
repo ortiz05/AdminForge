@@ -24,6 +24,33 @@ export const CAPABILITIES_NO_INTUNE = {
 
 type Status = 'ok' | 'warn' | 'crit';
 
+/** The service each probe watches (a probe's `group`, as in portal/content/probes). */
+const PROBE_GROUP: Record<string, string> = {
+  'probes.portal-readiness': 'platform',
+  'probes.entra-openid-metadata': 'identity',
+  'probes.graph-reachability': 'm365',
+  'probes.arm-reachability': 'azure',
+  'probes.arm-subscription-access': 'azure',
+  'probes.m365-service-health': 'm365',
+  'probes.token-graph': 'platform',
+  'probes.token-arm': 'platform',
+  'probes.token-log-analytics': 'platform',
+  'probes.token-exchange': 'platform',
+  'probes.token-teams': 'platform',
+  'probes.token-sharepoint-admin': 'platform',
+  'probes.sign-in-health': 'identity',
+  'probes.sign-in-health-adminforge': 'platform',
+  'probes.licence-seats-spe-e3': 'm365',
+  'probes.licence-seats-spe-e5': 'm365',
+  'probes.portal-tls-certificate': 'platform',
+  'probes.app-credential-expiry': 'identity',
+  'probes.dns-mx': 'exchange',
+  'probes.dns-autodiscover': 'exchange',
+  'probes.dns-spf': 'exchange',
+  'probes.dns-dmarc': 'exchange',
+  'probes.function-hr-sync-health': 'azure',
+};
+
 function probe(
   key: string,
   title: string,
@@ -38,6 +65,7 @@ function probe(
     key,
     title,
     kind,
+    group: PROBE_GROUP[key] ?? null,
     latest: { ts: ago(12 * 60_000), status, metric, unit, message },
     series: Array.from({ length: 12 }, (_, i) => ({
       ts: ago((12 - i) * HOUR),

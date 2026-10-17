@@ -123,6 +123,44 @@ Azure Resource Manager. The tenant feeds need the automation app's ServiceMessag
 (`pnpm adminforge provision entra`) and Reader on the subscriptions. Feed failures and their codes are listed in
 `docs/news.md`.
 
+## Synthetic transactions
+
+Synthetic monitoring (`/monitoring`, grouped by service; each service's section links to its own checks with
+"Service checks") runs two kinds of M365 checks. **Read-only checks** work as soon as the automation identity has its
+permissions: Exchange Autodiscover, the Outlook (MAPI) and Outlook on the web front doors, the SharePoint front door
+(`AF_SPO_TENANT_NAME`), the Teams web app, the Microsoft 365 web portal, Entra realm discovery for the primary
+domain, an open-incident check per workload (Exchange, SharePoint, OneDrive, Teams, Entra, Intune) and services in
+"service interruption", sign-in failure rates per workload (Exchange, SharePoint, Teams; Entra ID P1 sign-in logs),
+the Intune service through Graph and the channels of a test team (`AF_SYNTHETIC_TEAM_ID`, no new permission).
+
+**Synthetic transactions** (ADR-015; `sweep.synthetic-transactions`, every 15 minutes) do what a person does and
+remove what they made: they act **only** on dedicated test objects named in `AF_SYNTHETIC_*` keys (the mail check also
+sends from `AF_MAIL_SENDER`), and do nothing ("not configured", the run succeeds with a note) until those are set. Use
+test objects nobody reads, and scope the identity to them. Runs in which they acted are audited as writes
+(`schedule.run`); turning the schedule off also stops **Run now**. To keep their permissions off the shared automation
+identity, give the sweep a named identity of its own (ADR-014) and grant the scopes below to it:
+
+| Probe                               | Does                                                                                                    | Needs                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `probes.exchange-mail-flow`         | Sends a message from `AF_MAIL_SENDER` to `AF_SYNTHETIC_MAILBOX`, waits up to 90 s, checks Junk, deletes | A test mailbox (a shared mailbox needs no licence). The sender already has "Application Mail.Send" for report email (go-live checklist). Exchange Online PowerShell: `New-ManagementScope -Name AdminForgeSyntheticMailbox -RecipientRestrictionFilter "PrimarySmtpAddress -eq '<test mailbox>'"`, then `New-ManagementRoleAssignment -App <automation app id> -Role "Application Mail.ReadWrite" -CustomResourceScope AdminForgeSyntheticMailbox`. No Entra permission.                                                                                       |
+| `probes.sharepoint-file-round-trip` | Uploads a 16 KB JSON file to the test site's default library, downloads it from SharePoint, deletes it  | A test site; its Graph id in `AF_SYNTHETIC_SITE_ID` (`GET /v1.0/sites/<tenant>.sharepoint.com:/sites/<path>?$select=id`). **Sites.Selected** (granted by `provision entra`, no opt-in: it reaches nothing by itself) plus write on that site only, by a SharePoint admin: `Grant-PnPAzureADAppSitePermission -AppId <automation app id> -DisplayName "AdminForge automation" -Site <site url> -Permissions Write` (or Graph `POST /sites/{id}/permissions` with `roles: ["write"]`) — `write`, never `fullcontrol`, which could manage the site's permissions. |
+| `probes.teams-online-meeting`       | Creates a Teams meeting for the test user an hour ahead (no invitation), checks the join link, deletes  | A Teams-licensed test user (`AF_SYNTHETIC_USER_ID`, object id). **OnlineMeetings.ReadWrite.All** — an application write permission, granted only with `AF_AUTOMATION_ALLOW_WRITE_PERMISSIONS=true` — limited to that user by a Teams application access policy: `New-CsApplicationAccessPolicy -Identity AdminForge-Synthetic -AppIds <automation app id>`, `Grant-CsApplicationAccessPolicy -PolicyName AdminForge-Synthetic -Identity <test user object id>` (takes up to 30 minutes).                                                                       |
+
+Check them once before relying on them (writes only to the test objects, and removes them):
+
+```sh
+pnpm exec tsx tests/live/scripts/run-schedule-once.ts --no-store \
+  --probe probes.exchange-mail-flow --probe probes.sharepoint-file-round-trip --probe probes.teams-online-meeting
+```
+
+What the results mean: `not_configured` — the `AF_SYNTHETIC_*` key is unset or isn't a mailbox / Graph site id / object
+id; `forbidden` — the message names the role, grant or policy that's missing; `not_delivered` — the message didn't
+arrive within the wait (critical); `junk` — it arrived in Junk Email (degraded: check the sender's SPF/DKIM/DMARC and
+anti-spam policies); `cleanup_failed` — the check worked but its test item stayed (degraded; the next run removes
+leftovers it recognises); `expectation_failed` — SharePoint returned another file or no download address, or Teams no
+join link; `writes_paused` — the emergency stop is on (transactions pause with every other change). Probe results are
+the record of these runs; they don't add audit events.
+
 ## Sizing for a large tenant
 
 **Design target: about 50 engineers using AdminForge at the same time**, which one API process with the defaults

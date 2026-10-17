@@ -527,7 +527,8 @@ describe('quick wins', () => {
       'SPE_E3',
     ]);
     const monitoring = JSON.stringify(def('automation.monitoring'));
-    expect(monitoring).toContain('probes.licence-seats-nearly-full');
+    // The dashboard shows probes by service: the licence probe through its group's panel.
+    expect(monitoring).toContain(`"group":"${def('probes.licence-seats-nearly-full').group}"`);
     expect(monitoring).not.toContain('probes.licence-seats-spe-');
   });
 });

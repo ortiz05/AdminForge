@@ -1,12 +1,14 @@
 $schema: ../../../packages/schemas/generated/report.schema.json
 kind: report
 id: m365.external-forwarding
-version: 1.1.1
+version: 1.2.0
 title: Mailbox external forwarding
 summary: Mailboxes and inbox rules that forward or redirect mail to addresses outside the organization's accepted domains.
 owner: m365-team
 tags: [m365, exchange, security, data-loss]
 nav: { section: reports, label: Mailbox external forwarding, icon: arrow-bend-up-right, order: 120 }
+# Reports catalogue area (the key keeps its m365. prefix so schedules and links keep working).
+area: exchange
 requires:
   portalRoles: [Portal.Reader]
   scopes:

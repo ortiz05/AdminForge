@@ -1,0 +1,23 @@
+$schema: ../../../packages/schemas/generated/schedule.schema.json
+kind: schedule
+id: sweep.synthetic-transactions
+version: 1.0.0
+title: Synthetic transactions every 15 minutes
+summary: >-
+  Every 15 minutes, runs the probes tagged synthetic-transaction as the automation identity — mail flow, a SharePoint
+  file round trip, a Teams meeting — against the test objects in configuration (AF_SYNTHETIC_*), removing what they
+  make. Until the test objects are set up (docs/operations.md › Synthetic transactions) each says "not configured"
+  and changes nothing. The emergency stop pauses them like any change.
+owner: m365-team
+tags: [synthetic, probe-sweep, synthetic-transaction]
+every: every 15 minutes
+timezone: UTC
+enabled: true
+identity: automation
+job:
+  kind: probe
+  select: { tags: [synthetic-transaction] }
+  concurrency: 3
+# A mail check waits up to 90 s for delivery; three run side by side.
+timeoutSeconds: 300
+overlap: skip

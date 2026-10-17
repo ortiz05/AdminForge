@@ -147,8 +147,11 @@ Pages, dashboards and reports are YAML in `portal/content/{pages,dashboards,repo
    devices (`Device*` / `DeviceTvm*` hunting tables, `security.microsoft.com/machines` or `/vulnerabilities` links).
    **Reports** keep `nav: { section: reports, icon, … }` but aren't listed one by one in the rail (the Reports section
    says `listDefinitions: false` and shows "All reports"): they appear in the **Reports catalogue** (`/reports`)
-   automatically. There the area is the key's first segment (`identity`, `m365`, `endpoint`, `security`, `azure` — a
-   navigation section key), `tags` drive the tag filter and search (give every report specific tags), `summary` is its
+   automatically. There the area is the report's `area:` if it sets one, else the key's first segment — always a
+   navigation section key (`identity`, `m365`, `exchange`, `sharepoint`, `teams`, `endpoint`, `security`, `azure`). Put a report under its workload with `area:` (`m365.inbox-rules` says `area: exchange`) rather than
+   renaming its key: schedules, links and saved views use the key. The same goes for pages — move one with
+   `nav.section`, keep its key. Each workload section opens with an Overview dashboard (`exchange.overview`, …) whose
+   `probeStatus` widget takes `group: <section>` to show that service's synthetic checks. `tags` drive the tag filter and search (give every report specific tags), `summary` is its
    description, `nav.icon` its row icon, `requires` its requirements panel, `export` makes it schedulable, and its
    params become the schedule form (string/number/boolean/enum params without a picker can be set per schedule; the
    others run with their default, so give them sensible defaults). Operators schedule reports from the catalogue

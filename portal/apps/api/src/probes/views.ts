@@ -1,4 +1,4 @@
-import type { Probe } from '@adminforge/schemas';
+import type { Navigation, Probe } from '@adminforge/schemas';
 import type { DefinitionSource } from '../definitions/types';
 import { AppError } from '../errors';
 import type { ScheduleStore } from '../schedules/store';
@@ -11,6 +11,8 @@ export interface ProbeItem {
   key: string;
   title: string;
   kind: string;
+  /** The service it watches (`group`: a navigation section key, or `platform`), or null. */
+  group: string | null;
   latest: {
     status: ProbeStatus;
     metric: number | null;
@@ -20,6 +22,31 @@ export interface ProbeItem {
   } | null;
   series: Array<{ ts: string; metric: number | null; status: ProbeStatus }>;
   thresholds: { warn: number | null; crit: number | null; unit: string; worse: 'higher' | 'lower' };
+}
+
+/** A service group on Synthetic monitoring: a navigation section's label and icon, or AdminForge itself. */
+export interface ProbeGroup {
+  key: string;
+  label: string;
+  icon: string;
+}
+
+/** `platform`: probes of AdminForge itself (readiness, audit chain, its certificate, its tokens). */
+export const PLATFORM_GROUP: ProbeGroup = { key: 'platform', label: 'AdminForge', icon: 'gauge' };
+
+/** The groups the probes use, in navigation order (then AdminForge, then any other key). */
+export function probeGroups(navigation: Navigation | undefined, present: Iterable<string>): ProbeGroup[] {
+  const keys = new Set(present);
+  const out: ProbeGroup[] = [];
+  const sections = [...(navigation?.sections ?? [])]
+    .map((s, index) => ({ s, index }))
+    .sort((a, b) => (a.s.order ?? 1000) - (b.s.order ?? 1000) || a.index - b.index);
+  for (const { s } of sections)
+    if (keys.delete(s.key)) out.push({ key: s.key, label: s.label, icon: s.icon });
+  if (keys.delete(PLATFORM_GROUP.key)) out.push(PLATFORM_GROUP);
+  for (const key of [...keys].sort())
+    out.push({ key, label: key.charAt(0).toUpperCase() + key.slice(1), icon: 'pulse' });
+  return out;
 }
 
 export interface ProbeResultItem {
@@ -47,12 +74,13 @@ export class ProbeViews {
     },
   ) {}
 
-  async list(): Promise<{ items: ProbeItem[] }> {
+  async list(): Promise<{ items: ProbeItem[]; groups: ProbeGroup[] }> {
     const now = this.deps.now();
-    const [records, latest, series] = await Promise.all([
+    const [records, latest, series, navs] = await Promise.all([
       this.deps.definitions.list('probe'),
       this.deps.store.latestProbeResults(),
       this.deps.store.probeSeries(new Date(now.getTime() - SERIES_WINDOW_MS), SERIES_POINTS),
+      this.deps.definitions.list('navigation'),
     ]);
     const latestBy = new Map(latest.map((r) => [r.probeKey, r]));
     const seriesBy = new Map<string, typeof series>();
@@ -66,6 +94,7 @@ export class ProbeViews {
           key: rec.key,
           title: probe.title,
           kind: probe.check.kind,
+          group: probe.group ?? null,
           latest: l
             ? { status: l.status, metric: l.metric, unit: t.unit, ts: l.ts.toISOString(), message: l.message }
             : null,
@@ -76,7 +105,15 @@ export class ProbeViews {
         };
       })
       .sort((a, b) => a.key.localeCompare(b.key));
-    return { items };
+    const navigation = (navs.find((n) => n.key === 'portal.navigation') ?? navs[0])?.def as
+      Navigation | undefined;
+    return {
+      items,
+      groups: probeGroups(
+        navigation,
+        items.flatMap((i) => (i.group ? [i.group] : [])),
+      ),
+    };
   }
 
   /** One probe's results since `since` (default 24 h; at most 31 days), newest first, with details rows. */

@@ -323,16 +323,12 @@ test.describe('dashboard', () => {
   test('probe dashboard renders probe results and the markdown guidance', async ({ page }) => {
     await open(page, '/p/automation.monitoring');
     await expect(page.getByRole('heading', { level: 1, name: 'Synthetic monitoring' })).toBeVisible();
-    await expect(page.getByRole('list', { name: 'Token acquisition (automation identity)' })).toContainText(
-      'Failing',
-    );
-    await page
-      .getByRole('list', { name: 'Token acquisition (automation identity)' })
-      .getByRole('button', { name: /Token acquisition · Exchange Online/ })
-      .click();
-    await expect(
-      page.getByRole('list', { name: 'Token acquisition (automation identity)' }).getByText(/AADSTS7000215/),
-    ).toBeVisible();
+    // One panel per service: AdminForge's own checks (its tokens among them) in the AdminForge panel.
+    const platform = page.getByRole('list', { name: 'AdminForge' });
+    await expect(platform).toContainText('Failing');
+    await platform.getByRole('button', { name: /Token acquisition · Exchange Online/ }).click();
+    await expect(platform.getByText(/AADSTS7000215/)).toBeVisible();
+    await expect(page.getByRole('list', { name: 'Exchange Online' })).toContainText('Mail exchanger (MX)');
   });
 });
 

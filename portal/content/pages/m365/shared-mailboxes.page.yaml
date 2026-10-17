@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/page.schema.json
 kind: page
 id: m365.shared-mailboxes
-version: 1.4.0
+version: 1.5.0
 title: Shared mailboxes
 summary: >-
   Shared mailboxes, which of them people can still sign in to (block it), and which need a licence because they have
@@ -9,7 +9,7 @@ summary: >-
 owner: m365-team
 tags: [m365, exchange, mailboxes]
 template: list-detail
-nav: { section: m365, label: Shared mailboxes, icon: tray, order: 55 }
+nav: { section: exchange, label: Shared mailboxes, icon: tray, order: 20 }
 requires:
   portalRoles: [Portal.Reader]
   scopes:

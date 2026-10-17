@@ -1,20 +1,21 @@
 $schema: ../../packages/schemas/generated/probe.schema.json
 kind: probe
 id: probes.sign-in-health
-version: 1.0.1
+version: 1.0.2
 title: Tenant sign-in failure rate
 summary: >-
   Failure rate of interactive sign-ins across the tenant over the last hour (from the Entra sign-in logs). A sudden
   rise usually means an outage, a broken Conditional Access policy, or a password-spray attempt.
 owner: identity-team
 tags: [synthetic, identity, sign-ins, sweep-1h]
+group: identity
 check:
   kind: signInHealth
   window: PT1H
   maxFailurePercent: 25
   minSignIns: 50
 thresholds: { warn: 10, crit: 25 }
-intervalHint: PT15M
+intervalHint: PT1H
 timeoutMs: 60000
 requires:
   scopes:

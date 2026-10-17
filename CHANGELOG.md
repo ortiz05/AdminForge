@@ -11,6 +11,43 @@ Closes the gaps found by comparing the build with the original plan (see the pla
 
 ### Added
 
+- **Synthetic monitoring of Microsoft 365, by service.** `/monitoring` groups probes by the service they watch
+  (new probe `group:` — a navigation section key or `platform`; `GET /api/probes` returns `group` and `groups`), with
+  a **By service / By check** switch and `?group=<key>` for one service; Exchange Online, SharePoint Online and Teams
+  each get a "Service checks" item, and `probeStatus` widgets take `group:`. Every probe now names its group. New
+  checks:
+  - **Synthetic transactions** (ADR-015, `sweep.synthetic-transactions` every 15 minutes): **mail flow** from
+    `AF_MAIL_SENDER` to a test mailbox (delivery seconds, Junk Email, cleanup), a **SharePoint file round trip**
+    (upload, download from SharePoint, compare, delete) and a **Teams meeting** created and deleted for a test user.
+    New built-in check kinds `mailFlow`, `fileRoundTrip`, `onlineMeeting`; their test objects come only from
+    configuration (`AF_SYNTHETIC_MAILBOX`, `AF_SYNTHETIC_SITE_ID`, `AF_SYNTHETIC_USER_ID`), every change is a
+    declared write (emergency stop, protected objects), and they report "not configured" until set up
+    (docs/operations.md › Synthetic transactions).
+  - **Read-only service checks:** Exchange Autodiscover, the Outlook (MAPI) and Outlook on the web front doors, the
+    SharePoint front door, the Teams web app, the Microsoft 365 web portal, Entra realm discovery for the primary
+    domain, open incidents per workload (Exchange, SharePoint, OneDrive, Teams, Entra, Intune), services in "service
+    interruption", sign-in failure rates per workload (`signInHealth` gains `resourceId`), Intune through Graph and a
+    test team's channels (`AF_SYNTHETIC_TEAM_ID`). `probes.m365-workload-incidents` is retired: one incident check per
+    workload and `probes.m365-suite-incidents` say which service and which incident.
+  - Hardening from review: transaction targets must be `AF_SYNTHETIC_*` keys (the sender may also be
+    `AF_MAIL_SENDER`), checked again at run time; mailboxes are resolved to object ids so the protected-object guard
+    applies; runs in which a transaction acted are audited as writes with their outcome codes; Run now is refused
+    while the sweep is off; only stale test messages are swept, never a running check's; a probe job whose probes are
+    all "not configured" succeeds with a note; HTTP probes name an unset setting in their URL instead of showing the
+    expression error; `probeStatus` says "No results yet" instead of "All passing" before anything ran.
+  - Provisioning grants `Sites.Selected` (and the `…SelectedOperations.Selected` permissions) without
+    `AF_AUTOMATION_ALLOW_WRITE_PERMISSIONS`: they reach nothing until a site is granted; `Presence.Read.All` is now a
+    sensitive read. Every section with probes has a "Service checks" item (Azure: "Configuration checks"); token
+    probes are listed under AdminForge. `adminforge new probe` fills
+    in `group`. The rail highlights one item when two link to the same page with different queries.
+- **Exchange Online, SharePoint Online and Teams are parents of their own** in the navigation. Mailboxes, shared
+  mailboxes, distribution lists and mail forwarding move to Exchange Online; sites and sharing to SharePoint Online;
+  teams and Teams user policies to Teams; Microsoft 365 keeps service health, Message center, licences, usage and
+  groups. Page keys are unchanged, so links, schedules and inspectors keep working. Each workload has an **Overview**
+  dashboard (`exchange.overview`, `sharepoint.overview`, `teams.overview`): its service health and open issues,
+  storage or activity numbers, its synthetic checks and links to its pages and reports. In the Reports catalogue,
+  Exchange, SharePoint/OneDrive and Teams reports appear under their workload (new optional `area:` on reports; keys
+  unchanged).
 - **Who a schedule runs as** (ADR-014): `identity: automation | { app: <name> } | { user: creator }`. Named app
   identities (`AF_SCHEDULE_IDENTITIES`, `AF_IDENTITY_<NAME>_CLIENT_ID` / `_CERT_PATH` / `_CLIENT_SECRET`) are
   provisioned, checked and pruned by `provision entra` / `status` with exactly the permissions of their schedules, and

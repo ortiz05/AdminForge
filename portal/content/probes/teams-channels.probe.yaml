@@ -1,0 +1,28 @@
+$schema: ../../packages/schemas/generated/probe.schema.json
+kind: probe
+id: probes.teams-channels
+version: 1.0.0
+title: Teams service — channels of the test team
+summary: >-
+  Lists the channels of a test team (AF_SYNTHETIC_TEAM_ID) through Microsoft Graph's Teams API as the automation
+  identity, measuring the round trip. A failure while the directory still answers means the Teams service itself is
+  in trouble.
+owner: m365-team
+tags: [synthetic, teams, graph, sweep-15m]
+group: teams
+check:
+  kind: graph
+  path: /teams/${ $encode(env.AF_SYNTHETIC_TEAM_ID) }/channels
+  query:
+    $select: id,displayName
+  expect:
+    status: 200
+    bodyContains: displayName
+thresholds: { warn: 2500, crit: 8000 }
+intervalHint: PT15M
+timeoutMs: 15000
+requires:
+  licences: [teams]
+  # Already held (Graph accepts it for team channels); Channel.ReadBasic.All is the narrower alternative.
+  scopes:
+    graph: [Group.Read.All]

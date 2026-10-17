@@ -743,11 +743,13 @@ export class Scheduler {
       (s.source === 'portal' ? def.owner : null) ??
       s.createdBy ??
       `content (owner: ${def.owner})`;
+    // A probe job whose synthetic transactions acted on the tenant (ADR-015) changed something: audited as a write.
+    const transactions = Number(run.result?.transactions ?? 0);
     await this.o.audit
       .append({
         actorOid: 'automation',
         actorUpn: 'automation identity',
-        mode: isWriteCapable(def) ? 'write' : 'read',
+        mode: isWriteCapable(def) || transactions > 0 ? 'write' : 'read',
         action: 'schedule.run',
         targetType: 'schedule',
         targetId: s.key,
@@ -768,6 +770,7 @@ export class Scheduler {
           ...(run.runId ? { runId: run.runId } : {}),
           ...(run.artifactPath ? { artifact: run.artifactPath } : {}),
           ...(error ? { error: error.code } : {}),
+          ...(transactions > 0 ? { transactions: run.result?.transactionCodes } : {}),
         },
       })
       .catch((err: unknown) =>

@@ -60,10 +60,28 @@ const nav = tv({
   },
 });
 
-export function isActive(href: string, pathname: string): boolean {
-  const path = splitHref(href).pathname;
-  if (path === '/') return pathname === '/';
-  return pathname === path || pathname.startsWith(`${path}/`);
+/**
+ * Whether a nav item is the current place. An item whose href carries a query (`/monitoring?group=exchange`) is active
+ * only while the URL has those values; the plain item for the same path (`/monitoring`) then isn't, so exactly one item
+ * is highlighted. `others` are the rail's other hrefs.
+ */
+export function isActive(
+  href: string,
+  pathname: string,
+  search: Record<string, unknown> = {},
+  others: readonly string[] = [],
+): boolean {
+  const target = splitHref(href);
+  const path = target.pathname;
+  const onPath = path === '/' ? pathname === '/' : pathname === path || pathname.startsWith(`${path}/`);
+  if (!onPath) return false;
+  const matches = (q: Record<string, unknown>) =>
+    Object.entries(q).every(([k, v]) => search[k] !== undefined && String(search[k]) === String(v));
+  if (Object.keys(target.search).length) return matches(target.search);
+  return !others.some((other) => {
+    const o = splitHref(other);
+    return o.pathname === path && Object.keys(o.search).length > 0 && matches(o.search);
+  });
 }
 
 /** Short names for licences, service plans and feature keys as they appear in "Requires …" badges. */
@@ -218,6 +236,9 @@ export function NavRail({
   counts,
 }: NavRailProps) {
   const pathname = useRouterState({ select: (st) => st.location.pathname });
+  const search = useRouterState({ select: (st) => st.location.search }) as Record<string, unknown>;
+  const hrefs = sections?.flatMap((x) => x.items.map((i) => i.href)) ?? [];
+  const active = (href: string) => isActive(href, pathname, search, hrefs);
   const s = nav();
   return (
     <nav aria-label="Primary" className={s.root()}>
@@ -233,7 +254,7 @@ export function NavRail({
         {sections?.map((section, i) => {
           const closed = !collapsed && closedSections.includes(section.key);
           const items = closed
-            ? section.items.filter((item) => isActive(item.href, pathname) || counts?.[item.key])
+            ? section.items.filter((item) => active(item.href) || counts?.[item.key])
             : section.items;
           const hidden = section.items.length - items.length;
           return (
@@ -280,7 +301,7 @@ export function NavRail({
                     <NavLink
                       item={item}
                       section={section}
-                      active={isActive(item.href, pathname)}
+                      active={active(item.href)}
                       collapsed={collapsed}
                       live={counts?.[item.key]}
                     />

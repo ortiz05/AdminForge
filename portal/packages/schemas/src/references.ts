@@ -101,6 +101,16 @@ export function validateReferences(entries: readonly DefinitionEntry[]): Content
 
     if ('nav' in def && def.nav && hasNavigation && !navSections.has(def.nav.section))
       err(['nav', 'section'], `Unknown navigation section "${def.nav.section}".`);
+    if (
+      def.kind === 'probe' &&
+      def.group &&
+      def.group !== 'platform' &&
+      hasNavigation &&
+      !navSections.has(def.group)
+    )
+      err(['group'], `Unknown probe group "${def.group}": use a navigation section key or platform.`);
+    if (def.kind === 'report' && def.area && hasNavigation && !navSections.has(def.area))
+      err(['area'], `Unknown navigation section "${def.area}" for the Reports catalogue area.`);
 
     if (def.kind === 'page' || def.kind === 'dashboard' || def.kind === 'report') {
       checkDatasources(def.datasources);

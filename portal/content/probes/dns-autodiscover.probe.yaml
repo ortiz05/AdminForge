@@ -1,11 +1,12 @@
 $schema: ../../packages/schemas/generated/probe.schema.json
 kind: probe
 id: probes.dns-autodiscover
-version: 1.0.2
+version: 1.0.3
 title: Autodiscover record for the primary domain
 summary: Resolves autodiscover.<primary domain> and expects the CNAME to autodiscover.outlook.com that Outlook clients need.
 owner: m365-team
 tags: [synthetic, m365, exchange, dns, sweep-1h]
+group: exchange
 check:
   kind: dnsResolve
   name: ${ 'autodiscover.' & env.AF_MAIL_DOMAIN }

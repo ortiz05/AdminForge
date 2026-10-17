@@ -1,7 +1,7 @@
 $schema: ../../packages/schemas/generated/probe.schema.json
 kind: probe
 id: probes.arc-machines-disconnected
-version: 1.0.0
+version: 1.0.1
 title: Disconnected or expired Azure Arc machines
 summary: >-
   Azure Arc-enabled servers whose agent is Disconnected, Expired (offline for more than 45 days, needs re-onboarding)
@@ -9,6 +9,7 @@ summary: >-
   same machines with more detail.
 owner: azure-team
 tags: [kql, configuration, azure, arc, config-check]
+group: azure
 check:
   kind: kql
   source: resourceGraph

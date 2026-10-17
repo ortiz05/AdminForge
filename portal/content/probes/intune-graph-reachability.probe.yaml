@@ -1,0 +1,26 @@
+$schema: ../../packages/schemas/generated/probe.schema.json
+kind: probe
+id: probes.intune-graph-reachability
+version: 1.0.0
+title: Intune service through Microsoft Graph
+summary: >-
+  Reads one managed device from Intune through Microsoft Graph as the automation identity and measures the round trip.
+  A failure while Microsoft Graph's directory answers means the Intune service is in trouble.
+owner: endpoint-team
+tags: [synthetic, endpoint, intune, graph, sweep-15m]
+group: endpoint
+check:
+  kind: graph
+  path: /deviceManagement/managedDevices
+  query:
+    $select: id
+    $top: 1
+  expect:
+    status: 200
+thresholds: { warn: 2500, crit: 8000 }
+intervalHint: PT15M
+timeoutMs: 15000
+requires:
+  scopes:
+    graph: [DeviceManagementManagedDevices.Read.All]
+  licences: [intune]

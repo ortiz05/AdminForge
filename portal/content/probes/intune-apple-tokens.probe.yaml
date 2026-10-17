@@ -1,7 +1,7 @@
 $schema: ../../packages/schemas/generated/probe.schema.json
 kind: probe
 id: probes.intune-apple-tokens
-version: 1.0.0
+version: 1.0.1
 title: Apple enrolment (ADE) tokens expiring
 summary: >-
   Counts the Apple automated device enrolment (ADE) tokens that have expired or expire within 30 days, or whose last
@@ -10,6 +10,7 @@ summary: >-
   report also covers the Apple push certificate and VPP tokens.
 owner: endpoint-team
 tags: [endpoint, intune, apple, certificates, sweep-6h]
+group: endpoint
 check:
   kind: graphCount
   path: /deviceManagement/depOnboardingSettings

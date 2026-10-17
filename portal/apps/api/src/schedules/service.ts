@@ -2,7 +2,9 @@ import {
   identityKey,
   identityLabel,
   isWriteCapable,
+  TRANSACTION_KINDS,
   type PortalRole,
+  type Probe,
   type Schedule,
 } from '@adminforge/schemas';
 
@@ -497,6 +499,20 @@ export class ScheduleService {
     this.deps.events.publish({ type: 'schedule.updated', data: { key } });
   }
 
+  /** Whether a probe job's probes (by ref, refs or tags, as jobs.ts selects them) include a synthetic transaction. */
+  private async runsTransactions(def: Schedule): Promise<boolean> {
+    const job = def.job;
+    if (job.kind !== 'probe') return false;
+    const probes = (await this.deps.definitions.list('probe')).filter((r) =>
+      job.ref
+        ? r.key === job.ref
+        : job.refs
+          ? job.refs.includes(r.key)
+          : (job.select?.tags ?? []).every((t) => (r.def as Probe).tags?.includes(t)),
+    );
+    return probes.some((r) => (TRANSACTION_KINDS as readonly string[]).includes((r.def as Probe).check.kind));
+  }
+
   /** POST /run: queues a manual run for the scheduler. */
   async runNow(c: Caller, key: string): Promise<{ scheduleRunId: string }> {
     requireRole(c.session, 'Portal.Operator', 'Running schedules');
@@ -515,6 +531,17 @@ export class ScheduleService {
         'approval_required',
         'This schedule changes data; it can run only after enabling it was approved by a second person.',
         { hint: 'Enable it first; a Playbook.Approver who is not you approves the request.' },
+      );
+    // Synthetic transactions write to their test objects (ADR-015): a schedule turned off — e.g. because a test object
+    // turned out to be in use — doesn't run them on demand either.
+    if (!row.enabled && (await this.runsTransactions(def)))
+      throw new AppError(
+        409,
+        'schedule_disabled',
+        'This schedule runs synthetic transactions, which send, upload or create on test objects, and it is turned off, so it can’t run now.',
+        {
+          hint: 'Turn it on first, once its test objects are set up (docs/operations.md › Synthetic transactions).',
+        },
       );
     if (row.source === 'portal') await this.assertRunNowAllowed(row);
     const run = await this.deps.store.insertRun({

@@ -368,6 +368,8 @@ export interface ProbeItem {
   key: string;
   title: string;
   kind: string;
+  /** The service it watches (a navigation section key, or `platform`), or null. */
+  group: string | null;
   latest: (ProbePoint & { unit: string | null; message: string | null }) | null;
   series: ProbePoint[];
   thresholds: { warn: number | null; crit: number | null; unit: string | null; worse: 'higher' | 'lower' };
@@ -407,6 +409,9 @@ const KIND_UNIT: Record<string, string> = {
   appCredentialExpiry: 'days',
   licenseThreshold: '%',
   signInHealth: '%',
+  mailFlow: 's',
+  fileRoundTrip: 'ms',
+  onlineMeeting: 'ms',
 };
 
 export function readProbe(raw: unknown): ProbeItem | null {
@@ -421,6 +426,7 @@ export function readProbe(raw: unknown): ProbeItem | null {
     key,
     title: pick(o, 'title') ?? key,
     kind,
+    group: pick(o, 'group') ?? null,
     latest:
       latestPoint && latestRaw
         ? {
@@ -442,9 +448,29 @@ export function readProbe(raw: unknown): ProbeItem | null {
   };
 }
 
+/** A service group on Synthetic monitoring (GET /api/probes `groups`). */
+export interface ProbeGroup {
+  key: string;
+  label: string;
+  icon: string;
+}
+
+function readGroups(raw: unknown): ProbeGroup[] {
+  return arr(raw).flatMap((g) => {
+    const o = rec(g);
+    const key = pick(o, 'key');
+    return key ? [{ key, label: pick(o, 'label') ?? key, icon: pick(o, 'icon') ?? 'pulse' }] : [];
+  });
+}
+
+const probeList = parser((input) => ({
+  ...listOf(readProbe).parse(input),
+  groups: readGroups(rec(input).groups),
+}));
+
 export const probesQuery = queryOptions({
   queryKey: ['probes'] as const,
-  queryFn: ({ signal }) => api('/api/probes', { schema: listOf(readProbe), signal }),
+  queryFn: ({ signal }) => api('/api/probes', { schema: probeList, signal }),
   refetchInterval: 60_000,
 });
 
@@ -470,6 +496,11 @@ export const PROBE_KIND_LABEL: Record<string, string> = {
   licenseThreshold: 'Licence seats',
   signInHealth: 'Sign-in health',
   kql: 'Configuration checks (KQL)',
+  graphCount: 'Microsoft Graph counts',
+  auditChain: 'Audit log',
+  mailFlow: 'Mail flow',
+  fileRoundTrip: 'File round trip',
+  onlineMeeting: 'Teams meetings',
 };
 
 export const PROBE_TONE: Record<ProbeStatus, StatusTone> = {

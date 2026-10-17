@@ -534,6 +534,31 @@ First run of `tests/live/scripts/check-accuracy.ts` against the host services (d
       `identity.saml-certificate-expiry`, `identity.licence-assignment-errors` showed as not published) and after the
       registration report catches up (8 of 12 members after a day; Microsoft refreshes it every few hours).
 
+## Synthetic monitoring of Microsoft 365 (2026-10-17)
+
+- [ ] Run the synthetic transactions live once their test objects exist (mail flow, SharePoint file round trip, Teams
+      meeting; `provision entra` grants Sites.Selected). Only the read-only checks were validated live so far.
+- [ ] A per-permission opt-in for application write permissions: `OnlineMeetings.ReadWrite.All` (Teams meeting check)
+      needs `AF_AUTOMATION_ALLOW_WRITE_PERMISSIONS`, which lifts the ceiling for every write permission content
+      declares. Until then, run the transactions sweep as a dedicated named identity (ADR-014).
+- [ ] `provision status`: warn when the identity holds a site grant other than `write` on `AF_SYNTHETIC_SITE_ID`
+      (`fullcontrol` could manage the site's permissions) — grants made in SharePoint are invisible to it today.
+- [ ] Message center filters (`m365.message-center`, `m365.message-center-actions`) still offer "OneDrive for
+      Business"; service health now says "Microsoft OneDrive" — check which name Message center posts use.
+- [ ] Provision the test objects with the CLI (an `AF_TEST_FIXTURES=synthetic` fixture: shared test mailbox and its
+      Exchange RBAC scope, test site and its Sites.Selected grant, the Teams application access policy) instead of the
+      manual steps in docs/operations.md › Synthetic transactions.
+- [ ] Mail flow to and from the internet (an external mailbox that echoes) and a message trace (Get-MessageTraceV2, or
+      Graph message trace when it is generally available) to say where a late message is waiting.
+- [ ] More transactions: a OneDrive round trip in the test user's OneDrive; a Teams chat or channel message read back
+      (app-only can't post messages — needs a bot or a delegated test account); a calendar invitation accepted.
+- [ ] `probes.teams-web-client` sends a current Edge user agent so Teams serves its web app; refresh it if Microsoft
+      changes the browser check (the probe then sees the "unsupported browser" redirect and fails).
+- [ ] The per-workload sign-in probes need 20 sign-ins an hour to judge; small tenants stay "insufficient data". Tune
+      `minSignIns` per installation if that's too quiet.
+- [ ] The e2e navigation mock (`tests/support/web/fixtures`) still has the single Microsoft 365 section; update it
+      (and its screenshot baselines) to the per-workload parents.
+
 ## Navigation / product
 
 - [ ] Decide between the content "Probe dashboard" (`automation.monitoring`, nav: Automation) and the coded
@@ -554,6 +579,10 @@ First run of `tests/live/scripts/check-accuracy.ts` against the host services (d
       "What's new in Microsoft Graph" feed is the live signal. Retire `feeds.graph-changelog` if it stays quiet.
 - [ ] Learn what's-new feeds only say "this page was updated" (Learn search RSS has no per-change items). A per-change
       feed would need parsing the page, which the terms and the plain-text rule rule out.
+- [ ] News areas still say `m365` for Exchange Online, SharePoint Online and Teams items, although navigation (and
+      the Reports catalogue) now has a parent per workload. Split `NEWS_AREAS` (`schemas/news.ts`) into `exchange`,
+      `sharepoint`, `teams` with feed rules by Message center / service health `service`, keep `m365` for the suite,
+      and decide what stored items with `m365` become (re-classify on the next collection, or keep).
 - [ ] Teams/email digest of breaking items (daily, to `AF_…ALERTS` recipients) through the existing delivery path.
 - [ ] Azure Advisor service-retirement recommendations (`advisorresources`) as a tenant feed: retirements that affect
       resources you actually have.

@@ -1,0 +1,21 @@
+$schema: ../../packages/schemas/generated/probe.schema.json
+kind: probe
+id: probes.exchange-outlook-connectivity
+version: 1.0.0
+title: Outlook connectivity endpoint (MAPI over HTTP)
+summary: >-
+  Calls the endpoint Outlook for Windows and Mac connects to (outlook.office365.com/mapi) without signing in. Exchange
+  Online answering 401 — asking for a sign-in — means the front door is up; anything else or no answer means Outlook
+  clients can't connect.
+owner: m365-team
+tags: [synthetic, exchange, http, outlook, sweep-15m]
+group: exchange
+check:
+  kind: http
+  url: https://outlook.office365.com/mapi/emsmdb/
+  method: GET
+  expect:
+    status: 401
+thresholds: { warn: 1500, crit: 5000 }
+intervalHint: PT15M
+timeoutMs: 10000

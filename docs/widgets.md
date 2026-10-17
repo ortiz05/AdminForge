@@ -29,6 +29,11 @@ A `map` turns raw values into status + label: `map: { "true": [ok, Enabled], "fa
   href: /p/identity.users?userType=Member  # optional drill-down
 ```
 
+Labels and hints are cut off rather than wrapped. At `span: 2` (six KPIs in a row on a laptop) a label fits about 22
+characters: "Patching overdue", not "Patching overdue (30 days)" — put the detail in the page's text or the linked
+list. The line under the number shows the status label first and then the `hint` (or the delta's period), which gets
+only what's left: keep a hint to two or three words, or leave it out on a KPI that shows a status.
+
 ## table
 
 ```yaml

@@ -88,12 +88,16 @@ Scheduled scripts aren't supported yet: the runner can't sign in as the automati
 
 **Schedules.** Each scheduler process campaigns for a Postgres advisory lock; the holder fires schedules
 (`SCHEDULER_CONCURRENCY`, default 4) and a standby takes over within seconds if it stops. Probe, report and
-content-health jobs only read, as the automation identity; playbook jobs are handed to the worker, which runs them as
-the automation identity. Probe results go to `probe_results`, each run to `schedule_runs`, and report files to
-`ADMINFORGE_ARTIFACTS_DIR` (default `~/.local/share/adminforge/artifacts`) as `<schedule>/<timestamp>.<ext>`, which
-the API serves to `Portal.Operator` by default. Write-capable schedules run only after a second person approved
-enabling them; the approval covers a fingerprint of the playbook and its children, so publishing a new version
-switches the schedule off until it is approved again.
+content-health jobs only read, as the automation identity — except the built-in synthetic transactions, which write
+only to configured test objects (ADR-015); playbook jobs are handed to the worker, which runs them as the automation
+identity. Probe results (status, metric, a message and the detail rows behind it) go to `probe_results`, each run to
+`schedule_runs`, and report files to `ADMINFORGE_ARTIFACTS_DIR` (default `~/.local/share/adminforge/artifacts`) as
+`<schedule>/<timestamp>.<ext>`, which the API serves to `Portal.Operator` by default. `GET /api/probes` gives every
+Reader each probe's latest result with its definition's `summary`, `remedy` and `link`; a probe's detail on Synthetic
+monitoring reads `GET /api/probes/:key/results`, whose detail rows only Operators receive (others get
+`detailsHidden`). Write-capable schedules run only after a second person approved enabling them; the approval covers a
+fingerprint of the playbook and its children, so publishing a new version switches the schedule off until it is
+approved again.
 
 ## Identities
 
@@ -133,8 +137,9 @@ Pages, dashboards, reports, playbooks, runbooks, schedules, probes and connectio
 (ADR-005), rendered and executed by generic code:
 
 1. Author in git with Claude Code (`CLAUDE.md`, `.claude/skills/`, `docs/extending.md`).
-2. `pnpm adminforge validate` checks schema, references, expressions, filter lint and env keys (`--scopes` also
-   compares declared permissions with the app registrations); `pnpm adminforge test` runs playbook tests.
+2. `pnpm adminforge validate` checks schema, references (including probe links to pages), expressions, query lint
+   (quoting; Resource Graph join and union limits) and env keys (`--scopes` also compares declared permissions with
+   the app registrations); `pnpm adminforge test` runs playbook tests.
 3. `pnpm adminforge publish` writes new versions to the `definitions` table (idempotent by SHA-256; it refuses a
    changed file whose `version` wasn't bumped) and sends `NOTIFY definitions_changed`.
 4. The API, worker and scheduler (`CONTENT_SOURCE=db`) pick up the change within seconds; the scheduler re-syncs the

@@ -84,6 +84,31 @@ outcome. Decisions taken in that review:
 - **Advanced filters** are structured data compiled server-side to quoted OData/KQL.
 - **Runner** requests are HMAC-signed over timestamp, method, path, and body hash.
 
+## Content and monitoring (2026-10-17)
+
+- **A failed check explains itself.** Probes carry `remedy` (what to do) and `link` (where to act); their detail on
+  Synthetic monitoring shows the rows behind the result. Those rows were collected with application permissions, so
+  they stay Operator-only and never go into the message every Reader sees (an aggregate such as the most common
+  sign-in error code is allowed). Rejected: naming the items in the message — it would hand app-permission data to
+  Readers. Every active probe must have a remedy (content test).
+- **Services get parent sections.** Exchange Online, SharePoint Online and Teams moved out of Microsoft 365 (their
+  pages keep `m365.*` ids so links, schedules and saved views keep working); Azure Virtual Desktop and Azure Billing
+  are sections of their own. A section's checks are probes with `group: <section>`.
+- **Retire, don't delete.** Function Apps and Azure Arc-enabled Kubernetes were retired (owner: the estate is AVD and
+  thousands of hybrid Arc servers): `status: retired` with a version bump keeps their history in git and the database,
+  publishing retires them, and `docs/backlog.md` says how to bring them back. The generic `functionHealth` probe and
+  `function` datasource stay.
+- **Resource Graph's join limit is enforced before Azure sees the query.** Azure allows three `join`/`union`
+  operations and one join to another table unless all are `resources` ↔ `resourcecontainers`. When rows already join
+  another table, subscription names come from a small `resourcecontainers` datasource joined with `$attach`. Trade-off:
+  that list now has a transform, so its export is no longer streamed — it is complete up to the datasource's
+  `maxItems` (50,000 / 20,000), and a scale test holds the join to the 250 ms budget at that size. Rejected: showing
+  subscription ids only.
+- **No eval in the browser, Zod included.** The CSP keeps `script-src 'self'` without `unsafe-eval`; Zod 4 probes
+  `Function('')` to decide whether to compile validators, so the web app sets `jitless` before anything validates
+  (`disableEvalProbe`). Validators run interpreted in the browser (fast enough for its payloads); the API keeps
+  compiled ones. Rejected: allowing `unsafe-eval`.
+
 ## Validation tenant specifics (not tenant identifiers)
 
 - No Microsoft 365 / Entra P1/P2 / Intune / Defender licences; see `docs/licensing-review.md`.

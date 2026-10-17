@@ -34,11 +34,27 @@ Copy what you need into your PR or your notes. Each item links to where it's exp
       matrix](11-documentation.md#what-to-update-for-each-kind-of-change))
 - [ ] `pnpm lint`, `pnpm format:check`, `pnpm typecheck`, `pnpm guard`, and the vitest projects you touched pass
 - [ ] Content: `pnpm adminforge validate` and `pnpm adminforge test` clean; versions bumped
+- [ ] Probes: `group`, `remedy`, `link`, detail rows that name the item; swept by tag
+- [ ] New queries checked live (read-only), or listed as fixture-only in `docs/licensing-review.md` and
+      `docs/backlog.md`
+- [ ] Big lists paged at the source; a `content-at-scale-*` case for any transform over them
+- [ ] Web dependency or bundling changed: `pnpm build && pnpm test:e2e:prod` (in your own checkout)
 - [ ] UI: screenshots in steel + daylight reviewed; keyboard and axe checked
 - [ ] API: contract in `@adminforge/schemas`; role checks; audit per state change; `docs/api.md`
 - [ ] Reviewer agents run where they apply (content, security, design) and findings handled
 - [ ] Nothing tenant-specific or secret anywhere — code, fixtures, docs, screenshots, messages, description
 - [ ] Risk and rollout filled in: migration, config keys, permissions, publish/restart, how to undo
+
+## A new section, or retiring one
+
+- [ ] `navigation.yaml` section (key, label, icon, order); pages and overview dashboard under `nav.section: <key>`
+- [ ] Reports in the catalogue area `<key>`; a "… reports" item when the section is mostly reports
+- [ ] Checks: probes with `group: <key>`, a "Service checks" item (`/monitoring?group=<key>`), `probeStatus` with
+      `group: <key>` on the overview
+- [ ] Screenshots of the overview and a list in steel and daylight — KPI labels fit, no alert banners
+- [ ] Retiring: `status: retired` + version bump on every related definition (schedules also `enabled: false`); no
+      active links left (`tests/content/retired-content.test.ts`); `publish --dry-run` shows `− retire`; backlog says
+      how to bring it back
 
 ## Reviewing a pull request
 
@@ -57,6 +73,7 @@ Copy what you need into your PR or your notes. Each item links to where it's exp
 **Security** (see the next list for sensitive changes)
 
 - [ ] No tenant data or secrets; inputs parsed with zod; untrusted values quoted with the helpers
+- [ ] Probe messages carry no names or rows (those are Operator-only details); links are in-app or https
 - [ ] Roles checked server-side; ids compared by oid; content `requires.portalRoles` honoured
 - [ ] Microsoft calls only through the outbound executor; writes only from declared content
 - [ ] Every state change audited; errors have message + hint and leak nothing
@@ -79,6 +96,9 @@ For changes on the [security-review list](04-security.md#what-needs-a-security-r
 - [ ] Anything that sends data out (email, Teams, files, webhooks, new hosts) uses configured destinations only and
       treats text as plain text
 - [ ] Anything that loosens a playbook (risk, confirmation, approval, scopes, connections, hosts) is called out
+- [ ] Writes on reusable ids assert the target still matches what the person saw; high-risk bulk uses a typed
+      confirmation
+- [ ] Nothing in the browser needs `eval` or inline script; the CSP is unchanged
 - [ ] `SECURITY.md` updated (section, threats row or known gap)
 - [ ] A code owner approved (or, for a code owner's own change, another engineer — see [guide
       10](10-git-and-pull-requests.md#reviewing))

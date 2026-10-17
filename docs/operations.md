@@ -340,23 +340,30 @@ Measured numbers at 100k users for 50–200 engineers (and beyond), and a sizing
 ## Upgrade
 
 ```sh
-git pull
+git pull                                                               # the reviewed commit on origin/main
 pnpm install --frozen-lockfile
-pnpm build
+pnpm build                                                             # the web app is live from here on (below)
 pnpm --filter @adminforge/api db:migrate                               # dev database
 ADMINFORGE_ENV_OVERLAY=host pnpm --filter @adminforge/api db:migrate   # services' database (as adminforge_owner)
 pnpm db:harden --dry-run                                               # should report nothing to change
-ADMINFORGE_ENV_OVERLAY=host pnpm adminforge publish                     # needs a clean checkout of origin/main
+ADMINFORGE_ENV_OVERLAY=host pnpm adminforge publish --dry-run          # what would be published or retired
+ADMINFORGE_ENV_OVERLAY=host pnpm adminforge publish                    # needs a clean checkout of origin/main
 pnpm adminforge validate --scopes     # if permissions changed: pnpm adminforge provision entra
 pnpm --filter @adminforge/runner modules:install   # only if portal/apps/runner/modules.lock.json changed
 systemctl --user restart adminforge-api adminforge-worker adminforge-scheduler adminforge-runner
+curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:3300/readyz             # 200; then the LAN address
+journalctl --user -u adminforge-api -u adminforge-scheduler --since '-5 min' | grep -i error   # nothing new
 # with the service accounts, instead of the restart (new release, config, units, restart; --rollback goes back):
 # sudo /opt/adminforge/current/portal/deploy/install-service-account.sh --release --checkout ~/Azure-Admin
 ```
 
 Migrations only add; they are safe to apply before restarting the old processes. Deploy from a checkout of a reviewed
-commit (ideally a tag, in a directory the services can't write to), not from a working copy someone is editing: the
-units run `dist/` from their `WorkingDirectory`, so anything built there goes live at the next restart.
+commit (ideally a tag, in a directory the services can't write to), not from a working copy someone is editing. The
+API serves the web app from `portal/apps/web/dist` in its checkout (`WEB_DIST_DIR`) and reads it on every request, so
+a `pnpm build` there is what browsers get **at once**; the API, worker, scheduler and runner run their `dist/` from
+their `WorkingDirectory` and pick up a build at the next restart. A tab opened on the previous build may fail to load
+a screen it hasn't opened yet (its file is gone) until it is reloaded. Don't build in the services' checkout outside a
+deploy — including to run `pnpm test:e2e:prod`.
 
 Runner workers start with `portal/apps/runner/ps/powershell.config.json` (PowerShell's own script-block and module
 logging off). If the journal grew before that, reclaim it with `journalctl --user --vacuum-size=…`. Installed

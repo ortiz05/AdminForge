@@ -25,10 +25,24 @@ Pages, dashboards and reports are YAML in `portal/content/{pages,dashboards,repo
      `adminforge validate` rejects the leading form.
    - Resource Graph returns **computed** booleans as `1`/`0` (`tostring()` gives `True`/`False`); raw `properties.*`
      booleans stay `true`/`false`. Project flags you compare or map as `iff(cond, 'true', 'false')` in the final `project` (keep the boolean for KQL `where`/`order by`), compare with `= 'true'`, show them with `kind: status` (never `kind: boolean`), and make fixtures
-     match what Resource Graph really returns. Only `leftouter`/`inner`/`innerunique` joins, and at most three `join` + `union` together; only **one** may join another table (unless every one is `resources` ↔ `resourcecontainers`), and a `union` stays in one table or that pair — `validate` refuses the rest. Rows that already join another table (`patchassessmentresources`, `recoveryservicesresources`, …) get subscription names from a small `resourcecontainers` datasource joined with `$attach` (`azure.vms-without-backup`: `subs`). Joins: use `leftouter` +
-     `where isnull(x)` instead of `leftanti`; every union branch must project the columns used after it.
-   - Results that can reach thousands of rows: a rows datasource without a transform (transforms have a 250 ms budget)
-     plus a second Resource Graph `summarize` query for KPIs; `<ds>.totalRecords` works directly as a KPI.
+     match what Resource Graph really returns.
+   - **Resource Graph joins** (Azure refuses the rest; `validate` checks it — `resourceGraphJoinProblem` in
+     `portal/packages/schemas/src/datasource.ts`): only `leftouter`/`inner`/`innerunique`; at most three `join` +
+     `union` together; only **one** join to another table, unless every one is `resources` ↔ `resourcecontainers`; a
+     `union` stays in one table or that pair. Use `leftouter` + `where isnull(x)` instead of `leftanti`; every union
+     branch projects the columns used after it. Rows that already join another table (`patchassessmentresources`,
+     `recoveryservicesresources`, `desktopvirtualizationresources`, …) get subscription names from a small
+     `resourcecontainers` datasource (with the page's subscription filter) joined natively:
+     `${ value.value ? $merge([value, { 'value': $attach(value.value, 'subscriptionId', ds.subs, { 'subscriptionName': null }) }]) : value }`
+     (`azure.vms-without-backup` `subs`, `avd.host-pools` `subscriptions`; checked at 50,000 rows in
+     `tests/content/content-at-scale-subscription-names.test.ts`). The trade-off: a collection datasource **without** a
+     transform exports streamed, page by page; with one, the export is collected up to its `maxItems`. Need more than
+     one other table? Split the query (`azure.arc-patching`: `machines` from the assessments, `unassessed` from the
+     servers; `azure.arc-defender-coverage`: the plans per subscription in their own query, passed on as a `$guid()`
+     list).
+   - Results that can reach thousands of rows: a rows datasource without a transform (transforms have a 250 ms budget;
+     the export then streams) plus a second Resource Graph `summarize` query for KPIs; `<ds>.totalRecords` works
+     directly as a KPI. Fold a long tail in KQL (top 5 regions + "Other"), not with a JSONata slice of a variable.
    - **Scale (100k users / 30k devices).** JSONata costs ~15 µs per operation and row (a filter, a `$merge`); a mapped
      row with ten fields is ~10 operations (~0.15 ms), so a per-row mapping fits only ~1,500 rows in the 250 ms budget.
      For big lists: filter and count at the source (`$filter`, `$count` + `ConsistencyLevel: eventual`, summary
@@ -106,8 +120,12 @@ Pages, dashboards and reports are YAML in `portal/content/{pages,dashboards,repo
      slice has ids (`m365.shared-mailboxes`: `accounts1`…`accounts5`, merged with `$attach`); read PIM through `graphBatch`; in directory audit events a group's
      name is only in `modifiedProperties`, so filter with `targetResources/any(t:t/id eq …)`.
    - Fixtures: long queries get hashed file names (find them with `fixtureKey()`); add POST fixtures as `variants`
-     rather than overwriting a shared file.
-   - User input: `$odata()`, `$odataSearch()`, `$kql()`, `$encode()` (validation flags user data in a `path`/`url`
+     rather than overwriting a shared file. The **first** matching variant wins: put a specific `af:<id>#<ds>` variant
+     before the generic ones (`tests/fixtures/resourceGraph/POST.json` ends with a catch-all `resourcecontainers`
+     variant), and keep fixture rows exactly what the query projects (drop a column the query no longer returns).
+   - User input: `$odata()`, `$odataSearch()`, `$kql()`, `$encode()` — a quoted literal, never a `$replace` that strips
+     characters (it changes what was searched for); search in KQL as `where name contains ${ $kql(params.q) }`
+     (validation flags user data in a `path`/`url`
      without `$encode()`, and in `$filter` / `$search` / `$orderby` — query or body — without `$odata()` /
      `$odataSearch()` / `$guid()`, even inside a quoted literal; `$orderby` takes a literal allow-list). `${ }` values in Markdown text show as plain text; links must be http(s), mailto, `/path` or
      `#`. `$eval` is unavailable; ranges are capped at 1,000,000 items and built text at 10 M characters. Advanced filters: declare
@@ -115,16 +133,14 @@ Pages, dashboards and reports are YAML in `portal/content/{pages,dashboards,repo
      (Resource Graph / Log Analytics) compile into the request; for sources with no query language (`runner`,
      `static`, `function`) use `dialect: rows` and keep the matching rows in the transform with
      `$applyAdvanced(<rows>, advanced)` (row fields use `.` paths; computed fields work too).
-   - Defender advanced hunting: `source: graph`, `method: POST`, `path: /security/runHuntingQuery`,
-     `body: { Query: … }` (a read; the KQL lint checks `body.Query` like any query), transform `value.results`,
-     `requires.scopes.graph: [ThreatHunting.Read.All]`. Start a `// af:<page id>#<datasource>` comment line so
-     fixtures can match it (`bodyIncludes`). A 403 "Account is not provisioned" (incidents, alerts, hunting) means
-     Defender XDR isn't set up for the tenant yet, not a bad request — Graph checks `$filter` first (400).
-   - Secure Score: improvement actions come from the latest `secureScores` snapshot's `controlScores` (the controls
-     that count for the tenant), joined to `secureScoreControlProfiles` for titles and maximum points — the profiles
-     also list controls for products the tenant doesn't have. A new tenant has no snapshot for about 48 hours (show
-     empty, not 0 %). `implementationCost` / `userImpact` come in mixed case or `Unknown`, and
-     `averageComparativeScores[].averageScore` is a percentage.
+   - **Out of scope: the Microsoft Defender portal** (owner decision 2026-10-17) — incidents, alerts, advanced
+     hunting, Secure Score and device vulnerabilities (`/security/…`, `source: advancedHunting`, the `defender` /
+     `defenderEndpoint` licences). That content is retired, and `tests/content/retired-content.test.ts` refuses any
+     active definition that reads it. Defender **for Cloud** through Resource Graph (`securityresources`:
+     recommendations, plans — `azure.arc-defender-coverage`, `security.cloud-recommendations`) and Entra ID Protection
+     (risky users) stay in scope.
+   - Every Resource Graph or Log Analytics query starts with a `// af:<page id>#<datasource>` line: fixtures match on
+     it (`bodyIncludes`).
    - Later datasources may reference earlier ones as `ds.<name>` (declare dependencies above the datasources that use
      them — `validate` refuses references to later ones and loops; the runtime follows the references, never key order,
      because published definitions come back from Postgres) — in a datasource's `when`, request and runner
@@ -162,10 +178,13 @@ Pages, dashboards and reports are YAML in `portal/content/{pages,dashboards,repo
 4. **Layout:** widgets exactly as in `docs/widgets.md` (kpi, table, chart, list, keyValue, statusGrid, timeline,
    markdown, actionBar, licenceGate, probeStatus). Tables: `columns` (`kind`, `filter`, `hidden`), `rowActions`,
    `bulkActions` (playbook + `forEach.inputs`), `inspect` (entity page in the drawer), `export` (reports require it).
+   `rowKey` must be unique per row: a table grouped by several columns gets a composite key in the query
+   (`extend Key = strcat(CodeSymbolic, '|', Source, '|', ActivityType)`, `avd.connections`). KPIs at `span: 2` (six a
+   row) show about 22 characters of label; a `hint` after a status pill is cut off — keep labels short
+   ("Defender gaps", not "Not fully protected by Defender for Servers") and hints short or none (`azure.arc-fleet`).
 5. **Declare** `requires.scopes` (exact Graph/ARM permissions), `requires.licences` (`signInLogs`, `conditionalAccess`,
    `pim`, `intune`, `exchange`, `defender`, …) and `nav: { section, label, icon (Phosphor kebab-case), order }`.
-   Defender: `defender` = incidents, alerts, email hunting (Office 365 E5 is enough); `defenderEndpoint` = anything on
-   devices (`Device*` / `DeviceTvm*` hunting tables, `security.microsoft.com/machines` or `/vulnerabilities` links).
+   (`defender` / `defenderEndpoint` belong to the retired Defender portal content — see Datasources.)
    **Reports** keep `nav: { section: reports, icon, … }` but aren't listed one by one in the rail (the Reports section
    says `listDefinitions: false` and shows "All reports"): they appear in the **Reports catalogue** (`/reports`)
    automatically. There the area is the report's `area:` if it sets one, else the key's first segment — always a
@@ -178,11 +197,25 @@ Pages, dashboards and reports are YAML in `portal/content/{pages,dashboards,repo
    params become the schedule form (string/number/boolean/enum params without a picker can be set per schedule; the
    others run with their default, so give them sensible defaults). Operators schedule reports from the catalogue
    without YAML (`adding-a-schedule-or-probe` explains when a content schedule is still the right choice).
+   **A new parent section** (as Exchange Online, Azure Billing and Azure Virtual Desktop were added): a section in
+   `portal/content/navigation.yaml` (bump its `version`) with a "Service checks" item `/monitoring?group=<key>`; keys
+   `<key>.*`; an Overview dashboard (`<key>.overview`, `nav.order: 5`) with a `probeStatus` widget `group: <key>` and
+   a markdown block linking its pages, reports and `/monitoring?group=<key>` (`avd.overview`, `exchange.overview`);
+   reports with `area: <key>` (they appear under `/reports?area=<key>`; Billing also links that from the rail);
+   probes with `group: <key>`; a section in `docs/operations.md` and its roles in `docs/access.md`.
+   **Retiring** a page, report, playbook, schedule or probe: `status: retired` + a version bump — never delete (runs
+   and audit keep pointing at it); remove every active link, embed, `type: playbook` step and schedule reference
+   (`tests/content/retired-content.test.ts`); a retired definition still has to validate, so fix it minimally; a
+   retired schedule also gets `enabled: false`; add a `docs/backlog.md` line saying how to bring it back. Generic
+   engine features (a probe kind, a datasource source) stay.
 6. **Fixtures:** every datasource needs a synthetic fixture so mock mode renders — naming scheme at the top of
    `portal/packages/connectors/src/fixtures.ts`; files under `tests/fixtures/<service>/…`. `Example Org`,
    `example.com`, generated GUIDs only.
 7. **Tests:** content tests run automatically; add a focused test file under `tests/content/` only for page-specific
-   logic (e.g. a transform), never append to `validate-all.test.ts`.
+   logic (e.g. a transform), never append to `validate-all.test.ts`. A transform that can see many rows also gets a
+   `tests/content/content-at-scale-<area>.test.ts` (the `scale` project, run one file at a time): one untimed warm-up
+   run, then the real budget on the largest answer the query can return (`content-at-scale-arc.test.ts`,
+   `content-at-scale-subscription-names.test.ts`).
 8. **Check:** `pnpm adminforge validate`, `pnpm --filter @adminforge/tests exec vitest run --project content`,
    `pnpm guard`, then look at it in mock mode (the one-liner in `CLAUDE.md` › Commands) → `/p/<key>`.
 
@@ -197,3 +230,6 @@ Pages, dashboards and reports are YAML in `portal/content/{pages,dashboards,repo
 | `signInActivity` etc. without `requires.licences` | Declare the licence; the renderer gates and explains                           |
 | A report without `tags` or `summary`              | The Reports catalogue filters and searches on them; add both                   |
 | A required report param without a default         | Scheduled runs can't fill pickers or dates: give it a default                  |
+| Two joins to other Resource Graph tables          | One cross-table join per query; names via a `resourcecontainers` + `$attach`   |
+| `env.X` in a widget, header or action expression  | Always empty (browser): read it in a `source: static` datasource               |
+| Deleting content you no longer need               | `status: retired` + version bump; remove active references                     |

@@ -16,15 +16,17 @@ imports a test library. Add a **new** test file for new behaviour rather than ap
 | Postgres behaviour (transactions, locks, migrations) | `tests/api/<area>-pg.test.ts` (skips without Postgres)     | vitest `api`           |
 | A React component or coded page                      | `tests/component/<area>/<Component>.test.tsx` (jsdom, axe) | vitest `component`     |
 | Content logic (a transform, a rule)                  | `tests/content/<topic>.test.ts`                            | vitest `content`       |
+| A transform at enterprise size (the 250 ms budget)   | `tests/content/content-at-scale-<topic>.test.ts`           | vitest `scale`         |
 | A playbook or runbook                                | its own `tests:` block                                     | `pnpm adminforge test` |
 | A user journey or a visible change                   | `tests/e2e/<feature>.spec.ts` + screenshots                | Playwright             |
+| What only the production bundle shows (CSP, chunks)  | `tests/e2e/prod/<topic>.spec.ts`                           | `pnpm test:e2e:prod`   |
 | A PowerShell script or the runner module             | `tests/runner/pester/` (stub cmdlets)                      | Pester                 |
 | Behaviour only a real tenant can show                | `tests/live/` (never in CI)                                | Playwright (live)      |
 
 ## Commands
 
 ```bash
-pnpm test                                                        # unit, component, api, content, guards
+pnpm test                                                        # unit, component, api, content, guards; then scale
 pnpm --filter @adminforge/tests exec vitest run --project api api/schedules   # one project, a path filter
 pnpm --filter @adminforge/tests exec vitest --project component  # watch mode
 pnpm guard                                                       # guards (also the pre-commit hook)
@@ -63,6 +65,26 @@ runner or a script, run it yourself and say so in the PR.
 - **Flaky is broken:** CI retries a failed e2e test once; a test that needs that retry to pass is flaky. Fix it, or
   quarantine it with a backlog entry, the same day.
 
+## Rules the suite enforces for everyone
+
+Some tests are there so the next change can't quietly break a convention. Know them; extend them when you add to what
+they cover:
+
+- `tests/content/probe-remedies.test.ts` — every active probe has a `remedy`; `tests/content/probes-schedules.test.ts`
+  — every probe is swept, configuration checks are exactly `CONFIG_CHECKS` (health-type KQL probes are in
+  `OPERATIONAL`).
+- `tests/content/retired-content.test.ts` — nothing active links to, embeds, runs or schedules a retired definition.
+- `tests/unit/schemas/resource-graph-joins.test.ts` — the Resource Graph join/union lint `validate` applies.
+- `tests/content/content-at-scale-*.test.ts` — each big-list transform at its largest size under the real budget.
+  They run in the `scale` project, after the others and one file at a time; a busy machine (another suite, background
+  agents) can push one over — rerun that file alone before suspecting a regression.
+- `tests/e2e/prod/csp-no-eval.spec.ts` — the production build under the API's `script-src 'self'`: no violation.
+
+A new guard earns its place only if it fails without the fix: prove that once (for the production bundle, build the
+old code into a scratch `--outDir` and serve it with `vite preview --outDir … --port 4174`, which the prod config
+reuses), and give a browser check a **control** that shows the condition is really in force — `page.evaluate` runs
+through DevTools, which ignores the page's CSP, so a control evaluates an inline `<script>`, not `Function('')`.
+
 ## Fixtures
 
 - Synthetic only: `Example Org`, `example.com`, generated GUIDs. The guard tests scan fixtures like everything else.
@@ -82,8 +104,10 @@ runner or a script, run it yourself and say so in the PR.
 - UI changes add or update screenshots in **steel and daylight**. Update only the baselines your change intentionally
   alters: `pnpm --filter @adminforge/tests exec playwright test -c e2e/playwright.config.ts <spec> --update-snapshots`.
 - **Look at every new or changed image** before committing it; a baseline is a reviewed artefact, not a byproduct.
-- `pnpm build && pnpm test:e2e:prod` smoke-tests the production bundle. Don't run `pnpm build` on a machine whose
-  services run from that checkout (it rewrites their `dist/`).
+  `--update-snapshots` rewrites only images that differ by more than the 1 % tolerance, so after changing a new spec's
+  fixture, delete its images and run it twice (the first run writes, the second must pass).
+- `pnpm build && pnpm test:e2e:prod` smoke-tests the production bundle. Don't run `pnpm build` in the checkout the
+  services run from: the API serves that `dist/` to everyone at once.
 
 ## Live validation
 
@@ -98,6 +122,7 @@ results as counts and statuses.
 - [ ] New behaviour has new tests; refusals and roles covered; regression test for a bug fix
 - [ ] Content: `pnpm adminforge validate` + `pnpm adminforge test` clean
 - [ ] UI: component test (axe) and e2e with screenshots in both themes, reviewed
+- [ ] Big lists: a `content-at-scale-*` case; bundling or a web dependency: `pnpm test:e2e:prod`
 - [ ] Runner or scripts: Pester run locally
 - [ ] No fixed-date-versus-real-clock mixes, no network, no sleeps
 

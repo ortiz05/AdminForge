@@ -65,6 +65,21 @@ you apply every day and when to ask for a review. The full model is [`SECURITY.m
     matters for an investigation.
 15. Errors never contain tokens, stack traces, header names, raw upstream bodies or another person's data.
 
+**Monitoring, the browser and bulk changes**
+
+16. Probe detail rows ("What it found"), report files and scheduled run outputs were collected with the automation
+    identity's application permissions, so only Operators see them by default. A probe's **message** reaches every
+    Reader: keep names, ids and rows out of it (an aggregate such as the most common error code is fine) and put them
+    in the detail rows. A probe's `link` is an in-app path or an https URL (validation refuses `//host`); shipped
+    probes link only to AdminForge or Microsoft hosts.
+17. Browser code runs under `script-src 'self'` with no `unsafe-eval`: no `eval`, `new Function`, inline scripts or
+    libraries that need them ([web guide](07-web-guide.md#under-the-security-policy)). Don't loosen the policy to make
+    a library work — pick another library.
+18. A playbook that acts on a target whose id can be reused or change hands (an AVD session number, a list minutes
+    old) passes what the person saw and `assert`s it still holds before writing. High-risk changes use a typed
+    confirmation (in bulk: the number of items), and a bulk run's audit event keeps the inputs the items share — the
+    reason — redacted like a single run's.
+
 ## What needs a security review
 
 Ask for one — run the `security-reviewer` agent **and** get a code owner's review — when the change touches:
@@ -76,6 +91,7 @@ Ask for one — run the `security-reviewer` agent **and** get a code owner's rev
   `connections/`, `scripts/`, `feeds/` and the news host list;
 - anything that adds a permission, a configuration key holding a secret, a new outbound host, a new way to send
   data out (email, webhook, file), or a new role check;
+- a new web dependency, or anything that changes the security headers or what a probe message or link may contain;
 - `.github/`, `.githooks/`, `tooling/` and `.claude/` (they decide what runs on every change).
 
 For content changes, also run the `content-reviewer` agent. `.github/CODEOWNERS` lists these paths, so GitHub

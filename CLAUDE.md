@@ -56,6 +56,15 @@ extension point — and the reviewer agents in `.claude/agents/`.
     the security model these rules protect.
 11. **Every change ships complete:** content/code + tests + fixtures + docs. If you changed how something is extended,
     update the matching skill in `.claude/skills/` and `docs/extending.md`.
+12. **Browser code runs under `script-src 'self'`:** no `eval`, `new Function`, inline scripts or libraries that need
+    them (Zod's eval probe is switched off first, `disableEvalProbe`). `pnpm test:e2e:prod` fails on any CSP violation.
+13. **Checks explain themselves.** Every probe has a `group` (its service's nav section, or `platform`), a `remedy`
+    (what to do) and, where one helps, a `link` (where to act); its detail rows name the item and the value that broke
+    the rule. Those rows are collected with application permissions — Operator-only, never copied into messages.
+14. **Queries Microsoft accepts.** Resource Graph: at most three `join`/`union` per query and one join to another table
+    unless all are `resources` ↔ `resourcecontainers` (`validate` refuses the rest). Run every new query once live,
+    read-only — fixtures can't catch what Microsoft rejects — and record what you couldn't check in
+    `docs/licensing-review.md` / `docs/backlog.md`. Retire content (`status: retired` + version bump), never delete it.
 
 ## Commands
 
@@ -75,6 +84,7 @@ extension point — and the reviewer agents in `.claude/agents/`.
 | Lint / types                   | `pnpm lint` · `pnpm typecheck`                                                                                                           |
 | Format                         | `pnpm format` (write) · `pnpm format:check` (CI)                                                                                         |
 | Publish content to the DB      | `pnpm adminforge publish [--dry-run]` (runs validate + tests; needs committed content on `origin/main`, else `--allow-unreviewed`)       |
+| Deploy to this host            | Code owners only, when asked: `docs/operations.md` › Upgrade (install, build, migrate dev + host, publish, restart, `/readyz`)           |
 | Live smoke (validation tenant) | `pnpm exec tsx tests/live/scripts/verify-api-live.ts` · full sweep: `pnpm test:live` (see `tests/live/README.md`)                        |
 
 Mock mode ignores the env file (`ADMINFORGE_ENV_FILE=/dev/null`), so it runs on in-memory stores and never touches a
@@ -87,16 +97,23 @@ only).
 Postgres for dev runs in Docker on `127.0.0.1:55432` (`pnpm db:up`). System Chrome is used by Playwright (no browser
 download).
 
+On this host the API serves `portal/apps/web/dist` straight from the checkout (`WEB_DIST_DIR`): a `pnpm build` here
+changes what production serves at once (server code at the next restart). Build only as part of a deploy.
+
 ## Commits and pull requests
 
 Conventional Commits with AdminForge's types and scopes — `<type>(<scope>): <summary>`, e.g.
 `fix(scheduler): skip deleted portal schedules` (header ≤ 100 characters, no full stop; body says why). The
 `commit-msg` hook and CI (pull request title) check it with `tooling/git/commit-message.mjs`; the full rules, branch
-naming and review process are in `docs/onboarding/10-git-and-pull-requests.md`. One logical change per commit.
+naming and review process are in `docs/onboarding/10-git-and-pull-requests.md`. One logical change per commit — a
+session that spans several features commits each on its own (shared files such as `CHANGELOG.md` split by hunk).
 
 ## Before you say "done"
 
 - `pnpm adminforge validate` and `pnpm adminforge test` are clean for content changes.
 - The focused vitest project(s) you touched pass; `pnpm guard` passes; `pnpm lint` is clean for your files.
-- UI changes: screenshot them (Playwright, steel + daylight) and look at the images.
-- Report licence/permission needs you discovered.
+- UI changes: screenshot them (Playwright, steel + daylight) and look at the images. Web dependencies or bundling:
+  `pnpm build && pnpm test:e2e:prod` (on this host, only as part of a deploy — see above).
+- The reviewer agents that apply (`content-reviewer`, `security-reviewer`, `design-reviewer`) ran and their findings
+  are fixed or answered.
+- Report licence/permission needs you discovered, and what you could only check against fixtures.

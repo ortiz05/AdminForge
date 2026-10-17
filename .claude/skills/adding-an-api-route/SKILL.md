@@ -32,3 +32,6 @@ need **no** new route — check that first.
 8. Tests: `tests/api/<area>.test.ts` with `app.inject` (memory stores) and DB-backed tests that skip when Postgres is
    down; unit tests in `tests/unit/api/`.
 9. Check: `pnpm --filter @adminforge/api typecheck`, api + unit projects, `pnpm guard`, `pnpm lint`.
+10. Never loosen the Content-Security-Policy (`helmet` in `src/app.ts`): `script-src` stays `'self'` — no
+    `'unsafe-eval'` or `'unsafe-inline'` for scripts (styles keep `'unsafe-inline'`, an accepted risk in
+    `docs/decisions.md`). If a web dependency needs eval, fix the dependency (adding-a-widget, step 9).

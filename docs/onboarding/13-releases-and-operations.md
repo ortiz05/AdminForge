@@ -17,6 +17,12 @@ by a **code owner** (or, for configuration, whoever administers the host):
 | Runner modules             | `pnpm --filter @adminforge/runner modules:install` when `portal/apps/runner/modules.lock.json` changed                                                                           |
 | Configuration keys         | Set in the host's env file outside the repository (documented in `config/example.env`), then restart the affected units                                                          |
 
+A full deploy of a reviewed commit, in order ([operations → Upgrade](../operations.md#upgrade) has the commands):
+push to `origin/main` → `git pull` on the host → `pnpm install --frozen-lockfile` → `pnpm build` → migrate the dev
+**and** the services' database (`ADMINFORGE_ENV_OVERLAY=host`) → `publish --dry-run`, read it, then `publish` →
+restart the four units → `/readyz` 200 on the loopback and LAN addresses, no new errors in the journal. Retired
+definitions show as `− retire` in the dry run; check that's what the change meant.
+
 The CLI talks to your **dev** environment unless told otherwise: anything aimed at the host's database needs
 `ADMINFORGE_ENV_OVERLAY=host`. `publish` re-runs `validate` and the playbook tests and refuses content that isn't
 committed and on `origin/main` as last fetched — it never fetches for you. `--allow-unreviewed` exists for emergencies
@@ -40,7 +46,8 @@ In the PR's **Risk and rollout** section (and the commit body):
   `## <version> — <date>` (Semantic Versioning: minor for features, patch for fixes, major for breaking changes) and
   tagging that commit `v<version>`. (Releases so far were recorded only in the changelog; tag from the next release on.)
 - Deploy from a reviewed commit — ideally a tag — in a checkout the services can't write to, never from a working copy
-  someone is editing: the units run the `dist/` they find in their working directory.
+  someone is editing: the API serves the web app from that checkout's `portal/apps/web/dist` on every request (a build
+  is live at once), and the units run the `dist/` they find in their working directory (live at the next restart).
 - **Rolling back code:** check out the previous release, `pnpm install --frozen-lockfile`, build, reinstall runner
   modules if the lock file differs, restart. Migrations only add, so older code runs on the newer schema.
 - **Rolling back content:** published versions only move forward — an older version can't be republished. Revert the
@@ -58,8 +65,9 @@ In the PR's **Risk and rollout** section (and the commit body):
 ## What contributors never do
 
 - Run `pnpm dev`, tests or builds against the **host services' database** or env overlay.
-- Run `pnpm build` (or the root `pnpm typecheck`) inside the checkout the services run from — it replaces their
-  `dist/` and goes live at the next restart.
+- Run `pnpm build` (or the root `pnpm typecheck`) inside the checkout the services run from — the web app it builds
+  is served to everyone immediately, and the server code goes live at the next restart. That includes building to
+  run `pnpm test:e2e:prod`: do that in your own checkout.
 - Restart, stop or reconfigure the host's units, edit its env files or Caddyfile, prune its Docker images, or touch its
   backups — unless a code owner asked for that specific action.
 - Run `pnpm adminforge provision entra` or `publish` against a shared environment on your own initiative.

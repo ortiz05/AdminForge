@@ -28,6 +28,12 @@ check whether a config option on an existing widget is enough** — prefer that.
 7. Tests: `tests/component/widgets/<type>.test.tsx` (render, keyboard, `axe` = 0 violations); add the type to the list
    in `tests/component/widgets/registry.test.tsx`; a content example in `tests/fixtures` if needed.
 8. Check: widgets/web typecheck, component tests, `pnpm guard` (tokens), and screenshot it in steel and daylight.
+9. **No eval in the browser.** The API serves the app with `script-src 'self'` (`portal/apps/api/src/app.ts`): no
+   `eval`, `new Function`, inline `<script>` or a library that needs them. A library that only _probes_ for eval
+   (Zod 4 tries `Function('')`) is configured not to before anything uses it (`disableEvalProbe`,
+   `portal/apps/web/src/lib/no-eval.ts`, imported first by `main.tsx`). `tests/e2e/prod/csp-no-eval.spec.ts` loads
+   the production build under that policy and fails on any violation: `pnpm build && pnpm test:e2e:prod` after adding
+   a dependency.
 
 ## Common mistakes
 
@@ -36,3 +42,4 @@ check whether a config option on an existing widget is enough** — prefer that.
 | Page-specific widget (`usersHeatmap`) | Generic widget + config                                  |
 | Raw colours / arbitrary Tailwind      | Tokens only; add tokens in design-tokens if truly needed |
 | Using `armed`/ember for emphasis      | Ember means write mode only                              |
+| A dependency that uses or probes eval | Refused by the CSP: pick another, or turn the probe off  |

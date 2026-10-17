@@ -220,6 +220,11 @@ Found by the organization and security evaluation; the fixed findings are in CHA
 
 ## Platform
 
+- [ ] Reload after a deploy: the API serves the new build at once and the old lazy chunks are gone, so a tab opened
+      before the deploy can fail to open a screen until it's reloaded. Catch a failed dynamic import (or compare a
+      build id from `/api/me`) and offer a reload (found 2026-10-17).
+- [ ] Initial JS is at 244.6 of 250 KB gzip (98 %, `pnpm check:bundle`, 2026-10-17): the next web dependency will
+      break the budget. Move something out of the entry chunk (e.g. route-level splitting of the ops pages) first.
 - [x] History retention (runs, schedule history, probe results, report files), audited; `adminforge audit verify`;
       hourly `probes.audit-chain`; worker/scheduler heartbeats in `/readyz`; per-call telemetry logs; daily backups.
 - [ ] OpenTelemetry/metrics export (`/metrics` on loopback or OTLP) and a portal-health dashboard from internal metrics

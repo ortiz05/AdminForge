@@ -166,6 +166,10 @@ the reason.
   Read sign-in) and cached for 10 minutes; when it can't be read, writes to groups' members and owners, apps, service
   principals, app-role assignments and authentication methods are refused (`protected_objects_unavailable`).
   PowerShell inputs are matched by object id only (names and UPNs aren't). Playbooks keep friendly early checks.
+- Playbooks that act on a target whose id can be reused or change hands (Azure Virtual Desktop session numbers, a list
+  that may be minutes old) carry what the person saw and assert it still holds before writing — so a stale screen
+  can't sign out or message the wrong person — and high-risk ones ask for a typed confirmation (in bulk, the number of
+  items).
 - Group and app-owner playbooks refuse adding yourself; adding to a role-assignable group (which carries directory
   roles) and making someone an app owner need a second person's approval.
 - **Emergency stop** (Admin → Settings): a `Portal.Admin` or `Playbook.Approver` can pause all changes or all
@@ -236,7 +240,11 @@ the reason.
   over https on the default port, without credentials.
 - Report files, probe result rows and the outputs of scheduled runs were collected with application permissions, so
   by default only `Portal.Operator` can see them (a schedule's `requires.portalRoles` overrides this), plus the
-  playbook's own roles for run outputs.
+  playbook's own roles for run outputs. A probe's result **message** is shown to every Reader, so checks never copy
+  names, ids or rows into it (an aggregate such as the most common sign-in error code and Microsoft's reason text is
+  allowed); others see the probe's `remedy` and `link`, whose in-app pages read with their own permissions. A probe
+  `link` is an in-app path or an https URL — validation refuses protocol-relative (`//host`) and backslash paths,
+  checks that a `/p/` target exists, and the web app re-checks the shape before rendering it.
 - **Report schedules created in the portal** (Reports → Schedule) run without git review, so the server keeps them
   narrow:
   - only a `Portal.Operator` who also holds every role the report requires can create one (the refusal doesn't name
@@ -348,17 +356,21 @@ failures — anyone can send a browser to `/auth/callback` with an error) are re
 address (IPv6: per /64), then a `suppressed` count. `content.published` records the git
 commit and whether the content was reviewed (committed and on `origin/main`); `--allow-unreviewed` is recorded with
 its reasons. The Audit page,
-`adminforge audit verify` and the hourly `probes.audit-chain` check verify the chain. History (runs, schedule runs,
+`adminforge audit verify` and the hourly `probes.audit-chain` check verify the chain. A bulk run's `run.created` records
+the inputs every item shares (`inputsTemplate` — the reason, a message), redacted like a single run's, since the
+per-item runs don't record inputs. History (runs, schedule runs,
 probe results, report files) is purged after its retention period; the audit log is never purged.
 
 ## Host and network
 
 - Caddy terminates TLS on `:8443` with its own CA (`tls internal`); its admin API is off. The API listens on
   `127.0.0.1` and trusts `X-Forwarded-*` only from loopback. Security headers: CSP (`script-src 'self'`,
-  `frame-ancestors 'none'`), HSTS, `nosniff`, `no-referrer`, a `Permissions-Policy` that turns off camera,
-  microphone, geolocation, payment and USB, `no-store` on API and auth responses; rate limits on every route and
-  tighter ones on sign-in and arming (sign-in and anything without a valid session count per client address, never
-  per cookie; `TRUST_PROXY=true`, which would let anyone forge the address, is refused in production). Production source maps are kept out of what's served
+  `frame-ancestors 'none'`; nothing in the web bundle may need `eval` — Zod's eval probe is switched off before
+  anything validates, and `tests/e2e/prod/csp-no-eval.spec.ts` fails the production build on any violation), HSTS,
+  `nosniff`, `no-referrer`, a `Permissions-Policy` that turns off camera, microphone, geolocation, payment and USB,
+  `no-store` on API and auth responses; rate limits on every route and tighter ones on sign-in and arming (sign-in and
+  anything without a valid session count per client address, never per cookie; `TRUST_PROXY=true`, which would let
+  anyone forge the address, is refused in production). Production source maps are kept out of what's served
   (`portal/apps/web/sourcemaps/`), and the example Caddyfile drops the `Via` header.
 - Request logs carry the signed-in user's object id, never query values on `/api` (parameter names only), cookies,
   auth codes or the CSRF header. The public `/readyz` answer never names configuration keys or commands.

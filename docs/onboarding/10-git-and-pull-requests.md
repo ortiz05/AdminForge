@@ -88,6 +88,13 @@ A new area needs a new scope: add it to `SCOPES` in `tooling/git/commit-message.
 
 - One logical change per commit, and each commit should build and pass its tests — reviewers and `git bisect` rely on
   it.
+- **A session that built several features commits each on its own**, in an order where each stands (the schema field
+  before the content that uses it). Stage whole files per feature; split shared files — `CHANGELOG.md`, docs, skills,
+  a fixture file several features added to — by hunk (`git add -p`; Claude Code can't use interactive git, so it
+  builds each intermediate version of the file and stages it with `git hash-object -w` +
+  `git update-index --cacheinfo`; JSON fixtures are easiest split by variant). The last commit must leave `git status`
+  clean, so what you push is exactly the tree you tested. Hunks that can't be separated go with the earlier commit,
+  said in its body.
 - Don't mix formatting or renames with behaviour changes; commit them separately (`chore: …`).
 - Generated files are committed only when the repo already does (lockfile, screenshot baselines, migrations). Never
   commit build output, source maps, caches, `test-results/` or anything from `~/.config/adminforge`.

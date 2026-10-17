@@ -38,8 +38,15 @@ schedule may not use it (`adminforge validate` refuses it).
    `fileRoundTrip`, `onlineMeeting`).
    - Tenant-wide configuration questions → `kql` with `source: resourceGraph` (all subscriptions, one query),
      `logAnalytics` (`workspace` defaults to `${env.AF_LOG_ANALYTICS_WORKSPACE_ID}`; a workload's own workspace is an
-     env reference with that fallback, `"${ env.AF_AVD_LOG_ANALYTICS_WORKSPACE_ID ? … : env.AF_LOG_ANALYTICS_WORKSPACE_ID }"`), or `advancedHunting`
-     (Defender licence). `metric: rowCount` or `{ column, aggregate }`; `detailsLimit` keeps the offending rows.
+     env reference with that fallback,
+     `"${ env.AF_AVD_LOG_ANALYTICS_WORKSPACE_ID ? env.AF_AVD_LOG_ANALYTICS_WORKSPACE_ID : env.AF_LOG_ANALYTICS_WORKSPACE_ID }"`
+     — `probes.avd-connection-errors`). `metric: rowCount` or `{ column, aggregate }`; `detailsLimit` keeps the
+     offending rows. `advancedHunting` (the Defender portal) is out of scope since 2026-10-17: the retired-content
+     test refuses it. Resource Graph join limits apply here too (adding-a-page-or-report › Resource Graph joins).
+   - Every KQL probe's id goes in `CONFIG_CHECKS` in `tests/content/probes-schedules.test.ts` (the exact set). A
+     configuration check is tagged `config-check` (the 6-hourly sweep); one that watches service health (hosts down,
+     capacity, failures) is tagged `sweep-15m` or `sweep-1h` instead and listed in `OPERATIONAL` with that tag
+     (`probes.avd-session-hosts-unavailable`).
    - Put `// af:<probe id>` as the first KQL line (fixtures match on it).
    - A workload's own sign-in failure rate → `signInHealth` with `resourceId` (Exchange Online
      `00000002-0000-0ff1-ce00-000000000000`, SharePoint Online `00000003-0000-0ff1-ce00-000000000000`, Teams Services
@@ -56,11 +63,16 @@ schedule may not use it (`adminforge validate` refuses it).
    Synthetic monitoring groups tiles by it, each section's "Service checks" item (`/monitoring?group=<key>`) and a
    dashboard's `probeStatus` with `group:` show it; without it the probe lands under "Other checks".
    **Say what to do** when it warns or fails: `remedy:` (plain sentences, ≤ 1000 characters: the likely causes, the
-   first step, and what "not configured" / "forbidden" mean for this check) and `link: { label, href }` — an AdminForge
-   page that lists the items (`/p/<key>?<filter>=…`, validated to exist) or a Microsoft admin centre (https). The probe's
-   detail on Synthetic monitoring shows them with the rows behind the result (`fields` / `detailsLimit`: keep the
-   columns that say _which_ item and _why_ — a name, the date or value that broke the rule), so engineers don't go
-   looking. Every active probe needs a remedy (`tests/content/probe-remedies.test.ts`).
+   first step, and what "not configured" / "forbidden" mean for this check — only what the check really looks at:
+   an incidents check that filters `classification eq 'incident'` doesn't cover advisories) and
+   `link: { label, href }` — an AdminForge page that lists the items with the same filter (`/p/<key>?<param>=…`; the
+   key must exist and the params match the page's own, e.g. `&includeDrained=false`) or a Microsoft admin centre
+   (`https://`; never `//host` or a backslash). The probe's detail on Synthetic monitoring shows the remedy, the link
+   and the rows behind the result as **What it found** — so the rows (`fields` / `detailsLimit` / the KQL `project`)
+   start with the item's name and the value that broke the rule (`displayName, expires, daysRemaining`). Those rows
+   were collected with application permissions, so only Operators see them: never put item names into the message
+   (Readers see messages); an aggregate is fine (`signInHealth` names the most common error code). Every active probe
+   needs a remedy (`tests/content/probe-remedies.test.ts`; plain text over 60 characters; external links only to Microsoft).
 5. **Thresholds** `{ warn, crit }` in the direction `PROBE_METRICS` defines for the kind; `intervalHint`, `timeoutMs`.
 6. **Schedules:** when it runs as `every:` in plain English — `every weekday at 07:00`, `every Monday at 08:30`,
    `mon, wed and fri at 18:00`, `first Monday of the month at 08:30`, `last Friday of the month at 17:00`, `last day
@@ -104,24 +116,25 @@ minutes` — or `cron` (5/6 fields; one of the two). Validation compiles `every`
 
 ## Common mistakes
 
-| Mistake                                                                                  | Fix                                                                                                                                                                    |
-| ---------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| One schedule per probe                                                                   | Tag the probe; reuse the tag sweep                                                                                                                                     |
-| Thousands of Graph calls for a tenant-wide check                                         | KQL (Resource Graph / Log Analytics)                                                                                                                                   |
-| Delegated scopes for a schedule                                                          | Schedules use application permissions on the automation identity                                                                                                       |
-| Subscription/workspace ids in YAML                                                       | `${env.AF_SUBSCRIPTION_ID}`, `${env.AF_LOG_ANALYTICS_WORKSPACE_ID}`                                                                                                    |
-| Write job without approval                                                               | `approvedBy` + two-person approval to enable                                                                                                                           |
-| Treating `job.approvedBy` as the approval                                                | It's a review note; only the in-app approval counts, and it covers the playbook's current version (a new playbook version switches the schedule off until re-approved) |
-| Report or probe rows visible to every Reader                                             | Scheduled data is collected with application permissions: Operators by default; widen deliberately with `requires.portalRoles`                                         |
-| Declaring an app-only **write** permission                                               | Provisioning skips it unless `AF_AUTOMATION_ALLOW_WRITE_PERMISSIONS=true` — say so in the PR                                                                           |
-| Declaring a **sensitive read** (mail, files, sites, chats, calendars, BitLocker keys, …) | Provisioning skips it unless `AF_AUTOMATION_ALLOW_SENSITIVE_READS=true` — prefer a narrower permission                                                                 |
-| Alerting on how many items a Graph list holds (too many or too few) with a latency probe | `kind: graphCount` — `items: ${ value[...] }` selects what to count, `worse: higher                                                                                    | lower`, thresholds on the count, `fields`for the detail rows (see`probes.global-admins-too-few`) |
-| An HTTP probe that POSTs                                                                 | Set `allowPost: true`; HTTP probes never follow redirects or reach private addresses other than the portal                                                             |
-| Literal email addresses in `delivery.to`                                                 | Recipients are configuration: `${ env.AF_REPORT_RECIPIENTS }` (keys ending RECIPIENTS/EMAIL/ALERTS)                                                                    |
-| Content schedule id `portal.…`                                                           | Reserved for report schedules created in the portal; use `<section>.<name>` (e.g. `reports.weekly-…`)                                                                  |
-| A probe without `remedy`, or details rows that don't say which item                      | `remedy:` + `link:`; `fields` with a name and the value that broke the rule (the detail shows them as "What it found" to Operators)                                    |
-| A probe without `group`                                                                  | `group: <nav section key>` (or `platform`) — otherwise it shows under "Other checks", not on its service's page                                                        |
-| An anonymous HTTP probe expecting one exact status                                       | Tenants differ (SharePoint answers 401 or 403): accept every status that means "up", e.g. `status: [401, 403]`; check with curl first                                  |
-| Filtering service health on a name from a fixture                                        | Names change ("OneDrive for Business" is now "Microsoft OneDrive"): read `healthOverviews` live and filter on both names                                               |
-| A "degraded services" count                                                              | Advisories keep several services at `serviceDegradation` most days; alert on `serviceInterruption` or open incidents (`classification eq 'incident'`)                  |
-| New `config-check` KQL probe not in the shipped set                                      | Add its id to `CONFIG_CHECKS` in `tests/content/probes-schedules.test.ts` (exact set); a service-health KQL probe also goes in `OPERATIONAL` (faster sweep)            |
+| Mistake                                                                                  | Fix                                                                                                                                                                                         |
+| ---------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| One schedule per probe                                                                   | Tag the probe; reuse the tag sweep                                                                                                                                                          |
+| Thousands of Graph calls for a tenant-wide check                                         | KQL (Resource Graph / Log Analytics)                                                                                                                                                        |
+| Delegated scopes for a schedule                                                          | Schedules use application permissions on the automation identity                                                                                                                            |
+| Subscription/workspace ids in YAML                                                       | `${env.AF_SUBSCRIPTION_ID}`, `${env.AF_LOG_ANALYTICS_WORKSPACE_ID}`                                                                                                                         |
+| Write job without approval                                                               | `approvedBy` + two-person approval to enable                                                                                                                                                |
+| Treating `job.approvedBy` as the approval                                                | It's a review note; only the in-app approval counts, and it covers the playbook's current version (a new playbook version switches the schedule off until re-approved)                      |
+| Report or probe rows visible to every Reader                                             | Scheduled data is collected with application permissions: Operators by default; widen deliberately with `requires.portalRoles`                                                              |
+| Declaring an app-only **write** permission                                               | Provisioning skips it unless `AF_AUTOMATION_ALLOW_WRITE_PERMISSIONS=true` — say so in the PR                                                                                                |
+| Declaring a **sensitive read** (mail, files, sites, chats, calendars, BitLocker keys, …) | Provisioning skips it unless `AF_AUTOMATION_ALLOW_SENSITIVE_READS=true` — prefer a narrower permission                                                                                      |
+| Alerting on how many items a Graph list holds (too many or too few) with a latency probe | `kind: graphCount` — `items: ${ value[...] }` selects what to count, `worse: higher` or `lower`, thresholds on the count, `fields` for the detail rows (see `probes.global-admins-too-few`) |
+| An HTTP probe that POSTs                                                                 | Set `allowPost: true`; HTTP probes never follow redirects or reach private addresses other than the portal                                                                                  |
+| Literal email addresses in `delivery.to`                                                 | Recipients are configuration: `${ env.AF_REPORT_RECIPIENTS }` (keys ending RECIPIENTS/EMAIL/ALERTS)                                                                                         |
+| Content schedule id `portal.…`                                                           | Reserved for report schedules created in the portal; use `<section>.<name>` (e.g. `reports.weekly-…`)                                                                                       |
+| A probe without `remedy`, or details rows that don't say which item                      | `remedy:` + `link:`; `fields` with a name and the value that broke the rule (the detail shows them as "What it found" to Operators)                                                         |
+| A probe without `group`                                                                  | `group: <nav section key>` (or `platform`) — otherwise it shows under "Other checks", not on its service's page                                                                             |
+| An anonymous HTTP probe expecting one exact status                                       | Tenants differ (SharePoint answers 401 or 403): accept every status that means "up", e.g. `status: [401, 403]`; check with curl first                                                       |
+| Filtering service health on a name from a fixture                                        | Names change ("OneDrive for Business" is now "Microsoft OneDrive"): read `healthOverviews` live and filter on both names                                                                    |
+| A "degraded services" count                                                              | Advisories keep several services at `serviceDegradation` most days; alert on `serviceInterruption` or open incidents (`classification eq 'incident'`)                                       |
+| New KQL probe not in the shipped set                                                     | Add its id to `CONFIG_CHECKS` in `tests/content/probes-schedules.test.ts` (exact set); a service-health KQL probe also goes in `OPERATIONAL` with its sweep tag                             |
+| Item names in a probe's message                                                          | Readers see messages; names go in the details rows, which only Operators see                                                                                                                |

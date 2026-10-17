@@ -309,6 +309,13 @@ Closes the gaps found by comparing the build with the original plan (see the pla
 
 ### Changed
 
+- **Docs and skills for extending consistently:** CLAUDE.md non-negotiables 12–14 (no eval in the browser; checks
+  explain themselves; Resource Graph limits, live checks, retire don't delete) and the deploy runbook (a build in the
+  services' checkout is served at once); `docs/extending.md` covers new parent sections and retiring content; the
+  onboarding guides cover the security policy, scale and production-build tests, committing per feature and bigger
+  Claude Code sessions with parallel agents; the skills (pages, probes, playbooks, widgets, API routes, tenant
+  validation) and the content, security and design reviewers check the new rules; SECURITY.md, widgets, architecture
+  and decisions are current.
 - `azure.arc-servers` 2.0.0 pages in Resource Graph with no transform and new filters (not connected, agent, failed
   extensions, ESU, query builder); `azure.arc-disconnected` 1.1.0 counts in Resource Graph;
   `probes.arc-machines-disconnected` 1.1.0 gives Disconnected servers an hour's grace, shows hours offline and days to

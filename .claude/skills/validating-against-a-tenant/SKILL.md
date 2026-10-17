@@ -59,17 +59,39 @@ permission on the provisioner (table in `tests/live/README.md` → Licensed test
 - Writes: **only** against `AF-Test-*` users/groups/resources that provisioning created. Dry run first, then run,
   then run the compensating playbook; check `/audit` (chain verified).
 - Read-only checks with the automation identity: print counts/statuses only — never ids, names, or tokens.
+- Every page's datasources at once, as the validation user and read-only:
+  `pnpm exec tsx tests/live/scripts/check-page-datasources.ts <key>…` (`ok` or the error code per datasource).
+- Screenshots of a live session (`pnpm dev`, mock or tenant): the server's saved preferences override the
+  `adminforge.prefs` localStorage key once you sign in, so switch the theme through the command palette (Ctrl+K →
+  "Steel" / "Daylight") before each shot. The mocked-API Playwright specs (`setPrefs`) aren't affected.
+
+## Azure content that hasn't met Azure yet
+
+Azure Billing, the Arc fleet (servers, extensions, patching, Defender coverage) and Azure Virtual Desktop were built
+on 2026-10-17 against fixtures only — the validation tenant had no subscription. When one exists, before trusting them:
+
+1. The automation identity needs Reader (and Cost Management Reader) at the management group, not only on
+   `AF_SUBSCRIPTION_ID`; engineers need the roles in `docs/access.md`.
+2. Run every Resource Graph query once in Resource Graph Explorer (each starts `// af:<key>#<ds>`; read-only), or all
+   of a page's datasources with `check-page-datasources.ts avd.overview azure.arc-fleet billing.overview …`; then each
+   KQL probe with `run-schedule-once.ts --probe <id>`.
+3. Check the specific guesses listed under "Validate live" in `docs/backlog.md` (Azure Billing, Hybrid Azure Arc
+   servers, Azure Virtual Desktop): property names, `arg_max` with several columns, long `in~` lists, Resource Graph
+   freshness for AVD session host status.
+4. AVD writes (drain mode, send a message, sign out) only on a host pool and session built for testing, dry run
+   first; the sign-out's owner check refuses a session someone else holds.
 
 ## Reading failures
 
-| Symptom                                          | Likely cause                                                                         |
-| ------------------------------------------------ | ------------------------------------------------------------------------------------ |
-| 403 with hint "Needs X on the Read app"          | Scope missing → add to provisioning, `provision entra`                               |
-| 403 `licence_required`                           | Tenant lacks the licence → note in `docs/licensing-review.md`                        |
-| 401 `reauth`                                     | CAE/claims challenge or expired session → sign in again                              |
-| 403 `rearm` / `not_armed`                        | Write step without an armed session                                                  |
-| Data empty in Log Analytics                      | Activity-log export can take ~15 min after provisioning                              |
-| Sign-in stops: "registration campaign"           | Validation user not excluded → `provision test-identities`                           |
-| 403 "Defender XDR isn't set up"                  | Admin opens security.microsoft.com once; data in hours                               |
-| Fixture `✗ … may not do this: grant…`            | Provisioner lacks that Graph application permission → grant it, admin consent, rerun |
-| Fixture `✗ cannot … not created by provisioning` | A same-named object exists that isn't ours → rename or delete it                     |
+| Symptom                                                              | Likely cause                                                                         |
+| -------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| 403 with hint "Needs X on the Read app"                              | Scope missing → add to provisioning, `provision entra`                               |
+| 403 `licence_required`                                               | Tenant lacks the licence → note in `docs/licensing-review.md`                        |
+| 401 `reauth`                                                         | CAE/claims challenge or expired session → sign in again                              |
+| 403 `rearm` / `not_armed`                                            | Write step without an armed session                                                  |
+| Data empty in Log Analytics                                          | Activity-log export can take ~15 min after provisioning                              |
+| Sign-in stops: "registration campaign"                               | Validation user not excluded → `provision test-identities`                           |
+| 403 "Defender XDR isn't set up"                                      | Admin opens security.microsoft.com once; data in hours                               |
+| Fixture `✗ … may not do this: grant…`                                | Provisioner lacks that Graph application permission → grant it, admin consent, rerun |
+| Fixture `✗ cannot … not created by provisioning`                     | A same-named object exists that isn't ours → rename or delete it                     |
+| Resource Graph 400 "DisallowedMaxNumberOfRemoteTables" / join limits | More than one cross-table join → split the query (adding-a-page-or-report)           |

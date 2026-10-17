@@ -53,6 +53,11 @@ If you remember nothing else, remember these. Each links to the guide that expla
    the `pr-title` workflow checks pull request titles. ([Git](10-git-and-pull-requests.md))
 10. **Security-relevant changes get a security review** before merge: the `security-reviewer` agent plus a code
     owner's (or, for a code owner's own change, a second engineer's) review. ([Security](04-security.md))
+11. **Checks explain themselves:** every probe has a `group`, a `remedy` and a `link`; the rows behind a result are
+    Operator-only and never go into its message. ([Content](08-content-guide.md))
+12. **Fixtures can't catch what Microsoft rejects.** `validate` knows some limits (Resource Graph's joins); run every
+    new query once live, read-only, or record it as unchecked. ([Content](08-content-guide.md))
+13. **No `eval` in the browser** — the security policy forbids it, for libraries too. ([Web](07-web-guide.md))
 
 ## Where the rules come from
 

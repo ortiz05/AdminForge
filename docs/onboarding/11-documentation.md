@@ -28,21 +28,23 @@ it isn't finished (CLAUDE.md rule 11). This page says which docs each kind of ch
 
 ## What to update for each kind of change
 
-| Change                                      | Update                                                                                                                   |
-| ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| New or changed API endpoint                 | `docs/api.md` (index + section + rate-limit row + roles table if access changed); new codes in `docs/troubleshooting.md` |
-| New error code anywhere                     | `docs/troubleshooting.md` (meaning, cause, what to do)                                                                   |
-| New configuration key                       | `config/example.env` (comment + safe default); `docs/operations.md` if operators must set it                             |
-| New permission, role use or licence need    | `docs/access.md`; `docs/licensing-review.md`; provisioning catalog if the automation identity needs it                   |
-| Security-relevant behaviour                 | `SECURITY.md` (the section, plus a threats row or known-gaps entry)                                                      |
-| New widget or widget option                 | `docs/widgets.md` and the widget schema                                                                                  |
-| Changed how something is extended           | The matching `.claude/skills/<skill>/SKILL.md` and `docs/extending.md`                                                   |
-| New process, unit, table or data flow       | `docs/architecture.md`                                                                                                   |
-| Anything an operator does differently       | `docs/operations.md` (and the upgrade notes in the PR's "Risk and rollout")                                              |
-| A decision someone could undo by accident   | An ADR (big, architectural) or a line in `docs/decisions.md` (smaller)                                                   |
-| Something you're deliberately not doing now | `docs/backlog.md`                                                                                                        |
-| Anything a user or operator would notice    | `CHANGELOG.md` → `## Unreleased` → Added / Changed / Fixed / Security                                                    |
-| How we work (commits, review, conventions)  | `docs/onboarding/` and, if it's a rule, `CLAUDE.md`                                                                      |
+| Change                                           | Update                                                                                                                                        |
+| ------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| New or changed API endpoint                      | `docs/api.md` (index + section + rate-limit row + roles table if access changed); new codes in `docs/troubleshooting.md`                      |
+| New error code anywhere                          | `docs/troubleshooting.md` (meaning, cause, what to do)                                                                                        |
+| New configuration key                            | `config/example.env` (comment + safe default); `docs/operations.md` if operators must set it                                                  |
+| New permission, role use or licence need         | `docs/access.md`; `docs/licensing-review.md`; provisioning catalog if the automation identity needs it                                        |
+| Security-relevant behaviour                      | `SECURITY.md` (the section, plus a threats row or known-gaps entry)                                                                           |
+| New widget or widget option                      | `docs/widgets.md` and the widget schema                                                                                                       |
+| Changed how something is extended                | The matching `.claude/skills/<skill>/SKILL.md` and `docs/extending.md`                                                                        |
+| New process, unit, table or data flow            | `docs/architecture.md`                                                                                                                        |
+| Anything an operator does differently            | `docs/operations.md` (and the upgrade notes in the PR's "Risk and rollout")                                                                   |
+| A decision someone could undo by accident        | An ADR (big, architectural) or a line in `docs/decisions.md` (smaller)                                                                        |
+| Something you're deliberately not doing now      | `docs/backlog.md`                                                                                                                             |
+| A query or request checked against fixtures only | `docs/licensing-review.md` (what it relies on, with Microsoft's docs) and `docs/backlog.md` (the live check still to do)                      |
+| A new navigation section, or retired content     | `docs/onboarding/08-content-guide.md` (sections), `docs/operations.md` (what it needs), `docs/backlog.md` (how to bring retired content back) |
+| Anything a user or operator would notice         | `CHANGELOG.md` → `## Unreleased` → Added / Changed / Fixed / Security                                                                         |
+| How we work (commits, review, conventions)       | `docs/onboarding/` and, if it's a rule, `CLAUDE.md`                                                                                           |
 
 ## Changelog
 

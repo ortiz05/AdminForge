@@ -20,12 +20,23 @@ Check, citing file:line:
   param interpolation; runner scripts never interpolate inputs into code; `http` hosts allowlisted.
 - **Secrets**: `secretOutputs` respected end to end; nothing secret in fixtures, logs, `config/example.env` values.
 - **Web**: CSRF header on state-changing calls; no `dangerouslySetInnerHTML` with data; open redirects (`safeReturnTo`).
+  The CSP stays `script-src 'self'` (`helmet` in `portal/apps/api/src/app.ts`): no `eval`, `new Function` or inline
+  script in web code or a new dependency, and libraries that probe eval are configured not to (`disableEvalProbe`);
+  run `pnpm build && pnpm test:e2e:prod` (`tests/e2e/prod/csp-no-eval.spec.ts`). Links from content (probe
+  `link.href`, markdown, `href` templates) are in-app paths or `https://` — never `//host`, a backslash or
+  `javascript:`.
+- **Data collected with application permissions** (probe and report rows, scheduled results) reaches only Operators
+  unless the definition widens it deliberately: details stay behind `detailsHidden`, and nothing copies item names
+  from those rows into a message, title or other field Readers see.
 - **Separation of duties**: nobody can approve their own request or a change that benefits them; AdminForge's own
   apps, the groups that grant portal roles and protected accounts stay out of reach of writes; parked or resumed runs
   are re-authorized against the current version; role loss reaches the worker, not only the browser.
 - **Content pipeline**: anything that loosens a playbook (risk, confirmation, approval, scopes, connections, hosts) is
   called out; `publish` must not bypass the checks `validate` runs.
 - **Tenant data**: run `pnpm guard`.
-- **Audit**: every state change appends an audit event with the actor and identity.
+- **Audit**: every state change appends an audit event with the actor and identity; a bulk run keeps its shared inputs
+  (`inputsTemplate`, redacted) on `run.created`.
+- **Stale targets**: a write on an id that can be reused (AVD session numbers) asserts the owner the list showed
+  before it acts; high-risk bulk actions need a typed confirmation.
   Run the relevant tests (`pnpm --filter @adminforge/tests exec vitest run --project unit --project api`). Report
   findings by severity with a concrete failure scenario for each. Do not edit files.

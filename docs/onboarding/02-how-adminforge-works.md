@@ -70,7 +70,8 @@ protected accounts are refused centrally, and an administrator can pause all cha
 **…a schedule fires.** The scheduler (one leader at a time) runs it as the automation identity: a probe sweep, a
 report export (file, email, Teams), a content-health check, a news collection, or a playbook handed to the worker.
 Report schedules can also be created in the portal by Operators; anything that writes needs a second person's
-approval before it is enabled.
+approval before it is enabled. Probe results feed **Synthetic monitoring**, grouped by service; a check's detail says
+what it found (the rows, for Operators), what to do and where to act.
 
 **…content changes.** An engineer edits YAML, `adminforge validate` and `adminforge test` check it, a pull request is
 reviewed and merged, and `adminforge publish` writes the new versions to Postgres. Running services pick it up through

@@ -42,6 +42,23 @@ tests/e2e/reports.spec.ts + __screenshots__ end-to-end and visual baselines (moc
 - Watch the **initial-load budget** (≤ 250 KB gzip JS, checked in CI): heavy screens and libraries load lazily with
   their route.
 
+## Under the security policy
+
+The API serves the app with `script-src 'self'` and no `unsafe-eval` (`SECURITY.md` › Host and network); Firefox and
+Chrome log every violation in the console, where it hides real problems.
+
+- No `eval`, `new Function`, `setTimeout` with a string, inline `<script>` or `javascript:` URLs — and no library that
+  needs them. Before you adopt a dependency, search its built output for `new Function(`, a bare `Function(` and
+  `eval(` — the test below only sees the code that runs on the page it loads.
+- Zod 4 probes `Function('')` to decide whether to compile validators. `src/main.tsx` imports `lib/no-eval.ts` first,
+  which calls `disableEvalProbe()` from `@adminforge/schemas`; keep it the first import. It adds only Zod's
+  configuration to the initial bundle — the schemas themselves still load lazily with the screens that use them.
+- Styles may be inline (Radix and Monaco inject them; `style-src 'unsafe-inline'` is an accepted risk) — scripts may
+  not.
+- `tests/e2e/prod/csp-no-eval.spec.ts` loads a page of the production build under the same policy and fails on any
+  violation; run `pnpm build && pnpm test:e2e:prod` when you add a dependency or change bundling (in your own checkout —
+  never the one the services run from, whose `dist/` is served live).
+
 ## URL state
 
 Anything a person would want to share or come back to — selected item, filters, search, open panel or form — lives in
@@ -97,11 +114,13 @@ internal names (env keys, endpoint paths, header names) in the UI.
 ## Screenshots are part of the change
 
 UI changes ship with Playwright screenshots in **steel and daylight** (and a narrow viewport when layout changes),
-committed as baselines under `tests/e2e/__screenshots__/`. Look at every image before you commit it — overflow, clipped
-text, alignment, contrast. Only update baselines your change intentionally altered (`--update-snapshots` on the spec
-you changed). New endpoints need handlers in the mock API (`tests/e2e/support/mock-api.ts`, or a feature mock such as
-`tests/support/web/mock-automation.ts`) and payloads in `tests/support/web/fixtures/`. `pnpm build && pnpm test:e2e:prod` smoke-tests the production bundle. See
-[Testing](09-testing.md#end-to-end-and-visual).
+committed as baselines under `tests/e2e/__screenshots__/`. Look at every image before you commit it — overflow,
+clipped text, alignment, contrast. Only update baselines your change intentionally altered (`--update-snapshots` on
+the spec you changed). New endpoints need handlers in the mock API (`tests/e2e/support/mock-api.ts`, or a feature mock
+such as `tests/support/web/mock-automation.ts`) and payloads in `tests/support/web/fixtures/`.
+`pnpm build && pnpm test:e2e:prod` smoke-tests the production bundle (charts, the security policy). See
+[Testing](09-testing.md#end-to-end-and-visual). Content pages are screenshotted too when a new section or dashboard
+ships: look at KPI labels — at `span: 2` they cut off past about 22 characters ([widgets](../widgets.md#kpi)).
 
 ## Before you open the PR
 
@@ -109,6 +128,7 @@ you changed). New endpoints need handlers in the mock API (`tests/e2e/support/mo
 - [ ] Data module with `queryOptions`, `api()` + parser, invalidation on mutation and events; lazy-loaded if heavy
 - [ ] URL holds shareable state; Back closes panels
 - [ ] Tokens only; existing ui components; ember only for write mode
+- [ ] Nothing that needs `eval` or inline script; `lib/no-eval.ts` still first in `main.tsx`
 - [ ] Loading, empty, error, no-permission and unlicensed states
 - [ ] Keyboard, focus return, labels, axe clean
 - [ ] Screenshots in steel + daylight reviewed; mock API handlers and fixtures for new endpoints

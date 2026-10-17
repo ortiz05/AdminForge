@@ -42,6 +42,30 @@ well, it is the fastest way to a consistent change; you still own every line it 
    `origin/main...HEAD` ("run the security-reviewer on origin/main...HEAD"). Fix or answer every finding.
 5. **Read the diff yourself.** You are the author of record. Claude's output goes through the same review, tests and
    checklists as yours.
+6. **Look at what it built.** For anything visible — a coded screen or a new content page or section — ask for
+   screenshots in steel and daylight (mock mode for content pages) and look at them: clipped KPI labels, empty
+   widgets and alert banners show up there, not in tests.
+7. **Ask what wasn't checked.** Without a tenant (or a subscription, a licence) new queries are checked against
+   fixtures only. The session should say so and record it: what each request relies on in `docs/licensing-review.md`,
+   the live check still to do in `docs/backlog.md`.
+
+## Bigger sessions
+
+A request that spans several features (a new section, checks for it, retiring something else) goes faster with
+parallel agents — and stays consistent only with clear boundaries:
+
+- **One owner per file.** Give each agent its own folders (AVD content; Arc content; the API and web code) and say
+  what it must not touch. Shared files — `CHANGELOG.md`, `docs/backlog.md`, `docs/operations.md`,
+  `docs/licensing-review.md`, fixture files many pages share — are edited in small, re-read-first edits, or left to
+  the coordinating session (agents return their changelog lines instead).
+- **Schema and engine first.** A field content will use (a probe's `remedy`) lands before the agents that write
+  content with it; an agent that needs a generic engine or policy change stops and asks instead of making it.
+- **Ports and the host are shared.** Only one agent runs the dev server, e2e or Playwright at a time; none builds in
+  the checkout the services run from.
+- **Review the result as one change.** Run `content-reviewer` and `security-reviewer` over the whole diff after the
+  agents finish (they find what each agent couldn't see — a query limit, a stale-target write), fix, then run the full
+  suite once more before committing.
+- **Commit per feature**, not per agent and not as one lump ([granularity](10-git-and-pull-requests.md#granularity)).
 
 ## Rules for sessions
 
@@ -50,7 +74,8 @@ well, it is the fastest way to a consistent change; you still own every line it 
 - Don't ask Claude to bypass a hook, a guard or a failing test (`--no-verify`, skipping tests, loosening a rule to get
   green). If a rule is wrong, change the rule in its own reviewed PR.
 - Don't let a session run provisioning, `adminforge publish` to a shared database, deploys, restarts or anything on
-  the AdminForge host unless a code owner asked for that specific action.
+  the AdminForge host unless a code owner asked for that specific action — an earlier "deploy it" doesn't cover the
+  next change. On the host, a `pnpm build` in the services' checkout is a deploy of the web app (it's served at once).
 - Commits from a session follow the [commit convention](10-git-and-pull-requests.md#commit-messages) like any other
   (the hook checks them). Keep a `Co-Authored-By` trailer when Claude wrote a substantial part.
 - Long-running work can use worktrees (`.claude/worktrees/` is git-ignored); clean them up when done.

@@ -3,6 +3,90 @@
     "variants": [
       {
         "match": {
+          "bodyIncludes": [
+            "\"timeframe\":\"MonthToDate\"",
+            "\"name\":\"SubscriptionId\""
+          ]
+        },
+        "body": {
+          "id": "subscriptions/00000000-0000-4000-8000-0000000000a1/providers/Microsoft.CostManagement/query/30000000-0000-4000-8000-000000000465",
+          "name": "30000000-0000-4000-8000-000000000465",
+          "type": "Microsoft.CostManagement/query",
+          "properties": {
+            "nextLink": null,
+            "columns": [
+              {
+                "name": "Cost",
+                "type": "Number"
+              },
+              {
+                "name": "SubscriptionId",
+                "type": "String"
+              },
+              {
+                "name": "SubscriptionName",
+                "type": "String"
+              },
+              {
+                "name": "Currency",
+                "type": "String"
+              }
+            ],
+            "rows": [
+              [
+                1657.26,
+                "00000000-0000-4000-8000-0000000000a1",
+                "Example Org Production",
+                "EUR"
+              ]
+            ]
+          }
+        }
+      },
+      {
+        "match": {
+          "bodyIncludes": [
+            "\"timeframe\":\"Custom\"",
+            "\"name\":\"SubscriptionId\""
+          ]
+        },
+        "body": {
+          "id": "subscriptions/00000000-0000-4000-8000-0000000000a1/providers/Microsoft.CostManagement/query/30000000-0000-4000-8000-000000000465",
+          "name": "30000000-0000-4000-8000-000000000465",
+          "type": "Microsoft.CostManagement/query",
+          "properties": {
+            "nextLink": null,
+            "columns": [
+              {
+                "name": "Cost",
+                "type": "Number"
+              },
+              {
+                "name": "SubscriptionId",
+                "type": "String"
+              },
+              {
+                "name": "SubscriptionName",
+                "type": "String"
+              },
+              {
+                "name": "Currency",
+                "type": "String"
+              }
+            ],
+            "rows": [
+              [
+                2485.5,
+                "00000000-0000-4000-8000-0000000000a1",
+                "Example Org Production",
+                "EUR"
+              ]
+            ]
+          }
+        }
+      },
+      {
+        "match": {
           "bodyIncludes": "\"timeframe\":\"MonthToDate\""
         },
         "body": {

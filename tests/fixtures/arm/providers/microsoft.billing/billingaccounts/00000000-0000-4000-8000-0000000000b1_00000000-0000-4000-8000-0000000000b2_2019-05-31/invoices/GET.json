@@ -1,0 +1,96 @@
+{
+  "value": [
+    {
+      "id": "/providers/Microsoft.Billing/billingAccounts/00000000-0000-4000-8000-0000000000b1:00000000-0000-4000-8000-0000000000b2_2019-05-31/invoices/G000000010",
+      "name": "G000000010",
+      "type": "Microsoft.Billing/billingAccounts/invoices",
+      "properties": {
+        "invoiceDate": "2026-10-05T00:00:00.0000000Z",
+        "dueDate": "2026-11-04T00:00:00.0000000Z",
+        "status": "Due",
+        "documentType": "Invoice",
+        "billedAmount": {
+          "currency": "EUR",
+          "value": 3685.85
+        },
+        "amountDue": {
+          "currency": "EUR",
+          "value": 3685.85
+        },
+        "invoicePeriodStartDate": "2026-09-01T00:00:00.0000000Z",
+        "invoicePeriodEndDate": "2026-09-30T00:00:00.0000000Z",
+        "billingProfileDisplayName": "Example Org Billing",
+        "purchaseOrderNumber": "PO-EXAMPLE-01"
+      }
+    },
+    {
+      "id": "/providers/Microsoft.Billing/billingAccounts/00000000-0000-4000-8000-0000000000b1:00000000-0000-4000-8000-0000000000b2_2019-05-31/invoices/G000000009",
+      "name": "G000000009",
+      "type": "Microsoft.Billing/billingAccounts/invoices",
+      "properties": {
+        "invoiceDate": "2026-09-05T00:00:00.0000000Z",
+        "dueDate": "2026-10-05T00:00:00.0000000Z",
+        "status": "OverDue",
+        "documentType": "Invoice",
+        "billedAmount": {
+          "currency": "EUR",
+          "value": 3380.0
+        },
+        "amountDue": {
+          "currency": "EUR",
+          "value": 1200.0
+        },
+        "invoicePeriodStartDate": "2026-08-01T00:00:00.0000000Z",
+        "invoicePeriodEndDate": "2026-08-31T00:00:00.0000000Z",
+        "billingProfileDisplayName": "Example Org Billing",
+        "purchaseOrderNumber": "PO-EXAMPLE-01"
+      }
+    },
+    {
+      "id": "/providers/Microsoft.Billing/billingAccounts/00000000-0000-4000-8000-0000000000b1:00000000-0000-4000-8000-0000000000b2_2019-05-31/invoices/G000000008",
+      "name": "G000000008",
+      "type": "Microsoft.Billing/billingAccounts/invoices",
+      "properties": {
+        "invoiceDate": "2026-08-05T00:00:00.0000000Z",
+        "dueDate": "2026-09-04T00:00:00.0000000Z",
+        "status": "Paid",
+        "documentType": "Invoice",
+        "billedAmount": {
+          "currency": "EUR",
+          "value": 3120.4
+        },
+        "amountDue": {
+          "currency": "EUR",
+          "value": 0
+        },
+        "invoicePeriodStartDate": "2026-07-01T00:00:00.0000000Z",
+        "invoicePeriodEndDate": "2026-07-31T00:00:00.0000000Z",
+        "billingProfileDisplayName": "Example Org Billing",
+        "purchaseOrderNumber": "PO-EXAMPLE-01"
+      }
+    },
+    {
+      "id": "/providers/Microsoft.Billing/billingAccounts/00000000-0000-4000-8000-0000000000b1:00000000-0000-4000-8000-0000000000b2_2019-05-31/invoices/G000000007",
+      "name": "G000000007",
+      "type": "Microsoft.Billing/billingAccounts/invoices",
+      "properties": {
+        "invoiceDate": "2026-07-05T00:00:00.0000000Z",
+        "dueDate": "2026-08-04T00:00:00.0000000Z",
+        "status": "Paid",
+        "documentType": "Invoice",
+        "billedAmount": {
+          "currency": "EUR",
+          "value": 2990.15
+        },
+        "amountDue": {
+          "currency": "EUR",
+          "value": 0
+        },
+        "invoicePeriodStartDate": "2026-06-01T00:00:00.0000000Z",
+        "invoicePeriodEndDate": "2026-06-30T00:00:00.0000000Z",
+        "billingProfileDisplayName": "Example Org Billing",
+        "purchaseOrderNumber": "PO-EXAMPLE-01"
+      }
+    }
+  ]
+}

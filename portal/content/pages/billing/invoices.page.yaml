@@ -1,0 +1,200 @@
+$schema: ../../../packages/schemas/generated/page.schema.json
+kind: page
+id: billing.invoices
+version: 1.0.0
+title: Billing accounts and invoices
+summary: >-
+  The Azure billing accounts you can read (agreement type and state) and the invoices of one of them for the last
+  months — amount billed, amount due, due date and status — for Microsoft Customer Agreement and pay-as-you-go
+  billing accounts.
+owner: finance-ops
+tags: [billing, invoices, finops]
+template: list-detail
+nav: { section: billing, label: Invoices, icon: receipt, order: 70 }
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    arm: [user_impersonation]
+  # A billing role: Billing account reader (MCA) or Invoice manager; EA enrollments keep their invoices in the EA
+  # portal (Cost Management + Billing → Invoices).
+  azureRoles: [Billing account reader]
+
+params:
+  billingAccountId:
+    type: string
+    label: Billing account
+    pattern: "[A-Za-z0-9:_.-]{1,200}"
+    default: "${ env.AF_BILLING_ACCOUNT_ID }"
+    description: Leave empty for the first billing account you can read (AF_BILLING_ACCOUNT_ID sets the default).
+  months:
+    type: enum
+    label: Invoices from
+    facet: true
+    default: 12
+    values:
+      - { value: 6, label: Last 6 months }
+      - { value: 12, label: Last 12 months }
+      - { value: 24, label: Last 24 months }
+
+datasources:
+  accounts:
+    source: arm
+    request:
+      path: /providers/Microsoft.Billing/billingAccounts
+      apiVersion: "2024-04-01"
+    paging: all
+    maxItems: 200
+    transform: >-
+      ${ [value.value.{
+        'name': name,
+        'displayName': properties.displayName ? properties.displayName : name,
+        'agreementType': properties.agreementType,
+        'accountType': properties.accountType,
+        'accountStatus': properties.accountStatus
+      }] }
+    cache: { ttl: 3600 }
+  account:
+    source: static
+    data: {}
+    # The account asked for, else the first one the viewer can read; ids are encoded here, once.
+    transform: >-
+      ${ (
+        $name := params.billingAccountId ? params.billingAccountId : ds.accounts[0].name;
+        $name ? {
+          'name': $name,
+          'path': '/providers/Microsoft.Billing/billingAccounts/' & $encode($name),
+          'displayName': ($match := ds.accounts[name = $name]; $match ? $match[0].displayName : $name),
+          'agreementType': ds.accounts[name = $name][0].agreementType,
+          'isEa': ds.accounts[name = $name][0].agreementType = 'EnterpriseAgreement'
+        } : null
+      ) }
+  # Enterprise Agreement enrollments have no invoices API (their invoices are in the Azure portal): not called.
+  invoices:
+    source: arm
+    when: "${ ds.account.path and $not(ds.account.isEa = true) ? true : false }"
+    request:
+      path: ${ ds.account.path }/invoices
+      apiVersion: "2024-04-01"
+      query:
+        # The first day of the month that many months back.
+        periodStartDate: "${ ( $back := $number(params.months) in [6, 12, 24] ? $number(params.months) : 12; $i := $number($substring(now, 0, 4)) * 12 + $number($substring(now, 5, 2)) - 1 - $back; $string($floor($i / 12)) & '-' & $formatNumber($i % 12 + 1, '00') & '-01' ) }"
+        periodEndDate: "${ $substring(now, 0, 10) }"
+    paging: all
+    maxItems: 1000
+    transform: >-
+      ${ (
+        $rows := [value.value.{
+          'id': id,
+          'invoice': name,
+          'invoiceDate': properties.invoiceDate,
+          'dueDate': properties.dueDate,
+          /* Microsoft spells it OverDue (older answers: Overdue, PastDue): one canonical status for counts and colours */
+          'status': ($s := $lowercase(properties.status); $s = 'paid' ? 'Paid' : $s = 'due' ? 'Due' : $s in ['overdue', 'pastdue'] ? 'OverDue' : $s = 'void' ? 'Void' : $s = 'locked' ? 'Locked' : properties.status),
+          'documentType': properties.documentType,
+          'billed': properties.billedAmount.value,
+          'due': properties.amountDue.value,
+          'currency': properties.billedAmount.currency ? properties.billedAmount.currency : properties.amountDue.currency,
+          'periodStart': properties.invoicePeriodStartDate,
+          'periodEnd': properties.invoicePeriodEndDate,
+          'billingProfile': properties.billingProfileDisplayName,
+          'purchaseOrder': properties.purchaseOrderNumber
+        }];
+        $open := $rows[status in ['Due', 'OverDue']];
+        $dated := $applyAdvanced($rows, { 'join': 'and', 'clauses': [{ 'path': 'invoiceDate', 'op': 'notEmpty' }] });
+        $newest := [$dated^(>invoiceDate)];
+        {
+          'rows': $newest,
+          'total': $count($rows),
+          'openAmount': $round($sum([0, $open.due]), 2),
+          'overdue': $count($rows[status = 'OverDue']),
+          /* a credit note is not the latest invoice */
+          'latest': $newest[$not($exists(documentType)) or documentType = 'Invoice'][0].billed
+        }
+      ) }
+    cache: { ttl: 3600 }
+
+layout:
+  - widget: markdown
+    when: "${ account.isEa = true }"
+    text: >-
+      **This is an Enterprise Agreement enrollment.** Its invoices aren't available through the billing API: open them
+      in the Azure portal (Cost Management + Billing → Invoices). Cost for the enrollment is in the billing overview and
+      cost analysis with the billing account scope.
+  - widget: kpi
+    data: invoices.latest
+    label: Latest invoice
+    format: number
+  - widget: kpi
+    data: invoices.openAmount
+    label: Amount due
+    format: number
+    status: "${ $type(value) = 'number' and value > 0 ? 'info' : 'ok' }"
+  - widget: kpi
+    data: invoices.overdue
+    label: Overdue invoices
+    format: number
+    status: "${ $type(value) = 'number' and value > 0 ? 'crit' : 'ok' }"
+  - widget: kpi
+    data: account.displayName
+    label: Billing account
+    format: text
+  - widget: table
+    id: invoices
+    title: Invoices
+    span: 12
+    data: invoices.rows
+    rowKey: id
+    columns:
+      - { field: invoice, label: Invoice, kind: identity, secondary: billingProfile, sortable: true, filter: text }
+      - { field: invoiceDate, label: Invoice date, kind: date, sortable: true, filter: date }
+      - field: status
+        label: Status
+        kind: status
+        map: { Paid: [ok, Paid], Due: [warn, Due], OverDue: [crit, Overdue], Void: [neutral, Void], Locked: [info, Locked] }
+        filter: facet
+      - { field: billed, label: Billed, kind: number, sortable: true }
+      - { field: due, label: Amount due, kind: number, sortable: true }
+      - { field: currency, label: Currency, filter: facet }
+      - { field: dueDate, label: Due, kind: date, sortable: true }
+      - { field: periodStart, label: Period from, kind: date, hidden: true }
+      - { field: periodEnd, label: Period to, kind: date, hidden: true }
+      - { field: documentType, label: Document, filter: facet, hidden: true }
+      - { field: purchaseOrder, label: Purchase order, hidden: true }
+    rowActions:
+      - label: Open invoices in the Azure portal
+        icon: arrow-square-out
+        href: https://portal.azure.com/#view/Microsoft_Azure_GTM/ModernBillingMenuBlade/~/Invoices
+    empty:
+      title: No invoices to show
+      body: >-
+        No invoice in these months, or this account keeps its invoices elsewhere: Enterprise Agreement enrollments show
+        theirs in Cost Management + Billing → Invoices. Reading invoices needs a billing role (Billing account reader
+        or Invoice manager).
+  - widget: table
+    id: accounts
+    title: Billing accounts you can read
+    span: 12
+    data: accounts
+    rowKey: name
+    columns:
+      - { field: displayName, label: Billing account, kind: identity, secondary: name, sortable: true }
+      - { field: agreementType, label: Agreement, filter: facet }
+      - { field: accountType, label: Account type, filter: facet }
+      - field: accountStatus
+        label: State
+        kind: status
+        map: { Active: [ok, Active], Pending: [info, Pending], Disabled: [crit, Disabled], Deleted: [neutral, Deleted], Warned: [warn, Warned], Expired: [crit, Expired], UnderReview: [info, Under review], Extended: [info, Extended], Terminated: [neutral, Terminated], Transferred: [neutral, Transferred] }
+        filter: facet
+    rowActions:
+      - label: Show its invoices
+        icon: receipt
+        href: ${ '/p/billing.invoices?billingAccountId=' & $encode(row.name) }
+    empty:
+      title: No billing account visible
+      body: Your account holds no billing role. Ask a billing account owner for Billing account reader.
+
+export:
+  formats: [csv, xlsx]
+  fileName: azure-invoices
+  data: invoices.rows
+  columns: all

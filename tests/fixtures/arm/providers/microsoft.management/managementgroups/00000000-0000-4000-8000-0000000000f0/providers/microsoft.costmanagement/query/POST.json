@@ -1,0 +1,1392 @@
+{
+  "$fixture": {
+    "variants": [
+      {
+        "match": {
+          "bodyIncludes": [
+            "\"granularity\":\"Monthly\"",
+            "\"name\":\"SubscriptionId\""
+          ]
+        },
+        "body": {
+          "id": "synthetic-subscriptions-by-month",
+          "name": "synthetic-subscriptions-by-month",
+          "type": "Microsoft.CostManagement/query",
+          "properties": {
+            "nextLink": null,
+            "columns": [
+              {
+                "name": "Cost",
+                "type": "Number"
+              },
+              {
+                "name": "BillingMonth",
+                "type": "Datetime"
+              },
+              {
+                "name": "SubscriptionId",
+                "type": "String"
+              },
+              {
+                "name": "SubscriptionName",
+                "type": "String"
+              },
+              {
+                "name": "Currency",
+                "type": "String"
+              }
+            ],
+            "rows": [
+              [
+                2485.5,
+                "2026-09-01T00:00:00",
+                "00000000-0000-4000-8000-0000000000a1",
+                "Example Org Production",
+                "EUR"
+              ],
+              [
+                290.0,
+                "2026-09-01T00:00:00",
+                "00000000-0000-4000-8000-0000000000a2",
+                "Example Org Development",
+                "EUR"
+              ],
+              [
+                910.35,
+                "2026-09-01T00:00:00",
+                "00000000-0000-4000-8000-0000000000a3",
+                "Example Org Shared Services",
+                "EUR"
+              ],
+              [
+                1657.26,
+                "2026-10-01T00:00:00",
+                "00000000-0000-4000-8000-0000000000a1",
+                "Example Org Production",
+                "EUR"
+              ],
+              [
+                312.4,
+                "2026-10-01T00:00:00",
+                "00000000-0000-4000-8000-0000000000a2",
+                "Example Org Development",
+                "EUR"
+              ],
+              [
+                845.1,
+                "2026-10-01T00:00:00",
+                "00000000-0000-4000-8000-0000000000a3",
+                "Example Org Shared Services",
+                "EUR"
+              ],
+              [
+                18.75,
+                "2026-10-01T00:00:00",
+                "00000000-0000-4000-8000-0000000000a4",
+                "Example Org Sandbox",
+                "EUR"
+              ]
+            ]
+          }
+        }
+      },
+      {
+        "match": {
+          "bodyIncludes": [
+            "\"type\":\"TagKey\"",
+            "\"name\":\"SubscriptionName\""
+          ]
+        },
+        "body": {
+          "id": "providers/Microsoft.Management/managementGroups/00000000-0000-4000-8000-0000000000f0/providers/Microsoft.CostManagement/query/30000000-0000-4000-8000-000000000452",
+          "name": "30000000-0000-4000-8000-000000000452",
+          "type": "Microsoft.CostManagement/query",
+          "properties": {
+            "nextLink": null,
+            "columns": [
+              {
+                "name": "Cost",
+                "type": "Number"
+              },
+              {
+                "name": "TagKey",
+                "type": "String"
+              },
+              {
+                "name": "TagValue",
+                "type": "String"
+              },
+              {
+                "name": "SubscriptionName",
+                "type": "String"
+              },
+              {
+                "name": "Currency",
+                "type": "String"
+              }
+            ],
+            "rows": [
+              [
+                1010.5,
+                "CostCenter",
+                "CC-1001",
+                "Example Org Production",
+                "EUR"
+              ],
+              [
+                190.0,
+                "CostCenter",
+                "CC-1001",
+                "Example Org Shared Services",
+                "EUR"
+              ],
+              [
+                700.25,
+                "CostCenter",
+                "CC-2002",
+                "Example Org Production",
+                "EUR"
+              ],
+              [
+                300.0,
+                "CostCenter",
+                "CC-3003",
+                "Example Org Development",
+                "EUR"
+              ],
+              [
+                632.76,
+                "",
+                "",
+                "Example Org Shared Services",
+                "EUR"
+              ]
+            ]
+          }
+        }
+      },
+      {
+        "match": {
+          "bodyIncludes": [
+            "\"type\":\"TagKey\"",
+            "\"granularity\":\"Monthly\""
+          ]
+        },
+        "body": {
+          "id": "providers/Microsoft.Management/managementGroups/00000000-0000-4000-8000-0000000000f0/providers/Microsoft.CostManagement/query/30000000-0000-4000-8000-000000000457",
+          "name": "30000000-0000-4000-8000-000000000457",
+          "type": "Microsoft.CostManagement/query",
+          "properties": {
+            "nextLink": null,
+            "columns": [
+              {
+                "name": "Cost",
+                "type": "Number"
+              },
+              {
+                "name": "BillingMonth",
+                "type": "Datetime"
+              },
+              {
+                "name": "TagKey",
+                "type": "String"
+              },
+              {
+                "name": "TagValue",
+                "type": "String"
+              },
+              {
+                "name": "Currency",
+                "type": "String"
+              }
+            ],
+            "rows": [
+              [
+                1100.0,
+                "2026-09-01T00:00:00",
+                "CostCenter",
+                "CC-1001",
+                "EUR"
+              ],
+              [
+                700.0,
+                "2026-09-01T00:00:00",
+                "CostCenter",
+                "CC-2002",
+                "EUR"
+              ],
+              [
+                600.0,
+                "2026-09-01T00:00:00",
+                "",
+                "",
+                "EUR"
+              ],
+              [
+                1200.5,
+                "2026-10-01T00:00:00",
+                "CostCenter",
+                "CC-1001",
+                "EUR"
+              ]
+            ]
+          }
+        }
+      },
+      {
+        "match": {
+          "bodyIncludes": [
+            "\"type\":\"TagKey\""
+          ]
+        },
+        "body": {
+          "id": "providers/Microsoft.Management/managementGroups/00000000-0000-4000-8000-0000000000f0/providers/Microsoft.CostManagement/query/30000000-0000-4000-8000-000000000453",
+          "name": "30000000-0000-4000-8000-000000000453",
+          "type": "Microsoft.CostManagement/query",
+          "properties": {
+            "nextLink": null,
+            "columns": [
+              {
+                "name": "Cost",
+                "type": "Number"
+              },
+              {
+                "name": "TagKey",
+                "type": "String"
+              },
+              {
+                "name": "TagValue",
+                "type": "String"
+              },
+              {
+                "name": "Currency",
+                "type": "String"
+              }
+            ],
+            "rows": [
+              [
+                1200.5,
+                "CostCenter",
+                "CC-1001",
+                "EUR"
+              ],
+              [
+                700.25,
+                "CostCenter",
+                "CC-2002",
+                "EUR"
+              ],
+              [
+                300.0,
+                "CostCenter",
+                "CC-3003",
+                "EUR"
+              ],
+              [
+                632.76,
+                "",
+                "",
+                "EUR"
+              ]
+            ]
+          }
+        }
+      },
+      {
+        "match": {
+          "bodyIncludes": [
+            "\"name\":\"ResourceId\""
+          ]
+        },
+        "body": {
+          "id": "providers/Microsoft.Management/managementGroups/00000000-0000-4000-8000-0000000000f0/providers/Microsoft.CostManagement/query/30000000-0000-4000-8000-000000000454",
+          "name": "30000000-0000-4000-8000-000000000454",
+          "type": "Microsoft.CostManagement/query",
+          "properties": {
+            "nextLink": null,
+            "columns": [
+              {
+                "name": "Cost",
+                "type": "Number"
+              },
+              {
+                "name": "ResourceId",
+                "type": "String"
+              },
+              {
+                "name": "Currency",
+                "type": "String"
+              }
+            ],
+            "rows": [
+              [
+                640.2,
+                "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourcegroups/rg-example-app/providers/microsoft.compute/virtualmachines/vm-example-app01",
+                "EUR"
+              ],
+              [
+                455.0,
+                "/subscriptions/00000000-0000-4000-8000-0000000000a3/resourcegroups/rg-example-data/providers/microsoft.sql/servers/sql-example-core",
+                "EUR"
+              ],
+              [
+                380.1,
+                "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourcegroups/rg-example-functions/providers/microsoft.web/serverfarms/asp-example-api",
+                "EUR"
+              ],
+              [
+                402.15,
+                "/subscriptions/00000000-0000-4000-8000-0000000000a3/resourcegroups/rg-example-data/providers/microsoft.storage/storageaccounts/stexampledata",
+                "EUR"
+              ],
+              [
+                120.66,
+                "/subscriptions/00000000-0000-4000-8000-0000000000a2/resourcegroups/rg-example-monitor/providers/microsoft.operationalinsights/workspaces/log-example",
+                "EUR"
+              ],
+              [
+                60.0,
+                "",
+                "EUR"
+              ]
+            ]
+          }
+        }
+      },
+      {
+        "match": {
+          "bodyIncludes": [
+            "\"granularity\":\"Monthly\""
+          ]
+        },
+        "body": {
+          "id": "providers/Microsoft.Management/managementGroups/00000000-0000-4000-8000-0000000000f0/providers/Microsoft.CostManagement/query/30000000-0000-4000-8000-000000000455",
+          "name": "30000000-0000-4000-8000-000000000455",
+          "type": "Microsoft.CostManagement/query",
+          "properties": {
+            "nextLink": null,
+            "columns": [
+              {
+                "name": "Cost",
+                "type": "Number"
+              },
+              {
+                "name": "BillingMonth",
+                "type": "Datetime"
+              },
+              {
+                "name": "SubscriptionName",
+                "type": "String"
+              },
+              {
+                "name": "Currency",
+                "type": "String"
+              }
+            ],
+            "rows": [
+              [
+                1800.0,
+                "2025-11-01T00:00:00",
+                "Example Org Production",
+                "EUR"
+              ],
+              [
+                260.0,
+                "2025-11-01T00:00:00",
+                "Example Org Development",
+                "EUR"
+              ],
+              [
+                820.0,
+                "2025-11-01T00:00:00",
+                "Example Org Shared Services",
+                "EUR"
+              ],
+              [
+                1854.0,
+                "2025-12-01T00:00:00",
+                "Example Org Production",
+                "EUR"
+              ],
+              [
+                267.8,
+                "2025-12-01T00:00:00",
+                "Example Org Development",
+                "EUR"
+              ],
+              [
+                844.6,
+                "2025-12-01T00:00:00",
+                "Example Org Shared Services",
+                "EUR"
+              ],
+              [
+                1908.0,
+                "2026-01-01T00:00:00",
+                "Example Org Production",
+                "EUR"
+              ],
+              [
+                275.6,
+                "2026-01-01T00:00:00",
+                "Example Org Development",
+                "EUR"
+              ],
+              [
+                869.2,
+                "2026-01-01T00:00:00",
+                "Example Org Shared Services",
+                "EUR"
+              ],
+              [
+                1962.0,
+                "2026-02-01T00:00:00",
+                "Example Org Production",
+                "EUR"
+              ],
+              [
+                283.4,
+                "2026-02-01T00:00:00",
+                "Example Org Development",
+                "EUR"
+              ],
+              [
+                893.8,
+                "2026-02-01T00:00:00",
+                "Example Org Shared Services",
+                "EUR"
+              ],
+              [
+                2016.0,
+                "2026-03-01T00:00:00",
+                "Example Org Production",
+                "EUR"
+              ],
+              [
+                291.2,
+                "2026-03-01T00:00:00",
+                "Example Org Development",
+                "EUR"
+              ],
+              [
+                918.4,
+                "2026-03-01T00:00:00",
+                "Example Org Shared Services",
+                "EUR"
+              ],
+              [
+                2070.0,
+                "2026-04-01T00:00:00",
+                "Example Org Production",
+                "EUR"
+              ],
+              [
+                299.0,
+                "2026-04-01T00:00:00",
+                "Example Org Development",
+                "EUR"
+              ],
+              [
+                943.0,
+                "2026-04-01T00:00:00",
+                "Example Org Shared Services",
+                "EUR"
+              ],
+              [
+                2124.0,
+                "2026-05-01T00:00:00",
+                "Example Org Production",
+                "EUR"
+              ],
+              [
+                306.8,
+                "2026-05-01T00:00:00",
+                "Example Org Development",
+                "EUR"
+              ],
+              [
+                967.6,
+                "2026-05-01T00:00:00",
+                "Example Org Shared Services",
+                "EUR"
+              ],
+              [
+                2178.0,
+                "2026-06-01T00:00:00",
+                "Example Org Production",
+                "EUR"
+              ],
+              [
+                314.6,
+                "2026-06-01T00:00:00",
+                "Example Org Development",
+                "EUR"
+              ],
+              [
+                992.2,
+                "2026-06-01T00:00:00",
+                "Example Org Shared Services",
+                "EUR"
+              ],
+              [
+                2232.0,
+                "2026-07-01T00:00:00",
+                "Example Org Production",
+                "EUR"
+              ],
+              [
+                322.4,
+                "2026-07-01T00:00:00",
+                "Example Org Development",
+                "EUR"
+              ],
+              [
+                1016.8,
+                "2026-07-01T00:00:00",
+                "Example Org Shared Services",
+                "EUR"
+              ],
+              [
+                2200.0,
+                "2026-08-01T00:00:00",
+                "Example Org Production",
+                "EUR"
+              ],
+              [
+                300.0,
+                "2026-08-01T00:00:00",
+                "Example Org Development",
+                "EUR"
+              ],
+              [
+                880.0,
+                "2026-08-01T00:00:00",
+                "Example Org Shared Services",
+                "EUR"
+              ],
+              [
+                2485.5,
+                "2026-09-01T00:00:00",
+                "Example Org Production",
+                "EUR"
+              ],
+              [
+                290.0,
+                "2026-09-01T00:00:00",
+                "Example Org Development",
+                "EUR"
+              ],
+              [
+                910.35,
+                "2026-09-01T00:00:00",
+                "Example Org Shared Services",
+                "EUR"
+              ],
+              [
+                1657.26,
+                "2026-10-01T00:00:00",
+                "Example Org Production",
+                "EUR"
+              ],
+              [
+                312.4,
+                "2026-10-01T00:00:00",
+                "Example Org Development",
+                "EUR"
+              ],
+              [
+                845.1,
+                "2026-10-01T00:00:00",
+                "Example Org Shared Services",
+                "EUR"
+              ],
+              [
+                18.75,
+                "2026-10-01T00:00:00",
+                "Example Org Sandbox",
+                "EUR"
+              ]
+            ]
+          }
+        }
+      },
+      {
+        "match": {
+          "bodyIncludes": [
+            "\"granularity\":\"Daily\""
+          ]
+        },
+        "body": {
+          "id": "providers/Microsoft.Management/managementGroups/00000000-0000-4000-8000-0000000000f0/providers/Microsoft.CostManagement/query/30000000-0000-4000-8000-000000000456",
+          "name": "30000000-0000-4000-8000-000000000456",
+          "type": "Microsoft.CostManagement/query",
+          "properties": {
+            "nextLink": null,
+            "columns": [
+              {
+                "name": "Cost",
+                "type": "Number"
+              },
+              {
+                "name": "UsageDate",
+                "type": "Number"
+              },
+              {
+                "name": "ServiceName",
+                "type": "String"
+              },
+              {
+                "name": "Currency",
+                "type": "String"
+              }
+            ],
+            "rows": [
+              [
+                76.18,
+                20261001,
+                "Virtual Machines",
+                "EUR"
+              ],
+              [
+                42.32,
+                20261001,
+                "Azure App Service",
+                "EUR"
+              ],
+              [
+                29.12,
+                20261001,
+                "Azure SQL Database",
+                "EUR"
+              ],
+              [
+                27.88,
+                20261001,
+                "Storage",
+                "EUR"
+              ],
+              [
+                71.7,
+                20261002,
+                "Virtual Machines",
+                "EUR"
+              ],
+              [
+                39.88,
+                20261002,
+                "Azure App Service",
+                "EUR"
+              ],
+              [
+                30.33,
+                20261002,
+                "Azure SQL Database",
+                "EUR"
+              ],
+              [
+                26.27,
+                20261002,
+                "Storage",
+                "EUR"
+              ],
+              [
+                74.69,
+                20261003,
+                "Virtual Machines",
+                "EUR"
+              ],
+              [
+                41.5,
+                20261003,
+                "Azure App Service",
+                "EUR"
+              ],
+              [
+                31.54,
+                20261003,
+                "Azure SQL Database",
+                "EUR"
+              ],
+              [
+                27.35,
+                20261003,
+                "Storage",
+                "EUR"
+              ],
+              [
+                77.68,
+                20261004,
+                "Virtual Machines",
+                "EUR"
+              ],
+              [
+                39.06,
+                20261004,
+                "Azure App Service",
+                "EUR"
+              ],
+              [
+                29.72,
+                20261004,
+                "Azure SQL Database",
+                "EUR"
+              ],
+              [
+                25.74,
+                20261004,
+                "Storage",
+                "EUR"
+              ],
+              [
+                73.2,
+                20261005,
+                "Virtual Machines",
+                "EUR"
+              ],
+              [
+                40.69,
+                20261005,
+                "Azure App Service",
+                "EUR"
+              ],
+              [
+                30.94,
+                20261005,
+                "Azure SQL Database",
+                "EUR"
+              ],
+              [
+                26.81,
+                20261005,
+                "Storage",
+                "EUR"
+              ],
+              [
+                76.18,
+                20261006,
+                "Virtual Machines",
+                "EUR"
+              ],
+              [
+                42.32,
+                20261006,
+                "Azure App Service",
+                "EUR"
+              ],
+              [
+                29.12,
+                20261006,
+                "Azure SQL Database",
+                "EUR"
+              ],
+              [
+                27.88,
+                20261006,
+                "Storage",
+                "EUR"
+              ],
+              [
+                71.7,
+                20261007,
+                "Virtual Machines",
+                "EUR"
+              ],
+              [
+                39.88,
+                20261007,
+                "Azure App Service",
+                "EUR"
+              ],
+              [
+                30.33,
+                20261007,
+                "Azure SQL Database",
+                "EUR"
+              ],
+              [
+                26.27,
+                20261007,
+                "Storage",
+                "EUR"
+              ],
+              [
+                74.69,
+                20261008,
+                "Virtual Machines",
+                "EUR"
+              ],
+              [
+                41.5,
+                20261008,
+                "Azure App Service",
+                "EUR"
+              ],
+              [
+                31.54,
+                20261008,
+                "Azure SQL Database",
+                "EUR"
+              ],
+              [
+                27.35,
+                20261008,
+                "Storage",
+                "EUR"
+              ],
+              [
+                77.68,
+                20261009,
+                "Virtual Machines",
+                "EUR"
+              ],
+              [
+                39.06,
+                20261009,
+                "Azure App Service",
+                "EUR"
+              ],
+              [
+                29.72,
+                20261009,
+                "Azure SQL Database",
+                "EUR"
+              ],
+              [
+                25.74,
+                20261009,
+                "Storage",
+                "EUR"
+              ],
+              [
+                73.2,
+                20261010,
+                "Virtual Machines",
+                "EUR"
+              ],
+              [
+                40.69,
+                20261010,
+                "Azure App Service",
+                "EUR"
+              ],
+              [
+                30.94,
+                20261010,
+                "Azure SQL Database",
+                "EUR"
+              ],
+              [
+                26.81,
+                20261010,
+                "Storage",
+                "EUR"
+              ],
+              [
+                76.18,
+                20261011,
+                "Virtual Machines",
+                "EUR"
+              ],
+              [
+                42.32,
+                20261011,
+                "Azure App Service",
+                "EUR"
+              ],
+              [
+                29.12,
+                20261011,
+                "Azure SQL Database",
+                "EUR"
+              ],
+              [
+                27.88,
+                20261011,
+                "Storage",
+                "EUR"
+              ],
+              [
+                71.7,
+                20261012,
+                "Virtual Machines",
+                "EUR"
+              ],
+              [
+                39.88,
+                20261012,
+                "Azure App Service",
+                "EUR"
+              ],
+              [
+                30.33,
+                20261012,
+                "Azure SQL Database",
+                "EUR"
+              ],
+              [
+                26.27,
+                20261012,
+                "Storage",
+                "EUR"
+              ],
+              [
+                74.69,
+                20261013,
+                "Virtual Machines",
+                "EUR"
+              ],
+              [
+                41.5,
+                20261013,
+                "Azure App Service",
+                "EUR"
+              ],
+              [
+                31.54,
+                20261013,
+                "Azure SQL Database",
+                "EUR"
+              ],
+              [
+                27.35,
+                20261013,
+                "Storage",
+                "EUR"
+              ],
+              [
+                77.68,
+                20261014,
+                "Virtual Machines",
+                "EUR"
+              ],
+              [
+                39.06,
+                20261014,
+                "Azure App Service",
+                "EUR"
+              ],
+              [
+                29.72,
+                20261014,
+                "Azure SQL Database",
+                "EUR"
+              ],
+              [
+                25.74,
+                20261014,
+                "Storage",
+                "EUR"
+              ],
+              [
+                73.2,
+                20261015,
+                "Virtual Machines",
+                "EUR"
+              ],
+              [
+                40.69,
+                20261015,
+                "Azure App Service",
+                "EUR"
+              ],
+              [
+                30.94,
+                20261015,
+                "Azure SQL Database",
+                "EUR"
+              ],
+              [
+                26.81,
+                20261015,
+                "Storage",
+                "EUR"
+              ]
+            ]
+          }
+        }
+      },
+      {
+        "match": {
+          "bodyIncludes": [
+            "\"timeframe\":\"MonthToDate\"",
+            "\"name\":\"SubscriptionId\""
+          ]
+        },
+        "body": {
+          "id": "providers/Microsoft.Management/managementGroups/00000000-0000-4000-8000-0000000000f0/providers/Microsoft.CostManagement/query/30000000-0000-4000-8000-000000000458",
+          "name": "30000000-0000-4000-8000-000000000458",
+          "type": "Microsoft.CostManagement/query",
+          "properties": {
+            "nextLink": null,
+            "columns": [
+              {
+                "name": "Cost",
+                "type": "Number"
+              },
+              {
+                "name": "SubscriptionId",
+                "type": "String"
+              },
+              {
+                "name": "SubscriptionName",
+                "type": "String"
+              },
+              {
+                "name": "Currency",
+                "type": "String"
+              }
+            ],
+            "rows": [
+              [
+                1657.26,
+                "00000000-0000-4000-8000-0000000000a1",
+                "Example Org Production",
+                "EUR"
+              ],
+              [
+                312.4,
+                "00000000-0000-4000-8000-0000000000a2",
+                "Example Org Development",
+                "EUR"
+              ],
+              [
+                845.1,
+                "00000000-0000-4000-8000-0000000000a3",
+                "Example Org Shared Services",
+                "EUR"
+              ],
+              [
+                18.75,
+                "00000000-0000-4000-8000-0000000000a4",
+                "Example Org Sandbox",
+                "EUR"
+              ]
+            ]
+          }
+        }
+      },
+      {
+        "match": {
+          "bodyIncludes": [
+            "\"timeframe\":\"Custom\"",
+            "\"name\":\"SubscriptionId\""
+          ]
+        },
+        "body": {
+          "id": "providers/Microsoft.Management/managementGroups/00000000-0000-4000-8000-0000000000f0/providers/Microsoft.CostManagement/query/30000000-0000-4000-8000-000000000459",
+          "name": "30000000-0000-4000-8000-000000000459",
+          "type": "Microsoft.CostManagement/query",
+          "properties": {
+            "nextLink": null,
+            "columns": [
+              {
+                "name": "Cost",
+                "type": "Number"
+              },
+              {
+                "name": "SubscriptionId",
+                "type": "String"
+              },
+              {
+                "name": "SubscriptionName",
+                "type": "String"
+              },
+              {
+                "name": "Currency",
+                "type": "String"
+              }
+            ],
+            "rows": [
+              [
+                2485.5,
+                "00000000-0000-4000-8000-0000000000a1",
+                "Example Org Production",
+                "EUR"
+              ],
+              [
+                290.0,
+                "00000000-0000-4000-8000-0000000000a2",
+                "Example Org Development",
+                "EUR"
+              ],
+              [
+                910.35,
+                "00000000-0000-4000-8000-0000000000a3",
+                "Example Org Shared Services",
+                "EUR"
+              ]
+            ]
+          }
+        }
+      },
+      {
+        "match": {
+          "bodyIncludes": [
+            "\"name\":\"SubscriptionName\"",
+            "\"name\":\"ServiceName\""
+          ]
+        },
+        "body": {
+          "id": "providers/Microsoft.Management/managementGroups/00000000-0000-4000-8000-0000000000f0/providers/Microsoft.CostManagement/query/30000000-0000-4000-8000-000000000460",
+          "name": "30000000-0000-4000-8000-000000000460",
+          "type": "Microsoft.CostManagement/query",
+          "properties": {
+            "nextLink": null,
+            "columns": [
+              {
+                "name": "Cost",
+                "type": "Number"
+              },
+              {
+                "name": "SubscriptionName",
+                "type": "String"
+              },
+              {
+                "name": "ServiceName",
+                "type": "String"
+              },
+              {
+                "name": "Currency",
+                "type": "String"
+              }
+            ],
+            "rows": [
+              [
+                1500.4,
+                "Example Org Production",
+                "Virtual Machines",
+                "EUR"
+              ],
+              [
+                985.1,
+                "Example Org Production",
+                "Azure App Service",
+                "EUR"
+              ],
+              [
+                290.0,
+                "Example Org Development",
+                "Azure App Service",
+                "EUR"
+              ],
+              [
+                910.35,
+                "Example Org Shared Services",
+                "Azure SQL Database",
+                "EUR"
+              ]
+            ]
+          }
+        }
+      },
+      {
+        "match": {
+          "bodyIncludes": [
+            "\"name\":\"SubscriptionName\""
+          ]
+        },
+        "body": {
+          "id": "providers/Microsoft.Management/managementGroups/00000000-0000-4000-8000-0000000000f0/providers/Microsoft.CostManagement/query/30000000-0000-4000-8000-000000000461",
+          "name": "30000000-0000-4000-8000-000000000461",
+          "type": "Microsoft.CostManagement/query",
+          "properties": {
+            "nextLink": null,
+            "columns": [
+              {
+                "name": "Cost",
+                "type": "Number"
+              },
+              {
+                "name": "SubscriptionName",
+                "type": "String"
+              },
+              {
+                "name": "Currency",
+                "type": "String"
+              }
+            ],
+            "rows": [
+              [
+                1657.26,
+                "Example Org Production",
+                "EUR"
+              ],
+              [
+                312.4,
+                "Example Org Development",
+                "EUR"
+              ],
+              [
+                845.1,
+                "Example Org Shared Services",
+                "EUR"
+              ],
+              [
+                18.75,
+                "Example Org Sandbox",
+                "EUR"
+              ]
+            ]
+          }
+        }
+      },
+      {
+        "match": {
+          "bodyIncludes": [
+            "\"name\":\"ServiceName\""
+          ]
+        },
+        "body": {
+          "id": "providers/Microsoft.Management/managementGroups/00000000-0000-4000-8000-0000000000f0/providers/Microsoft.CostManagement/query/30000000-0000-4000-8000-000000000462",
+          "name": "30000000-0000-4000-8000-000000000462",
+          "type": "Microsoft.CostManagement/query",
+          "properties": {
+            "nextLink": null,
+            "columns": [
+              {
+                "name": "Cost",
+                "type": "Number"
+              },
+              {
+                "name": "ServiceName",
+                "type": "String"
+              },
+              {
+                "name": "Currency",
+                "type": "String"
+              }
+            ],
+            "rows": [
+              [
+                1120.4,
+                "Virtual Machines",
+                "EUR"
+              ],
+              [
+                610.3,
+                "Azure App Service",
+                "EUR"
+              ],
+              [
+                455.0,
+                "Azure SQL Database",
+                "EUR"
+              ],
+              [
+                402.15,
+                "Storage",
+                "EUR"
+              ],
+              [
+                140.66,
+                "Azure Monitor",
+                "EUR"
+              ],
+              [
+                60.0,
+                "Bandwidth",
+                "EUR"
+              ],
+              [
+                15.0,
+                "Key Vault",
+                "EUR"
+              ],
+              [
+                30.0,
+                "Functions",
+                "EUR"
+              ]
+            ]
+          }
+        }
+      },
+      {
+        "match": {
+          "bodyIncludes": [
+            "\"timeframe\":\"MonthToDate\"",
+            "\"name\":\"ResourceGroupName\""
+          ]
+        },
+        "body": {
+          "id": "providers/Microsoft.Management/managementGroups/00000000-0000-4000-8000-0000000000f0/providers/Microsoft.CostManagement/query/30000000-0000-4000-8000-000000000463",
+          "name": "30000000-0000-4000-8000-000000000463",
+          "type": "Microsoft.CostManagement/query",
+          "properties": {
+            "nextLink": null,
+            "columns": [
+              {
+                "name": "Cost",
+                "type": "Number"
+              },
+              {
+                "name": "ResourceGroupName",
+                "type": "String"
+              },
+              {
+                "name": "Currency",
+                "type": "String"
+              }
+            ],
+            "rows": [
+              [
+                1234.56,
+                "rg-example-functions",
+                "EUR"
+              ],
+              [
+                410.2,
+                "rg-example-data",
+                "EUR"
+              ],
+              [
+                12.5,
+                "",
+                "EUR"
+              ]
+            ]
+          }
+        }
+      }
+    ],
+    "body": {
+      "id": "providers/Microsoft.Management/managementGroups/00000000-0000-4000-8000-0000000000f0/providers/Microsoft.CostManagement/query/30000000-0000-4000-8000-000000000464",
+      "name": "30000000-0000-4000-8000-000000000464",
+      "type": "Microsoft.CostManagement/query",
+      "properties": {
+        "nextLink": null,
+        "columns": [
+          {
+            "name": "Cost",
+            "type": "Number"
+          },
+          {
+            "name": "ResourceGroupName",
+            "type": "String"
+          },
+          {
+            "name": "Currency",
+            "type": "String"
+          }
+        ],
+        "rows": [
+          [
+            2010.4,
+            "rg-example-functions",
+            "EUR"
+          ],
+          [
+            380.0,
+            "rg-example-data",
+            "EUR"
+          ],
+          [
+            95.1,
+            "rg-example-old",
+            "EUR"
+          ]
+        ]
+      }
+    }
+  }
+}

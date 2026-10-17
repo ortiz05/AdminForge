@@ -1,0 +1,297 @@
+$schema: ../../../packages/schemas/generated/report.schema.json
+kind: report
+id: billing.monthly-trend
+version: 1.0.0
+title: Azure monthly cost trend
+summary: >-
+  Azure cost month by month for the last 6 or 12 months across every subscription (or one), by subscription, service,
+  resource group, service family, meter category, region or a tag — each line's last full month against the month
+  before, its three-month average and the period total, with the top five over time.
+owner: finance-ops
+tags: [billing, cost, finops, trend, subscriptions]
+area: billing
+nav: { section: reports, label: Azure monthly cost trend, icon: chart-line-up, order: 187 }
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    arm: [user_impersonation]
+  # Cost Management Reader (or Reader) on the management group or subscription, or a billing role on the billing account.
+  azureRoles: [Cost Management Reader]
+
+params:
+  scope:
+    type: enum
+    label: Scope
+    facet: true
+    default: managementGroup
+    values:
+      - { value: managementGroup, label: All subscriptions (management group) }
+      - { value: billingAccount, label: Billing account }
+  subscriptionId:
+    type: string
+    format: guid
+    label: Subscription
+    picker: subscription
+    facet: true
+    description: Leave empty for every subscription in the scope.
+  months:
+    type: enum
+    label: Months
+    facet: true
+    default: 12
+    values:
+      - { value: 6, label: Last 6 months }
+      - { value: 12, label: Last 12 months }
+    description: Including this month so far (Cost Management answers at most a year at a time).
+  groupBy:
+    type: enum
+    label: Group by
+    facet: true
+    default: SubscriptionName
+    values:
+      - { value: SubscriptionName, label: Subscription }
+      - { value: ServiceName, label: Service }
+      - { value: ResourceGroupName, label: Resource group }
+      - { value: ServiceFamily, label: Service family }
+      - { value: MeterCategory, label: Meter category }
+      - { value: ResourceLocation, label: Region }
+      - { value: Tag, label: Tag (Tag key) }
+  tagKey:
+    type: string
+    label: Tag key
+    default: "${ env.AF_COST_TAG_NAME ? env.AF_COST_TAG_NAME : 'CostCenter' }"
+    pattern: "[A-Za-z0-9 _.:@+=-]{1,128}"
+    description: Used when grouping by tag (AF_COST_TAG_NAME).
+  costType:
+    type: enum
+    label: Cost
+    facet: true
+    default: ActualCost
+    values:
+      - { value: ActualCost, label: Actual (as billed) }
+      - { value: AmortizedCost, label: Amortized (reservations and savings plans spread over their term) }
+  managementGroupId:
+    type: string
+    hidden: true
+    pattern: "[A-Za-z0-9._()-]{1,90}"
+    default: "${ env.AF_COST_MANAGEMENT_GROUP_ID ? env.AF_COST_MANAGEMENT_GROUP_ID : env.AF_TENANT_ID }"
+  billingAccountId:
+    type: string
+    hidden: true
+    pattern: "[A-Za-z0-9:_.-]{1,200}"
+    default: "${ env.AF_BILLING_ACCOUNT_ID }"
+
+datasources:
+  # Where Cost Management adds up (see billing.cost-analysis): ids encoded once, here.
+  scope:
+    source: static
+    data: {}
+    transform: >-
+      ${ (
+        $sub := params.subscriptionId;
+        $sub ? {
+          'kind': 'subscription',
+          'label': 'Subscription ' & $sub,
+          'path': '/subscriptions/' & $encode($guid($sub))
+        } : params.scope = 'billingAccount' ? (
+          params.billingAccountId ? {
+            'kind': 'billingAccount',
+            'label': 'Billing account ' & params.billingAccountId,
+            'path': '/providers/Microsoft.Billing/billingAccounts/' & $encode(params.billingAccountId)
+          } : { 'kind': 'none', 'missing': 'Set AF_BILLING_ACCOUNT_ID to the billing account (EA enrollment or MCA billing account id), or pick the management group scope.' }
+        ) : params.managementGroupId ? {
+          'kind': 'managementGroup',
+          'label': 'Management group ' & params.managementGroupId,
+          'path': '/providers/Microsoft.Management/managementGroups/' & $encode(params.managementGroupId)
+        } : { 'kind': 'none', 'missing': 'Set AF_COST_MANAGEMENT_GROUP_ID (or AF_TENANT_ID for the tenant root group), or pick a subscription.' }
+      ) }
+  # The months as YYYY-MM, oldest first: the last full months and this month so far.
+  months:
+    source: static
+    data: {}
+    transform: >-
+      ${ (
+        $y := $number($substring(now, 0, 4));
+        $m := $number($substring(now, 5, 2));
+        $n := $number(params.months) = 6 ? 6 : 12;
+        $month := function($back) { (
+          $i := $y * 12 + ($m - 1) - $back;
+          $string($floor($i / 12)) & '-' & $formatNumber($i % 12 + 1, '00')
+        ) };
+        {
+          'list': [[0..$n - 1].$month($n - 1 - $)],
+          'from': $month($n - 1) & '-01T00:00:00Z',
+          'to': $substring(now, 0, 10) & 'T23:59:59Z',
+          'current': $month(0),
+          'lastFull': $month(1),
+          'before': $month(2),
+          'last3': [$month(1), $month(2), $month(3)]
+        }
+      ) }
+  # One monthly query, cached for an hour (Cost Management allows only a few queries a minute per scope).
+  trend:
+    source: arm
+    when: "${ ds.scope.path ? true : false }"
+    request:
+      method: POST
+      path: ${ ds.scope.path }/providers/Microsoft.CostManagement/query
+      apiVersion: "2023-11-01"
+      body:
+        type: "${ params.costType = 'AmortizedCost' ? 'AmortizedCost' : 'ActualCost' }"
+        timeframe: Custom
+        timePeriod:
+          from: "${ ds.months.from }"
+          to: "${ ds.months.to }"
+        dataset:
+          granularity: Monthly
+          aggregation: { totalCost: { name: Cost, function: Sum } }
+          grouping: >-
+            ${ (
+              $dims := ['SubscriptionName', 'ServiceName', 'ResourceGroupName', 'ServiceFamily', 'MeterCategory', 'ResourceLocation'];
+              params.groupBy = 'Tag'
+                ? [{ 'type': 'TagKey', 'name': params.tagKey ? params.tagKey : 'CostCenter' }]
+                : [{ 'type': 'Dimension', 'name': params.groupBy in $dims ? params.groupBy : 'SubscriptionName' }]
+            ) }
+    # Every (month × group) row is read and grouped natively ($tableRows, $applyAdvanced, grouping): only the dozen or
+    # so distinct months are turned into "YYYY-MM" in JSONata, and the 300 largest groups into lines.
+    transform: >-
+      ${ (
+        $dims := ['SubscriptionName', 'ServiceName', 'ResourceGroupName', 'ServiceFamily', 'MeterCategory', 'ResourceLocation'];
+        $tag := params.groupBy = 'Tag';
+        $dim := $tag ? 'TagValue' : params.groupBy in $dims ? params.groupBy : 'SubscriptionName';
+        $none := $tag ? '(untagged)' : '(not assigned)';
+        $monthCol := 'BillingMonth' in [value.properties.columns.name] ? 'BillingMonth' : 'UsageDate';
+        $raw := $tableRows(value.properties, { 'group': $dim, 'monthRaw': $monthCol, 'cost': 'Cost', 'currency': 'Currency' });
+        $where := function($path, $op, $v) { { 'join': 'and', 'clauses': [{ 'path': $path, 'type': 'string', 'op': $op, 'value': $v }] } };
+        $rows := $append($applyAdvanced($raw, $where('group', 'notEmpty', null)), $withFields($applyAdvanced($raw, $where('group', 'isEmpty', null)), { 'group': $none }));
+        /* BillingMonth "2026-09-01T00:00:00", or UsageDate 20260901 (a number, or its text as a group key) */
+        $monthOf := function($m) { ( $t := $string($m); $contains($t, '-') ? $substring($t, 0, 7) : $substring($t, 0, 4) & '-' & $substring($t, 4, 2) ) };
+        $rawMonths := [$distinct($pluck($rows, 'monthRaw'))];
+        $inMonths := function($months) { (
+          $picked := [$rawMonths[$monthOf($) in $months]];
+          $count($picked) = 0 ? [] : $applyAdvanced($rows, $where('monthRaw', 'in', $picked))
+        ) };
+        $sumBy := function($list) { $list{ group: $sum(cost) } };
+        $mo := ds.months;
+        $totalBy := $sumBy($rows);
+        $lastBy := $sumBy($inMonths([$mo.lastFull]));
+        $beforeBy := $sumBy($inMonths([$mo.before]));
+        $currentBy := $sumBy($inMonths([$mo.current]));
+        $last3By := $sumBy($inMonths($mo.last3));
+        $pairs := [$each($totalBy, function($v, $g) { { 'group': $g, 'total': $v } })];
+        $largest := $take([$pairs^(>total)], 300);
+        $ranked := [$map($largest, function($p) { (
+          $g := $p.group;
+          $last := $lookup($lastBy, $g);
+          $last := $last ? $last : 0;
+          $before := $lookup($beforeBy, $g);
+          $before := $before ? $before : 0;
+          $current := $lookup($currentBy, $g);
+          $three := $lookup($last3By, $g);
+          {
+            'group': $g,
+            'thisMonth': $current ? $round($current, 2) : 0,
+            'lastFullMonth': $round($last, 2),
+            'monthBefore': $round($before, 2),
+            'change': $before > 0 ? ($last - $before) / $before : null,
+            'average3': $three ? $round($three / 3, 2) : 0,
+            'total': $round($p.total, 2)
+          }
+        ) })];
+        $top := [$take($ranked, 5).group];
+        $inTop := $count($top) = 0 ? [] : $applyAdvanced($rows, $where('group', 'in', $top));
+        $rest := $count($top) = 0 ? $rows : $applyAdvanced($rows, $where('group', 'notIn', $top));
+        $restByMonth := $rest{ monthRaw: $sum(cost) };
+        /* At most five groups: one small grouping each. */
+        $topLines := [$top.( $g := $; $each($applyAdvanced($inTop, $where('group', 'eq', $g)){ monthRaw: $sum(cost) }, function($v, $k) { { 'month': $monthOf($k), 'group': $g, 'cost': $round($v, 2) } }) )];
+        $chart := $append($topLines, [$each($restByMonth, function($v, $k) { { 'month': $monthOf($k), 'group': 'Other', 'cost': $round($v, 2) } })]);
+        $byRawMonth := $rows{ monthRaw: $sum(cost) };
+        $totals := [$each($byRawMonth, function($v, $k) { { 'month': $monthOf($k), 'cost': $v } })]{ month: $sum(cost) };
+        $mt := function($k) { $lookup($totals, $k) ? $lookup($totals, $k) : 0 };
+        $lastTotal := $mt($mo.lastFull);
+        $beforeTotal := $mt($mo.before);
+        /* The average is over full months: this month so far would pull it down. */
+        $full := $mo.list[$ != $mo.current];
+        $currencies := [$distinct($pluck($raw, 'currency'))[$ != '']];
+        {
+          'lines': $ranked,
+          'chart': [$chart^(month)],
+          'lastFullMonth': $round($lastTotal, 2),
+          'monthBefore': $round($beforeTotal, 2),
+          'change': $beforeTotal > 0 ? $round(($lastTotal - $beforeTotal) / $beforeTotal, 4) : null,
+          'total': $round($sum($pluck($rows, 'cost')), 2),
+          'average': $count($full) > 0 ? $round($sum([0, $full.$mt($)]) / $count($full), 2) : null,
+          'currency': $count($currencies) = 1 ? $currencies[0] : $count($currencies) = 0 ? null : 'Mixed',
+          'capped': $count($pairs) > 300,
+          'partial': value.properties.nextLink ? true : false
+        }
+      ) }
+    cache: { ttl: 3600 }
+
+layout:
+  - widget: markdown
+    when: "${ scope.missing ? true : false }"
+    text: "**Nothing to add up yet.** ${ scope.missing }"
+  - widget: kpi
+    data: trend.lastFullMonth
+    label: Last full month
+    format: number
+  - widget: kpi
+    data: trend.change
+    label: Against the month before
+    format: percent
+    status: "${ $type(value) != 'number' ? 'neutral' : value > 0.1 ? 'warn' : value < 0 ? 'ok' : 'neutral' }"
+  - widget: kpi
+    data: trend.average
+    label: Monthly average
+    format: number
+  - widget: kpi
+    data: trend.total
+    label: Total for the period
+    format: number
+  - widget: markdown
+    when: "${ trend.partial or trend.capped ? true : false }"
+    text: >-
+      **Partial data.** There are more month-by-group lines than this view adds up (it reads the 1,000 highest and
+      lists the 300 largest groups): the smallest lines and the monthly figures may be short. Pick a coarser grouping
+      or one subscription.
+  - widget: chart
+    title: Top five by month
+    span: 12
+    rows: 3
+    type: stackedBar
+    data: trend.chart
+    x: month
+    y: cost
+    series: group
+    format: number
+    xLabel: Month
+  - widget: table
+    id: trend
+    span: 12
+    data: trend.lines
+    rowKey: group
+    sort: { field: total, desc: true }
+    columns:
+      - { field: group, label: Group, kind: identity, sortable: true, filter: text }
+      - { field: lastFullMonth, label: Last full month, kind: number, sortable: true }
+      - { field: monthBefore, label: Month before, kind: number, sortable: true }
+      - { field: change, label: Change, kind: percent, sortable: true, filter: range }
+      - { field: average3, label: 3-month average, kind: number, sortable: true }
+      - { field: thisMonth, label: This month so far, kind: number, sortable: true }
+      - { field: total, label: Total for the period, kind: number, sortable: true }
+    rowActions:
+      - label: Open Cost analysis
+        icon: arrow-square-out
+        href: https://portal.azure.com/#view/Microsoft_Azure_CostManagement/Menu/~/costanalysis/openedBy/AzurePortal
+    empty:
+      title: No cost to show
+      body: >-
+        Nothing was charged in these months in this scope, or the scope isn't configured. Cost Management needs an
+        offer that supports it (EA, MCA, pay-as-you-go).
+
+export:
+  formats: [csv, xlsx]
+  fileName: azure-monthly-cost-trend
+  data: trend.lines
+  columns: all

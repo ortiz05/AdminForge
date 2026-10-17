@@ -161,6 +161,43 @@ leftovers it recognises); `expectation_failed` — SharePoint returned another f
 join link; `writes_paused` — the emergency stop is on (transactions pause with every other change). Probe results are
 the record of these runs; they don't add audit events.
 
+## Azure Billing
+
+The **Azure Billing** section (the overview dashboard and Invoices; its reports are in the Reports catalogue under
+"Azure Billing": cost analysis, this month and last, monthly trend, chargeback by tag, top resources, budgets) reads
+Cost Management for **every subscription under one management group** by default — the tenant root group (its id is
+`AF_TENANT_ID`), or the group in `AF_COST_MANAGEMENT_GROUP_ID`. Each view can narrow to one subscription, or switch to
+the **billing account** in `AF_BILLING_ACCOUNT_ID` (an EA enrollment number or an MCA billing account id: Cost
+Management + Billing → Properties). Cost by tag uses `AF_COST_TAG_NAME` (default `CostCenter`); turn on **tag
+inheritance** in Cost Management (Settings → Manage tag inheritance) so resource-group and subscription tags count
+for the resources in them.
+
+**Finance users** sign in like everyone else and need `Portal.Reader` (`SG-AdminForge-<label>-Portal.Reader`) plus, in
+Azure, **Cost Management Reader** (or Reader) on that management group — or a billing role on the billing account for
+the billing-account scope (EA: Enterprise read-only; MCA: Billing account reader). The Invoices page needs **Billing
+account reader** or **Invoice manager** on the billing account; Enterprise Agreement invoices stay in the EA views of
+Cost Management + Billing. Their Graph-backed pages elsewhere simply report what their account can't read.
+
+**Schedules** run as the automation identity and mail the finance team (`AF_FINANCE_RECIPIENTS`, with
+`AF_MAIL_SENDER`): `reports.azure-monthly-cost-weekly` (Mondays 06:45 UTC, cost by subscription),
+`billing.month-close` (the 4th at 07:00 UTC, last month by subscription and service — Cost Management settles a month
+within 72 hours) and `billing.chargeback-monthly` (the 4th at 07:30 UTC, last month's amortized cost by tag value and
+subscription). The automation identity needs **Cost Management Reader on the management group**: provisioning grants
+it Reader on `AF_SUBSCRIPTION_ID` only, so assign the role yourself —
+`az role assignment create --assignee <automation app id> --role "Cost Management Reader" --scope /providers/Microsoft.Management/managementGroups/<group id>`.
+The three schedules **ship turned off**: once the role is assigned and `AF_FINANCE_RECIPIENTS` is set, turn them on
+under Automation › Schedules. (Without the role a run fails with `forbidden` and says which role is missing.)
+
+Files and exports carry **every row** Cost Management returned (the page lists the 500 highest) — up to its 5,000-row
+answer; beyond that a view says "Partial data" and a narrower scope or grouping is needed. Grouping by resource group
+or subscription **name** adds up names that repeat across subscriptions (`rg-network` in each); add _Then by:
+Subscription_ in cost analysis to keep them apart.
+
+Cost Management allows only a few queries a minute per scope: every view caches for an hour; a throttled query
+is retried after Microsoft's Retry-After and otherwise shows "Microsoft is limiting requests right now". Cost data lags by up to a day (72 hours for some EA usage), the newest day is partial, and amounts
+are in the billing currency (a view across billing accounts in different currencies says so). Offers without Cost
+Management (some CSP and sponsorship offers) answer with a clear error; see `docs/licensing-review.md` › Azure Billing.
+
 ## Sizing for a large tenant
 
 **Design target: about 50 engineers using AdminForge at the same time**, which one API process with the defaults

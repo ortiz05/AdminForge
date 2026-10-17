@@ -19,6 +19,7 @@ import { existsSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { collectExpressions, lintExpressions, validateExpressions } from '@adminforge/expressions';
 import { formatContentError, loadContentDir, type LoadedDefinition } from '@adminforge/schemas';
+import { hiddenFromContent } from './api-bridge';
 import { relPath, type ContentCliContext } from './context';
 import { bareDatasourceRefs, datasourceOrderProblems, scriptPinProblems } from './lint';
 
@@ -85,6 +86,11 @@ export async function checkContent(
       for (const m of e.source.matchAll(/\benv\.([A-Za-z0-9_]+)/g))
         if (!declaredEnv.has(m[1]!))
           errs.push(`${d.file} ${e.path}: env.${m[1]} is not declared in config/example.env.`);
+        else if (hiddenFromContent(m[1]!))
+          // Secret-looking names (…_KEY, …TOKEN, …SECRET, …) never reach expressions: the reference is always empty.
+          errs.push(
+            `${d.file} ${e.path}: env.${m[1]} is never readable by content (its name looks like a secret: …SECRET, …TOKEN, …_KEY, …). Rename the setting.`,
+          );
     const ref = (d.def as { $schema?: string }).$schema;
     if (
       ref &&

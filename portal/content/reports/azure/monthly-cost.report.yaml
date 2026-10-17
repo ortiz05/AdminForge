@@ -1,50 +1,95 @@
 $schema: ../../../packages/schemas/generated/report.schema.json
 kind: report
 id: azure.monthly-cost
-version: 1.0.0
-# Draft until the request policy allows the read-only Cost Management query POST
-# (/subscriptions/{id}/providers/Microsoft.CostManagement/query): read mode refuses it today, so the report would only
-# show "changes data". Both queries were checked against the validation tenant.
-status: draft
+version: 1.1.0
 title: Azure cost this month and last
-summary: Actual cost of a subscription month to date and for the whole of last month, by resource group, service or region, with a straight-line projection for the month and each line's share — from the Cost Management query API.
-owner: azure-team
-tags: [azure, cost, finops]
+summary: >-
+  Actual cost month to date and for the whole of last month across every subscription (or one), by subscription,
+  resource group, service, service family, meter category or region, with a straight-line projection for the month and
+  each line's share — from the Cost Management query API.
+owner: finance-ops
+tags: [azure, billing, cost, finops, subscriptions]
+area: billing
 nav: { section: reports, label: Azure cost this month and last, icon: currency-circle-dollar, order: 183 }
 requires:
   portalRoles: [Portal.Reader]
   scopes:
     arm: [user_impersonation]
-  # Cost Management Reader (or Reader) on the subscription; the offer must support Cost Management (EA, MCA, pay-as-you-go).
+  # Cost Management Reader (or Reader) on the management group or subscription, or a billing role on the billing
+  # account; the offer must support Cost Management (EA, MCA, pay-as-you-go).
   azureRoles: [Cost Management Reader]
 
 params:
+  scope:
+    type: enum
+    label: Scope
+    facet: true
+    default: managementGroup
+    values:
+      - { value: managementGroup, label: All subscriptions (management group) }
+      - { value: billingAccount, label: Billing account }
+    description: Every subscription under AF_COST_MANAGEMENT_GROUP_ID (default the tenant root group), or the billing account in AF_BILLING_ACCOUNT_ID.
   subscriptionId:
     type: string
     format: guid
     label: Subscription
     picker: subscription
     facet: true
-    default: "${ env.AF_SUBSCRIPTION_ID }"
-    description: Defaults to the installation's subscription (AF_SUBSCRIPTION_ID).
+    description: Leave empty for every subscription in the scope.
   groupBy:
     type: enum
     label: Group by
     facet: true
-    default: ResourceGroupName
+    default: SubscriptionName
     values:
+      - { value: SubscriptionName, label: Subscription }
       - { value: ResourceGroupName, label: Resource group }
       - { value: ServiceName, label: Service }
+      - { value: ServiceFamily, label: Service family }
+      - { value: MeterCategory, label: Meter category }
       - { value: ResourceLocation, label: Region }
+  managementGroupId:
+    type: string
+    hidden: true
+    pattern: "[A-Za-z0-9._()-]{1,90}"
+    default: "${ env.AF_COST_MANAGEMENT_GROUP_ID ? env.AF_COST_MANAGEMENT_GROUP_ID : env.AF_TENANT_ID }"
+  billingAccountId:
+    type: string
+    hidden: true
+    pattern: "[A-Za-z0-9:_.-]{1,200}"
+    default: "${ env.AF_BILLING_ACCOUNT_ID }"
 
 datasources:
+  # Where Cost Management adds up (see billing.cost-analysis): ids encoded once, here.
+  scope:
+    source: static
+    data: {}
+    transform: >-
+      ${ (
+        $sub := params.subscriptionId;
+        $sub ? {
+          'kind': 'subscription',
+          'label': 'Subscription ' & $sub,
+          'path': '/subscriptions/' & $encode($guid($sub))
+        } : params.scope = 'billingAccount' ? (
+          params.billingAccountId ? {
+            'kind': 'billingAccount',
+            'label': 'Billing account ' & params.billingAccountId,
+            'path': '/providers/Microsoft.Billing/billingAccounts/' & $encode(params.billingAccountId)
+          } : { 'kind': 'none', 'missing': 'Set AF_BILLING_ACCOUNT_ID to the billing account (EA enrollment or MCA billing account id), or pick the management group scope.' }
+        ) : params.managementGroupId ? {
+          'kind': 'managementGroup',
+          'label': 'Management group ' & params.managementGroupId,
+          'path': '/providers/Microsoft.Management/managementGroups/' & $encode(params.managementGroupId)
+        } : { 'kind': 'none', 'missing': 'Set AF_COST_MANAGEMENT_GROUP_ID (or AF_TENANT_ID for the tenant root group), or pick a subscription.' }
+      ) }
   # Cost Management allows only a few queries a minute per scope: keep the cache long.
   monthToDate:
     source: arm
-    when: "${ params.subscriptionId ? true : false }"
+    when: "${ ds.scope.path ? true : false }"
     request:
       method: POST
-      path: /subscriptions/${ $encode($guid(params.subscriptionId)) }/providers/Microsoft.CostManagement/query
+      path: ${ ds.scope.path }/providers/Microsoft.CostManagement/query
       apiVersion: "2023-11-01"
       body:
         type: ActualCost
@@ -52,27 +97,41 @@ datasources:
         dataset:
           granularity: None
           aggregation: { totalCost: { name: Cost, function: Sum } }
-          grouping:
-            - { type: Dimension, name: "${ params.groupBy in ['ResourceGroupName', 'ServiceName', 'ResourceLocation'] ? params.groupBy : 'ResourceGroupName' }" }
+          # By subscription: the id too, so two subscriptions with the same name stay apart and rows link to it.
+          grouping: &grouping >-
+            ${ (
+              $dims := ['SubscriptionName', 'ResourceGroupName', 'ServiceName', 'ServiceFamily', 'MeterCategory', 'ResourceLocation'];
+              $dim := params.groupBy in $dims ? params.groupBy : 'SubscriptionName';
+              $dim = 'SubscriptionName'
+                ? [{ 'type': 'Dimension', 'name': 'SubscriptionId' }, { 'type': 'Dimension', 'name': 'SubscriptionName' }]
+                : [{ 'type': 'Dimension', 'name': $dim }]
+            ) }
+    # Read and sorted natively ($tableRows); the totals add every row, the 500 highest lines are kept (a very large
+    # estate grouped by resource group has more).
     transform: >-
       ${ (
-        $cols := [value.properties.columns.name];
-        $dim := params.groupBy in ['ResourceGroupName', 'ServiceName', 'ResourceLocation'] ? params.groupBy : 'ResourceGroupName';
+        $dims := ['SubscriptionName', 'ResourceGroupName', 'ServiceName', 'ServiceFamily', 'MeterCategory', 'ResourceLocation'];
+        $dim := params.groupBy in $dims ? params.groupBy : 'SubscriptionName';
+        $raw := $tableRows(value.properties, $merge([{ 'group': $dim, 'cost': 'Cost', 'currency': 'Currency' }, $dim = 'SubscriptionName' ? { 'subscriptionId': 'SubscriptionId' } : {}]));
         {
-          'rows': [$map(value.properties.rows, function($r) { (
-            $o := $merge($map($cols, function($c, $i) { { $c: $r[$i] } }));
-            { 'group': $lookup($o, $dim), 'cost': $lookup($o, 'Cost'), 'currency': $lookup($o, 'Currency') }
-          ) })]
+          'rows': [$map($take([$raw^(>cost)], 500), function($r) { (
+            $g := $r.group ? $r.group : '';
+            $id := $r.subscriptionId ? $lowercase($r.subscriptionId) : '';
+            { 'key': $id ? $id : $g, 'group': $g ? $g : $id, 'subscriptionId': $id ? $id : null, 'cost': $r.cost }
+          ) })],
+          'total': $sum($pluck($raw, 'cost')),
+          'currencies': [$distinct($pluck($raw, 'currency'))[$ != '']],
+          'capped': $count($raw) > 500
         }
       ) }
     cache: { ttl: 3600 }
   cost:
     source: arm
-    when: "${ params.subscriptionId ? true : false }"
+    when: "${ ds.scope.path ? true : false }"
     # TheLastMonth is not accepted for every offer, so last month is a custom period computed from `now`.
     request:
       method: POST
-      path: /subscriptions/${ $encode($guid(params.subscriptionId)) }/providers/Microsoft.CostManagement/query
+      path: ${ ds.scope.path }/providers/Microsoft.CostManagement/query
       apiVersion: "2023-11-01"
       body:
         type: ActualCost
@@ -83,55 +142,66 @@ datasources:
         dataset:
           granularity: None
           aggregation: { totalCost: { name: Cost, function: Sum } }
-          grouping:
-            - { type: Dimension, name: "${ params.groupBy in ['ResourceGroupName', 'ServiceName', 'ResourceLocation'] ? params.groupBy : 'ResourceGroupName' }" }
+          grouping: *grouping
     transform: >-
       ${ (
-        $cols := [value.properties.columns.name];
-        $dim := params.groupBy in ['ResourceGroupName', 'ServiceName', 'ResourceLocation'] ? params.groupBy : 'ResourceGroupName';
-        $last := [$map(value.properties.rows, function($r) { (
-          $o := $merge($map($cols, function($c, $i) { { $c: $r[$i] } }));
-          { 'group': $lookup($o, $dim), 'cost': $lookup($o, 'Cost'), 'currency': $lookup($o, 'Currency') }
+        $dims := ['SubscriptionName', 'ResourceGroupName', 'ServiceName', 'ServiceFamily', 'MeterCategory', 'ResourceLocation'];
+        $dim := params.groupBy in $dims ? params.groupBy : 'SubscriptionName';
+        $raw := $tableRows(value.properties, $merge([{ 'group': $dim, 'cost': 'Cost', 'currency': 'Currency' }, $dim = 'SubscriptionName' ? { 'subscriptionId': 'SubscriptionId' } : {}]));
+        $last := [$map($take([$raw^(>cost)], 500), function($r) { (
+          $g := $r.group ? $r.group : '';
+          $id := $r.subscriptionId ? $lowercase($r.subscriptionId) : '';
+          { 'key': $id ? $id : $g, 'group': $g ? $g : $id, 'subscriptionId': $id ? $id : null, 'cost': $r.cost }
         ) })];
         $mtd := [ds.monthToDate.rows];
-        $mtdBy := $merge([{}, $mtd.{ $string(group): cost }]);
-        $lastBy := $merge([{}, $last.{ $string(group): cost }]);
-        $groups := $distinct($append($mtd.$string(group), $last.$string(group)));
-        $mtdTotal := $sum([0, $mtd.cost]);
-        $lastTotal := $sum([0, $last.cost]);
-        $currency := $distinct($append($mtd.currency, $last.currency))[0];
+        $mtdBy := $mtd{ key: $sum(cost) };
+        $lastBy := $last{ key: $sum(cost) };
+        $names := $merge([{}, $last{ key: group[0] }, $mtd{ key: group[0] }]);
+        $ids := $merge([{}, $last{ key: subscriptionId[0] }, $mtd{ key: subscriptionId[0] }]);
+        $groups := $distinct($append($mtd.key, $last.key));
+        $mtdTotal := ds.monthToDate.total ? ds.monthToDate.total : 0;
+        $lastTotal := $sum($pluck($raw, 'cost'));
+        $per := $mtdTotal > 0 ? $mtdTotal : 1;
+        $currencies := [$distinct($append([ds.monthToDate.currencies], $pluck($raw, 'currency')))[$ != '']];
         $y := $number($substring(now, 0, 4));
         $mo := $number($substring(now, 5, 2));
         $start := $toMillis($substring(now, 0, 7) & '-01T00:00:00Z');
         $next := $toMillis($string($mo = 12 ? $y + 1 : $y) & '-' & $formatNumber($mo = 12 ? 1 : $mo + 1, '00') & '-01T00:00:00Z');
         $runRate := ($next - $start) / $max([86400000, $toMillis(now) - $start]);
-        $rows := [$groups.(
-          $g := $;
-          $m := $lookup($mtdBy, $g) ? $lookup($mtdBy, $g) : 0;
-          $l := $lookup($lastBy, $g) ? $lookup($lastBy, $g) : 0;
+        $rows := [$map($groups, function($g) { (
+          $m := $lookup($mtdBy, $g);
+          $m := $m ? $m : 0;
+          $l := $lookup($lastBy, $g);
+          $l := $l ? $l : 0;
           {
-            'group': $g = '' ? '(not assigned)' : $g,
+            'key': $g ? $g : '(not assigned)',
+            'group': ($n := $lookup($names, $g); $n ? $n : '(not assigned)'),
+            'subscriptionId': $lookup($ids, $g),
             'monthToDate': $round($m, 2),
             'lastMonth': $round($l, 2),
             'projected': $round($m * $runRate, 2),
-            'share': $mtdTotal > 0 ? $round($m / $mtdTotal, 4) : 0,
-            'change': $l > 0 ? $round(($m * $runRate - $l) / $l, 4) : null,
-            'currency': $currency
+            'share': $m / $per,
+            'change': $l > 0 ? ($m * $runRate - $l) / $l : null
           }
-        )];
+        ) })];
+        $ranked := [$rows^(>monthToDate)];
         {
-          'rows': [$rows^(>monthToDate)],
+          'rows': $ranked,
           'monthToDate': $round($mtdTotal, 2),
           'lastMonth': $round($lastTotal, 2),
           'projected': $round($mtdTotal * $runRate, 2),
-          'currency': $currency,
+          'currency': $count($currencies) = 1 ? $currencies[0] : $count($currencies) = 0 ? null : 'Mixed',
           'groups': $count($rows),
-          'top': [$rows^(>monthToDate)][[0..9]]
+          'top': [$take($ranked, 10)],
+          'capped': ds.monthToDate.capped or $count($raw) > 500
         }
       ) }
     cache: { ttl: 3600 }
 
 layout:
+  - widget: markdown
+    when: "${ scope.missing ? true : false }"
+    text: "**Nothing to add up yet.** ${ scope.missing }"
   - widget: kpi
     data: cost.monthToDate
     label: Month to date
@@ -148,6 +218,11 @@ layout:
     data: cost.currency
     label: Currency
     format: text
+  - widget: markdown
+    when: "${ cost.capped ? true : false }"
+    text: >-
+      **The 500 highest lines are compared.** The month totals add up everything Cost Management returned; group by
+      subscription or service, or pick one subscription, to see every line.
   - widget: chart
     title: Highest cost this month
     span: 12
@@ -155,27 +230,38 @@ layout:
     data: cost.top
     x: group
     y: [monthToDate, lastMonth]
+    labels: { monthToDate: Month to date, lastMonth: Last month }
     format: number
   - widget: table
     id: cost
     span: 12
     data: cost.rows
-    rowKey: group
+    rowKey: key
     columns:
-      - { field: group, label: Resource group, service or region, kind: identity, sortable: true }
+      - { field: group, label: "Subscription, resource group, service or region", kind: identity, secondary: subscriptionId, sortable: true, filter: text }
       - { field: monthToDate, label: Month to date, kind: number, sortable: true }
       - { field: lastMonth, label: Last month, kind: number, sortable: true }
       - { field: projected, label: Projected this month, kind: number, sortable: true }
       - { field: share, label: Share this month, kind: percent, sortable: true }
-      - { field: change, label: Projected change, kind: percent, sortable: true }
-      - { field: currency, label: Currency, hidden: true }
+      - { field: change, label: Projected change, kind: percent, sortable: true, filter: range }
+      - { field: subscriptionId, label: Subscription id, kind: guid, hidden: true }
     rowActions:
+      - label: Analyse this subscription
+        icon: chart-pie-slice
+        when: "${ row.subscriptionId ? true : false }"
+        href: ${ '/p/billing.cost-analysis?subscriptionId=' & $encode(row.subscriptionId) }
+      - label: Open subscription
+        icon: cloud
+        when: "${ row.subscriptionId ? true : false }"
+        href: ${ '/p/azure.subscription?id=' & $encode(row.subscriptionId) }
       - label: Open Cost analysis
         icon: arrow-square-out
         href: https://portal.azure.com/#view/Microsoft_Azure_CostManagement/Menu/~/costanalysis/openedBy/AzurePortal
     empty:
       title: No cost to show
-      body: Pick a subscription. Cost Management needs an offer that supports it (EA, MCA, pay-as-you-go) and data can lag by up to a day.
+      body: >-
+        Nothing was charged in this scope yet, or the scope isn't configured. Cost Management needs an offer that
+        supports it (EA, MCA, pay-as-you-go) and data can lag by up to a day.
 
 export:
   formats: [csv, xlsx]

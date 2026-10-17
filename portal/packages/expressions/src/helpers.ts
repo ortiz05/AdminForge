@@ -661,6 +661,80 @@ export function pluck(rows: unknown, path: unknown, budget?: Budget): unknown[] 
 }
 
 /**
+ * `$tableRows(table, names?)`: the rows of a columnar answer — `{ columns: [{ name } | name, …], rows: [[…], …] }`, as
+ * Azure Cost Management (`value.properties`) and Log Analytics tables return them — as objects keyed by column name,
+ * natively (a JSONata `$map` over thousands of rows costs most of a transform's budget). `names` picks and renames
+ * columns, `{ "cost": "Cost", "service": "ServiceName" }`; a column the answer doesn't have gives no field. Without
+ * `names`, columns whose names aren't plain field names are left out.
+ */
+export function tableRows(table: unknown, names?: unknown, budget?: Budget): Record<string, unknown>[] {
+  if (table === undefined || table === null) return [];
+  if (!isRecord(table)) throw new Error('$tableRows: the table must be an object with columns and rows');
+  const columns = Array.isArray(table.columns) ? table.columns : [];
+  const rows = Array.isArray(table.rows) ? table.rows : [];
+  const columnNames = columns.map((c) =>
+    typeof c === 'string' ? c : isRecord(c) && typeof c.name === 'string' ? c.name : '',
+  );
+  let pick: Array<[string, number]>;
+  if (names === undefined || names === null)
+    pick = columnNames.flatMap((n, i): Array<[string, number]> =>
+      WRITABLE_FIELD.test(n) && !RESERVED_FIELDS.has(n) && !n.startsWith('_jsonata') ? [[n, i]] : [],
+    );
+  else {
+    if (!isRecord(names)) throw new Error('$tableRows: names must be an object of field: column');
+    const keys = Object.keys(names);
+    if (keys.length > MAX_NAMES) throw new Error(`$tableRows: at most ${MAX_NAMES} names`);
+    pick = keys.flatMap((k): Array<[string, number]> => {
+      writableField(k, '$tableRows', 'each name');
+      const column = names[k];
+      if (typeof column !== 'string') throw new Error(`$tableRows: "${k}" must name a column`);
+      const i = columnNames.indexOf(column);
+      return i < 0 ? [] : [[k, i]];
+    });
+  }
+  if (rows.length > MAX_SEQUENCE) throw new Error(`$tableRows: at most ${MAX_SEQUENCE} rows`);
+  const out: Record<string, unknown>[] = new Array(rows.length);
+  for (let r = 0; r < rows.length; r++) {
+    if (r % DEADLINE_STRIDE === 0) checkBudget(budget);
+    const row = rows[r];
+    const o: Record<string, unknown> = {};
+    if (Array.isArray(row))
+      for (const [k, i] of pick) {
+        const v = row[i];
+        // Functions never cross into the result (a copy of a lambda would be a forged, callable function).
+        if (v !== undefined && typeof v !== 'function') o[k] = v;
+      }
+    out[r] = o;
+  }
+  return out;
+}
+
+/**
+ * `$withShare(rows, 'cost', 'share')`: every object row with `share` = its `cost` divided by the total `cost` of the
+ * rows (0 when the total is 0; a row without a number there counts as 0) — natively, for "share of total" columns over
+ * lists too long for a JSONata `$map`.
+ */
+export function withShare(rows: unknown, field: unknown, as: unknown, budget?: Budget): unknown[] {
+  const keys = pathKeys(field, '$withShare');
+  const name = writableField(as, '$withShare', 'the new field');
+  const list = asRows(rows);
+  if (list.length > MAX_SEQUENCE) throw new Error(`$withShare: at most ${MAX_SEQUENCE} rows`);
+  const num = (r: unknown) => {
+    const v = readPath(r, keys);
+    return typeof v === 'number' && Number.isFinite(v) ? v : 0;
+  };
+  let total = 0;
+  for (let i = 0; i < list.length; i++) {
+    if (i % DEADLINE_STRIDE === 0) checkBudget(budget);
+    total += num(list[i]);
+  }
+  return list.map((r, i) => {
+    if (i % DEADLINE_STRIDE === 0) checkBudget(budget);
+    return isRecord(r) ? { ...r, [name]: total ? num(r) / total : 0 } : r;
+  });
+}
+
+/**
  * `$idsWhere(rows, path, { "publicClient": filter, "multiTenant": filter, … })`: for each named query-builder filter
  * (as `$applyAdvanced` takes), the values at `path` (usually `id`) of the rows it matches — every filter compiled once
  * and all of them checked in one pass over the rows, where one `$applyAdvanced` per finding walks the rows again each
@@ -1065,6 +1139,8 @@ export const HELPER_NAMES = [
   'withCount',
   'flagIn',
   'idsWhere',
+  'tableRows',
+  'withShare',
 ] as const;
 
 /** Registers the helpers on a compiled expression. */
@@ -1147,5 +1223,19 @@ export function registerHelpers(expr: jsonata.Expression): void {
       return idsWhere(rows, path, filters, budgetOf(this));
     },
     '<xso:o>',
+  );
+  expr.registerFunction(
+    'tableRows',
+    function (this: jsonata.Focus, table: unknown, names?: unknown) {
+      return tableRows(table, names, budgetOf(this));
+    },
+    '<xx?:a>',
+  );
+  expr.registerFunction(
+    'withShare',
+    function (this: jsonata.Focus, rows: unknown, field: unknown, as: unknown) {
+      return withShare(rows, field, as, budgetOf(this));
+    },
+    '<xss:a>',
   );
 }

@@ -62,6 +62,14 @@ sections:
     order: 60
     items:
       - { key: azure-checks, label: Configuration checks, href: /monitoring?group=azure, icon: pulse, order: 90 }
+  # Cost and billing across every subscription, for the people who manage Azure spend (finance and engineering).
+  # Its reports are listed in the Reports catalogue (area billing).
+  - key: billing
+    label: Azure Billing
+    icon: currency-circle-dollar
+    order: 65
+    items:
+      - { key: billing-reports, label: Billing reports, href: /reports?area=billing, icon: chart-bar, order: 50 }
   - key: automation
     label: Automation
     icon: lightning

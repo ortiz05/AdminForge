@@ -49,6 +49,8 @@ export {
 export { createOutboundExecutor } from './execution/outbound';
 export { createAutomationTokenProvider, type AutomationTokenProvider } from './auth/automation';
 export { DatasourceRunner, type UserScope } from './datasources/executor';
+// Which configuration keys content expressions can never read (CLI: validate).
+export { hiddenFromContent } from './datasources/env';
 
 // Audit writer (CLI: publish and audit).
 export { PgAuditWriter, type AuditInput } from './audit/writer';

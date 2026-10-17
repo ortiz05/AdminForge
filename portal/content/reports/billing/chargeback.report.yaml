@@ -1,0 +1,257 @@
+$schema: ../../../packages/schemas/generated/report.schema.json
+kind: report
+id: billing.chargeback
+version: 1.0.0
+title: Azure chargeback by tag
+summary: >-
+  Azure cost per value of a tag (cost centre, department, project — AF_COST_TAG_NAME, default CostCenter) across every
+  subscription, optionally split by subscription, resource group or service, with the share each value carries and how
+  much cost has no value at all — for chargeback and showback. Amortized by default, so reservations and savings plans
+  land with the teams that use them.
+owner: finance-ops
+tags: [billing, cost, finops, chargeback, showback, tags]
+area: billing
+nav: { section: reports, label: Azure chargeback by tag, icon: tag, order: 188 }
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    arm: [user_impersonation]
+  # Cost Management Reader (or Reader) on the management group or subscription, or a billing role on the billing account.
+  azureRoles: [Cost Management Reader]
+
+params:
+  scope:
+    type: enum
+    label: Scope
+    facet: true
+    default: managementGroup
+    values:
+      - { value: managementGroup, label: All subscriptions (management group) }
+      - { value: billingAccount, label: Billing account }
+  subscriptionId:
+    type: string
+    format: guid
+    label: Subscription
+    picker: subscription
+    facet: true
+    description: Leave empty for every subscription in the scope.
+  tagKey:
+    type: string
+    label: Tag key
+    default: "${ env.AF_COST_TAG_NAME ? env.AF_COST_TAG_NAME : 'CostCenter' }"
+    pattern: "[A-Za-z0-9 _.:@+=-]{1,128}"
+    description: The tag cost is charged back by, e.g. CostCenter or Department (AF_COST_TAG_NAME).
+  timeframe:
+    type: enum
+    label: Period
+    facet: true
+    default: LastMonth
+    values:
+      - { value: LastMonth, label: Last month }
+      - { value: MonthToDate, label: This month so far }
+      - { value: Last3Months, label: Last 3 full months }
+      - { value: YearToDate, label: This year so far }
+  thenBy:
+    type: enum
+    label: Then by
+    facet: true
+    default: None
+    values:
+      - { value: None, label: Nothing }
+      - { value: SubscriptionName, label: Subscription }
+      - { value: ResourceGroupName, label: Resource group }
+      - { value: ServiceName, label: Service }
+  costType:
+    type: enum
+    label: Cost
+    facet: true
+    default: AmortizedCost
+    values:
+      - { value: AmortizedCost, label: Amortized (reservations and savings plans spread over their term) }
+      - { value: ActualCost, label: Actual (as billed) }
+  managementGroupId:
+    type: string
+    hidden: true
+    pattern: "[A-Za-z0-9._()-]{1,90}"
+    default: "${ env.AF_COST_MANAGEMENT_GROUP_ID ? env.AF_COST_MANAGEMENT_GROUP_ID : env.AF_TENANT_ID }"
+  billingAccountId:
+    type: string
+    hidden: true
+    pattern: "[A-Za-z0-9:_.-]{1,200}"
+    default: "${ env.AF_BILLING_ACCOUNT_ID }"
+
+datasources:
+  # Where Cost Management adds up (see billing.cost-analysis): ids encoded once, here.
+  scope:
+    source: static
+    data: {}
+    transform: >-
+      ${ (
+        $sub := params.subscriptionId;
+        $sub ? {
+          'kind': 'subscription',
+          'label': 'Subscription ' & $sub,
+          'path': '/subscriptions/' & $encode($guid($sub))
+        } : params.scope = 'billingAccount' ? (
+          params.billingAccountId ? {
+            'kind': 'billingAccount',
+            'label': 'Billing account ' & params.billingAccountId,
+            'path': '/providers/Microsoft.Billing/billingAccounts/' & $encode(params.billingAccountId)
+          } : { 'kind': 'none', 'missing': 'Set AF_BILLING_ACCOUNT_ID to the billing account (EA enrollment or MCA billing account id), or pick the management group scope.' }
+        ) : params.managementGroupId ? {
+          'kind': 'managementGroup',
+          'label': 'Management group ' & params.managementGroupId,
+          'path': '/providers/Microsoft.Management/managementGroups/' & $encode(params.managementGroupId)
+        } : { 'kind': 'none', 'missing': 'Set AF_COST_MANAGEMENT_GROUP_ID (or AF_TENANT_ID for the tenant root group), or pick a subscription.' }
+      ) }
+  # The period as a custom timePeriod worked out from now (UTC), so every offer accepts it.
+  period:
+    source: static
+    data: {}
+    transform: >-
+      ${ (
+        $y := $number($substring(now, 0, 4));
+        $m := $number($substring(now, 5, 2));
+        $start := function($back) { (
+          $i := $y * 12 + ($m - 1) - $back;
+          $string($floor($i / 12)) & '-' & $formatNumber($i % 12 + 1, '00') & '-01T00:00:00Z'
+        ) };
+        $before := function($iso) { $fromMillis($toMillis($iso) - 1000) };
+        $endOfToday := $substring(now, 0, 10) & 'T23:59:59Z';
+        params.timeframe = 'MonthToDate' ? { 'from': $start(0), 'to': $endOfToday, 'label': 'This month so far' }
+        : params.timeframe = 'Last3Months' ? { 'from': $start(3), 'to': $before($start(0)), 'label': 'Last 3 full months' }
+        : params.timeframe = 'YearToDate' ? { 'from': $string($y) & '-01-01T00:00:00Z', 'to': $endOfToday, 'label': 'This year so far' }
+        : { 'from': $start(1), 'to': $before($start(0)), 'label': 'Last month' }
+      ) }
+  cost:
+    source: arm
+    when: "${ ds.scope.path ? true : false }"
+    request:
+      method: POST
+      path: ${ ds.scope.path }/providers/Microsoft.CostManagement/query
+      apiVersion: "2023-11-01"
+      body:
+        type: "${ params.costType = 'ActualCost' ? 'ActualCost' : 'AmortizedCost' }"
+        timeframe: Custom
+        timePeriod:
+          from: "${ ds.period.from }"
+          to: "${ ds.period.to }"
+        dataset:
+          granularity: None
+          aggregation: { totalCost: { name: Cost, function: Sum } }
+          grouping: >-
+            ${ $append(
+              [{ 'type': 'TagKey', 'name': params.tagKey ? params.tagKey : 'CostCenter' }],
+              params.thenBy in ['SubscriptionName', 'ResourceGroupName', 'ServiceName'] ? [{ 'type': 'Dimension', 'name': params.thenBy }] : []
+            ) }
+    # Rows without the tag come back with an empty TagValue: that is the cost nobody is charged for yet. Every row is
+    # labelled, summed and sorted natively ($tableRows, $applyAdvanced, $withFields, $withShare): the file exports all of
+    # them (`exportRows`); the page lists the 500 highest.
+    transform: >-
+      ${ (
+        $d2 := params.thenBy in ['SubscriptionName', 'ResourceGroupName', 'ServiceName'] ? params.thenBy;
+        $empty := function($f) { { 'join': 'and', 'clauses': [{ 'path': $f, 'type': 'string', 'op': 'isEmpty', 'value': null }] } };
+        $filled := function($f) { { 'join': 'and', 'clauses': [{ 'path': $f, 'type': 'string', 'op': 'notEmpty', 'value': null }] } };
+        $raw := $tableRows(value.properties, $merge([{ 'value': 'TagValue', 'cost': 'Cost', 'currency': 'Currency' }, $d2 ? { 'detail': $d2 } : {}]));
+        $named := $d2 ? $append($applyAdvanced($raw, $filled('detail')), $withFields($applyAdvanced($raw, $empty('detail')), { 'detail': '(not assigned)' })) : $raw;
+        $tagged := $withFields($applyAdvanced($named, $filled('value')), { 'tagged': 'true' });
+        $untaggedRows := $withFields($applyAdvanced($named, $empty('value')), { 'value': '(untagged)', 'tagged': 'false' });
+        $labelled := $append($tagged, $untaggedRows);
+        $all := $withShare([$labelled^(>cost)], 'cost', 'share');
+        $total := $sum($pluck($all, 'cost'));
+        $untagged := $sum($pluck($untaggedRows, 'cost'));
+        $rows := [$map($take($all, 500), function($r, $n) { $merge([$r, { 'key': $n, 'cost': $round($r.cost, 2) }]) })];
+        $currencies := $distinct($pluck($all, 'currency'));
+        $byValue := $labelled{ value: $sum(cost) };
+        $values := [$each($byValue, function($v, $k) { { 'value': $k, 'cost': $round($v, 2) } })];
+        {
+          'rows': $rows,
+          'exportRows': $all,
+          'top': $take([$values^(>cost)], 10),
+          'total': $round($total, 2),
+          'untagged': $round($untagged, 2),
+          'allocated': $total > 0 ? $round(($total - $untagged) / $total, 4) : null,
+          'values': $count($distinct($pluck($tagged, 'value'))),
+          'currency': $count($currencies) = 1 ? $currencies[0] : $count($currencies) = 0 ? null : 'Mixed',
+          'capped': $count($all) > 500,
+          'partial': value.properties.nextLink ? true : false
+        }
+      ) }
+    cache: { ttl: 3600 }
+
+layout:
+  - widget: markdown
+    when: "${ scope.missing ? true : false }"
+    text: "**Nothing to add up yet.** ${ scope.missing }"
+  - widget: kpi
+    data: cost.total
+    label: Cost for the period
+    format: number
+    hint: "${ period.label }"
+  - widget: kpi
+    data: cost.allocated
+    label: Charged back (has a tag value)
+    format: percent
+    hint: "${ 'Tag key ' & params.tagKey }"
+    status: "${ $type(value) != 'number' ? 'neutral' : value < 0.8 ? 'warn' : 'ok' }"
+  - widget: kpi
+    data: cost.untagged
+    label: Not charged back (no value)
+    format: number
+    status: "${ $type(value) = 'number' and value > 0 ? 'warn' : 'ok' }"
+  - widget: kpi
+    data: cost.values
+    label: Tag values
+    format: number
+    hint: "${ params.tagKey }"
+  - widget: markdown
+    when: "${ cost.partial ? true : false }"
+    text: >-
+      **Partial data.** Cost Management has more rows than it returned in one answer, so the totals cover only part of
+      the period's cost. Drop the second grouping or pick one subscription.
+  - widget: markdown
+    when: "${ cost.capped and $not(cost.partial) ? true : false }"
+    text: >-
+      **The 500 highest rows are listed.** The totals add up every row Cost Management returned, and the export has
+      every row; drop the second grouping to see every value here.
+  - widget: chart
+    title: Highest cost by tag value
+    span: 12
+    type: bar
+    data: cost.top
+    x: value
+    y: cost
+    labels: { cost: Cost }
+    format: number
+  - widget: table
+    id: chargeback
+    span: 12
+    data: cost.rows
+    rowKey: key
+    columns:
+      - { field: value, label: Tag value, kind: identity, secondary: detail, sortable: true, filter: text }
+      - { field: detail, label: Then by, hidden: true, filter: facet }
+      - field: tagged
+        label: Charged back
+        kind: status
+        map: { "true": [ok, Tagged], "false": [warn, No value] }
+        filter: facet
+      - { field: cost, label: Cost, kind: number, sortable: true, filter: range }
+      - { field: share, label: Share of total, kind: percent, sortable: true }
+      - { field: currency, label: Currency, filter: facet }
+    rowActions:
+      - label: Open Cost analysis
+        icon: arrow-square-out
+        href: https://portal.azure.com/#view/Microsoft_Azure_CostManagement/Menu/~/costanalysis/openedBy/AzurePortal
+    empty:
+      title: No cost to show
+      body: >-
+        Nothing was charged in this period for this scope, or the scope isn't configured. Tag inheritance (Cost
+        Management settings) makes resource-group and subscription tags count for the resources in them.
+
+export:
+  formats: [csv, xlsx]
+  fileName: azure-chargeback
+  # Every row, not only the 500 the page lists.
+  data: cost.exportRows
+  columns: all

@@ -1,0 +1,371 @@
+$schema: ../../../packages/schemas/generated/report.schema.json
+kind: report
+id: billing.cost-analysis
+version: 1.0.0
+title: Azure cost analysis
+summary: >-
+  Slice and dice Azure cost across every subscription: pick the period, group by subscription, resource group, service,
+  service family, meter category, region, resource type, resource, charge type, pricing model, publisher or a tag (and
+  a second dimension), actual or amortized cost, as one total or by day or month — from Cost Management, exportable.
+owner: finance-ops
+tags: [billing, cost, finops, chargeback, subscriptions]
+area: billing
+nav: { section: reports, label: Azure cost analysis, icon: chart-pie-slice, order: 186 }
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    arm: [user_impersonation]
+  # Cost Management Reader (or Reader) on the management group, or a billing role on the billing account; the offer
+  # must support Cost Management (EA, MCA, pay-as-you-go).
+  azureRoles: [Cost Management Reader]
+
+params:
+  scope:
+    type: enum
+    label: Scope
+    facet: true
+    default: managementGroup
+    values:
+      - { value: managementGroup, label: All subscriptions (management group) }
+      - { value: billingAccount, label: Billing account }
+    description: Every subscription under AF_COST_MANAGEMENT_GROUP_ID (default the tenant root group), or the billing account in AF_BILLING_ACCOUNT_ID.
+  subscriptionId:
+    type: string
+    format: guid
+    label: Subscription
+    picker: subscription
+    facet: true
+    description: Leave empty for every subscription in the scope.
+  timeframe:
+    type: enum
+    label: Period
+    facet: true
+    default: MonthToDate
+    values:
+      - { value: MonthToDate, label: This month so far }
+      - { value: LastMonth, label: Last month }
+      - { value: Last3Months, label: Last 3 full months }
+      - { value: Last6Months, label: Last 6 full months }
+      - { value: Last12Months, label: Last 12 full months }
+      - { value: YearToDate, label: This year so far }
+      - { value: LastYear, label: Last calendar year }
+      - { value: Last30Days, label: Last 30 days }
+      - { value: Custom, label: Custom (From and To) }
+  from:
+    type: date
+    label: From (custom period)
+    default: -30d
+  to:
+    type: date
+    label: To (custom period)
+    default: today
+  groupBy:
+    type: enum
+    label: Group by
+    facet: true
+    default: ServiceName
+    values:
+      - { value: SubscriptionName, label: Subscription }
+      - { value: ResourceGroupName, label: Resource group }
+      - { value: ServiceName, label: Service }
+      - { value: ServiceFamily, label: Service family }
+      - { value: MeterCategory, label: Meter category }
+      - { value: ResourceLocation, label: Region }
+      - { value: ResourceType, label: Resource type }
+      - { value: ResourceId, label: Resource }
+      - { value: ChargeType, label: Charge type }
+      - { value: PricingModel, label: Pricing model }
+      - { value: PublisherType, label: Publisher type }
+      - { value: Tag, label: Tag (Tag key) }
+  tagKey:
+    type: string
+    label: Tag key
+    default: "${ env.AF_COST_TAG_NAME ? env.AF_COST_TAG_NAME : 'CostCenter' }"
+    pattern: "[A-Za-z0-9 _.:@+=-]{1,128}"
+    description: Used when grouping by tag, e.g. CostCenter or Department (AF_COST_TAG_NAME).
+  thenBy:
+    type: enum
+    label: Then by
+    default: None
+    values:
+      - { value: None, label: Nothing }
+      - { value: SubscriptionName, label: Subscription }
+      - { value: ResourceGroupName, label: Resource group }
+      - { value: ServiceName, label: Service }
+      - { value: ServiceFamily, label: Service family }
+      - { value: MeterCategory, label: Meter category }
+      - { value: ResourceLocation, label: Region }
+      - { value: ResourceType, label: Resource type }
+      - { value: ChargeType, label: Charge type }
+      - { value: PricingModel, label: Pricing model }
+      - { value: PublisherType, label: Publisher type }
+  costType:
+    type: enum
+    label: Cost
+    facet: true
+    default: ActualCost
+    values:
+      - { value: ActualCost, label: Actual (as billed) }
+      - { value: AmortizedCost, label: Amortized (reservations and savings plans spread over their term) }
+  granularity:
+    type: enum
+    label: Show
+    facet: true
+    default: None
+    values:
+      - { value: None, label: Total for the period }
+      - { value: Daily, label: By day }
+      - { value: Monthly, label: By month }
+  managementGroupId:
+    type: string
+    hidden: true
+    pattern: "[A-Za-z0-9._()-]{1,90}"
+    default: "${ env.AF_COST_MANAGEMENT_GROUP_ID ? env.AF_COST_MANAGEMENT_GROUP_ID : env.AF_TENANT_ID }"
+  billingAccountId:
+    type: string
+    hidden: true
+    pattern: "[A-Za-z0-9:_.-]{1,200}"
+    default: "${ env.AF_BILLING_ACCOUNT_ID }"
+
+datasources:
+  # Where Cost Management adds up: the subscription picked, else the billing account or the management group (the
+  # tenant root group unless AF_COST_MANAGEMENT_GROUP_ID names another). Ids are encoded here, once.
+  scope:
+    source: static
+    data: {}
+    transform: >-
+      ${ (
+        $sub := params.subscriptionId;
+        $sub ? {
+          'kind': 'subscription',
+          'label': 'Subscription ' & $sub,
+          'short': 'One subscription',
+          'id': $sub,
+          'path': '/subscriptions/' & $encode($guid($sub))
+        } : params.scope = 'billingAccount' ? (
+          params.billingAccountId ? {
+            'kind': 'billingAccount',
+            'label': 'Billing account ' & params.billingAccountId,
+            'short': 'Billing account',
+            'id': params.billingAccountId,
+            'path': '/providers/Microsoft.Billing/billingAccounts/' & $encode(params.billingAccountId)
+          } : { 'kind': 'none', 'missing': 'Set AF_BILLING_ACCOUNT_ID to the billing account (EA enrollment or MCA billing account id), or pick the management group scope.' }
+        ) : params.managementGroupId ? {
+          'kind': 'managementGroup',
+          'label': 'Management group ' & params.managementGroupId,
+          'short': 'Management group',
+          'id': params.managementGroupId,
+          'path': '/providers/Microsoft.Management/managementGroups/' & $encode(params.managementGroupId)
+        } : { 'kind': 'none', 'missing': 'Set AF_COST_MANAGEMENT_GROUP_ID (or AF_TENANT_ID for the tenant root group), or pick a subscription.' }
+      ) }
+  # The period as a custom timePeriod worked out from now (UTC): every offer accepts it, unlike TheLastMonth.
+  period:
+    source: static
+    data: {}
+    transform: >-
+      ${ (
+        $y := $number($substring(now, 0, 4));
+        $m := $number($substring(now, 5, 2));
+        $start := function($back) { (
+          $i := $y * 12 + ($m - 1) - $back;
+          $string($floor($i / 12)) & '-' & $formatNumber($i % 12 + 1, '00') & '-01T00:00:00Z'
+        ) };
+        $before := function($iso) { $fromMillis($toMillis($iso) - 1000) };
+        $endOfToday := $substring(now, 0, 10) & 'T23:59:59Z';
+        $tf := params.timeframe;
+        $from := $substring(params.from ? params.from : now, 0, 10);
+        $to := $substring(params.to ? params.to : now, 0, 10);
+        $span := ($toMillis($to & 'T00:00:00Z') - $toMillis($from & 'T00:00:00Z')) / 86400000;
+        $tf = 'LastMonth' ? { 'from': $start(1), 'to': $before($start(0)), 'label': 'Last month' }
+        : $tf = 'Last3Months' ? { 'from': $start(3), 'to': $before($start(0)), 'label': 'Last 3 full months' }
+        : $tf = 'Last6Months' ? { 'from': $start(6), 'to': $before($start(0)), 'label': 'Last 6 full months' }
+        : $tf = 'Last12Months' ? { 'from': $start(12), 'to': $before($start(0)), 'label': 'Last 12 full months' }
+        : $tf = 'YearToDate' ? { 'from': $string($y) & '-01-01T00:00:00Z', 'to': $endOfToday, 'label': 'This year so far' }
+        : $tf = 'LastYear' ? { 'from': $string($y - 1) & '-01-01T00:00:00Z', 'to': $string($y - 1) & '-12-31T23:59:59Z', 'label': 'Last calendar year' }
+        : $tf = 'Last30Days' ? { 'from': $substring($fromMillis($toMillis(now) - 29 * 86400000), 0, 10) & 'T00:00:00Z', 'to': $endOfToday, 'label': 'Last 30 days' }
+        : $tf = 'Custom' ? (
+          $span < 0 ? { 'error': 'The custom period ends before it starts: pick a To date after the From date.' }
+          : $span > 365 ? { 'error': 'Cost Management answers at most one year at a time: shorten the custom period.' }
+          : { 'from': $from & 'T00:00:00Z', 'to': $to & 'T23:59:59Z', 'label': $from & ' to ' & $to }
+        )
+        : { 'from': $start(0), 'to': $endOfToday, 'label': 'This month so far' }
+      ) }
+  # Cost Management allows only a few queries a minute per scope: one query, cached for an hour.
+  cost:
+    source: arm
+    when: "${ ds.scope.path and ds.period.from ? true : false }"
+    request:
+      method: POST
+      path: ${ ds.scope.path }/providers/Microsoft.CostManagement/query
+      apiVersion: "2023-11-01"
+      body:
+        type: "${ params.costType = 'AmortizedCost' ? 'AmortizedCost' : 'ActualCost' }"
+        timeframe: Custom
+        timePeriod:
+          from: "${ ds.period.from }"
+          to: "${ ds.period.to }"
+        dataset:
+          granularity: "${ params.granularity in ['Daily', 'Monthly'] ? params.granularity : 'None' }"
+          aggregation: { totalCost: { name: Cost, function: Sum } }
+          grouping: >-
+            ${ (
+              $dims := ['SubscriptionName', 'ResourceGroupName', 'ServiceName', 'ServiceFamily', 'MeterCategory', 'ResourceLocation', 'ResourceType', 'ResourceId', 'ChargeType', 'PricingModel', 'PublisherType'];
+              $first := params.groupBy = 'Tag'
+                ? { 'type': 'TagKey', 'name': params.tagKey ? params.tagKey : 'CostCenter' }
+                : { 'type': 'Dimension', 'name': params.groupBy in $dims ? params.groupBy : 'ServiceName' };
+              $then := params.thenBy in $dims and params.thenBy != params.groupBy ? [{ 'type': 'Dimension', 'name': params.thenBy }] : [];
+              $append([$first], $then)
+            ) }
+    # Every row is read, labelled, summed, grouped and sorted natively ($tableRows, $applyAdvanced, $withFields,
+    # $attach, $withShare); periods are formatted once per distinct date. The file exports every row (`exportRows`;
+    # a resource is its full id there); the page lists the 500 highest.
+    transform: >-
+      ${ (
+        $dims := ['SubscriptionName', 'ResourceGroupName', 'ServiceName', 'ServiceFamily', 'MeterCategory', 'ResourceLocation', 'ResourceType', 'ResourceId', 'ChargeType', 'PricingModel', 'PublisherType'];
+        $tag := params.groupBy = 'Tag';
+        $d1 := $tag ? 'TagValue' : params.groupBy in $dims ? params.groupBy : 'ServiceName';
+        $d2 := params.thenBy in $dims and params.thenBy != params.groupBy ? params.thenBy;
+        $isResource := $d1 = 'ResourceId';
+        $none := $tag ? '(untagged)' : '(not assigned)';
+        $cols := [value.properties.columns.name];
+        $periodCol := 'UsageDate' in $cols ? 'UsageDate' : 'BillingMonth' in $cols ? 'BillingMonth';
+        $byPeriod := $exists($periodCol);
+        $where := function($path, $op, $v) { { 'join': 'and', 'clauses': [{ 'path': $path, 'type': 'string', 'op': $op, 'value': $v }] } };
+        $raw := $tableRows(value.properties, $merge([
+          { 'group': $d1, 'cost': 'Cost', 'currency': 'Currency' },
+          $isResource ? { 'resourceId': 'ResourceId' } : {},
+          $d2 ? { 'detail': $d2 } : {},
+          $byPeriod ? { 'periodRaw': $periodCol } : {}
+        ]));
+        $named := $append($applyAdvanced($raw, $where('group', 'notEmpty', null)), $withFields($applyAdvanced($raw, $where('group', 'isEmpty', null)), { 'group': $none }));
+        $detailed := $d2 ? $append($applyAdvanced($named, $where('detail', 'notEmpty', null)), $withFields($applyAdvanced($named, $where('detail', 'isEmpty', null)), { 'detail': '(not assigned)' })) : $named;
+        /* UsageDate 20261015 → 2026-10-15; BillingMonth 2026-10-01T00:00:00 → 2026-10 */
+        $fmt := function($p) { ( $t := $string($p); $contains($t, '-') ? $substring($t, 0, 7) : $substring($t, 0, 4) & '-' & $substring($t, 4, 2) & '-' & $substring($t, 6, 2) ) };
+        $periods := $byPeriod ? $merge([{}, [$distinct($pluck($detailed, 'periodRaw'))].{ $string($): { 'period': $fmt($) } }]) : {};
+        $dated := $byPeriod ? $attach($detailed, 'periodRaw', $periods) : $detailed;
+        $all := $withShare([$dated^(>cost)], 'cost', 'share');
+        $total := $sum($pluck($all, 'cost'));
+        $per := $total > 0 ? $total : 1;
+        $short := function($g) { $isResource ? $split($g, '/')[-1] : $g };
+        $rows := [$map($take($all, 500), function($r, $n) { $merge([$r, { 'key': $n, 'group': $short($r.group), 'cost': $round($r.cost, 2) }]) })];
+        $currencies := [$distinct($pluck($all, 'currency'))[$ != '']];
+        $grouped := $exists($d2) or $byPeriod;
+        $byGroup := $grouped ? $all{ group: $sum(cost) } : {};
+        $groupCount := $grouped ? $count($keys($byGroup)) : $count($all);
+        /* Ranking every group runs in JSONata: beyond a few thousand groups the 500 listed rows stand for them. */
+        $groups := $grouped
+          ? ($groupCount <= 2000
+              ? [$each($byGroup, function($v, $k) { { 'group': $short($k), 'key': $k, 'cost': $round($v, 2), 'share': $v / $per } })]
+              : [($rows{ group: $sum(cost) }) ~> $each(function($v, $k) { { 'group': $k, 'key': $k, 'cost': $round($v, 2), 'share': $v / $per } })])
+          : $rows;
+        $ranked := [$groups^(>cost)];
+        $topKeys := [$take($ranked, 5).($exists(key) ? key : group)];
+        $trend := $byPeriod and $count($topKeys) > 0 ? $applyAdvanced($all, $where('group', 'in', $topKeys)) : [];
+        {
+          'rows': $rows,
+          'exportRows': $all,
+          'total': $round($total, 2),
+          'currency': $count($currencies) = 1 ? $currencies[0] : $count($currencies) = 0 ? null : 'Mixed',
+          'mixedCurrencies': $count($currencies) > 1,
+          'groups': $groupCount,
+          'top': [$take($ranked, 10)],
+          'trend': $byPeriod ? [$map([$trend^(periodRaw)], function($r) { { 'period': $r.period, 'group': $short($r.group), 'cost': $round($r.cost, 2) } })] : [],
+          'byPeriod': $byPeriod,
+          'capped': $count($all) > 500,
+          'partial': value.properties.nextLink ? true : false
+        }
+      ) }
+    cache: { ttl: 3600 }
+
+layout:
+  - widget: markdown
+    when: "${ scope.missing ? true : false }"
+    text: "**Nothing to add up yet.** ${ scope.missing }"
+  - widget: markdown
+    when: "${ period.error ? true : false }"
+    text: "**Check the period.** ${ period.error }"
+  - widget: kpi
+    data: cost.total
+    label: Cost for the period
+    format: number
+    hint: "${ period.label }"
+  - widget: kpi
+    data: cost.currency
+    label: Currency
+    format: text
+    status: "${ cost.mixedCurrencies ? 'warn' : 'neutral' }"
+    statusLabel: "${ cost.mixedCurrencies ? 'Several currencies' : 'Billing currency' }"
+    hint: "${ cost.mixedCurrencies ? 'Several billing currencies: totals add them up as they are. Filter to one subscription or billing account.' : '' }"
+  - widget: kpi
+    data: cost.groups
+    label: Groups
+    format: number
+  - widget: kpi
+    data: scope.short
+    label: Scope
+    format: text
+    hint: "${ scope.id }"
+  - widget: markdown
+    when: "${ cost.partial ? true : false }"
+    text: >-
+      **Partial data.** Cost Management has more rows than it returned in one answer, so the total and the table cover
+      only part of the period's cost. Pick a coarser grouping, a shorter period or one subscription.
+  - widget: markdown
+    when: "${ cost.capped and $not(cost.partial) ? true : false }"
+    text: >-
+      **The 500 highest rows are listed.** The total and the shares add up every row Cost Management returned; pick
+      a coarser grouping to see every line.
+  - widget: chart
+    title: Highest cost
+    when: "${ cost.byPeriod ? false : true }"
+    span: 12
+    type: bar
+    data: cost.top
+    x: group
+    y: cost
+    format: number
+    labels: { cost: Cost }
+  - widget: chart
+    title: Top five over time
+    when: "${ cost.byPeriod ? true : false }"
+    span: 12
+    type: stackedBar
+    data: cost.trend
+    x: period
+    y: cost
+    series: group
+    format: number
+    xLabel: Period
+  - widget: table
+    id: cost
+    span: 12
+    data: cost.rows
+    rowKey: key
+    columns:
+      - { field: group, label: Group, kind: identity, secondary: detail, sortable: true, filter: text }
+      - { field: detail, label: Then by, hidden: true, filter: facet }
+      - { field: period, label: Period, sortable: true, filter: facet }
+      - { field: cost, label: Cost, kind: number, sortable: true, filter: range }
+      - { field: share, label: Share of total, kind: percent, sortable: true }
+      - { field: currency, label: Currency, filter: facet }
+      - { field: resourceId, label: Resource id, kind: code, hidden: true }
+    rowActions:
+      - label: Open resource
+        icon: cube
+        when: "${ $type(row.resourceId) = 'string' and $substring($lowercase(row.resourceId), 0, 15) = '/subscriptions/' }"
+        href: ${ '/p/azure.resource?id=' & $encode(row.resourceId) }
+      - label: Open Cost analysis
+        icon: arrow-square-out
+        href: https://portal.azure.com/#view/Microsoft_Azure_CostManagement/Menu/~/costanalysis/openedBy/AzurePortal
+    empty:
+      title: No cost to show
+      body: >-
+        Nothing was charged in this period for this scope, or the scope isn't configured. Cost Management needs an
+        offer that supports it (EA, MCA, pay-as-you-go), and the newest day can take up to a day to appear.
+
+export:
+  formats: [csv, xlsx]
+  fileName: azure-cost-analysis
+  # Every row, not only the 500 the page lists.
+  data: cost.exportRows
+  columns: all

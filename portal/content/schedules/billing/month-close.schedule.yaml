@@ -1,0 +1,42 @@
+$schema: ../../../packages/schemas/generated/schedule.schema.json
+kind: schedule
+id: billing.month-close
+version: 1.0.0
+title: Azure month close
+summary: >-
+  On the 4th of every month at 07:00 UTC — once Cost Management has settled the month before (up to 72 hours) —
+  writes last month's Azure cost for every subscription under the management group, by subscription and then by
+  service, as XLSX, and mails it to the finance team (AF_FINANCE_RECIPIENTS) when it and AF_MAIL_SENDER are configured.
+owner: finance-ops
+tags: [billing, cost, finops, month-close, report]
+every: on the 4th of every month at 07:00
+timezone: UTC
+# Off until the automation identity holds Cost Management Reader on the cost scope and AF_FINANCE_RECIPIENTS is set
+# (docs/operations.md › Azure Billing); then turn it on under Automation › Schedules.
+enabled: false
+identity: automation
+job:
+  kind: report
+  ref: billing.cost-analysis
+  # Pinned so every month's file has the same shape.
+  params:
+    scope: managementGroup
+    timeframe: LastMonth
+    groupBy: SubscriptionName
+    thenBy: ServiceName
+    costType: ActualCost
+    granularity: None
+  delivery:
+    - type: file
+      format: xlsx
+      path: billing/month-close/{date}.xlsx
+      retain: 36
+    - type: email
+      to: ["${ env.AF_FINANCE_RECIPIENTS }"]
+      format: xlsx
+retry: { max: 3, backoff: exponential, delay: 10m }
+timeoutSeconds: 1800
+overlap: skip
+requires:
+  # Cost Management Reader on the management group for the automation identity (docs/operations.md › Azure Billing).
+  azureRoles: [Cost Management Reader]

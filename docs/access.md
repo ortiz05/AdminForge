@@ -19,12 +19,16 @@ Operator can turn one off.
 
 ## Typical combinations
 
-| Person                     | Groups                                                                                                         |
-| -------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| Help desk (look things up) | Reader                                                                                                         |
-| Engineer who makes changes | Reader + Operator                                                                                              |
-| Change approver            | Reader + Operator + Playbook.Approver (approvers must be armed when the steps after an approval write as them) |
-| Platform owner             | Reader + Operator + Portal.Admin                                                                               |
+| Person                     | Groups                                                                                                          |
+| -------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| Help desk (look things up) | Reader                                                                                                          |
+| Engineer who makes changes | Reader + Operator                                                                                               |
+| Change approver            | Reader + Operator + Playbook.Approver (approvers must be armed when the steps after an approval write as them)  |
+| Platform owner             | Reader + Operator + Portal.Admin                                                                                |
+| Finance (Azure Billing)    | Reader, plus in Azure: Cost Management Reader on the cost management group, Billing account reader for invoices |
+
+Finance users see the Azure Billing section with their own Azure access (`docs/operations.md` › Azure Billing); they
+need no AdminForge role beyond Reader, and Operator only to schedule billing reports themselves.
 
 AdminForge never grants Entra privileges: a write still needs the person's own Entra role (for example User
 Administrator, often activated through PIM). The portal explains when a role or licence is missing.

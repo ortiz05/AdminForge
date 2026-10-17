@@ -1,0 +1,346 @@
+$schema: ../../../packages/schemas/generated/dashboard.schema.json
+kind: dashboard
+id: billing.overview
+version: 1.0.0
+title: Azure billing overview
+summary: >-
+  Azure spend across every subscription: this month so far, last month, the Cost Management forecast to month end, the
+  daily trend, and which subscriptions and services cost the most — with links to cost analysis, trends, chargeback,
+  budgets and invoices.
+owner: finance-ops
+tags: [billing, cost, finops, dashboard]
+template: dashboard
+nav: { section: billing, label: Overview, icon: gauge, order: 5 }
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    arm: [user_impersonation]
+  # Cost Management Reader (or Reader) on the management group (AF_COST_MANAGEMENT_GROUP_ID, default the tenant root
+  # group), or a billing role on the billing account for the billing-account scope.
+  azureRoles: [Cost Management Reader]
+
+params:
+  scope:
+    type: enum
+    label: Scope
+    facet: true
+    default: managementGroup
+    values:
+      - { value: managementGroup, label: All subscriptions (management group) }
+      - { value: billingAccount, label: Billing account }
+  subscriptionId:
+    type: string
+    format: guid
+    label: Subscription
+    picker: subscription
+    facet: true
+    description: Leave empty for every subscription in the scope.
+  managementGroupId:
+    type: string
+    hidden: true
+    pattern: "[A-Za-z0-9._()-]{1,90}"
+    default: "${ env.AF_COST_MANAGEMENT_GROUP_ID ? env.AF_COST_MANAGEMENT_GROUP_ID : env.AF_TENANT_ID }"
+  billingAccountId:
+    type: string
+    hidden: true
+    pattern: "[A-Za-z0-9:_.-]{1,200}"
+    default: "${ env.AF_BILLING_ACCOUNT_ID }"
+
+datasources:
+  # Where Cost Management adds up (see billing.cost-analysis): ids encoded once, here.
+  scope:
+    source: static
+    data: {}
+    transform: >-
+      ${ (
+        $sub := params.subscriptionId;
+        $sub ? {
+          'kind': 'subscription',
+          'label': 'Subscription ' & $sub,
+          'path': '/subscriptions/' & $encode($guid($sub))
+        } : params.scope = 'billingAccount' ? (
+          params.billingAccountId ? {
+            'kind': 'billingAccount',
+            'label': 'Billing account ' & params.billingAccountId,
+            'path': '/providers/Microsoft.Billing/billingAccounts/' & $encode(params.billingAccountId)
+          } : { 'kind': 'none', 'missing': 'Set AF_BILLING_ACCOUNT_ID to the billing account (EA enrollment or MCA billing account id), or pick the management group scope.' }
+        ) : params.managementGroupId ? {
+          'kind': 'managementGroup',
+          'label': 'Management group ' & params.managementGroupId,
+          'path': '/providers/Microsoft.Management/managementGroups/' & $encode(params.managementGroupId)
+        } : { 'kind': 'none', 'missing': 'Set AF_COST_MANAGEMENT_GROUP_ID (or AF_TENANT_ID for the tenant root group), or pick a subscription.' }
+      ) }
+  # This month and last month by subscription in one monthly query, and this month by service: with the forecast,
+  # three Cost Management queries a load, each cached for an hour (it allows only a few queries a minute per scope).
+  bySubscription:
+    source: arm
+    when: "${ ds.scope.path ? true : false }"
+    request:
+      method: POST
+      path: ${ ds.scope.path }/providers/Microsoft.CostManagement/query
+      apiVersion: "2023-11-01"
+      body:
+        type: ActualCost
+        timeframe: Custom
+        timePeriod:
+          from: "${ ( $y := $number($substring(now, 0, 4)); $m := $number($substring(now, 5, 2)); $string($m = 1 ? $y - 1 : $y) & '-' & $formatNumber($m = 1 ? 12 : $m - 1, '00') & '-01T00:00:00Z' ) }"
+          to: "${ $substring(now, 0, 10) & 'T23:59:59Z' }"
+        dataset:
+          granularity: Monthly
+          aggregation: { totalCost: { name: Cost, function: Sum } }
+          grouping:
+            - { type: Dimension, name: SubscriptionId }
+            - { type: Dimension, name: SubscriptionName }
+    # Read natively ($tableRows) and split by month: this month's rows and last month's.
+    transform: >-
+      ${ (
+        $monthCol := 'BillingMonth' in [value.properties.columns.name] ? 'BillingMonth' : 'UsageDate';
+        $raw := $tableRows(value.properties, { 'key': 'SubscriptionId', 'subscriptionId': 'SubscriptionId', 'name': 'SubscriptionName', 'cost': 'Cost', 'currency': 'Currency', 'monthRaw': $monthCol });
+        $where := function($path, $op, $v) { { 'join': 'and', 'clauses': [{ 'path': $path, 'type': 'string', 'op': $op, 'value': $v }] } };
+        $named := $append($applyAdvanced($raw, $where('name', 'notEmpty', null)), $withFields($applyAdvanced($raw, $where('name', 'isEmpty', null)), { 'name': '(no name)' }));
+        $rows := $append($applyAdvanced($named, $where('key', 'notEmpty', null)), $withFields($applyAdvanced($named, $where('key', 'isEmpty', null)), { 'key': '(not assigned)', 'subscriptionId': null, 'name': '(not assigned)' }));
+        /* BillingMonth "2026-10-01T00:00:00", or UsageDate 20261001 */
+        $monthOf := function($m) { ( $t := $string($m); $contains($t, '-') ? $substring($t, 0, 7) : $substring($t, 0, 4) & '-' & $substring($t, 4, 2) ) };
+        $raws := [$distinct($pluck($rows, 'monthRaw'))];
+        /* (inside a filter a bare name reads the item: the month is taken out first) */
+        $current := $substring(now, 0, 7);
+        $thisRaw := [$raws[$monthOf($) = $current]];
+        $lastRaw := [$raws[$monthOf($) != $current]];
+        {
+          'thisMonth': $count($thisRaw) = 0 ? [] : $applyAdvanced($rows, $where('monthRaw', 'in', $thisRaw)),
+          'lastMonth': $count($lastRaw) = 0 ? [] : $applyAdvanced($rows, $where('monthRaw', 'in', $lastRaw))
+        }
+      ) }
+    cache: { ttl: 3600 }
+  byService:
+    source: arm
+    when: "${ ds.scope.path ? true : false }"
+    request:
+      method: POST
+      path: ${ ds.scope.path }/providers/Microsoft.CostManagement/query
+      apiVersion: "2023-11-01"
+      body:
+        type: ActualCost
+        timeframe: MonthToDate
+        dataset:
+          granularity: None
+          aggregation: { totalCost: { name: Cost, function: Sum } }
+          grouping:
+            - { type: Dimension, name: ServiceName }
+    transform: >-
+      ${ (
+        $raw := $tableRows(value.properties, { 'service': 'ServiceName', 'cost': 'Cost' });
+        $ranked := [$raw^(>cost)];
+        $top := [$map($take($ranked, 5), function($r) { { 'service': $r.service ? $r.service : '(not assigned)', 'cost': $round($r.cost, 2) } })];
+        $rest := $sum($pluck($raw, 'cost')) - $sum($pluck($take($ranked, 5), 'cost'));
+        { 'top': [$append($top, $rest > 0.005 ? [{ 'service': 'Other', 'cost': $round($rest, 2) }] : [])] }
+      ) }
+    cache: { ttl: 3600 }
+  # Cost Management's own forecast for the whole month, daily: actual cost so far plus the forecast for the rest.
+  # Optional: offers without a forecast still show the straight-line projection.
+  forecast:
+    source: arm
+    optional: true
+    when: "${ ds.scope.path ? true : false }"
+    request:
+      method: POST
+      path: ${ ds.scope.path }/providers/Microsoft.CostManagement/forecast
+      apiVersion: "2023-11-01"
+      body:
+        type: ActualCost
+        timeframe: Custom
+        timePeriod:
+          from: "${ $substring(now, 0, 7) & '-01T00:00:00Z' }"
+          to: "${ ( $y := $number($substring(now, 0, 4)); $m := $number($substring(now, 5, 2)); $fromMillis($toMillis($string($m = 12 ? $y + 1 : $y) & '-' & $formatNumber($m = 12 ? 1 : $m + 1, '00') & '-01T00:00:00Z') - 1000) ) }"
+        dataset:
+          granularity: Daily
+          aggregation: { totalCost: { name: Cost, function: Sum } }
+        includeActualCost: true
+        includeFreshPartialCost: false
+    transform: >-
+      ${ (
+        $ix := $merge($map([value.properties.columns.name], function($c, $i) { { $c: $i } }));
+        $iC := $lookup($ix, 'Cost');
+        $iD := $lookup($ix, 'UsageDate');
+        $iS := $lookup($ix, 'CostStatus');
+        $all := $type(value.properties.rows) = 'array' ? value.properties.rows : [];
+        $days := [$map($all, function($r) { (
+          $d := $string($r[$iD]);
+          {
+            'day': $substring($d, 0, 4) & '-' & $substring($d, 4, 2) & '-' & $substring($d, 6, 2),
+            'status': $r[$iS] = 'Forecast' ? 'Forecast' : 'Actual',
+            'cost': $type($r[$iC]) = 'number' ? $round($r[$iC], 2) : 0
+          }
+        ) })];
+        {
+          'days': [$days^(day)],
+          'total': $round($sum([0, $days.cost]), 2),
+          'forecastPart': $round($sum([0, $days[status = 'Forecast'].cost]), 2)
+        }
+      ) }
+    cache: { ttl: 3600 }
+  summary:
+    source: static
+    data: {}
+    # Natively joined ($attach) and sorted; the 500 subscriptions that cost the most this month become table rows (the
+    # totals add every subscription). The projection runs to the last day Cost Management has data for (it lags about
+    # a day), and the forecast is used only when it really forecasts something.
+    transform: >-
+      ${ (
+        $mtd := ds.bySubscription.thisMonth;
+        $last := ds.bySubscription.lastMonth;
+        $where := function($path, $type, $op, $v) { { 'join': 'and', 'clauses': [{ 'path': $path, 'type': $type, 'op': $op, 'value': $v }] } };
+        $mtdTotal := $sum($pluck($mtd, 'cost'));
+        $lastTotal := $sum($pluck($last, 'cost'));
+        $y := $number($substring(now, 0, 4));
+        $mo := $number($substring(now, 5, 2));
+        $start := $toMillis($substring(now, 0, 7) & '-01T00:00:00Z');
+        $next := $toMillis($string($mo = 12 ? $y + 1 : $y) & '-' & $formatNumber($mo = 12 ? 1 : $mo + 1, '00') & '-01T00:00:00Z');
+        $lastActual := ds.forecast.days[status = 'Actual'][-1].day;
+        $asOf := $lastActual ? $toMillis($lastActual & 'T00:00:00Z') + 86400000 : $toMillis(now) - 86400000;
+        $runRate := ($next - $start) / $max([86400000, $asOf - $start]);
+        $forecast := $type(ds.forecast.forecastPart) = 'number' and ds.forecast.forecastPart > 0 ? ds.forecast.total : null;
+        $projected := $forecast ? $forecast : $round($mtdTotal * $runRate, 2);
+        $lastBy := $last{ key: { 'lastMonth': cost } };
+        $mtdKeys := $pluck($mtd, 'key');
+        $joined := $attach($mtd, 'key', $lastBy, { 'lastMonth': 0 });
+        $lastOnly := $count($mtdKeys) = 0 ? $last : $applyAdvanced($last, $where('key', 'string', 'notIn', $mtdKeys));
+        $all := [$append($joined, $withFields($attach($lastOnly, 'key', $lastBy), { 'cost': 0 }))^(>cost)];
+        $rows := [$map($take($all, 500), function($r) { (
+          $l := $sum([0, $r.lastMonth]);
+          {
+            'key': $r.key,
+            'subscriptionId': $r.subscriptionId,
+            'name': $r.name,
+            'monthToDate': $round($r.cost, 2),
+            'lastMonth': $round($l, 2),
+            'projected': $round($r.cost * $runRate, 2),
+            'share': $mtdTotal > 0 ? $round($r.cost / $mtdTotal, 4) : 0,
+            'change': $l > 0 ? $round(($r.cost * $runRate - $l) / $l, 4) : null
+          }
+        ) })];
+        $currencies := [$distinct($append($pluck($mtd, 'currency'), $pluck($last, 'currency')))[$ != '']];
+        {
+          'monthToDate': $round($mtdTotal, 2),
+          'lastMonth': $round($lastTotal, 2),
+          'projected': $projected,
+          'projectedFrom': $forecast ? 'Cost Management forecast' : 'straight-line projection',
+          'change': $lastTotal > 0 ? $round(($projected - $lastTotal) / $lastTotal, 4) : null,
+          'currency': $count($currencies) = 1 ? $currencies[0] : $count($currencies) = 0 ? null : 'Mixed',
+          'mixedCurrencies': $count($currencies) > 1,
+          'subscriptions': $count($applyAdvanced($mtd, $where('cost', 'number', 'gt', 0))),
+          'rows': $rows,
+          'top': $take($rows, 8),
+          'capped': $count($all) > 500
+        }
+      ) }
+
+layout:
+  - widget: markdown
+    when: "${ scope.missing ? true : false }"
+    text: "**Nothing to add up yet.** ${ scope.missing }"
+  - widget: kpi
+    data: summary.monthToDate
+    label: This month so far
+    format: number
+    hint: "${ summary.currency }"
+    href: /p/billing.cost-analysis
+  - widget: kpi
+    data: summary.lastMonth
+    label: Last month
+    format: number
+    hint: "${ summary.currency }"
+    href: /p/billing.cost-analysis?timeframe=LastMonth
+  - widget: kpi
+    data: summary.projected
+    label: Forecast this month
+    format: number
+    hint: "${ summary.projectedFrom }"
+    status: "${ $type(summary.change) = 'number' and summary.change > 0.1 ? 'warn' : 'neutral' }"
+    statusLabel: "${ $type(summary.change) = 'number' and summary.change > 0.1 ? 'Above last month' : 'Forecast' }"
+  - widget: kpi
+    data: summary.change
+    label: Forecast against last month
+    format: percent
+    status: "${ $type(value) != 'number' ? 'neutral' : value > 0.1 ? 'warn' : value < 0 ? 'ok' : 'neutral' }"
+    statusLabel: "${ $type(value) != 'number' ? 'No comparison' : value > 0.1 ? 'Rising' : value < 0 ? 'Falling' : 'Steady' }"
+  - widget: markdown
+    when: "${ summary.mixedCurrencies ? true : false }"
+    text: >-
+      **Several billing currencies.** The totals add them up as they are; pick one subscription or the billing account
+      to see one currency.
+  - widget: chart
+    title: Cost by day this month
+    description: Actual cost so far and Cost Management's forecast for the rest of the month.
+    span: 8
+    rows: 3
+    type: stackedBar
+    data: forecast.days
+    x: day
+    y: cost
+    series: status
+    format: number
+    xLabel: Day
+  - widget: chart
+    title: Top services this month
+    span: 4
+    rows: 3
+    type: donut
+    data: byService.top
+    x: service
+    y: cost
+    format: number
+  - widget: chart
+    title: Subscriptions with the highest cost
+    span: 12
+    type: bar
+    data: summary.top
+    x: name
+    y: [monthToDate, lastMonth]
+    labels: { monthToDate: This month so far, lastMonth: Last month }
+    format: number
+  - widget: markdown
+    when: "${ summary.capped ? true : false }"
+    text: >-
+      **The 500 subscriptions that cost the most this month are listed.** The totals add up every subscription; Cost
+      analysis grouped by subscription lists and exports all of them.
+  - widget: table
+    id: subscriptions
+    title: Cost by subscription
+    span: 12
+    data: summary.rows
+    rowKey: key
+    sort: { field: monthToDate, desc: true }
+    columns:
+      - { field: name, label: Subscription, kind: identity, secondary: subscriptionId, sortable: true, filter: text }
+      - { field: monthToDate, label: This month so far, kind: number, sortable: true }
+      - { field: lastMonth, label: Last month, kind: number, sortable: true }
+      - { field: projected, label: Projected this month, kind: number, sortable: true }
+      - { field: change, label: Projected change, kind: percent, sortable: true, filter: range }
+      - { field: share, label: Share this month, kind: percent, sortable: true }
+      - { field: subscriptionId, label: Subscription id, kind: guid, hidden: true }
+    rowActions:
+      - label: Analyse this subscription
+        icon: chart-pie-slice
+        when: "${ row.subscriptionId ? true : false }"
+        href: ${ '/p/billing.cost-analysis?subscriptionId=' & $encode(row.subscriptionId) }
+      - label: Open subscription
+        icon: cloud
+        when: "${ row.subscriptionId ? true : false }"
+        href: ${ '/p/azure.subscription?id=' & $encode(row.subscriptionId) }
+    empty:
+      title: No cost to show
+      body: >-
+        Nothing was charged this month in this scope yet, or the scope isn't configured. Cost Management needs an offer
+        that supports it (EA, MCA, pay-as-you-go); the newest day can take up to a day to appear.
+  - widget: markdown
+    span: 12
+    text: |
+      **Slice and dice**
+
+      - [Cost analysis](/p/billing.cost-analysis) — any period, grouped by subscription, resource group, service, meter, region, resource, charge type, pricing model or a tag; actual or amortized; by day or month
+      - [Cost this month and last](/p/azure.monthly-cost) — month to date against last month with a projection, by subscription, resource group, service or region
+      - [Monthly trend](/p/billing.monthly-trend) — twelve months, month-over-month change per subscription or service
+      - [Chargeback by tag](/p/billing.chargeback) — cost per cost centre (or any tag) and what isn't tagged
+      - [Top resources](/p/billing.top-resources) — the resources that cost the most
+      - [Budgets](/p/azure.budgets) — one subscription's Cost Management budgets with spend and forecast · [Invoices](/p/billing.invoices) — billing accounts and their invoices

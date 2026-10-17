@@ -183,8 +183,8 @@ Found by the organization and security evaluation; the fixed findings are in CHA
 - [ ] `identity.inactive-guests`: the unredeemed-invitations view should work without Entra ID P1.
 - [ ] Azure: `getByIds` batching beyond 3,000 principals; an option to give the automation identity Reader at a
       management group; review the App Service end-of-support list quarterly; sub-groups in the Reports navigation.
-- [ ] Enable `reports.azure-monthly-cost-weekly` once the automation identity's access to Cost Management is
-      confirmed (Reader may be enough; Cost Management Reader otherwise).
+- [x] Enable `reports.azure-monthly-cost-weekly` — enabled with Azure Billing (2026-10-17); it needs Cost Management
+      Reader on the management group for the automation identity (see "Azure Billing" below).
 - [x] ~~`logQuery` widget~~ — superseded by the `logAnalytics` datasource with table/chart widgets and Query Studio (docs/decisions.md).
 - [x] `kql` probe/check kind over Resource Graph, Log Analytics, advanced hunting — R12.
 - [x] Licence-threshold probe `sku` from `${env.X}` so SKUs aren't literals.
@@ -557,7 +557,48 @@ First run of `tests/live/scripts/check-accuracy.ts` against the host services (d
 - [ ] The per-workload sign-in probes need 20 sign-ins an hour to judge; small tenants stay "insufficient data". Tune
       `minSignIns` per installation if that's too quiet.
 - [ ] The e2e navigation mock (`tests/support/web/fixtures`) still has the single Microsoft 365 section; update it
-      (and its screenshot baselines) to the per-workload parents.
+      (and its screenshot baselines) to the per-workload parents and Azure Billing.
+
+## Azure Billing (2026-10-17)
+
+- [ ] **Validate live** once the tenant has a subscription with cost: every view once, read-only, against a management
+      group and a single subscription, and the billing-account scope and Invoices with a billing role. Fixture-only
+      so far: the Cost Management column names (`BillingMonth` for monthly granularity, `TagKey`/`TagValue`, empty
+      values for untagged cost), the forecast's `CostStatus`, the invoice fields and status values, and whether the
+      invoices API still wants `periodStartDate`/`periodEndDate`.
+- [ ] Give the automation identity Cost Management Reader on the cost management group from `provision entra` (today
+      it is assigned by hand; provisioning grants Reader on `AF_SUBSCRIPTION_ID` only).
+- [ ] A management-group picker (an entity picker kind `managementGroup`): the scope is configuration
+      (`AF_COST_MANAGEMENT_GROUP_ID`) or a deep link (`?managementGroupId=`) today.
+- [ ] Budgets across subscriptions: `azure.budgets` reads one subscription; a fan-out over the subscriptions (or the
+      management-group budgets API for EA) would list them all.
+- [ ] Reservation and savings-plan utilisation and recommendations (`Microsoft.CostManagement/benefitUtilizationSummaries`,
+      `benefitRecommendations`) — amortized cost and the pricing-model grouping cover where the cost lands.
+- [ ] Cost anomaly alerts (Cost Management scheduled actions) and a "daily cost jumped" probe.
+- [ ] Invoice PDF download: `POST …/invoices/{name}/download` changes nothing but is a POST, so the read policy refuses
+      it; the page links to the Azure portal instead.
+- [ ] Large estates: Cost Management answers one page per query here (`properties.nextLink` is reported as partial,
+      not followed). Within one answer every row is totalled and exported (`$tableRows`); the pages list the 500
+      highest. Following `nextLink` in the ARM connector for Cost Management POSTs would complete answers over 5,000
+      rows.
+- [ ] A finance-only portal role (today finance users get `Portal.Reader` and see every section, with what their own
+      account can't read explained).
+- [ ] Names that repeat: grouping by subscription or resource group **name** adds up same-named ones across the
+      estate (`rg-network` in every subscription). Pair the id with the name (as the overview and this-month-and-last
+      do for subscriptions), or group resource groups by subscription too at management-group scope.
+- [ ] Billing-scope groupings: billing profile and invoice section (MCA), department and enrollment account (EA) —
+      the policy already allows the billing-profile query scope; no view uses it yet.
+- [ ] A named past month for chargeback, top resources and this-month-and-last (re-running August's close), and the
+      covered month in scheduled file names (today the file is named by run date and labelled "Last month").
+- [ ] Mixed currencies: totals across billing accounts in different currencies add them as they are (the views say
+      so); split totals by currency instead.
+- [ ] Mock-mode fixtures: no subscription-scope forecast, no billing-account-scope query, and the subscription query
+      fixture answers resource-group columns for every grouping.
+- [ ] Check live whether a throttled Cost Management query sends a standard `Retry-After` or only its
+      `x-ms-ratelimit-microsoft.costmanagement-*` headers (the connectors honour `Retry-After`).
+- [ ] Scheduled finance files are visible to Operators only (scheduled data rule); finance users with
+      `Portal.Reader` get the email but can't browse the archive. Decide whether billing schedules widen
+      `requires.portalRoles`.
 
 ## Navigation / product
 

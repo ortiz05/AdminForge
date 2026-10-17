@@ -12,6 +12,7 @@ export {
   DatasourceRunner,
   DbDefinitionStore,
   FsDefinitionSource,
+  hiddenFromContent,
   PgAuditWriter,
   registryFrom,
   type AuditInput,

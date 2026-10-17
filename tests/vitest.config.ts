@@ -14,6 +14,7 @@ const SCALE = [
   'unit/expressions/rows-join-helpers.test.ts',
   'unit/expressions/limits.test.ts',
   'unit/expressions/native-paths-hardening.test.ts',
+  'unit/expressions/table-rows.test.ts',
   'unit/api/datasource-scale.test.ts',
 ];
 

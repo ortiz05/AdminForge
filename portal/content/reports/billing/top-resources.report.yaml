@@ -1,0 +1,231 @@
+$schema: ../../../packages/schemas/generated/report.schema.json
+kind: report
+id: billing.top-resources
+version: 1.0.0
+title: Azure resources with the highest cost
+summary: >-
+  The Azure resources that cost the most across every subscription (or one) this month, last month or over the last
+  three months — with their subscription, resource group, type and share of the total, linked to each resource.
+owner: finance-ops
+tags: [billing, cost, finops, resources, optimisation]
+area: billing
+nav: { section: reports, label: Azure resources with the highest cost, icon: ranking, order: 189 }
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    arm: [user_impersonation]
+  # Cost Management Reader (or Reader) on the management group or subscription, or a billing role on the billing account.
+  azureRoles: [Cost Management Reader]
+
+params:
+  scope:
+    type: enum
+    label: Scope
+    facet: true
+    default: managementGroup
+    values:
+      - { value: managementGroup, label: All subscriptions (management group) }
+      - { value: billingAccount, label: Billing account }
+  subscriptionId:
+    type: string
+    format: guid
+    label: Subscription
+    picker: subscription
+    facet: true
+    description: Leave empty for every subscription in the scope.
+  timeframe:
+    type: enum
+    label: Period
+    facet: true
+    default: MonthToDate
+    values:
+      - { value: MonthToDate, label: This month so far }
+      - { value: LastMonth, label: Last month }
+      - { value: Last3Months, label: Last 3 full months }
+  top:
+    type: enum
+    label: Show
+    facet: true
+    default: 50
+    values:
+      - { value: 25, label: Top 25 }
+      - { value: 50, label: Top 50 }
+      - { value: 100, label: Top 100 }
+      - { value: 250, label: Top 250 }
+  costType:
+    type: enum
+    label: Cost
+    facet: true
+    default: ActualCost
+    values:
+      - { value: ActualCost, label: Actual (as billed) }
+      - { value: AmortizedCost, label: Amortized (reservations and savings plans spread over their term) }
+  managementGroupId:
+    type: string
+    hidden: true
+    pattern: "[A-Za-z0-9._()-]{1,90}"
+    default: "${ env.AF_COST_MANAGEMENT_GROUP_ID ? env.AF_COST_MANAGEMENT_GROUP_ID : env.AF_TENANT_ID }"
+  billingAccountId:
+    type: string
+    hidden: true
+    pattern: "[A-Za-z0-9:_.-]{1,200}"
+    default: "${ env.AF_BILLING_ACCOUNT_ID }"
+
+datasources:
+  # Where Cost Management adds up (see billing.cost-analysis): ids encoded once, here.
+  scope:
+    source: static
+    data: {}
+    transform: >-
+      ${ (
+        $sub := params.subscriptionId;
+        $sub ? {
+          'kind': 'subscription',
+          'label': 'Subscription ' & $sub,
+          'path': '/subscriptions/' & $encode($guid($sub))
+        } : params.scope = 'billingAccount' ? (
+          params.billingAccountId ? {
+            'kind': 'billingAccount',
+            'label': 'Billing account ' & params.billingAccountId,
+            'path': '/providers/Microsoft.Billing/billingAccounts/' & $encode(params.billingAccountId)
+          } : { 'kind': 'none', 'missing': 'Set AF_BILLING_ACCOUNT_ID to the billing account (EA enrollment or MCA billing account id), or pick the management group scope.' }
+        ) : params.managementGroupId ? {
+          'kind': 'managementGroup',
+          'label': 'Management group ' & params.managementGroupId,
+          'path': '/providers/Microsoft.Management/managementGroups/' & $encode(params.managementGroupId)
+        } : { 'kind': 'none', 'missing': 'Set AF_COST_MANAGEMENT_GROUP_ID (or AF_TENANT_ID for the tenant root group), or pick a subscription.' }
+      ) }
+  period:
+    source: static
+    data: {}
+    transform: >-
+      ${ (
+        $y := $number($substring(now, 0, 4));
+        $m := $number($substring(now, 5, 2));
+        $start := function($back) { (
+          $i := $y * 12 + ($m - 1) - $back;
+          $string($floor($i / 12)) & '-' & $formatNumber($i % 12 + 1, '00') & '-01T00:00:00Z'
+        ) };
+        $before := function($iso) { $fromMillis($toMillis($iso) - 1000) };
+        params.timeframe = 'LastMonth' ? { 'from': $start(1), 'to': $before($start(0)), 'label': 'Last month' }
+        : params.timeframe = 'Last3Months' ? { 'from': $start(3), 'to': $before($start(0)), 'label': 'Last 3 full months' }
+        : { 'from': $start(0), 'to': $substring(now, 0, 10) & 'T23:59:59Z', 'label': 'This month so far' }
+      ) }
+  # One row per resource (Cost Management returns resource ids in lower case); ranked here, ids parsed for the top only.
+  cost:
+    source: arm
+    when: "${ ds.scope.path ? true : false }"
+    request:
+      method: POST
+      path: ${ ds.scope.path }/providers/Microsoft.CostManagement/query
+      apiVersion: "2023-11-01"
+      body:
+        type: "${ params.costType = 'AmortizedCost' ? 'AmortizedCost' : 'ActualCost' }"
+        timeframe: Custom
+        timePeriod:
+          from: "${ ds.period.from }"
+          to: "${ ds.period.to }"
+        dataset:
+          granularity: None
+          aggregation: { totalCost: { name: Cost, function: Sum } }
+          grouping:
+            - { type: Dimension, name: ResourceId }
+    # Sorted natively on the raw rows; only the top N are turned into rows and have their ids parsed.
+    transform: >-
+      ${ (
+        $ix := $merge($map([value.properties.columns.name], function($c, $i) { { $c: $i } }));
+        $iC := $lookup($ix, 'Cost');
+        $iR := $lookup($ix, 'ResourceId');
+        $iCur := $lookup($ix, 'Currency');
+        $all := $type(value.properties.rows) = 'array' ? value.properties.rows : [];
+        $total := $sum([0, $map($all, function($r) { $r[$iC] })]);
+        $sorted := $count($all) > 1 ? $all^(>$[$iC]) : $all;
+        $n := $number(params.top) in [25, 50, 100, 250] ? $number(params.top) : 50;
+        $top := [$map($take($sorted, $n), function($r) { (
+          $id := $exists($iR) and $r[$iR] ? $lowercase($string($r[$iR])) : '';
+          $p := $split($id, '/');
+          $known := $id != '' and $count($p) >= 9;
+          $c := $r[$iC] ? $r[$iC] : 0;
+          {
+            'key': $id != '' ? $id : '(not tied to a resource)',
+            'resourceId': $id != '' ? $id : null,
+            'name': $id = '' ? '(not tied to a resource)' : $p[-1],
+            'subscriptionId': $known ? $p[2] : null,
+            'resourceGroup': $known ? $p[4] : null,
+            'type': $known ? $p[6] & '/' & $p[7] : null,
+            'cost': $round($c, 2),
+            'share': $total > 0 ? $round($c / $total, 4) : 0,
+            'currency': $r[$iCur]
+          }
+        ) })];
+        $currencies := $keys($top[currency]{ currency: true });
+        {
+          'rows': $top,
+          'total': $round($total, 2),
+          'shown': $round($sum([0, $top.cost]), 2),
+          'resources': $count($all),
+          'currency': $count($currencies) = 1 ? $currencies[0] : $count($currencies) = 0 ? null : 'Mixed',
+          'partial': value.properties.nextLink ? true : false
+        }
+      ) }
+    cache: { ttl: 3600 }
+
+layout:
+  - widget: markdown
+    when: "${ scope.missing ? true : false }"
+    text: "**Nothing to add up yet.** ${ scope.missing }"
+  - widget: kpi
+    data: cost.total
+    label: Cost for the period
+    format: number
+    hint: "${ period.label }"
+  - widget: kpi
+    data: cost.shown
+    label: Of which the resources listed
+    format: number
+  - widget: kpi
+    data: cost.resources
+    label: Resources with cost
+    format: number
+  - widget: kpi
+    data: cost.currency
+    label: Currency
+    format: text
+  - widget: markdown
+    when: "${ cost.partial ? true : false }"
+    text: >-
+      **Partial data.** Cost Management has more resources than it returned in one answer, so the ranking covers only
+      part of them. Pick one subscription for a complete ranking.
+  - widget: table
+    id: resources
+    span: 12
+    data: cost.rows
+    rowKey: key
+    columns:
+      - { field: name, label: Resource, kind: identity, secondary: type, sortable: true, filter: text }
+      - { field: resourceGroup, label: Resource group, sortable: true, filter: facet }
+      - { field: cost, label: Cost, kind: number, sortable: true, filter: range }
+      - { field: share, label: Share of total, kind: percent, sortable: true }
+      - { field: subscriptionId, label: Subscription id, kind: guid, filter: facet }
+      - { field: currency, label: Currency, hidden: true }
+      - { field: resourceId, label: Resource id, kind: code, hidden: true }
+    rowActions:
+      - label: Open resource
+        icon: cube
+        when: "${ $type(row.resourceId) = 'string' and $substring($lowercase(row.resourceId), 0, 15) = '/subscriptions/' }"
+        href: ${ '/p/azure.resource?id=' & $encode(row.resourceId) }
+      - label: Open subscription
+        icon: cloud
+        when: "${ row.subscriptionId ? true : false }"
+        href: ${ '/p/azure.subscription?id=' & $encode(row.subscriptionId) }
+    empty:
+      title: No cost to show
+      body: >-
+        Nothing was charged in this period for this scope, or the scope isn't configured. Cost Management needs an
+        offer that supports it (EA, MCA, pay-as-you-go).
+
+export:
+  formats: [csv, xlsx]
+  fileName: azure-top-resources
+  data: cost.rows
+  columns: all

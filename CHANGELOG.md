@@ -40,6 +40,29 @@ Closes the gaps found by comparing the build with the original plan (see the pla
     sensitive read. Every section with probes has a "Service checks" item (Azure: "Configuration checks"); token
     probes are listed under AdminForge. `adminforge new probe` fills
     in `group`. The rail highlights one item when two link to the same page with different queries.
+  - `adminforge validate` refuses content that names a setting content can never read (names that look like secrets:
+    …_KEY, …TOKEN, …SECRET); the cost tag setting is `AF_COST_TAG_NAME`.
+- **Azure Billing** — a new parent in the navigation for the people who manage Azure spend. Every view covers all
+  subscriptions under a management group by default (`AF_COST_MANAGEMENT_GROUP_ID`, else the tenant root group), one
+  picked subscription, or the billing account (`AF_BILLING_ACCOUNT_ID`); Cost Management answers are cached for an
+  hour.
+  - **Billing overview** (`billing.overview`): month to date, last month, Cost Management's forecast to month end
+    (straight-line fallback), change against last month, daily actual vs forecast, top services and subscriptions,
+    and cost per subscription with links. **Invoices** (`billing.invoices`): billing accounts and their invoices.
+  - Reports (area `billing`, CSV/XLSX, schedulable; "Billing reports" in the rail): **cost analysis** (any period incl.
+    custom; group by subscription, resource group, service, service family, meter category, region, resource type,
+    resource, charge type, pricing model, publisher or a tag, with a second dimension; actual or amortized; total,
+    daily or monthly), **monthly trend** (6 or 12 months), **chargeback by tag** (`AF_COST_TAG_NAME`, untagged share
+    called out), **top resources**; **Azure cost this month and last** now spans every subscription and is active;
+    **budgets** move to the billing area.
+  - Finance schedules mailed to `AF_FINANCE_RECIPIENTS`: weekly cost by subscription, month close on the 4th, monthly
+    chargeback — shipped off until the automation identity holds Cost Management Reader on the cost scope.
+  - Exports and finance files carry every row Cost Management returned (pages list the 500 highest); totals, charts
+    and counts add every row; the overview reads this month and last month in one query and projects to the last day
+    with data. New native expression helpers `$tableRows` (columnar answers as objects) and `$withShare`.
+    Invoices count every spelling of overdue, skip credit notes for "latest", and don't call the invoices API for
+    Enterprise Agreement enrollments. The read policy also allows the Cost Management query/forecast at billing-account and billing-profile
+    scope (invoice download and everything else under `Microsoft.Billing` stays refused).
 - **Exchange Online, SharePoint Online and Teams are parents of their own** in the navigation. Mailboxes, shared
   mailboxes, distribution lists and mail forwarding move to Exchange Online; sites and sharing to SharePoint Online;
   teams and Teams user policies to Teams; Microsoft 365 keeps service health, Message center, licences, usage and

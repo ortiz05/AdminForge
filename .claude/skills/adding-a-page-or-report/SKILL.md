@@ -134,6 +134,16 @@ Pages, dashboards and reports are YAML in `portal/content/{pages,dashboards,repo
      (`/teams`, team settings, channels) answer delegated calls only for people who hold a Teams licence. Their results
      carry the failure as `errors["ds.<name>"]`; a scheduled report built on one ends `report_incomplete`. It never
      hides a missing portal role, `policy_denied`, `licence_required` or a sign-in/arming problem anywhere up the chain.
+   - Azure Cost Management (`POST …/providers/Microsoft.CostManagement/query|forecast` at management-group,
+     subscription, resource-group, billing-account or billing-profile scope — allowed reads): cache for an hour
+     (`cache: { ttl: 3600 }`, it throttles per scope), keep a page to a few queries, default the scope to
+     `AF_COST_MANAGEMENT_GROUP_ID` (else the tenant root group). Rows come back as arrays with `columns` beside them:
+     turn them into objects natively with `$tableRows(value.properties, { "cost": "Cost", "group": "ServiceName" })`,
+     then total, filter, label and sort natively (`$sum($pluck(rows, 'cost'))`, `$applyAdvanced`, `$withFields`,
+     `rows^(>cost)`, `$withShare(rows, 'cost', 'share')`); format dates once per distinct value and join them back
+     with `$attach`; map only the rows the page lists in JSONata, and export the whole list (`exportRows`,
+     `billing.cost-analysis`). Inside a filter (`$list[…]`) a bare name reads the item: take `now` out into a variable
+     first. JSONata's `$exists(null)` is true: leave an optional value undefined (`$d ? x`, no `: null`).
    - Microsoft 365 usage reports answer 404 `UnknownTenantId` until Microsoft starts them (24–48 h after the tenant's
      first subscription). With concealed names (`/admin/reportSettings` `displayConcealedNames`) UPNs and owners are
      hashes (no `@`) and site URLs are empty or hashes: fall back to `siteId`, and only link rows whose URL starts
@@ -148,7 +158,8 @@ Pages, dashboards and reports are YAML in `portal/content/{pages,dashboards,repo
    **Reports** keep `nav: { section: reports, icon, … }` but aren't listed one by one in the rail (the Reports section
    says `listDefinitions: false` and shows "All reports"): they appear in the **Reports catalogue** (`/reports`)
    automatically. There the area is the report's `area:` if it sets one, else the key's first segment — always a
-   navigation section key (`identity`, `m365`, `exchange`, `sharepoint`, `teams`, `endpoint`, `security`, `azure`). Put a report under its workload with `area:` (`m365.inbox-rules` says `area: exchange`) rather than
+   navigation section key (`identity`, `m365`, `exchange`, `sharepoint`, `teams`, `endpoint`, `security`, `azure`,
+   `billing`). Put a report under its workload with `area:` (`m365.inbox-rules` says `area: exchange`) rather than
    renaming its key: schedules, links and saved views use the key. The same goes for pages — move one with
    `nav.section`, keep its key. Each workload section opens with an Overview dashboard (`exchange.overview`, …) whose
    `probeStatus` widget takes `group: <section>` to show that service's synthetic checks. `tags` drive the tag filter and search (give every report specific tags), `summary` is its

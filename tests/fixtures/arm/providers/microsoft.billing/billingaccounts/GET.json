@@ -1,0 +1,26 @@
+{
+  "value": [
+    {
+      "id": "/providers/Microsoft.Billing/billingAccounts/00000000-0000-4000-8000-0000000000b1:00000000-0000-4000-8000-0000000000b2_2019-05-31",
+      "name": "00000000-0000-4000-8000-0000000000b1:00000000-0000-4000-8000-0000000000b2_2019-05-31",
+      "type": "Microsoft.Billing/billingAccounts",
+      "properties": {
+        "displayName": "Example Org",
+        "agreementType": "MicrosoftCustomerAgreement",
+        "accountType": "Business",
+        "accountStatus": "Active"
+      }
+    },
+    {
+      "id": "/providers/Microsoft.Billing/billingAccounts/12345678",
+      "name": "12345678",
+      "type": "Microsoft.Billing/billingAccounts",
+      "properties": {
+        "displayName": "Example Org Enrollment",
+        "agreementType": "EnterpriseAgreement",
+        "accountType": "Enterprise",
+        "accountStatus": "Active"
+      }
+    }
+  ]
+}

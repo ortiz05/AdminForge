@@ -1,0 +1,40 @@
+$schema: ../../../packages/schemas/generated/schedule.schema.json
+kind: schedule
+id: billing.chargeback-monthly
+version: 1.0.0
+title: Monthly Azure chargeback by tag
+summary: >-
+  On the 4th of every month at 07:30 UTC, writes last month's amortized Azure cost per value of the chargeback tag
+  (AF_COST_TAG_NAME, default CostCenter) and subscription, with the cost that carries no value, as XLSX, and mails it
+  to the finance team (AF_FINANCE_RECIPIENTS) when it and AF_MAIL_SENDER are configured.
+owner: finance-ops
+tags: [billing, cost, finops, chargeback, report]
+every: on the 4th of every month at 07:30
+timezone: UTC
+# Off until the automation identity holds Cost Management Reader on the cost scope and AF_FINANCE_RECIPIENTS is set
+# (docs/operations.md › Azure Billing); then turn it on under Automation › Schedules.
+enabled: false
+identity: automation
+job:
+  kind: report
+  ref: billing.chargeback
+  # The tag key stays the report's default (AF_COST_TAG_NAME), so changing the configuration changes the schedule too.
+  params:
+    scope: managementGroup
+    timeframe: LastMonth
+    thenBy: SubscriptionName
+    costType: AmortizedCost
+  delivery:
+    - type: file
+      format: xlsx
+      path: billing/chargeback/{date}.xlsx
+      retain: 36
+    - type: email
+      to: ["${ env.AF_FINANCE_RECIPIENTS }"]
+      format: xlsx
+retry: { max: 3, backoff: exponential, delay: 10m }
+timeoutSeconds: 1800
+overlap: skip
+requires:
+  # Cost Management Reader on the management group for the automation identity (docs/operations.md › Azure Billing).
+  azureRoles: [Cost Management Reader]

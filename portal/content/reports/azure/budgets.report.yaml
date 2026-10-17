@@ -1,11 +1,12 @@
 $schema: ../../../packages/schemas/generated/report.schema.json
 kind: report
 id: azure.budgets
-version: 1.0.0
+version: 1.0.1
 title: Azure budgets
 summary: Cost Management budgets on a subscription with spend so far, forecast and alert rules — which budgets are over, close to their limit or forecast to overrun before the period ends.
 owner: azure-team
-tags: [azure, cost, budgets, governance]
+tags: [azure, billing, cost, budgets, governance]
+area: billing
 nav: { section: reports, label: Azure budgets, icon: piggy-bank, order: 182 }
 requires:
   portalRoles: [Portal.Reader]

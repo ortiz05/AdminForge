@@ -37,6 +37,8 @@ const READ_POSTS: Partial<Record<ServiceId, RegExp[]>> = {
     /\/providers\/Microsoft\.Insights\/metrics$/i,
     // Cost Management query/forecast: reads that take their filters as a POST body.
     /^(\/providers\/Microsoft\.Management\/managementGroups\/[^/]+|\/subscriptions\/[^/]+(\/resourceGroups\/[^/]+)?)\/providers\/Microsoft\.CostManagement\/(query|forecast)$/i,
+    // The same two reads at billing scope (Azure Billing: a whole EA enrollment or MCA billing account / profile).
+    /^\/providers\/Microsoft\.Billing\/billingAccounts\/[^/]+(\/billingProfiles\/[^/]+)?\/providers\/Microsoft\.CostManagement\/(query|forecast)$/i,
   ],
   logAnalytics: [/^\/v1\/workspaces\/[0-9a-f-]{36}\/query$/i],
 };

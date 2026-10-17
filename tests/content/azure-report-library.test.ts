@@ -6,7 +6,8 @@ import { renderString, renderTemplate } from '@adminforge/expressions';
 import { loadContentDir, startsWithUnion, validateCron } from '@adminforge/schemas';
 import { repoRoot } from '../lib/repo';
 
-// The Azure report library (portal/content/reports/azure), its schedules and KQL probes. Each datasource runs the way
+// The Azure report library (portal/content/reports/azure), its schedules and KQL probes. Cost (azure.monthly-cost) is
+// tested with Azure Billing (billing-library.test.ts). Each datasource runs the way
 // DATA_MODE=fixtures runs it: params resolved with their defaults, the request rendered, the fixture answered, then
 // the transform — with earlier datasources available as ds.<name>.
 
@@ -32,7 +33,6 @@ const env = { AF_SUBSCRIPTION_ID: S1 };
 const REPORTS = [
   'azure.orphaned-resources',
   'azure.budgets',
-  'azure.monthly-cost',
   'azure.storage-account-security',
   'azure.databases-public-access',
   'azure.vms-without-backup',
@@ -243,40 +243,6 @@ describe('Azure report library: fixtures render', () => {
   it('budgets: nothing is called without a subscription', async () => {
     const r = await resolveParams(def('azure.budgets').params, {}, { env: {}, now: NOW, user } as never);
     expect(await renderString(def('azure.budgets').datasources.budgets.when, { params: r })).toBe(false);
-  });
-
-  it('monthly cost (draft): month to date against last month, with a straight-line projection', async () => {
-    expect(def('azure.monthly-cost').status).toBe('draft');
-    const { ds, requests } = await run('azure.monthly-cost');
-    expect(requests.monthToDate).toMatchObject({
-      method: 'POST',
-      path: `/subscriptions/${S1}/providers/Microsoft.CostManagement/query`,
-      body: {
-        timeframe: 'MonthToDate',
-        dataset: { grouping: [{ type: 'Dimension', name: 'ResourceGroupName' }] },
-      },
-    });
-    expect(requests.cost.body.timePeriod).toEqual({
-      from: '2026-09-01T00:00:00Z',
-      to: '2026-09-30T23:59:59.000Z',
-    });
-    expect(ds.cost).toMatchObject({ monthToDate: 1657.26, lastMonth: 2485.5, currency: 'EUR', groups: 4 });
-    expect(ds.cost.projected).toBeCloseTo(3543.11, 1);
-    expect(ds.cost.rows.map((r: Def) => r.group)).toEqual([
-      'rg-example-functions',
-      'rg-example-data',
-      '(not assigned)',
-      'rg-example-old',
-    ]);
-    expect(ds.cost.rows[0].share).toBeCloseTo(0.7449, 3);
-    expect(ds.cost.rows[0].change).toBeCloseTo(0.3129, 3);
-    expect(ds.cost.rows[3]).toMatchObject({ monthToDate: 0, lastMonth: 95.1, change: -1 });
-    const january = await run('azure.monthly-cost', { groupBy: 'ServiceName' }, '2027-01-10T08:00:00Z');
-    expect(january.requests.cost.body.timePeriod).toEqual({
-      from: '2026-12-01T00:00:00Z',
-      to: '2026-12-31T23:59:59.000Z',
-    });
-    expect(january.requests.cost.body.dataset.grouping[0].name).toBe('ServiceName');
   });
 
   it('storage, databases and Key Vault settings count each finding', async () => {
@@ -511,11 +477,13 @@ describe('Azure report schedules', () => {
     }
   });
 
-  it('are enabled, except the draft cost report until the policy allows its query', () => {
+  it('are enabled and active (the cost report waits for its Cost Management role, in the billing area)', () => {
     for (const s of schedules)
-      expect([s.job.ref, s.enabled, s.status ?? 'active']).toEqual(
-        s.job.ref === 'azure.monthly-cost' ? [s.job.ref, false, 'draft'] : [s.job.ref, true, 'active'],
-      );
+      expect([s.job.ref, s.enabled, s.status ?? 'active']).toEqual([
+        s.job.ref,
+        s.job.ref !== 'azure.monthly-cost',
+        'active',
+      ]);
   });
 
   it('spread over the morning so Resource Graph is not asked everything at once', () => {

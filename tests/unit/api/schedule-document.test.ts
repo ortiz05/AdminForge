@@ -67,6 +67,7 @@ describe('schedule document builder', () => {
         timezone: 'UTC',
         enabled: true,
         retries: 2,
+        identity: 'automation',
         job: {
           kind: 'report',
           ref: 'identity.inactive-users',
@@ -107,6 +108,7 @@ describe('schedule document builder', () => {
         timezone: 'UTC',
         enabled: true,
         retries: 2,
+        identity: 'automation',
         job: { kind: 'contentHealth' },
       },
       { known: [], now: NOW },

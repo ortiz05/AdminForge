@@ -18,6 +18,7 @@ const POLICY = { runDays: 180, scheduleRunDays: 180, probeDays: 35, artifactDays
 
 const newRun = (): NewRun => ({
   id: randomUUID(),
+  identityName: null,
   kind: 'playbook',
   definitionKey: 'test.retention',
   definitionVersion: '1.0.0',

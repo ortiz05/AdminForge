@@ -19,6 +19,7 @@ const url = await testDatabaseUrl();
 
 const newRun = (over: Partial<NewRun> = {}): NewRun => ({
   id: randomUUID(),
+  identityName: null,
   kind: 'playbook',
   definitionKey: 'test.pg',
   definitionVersion: '1.0.0',

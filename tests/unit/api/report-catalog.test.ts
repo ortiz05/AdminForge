@@ -181,6 +181,7 @@ describe('schedulesByReport', () => {
     timezone: 'UTC',
     enabled: true,
     identity: 'automation',
+    runsAs: { kind: 'automation', name: null, label: 'automation identity' },
     job,
     nextRunAt: null,
     lastRunAt: null,

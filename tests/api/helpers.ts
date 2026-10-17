@@ -114,7 +114,7 @@ export class FakeAuthClient implements AuthClient {
   }> = [];
   forgets: Array<{ kind: string; partitionKey: string }> = [];
   /** The app's token cache (wired by makeApp): redemptions write to it, as MSAL does. */
-  cache?: { set(key: string, value: string): Promise<void> };
+  cache?: { set(key: string, value: string): Promise<unknown> };
   claims: (kind: 'read' | 'write') => Partial<IdClaims> = () => ({});
   /** The app's clock (wired by makeApp): ID tokens carry auth_time = now, as after a fresh interactive sign-in. */
   now: () => Date = () => new Date();

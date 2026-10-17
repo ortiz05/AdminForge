@@ -1,0 +1,35 @@
+# AdminForge PowerShell runner (loopback only) as its own system account, `adminforge-runner`: it gets only its own env
+# file (RUNNER_* keys, read by systemd before the sandbox starts) and can't see the API's configuration or state.
+# Installed by portal/deploy/install-service-account.sh; local settings go in adminforge-runner.service.d/override.conf.
+[Unit]
+Description=AdminForge PowerShell runner
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=adminforge-runner
+Group=adminforge-runner
+WorkingDirectory=@OPT@/current/portal/apps/runner
+ExecStart=@OPT@/runtime/node/bin/node dist/main.js
+EnvironmentFile=@ETC@/@ENV@.runner.env
+Environment=HOME=@RUNNER_STATE@
+Environment=PATH=@OPT@/runtime/node/bin:@OPT@/runtime/powershell:/usr/local/bin:/usr/bin:/bin
+Environment=PWSH_PATH=@OPT@/runtime/powershell/pwsh
+Environment=POWERSHELL_TELEMETRY_OPTOUT=1
+Environment=DOTNET_CLI_TELEMETRY_OPTOUT=1
+# Az.Accounts probes the desktop keyring at import (no D-Bus for services): import it on demand instead.
+Environment=RUNNER_PRELOAD_MODULES=graph,exchange,teams,sharepoint
+TimeoutStopSec=30
+Restart=on-failure
+RestartSec=5
+@HARDENING@
+StateDirectory=adminforge-runner
+StateDirectoryMode=0750
+NoExecPaths=@RUNNER_STATE@
+InaccessiblePaths=@ETC@ @VARLIB@
+SocketBindAllow=tcp:@RUNNER_PORT@
+SocketBindDeny=any
+
+[Install]
+WantedBy=multi-user.target

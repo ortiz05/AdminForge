@@ -133,6 +133,63 @@ Re-run it after pulling changes to `systemd/` (or after moving the checkout: `--
 contain letters, digits and `. _ / + -`, because it is written into `ExecStart=`), then
 `systemctl --user daemon-reload` and restart the units it updated.
 
+### Running as a dedicated service account (recommended)
+
+User units run as your login account, and on this host that account is in the `docker`, `sudo`, `lxd` and `adm`
+groups — any process running as it can `docker exec` into Postgres as the superuser and rewrite the audit log
+(`SECURITY.md`, Postgres finding C1). `install-service-account.sh` moves the services to two system accounts in none of
+those groups: `adminforge` (api, worker, scheduler) and `adminforge-runner` (the PowerShell runner, which gets only its
+own env file and can't see the API's configuration or state). Postgres stays in Docker and the services keep connecting
+over TCP as `adminforge_app`. It runs as root, so read the script and its dry run first — and never allow it through a
+`NOPASSWD` sudoers rule (whoever can edit the checkout could then run code as root):
+
+```sh
+portal/deploy/install-service-account.sh --firewall           # dry run: the whole plan, nothing changes, no root
+sudo portal/deploy/install-service-account.sh --apply --firewall
+```
+
+`--apply` creates the accounts (`nologin`) and copies:
+
+- node and PowerShell out of your home to `/opt/adminforge/runtime`;
+- a read-only release of this checkout (committed and built; no `.git`, tests, docs, env files or keys) to
+  `/opt/adminforge/releases/<sha>.<time>`, with `current` pointing at it;
+- the configuration to `/etc/adminforge` — only keys documented in `config/example.env`, never provisioner,
+  test-account or database-owner keys or a `*.admin.env` / `*.owner.env` file; keys the overlay replaces (the owner's
+  `DATABASE_URL`) are left out; the runner's file keeps its `RUNNER_*` settings only and is read by systemd, not by
+  the runner's account. A certificate named by `AF_AUTOMATION_CERT_PATH` in your home is copied next to it; other
+  path settings that point into a home directory are refused;
+- the report files, once, to `/var/lib/adminforge/artifacts`;
+- sandboxed system units (`ProtectSystem=strict`, `ProtectHome`, `PrivateTmp`, no capabilities, `StateDirectory`
+  the only writable path, no Docker socket, only the API and the runner may listen).
+
+The plan names every key it leaves out and every user-unit setting it doesn't carry into
+`adminforge-<unit>.service.d/10-carried.conf`; values are never printed. `--firewall` adds an nftables rule so that, on
+loopback, the accounts reach only Postgres, the runner, the API, the proxy and the DNS stub. Make it survive a reboot
+by including `/etc/adminforge/loopback.nft` from `/etc/nftables.conf`. Nothing starts: the script prints the
+switch-over, a verification checklist and the rollback. The proxy (Caddy) and the backup stay your user units — the
+backup needs Docker, and reads the report files through the `adminforge` group (log out and in once after `--apply`).
+
+Later deploys, after `git pull`, `pnpm install --frozen-lockfile` and `pnpm build` (and migrations and publish) as you,
+run the root-owned copy from the current release, never the one in your checkout:
+
+```sh
+sudo /opt/adminforge/current/portal/deploy/install-service-account.sh --release --checkout ~/Azure-Admin
+sudo /opt/adminforge/current/portal/deploy/install-service-account.sh --rollback      # bad release: the previous one
+sudo /opt/adminforge/current/portal/deploy/install-service-account.sh --sync-config --checkout ~/Azure-Admin
+```
+
+The configuration stays in `~/.config/adminforge`: edit it there, then `--sync-config` copies it to `/etc/adminforge`
+and restarts the services (`--release` does too). The newest three releases are kept. To go back to user units (they
+run whatever is built in your checkout, so build the commit you want first):
+
+```sh
+sudo systemctl disable --now adminforge-runner adminforge-api adminforge-worker adminforge-scheduler
+sudo rsync -a /var/lib/adminforge/artifacts/ ~/.local/share/adminforge/artifacts/
+sudo chown -R "$USER": ~/.local/share/adminforge/artifacts
+systemctl --user enable --now adminforge-runner adminforge-api adminforge-worker adminforge-scheduler
+sudo rm -rf /etc/adminforge
+```
+
 ### Production overrides (this host)
 
 The dev server (`pnpm dev`) uses `PUBLIC_BASE_URL`/`API_PORT` from the env file. The services run the production

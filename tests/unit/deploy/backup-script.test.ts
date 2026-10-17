@@ -17,7 +17,8 @@ import { repoRoot } from '../../lib/repo';
 // portal/deploy/backup/adminforge-backup.sh against a fake `docker` (never a real database): it refuses to run
 // unencrypted unless plaintext is explicitly allowed, the dump leaves out the rows of the credential tables, the admin
 // and owner env files (and owner keys in an older env file) stay out of the configuration archive, and a dump that still
-// holds credential rows is deleted and fails the backup.
+// holds credential rows is deleted and fails the backup. The service account's report files are archived when this user
+// can read them; when it can't, the rest is backed up and the run fails naming the fix.
 const SCRIPT = path.join(repoRoot, 'portal/deploy/backup/adminforge-backup.sh');
 const CREDENTIAL_TABLES = ['public.sessions', 'public.preauth', 'public.token_cache'];
 
@@ -80,11 +81,13 @@ function sandbox() {
         AF_BACKUP_DIR: backups,
         FAKE_DOCKER_LOG: log,
         AF_BACKUP_ALLOW_PLAINTEXT: '1',
+        AF_BACKUP_STATE_DIR: path.join(root, 'var-lib-adminforge'),
         ...extra,
       },
     });
   return {
     root,
+    state: path.join(root, 'var-lib-adminforge'),
     backups,
     run,
     calls: () => (existsSync(log) ? readFileSync(log, 'utf8').trim().split('\n') : []),
@@ -175,6 +178,31 @@ describe.skipIf(!hasTools)('adminforge-backup.sh', () => {
       } finally {
         s.cleanup();
       }
+    }
+  });
+
+  it('archives the service account’s report files, and fails naming the fix when it can’t read them', () => {
+    const s = sandbox();
+    try {
+      mkdirSync(path.join(s.state, 'artifacts/reports.x'), { recursive: true });
+      writeFileSync(path.join(s.state, 'artifacts/reports.x/2026-10-17.csv'), 'a,b\n');
+      const ok = s.run();
+      expect(ok.status).toBe(0);
+      const [stamp] = readdirSync(s.backups);
+      const dest = path.join(s.backups, stamp!);
+      expect(readdirSync(dest).sort()).toEqual(['adminforge.dump', 'config.tgz', 'state.tgz']);
+      const list = spawnSync('tar', ['-tzf', path.join(dest, 'state.tgz')], { encoding: 'utf8' }).stdout;
+      expect(list).toContain('artifacts/reports.x/2026-10-17.csv');
+
+      if (process.getuid?.() !== 0) {
+        chmodSync(path.join(s.state, 'artifacts/reports.x/2026-10-17.csv'), 0o000);
+        const gap = s.run();
+        expect(gap.status).toBe(1);
+        expect(gap.stdout).toMatch(/^✓ backup /m);
+        expect(gap.stderr).toMatch(/report files in .* were not backed up: .* sudo usermod -aG adminforge /);
+      }
+    } finally {
+      s.cleanup();
     }
   });
 });

@@ -1,0 +1,30 @@
+# AdminForge API / BFF (serves the built web app too) as the dedicated `adminforge` system account.
+# Installed by portal/deploy/install-service-account.sh — don't edit /etc/systemd/system copies by hand; put local
+# settings in adminforge-api.service.d/override.conf.
+[Unit]
+Description=AdminForge API
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=adminforge
+Group=adminforge
+WorkingDirectory=@OPT@/current/portal/apps/api
+ExecStart=@OPT@/runtime/node/bin/node dist/main.js
+Environment=HOME=@VARLIB@/home
+Environment=PATH=@OPT@/runtime/node/bin:/usr/local/bin:/usr/bin:/bin
+Environment=ADMINFORGE_ENV_FILE=@ETC@/@ENV@.env
+Environment=ADMINFORGE_ARTIFACTS_DIR=@VARLIB@/artifacts
+TimeoutStopSec=30
+Restart=on-failure
+RestartSec=5
+@HARDENING@
+StateDirectory=adminforge
+StateDirectoryMode=0750
+NoExecPaths=@VARLIB@
+SocketBindAllow=tcp:@API_PORT@
+SocketBindDeny=any
+
+[Install]
+WantedBy=multi-user.target

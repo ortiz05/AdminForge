@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 # AdminForge backup: the services' database (pg_dump, custom format), the services' configuration (env files incl.
 # TOKEN_CACHE_KEY and client secrets) and data (report files, Caddy's CA certificate). Run by adminforge-backup.timer.
+# When the services run as the adminforge system account (install-service-account.sh), their report files live in
+# /var/lib/adminforge/artifacts and this user reads them through the adminforge group; if it can't, everything else is
+# backed up and the run fails, naming the fix.
 # Prints file names and sizes only — never contents. Backups hold secrets: they stay mode 600 in a 700 directory.
 #
 # Never backed up: <env>.admin.env (provisioner and test-user credentials — recreate or re-issue them instead), the
@@ -18,7 +21,8 @@
 # yield refresh tokens, and after a restore everyone simply signs in again.
 #
 # Settings (environment, e.g. the backup unit's Environment= lines): AF_BACKUP_DIR (default ~/adminforge-backups),
-# AF_BACKUP_KEEP_DAYS (14), AF_BACKUP_GPG_RECIPIENT, AF_BACKUP_PG_CONTAINER and AF_BACKUP_DATABASE. The container,
+# AF_BACKUP_KEEP_DAYS (14), AF_BACKUP_GPG_RECIPIENT, AF_BACKUP_PG_CONTAINER, AF_BACKUP_DATABASE and
+# AF_BACKUP_STATE_DIR (the service account's state, default /var/lib/adminforge). The container,
 # database and owner role default to portal/deploy/defaults.env (AF_PG_CONTAINER, AF_PG_DATABASE, AF_PG_USER).
 # Tested against a fake docker in tests/unit/deploy/backup-script.test.ts.
 set -euo pipefail
@@ -87,8 +91,19 @@ if [ ${#data[@]} -gt 0 ]; then
     tar -C "$HOME/.local/share" --exclude='caddy/*.key' -czf "$DEST/data.tgz" "${data[@]}"
   fi
 fi
+STATE_DIR="${AF_BACKUP_STATE_DIR:-/var/lib/adminforge}"
+STATE_GAP=""
+if [ -d "$STATE_DIR" ]; then
+  if [ -r "$STATE_DIR" ] && [ -x "$STATE_DIR" ] &&
+    { [ ! -e "$STATE_DIR/artifacts" ] || [ -z "$(find "$STATE_DIR/artifacts" ! -readable -print -quit 2>/dev/null)" ]; }; then
+    [ -d "$STATE_DIR/artifacts" ] && tar -C "$STATE_DIR" -czf "$DEST/state.tgz" artifacts
+  else
+    me="$(id -un)"
+    STATE_GAP="the report files in $STATE_DIR/artifacts were not backed up: $me can't read them — sudo usermod -aG adminforge $me, then log out and in (or reboot) so the backup's user manager has the group"
+  fi
+fi
 if [ -n "$RECIPIENT" ]; then
-  for f in "$DEST/$DATABASE.dump" "$DEST/config.tgz" "$DEST/data.tgz"; do
+  for f in "$DEST/$DATABASE.dump" "$DEST/config.tgz" "$DEST/data.tgz" "$DEST/state.tgz"; do
     [ -f "$f" ] || continue
     gpg --batch --yes --trust-model always --recipient "$RECIPIENT" --output "$f.gpg" --encrypt "$f"
     shred -u "$f"
@@ -98,3 +113,7 @@ chmod 600 "$DEST"/*
 
 find "$DEST_ROOT" -mindepth 1 -maxdepth 1 -type d -mtime +"$KEEP_DAYS" -exec rm -rf {} +
 echo "✓ backup $STAMP: $(du -sh "$DEST" | cut -f1) in $DEST (kept ${KEEP_DAYS} days, $([ -n "$RECIPIENT" ] && echo "encrypted to $RECIPIENT" || echo "NOT encrypted (AF_BACKUP_ALLOW_PLAINTEXT=1): set AF_BACKUP_GPG_RECIPIENT"))"
+if [ -n "$STATE_GAP" ]; then
+  echo "✗ $STATE_GAP" >&2
+  exit 1
+fi

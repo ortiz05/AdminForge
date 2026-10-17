@@ -1,0 +1,31 @@
+# AdminForge scheduler (ADR-011) as the dedicated `adminforge` system account. One scheduler is active at a time
+# (Postgres advisory lock). Installed by portal/deploy/install-service-account.sh; local settings go in
+# adminforge-scheduler.service.d/override.conf.
+[Unit]
+Description=AdminForge scheduler
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=adminforge
+Group=adminforge
+WorkingDirectory=@OPT@/current/portal/apps/scheduler
+ExecStart=@OPT@/runtime/node/bin/node dist/main.js
+Environment=HOME=@VARLIB@/home
+Environment=PATH=@OPT@/runtime/node/bin:/usr/local/bin:/usr/bin:/bin
+Environment=ADMINFORGE_ENV_FILE=@ETC@/@ENV@.env
+Environment=ADMINFORGE_ARTIFACTS_DIR=@VARLIB@/artifacts
+# SIGTERM lets running jobs finish for up to 30 s, then records the rest as interrupted and releases the lock.
+KillSignal=SIGTERM
+TimeoutStopSec=60
+Restart=on-failure
+RestartSec=10
+@HARDENING@
+StateDirectory=adminforge
+StateDirectoryMode=0750
+NoExecPaths=@VARLIB@
+SocketBindDeny=any
+
+[Install]
+WantedBy=multi-user.target

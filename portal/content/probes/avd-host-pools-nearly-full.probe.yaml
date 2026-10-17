@@ -1,0 +1,42 @@
+$schema: ../../packages/schemas/generated/probe.schema.json
+kind: probe
+id: probes.avd-host-pools-nearly-full
+version: 1.0.0
+title: AVD host pools nearly full
+summary: >-
+  Pooled Azure Virtual Desktop host pools with a session limit where at least 90% of the slots on the hosts taking new
+  sessions are in use and nothing can start another host (no shut-down host out of drain mode with autoscale or Start
+  VM on Connect) — the next people to sign in may be turned away. Pools already full are the companion probe's.
+owner: avd-team
+tags: [kql, azure, avd, host-pools, capacity, sweep-15m]
+group: avd
+remedy: >-
+  Add capacity before the pool fills: turn drain mode off on hosts that are ready, start shut-down hosts or add hosts.
+  If this happens every day at the same time, give the pool a scaling plan (or adjust its ramp-up capacity threshold)
+  or raise the session limit if the hosts have headroom.
+link: { label: Open host pool capacity, href: "/p/avd.host-pool-capacity?hostPoolType=Pooled" }
+check:
+  kind: kql
+  source: resourceGraph
+  query: |
+    // af:probes.avd-host-pools-nearly-full
+    resources
+    | where type =~ 'microsoft.desktopvirtualization/hostpools' and tostring(properties.hostPoolType) =~ 'Pooled'
+    | extend lid = tolower(id), maxSessionLimit = toint(properties.maxSessionLimit), startVMOnConnect = coalesce(tobool(properties.startVMOnConnect), false)
+    | where maxSessionLimit > 0 and maxSessionLimit < 999999
+    | join kind=inner (desktopvirtualizationresources | where type =~ 'microsoft.desktopvirtualization/hostpools/sessionhosts' | extend hostPoolId = tostring(split(tolower(id), '/sessionhosts/')[0]), status = tostring(properties.status), allowNew = coalesce(tobool(properties.allowNewSession), false), hostSessions = coalesce(toint(properties.sessions), 0) | extend serving = status in~ ('Available', 'NeedsAssistance') | summarize hosts = count(), accepting = countif(serving and allowNew), startable = countif(status =~ 'Shutdown' and allowNew), acceptingSessions = sumif(hostSessions, serving and allowNew) by hostPoolId) on $left.lid == $right.hostPoolId
+    | join kind=leftouter (resources | where type =~ 'microsoft.desktopvirtualization/scalingplans' | mv-expand ref = properties.hostPoolReferences | extend planPoolId = tolower(tostring(ref.hostPoolArmPath)), planOn = iff(coalesce(tobool(ref.scalingPlanEnabled), false), 1, 0) | summarize scalingOn = max(planOn) by planPoolId) on $left.lid == $right.planPoolId
+    | extend autoStart = startVMOnConnect or coalesce(scalingOn, 0) == 1
+    | extend slots = accepting * maxSessionLimit
+    | where accepting > 0 and not(autoStart and startable > 0)
+    | extend used = round(todouble(acceptingSessions) / slots, 3)
+    | where used >= 0.9 and acceptingSessions < slots
+    | project name, used, sessions = acceptingSessions, slots, accepting, hosts, startable, maxSessionLimit, resourceGroup, subscriptionId, id
+    | order by used desc
+  metric: rowCount
+  detailsLimit: 100
+thresholds: { warn: 1, crit: 5 }
+intervalHint: PT15M
+timeoutMs: 60000
+requires:
+  azureRoles: [Reader]

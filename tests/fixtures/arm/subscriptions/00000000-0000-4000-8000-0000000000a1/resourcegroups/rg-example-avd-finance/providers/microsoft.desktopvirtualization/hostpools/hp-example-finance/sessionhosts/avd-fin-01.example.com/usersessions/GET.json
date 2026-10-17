@@ -1,0 +1,108 @@
+{
+  "value": [
+    {
+      "name": "hp-example-finance/avd-fin-01.example.com/2",
+      "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-avd-finance/providers/Microsoft.DesktopVirtualization/hostPools/hp-example-finance/sessionHosts/avd-fin-01.example.com/userSessions/2",
+      "type": "Microsoft.DesktopVirtualization/hostPools/sessionHosts/userSessions",
+      "properties": {
+        "objectId": "00000000-0000-4000-8000-0000000d0028",
+        "userPrincipalName": "r.novak28@example.com",
+        "applicationType": "Desktop",
+        "sessionState": "Active",
+        "activeDirectoryUserName": "EXAMPLE\\r.novak28",
+        "createTime": "2026-10-17T07:00:00Z"
+      }
+    },
+    {
+      "name": "hp-example-finance/avd-fin-01.example.com/3",
+      "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-avd-finance/providers/Microsoft.DesktopVirtualization/hostPools/hp-example-finance/sessionHosts/avd-fin-01.example.com/userSessions/3",
+      "type": "Microsoft.DesktopVirtualization/hostPools/sessionHosts/userSessions",
+      "properties": {
+        "objectId": "00000000-0000-4000-8000-0000000d0029",
+        "userPrincipalName": "s.haddad29@example.com",
+        "applicationType": "Desktop",
+        "sessionState": "Active",
+        "activeDirectoryUserName": "EXAMPLE\\s.haddad29",
+        "createTime": "2026-10-17T08:07:00Z"
+      }
+    },
+    {
+      "name": "hp-example-finance/avd-fin-01.example.com/4",
+      "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-avd-finance/providers/Microsoft.DesktopVirtualization/hostPools/hp-example-finance/sessionHosts/avd-fin-01.example.com/userSessions/4",
+      "type": "Microsoft.DesktopVirtualization/hostPools/sessionHosts/userSessions",
+      "properties": {
+        "objectId": "00000000-0000-4000-8000-0000000d0030",
+        "userPrincipalName": "l.moreau30@example.com",
+        "applicationType": "Desktop",
+        "sessionState": "Active",
+        "activeDirectoryUserName": "EXAMPLE\\l.moreau30",
+        "createTime": "2026-10-17T09:14:00Z"
+      }
+    },
+    {
+      "name": "hp-example-finance/avd-fin-01.example.com/5",
+      "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-avd-finance/providers/Microsoft.DesktopVirtualization/hostPools/hp-example-finance/sessionHosts/avd-fin-01.example.com/userSessions/5",
+      "type": "Microsoft.DesktopVirtualization/hostPools/sessionHosts/userSessions",
+      "properties": {
+        "objectId": "00000000-0000-4000-8000-0000000d0031",
+        "userPrincipalName": "p.ivanova31@example.com",
+        "applicationType": "Desktop",
+        "sessionState": "Disconnected",
+        "activeDirectoryUserName": "EXAMPLE\\p.ivanova31",
+        "createTime": "2026-10-17T10:21:00Z"
+      }
+    },
+    {
+      "name": "hp-example-finance/avd-fin-01.example.com/6",
+      "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-avd-finance/providers/Microsoft.DesktopVirtualization/hostPools/hp-example-finance/sessionHosts/avd-fin-01.example.com/userSessions/6",
+      "type": "Microsoft.DesktopVirtualization/hostPools/sessionHosts/userSessions",
+      "properties": {
+        "objectId": "00000000-0000-4000-8000-0000000d0032",
+        "userPrincipalName": "d.okafor32@example.com",
+        "applicationType": "Desktop",
+        "sessionState": "Active",
+        "activeDirectoryUserName": "EXAMPLE\\d.okafor32",
+        "createTime": "2026-10-17T07:28:00Z"
+      }
+    },
+    {
+      "name": "hp-example-finance/avd-fin-01.example.com/7",
+      "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-avd-finance/providers/Microsoft.DesktopVirtualization/hostPools/hp-example-finance/sessionHosts/avd-fin-01.example.com/userSessions/7",
+      "type": "Microsoft.DesktopVirtualization/hostPools/sessionHosts/userSessions",
+      "properties": {
+        "objectId": "00000000-0000-4000-8000-0000000d0033",
+        "userPrincipalName": "t.berg33@example.com",
+        "applicationType": "Desktop",
+        "sessionState": "Active",
+        "activeDirectoryUserName": "EXAMPLE\\t.berg33",
+        "createTime": "2026-10-17T08:35:00Z"
+      }
+    },
+    {
+      "name": "hp-example-finance/avd-fin-01.example.com/8",
+      "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-avd-finance/providers/Microsoft.DesktopVirtualization/hostPools/hp-example-finance/sessionHosts/avd-fin-01.example.com/userSessions/8",
+      "type": "Microsoft.DesktopVirtualization/hostPools/sessionHosts/userSessions",
+      "properties": {
+        "objectId": "00000000-0000-4000-8000-0000000d0034",
+        "userPrincipalName": "n.rossi34@example.com",
+        "applicationType": "Desktop",
+        "sessionState": "Active",
+        "activeDirectoryUserName": "EXAMPLE\\n.rossi34",
+        "createTime": "2026-10-17T09:42:00Z"
+      }
+    },
+    {
+      "name": "hp-example-finance/avd-fin-01.example.com/9",
+      "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-avd-finance/providers/Microsoft.DesktopVirtualization/hostPools/hp-example-finance/sessionHosts/avd-fin-01.example.com/userSessions/9",
+      "type": "Microsoft.DesktopVirtualization/hostPools/sessionHosts/userSessions",
+      "properties": {
+        "objectId": "00000000-0000-4000-8000-0000000d0035",
+        "userPrincipalName": "e.kowalski35@example.com",
+        "applicationType": "Desktop",
+        "sessionState": "Disconnected",
+        "activeDirectoryUserName": "EXAMPLE\\e.kowalski35",
+        "createTime": "2026-10-17T10:49:00Z"
+      }
+    }
+  ]
+}

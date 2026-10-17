@@ -1,0 +1,243 @@
+$schema: ../../../packages/schemas/generated/page.schema.json
+kind: page
+id: avd.session-hosts
+version: 1.0.0
+title: Session hosts
+summary: >-
+  Every Azure Virtual Desktop session host across subscriptions and host pools, from Azure Resource Graph — health,
+  drain mode, sessions, agent and OS versions — with drain mode on or off for one host or hundreds at once.
+owner: avd-team
+tags: [azure, avd, virtual-desktop, session-hosts, resource-graph]
+template: list-detail
+nav: { section: avd, label: Session hosts, icon: desktop, order: 20 }
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    arm: [user_impersonation]
+  azureRoles: [Desktop Virtualization Reader]
+
+params:
+  q: { type: string, default: "", label: Search, placeholder: Host name or assigned user contains… }
+  health:
+    type: enum
+    label: Health
+    facet: true
+    default: All
+    values:
+      - { value: All, label: Any }
+      - { value: Healthy, label: Healthy }
+      - { value: Unhealthy, label: Can't take connections }
+      - { value: NeedsAssistance, label: Needs assistance }
+      - { value: ShutDown, label: Shut down }
+      - { value: Upgrading, label: Upgrading }
+  drain:
+    type: enum
+    label: Drain mode
+    facet: true
+    default: All
+    values:
+      - { value: All, label: Any }
+      - { value: On, label: "On" }
+      - { value: Off, label: "Off" }
+  hosting:
+    type: enum
+    label: Runs on
+    facet: true
+    default: All
+    values:
+      - { value: All, label: Any }
+      - { value: azure, label: Azure VM }
+      - { value: arc, label: Azure Arc (Azure Local) }
+  hostPool: { type: string, label: Host pool, placeholder: Host pool name, facet: true, pattern: "^[A-Za-z0-9@._ -]{0,64}$" }
+  # One host pool exactly (Host pools links here with it): names repeat across resource groups, ids don't.
+  hostPoolId:
+    type: string
+    label: Host pool (resource id)
+    facet: true
+    pattern: '^/subscriptions/[0-9a-fA-F-]{36}/[Rr]esource[Gg]roups/[-\w._()]{1,90}/providers/[Mm]icrosoft\.[Dd]esktop[Vv]irtualization/[Hh]ost[Pp]ools/[A-Za-z0-9@._ -]{3,64}$'
+  subscriptionId: { type: string, format: guid, label: Subscription, picker: subscription, facet: true }
+  resourceGroup: { type: string, label: Resource group, facet: true }
+
+filters:
+  search: q
+  facets: [health, drain, hosting, hostPool, hostPoolId, subscriptionId, resourceGroup]
+
+savedViews:
+  enabled: true
+  shared: true
+  presets:
+    - { name: Can't take connections, params: { health: Unhealthy } }
+    - { name: Needs assistance, params: { health: NeedsAssistance } }
+    - { name: In drain mode, params: { drain: "On" } }
+    - { name: On Azure Local (Arc), params: { hosting: arc } }
+
+datasources:
+  # Thousands of hosts: the server pages the rows (cursor) and a second query counts the fleet. User input reaches the
+  # KQL text only as GUID-validated or enum-whitelisted values or $kql() literals.
+  hosts:
+    source: resourceGraph
+    query: |
+      // af:avd.session-hosts#hosts
+      desktopvirtualizationresources
+      | where type =~ 'microsoft.desktopvirtualization/hostpools/sessionhosts'
+      ${ params.subscriptionId ? "| where subscriptionId == '" & $guid(params.subscriptionId) & "'" }
+      ${ params.resourceGroup ? '| where resourceGroup =~ ' & $kql(params.resourceGroup) }
+      | extend hostPool = tostring(split(id, '/')[8]), sessionHost = tostring(split(id, '/')[10]), assignedUser = tostring(properties.assignedUser)
+      ${ params.hostPool ? '| where hostPool =~ ' & $kql(params.hostPool) }
+      ${ params.hostPoolId ? '| where tolower(id) startswith ' & $kql($lowercase(params.hostPoolId) & '/sessionhosts/') }
+      ${ params.q ? '| where sessionHost contains ' & $kql(params.q) & ' or assignedUser contains ' & $kql(params.q) }
+      | extend status = tostring(properties.status), allowNewSession = coalesce(tobool(properties.allowNewSession), false), updateState = tostring(properties.updateState), failedCheck = tostring(properties.sessionHostHealthCheckResults) contains 'HealthCheckFailed', vmResourceId = tostring(properties.resourceId)
+      | extend health = case(status in~ ('Unavailable', 'NoHeartbeat', 'Disconnected', 'UpgradeFailed', 'NotJoinedToDomain', 'DomainTrustRelationshipLost', 'SxSStackListenerNotReady', 'FSLogixNotHealthy'), 'Unhealthy', status =~ 'Shutdown', 'ShutDown', status =~ 'Upgrading', 'Upgrading', status =~ 'NeedsAssistance' or updateState =~ 'Failed' or failedCheck, 'NeedsAssistance', status =~ 'Available', 'Healthy', 'Unknown')
+      ${ params.health in ['Healthy', 'Unhealthy', 'NeedsAssistance', 'ShutDown', 'Upgrading'] ? "| where health == '" & params.health & "'" }
+      ${ params.drain = 'On' ? '| where not(allowNewSession)' : params.drain = 'Off' ? '| where allowNewSession' }
+      | extend hosting = iff(tolower(vmResourceId) contains '/microsoft.hybridcompute/', 'arc', 'azure')
+      ${ params.hosting in ['azure', 'arc'] ? "| where hosting == '" & params.hosting & "'" }
+      | join kind=leftouter (resourcecontainers | where type =~ 'microsoft.resources/subscriptions' | project subscriptionId, subscriptionName = name) on subscriptionId
+      | project id, sessionHost, hostPool, status, health, drainMode = iff(allowNewSession, 'false', 'true'), sessions = toint(properties.sessions), assignedUser, statusSince = todatetime(properties.statusTimestamp), lastHeartBeat = todatetime(properties.lastHeartBeat), agentVersion = tostring(properties.agentVersion), sxsStackVersion = tostring(properties.sxSStackVersion), osVersion = tostring(properties.osVersion), updateState, hosting, vmResourceId, resourceGroup, subscriptionId, subscriptionName
+      | order by hostPool asc, sessionHost asc
+    paging: cursor
+    cache: { ttl: 60 }
+  summary:
+    source: resourceGraph
+    query: |
+      // af:avd.session-hosts#summary
+      desktopvirtualizationresources
+      | where type =~ 'microsoft.desktopvirtualization/hostpools/sessionhosts'
+      | extend status = tostring(properties.status), allowNewSession = coalesce(tobool(properties.allowNewSession), false), updateState = tostring(properties.updateState), failedCheck = tostring(properties.sessionHostHealthCheckResults) contains 'HealthCheckFailed'
+      | summarize hosts = count(), available = countif(status =~ 'Available'), unhealthy = countif(status in~ ('Unavailable', 'NoHeartbeat', 'Disconnected', 'UpgradeFailed', 'NotJoinedToDomain', 'DomainTrustRelationshipLost', 'SxSStackListenerNotReady', 'FSLogixNotHealthy')), needsAssistance = countif(status =~ 'NeedsAssistance' or (status =~ 'Available' and (updateState =~ 'Failed' or failedCheck))), shutdown = countif(status =~ 'Shutdown'), drained = countif(not(allowNewSession)), sessions = sum(toint(properties.sessions))
+    transform: "${ $merge([{ 'hosts': 0, 'available': 0, 'unhealthy': 0, 'needsAssistance': 0, 'shutdown': 0, 'drained': 0, 'sessions': 0 }, value.value[0]]) }"
+    cache: { ttl: 60 }
+
+layout:
+  - widget: kpi
+    data: summary.hosts
+    label: Session hosts
+    format: number
+    hint: Every host pool
+  - widget: kpi
+    data: summary.available
+    label: Available
+    format: number
+    status: ok
+    href: /p/avd.session-hosts?health=Healthy
+  - widget: kpi
+    data: summary.unhealthy
+    label: Can't take connections
+    format: number
+    status: "${ value > 0 ? 'crit' : 'ok' }"
+    href: /p/avd.session-hosts?health=Unhealthy
+  - widget: kpi
+    data: summary.needsAssistance
+    label: Need assistance
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+    href: /p/avd.session-hosts?health=NeedsAssistance
+  - widget: kpi
+    data: summary.drained
+    label: In drain mode
+    format: number
+    status: "${ value > 0 ? 'info' : 'ok' }"
+    href: /p/avd.session-hosts?drain=On
+  - widget: kpi
+    data: summary.sessions
+    label: User sessions
+    format: number
+  - widget: table
+    id: hosts
+    span: 12
+    data: hosts.value
+    rowKey: id
+    selection: multi
+    columns:
+      - { field: sessionHost, label: Session host, kind: identity, secondary: hostPool, sortable: true }
+      - field: health
+        label: Health
+        kind: status
+        map:
+          Healthy: [ok, Healthy]
+          Unhealthy: [crit, Can't take connections]
+          NeedsAssistance: [warn, Needs assistance]
+          ShutDown: [neutral, Shut down]
+          Upgrading: [info, Upgrading]
+          Unknown: [neutral, Unknown]
+        filter: { type: facet, param: health }
+      - { field: status, label: Status, filter: facet }
+      - { field: drainMode, label: Drain mode, kind: status, map: { "true": [info, "On"], "false": [neutral, "Off"] }, filter: { type: facet, param: drain } }
+      - { field: sessions, label: Sessions, kind: number, sortable: true, filter: range }
+      - { field: hostPool, label: Host pool, filter: { type: text, param: hostPool } }
+      - { field: statusSince, label: Status since, kind: relativeTime, sortable: true }
+      - { field: assignedUser, label: Assigned user, filter: text }
+      - { field: agentVersion, label: Agent version, filter: facet, hidden: true }
+      - { field: sxsStackVersion, label: SxS stack version, filter: facet, hidden: true }
+      - { field: osVersion, label: OS version, filter: facet, hidden: true }
+      - { field: updateState, label: Agent update, filter: facet, hidden: true }
+      - { field: lastHeartBeat, label: Last heartbeat, kind: relativeTime, hidden: true }
+      - field: hosting
+        label: Runs on
+        kind: status
+        map: { azure: [neutral, Azure VM], arc: [info, Azure Arc] }
+        filter: { type: facet, param: hosting }
+        hidden: true
+      - { field: resourceGroup, label: Resource group, filter: { type: text, param: resourceGroup } }
+      - { field: subscriptionName, label: Subscription, filter: facet }
+      - { field: vmResourceId, label: Machine resource id, kind: code, hidden: true }
+      - { field: id, label: Session host resource id, kind: code, hidden: true }
+    inspect:
+      page: avd.session-host
+      params:
+        id: ${ row.id }
+    rowActions:
+      - playbook: avd.set-drain-mode
+        label: Turn on drain mode
+        icon: prohibit
+        when: ${ row.drainMode = 'false' }
+        inputs:
+          sessionHostId: ${ row.id }
+          drainMode: true
+      - playbook: avd.set-drain-mode
+        label: Turn off drain mode
+        icon: check-circle
+        when: ${ row.drainMode = 'true' }
+        inputs:
+          sessionHostId: ${ row.id }
+          drainMode: false
+      - label: User sessions on this host
+        icon: users
+        href: /p/avd.user-sessions?hostPoolId=${ $encode($join($split(row.id, '/')[[0..8]], '/')) }&sessionHost=${ $encode(row.sessionHost) }
+      - label: Open the machine in Azure portal
+        icon: arrow-square-out
+        when: ${ $boolean(row.vmResourceId) }
+        href: https://portal.azure.com/#resource${ row.vmResourceId }/overview
+    bulkActions:
+      - playbook: avd.set-drain-mode
+        label: Turn on drain mode
+        icon: prohibit
+        forEach:
+          inputs:
+            sessionHostId: ${ row.id }
+            drainMode: true
+          concurrency: 5
+        maxItems: 500
+        when: ${ $count(rows[drainMode = 'false']) > 0 }
+      - playbook: avd.set-drain-mode
+        label: Turn off drain mode
+        icon: check-circle
+        forEach:
+          inputs:
+            sessionHostId: ${ row.id }
+            drainMode: false
+          concurrency: 5
+        maxItems: 500
+        when: ${ $count(rows[drainMode = 'true']) > 0 }
+    empty:
+      title: No session hosts match these filters
+      body: >-
+        Clear a filter, or check that your account has Reader (or Desktop Virtualization Reader) on the subscriptions
+        that hold your host pools. Resource Graph lists only the session hosts you can read.
+
+export:
+  formats: [csv, xlsx]
+  fileName: avd-session-hosts
+  data: hosts.value
+  columns: visible
+  maxRows: 100000

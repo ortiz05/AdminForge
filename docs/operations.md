@@ -244,6 +244,47 @@ sources: `docs/licensing-review.md` › Hybrid Azure Arc servers at scale.
 Function Apps and Azure Arc-enabled Kubernetes are retired (not needed at this time): their pages, report, schedule,
 runbook, trigger-sync playbook, example connection and probe stay in the history but are hidden.
 
+## Azure Virtual Desktop
+
+The **Azure Virtual Desktop** section covers every host pool across subscriptions: **Overview** (session hosts that
+can't take connections or need assistance, drain mode, sessions, the busiest pools and the AVD checks), **Host pools**
+(capacity: hosts taking new sessions, sessions against the slots they offer, autoscale, Start VM on Connect), **Session
+hosts** (health, drain mode, agent and OS versions, Azure VM or Arc-enabled server on Azure Local), **User sessions**
+(who is signed in to a pool or host, found by UPN) and **Connections** (from Log Analytics: success rate, failures over
+time, the most common errors, the people they hit, round-trip time, one person's recent connections). Each host pool
+and session host opens in the inspector; a session host is read **live** from Azure Resource Manager, with its health
+checks and their messages. The reports — _AVD session host health_, _AVD host pool capacity_, _AVD session hosts in
+drain mode_ and _AVD connection errors_ — are in the Reports catalogue under "Azure Virtual Desktop" and can be
+scheduled there.
+
+**Actions** (write mode, `Portal.Operator`): **drain mode** on or off for one host or many at once
+(`avd.set-drain-mode`; to undo it, run it again with the other setting), **send a message** to one session or every
+session on a host (`avd.send-user-message`; disconnected sessions are skipped and say so) and **sign a user out**
+(`avd.log-off-user-session`, high risk: unsaved work in the session is lost; type the person's sign-in name, or for many
+sessions how many, to confirm). Session numbers are reused on a host, so a message or a sign-out goes only to the person
+the list showed: if someone else holds the session by then, that item stops and changes nothing. A table selects at most
+500 rows for one bulk run (the API accepts up to 1,000 items per run). They run with the engineer's delegated Azure
+access — **Desktop Virtualization Session Host Operator** for drain mode and **Desktop Virtualization User Session
+Operator** for messages and sign-outs, on the host pool (or Desktop Virtualization Contributor).
+
+**Scale.** Session hosts are counted and paged in **Azure Resource Graph** (`desktopvirtualizationresources`), so
+thousands of hosts cost a few queries; lists load a page at a time and export up to 100,000 rows. Resource Graph can
+trail a status change by a few minutes — the session host page reads Azure Resource Manager directly. User sessions
+come from Resource Manager per host pool (up to 10,000; narrow to a host or a UPN beyond that).
+
+**Checks** (Synthetic monitoring, group "Azure Virtual Desktop", as the automation identity): session hosts that
+can't take connections and host pools with no capacity or nearly full every 15 minutes, session hosts that need
+assistance and connection failures every hour. Each result lists the hosts or pools it found, what to do and a link.
+The automation identity needs **Reader** on the subscriptions that hold the host pools (provisioning grants it on
+`AF_SUBSCRIPTION_ID` only; assign it at the management group for the rest, as for Arc servers).
+
+**Diagnostics.** Connections, the connection errors report and probe, and a host pool's Connection errors tab read
+the host pools' diagnostic settings in Log Analytics: send the **Connections**, **Errors** and **Network data**
+categories (WVDConnections, WVDErrors, WVDConnectionNetworkData) to one workspace and set
+`AF_AVD_LOG_ANALYTICS_WORKSPACE_ID` to its customer id (empty = `AF_LOG_ANALYTICS_WORKSPACE_ID`). People need **Log
+Analytics Reader** (or Reader) on it. Until then those views say no workspace is configured; a workspace without the
+tables answers "Failed to resolve table" in the probe's result.
+
 ## Sizing for a large tenant
 
 **Design target: about 50 engineers using AdminForge at the same time**, which one API process with the defaults

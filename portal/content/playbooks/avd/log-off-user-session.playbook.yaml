@@ -1,0 +1,118 @@
+$schema: ../../../packages/schemas/generated/playbook.schema.json
+kind: playbook
+id: avd.log-off-user-session
+version: 1.0.0
+title: Sign a user out of Azure Virtual Desktop
+summary: >-
+  Signs a user out of one Azure Virtual Desktop session (log off), active or disconnected — for a stuck or frozen
+  session, a profile that won't load, or emptying a host before maintenance. Unsaved work in that session is lost.
+  Send a message first to give people time to save. Run it for many sessions at once from a session host. Session
+  numbers are reused on a host, so it signs out only the person the list showed: if someone else holds the session
+  now, it stops.
+owner: avd-team
+tags: [azure, avd, virtual-desktop, user-sessions, helpdesk, bulk]
+risk: high
+mode: write
+requires:
+  portalRoles: [Portal.Operator]
+  scopes:
+    arm: [user_impersonation]
+  # Desktop Virtualization User Session Operator (or Desktop Virtualization Contributor) on the host pool.
+  azureRoles: [Desktop Virtualization User Session Operator]
+# Typed: the person's sign-in name for one session; for many at once, how many sessions.
+confirm:
+  type: typed
+  value: ${ steps.lookup.output.properties.userPrincipalName }
+  message: >-
+    ${ 'Sign ' & steps.lookup.output.properties.userPrincipalName & ' out of ' & $split(inputs.userSessionId, '/')[10] & '? Anything not saved in the session is lost. Type their sign-in name to confirm.' }
+approval:
+  required: false
+
+inputs:
+  userSessionId:
+    type: string
+    label: User session
+    description: The user session's resource id (from a session host or User sessions).
+    pattern: '^/subscriptions/[0-9a-fA-F-]{36}/[Rr]esource[Gg]roups/[-\w._()]{1,90}/providers/[Mm]icrosoft\.[Dd]esktop[Vv]irtualization/[Hh]ost[Pp]ools/[A-Za-z0-9@._ -]{3,64}/[Ss]ession[Hh]osts/[A-Za-z0-9@._ -]{3,48}/[Uu]ser[Ss]essions/[A-Za-z0-9]{1,24}$'
+  expectedUser:
+    type: string
+    label: Signed-in user
+    description: The sign-in name the list showed for this session. If someone else holds the session now, nothing is signed out.
+    pattern: '^[^\s@]{1,128}@[^\s@]{1,253}$'
+  reason: { type: string, label: Reason, minLength: 5, multiline: true, description: "Recorded in the audit log, e.g. the ticket number." }
+
+steps:
+  - id: lookup
+    type: arm
+    mode: read
+    describe: Read the session (who is signed in, and its state)
+    request:
+      method: GET
+      path: ${ $join($split(inputs.userSessionId, '/')[$ != ''].('/' & $encode($)), '') }
+      apiVersion: "2024-04-03"
+
+  - id: isUserSession
+    type: assert
+    that: ${ $lowercase(steps.lookup.output.type) = 'microsoft.desktopvirtualization/hostpools/sessionhosts/usersessions' }
+    message: That resource isn't an Azure Virtual Desktop user session.
+
+  # Session numbers are reused on a host: a list a minute old can point at someone else's session now.
+  - id: sameUser
+    type: assert
+    that: ${ $lowercase($string(steps.lookup.output.properties.userPrincipalName)) = $lowercase($trim(inputs.expectedUser)) }
+    message: >-
+      ${ 'That session now belongs to ' & (steps.lookup.output.properties.userPrincipalName ? steps.lookup.output.properties.userPrincipalName : 'nobody') & ', not ' & inputs.expectedUser & ' (session numbers are reused on a host). Nothing was signed out: refresh the list and try again.' }
+
+  - id: logOff
+    type: arm
+    mode: write
+    describe: >-
+      ${ 'Sign ' & steps.lookup.output.properties.userPrincipalName & ' out of ' & $split(inputs.userSessionId, '/')[10] }
+    request:
+      method: DELETE
+      path: ${ $join($split(inputs.userSessionId, '/')[$ != ''].('/' & $encode($)), '') }
+      apiVersion: "2024-04-03"
+      query: { force: true }
+
+outputs:
+  summary: >-
+    ${ steps.lookup.output.properties.userPrincipalName & ' was signed out of ' & $split(inputs.userSessionId, '/')[10] & ' (the session was ' & $lowercase(steps.lookup.output.properties.sessionState) & ').' }
+
+tests:
+  - name: signs a user out of an active session
+    inputs:
+      userSessionId: /subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-avd/providers/Microsoft.DesktopVirtualization/hostPools/hp-example-pooled/sessionHosts/avd-ex-0001.example.com/userSessions/3
+      expectedUser: m.chen@example.com
+      reason: ticket 5521 frozen session
+    mocks:
+      lookup: { name: hp-example-pooled/avd-ex-0001.example.com/3, type: Microsoft.DesktopVirtualization/hostPools/sessionHosts/userSessions, properties: { userPrincipalName: m.chen@example.com, sessionState: Active } }
+    expect:
+      status: succeeded
+      plan: [logOff]
+      outputs: { summary: m.chen@example.com was signed out of avd-ex-0001.example.com (the session was active). }
+  - name: signs a user out of a disconnected session (lower-case id)
+    inputs:
+      userSessionId: /subscriptions/00000000-0000-4000-8000-0000000000a1/resourcegroups/rg-example-avd/providers/microsoft.desktopvirtualization/hostpools/hp-example-pooled/sessionhosts/avd-ex-0002.example.com/usersessions/7
+      expectedUser: A.Lee@example.com
+      reason: ticket 5522 profile stuck
+    mocks:
+      lookup: { name: hp-example-pooled/avd-ex-0002.example.com/7, type: microsoft.desktopvirtualization/hostpools/sessionhosts/usersessions, properties: { userPrincipalName: a.lee@example.com, sessionState: Disconnected } }
+    expect:
+      status: succeeded
+      plan: [logOff]
+  - name: refuses a resource that isn't a user session
+    inputs:
+      userSessionId: /subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-avd/providers/Microsoft.DesktopVirtualization/hostPools/hp-example-pooled/sessionHosts/avd-ex-0001.example.com/userSessions/4
+      expectedUser: m.chen@example.com
+      reason: ticket 5523
+    mocks:
+      lookup: { name: hp-example-pooled/avd-ex-0001.example.com, type: Microsoft.DesktopVirtualization/hostPools/sessionHosts, properties: {} }
+    expect: { status: failed, failedStep: isUserSession }
+  - name: signs nobody out when the session now belongs to someone else
+    inputs:
+      userSessionId: /subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-avd/providers/Microsoft.DesktopVirtualization/hostPools/hp-example-pooled/sessionHosts/avd-ex-0001.example.com/userSessions/3
+      expectedUser: m.chen@example.com
+      reason: ticket 5524 frozen session
+    mocks:
+      lookup: { name: hp-example-pooled/avd-ex-0001.example.com/3, type: Microsoft.DesktopVirtualization/hostPools/sessionHosts/userSessions, properties: { userPrincipalName: k.osei@example.com, sessionState: Active } }
+    expect: { status: failed, failedStep: sameUser }

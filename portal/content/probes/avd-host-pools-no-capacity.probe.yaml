@@ -1,0 +1,41 @@
+$schema: ../../packages/schemas/generated/probe.schema.json
+kind: probe
+id: probes.avd-host-pools-no-capacity
+version: 1.0.0
+title: AVD host pools that can't take a new session
+summary: >-
+  Pooled Azure Virtual Desktop host pools with session hosts where nobody new can connect: no host is available and
+  out of drain mode, or every session slot on those hosts is taken — and nothing can start another host (no shut-down
+  host out of drain mode with autoscale or Start VM on Connect). Details list each pool with its hosts, sessions,
+  slots and why.
+owner: avd-team
+tags: [kql, azure, avd, host-pools, capacity, sweep-15m]
+group: avd
+remedy: >-
+  Users of these pools can't connect now. Turn drain mode off on hosts that are ready, start shut-down hosts, or fix
+  the hosts that can't take connections (Session hosts). If every slot is in use, raise the pool's session limit or add
+  hosts, and check that the scaling plan is assigned and enabled for the pool.
+link: { label: Open host pool capacity, href: "/p/avd.host-pool-capacity?hostPoolType=Pooled" }
+check:
+  kind: kql
+  source: resourceGraph
+  query: |
+    // af:probes.avd-host-pools-no-capacity
+    resources
+    | where type =~ 'microsoft.desktopvirtualization/hostpools' and tostring(properties.hostPoolType) =~ 'Pooled'
+    | extend lid = tolower(id), maxSessionLimit = toint(properties.maxSessionLimit), startVMOnConnect = coalesce(tobool(properties.startVMOnConnect), false)
+    | join kind=inner (desktopvirtualizationresources | where type =~ 'microsoft.desktopvirtualization/hostpools/sessionhosts' | extend hostPoolId = tostring(split(tolower(id), '/sessionhosts/')[0]), status = tostring(properties.status), allowNew = coalesce(tobool(properties.allowNewSession), false), hostSessions = coalesce(toint(properties.sessions), 0) | extend serving = status in~ ('Available', 'NeedsAssistance') | summarize hosts = count(), accepting = countif(serving and allowNew), startable = countif(status =~ 'Shutdown' and allowNew), drained = countif(not(allowNew)), sessions = sum(hostSessions), acceptingSessions = sumif(hostSessions, serving and allowNew) by hostPoolId) on $left.lid == $right.hostPoolId
+    | join kind=leftouter (resources | where type =~ 'microsoft.desktopvirtualization/scalingplans' | mv-expand ref = properties.hostPoolReferences | extend planPoolId = tolower(tostring(ref.hostPoolArmPath)), planOn = iff(coalesce(tobool(ref.scalingPlanEnabled), false), 1, 0) | summarize scalingOn = max(planOn) by planPoolId) on $left.lid == $right.planPoolId
+    | extend autoStart = startVMOnConnect or coalesce(scalingOn, 0) == 1, limited = maxSessionLimit > 0 and maxSessionLimit < 999999
+    | extend slots = iff(limited, accepting * maxSessionLimit, int(null))
+    | where not(autoStart and startable > 0)
+    | where accepting == 0 or (limited and acceptingSessions >= slots)
+    | project name, reason = iff(accepting == 0, 'No host takes new sessions', 'Every session slot is in use'), hosts, accepting, drained, startable, sessions, slots, maxSessionLimit, autoStart = iff(autoStart, 'true', 'false'), resourceGroup, subscriptionId, id
+    | order by name asc
+  metric: rowCount
+  detailsLimit: 100
+thresholds: { warn: 1, crit: 1 }
+intervalHint: PT15M
+timeoutMs: 60000
+requires:
+  azureRoles: [Reader]

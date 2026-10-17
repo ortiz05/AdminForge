@@ -148,6 +148,10 @@ Found by the organization and security evaluation; the fixed findings are in CHA
 
 ## Schema / content model
 
+- [ ] `m365.sharepoint-sharing` and `m365.sharepoint-site` build their "Open in SharePoint admin center" actions from
+      `env.AF_SPO_TENANT_NAME`, but row and page actions are evaluated in the browser, which has no `env`: the action
+      never appears. Read the value in a `source: static` datasource (as the AVD pages do) and use that; and have
+      `validate` refuse `env.` in row/page action templates (found 2026-10-17).
 - [ ] Licence state in the expression scope (`licences.signInLogs`) so a page can drop P1-only `$select` fields instead of gating the whole page (users list + signInActivity).
 - [ ] `graphBatch` paging (`@odata.nextLink` per sub-request).
 - [ ] Per-row `inspect.page` expression (mixed row types).
@@ -629,6 +633,26 @@ First run of `tests/live/scripts/check-accuracy.ts` against the host services (d
       for the change board; the page exports it today.
 - [ ] Physical site: Arc's `properties.locationData` (name, city, country) as a fleet chart and filter, if the
       servers are onboarded with it (the fleet charts use the Azure region today).
+
+## Azure Virtual Desktop (2026-10-17)
+
+- [ ] **Validate live** once a subscription has a host pool: every AVD view, the four reports and five probes
+      read-only, then the three playbooks on a test host pool (dry run, run, undo). Fixture-only so far: the
+      `desktopvirtualizationresources` session host properties in Resource Graph (and how soon they follow a status
+      change), `mv-expand` of the health check results inside a join, the user session `$filter` syntax, the
+      `force=true` log off, and the WVD table columns.
+- [ ] Disconnect a session (`POST …/userSessions/{id}/disconnect`) as its own playbook: today an engineer sends a
+      message or signs the user out.
+- [ ] How long a host has been in drain mode: Azure keeps no timestamp for `allowNewSession`. The Activity Log
+      (`AzureActivity`, `MICROSOFT.DESKTOPVIRTUALIZATION/HOSTPOOLS/SESSIONHOSTS/WRITE`) could date it, so the drain mode
+      report could flag hosts drained for more than a day; today it lists every drained host.
+- [ ] Find a person's sessions across every host pool in one search: Resource Manager lists sessions per host pool
+      (one call each). Today: Connections (Log Analytics) shows where they connected, then User sessions for that pool.
+- [ ] Start, restart or deallocate a session host's virtual machine (or Arc machine) from the session host page.
+- [ ] Capacity thresholds per host pool (the nearly-full check uses 90 % for every pool) and connection-failure
+      thresholds sized to the installation (10 / 50 failed connections an hour today).
+- [ ] FSLogix profile health and logon duration (`WVDCheckpoints`, Windows event logs) — not read yet.
+- [ ] Scaling plan schedules, registration tokens and adding session hosts stay in the Azure portal.
 
 ## Navigation / product
 

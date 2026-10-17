@@ -1,0 +1,13 @@
+{
+  "name": "hp-example-pooled/avd-ex-0006.example.com/2",
+  "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-avd/providers/Microsoft.DesktopVirtualization/hostPools/hp-example-pooled/sessionHosts/avd-ex-0006.example.com/userSessions/2",
+  "type": "Microsoft.DesktopVirtualization/hostPools/sessionHosts/userSessions",
+  "properties": {
+    "objectId": "00000000-0000-4000-8000-0000000d0017",
+    "userPrincipalName": "s.haddad17@example.com",
+    "applicationType": "Desktop",
+    "sessionState": "Active",
+    "activeDirectoryUserName": "EXAMPLE\\s.haddad17",
+    "createTime": "2026-10-17T07:00:00Z"
+  }
+}

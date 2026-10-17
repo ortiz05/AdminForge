@@ -3,6 +3,767 @@
     "variants": [
       {
         "match": {
+          "bodyIncludes": "af:avd.host-pool#errors"
+        },
+        "body": {
+          "tables": [
+            {
+              "name": "PrimaryResult",
+              "columns": [
+                {
+                  "name": "CodeSymbolic",
+                  "type": "string"
+                },
+                {
+                  "name": "Source",
+                  "type": "string"
+                },
+                {
+                  "name": "ActivityType",
+                  "type": "string"
+                },
+                {
+                  "name": "Errors",
+                  "type": "long"
+                },
+                {
+                  "name": "Users",
+                  "type": "long"
+                },
+                {
+                  "name": "LastSeen",
+                  "type": "datetime"
+                },
+                {
+                  "name": "Sample",
+                  "type": "string"
+                },
+                {
+                  "name": "ServiceError",
+                  "type": "bool"
+                },
+                {
+                  "name": "Key",
+                  "type": "string"
+                }
+              ],
+              "rows": [
+                [
+                  "ConnectionFailedNoHealthyRdshAvailable",
+                  "RDBroker",
+                  "Connection",
+                  14,
+                  6,
+                  "2026-10-17T07:58:00Z",
+                  "No session host is available to take the connection (synthetic).",
+                  false,
+                  "ConnectionFailedNoHealthyRdshAvailable|RDBroker|Connection"
+                ],
+                [
+                  "ConnectionFailedUserHasValidSessionButRdshIsUnhealthy",
+                  "RDBroker",
+                  "Connection",
+                  3,
+                  1,
+                  "2026-10-17T08:20:00Z",
+                  "The user has a session on a host that is not healthy (synthetic).",
+                  false,
+                  "ConnectionFailedUserHasValidSessionButRdshIsUnhealthy|RDBroker|Connection"
+                ]
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "match": {
+          "bodyIncludes": "af:avd.connections#summary"
+        },
+        "body": {
+          "tables": [
+            {
+              "name": "PrimaryResult",
+              "columns": [
+                {
+                  "name": "Attempts",
+                  "type": "long"
+                },
+                {
+                  "name": "Connected",
+                  "type": "long"
+                },
+                {
+                  "name": "People",
+                  "type": "long"
+                },
+                {
+                  "name": "Hosts",
+                  "type": "long"
+                },
+                {
+                  "name": "Failed",
+                  "type": "long"
+                },
+                {
+                  "name": "PeopleWithErrors",
+                  "type": "long"
+                },
+                {
+                  "name": "SuccessRate",
+                  "type": "real"
+                }
+              ],
+              "rows": [
+                [
+                  412,
+                  389,
+                  131,
+                  10,
+                  23,
+                  9,
+                  0.9442
+                ]
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "match": {
+          "bodyIncludes": "af:avd.connections#trend"
+        },
+        "body": {
+          "tables": [
+            {
+              "name": "PrimaryResult",
+              "columns": [
+                {
+                  "name": "TimeGenerated",
+                  "type": "datetime"
+                },
+                {
+                  "name": "Connected",
+                  "type": "long"
+                },
+                {
+                  "name": "Failed",
+                  "type": "long"
+                }
+              ],
+              "rows": [
+                [
+                  "2026-10-17T06:00:00Z",
+                  12,
+                  0
+                ],
+                [
+                  "2026-10-17T07:00:00Z",
+                  88,
+                  9
+                ],
+                [
+                  "2026-10-17T08:00:00Z",
+                  141,
+                  11
+                ],
+                [
+                  "2026-10-17T09:00:00Z",
+                  77,
+                  2
+                ],
+                [
+                  "2026-10-17T10:00:00Z",
+                  46,
+                  1
+                ],
+                [
+                  "2026-10-17T11:00:00Z",
+                  25,
+                  0
+                ]
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "match": {
+          "bodyIncludes": "af:avd.connections#errors"
+        },
+        "body": {
+          "tables": [
+            {
+              "name": "PrimaryResult",
+              "columns": [
+                {
+                  "name": "CodeSymbolic",
+                  "type": "string"
+                },
+                {
+                  "name": "Source",
+                  "type": "string"
+                },
+                {
+                  "name": "ActivityType",
+                  "type": "string"
+                },
+                {
+                  "name": "Errors",
+                  "type": "long"
+                },
+                {
+                  "name": "People",
+                  "type": "long"
+                },
+                {
+                  "name": "LastSeen",
+                  "type": "datetime"
+                },
+                {
+                  "name": "Sample",
+                  "type": "string"
+                },
+                {
+                  "name": "ServiceError",
+                  "type": "bool"
+                },
+                {
+                  "name": "Key",
+                  "type": "string"
+                }
+              ],
+              "rows": [
+                [
+                  "ConnectionFailedNoHealthyRdshAvailable",
+                  "RDBroker",
+                  "Connection",
+                  17,
+                  7,
+                  "2026-10-17T08:41:00Z",
+                  "No session host is available to take the connection (synthetic).",
+                  false,
+                  "ConnectionFailedNoHealthyRdshAvailable|RDBroker|Connection"
+                ],
+                [
+                  "ConnectionFailedClientDisconnect",
+                  "Client",
+                  "Connection",
+                  5,
+                  3,
+                  "2026-10-17T09:12:00Z",
+                  "The client disconnected before the connection completed (synthetic).",
+                  false,
+                  "ConnectionFailedClientDisconnect|Client|Connection"
+                ],
+                [
+                  "InvalidCredentials",
+                  "RDStack",
+                  "Connection",
+                  4,
+                  2,
+                  "2026-10-17T10:02:00Z",
+                  "The user name or password is incorrect (synthetic).",
+                  false,
+                  "InvalidCredentials|RDStack|Connection"
+                ]
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "match": {
+          "bodyIncludes": "af:avd.connections#people"
+        },
+        "body": {
+          "tables": [
+            {
+              "name": "PrimaryResult",
+              "columns": [
+                {
+                  "name": "UserName",
+                  "type": "string"
+                },
+                {
+                  "name": "FailedConnections",
+                  "type": "long"
+                },
+                {
+                  "name": "LastFailure",
+                  "type": "datetime"
+                },
+                {
+                  "name": "Errors",
+                  "type": "dynamic"
+                },
+                {
+                  "name": "LastMessage",
+                  "type": "string"
+                }
+              ],
+              "rows": [
+                [
+                  "m.chen@example.com",
+                  4,
+                  "2026-10-17T08:41:00Z",
+                  "[\"ConnectionFailedNoHealthyRdshAvailable\"]",
+                  "No session host is available to take the connection (synthetic)."
+                ],
+                [
+                  "a.lee@example.com",
+                  2,
+                  "2026-10-17T10:02:00Z",
+                  "[\"InvalidCredentials\"]",
+                  "The user name or password is incorrect (synthetic)."
+                ]
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "match": {
+          "bodyIncludes": "af:avd.connections#network"
+        },
+        "body": {
+          "tables": [
+            {
+              "name": "PrimaryResult",
+              "columns": [
+                {
+                  "name": "HostPool",
+                  "type": "string"
+                },
+                {
+                  "name": "MedianRttMs",
+                  "type": "real"
+                },
+                {
+                  "name": "P95RttMs",
+                  "type": "real"
+                },
+                {
+                  "name": "MedianBandwidthKBps",
+                  "type": "real"
+                },
+                {
+                  "name": "Connections",
+                  "type": "long"
+                }
+              ],
+              "rows": [
+                [
+                  "hp-example-finance",
+                  48,
+                  171,
+                  5120,
+                  64
+                ],
+                [
+                  "hp-example-pooled",
+                  31,
+                  96,
+                  9400,
+                  318
+                ]
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "match": {
+          "bodyIncludes": "af:avd.connections#recent"
+        },
+        "body": {
+          "tables": [
+            {
+              "name": "PrimaryResult",
+              "columns": [
+                {
+                  "name": "Started",
+                  "type": "datetime"
+                },
+                {
+                  "name": "Ended",
+                  "type": "datetime"
+                },
+                {
+                  "name": "Outcome",
+                  "type": "string"
+                },
+                {
+                  "name": "Error",
+                  "type": "string"
+                },
+                {
+                  "name": "ErrorMessage",
+                  "type": "string"
+                },
+                {
+                  "name": "SessionHostName",
+                  "type": "string"
+                },
+                {
+                  "name": "HostPool",
+                  "type": "string"
+                },
+                {
+                  "name": "ClientType",
+                  "type": "string"
+                },
+                {
+                  "name": "ClientOS",
+                  "type": "string"
+                },
+                {
+                  "name": "ClientVersion",
+                  "type": "string"
+                },
+                {
+                  "name": "TransportType",
+                  "type": "string"
+                },
+                {
+                  "name": "GatewayRegion",
+                  "type": "string"
+                },
+                {
+                  "name": "CorrelationId",
+                  "type": "string"
+                }
+              ],
+              "rows": [
+                [
+                  "2026-10-17T08:41:00Z",
+                  "2026-10-17T08:41:09Z",
+                  "Failed",
+                  "ConnectionFailedNoHealthyRdshAvailable",
+                  "No session host is available to take the connection (synthetic).",
+                  "",
+                  "hp-example-finance",
+                  "Windows App",
+                  "Windows 11",
+                  "2.0.559.0",
+                  "",
+                  "EUR-W",
+                  "00000000-0000-4000-8000-0000000c0001"
+                ],
+                [
+                  "2026-10-17T07:55:00Z",
+                  "2026-10-17T11:20:00Z",
+                  "Ended",
+                  "",
+                  "",
+                  "avd-ex-0001.example.com",
+                  "hp-example-pooled",
+                  "Windows App",
+                  "Windows 11",
+                  "2.0.559.0",
+                  "UDP",
+                  "EUR-W",
+                  "00000000-0000-4000-8000-0000000c0002"
+                ]
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "match": {
+          "bodyIncludes": "af:avd.connection-errors#errors"
+        },
+        "body": {
+          "tables": [
+            {
+              "name": "PrimaryResult",
+              "columns": [
+                {
+                  "name": "CodeSymbolic",
+                  "type": "string"
+                },
+                {
+                  "name": "Code",
+                  "type": "long"
+                },
+                {
+                  "name": "Source",
+                  "type": "string"
+                },
+                {
+                  "name": "ActivityType",
+                  "type": "string"
+                },
+                {
+                  "name": "HostPool",
+                  "type": "string"
+                },
+                {
+                  "name": "Errors",
+                  "type": "long"
+                },
+                {
+                  "name": "Connections",
+                  "type": "long"
+                },
+                {
+                  "name": "People",
+                  "type": "long"
+                },
+                {
+                  "name": "FirstSeen",
+                  "type": "datetime"
+                },
+                {
+                  "name": "LastSeen",
+                  "type": "datetime"
+                },
+                {
+                  "name": "Sample",
+                  "type": "string"
+                },
+                {
+                  "name": "ServiceError",
+                  "type": "bool"
+                },
+                {
+                  "name": "Key",
+                  "type": "string"
+                }
+              ],
+              "rows": [
+                [
+                  "ConnectionFailedNoHealthyRdshAvailable",
+                  -2146233088,
+                  "RDBroker",
+                  "Connection",
+                  "hp-example-finance",
+                  61,
+                  58,
+                  19,
+                  "2026-10-11T07:40:00Z",
+                  "2026-10-17T08:41:00Z",
+                  "No session host is available to take the connection (synthetic).",
+                  false,
+                  "ConnectionFailedNoHealthyRdshAvailable|-2146233088|RDBroker|Connection|hp-example-finance"
+                ],
+                [
+                  "InvalidCredentials",
+                  1326,
+                  "RDStack",
+                  "Connection",
+                  "hp-example-pooled",
+                  22,
+                  22,
+                  9,
+                  "2026-10-10T08:02:00Z",
+                  "2026-10-17T10:02:00Z",
+                  "The user name or password is incorrect (synthetic).",
+                  false,
+                  "InvalidCredentials|1326|RDStack|Connection|hp-example-pooled"
+                ],
+                [
+                  "ConnectionBrokenMissedHeartbeatThresholdExceeded",
+                  2,
+                  "RDGateway",
+                  "Connection",
+                  "hp-example-pooled",
+                  7,
+                  7,
+                  5,
+                  "2026-10-12T13:10:00Z",
+                  "2026-10-16T15:44:00Z",
+                  "The connection was lost: the gateway missed heartbeats (synthetic).",
+                  true,
+                  "ConnectionBrokenMissedHeartbeatThresholdExceeded|2|RDGateway|Connection|hp-example-pooled"
+                ]
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "match": {
+          "bodyIncludes": "af:avd.connection-errors#daily"
+        },
+        "body": {
+          "tables": [
+            {
+              "name": "PrimaryResult",
+              "columns": [
+                {
+                  "name": "Day",
+                  "type": "datetime"
+                },
+                {
+                  "name": "Failed",
+                  "type": "long"
+                },
+                {
+                  "name": "People",
+                  "type": "long"
+                }
+              ],
+              "rows": [
+                [
+                  "2026-10-11T00:00:00Z",
+                  9,
+                  5
+                ],
+                [
+                  "2026-10-12T00:00:00Z",
+                  14,
+                  7
+                ],
+                [
+                  "2026-10-13T00:00:00Z",
+                  11,
+                  6
+                ],
+                [
+                  "2026-10-14T00:00:00Z",
+                  16,
+                  8
+                ],
+                [
+                  "2026-10-15T00:00:00Z",
+                  13,
+                  7
+                ],
+                [
+                  "2026-10-16T00:00:00Z",
+                  12,
+                  6
+                ],
+                [
+                  "2026-10-17T00:00:00Z",
+                  12,
+                  5
+                ]
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "match": {
+          "bodyIncludes": "af:avd.connection-errors#totals"
+        },
+        "body": {
+          "tables": [
+            {
+              "name": "PrimaryResult",
+              "columns": [
+                {
+                  "name": "Errors",
+                  "type": "long"
+                },
+                {
+                  "name": "Failed",
+                  "type": "long"
+                },
+                {
+                  "name": "People",
+                  "type": "long"
+                },
+                {
+                  "name": "Codes",
+                  "type": "long"
+                },
+                {
+                  "name": "MicrosoftSide",
+                  "type": "long"
+                }
+              ],
+              "rows": [
+                [
+                  90,
+                  87,
+                  27,
+                  3,
+                  7
+                ]
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "match": {
+          "bodyIncludes": "af:probes.avd-connection-errors"
+        },
+        "body": {
+          "tables": [
+            {
+              "name": "PrimaryResult",
+              "columns": [
+                {
+                  "name": "name",
+                  "type": "string"
+                },
+                {
+                  "name": "hostPool",
+                  "type": "string"
+                },
+                {
+                  "name": "source",
+                  "type": "string"
+                },
+                {
+                  "name": "failures",
+                  "type": "long"
+                },
+                {
+                  "name": "people",
+                  "type": "long"
+                },
+                {
+                  "name": "lastSeen",
+                  "type": "datetime"
+                },
+                {
+                  "name": "sample",
+                  "type": "string"
+                },
+                {
+                  "name": "serviceError",
+                  "type": "bool"
+                },
+                {
+                  "name": "failedAttempts",
+                  "type": "long"
+                }
+              ],
+              "rows": [
+                [
+                  "ConnectionFailedNoHealthyRdshAvailable",
+                  "hp-example-finance",
+                  "RDBroker",
+                  6,
+                  4,
+                  "2026-10-17T08:41:00Z",
+                  "No session host is available to take the connection (synthetic).",
+                  false,
+                  7
+                ],
+                [
+                  "InvalidCredentials",
+                  "hp-example-pooled",
+                  "RDStack",
+                  2,
+                  1,
+                  "2026-10-17T10:02:00Z",
+                  "The user name or password is incorrect (synthetic).",
+                  false,
+                  7
+                ]
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "match": {
           "bodyIncludes": "af:identity.ca-report-only-impact#kqltotal"
         },
         "body": {

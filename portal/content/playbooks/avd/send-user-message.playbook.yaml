@@ -1,0 +1,131 @@
+$schema: ../../../packages/schemas/generated/playbook.schema.json
+kind: playbook
+id: avd.send-user-message
+version: 1.0.0
+title: Send a message to an Azure Virtual Desktop user
+summary: >-
+  Shows a message in a user's Azure Virtual Desktop session — "save your work, this host restarts at 18:00" before
+  maintenance, or a note from the service desk. Only active sessions can show it; a disconnected session is skipped.
+  Send it to every session on a host at once from the session host's User sessions tab. Session numbers are reused on
+  a host, so it is shown only to the person the list showed: if someone else holds the session now, it stops.
+owner: avd-team
+tags: [azure, avd, virtual-desktop, user-sessions, maintenance, helpdesk, bulk]
+risk: low
+mode: write
+requires:
+  portalRoles: [Portal.Operator]
+  scopes:
+    arm: [user_impersonation]
+  # Desktop Virtualization User Session Operator (or Desktop Virtualization Contributor) on the host pool.
+  azureRoles: [Desktop Virtualization User Session Operator]
+confirm:
+  type: click
+  message: >-
+    ${ 'Show this message to ' & (steps.lookup.output.properties.userPrincipalName ? steps.lookup.output.properties.userPrincipalName : 'the user') & ' on ' & $split(inputs.userSessionId, '/')[10] & '?' }
+approval:
+  required: false
+
+inputs:
+  userSessionId:
+    type: string
+    label: User session
+    description: The user session's resource id (from a session host or User sessions).
+    pattern: '^/subscriptions/[0-9a-fA-F-]{36}/[Rr]esource[Gg]roups/[-\w._()]{1,90}/providers/[Mm]icrosoft\.[Dd]esktop[Vv]irtualization/[Hh]ost[Pp]ools/[A-Za-z0-9@._ -]{3,64}/[Ss]ession[Hh]osts/[A-Za-z0-9@._ -]{3,48}/[Uu]ser[Ss]essions/[A-Za-z0-9]{1,24}$'
+  expectedUser:
+    type: string
+    label: Signed-in user
+    description: The sign-in name the list showed for this session. If someone else holds the session now, nothing is sent.
+    pattern: '^[^\s@]{1,128}@[^\s@]{1,253}$'
+  title: { type: string, label: Title, minLength: 1, maxLength: 100, default: Message from IT, placeholder: Planned maintenance }
+  message:
+    type: string
+    label: Message
+    minLength: 1
+    maxLength: 1000
+    multiline: true
+    placeholder: This desktop restarts at 18:00 for updates. Save your work and sign out before then.
+
+steps:
+  - id: lookup
+    type: arm
+    mode: read
+    describe: Read the session (who is signed in, and whether it is active)
+    request:
+      method: GET
+      path: ${ $join($split(inputs.userSessionId, '/')[$ != ''].('/' & $encode($)), '') }
+      apiVersion: "2024-04-03"
+
+  - id: isUserSession
+    type: assert
+    that: ${ $lowercase(steps.lookup.output.type) = 'microsoft.desktopvirtualization/hostpools/sessionhosts/usersessions' }
+    message: That resource isn't an Azure Virtual Desktop user session.
+
+  # Session numbers are reused on a host: a list a minute old can point at someone else's session now.
+  - id: sameUser
+    type: assert
+    that: ${ $lowercase($string(steps.lookup.output.properties.userPrincipalName)) = $lowercase($trim(inputs.expectedUser)) }
+    message: >-
+      ${ 'That session now belongs to ' & (steps.lookup.output.properties.userPrincipalName ? steps.lookup.output.properties.userPrincipalName : 'nobody') & ', not ' & inputs.expectedUser & ' (session numbers are reused on a host). Nothing was sent: refresh the list and try again.' }
+
+  # A disconnected session has no screen to show it on: skipped, and the summary says so.
+  - id: send
+    type: arm
+    mode: write
+    when: ${ steps.lookup.output.properties.sessionState = 'Active' }
+    describe: >-
+      ${ 'Show "' & inputs.title & '" to ' & (steps.lookup.output.properties.userPrincipalName ? steps.lookup.output.properties.userPrincipalName : 'the user') & ' on ' & $split(inputs.userSessionId, '/')[10] }
+    request:
+      method: POST
+      path: ${ $join($split(inputs.userSessionId, '/')[$ != ''].('/' & $encode($)), '') }/sendMessage
+      apiVersion: "2024-04-03"
+      body: "${ { 'messageTitle': inputs.title, 'messageBody': inputs.message } }"
+
+outputs:
+  summary: >-
+    ${ steps.lookup.output.properties.sessionState = 'Active'
+       ? 'Message shown to ' & steps.lookup.output.properties.userPrincipalName & ' on ' & $split(inputs.userSessionId, '/')[10] & '.'
+       : 'Not sent: ' & steps.lookup.output.properties.userPrincipalName & "'s session on " & $split(inputs.userSessionId, '/')[10] & ' is ' & $lowercase(steps.lookup.output.properties.sessionState) & ', so there is no screen to show it on.' }
+
+tests:
+  - name: shows a message in an active session
+    inputs:
+      userSessionId: /subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-avd/providers/Microsoft.DesktopVirtualization/hostPools/hp-example-pooled/sessionHosts/avd-ex-0001.example.com/userSessions/3
+      expectedUser: m.chen@example.com
+      title: Planned maintenance
+      message: This desktop restarts at 18:00 for updates. Save your work and sign out before then.
+    mocks:
+      lookup: { name: hp-example-pooled/avd-ex-0001.example.com/3, type: Microsoft.DesktopVirtualization/hostPools/sessionHosts/userSessions, properties: { userPrincipalName: m.chen@example.com, sessionState: Active } }
+    expect:
+      status: succeeded
+      plan: [send]
+      outputs: { summary: Message shown to m.chen@example.com on avd-ex-0001.example.com. }
+  - name: skips a disconnected session and says why
+    inputs:
+      userSessionId: /subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-avd/providers/Microsoft.DesktopVirtualization/hostPools/hp-example-pooled/sessionHosts/avd-ex-0002.example.com/userSessions/7
+      expectedUser: a.lee@example.com
+      title: Planned maintenance
+      message: This desktop restarts at 18:00 for updates.
+    mocks:
+      lookup: { name: hp-example-pooled/avd-ex-0002.example.com/7, type: Microsoft.DesktopVirtualization/hostPools/sessionHosts/userSessions, properties: { userPrincipalName: a.lee@example.com, sessionState: Disconnected } }
+    expect:
+      status: succeeded
+      plan: []
+      outputs: { summary: "Not sent: a.lee@example.com's session on avd-ex-0002.example.com is disconnected, so there is no screen to show it on." }
+  - name: refuses a resource that isn't a user session
+    inputs:
+      userSessionId: /subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-avd/providers/Microsoft.DesktopVirtualization/hostPools/hp-example-pooled/sessionHosts/avd-ex-0001.example.com/userSessions/4
+      expectedUser: m.chen@example.com
+      title: Planned maintenance
+      message: Save your work.
+    mocks:
+      lookup: { name: hp-example-pooled/avd-ex-0001.example.com, type: Microsoft.DesktopVirtualization/hostPools/sessionHosts, properties: {} }
+    expect: { status: failed, failedStep: isUserSession }
+  - name: sends nothing when the session now belongs to someone else
+    inputs:
+      userSessionId: /subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-avd/providers/Microsoft.DesktopVirtualization/hostPools/hp-example-pooled/sessionHosts/avd-ex-0001.example.com/userSessions/3
+      expectedUser: m.chen@example.com
+      title: Planned maintenance
+      message: Save your work.
+    mocks:
+      lookup: { name: hp-example-pooled/avd-ex-0001.example.com/3, type: Microsoft.DesktopVirtualization/hostPools/sessionHosts/userSessions, properties: { userPrincipalName: k.osei@example.com, sessionState: Active } }
+    expect: { status: failed, failedStep: sameUser }

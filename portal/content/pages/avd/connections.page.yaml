@@ -1,0 +1,242 @@
+$schema: ../../../packages/schemas/generated/page.schema.json
+kind: page
+id: avd.connections
+version: 1.0.0
+title: Connections
+summary: >-
+  Azure Virtual Desktop connection health from the host pools' diagnostics in Log Analytics — attempts and how many
+  connected, failures over time, the most common errors, the people they hit, round-trip time per host pool, and one
+  person's recent connections with the error behind each failure.
+owner: avd-team
+tags: [azure, avd, virtual-desktop, connections, log-analytics, kql, helpdesk]
+template: dashboard
+nav: { section: avd, label: Connections, icon: plugs-connected, order: 40 }
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    logAnalytics: [Data.Read]
+  azureRoles: [Log Analytics Reader]
+
+params:
+  range: { type: dateRange, label: Time range, default: P1D, presets: [PT4H, P1D, P7D, P30D], max: P30D }
+  hostPool: { type: string, label: Host pool, placeholder: Host pool name, facet: true, pattern: "^[A-Za-z0-9@._ -]{0,64}$" }
+  upn: { type: string, label: User, placeholder: name@example.com, format: upn, facet: true, description: Shows that person's recent connections. }
+
+filters:
+  facets: [hostPool, upn]
+
+datasources:
+  # Which workspace the diagnostics go to (AF_AVD_LOG_ANALYTICS_WORKSPACE_ID, else the default workspace); only the
+  # yes/no answer reaches the browser.
+  workspace:
+    source: static
+    data: {}
+    transform: "${ { 'configured': $boolean(env.AF_AVD_LOG_ANALYTICS_WORKSPACE_ID) or $boolean(env.AF_LOG_ANALYTICS_WORKSPACE_ID) } }"
+  # User input reaches KQL only through $kql(). A host pool filter matches the end of the record's resource id.
+  summary:
+    source: logAnalytics
+    when: ${ ds.workspace.configured }
+    workspace: "${ env.AF_AVD_LOG_ANALYTICS_WORKSPACE_ID ? env.AF_AVD_LOG_ANALYTICS_WORKSPACE_ID : env.AF_LOG_ANALYTICS_WORKSPACE_ID }"
+    timespan: ${ params.range.timespan }
+    query: |
+      // af:avd.connections#summary
+      let pool = ${ params.hostPool ? $kql('/hostpools/' & $lowercase(params.hostPool)) : "''" };
+      let conn = WVDConnections | where isempty(pool) or tolower(_ResourceId) endswith pool;
+      let err = WVDErrors | where ActivityType =~ 'Connection' | where isempty(pool) or tolower(_ResourceId) endswith pool;
+      conn
+      | summarize Attempts = dcount(CorrelationId), Connected = dcountif(CorrelationId, State =~ 'Connected'), People = dcount(UserName), Hosts = dcount(SessionHostName)
+      | extend k = 1
+      | join kind=leftouter (err | summarize Failed = dcount(CorrelationId), PeopleWithErrors = dcount(UserName) | extend k = 1) on k
+      | project Attempts, Connected, People, Hosts, Failed = coalesce(Failed, 0), PeopleWithErrors = coalesce(PeopleWithErrors, 0), SuccessRate = iff(Attempts > 0, round(todouble(Connected) / Attempts, 4), real(null))
+    transform: "${ $merge([{ 'Attempts': 0, 'Connected': 0, 'People': 0, 'Hosts': 0, 'Failed': 0, 'PeopleWithErrors': 0 }, value.value[0]]) }"
+    cache: { ttl: 300 }
+  trend:
+    source: logAnalytics
+    when: ${ ds.workspace.configured }
+    workspace: "${ env.AF_AVD_LOG_ANALYTICS_WORKSPACE_ID ? env.AF_AVD_LOG_ANALYTICS_WORKSPACE_ID : env.AF_LOG_ANALYTICS_WORKSPACE_ID }"
+    timespan: ${ params.range.timespan }
+    query: |
+      // af:avd.connections#trend
+      let pool = ${ params.hostPool ? $kql('/hostpools/' & $lowercase(params.hostPool)) : "''" };
+      let step = ${ params.range.timespan in ['P7D', 'P30D'] ? '1d' : '1h' };
+      let conn = WVDConnections | where isempty(pool) or tolower(_ResourceId) endswith pool | where State =~ 'Connected' | summarize Connected = dcount(CorrelationId) by TimeGenerated = bin(TimeGenerated, step);
+      let err = WVDErrors | where ActivityType =~ 'Connection' | where isempty(pool) or tolower(_ResourceId) endswith pool | summarize Failed = dcount(CorrelationId) by TimeGenerated = bin(TimeGenerated, step);
+      conn
+      | join kind=fullouter err on TimeGenerated
+      | project TimeGenerated = coalesce(TimeGenerated, TimeGenerated1), Connected = coalesce(Connected, 0), Failed = coalesce(Failed, 0)
+      | order by TimeGenerated asc
+    cache: { ttl: 300 }
+  errors:
+    source: logAnalytics
+    when: ${ ds.workspace.configured }
+    workspace: "${ env.AF_AVD_LOG_ANALYTICS_WORKSPACE_ID ? env.AF_AVD_LOG_ANALYTICS_WORKSPACE_ID : env.AF_LOG_ANALYTICS_WORKSPACE_ID }"
+    timespan: ${ params.range.timespan }
+    query: |
+      // af:avd.connections#errors
+      let pool = ${ params.hostPool ? $kql('/hostpools/' & $lowercase(params.hostPool)) : "''" };
+      WVDErrors
+      | where isempty(pool) or tolower(_ResourceId) endswith pool
+      | summarize Errors = count(), People = dcount(UserName), LastSeen = max(TimeGenerated), Sample = take_any(Message), ServiceError = take_any(ServiceError) by CodeSymbolic, Source, ActivityType
+      | extend Key = strcat(CodeSymbolic, '|', Source, '|', ActivityType)
+      | order by Errors desc
+      | take 100
+    cache: { ttl: 300 }
+  people:
+    source: logAnalytics
+    when: ${ ds.workspace.configured }
+    workspace: "${ env.AF_AVD_LOG_ANALYTICS_WORKSPACE_ID ? env.AF_AVD_LOG_ANALYTICS_WORKSPACE_ID : env.AF_LOG_ANALYTICS_WORKSPACE_ID }"
+    timespan: ${ params.range.timespan }
+    query: |
+      // af:avd.connections#people
+      let pool = ${ params.hostPool ? $kql('/hostpools/' & $lowercase(params.hostPool)) : "''" };
+      WVDErrors
+      | where ActivityType =~ 'Connection'
+      | where isempty(pool) or tolower(_ResourceId) endswith pool
+      | summarize FailedConnections = dcount(CorrelationId), Errors = make_set(CodeSymbolic, 5), arg_max(TimeGenerated, Message) by UserName
+      | project UserName, FailedConnections, LastFailure = TimeGenerated, Errors, LastMessage = Message
+      | order by FailedConnections desc
+      | take 100
+    cache: { ttl: 300 }
+  network:
+    source: logAnalytics
+    when: ${ ds.workspace.configured }
+    workspace: "${ env.AF_AVD_LOG_ANALYTICS_WORKSPACE_ID ? env.AF_AVD_LOG_ANALYTICS_WORKSPACE_ID : env.AF_LOG_ANALYTICS_WORKSPACE_ID }"
+    timespan: ${ params.range.timespan }
+    query: |
+      // af:avd.connections#network
+      let pool = ${ params.hostPool ? $kql('/hostpools/' & $lowercase(params.hostPool)) : "''" };
+      WVDConnectionNetworkData
+      | where isempty(pool) or tolower(_ResourceId) endswith pool
+      | summarize MedianRttMs = percentile(EstRoundTripTimeInMs, 50), P95RttMs = percentile(EstRoundTripTimeInMs, 95), MedianBandwidthKBps = percentile(EstAvailableBandwidthKBps, 50), Connections = dcount(CorrelationId) by HostPool = tostring(split(_ResourceId, '/')[8])
+      | order by P95RttMs desc
+      | take 100
+    cache: { ttl: 300 }
+  recent:
+    source: logAnalytics
+    when: ${ ds.workspace.configured and $boolean(params.upn) }
+    workspace: "${ env.AF_AVD_LOG_ANALYTICS_WORKSPACE_ID ? env.AF_AVD_LOG_ANALYTICS_WORKSPACE_ID : env.AF_LOG_ANALYTICS_WORKSPACE_ID }"
+    timespan: ${ params.range.timespan }
+    query: |
+      // af:avd.connections#recent
+      let who = ${ $kql(params.upn) };
+      let err = WVDErrors | where UserName =~ who | summarize Error = take_any(CodeSymbolic), ErrorMessage = take_any(Message) by CorrelationId;
+      WVDConnections
+      | where UserName =~ who
+      | summarize Started = min(TimeGenerated), Ended = max(TimeGenerated), States = make_set(State), SessionHostName = take_any(SessionHostName), HostPool = take_any(tostring(split(_ResourceId, '/')[8])), ClientType = take_any(ClientType), ClientOS = take_any(ClientOS), ClientVersion = take_any(ClientVersion), TransportType = take_any(TransportType), GatewayRegion = take_any(GatewayRegion) by CorrelationId
+      | join kind=leftouter err on CorrelationId
+      | extend Outcome = case(isnotempty(Error), 'Failed', set_has_element(States, 'Completed'), 'Ended', set_has_element(States, 'Connected'), 'Connected', 'Started')
+      | project Started, Ended, Outcome, Error, ErrorMessage, SessionHostName, HostPool, ClientType, ClientOS, ClientVersion, TransportType, GatewayRegion, CorrelationId
+      | order by Started desc
+      | take 200
+    cache: { ttl: 60 }
+
+layout:
+  - widget: markdown
+    when: "${ workspace.configured = false }"
+    text: >-
+      **No Log Analytics workspace is configured.** Turn on the host pools' diagnostic settings (Connections, Errors,
+      Network data) to a Log Analytics workspace, then ask an administrator to set AF_AVD_LOG_ANALYTICS_WORKSPACE_ID.
+  - widget: kpi
+    data: summary.Attempts
+    label: Connection attempts
+    format: number
+    hint: "${ params.hostPool ? 'Host pool ' & params.hostPool : 'Every host pool' }"
+  - widget: kpi
+    data: summary.SuccessRate
+    label: Connected
+    format: percent
+    status: "${ $type(value) != 'number' ? 'neutral' : value < 0.9 ? 'crit' : value < 0.97 ? 'warn' : 'ok' }"
+  - widget: kpi
+    data: summary.Failed
+    label: Failed connections
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+  - widget: kpi
+    data: summary.PeopleWithErrors
+    label: People with a failed connection
+    format: number
+    hint: "${ 'of ' & summary.People & ' who tried to connect' }"
+  - widget: chart
+    title: Connections and failures
+    span: 12
+    type: line
+    data: trend.value
+    x: TimeGenerated
+    y: [Connected, Failed]
+    labels: { Connected: Connected, Failed: Failed }
+    format: number
+  - widget: table
+    id: recent
+    title: Recent connections
+    when: ${ $boolean(params.upn) }
+    span: 12
+    data: recent.value
+    rowKey: CorrelationId
+    columns:
+      - { field: Started, label: Started, kind: datetime, sortable: true }
+      - { field: Outcome, label: Outcome, kind: status, map: { Failed: [crit, Failed], Connected: [ok, Connected], Ended: [neutral, Ended], Started: [info, Started] }, filter: facet }
+      - { field: Error, label: Error, kind: identity, secondary: ErrorMessage }
+      - { field: SessionHostName, label: Session host }
+      - { field: HostPool, label: Host pool, filter: facet }
+      - { field: ClientType, label: Client, secondary: ClientVersion, kind: identity, filter: facet }
+      - { field: ClientOS, label: Client OS, hidden: true }
+      - { field: TransportType, label: Transport, filter: facet }
+      - { field: GatewayRegion, label: Gateway region, hidden: true }
+      - { field: CorrelationId, label: Activity id, kind: code, hidden: true }
+    empty:
+      title: No connections for this person in the time range
+      body: Check the UPN, widen the time range, or check that the host pools send Connections diagnostics to this workspace.
+  - widget: table
+    id: errors
+    title: Most common errors
+    span: 12
+    data: errors.value
+    rowKey: Key
+    columns:
+      - { field: CodeSymbolic, label: Error, kind: identity, secondary: Sample, sortable: true }
+      - { field: Errors, label: Errors, kind: number, sortable: true }
+      - { field: People, label: People, kind: number, sortable: true }
+      - { field: LastSeen, label: Last seen, kind: relativeTime, sortable: true }
+      - { field: ActivityType, label: Activity, filter: facet }
+      - { field: Source, label: Source, filter: facet }
+      - { field: ServiceError, label: Microsoft-side, kind: boolean, hidden: true }
+    rowActions:
+      - label: Troubleshooting connections
+        icon: book-open
+        href: https://learn.microsoft.com/troubleshoot/azure/virtual-desktop/troubleshoot-client-windows
+    empty:
+      title: No errors in this time range
+      body: Or the host pools don't send their Errors diagnostics to this workspace.
+  - widget: table
+    id: people
+    title: People with failed connections
+    span: 7
+    data: people.value
+    rowKey: UserName
+    columns:
+      - { field: UserName, label: Person, kind: identity, secondary: LastMessage, sortable: true }
+      - { field: FailedConnections, label: Failed, kind: number, sortable: true }
+      - { field: LastFailure, label: Last failure, kind: relativeTime, sortable: true }
+      - { field: Errors, label: Errors, kind: tags }
+    rowActions:
+      - label: Their recent connections
+        icon: clock-counter-clockwise
+        href: /p/avd.connections?upn=${ $encode(row.UserName) }
+    empty:
+      title: Nobody had a failed connection
+      body: No connection failed in this time range.
+  - widget: table
+    id: network
+    title: Round-trip time by host pool
+    span: 5
+    data: network.value
+    rowKey: HostPool
+    columns:
+      - { field: HostPool, label: Host pool, sortable: true }
+      - { field: MedianRttMs, label: Median ms, kind: number, sortable: true }
+      - { field: P95RttMs, label: 95th percentile ms, kind: number, sortable: true }
+      - { field: MedianBandwidthKBps, label: Bandwidth KB/s, kind: number, hidden: true }
+      - { field: Connections, label: Connections, kind: number, hidden: true }
+    empty:
+      title: No network data
+      body: The host pools' diagnostic settings need the Network data category.

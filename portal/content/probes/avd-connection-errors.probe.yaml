@@ -1,0 +1,40 @@
+$schema: ../../packages/schemas/generated/probe.schema.json
+kind: probe
+id: probes.avd-connection-errors
+version: 1.0.0
+title: AVD connection failures (last hour)
+summary: >-
+  Failed Azure Virtual Desktop connections in the last hour, from the host pools' Errors diagnostics in Log Analytics
+  (AF_AVD_LOG_ANALYTICS_WORKSPACE_ID, else the default workspace). The metric is how many connection attempts failed;
+  details group them by error code and host pool with the people affected and a sample message, so a broken gateway
+  route, an expired certificate or a host pool out of capacity stands out.
+owner: avd-team
+tags: [kql, azure, avd, connections, log-analytics, sweep-1h]
+group: avd
+remedy: >-
+  Read the top error code in the details. ConnectionFailedNoHealthyRdshAvailable or similar — the pool has no host to
+  send people to (see the capacity checks); authentication errors — check the users' credentials, MFA and Conditional
+  Access; client or network errors — check the client version and the network path. A table not found error means the
+  host pools don't send their Errors diagnostics to this workspace yet.
+link: { label: Open AVD connections, href: "/p/avd.connections" }
+check:
+  kind: kql
+  source: logAnalytics
+  workspace: "${ env.AF_AVD_LOG_ANALYTICS_WORKSPACE_ID ? env.AF_AVD_LOG_ANALYTICS_WORKSPACE_ID : env.AF_LOG_ANALYTICS_WORKSPACE_ID }"
+  timespan: PT2H
+  query: |
+    // af:probes.avd-connection-errors
+    // One attempt can log several errors: the metric counts failed attempts once (failedAttempts, on every row).
+    let failed = WVDErrors | where TimeGenerated > ago(1h) | where ActivityType =~ 'Connection';
+    let attempts = toscalar(failed | summarize dcount(CorrelationId));
+    failed
+    | summarize failures = dcount(CorrelationId), people = dcount(UserName), lastSeen = max(TimeGenerated), sample = take_any(Message), serviceError = take_any(ServiceError) by name = CodeSymbolic, hostPool = tostring(split(_ResourceId, '/')[8]), source = Source
+    | extend failedAttempts = attempts
+    | order by failures desc
+  metric: { column: failedAttempts, aggregate: max }
+  detailsLimit: 50
+thresholds: { warn: 10, crit: 50 }
+intervalHint: PT1H
+timeoutMs: 60000
+requires:
+  azureRoles: [Log Analytics Reader]

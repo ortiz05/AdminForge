@@ -36,7 +36,22 @@ const CONFIG_CHECKS = [
   'probes.arc-critical-updates-overdue',
   'probes.arc-not-assessed',
   'probes.arc-agents-outdated',
+  // Azure Virtual Desktop (tests/content/avd-library.test.ts): operational, so on the faster sweeps (OPERATIONAL)
+  'probes.avd-session-hosts-unavailable',
+  'probes.avd-session-hosts-need-assistance',
+  'probes.avd-host-pools-no-capacity',
+  'probes.avd-host-pools-nearly-full',
+  'probes.avd-connection-errors',
 ];
+/** KQL probes that watch service health rather than configuration: their own sweep, not the 6-hourly config sweep. */
+const OPERATIONAL: Record<string, string> = {
+  'probes.activity-failed-writes-spike': 'sweep-1h',
+  'probes.avd-session-hosts-unavailable': 'sweep-15m',
+  'probes.avd-session-hosts-need-assistance': 'sweep-1h',
+  'probes.avd-host-pools-no-capacity': 'sweep-15m',
+  'probes.avd-host-pools-nearly-full': 'sweep-15m',
+  'probes.avd-connection-errors': 'sweep-1h',
+};
 
 describe('probe sweeps', () => {
   const sweeps = schedules.filter((s) => s.def.job.kind === 'probe');
@@ -104,7 +119,14 @@ describe('KQL configuration checks', () => {
       const c = check(p.def);
       if (c.source === 'resourceGraph')
         expect([p.def.id, /(^|\n)\s*let\s/.test(c.query)]).toEqual([p.def.id, false]);
-      expect([p.def.id, c.workspace]).toEqual([p.def.id, undefined]);
+      // A workspace other than the default is configuration too: `${ env.X }`, optionally falling back to another key.
+      expect([
+        p.def.id,
+        c.workspace === undefined ||
+          /^\$\{ env\.AF_[A-Z0-9_]+ \? env\.AF_[A-Z0-9_]+ : env\.AF_[A-Z0-9_]+ \}$|^\$\{ env\.AF_[A-Z0-9_]+ \}$/.test(
+            c.workspace,
+          ),
+      ]).toEqual([p.def.id, true]);
       expect(c.query).toContain(`// af:${p.def.id}`);
     }
   });
@@ -112,11 +134,11 @@ describe('KQL configuration checks', () => {
     expect(
       kql.flatMap((p) => lintExpressions(p.def).map((w) => `${p.file} ${w.path}: ${w.message}`)),
     ).toEqual([]));
-  it('are swept with the configuration checks, except the hourly activity spike', () => {
+  it('are swept with the configuration checks, except the operational ones', () => {
     for (const p of kql)
       expect([
         p.def.id,
         p.def.tags?.includes('config-check') ? 'config' : p.def.tags?.find((t) => t.startsWith('sweep-')),
-      ]).toEqual([p.def.id, p.def.id === 'probes.activity-failed-writes-spike' ? 'sweep-1h' : 'config']);
+      ]).toEqual([p.def.id, OPERATIONAL[p.def.id] ?? 'config']);
   });
 });

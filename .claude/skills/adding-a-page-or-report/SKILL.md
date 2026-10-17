@@ -144,6 +144,17 @@ Pages, dashboards and reports are YAML in `portal/content/{pages,dashboards,repo
      with `$attach`; map only the rows the page lists in JSONata, and export the whole list (`exportRows`,
      `billing.cost-analysis`). Inside a filter (`$list[…]`) a bare name reads the item: take `now` out into a variable
      first. JSONata's `$exists(null)` is true: leave an optional value undefined (`$d ? x`, no `: null`).
+   - Widget, header and action expressions (`when`, `href`, `text`, `hint`) run **in the browser**, where `env` doesn't
+     exist (only datasources, `params`, `user`, `now`): `env.X` there is always empty. Read configuration in a
+     `source: static` datasource and pass on only the answer (`workspace: { configured: … }` in `avd.connections`;
+     its `when: ${ workspace.configured = false }` shows the "not configured" note). A workload's own Log Analytics
+     workspace falls back to the default: `workspace: "${ env.AF_X ? env.AF_X : env.AF_LOG_ANALYTICS_WORKSPACE_ID }"`
+     with `when: ${ ds.workspace.configured }`.
+   - JSONata `$boolean(undefined)` and `$not(undefined)` are undefined, not false/true, so `$not(params.x)` on a param
+     that wasn't given never counts as true: write `params.x ? false : true` (and `a and (params.x ? false : true)`).
+   - Azure Resource Manager list answers (`value[]` of `{ id, name, properties }`) can go to a table as they come:
+     columns take dotted paths (`properties.sessionState`) and `$applyAdvanced` counts them (`avd.user-sessions`), so
+     thousands of rows need no per-row mapping.
    - Microsoft 365 usage reports answer 404 `UnknownTenantId` until Microsoft starts them (24–48 h after the tenant's
      first subscription). With concealed names (`/admin/reportSettings` `displayConcealedNames`) UPNs and owners are
      hashes (no `@`) and site URLs are empty or hashes: fall back to `siteId`, and only link rows whose URL starts
@@ -159,7 +170,7 @@ Pages, dashboards and reports are YAML in `portal/content/{pages,dashboards,repo
    says `listDefinitions: false` and shows "All reports"): they appear in the **Reports catalogue** (`/reports`)
    automatically. There the area is the report's `area:` if it sets one, else the key's first segment — always a
    navigation section key (`identity`, `m365`, `exchange`, `sharepoint`, `teams`, `endpoint`, `security`, `azure`,
-   `billing`). Put a report under its workload with `area:` (`m365.inbox-rules` says `area: exchange`) rather than
+   `avd`, `billing`). Put a report under its workload with `area:` (`m365.inbox-rules` says `area: exchange`) rather than
    renaming its key: schedules, links and saved views use the key. The same goes for pages — move one with
    `nav.section`, keep its key. Each workload section opens with an Overview dashboard (`exchange.overview`, …) whose
    `probeStatus` widget takes `group: <section>` to show that service's synthetic checks. `tags` drive the tag filter and search (give every report specific tags), `summary` is its

@@ -1,0 +1,324 @@
+$schema: ../../../packages/schemas/generated/page.schema.json
+kind: page
+id: avd.host-pool
+version: 1.0.0
+title: Host pool
+summary: >-
+  One Azure Virtual Desktop host pool — configuration, capacity (hosts taking new sessions, slots in use), its session
+  hosts with drain mode, application groups, scaling plan and the connection errors of the last 24 hours.
+owner: avd-team
+tags: [azure, avd, virtual-desktop, host-pools]
+template: entity
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    arm: [user_impersonation]
+    logAnalytics: [Data.Read]
+  # Log Analytics Reader on the AVD workspace for the Connection errors tab.
+  azureRoles: [Desktop Virtualization Reader, Log Analytics Reader]
+
+params:
+  id:
+    type: string
+    label: Host pool resource id
+    required: true
+    hidden: true
+    pattern: '^/subscriptions/[0-9a-fA-F-]{36}/[Rr]esource[Gg]roups/[-\w._()]{1,90}/providers/[Mm]icrosoft\.[Dd]esktop[Vv]irtualization/[Hh]ost[Pp]ools/[A-Za-z0-9@._ -]{3,64}$'
+
+datasources:
+  # The pool with its hosts added up by Resource Graph (the same arithmetic as Host pools).
+  pool:
+    source: resourceGraph
+    query: |
+      // af:avd.host-pool#pool
+      resources
+      | where type =~ 'microsoft.desktopvirtualization/hostpools' and tolower(id) == ${ $kql($lowercase(params.id)) }
+      | extend lid = tolower(id), hostPoolType = tostring(properties.hostPoolType), loadBalancerType = tostring(properties.loadBalancerType), maxSessionLimit = toint(properties.maxSessionLimit), friendlyName = tostring(properties.friendlyName), description = tostring(properties.description), startVMOnConnect = coalesce(tobool(properties.startVMOnConnect), false), validationEnvironment = coalesce(tobool(properties.validationEnvironment), false), preferredAppGroupType = tostring(properties.preferredAppGroupType), personalAssignment = tostring(properties.personalDesktopAssignmentType), publicNetworkAccess = tostring(properties.publicNetworkAccess), agentUpdate = tostring(properties.agentUpdate.type), customRdpProperty = tostring(properties.customRdpProperty)
+      | join kind=leftouter (desktopvirtualizationresources | where type =~ 'microsoft.desktopvirtualization/hostpools/sessionhosts' and tolower(id) startswith ${ $kql($lowercase(params.id) & '/sessionhosts/') } | extend hostPoolId = tostring(split(tolower(id), '/sessionhosts/')[0]), status = tostring(properties.status), allowNew = coalesce(tobool(properties.allowNewSession), false), hostSessions = coalesce(toint(properties.sessions), 0) | extend serving = status in~ ('Available', 'NeedsAssistance') | summarize hosts = count(), accepting = countif(serving and allowNew), startable = countif(status =~ 'Shutdown' and allowNew), drained = countif(not(allowNew)), unavailable = countif(not(status in~ ('Available', 'NeedsAssistance', 'Shutdown', 'Upgrading'))), shutdown = countif(status =~ 'Shutdown'), unassigned = countif(isempty(tostring(properties.assignedUser))), sessions = sum(hostSessions), acceptingSessions = sumif(hostSessions, serving and allowNew) by hostPoolId) on $left.lid == $right.hostPoolId
+      | extend hosts = coalesce(hosts, 0), accepting = coalesce(accepting, 0), startable = coalesce(startable, 0), drained = coalesce(drained, 0), unavailable = coalesce(unavailable, 0), shutdown = coalesce(shutdown, 0), unassigned = coalesce(unassigned, 0), sessions = coalesce(sessions, 0), acceptingSessions = coalesce(acceptingSessions, 0)
+      | extend limited = hostPoolType =~ 'Pooled' and maxSessionLimit > 0 and maxSessionLimit < 999999
+      | extend slots = iff(limited, accepting * maxSessionLimit, int(null))
+      | extend capacityUsed = iff(limited and slots > 0, round(todouble(acceptingSessions) / slots, 3), real(null))
+      | project id, name, location, resourceGroup, subscriptionId, tags, friendlyName, description, hostPoolType, loadBalancerType, maxSessionLimit, personalAssignment, preferredAppGroupType, publicNetworkAccess, agentUpdate, customRdpProperty, startVMOnConnect = iff(startVMOnConnect, 'true', 'false'), validationEnvironment = iff(validationEnvironment, 'true', 'false'), hosts, accepting, unavailable, drained, shutdown, startable, unassigned, sessions, slots, capacityUsed
+      | take 1
+    transform: "${ value.value[0] }"
+    cache: { ttl: 60 }
+  hosts:
+    source: resourceGraph
+    query: |
+      // af:avd.host-pool#hosts
+      desktopvirtualizationresources
+      | where type =~ 'microsoft.desktopvirtualization/hostpools/sessionhosts' and tolower(id) startswith ${ $kql($lowercase(params.id) & '/sessionhosts/') }
+      | extend status = tostring(properties.status), allowNewSession = coalesce(tobool(properties.allowNewSession), false), updateState = tostring(properties.updateState), failedCheck = tostring(properties.sessionHostHealthCheckResults) contains 'HealthCheckFailed'
+      | extend health = case(status in~ ('Unavailable', 'NoHeartbeat', 'Disconnected', 'UpgradeFailed', 'NotJoinedToDomain', 'DomainTrustRelationshipLost', 'SxSStackListenerNotReady', 'FSLogixNotHealthy'), 'Unhealthy', status =~ 'Shutdown', 'ShutDown', status =~ 'Upgrading', 'Upgrading', status =~ 'NeedsAssistance' or updateState =~ 'Failed' or failedCheck, 'NeedsAssistance', status =~ 'Available', 'Healthy', 'Unknown')
+      | project id, sessionHost = tostring(split(id, '/')[10]), status, health, drainMode = iff(allowNewSession, 'false', 'true'), sessions = toint(properties.sessions), assignedUser = tostring(properties.assignedUser), statusSince = todatetime(properties.statusTimestamp), agentVersion = tostring(properties.agentVersion), osVersion = tostring(properties.osVersion), updateState, vmResourceId = tostring(properties.resourceId)
+      | order by sessionHost asc
+    paging: cursor
+    cache: { ttl: 60 }
+  appGroups:
+    source: resourceGraph
+    query: |
+      // af:avd.host-pool#appgroups
+      resources
+      | where type =~ 'microsoft.desktopvirtualization/applicationgroups' and tolower(tostring(properties.hostPoolArmPath)) == ${ $kql($lowercase(params.id)) }
+      | project id, name, friendlyName = tostring(properties.friendlyName), applicationGroupType = tostring(properties.applicationGroupType), workspace = tostring(split(tostring(properties.workspaceArmPath), '/')[8]), showInFeed = iff(coalesce(tobool(properties.showInFeed), true), 'true', 'false'), resourceGroup, location
+      | order by name asc
+    cache: { ttl: 300 }
+  scaling:
+    source: resourceGraph
+    query: |
+      // af:avd.host-pool#scaling
+      resources
+      | where type =~ 'microsoft.desktopvirtualization/scalingplans'
+      | mv-expand ref = properties.hostPoolReferences
+      | where tolower(tostring(ref.hostPoolArmPath)) == ${ $kql($lowercase(params.id)) }
+      | project id, name, enabled = iff(coalesce(tobool(ref.scalingPlanEnabled), false), 'true', 'false'), timeZone = tostring(properties.timeZone), schedules = coalesce(array_length(properties.schedules), 0), exclusionTag = tostring(properties.exclusionTag), resourceGroup
+    cache: { ttl: 300 }
+  # Whether a workspace for the AVD diagnostics is configured (AF_AVD_LOG_ANALYTICS_WORKSPACE_ID, else the default).
+  workspace:
+    source: static
+    data: {}
+    transform: "${ { 'configured': $boolean(env.AF_AVD_LOG_ANALYTICS_WORKSPACE_ID) or $boolean(env.AF_LOG_ANALYTICS_WORKSPACE_ID) } }"
+  # Connection errors of the last 24 hours, when the host pool sends diagnostics to the AVD workspace.
+  errors:
+    source: logAnalytics
+    optional: true
+    when: ${ ds.workspace.configured }
+    workspace: "${ env.AF_AVD_LOG_ANALYTICS_WORKSPACE_ID ? env.AF_AVD_LOG_ANALYTICS_WORKSPACE_ID : env.AF_LOG_ANALYTICS_WORKSPACE_ID }"
+    timespan: P1D
+    query: |
+      // af:avd.host-pool#errors
+      WVDErrors
+      | where TimeGenerated > ago(1d)
+      | where _ResourceId =~ ${ $kql(params.id) }
+      | summarize Errors = count(), Users = dcount(UserName), LastSeen = max(TimeGenerated), Sample = take_any(Message), ServiceError = take_any(ServiceError) by CodeSymbolic, Source, ActivityType
+      | extend Key = strcat(CodeSymbolic, '|', Source, '|', ActivityType)
+      | order by Errors desc
+      | take 50
+    cache: { ttl: 300 }
+
+header:
+  title: ${ pool.name }
+  subtitle: >-
+    ${ pool.hostPoolType & ' · ' & pool.loadBalancerType & (pool.friendlyName ? ' · ' & pool.friendlyName : '') }
+  status: >-
+    ${ pool.hosts = 0 ? 'neutral'
+       : pool.accepting = 0 and pool.startable = 0 ? 'crit'
+       : pool.unavailable > 0 ? 'warn'
+       : $type(pool.capacityUsed) = 'number' and pool.capacityUsed >= 0.9 ? 'warn' : 'ok' }
+  statusLabel: >-
+    ${ pool.hosts = 0 ? 'No session hosts'
+       : pool.accepting & ' of ' & pool.hosts & ' hosts take new sessions' }
+  ids:
+    Resource id: ${ params.id }
+
+actions:
+  - label: User sessions
+    icon: users
+    href: /p/avd.user-sessions?hostPoolId=${ $encode(params.id) }
+  - label: Connections
+    icon: plugs-connected
+    href: /p/avd.connections?hostPool=${ $encode(pool.name) }
+  - label: Open in Azure portal
+    icon: arrow-square-out
+    href: https://portal.azure.com/#resource${ params.id }/overview
+
+tabs:
+  - id: overview
+    label: Overview
+    layout:
+      - widget: kpi
+        data: pool.accepting
+        label: Hosts taking new sessions
+        format: number
+        status: "${ pool.hosts > 0 and value = 0 ? 'crit' : 'ok' }"
+        hint: "${ 'of ' & pool.hosts & ' session hosts' }"
+      - widget: kpi
+        data: pool.sessions
+        label: Sessions
+        format: number
+      - widget: kpi
+        data: pool.capacityUsed
+        label: Slots in use
+        format: percent
+        status: "${ $type(value) != 'number' ? 'neutral' : value >= 0.9 ? 'warn' : 'ok' }"
+        hint: "${ $type(pool.slots) = 'number' ? pool.slots & ' slots on the hosts taking new sessions' : 'No session limit' }"
+      - widget: kpi
+        data: pool.unavailable
+        label: Can't take connections
+        format: number
+        status: "${ value > 0 ? 'crit' : 'ok' }"
+      - widget: kpi
+        data: pool.drained
+        label: In drain mode
+        format: number
+        status: "${ value > 0 ? 'info' : 'ok' }"
+      - widget: keyValue
+        span: 6
+        title: Configuration
+        data: pool
+        fields:
+          - { field: hostPoolType, label: Type }
+          - { field: loadBalancerType, label: Load balancing }
+          - { field: maxSessionLimit, label: Session limit per host, kind: number }
+          - { field: personalAssignment, label: Personal desktop assignment }
+          - { field: preferredAppGroupType, label: Preferred app group type }
+          - { field: startVMOnConnect, label: Start VM on Connect, kind: status, map: { "true": [ok, "On"], "false": [neutral, "Off"] } }
+          - { field: validationEnvironment, label: Validation pool, kind: status, map: { "true": [info, "Yes — gets service updates first"], "false": [neutral, "No"] } }
+          - { field: agentUpdate, label: Agent updates }
+          - { field: publicNetworkAccess, label: Public network access }
+      - widget: keyValue
+        span: 6
+        title: Where
+        data: pool
+        fields:
+          - { field: description, label: Description }
+          - { field: location, label: Metadata location }
+          - { field: resourceGroup, label: Resource group }
+          - { field: subscriptionId, label: Subscription, kind: id }
+          - { field: startable, label: Shut-down hosts that can start, kind: number }
+          - { field: unassigned, label: Unassigned hosts (personal pools), kind: number }
+          - { field: tags, label: Tags, kind: tags }
+          - { field: customRdpProperty, label: RDP properties, kind: code }
+  - id: hosts
+    label: Session hosts
+    layout:
+      - widget: table
+        span: 12
+        data: hosts.value
+        rowKey: id
+        selection: multi
+        columns:
+          - { field: sessionHost, label: Session host, kind: identity, secondary: assignedUser, sortable: true }
+          - field: health
+            label: Health
+            kind: status
+            map:
+              Healthy: [ok, Healthy]
+              Unhealthy: [crit, Can't take connections]
+              NeedsAssistance: [warn, Needs assistance]
+              ShutDown: [neutral, Shut down]
+              Upgrading: [info, Upgrading]
+              Unknown: [neutral, Unknown]
+            filter: facet
+          - { field: status, label: Status, filter: facet }
+          - { field: drainMode, label: Drain mode, kind: status, map: { "true": [info, "On"], "false": [neutral, "Off"] }, filter: facet }
+          - { field: sessions, label: Sessions, kind: number, sortable: true }
+          - { field: statusSince, label: Status since, kind: relativeTime, sortable: true }
+          - { field: agentVersion, label: Agent version, filter: facet, hidden: true }
+          - { field: osVersion, label: OS version, filter: facet, hidden: true }
+          - { field: updateState, label: Agent update, filter: facet, hidden: true }
+          - { field: id, label: Resource id, kind: code, hidden: true }
+        inspect:
+          page: avd.session-host
+          params:
+            id: ${ row.id }
+        rowActions:
+          - playbook: avd.set-drain-mode
+            label: Turn on drain mode
+            icon: prohibit
+            when: ${ row.drainMode = 'false' }
+            inputs:
+              sessionHostId: ${ row.id }
+              drainMode: true
+          - playbook: avd.set-drain-mode
+            label: Turn off drain mode
+            icon: check-circle
+            when: ${ row.drainMode = 'true' }
+            inputs:
+              sessionHostId: ${ row.id }
+              drainMode: false
+          - label: User sessions on this host
+            icon: users
+            href: /p/avd.user-sessions?hostPoolId=${ $encode(params.id) }&sessionHost=${ $encode(row.sessionHost) }
+        bulkActions:
+          - playbook: avd.set-drain-mode
+            label: Turn on drain mode
+            icon: prohibit
+            forEach:
+              inputs:
+                sessionHostId: ${ row.id }
+                drainMode: true
+              concurrency: 5
+            maxItems: 500
+            when: ${ $count(rows[drainMode = 'false']) > 0 }
+          - playbook: avd.set-drain-mode
+            label: Turn off drain mode
+            icon: check-circle
+            forEach:
+              inputs:
+                sessionHostId: ${ row.id }
+                drainMode: false
+              concurrency: 5
+            maxItems: 500
+            when: ${ $count(rows[drainMode = 'true']) > 0 }
+        empty:
+          title: This host pool has no session hosts
+          body: Add session hosts from the Azure portal (Host pool › Session hosts › Add) or your image pipeline.
+  - id: appGroups
+    label: Application groups
+    layout:
+      - widget: table
+        span: 12
+        data: appGroups.value
+        rowKey: id
+        columns:
+          - { field: name, label: Application group, kind: identity, secondary: friendlyName, sortable: true }
+          - { field: applicationGroupType, label: Type, filter: facet }
+          - { field: workspace, label: Workspace }
+          - { field: showInFeed, label: In the user feed, kind: status, map: { "true": [ok, "Yes"], "false": [neutral, "No"] } }
+          - { field: resourceGroup, label: Resource group }
+        rowActions:
+          - label: Open in Azure portal
+            icon: arrow-square-out
+            href: https://portal.azure.com/#resource${ row.id }/overview
+        empty:
+          title: No application groups
+          body: Users reach a host pool through an application group (desktop or RemoteApp) registered in a workspace.
+  - id: scaling
+    label: Scaling plan
+    layout:
+      - widget: table
+        span: 12
+        data: scaling.value
+        rowKey: id
+        columns:
+          - { field: name, label: Scaling plan, kind: identity, secondary: timeZone }
+          - { field: enabled, label: Enabled for this pool, kind: status, map: { "true": [ok, "Yes"], "false": [warn, "No"] } }
+          - { field: schedules, label: Schedules, kind: number }
+          - { field: exclusionTag, label: Exclusion tag }
+          - { field: resourceGroup, label: Resource group }
+        rowActions:
+          - label: Open in Azure portal
+            icon: arrow-square-out
+            href: https://portal.azure.com/#resource${ row.id }/overview
+        empty:
+          title: No scaling plan
+          body: Without autoscale, every session host keeps running. A scaling plan starts and stops hosts on a schedule and with demand.
+  - id: errors
+    label: Connection errors
+    layout:
+      - widget: markdown
+        when: "${ workspace.configured = false }"
+        text: >-
+          **No Log Analytics workspace is configured.** Send the host pool's diagnostics (Connections, Errors) to a
+          workspace and ask an administrator to set AF_AVD_LOG_ANALYTICS_WORKSPACE_ID.
+      - widget: table
+        span: 12
+        data: errors.value
+        rowKey: Key
+        columns:
+          - { field: CodeSymbolic, label: Error, kind: identity, secondary: Sample, sortable: true }
+          - { field: Errors, label: Errors, kind: number, sortable: true }
+          - { field: Users, label: People affected, kind: number, sortable: true }
+          - { field: LastSeen, label: Last seen, kind: relativeTime, sortable: true }
+          - { field: Source, label: Source, filter: facet }
+          - { field: ActivityType, label: Activity, filter: facet }
+          - { field: ServiceError, label: Microsoft-side, kind: boolean, hidden: true }
+        rowActions:
+          - label: Troubleshooting connections
+            icon: book-open
+            href: https://learn.microsoft.com/troubleshoot/azure/virtual-desktop/troubleshoot-client-windows
+        empty:
+          title: No connection errors in the last 24 hours
+          body: Or the host pool doesn't send its Errors diagnostics to the configured workspace.

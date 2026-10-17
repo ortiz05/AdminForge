@@ -1,0 +1,40 @@
+$schema: ../../packages/schemas/generated/probe.schema.json
+kind: probe
+id: probes.avd-session-hosts-unavailable
+version: 1.0.0
+title: AVD session hosts that can't take connections
+summary: >-
+  Session hosts in every host pool that accept new sessions (not drained) but can't serve one — Unavailable, no
+  heartbeat, disconnected, agent upgrade failed, domain join or trust lost, SxS stack not listening, FSLogix unhealthy.
+  Hosts shut down by autoscale or mid-upgrade are left out. Details list each host with its host pool, status, since
+  when, and the failing health checks.
+owner: avd-team
+tags: [kql, azure, avd, session-hosts, sweep-15m]
+group: avd
+remedy: >-
+  Open the host from Session hosts: its health checks name the cause. No heartbeat or Unavailable — start the VM, then
+  check the Remote Desktop Agent and Agent Boot Loader services; UpgradeFailed — reinstall the agent; domain join or
+  trust lost — rejoin the domain or reset the computer account; SxS stack not ready — restart the VM. Turn on drain mode
+  while you work on it so new users land on other hosts.
+link: { label: Open session host health, href: "/p/avd.session-host-health?health=Unhealthy&includeDrained=false" }
+check:
+  kind: kql
+  source: resourceGraph
+  query: |
+    // af:probes.avd-session-hosts-unavailable
+    desktopvirtualizationresources
+    | where type =~ 'microsoft.desktopvirtualization/hostpools/sessionhosts'
+    | extend status = tostring(properties.status)
+    | where status in~ ('Unavailable', 'NoHeartbeat', 'Disconnected', 'UpgradeFailed', 'NotJoinedToDomain', 'DomainTrustRelationshipLost', 'SxSStackListenerNotReady', 'FSLogixNotHealthy')
+    | where coalesce(tobool(properties.allowNewSession), true)
+    | extend lid = tolower(id)
+    | join kind=leftouter (desktopvirtualizationresources | where type =~ 'microsoft.desktopvirtualization/hostpools/sessionhosts' | where tostring(properties.sessionHostHealthCheckResults) contains 'HealthCheckFailed' | mv-expand hc = properties.sessionHostHealthCheckResults | where tostring(hc.healthCheckResult) =~ 'HealthCheckFailed' | summarize failedChecks = make_set(tostring(hc.healthCheckName), 10), failureMessages = make_set(tostring(hc.additionalFailureDetails.message), 3) by lid = tolower(id)) on lid
+    | project name = tostring(split(id, '/')[10]), hostPool = tostring(split(id, '/')[8]), status, statusSince = todatetime(properties.statusTimestamp), lastHeartBeat = todatetime(properties.lastHeartBeat), sessions = toint(properties.sessions), failedChecks, failureMessages, agentVersion = tostring(properties.agentVersion), resourceGroup, subscriptionId, id
+    | order by statusSince asc
+  metric: rowCount
+  detailsLimit: 100
+thresholds: { warn: 1, crit: 10 }
+intervalHint: PT15M
+timeoutMs: 60000
+requires:
+  azureRoles: [Reader]

@@ -1,0 +1,263 @@
+$schema: ../../../packages/schemas/generated/page.schema.json
+kind: page
+id: avd.session-host
+version: 1.0.0
+title: Session host
+summary: >-
+  One Azure Virtual Desktop session host, read live from Azure — status, drain mode, health checks with their failure
+  messages, agent and update state, the user sessions on it, and the virtual machine or Arc machine behind it.
+owner: avd-team
+tags: [azure, avd, virtual-desktop, session-hosts]
+template: entity
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    arm: [user_impersonation]
+  azureRoles: [Desktop Virtualization Reader]
+
+params:
+  id:
+    type: string
+    label: Session host resource id
+    required: true
+    hidden: true
+    pattern: '^/subscriptions/[0-9a-fA-F-]{36}/[Rr]esource[Gg]roups/[-\w._()]{1,90}/providers/[Mm]icrosoft\.[Dd]esktop[Vv]irtualization/[Hh]ost[Pp]ools/[A-Za-z0-9@._ -]{3,64}/[Ss]ession[Hh]osts/[A-Za-z0-9@._ -]{3,48}$'
+
+datasources:
+  # Live from Azure Resource Manager (Resource Graph can trail by a few minutes): every path segment encoded.
+  host:
+    source: arm
+    request:
+      path: ${ $join($split(params.id, '/')[$ != ''].('/' & $encode($)), '') }
+      apiVersion: "2024-04-03"
+    transform: >-
+      ${ (
+        $p := value.properties;
+        $parts := $split(value.id ? value.id : params.id, '/');
+        $checks := [$p.sessionHostHealthCheckResults];
+        {
+          'id': value.id,
+          'name': $parts[10],
+          'hostPool': $parts[8],
+          'hostPoolId': $join($parts[[0..8]], '/'),
+          'status': $p.status,
+          'drainMode': $p.allowNewSession = false ? 'true' : 'false',
+          'sessions': $p.sessions,
+          'assignedUser': $p.assignedUser,
+          'friendlyName': $p.friendlyName,
+          'lastHeartBeat': $p.lastHeartBeat,
+          'statusTimestamp': $p.statusTimestamp,
+          'agentVersion': $p.agentVersion,
+          'sxsStackVersion': $p.sxSStackVersion,
+          'osVersion': $p.osVersion,
+          'updateState': $p.updateState,
+          'lastUpdateTime': $p.lastUpdateTime,
+          'updateErrorMessage': $p.updateErrorMessage,
+          'vmResourceId': $p.resourceId,
+          'virtualMachineId': $p.virtualMachineId,
+          'hosting': $contains($lowercase($p.resourceId ? $p.resourceId : ''), '/microsoft.hybridcompute/') ? 'arc' : 'azure',
+          'checks': $checks,
+          'failedChecks': $count($checks[healthCheckResult = 'HealthCheckFailed'])
+        }
+      ) }
+    cache: { ttl: 30 }
+  sessions:
+    source: arm
+    request:
+      path: ${ $join($split(params.id, '/')[$ != ''].('/' & $encode($)), '') }/userSessions
+      apiVersion: "2024-04-03"
+    paging: all
+    maxItems: 2000
+    cache: { ttl: 30 }
+  # The Azure VM or Arc-enabled server behind the host (Azure Local session hosts run on Arc).
+  machine:
+    source: resourceGraph
+    when: ${ $boolean(ds.host.vmResourceId) }
+    query: |
+      // af:avd.session-host#machine
+      resources
+      | where tolower(id) == ${ $kql($lowercase(ds.host.vmResourceId)) }
+      | project id, name, type, location, resourceGroup, subscriptionId, tags, powerState = tostring(properties.extended.instanceView.powerState.displayStatus), vmSize = tostring(properties.hardwareProfile.vmSize), imageSku = tostring(properties.storageProfile.imageReference.sku), osName = tostring(coalesce(properties.extended.instanceView.osName, properties.osName)), arcStatus = tostring(properties.status), arcAgentVersion = tostring(properties.agentVersion)
+      | take 1
+    transform: "${ value.value[0] }"
+    cache: { ttl: 60 }
+
+header:
+  title: ${ host.name }
+  subtitle: >-
+    ${ 'Host pool ' & host.hostPool & (host.assignedUser ? ' · assigned to ' & host.assignedUser : '') }
+  status: >-
+    ${ host.status = 'Available' ? (host.failedChecks > 0 ? 'warn' : 'ok')
+       : host.status in ['Shutdown', 'Upgrading'] ? 'neutral'
+       : host.status = 'NeedsAssistance' ? 'warn' : 'crit' }
+  statusLabel: >-
+    ${ host.status & (host.drainMode = 'true' ? ' · drain mode on' : '') }
+  ids:
+    Resource id: ${ params.id }
+    Machine: ${ host.vmResourceId }
+
+actions:
+  - playbook: avd.set-drain-mode
+    label: Turn on drain mode
+    icon: prohibit
+    when: ${ host.drainMode = 'false' }
+    inputs:
+      sessionHostId: ${ params.id }
+      drainMode: true
+  - playbook: avd.set-drain-mode
+    label: Turn off drain mode
+    icon: check-circle
+    when: ${ host.drainMode = 'true' }
+    inputs:
+      sessionHostId: ${ params.id }
+      drainMode: false
+  - label: Host pool
+    icon: stack
+    href: /p/avd.host-pool?id=${ $encode(host.hostPoolId) }
+  - label: Open the machine in Azure portal
+    icon: arrow-square-out
+    when: ${ $boolean(host.vmResourceId) }
+    href: https://portal.azure.com/#resource${ host.vmResourceId }/overview
+
+tabs:
+  - id: overview
+    label: Overview
+    layout:
+      - widget: keyValue
+        span: 6
+        title: Connections
+        data: host
+        fields:
+          - field: status
+            label: Status
+            kind: status
+            map:
+              Available: [ok, Available]
+              Unavailable: [crit, Unavailable]
+              Shutdown: [neutral, Shut down]
+              Disconnected: [crit, Disconnected]
+              Upgrading: [info, Upgrading]
+              UpgradeFailed: [crit, Agent upgrade failed]
+              NoHeartbeat: [crit, No heartbeat]
+              NotJoinedToDomain: [crit, Not joined to the domain]
+              DomainTrustRelationshipLost: [crit, Domain trust lost]
+              SxSStackListenerNotReady: [crit, SxS stack not ready]
+              FSLogixNotHealthy: [crit, FSLogix unhealthy]
+              NeedsAssistance: [warn, Needs assistance]
+          - { field: statusTimestamp, label: Status since, kind: relativeTime }
+          - { field: drainMode, label: Drain mode, kind: status, map: { "true": [info, "On — takes no new sessions"], "false": [ok, "Off — takes new sessions"] } }
+          - { field: sessions, label: Sessions, kind: number }
+          - { field: assignedUser, label: Assigned user (personal pools) }
+          - { field: lastHeartBeat, label: Last heartbeat, kind: relativeTime }
+          - { field: failedChecks, label: Failed health checks, kind: number }
+      - widget: keyValue
+        span: 6
+        title: Agent and operating system
+        data: host
+        fields:
+          - { field: agentVersion, label: Agent version }
+          - { field: sxsStackVersion, label: SxS stack version }
+          - { field: osVersion, label: OS version }
+          - field: updateState
+            label: Agent update
+            kind: status
+            map: { Succeeded: [ok, Succeeded], Failed: [crit, Failed], Started: [info, In progress], Pending: [info, Pending], Initial: [neutral, Not started] }
+          - { field: lastUpdateTime, label: Last update, kind: relativeTime }
+          - { field: updateErrorMessage, label: Update error }
+          - { field: hosting, label: Runs on, kind: status, map: { azure: [neutral, Azure VM], arc: [info, Azure Arc (Azure Local)] } }
+  - id: health
+    label: Health checks
+    layout:
+      - widget: table
+        span: 12
+        data: host.checks
+        rowKey: healthCheckName
+        columns:
+          - { field: healthCheckName, label: Check, kind: identity, secondary: additionalFailureDetails.message, sortable: true }
+          - field: healthCheckResult
+            label: Result
+            kind: status
+            map: { HealthCheckSucceeded: [ok, Passed], HealthCheckFailed: [crit, Failed], SessionHostShutdown: [neutral, Host shut down], Unknown: [neutral, Unknown] }
+            filter: facet
+          - { field: additionalFailureDetails.lastHealthCheckDateTime, label: Checked, kind: relativeTime }
+          - { field: additionalFailureDetails.errorCode, label: Error code, kind: code, hidden: true }
+        rowActions:
+          - label: Troubleshooting guide
+            icon: book-open
+            href: https://learn.microsoft.com/azure/virtual-desktop/troubleshoot-agent
+        empty:
+          title: No health checks reported
+          body: The Azure Virtual Desktop agent reports its health checks every few minutes while the host runs; a shut-down host reports none.
+  - id: sessions
+    label: User sessions
+    layout:
+      - widget: table
+        span: 12
+        data: sessions.value
+        rowKey: id
+        selection: multi
+        columns:
+          - { field: properties.userPrincipalName, label: User, kind: identity, secondary: properties.activeDirectoryUserName, sortable: true }
+          - field: properties.sessionState
+            label: State
+            kind: status
+            map: { Active: [ok, Active], Disconnected: [warn, Disconnected], Pending: [info, Pending], LogOff: [neutral, Signing out], UserProfileDiskMounted: [info, Profile disk mounted], Unknown: [neutral, Unknown] }
+            filter: facet
+          - { field: properties.applicationType, label: Type, filter: facet }
+          - { field: properties.createTime, label: Started, kind: relativeTime, sortable: true }
+          - { field: name, label: Session, kind: code, hidden: true }
+        rowActions:
+          - playbook: avd.send-user-message
+            label: Send a message
+            icon: chat-text
+            when: ${ row.properties.sessionState = 'Active' }
+            inputs:
+              userSessionId: ${ row.id }
+              expectedUser: ${ row.properties.userPrincipalName }
+          - playbook: avd.log-off-user-session
+            label: Sign the user out
+            icon: sign-out
+            inputs:
+              userSessionId: ${ row.id }
+              expectedUser: ${ row.properties.userPrincipalName }
+        bulkActions:
+          - playbook: avd.send-user-message
+            label: Send a message
+            icon: chat-text
+            forEach:
+              inputs:
+                userSessionId: ${ row.id }
+                expectedUser: ${ row.properties.userPrincipalName }
+              concurrency: 5
+            maxItems: 500
+          - playbook: avd.log-off-user-session
+            label: Sign users out
+            icon: sign-out
+            forEach:
+              inputs:
+                userSessionId: ${ row.id }
+                expectedUser: ${ row.properties.userPrincipalName }
+              concurrency: 5
+            maxItems: 500
+        empty:
+          title: Nobody is signed in to this host
+          body: Sessions appear here while people are connected or disconnected but still signed in.
+  - id: machine
+    label: Machine
+    layout:
+      - widget: keyValue
+        span: 12
+        title: Virtual machine
+        data: machine
+        fields:
+          - { field: name, label: Name }
+          - { field: type, label: Type, kind: code }
+          - { field: powerState, label: Power state }
+          - { field: vmSize, label: Size }
+          - { field: osName, label: Operating system }
+          - { field: imageSku, label: Image SKU }
+          - { field: arcStatus, label: Arc agent status }
+          - { field: arcAgentVersion, label: Arc agent version }
+          - { field: location, label: Location }
+          - { field: resourceGroup, label: Resource group }
+          - { field: tags, label: Tags, kind: tags }

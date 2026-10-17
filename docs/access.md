@@ -26,9 +26,16 @@ Operator can turn one off.
 | Change approver            | Reader + Operator + Playbook.Approver (approvers must be armed when the steps after an approval write as them)  |
 | Platform owner             | Reader + Operator + Portal.Admin                                                                                |
 | Finance (Azure Billing)    | Reader, plus in Azure: Cost Management Reader on the cost management group, Billing account reader for invoices |
+| Virtual desktop support    | Reader (+ Operator for drain mode, messages, sign-outs), plus the Azure Virtual Desktop roles below             |
 
 Finance users see the Azure Billing section with their own Azure access (`docs/operations.md` › Azure Billing); they
 need no AdminForge role beyond Reader, and Operator only to schedule billing reports themselves.
+
+Azure Virtual Desktop works with the engineer's own Azure access as well (`docs/operations.md` › Azure Virtual
+Desktop): **Desktop Virtualization Reader** (or Reader) on the host pools to see them, **Log Analytics Reader** on the
+AVD workspace for Connections, and — with Operator, while armed — **Desktop Virtualization Session Host Operator** for
+drain mode and **Desktop Virtualization User Session Operator** to send messages and sign users out (or Desktop
+Virtualization Contributor for both). The ARM `user_impersonation` scope they use is already on both apps.
 
 AdminForge never grants Entra privileges: a write still needs the person's own Entra role (for example User
 Administrator, often activated through PIM). The portal explains when a role or licence is missing.

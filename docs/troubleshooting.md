@@ -201,6 +201,7 @@ schedule's run (`/monitoring`, or `/monitoring?group=<service>` for one service)
 | `protected_object`   | A synthetic transaction's test object is a protected account (`AF_PROTECTED_USER_IDS`), so nothing was sent. Point `AF_SYNTHETIC_*` at a dedicated test object.                                                             |
 | `schedule_disabled`  | **Run now** on a schedule that runs synthetic transactions while it is turned off. Turn it on first, once its test objects are set up.                                                                                      |
 | `insufficient_data`  | Too few sign-ins (or rows) in the window to judge; shown as healthy. Small tenants see this for the per-workload sign-in checks.                                                                                            |
+| `bad_request`        | Microsoft refused the query. For the AVD connection check, "Failed to resolve table … WVDErrors" means the host pools don't send their Errors diagnostics to the workspace in `AF_AVD_LOG_ANALYTICS_WORKSPACE_ID` (yet).    |
 
 ### Approvals and schedules
 

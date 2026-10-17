@@ -1,0 +1,24 @@
+{
+  "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-avd/providers/Microsoft.DesktopVirtualization/hostPools/hp-example-pooled/sessionHosts/avd-ex-0003.example.com",
+  "name": "hp-example-pooled/avd-ex-0003.example.com",
+  "type": "Microsoft.DesktopVirtualization/hostPools/sessionHosts",
+  "properties": {
+    "objectId": "00000000-0000-4000-8000-0000000a0003",
+    "lastHeartBeat": "2026-10-17T06:11:40Z",
+    "sessions": 0,
+    "agentVersion": "1.0.9742.2400",
+    "allowNewSession": true,
+    "assignedUser": "",
+    "status": "NoHeartbeat",
+    "statusTimestamp": "2026-10-17T06:12:00Z",
+    "osVersion": "10.0.26100.6584",
+    "sxSStackVersion": "rdp-sxs250813001",
+    "updateState": "Succeeded",
+    "lastUpdateTime": "2026-10-09T02:14:00Z",
+    "updateErrorMessage": "",
+    "virtualMachineId": "00000000-0000-4000-8000-0000000b0003",
+    "friendlyName": "",
+    "resourceId": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-avd/providers/Microsoft.Compute/virtualMachines/avd-ex-0003",
+    "sessionHostHealthCheckResults": []
+  }
+}

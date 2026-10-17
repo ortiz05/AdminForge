@@ -37,7 +37,8 @@ schedule may not use it (`adminforge validate` refuses it).
    `functionHealth`, `auditChain` (AdminForge's own audit log), **`kql`**, or a synthetic transaction (`mailFlow`,
    `fileRoundTrip`, `onlineMeeting`).
    - Tenant-wide configuration questions → `kql` with `source: resourceGraph` (all subscriptions, one query),
-     `logAnalytics` (`workspace` defaults to `${env.AF_LOG_ANALYTICS_WORKSPACE_ID}`), or `advancedHunting`
+     `logAnalytics` (`workspace` defaults to `${env.AF_LOG_ANALYTICS_WORKSPACE_ID}`; a workload's own workspace is an
+     env reference with that fallback, `"${ env.AF_AVD_LOG_ANALYTICS_WORKSPACE_ID ? … : env.AF_LOG_ANALYTICS_WORKSPACE_ID }"`), or `advancedHunting`
      (Defender licence). `metric: rowCount` or `{ column, aggregate }`; `detailsLimit` keeps the offending rows.
    - Put `// af:<probe id>` as the first KQL line (fixtures match on it).
    - A workload's own sign-in failure rate → `signInHealth` with `resourceId` (Exchange Online
@@ -51,7 +52,7 @@ schedule may not use it (`adminforge validate` refuses it).
      Synthetic transactions). Content can't define new transactions: a new kind is code in
      `portal/apps/api/src/probes/transactions.ts` with a security review — never a generic write probe.
 4. **Group** every probe by the service it watches: `group:` a navigation section key (`identity`, `m365`,
-   `exchange`, `sharepoint`, `teams`, `endpoint`, `azure`, `billing`, …) or `platform` for AdminForge itself.
+   `exchange`, `sharepoint`, `teams`, `endpoint`, `azure`, `avd`, `billing`, …) or `platform` for AdminForge itself.
    Synthetic monitoring groups tiles by it, each section's "Service checks" item (`/monitoring?group=<key>`) and a
    dashboard's `probeStatus` with `group:` show it; without it the probe lands under "Other checks".
    **Say what to do** when it warns or fails: `remedy:` (plain sentences, ≤ 1000 characters: the likely causes, the
@@ -123,4 +124,4 @@ minutes` — or `cron` (5/6 fields; one of the two). Validation compiles `every`
 | An anonymous HTTP probe expecting one exact status                                       | Tenants differ (SharePoint answers 401 or 403): accept every status that means "up", e.g. `status: [401, 403]`; check with curl first                                  |
 | Filtering service health on a name from a fixture                                        | Names change ("OneDrive for Business" is now "Microsoft OneDrive"): read `healthOverviews` live and filter on both names                                               |
 | A "degraded services" count                                                              | Advisories keep several services at `serviceDegradation` most days; alert on `serviceInterruption` or open incidents (`classification eq 'incident'`)                  |
-| New `config-check` KQL probe not in the shipped set                                      | Add its id to `CONFIG_CHECKS` in `tests/content/probes-schedules.test.ts` (the test asserts the exact set)                                                             |
+| New `config-check` KQL probe not in the shipped set                                      | Add its id to `CONFIG_CHECKS` in `tests/content/probes-schedules.test.ts` (exact set); a service-health KQL probe also goes in `OPERATIONAL` (faster sweep)            |

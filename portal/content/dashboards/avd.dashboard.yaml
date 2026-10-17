@@ -1,0 +1,173 @@
+$schema: ../../packages/schemas/generated/dashboard.schema.json
+kind: dashboard
+id: avd.overview
+version: 1.0.0
+title: Azure Virtual Desktop overview
+summary: >-
+  Azure Virtual Desktop at a glance across every subscription — host pools, session hosts that can't take connections
+  or need assistance, drain mode, user sessions, the busiest host pools against their capacity, and the synthetic
+  checks for session host health, capacity and connection failures — with links to the pages and reports.
+owner: avd-team
+tags: [azure, avd, virtual-desktop, overview, dashboard]
+template: dashboard
+nav: { section: avd, label: Overview, icon: squares-four, order: 5 }
+refresh: 300
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    arm: [user_impersonation]
+  azureRoles: [Desktop Virtualization Reader]
+
+datasources:
+  # Counts only: Resource Graph adds thousands of session hosts up, nothing is listed here.
+  hosts:
+    source: resourceGraph
+    query: |
+      // af:avd.overview#hosts
+      desktopvirtualizationresources
+      | where type =~ 'microsoft.desktopvirtualization/hostpools/sessionhosts'
+      | extend status = tostring(properties.status), allowNewSession = coalesce(tobool(properties.allowNewSession), false), updateState = tostring(properties.updateState), failedCheck = tostring(properties.sessionHostHealthCheckResults) contains 'HealthCheckFailed'
+      | summarize hosts = count(), available = countif(status =~ 'Available'), unhealthy = countif(status in~ ('Unavailable', 'NoHeartbeat', 'Disconnected', 'UpgradeFailed', 'NotJoinedToDomain', 'DomainTrustRelationshipLost', 'SxSStackListenerNotReady', 'FSLogixNotHealthy')), needsAssistance = countif(status =~ 'NeedsAssistance' or (status =~ 'Available' and (updateState =~ 'Failed' or failedCheck))), shutdown = countif(status =~ 'Shutdown'), drained = countif(not(allowNewSession)), sessions = sum(toint(properties.sessions)), hostPools = dcount(tostring(split(tolower(id), '/sessionhosts/')[0]))
+    transform: "${ $merge([{ 'hosts': 0, 'available': 0, 'unhealthy': 0, 'needsAssistance': 0, 'shutdown': 0, 'drained': 0, 'sessions': 0, 'hostPools': 0 }, value.value[0]]) }"
+    cache: { ttl: 120 }
+  byStatus:
+    source: resourceGraph
+    query: |
+      // af:avd.overview#bystatus
+      desktopvirtualizationresources
+      | where type =~ 'microsoft.desktopvirtualization/hostpools/sessionhosts'
+      | extend status = tostring(properties.status)
+      | extend state = case(status =~ 'Available', 'Available', status =~ 'Shutdown', 'Shut down', status =~ 'NeedsAssistance', 'Needs assistance', status =~ 'Upgrading', 'Upgrading', "Can't take connections")
+      | summarize hosts = count() by state
+      | order by hosts desc
+    transform: "${ [value.value] }"
+    cache: { ttl: 120 }
+  busiest:
+    source: resourceGraph
+    query: |
+      // af:avd.overview#busiest
+      desktopvirtualizationresources
+      | where type =~ 'microsoft.desktopvirtualization/hostpools/sessionhosts'
+      | extend hostPoolId = tostring(split(tolower(id), '/sessionhosts/')[0]), status = tostring(properties.status), allowNew = coalesce(tobool(properties.allowNewSession), false)
+      | summarize sessions = sum(toint(properties.sessions)), hosts = count(), accepting = countif(status in~ ('Available', 'NeedsAssistance') and allowNew), hostPool = take_any(tostring(split(id, '/')[8])) by hostPoolId
+      | top 10 by sessions desc
+      | project hostPool, sessions, hosts, accepting
+    transform: "${ [value.value] }"
+    cache: { ttl: 120 }
+  # The hosts that can't take connections, worst (longest) first — a short list for the overview.
+  unhealthy:
+    source: resourceGraph
+    query: |
+      // af:avd.overview#unhealthy
+      desktopvirtualizationresources
+      | where type =~ 'microsoft.desktopvirtualization/hostpools/sessionhosts'
+      | extend status = tostring(properties.status)
+      | where status in~ ('Unavailable', 'NoHeartbeat', 'Disconnected', 'UpgradeFailed', 'NotJoinedToDomain', 'DomainTrustRelationshipLost', 'SxSStackListenerNotReady', 'FSLogixNotHealthy')
+      | project id, sessionHost = tostring(split(id, '/')[10]), hostPool = tostring(split(id, '/')[8]), status, statusSince = todatetime(properties.statusTimestamp)
+      | order by statusSince asc
+      | take 20
+    cache: { ttl: 120 }
+
+layout:
+  - widget: kpi
+    id: hostPools
+    data: hosts.hostPools
+    label: Host pools with hosts
+    format: number
+    href: /p/avd.host-pools
+  - widget: kpi
+    id: hosts
+    data: hosts.hosts
+    label: Session hosts
+    format: number
+    hint: "${ hosts.available & ' available · ' & hosts.shutdown & ' shut down' }"
+    href: /p/avd.session-hosts
+  - widget: kpi
+    id: unhealthy
+    data: hosts.unhealthy
+    label: Can't take connections
+    format: number
+    status: "${ value > 0 ? 'crit' : 'ok' }"
+    href: /p/avd.session-hosts?health=Unhealthy
+  - widget: kpi
+    id: assistance
+    data: hosts.needsAssistance
+    label: Need assistance
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+    href: /p/avd.session-hosts?health=NeedsAssistance
+  - widget: kpi
+    id: drained
+    data: hosts.drained
+    label: In drain mode
+    format: number
+    status: "${ value > 0 ? 'info' : 'ok' }"
+    href: /p/avd.session-hosts?drain=On
+  - widget: kpi
+    id: sessions
+    data: hosts.sessions
+    label: User sessions
+    format: number
+    href: /p/avd.user-sessions
+  - widget: probeStatus
+    id: checks
+    title: Synthetic checks
+    description: Session hosts that can't take connections or need assistance, host pool capacity and connection failures — on a schedule, as the automation identity.
+    span: 7
+    group: avd
+    empty:
+      title: No Azure Virtual Desktop checks have reported yet
+      body: The checks report here after their first scheduled run. Every check is on the Synthetic monitoring page.
+  - widget: chart
+    id: byStatus
+    title: Session hosts by status
+    span: 5
+    type: donut
+    data: byStatus
+    x: state
+    y: hosts
+    format: number
+  - widget: chart
+    id: busiest
+    title: Busiest host pools
+    span: 7
+    type: bar
+    data: busiest
+    x: hostPool
+    y: [sessions, accepting]
+    labels: { sessions: Sessions, accepting: Hosts taking new sessions }
+    format: number
+  - widget: list
+    id: unhealthyHosts
+    title: Session hosts that can't take connections
+    span: 5
+    data: unhealthy.value
+    primary: sessionHost
+    secondary: statusSince
+    secondaryFormat: relativeTime
+    status:
+      field: status
+      map:
+        Unavailable: [crit, Unavailable]
+        NoHeartbeat: [crit, No heartbeat]
+        Disconnected: [crit, Disconnected]
+        UpgradeFailed: [crit, Upgrade failed]
+        NotJoinedToDomain: [crit, Not domain-joined]
+        DomainTrustRelationshipLost: [crit, Domain trust lost]
+        SxSStackListenerNotReady: [crit, SxS stack not ready]
+        FSLogixNotHealthy: [crit, FSLogix unhealthy]
+    href: ${ '/p/avd.session-host?id=' & $encode(row.id) }
+    limit: 8
+    empty:
+      title: Every session host can take connections
+      body: No session host reports a status that stops connections, drained or not.
+  - widget: markdown
+    id: links
+    title: Pages and reports
+    span: 12
+    text: |
+      **Pages:** [Host pools](/p/avd.host-pools) · [Session hosts](/p/avd.session-hosts) · [User sessions](/p/avd.user-sessions) · [Connections](/p/avd.connections)
+
+      **Reports:** [Session host health](/p/avd.session-host-health) · [Host pool capacity](/p/avd.host-pool-capacity) · [Session hosts left in drain mode](/p/avd.drained-session-hosts) · [Connection errors](/p/avd.connection-errors) · [Every Azure Virtual Desktop report](/reports?area=avd)
+
+      **Monitoring:** [Azure Virtual Desktop checks](/monitoring?group=avd)

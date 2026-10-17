@@ -1,0 +1,40 @@
+$schema: ../../packages/schemas/generated/probe.schema.json
+kind: probe
+id: probes.avd-session-hosts-need-assistance
+version: 1.0.0
+title: AVD session hosts that need assistance
+summary: >-
+  Azure Virtual Desktop session hosts that still serve connections but report a problem that degrades them — status
+  NeedsAssistance, a failed non-fatal health check (monitoring agent, App Attach, metadata service, …) or a failed
+  agent update — so users get a temporary profile, missing apps or no monitoring data before anything breaks. Details
+  list each host with the failing checks, their messages and the update error.
+owner: avd-team
+tags: [kql, azure, avd, session-hosts, sweep-1h]
+group: avd
+remedy: >-
+  Open the host from Session hosts and read the failing health check's message. Monitoring agent — repair or reinstall
+  the Azure Virtual Desktop agent; App Attach — check the package share and the host's access to it; agent update
+  failed — the update error says why (often disk space or a blocked URL; the required URL list is in Microsoft's
+  documentation). Drain the host first if users are affected.
+link: { label: Open session host health, href: "/p/avd.session-host-health?health=NeedsAssistance" }
+check:
+  kind: kql
+  source: resourceGraph
+  query: |
+    // af:probes.avd-session-hosts-need-assistance
+    desktopvirtualizationresources
+    | where type =~ 'microsoft.desktopvirtualization/hostpools/sessionhosts'
+    | extend status = tostring(properties.status), updateState = tostring(properties.updateState)
+    | where status in~ ('Available', 'NeedsAssistance')
+    | where status =~ 'NeedsAssistance' or updateState =~ 'Failed' or tostring(properties.sessionHostHealthCheckResults) contains 'HealthCheckFailed'
+    | extend lid = tolower(id)
+    | join kind=leftouter (desktopvirtualizationresources | where type =~ 'microsoft.desktopvirtualization/hostpools/sessionhosts' | where tostring(properties.sessionHostHealthCheckResults) contains 'HealthCheckFailed' | mv-expand hc = properties.sessionHostHealthCheckResults | where tostring(hc.healthCheckResult) =~ 'HealthCheckFailed' | summarize failedChecks = make_set(tostring(hc.healthCheckName), 10), failureMessages = make_set(tostring(hc.additionalFailureDetails.message), 3) by lid = tolower(id)) on lid
+    | project name = tostring(split(id, '/')[10]), hostPool = tostring(split(id, '/')[8]), status, failedChecks, failureMessages, updateState, updateError = tostring(properties.updateErrorMessage), agentVersion = tostring(properties.agentVersion), sessions = toint(properties.sessions), resourceGroup, subscriptionId, id
+    | order by hostPool asc, name asc
+  metric: rowCount
+  detailsLimit: 100
+thresholds: { warn: 1, crit: 25 }
+intervalHint: PT1H
+timeoutMs: 60000
+requires:
+  azureRoles: [Reader]

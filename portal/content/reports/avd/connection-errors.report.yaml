@@ -1,0 +1,150 @@
+$schema: ../../../packages/schemas/generated/report.schema.json
+kind: report
+id: avd.connection-errors
+version: 1.0.0
+title: AVD connection errors
+summary: >-
+  Azure Virtual Desktop errors over a period from the host pools' diagnostics in Log Analytics — by error code and host
+  pool, how often, how many people, when last seen, a sample message and whether Microsoft or the customer side is at
+  fault — plus the failed connections per day. Needs the host pools' Errors diagnostics in the AVD workspace.
+owner: avd-team
+tags: [azure, avd, virtual-desktop, connections, errors, log-analytics, kql, troubleshooting]
+area: avd
+nav: { section: reports, label: AVD connection errors, icon: plugs, order: 203 }
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    logAnalytics: [Data.Read]
+  azureRoles: [Log Analytics Reader]
+
+params:
+  range: { type: dateRange, label: Period, default: P7D, presets: [P1D, P7D, P30D], max: P30D }
+  activity:
+    type: enum
+    label: Activity
+    facet: true
+    default: Connection
+    values:
+      - { value: Connection, label: Connections }
+      - { value: All, label: "Everything (feed, management, connections)" }
+  hostPool: { type: string, label: Host pool, placeholder: Host pool name, facet: true, pattern: "^[A-Za-z0-9@._ -]{0,64}$" }
+
+datasources:
+  workspace:
+    source: static
+    data: {}
+    transform: "${ { 'configured': $boolean(env.AF_AVD_LOG_ANALYTICS_WORKSPACE_ID) or $boolean(env.AF_LOG_ANALYTICS_WORKSPACE_ID) } }"
+  # Grouped in Log Analytics (at most 2,000 groups); user input reaches KQL only through $kql().
+  errors:
+    source: logAnalytics
+    when: ${ ds.workspace.configured }
+    workspace: "${ env.AF_AVD_LOG_ANALYTICS_WORKSPACE_ID ? env.AF_AVD_LOG_ANALYTICS_WORKSPACE_ID : env.AF_LOG_ANALYTICS_WORKSPACE_ID }"
+    timespan: ${ params.range.timespan }
+    query: |
+      // af:avd.connection-errors#errors
+      let pool = ${ params.hostPool ? $kql('/hostpools/' & $lowercase(params.hostPool)) : "''" };
+      WVDErrors
+      ${ params.activity = 'All' ? '' : "| where ActivityType =~ 'Connection'" }
+      | where isempty(pool) or tolower(_ResourceId) endswith pool
+      | summarize Errors = count(), Connections = dcount(CorrelationId), People = dcount(UserName), FirstSeen = min(TimeGenerated), LastSeen = max(TimeGenerated), Sample = take_any(Message), ServiceError = take_any(ServiceError) by CodeSymbolic, Code, Source, ActivityType, HostPool = tostring(split(_ResourceId, '/')[8])
+      | extend Key = strcat(CodeSymbolic, '|', Code, '|', Source, '|', ActivityType, '|', HostPool)
+      | order by Errors desc
+      | take 2000
+    cache: { ttl: 900 }
+  daily:
+    source: logAnalytics
+    when: ${ ds.workspace.configured }
+    workspace: "${ env.AF_AVD_LOG_ANALYTICS_WORKSPACE_ID ? env.AF_AVD_LOG_ANALYTICS_WORKSPACE_ID : env.AF_LOG_ANALYTICS_WORKSPACE_ID }"
+    timespan: ${ params.range.timespan }
+    query: |
+      // af:avd.connection-errors#daily
+      let pool = ${ params.hostPool ? $kql('/hostpools/' & $lowercase(params.hostPool)) : "''" };
+      WVDErrors
+      ${ params.activity = 'All' ? '' : "| where ActivityType =~ 'Connection'" }
+      | where isempty(pool) or tolower(_ResourceId) endswith pool
+      | summarize Failed = dcount(CorrelationId), People = dcount(UserName) by Day = bin(TimeGenerated, 1d)
+      | order by Day asc
+    cache: { ttl: 900 }
+  totals:
+    source: logAnalytics
+    when: ${ ds.workspace.configured }
+    workspace: "${ env.AF_AVD_LOG_ANALYTICS_WORKSPACE_ID ? env.AF_AVD_LOG_ANALYTICS_WORKSPACE_ID : env.AF_LOG_ANALYTICS_WORKSPACE_ID }"
+    timespan: ${ params.range.timespan }
+    query: |
+      // af:avd.connection-errors#totals
+      let pool = ${ params.hostPool ? $kql('/hostpools/' & $lowercase(params.hostPool)) : "''" };
+      WVDErrors
+      ${ params.activity = 'All' ? '' : "| where ActivityType =~ 'Connection'" }
+      | where isempty(pool) or tolower(_ResourceId) endswith pool
+      | summarize Errors = count(), Failed = dcount(CorrelationId), People = dcount(UserName), Codes = dcount(CodeSymbolic), MicrosoftSide = countif(ServiceError == true)
+    transform: "${ $merge([{ 'Errors': 0, 'Failed': 0, 'People': 0, 'Codes': 0, 'MicrosoftSide': 0 }, value.value[0]]) }"
+    cache: { ttl: 900 }
+
+layout:
+  - widget: markdown
+    when: "${ workspace.configured = false }"
+    text: >-
+      **No Log Analytics workspace is configured.** Turn on the host pools' diagnostic settings (Errors, Connections)
+      to a Log Analytics workspace, then ask an administrator to set AF_AVD_LOG_ANALYTICS_WORKSPACE_ID.
+  - widget: kpi
+    data: totals.Failed
+    label: Failed activities
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+    hint: "${ totals.Errors & ' errors in the period' }"
+  - widget: kpi
+    data: totals.People
+    label: People affected
+    format: number
+  - widget: kpi
+    data: totals.Codes
+    label: Different errors
+    format: number
+  - widget: kpi
+    data: totals.MicrosoftSide
+    label: Microsoft-side errors
+    format: number
+    hint: The rest are on the customer side (configuration, network, client, credentials).
+  - widget: chart
+    title: Failures per day
+    span: 12
+    type: bar
+    data: daily.value
+    x: Day
+    y: [Failed, People]
+    labels: { Failed: Failed, People: People affected }
+    format: number
+  - widget: table
+    id: errors
+    span: 12
+    data: errors.value
+    rowKey: Key
+    columns:
+      - { field: CodeSymbolic, label: Error, kind: identity, secondary: Sample, sortable: true }
+      - { field: HostPool, label: Host pool, filter: facet }
+      - { field: Errors, label: Errors, kind: number, sortable: true }
+      - { field: People, label: People, kind: number, sortable: true }
+      - { field: LastSeen, label: Last seen, kind: relativeTime, sortable: true }
+      - { field: FirstSeen, label: First seen, kind: datetime, hidden: true }
+      - { field: Source, label: Source, filter: facet }
+      - { field: ActivityType, label: Activity, filter: facet }
+      - { field: ServiceError, label: Microsoft-side, kind: boolean }
+      - { field: Code, label: Code, kind: code, hidden: true }
+      - { field: Connections, label: Activities, kind: number, hidden: true }
+    rowActions:
+      - label: Connections in this host pool
+        icon: plugs-connected
+        href: /p/avd.connections?hostPool=${ $encode(row.HostPool) }
+      - label: Troubleshooting connections
+        icon: book-open
+        href: https://learn.microsoft.com/troubleshoot/azure/virtual-desktop/troubleshoot-client-windows
+    empty:
+      title: No errors in this period
+      body: Or the host pools don't send their Errors diagnostics to this workspace.
+
+export:
+  formats: [csv, xlsx]
+  fileName: avd-connection-errors
+  data: errors.value
+  columns: all
+  maxRows: 2000

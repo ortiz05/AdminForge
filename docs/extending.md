@@ -54,6 +54,9 @@ Claude picks the matching skill automatically (or name it: "use the adding-a-pla
 - **In provisioning** (`adminforge provision entra`): tier-0 Write scopes, application write permissions and
   sensitive application reads are only granted with their opt-ins (`docs/access.md`); `provision status` fails on
   privilege it didn't grant.
+- **Not caught by `validate` yet:** widget, header and action expressions (`when`, `href`, `text`) run in the
+  browser, which has no `env` — `env.X` there is always empty. Read configuration in a `source: static` datasource
+  and use its answer (the page skill shows how).
 - **Fixtures can't catch what Microsoft rejects:** run every new Graph request, Resource Graph or KQL query once
   against a real tenant, read-only (the page and schedule skills show how).
 - **Fixtures can't catch scale either:** `pnpm test:perf` (`tests/perf`, not part of `pnpm test`) runs every

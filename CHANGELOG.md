@@ -11,6 +11,16 @@ Closes the gaps found by comparing the build with the original plan (see the pla
 
 ### Added
 
+- **Azure Virtual Desktop**, a parent section of its own: Overview, Host pools (capacity: hosts taking new sessions,
+  slots in use, autoscale, Start VM on Connect), Session hosts (health, drain mode, agent and OS; Resource Graph, paged
+  — thousands of hosts), User sessions (per pool or host, by UPN) and Connections (Log Analytics: success rate,
+  failures, errors, round-trip time, one person's connections), with host pool and session host inspectors read live
+  from Azure. Reports (area `avd`): session host health, host pool capacity, session hosts in drain mode, connection
+  errors. Five checks (`group: avd`, with remedy and link): hosts that can't take connections, pools with no capacity
+  or nearly full (every 15 minutes), hosts that need assistance and connection failures (hourly). Playbooks: drain
+  mode on/off (one host or a selection), send a message, sign a user out — both session actions first check the
+  session still belongs to the person the list showed, and sign-out asks for their sign-in name (in bulk, the count).
+  New key `AF_AVD_LOG_ANALYTICS_WORKSPACE_ID` (falls back to `AF_LOG_ANALYTICS_WORKSPACE_ID`).
 - **Hybrid Azure Arc servers at fleet size:** an Arc fleet dashboard (connection and time offline, OS, agent versions,
   regions, subscriptions, resource groups, failed extensions, patching, Defender coverage, ESU), and Arc extensions,
   Arc patching (Azure Update Manager: assessed and not-assessed servers) and Arc Defender coverage pages. Every list is
@@ -302,6 +312,8 @@ Closes the gaps found by comparing the build with the original plan (see the pla
   expiry and is critical at 25 servers; `azure.overview` 1.1.0 counts Arc servers instead of Function Apps. A failed
   Arc extension means the same everywhere (provisioning failed or it reports an error), including
   `azure.arc-agent-health` 1.1.0. Free text reaches the Arc and AVD queries only as `$kql()` literals.
+- KQL probes that watch service health may run on the 15-minute or hourly sweeps, and a Log Analytics probe may name
+  its workspace as an env key with a fallback.
 - A bulk run's `run.created` audit event records the inputs every item shares (`inputsTemplate`, redacted), so the
   reason for a bulk change is kept.
 - **Shared mailbox sign-in state comes from Microsoft Entra ID:** the Shared mailboxes page (1.4) and the Shared

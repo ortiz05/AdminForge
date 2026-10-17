@@ -1,0 +1,119 @@
+$schema: ../../../packages/schemas/generated/report.schema.json
+kind: report
+id: avd.drained-session-hosts
+version: 1.0.0
+title: AVD session hosts in drain mode
+summary: >-
+  Every Azure Virtual Desktop session host in drain mode (taking no new sessions), with the sessions still on it, its
+  status and host pool — so hosts drained for maintenance and never put back don't quietly shrink capacity. Schedule it
+  weekly after the maintenance window, and turn drain mode off from the list.
+owner: avd-team
+tags: [azure, avd, virtual-desktop, session-hosts, drain-mode, maintenance, capacity]
+area: avd
+nav: { section: reports, label: AVD session hosts in drain mode, icon: prohibit, order: 202 }
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    arm: [user_impersonation]
+  azureRoles: [Desktop Virtualization Reader]
+
+params:
+  emptyOnly:
+    type: boolean
+    label: Only hosts with no sessions left
+    default: false
+  subscriptionId: { type: string, format: guid, label: Subscription, picker: subscription, facet: true }
+
+datasources:
+  hosts:
+    source: resourceGraph
+    query: |
+      // af:avd.drained-session-hosts#hosts
+      desktopvirtualizationresources
+      | where type =~ 'microsoft.desktopvirtualization/hostpools/sessionhosts'
+      ${ params.subscriptionId ? "| where subscriptionId == '" & $guid(params.subscriptionId) & "'" }
+      | where not(coalesce(tobool(properties.allowNewSession), false))
+      | extend sessions = coalesce(toint(properties.sessions), 0)
+      ${ params.emptyOnly = true ? '| where sessions == 0' }
+      | join kind=leftouter (resourcecontainers | where type =~ 'microsoft.resources/subscriptions' | project subscriptionId, subscriptionName = name) on subscriptionId
+      | project id, sessionHost = tostring(split(id, '/')[10]), hostPool = tostring(split(id, '/')[8]), sessions, status = tostring(properties.status), statusSince = todatetime(properties.statusTimestamp), updateState = tostring(properties.updateState), agentVersion = tostring(properties.agentVersion), resourceGroup, subscriptionId, subscriptionName
+      | order by hostPool asc, sessionHost asc
+    paging: all
+    maxItems: 20000
+    cache: { ttl: 120 }
+  counts:
+    source: resourceGraph
+    query: |
+      // af:avd.drained-session-hosts#counts
+      desktopvirtualizationresources
+      | where type =~ 'microsoft.desktopvirtualization/hostpools/sessionhosts'
+      ${ params.subscriptionId ? "| where subscriptionId == '" & $guid(params.subscriptionId) & "'" }
+      | extend drained = not(coalesce(tobool(properties.allowNewSession), false)), sessions = coalesce(toint(properties.sessions), 0)
+      | summarize hosts = count(), drained = countif(drained), drainedEmpty = countif(drained and sessions == 0), pools = dcountif(tostring(split(id, '/')[8]), drained)
+    transform: "${ $merge([{ 'hosts': 0, 'drained': 0, 'drainedEmpty': 0, 'pools': 0 }, value.value[0]]) }"
+    cache: { ttl: 120 }
+
+layout:
+  - widget: kpi
+    data: counts.drained
+    label: In drain mode
+    format: number
+    status: "${ value > 0 ? 'info' : 'ok' }"
+    hint: "${ 'of ' & counts.hosts & ' session hosts' }"
+  - widget: kpi
+    data: counts.drainedEmpty
+    label: Drained with nobody on them
+    format: number
+    hint: Ready for maintenance — or forgotten
+  - widget: kpi
+    data: counts.pools
+    label: Host pools affected
+    format: number
+  - widget: table
+    id: hosts
+    span: 12
+    data: hosts.value
+    rowKey: id
+    selection: multi
+    columns:
+      - { field: sessionHost, label: Session host, kind: identity, secondary: hostPool, sortable: true }
+      - { field: sessions, label: Sessions left, kind: number, sortable: true, filter: range }
+      - { field: status, label: Status, filter: facet }
+      - { field: statusSince, label: Status since, kind: relativeTime, sortable: true }
+      - { field: hostPool, label: Host pool, filter: facet }
+      - { field: updateState, label: Agent update, filter: facet, hidden: true }
+      - { field: agentVersion, label: Agent version, hidden: true }
+      - { field: resourceGroup, label: Resource group, hidden: true }
+      - { field: subscriptionName, label: Subscription, filter: facet }
+      - { field: id, label: Resource id, kind: code, hidden: true }
+    inspect:
+      page: avd.session-host
+      params:
+        id: ${ row.id }
+    rowActions:
+      - playbook: avd.set-drain-mode
+        label: Turn off drain mode
+        icon: check-circle
+        inputs:
+          sessionHostId: ${ row.id }
+          drainMode: false
+    bulkActions:
+      - playbook: avd.set-drain-mode
+        label: Turn off drain mode
+        icon: check-circle
+        forEach:
+          inputs:
+            sessionHostId: ${ row.id }
+            drainMode: false
+          concurrency: 5
+        maxItems: 500
+    empty:
+      title: No session host is in drain mode
+      body: Every session host takes new sessions.
+
+export:
+  formats: [csv, xlsx]
+  fileName: avd-drained-session-hosts
+  data: hosts.value
+  columns: all
+  maxRows: 20000

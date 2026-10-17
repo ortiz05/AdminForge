@@ -1,0 +1,13 @@
+{
+  "name": "hp-example-finance/avd-fin-02.example.com/8",
+  "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-avd-finance/providers/Microsoft.DesktopVirtualization/hostPools/hp-example-finance/sessionHosts/avd-fin-02.example.com/userSessions/8",
+  "type": "Microsoft.DesktopVirtualization/hostPools/sessionHosts/userSessions",
+  "properties": {
+    "objectId": "00000000-0000-4000-8000-0000000d0042",
+    "userPrincipalName": "l.moreau42@example.com",
+    "applicationType": "Desktop",
+    "sessionState": "Active",
+    "activeDirectoryUserName": "EXAMPLE\\l.moreau42",
+    "createTime": "2026-10-17T09:42:00Z"
+  }
+}

@@ -1,0 +1,79 @@
+{
+  "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-avd/providers/Microsoft.DesktopVirtualization/hostPools/hp-example-pooled/sessionHosts/avd-ex-0006.example.com",
+  "name": "hp-example-pooled/avd-ex-0006.example.com",
+  "type": "Microsoft.DesktopVirtualization/hostPools/sessionHosts",
+  "properties": {
+    "objectId": "00000000-0000-4000-8000-0000000a0006",
+    "lastHeartBeat": "2026-10-17T11:39:30Z",
+    "sessions": 11,
+    "agentVersion": "1.0.9742.2400",
+    "allowNewSession": true,
+    "assignedUser": "",
+    "status": "Available",
+    "statusTimestamp": "2026-10-17T07:30:00Z",
+    "osVersion": "10.0.26100.6584",
+    "sxSStackVersion": "rdp-sxs250813001",
+    "updateState": "Failed",
+    "lastUpdateTime": "2026-10-09T02:14:00Z",
+    "updateErrorMessage": "Agent update failed: not enough free disk space (synthetic).",
+    "virtualMachineId": "00000000-0000-4000-8000-0000000b0006",
+    "friendlyName": "",
+    "resourceId": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-avd/providers/Microsoft.Compute/virtualMachines/avd-ex-0006",
+    "sessionHostHealthCheckResults": [
+      {
+        "healthCheckName": "DomainJoinedCheck",
+        "healthCheckResult": "HealthCheckSucceeded",
+        "additionalFailureDetails": {
+          "message": "DomainJoinedCheck passed (synthetic).",
+          "errorCode": 0,
+          "lastHealthCheckDateTime": "2026-10-17T11:35:12Z"
+        }
+      },
+      {
+        "healthCheckName": "DomainTrustCheck",
+        "healthCheckResult": "HealthCheckSucceeded",
+        "additionalFailureDetails": {
+          "message": "DomainTrustCheck passed (synthetic).",
+          "errorCode": 0,
+          "lastHealthCheckDateTime": "2026-10-17T11:35:12Z"
+        }
+      },
+      {
+        "healthCheckName": "SxSStackListenerCheck",
+        "healthCheckResult": "HealthCheckSucceeded",
+        "additionalFailureDetails": {
+          "message": "SxSStackListenerCheck passed (synthetic).",
+          "errorCode": 0,
+          "lastHealthCheckDateTime": "2026-10-17T11:35:12Z"
+        }
+      },
+      {
+        "healthCheckName": "MonitoringAgentCheck",
+        "healthCheckResult": "HealthCheckSucceeded",
+        "additionalFailureDetails": {
+          "message": "MonitoringAgentCheck passed (synthetic).",
+          "errorCode": 0,
+          "lastHealthCheckDateTime": "2026-10-17T11:35:12Z"
+        }
+      },
+      {
+        "healthCheckName": "MetaDataServiceCheck",
+        "healthCheckResult": "HealthCheckSucceeded",
+        "additionalFailureDetails": {
+          "message": "MetaDataServiceCheck passed (synthetic).",
+          "errorCode": 0,
+          "lastHealthCheckDateTime": "2026-10-17T11:35:12Z"
+        }
+      },
+      {
+        "healthCheckName": "AppAttachHealthCheck",
+        "healthCheckResult": "HealthCheckSucceeded",
+        "additionalFailureDetails": {
+          "message": "AppAttachHealthCheck passed (synthetic).",
+          "errorCode": 0,
+          "lastHealthCheckDateTime": "2026-10-17T11:35:12Z"
+        }
+      }
+    ]
+  }
+}

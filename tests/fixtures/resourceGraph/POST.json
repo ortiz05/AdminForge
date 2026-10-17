@@ -3,6 +3,1283 @@
     "variants": [
       {
         "match": {
+          "bodyIncludes": "af:avd.host-pools#subscriptions"
+        },
+        "body": {
+          "totalRecords": 2,
+          "count": 2,
+          "resultTruncated": "false",
+          "data": [
+            {
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "subscriptionName": "Example Org Production"
+            },
+            {
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a2",
+              "subscriptionName": "Example Org Development"
+            }
+          ]
+        }
+      },
+      {
+        "match": {
+          "bodyIncludes": "af:avd.host-pool-capacity#subscriptions"
+        },
+        "body": {
+          "totalRecords": 2,
+          "count": 2,
+          "resultTruncated": "false",
+          "data": [
+            {
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "subscriptionName": "Example Org Production"
+            },
+            {
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a2",
+              "subscriptionName": "Example Org Development"
+            }
+          ]
+        }
+      },
+      {
+        "match": {
+          "bodyIncludes": "af:avd.session-hosts#hosts"
+        },
+        "body": {
+          "totalRecords": 12,
+          "count": 12,
+          "resultTruncated": "false",
+          "data": [
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-avd/providers/Microsoft.DesktopVirtualization/hostPools/hp-example-pooled/sessionHosts/avd-ex-0001.example.com",
+              "sessionHost": "avd-ex-0001.example.com",
+              "hostPool": "hp-example-pooled",
+              "status": "Available",
+              "health": "Healthy",
+              "drainMode": "false",
+              "sessions": 10,
+              "assignedUser": "",
+              "statusSince": "2026-10-17T07:30:00Z",
+              "lastHeartBeat": "2026-10-17T11:39:30Z",
+              "agentVersion": "1.0.9742.2400",
+              "sxsStackVersion": "rdp-sxs250813001",
+              "osVersion": "10.0.26100.6584",
+              "updateState": "Succeeded",
+              "hosting": "azure",
+              "vmResourceId": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-avd/providers/Microsoft.Compute/virtualMachines/avd-ex-0001",
+              "resourceGroup": "rg-example-avd",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "subscriptionName": "Example Org Production"
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-avd/providers/Microsoft.DesktopVirtualization/hostPools/hp-example-pooled/sessionHosts/avd-ex-0002.example.com",
+              "sessionHost": "avd-ex-0002.example.com",
+              "hostPool": "hp-example-pooled",
+              "status": "Available",
+              "health": "Healthy",
+              "drainMode": "true",
+              "sessions": 0,
+              "assignedUser": "",
+              "statusSince": "2026-10-17T07:30:00Z",
+              "lastHeartBeat": "2026-10-17T11:39:30Z",
+              "agentVersion": "1.0.9742.2400",
+              "sxsStackVersion": "rdp-sxs250813001",
+              "osVersion": "10.0.26100.6584",
+              "updateState": "Succeeded",
+              "hosting": "azure",
+              "vmResourceId": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-avd/providers/Microsoft.Compute/virtualMachines/avd-ex-0002",
+              "resourceGroup": "rg-example-avd",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "subscriptionName": "Example Org Production"
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-avd/providers/Microsoft.DesktopVirtualization/hostPools/hp-example-pooled/sessionHosts/avd-ex-0003.example.com",
+              "sessionHost": "avd-ex-0003.example.com",
+              "hostPool": "hp-example-pooled",
+              "status": "NoHeartbeat",
+              "health": "Unhealthy",
+              "drainMode": "false",
+              "sessions": 0,
+              "assignedUser": "",
+              "statusSince": "2026-10-17T06:12:00Z",
+              "lastHeartBeat": "2026-10-17T06:11:40Z",
+              "agentVersion": "1.0.9742.2400",
+              "sxsStackVersion": "rdp-sxs250813001",
+              "osVersion": "10.0.26100.6584",
+              "updateState": "Succeeded",
+              "hosting": "azure",
+              "vmResourceId": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-avd/providers/Microsoft.Compute/virtualMachines/avd-ex-0003",
+              "resourceGroup": "rg-example-avd",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "subscriptionName": "Example Org Production"
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-avd/providers/Microsoft.DesktopVirtualization/hostPools/hp-example-pooled/sessionHosts/avd-ex-0004.example.com",
+              "sessionHost": "avd-ex-0004.example.com",
+              "hostPool": "hp-example-pooled",
+              "status": "NeedsAssistance",
+              "health": "NeedsAssistance",
+              "drainMode": "false",
+              "sessions": 6,
+              "assignedUser": "",
+              "statusSince": "2026-10-17T07:30:00Z",
+              "lastHeartBeat": "2026-10-17T11:39:30Z",
+              "agentVersion": "1.0.9742.2400",
+              "sxsStackVersion": "rdp-sxs250813001",
+              "osVersion": "10.0.26100.6584",
+              "updateState": "Succeeded",
+              "hosting": "azure",
+              "vmResourceId": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-avd/providers/Microsoft.Compute/virtualMachines/avd-ex-0004",
+              "resourceGroup": "rg-example-avd",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "subscriptionName": "Example Org Production"
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-avd/providers/Microsoft.DesktopVirtualization/hostPools/hp-example-pooled/sessionHosts/avd-ex-0005.example.com",
+              "sessionHost": "avd-ex-0005.example.com",
+              "hostPool": "hp-example-pooled",
+              "status": "Shutdown",
+              "health": "ShutDown",
+              "drainMode": "false",
+              "sessions": 0,
+              "assignedUser": "",
+              "statusSince": "2026-10-17T07:30:00Z",
+              "lastHeartBeat": "2026-10-17T11:39:30Z",
+              "agentVersion": "1.0.9742.2400",
+              "sxsStackVersion": "rdp-sxs250813001",
+              "osVersion": "10.0.26100.6584",
+              "updateState": "Succeeded",
+              "hosting": "azure",
+              "vmResourceId": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-avd/providers/Microsoft.Compute/virtualMachines/avd-ex-0005",
+              "resourceGroup": "rg-example-avd",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "subscriptionName": "Example Org Production"
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-avd/providers/Microsoft.DesktopVirtualization/hostPools/hp-example-pooled/sessionHosts/avd-ex-0006.example.com",
+              "sessionHost": "avd-ex-0006.example.com",
+              "hostPool": "hp-example-pooled",
+              "status": "Available",
+              "health": "NeedsAssistance",
+              "drainMode": "false",
+              "sessions": 11,
+              "assignedUser": "",
+              "statusSince": "2026-10-17T07:30:00Z",
+              "lastHeartBeat": "2026-10-17T11:39:30Z",
+              "agentVersion": "1.0.9742.2400",
+              "sxsStackVersion": "rdp-sxs250813001",
+              "osVersion": "10.0.26100.6584",
+              "updateState": "Failed",
+              "hosting": "azure",
+              "vmResourceId": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-avd/providers/Microsoft.Compute/virtualMachines/avd-ex-0006",
+              "resourceGroup": "rg-example-avd",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "subscriptionName": "Example Org Production"
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-avd-finance/providers/Microsoft.DesktopVirtualization/hostPools/hp-example-finance/sessionHosts/avd-fin-01.example.com",
+              "sessionHost": "avd-fin-01.example.com",
+              "hostPool": "hp-example-finance",
+              "status": "Available",
+              "health": "Healthy",
+              "drainMode": "false",
+              "sessions": 8,
+              "assignedUser": "",
+              "statusSince": "2026-10-17T07:30:00Z",
+              "lastHeartBeat": "2026-10-17T11:39:30Z",
+              "agentVersion": "1.0.9742.2400",
+              "sxsStackVersion": "rdp-sxs250813001",
+              "osVersion": "10.0.26100.6584",
+              "updateState": "Succeeded",
+              "hosting": "azure",
+              "vmResourceId": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-avd-finance/providers/Microsoft.Compute/virtualMachines/avd-fin-01",
+              "resourceGroup": "rg-example-avd-finance",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "subscriptionName": "Example Org Production"
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-avd-finance/providers/Microsoft.DesktopVirtualization/hostPools/hp-example-finance/sessionHosts/avd-fin-02.example.com",
+              "sessionHost": "avd-fin-02.example.com",
+              "hostPool": "hp-example-finance",
+              "status": "Available",
+              "health": "Healthy",
+              "drainMode": "false",
+              "sessions": 7,
+              "assignedUser": "",
+              "statusSince": "2026-10-17T07:30:00Z",
+              "lastHeartBeat": "2026-10-17T11:39:30Z",
+              "agentVersion": "1.0.9742.2400",
+              "sxsStackVersion": "rdp-sxs250813001",
+              "osVersion": "10.0.26100.6584",
+              "updateState": "Succeeded",
+              "hosting": "azure",
+              "vmResourceId": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-avd-finance/providers/Microsoft.Compute/virtualMachines/avd-fin-02",
+              "resourceGroup": "rg-example-avd-finance",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "subscriptionName": "Example Org Production"
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-avd-finance/providers/Microsoft.DesktopVirtualization/hostPools/hp-example-finance/sessionHosts/avd-fin-03.example.com",
+              "sessionHost": "avd-fin-03.example.com",
+              "hostPool": "hp-example-finance",
+              "status": "DomainTrustRelationshipLost",
+              "health": "Unhealthy",
+              "drainMode": "false",
+              "sessions": 0,
+              "assignedUser": "",
+              "statusSince": "2026-10-16T22:05:00Z",
+              "lastHeartBeat": "2026-10-17T11:39:30Z",
+              "agentVersion": "1.0.9742.2400",
+              "sxsStackVersion": "rdp-sxs250813001",
+              "osVersion": "10.0.26100.6584",
+              "updateState": "Succeeded",
+              "hosting": "azure",
+              "vmResourceId": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-avd-finance/providers/Microsoft.Compute/virtualMachines/avd-fin-03",
+              "resourceGroup": "rg-example-avd-finance",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "subscriptionName": "Example Org Production"
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a2/resourceGroups/rg-example-avd-dev/providers/Microsoft.DesktopVirtualization/hostPools/hp-example-personal/sessionHosts/avd-dev-01.example.com",
+              "sessionHost": "avd-dev-01.example.com",
+              "hostPool": "hp-example-personal",
+              "status": "Available",
+              "health": "Healthy",
+              "drainMode": "false",
+              "sessions": 1,
+              "assignedUser": "k.osei@example.com",
+              "statusSince": "2026-10-17T07:30:00Z",
+              "lastHeartBeat": "2026-10-17T11:39:30Z",
+              "agentVersion": "1.0.9742.2400",
+              "sxsStackVersion": "rdp-sxs250813001",
+              "osVersion": "10.0.26100.6584",
+              "updateState": "Succeeded",
+              "hosting": "azure",
+              "vmResourceId": "/subscriptions/00000000-0000-4000-8000-0000000000a2/resourceGroups/rg-example-avd-dev/providers/Microsoft.Compute/virtualMachines/avd-dev-01",
+              "resourceGroup": "rg-example-avd-dev",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a2",
+              "subscriptionName": "Example Org Development"
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a2/resourceGroups/rg-example-avd-dev/providers/Microsoft.DesktopVirtualization/hostPools/hp-example-personal/sessionHosts/avd-dev-02.example.com",
+              "sessionHost": "avd-dev-02.example.com",
+              "hostPool": "hp-example-personal",
+              "status": "Available",
+              "health": "Healthy",
+              "drainMode": "false",
+              "sessions": 0,
+              "assignedUser": "j.silva@example.com",
+              "statusSince": "2026-10-17T07:30:00Z",
+              "lastHeartBeat": "2026-10-17T11:39:30Z",
+              "agentVersion": "1.0.9742.2400",
+              "sxsStackVersion": "rdp-sxs250813001",
+              "osVersion": "10.0.26100.6584",
+              "updateState": "Succeeded",
+              "hosting": "arc",
+              "vmResourceId": "/subscriptions/00000000-0000-4000-8000-0000000000a2/resourceGroups/rg-example-avd-dev/providers/Microsoft.HybridCompute/machines/avd-dev-02",
+              "resourceGroup": "rg-example-avd-dev",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a2",
+              "subscriptionName": "Example Org Development"
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a2/resourceGroups/rg-example-avd-dev/providers/Microsoft.DesktopVirtualization/hostPools/hp-example-validation/sessionHosts/avd-val-01.example.com",
+              "sessionHost": "avd-val-01.example.com",
+              "hostPool": "hp-example-validation",
+              "status": "Available",
+              "health": "Healthy",
+              "drainMode": "true",
+              "sessions": 0,
+              "assignedUser": "",
+              "statusSince": "2026-10-17T07:30:00Z",
+              "lastHeartBeat": "2026-10-17T11:39:30Z",
+              "agentVersion": "1.0.9810.900",
+              "sxsStackVersion": "rdp-sxs250813001",
+              "osVersion": "10.0.26100.6584",
+              "updateState": "Succeeded",
+              "hosting": "azure",
+              "vmResourceId": "/subscriptions/00000000-0000-4000-8000-0000000000a2/resourceGroups/rg-example-avd-dev/providers/Microsoft.Compute/virtualMachines/avd-val-01",
+              "resourceGroup": "rg-example-avd-dev",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a2",
+              "subscriptionName": "Example Org Development"
+            }
+          ]
+        }
+      },
+      {
+        "match": {
+          "bodyIncludes": "af:avd.session-hosts#summary"
+        },
+        "body": {
+          "totalRecords": 1,
+          "count": 1,
+          "resultTruncated": "false",
+          "data": [
+            {
+              "hosts": 12,
+              "available": 8,
+              "unhealthy": 2,
+              "needsAssistance": 2,
+              "shutdown": 1,
+              "drained": 2,
+              "sessions": 43
+            }
+          ]
+        }
+      },
+      {
+        "match": {
+          "bodyIncludes": "af:avd.host-pools#pools"
+        },
+        "body": {
+          "totalRecords": 4,
+          "count": 4,
+          "resultTruncated": "false",
+          "data": [
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-avd-finance/providers/Microsoft.DesktopVirtualization/hostPools/hp-example-finance",
+              "name": "hp-example-finance",
+              "friendlyName": "Finance desktops",
+              "hostPoolType": "Pooled",
+              "loadBalancerType": "DepthFirst",
+              "maxSessionLimit": 8,
+              "hosts": 3,
+              "accepting": 2,
+              "unavailable": 1,
+              "drained": 0,
+              "startable": 0,
+              "unassigned": null,
+              "sessions": 15,
+              "slots": 16,
+              "capacityUsed": 0.938,
+              "startVMOnConnect": "false",
+              "autoscale": "false",
+              "scalingPlan": null,
+              "validationEnvironment": "false",
+              "preferredAppGroupType": "Desktop",
+              "appGroups": 1,
+              "location": "westeurope",
+              "resourceGroup": "rg-example-avd-finance",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "tags": {
+                "owner": "euc-team",
+                "env": "prod"
+              }
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a2/resourceGroups/rg-example-avd-dev/providers/Microsoft.DesktopVirtualization/hostPools/hp-example-personal",
+              "name": "hp-example-personal",
+              "friendlyName": "Developer workstations",
+              "hostPoolType": "Personal",
+              "loadBalancerType": "Persistent",
+              "maxSessionLimit": 999999,
+              "hosts": 2,
+              "accepting": 2,
+              "unavailable": 0,
+              "drained": 0,
+              "startable": 0,
+              "unassigned": 0,
+              "sessions": 1,
+              "slots": null,
+              "capacityUsed": null,
+              "startVMOnConnect": "true",
+              "autoscale": "false",
+              "scalingPlan": null,
+              "validationEnvironment": "false",
+              "preferredAppGroupType": "Desktop",
+              "appGroups": 1,
+              "location": "northeurope",
+              "resourceGroup": "rg-example-avd-dev",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a2",
+              "tags": {
+                "owner": "euc-team",
+                "env": "dev"
+              }
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-avd/providers/Microsoft.DesktopVirtualization/hostPools/hp-example-pooled",
+              "name": "hp-example-pooled",
+              "friendlyName": "Example Org desktops",
+              "hostPoolType": "Pooled",
+              "loadBalancerType": "BreadthFirst",
+              "maxSessionLimit": 12,
+              "hosts": 6,
+              "accepting": 3,
+              "unavailable": 1,
+              "drained": 1,
+              "startable": 1,
+              "unassigned": null,
+              "sessions": 27,
+              "slots": 36,
+              "capacityUsed": 0.75,
+              "startVMOnConnect": "true",
+              "autoscale": "true",
+              "scalingPlan": "sp-example-weekdays",
+              "validationEnvironment": "false",
+              "preferredAppGroupType": "Desktop",
+              "appGroups": 2,
+              "location": "westeurope",
+              "resourceGroup": "rg-example-avd",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "tags": {
+                "owner": "euc-team",
+                "env": "prod"
+              }
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a2/resourceGroups/rg-example-avd-dev/providers/Microsoft.DesktopVirtualization/hostPools/hp-example-validation",
+              "name": "hp-example-validation",
+              "friendlyName": "Validation ring",
+              "hostPoolType": "Pooled",
+              "loadBalancerType": "BreadthFirst",
+              "maxSessionLimit": 10,
+              "hosts": 1,
+              "accepting": 0,
+              "unavailable": 0,
+              "drained": 1,
+              "startable": 0,
+              "unassigned": null,
+              "sessions": 0,
+              "slots": 0,
+              "capacityUsed": null,
+              "startVMOnConnect": "false",
+              "autoscale": "false",
+              "scalingPlan": null,
+              "validationEnvironment": "true",
+              "preferredAppGroupType": "Desktop",
+              "appGroups": 1,
+              "location": "northeurope",
+              "resourceGroup": "rg-example-avd-dev",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a2",
+              "tags": {
+                "owner": "euc-team",
+                "env": "dev"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "match": {
+          "bodyIncludes": "af:avd.host-pools#summary"
+        },
+        "body": {
+          "totalRecords": 1,
+          "count": 1,
+          "resultTruncated": "false",
+          "data": [
+            {
+              "hostPools": 4,
+              "pooled": 3,
+              "personal": 1,
+              "applicationGroups": 5,
+              "workspaces": 2,
+              "scalingPlans": 1
+            }
+          ]
+        }
+      },
+      {
+        "match": {
+          "bodyIncludes": "af:avd.host-pool#pool"
+        },
+        "body": {
+          "totalRecords": 1,
+          "count": 1,
+          "resultTruncated": "false",
+          "data": [
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-avd/providers/Microsoft.DesktopVirtualization/hostPools/hp-example-pooled",
+              "name": "hp-example-pooled",
+              "friendlyName": "Example Org desktops",
+              "hostPoolType": "Pooled",
+              "loadBalancerType": "BreadthFirst",
+              "maxSessionLimit": 12,
+              "hosts": 6,
+              "accepting": 3,
+              "unavailable": 1,
+              "drained": 1,
+              "startable": 1,
+              "unassigned": 6,
+              "sessions": 27,
+              "slots": 36,
+              "capacityUsed": 0.75,
+              "startVMOnConnect": "true",
+              "validationEnvironment": "false",
+              "preferredAppGroupType": "Desktop",
+              "location": "westeurope",
+              "resourceGroup": "rg-example-avd",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "tags": {
+                "owner": "euc-team",
+                "env": "prod"
+              },
+              "description": "Pooled Windows 11 multi-session desktops for Example Org (synthetic).",
+              "personalAssignment": "",
+              "publicNetworkAccess": "Enabled",
+              "agentUpdate": "Scheduled",
+              "customRdpProperty": "drivestoredirect:s:;audiomode:i:0;camerastoredirect:s:*",
+              "shutdown": 1
+            }
+          ]
+        }
+      },
+      {
+        "match": {
+          "bodyIncludes": "af:avd.host-pool#hosts"
+        },
+        "body": {
+          "totalRecords": 6,
+          "count": 6,
+          "resultTruncated": "false",
+          "data": [
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-avd/providers/Microsoft.DesktopVirtualization/hostPools/hp-example-pooled/sessionHosts/avd-ex-0001.example.com",
+              "sessionHost": "avd-ex-0001.example.com",
+              "status": "Available",
+              "health": "Healthy",
+              "drainMode": "false",
+              "sessions": 10,
+              "assignedUser": "",
+              "statusSince": "2026-10-17T07:30:00Z",
+              "agentVersion": "1.0.9742.2400",
+              "osVersion": "10.0.26100.6584",
+              "updateState": "Succeeded",
+              "vmResourceId": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-avd/providers/Microsoft.Compute/virtualMachines/avd-ex-0001"
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-avd/providers/Microsoft.DesktopVirtualization/hostPools/hp-example-pooled/sessionHosts/avd-ex-0002.example.com",
+              "sessionHost": "avd-ex-0002.example.com",
+              "status": "Available",
+              "health": "Healthy",
+              "drainMode": "true",
+              "sessions": 0,
+              "assignedUser": "",
+              "statusSince": "2026-10-17T07:30:00Z",
+              "agentVersion": "1.0.9742.2400",
+              "osVersion": "10.0.26100.6584",
+              "updateState": "Succeeded",
+              "vmResourceId": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-avd/providers/Microsoft.Compute/virtualMachines/avd-ex-0002"
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-avd/providers/Microsoft.DesktopVirtualization/hostPools/hp-example-pooled/sessionHosts/avd-ex-0003.example.com",
+              "sessionHost": "avd-ex-0003.example.com",
+              "status": "NoHeartbeat",
+              "health": "Unhealthy",
+              "drainMode": "false",
+              "sessions": 0,
+              "assignedUser": "",
+              "statusSince": "2026-10-17T06:12:00Z",
+              "agentVersion": "1.0.9742.2400",
+              "osVersion": "10.0.26100.6584",
+              "updateState": "Succeeded",
+              "vmResourceId": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-avd/providers/Microsoft.Compute/virtualMachines/avd-ex-0003"
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-avd/providers/Microsoft.DesktopVirtualization/hostPools/hp-example-pooled/sessionHosts/avd-ex-0004.example.com",
+              "sessionHost": "avd-ex-0004.example.com",
+              "status": "NeedsAssistance",
+              "health": "NeedsAssistance",
+              "drainMode": "false",
+              "sessions": 6,
+              "assignedUser": "",
+              "statusSince": "2026-10-17T07:30:00Z",
+              "agentVersion": "1.0.9742.2400",
+              "osVersion": "10.0.26100.6584",
+              "updateState": "Succeeded",
+              "vmResourceId": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-avd/providers/Microsoft.Compute/virtualMachines/avd-ex-0004"
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-avd/providers/Microsoft.DesktopVirtualization/hostPools/hp-example-pooled/sessionHosts/avd-ex-0005.example.com",
+              "sessionHost": "avd-ex-0005.example.com",
+              "status": "Shutdown",
+              "health": "ShutDown",
+              "drainMode": "false",
+              "sessions": 0,
+              "assignedUser": "",
+              "statusSince": "2026-10-17T07:30:00Z",
+              "agentVersion": "1.0.9742.2400",
+              "osVersion": "10.0.26100.6584",
+              "updateState": "Succeeded",
+              "vmResourceId": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-avd/providers/Microsoft.Compute/virtualMachines/avd-ex-0005"
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-avd/providers/Microsoft.DesktopVirtualization/hostPools/hp-example-pooled/sessionHosts/avd-ex-0006.example.com",
+              "sessionHost": "avd-ex-0006.example.com",
+              "status": "Available",
+              "health": "NeedsAssistance",
+              "drainMode": "false",
+              "sessions": 11,
+              "assignedUser": "",
+              "statusSince": "2026-10-17T07:30:00Z",
+              "agentVersion": "1.0.9742.2400",
+              "osVersion": "10.0.26100.6584",
+              "updateState": "Failed",
+              "vmResourceId": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-avd/providers/Microsoft.Compute/virtualMachines/avd-ex-0006"
+            }
+          ]
+        }
+      },
+      {
+        "match": {
+          "bodyIncludes": "af:avd.host-pool#appgroups"
+        },
+        "body": {
+          "totalRecords": 2,
+          "count": 2,
+          "resultTruncated": "false",
+          "data": [
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-avd/providers/Microsoft.DesktopVirtualization/applicationGroups/ag-example-desktop",
+              "name": "ag-example-desktop",
+              "friendlyName": "Example Org desktop",
+              "applicationGroupType": "Desktop",
+              "workspace": "ws-example-avd",
+              "showInFeed": "true",
+              "resourceGroup": "rg-example-avd",
+              "location": "westeurope"
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-avd/providers/Microsoft.DesktopVirtualization/applicationGroups/ag-example-apps",
+              "name": "ag-example-apps",
+              "friendlyName": "Line-of-business apps",
+              "applicationGroupType": "RemoteApp",
+              "workspace": "ws-example-avd",
+              "showInFeed": "true",
+              "resourceGroup": "rg-example-avd",
+              "location": "westeurope"
+            }
+          ]
+        }
+      },
+      {
+        "match": {
+          "bodyIncludes": "af:avd.host-pool#scaling"
+        },
+        "body": {
+          "totalRecords": 1,
+          "count": 1,
+          "resultTruncated": "false",
+          "data": [
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-avd/providers/Microsoft.DesktopVirtualization/scalingPlans/sp-example-weekdays",
+              "name": "sp-example-weekdays",
+              "enabled": "true",
+              "timeZone": "W. Europe Standard Time",
+              "schedules": 2,
+              "exclusionTag": "avd-exclude-autoscale",
+              "resourceGroup": "rg-example-avd"
+            }
+          ]
+        }
+      },
+      {
+        "match": {
+          "bodyIncludes": "af:avd.session-host#machine"
+        },
+        "body": {
+          "totalRecords": 1,
+          "count": 1,
+          "resultTruncated": "false",
+          "data": [
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-avd/providers/Microsoft.Compute/virtualMachines/avd-ex-0001",
+              "name": "avd-ex-0001",
+              "type": "microsoft.compute/virtualmachines",
+              "location": "westeurope",
+              "resourceGroup": "rg-example-avd",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "tags": {
+                "owner": "euc-team"
+              },
+              "powerState": "VM running",
+              "vmSize": "Standard_D8s_v5",
+              "imageSku": "win11-24h2-avd-m365",
+              "osName": "Windows 11 Enterprise multi-session"
+            }
+          ]
+        }
+      },
+      {
+        "match": {
+          "bodyIncludes": "af:avd.user-sessions#pools"
+        },
+        "body": {
+          "totalRecords": 4,
+          "count": 4,
+          "resultTruncated": "false",
+          "data": [
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-avd/providers/Microsoft.DesktopVirtualization/hostPools/hp-example-pooled",
+              "name": "hp-example-pooled",
+              "hostPoolType": "Pooled",
+              "hosts": 6,
+              "sessions": 27,
+              "resourceGroup": "rg-example-avd",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1"
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-avd-finance/providers/Microsoft.DesktopVirtualization/hostPools/hp-example-finance",
+              "name": "hp-example-finance",
+              "hostPoolType": "Pooled",
+              "hosts": 3,
+              "sessions": 15,
+              "resourceGroup": "rg-example-avd-finance",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1"
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a2/resourceGroups/rg-example-avd-dev/providers/Microsoft.DesktopVirtualization/hostPools/hp-example-personal",
+              "name": "hp-example-personal",
+              "hostPoolType": "Personal",
+              "hosts": 2,
+              "sessions": 1,
+              "resourceGroup": "rg-example-avd-dev",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a2"
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a2/resourceGroups/rg-example-avd-dev/providers/Microsoft.DesktopVirtualization/hostPools/hp-example-validation",
+              "name": "hp-example-validation",
+              "hostPoolType": "Pooled",
+              "hosts": 1,
+              "sessions": 0,
+              "resourceGroup": "rg-example-avd-dev",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a2"
+            }
+          ]
+        }
+      },
+      {
+        "match": {
+          "bodyIncludes": "af:avd.overview#hosts"
+        },
+        "body": {
+          "totalRecords": 1,
+          "count": 1,
+          "resultTruncated": "false",
+          "data": [
+            {
+              "hosts": 12,
+              "available": 8,
+              "unhealthy": 2,
+              "needsAssistance": 2,
+              "shutdown": 1,
+              "drained": 2,
+              "sessions": 43,
+              "hostPools": 4
+            }
+          ]
+        }
+      },
+      {
+        "match": {
+          "bodyIncludes": "af:avd.overview#bystatus"
+        },
+        "body": {
+          "totalRecords": 4,
+          "count": 4,
+          "resultTruncated": "false",
+          "data": [
+            {
+              "state": "Available",
+              "hosts": 8
+            },
+            {
+              "state": "Can't take connections",
+              "hosts": 2
+            },
+            {
+              "state": "Needs assistance",
+              "hosts": 1
+            },
+            {
+              "state": "Shut down",
+              "hosts": 1
+            }
+          ]
+        }
+      },
+      {
+        "match": {
+          "bodyIncludes": "af:avd.overview#busiest"
+        },
+        "body": {
+          "totalRecords": 4,
+          "count": 4,
+          "resultTruncated": "false",
+          "data": [
+            {
+              "hostPool": "hp-example-pooled",
+              "sessions": 27,
+              "hosts": 6,
+              "accepting": 3
+            },
+            {
+              "hostPool": "hp-example-finance",
+              "sessions": 15,
+              "hosts": 3,
+              "accepting": 2
+            },
+            {
+              "hostPool": "hp-example-personal",
+              "sessions": 1,
+              "hosts": 2,
+              "accepting": 2
+            },
+            {
+              "hostPool": "hp-example-validation",
+              "sessions": 0,
+              "hosts": 1,
+              "accepting": 0
+            }
+          ]
+        }
+      },
+      {
+        "match": {
+          "bodyIncludes": "af:avd.overview#unhealthy"
+        },
+        "body": {
+          "totalRecords": 2,
+          "count": 2,
+          "resultTruncated": "false",
+          "data": [
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-avd-finance/providers/Microsoft.DesktopVirtualization/hostPools/hp-example-finance/sessionHosts/avd-fin-03.example.com",
+              "sessionHost": "avd-fin-03.example.com",
+              "hostPool": "hp-example-finance",
+              "status": "DomainTrustRelationshipLost",
+              "statusSince": "2026-10-16T22:05:00Z"
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-avd/providers/Microsoft.DesktopVirtualization/hostPools/hp-example-pooled/sessionHosts/avd-ex-0003.example.com",
+              "sessionHost": "avd-ex-0003.example.com",
+              "hostPool": "hp-example-pooled",
+              "status": "NoHeartbeat",
+              "statusSince": "2026-10-17T06:12:00Z"
+            }
+          ]
+        }
+      },
+      {
+        "match": {
+          "bodyIncludes": "af:avd.session-host-health#hosts"
+        },
+        "body": {
+          "totalRecords": 4,
+          "count": 4,
+          "resultTruncated": "false",
+          "data": [
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-avd-finance/providers/Microsoft.DesktopVirtualization/hostPools/hp-example-finance/sessionHosts/avd-fin-03.example.com",
+              "sessionHost": "avd-fin-03.example.com",
+              "hostPool": "hp-example-finance",
+              "status": "DomainTrustRelationshipLost",
+              "health": "Unhealthy",
+              "drainMode": "false",
+              "sessions": 0,
+              "statusSince": "2026-10-16T22:05:00Z",
+              "lastHeartBeat": "2026-10-17T11:39:30Z",
+              "agentVersion": "1.0.9742.2400",
+              "updateState": "Succeeded",
+              "vmResourceId": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-avd-finance/providers/Microsoft.Compute/virtualMachines/avd-fin-03",
+              "resourceGroup": "rg-example-avd-finance",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "subscriptionName": "Example Org Production",
+              "failedChecks": [
+                "DomainTrustCheck"
+              ],
+              "failureMessages": [
+                "SessionHost unhealthy: the trust relationship with the domain example.com failed (synthetic)."
+              ],
+              "updateError": ""
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-avd/providers/Microsoft.DesktopVirtualization/hostPools/hp-example-pooled/sessionHosts/avd-ex-0003.example.com",
+              "sessionHost": "avd-ex-0003.example.com",
+              "hostPool": "hp-example-pooled",
+              "status": "NoHeartbeat",
+              "health": "Unhealthy",
+              "drainMode": "false",
+              "sessions": 0,
+              "statusSince": "2026-10-17T06:12:00Z",
+              "lastHeartBeat": "2026-10-17T06:11:40Z",
+              "agentVersion": "1.0.9742.2400",
+              "updateState": "Succeeded",
+              "vmResourceId": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-avd/providers/Microsoft.Compute/virtualMachines/avd-ex-0003",
+              "resourceGroup": "rg-example-avd",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "subscriptionName": "Example Org Production",
+              "updateError": ""
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-avd/providers/Microsoft.DesktopVirtualization/hostPools/hp-example-pooled/sessionHosts/avd-ex-0004.example.com",
+              "sessionHost": "avd-ex-0004.example.com",
+              "hostPool": "hp-example-pooled",
+              "status": "NeedsAssistance",
+              "health": "NeedsAssistance",
+              "drainMode": "false",
+              "sessions": 6,
+              "statusSince": "2026-10-17T07:30:00Z",
+              "lastHeartBeat": "2026-10-17T11:39:30Z",
+              "agentVersion": "1.0.9742.2400",
+              "updateState": "Succeeded",
+              "vmResourceId": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-avd/providers/Microsoft.Compute/virtualMachines/avd-ex-0004",
+              "resourceGroup": "rg-example-avd",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "subscriptionName": "Example Org Production",
+              "failedChecks": [
+                "MonitoringAgentCheck"
+              ],
+              "failureMessages": [
+                "The monitoring agent is not running on the session host (synthetic)."
+              ],
+              "updateError": ""
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-avd/providers/Microsoft.DesktopVirtualization/hostPools/hp-example-pooled/sessionHosts/avd-ex-0006.example.com",
+              "sessionHost": "avd-ex-0006.example.com",
+              "hostPool": "hp-example-pooled",
+              "status": "Available",
+              "health": "NeedsAssistance",
+              "drainMode": "false",
+              "sessions": 11,
+              "statusSince": "2026-10-17T07:30:00Z",
+              "lastHeartBeat": "2026-10-17T11:39:30Z",
+              "agentVersion": "1.0.9742.2400",
+              "updateState": "Failed",
+              "vmResourceId": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-avd/providers/Microsoft.Compute/virtualMachines/avd-ex-0006",
+              "resourceGroup": "rg-example-avd",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "subscriptionName": "Example Org Production",
+              "updateError": "Agent update failed: not enough free disk space (synthetic)."
+            }
+          ]
+        }
+      },
+      {
+        "match": {
+          "bodyIncludes": "af:avd.session-host-health#counts"
+        },
+        "body": {
+          "totalRecords": 1,
+          "count": 1,
+          "resultTruncated": "false",
+          "data": [
+            {
+              "hosts": 12,
+              "unhealthy": 2,
+              "needsAssistance": 2,
+              "sessionsOnUnhealthy": 0,
+              "pools": 2
+            }
+          ]
+        }
+      },
+      {
+        "match": {
+          "bodyIncludes": "af:avd.host-pool-capacity#pools"
+        },
+        "body": {
+          "totalRecords": 4,
+          "count": 4,
+          "resultTruncated": "false",
+          "data": [
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a2/resourceGroups/rg-example-avd-dev/providers/Microsoft.DesktopVirtualization/hostPools/hp-example-validation",
+              "name": "hp-example-validation",
+              "hostPoolType": "Pooled",
+              "hosts": 1,
+              "accepting": 0,
+              "unavailable": 0,
+              "drained": 1,
+              "startable": 0,
+              "unassigned": null,
+              "sessions": 0,
+              "slots": 0,
+              "capacityUsed": null,
+              "maxSessionLimit": 10,
+              "loadBalancerType": "BreadthFirst",
+              "autoscale": "false",
+              "scalingPlan": null,
+              "startVMOnConnect": "false",
+              "resourceGroup": "rg-example-avd-dev",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a2",
+              "capacity": "NoHost",
+              "shutdown": 0,
+              "freeSlots": 0,
+              "rank": 0
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-avd-finance/providers/Microsoft.DesktopVirtualization/hostPools/hp-example-finance",
+              "name": "hp-example-finance",
+              "hostPoolType": "Pooled",
+              "hosts": 3,
+              "accepting": 2,
+              "unavailable": 1,
+              "drained": 0,
+              "startable": 0,
+              "unassigned": null,
+              "sessions": 15,
+              "slots": 16,
+              "capacityUsed": 0.938,
+              "maxSessionLimit": 8,
+              "loadBalancerType": "DepthFirst",
+              "autoscale": "false",
+              "scalingPlan": null,
+              "startVMOnConnect": "false",
+              "resourceGroup": "rg-example-avd-finance",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "capacity": "NearlyFull",
+              "shutdown": 0,
+              "freeSlots": 1,
+              "rank": 2
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a2/resourceGroups/rg-example-avd-dev/providers/Microsoft.DesktopVirtualization/hostPools/hp-example-personal",
+              "name": "hp-example-personal",
+              "hostPoolType": "Personal",
+              "hosts": 2,
+              "accepting": 2,
+              "unavailable": 0,
+              "drained": 0,
+              "startable": 0,
+              "unassigned": 0,
+              "sessions": 1,
+              "slots": null,
+              "capacityUsed": null,
+              "maxSessionLimit": 999999,
+              "loadBalancerType": "Persistent",
+              "autoscale": "false",
+              "scalingPlan": null,
+              "startVMOnConnect": "true",
+              "resourceGroup": "rg-example-avd-dev",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a2",
+              "capacity": "AllAssigned",
+              "shutdown": 0,
+              "freeSlots": null,
+              "rank": 3
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-avd/providers/Microsoft.DesktopVirtualization/hostPools/hp-example-pooled",
+              "name": "hp-example-pooled",
+              "hostPoolType": "Pooled",
+              "hosts": 6,
+              "accepting": 3,
+              "unavailable": 1,
+              "drained": 1,
+              "startable": 1,
+              "unassigned": null,
+              "sessions": 27,
+              "slots": 36,
+              "capacityUsed": 0.75,
+              "maxSessionLimit": 12,
+              "loadBalancerType": "BreadthFirst",
+              "autoscale": "true",
+              "scalingPlan": "sp-example-weekdays",
+              "startVMOnConnect": "true",
+              "resourceGroup": "rg-example-avd",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "capacity": "Ok",
+              "shutdown": 1,
+              "freeSlots": 9,
+              "rank": 4
+            }
+          ]
+        }
+      },
+      {
+        "match": {
+          "bodyIncludes": "af:avd.drained-session-hosts#hosts"
+        },
+        "body": {
+          "totalRecords": 2,
+          "count": 2,
+          "resultTruncated": "false",
+          "data": [
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-avd/providers/Microsoft.DesktopVirtualization/hostPools/hp-example-pooled/sessionHosts/avd-ex-0002.example.com",
+              "sessionHost": "avd-ex-0002.example.com",
+              "hostPool": "hp-example-pooled",
+              "status": "Available",
+              "sessions": 0,
+              "statusSince": "2026-10-17T07:30:00Z",
+              "agentVersion": "1.0.9742.2400",
+              "updateState": "Succeeded",
+              "resourceGroup": "rg-example-avd",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "subscriptionName": "Example Org Production"
+            },
+            {
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a2/resourceGroups/rg-example-avd-dev/providers/Microsoft.DesktopVirtualization/hostPools/hp-example-validation/sessionHosts/avd-val-01.example.com",
+              "sessionHost": "avd-val-01.example.com",
+              "hostPool": "hp-example-validation",
+              "status": "Available",
+              "sessions": 0,
+              "statusSince": "2026-10-17T07:30:00Z",
+              "agentVersion": "1.0.9810.900",
+              "updateState": "Succeeded",
+              "resourceGroup": "rg-example-avd-dev",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a2",
+              "subscriptionName": "Example Org Development"
+            }
+          ]
+        }
+      },
+      {
+        "match": {
+          "bodyIncludes": "af:avd.drained-session-hosts#counts"
+        },
+        "body": {
+          "totalRecords": 1,
+          "count": 1,
+          "resultTruncated": "false",
+          "data": [
+            {
+              "hosts": 12,
+              "drained": 2,
+              "drainedEmpty": 2,
+              "pools": 2
+            }
+          ]
+        }
+      },
+      {
+        "match": {
+          "bodyIncludes": "af:probes.avd-session-hosts-unavailable"
+        },
+        "body": {
+          "totalRecords": 2,
+          "count": 2,
+          "resultTruncated": "false",
+          "data": [
+            {
+              "name": "avd-fin-03.example.com",
+              "hostPool": "hp-example-finance",
+              "status": "DomainTrustRelationshipLost",
+              "statusSince": "2026-10-16T22:05:00Z",
+              "lastHeartBeat": "2026-10-17T11:39:30Z",
+              "sessions": 0,
+              "failedChecks": [
+                "DomainTrustCheck"
+              ],
+              "failureMessages": [
+                "SessionHost unhealthy: the trust relationship with the domain example.com failed (synthetic)."
+              ],
+              "agentVersion": "1.0.9742.2400",
+              "resourceGroup": "rg-example-avd-finance",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-avd-finance/providers/Microsoft.DesktopVirtualization/hostPools/hp-example-finance/sessionHosts/avd-fin-03.example.com"
+            },
+            {
+              "name": "avd-ex-0003.example.com",
+              "hostPool": "hp-example-pooled",
+              "status": "NoHeartbeat",
+              "statusSince": "2026-10-17T06:12:00Z",
+              "lastHeartBeat": "2026-10-17T06:11:40Z",
+              "sessions": 0,
+              "agentVersion": "1.0.9742.2400",
+              "resourceGroup": "rg-example-avd",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-avd/providers/Microsoft.DesktopVirtualization/hostPools/hp-example-pooled/sessionHosts/avd-ex-0003.example.com"
+            }
+          ]
+        }
+      },
+      {
+        "match": {
+          "bodyIncludes": "af:probes.avd-session-hosts-need-assistance"
+        },
+        "body": {
+          "totalRecords": 2,
+          "count": 2,
+          "resultTruncated": "false",
+          "data": [
+            {
+              "name": "avd-ex-0004.example.com",
+              "hostPool": "hp-example-pooled",
+              "status": "NeedsAssistance",
+              "failedChecks": [
+                "MonitoringAgentCheck"
+              ],
+              "failureMessages": [
+                "The monitoring agent is not running on the session host (synthetic)."
+              ],
+              "updateState": "Succeeded",
+              "updateError": "",
+              "agentVersion": "1.0.9742.2400",
+              "sessions": 6,
+              "resourceGroup": "rg-example-avd",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-avd/providers/Microsoft.DesktopVirtualization/hostPools/hp-example-pooled/sessionHosts/avd-ex-0004.example.com"
+            },
+            {
+              "name": "avd-ex-0006.example.com",
+              "hostPool": "hp-example-pooled",
+              "status": "Available",
+              "updateState": "Failed",
+              "updateError": "Agent update failed: not enough free disk space (synthetic).",
+              "agentVersion": "1.0.9742.2400",
+              "sessions": 11,
+              "resourceGroup": "rg-example-avd",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-avd/providers/Microsoft.DesktopVirtualization/hostPools/hp-example-pooled/sessionHosts/avd-ex-0006.example.com"
+            }
+          ]
+        }
+      },
+      {
+        "match": {
+          "bodyIncludes": "af:probes.avd-host-pools-no-capacity"
+        },
+        "body": {
+          "totalRecords": 1,
+          "count": 1,
+          "resultTruncated": "false",
+          "data": [
+            {
+              "name": "hp-example-validation",
+              "reason": "No host takes new sessions",
+              "hosts": 1,
+              "accepting": 0,
+              "drained": 1,
+              "startable": 0,
+              "sessions": 0,
+              "slots": 0,
+              "maxSessionLimit": 10,
+              "autoStart": "false",
+              "resourceGroup": "rg-example-avd-dev",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a2",
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a2/resourceGroups/rg-example-avd-dev/providers/Microsoft.DesktopVirtualization/hostPools/hp-example-validation"
+            }
+          ]
+        }
+      },
+      {
+        "match": {
+          "bodyIncludes": "af:probes.avd-host-pools-nearly-full"
+        },
+        "body": {
+          "totalRecords": 1,
+          "count": 1,
+          "resultTruncated": "false",
+          "data": [
+            {
+              "name": "hp-example-finance",
+              "used": 0.938,
+              "sessions": 15,
+              "slots": 16,
+              "accepting": 2,
+              "hosts": 3,
+              "startable": 0,
+              "maxSessionLimit": 8,
+              "resourceGroup": "rg-example-avd-finance",
+              "subscriptionId": "00000000-0000-4000-8000-0000000000a1",
+              "id": "/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-avd-finance/providers/Microsoft.DesktopVirtualization/hostPools/hp-example-finance"
+            }
+          ]
+        }
+      },
+      {
+        "match": {
           "bodyIncludes": "af:news.azure-service-health"
         },
         "body": {

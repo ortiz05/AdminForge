@@ -1,0 +1,205 @@
+$schema: ../../../packages/schemas/generated/page.schema.json
+kind: page
+id: avd.user-sessions
+version: 1.0.0
+title: User sessions
+summary: >-
+  Who is signed in to an Azure Virtual Desktop host pool or one of its session hosts, read live from Azure — find a
+  person's session by UPN, send everyone on a host a message before maintenance, or sign stuck sessions out.
+owner: avd-team
+tags: [azure, avd, virtual-desktop, user-sessions, helpdesk]
+template: list-detail
+nav: { section: avd, label: User sessions, icon: users, order: 30 }
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    arm: [user_impersonation]
+  azureRoles: [Desktop Virtualization Reader]
+
+params:
+  hostPoolId:
+    type: string
+    label: Host pool
+    description: The host pool's resource id — pick one from the list below, Host pools or a session host.
+    facet: true
+    pattern: '^/subscriptions/[0-9a-fA-F-]{36}/[Rr]esource[Gg]roups/[-\w._()]{1,90}/providers/[Mm]icrosoft\.[Dd]esktop[Vv]irtualization/[Hh]ost[Pp]ools/[A-Za-z0-9@._ -]{3,64}$'
+  sessionHost: { type: string, label: Session host, placeholder: avd-0001.example.com, facet: true, pattern: "^[A-Za-z0-9@._ -]{0,48}$" }
+  upn:
+    type: string
+    label: User (exact UPN)
+    placeholder: name@example.com
+    format: upn
+    facet: true
+    description: Finds that person's sessions in the whole host pool (not used together with a session host).
+
+filters:
+  facets: [hostPoolId, sessionHost, upn]
+
+datasources:
+  # The host pool's path from its id, each segment encoded once here.
+  ref:
+    source: static
+    data: {}
+    when: ${ $boolean(params.hostPoolId) }
+    transform: >-
+      ${ (
+        $parts := $split(params.hostPoolId, '/');
+        {
+          'path': $join($parts[$ != ''].('/' & $encode($)), ''),
+          'hostPool': $parts[8],
+          'subscriptionId': $parts[2],
+          'resourceGroup': $parts[4]
+        }
+      ) }
+  # Live from Azure Resource Manager; ARM's own fields are shown as they come (no per-row mapping), so a pool with
+  # thousands of sessions stays within the transform budget.
+  sessions:
+    source: arm
+    when: ${ $boolean(ds.ref.path) }
+    request:
+      path: "${ ds.ref.path & (params.sessionHost ? '/sessionHosts/' & $encode(params.sessionHost) : '') & '/userSessions' }"
+      apiVersion: "2024-04-03"
+      query:
+        $filter: "${ params.upn and (params.sessionHost ? false : true) ? 'userPrincipalName eq ' & $odata(params.upn) : '' }"
+    paging: all
+    maxItems: 10000
+    cache: { ttl: 30 }
+  counts:
+    source: static
+    data: {}
+    when: ${ $boolean(ds.ref.path) }
+    transform: >-
+      ${ (
+        $rows := ds.sessions.value ? ds.sessions.value : [];
+        $state := function($s) { { 'join': 'and', 'clauses': [{ 'path': 'properties.sessionState', 'type': 'string', 'op': 'eq', 'value': $s }] } };
+        {
+          'total': $count($rows),
+          'active': $count($applyAdvanced($rows, $state('Active'))),
+          'disconnected': $count($applyAdvanced($rows, $state('Disconnected'))),
+          'partial': ds.sessions.truncated = true
+        }
+      ) }
+  # Without a host pool: the pools to choose from.
+  pools:
+    source: resourceGraph
+    when: "${ params.hostPoolId ? false : true }"
+    query: |
+      // af:avd.user-sessions#pools
+      resources
+      | where type =~ 'microsoft.desktopvirtualization/hostpools'
+      | extend lid = tolower(id)
+      | join kind=leftouter (desktopvirtualizationresources | where type =~ 'microsoft.desktopvirtualization/hostpools/sessionhosts' | extend hostPoolId = tostring(split(tolower(id), '/sessionhosts/')[0]) | summarize hosts = count(), sessions = sum(toint(properties.sessions)) by hostPoolId) on $left.lid == $right.hostPoolId
+      | project id, name, hostPoolType = tostring(properties.hostPoolType), hosts = coalesce(hosts, 0), sessions = coalesce(sessions, 0), resourceGroup, subscriptionId
+      | order by sessions desc, name asc
+    paging: all
+    maxItems: 5000
+    cache: { ttl: 120 }
+
+layout:
+  - widget: table
+    id: pools
+    title: Pick a host pool
+    when: "${ params.hostPoolId ? false : true }"
+    span: 12
+    data: pools.value
+    rowKey: id
+    columns:
+      - { field: name, label: Host pool, kind: identity, secondary: resourceGroup, sortable: true }
+      - { field: hostPoolType, label: Type, filter: facet }
+      - { field: hosts, label: Session hosts, kind: number, sortable: true }
+      - { field: sessions, label: Sessions, kind: number, sortable: true }
+    rowActions:
+      - label: Show user sessions
+        icon: users
+        href: /p/avd.user-sessions?hostPoolId=${ $encode(row.id) }
+    empty:
+      title: No host pools
+      body: You need Reader (or Desktop Virtualization Reader) on the subscriptions that hold your host pools.
+  - widget: kpi
+    when: ${ $boolean(params.hostPoolId) }
+    data: counts.total
+    label: Sessions
+    format: number
+    hint: "${ params.sessionHost ? 'On ' & params.sessionHost : 'In ' & ref.hostPool }"
+  - widget: kpi
+    when: ${ $boolean(params.hostPoolId) }
+    data: counts.active
+    label: Active
+    format: number
+    status: ok
+  - widget: kpi
+    when: ${ $boolean(params.hostPoolId) }
+    data: counts.disconnected
+    label: Disconnected (still signed in)
+    format: number
+    status: "${ value > 0 ? 'info' : 'ok' }"
+  - widget: markdown
+    when: ${ counts.partial = true }
+    text: >-
+      **The first 10,000 sessions are listed.** Pick a session host or a user to see the rest.
+  - widget: table
+    id: sessions
+    when: ${ $boolean(params.hostPoolId) }
+    span: 12
+    data: sessions.value
+    rowKey: id
+    selection: multi
+    columns:
+      - { field: properties.userPrincipalName, label: User, kind: identity, secondary: properties.activeDirectoryUserName, sortable: true }
+      - field: properties.sessionState
+        label: State
+        kind: status
+        map: { Active: [ok, Active], Disconnected: [warn, Disconnected], Pending: [info, Pending], LogOff: [neutral, Signing out], UserProfileDiskMounted: [info, Profile disk mounted], Unknown: [neutral, Unknown] }
+        filter: facet
+      - { field: name, label: Host pool / host / session, kind: code, sortable: true, filter: text }
+      - { field: properties.applicationType, label: Type, filter: facet }
+      - { field: properties.createTime, label: Started, kind: relativeTime, sortable: true }
+      - { field: id, label: Resource id, kind: code, hidden: true }
+    rowActions:
+      - playbook: avd.send-user-message
+        label: Send a message
+        icon: chat-text
+        when: ${ row.properties.sessionState = 'Active' }
+        inputs:
+          userSessionId: ${ row.id }
+          expectedUser: ${ row.properties.userPrincipalName }
+      - playbook: avd.log-off-user-session
+        label: Sign the user out
+        icon: sign-out
+        inputs:
+          userSessionId: ${ row.id }
+          expectedUser: ${ row.properties.userPrincipalName }
+      - label: Session host
+        icon: desktop
+        href: /p/avd.session-host?id=${ $encode($join($split(row.id, '/')[[0..10]], '/')) }
+    bulkActions:
+      - playbook: avd.send-user-message
+        label: Send a message
+        icon: chat-text
+        forEach:
+          inputs:
+            userSessionId: ${ row.id }
+            expectedUser: ${ row.properties.userPrincipalName }
+          concurrency: 5
+        maxItems: 500
+      - playbook: avd.log-off-user-session
+        label: Sign users out
+        icon: sign-out
+        forEach:
+          inputs:
+            userSessionId: ${ row.id }
+            expectedUser: ${ row.properties.userPrincipalName }
+          concurrency: 5
+        maxItems: 500
+    empty:
+      title: Nobody is signed in here
+      body: >-
+        No sessions in this host pool or on this host match. A UPN must match exactly (name@example.com); sessions that
+        were signed out are gone.
+
+export:
+  formats: [csv, xlsx]
+  fileName: avd-user-sessions
+  data: sessions.value
+  columns: visible
+  maxRows: 10000

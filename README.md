@@ -17,6 +17,8 @@ schedules, synthetic probes, and KQL configuration checks are declarative conten
 - **Azure**: subscriptions, Resource Graph inventory, resource detail, hybrid Azure Arc servers at fleet scale
   (connectivity, extensions, Update Manager patching, Defender for Servers coverage, ESU), monitoring (alerts,
   metrics, Log Analytics), RBAC. Function Apps and Arc-enabled Kubernetes are retired (not needed at this time).
+- **Azure Virtual Desktop**: host pools and capacity, session hosts at fleet scale (health, drain mode, agents), user
+  sessions, connection failures from Log Analytics; drain mode, messages and sign-outs (armed).
 - **Automation**: playbooks (dry-run preview → confirm → run; approvals; bulk; show-once secrets), runbooks,
   schedules on this host (automation identity), synthetic probes and KQL checks, Query Studio, reports with
   CSV/XLSX export, audit (hash-chained), appearance and settings.

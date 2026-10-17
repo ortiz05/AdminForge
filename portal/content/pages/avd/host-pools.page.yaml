@@ -1,0 +1,162 @@
+$schema: ../../../packages/schemas/generated/page.schema.json
+kind: page
+id: avd.host-pools
+version: 1.0.0
+title: Host pools
+summary: >-
+  Every Azure Virtual Desktop host pool across subscriptions — type, load balancing, session limit, how many hosts take
+  new sessions, sessions in use against the slots left, drain mode, autoscale and Start VM on Connect.
+owner: avd-team
+tags: [azure, avd, virtual-desktop, host-pools, capacity, resource-graph]
+template: list-detail
+nav: { section: avd, label: Host pools, icon: stack, order: 10 }
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    arm: [user_impersonation]
+  azureRoles: [Desktop Virtualization Reader]
+
+params:
+  q: { type: string, default: "", label: Search, placeholder: Host pool name contains… }
+  hostPoolType:
+    type: enum
+    label: Type
+    facet: true
+    default: All
+    values:
+      - { value: All, label: Any }
+      - { value: Pooled, label: Pooled }
+      - { value: Personal, label: Personal }
+  subscriptionId: { type: string, format: guid, label: Subscription, picker: subscription, facet: true }
+  resourceGroup: { type: string, label: Resource group, facet: true }
+
+filters:
+  search: q
+  facets: [hostPoolType, subscriptionId, resourceGroup]
+
+datasources:
+  # Subscription names, joined onto the pools natively ($attach): Resource Graph allows one cross-table join per query
+  # (other than resources ↔ resourcecontainers), and the pools query already joins the session hosts.
+  subscriptions:
+    source: resourceGraph
+    optional: true
+    query: |
+      // af:avd.host-pools#subscriptions
+      resourcecontainers
+      | where type =~ 'microsoft.resources/subscriptions'
+      | project subscriptionId, subscriptionName = name
+    paging: all
+    maxItems: 5000
+    transform: '${ value.value{ subscriptionId: { "subscriptionName": subscriptionName } } }'
+    cache: { ttl: 600 }
+  # Host pools are tens to hundreds, their session hosts thousands: Resource Graph adds the hosts up per pool, so no
+  # transform touches a host. A pool with no session limit (999999) has no slot count. User input reaches the KQL text
+  # only as GUID-validated or enum-whitelisted values or $kql() literals.
+  pools:
+    source: resourceGraph
+    query: |
+      // af:avd.host-pools#pools
+      resources
+      | where type =~ 'microsoft.desktopvirtualization/hostpools'
+      ${ params.subscriptionId ? "| where subscriptionId == '" & $guid(params.subscriptionId) & "'" }
+      ${ params.resourceGroup ? '| where resourceGroup =~ ' & $kql(params.resourceGroup) }
+      ${ params.q ? '| where name contains ' & $kql(params.q) & ' or tostring(properties.friendlyName) contains ' & $kql(params.q) }
+      | extend lid = tolower(id), hostPoolType = tostring(properties.hostPoolType), loadBalancerType = tostring(properties.loadBalancerType), maxSessionLimit = toint(properties.maxSessionLimit), friendlyName = tostring(properties.friendlyName), startVMOnConnect = coalesce(tobool(properties.startVMOnConnect), false), validationEnvironment = coalesce(tobool(properties.validationEnvironment), false), preferredAppGroupType = tostring(properties.preferredAppGroupType), appGroups = coalesce(array_length(properties.applicationGroupReferences), 0)
+      ${ params.hostPoolType in ['Pooled', 'Personal'] ? "| where hostPoolType =~ '" & params.hostPoolType & "'" }
+      | join kind=leftouter (desktopvirtualizationresources | where type =~ 'microsoft.desktopvirtualization/hostpools/sessionhosts' | extend hostPoolId = tostring(split(tolower(id), '/sessionhosts/')[0]), status = tostring(properties.status), allowNew = coalesce(tobool(properties.allowNewSession), false), hostSessions = coalesce(toint(properties.sessions), 0) | extend serving = status in~ ('Available', 'NeedsAssistance') | summarize hosts = count(), accepting = countif(serving and allowNew), startable = countif(status =~ 'Shutdown' and allowNew), drained = countif(not(allowNew)), unavailable = countif(not(status in~ ('Available', 'NeedsAssistance', 'Shutdown', 'Upgrading'))), unassigned = countif(isempty(tostring(properties.assignedUser))), sessions = sum(hostSessions), acceptingSessions = sumif(hostSessions, serving and allowNew) by hostPoolId) on $left.lid == $right.hostPoolId
+      | join kind=leftouter (resources | where type =~ 'microsoft.desktopvirtualization/scalingplans' | mv-expand ref = properties.hostPoolReferences | extend planPoolId = tolower(tostring(ref.hostPoolArmPath)), planOn = iff(coalesce(tobool(ref.scalingPlanEnabled), false), 1, 0) | summarize scalingPlan = take_any(name), scalingOn = max(planOn) by planPoolId) on $left.lid == $right.planPoolId
+      | extend hosts = coalesce(hosts, 0), accepting = coalesce(accepting, 0), startable = coalesce(startable, 0), drained = coalesce(drained, 0), unavailable = coalesce(unavailable, 0), unassigned = iff(hostPoolType =~ 'Personal', coalesce(unassigned, 0), int(null)), sessions = coalesce(sessions, 0), acceptingSessions = coalesce(acceptingSessions, 0), scalingOn = coalesce(scalingOn, 0)
+      | extend limited = hostPoolType =~ 'Pooled' and maxSessionLimit > 0 and maxSessionLimit < 999999
+      | extend slots = iff(limited, accepting * maxSessionLimit, int(null))
+      | extend capacityUsed = iff(limited and slots > 0, round(todouble(acceptingSessions) / slots, 3), real(null))
+      | project id, name, friendlyName, hostPoolType, loadBalancerType, maxSessionLimit, hosts, accepting, unavailable, drained, startable, unassigned, sessions, slots, capacityUsed, startVMOnConnect = iff(startVMOnConnect, 'true', 'false'), autoscale = iff(scalingOn == 1, 'true', 'false'), scalingPlan, validationEnvironment = iff(validationEnvironment, 'true', 'false'), preferredAppGroupType, appGroups, location, resourceGroup, subscriptionId, tags
+      | order by name asc
+    paging: all
+    maxItems: 5000
+    transform: >-
+      ${ $merge([value, { 'value': $attach(value.value, 'subscriptionId', $type(ds.subscriptions) = 'object' ? ds.subscriptions : {}, { 'subscriptionName': null }) }]) }
+    cache: { ttl: 120 }
+  summary:
+    source: resourceGraph
+    query: |
+      // af:avd.host-pools#summary
+      resources
+      | where type in~ ('microsoft.desktopvirtualization/hostpools', 'microsoft.desktopvirtualization/applicationgroups', 'microsoft.desktopvirtualization/workspaces', 'microsoft.desktopvirtualization/scalingplans')
+      | summarize hostPools = countif(type =~ 'microsoft.desktopvirtualization/hostpools'), pooled = countif(type =~ 'microsoft.desktopvirtualization/hostpools' and tostring(properties.hostPoolType) =~ 'Pooled'), personal = countif(type =~ 'microsoft.desktopvirtualization/hostpools' and tostring(properties.hostPoolType) =~ 'Personal'), applicationGroups = countif(type =~ 'microsoft.desktopvirtualization/applicationgroups'), workspaces = countif(type =~ 'microsoft.desktopvirtualization/workspaces'), scalingPlans = countif(type =~ 'microsoft.desktopvirtualization/scalingplans')
+    transform: "${ $merge([{ 'hostPools': 0, 'pooled': 0, 'personal': 0, 'applicationGroups': 0, 'workspaces': 0, 'scalingPlans': 0 }, value.value[0]]) }"
+    cache: { ttl: 300 }
+
+layout:
+  - widget: kpi
+    data: summary.hostPools
+    label: Host pools
+    format: number
+    hint: "${ summary.pooled & ' pooled · ' & summary.personal & ' personal' }"
+  - widget: kpi
+    data: summary.applicationGroups
+    label: Application groups
+    format: number
+  - widget: kpi
+    data: summary.workspaces
+    label: Workspaces
+    format: number
+  - widget: kpi
+    data: summary.scalingPlans
+    label: Scaling plans
+    format: number
+  - widget: table
+    id: pools
+    span: 12
+    data: pools.value
+    rowKey: id
+    columns:
+      - { field: name, label: Host pool, kind: identity, secondary: friendlyName, sortable: true }
+      - { field: hostPoolType, label: Type, filter: { type: facet, param: hostPoolType } }
+      - { field: hosts, label: Session hosts, kind: number, sortable: true }
+      - { field: accepting, label: Taking new sessions, kind: number, sortable: true, filter: range }
+      - { field: unavailable, label: Can't take connections, kind: number, sortable: true, filter: range }
+      - { field: drained, label: In drain mode, kind: number, sortable: true, filter: range }
+      - { field: sessions, label: Sessions, kind: number, sortable: true }
+      - { field: capacityUsed, label: Slots in use, kind: percent, sortable: true, filter: range }
+      - { field: loadBalancerType, label: Load balancing, filter: facet }
+      - { field: maxSessionLimit, label: Session limit per host, kind: number, hidden: true }
+      - { field: slots, label: Free and used slots, kind: number, hidden: true }
+      - { field: startable, label: Shut down hosts that can start, kind: number, hidden: true }
+      - { field: unassigned, label: Desktops not assigned (personal pools), kind: number, hidden: true }
+      - { field: autoscale, label: Autoscale, kind: status, map: { "true": [ok, "On"], "false": [neutral, "Off"] }, filter: facet }
+      - { field: startVMOnConnect, label: Start VM on Connect, kind: status, map: { "true": [ok, "On"], "false": [neutral, "Off"] }, filter: facet, hidden: true }
+      - { field: scalingPlan, label: Scaling plan, hidden: true }
+      - { field: validationEnvironment, label: Validation pool, kind: status, map: { "true": [info, "Yes"], "false": [neutral, "No"] }, filter: facet, hidden: true }
+      - { field: preferredAppGroupType, label: Preferred app group type, hidden: true }
+      - { field: appGroups, label: Application groups, kind: number, hidden: true }
+      - { field: location, label: Location, filter: facet, hidden: true }
+      - { field: resourceGroup, label: Resource group, filter: { type: text, param: resourceGroup } }
+      - { field: subscriptionName, label: Subscription, filter: facet }
+      - { field: tags, label: Tags, kind: tags, hidden: true }
+      - { field: id, label: Resource id, kind: code, hidden: true }
+    inspect:
+      page: avd.host-pool
+      params:
+        id: ${ row.id }
+    rowActions:
+      - label: Session hosts
+        icon: desktop
+        href: /p/avd.session-hosts?hostPoolId=${ $encode(row.id) }
+      - label: User sessions
+        icon: users
+        href: /p/avd.user-sessions?hostPoolId=${ $encode(row.id) }
+      - label: Open in Azure portal
+        icon: arrow-square-out
+        href: https://portal.azure.com/#resource${ row.id }/overview
+    empty:
+      title: No host pools match these filters
+      body: >-
+        Clear a filter, or check that your account has Reader (or Desktop Virtualization Reader) on the subscriptions
+        that hold your host pools.
+
+export:
+  formats: [csv, xlsx]
+  fileName: avd-host-pools
+  data: pools.value
+  columns: visible
+  maxRows: 5000

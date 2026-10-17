@@ -1,0 +1,112 @@
+$schema: ../../../packages/schemas/generated/playbook.schema.json
+kind: playbook
+id: avd.set-drain-mode
+version: 1.0.0
+title: Turn drain mode on or off
+summary: >-
+  Turns drain mode on for an Azure Virtual Desktop session host (it takes no new sessions; people already signed in
+  stay connected) before maintenance, or off again so it takes new sessions. Run it on many hosts at once from Session
+  hosts. To undo it, run it again with the other setting.
+owner: avd-team
+tags: [azure, avd, virtual-desktop, session-hosts, maintenance, bulk]
+risk: medium
+mode: write
+requires:
+  portalRoles: [Portal.Operator]
+  scopes:
+    arm: [user_impersonation]
+  # Desktop Virtualization Session Host Operator (or Desktop Virtualization Contributor) on the host pool.
+  azureRoles: [Desktop Virtualization Session Host Operator]
+confirm:
+  type: click
+  message: >-
+    ${ inputs.drainMode
+       ? 'Turn on drain mode for ' & steps.lookup.output.name & '? It takes no new sessions until you turn it off; the ' & $string(steps.lookup.output.properties.sessions ? steps.lookup.output.properties.sessions : 0) & ' signed-in session(s) stay connected.'
+       : 'Turn off drain mode for ' & steps.lookup.output.name & '? It takes new sessions again.' }
+approval:
+  required: false
+
+inputs:
+  sessionHostId:
+    type: string
+    label: Session host
+    description: The session host's resource id (from Session hosts).
+    pattern: '^/subscriptions/[0-9a-fA-F-]{36}/[Rr]esource[Gg]roups/[-\w._()]{1,90}/providers/[Mm]icrosoft\.[Dd]esktop[Vv]irtualization/[Hh]ost[Pp]ools/[A-Za-z0-9@._ -]{3,64}/[Ss]ession[Hh]osts/[A-Za-z0-9@._ -]{3,48}$'
+  drainMode: { type: boolean, label: Drain mode on, default: true, description: "On = take no new sessions; off = take new sessions again." }
+  reason: { type: string, label: Reason, minLength: 5, multiline: true, description: "Recorded in the audit log, e.g. the change or maintenance window." }
+
+steps:
+  - id: lookup
+    type: arm
+    mode: read
+    describe: Read the session host and its current drain mode
+    request:
+      method: GET
+      path: ${ $join($split(inputs.sessionHostId, '/')[$ != ''].('/' & $encode($)), '') }
+      apiVersion: "2024-04-03"
+
+  - id: isSessionHost
+    type: assert
+    that: ${ $lowercase(steps.lookup.output.type) = 'microsoft.desktopvirtualization/hostpools/sessionhosts' }
+    message: That resource isn't an Azure Virtual Desktop session host.
+
+  # allowNewSession is the opposite of drain mode; nothing to do when it already has the requested value.
+  - id: set
+    type: arm
+    mode: write
+    when: ${ $not(steps.lookup.output.properties.allowNewSession = $not(inputs.drainMode)) }
+    describe: "${ (inputs.drainMode ? 'Turn on drain mode for ' : 'Turn off drain mode for ') & steps.lookup.output.name }"
+    request:
+      method: PATCH
+      path: ${ $join($split(inputs.sessionHostId, '/')[$ != ''].('/' & $encode($)), '') }
+      apiVersion: "2024-04-03"
+      body: "${ { 'properties': { 'allowNewSession': $not(inputs.drainMode) } } }"
+
+outputs:
+  summary: >-
+    ${ steps.lookup.output.properties.allowNewSession = $not(inputs.drainMode)
+       ? steps.lookup.output.name & ' already had drain mode ' & (inputs.drainMode ? 'on' : 'off') & '; nothing changed.'
+       : 'Drain mode ' & (inputs.drainMode ? 'on' : 'off') & ' for ' & steps.lookup.output.name & '.' }
+
+tests:
+  - name: turns on drain mode for a host that takes new sessions
+    inputs:
+      sessionHostId: /subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-avd/providers/Microsoft.DesktopVirtualization/hostPools/hp-example-pooled/sessionHosts/avd-ex-0001.example.com
+      drainMode: true
+      reason: patching window 2026-10
+    mocks:
+      lookup: { name: hp-example-pooled/avd-ex-0001.example.com, type: Microsoft.DesktopVirtualization/hostPools/sessionHosts, properties: { allowNewSession: true, sessions: 4, status: Available } }
+    expect:
+      status: succeeded
+      plan: [set]
+      outputs: { summary: Drain mode on for hp-example-pooled/avd-ex-0001.example.com. }
+  - name: turns drain mode off again (lower-case resource id from Resource Graph)
+    inputs:
+      sessionHostId: /subscriptions/00000000-0000-4000-8000-0000000000a1/resourcegroups/rg-example-avd/providers/microsoft.desktopvirtualization/hostpools/hp-example-pooled/sessionhosts/avd-ex-0002.example.com
+      drainMode: false
+      reason: patching finished
+    mocks:
+      lookup: { name: hp-example-pooled/avd-ex-0002.example.com, type: Microsoft.DesktopVirtualization/hostPools/sessionHosts, properties: { allowNewSession: false, sessions: 0, status: Available } }
+    expect:
+      status: succeeded
+      plan: [set]
+      outputs: { summary: Drain mode off for hp-example-pooled/avd-ex-0002.example.com. }
+  - name: changes nothing when drain mode is already on
+    inputs:
+      sessionHostId: /subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-avd/providers/Microsoft.DesktopVirtualization/hostPools/hp-example-pooled/sessionHosts/avd-ex-0003.example.com
+      drainMode: true
+      reason: patching window 2026-10
+    mocks:
+      lookup: { name: hp-example-pooled/avd-ex-0003.example.com, type: Microsoft.DesktopVirtualization/hostPools/sessionHosts, properties: { allowNewSession: false, sessions: 2, status: Available } }
+    expect:
+      status: succeeded
+      plan: []
+      outputs: { summary: hp-example-pooled/avd-ex-0003.example.com already had drain mode on; nothing changed. }
+  - name: refuses a resource that isn't a session host
+    inputs:
+      sessionHostId: /subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-example-avd/providers/Microsoft.DesktopVirtualization/hostPools/hp-example-pooled/sessionHosts/avd-ex-0004.example.com
+      drainMode: true
+      reason: patching window 2026-10
+    mocks:
+      lookup: { name: hp-example-pooled, type: Microsoft.DesktopVirtualization/hostPools, properties: {} }
+    expect: { status: failed, failedStep: isSessionHost }

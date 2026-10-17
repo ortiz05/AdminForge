@@ -10,7 +10,15 @@
  *   - `named-location`: AF-Test-Location, the documentation range 192.0.2.0/24, not trusted;
  *   - `intune`: a Windows compliance policy and configuration profile assigned to AF-Test-Group-01;
  *   - `approver`: a second validation account, "AF Tester 2", that holds only the Playbook.Approver portal role;
- *   - `ca-audit`: example Conditional Access policies, report-only — never enforced (provision/ca-audit-catalog.ts).
+ *   - `ca-audit`: example Conditional Access policies, report-only — never enforced (provision/ca-audit-catalog.ts);
+ *   - `directory`: AF-Test-User-04..12 with attributes and a manager chain, dynamic / nested / Microsoft 365 / empty /
+ *     group-licensing groups and an administrative unit (provision/directory-fixture-*.ts);
+ *   - `guest`: AF-Test-Guest-01, invited without an email, never redeemed (directory-fixture-plan.ts `planGuest`);
+ *   - `apps`: app registrations with expiring, long-lived and many credentials, a risky one, an ownerless one and a
+ *     SAML app — never granted anything (provision/apps-fixture-*.ts);
+ *   - `auth-methods`: an SMS method (fictitious number) and a Temporary Access Pass (provision/auth-methods-fixture.ts);
+ *   - `intune-more`: iOS, Android and macOS compliance, an update ring, app protection (intune-more-fixture.ts);
+ *   - `sign-ins`: two accounts that only sign in (tests/live/scripts/generate-sign-ins.ts; sign-ins-fixture.ts).
  * Opt-in: nothing here is planned unless AF_TEST_LICENCE_SKU is set or AF_TEST_FIXTURES names the fixture.
  *
  * Ownership: provisioning only changes or removes objects it created — users with the validation marker
@@ -19,7 +27,13 @@
  * that are not on (enforced). A same-named object without that is refused.
  */
 import { TEST_FIXTURE_NAMES } from '@adminforge/config';
+import type { AppsState, AppsStep } from './apps-fixture-plan';
+import type { AuthMethodsState, AuthMethodsStep } from './auth-methods-fixture';
 import type { PortalRole } from './catalog';
+import type { DirectoryCatalog } from './directory-fixture-catalog';
+import type { DirectoryState, DirectoryStep } from './directory-fixture-plan';
+import type { IntuneMoreState, IntuneMoreStep } from './intune-more-fixture';
+import type { SignInAccountSpec, SignInsState, SignInsStep } from './sign-ins-fixture';
 import type { GraphGroup, Action } from './model';
 import {
   APPROVER_MARKER,
@@ -55,6 +69,14 @@ export const FIXTURE_PERMISSIONS: Readonly<Record<FixtureKey, readonly string[]>
   // condition (the Azure management policy names an app) — it answers 403 "Application.Read.All scope is required".
   // Role template ids and the authentication strength are well-known ids, so nothing else needs reading.
   'ca-audit': ['Policy.Read.All', 'Policy.ReadWrite.ConditionalAccess', 'Application.Read.All'],
+  // Users, groups and the administrative unit are covered by the provisioner's directory role; group-based licensing
+  // and inviting a guest are not, app-only.
+  directory: ['LicenseAssignment.ReadWrite.All'],
+  guest: ['User.Invite.All'],
+  apps: [],
+  'auth-methods': ['UserAuthenticationMethod.ReadWrite.All'],
+  'intune-more': ['DeviceManagementConfiguration.ReadWrite.All', 'DeviceManagementApps.ReadWrite.All'],
+  'sign-ins': [],
 };
 
 /** Broader Graph application permissions that include a fixture's (Microsoft's documented alternatives). */
@@ -221,7 +243,7 @@ export interface DesiredFixtures {
   /** PIM eligibility: who, for which role. */
   eligibility: Array<{ user: UserSpec; roleName: FixtureRoleName; roleDefinitionId: string }>;
   approver: UserSpec;
-  testGroup: { uniqueName: string; displayName: string };
+  testGroup: { uniqueName: string; displayName: string; description: string };
   /**
    * AF_AUTOMATION_ALLOW_WRITE_PERMISSIONS=true for this label: scheduled writes can run, so two-person approval
    * protects real changes — the approver fixture (both passwords in one file) is refused here.
@@ -229,6 +251,10 @@ export interface DesiredFixtures {
   automationWrites: boolean;
   /** AF_PROTECTED_USER_IDS (break-glass accounts): excluded from the ca-audit policies. */
   protectedUserIds: string[];
+  /** The directory fixture's users, guest, groups and administrative unit. */
+  directory: DirectoryCatalog;
+  /** The sign-ins fixture's two accounts. */
+  signIns: SignInAccountSpec[];
 }
 
 /** A part of the state that couldn't be read; `forbidden` when Graph answered 401/403. */
@@ -317,6 +343,11 @@ export interface FixtureState {
   approver?: ApproverState;
   /** Conditional Access policies (ca-audit only). */
   caPolicies?: CaPolicyState[] | Unreadable;
+  directory?: DirectoryState | Unreadable;
+  apps?: AppsState | Unreadable;
+  authMethods?: AuthMethodsState | Unreadable;
+  intuneMore?: IntuneMoreState | Unreadable;
+  signIns?: SignInsState | Unreadable;
 }
 
 /** A Conditional Access policy as the ca-audit fixture reads it. */
@@ -362,6 +393,11 @@ export type FixtureOp = OpBase &
     | { kind: 'approverRemove'; id: string }
     | { kind: 'caPolicy'; displayName: string; existingId?: string }
     | { kind: 'caPolicyRemove'; displayName: string; id: string }
+    | { kind: 'directory'; step: DirectoryStep }
+    | { kind: 'apps'; step: AppsStep }
+    | { kind: 'authMethods'; step: AuthMethodsStep }
+    | { kind: 'intuneMore'; step: IntuneMoreStep }
+    | { kind: 'signIns'; step: SignInsStep }
   );
 
 const localPart = (upn: string) => upn.split('@')[0]!;
@@ -404,6 +440,39 @@ export function unexpectedGroupMembers(members: readonly GroupMember[]): number 
       /^af-test-user-\d+@/i.test(m.userPrincipalName) && /^AF-Test-User-\d+$/.test(m.displayName ?? '');
     return !(isProvisionedTester(user) || target || isProvisionedAccount({ displayName: '' }, user));
   }).length;
+}
+
+/**
+ * Whether a group is AF-Test-Group-01 as the test identities created it: its unique name, display name and
+ * description. The enterprise fixtures nest it and assign policies to it only then.
+ */
+export const isProvisionedTestGroup = (
+  d: Pick<DesiredFixtures, 'testGroup'>,
+  g: { uniqueName?: string | null; displayName?: string; description?: string | null } | undefined,
+) =>
+  !!g &&
+  g.uniqueName === d.testGroup.uniqueName &&
+  g.displayName === d.testGroup.displayName &&
+  (g.description ?? '') === d.testGroup.description;
+
+/**
+ * Why policies scoped to AF-Test-Group-01 can't target it now (ca-audit, intune-more), or undefined when they can:
+ * whoever is in the group receives them, so it must hold only provisioning's test accounts and AF-Test-* devices, and
+ * not use dynamic membership.
+ */
+export function testGroupProblem(
+  s: Pick<FixtureState, 'testGroupMembers' | 'testGroupDynamic'>,
+): string | undefined {
+  const members = s.testGroupMembers;
+  if (isUnreadable(members)) return `AF-Test-Group-01's members: ${members.unreadable}`;
+  if (isUnreadable(s.testGroupDynamic))
+    return `AF-Test-Group-01's membership type: ${s.testGroupDynamic.unreadable}`;
+  if (s.testGroupDynamic)
+    return 'AF-Test-Group-01 uses dynamic membership — anyone could fall into this policy; make it an assigned group';
+  const others = members ? unexpectedGroupMembers(members) : 0;
+  return others
+    ? `AF-Test-Group-01 has ${others} member(s) that aren't provisioning's test accounts or AF-Test-* devices — remove them first`
+    : undefined;
 }
 
 /** Whether an Intune policy is provisioning's: an AF-Test name and the marker in its description. */

@@ -24,7 +24,7 @@ export interface TestUserCredentials {
   /** Base32 TOTP seed registered for the dedicated test user (local config only). */
   totpSecret?: string;
   /** The admin env key a newly registered seed is written to (default AF_TEST_USER_TOTP_SECRET). */
-  totpKey?: 'AF_TEST_USER_TOTP_SECRET' | 'AF_TEST_APPROVER_TOTP_SECRET';
+  totpKey?: 'AF_TEST_USER_TOTP_SECRET' | 'AF_TEST_APPROVER_TOTP_SECRET' | 'AF_TEST_SIGNIN_1_TOTP_SECRET';
 }
 
 /**

@@ -25,7 +25,7 @@ import {
 import {
   isProvisionedLocation,
   isUnreadable,
-  unexpectedGroupMembers,
+  testGroupProblem,
   type CaPolicyState,
   type DesiredFixtures,
   type FixtureOp,
@@ -146,20 +146,6 @@ function idsOf(d: DesiredFixtures, s: FixtureState): AuditIds {
     protectedUserIds: d.protectedUserIds,
     testLocationId: locations.find(isProvisionedLocation)?.id,
   };
-}
-
-/** Why the group-scoped examples can't target AF-Test-Group-01 now, or undefined when they can. */
-function testGroupProblem(s: FixtureState): string | undefined {
-  const members = s.testGroupMembers;
-  if (isUnreadable(members)) return `AF-Test-Group-01's members: ${members.unreadable}`;
-  if (isUnreadable(s.testGroupDynamic))
-    return `AF-Test-Group-01's membership type: ${s.testGroupDynamic.unreadable}`;
-  if (s.testGroupDynamic)
-    return 'AF-Test-Group-01 uses dynamic membership — anyone could fall into this policy; make it an assigned group';
-  const others = members ? unexpectedGroupMembers(members) : 0;
-  return others
-    ? `AF-Test-Group-01 has ${others} member(s) that aren't provisioning's test accounts or AF-Test-* devices — remove them first`
-    : undefined;
 }
 
 function base(spec: AuditPolicySpec) {

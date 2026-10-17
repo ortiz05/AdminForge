@@ -371,6 +371,23 @@ export function createFixturesCloud(opts: FixturesCloudOptions) {
         return json(204);
       }
     }
+    // The enterprise fixtures' reads (enterprise-fixtures-fake.ts answers them in full): empty, as in a tenant
+    // without those fixtures — `--remove-fixtures` and `provision status` read them whether or not they are opted in.
+    if (method === 'GET' && path === '/users') return json(200, { value: [] });
+    if (method === 'GET' && path === '/directory/administrativeUnits') return json(200, { value: [] });
+    if (method === 'GET' && /^\/deviceAppManagement\/(ios|android)ManagedAppProtections$/.test(path))
+      return json(200, { value: [] });
+    if (
+      method === 'GET' &&
+      /^\/users\/[^/]+\/(authentication\/(phoneMethods|temporaryAccessPassMethods)|appRoleAssignments)$/.test(
+        path,
+      )
+    )
+      return json(200, { value: [] });
+    if (method === 'GET' && /^\/users\/[^/]+\/manager$/.test(path))
+      return graphError(404, 'Request_ResourceNotFound', 'no manager');
+    if (method === 'GET' && path === '/policies/authorizationPolicy')
+      return json(200, { allowInvitesFrom: 'everyone' });
     if ((m = /^\/groups\/([^/]+)\/members$/.exec(path)) && method === 'GET') {
       const ids = cloud.members.filter((x) => x.groupId === m![1]).map((x) => x.memberId);
       return json(200, {

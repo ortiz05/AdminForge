@@ -23,7 +23,19 @@ export const PUBLIC_CATALOGUE_KEY = /^(AF_LICENCE_SKU_\d+|AF_TEST_LICENCE_SKU)$/
  * The licensed test fixtures `adminforge provision test-identities` knows (AF_TEST_FIXTURES). The CLI uses this list
  * too (provision/fixtures-model.ts), so the exemption below and the CLI can't drift apart.
  */
-export const TEST_FIXTURE_NAMES = ['pim', 'named-location', 'intune', 'approver', 'ca-audit'] as const;
+export const TEST_FIXTURE_NAMES = [
+  'pim',
+  'named-location',
+  'intune',
+  'approver',
+  'ca-audit',
+  'directory',
+  'guest',
+  'apps',
+  'auth-methods',
+  'intune-more',
+  'sign-ins',
+] as const;
 
 /**
  * Query Studio sources an installation can offer (AF_QUERY_SOURCES) — the KQL_SOURCES of @adminforge/schemas, repeated

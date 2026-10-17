@@ -69,6 +69,7 @@ import {
   planFixturesRun,
   printFixturesPlan,
   provisionerStandingLines,
+  disableSignInAccounts,
   setApproverEnabled,
 } from './test-fixtures';
 import { readEligibleRoles, unexpectedEligibleRoles } from '../provision/eligibility';
@@ -327,7 +328,8 @@ const disableFailure = (err: unknown) =>
  * `adminforge provision test-identities --enable [--approver] | --disable`: turns the validation user's sign-in on
  * for a live run and off again (it holds standing directory roles). The approver fixture (AF Tester 2) is enabled only
  * with an explicit `--approver` (and never where AF_AUTOMATION_ALLOW_WRITE_PERMISSIONS=true); `--disable` always
- * disables both, trying each even when the other fails, and reports each. Idempotent; prints no identifiers.
+ * disables both — and the sign-ins fixture's two accounts — trying each even when another fails, and reports each.
+ * Idempotent; prints no identifiers.
  */
 export async function setTesterEnabled(
   ctx: CliContext,
@@ -354,6 +356,7 @@ export async function setTesterEnabled(
   const steps: Array<[string, () => Promise<boolean>]> = [
     ['Validation user (AF_TEST_USER_UPN)', () => setValidationUser(ctx, clients.graph, upn, false)],
     ['Approver (AF_TEST_APPROVER_UPN)', () => setApproverEnabled(ctx, clients.graph, settings, false)],
+    ['Sign-in accounts (AF-Test-SignIn-01, -02)', () => disableSignInAccounts(ctx, clients.graph, settings)],
   ];
   for (const [who, step] of steps)
     try {
@@ -491,6 +494,14 @@ export async function provisionStatus(ctx: CliContext): Promise<StatusResult> {
       ctx.out(`    ✗ ${left} — run \`pnpm adminforge provision test-identities --remove-fixtures\``);
       failures.push(left);
     }
+    // The enterprise fixtures' marked objects (users, apps, groups, policies, sign-in accounts) must not be here either.
+    const leftovers = await planFixturesRun(ctx, clients, settings, desired, 'remove');
+    const enterprise = (leftovers?.ops ?? []).filter((o) => o.action === 'delete' && o.fixture !== 'approver');
+    if (enterprise.length) {
+      const left = `${enterprise.length} AF-Test fixture object(s) left over in a non-test environment`;
+      ctx.out(`    ✗ ${left} — run \`pnpm adminforge provision test-identities --remove-fixtures\` (dry run first)`);
+      failures.push(left);
+    }
   } else {
     const plan = await identityPlan(ctx, clients, settings);
     identityOps = plan.ops;
@@ -504,7 +515,7 @@ export async function provisionStatus(ctx: CliContext): Promise<StatusResult> {
         '    ⚠ The validation user is enabled: it holds standing directory roles. Disable it between live runs: `pnpm adminforge provision test-identities --disable`.',
       );
     // The opted-in licensed test fixtures: ✗ when missing, drifted or blocked (no permission, refused object).
-    const fixtures = refused ? undefined : await planFixturesRun(ctx, clients, settings, plan.desired);
+    const fixtures = refused ? undefined : await planFixturesRun(ctx, clients, settings, plan.desired, 'status');
     if (fixtures) {
       fixtureOps = fixtures.ops;
       renderStatus(fixtureOps, ctx.out);

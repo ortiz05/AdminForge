@@ -36,6 +36,7 @@ import {
   unexpectedGroupMembers,
 } from '../provision/fixtures-plan';
 import { setUserEnabled } from '../provision/identities-io';
+import { setSignInAccountsEnabled, storedSignInAccounts } from '../provision/sign-ins-fixture';
 import {
   buildDesiredIdentities,
   isProvisionedApprover,
@@ -64,7 +65,8 @@ export async function planFixturesRun(
   clients: Clients,
   settings: ProvisionSettings,
   identities: DesiredIdentities,
-  mode: 'provision' | 'remove' = 'provision',
+  /** `status` also flags leftovers of enterprise fixtures no longer opted in; `remove` removes them too. */
+  mode: 'provision' | 'remove' | 'status' = 'provision',
 ): Promise<FixturesRun | undefined> {
   const fixtures = fixtureSettings(ctx.env);
   const desired = buildDesiredFixtures({
@@ -76,11 +78,21 @@ export async function planFixturesRun(
     // Break-glass accounts: excluded from the ca-audit policies (read only when that fixture is opted in).
     protectedUserIds: wants(fixtures, 'ca-audit') ? protectedUserIds(ctx.env) : [],
   });
-  const state = await fetchFixtureState(clients.graph, desired, {
-    upn: ctx.env.AF_TEST_APPROVER_UPN || undefined,
-    password: ctx.env.AF_TEST_APPROVER_PASSWORD || undefined,
-  });
-  const ops = mode === 'remove' ? planFixtureRemoval(desired, state) : planFixtures(desired, state);
+  const state = await fetchFixtureState(
+    clients.graph,
+    desired,
+    {
+      upn: ctx.env.AF_TEST_APPROVER_UPN || undefined,
+      password: ctx.env.AF_TEST_APPROVER_PASSWORD || undefined,
+    },
+    ctx.env,
+    ctx.now?.() ?? new Date(),
+    mode !== 'provision',
+  );
+  const ops =
+    mode === 'remove'
+      ? planFixtureRemoval(desired, state)
+      : planFixtures(desired, state, { leftovers: mode === 'status' });
   if (!fixturesEnabled(fixtures) && !ops.length) return undefined;
   return { desired, state, ops };
 }
@@ -187,17 +199,24 @@ export const fixturesFailed = (failed: FixtureKey[]) =>
  */
 export function fixtureStatusWarnings(run: FixturesRun): string[] {
   const lines: string[] = [...fixtureWarnings(run)];
+  if (run.ops.some((o) => o.fixture === 'sign-ins' && o.kind === 'note' && o.detail === 'account enabled'))
+    lines.push(
+      '⚠ A sign-in account (AF-Test-SignIn-01/02) is enabled. Only tests/live/scripts/generate-sign-ins.ts enables them, for its run: `pnpm adminforge provision test-identities --disable`.',
+    );
   if (run.ops.some((o) => o.fixture === 'approver' && o.kind === 'note' && o.detail === 'account enabled'))
     lines.push(
       '⚠ The approver (AF Tester 2) is enabled. Disable it between live runs: `pnpm adminforge provision test-identities --disable`.',
     );
   const members = run.state.testGroupMembers;
-  const targeted = wants(run.desired.settings, 'intune') || wants(run.desired.settings, 'ca-audit');
+  const targeted =
+    wants(run.desired.settings, 'intune') ||
+    wants(run.desired.settings, 'ca-audit') ||
+    wants(run.desired.settings, 'intune-more');
   if (targeted && members && !isUnreadable(members)) {
     const others = unexpectedGroupMembers(members);
     if (others)
       lines.push(
-        `⚠ ${run.desired.testGroup.displayName} has ${others} member(s) that aren't provisioning's test accounts or AF-Test-* devices — they receive the AF-Test Intune and group-scoped AF-Audit policies; remove them from the group`,
+        `⚠ ${run.desired.testGroup.displayName} has ${others} member(s) that aren't provisioning's test accounts or AF-Test-* devices — they receive the AF-Test Intune and group-scoped AF-Audit policies (the assigned enterprise ones are refused meanwhile); remove them from the group`,
       );
   }
   return lines;
@@ -205,7 +224,9 @@ export function fixtureStatusWarnings(run: FixturesRun): string[] {
 
 /**
  * `adminforge provision test-identities --remove-fixtures [--dry-run]`: removes what the opted-in fixtures created,
- * and a marked approver in any case. Works in any label (it only removes objects carrying provisioning's marks).
+ * the enterprise fixtures' marked objects and a marked approver in any case. Works in any label (it only removes
+ * objects carrying provisioning's marks). A part that couldn't be read is ✗ and the run exits 1 — never "nothing to
+ * remove" while something may be left.
  */
 export async function removeTestFixtures(
   ctx: CliContext,
@@ -226,7 +247,7 @@ export async function removeTestFixtures(
   const run = await planFixturesRun(ctx, clients, settings, identities, 'remove');
   if (!run) {
     ctx.out(
-      'No fixture is opted in (AF_TEST_LICENCE_SKU, AF_TEST_FIXTURES) and no approver is left over: nothing to remove. Removal covers the opted-in fixtures (and the approver in any case), so keep the keys set until they are removed.',
+      'No fixture is opted in (AF_TEST_LICENCE_SKU, AF_TEST_FIXTURES) and no approver or enterprise fixture object is left over: nothing to remove. Removal covers the opted-in fixtures (and the approver and enterprise fixtures in any case), so keep the keys set until they are removed.',
     );
     return undefined;
   }
@@ -234,13 +255,20 @@ export async function removeTestFixtures(
   ctx.out('Plan:');
   renderPlan(run.ops, ctx.out);
   const c = counts(run.ops);
+  // A fixture whose state couldn't be read may still have objects: never report "nothing to remove" then.
+  const unread = [...new Set(run.ops.filter((o) => o.blocked).map((o) => o.fixture))];
   ctx.out('');
-  if (opts.dryRun) ctx.out('Dry run: nothing was changed.');
-  else if (c.changes === 0) ctx.out('Nothing to remove.');
-  else {
+  if (opts.dryRun) {
+    ctx.out('Dry run: nothing was changed.');
+    if (unread.length)
+      ctx.out(`${unread.length} fixture(s) couldn't be read (${unread.join(', ')}) — see ✗ above.`);
+  } else if (c.changes === 0) {
+    if (unread.length) throw fixturesFailed(unread);
+    ctx.out('Nothing to remove.');
+  } else {
     ctx.out('Removing:');
     const failed = await applyFixtures(ctx, clients, run);
-    if (failed.length) throw fixturesFailed(failed);
+    if (failed.length || unread.length) throw fixturesFailed([...new Set([...failed, ...unread])]);
     ctx.out('');
     ctx.out(
       `Done: ${c.delete} removed. Unset AF_TEST_LICENCE_SKU / AF_TEST_FIXTURES to stop provisioning them again.`,
@@ -287,4 +315,29 @@ export async function setApproverEnabled(
       : `Approver (AF_TEST_APPROVER_UPN): already ${state}.`,
   );
   return result === 'changed';
+}
+
+/**
+ * `--disable`: the sign-ins fixture's two accounts are disabled too — at the UPNs the admin env stores
+ * (AF_TEST_SIGNIN_<n>_UPN), else the derived ones; only accounts with their marker. Says so when it can't look.
+ */
+export async function disableSignInAccounts(
+  ctx: CliContext,
+  graph: GraphClient,
+  settings: ProvisionSettings,
+): Promise<boolean> {
+  const accounts = storedSignInAccounts(ctx.env, settings.primaryDomain);
+  if (!accounts.length) {
+    ctx.out('Sign-in accounts: AF_TEST_SIGNIN_<n>_UPN and AF_PRIMARY_DOMAIN are not set — not checked.');
+    return false;
+  }
+  const { changed, refused, missing } = await setSignInAccountsEnabled(graph, accounts, false);
+  if (refused.length)
+    throw new ConfigError(
+      `${refused.join(', ')}: the account at the sign-in account's UPN has no sign-ins marker, so it is not disabled here.`,
+    );
+  if (changed) ctx.out(`✓ Sign-in accounts: ${changed} disabled, sign-in sessions revoked.`);
+  else if (missing.length < accounts.length) ctx.out('Sign-in accounts: already disabled.');
+  else if (fixtureSettings(ctx.env).fixtures.includes('sign-ins')) ctx.out('Sign-in accounts: do not exist.');
+  return changed > 0;
 }

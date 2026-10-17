@@ -12,7 +12,13 @@
 import { SKU_PART_NUMBER } from '@adminforge/config';
 import { ConfigError } from '../shared/errors';
 import { planApprover, planApproverRemoval, planLeftoverApprover } from './approver-plan';
+import { APPS_SECTION, planApps } from './apps-fixture-plan';
+import { AUTH_METHODS_SECTION, planAuthMethods } from './auth-methods-fixture';
 import { planCaAudit } from './ca-audit-plan';
+import { directoryCatalog } from './directory-fixture-catalog';
+import { DIRECTORY_SECTION, GUEST_SECTION, planDirectory, planGuest } from './directory-fixture-plan';
+import { INTUNE_MORE_SECTION, planIntuneMore } from './intune-more-fixture';
+import { SIGN_INS_SECTION, planSignIns, signInAccounts } from './sign-ins-fixture';
 import {
   APPROVER_DISPLAY_NAME,
   FIXTURE_NAMES,
@@ -23,6 +29,7 @@ import {
   isProvisionedLocation,
   isProvisionedPolicy,
   isUnreadable,
+  testGroupProblem,
   wants,
   assignedOnlyTo,
   type DesiredFixtures,
@@ -88,9 +95,12 @@ export function buildDesiredFixtures(opts: {
     },
     automationWrites: !!opts.automationWrites,
     protectedUserIds: opts.protectedUserIds ?? [],
+    directory: directoryCatalog(opts.domain),
+    signIns: signInAccounts(opts.domain),
     testGroup: {
       uniqueName: identities.testGroup.uniqueName,
       displayName: identities.testGroup.body.displayName,
+      description: identities.testGroup.body.description,
     },
   };
 }
@@ -102,6 +112,12 @@ const SECTIONS: Record<FixtureKey, string> = {
   intune: 'Test fixtures: Intune',
   approver: 'Test fixtures: approver',
   'ca-audit': 'Test fixtures: Conditional Access (report-only)',
+  directory: DIRECTORY_SECTION,
+  guest: GUEST_SECTION,
+  apps: APPS_SECTION,
+  'auth-methods': AUTH_METHODS_SECTION,
+  'intune-more': INTUNE_MORE_SECTION,
+  'sign-ins': SIGN_INS_SECTION,
 };
 
 const lower = (s: string) => s.toLowerCase();
@@ -330,16 +346,24 @@ function planIntune(d: DesiredFixtures, s: FixtureState, remove: boolean): Fixtu
 }
 
 /** Pure: the opted-in fixtures + fetched state → operations (`provision test-identities`, `provision status`). */
-export function planFixtures(desired: DesiredFixtures, state: FixtureState): FixtureOp[] {
-  return plan(desired, state, false);
+export function planFixtures(
+  desired: DesiredFixtures,
+  state: FixtureState,
+  /** `provision status`: an enterprise fixture no longer opted in whose marked objects are still there is ✗. */
+  opts: { leftovers?: boolean } = {},
+): FixtureOp[] {
+  return plan(desired, state, false, !!opts.leftovers);
 }
 
-/** Pure: `--remove-fixtures` — removes what the opted-in fixtures created, only provisioning's own objects. */
+/**
+ * Pure: `--remove-fixtures` — removes what the opted-in fixtures created, and every enterprise fixture's marked
+ * objects whether or not it is opted in (the state then has them read) — only provisioning's own objects.
+ */
 export function planFixtureRemoval(desired: DesiredFixtures, state: FixtureState): FixtureOp[] {
   return plan(desired, state, true);
 }
 
-function plan(d: DesiredFixtures, s: FixtureState, remove: boolean): FixtureOp[] {
+function plan(d: DesiredFixtures, s: FixtureState, remove: boolean, leftovers = false): FixtureOp[] {
   const ops: FixtureOp[] = [];
   // The audit policies come after the named location when provisioning (the location example excludes it) and before
   // it when removing (Graph refuses to delete a named location a policy still refers to).
@@ -348,11 +372,43 @@ function plan(d: DesiredFixtures, s: FixtureState, remove: boolean): FixtureOp[]
       ? planCaAudit(d, s, { remove, locationPlanned: wants(d.settings, 'named-location') })
       : [];
   if (remove) ops.push(...caAudit());
+  // The enterprise fixtures, each in its own module; removed in reverse order (methods and apps before the users),
+  // whether or not they are opted in (their state is read for removal and status).
+  const newer = (): FixtureOp[] => {
+    const planners: Array<[FixtureName, (removing: boolean) => FixtureOp[]]> = [
+      ['directory', (r) => planDirectory(d, s.directory, r)],
+      ['guest', (r) => planGuest(d, s.directory, r)],
+      ['apps', (r) => planApps(d, s.apps, r)],
+      ['auth-methods', (r) => planAuthMethods(d, s.authMethods, r)],
+      ['intune-more', (r) => planIntuneMore(d, s.intuneMore, r, testGroupProblem(s))],
+      ['sign-ins', (r) => planSignIns(d, s.signIns, r)],
+    ];
+    if (remove) return [...planners].reverse().flatMap(([, plan]) => plan(true));
+    const ops = planners.filter(([name]) => wants(d.settings, name)).flatMap(([, plan]) => plan(false));
+    // Not opted in, but its marked objects are still there: ✗ until --remove-fixtures takes them away.
+    if (leftovers)
+      for (const [name, plan] of planners) {
+        if (wants(d.settings, name)) continue;
+        const left = plan(true).filter((o) => o.action === 'delete').length;
+        if (left)
+          ops.push({
+            kind: 'note',
+            fixture: name,
+            section: SECTIONS[name],
+            action: 'skip',
+            blocked: true,
+            title: `${name}: ${left} object(s) left over — "${name}" is not in AF_TEST_FIXTURES`,
+            changes: ['run `pnpm adminforge provision test-identities --remove-fixtures` (dry run first)'],
+          });
+      }
+    return ops;
+  };
+  if (remove) ops.push(...newer());
   if (wants(d.settings, 'licences')) ops.push(...planLicences(d, s, remove));
   if (wants(d.settings, 'pim')) ops.push(...planEligibility(d, s, remove));
   if (wants(d.settings, 'named-location')) ops.push(...planNamedLocation(s, remove));
   if (wants(d.settings, 'intune')) ops.push(...planIntune(d, s, remove));
-  if (!remove) ops.push(...caAudit());
+  if (!remove) ops.push(...caAudit(), ...newer());
   // The approver: provisioned when opted in; removed by --remove-fixtures and flagged as left over even when not.
   if (s.approver) {
     if (remove) ops.push(...planApproverRemoval(d, s.approver));

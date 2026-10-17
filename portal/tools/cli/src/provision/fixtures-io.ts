@@ -10,13 +10,19 @@
  */
 import { ApiError, type GraphClient } from '@adminforge/connectors';
 import { applyApproverOp, fetchApproverState } from './approver-io';
+import { applyAppsStep, readAppsState } from './apps-fixture-io';
+import { applyAuthMethodsStep, readAuthMethodsState } from './auth-methods-fixture';
 import { applyCaAuditOp, readCaPolicies } from './ca-audit-io';
+import { applyDirectoryStep, readDirectoryState } from './directory-fixture-io';
+import { applyIntuneMoreStep, readIntuneMoreState } from './intune-more-fixture';
+import { applySignInsStep, readSignInsState } from './sign-ins-fixture';
 import { findGroup, odata } from './entra-io';
 import {
   INTUNE_POLICIES,
   NAMED_LOCATION,
   isProvisionedAccount,
   isProvisionedLocation,
+  isProvisionedTestGroup,
   refusalHint,
   wants,
   type ApproverState,
@@ -33,7 +39,7 @@ import {
   type Unreadable,
 } from './fixtures-model';
 import { GUID_PATTERN } from './ids';
-import { withReplicationRetry, type RetryOptions } from './retry';
+import { isReplicationDelay, withReplicationRetry, type RetryOptions } from './retry';
 
 const USER_SELECT =
   'id,userPrincipalName,displayName,accountEnabled,employeeType,usageLocation,assignedLicenses';
@@ -159,8 +165,17 @@ export async function fetchFixtureState(
   graph: GraphClient,
   desired: DesiredFixtures,
   approverEnv: ApproverState['env'],
+  /** The env (admin file included): the sign-ins fixture checks which of its keys are stored, never their values. */
+  env: Readonly<Record<string, string | undefined>> = {},
+  now: Date = new Date(),
+  /**
+   * Read the enterprise fixtures (directory, guest, apps, auth-methods, intune-more, sign-ins) whether or not they are
+   * opted in: `--remove-fixtures` removes them and `provision status` flags leftovers in any case.
+   */
+  readAllEnterprise = false,
 ): Promise<FixtureState> {
   const s = desired.settings;
+  const read = (f: FixtureKey) => readAllEnterprise || wants(s, f);
   const state: FixtureState = { users: {} };
   const people = [
     ...(wants(s, 'licences') ? desired.licensed : []),
@@ -195,24 +210,37 @@ export async function fetchFixtureState(
     const groupId = state.testGroupId;
     if (groupId) state.testGroupMembers = await readPart('intune', () => readGroupMembers(graph, groupId));
   }
+  /** AF-Test-Group-01's members and membership type: policies scoped to it apply to whoever is in it. */
+  const readTestGroupMembers = async (fixture: FixtureKey) => {
+    state.testGroupId ??= (await findGroup(graph, desired.testGroup.uniqueName))?.id;
+    const groupId = state.testGroupId;
+    if (!groupId) return;
+    state.testGroupMembers ??= await readPart(fixture, () => readGroupMembers(graph, groupId));
+    state.testGroupDynamic ??= await readPart(fixture, async () => {
+      const { data } = await graph.request<{ groupTypes?: string[]; membershipRule?: string | null }>({
+        path: `/groups/${groupId}`,
+        query: { $select: 'groupTypes,membershipRule' },
+      });
+      return (data.groupTypes ?? []).includes('DynamicMembership') || !!data.membershipRule;
+    });
+  };
   if (wants(s, 'ca-audit')) {
     state.caPolicies = await readPart('ca-audit', () => readCaPolicies(graph));
     // The ids the policies refer to: AF-Test-Group-01 and AF-Test-Location (when it exists).
-    state.testGroupId ??= (await findGroup(graph, desired.testGroup.uniqueName))?.id;
     state.namedLocations ??= await readPart('ca-audit', () => readNamedLocations(graph));
-    // The group-scoped examples apply to whoever is in AF-Test-Group-01: its members and membership type.
-    const groupId = state.testGroupId;
-    if (groupId) {
-      state.testGroupMembers ??= await readPart('ca-audit', () => readGroupMembers(graph, groupId));
-      state.testGroupDynamic = await readPart('ca-audit', async () => {
-        const { data } = await graph.request<{ groupTypes?: string[]; membershipRule?: string | null }>({
-          path: `/groups/${groupId}`,
-          query: { $select: 'groupTypes,membershipRule' },
-        });
-        return (data.groupTypes ?? []).includes('DynamicMembership') || !!data.membershipRule;
-      });
-    }
+    await readTestGroupMembers('ca-audit');
   }
+  if (read('directory') || read('guest'))
+    state.directory = await readPart('directory', () => readDirectoryState(graph, desired));
+  if (read('apps')) state.apps = await readPart('apps', () => readAppsState(graph, desired, now));
+  if (read('auth-methods'))
+    state.authMethods = await readPart('auth-methods', () => readAuthMethodsState(graph, desired));
+  if (read('intune-more')) {
+    state.intuneMore = await readPart('intune-more', () => readIntuneMoreState(graph, desired));
+    await readTestGroupMembers('intune-more');
+  }
+  if (read('sign-ins'))
+    state.signIns = await readPart('sign-ins', () => readSignInsState(graph, desired, env));
   // Always looked up: opted in, it is read in full; otherwise only whether a leftover approver exists.
   state.approver = await fetchApproverState(graph, desired, approverEnv, wants(s, 'approver'));
   return state;
@@ -236,6 +264,11 @@ export function describeFixtureFailure(fixture: FixtureKey, err: ApiError): stri
     : `${err.status} ${err.code}: ${quiet(err.message)}`;
 }
 
+/** Graph's "concurrent requests" refusal: the write wasn't made, so it is safe to send again after a moment. */
+const isConcurrencyViolation = (err: unknown) =>
+  err instanceof ApiError &&
+  err.status === 409 &&
+  /ConcurrencyViolation|concurrent requests/i.test(`${err.code} ${err.message}`);
 const isAlreadyExists = (err: unknown) =>
   err instanceof ApiError &&
   (err.status === 409 || /already exist|RoleAssignmentExists/i.test(`${err.code} ${err.message}`));
@@ -260,9 +293,13 @@ export async function applyFixtureOps(
   const failed = new Set<FixtureKey>();
   const retry = <T>(fn: () => Promise<T>) =>
     withReplicationRetry(fn, {
+      // Graph also refuses a write while another one on the same object is in flight (409 concurrency violation).
+      isRetryable: (err) => isReplicationDelay(err) || isConcurrencyViolation(err),
       ...ctx.retry,
-      onRetry: (_e, n, ms) =>
-        log(`      … waiting ${Math.round(ms / 1000)}s for directory replication (attempt ${n})`),
+      onRetry: (e, n, ms) =>
+        log(
+          `      … waiting ${Math.round(ms / 1000)}s for ${isConcurrencyViolation(e) ? 'a concurrent change to finish' : 'directory replication'} (attempt ${n})`,
+        ),
     });
   const specOf = (upn: string) =>
     [...desired.licensed, ...desired.eligibility.map((e) => e.user)].find(
@@ -300,6 +337,19 @@ export async function applyFixtureOps(
         (await findGroup(graph, desired.testGroup.uniqueName))?.id ??
         Promise.reject(notVisible(desired.testGroup.displayName)),
     );
+  /** AF-Test-Group-01, refused unless it is the group the test identities created (the enterprise fixtures). */
+  const ownTestGroupId = () =>
+    retry(async () => {
+      const g = await findGroup(graph, desired.testGroup.uniqueName);
+      if (!g) return Promise.reject(notVisible(desired.testGroup.displayName));
+      if (!isProvisionedTestGroup(desired, g))
+        throw new ApiError(
+          409,
+          'NotProvisioned',
+          `${desired.testGroup.displayName} isn't the group provisioning created; left alone`,
+        );
+      return g.id;
+    });
   const eligibilityRequest = (
     principalId: string,
     roleDefinitionId: string,
@@ -463,6 +513,33 @@ export async function applyFixtureOps(
                 const own = (await readNamedLocations(graph)).find(isProvisionedLocation);
                 return own?.id ?? Promise.reject(notVisible(NAMED_LOCATION.displayName));
               }),
+          });
+          break;
+        case 'directory':
+          await applyDirectoryStep(op.step, op.title, desired, {
+            graph,
+            log,
+            retry,
+            password: ctx.password,
+            testGroupId: ownTestGroupId,
+          });
+          break;
+        case 'apps':
+          await applyAppsStep(op.step, op.title, desired, { graph, log, retry, now: ctx.now });
+          break;
+        case 'authMethods':
+          await applyAuthMethodsStep(op.step, op.title, desired, { graph, log, retry });
+          break;
+        case 'intuneMore':
+          await applyIntuneMoreStep(op.step, op.title, { graph, log, testGroupId: ownTestGroupId });
+          break;
+        case 'signIns':
+          await applySignInsStep(op.step, op.title, desired, {
+            graph,
+            log,
+            writeEnv: ctx.writeEnv,
+            retry,
+            password: ctx.password,
           });
           break;
         case 'note':

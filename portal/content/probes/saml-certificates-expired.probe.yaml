@@ -1,0 +1,33 @@
+$schema: ../../packages/schemas/generated/probe.schema.json
+kind: probe
+id: probes.saml-certificates-expired
+version: 1.0.0
+title: SAML signing certificates expired or within 7 days
+summary: >-
+  Critical while any enabled SAML enterprise application's newest token-signing certificate has expired or expires within 7
+  days: single sign-on to that application fails (or is about to) until a new certificate is activated in Entra and
+  uploaded to the application. The SAML signing certificate expiry report lists them.
+owner: identity-team
+tags: [identity, apps, saml, certificates, sweep-6h]
+check:
+  kind: graphCount
+  path: /servicePrincipals
+  query:
+    $filter: preferredSingleSignOnMode eq 'saml' and accountEnabled eq true
+    $select: id,displayName,keyCredentials
+    $top: 999
+  items: >-
+    ${ value.(
+      $latest := [keyCredentials[usage = 'Sign']^(endDateTime)][-1];
+      $left := $latest ? $daysUntil($latest.endDateTime) : null;
+      ($type($left) = 'number' and $left <= 7) ? { "displayName": displayName, "expires": $latest.endDateTime, "daysRemaining": $left }
+    ) }
+  worse: higher
+  maxItems: 500
+  fields: [displayName, expires, daysRemaining]
+thresholds: { crit: 1 }
+intervalHint: PT6H
+timeoutMs: 30000
+requires:
+  scopes:
+    graph: [Application.Read.All]

@@ -1,0 +1,11 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#groupLifecyclePolicies",
+  "value": [
+    {
+      "id": "70000000-0000-4000-8000-000000000751",
+      "groupLifetimeInDays": 365,
+      "managedGroupTypes": "All",
+      "alternateNotificationEmails": "it-groups@example.com"
+    }
+  ]
+}

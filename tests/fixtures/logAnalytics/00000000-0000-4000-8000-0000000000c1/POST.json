@@ -2,17 +2,105 @@
   "$fixture": {
     "variants": [
       {
-        "match": { "bodyIncludes": "SigninLogs" },
+        "match": {
+          "bodyIncludes": "af:identity.ca-report-only-impact#kqltotal"
+        },
         "body": {
           "tables": [
             {
               "name": "PrimaryResult",
               "columns": [
-                { "name": "Total", "type": "long" },
-                { "name": "Failures", "type": "long" },
-                { "name": "FailureRate", "type": "real" }
+                {
+                  "name": "Count",
+                  "type": "long"
+                }
               ],
-              "rows": [[1200, 18, 1.5]]
+              "rows": [
+                [
+                  48210
+                ]
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "match": {
+          "bodyIncludes": "af:identity.ca-report-only-impact#kql"
+        },
+        "body": {
+          "tables": [
+            {
+              "name": "PrimaryResult",
+              "columns": [
+                {
+                  "name": "PolicyId",
+                  "type": "string"
+                },
+                {
+                  "name": "WouldBlock",
+                  "type": "long"
+                },
+                {
+                  "name": "WouldPrompt",
+                  "type": "long"
+                },
+                {
+                  "name": "WouldAllow",
+                  "type": "long"
+                },
+                {
+                  "name": "NotApplied",
+                  "type": "long"
+                },
+                {
+                  "name": "People",
+                  "type": "long"
+                }
+              ],
+              "rows": [
+                [
+                  "00000000-0000-4000-8000-000000000904",
+                  37,
+                  0,
+                  1880,
+                  26100,
+                  21
+                ]
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "match": {
+          "bodyIncludes": "SigninLogs"
+        },
+        "body": {
+          "tables": [
+            {
+              "name": "PrimaryResult",
+              "columns": [
+                {
+                  "name": "Total",
+                  "type": "long"
+                },
+                {
+                  "name": "Failures",
+                  "type": "long"
+                },
+                {
+                  "name": "FailureRate",
+                  "type": "real"
+                }
+              ],
+              "rows": [
+                [
+                  1200,
+                  18,
+                  1.5
+                ]
+              ]
             }
           ]
         }
@@ -23,16 +111,48 @@
         {
           "name": "PrimaryResult",
           "columns": [
-            { "name": "TimeGenerated", "type": "datetime" },
-            { "name": "AppRoleName", "type": "string" },
-            { "name": "Requests", "type": "long" },
-            { "name": "Failures", "type": "long" },
-            { "name": "Healthy", "type": "bool" },
-            { "name": "TopError", "type": "dynamic" }
+            {
+              "name": "TimeGenerated",
+              "type": "datetime"
+            },
+            {
+              "name": "AppRoleName",
+              "type": "string"
+            },
+            {
+              "name": "Requests",
+              "type": "long"
+            },
+            {
+              "name": "Failures",
+              "type": "long"
+            },
+            {
+              "name": "Healthy",
+              "type": "bool"
+            },
+            {
+              "name": "TopError",
+              "type": "dynamic"
+            }
           ],
           "rows": [
-            ["2026-01-10T00:00:00Z", "func-example", 5120, 12, true, "{\"code\":\"Timeout\",\"count\":7}"],
-            ["2026-01-10T01:00:00Z", "func-example", 4980, 40, false, "{\"code\":\"HostUnavailable\",\"count\":31}"]
+            [
+              "2026-01-10T00:00:00Z",
+              "func-example",
+              5120,
+              12,
+              true,
+              "{\"code\":\"Timeout\",\"count\":7}"
+            ],
+            [
+              "2026-01-10T01:00:00Z",
+              "func-example",
+              4980,
+              40,
+              false,
+              "{\"code\":\"HostUnavailable\",\"count\":31}"
+            ]
           ]
         }
       ]

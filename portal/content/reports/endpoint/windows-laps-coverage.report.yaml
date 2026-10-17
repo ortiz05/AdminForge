@@ -1,0 +1,178 @@
+$schema: ../../../packages/schemas/generated/report.schema.json
+kind: report
+id: endpoint.windows-laps-coverage
+version: 1.0.0
+title: Windows LAPS coverage
+summary: >-
+  Active Windows devices whose local administrator password isn't backed up to Microsoft Entra by Windows LAPS — never,
+  or not within the chosen number of days — so nobody can sign in locally when the device is off the network.
+  Hybrid-joined devices may back up to Active Directory instead and are shown apart. Only backup metadata is read;
+  passwords are never retrieved. Size limit: 1,500 devices and 1,500 backups.
+owner: endpoint-team
+tags: [endpoint, windows, laps, local-admin, report]
+nav: { section: reports, label: Windows LAPS coverage, icon: password, order: 38 }
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    graph: [Device.Read.All, DeviceLocalCredential.ReadBasic.All]
+  entraRoles: [Cloud Device Administrator, Global Reader]
+
+params:
+  days:
+    type: enum
+    label: Backed up within
+    facet: true
+    default: 30
+    values:
+      - { value: 7, label: 7 days }
+      - { value: 30, label: 30 days }
+      - { value: 90, label: 90 days }
+  activeDays:
+    type: enum
+    label: Devices active in the last
+    facet: true
+    default: 30
+    values:
+      - { value: 30, label: 30 days }
+      - { value: 90, label: 90 days }
+
+# Windows devices come from one list filtered by Graph (enabled, active in the window — an advanced query); LAPS backup
+# metadata is one tenant-wide list whose ids are the devices' deviceIds, joined with a lookup object ($merge — the
+# grouping constructor fails on thousands of keys), never per device. Transforms have a 250 ms budget, so each list
+# stops at 1,500 rows: past that the report says so, and when the backup list is cut short it shows nothing rather than
+# flag devices whose backup it didn't read. Hybrid-joined devices that back up to Active Directory instead of Entra
+# show as not backed up here.
+datasources:
+  devices:
+    source: graph
+    request:
+      path: /devices
+      headers: { ConsistencyLevel: eventual }
+      query:
+        $filter: >-
+          ${ "operatingSystem eq 'Windows' and accountEnabled eq true and approximateLastSignInDateTime ge "
+             & $daysAgo($number(params.activeDays ? params.activeDays : 30)) }
+        $count: true
+        $select: id,deviceId,displayName,trustType,approximateLastSignInDateTime,operatingSystemVersion,isManaged
+        $top: 999
+    paging: all
+    maxItems: 1500
+    cache: { ttl: 900 }
+  backups:
+    source: graph
+    request:
+      path: /directory/deviceLocalCredentials
+      headers: { ocp-client-name: AdminForge, ocp-client-version: "1.0" }
+      query:
+        $select: id,deviceName,lastBackupDateTime,refreshDateTime
+    paging: all
+    maxItems: 1500
+    cache: { ttl: 900 }
+  report:
+    source: static
+    data: >-
+      ${ { "devices": ds.devices.value, "backups": ds.backups.value } }
+    transform: >-
+      ${ (
+        $days := params.days ? $number(params.days) : 30;
+        $active := params.activeDays ? $number(params.activeDays) : 30;
+        $since := $daysAgo($active);
+        $fresh := $daysAgo($days);
+        $backupsCapped := $count(value.backups) >= 1500;
+        $last := $merge([{}, value.backups.{ id: lastBackupDateTime }]);
+        $inScope := value.devices[trustType != 'Workplace' and approximateLastSignInDateTime >= $since];
+        $missing := $backupsCapped ? [] : $inScope[($b := $lookup($last, deviceId); $not($exists($b)) or $b < $fresh)];
+        $rows := [$missing.(
+          $b := $lookup($last, deviceId);
+          {
+            "id": id,
+            "deviceId": deviceId,
+            "displayName": displayName,
+            "join": trustType = 'AzureAd' ? 'Microsoft Entra joined' : trustType = 'ServerAd' ? 'Hybrid joined' : trustType,
+            "osVersion": operatingSystemVersion,
+            "managed": isManaged = true,
+            "lastActive": approximateLastSignInDateTime,
+            "lastBackup": $b,
+            "daysSinceBackup": $b ? -$daysUntil($b) : null,
+            "state": $b ? 'stale' : trustType = 'ServerAd' ? 'hybridNoEntra' : 'never'
+          }
+        )];
+        {
+          "rows": [$rows^(displayName)],
+          "never": $backupsCapped ? null : $count($rows[state = 'never']),
+          "hybrid": $backupsCapped ? null : $count($rows[state = 'hybridNoEntra']),
+          "stale": $backupsCapped ? null : $count($rows[state = 'stale']),
+          "checked": $count($inScope),
+          "backupsCapped": $backupsCapped,
+          "devicesCapped": $count(value.devices) >= 1500
+        }
+      ) }
+
+layout:
+  - widget: kpi
+    data: report.never
+    label: Never backed up
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+  - widget: kpi
+    data: report.stale
+    label: Backup older than the window
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+  - widget: kpi
+    data: report.hybrid
+    label: Hybrid-joined, no Entra backup
+    format: number
+  - widget: kpi
+    data: report.checked
+    label: Active Windows devices checked
+    format: number
+  - widget: markdown
+    span: 12
+    when: ${ report.backupsCapped = true }
+    text: >-
+      The tenant holds more than 1,500 LAPS backups, more than this report can match within its time budget, so it lists
+      no devices rather than flag ones whose backup it didn't read.
+  - widget: markdown
+    span: 12
+    when: ${ report.devicesCapped = true and report.backupsCapped != true }
+    text: Only the first 1,500 active Windows devices were checked.
+  - widget: markdown
+    span: 12
+    when: ${ report.hybrid > 0 }
+    text: >-
+      Hybrid-joined devices can back up their LAPS password to Active Directory instead of Entra (the LAPS policy's
+      backup directory); this report can't see AD, so check those devices there.
+  - widget: table
+    id: devices
+    span: 12
+    data: report.rows
+    rowKey: id
+    columns:
+      - { field: displayName, label: Device, sortable: true }
+      - field: state
+        label: LAPS backup
+        kind: status
+        map: { never: [warn, Never backed up], stale: [warn, Out of date], hybridNoEntra: [info, Not in Entra (may back up to AD)] }
+        filter: facet
+      - { field: lastBackup, label: Last backup, kind: date, sortable: true }
+      - { field: daysSinceBackup, label: Days since, kind: number, sortable: true }
+      - { field: join, label: Join type, filter: facet }
+      - { field: managed, label: Managed, kind: boolean, filter: facet }
+      - { field: osVersion, label: OS version }
+      - { field: lastActive, label: Last active, kind: date, sortable: true }
+      - { field: deviceId, label: Device id, kind: guid, hidden: true }
+    inspect:
+      page: identity.device
+      params:
+        id: ${ row.id }
+        deviceId: ${ row.deviceId }
+    empty:
+      title: Every active Windows device backs up its local admin password
+      body: Every Entra-joined or hybrid-joined Windows device active in the window backed up its LAPS password recently.
+
+export:
+  formats: [csv, xlsx]
+  fileName: windows-laps-coverage-${ params.days }d
+  data: report.rows
+  columns: all

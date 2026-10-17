@@ -1,0 +1,226 @@
+$schema: ../../../packages/schemas/generated/report.schema.json
+kind: report
+id: identity.licence-assignment-errors
+version: 1.0.0
+title: Licence assignment errors
+summary: >-
+  Why people don't get the licences they should: groups whose group-based licensing failed for some members (not enough
+  seats, conflicting or dependent service plans, a missing usage location), the members and error codes of the group you
+  pick, and licensed users without a usage location (Microsoft can't assign most services until it is set). Seat counts
+  per SKU are in Licence utilization.
+owner: identity-team
+tags: [identity, licensing, group-based-licensing, hygiene, report]
+nav: { section: reports, label: Licence assignment errors, icon: identification-badge, order: 28 }
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    graph: [Group.Read.All, User.Read.All, Organization.Read.All]
+  entraRoles: [Global Reader]
+
+params:
+  group:
+    type: string
+    format: guid
+    label: Members of group
+    picker: group
+    description: Pick a group from the list (or any licensing group) to see which members failed and why.
+
+# Graph can't filter users on licenseAssignmentStates (not indexed), so errors are found per group:
+# `hasMembersWithLicenseErrors eq true` lists the groups, `membersWithLicenseErrors` their failing members — one group
+# at a time, never the whole directory. Users without a usage location are one server-side filter (advanced query),
+# counted separately so the KPI stays complete when the list stops at its cap.
+datasources:
+  groups:
+    source: graph
+    request:
+      path: /groups
+      query:
+        $filter: hasMembersWithLicenseErrors eq true
+        $select: id,displayName,mail,assignedLicenses,licenseProcessingState,onPremisesSyncEnabled
+        $top: 999
+    paging: all
+    maxItems: 500
+    cache: { ttl: 900 }
+  members:
+    source: graph
+    when: ${ $boolean(params.group) = true }
+    request:
+      path: /groups/${ $encode($guid(params.group)) }/membersWithLicenseErrors
+      query:
+        $select: id,displayName,userPrincipalName,accountEnabled,usageLocation,licenseAssignmentStates
+        $top: 999
+    paging: all
+    maxItems: 500
+    cache: { ttl: 300 }
+  noLocation:
+    source: graph
+    request:
+      path: /users
+      headers: { ConsistencyLevel: eventual }
+      query:
+        $filter: assignedLicenses/$count ne 0 and usageLocation eq null
+        $count: true
+        $select: id,displayName,userPrincipalName,accountEnabled,userType,assignedLicenses
+        $top: 999
+    paging: all
+    maxItems: 500
+    cache: { ttl: 900 }
+  # The complete count for the KPI (the list above stops at 500 users).
+  noLocationCount:
+    source: graph
+    request:
+      path: /users
+      headers: { ConsistencyLevel: eventual }
+      query:
+        $filter: assignedLicenses/$count ne 0 and usageLocation eq null
+        $count: true
+        $top: 1
+        $select: id
+    cache: { ttl: 900 }
+    transform: ${ $lookup(value, '@odata.count') }
+  skus:
+    source: graph
+    optional: true
+    request:
+      path: /subscribedSkus
+      query:
+        $select: skuId,skuPartNumber
+    cache: { ttl: 3600 }
+  report:
+    source: static
+    data: >-
+      ${ { "groups": ds.groups.value, "members": ds.members.value, "noLocation": ds.noLocation.value, "skus": ds.skus.value } }
+    transform: >-
+      ${ (
+        $names := value.skus ? value.skus{ skuId: skuPartNumber } : {};
+        $why := {
+          "CountViolation": "Not enough licences — buy more seats or free some up",
+          "MutuallyExclusiveViolation": "Conflicts with another licence the user holds",
+          "DependencyViolation": "A service plan it depends on is disabled or missing",
+          "ProhibitedInUsageLocationViolation": "Not available in the user's usage location",
+          "UniquenessViolation": "A proxy address conflicts with another object",
+          "Other": "Other error — see the user's licences in Entra"
+        };
+        $groupId := params.group;
+        $groupRows := [value.groups.{
+          "kind": "group",
+          "id": id,
+          "name": displayName,
+          "upn": mail,
+          "group": displayName,
+          "groupId": id,
+          "sku": $join([assignedLicenses.($n := $lookup($names, skuId); $n ? $n : skuId)], ', '),
+          "issue": "groupErrors",
+          "error": null,
+          "detail": "Some members failed — pick this group to see who and why",
+          "enabled": null
+        }];
+        $groupName := ($g := value.groups[id = $groupId]; $g ? $g.displayName : null);
+        $memberRows := [value.members.(
+          $u := $;
+          licenseAssignmentStates[state = 'Error' and assignedByGroup = $groupId].{
+            "kind": "user",
+            "id": $u.id & '|' & skuId,
+            "name": $u.displayName,
+            "upn": $u.userPrincipalName,
+            "group": $groupName,
+            "groupId": assignedByGroup,
+            "sku": ($n := $lookup($names, skuId); $n ? $n : skuId),
+            "issue": "assignmentError",
+            "error": error,
+            "detail": ($w := $lookup($why, error); $w ? $w : error),
+            "enabled": $u.accountEnabled = true,
+            "userId": $u.id
+          }
+        )];
+        $locationRows := [value.noLocation.{
+          "kind": "user",
+          "id": id & '|nolocation',
+          "name": displayName,
+          "upn": userPrincipalName,
+          "group": null,
+          "groupId": null,
+          "sku": $count(assignedLicenses) & ' licence(s)',
+          "issue": "noUsageLocation",
+          "error": null,
+          "detail": "Set the usage location (country) so services can be assigned",
+          "enabled": accountEnabled = true,
+          "userId": id
+        }];
+        {
+          "rows": $append($append($memberRows, $groupRows), $locationRows),
+          "groups": $count($groupRows),
+          "errors": $count($memberRows),
+          "noLocation": $count($locationRows),
+          "groupsCapped": $count(value.groups) >= 500,
+          "capped": $count(value.groups) >= 500 or $count(value.noLocation) >= 500 or $count(value.members) >= 500
+        }
+      ) }
+
+layout:
+  - widget: kpi
+    data: report.groups
+    label: Groups with licence errors
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+  - widget: kpi
+    data: report.errors
+    label: Failed assignments in the chosen group
+    format: number
+    when: ${ $boolean(params.group) = true }
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+  - widget: kpi
+    data: noLocationCount
+    label: Licensed users without a usage location
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+  - widget: markdown
+    span: 12
+    when: ${ report.capped = true }
+    text: >-
+      The table stops at 500 groups, 500 failed members and 500 users without a usage location (the report's time
+      budget); the usage-location count above is complete${ report.groupsCapped = true ? ', the group count is not' : '' }.
+  - widget: table
+    id: errors
+    span: 12
+    data: report.rows
+    rowKey: id
+    columns:
+      - { field: name, label: Group or user, kind: identity, secondary: upn, sortable: true }
+      - field: issue
+        label: Issue
+        kind: status
+        map:
+          groupErrors: [warn, Group has failed members]
+          assignmentError: [crit, Assignment failed]
+          noUsageLocation: [warn, No usage location]
+        filter: facet
+      - { field: sku, label: Licence (SKU), filter: facet }
+      - { field: detail, label: Why and what to do }
+      - { field: error, label: Error code, filter: facet, hidden: true }
+      - { field: group, label: Through group }
+      - { field: enabled, label: Account enabled, kind: boolean }
+      - { field: groupId, label: Group id, kind: guid, hidden: true }
+    rowActions:
+      - label: Show the failed members
+        icon: list-magnifying-glass
+        href: ${ '/p/identity.licence-assignment-errors?group=' & $encode(row.groupId) }
+        when: ${ row.issue = 'groupErrors' }
+      - label: Reprocess in Entra
+        icon: arrow-square-out
+        href: "https://entra.microsoft.com/#view/Microsoft_AAD_IAM/GroupDetailsMenuBlade/~/Licenses/groupId/${ $encode(row.groupId) }"
+        when: ${ row.issue = 'groupErrors' }
+      - label: Open the user
+        icon: user
+        href: ${ '/p/identity.user?id=' & $encode(row.userId) }
+        when: ${ row.kind = 'user' }
+    empty:
+      title: No licence assignment problems
+      body: >-
+        No group has members whose group-based licence failed, and every licensed user has a usage location.
+
+export:
+  formats: [csv, xlsx]
+  fileName: licence-assignment-errors
+  data: report.rows
+  columns: all

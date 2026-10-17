@@ -1,0 +1,29 @@
+$schema: ../../packages/schemas/generated/probe.schema.json
+kind: probe
+id: probes.subscription-lifecycle
+version: 1.0.0
+title: Subscriptions lapsed or trial ending
+summary: >-
+  Counts the Microsoft cloud subscriptions in their grace period (Warning), Suspended or Locked out, and trials that end
+  within 14 days. Warns at one: people with those licences lose access when the subscription moves on. The
+  Subscription renewals report shows each one with its date and assigned licences.
+owner: m365-team
+tags: [m365, licensing, subscriptions, sweep-6h]
+check:
+  kind: graphCount
+  path: /directory/subscriptions
+  query:
+    $select: id,skuPartNumber,status,isTrial,nextLifecycleDateTime
+  items: >-
+    ${ value[status in ['Warning', 'Suspended', 'LockedOut']
+             or (isTrial = true and status = 'Enabled' and $exists(nextLifecycleDateTime)
+                 and $daysUntil(nextLifecycleDateTime) <= 14)] }
+  worse: higher
+  maxItems: 2000
+  fields: [skuPartNumber, status, isTrial, nextLifecycleDateTime]
+thresholds: { warn: 1 }
+intervalHint: PT6H
+timeoutMs: 20000
+requires:
+  scopes:
+    graph: [Organization.Read.All]

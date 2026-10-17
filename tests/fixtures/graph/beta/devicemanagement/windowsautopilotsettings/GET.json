@@ -1,0 +1,11 @@
+{
+  "$fixture": {
+    "status": 404,
+    "body": {
+      "error": {
+        "code": "ResourceNotFound",
+        "message": "Autopilot settings have not been created for this tenant."
+      }
+    }
+  }
+}

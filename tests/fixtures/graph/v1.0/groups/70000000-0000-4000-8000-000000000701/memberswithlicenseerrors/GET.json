@@ -1,0 +1,67 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#directoryObjects",
+  "value": [
+    {
+      "@odata.type": "#microsoft.graph.user",
+      "id": "00000000-0000-4000-8000-000000000171",
+      "displayName": "Priya Natarajan",
+      "userPrincipalName": "p.natarajan@example.com",
+      "accountEnabled": true,
+      "usageLocation": "GB",
+      "licenseAssignmentStates": [
+        {
+          "skuId": "30000000-0000-4000-8000-000000000401",
+          "disabledPlans": [],
+          "assignedByGroup": "70000000-0000-4000-8000-000000000701",
+          "state": "Error",
+          "error": "MutuallyExclusiveViolation",
+          "lastUpdatedDateTime": "2026-10-14T08:00:00Z"
+        },
+        {
+          "skuId": "30000000-0000-4000-8000-000000000402",
+          "disabledPlans": [],
+          "assignedByGroup": null,
+          "state": "Active",
+          "error": "None",
+          "lastUpdatedDateTime": "2025-02-01T08:00:00Z"
+        }
+      ]
+    },
+    {
+      "@odata.type": "#microsoft.graph.user",
+      "id": "00000000-0000-4000-8000-000000000172",
+      "displayName": "Tom\u00e1s Ortega",
+      "userPrincipalName": "t.ortega@example.com",
+      "accountEnabled": true,
+      "usageLocation": "ES",
+      "licenseAssignmentStates": [
+        {
+          "skuId": "30000000-0000-4000-8000-000000000401",
+          "disabledPlans": [],
+          "assignedByGroup": "70000000-0000-4000-8000-000000000701",
+          "state": "Error",
+          "error": "CountViolation",
+          "lastUpdatedDateTime": "2026-10-16T08:00:00Z"
+        }
+      ]
+    },
+    {
+      "@odata.type": "#microsoft.graph.user",
+      "id": "00000000-0000-4000-8000-000000000173",
+      "displayName": "Grace O'Neill",
+      "userPrincipalName": "g.oneill@example.com",
+      "accountEnabled": false,
+      "usageLocation": null,
+      "licenseAssignmentStates": [
+        {
+          "skuId": "30000000-0000-4000-8000-000000000401",
+          "disabledPlans": [],
+          "assignedByGroup": "70000000-0000-4000-8000-000000000701",
+          "state": "Error",
+          "error": "ProhibitedInUsageLocationViolation",
+          "lastUpdatedDateTime": "2026-10-10T08:00:00Z"
+        }
+      ]
+    }
+  ]
+}

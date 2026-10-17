@@ -1,7 +1,7 @@
 $schema: ../../packages/schemas/generated/dashboard.schema.json
 kind: dashboard
 id: automation.monitoring
-version: 1.0.0
+version: 1.1.0
 title: Synthetic monitoring
 summary: >-
   Latest result and recent trend of every synthetic probe the scheduler runs as the automation identity — portal and
@@ -25,8 +25,8 @@ layout:
       licences, failure rate for sign-ins. Select a probe to see its history and the last error.
 
       A failing *Token acquisition* probe usually means the automation identity's certificate or secret expired, or
-      admin consent was removed. Failing *DNS* probes point at mail-flow records for the primary domain. Change the
-      licence probes to the SKUs your tenant uses.
+      admin consent was removed. Failing *DNS* probes point at mail-flow records for the primary domain. The licence
+      probe checks every SKU the tenant has; *Subscriptions lapsed or trial ending* warns before access is lost.
 
   - widget: probeStatus
     id: portal_and_cloud
@@ -59,8 +59,8 @@ layout:
     probes:
       - probes.sign-in-health
       - probes.sign-in-health-adminforge
-      - probes.licence-seats-spe-e3
-      - probes.licence-seats-spe-e5
+      - probes.licence-seats-nearly-full
+      - probes.subscription-lifecycle
 
   - widget: probeStatus
     id: expiry
@@ -69,6 +69,10 @@ layout:
     probes:
       - probes.portal-tls-certificate
       - probes.app-credential-expiry
+      - probes.saml-certificates-expiring
+      - probes.saml-certificates-expired
+      - probes.intune-apple-tokens
+      - probes.intune-vpp-tokens
 
   - widget: probeStatus
     id: mail_dns

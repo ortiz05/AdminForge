@@ -1,0 +1,31 @@
+$schema: ../../packages/schemas/generated/probe.schema.json
+kind: probe
+id: probes.intune-apple-tokens
+version: 1.0.0
+title: Apple enrolment (ADE) tokens expiring
+summary: >-
+  Counts the Apple automated device enrolment (ADE) tokens that have expired or expire within 30 days, or whose last
+  sync with Apple Business Manager failed. Warns at one: an expired token stops new Apple devices enrolling with their
+  enrolment profile. Uses Microsoft Graph beta. No tokens (Apple not set up) is healthy. The Intune connector health
+  report also covers the Apple push certificate and VPP tokens.
+owner: endpoint-team
+tags: [endpoint, intune, apple, certificates, sweep-6h]
+check:
+  kind: graphCount
+  path: /deviceManagement/depOnboardingSettings
+  beta: true
+  query:
+    $select: id,tokenName,tokenExpirationDateTime,lastSyncErrorCode
+  items: >-
+    ${ value[($exists(tokenExpirationDateTime) and $daysUntil(tokenExpirationDateTime) <= 30)
+             or ($exists(lastSyncErrorCode) and lastSyncErrorCode != 0)] }
+  worse: higher
+  maxItems: 500
+  fields: [tokenName, tokenExpirationDateTime, lastSyncErrorCode]
+thresholds: { warn: 1 }
+intervalHint: PT6H
+timeoutMs: 20000
+requires:
+  licences: [intune]
+  scopes:
+    graph: [DeviceManagementServiceConfig.Read.All]

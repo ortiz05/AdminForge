@@ -1,0 +1,36 @@
+$schema: ../../../packages/schemas/generated/schedule.schema.json
+kind: schedule
+id: reports.non-compliant-devices-daily
+version: 1.0.0
+title: Daily non-compliant devices report
+summary: >-
+  Every weekday at 06:40 UTC, writes the Intune devices that are not compliant or in their grace period (every OS and
+  ownership) as XLSX and emails it to the report recipients, so the devices about to lose access to company data are
+  followed up before Conditional Access blocks them.
+owner: endpoint-team
+tags: [endpoint, intune, compliance, report]
+every: every weekday at 06:40
+timezone: UTC
+# Off until the report's transforms handle enterprise volume (they time out on tens of thousands of devices; the
+# content-fix stream is reworking them — docs/backlog.md). Turn on once its perf budget passes.
+enabled: false
+identity: automation
+job:
+  kind: report
+  ref: endpoint.non-compliant-devices
+  params: { state: Both, os: Any, ownership: Any }
+  delivery:
+    - type: file
+      format: xlsx
+      path: endpoint/non-compliant-devices/{date}.xlsx
+      retain: 31
+    - type: email
+      to: ["${ env.AF_REPORT_RECIPIENTS }"]
+      format: xlsx
+retry: { max: 2, backoff: exponential, delay: 5m }
+timeoutSeconds: 1800
+overlap: skip
+requires:
+  scopes:
+    graph: [DeviceManagementManagedDevices.Read.All]
+  licences: [intune]

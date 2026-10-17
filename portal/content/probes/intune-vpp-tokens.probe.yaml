@@ -1,0 +1,29 @@
+$schema: ../../packages/schemas/generated/probe.schema.json
+kind: probe
+id: probes.intune-vpp-tokens
+version: 1.0.0
+title: Apple Volume Purchase (VPP) tokens expiring or failing
+summary: >-
+  Counts the Apple Volume Purchase (VPP) tokens that are expired or invalid, expire within 30 days, belong to another
+  MDM, or failed their last licence sync. Warns at one: app licences stop syncing and purchased apps stop installing.
+  No tokens (Apple not set up) is healthy.
+owner: endpoint-team
+tags: [endpoint, intune, apple, apps, sweep-6h]
+check:
+  kind: graphCount
+  path: /deviceAppManagement/vppTokens
+  query:
+    $select: id,organizationName,expirationDateTime,lastSyncStatus,state
+  items: >-
+    ${ value[state in ['expired', 'invalid', 'assignedToExternalMDM'] or lastSyncStatus = 'failed'
+             or ($exists(expirationDateTime) and $daysUntil(expirationDateTime) <= 30)] }
+  worse: higher
+  maxItems: 500
+  fields: [organizationName, state, expirationDateTime, lastSyncStatus]
+thresholds: { warn: 1 }
+intervalHint: PT6H
+timeoutMs: 20000
+requires:
+  licences: [intune]
+  scopes:
+    graph: [DeviceManagementApps.Read.All]

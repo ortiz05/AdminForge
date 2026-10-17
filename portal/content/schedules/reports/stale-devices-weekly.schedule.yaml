@@ -1,0 +1,36 @@
+$schema: ../../../packages/schemas/generated/schedule.schema.json
+kind: schedule
+id: reports.stale-devices-weekly
+version: 1.0.0
+title: Weekly stale devices report
+summary: >-
+  Every Monday at 06:15 UTC, writes the Microsoft Entra devices with no activity for 90 days (and the Intune devices
+  that stopped checking in) as XLSX and emails it to the report recipients — the clean-up list for the week.
+owner: endpoint-team
+tags: [endpoint, devices, hygiene, report]
+every: every Monday at 06:15
+timezone: UTC
+# Off until the report's transforms handle enterprise volume (they time out on tens of thousands of devices; the
+# content-fix stream is reworking them — docs/backlog.md). Turn on once its perf budget passes.
+enabled: false
+identity: automation
+job:
+  kind: report
+  ref: endpoint.stale-devices
+  # Pinned so the archive stays comparable from week to week.
+  params: { days: 90, joinType: Any }
+  delivery:
+    - type: file
+      format: xlsx
+      path: endpoint/stale-devices/{date}.xlsx
+      retain: 26
+    - type: email
+      to: ["${ env.AF_REPORT_RECIPIENTS }"]
+      format: xlsx
+retry: { max: 2, backoff: exponential, delay: 5m }
+timeoutSeconds: 1800
+overlap: skip
+requires:
+  # Application permissions held by the automation identity (ADR-011); the Intune part needs Intune.
+  scopes:
+    graph: [Device.Read.All, DeviceManagementManagedDevices.Read.All]

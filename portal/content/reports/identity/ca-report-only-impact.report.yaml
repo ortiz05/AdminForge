@@ -1,0 +1,209 @@
+$schema: ../../../packages/schemas/generated/report.schema.json
+kind: report
+id: identity.ca-report-only-impact
+version: 1.0.0
+title: Conditional Access report-only impact
+summary: >-
+  What each report-only Conditional Access policy would have done to recent sign-ins if switched on: sign-ins it would
+  block, interrupt (an extra prompt such as MFA) or let through, and the people affected — the evidence for "can we
+  enforce this?". Counts every sign-in with the sign-in logs in Log Analytics, otherwise samples the newest 300 from
+  Microsoft Graph. Needs Microsoft Entra ID P1.
+owner: identity-team
+tags: [identity, conditional-access, report-only, sign-ins, report]
+nav: { section: reports, label: Report-only CA impact, icon: traffic-signal, order: 33 }
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    graph: [AuditLog.Read.All, Directory.Read.All, Policy.Read.All]
+    logAnalytics: [Data.Read]
+  entraRoles: [Security Reader, Global Reader]
+  # Only for the Log Analytics path (the workspace that receives the Entra sign-in logs).
+  azureRoles: [Log Analytics Reader]
+  licences: [conditionalAccess, signInLogs]
+
+params:
+  window:
+    type: enum
+    label: Sign-ins from the last
+    facet: true
+    default: 6
+    values:
+      - { value: 1, label: Hour }
+      - { value: 6, label: 6 hours }
+      - { value: 24, label: 24 hours }
+      - { value: 72, label: 3 days }
+
+# With a Log Analytics workspace that receives the Entra sign-in logs (AF_LOG_ANALYTICS_WORKSPACE_ID), KQL summarises
+# every sign-in of the window per policy — any tenant size. That path is optional: when the workspace isn't set, the
+# query fails or the workspace has no SigninLogs, the Graph sample is used instead. Graph can't filter or aggregate
+# sign-ins on appliedConditionalAccessPolicies, so the newest 300 sign-ins of the window are read with only the fields
+# needed and counted here (JSONata needs about half a millisecond per sign-in for this, inside the 250 ms transform
+# budget): a sample, said so on the page.
+datasources:
+  policies:
+    source: graph
+    request:
+      path: /identity/conditionalAccess/policies
+      query:
+        $filter: state eq 'enabledForReportingButNotEnforced'
+        $select: id,displayName,state,modifiedDateTime,createdDateTime
+    cache: { ttl: 900 }
+  kql:
+    source: logAnalytics
+    optional: true
+    when: ${ $boolean(env.AF_LOG_ANALYTICS_WORKSPACE_ID) = true }
+    workspace: ${ env.AF_LOG_ANALYTICS_WORKSPACE_ID }
+    timespan: >-
+      ${ 'PT' & $string(params.window ? params.window : 6) & 'H' }
+    query: |
+      // af:identity.ca-report-only-impact#kql
+      SigninLogs
+      | where ConditionalAccessPolicies has "reportOnly"
+      | mv-expand Policy = ConditionalAccessPolicies
+      | extend Result = tostring(Policy.result), PolicyId = tostring(Policy.id)
+      | where Result startswith "reportOnly"
+      | summarize WouldBlock = countif(Result == "reportOnlyFailure"),
+                  WouldPrompt = countif(Result == "reportOnlyInterrupted"),
+                  WouldAllow = countif(Result == "reportOnlySuccess"),
+                  NotApplied = countif(Result == "reportOnlyNotApplied"),
+                  People = dcountif(UserPrincipalName, Result in ("reportOnlyFailure", "reportOnlyInterrupted"))
+                  by PolicyId
+    cache: { ttl: 300 }
+  kqlTotal:
+    source: logAnalytics
+    optional: true
+    when: ${ $count(ds.kql.value) > 0 }
+    workspace: ${ env.AF_LOG_ANALYTICS_WORKSPACE_ID }
+    timespan: >-
+      ${ 'PT' & $string(params.window ? params.window : 6) & 'H' }
+    query: |
+      // af:identity.ca-report-only-impact#kqltotal
+      SigninLogs
+      | count
+    cache: { ttl: 300 }
+  signins:
+    source: graph
+    # The sample, when Log Analytics isn't set up, failed or holds no report-only results for the window.
+    when: ${ $count(ds.kql.value) = 0 }
+    request:
+      path: /auditLogs/signIns
+      query:
+        $filter: >-
+          ${ 'createdDateTime ge ' & $daysAgo($number(params.window ? params.window : 6) / 24) }
+        $select: id,createdDateTime,userPrincipalName,appDisplayName,appliedConditionalAccessPolicies
+        $top: 300
+    paging: all
+    maxItems: 300
+    cache: { ttl: 300 }
+  report:
+    source: static
+    data: >-
+      ${ {
+        "policies": ds.policies.value,
+        "kql": ds.kql.value,
+        "total": ds.kqlTotal.value[0].Count,
+        "signins": ds.signins.value
+      } }
+    transform: >-
+      ${ (
+        $ro := ['reportOnlyFailure', 'reportOnlyInterrupted', 'reportOnlySuccess', 'reportOnlyNotApplied'];
+        $fromKql := $type(value.kql) = 'array' and $count(value.kql) > 0;
+        $k := $fromKql ? $merge([{}, value.kql.{ PolicyId: $ }]) : {};
+        $byPolicy := $fromKql ? {} : value.signins.appliedConditionalAccessPolicies[result in $ro]{ id: [result] };
+        $affected := $fromKql ? {} : [value.signins.(
+          $u := userPrincipalName;
+          appliedConditionalAccessPolicies[result in ['reportOnlyFailure', 'reportOnlyInterrupted']].{ "p": id, "u": $u }
+        )]{ p: [u] };
+        $rows := [value.policies.(
+          $q := $lookup($k, id);
+          $r := $lookup($byPolicy, id);
+          $f := $fromKql ? ($q ? $q.WouldBlock : 0) : $count($r[$ = 'reportOnlyFailure']);
+          $i := $fromKql ? ($q ? $q.WouldPrompt : 0) : $count($r[$ = 'reportOnlyInterrupted']);
+          $s := $fromKql ? ($q ? $q.WouldAllow : 0) : $count($r[$ = 'reportOnlySuccess']);
+          $n := $fromKql ? ($q ? $q.NotApplied : 0) : $count($r[$ = 'reportOnlyNotApplied']);
+          {
+            "id": id,
+            "policy": displayName,
+            "wouldBlock": $f,
+            "wouldPrompt": $i,
+            "wouldAllow": $s,
+            "notApplied": $n,
+            "evaluated": $f + $i + $s + $n,
+            "people": $fromKql ? ($q ? $q.People : 0) : $count($distinct($lookup($affected, id))),
+            "modified": modifiedDateTime,
+            "verdict": $f > 0 ? 'blocks' : $i > 0 ? 'prompts' : ($f + $i + $s) > 0 ? 'safe' : 'noData'
+          }
+        )];
+        {
+          "rows": [$rows^(>wouldBlock, >wouldPrompt, policy)],
+          "policies": $count($rows),
+          "blocking": $count($rows[wouldBlock > 0]),
+          "signins": $fromKql ? value.total : $count(value.signins),
+          "source": $fromKql ? 'logAnalytics' : 'graph',
+          "capped": $fromKql ? false : $count(value.signins) >= 300
+        }
+      ) }
+
+layout:
+  - widget: licenceGate
+    feature: conditionalAccess
+    title: Conditional Access needs Microsoft Entra ID P1
+    body: The report-only results of each policy.
+  - widget: kpi
+    data: report.policies
+    label: Report-only policies
+    format: number
+  - widget: kpi
+    data: report.blocking
+    label: Would block sign-ins
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+  - widget: kpi
+    data: report.signins
+    label: Sign-ins checked
+    format: number
+    hint: "${ report.source = 'logAnalytics' ? 'Every sign-in in the window (Log Analytics)' : 'The newest sign-ins, read from Microsoft Graph' }"
+  - widget: markdown
+    span: 12
+    when: ${ report.capped = true }
+    text: >-
+      This is a sample: only the newest 300 sign-ins of the window were read from Microsoft Graph. With the Entra
+      sign-in logs sent to the Log Analytics workspace AdminForge uses, every sign-in is counted.
+  - widget: table
+    id: policies
+    span: 12
+    data: report.rows
+    rowKey: id
+    columns:
+      - { field: policy, label: Policy, sortable: true }
+      - field: verdict
+        label: If switched on
+        kind: status
+        map:
+          blocks: [crit, Would block some sign-ins]
+          prompts: [warn, Would add prompts]
+          safe: [ok, No impact seen]
+          noData: [neutral, No matching sign-ins]
+        filter: facet
+      - { field: wouldBlock, label: Would block, kind: number, sortable: true }
+      - { field: wouldPrompt, label: Would prompt, kind: number, sortable: true }
+      - { field: wouldAllow, label: Would allow, kind: number }
+      - { field: notApplied, label: Not applicable, kind: number }
+      - { field: people, label: People affected, kind: number, sortable: true }
+      - { field: modified, label: Policy changed, kind: date }
+    rowActions:
+      - label: Open sign-ins
+        icon: list-magnifying-glass
+        href: /p/identity.sign-ins
+      - label: Open the policy
+        icon: arrow-square-out
+        href: "https://entra.microsoft.com/#view/Microsoft_AAD_ConditionalAccess/PolicyBlade/policyId/${ $encode(row.id) }"
+    empty:
+      title: No report-only policies
+      body: The tenant has no Conditional Access policy in report-only mode.
+
+export:
+  formats: [csv, xlsx]
+  fileName: ca-report-only-impact-${ params.window }h
+  data: report.rows
+  columns: all

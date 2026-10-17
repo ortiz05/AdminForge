@@ -1,0 +1,32 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#users(id,displayName,userPrincipalName,accountEnabled,userType,assignedLicenses)",
+  "@odata.count": 2,
+  "value": [
+    {
+      "id": "00000000-0000-4000-8000-000000000173",
+      "displayName": "Grace O'Neill",
+      "userPrincipalName": "g.oneill@example.com",
+      "accountEnabled": false,
+      "userType": "Member",
+      "assignedLicenses": [
+        {
+          "skuId": "30000000-0000-4000-8000-000000000402",
+          "disabledPlans": []
+        }
+      ]
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000174",
+      "displayName": "Ji-woo Park",
+      "userPrincipalName": "j.park@example.com",
+      "accountEnabled": true,
+      "userType": "Member",
+      "assignedLicenses": [
+        {
+          "skuId": "30000000-0000-4000-8000-000000000403",
+          "disabledPlans": []
+        }
+      ]
+    }
+  ]
+}

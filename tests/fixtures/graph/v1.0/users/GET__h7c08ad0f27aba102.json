@@ -1,0 +1,54 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#users(id,displayName,userPrincipalName,department,jobTitle,usageLocation,employeeId,companyName,onPremisesSyncEnabled,createdDateTime)",
+  "@odata.count": 4,
+  "value": [
+    {
+      "id": "00000000-0000-4000-8000-000000000181",
+      "displayName": "Alex Morgan",
+      "userPrincipalName": "a.morgan@example.com",
+      "department": null,
+      "jobTitle": "Service Desk Analyst",
+      "usageLocation": "GB",
+      "employeeId": "E10481",
+      "companyName": "Example Org",
+      "onPremisesSyncEnabled": true,
+      "createdDateTime": "2024-02-11T09:00:00Z"
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000182",
+      "displayName": "Bea Lindqvist",
+      "userPrincipalName": "b.lindqvist@example.com",
+      "department": "Finance",
+      "jobTitle": null,
+      "usageLocation": "SE",
+      "employeeId": null,
+      "companyName": "Example Org",
+      "onPremisesSyncEnabled": null,
+      "createdDateTime": "2025-06-02T09:00:00Z"
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000183",
+      "displayName": "Chidi Okafor",
+      "userPrincipalName": "c.okafor@example.com",
+      "department": "Engineering",
+      "jobTitle": "Platform Engineer",
+      "usageLocation": null,
+      "employeeId": "E20117",
+      "companyName": "Example Org",
+      "onPremisesSyncEnabled": null,
+      "createdDateTime": "2026-09-30T09:00:00Z"
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000184",
+      "displayName": "Conference Room Display",
+      "userPrincipalName": "room-display-03@example.com",
+      "department": null,
+      "jobTitle": null,
+      "usageLocation": null,
+      "employeeId": null,
+      "companyName": null,
+      "onPremisesSyncEnabled": null,
+      "createdDateTime": "2023-01-15T09:00:00Z"
+    }
+  ]
+}

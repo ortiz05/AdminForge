@@ -1,0 +1,12 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#identity/conditionalAccess/policies(id,displayName,state,modifiedDateTime,createdDateTime)",
+  "value": [
+    {
+      "id": "00000000-0000-4000-8000-000000000904",
+      "displayName": "CA004 \u2013 Require compliant device for Office 365",
+      "state": "enabledForReportingButNotEnforced",
+      "modifiedDateTime": "2026-10-02T09:00:00Z",
+      "createdDateTime": "2024-03-01T09:00:00Z"
+    }
+  ]
+}

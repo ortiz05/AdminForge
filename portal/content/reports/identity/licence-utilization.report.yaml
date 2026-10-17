@@ -1,11 +1,13 @@
 $schema: ../../../packages/schemas/generated/report.schema.json
 kind: report
 id: identity.licence-utilization
-version: 1.0.0
+version: 1.1.0
 title: Licence utilisation
 summary: >-
-  Purchased versus assigned seats for every subscribed SKU — unused seats to reclaim, SKUs about to run out,
+  Retired — merged into Licence utilization (m365.licence-utilization, seats per SKU) and Licence assignment errors
+  (identity.licence-assignment-errors, group licensing failures). Purchased versus assigned seats for every subscribed SKU — unused seats to reclaim, SKUs about to run out,
   suspended or warning subscriptions — and groups whose members hit licence assignment errors.
+status: retired
 owner: identity-team
 tags: [identity, licensing, cost, report]
 nav: { section: reports, label: Licence utilisation, icon: identification-badge, order: 15 }

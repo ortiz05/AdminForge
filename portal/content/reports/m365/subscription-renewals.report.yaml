@@ -1,0 +1,151 @@
+$schema: ../../../packages/schemas/generated/report.schema.json
+kind: report
+id: m365.subscription-renewals
+version: 1.0.0
+title: Subscription renewals and lapses
+summary: >-
+  Every Microsoft cloud subscription with its lifecycle state: trials about to end, paid subscriptions whose next
+  renewal or expiry date falls in the chosen window, and subscriptions already in their grace period (Warning),
+  Suspended or Locked out — each with how many licences are still assigned, so nobody loses access by surprise.
+owner: m365-team
+tags: [m365, licensing, subscriptions, renewals, report]
+nav: { section: reports, label: Subscription renewals, icon: calendar-x, order: 111 }
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    graph: [Organization.Read.All]
+  entraRoles: [Global Reader]
+
+params:
+  days:
+    type: enum
+    label: Renewal or end date within
+    facet: true
+    default: 60
+    values:
+      - { value: 30, label: 30 days }
+      - { value: 60, label: 60 days }
+      - { value: 90, label: 90 days }
+      - { value: 180, label: 180 days }
+  showAll: { type: boolean, label: Show every subscription, default: false, facet: true }
+
+# /directory/subscriptions holds a few dozen rows even in a large enterprise (one per commerce subscription).
+# nextLifecycleDateTime is the next renewal or expiry date (Microsoft doesn't say whether auto-renew is on), the end of
+# a trial, or when a lapsed subscription moves to its next state (Warning → Suspended → Deleted).
+datasources:
+  subscriptions:
+    source: graph
+    request:
+      path: /directory/subscriptions
+      query:
+        $select: id,skuId,skuPartNumber,status,isTrial,totalLicenses,nextLifecycleDateTime,createdDateTime
+    paging: all
+    maxItems: 2000
+    cache: { ttl: 900 }
+  skus:
+    source: graph
+    optional: true
+    request:
+      path: /subscribedSkus
+      query:
+        $select: skuId,skuPartNumber,consumedUnits
+    cache: { ttl: 900 }
+  report:
+    source: static
+    data: >-
+      ${ { "subs": ds.subscriptions.value, "skus": ds.skus.value } }
+    transform: >-
+      ${ (
+        $days := params.days ? $number(params.days) : 60;
+        $used := value.skus ? value.skus{ skuId: consumedUnits } : {};
+        $all := [value.subs.(
+          $left := nextLifecycleDateTime ? $daysUntil(nextLifecycleDateTime) : null;
+          $soon := $type($left) = 'number' and $left <= $days;
+          {
+            "id": id,
+            "sku": skuPartNumber,
+            "status": status,
+            "trial": isTrial = true,
+            "licences": totalLicenses,
+            "assigned": $lookup($used, skuId),
+            "nextDate": nextLifecycleDateTime,
+            "daysRemaining": $left,
+            "created": createdDateTime,
+            "state": status in ['Suspended', 'LockedOut'] ? 'suspended'
+                     : status = 'Warning' ? 'grace'
+                     : status = 'Deleted' ? 'deleted'
+                     : (isTrial = true and $soon) ? 'trialEnding'
+                     : $soon ? 'renewal'
+                     : 'ok'
+          }
+        )];
+        $shown := params.showAll = true ? $all : $all[state != 'ok' and state != 'deleted'];
+        $dated := $shown[$type(daysRemaining) = 'number'];
+        {
+          "rows": $append([$dated^(daysRemaining)], [$shown[$type(daysRemaining) != 'number']]),
+          "total": $count($all),
+          "attention": $count($all[state in ['suspended', 'grace', 'trialEnding']]),
+          "renewals": $count($all[state = 'renewal']),
+          "trials": $count($all[trial = true and state != 'deleted'])
+        }
+      ) }
+
+layout:
+  - widget: kpi
+    data: report.attention
+    label: Lapsed or trial ending
+    format: number
+    status: "${ value > 0 ? 'crit' : 'ok' }"
+  - widget: kpi
+    data: report.renewals
+    label: Renewal or end date in the window
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+  - widget: kpi
+    data: report.trials
+    label: Trials
+    format: number
+  - widget: kpi
+    data: report.total
+    label: Subscriptions
+    format: number
+  - widget: table
+    id: subscriptions
+    span: 12
+    data: report.rows
+    rowKey: id
+    columns:
+      - { field: sku, label: Product (SKU), sortable: true }
+      - field: state
+        label: State
+        kind: status
+        map:
+          suspended: [crit, Suspended]
+          grace: [crit, Expired — grace period]
+          trialEnding: [warn, Trial ending]
+          renewal: [info, Renewal or end date]
+          deleted: [neutral, Deleted]
+          ok: [ok, Active]
+        filter: facet
+      - { field: nextDate, label: Next lifecycle date, kind: date, filter: date, sortable: true }
+      - { field: daysRemaining, label: Days left, kind: number, filter: range, sortable: true }
+      - { field: trial, label: Trial, kind: boolean, filter: facet }
+      - { field: licences, label: Licences, kind: number }
+      - { field: assigned, label: Assigned (whole SKU), kind: number }
+      - { field: status, label: Microsoft status, filter: facet }
+      - { field: created, label: Created, kind: date }
+    rowActions:
+      - label: Open in Microsoft 365 admin center
+        icon: arrow-square-out
+        href: https://admin.microsoft.com/#/subscriptions
+    empty:
+      title: No subscription needs attention
+      body: >-
+        No trial ends, no subscription renews or expires within the selected window, and none is in its grace period or
+        suspended. Turn on "Show every subscription" to see them all.
+
+export:
+  formats: [csv, xlsx]
+  fileName: subscription-renewals-${ params.days }d
+  data: report.rows
+  columns: all

@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/page.schema.json
 kind: page
 id: identity.enterprise-apps
-version: 1.1.0
+version: 1.1.1
 title: Enterprise apps
 summary: >-
   Service principals — the apps users and workloads sign in to. Filter by app type, sign-in state, assignment
@@ -98,7 +98,9 @@ datasources:
     transform: >-
       ${ $merge([value, { "value": [value.value.(
            $certDays := [keyCredentials[usage = 'Sign' and endDateTime].$daysUntil(endDateTime)];
-           $next := $count($certDays) > 0 ? $min($certDays) : null;
+           /* The newest signing certificate, as the SAML expiry report and probes use: an older one expiring during a
+              rollover is not a problem once the new one is active. */
+           $next := $count($certDays) > 0 ? $max($certDays) : null;
            $merge([$, {
              "kind": appOwnerOrganizationId = 'f8cdef31-a31e-4b4a-93e4-5f571e91255a' ? 'Microsoft'
                      : servicePrincipalType = 'ManagedIdentity' ? 'Managed identity'

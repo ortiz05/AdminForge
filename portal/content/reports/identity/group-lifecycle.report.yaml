@@ -1,0 +1,253 @@
+$schema: ../../../packages/schemas/generated/report.schema.json
+kind: report
+id: identity.group-lifecycle
+version: 1.0.0
+title: Group lifecycle
+summary: >-
+  Groups whose lifecycle needs an owner's attention: Microsoft 365 groups that expire soon under the group expiration
+  policy (their team, site and mailbox are deleted with them unless renewed), groups with a single owner (nobody else
+  can renew or manage them), dynamic groups whose membership processing is paused, and groups deleted in the last 30
+  days that can still be restored. Groups without any owner are in Groups without owners.
+owner: identity-team
+tags: [identity, groups, governance, lifecycle, report]
+nav: { section: reports, label: Group lifecycle, icon: hourglass-medium, order: 30 }
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    graph: [Group.Read.All, Directory.Read.All]
+  entraRoles: [Directory Readers]
+
+params:
+  issue:
+    type: enum
+    label: Show
+    facet: true
+    default: all
+    values:
+      - { value: all, label: Everything below }
+      - { value: expiring, label: Expiring Microsoft 365 groups }
+      - { value: singleOwner, label: Groups with one owner }
+      - { value: paused, label: Paused dynamic groups }
+      - { value: deleted, label: Recently deleted groups }
+  days:
+    type: enum
+    label: Expiring within
+    facet: true
+    default: 30
+    values:
+      - { value: 14, label: 14 days }
+      - { value: 30, label: 30 days }
+      - { value: 60, label: 60 days }
+
+# Every list is filtered by Graph: expirationDateTime (an advanced query), owners/$count eq 1 (advanced),
+# membershipRuleProcessingState and the deleted-items container — so the rows stay few however many groups exist.
+datasources:
+  policy:
+    source: graph
+    optional: true
+    request:
+      path: /groupLifecyclePolicies
+    cache: { ttl: 3600 }
+  expiring:
+    source: graph
+    when: ${ params.issue in ['all', 'expiring'] }
+    request:
+      path: /groups
+      headers: { ConsistencyLevel: eventual }
+      query:
+        $filter: >-
+          ${ "groupTypes/any(c:c eq 'Unified') and expirationDateTime le " & $daysAgo(-$number(params.days ? params.days : 30)) }
+        $count: true
+        $select: id,displayName,mail,expirationDateTime,renewedDateTime,createdDateTime,visibility
+        $top: 999
+    paging: all
+    maxItems: 2000
+    cache: { ttl: 900 }
+  singleOwner:
+    source: graph
+    when: ${ params.issue in ['all', 'singleOwner'] }
+    request:
+      path: /groups
+      headers: { ConsistencyLevel: eventual }
+      query:
+        $filter: owners/$count eq 1
+        $count: true
+        $select: id,displayName,mail,groupTypes,securityEnabled,mailEnabled,onPremisesSyncEnabled,createdDateTime
+        $top: 999
+    paging: all
+    maxItems: 2000
+    cache: { ttl: 900 }
+  paused:
+    source: graph
+    when: ${ params.issue in ['all', 'paused'] }
+    request:
+      path: /groups
+      query:
+        $filter: groupTypes/any(c:c eq 'DynamicMembership') and membershipRuleProcessingState eq 'Paused'
+        $select: id,displayName,mail,groupTypes,securityEnabled,mailEnabled,membershipRule,createdDateTime
+        $top: 999
+    paging: all
+    maxItems: 2000
+    cache: { ttl: 900 }
+  deleted:
+    source: graph
+    when: ${ params.issue in ['all', 'deleted'] }
+    request:
+      path: /directory/deletedItems/microsoft.graph.group
+      query:
+        $select: id,displayName,mail,groupTypes,securityEnabled,mailEnabled,deletedDateTime
+        $top: 999
+    paging: all
+    maxItems: 2000
+    cache: { ttl: 900 }
+  # Complete counts for the KPIs (the lists above stop at 2,000 groups): one row each, `@odata.count`.
+  counts:
+    source: graphBatch
+    requests:
+      expiring:
+        path: /groups
+        headers: { ConsistencyLevel: eventual }
+        query:
+          $filter: >-
+            ${ "groupTypes/any(c:c eq 'Unified') and expirationDateTime le " & $daysAgo(-$number(params.days ? params.days : 30)) }
+          $count: true
+          $top: 1
+          $select: id
+      singleOwner:
+        path: /groups
+        headers: { ConsistencyLevel: eventual }
+        query: { $filter: "owners/$count eq 1", $count: true, $top: 1, $select: id }
+    cache: { ttl: 900 }
+    transform: >-
+      ${ { "expiring": $lookup(value.expiring, '@odata.count'), "singleOwner": $lookup(value.singleOwner, '@odata.count') } }
+  report:
+    source: static
+    data: >-
+      ${ {
+        "policy": ds.policy.value,
+        "expiring": ds.expiring.value,
+        "singleOwner": ds.singleOwner.value,
+        "paused": ds.paused.value,
+        "deleted": ds.deleted.value
+      } }
+    transform: >-
+      ${ (
+        $kind := function($g) {
+          'Unified' in $g.groupTypes ? 'Microsoft 365'
+          : $g.securityEnabled and $g.mailEnabled ? 'Mail-enabled security'
+          : $g.securityEnabled ? 'Security'
+          : $g.mailEnabled ? 'Distribution list' : null
+        };
+        $p := value.policy[0];
+        $expiring := [value.expiring[$exists(expirationDateTime)].{
+          "key": id & '|expiring', "id": id, "displayName": displayName, "mail": mail, "kind": "Microsoft 365",
+          "issue": "expiring", "date": expirationDateTime, "daysRemaining": $daysUntil(expirationDateTime),
+          "detail": "Renew it (an owner can, from Outlook or Teams) or it is deleted with its team, site and mailbox"
+        }];
+        $single := [value.singleOwner.{
+          "key": id & '|single', "id": id, "displayName": displayName, "mail": mail,
+          "kind": 'Unified' in groupTypes ? 'Microsoft 365' : securityEnabled ? (mailEnabled ? 'Mail-enabled security' : 'Security') : 'Distribution list',
+          "issue": "singleOwner", "date": createdDateTime, "daysRemaining": null,
+          "detail": onPremisesSyncEnabled = true ? "Synced from AD — add a second owner on-premises" : "Add a second owner so the group survives a leaver"
+        }];
+        $paused := [value.paused.{
+          "key": id & '|paused', "id": id, "displayName": displayName, "mail": mail, "kind": $kind($),
+          "issue": "paused", "date": createdDateTime, "daysRemaining": null,
+          "detail": "Membership is frozen until processing is turned back on: " & membershipRule
+        }];
+        $deleted := [value.deleted.{
+          "key": id & '|deleted', "id": id, "displayName": displayName, "mail": mail, "kind": $kind($),
+          "issue": "deleted", "date": deletedDateTime, "daysRemaining": $daysUntil(deletedDateTime) + 30,
+          "detail": "Restorable until 30 days after deletion, then gone for good"
+        }];
+        {
+          "rows": $append($append([$expiring^(daysRemaining)], [$deleted^(daysRemaining)]), $append($paused, $single)),
+          "expiring": $count($expiring),
+          "singleOwner": $count($single),
+          "paused": $count($paused),
+          "deleted": $count($deleted),
+          "capped": $count(value.singleOwner) >= 2000 or $count(value.expiring) >= 2000,
+          "policy": $p ? ($p.groupLifetimeInDays & ' days, ' & ($p.managedGroupTypes = 'All' ? 'all Microsoft 365 groups' : $p.managedGroupTypes = 'Selected' ? 'selected groups' : 'no groups')) : 'none'
+        }
+      ) }
+
+layout:
+  - widget: kpi
+    data: counts.expiring
+    label: Microsoft 365 groups expiring
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+    when: ${ params.issue in ['all', 'expiring'] }
+  - widget: kpi
+    data: counts.singleOwner
+    label: Groups with one owner
+    format: number
+    when: ${ params.issue in ['all', 'singleOwner'] }
+  - widget: kpi
+    data: report.paused
+    label: Paused dynamic groups
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+    when: ${ params.issue in ['all', 'paused'] }
+  - widget: kpi
+    data: report.deleted
+    label: Deleted, still restorable
+    format: number
+    when: ${ params.issue in ['all', 'deleted'] }
+  - widget: markdown
+    span: 12
+    text: >-
+      Group expiration policy: **${ report.policy }**.${ report.policy = 'none' ? ' Microsoft 365 groups never expire in this tenant.' : '' }
+  - widget: markdown
+    span: 12
+    when: ${ report.capped = true }
+    text: >-
+      The table lists the first 2,000 groups of each kind (the report's time budget); the counts above are complete.
+      Work through these, then run the report again for the rest.
+  - widget: table
+    id: groups
+    span: 12
+    data: report.rows
+    rowKey: key
+    columns:
+      - { field: displayName, label: Group, kind: identity, secondary: mail, sortable: true }
+      - field: issue
+        label: Issue
+        kind: status
+        map:
+          expiring: [warn, Expires soon]
+          singleOwner: [info, One owner]
+          paused: [warn, Processing paused]
+          deleted: [neutral, Deleted]
+        filter: facet
+      - { field: kind, label: Type, filter: facet }
+      - { field: date, label: Expires / deleted / created, kind: date, sortable: true }
+      - { field: daysRemaining, label: Days left, kind: number, sortable: true }
+      - { field: detail, label: What to do }
+      - { field: id, label: Object id, kind: guid, hidden: true }
+      - { field: key, label: Row, hidden: true }
+    # No inspector: a deleted group has no page to open. Live groups open from the first row action.
+    rowActions:
+      - label: Open group
+        icon: users-three
+        href: ${ '/p/identity.group?id=' & $encode(row.id) }
+        when: ${ row.issue != 'deleted' }
+      - playbook: identity.add-group-owner
+        label: Add owner
+        icon: user-plus
+        inputs:
+          groupId: ${ row.id }
+        when: ${ row.issue = 'singleOwner' }
+      - label: Restore in Entra
+        icon: arrow-square-out
+        href: https://entra.microsoft.com/#view/Microsoft_AAD_IAM/GroupsManagementMenuBlade/~/DeletedGroups
+        when: ${ row.issue = 'deleted' }
+    empty:
+      title: No group needs lifecycle attention
+      body: No Microsoft 365 group expires in the window, no group has a single owner, no dynamic group is paused and none was deleted recently.
+
+export:
+  formats: [csv, xlsx]
+  fileName: group-lifecycle-${ params.issue }
+  data: report.rows
+  columns: all

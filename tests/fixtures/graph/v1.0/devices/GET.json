@@ -1,20 +1,77 @@
 {
-  "value": [
-    {
-      "id": "30000000-0000-4000-8000-000000000201",
-      "displayName": "EX-LAPTOP-001",
-      "operatingSystem": "Windows",
-      "operatingSystemVersion": "10.0.26100",
-      "trustType": "AzureAd",
-      "accountEnabled": true
+  "$fixture": {
+    "status": 200,
+    "body": {
+      "value": [
+        {
+          "id": "30000000-0000-4000-8000-000000000201",
+          "displayName": "EX-LAPTOP-001",
+          "operatingSystem": "Windows",
+          "operatingSystemVersion": "10.0.26100",
+          "trustType": "AzureAd",
+          "accountEnabled": true
+        },
+        {
+          "id": "30000000-0000-4000-8000-000000000202",
+          "displayName": "EX-MAC-007",
+          "operatingSystem": "MacMDM",
+          "operatingSystemVersion": "15.1",
+          "trustType": "Workplace",
+          "accountEnabled": true
+        }
+      ]
     },
-    {
-      "id": "30000000-0000-4000-8000-000000000202",
-      "displayName": "EX-MAC-007",
-      "operatingSystem": "MacMDM",
-      "operatingSystemVersion": "15.1",
-      "trustType": "Workplace",
-      "accountEnabled": true
-    }
-  ]
+    "variants": [
+      {
+        "match": {
+          "query": {
+            "$select": "id,deviceId,displayName,trustType,approximateLastSignInDateTime,operatingSystemVersion,isManaged"
+          }
+        },
+        "status": 200,
+        "body": {
+          "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#devices(id,deviceId,displayName,trustType,approximateLastSignInDateTime,operatingSystemVersion,isManaged)",
+          "value": [
+            {
+              "id": "30000000-0000-4000-8000-000000000201",
+              "deviceId": "00000000-0000-4000-8001-000000000501",
+              "displayName": "EX-LAPTOP-001",
+              "trustType": "AzureAd",
+              "approximateLastSignInDateTime": "2026-10-17T07:10:00Z",
+              "operatingSystemVersion": "10.0.26100.2033",
+              "isManaged": true
+            },
+            {
+              "id": "30000000-0000-4000-8000-000000000202",
+              "deviceId": "00000000-0000-4000-8001-000000000502",
+              "displayName": "EX-LT-0157",
+              "trustType": "AzureAd",
+              "approximateLastSignInDateTime": "2026-10-16T18:10:00Z",
+              "operatingSystemVersion": "10.0.26100.2033",
+              "isManaged": true
+            },
+            {
+              "id": "30000000-0000-4000-8000-000000000203",
+              "deviceId": "00000000-0000-4000-8001-000000000504",
+              "displayName": "EX-DT-0033",
+              "trustType": "ServerAd",
+              "approximateLastSignInDateTime": "2026-10-15T09:40:00Z",
+              "operatingSystemVersion": "10.0.22631.4317",
+              "isManaged": true
+            },
+            {
+              "id": "30000000-0000-4000-8000-000000000204",
+              "deviceId": "00000000-0000-4000-8001-000000000506",
+              "displayName": "EX-LT-0201",
+              "trustType": "AzureAd",
+              "approximateLastSignInDateTime": "2026-10-17T06:05:00Z",
+              "operatingSystemVersion": "10.0.26100.1742",
+              "isManaged": true
+            }
+          ],
+          "@odata.count": 4
+        }
+      }
+    ]
+  }
 }

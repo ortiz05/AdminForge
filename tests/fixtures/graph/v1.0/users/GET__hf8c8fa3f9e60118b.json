@@ -1,0 +1,40 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#users(id,displayName,userPrincipalName,department,jobTitle,manager())",
+  "value": [
+    {
+      "id": "00000000-0000-4000-8000-000000000181",
+      "displayName": "Alex Morgan",
+      "userPrincipalName": "a.morgan@example.com",
+      "department": null,
+      "jobTitle": "Service Desk Analyst",
+      "manager": {
+        "@odata.type": "#microsoft.graph.user",
+        "id": "00000000-0000-4000-8000-000000000190",
+        "displayName": "Dana Whitfield",
+        "userPrincipalName": "d.whitfield@example.com",
+        "accountEnabled": false
+      }
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000182",
+      "displayName": "Bea Lindqvist",
+      "userPrincipalName": "b.lindqvist@example.com",
+      "department": "Finance",
+      "jobTitle": null
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000183",
+      "displayName": "Chidi Okafor",
+      "userPrincipalName": "c.okafor@example.com",
+      "department": "Engineering",
+      "jobTitle": "Platform Engineer",
+      "manager": {
+        "@odata.type": "#microsoft.graph.user",
+        "id": "00000000-0000-4000-8000-000000000191",
+        "displayName": "Eitan Shapiro",
+        "userPrincipalName": "e.shapiro@example.com",
+        "accountEnabled": true
+      }
+    }
+  ]
+}

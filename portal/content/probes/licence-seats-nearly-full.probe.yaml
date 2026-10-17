@@ -1,0 +1,41 @@
+$schema: ../../packages/schemas/generated/probe.schema.json
+kind: probe
+id: probes.licence-seats-nearly-full
+version: 1.0.0
+title: Licence seats nearly full or lapsed
+summary: >-
+  Counts the tenant's own paid licence SKUs that are at least 90 % assigned, or where people still hold licences while
+  the subscription is in its grace period (Warning) or suspended — whatever SKUs the tenant has, with no configuration.
+  Warns at one, so seats are bought (or freed) before onboarding stalls. Free and viral SKUs (Power Automate Free,
+  Power BI free, Teams Exploratory, …) are left out. Licence utilization shows the seat counts.
+owner: m365-team
+tags: [synthetic, m365, licences, sweep-6h]
+check:
+  kind: graphCount
+  path: /subscribedSkus
+  query:
+    $select: skuPartNumber,capabilityStatus,consumedUnits,prepaidUnits
+  # Free and viral SKUs (the same list as Licence utilization) never run out in a way that matters.
+  items: >-
+    ${ (
+      $free := ['FLOW_FREE', 'POWER_BI_STANDARD', 'TEAMS_EXPLORATORY', 'POWERAPPS_DEV', 'POWERAPPS_VIRAL', 'WINDOWS_STORE',
+                'STREAM', 'MICROSOFT_BUSINESS_CENTER', 'CCIBOTS_PRIVPREV_VIRAL', 'RMSBASIC'];
+      value[$not(skuPartNumber in $free) and (
+        ($enabled := prepaidUnits.enabled; $enabled > 0 and consumedUnits / $enabled >= 0.9)
+        or (capabilityStatus in ['Warning', 'Suspended', 'LockedOut'] and consumedUnits > 0)
+      )].{
+        "skuPartNumber": skuPartNumber,
+        "status": capabilityStatus,
+        "assigned": consumedUnits,
+        "purchased": prepaidUnits.enabled
+      }
+    ) }
+  worse: higher
+  maxItems: 1000
+  fields: [skuPartNumber, status, assigned, purchased]
+thresholds: { warn: 1 }
+intervalHint: PT6H
+timeoutMs: 15000
+requires:
+  scopes:
+    graph: [Organization.Read.All]

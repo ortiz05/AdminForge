@@ -1,0 +1,212 @@
+$schema: ../../../packages/schemas/generated/report.schema.json
+kind: report
+id: endpoint.intune-connector-health
+version: 1.0.0
+title: Intune connector and token health
+summary: >-
+  The certificates, tokens and connections Intune depends on, with their expiry and last sync: the Apple MDM push
+  certificate (if it expires, every Apple device must be re-enrolled), Apple automated device enrolment (ADE) and Volume
+  Purchase (VPP) tokens, Managed Google Play and the Windows Autopilot device sync. Connectors the tenant doesn't use
+  read "Not configured".
+owner: endpoint-team
+tags: [endpoint, intune, apple, android, autopilot, certificates, report]
+nav: { section: reports, label: Intune connector health, icon: plugs-connected, order: 36 }
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    graph: [DeviceManagementServiceConfig.Read.All, DeviceManagementApps.Read.All, DeviceManagementConfiguration.Read.All]
+  entraRoles: [Intune Administrator, Global Reader]
+  licences: [intune]
+
+params:
+  days:
+    type: enum
+    label: Warn when expiring within
+    facet: true
+    default: 30
+    values:
+      - { value: 14, label: 14 days }
+      - { value: 30, label: 30 days }
+      - { value: 60, label: 60 days }
+
+# One $batch round trip. A connector that was never set up answers an empty list (ADE, VPP) or 404 (Apple push
+# certificate, Autopilot settings); Managed Google Play always answers (notBound when unused). A failed sub-request
+# comes back null: for the lists and Managed Google Play that reads "Couldn't be read". The two singletons answer 404
+# when unused, which a $batch can't tell apart from other failures here, so they read "Not configured" when the other
+# Intune requests worked and "Couldn't be read" when they all failed (a permission problem). ADE, Managed Google Play
+# and the Autopilot settings exist on Microsoft Graph beta only.
+datasources:
+  connectors:
+    source: graphBatch
+    requests:
+      apple:
+        path: /deviceManagement/applePushNotificationCertificate
+        query: { $select: "id,expirationDateTime,lastModifiedDateTime,certificateUploadStatus" }
+      ade:
+        path: /deviceManagement/depOnboardingSettings
+        beta: true
+        query: { $select: "id,tokenName,tokenExpirationDateTime,lastSuccessfulSyncDateTime,lastSyncErrorCode,tokenType" }
+      vpp:
+        path: /deviceAppManagement/vppTokens
+        query: { $select: "id,organizationName,expirationDateTime,lastSyncDateTime,lastSyncStatus,state" }
+      googlePlay:
+        path: /deviceManagement/androidManagedStoreAccountEnterpriseSettings
+        beta: true
+        query: { $select: "id,bindStatus,lastAppSyncDateTime,lastAppSyncStatus" }
+      autopilot:
+        path: /deviceManagement/windowsAutopilotSettings
+        beta: true
+        query: { $select: "id,lastSyncDateTime,syncStatus" }
+    cache: { ttl: 900 }
+    transform: >-
+      ${ (
+        $days := params.days ? $number(params.days) : 30;
+        $expiry := function($date) { $date ? (
+          $left := $daysUntil($date);
+          $left < 0 ? 'expired' : $left <= 7 ? 'critical' : $left <= $days ? 'warning' : 'ok'
+        ) : 'ok' };
+        $none := function($name, $platform) { {
+          "connector": $name, "platform": $platform, "item": null, "expires": null, "daysRemaining": null,
+          "lastSync": null, "state": "notConfigured", "detail": "Not set up in this tenant."
+        } };
+        $unread := function($name, $platform) { {
+          "connector": $name, "platform": $platform, "item": null, "expires": null, "daysRemaining": null,
+          "lastSync": null, "state": "error",
+          "detail": "Couldn't be read — Intune Administrator (or Global Reader) is needed to see connectors."
+        } };
+        $readable := $type(value.ade) = 'object' or $type(value.vpp) = 'object' or $type(value.googlePlay) = 'object';
+        $absent := function($name, $platform) { $readable ? $none($name, $platform) : $unread($name, $platform) };
+        $apple := value.apple;
+        $appleRow := $apple and $apple.expirationDateTime ? {
+          "connector": "Apple MDM push certificate",
+          "platform": "iOS/iPadOS, macOS",
+          "item": null,
+          "expires": $apple.expirationDateTime,
+          "daysRemaining": $daysUntil($apple.expirationDateTime),
+          "lastSync": $apple.lastModifiedDateTime,
+          "state": $expiry($apple.expirationDateTime),
+          "detail": "Renew it with the same Apple ID before it expires; a new Apple ID means re-enrolling every Apple device."
+        } : $absent("Apple MDM push certificate", "iOS/iPadOS, macOS");
+        $ade := [value.ade.value.(
+          $s := $expiry(tokenExpirationDateTime);
+          {
+            "connector": "Apple automated device enrolment (ADE) token",
+            "platform": "iOS/iPadOS, macOS",
+            "item": tokenName,
+            "expires": tokenExpirationDateTime,
+            "daysRemaining": tokenExpirationDateTime ? $daysUntil(tokenExpirationDateTime) : null,
+            "lastSync": lastSuccessfulSyncDateTime,
+            "state": $s = 'ok' and lastSyncErrorCode and lastSyncErrorCode != 0 ? 'syncError' : $s,
+            "detail": lastSyncErrorCode and lastSyncErrorCode != 0 ? 'The last sync with Apple Business Manager failed (error ' & $string(lastSyncErrorCode) & ').' : null
+          }
+        )];
+        $vpp := [value.vpp.value.(
+          $s := state in ['expired', 'invalid'] ? 'expired' : state = 'assignedToExternalMDM' ? 'syncError' : $expiry(expirationDateTime);
+          {
+            "connector": "Apple Volume Purchase (VPP) token",
+            "platform": "iOS/iPadOS, macOS",
+            "item": organizationName,
+            "expires": expirationDateTime,
+            "daysRemaining": expirationDateTime ? $daysUntil(expirationDateTime) : null,
+            "lastSync": lastSyncDateTime,
+            "state": $s = 'ok' and lastSyncStatus = 'failed' ? 'syncError' : $s,
+            "detail": state = 'assignedToExternalMDM' ? 'The token is assigned to another MDM; app licences no longer sync to Intune.'
+                      : lastSyncStatus = 'failed' ? 'The last app licence sync failed.' : null
+          }
+        )];
+        $gp := value.googlePlay;
+        $gpRow := $gp and $gp.bindStatus in ['bound', 'boundAndValidated'] ? {
+          "connector": "Managed Google Play",
+          "platform": "Android Enterprise",
+          "item": null,
+          "expires": null,
+          "daysRemaining": null,
+          "lastSync": $gp.lastAppSyncDateTime,
+          "state": $gp.lastAppSyncStatus = 'success' or $gp.lastAppSyncStatus = 'none' ? 'ok' : 'syncError',
+          "detail": $gp.lastAppSyncStatus in ['success', 'none'] ? null : 'The last app sync with Managed Google Play reported ' & $gp.lastAppSyncStatus & '.'
+        } : $gp ? $none("Managed Google Play", "Android Enterprise") : $unread("Managed Google Play", "Android Enterprise");
+        $ap := value.autopilot;
+        $apRow := $ap and $ap.lastSyncDateTime ? {
+          "connector": "Windows Autopilot device sync",
+          "platform": "Windows",
+          "item": null,
+          "expires": null,
+          "daysRemaining": null,
+          "lastSync": $ap.lastSyncDateTime,
+          "state": $ap.syncStatus in ['failed', 'unknownFutureValue'] ? 'syncError' : 'ok',
+          "detail": $ap.syncStatus = 'failed' ? 'The last Autopilot device sync failed.' : null
+        } : $absent("Windows Autopilot device sync", "Windows");
+        $rows := $append(
+          $append([$appleRow], $count($ade) ? $ade
+            : $type(value.ade) = 'object' ? [$none("Apple automated device enrolment (ADE) token", "iOS/iPadOS, macOS")]
+            : [$unread("Apple automated device enrolment (ADE) token", "iOS/iPadOS, macOS")]),
+          $append($count($vpp) ? $vpp
+            : $type(value.vpp) = 'object' ? [$none("Apple Volume Purchase (VPP) token", "iOS/iPadOS, macOS")]
+            : [$unread("Apple Volume Purchase (VPP) token", "iOS/iPadOS, macOS")], [$gpRow, $apRow])
+        );
+        $keyed := $map($rows, function($r, $i) { $merge([$r, { "key": $string($i) }]) });
+        {
+          "rows": $keyed,
+          "attention": $count($rows[state in ['expired', 'critical', 'warning', 'syncError', 'error']]),
+          "expired": $count($rows[state in ['expired', 'critical']]),
+          "configured": $count($rows[state != 'notConfigured' and state != 'error'])
+        }
+      ) }
+
+layout:
+  - widget: licenceGate
+    feature: intune
+    title: Intune connectors need Microsoft Intune
+    body: The connector, certificate and token list.
+  - widget: kpi
+    data: connectors.expired
+    label: Expired or within 7 days
+    format: number
+    status: "${ value > 0 ? 'crit' : 'ok' }"
+  - widget: kpi
+    data: connectors.attention
+    label: Need attention
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+  - widget: kpi
+    data: connectors.configured
+    label: Configured connectors
+    format: number
+  - widget: table
+    id: connectors
+    span: 12
+    data: connectors.rows
+    rowKey: key
+    columns:
+      - { field: connector, label: Connector, secondary: item }
+      - { field: platform, label: Platform, filter: facet }
+      - field: state
+        label: Status
+        kind: status
+        map:
+          expired: [crit, Expired]
+          critical: [crit, Within 7 days]
+          warning: [warn, Expiring]
+          syncError: [warn, Sync problem]
+          error: [warn, Couldn't be read]
+          ok: [ok, Healthy]
+          notConfigured: [neutral, Not configured]
+        filter: facet
+      - { field: expires, label: Expires, kind: date }
+      - { field: daysRemaining, label: Days left, kind: number }
+      - { field: lastSync, label: Last sync or change, kind: date }
+      - { field: detail, label: What to do }
+      - { field: key, label: Row, hidden: true }
+    rowActions:
+      - label: Open Intune connectors and tokens
+        icon: arrow-square-out
+        href: https://intune.microsoft.com/#view/Microsoft_Intune_DeviceSettings/TenantAdminMenu/~/connectorsAndTokens
+    empty:
+      title: No connector data
+      body: Intune returned no connector information for this tenant.
+
+export:
+  formats: [csv, xlsx]
+  fileName: intune-connector-health
+  data: connectors.rows
+  columns: all

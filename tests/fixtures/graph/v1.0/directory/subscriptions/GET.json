@@ -1,0 +1,89 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#directory/subscriptions",
+  "value": [
+    {
+      "id": "40000000-0000-4000-8000-000000000501",
+      "commerceSubscriptionId": "50000000-0000-4000-8000-000000000501",
+      "skuId": "30000000-0000-4000-8000-000000000401",
+      "skuPartNumber": "SPE_E5",
+      "status": "Enabled",
+      "isTrial": false,
+      "totalLicenses": 1200,
+      "nextLifecycleDateTime": "2027-03-01T00:00:00Z",
+      "createdDateTime": "2024-03-01T10:00:00Z",
+      "ownerId": null,
+      "ownerTenantId": null,
+      "ownerType": null
+    },
+    {
+      "id": "40000000-0000-4000-8000-000000000502",
+      "commerceSubscriptionId": "50000000-0000-4000-8000-000000000502",
+      "skuId": "30000000-0000-4000-8000-000000000402",
+      "skuPartNumber": "SPE_E3",
+      "status": "Warning",
+      "isTrial": false,
+      "totalLicenses": 150,
+      "nextLifecycleDateTime": "2026-11-20T00:00:00Z",
+      "createdDateTime": "2023-11-20T10:00:00Z",
+      "ownerId": null,
+      "ownerTenantId": null,
+      "ownerType": null
+    },
+    {
+      "id": "40000000-0000-4000-8000-000000000503",
+      "commerceSubscriptionId": "50000000-0000-4000-8000-000000000503",
+      "skuId": "30000000-0000-4000-8000-000000000403",
+      "skuPartNumber": "EMS",
+      "status": "Enabled",
+      "isTrial": false,
+      "totalLicenses": 100,
+      "nextLifecycleDateTime": "2026-11-30T00:00:00Z",
+      "createdDateTime": "2023-12-01T10:00:00Z",
+      "ownerId": null,
+      "ownerTenantId": null,
+      "ownerType": null
+    },
+    {
+      "id": "40000000-0000-4000-8000-000000000504",
+      "commerceSubscriptionId": "50000000-0000-4000-8000-000000000504",
+      "skuId": "30000000-0000-4000-8000-000000000404",
+      "skuPartNumber": "POWER_BI_PRO",
+      "status": "Enabled",
+      "isTrial": true,
+      "totalLicenses": 40,
+      "nextLifecycleDateTime": "2026-10-25T00:00:00Z",
+      "createdDateTime": "2026-09-25T10:00:00Z",
+      "ownerId": null,
+      "ownerTenantId": null,
+      "ownerType": null
+    },
+    {
+      "id": "40000000-0000-4000-8000-000000000505",
+      "commerceSubscriptionId": "50000000-0000-4000-8000-000000000505",
+      "skuId": "30000000-0000-4000-8000-000000000406",
+      "skuPartNumber": "VISIOCLIENT",
+      "status": "Suspended",
+      "isTrial": false,
+      "totalLicenses": 10,
+      "nextLifecycleDateTime": "2026-12-15T00:00:00Z",
+      "createdDateTime": "2023-09-15T10:00:00Z",
+      "ownerId": null,
+      "ownerTenantId": null,
+      "ownerType": null
+    },
+    {
+      "id": "40000000-0000-4000-8000-000000000506",
+      "commerceSubscriptionId": "50000000-0000-4000-8000-000000000506",
+      "skuId": "30000000-0000-4000-8000-000000000405",
+      "skuPartNumber": "FLOW_FREE",
+      "status": "Enabled",
+      "isTrial": false,
+      "totalLicenses": 10000,
+      "nextLifecycleDateTime": null,
+      "createdDateTime": "2022-01-10T10:00:00Z",
+      "ownerId": null,
+      "ownerTenantId": null,
+      "ownerType": null
+    }
+  ]
+}

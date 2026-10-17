@@ -1,0 +1,202 @@
+$schema: ../../../packages/schemas/generated/report.schema.json
+kind: report
+id: identity.unused-apps
+version: 1.0.0
+title: Unused applications
+summary: >-
+  Enterprise applications (service principals) that haven't signed in — as themselves or on behalf of a user — for the
+  chosen number of days, or never: the retire-or-keep list, apps that hold Microsoft Graph application permissions
+  first. Microsoft's own apps and apps created in the window are left out. Size limit: 1,000 applications; a tenant
+  where more than 1,000 have signed in can't use it yet. Needs Entra ID P1 (sign-in activity is Graph beta).
+owner: identity-team
+tags: [identity, apps, hygiene, least-privilege, report]
+nav: { section: reports, label: Unused applications, icon: app-window, order: 31 }
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    graph: [Application.Read.All, AuditLog.Read.All]
+  entraRoles: [Reports Reader, Global Reader]
+  licences: [signInLogs]
+
+params:
+  days:
+    type: enum
+    label: No sign-in for
+    facet: true
+    default: 90
+    values:
+      - { value: 30, label: 30 days }
+      - { value: 90, label: 90 days }
+      - { value: 180, label: 180 days }
+      - { value: 365, label: 1 year }
+  holder:
+    type: enum
+    label: Apps from
+    facet: true
+    default: any
+    values:
+      - { value: any, label: Anyone but Microsoft }
+      - { value: own, label: This organisation }
+      - { value: other, label: Other organisations }
+
+# Three tenant-wide lists, each read once: application service principals, their sign-in activity (one row per app that
+# ever signed in) and the Microsoft Graph application permissions granted (appRoleAssignedTo on Graph), joined with
+# lookup objects ($merge / $distinct — the grouping constructor fails on thousands of keys). Transforms have a 250 ms
+# budget, so the lists stop at 1,000 applications (2,000 grants): past that the report says so, and when the activity
+# list is cut short it shows nothing rather than call active apps unused.
+datasources:
+  org:
+    source: graph
+    request:
+      path: /organization
+      query: { $select: id }
+    cache: { ttl: 86400 }
+  apps:
+    source: graph
+    request:
+      path: /servicePrincipals
+      query:
+        $filter: servicePrincipalType eq 'Application'
+        $select: id,appId,displayName,appOwnerOrganizationId,accountEnabled,createdDateTime
+        $top: 999
+    paging: all
+    maxItems: 1000
+    cache: { ttl: 3600 }
+  activity:
+    source: graph
+    request:
+      path: /reports/servicePrincipalSignInActivities
+      beta: true
+      query:
+        $top: 999
+    paging: all
+    maxItems: 1000
+    cache: { ttl: 3600 }
+  grants:
+    source: graph
+    optional: true
+    request:
+      path: "/servicePrincipals(appId='00000003-0000-0000-c000-000000000000')/appRoleAssignedTo"
+      query:
+        $select: principalId,appRoleId
+        $top: 999
+    paging: all
+    maxItems: 2000
+    cache: { ttl: 3600 }
+  report:
+    source: static
+    data: >-
+      ${ { "org": ds.org.value[0].id, "apps": ds.apps.value, "activity": ds.activity.value, "grants": ds.grants.value } }
+    transform: >-
+      ${ (
+        $days := params.days ? $number(params.days) : 90;
+        $holder := params.holder ? params.holder : 'any';
+        $org := value.org;
+        $activityCapped := $count(value.activity) >= 1000;
+        $last := $merge([{}, value.activity.{ appId: lastSignInActivity.lastSignInDateTime }]);
+        $holds := $merge([{}, $distinct(value.grants.principalId).{ $: true }]);
+        $cutoff := $daysAgo($days);
+        $candidates := $activityCapped ? [] : value.apps[
+          appOwnerOrganizationId != 'f8cdef31-a31e-4b4a-93e4-5f571e91255a'
+          and appOwnerOrganizationId != '72f988bf-86f1-41af-91ab-2d7cd011db47'
+          and ($holder = 'any' or ($holder = 'own') = (appOwnerOrganizationId = $org))
+          and ($type(createdDateTime) = 'string' ? createdDateTime <= $cutoff : true)
+          and ($seen := $lookup($last, appId); $not($exists($seen)) or $seen < $cutoff)
+        ];
+        $rows := [$candidates.(
+          $seen := $lookup($last, appId);
+          {
+            "id": id,
+            "appId": appId,
+            "displayName": displayName,
+            "owner": appOwnerOrganizationId = $org ? 'This organisation' : 'Other organisation',
+            "enabled": accountEnabled = true,
+            "created": createdDateTime,
+            "lastSignIn": $seen,
+            "daysSince": $seen ? -$daysUntil($seen) : null,
+            "holdsPermissions": $lookup($holds, id) = true,
+            "state": $seen ? 'stale' : 'never'
+          }
+        )];
+        $ranked := [$rows^(>(holdsPermissions ? 1 : 0), displayName)];
+        {
+          "rows": $ranked,
+          "total": $count($ranked),
+          "never": $count($ranked[state = 'never']),
+          "withPermissions": $count($ranked[holdsPermissions]),
+          "noActivityData": $count(value.activity) = 0,
+          "activityCapped": $activityCapped,
+          "appsCapped": $count(value.apps) >= 1000,
+          "grantsCapped": $count(value.grants) >= 2000
+        }
+      ) }
+
+layout:
+  - widget: licenceGate
+    feature: signInLogs
+    title: Application sign-in activity needs Microsoft Entra ID P1
+    body: Which applications haven't signed in, and for how long.
+  - widget: kpi
+    data: report.total
+    label: Unused applications
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+  - widget: kpi
+    data: report.withPermissions
+    label: Still holding Graph application permissions
+    format: number
+    status: "${ value > 0 ? 'crit' : 'ok' }"
+  - widget: kpi
+    data: report.never
+    label: Never signed in
+    format: number
+  - widget: markdown
+    span: 12
+    when: ${ report.activityCapped = true }
+    text: >-
+      More than 1,000 applications signed in, which is more than this report can match within its time budget, so it
+      shows none rather than call active applications unused. Use the sign-in activity in Entra (Usage & insights) for
+      this tenant.
+  - widget: markdown
+    span: 12
+    when: ${ report.appsCapped = true or report.grantsCapped = true }
+    text: >-
+      Only the first 1,000 applications (and 2,000 Graph permission grants) were checked; the list may be incomplete.
+  - widget: markdown
+    span: 12
+    when: ${ report.noActivityData = true }
+    text: >-
+      Microsoft has no sign-in activity for any application in this tenant yet (it fills in over the first days after
+      Entra ID P1 is licensed), so every application counts as never signed in.
+  - widget: table
+    id: apps
+    span: 12
+    data: report.rows
+    rowKey: id
+    columns:
+      - { field: displayName, label: Application, kind: identity, secondary: appId, sortable: true }
+      - { field: holdsPermissions, label: Holds Graph application permissions, kind: boolean, filter: facet }
+      - field: state
+        label: Sign-in
+        kind: status
+        map: { never: [warn, Never], stale: [info, Not recently] }
+        filter: facet
+      - { field: lastSignIn, label: Last sign-in, kind: date, filter: date, sortable: true }
+      - { field: daysSince, label: Days since, kind: number, sortable: true }
+      - { field: owner, label: Publisher, filter: facet }
+      - { field: enabled, label: Sign-in enabled, kind: boolean, filter: facet }
+      - { field: created, label: Created, kind: date, sortable: true }
+      - { field: id, label: Object id, kind: guid, hidden: true }
+    inspect:
+      page: identity.enterprise-app
+      params:
+        id: ${ row.id }
+    empty:
+      title: Every application is in use
+      body: Every application from outside Microsoft signed in within the selected number of days (or was created recently).
+
+export:
+  formats: [csv, xlsx]
+  fileName: unused-apps-${ params.days }d
+  data: report.rows
+  columns: all

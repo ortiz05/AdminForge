@@ -1,0 +1,7 @@
+{
+  "@odata.context": "https://graph.microsoft.com/beta/$metadata#deviceManagement/androidManagedStoreAccountEnterpriseSettings/$entity",
+  "id": "60000000-0000-4000-8000-000000000631",
+  "bindStatus": "bound",
+  "lastAppSyncDateTime": "2026-10-17T04:30:00Z",
+  "lastAppSyncStatus": "success"
+}

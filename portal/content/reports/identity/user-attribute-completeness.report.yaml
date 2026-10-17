@@ -1,0 +1,226 @@
+$schema: ../../../packages/schemas/generated/report.schema.json
+kind: report
+id: identity.user-attribute-completeness
+version: 1.0.0
+title: User attribute completeness
+summary: >-
+  Enabled member accounts missing the attributes that dynamic groups, group-based licensing, HR sync and manager-based
+  access reviews depend on: department, job title, usage location and employee id — and, on request, users without a
+  manager or whose manager's account is disabled.
+owner: identity-team
+tags: [identity, users, hygiene, hr, report]
+nav: { section: reports, label: User attribute completeness, icon: address-book, order: 29 }
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    graph: [User.Read.All]
+  entraRoles: [Directory Readers]
+
+params:
+  attribute:
+    type: enum
+    label: Missing
+    facet: true
+    default: any
+    values:
+      - { value: any, label: Any of them }
+      - { value: department, label: Department }
+      - { value: jobTitle, label: Job title }
+      - { value: usageLocation, label: Usage location }
+      - { value: employeeId, label: Employee id }
+  managers:
+    type: boolean
+    label: Check managers (slower on large tenants)
+    default: false
+    facet: true
+
+# The user list is filtered by Graph (advanced query: `eq null` needs ConsistencyLevel and $count) and shown as it
+# comes — no transform, so it stays fast with tens of thousands of rows. The KPIs are counts (`$count=true`, one row
+# each, `@odata.count`) in one $batch.
+# Graph can't filter on the manager, so the manager check reads enabled members with their manager expanded (capped
+# at 5,000 users, within the 250 ms transform budget) and only when asked for.
+datasources:
+  users:
+    source: graph
+    request:
+      path: /users
+      headers: { ConsistencyLevel: eventual }
+      query:
+        $filter: >-
+          ${ "accountEnabled eq true and userType eq 'Member' and " & $lookup({
+            "any": "(department eq null or jobTitle eq null or usageLocation eq null or employeeId eq null)",
+            "department": "department eq null",
+            "jobTitle": "jobTitle eq null",
+            "usageLocation": "usageLocation eq null",
+            "employeeId": "employeeId eq null"
+          }, params.attribute ? params.attribute : 'any') }
+        $count: true
+        $select: id,displayName,userPrincipalName,department,jobTitle,usageLocation,employeeId,companyName,onPremisesSyncEnabled,createdDateTime
+        $top: 999
+    paging: all
+    maxItems: 100000
+    cache: { ttl: 900 }
+  counts:
+    source: graphBatch
+    requests:
+      department:
+        path: /users
+        headers: { ConsistencyLevel: eventual }
+        query: { $filter: "accountEnabled eq true and userType eq 'Member' and department eq null", $count: true, $top: 1, $select: id }
+      jobTitle:
+        path: /users
+        headers: { ConsistencyLevel: eventual }
+        query: { $filter: "accountEnabled eq true and userType eq 'Member' and jobTitle eq null", $count: true, $top: 1, $select: id }
+      usageLocation:
+        path: /users
+        headers: { ConsistencyLevel: eventual }
+        query: { $filter: "accountEnabled eq true and userType eq 'Member' and usageLocation eq null", $count: true, $top: 1, $select: id }
+      employeeId:
+        path: /users
+        headers: { ConsistencyLevel: eventual }
+        query: { $filter: "accountEnabled eq true and userType eq 'Member' and employeeId eq null", $count: true, $top: 1, $select: id }
+      members:
+        path: /users
+        headers: { ConsistencyLevel: eventual }
+        query: { $filter: "accountEnabled eq true and userType eq 'Member'", $count: true, $top: 1, $select: id }
+    cache: { ttl: 900 }
+    transform: >-
+      ${ (
+        $n := function($v) { ($c := $lookup($v, '@odata.count'); $type($c) = 'number' ? $c : null) };
+        {
+          "department": $n(value.department),
+          "jobTitle": $n(value.jobTitle),
+          "usageLocation": $n(value.usageLocation),
+          "employeeId": $n(value.employeeId),
+          "members": $n(value.members)
+        }
+      ) }
+  managers:
+    source: graph
+    when: ${ params.managers = true }
+    request:
+      path: /users
+      query:
+        $filter: accountEnabled eq true and userType eq 'Member'
+        $select: id,displayName,userPrincipalName,department,jobTitle
+        $expand: manager($select=id,displayName,userPrincipalName,accountEnabled)
+        $top: 999
+    paging: all
+    maxItems: 5000
+    cache: { ttl: 900 }
+    transform: >-
+      ${ (
+        $rows := [value.value[$not($exists(manager)) or manager.accountEnabled = false].{
+          "id": id,
+          "displayName": displayName,
+          "userPrincipalName": userPrincipalName,
+          "department": department,
+          "jobTitle": jobTitle,
+          "manager": manager.displayName,
+          "managerUpn": manager.userPrincipalName,
+          "issue": $exists(manager) ? 'disabledManager' : 'noManager'
+        }];
+        {
+          "rows": $rows,
+          "noManager": $count($rows[issue = 'noManager']),
+          "disabledManager": $count($rows[issue = 'disabledManager']),
+          "capped": $count(value.value) >= 5000
+        }
+      ) }
+
+layout:
+  # Usage location blocks licence assignment (warn); the others weaken dynamic groups and HR sync (info).
+  - widget: kpi
+    data: counts.usageLocation
+    label: No usage location
+    format: number
+    status: "${ $type(value) = 'number' ? (value > 0 ? 'warn' : 'ok') : 'neutral' }"
+  - widget: kpi
+    data: counts.department
+    label: No department
+    format: number
+    status: "${ $type(value) = 'number' ? (value > 0 ? 'info' : 'ok') : 'neutral' }"
+  - widget: kpi
+    data: counts.jobTitle
+    label: No job title
+    format: number
+    status: "${ $type(value) = 'number' ? (value > 0 ? 'info' : 'ok') : 'neutral' }"
+  - widget: kpi
+    data: counts.employeeId
+    label: No employee id
+    format: number
+    status: "${ $type(value) = 'number' ? (value > 0 ? 'info' : 'ok') : 'neutral' }"
+  - widget: kpi
+    data: counts.members
+    label: Enabled members
+    format: number
+  - widget: table
+    id: users
+    span: 12
+    title: Users missing attributes
+    data: users.value
+    rowKey: id
+    columns:
+      - { field: displayName, label: User, kind: identity, secondary: userPrincipalName, sortable: true }
+      - { field: department, label: Department, sortable: true }
+      - { field: jobTitle, label: Job title }
+      - { field: usageLocation, label: Usage location }
+      - { field: employeeId, label: Employee id }
+      - { field: companyName, label: Company, hidden: true }
+      - { field: onPremisesSyncEnabled, label: Synced from AD, kind: boolean }
+      - { field: createdDateTime, label: Created, kind: date, filter: date, sortable: true }
+      - { field: id, label: Object id, kind: guid, hidden: true }
+    inspect:
+      page: identity.user
+      params:
+        id: ${ row.id }
+    empty:
+      title: Every enabled member has these attributes
+      body: No enabled member account is missing the selected attribute.
+  - widget: kpi
+    data: managers.noManager
+    label: No manager
+    format: number
+    when: ${ params.managers = true }
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+  - widget: kpi
+    data: managers.disabledManager
+    label: Manager's account disabled
+    format: number
+    when: ${ params.managers = true }
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+  - widget: markdown
+    span: 12
+    when: ${ params.managers = true and managers.capped = true }
+    text: >-
+      The manager check covers the first 5,000 enabled members (the report's time budget); the others weren't checked.
+  - widget: table
+    id: managers
+    span: 12
+    title: Manager problems
+    when: ${ params.managers = true }
+    data: managers.rows
+    rowKey: id
+    columns:
+      - { field: displayName, label: User, kind: identity, secondary: userPrincipalName, sortable: true }
+      - field: issue
+        label: Issue
+        kind: status
+        map: { noManager: [warn, No manager], disabledManager: [warn, Manager disabled] }
+        filter: facet
+      - { field: manager, label: Manager, secondary: managerUpn }
+      - { field: department, label: Department, filter: facet }
+      - { field: jobTitle, label: Job title }
+    inspect:
+      page: identity.user
+      params:
+        id: ${ row.id }
+    empty:
+      title: Every user has an active manager
+      body: All enabled members checked have a manager whose account is enabled.
+
+export:
+  formats: [csv, xlsx]
+  fileName: users-missing-${ params.attribute }
+  data: users.value
+  columns: all

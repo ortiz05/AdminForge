@@ -1,0 +1,32 @@
+$schema: ../../../packages/schemas/generated/schedule.schema.json
+kind: schedule
+id: reports.saml-certificate-expiry-daily
+version: 1.0.0
+title: Daily SAML certificate expiry report
+summary: >-
+  Every day at 06:05 UTC, writes the SAML signing certificate expiry report for the next 60 days (expired certificates
+  included) as XLSX and emails it to the report recipients, keeping a month of files.
+owner: identity-team
+tags: [identity, apps, saml, certificates, report]
+every: every day at 06:05
+timezone: UTC
+enabled: true
+identity: automation
+job:
+  kind: report
+  ref: identity.saml-certificate-expiry
+  params: { days: 60, includeExpired: true }
+  delivery:
+    - type: file
+      format: xlsx
+      path: identity/saml-certificate-expiry/{date}.xlsx
+      retain: 31
+    - type: email
+      to: ["${ env.AF_REPORT_RECIPIENTS }"]
+      format: xlsx
+retry: { max: 2, backoff: exponential, delay: 5m }
+timeoutSeconds: 900
+overlap: skip
+requires:
+  scopes:
+    graph: [Application.Read.All]

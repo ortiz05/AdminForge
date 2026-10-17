@@ -1,11 +1,13 @@
 $schema: ../../packages/schemas/generated/probe.schema.json
 kind: probe
 id: probes.licence-seats-spe-e5
-version: 1.0.2
+version: 1.1.0
 title: Licence seats — Microsoft 365 E5
 summary: >-
-  Share of Microsoft 365 E5 (SPE_E5) seats in use. Warns at 90 % and turns critical at 98 % so there is time to buy seats before
+  Retired — replaced by Licence seats nearly full or lapsed (probes.licence-seats-nearly-full), which checks every
+  SKU the tenant has. Share of Microsoft 365 E5 (SPE_E5) seats in use. Warns at 90 % and turns critical at 98 % so there is time to buy seats before
   onboarding stalls. Change sku to the part number your tenant uses (see Microsoft 365 > Licences).
+status: retired
 owner: m365-team
 tags: [synthetic, m365, licences, sweep-6h]
 check:

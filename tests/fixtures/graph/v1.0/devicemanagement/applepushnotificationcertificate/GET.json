@@ -1,0 +1,7 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#deviceManagement/applePushNotificationCertificate/$entity",
+  "id": "60000000-0000-4000-8000-000000000601",
+  "expirationDateTime": "2026-11-08T14:00:00Z",
+  "lastModifiedDateTime": "2025-11-08T14:05:00Z",
+  "certificateUploadStatus": null
+}

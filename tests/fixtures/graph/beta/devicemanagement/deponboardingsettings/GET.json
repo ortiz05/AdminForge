@@ -1,0 +1,21 @@
+{
+  "@odata.context": "https://graph.microsoft.com/beta/$metadata#deviceManagement/depOnboardingSettings",
+  "value": [
+    {
+      "id": "60000000-0000-4000-8000-000000000611",
+      "tokenName": "Example Org ABM (corporate)",
+      "tokenExpirationDateTime": "2027-04-02T10:00:00Z",
+      "lastSuccessfulSyncDateTime": "2026-10-17T06:12:00Z",
+      "lastSyncErrorCode": 0,
+      "tokenType": "dep"
+    },
+    {
+      "id": "60000000-0000-4000-8000-000000000612",
+      "tokenName": "Example Org ABM (education)",
+      "tokenExpirationDateTime": "2026-10-21T10:00:00Z",
+      "lastSuccessfulSyncDateTime": "2026-10-12T06:10:00Z",
+      "lastSyncErrorCode": 0,
+      "tokenType": "dep"
+    }
+  ]
+}

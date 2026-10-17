@@ -1,0 +1,13 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#deviceAppManagement/vppTokens",
+  "value": [
+    {
+      "id": "60000000-0000-4000-8000-000000000621",
+      "organizationName": "Example Org",
+      "expirationDateTime": "2027-02-14T09:00:00Z",
+      "lastSyncDateTime": "2026-10-17T05:00:00Z",
+      "lastSyncStatus": "failed",
+      "state": "valid"
+    }
+  ]
+}

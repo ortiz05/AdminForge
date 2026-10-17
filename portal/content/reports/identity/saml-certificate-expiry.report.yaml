@@ -1,0 +1,163 @@
+$schema: ../../../packages/schemas/generated/report.schema.json
+kind: report
+id: identity.saml-certificate-expiry
+version: 1.0.0
+title: SAML signing certificate expiry
+summary: >-
+  Enterprise applications that sign in with SAML and whose token-signing certificate has expired or expires within the
+  chosen window. When the certificate expires, single sign-on to that application stops until a new certificate is
+  activated in Entra and uploaded to the application. App registration secrets are in App credential expiry.
+owner: identity-team
+tags: [identity, apps, saml, certificates, sso, report]
+nav: { section: reports, label: SAML certificate expiry, icon: certificate, order: 27 }
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    graph: [Application.Read.All]
+  entraRoles: [Directory Readers]
+
+params:
+  days:
+    type: enum
+    label: Expiring within
+    facet: true
+    default: 60
+    values:
+      - { value: 30, label: 30 days }
+      - { value: 60, label: 60 days }
+      - { value: 90, label: 90 days }
+      - { value: 180, label: 180 days }
+  includeExpired: { type: boolean, label: Include expired, default: true, facet: true }
+
+# SAML applications only (`preferredSingleSignOnMode eq 'saml'`, a filter Graph supports), so the list stays small
+# whatever the size of the tenant. A SAML app usually holds one signing certificate; during a rollover it holds two.
+# Graph returns the active one only as a thumbprint that can't be matched to a key credential here, so the app's
+# status follows the signing certificate that expires last: if even that one is within the window, no replacement
+# exists yet. An older certificate expiring soon while a newer one exists is shown as "Rollover pending" — activate the
+# new certificate in Entra and upload it to the application before the old one expires.
+datasources:
+  apps:
+    source: graph
+    request:
+      path: /servicePrincipals
+      query:
+        $filter: preferredSingleSignOnMode eq 'saml'
+        $select: id,appId,displayName,accountEnabled,keyCredentials,notificationEmailAddresses
+        $top: 999
+    paging: all
+    maxItems: 500
+    cache: { ttl: 900 }
+    # Per app: the newest and oldest signing-certificate end dates by a native string sort of one or two dates, the
+    # state by comparing ISO strings with thresholds worked out once; days are only computed for the rows shown. About
+    # 0.15 ms per app, so 500 SAML apps fit the 250 ms budget.
+    transform: >-
+      ${ (
+        $days := params.days ? $number(params.days) : 60;
+        $withExpired := params.includeExpired != false;
+        $now := $toMillis(now);
+        $day := 86400000;
+        $t0 := $fromMillis($now);
+        $t7 := $fromMillis($now + 7 * $day);
+        $tw := $fromMillis($now + $days * $day);
+        $all := [value.value.(
+          $ends := $sort(keyCredentials[usage = 'Sign'].endDateTime);
+          $latest := $ends[-1];
+          $soonest := $ends[0];
+          {
+            "id": id,
+            "appId": appId,
+            "app": displayName,
+            "enabled": accountEnabled = true,
+            "certificates": $count($ends),
+            "expires": $latest,
+            "olderExpires": $count($ends) > 1 ? $soonest : null,
+            "notified": $count(notificationEmailAddresses) > 0,
+            "state": $count($ends) = 0 ? 'missing'
+                     : $latest < $t0 ? 'expired'
+                     : $latest <= $t7 ? 'critical'
+                     : $latest <= $tw ? 'warning'
+                     : ($count($ends) > 1 and $soonest <= $tw) ? 'rollover'
+                     : 'ok'
+          }
+        )];
+        $shown := $all[state in ['critical', 'warning', 'rollover'] or ($withExpired and state = 'expired')];
+        $withDays := $shown.$merge([$, { "daysRemaining": $floor(($toMillis(expires) - $now) / $day) }]);
+        $rows := $append([$all[state = 'missing'].$merge([$, { "daysRemaining": null }])], [$withDays^(daysRemaining)]);
+        {
+          "rows": $rows,
+          "saml": $count($all),
+          "total": $count($rows),
+          "expired": $count($rows[state = 'expired']),
+          "critical": $count($rows[state = 'critical']),
+          "noNotification": $count($rows[notified = false]),
+          "capped": $count(value.value) >= 500
+        }
+      ) }
+
+layout:
+  - widget: kpi
+    data: apps.expired
+    label: Expired
+    format: number
+    status: "${ value > 0 ? 'crit' : 'ok' }"
+  - widget: kpi
+    data: apps.critical
+    label: Expire within 7 days
+    format: number
+    status: "${ value > 0 ? 'crit' : 'ok' }"
+  - widget: kpi
+    data: apps.total
+    label: Applications in this report
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+  - widget: kpi
+    data: apps.saml
+    label: SAML applications
+    format: number
+  - widget: markdown
+    span: 12
+    when: ${ apps.capped = true }
+    text: Only the first 500 SAML applications were checked (the report's time budget).
+  - widget: table
+    id: apps
+    span: 12
+    data: apps.rows
+    rowKey: id
+    columns:
+      - { field: app, label: Application, kind: identity, secondary: appId, sortable: true }
+      - field: state
+        label: Status
+        kind: status
+        map:
+          expired: [crit, Expired]
+          critical: [crit, Within 7 days]
+          warning: [warn, Expiring]
+          rollover: [info, Rollover pending]
+          missing: [warn, No signing certificate]
+        filter: facet
+      - { field: expires, label: Signing certificate expires, kind: date, filter: date, sortable: true }
+      - { field: daysRemaining, label: Days left, kind: number, filter: range, sortable: true }
+      - { field: certificates, label: Signing certificates, kind: number }
+      - { field: olderExpires, label: Older certificate expires, kind: date }
+      - { field: notified, label: Expiry email set, kind: boolean, filter: facet }
+      - { field: enabled, label: Sign-in enabled, kind: boolean, filter: facet }
+      - { field: id, label: Object id, kind: guid, hidden: true }
+    inspect:
+      page: identity.enterprise-app
+      params:
+        id: ${ row.id }
+    rowActions:
+      - label: Open single sign-on settings
+        icon: arrow-square-out
+        href: "https://entra.microsoft.com/#view/Microsoft_AAD_IAM/ManagedAppMenuBlade/~/SignOn/objectId/${ $encode(row.id) }/appId/${ $encode(row.appId) }"
+    empty:
+      title: No SAML certificate needs attention
+      body: >-
+        No SAML application's signing certificate has expired or expires within the selected window (or the tenant has
+        no SAML applications).
+
+export:
+  formats: [csv, xlsx]
+  fileName: saml-certificate-expiry-${ params.days }d
+  data: apps.rows
+  columns: all

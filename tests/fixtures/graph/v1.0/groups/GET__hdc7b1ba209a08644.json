@@ -1,0 +1,28 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#groups(id,displayName,mail,groupTypes,securityEnabled,mailEnabled,onPremisesSyncEnabled,createdDateTime)",
+  "@odata.count": 2,
+  "value": [
+    {
+      "id": "70000000-0000-4000-8000-000000000721",
+      "displayName": "Finance Approvers",
+      "mail": null,
+      "groupTypes": [],
+      "securityEnabled": true,
+      "mailEnabled": false,
+      "onPremisesSyncEnabled": null,
+      "createdDateTime": "2024-05-02T08:00:00Z"
+    },
+    {
+      "id": "70000000-0000-4000-8000-000000000722",
+      "displayName": "Marketing Team",
+      "mail": "marketing@example.com",
+      "groupTypes": [
+        "Unified"
+      ],
+      "securityEnabled": false,
+      "mailEnabled": true,
+      "onPremisesSyncEnabled": null,
+      "createdDateTime": "2023-03-14T08:00:00Z"
+    }
+  ]
+}

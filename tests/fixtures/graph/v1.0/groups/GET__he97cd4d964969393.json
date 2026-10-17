@@ -1,0 +1,35 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#groups(id,displayName,mail,assignedLicenses,licenseProcessingState,onPremisesSyncEnabled)",
+  "value": [
+    {
+      "id": "70000000-0000-4000-8000-000000000701",
+      "displayName": "LIC-M365-E5-Staff",
+      "mail": null,
+      "assignedLicenses": [
+        {
+          "skuId": "30000000-0000-4000-8000-000000000401",
+          "disabledPlans": []
+        }
+      ],
+      "licenseProcessingState": {
+        "state": "ProcessingComplete"
+      },
+      "onPremisesSyncEnabled": null
+    },
+    {
+      "id": "70000000-0000-4000-8000-000000000702",
+      "displayName": "LIC-PowerBI-Pro",
+      "mail": null,
+      "assignedLicenses": [
+        {
+          "skuId": "30000000-0000-4000-8000-000000000404",
+          "disabledPlans": []
+        }
+      ],
+      "licenseProcessingState": {
+        "state": "ProcessingComplete"
+      },
+      "onPremisesSyncEnabled": null
+    }
+  ]
+}

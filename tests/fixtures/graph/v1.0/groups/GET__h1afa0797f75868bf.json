@@ -1,0 +1,17 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#groups(id,displayName,mail,groupTypes,membershipRule,createdDateTime)",
+  "value": [
+    {
+      "id": "70000000-0000-4000-8000-000000000731",
+      "displayName": "DYN-All-Sales",
+      "mail": null,
+      "groupTypes": [
+        "DynamicMembership"
+      ],
+      "membershipRule": "(user.department -eq \"Sales\")",
+      "createdDateTime": "2024-01-20T08:00:00Z",
+      "securityEnabled": true,
+      "mailEnabled": false
+    }
+  ]
+}

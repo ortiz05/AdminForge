@@ -1,0 +1,16 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#directory/deletedItems/microsoft.graph.group",
+  "value": [
+    {
+      "id": "70000000-0000-4000-8000-000000000741",
+      "displayName": "Old Intranet Editors",
+      "mail": "old-intranet-editors@example.com",
+      "groupTypes": [
+        "Unified"
+      ],
+      "deletedDateTime": "2026-10-09T15:00:00Z",
+      "securityEnabled": false,
+      "mailEnabled": true
+    }
+  ]
+}

@@ -1,0 +1,156 @@
+$schema: ../../../packages/schemas/generated/report.schema.json
+kind: report
+id: identity.auth-method-strength
+version: 1.0.0
+title: Authentication method strength
+summary: >-
+  The next step after "has MFA": users whose only second factors are phishable phone or email methods (SMS, voice
+  call, email one-time code), and administrators who can't yet sign in with a phishing-resistant or passwordless method —
+  the prerequisite for requiring phishing-resistant MFA for admins. From the authentication methods registration
+  report (refreshed every few hours). Users with no MFA at all are in Users without MFA.
+owner: identity-team
+tags: [identity, mfa, authentication-methods, phishing-resistant, report]
+nav: { section: reports, label: Authentication method strength, icon: fingerprint, order: 32 }
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    graph: [AuditLog.Read.All]
+  entraRoles: [Reports Reader]
+  licences: [signInLogs]
+
+params:
+  issue:
+    type: enum
+    label: Show
+    facet: true
+    default: all
+    values:
+      - { value: all, label: Both }
+      - { value: weakOnly, label: Phone or email methods only }
+      - { value: admins, label: Admins without passwordless }
+
+# Both lists are filtered by Graph: users with any phone or email method registered (a lambda over methodsRegistered),
+# and admins who aren't passwordless-capable. The transform keeps, from the first list, those with no stronger method
+# (at most 1,000 users are read for that, within the 250 ms transform budget).
+datasources:
+  weak:
+    source: graph
+    when: ${ params.issue in ['all', 'weakOnly'] }
+    request:
+      path: /reports/authenticationMethods/userRegistrationDetails
+      query:
+        $filter: "methodsRegistered/any(m:m eq 'mobilePhone' or m eq 'alternateMobilePhone' or m eq 'officePhone' or m eq 'email')"
+        $top: 999
+    paging: all
+    maxItems: 1000
+    cache: { ttl: 1800 }
+  admins:
+    source: graph
+    when: ${ params.issue in ['all', 'admins'] }
+    request:
+      path: /reports/authenticationMethods/userRegistrationDetails
+      query:
+        $filter: isAdmin eq true and isPasswordlessCapable eq false
+        $top: 999
+    paging: all
+    maxItems: 2000
+    cache: { ttl: 1800 }
+  report:
+    source: static
+    data: >-
+      ${ { "weak": ds.weak.value, "admins": ds.admins.value } }
+    # One regular expression per user (strip the phone and email methods: is anything left?) instead of a filter over
+    # each user's methods, the method names as Microsoft reports them, and no sort: about 0.05 ms per user.
+    transform: >-
+      ${ (
+        $row := function($u, $issue, $detail) { {
+          "key": $u.id & '|' & $issue,
+          "id": $u.id,
+          "userDisplayName": $u.userDisplayName,
+          "userPrincipalName": $u.userPrincipalName,
+          "userType": $u.userType,
+          "isAdmin": $u.isAdmin = true,
+          "issue": $issue,
+          "methods": $join($u.methodsRegistered, ', '),
+          "defaultMethod": $u.defaultMfaMethod,
+          "detail": $detail,
+          "lastUpdated": $u.lastUpdatedDateTime
+        } };
+        $weak := [value.weak[$trim($replace($join(methodsRegistered, ' '),
+                     /\b(mobilePhone|alternateMobilePhone|officePhone|email|securityQuestion)\b/, '')) = '']
+          .$row($, 'weakOnly', 'Register the Authenticator app or a passkey, then remove the phone or email method')];
+        $admins := [value.admins.$row($, 'adminNotPasswordless',
+          'Register a passkey, FIDO2 key or Windows Hello for Business before phishing-resistant MFA is required')];
+        {
+          "rows": $append($admins, $weak),
+          "weakOnly": $count($weak),
+          "weakAdmins": $count($weak[isAdmin]),
+          "admins": $count($admins),
+          "capped": $count(value.weak) >= 1000
+        }
+      ) }
+
+layout:
+  - widget: licenceGate
+    feature: signInLogs
+    title: The authentication methods report needs Microsoft Entra ID P1
+    body: Which methods each user has registered.
+  - widget: kpi
+    data: report.weakOnly
+    label: Phone or email methods only
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+    when: ${ params.issue in ['all', 'weakOnly'] }
+  - widget: kpi
+    data: report.weakAdmins
+    label: Admins with phone or email only
+    format: number
+    status: "${ value > 0 ? 'crit' : 'ok' }"
+    when: ${ params.issue in ['all', 'weakOnly'] }
+  - widget: kpi
+    data: report.admins
+    label: Admins not passwordless-capable
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+    when: ${ params.issue in ['all', 'admins'] }
+  - widget: markdown
+    span: 12
+    when: ${ report.capped = true }
+    text: >-
+      More than 1,000 users have a phone or email method registered; only the first 1,000 were checked for a stronger
+      method (the report's time budget), so the phone-or-email-only count is a lower bound. Admins are checked in full.
+  - widget: table
+    id: users
+    span: 12
+    data: report.rows
+    rowKey: key
+    columns:
+      - { field: userDisplayName, label: User, kind: identity, secondary: userPrincipalName, sortable: true }
+      - field: issue
+        label: Issue
+        kind: status
+        map: { weakOnly: [warn, Phone or email only], adminNotPasswordless: [warn, Admin without passwordless] }
+        filter: facet
+      - { field: isAdmin, label: Admin, kind: boolean, filter: facet }
+      - { field: methods, label: Registered methods }
+      - { field: defaultMethod, label: Default method, filter: facet }
+      - { field: detail, label: What to do }
+      - { field: userType, label: Type, filter: facet }
+      - { field: lastUpdated, label: Report updated, kind: date }
+      - { field: id, label: Object id, kind: guid, hidden: true }
+      - { field: key, label: Row, hidden: true }
+    inspect:
+      page: identity.user
+      params:
+        id: ${ row.id }
+    empty:
+      title: No weak methods found
+      body: >-
+        Nobody relies only on phone or email methods and every administrator can sign in passwordless. A new tenant's
+        registration report can take up to a day to fill in — see [Authentication methods registration](/p/identity.auth-registration).
+
+export:
+  formats: [csv, xlsx]
+  fileName: auth-method-strength-${ params.issue }
+  data: report.rows
+  columns: all

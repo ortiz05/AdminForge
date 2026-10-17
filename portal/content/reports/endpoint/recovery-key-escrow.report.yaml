@@ -1,0 +1,163 @@
+$schema: ../../../packages/schemas/generated/report.schema.json
+kind: report
+id: endpoint.recovery-key-escrow
+version: 1.0.0
+title: BitLocker recovery key escrow
+summary: >-
+  Intune-managed Windows devices that report BitLocker encryption but have no recovery key for their operating-system
+  drive in Microsoft Entra — if such a device asks for its recovery key, the data can't be recovered. Only key metadata
+  is read; keys are never retrieved. Size limit: up to 2,000 Windows devices (narrow with a name prefix) in tenants
+  with at most 2,000 recovery keys; larger tenants need Intune's encryption report for now.
+owner: endpoint-team
+tags: [endpoint, intune, bitlocker, encryption, recovery, report]
+nav: { section: reports, label: BitLocker key escrow, icon: key, order: 37 }
+requires:
+  portalRoles: [Portal.Reader]
+  scopes:
+    graph: [DeviceManagementManagedDevices.Read.All, BitlockerKey.ReadBasic.All]
+  entraRoles: [Intune Administrator, Global Reader]
+  licences: [intune]
+
+params:
+  namePrefix:
+    type: string
+    label: Device names starting with
+    maxLength: 64
+    description: >-
+      Only devices whose name starts with this are checked (the report reads at most 2,000 devices). The recovery-key
+      list is always read in full.
+  staleDays:
+    type: enum
+    label: Leave out devices not seen for
+    facet: true
+    default: 30
+    values:
+      - { value: 30, label: 30 days }
+      - { value: 90, label: 90 days }
+      - { value: 0, label: Keep every device }
+
+# Graph can't filter managed devices on isEncrypted, so Windows devices are read with only the fields needed (an
+# optional name prefix narrows them at the source) and the encrypted ones kept here; key metadata is one tenant-wide
+# list. The two are joined with a lookup object of device ids that have an operating-system volume key ($merge — the
+# grouping constructor fails on thousands of keys). Transforms have a 250 ms budget, so each list stops at 2,000 rows:
+# past that the report says so, and when the key list is cut short it shows nothing rather than flag devices whose key
+# simply wasn't read.
+datasources:
+  devices:
+    source: graph
+    request:
+      path: /deviceManagement/managedDevices
+      query:
+        $filter: >-
+          ${ "operatingSystem eq 'Windows'" & (params.namePrefix ? " and startswith(deviceName, " & $odata(params.namePrefix) & ")" : "") }
+        $select: id,deviceName,azureADDeviceId,isEncrypted,userPrincipalName,lastSyncDateTime,complianceState,managedDeviceOwnerType
+        $top: 999
+    paging: all
+    maxItems: 2000
+    cache: { ttl: 900 }
+  keys:
+    source: graph
+    request:
+      path: /informationProtection/bitlocker/recoveryKeys
+      headers: { ocp-client-name: AdminForge, ocp-client-version: "1.0" }
+      query:
+        $select: id,createdDateTime,deviceId,volumeType
+    paging: all
+    maxItems: 2000
+    cache: { ttl: 900 }
+  report:
+    source: static
+    data: >-
+      ${ { "devices": ds.devices.value, "keys": ds.keys.value } }
+    transform: >-
+      ${ (
+        $stale := params.staleDays ? $number(params.staleDays) : 30;
+        $cutoff := $daysAgo($stale);
+        $keysCapped := $count(value.keys) >= 2000;
+        $escrowed := $merge([{}, value.keys[volumeType = 1 or volumeType = 'operatingSystemVolume'].{ deviceId: true }]);
+        $encrypted := value.devices[isEncrypted = true];
+        $recent := $stale = 0 ? $encrypted : $encrypted[lastSyncDateTime > $cutoff];
+        $rows := $keysCapped ? [] : [$recent[$not($lookup($escrowed, azureADDeviceId) = true)].{
+          "id": id,
+          "deviceName": deviceName,
+          "user": userPrincipalName,
+          "entraDeviceId": azureADDeviceId,
+          "lastSync": lastSyncDateTime,
+          "compliance": complianceState,
+          "ownership": managedDeviceOwnerType,
+          "state": $exists(azureADDeviceId) and azureADDeviceId != '00000000-0000-0000-0000-000000000000' ? 'noKey' : 'notJoined'
+        }];
+        {
+          "rows": [$rows^(deviceName)],
+          "missing": $keysCapped ? null : $count($rows),
+          "encrypted": $count($recent),
+          "windows": $count(value.devices),
+          "keysCapped": $keysCapped,
+          "devicesCapped": $count(value.devices) >= 2000
+        }
+      ) }
+
+layout:
+  - widget: licenceGate
+    feature: intune
+    title: Device encryption data needs Microsoft Intune
+    body: Which encrypted Windows devices have no recovery key in Entra.
+  - widget: kpi
+    data: report.missing
+    label: Encrypted without an escrowed key
+    format: number
+    status: "${ value > 0 ? 'crit' : 'ok' }"
+  - widget: kpi
+    data: report.encrypted
+    label: Encrypted Windows devices checked
+    format: number
+  - widget: kpi
+    data: report.windows
+    label: Windows devices in Intune
+    format: number
+  - widget: markdown
+    span: 12
+    when: ${ report.keysCapped = true }
+    text: >-
+      The tenant holds more than 2,000 BitLocker recovery keys, more than this report can match within its time budget,
+      so it lists no devices rather than flag ones whose key it didn't read. Use Intune's encryption report instead.
+  - widget: markdown
+    span: 12
+    when: ${ report.devicesCapped = true and report.keysCapped != true }
+    text: Only the first 2,000 Windows devices were checked; narrow them with the name prefix.
+  - widget: table
+    id: devices
+    span: 12
+    data: report.rows
+    rowKey: id
+    columns:
+      - { field: deviceName, label: Device, sortable: true }
+      - field: state
+        label: Issue
+        kind: status
+        map: { noKey: [crit, No recovery key in Entra], notJoined: [warn, Not linked to an Entra device] }
+        filter: facet
+      - { field: user, label: Primary user }
+      - { field: lastSync, label: Last check-in, kind: date, filter: date, sortable: true }
+      - { field: compliance, label: Compliance, filter: facet }
+      - { field: ownership, label: Ownership, filter: facet }
+      - { field: entraDeviceId, label: Entra device id, kind: guid, hidden: true }
+    inspect:
+      page: endpoint.device
+      params:
+        id: ${ row.id }
+    rowActions:
+      - label: Open the device in Intune
+        icon: arrow-square-out
+        href: "https://intune.microsoft.com/#view/Microsoft_Intune_Devices/DeviceSettingsMenuBlade/~/overview/mdmDeviceId/${ $encode(row.id) }"
+    empty:
+      title: Every encrypted device has its key escrowed
+      body: >-
+        Every Intune-managed Windows device that reports BitLocker encryption (and checked in within the window) has an
+        operating-system drive recovery key in Microsoft Entra.
+
+export:
+  formats: [csv, xlsx]
+  fileName: bitlocker-key-escrow
+  data: report.rows
+  columns: all

@@ -1,0 +1,77 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#servicePrincipals(id,appId,displayName,appOwnerOrganizationId,accountEnabled,createdDateTime)",
+  "value": [
+    {
+      "id": "00000000-0000-4000-8000-000000000401",
+      "appId": "00000000-0000-4000-8001-000000000301",
+      "displayName": "Example HR Sync",
+      "appOwnerOrganizationId": "00000000-0000-4000-8000-00000000e0e0",
+      "accountEnabled": true,
+      "createdDateTime": "2025-03-01T09:00:00Z"
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000402",
+      "appId": "00000000-0000-4000-8001-000000000302",
+      "displayName": "Example Portal",
+      "appOwnerOrganizationId": "00000000-0000-4000-8000-00000000e0e0",
+      "accountEnabled": true,
+      "createdDateTime": "2025-03-01T09:00:00Z"
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000403",
+      "appId": "00000000-0000-4000-8001-000000000303",
+      "displayName": "Example Reporting",
+      "appOwnerOrganizationId": "00000000-0000-4000-8000-00000000e0e0",
+      "accountEnabled": true,
+      "createdDateTime": "2025-03-01T09:00:00Z"
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000404",
+      "appId": "00000000-0000-4000-8001-000000000404",
+      "displayName": "PDF Converter Online",
+      "appOwnerOrganizationId": "00000000-0000-4000-8000-00000000e0f1",
+      "accountEnabled": true,
+      "createdDateTime": "2025-03-01T09:00:00Z"
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000405",
+      "appId": "00000000-0000-4000-8001-000000000405",
+      "displayName": "Payroll Online",
+      "appOwnerOrganizationId": "00000000-0000-4000-8000-00000000e0f1",
+      "accountEnabled": true,
+      "createdDateTime": "2025-03-01T09:00:00Z"
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000406",
+      "appId": "00000000-0000-4000-8001-000000000305",
+      "displayName": "Example Data Pipeline",
+      "appOwnerOrganizationId": "00000000-0000-4000-8000-00000000e0e0",
+      "accountEnabled": true,
+      "createdDateTime": "2025-03-01T09:00:00Z"
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000407",
+      "appId": "00000000-0000-4000-8001-000000000306",
+      "displayName": "Legacy Automation",
+      "appOwnerOrganizationId": "00000000-0000-4000-8000-00000000e0e0",
+      "accountEnabled": true,
+      "createdDateTime": "2025-03-01T09:00:00Z"
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000408",
+      "appId": "00000002-0000-0ff1-ce00-000000000000",
+      "displayName": "Office 365 Exchange Online",
+      "appOwnerOrganizationId": "f8cdef31-a31e-4b4a-93e4-5f571e91255a",
+      "accountEnabled": true,
+      "createdDateTime": "2025-03-01T09:00:00Z"
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000409",
+      "appId": "00000003-0000-0000-c000-000000000000",
+      "displayName": "Microsoft Graph",
+      "appOwnerOrganizationId": "f8cdef31-a31e-4b4a-93e4-5f571e91255a",
+      "accountEnabled": true,
+      "createdDateTime": "2025-03-01T09:00:00Z"
+    }
+  ]
+}

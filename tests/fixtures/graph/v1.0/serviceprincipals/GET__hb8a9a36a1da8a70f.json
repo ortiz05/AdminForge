@@ -1,0 +1,184 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#servicePrincipals(id,appId,displayName,accountEnabled,keyCredentials,notificationEmailAddresses)",
+  "value": [
+    {
+      "id": "00000000-0000-4000-8000-000000000551",
+      "appId": "00000000-0000-4000-8000-000000000651",
+      "displayName": "Example Payroll",
+      "accountEnabled": true,
+      "keyCredentials": [
+        {
+          "customKeyIdentifier": null,
+          "displayName": "CN=Microsoft Azure Federated SSO Certificate",
+          "endDateTime": "2026-10-22T09:00:00Z",
+          "key": null,
+          "keyId": "7b2c0001-0000-4000-8000-000000000011",
+          "startDateTime": "2023-10-22T09:00:00Z",
+          "type": "AsymmetricX509Cert",
+          "usage": "Sign"
+        },
+        {
+          "customKeyIdentifier": null,
+          "displayName": "CN=Microsoft Azure Federated SSO Certificate",
+          "endDateTime": "2026-10-22T09:00:00Z",
+          "key": null,
+          "keyId": "7b2c0001-0000-4000-8000-000000000012",
+          "startDateTime": "2023-10-22T09:00:00Z",
+          "type": "AsymmetricX509Cert",
+          "usage": "Verify"
+        }
+      ],
+      "notificationEmailAddresses": [
+        "it-apps@example.com"
+      ]
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000552",
+      "appId": "00000000-0000-4000-8000-000000000652",
+      "displayName": "Example Travel",
+      "accountEnabled": true,
+      "keyCredentials": [
+        {
+          "customKeyIdentifier": null,
+          "displayName": "CN=Microsoft Azure Federated SSO Certificate",
+          "endDateTime": "2026-11-05T09:00:00Z",
+          "key": null,
+          "keyId": "7b2c0002-0000-4000-8000-000000000021",
+          "startDateTime": "2023-11-05T09:00:00Z",
+          "type": "AsymmetricX509Cert",
+          "usage": "Sign"
+        },
+        {
+          "customKeyIdentifier": null,
+          "displayName": "CN=Microsoft Azure Federated SSO Certificate",
+          "endDateTime": "2026-11-05T09:00:00Z",
+          "key": null,
+          "keyId": "7b2c0002-0000-4000-8000-000000000022",
+          "startDateTime": "2023-11-05T09:00:00Z",
+          "type": "AsymmetricX509Cert",
+          "usage": "Verify"
+        },
+        {
+          "customKeyIdentifier": null,
+          "displayName": "CN=Microsoft Azure Federated SSO Certificate",
+          "endDateTime": "2029-10-01T09:00:00Z",
+          "key": null,
+          "keyId": "7b2c0003-0000-4000-8000-000000000031",
+          "startDateTime": "2026-10-01T09:00:00Z",
+          "type": "AsymmetricX509Cert",
+          "usage": "Sign"
+        },
+        {
+          "customKeyIdentifier": null,
+          "displayName": "CN=Microsoft Azure Federated SSO Certificate",
+          "endDateTime": "2029-10-01T09:00:00Z",
+          "key": null,
+          "keyId": "7b2c0003-0000-4000-8000-000000000032",
+          "startDateTime": "2026-10-01T09:00:00Z",
+          "type": "AsymmetricX509Cert",
+          "usage": "Verify"
+        }
+      ],
+      "notificationEmailAddresses": [
+        "it-apps@example.com"
+      ]
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000553",
+      "appId": "00000000-0000-4000-8000-000000000653",
+      "displayName": "Example Wiki",
+      "accountEnabled": true,
+      "keyCredentials": [
+        {
+          "customKeyIdentifier": null,
+          "displayName": "CN=Microsoft Azure Federated SSO Certificate",
+          "endDateTime": "2026-12-01T09:00:00Z",
+          "key": null,
+          "keyId": "7b2c0004-0000-4000-8000-000000000041",
+          "startDateTime": "2023-12-01T09:00:00Z",
+          "type": "AsymmetricX509Cert",
+          "usage": "Sign"
+        },
+        {
+          "customKeyIdentifier": null,
+          "displayName": "CN=Microsoft Azure Federated SSO Certificate",
+          "endDateTime": "2026-12-01T09:00:00Z",
+          "key": null,
+          "keyId": "7b2c0004-0000-4000-8000-000000000042",
+          "startDateTime": "2023-12-01T09:00:00Z",
+          "type": "AsymmetricX509Cert",
+          "usage": "Verify"
+        }
+      ],
+      "notificationEmailAddresses": []
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000554",
+      "appId": "00000000-0000-4000-8000-000000000654",
+      "displayName": "Example Expense",
+      "accountEnabled": false,
+      "keyCredentials": [
+        {
+          "customKeyIdentifier": null,
+          "displayName": "CN=Microsoft Azure Federated SSO Certificate",
+          "endDateTime": "2026-10-01T09:00:00Z",
+          "key": null,
+          "keyId": "7b2c0005-0000-4000-8000-000000000051",
+          "startDateTime": "2023-10-01T09:00:00Z",
+          "type": "AsymmetricX509Cert",
+          "usage": "Sign"
+        },
+        {
+          "customKeyIdentifier": null,
+          "displayName": "CN=Microsoft Azure Federated SSO Certificate",
+          "endDateTime": "2026-10-01T09:00:00Z",
+          "key": null,
+          "keyId": "7b2c0005-0000-4000-8000-000000000052",
+          "startDateTime": "2023-10-01T09:00:00Z",
+          "type": "AsymmetricX509Cert",
+          "usage": "Verify"
+        }
+      ],
+      "notificationEmailAddresses": []
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000555",
+      "appId": "00000000-0000-4000-8000-000000000655",
+      "displayName": "Example HR Portal",
+      "accountEnabled": true,
+      "keyCredentials": [
+        {
+          "customKeyIdentifier": null,
+          "displayName": "CN=Microsoft Azure Federated SSO Certificate",
+          "endDateTime": "2028-06-01T09:00:00Z",
+          "key": null,
+          "keyId": "7b2c0006-0000-4000-8000-000000000061",
+          "startDateTime": "2025-06-01T09:00:00Z",
+          "type": "AsymmetricX509Cert",
+          "usage": "Sign"
+        },
+        {
+          "customKeyIdentifier": null,
+          "displayName": "CN=Microsoft Azure Federated SSO Certificate",
+          "endDateTime": "2028-06-01T09:00:00Z",
+          "key": null,
+          "keyId": "7b2c0006-0000-4000-8000-000000000062",
+          "startDateTime": "2025-06-01T09:00:00Z",
+          "type": "AsymmetricX509Cert",
+          "usage": "Verify"
+        }
+      ],
+      "notificationEmailAddresses": [
+        "hr-it@example.com"
+      ]
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000556",
+      "appId": "00000000-0000-4000-8000-000000000656",
+      "displayName": "Example Legacy Intranet",
+      "accountEnabled": true,
+      "keyCredentials": [],
+      "notificationEmailAddresses": []
+    }
+  ]
+}

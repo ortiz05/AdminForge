@@ -1,0 +1,65 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#deviceManagement/managedDevices(id,deviceName,azureADDeviceId,isEncrypted,userPrincipalName,lastSyncDateTime,complianceState,managedDeviceOwnerType)",
+  "value": [
+    {
+      "id": "00000000-0000-4000-8000-000000000601",
+      "deviceName": "EX-LT-0142",
+      "azureADDeviceId": "00000000-0000-4000-8001-000000000501",
+      "isEncrypted": true,
+      "userPrincipalName": "adele@example.com",
+      "lastSyncDateTime": "2026-10-17T07:00:00Z",
+      "complianceState": "compliant",
+      "managedDeviceOwnerType": "company"
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000602",
+      "deviceName": "EX-LT-0157",
+      "azureADDeviceId": "00000000-0000-4000-8001-000000000502",
+      "isEncrypted": true,
+      "userPrincipalName": "b.lindqvist@example.com",
+      "lastSyncDateTime": "2026-10-16T18:00:00Z",
+      "complianceState": "compliant",
+      "managedDeviceOwnerType": "company"
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000604",
+      "deviceName": "EX-DT-0033",
+      "azureADDeviceId": "00000000-0000-4000-8001-000000000504",
+      "isEncrypted": true,
+      "userPrincipalName": "c.okafor@example.com",
+      "lastSyncDateTime": "2026-10-15T09:30:00Z",
+      "complianceState": "noncompliant",
+      "managedDeviceOwnerType": "company"
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000606",
+      "deviceName": "EX-LT-0201",
+      "azureADDeviceId": "00000000-0000-4000-8001-000000000506",
+      "isEncrypted": false,
+      "userPrincipalName": "t.ortega@example.com",
+      "lastSyncDateTime": "2026-10-17T06:00:00Z",
+      "complianceState": "noncompliant",
+      "managedDeviceOwnerType": "company"
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000607",
+      "deviceName": "EX-LT-0099",
+      "azureADDeviceId": "00000000-0000-4000-8001-000000000507",
+      "isEncrypted": true,
+      "userPrincipalName": "a.morgan@example.com",
+      "lastSyncDateTime": "2026-06-01T09:00:00Z",
+      "complianceState": "compliant",
+      "managedDeviceOwnerType": "company"
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000608",
+      "deviceName": "EX-KIOSK-02",
+      "azureADDeviceId": "00000000-0000-0000-0000-000000000000",
+      "isEncrypted": true,
+      "userPrincipalName": null,
+      "lastSyncDateTime": "2026-10-17T05:00:00Z",
+      "complianceState": "compliant",
+      "managedDeviceOwnerType": "company"
+    }
+  ]
+}

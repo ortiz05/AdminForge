@@ -1,32 +1,90 @@
 {
-  "value": [
-    {
-      "id": "30000000-0000-4000-8000-000000000101",
-      "displayName": "SG-Example-Admins",
-      "mail": null,
-      "groupTypes": [],
-      "securityEnabled": true,
-      "mailEnabled": false
+  "$fixture": {
+    "status": 200,
+    "body": {
+      "value": [
+        {
+          "id": "30000000-0000-4000-8000-000000000101",
+          "displayName": "SG-Example-Admins",
+          "mail": null,
+          "groupTypes": [],
+          "securityEnabled": true,
+          "mailEnabled": false
+        },
+        {
+          "id": "30000000-0000-4000-8000-000000000102",
+          "displayName": "Example Finance",
+          "mail": "finance@example.com",
+          "groupTypes": [
+            "Unified"
+          ],
+          "securityEnabled": false,
+          "mailEnabled": true
+        },
+        {
+          "id": "30000000-0000-4000-8000-000000000103",
+          "displayName": "All Example Devices",
+          "mail": null,
+          "groupTypes": [
+            "DynamicMembership"
+          ],
+          "securityEnabled": true,
+          "mailEnabled": false
+        }
+      ]
     },
-    {
-      "id": "30000000-0000-4000-8000-000000000102",
-      "displayName": "Example Finance",
-      "mail": "finance@example.com",
-      "groupTypes": [
-        "Unified"
-      ],
-      "securityEnabled": false,
-      "mailEnabled": true
-    },
-    {
-      "id": "30000000-0000-4000-8000-000000000103",
-      "displayName": "All Example Devices",
-      "mail": null,
-      "groupTypes": [
-        "DynamicMembership"
-      ],
-      "securityEnabled": true,
-      "mailEnabled": false
-    }
-  ]
+    "variants": [
+      {
+        "match": {
+          "query": {
+            "$select": "id,displayName,mail,expirationDateTime,renewedDateTime,createdDateTime,visibility"
+          }
+        },
+        "status": 200,
+        "body": {
+          "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#groups(id,displayName,mail,expirationDateTime,renewedDateTime,createdDateTime,visibility)",
+          "@odata.count": 2,
+          "value": [
+            {
+              "id": "70000000-0000-4000-8000-000000000711",
+              "displayName": "Project Falcon",
+              "mail": "project-falcon@example.com",
+              "expirationDateTime": "2026-10-29T08:00:00Z",
+              "renewedDateTime": "2025-10-29T08:00:00Z",
+              "createdDateTime": "2025-10-29T08:00:00Z",
+              "visibility": "Private"
+            },
+            {
+              "id": "70000000-0000-4000-8000-000000000712",
+              "displayName": "Event Planning 2025",
+              "mail": "event-planning-2025@example.com",
+              "expirationDateTime": "2026-11-09T08:00:00Z",
+              "renewedDateTime": "2025-11-09T08:00:00Z",
+              "createdDateTime": "2024-11-09T08:00:00Z",
+              "visibility": "Public"
+            }
+          ]
+        }
+      },
+      {
+        "match": {
+          "query": {
+            "$select": "id",
+            "$top": "1",
+            "$count": "true"
+          }
+        },
+        "status": 200,
+        "body": {
+          "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#groups(id)",
+          "@odata.count": 2,
+          "value": [
+            {
+              "id": "70000000-0000-4000-8000-000000000711"
+            }
+          ]
+        }
+      }
+    ]
+  }
 }

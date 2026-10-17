@@ -430,20 +430,20 @@ for (const g of fixtureGroups) {
       const id = await groupId(g.displayName);
       if (!id) return [`${g.displayName}: not found in Graph`];
       const owners = await ownersOf(id);
-      const rows = rowsOf(v);
+      // 1.2: { people, apps, total } — people and apps read apart (the type casts), so apps are listed too.
+      const o = (v ?? {}) as Row;
+      const people = rowsOf(o.people);
       return [
         ...compareValue(
           `${g.displayName} owners listed (Graph: ${owners.users.length} people, ${owners.apps} apps)`,
           owners.users.length + owners.apps,
-          rows.length,
+          people.length + rowsOf(o.apps).length,
         ),
+        ...compareValue(`${g.displayName} owner total`, owners.users.length + owners.apps, o.total),
         ...compareSets(
           `${g.displayName} people listed as owners`,
           owners.users,
-          rows
-            .filter((r) => r.ownerType !== 'Service principal')
-            .map(nameOf)
-            .filter((n): n is string => !!n),
+          people.map(nameOf).filter((n): n is string => !!n),
         ),
       ];
     }),
@@ -550,10 +550,12 @@ add(
   async (page, check) => {
     const d = await data('identity.groups-without-owners', 'report', {});
     if ('problem' in d) return { page, check, status: 'unknowable', details: [d.problem] };
+    // 2.0: groups with no owner at all and groups owned by apps only (no person) are both listed, apart.
     const rows = rowsOf(d.value).filter((r) => r.noOwners === true);
-    const shown = fixtureNames(rows.map(nameOf)).filter((n) =>
-      fixtureGroups.some((g) => g.displayName === n),
-    );
+    const listed = (appOnly: boolean) =>
+      fixtureNames(rows.filter((r) => (r.appOnly === true) === appOnly).map(nameOf)).filter((n) =>
+        fixtureGroups.some((g) => g.displayName === n),
+      );
     const graphOwnerless: string[] = [];
     const appOwnedOnly: string[] = [];
     for (const g of fixtureGroups) {
@@ -563,32 +565,26 @@ add(
       if (!o.users.length && !o.apps) graphOwnerless.push(g.displayName);
       else if (!o.users.length) appOwnedOnly.push(g.displayName);
     }
-    const graph = compareSets('ownerless (Graph: no owner at all)', graphOwnerless, shown);
-    if (graph.length) return outcome(page, check, graph);
-    const catalogue = compareSets(
-      'ownerless (catalogue)',
-      fixtureGroups.filter((g) => !g.owners.length).map((g) => g.displayName),
-      shown,
-    );
-    const explained = catalogue.length > 0 && catalogue.every((x) => appOwnedOnly.some((n) => x.includes(n)));
-    return explained
-      ? outcome(
-          page,
-          check,
-          [...catalogue, `owned by an app only: ${appOwnedOnly.join(', ')}`],
-          APP_OWNER_WHY,
-        )
-      : outcome(page, check, catalogue);
+    return outcome(page, check, [
+      ...compareSets('no owner at all (Graph)', graphOwnerless, listed(false)),
+      ...compareSets('owned by an app only (Graph)', appOwnedOnly, listed(true)),
+      ...compareSets(
+        'no person as owner (catalogue)',
+        fixtureGroups.filter((g) => !g.owners.length).map((g) => g.displayName),
+        [...listed(false), ...listed(true)],
+      ),
+    ]);
   },
 );
 
 add(
   'identity.password-policies#users',
   'passwords that never expire (fixture users) vs Graph',
-  using('identity.password-policies', 'users', {}, async (v) => {
+  // 2.0: one row per account under its most severe finding; the "never expires" view lists every exemption.
+  using('identity.password-policies', 'users', { finding: 'neverExpires' }, async (v) => {
     const shown = fixtureNames(
       rowsOf(v)
-        .filter((r) => r.neverExpires === true)
+        .filter((r) => String(r.finding ?? '').startsWith('Never expires'))
         .map(nameOf),
     ).filter((n) => ALL_FIXTURE_USERS.includes(n));
     const graphRows = await all<{ displayName: string; passwordPolicies?: string | null }>('/users', {

@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/report.schema.json
 kind: report
 id: m365.inactive-licensed-users
-version: 1.0.0
+version: 2.0.0
 title: Inactive licensed users
 summary: >-
   Licensed people with no activity in Microsoft 365 (or in one workload — Exchange, Teams, OneDrive or SharePoint) for
@@ -54,7 +54,28 @@ savedViews:
 # so one request answers every window. Data lags 24–48 hours. When the tenant conceals user details in reports, names
 # and sign-in names are hashes (no "@") and can't be matched to accounts; the report says so.
 datasources:
-  users:
+  # Active and inactive users per workload, counted by Microsoft for the period (one small report).
+  services:
+    source: graph
+    label: Microsoft 365 services user counts (usage report)
+    request:
+      beta: true
+      path: '${ "/reports/getOffice365ServicesUserCounts(period=''" & (params.days = 30 ? "D30" : params.days = 180 ? "D180" : "D90") & "'')" }'
+      query: { $format: application/json }
+    cache: { ttl: 3600 }
+    transform: >-
+      ${ (
+        $c := value.value[0];
+        {
+          "period": params.days = 30 ? '30 days' : params.days = 180 ? '180 days' : '90 days',
+          "byWorkload": [
+          { "workload": "Exchange", "active": $c.exchangeActive, "inactive": $c.exchangeInactive },
+          { "workload": "Teams", "active": $c.teamsActive, "inactive": $c.teamsInactive },
+          { "workload": "OneDrive", "active": $c.oneDriveActive, "inactive": $c.oneDriveInactive },
+          { "workload": "SharePoint", "active": $c.sharePointActive, "inactive": $c.sharePointInactive }
+        ] }
+      ) }
+  userList:
     source: graph
     label: Microsoft 365 active user detail (usage report)
     request:
@@ -62,65 +83,67 @@ datasources:
       path: /reports/getOffice365ActiveUserDetail(period='D180')
       query: { $format: application/json }
     paging: all
-    maxItems: 100000
+    maxItems: 30000
     cache: { ttl: 3600 }
+    # Native filters ($applyAdvanced) on the report's own rows — no per-user JSONata, which doesn't fit the budget beyond
+    # ~1,500 users. "Inactive": every workload's last activity is empty or before the window, and the person held a
+    # licence before the window — any licence assigned before it, or no assignment date reported at all (an empty date
+    # counts as "before", in every view). The table shows the first 10,000 (never active first, then the longest idle);
+    # the counts and the export have every user read (past 30,000 the page says the data is partial).
     transform: >-
       ${ (
-        $days := params.days ? $number(params.days) : 90;
+        $cutoff := $daysAgo(params.days ? $number(params.days) : 90);
         $w := params.workload ? params.workload : 'any';
-        $recent := function($d) { $d ? -$daysUntil($d) < $days : false };
-        $state := function($licensed, $last, $assigned) {
-          $licensed != true ? 'unlicensed' : $recent($last) ? 'active' : $recent($assigned) ? 'new' : 'inactive'
-        };
-        $users := [value.value[$not(isDeleted = true) and $count(assignedProducts) > 0].(
-          $last := ([exchangeLastActivityDate, teamsLastActivityDate, oneDriveLastActivityDate, sharePointLastActivityDate, yammerLastActivityDate][$])^(>$)[0];
-          $since := ([exchangeLicenseAssignDate, teamsLicenseAssignDate, oneDriveLicenseAssignDate, sharePointLicenseAssignDate][$])^($)[0];
-          $s := {
-            "exchange": $state(hasExchangeLicense, exchangeLastActivityDate, exchangeLicenseAssignDate),
-            "teams": $state(hasTeamsLicense, teamsLastActivityDate, teamsLicenseAssignDate),
-            "oneDrive": $state(hasOneDriveLicense, oneDriveLastActivityDate, oneDriveLicenseAssignDate),
-            "sharePoint": $state(hasSharePointLicense, sharePointLastActivityDate, sharePointLicenseAssignDate)
-          };
-          $merge([$s, {
-            "userPrincipalName": userPrincipalName,
-            "displayName": displayName,
-            "products": assignedProducts,
-            "licences": $count(assignedProducts),
-            "any": $recent($last) ? 'active' : $recent($since) ? 'new' : 'inactive',
-            "lastActivityDate": $last,
-            "exchangeLastActivityDate": exchangeLastActivityDate,
-            "teamsLastActivityDate": teamsLastActivityDate,
-            "oneDriveLastActivityDate": oneDriveLastActivityDate,
-            "sharePointLastActivityDate": sharePointLastActivityDate,
-            "licensedSince": $since,
-            "concealed": $not($contains(userPrincipalName, '@')),
-            "reportRefreshDate": reportRefreshDate
-          }])
-        )];
-        $rows := [$users[$lookup($, $w) = 'inactive'].(
-          $l := $w = 'any' ? lastActivityDate : $lookup($, $w & 'LastActivityDate');
-          $merge([$, {
-            "workloadLastActivityDate": $l,
-            "daysInactive": $l ? -$daysUntil($l),
-            "activity": $l ? 'inactive' : 'never'
-          }])
-        )];
-        $per := function($key, $label) { {
-          "workload": $label,
-          "active": $count($users[$lookup($, $key) = 'active']),
-          "inactive": $count($users[$lookup($, $key) = 'inactive'])
-        } };
+        $f := function($rows, $clauses) { $applyAdvanced($rows, { "join": "and", "clauses": $clauses }) };
+        $idle := function($field) { { "join": "or", "clauses": [
+          { "path": $field, "type": "date", "op": "isEmpty", "value": null },
+          { "path": $field, "type": "date", "op": "lt", "value": $cutoff }
+        ] } };
+        $empty := function($field) { { "path": $field, "type": "date", "op": "isEmpty", "value": null } };
+        $workloads := ['exchange', 'teams', 'oneDrive', 'sharePoint'];
+        $all := $f(value.value, [
+          { "path": "isDeleted", "type": "boolean", "op": "ne", "value": true },
+          { "path": "assignedProducts", "type": "string", "op": "notEmpty", "value": null }
+        ]);
+        $licensedBefore := { "join": "or", "clauses": [$workloads.{ "path": $ & "LicenseAssignDate", "type": "date", "op": "le", "value": $cutoff }] };
+        $activityFields := $append($workloads.($ & 'LastActivityDate'), ['yammerLastActivityDate']);
+        $noAssignDates := [$workloads.$empty($ & 'LicenseAssignDate')];
+        $inactive := $w = 'any'
+          ? $append(
+              $f($all, $append([$activityFields.$idle($)], [$licensedBefore])),
+              $f($all, $append([$activityFields.$idle($)], $noAssignDates))
+            )
+          : $f($all, [
+              { "path": "has" & $uppercase($substring($w, 0, 1)) & $substring($w, 1) & "License", "type": "boolean", "op": "eq", "value": true },
+              $idle($w & 'LastActivityDate'),
+              { "join": "or", "clauses": [$empty($w & 'LicenseAssignDate'), { "path": $w & "LicenseAssignDate", "type": "date", "op": "le", "value": $cutoff }] }
+            ]);
+        $neverFields := $w = 'any' ? $activityFields : [$w & 'LastActivityDate'];
+        $never := $f($inactive, [$neverFields.$empty($)]);
+        $sometime := $f($inactive, [{ "join": "or", "clauses": [$neverFields.{ "path": $, "type": "date", "op": "notEmpty", "value": null }] }]);
+        $rows := $append($withFields($never, { "activity": "never" }), $withFields($append(
+          $f($sometime, [$empty('exchangeLastActivityDate')]),
+          ($dated := $f($sometime, [{ "path": "exchangeLastActivityDate", "type": "date", "op": "notEmpty", "value": null }]); $dated^(exchangeLastActivityDate))
+        ), { "activity": "inactive" }));
         {
-          "rows": [$rows^(activity = 'never' ? 0 : 1, >daysInactive)],
-          "total": $count($rows),
-          "never": $count($rows[activity = 'never']),
-          "licences": $sum($rows.licences),
-          "licensedUsers": $count($users),
-          "byWorkload": [$per('exchange', 'Exchange'), $per('teams', 'Teams'), $per('oneDrive', 'OneDrive'), $per('sharePoint', 'SharePoint')],
-          "concealed": $count($users[concealed]) > 0,
-          "asOf": $users[0].reportRefreshDate
+          "rows": $rows,
+          "partial": value.truncated = true,
+          "total": $count($inactive),
+          "never": $count($never),
+          "licences": $count($inactive.assignedProducts),
+          "licensedUsers": $count($all),
+          "concealed": $exists($all[0].userPrincipalName) and $not($contains($all[0].userPrincipalName, '@')),
+          "asOf": $all[0].reportRefreshDate
         }
       ) }
+  # What the page shows of userList: its figures and the first 10,000 rows, so the browser gets a small answer. The
+  # export reads userList itself — every row of the view (export.maxRows keeps its read at the same cap).
+  users:
+    source: static
+    data: ${ ds.userList }
+    cache: { ttl: 3600 }
+    transform: >-
+      ${ $merge([value, { "rows": $take(value.rows, 10000), "listCapped": $count(value.rows) > 10000 }]) }
 
 layout:
   - widget: markdown
@@ -130,6 +153,16 @@ layout:
       **User names are concealed in usage reports.** Rows show hashed names that can't be matched to accounts. A Global
       Administrator can turn off *Display concealed user, group, and site names in all reports* in the Microsoft 365
       admin center → **Settings → Org settings → Services → Reports**.
+  - widget: markdown
+    span: 12
+    when: ${ users.partial = true }
+    text: >-
+      **Partial data.** Microsoft has more users than this report reads (30,000); the figures, the list and the
+      export cover the ones read.
+  - widget: markdown
+    span: 12
+    when: ${ users.listCapped = true }
+    text: The list shows the first 10,000 users (never active first, then the longest idle in Exchange); the CSV/XLSX export has all of them.
   - widget: kpi
     data: users.total
     label: Inactive licensed users
@@ -150,16 +183,19 @@ layout:
     format: number
   - widget: chart
     id: byWorkload
-    title: Licensed users by workload, active and inactive in the window
+    title: Users by workload, active and inactive (Microsoft's counts for the report period)
     type: stackedBar
     span: 12
     rows: 2
-    data: users.byWorkload
+    data: services.byWorkload
     x: workload
     y: [active, inactive]
     stack: true
     labels: { active: Active, inactive: Inactive }
     format: number
+  - widget: markdown
+    span: 12
+    text: The chart is Microsoft's own count for the last ${ services.period } (the report period nearest the window you chose).
   - widget: table
     id: users
     span: 12
@@ -172,20 +208,18 @@ layout:
         kind: status
         map: { never: [crit, Never active], inactive: [warn, Inactive] }
         filter: facet
-      - { field: daysInactive, label: Days inactive, kind: number, align: end, sortable: true, filter: range }
-      - { field: workloadLastActivityDate, label: Last activity, kind: date, filter: date }
-      - { field: products, label: Licences, kind: tags }
-      - { field: exchangeLastActivityDate, label: Exchange, kind: date, hidden: true }
-      - { field: teamsLastActivityDate, label: Teams, kind: date, hidden: true }
+      - { field: assignedProducts, label: Licences, kind: tags }
+      - { field: exchangeLastActivityDate, label: Exchange, kind: date, filter: date, sortable: true }
+      - { field: teamsLastActivityDate, label: Teams, kind: date, filter: date, sortable: true }
       - { field: oneDriveLastActivityDate, label: OneDrive, kind: date, hidden: true }
       - { field: sharePointLastActivityDate, label: SharePoint, kind: date, hidden: true }
-      - { field: licensedSince, label: Licensed since, kind: date, hidden: true }
+      - { field: exchangeLicenseAssignDate, label: Exchange licence since, kind: date, hidden: true }
       - { field: reportRefreshDate, label: Report date, kind: date, hidden: true }
     rowActions:
       - label: Find the user
         icon: magnifying-glass
         href: /p/identity.users?q=${ $encode(row.userPrincipalName) }
-        when: ${ row.concealed = false }
+        when: ${ $contains(row.userPrincipalName, '@') }
     empty:
       title: No inactive licensed users
       body: Every licensed person used Microsoft 365 within the window. Usage data appears 24–48 hours after activity.
@@ -193,5 +227,6 @@ layout:
 export:
   formats: [csv, xlsx]
   fileName: inactive-licensed-users-${ params.workload }-${ params.days }d
-  data: users.rows
+  data: userList.rows
+  maxRows: 30000
   columns: all

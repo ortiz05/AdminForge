@@ -1,0 +1,13 @@
+{
+  "@odata.count": 1,
+  "value": [
+    {
+      "id": "00000000-0000-4000-8000-000000000102",
+      "userDisplayName": "Morgan Chen",
+      "userPrincipalName": "morgan.chen@example.com",
+      "riskLevel": "high",
+      "riskState": "atRisk",
+      "riskLastUpdatedDateTime": "2026-10-14T09:00:00Z"
+    }
+  ]
+}

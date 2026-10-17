@@ -1,7 +1,7 @@
 $schema: ../../packages/schemas/generated/dashboard.schema.json
 kind: dashboard
 id: identity.health
-version: 1.0.0
+version: 1.1.0
 title: Identity health
 summary: >-
   Posture of the directory at a glance — MFA registration, admins without MFA, stale accounts, guest growth, risky
@@ -60,6 +60,9 @@ datasources:
           "methods": $append([], [value.methods.userRegistrationMethodCounts[userCount > 0].{ "method": authenticationMethod, "users": userCount }^(>users)][[0..5]])
         }
       ) }
+  # Built for large tenants: counts come from Graph ($count), and the two answers Graph can't count (accounts by last
+  # sign-in, app credentials by expiry) read a capped list with native filters — past the cap the strip says the
+  # figures are partial, and the linked reports have the full lists.
   stale:
     source: graph
     requires: { licences: [signInLogs] }
@@ -70,64 +73,121 @@ datasources:
         $filter: ${ 'signInActivity/lastSignInDateTime le ' & $daysAgo(90) }
         $top: 120
     paging: all
-    maxItems: 50000
+    maxItems: 2400
     cache: { ttl: 3600 }
-    # The window is re-applied here so the numbers stay right whatever the page size or source.
     transform: >-
       ${ (
-        $stale := value.value[signInActivity.lastSignInDateTime and $daysUntil(signInActivity.lastSignInDateTime) <= -90];
+        $enabled := { "path": "accountEnabled", "type": "boolean", "op": "eq", "value": true };
         {
-          "members": $count($stale[userType = 'Member' and accountEnabled = true]),
-          "guests": $count($stale[userType = 'Guest' and accountEnabled = true])
+          "members": $count($applyAdvanced(value.value, { "join": "and", "clauses": [$enabled, { "path": "userType", "type": "string", "op": "eq", "value": "Member" }] })),
+          "guests": $count($applyAdvanced(value.value, { "join": "and", "clauses": [$enabled, { "path": "userType", "type": "string", "op": "eq", "value": "Guest" }] }))
         }
       ) }
+  # Guests created in each of the last twelve 30-day windows, counted by Graph (no list read).
   guestGrowth:
-    source: graph
-    request:
-      path: /users
-      headers: { ConsistencyLevel: eventual }
-      query:
-        $select: id,userType,createdDateTime
-        $filter: ${ "userType eq 'Guest' and createdDateTime ge " & $daysAgo(365) }
-        $count: true
-        $top: 999
-    paging: all
-    maxItems: 50000
+    source: graphBatch
+    requests:
+      w00:
+        path: /users/$count
+        headers: { ConsistencyLevel: eventual }
+        query: { $filter: "${ \"userType eq 'Guest' and createdDateTime ge \" & $daysAgo(30) & \" and createdDateTime le \" & $daysAgo(0) }" }
+      w01:
+        path: /users/$count
+        headers: { ConsistencyLevel: eventual }
+        query: { $filter: "${ \"userType eq 'Guest' and createdDateTime ge \" & $daysAgo(60) & \" and createdDateTime le \" & $daysAgo(30) }" }
+      w02:
+        path: /users/$count
+        headers: { ConsistencyLevel: eventual }
+        query: { $filter: "${ \"userType eq 'Guest' and createdDateTime ge \" & $daysAgo(90) & \" and createdDateTime le \" & $daysAgo(60) }" }
+      w03:
+        path: /users/$count
+        headers: { ConsistencyLevel: eventual }
+        query: { $filter: "${ \"userType eq 'Guest' and createdDateTime ge \" & $daysAgo(120) & \" and createdDateTime le \" & $daysAgo(90) }" }
+      w04:
+        path: /users/$count
+        headers: { ConsistencyLevel: eventual }
+        query: { $filter: "${ \"userType eq 'Guest' and createdDateTime ge \" & $daysAgo(150) & \" and createdDateTime le \" & $daysAgo(120) }" }
+      w05:
+        path: /users/$count
+        headers: { ConsistencyLevel: eventual }
+        query: { $filter: "${ \"userType eq 'Guest' and createdDateTime ge \" & $daysAgo(180) & \" and createdDateTime le \" & $daysAgo(150) }" }
+      w06:
+        path: /users/$count
+        headers: { ConsistencyLevel: eventual }
+        query: { $filter: "${ \"userType eq 'Guest' and createdDateTime ge \" & $daysAgo(210) & \" and createdDateTime le \" & $daysAgo(180) }" }
+      w07:
+        path: /users/$count
+        headers: { ConsistencyLevel: eventual }
+        query: { $filter: "${ \"userType eq 'Guest' and createdDateTime ge \" & $daysAgo(240) & \" and createdDateTime le \" & $daysAgo(210) }" }
+      w08:
+        path: /users/$count
+        headers: { ConsistencyLevel: eventual }
+        query: { $filter: "${ \"userType eq 'Guest' and createdDateTime ge \" & $daysAgo(270) & \" and createdDateTime le \" & $daysAgo(240) }" }
+      w09:
+        path: /users/$count
+        headers: { ConsistencyLevel: eventual }
+        query: { $filter: "${ \"userType eq 'Guest' and createdDateTime ge \" & $daysAgo(300) & \" and createdDateTime le \" & $daysAgo(270) }" }
+      w10:
+        path: /users/$count
+        headers: { ConsistencyLevel: eventual }
+        query: { $filter: "${ \"userType eq 'Guest' and createdDateTime ge \" & $daysAgo(330) & \" and createdDateTime le \" & $daysAgo(300) }" }
+      w11:
+        path: /users/$count
+        headers: { ConsistencyLevel: eventual }
+        query: { $filter: "${ \"userType eq 'Guest' and createdDateTime ge \" & $daysAgo(360) & \" and createdDateTime le \" & $daysAgo(330) }" }
     cache: { ttl: 3600 }
     transform: >-
-      ${ (
-        $months := [value.value[userType = 'Guest' and createdDateTime and $daysUntil(createdDateTime) >= -365].$substring(createdDateTime, 0, 7)];
-        { "byMonth": [$distinct($months).( $m := $; { "month": $m, "invited": $count($months[$ = $m]) } )^(month)] }
-      ) }
+      ${ {
+        "byMonth": [[11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0].(
+          $k := $;
+          $key := 'w' & ($k < 10 ? '0' : '') & $string($k);
+          { "month": $substring($daysAgo(30 * ($k + 1)), 0, 10), "invited": $lookup($$.value, $key) }
+        )]
+      } }
+  # Counted by Graph; the list shows the most recent high-risk users, then medium.
   risky:
-    source: graph
+    source: graphBatch
     requires: { licences: [identityProtection] }
-    request:
-      path: /identityProtection/riskyUsers
-      query:
-        $filter: riskState eq 'atRisk'
-        $top: 500
+    requests:
+      atRisk:
+        path: /identityProtection/riskyUsers
+        query: { $filter: "riskState eq 'atRisk'", $count: "true", $top: "1", $select: "id" }
+      high:
+        path: /identityProtection/riskyUsers
+        query: { $filter: "riskState eq 'atRisk' and riskLevel eq 'high'", $count: "true", $top: "8", $orderby: "riskLastUpdatedDateTime desc" }
+      medium:
+        path: /identityProtection/riskyUsers
+        query: { $filter: "riskState eq 'atRisk' and riskLevel eq 'medium'", $top: "8", $orderby: "riskLastUpdatedDateTime desc" }
     cache: { ttl: 600 }
     transform: >-
       ${ {
-        "count": $count(value.value[riskState = 'atRisk']),
-        "high": $count(value.value[riskState = 'atRisk' and riskLevel = 'high']),
-        "top": $append([], [value.value[riskState = 'atRisk']^(riskLevel = 'high' ? 0 : riskLevel = 'medium' ? 1 : 2, >riskLastUpdatedDateTime)][[0..7]])
+        "count": value.atRisk.`@odata.count`,
+        "high": value.high.`@odata.count`,
+        "top": $append([], $take($append($append([], value.high.value), value.medium.value), 8))
       } }
   credentials:
     source: graph
     request:
       path: /applications
       query:
-        $select: id,appId,displayName,passwordCredentials,keyCredentials
+        $select: id,passwordCredentials,keyCredentials
         $top: 999
     paging: all
-    maxItems: 20000
+    maxItems: 10000
     cache: { ttl: 1800 }
+    # Credentials compared as instants natively ($applyAdvanced): JSONata per credential is too slow for 20k apps.
     transform: >-
       ${ (
-        $days := [value.value.$append(passwordCredentials.endDateTime, keyCredentials.endDateTime)[$].$daysUntil($)];
-        { "expired": $count($days[$ < 0]), "expiring": $count($days[$ >= 0 and $ <= 30]) }
+        $creds := $append(value.value.passwordCredentials, value.value.keyCredentials);
+        $now := $iso();
+        $soon := $daysAgo(-30);
+        {
+          "expired": $count($applyAdvanced($creds, { "join": "and", "clauses": [{ "path": "endDateTime", "type": "date", "op": "lt", "value": $now }] })),
+          "expiring": $count($applyAdvanced($creds, { "join": "and", "clauses": [
+            { "path": "endDateTime", "type": "date", "op": "ge", "value": $now },
+            { "path": "endDateTime", "type": "date", "op": "le", "value": $soon }
+          ] }))
+        }
       ) }
   ca:
     source: graph
@@ -205,7 +265,7 @@ layout:
 
   - widget: chart
     id: guestGrowth
-    title: Guests invited per month
+    title: Guests invited (30-day windows)
     type: bar
     span: 8
     rows: 2

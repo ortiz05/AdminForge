@@ -1,0 +1,48 @@
+{
+  "value": [
+    {
+      "id": "00000000-0000-4000-8000-000000000201",
+      "displayName": "SG-App-Payroll-Users",
+      "mail": null,
+      "groupTypes": [],
+      "securityEnabled": true,
+      "mailEnabled": false,
+      "membershipRule": null,
+      "onPremisesSyncEnabled": null,
+      "isAssignableToRole": false,
+      "createdDateTime": "2025-03-01T00:00:00Z",
+      "visibility": null,
+      "owners": [
+        {
+          "@odata.type": "#microsoft.graph.user",
+          "id": "00000000-0000-4000-8000-000000000101",
+          "displayName": "Avery Lee",
+          "userPrincipalName": "avery.lee@example.com"
+        }
+      ]
+    },
+    {
+      "id": "00000000-0000-4000-8000-0000000002a1",
+      "displayName": "SG-HR-Provisioned-Sync",
+      "mail": null,
+      "groupTypes": [],
+      "securityEnabled": true,
+      "mailEnabled": false,
+      "membershipRule": null,
+      "onPremisesSyncEnabled": null,
+      "isAssignableToRole": false,
+      "createdDateTime": "2025-03-01T00:00:00Z",
+      "visibility": null,
+      "owners": [
+        {
+          "@odata.type": "#microsoft.graph.servicePrincipal",
+          "id": "00000000-0000-4000-8000-0000000005a1",
+          "displayName": "Example HR Provisioning",
+          "appId": "10000000-0000-4000-8000-0000000005a1",
+          "servicePrincipalType": "Application",
+          "accountEnabled": true
+        }
+      ]
+    }
+  ]
+}

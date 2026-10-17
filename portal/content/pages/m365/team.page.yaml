@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/page.schema.json
 kind: page
 id: m365.team
-version: 1.1.1
+version: 1.2.0
 title: Team or Microsoft 365 group
 summary: >-
   One Microsoft 365 group and, when it is team-enabled, its team — owners, members, guests, channels and team settings.
@@ -12,7 +12,7 @@ template: entity
 requires:
   portalRoles: [Portal.Reader]
   scopes:
-    graph: [Group.Read.All, GroupMember.Read.All, User.Read.All, Team.ReadBasic.All, TeamSettings.Read.All, Channel.ReadBasic.All]
+    graph: [Group.Read.All, GroupMember.Read.All, User.Read.All, Team.ReadBasic.All, TeamSettings.Read.All, Channel.ReadBasic.All, Application.Read.All]
   entraRoles: [Teams Administrator, Global Reader]
 
 params:
@@ -41,6 +41,16 @@ datasources:
       path: /groups/${ $encode($guid(params.id)) }/owners/microsoft.graph.user
       query:
         $select: id,displayName,userPrincipalName,mail,userType,accountEnabled
+        $top: 100
+    cache: { ttl: 60 }
+  # Apps (service principals) can own a group but can't manage a team: read apart from the people, so a team owned
+  # only by apps shows as having no person as owner (GET /groups/{id}/owners without a cast leaves them out).
+  appOwners:
+    source: graph
+    request:
+      path: /groups/${ $encode($guid(params.id)) }/owners/microsoft.graph.servicePrincipal
+      query:
+        $select: id,displayName,appId,servicePrincipalType,accountEnabled
         $top: 100
     cache: { ttl: 60 }
   members:
@@ -79,7 +89,7 @@ header:
   title: ${ group.displayName }
   subtitle: ${ group.mail }
   status: "${ team.isArchived = true ? 'neutral' : $count(owners.value) = 0 ? 'crit' : $count(owners.value) = 1 ? 'warn' : 'ok' }"
-  statusLabel: "${ team.isArchived = true ? 'Archived' : $count(owners.value) = 0 ? 'No owners' : $count(owners.value) = 1 ? 'One owner' : group.isTeam ? 'Active team' : 'Active group' }"
+  statusLabel: "${ team.isArchived = true ? 'Archived' : $count(owners.value) = 0 ? ($count(appOwners.value) > 0 ? 'Owned by an app only' : 'No owners') : $count(owners.value) = 1 ? 'One person as owner' : group.isTeam ? 'Active team' : 'Active group' }"
   ids:
     Group id: ${ group.id }
 
@@ -179,8 +189,25 @@ tabs:
             href: /p/m365.teams-user-policies?user=${ $encode(row.userPrincipalName) }
             when: ${ row.userType = 'Member' and $boolean(row.userPrincipalName) }
         empty:
-          title: This group has no owners
-          body: Nobody can manage membership or settings except administrators. Add at least two owners in the Teams or Entra admin center.
+          title: No person owns this group
+          body: Nobody can manage membership or settings except administrators. Add at least two people as owners in the Teams or Entra admin center.
+      - widget: table
+        id: appOwners
+        title: Apps that own this group
+        span: 12
+        when: ${ $count(appOwners.value) > 0 }
+        data: appOwners.value
+        rowKey: id
+        columns:
+          - { field: displayName, label: App, kind: identity, secondary: appId }
+          - { field: servicePrincipalType, label: Type }
+          - { field: accountEnabled, label: Sign-in, kind: status, map: { "true": [ok, Enabled], "false": [crit, Disabled] } }
+          - { field: id, label: Object id, kind: guid, hidden: true }
+        inspect:
+          page: identity.enterprise-app
+          params:
+            id: ${ row.id }
+            appId: ${ row.appId }
   - id: members
     label: Members
     layout:

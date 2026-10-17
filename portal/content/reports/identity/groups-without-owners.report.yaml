@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/report.schema.json
 kind: report
 id: identity.groups-without-owners
-version: 1.0.0
+version: 2.0.0
 title: Groups without owners
 summary: >-
   Cloud groups that nobody owns — no one to answer access reviews, renew Microsoft 365 groups before they expire or
@@ -23,13 +23,18 @@ params:
     facet: true
     default: noOwners
     values:
-      - { value: noOwners, label: Groups without owners }
+      - { value: noOwners, label: Groups without a person as owner }
       - { value: noMembers, label: Groups without members }
-      - { value: either, label: Without owners or without members }
+      - { value: either, label: "Without a person as owner, or without members" }
   includeSynced: { type: boolean, label: Include groups synced from AD, default: false, facet: true }
 
-# Owners: `owners/$count eq 0` (advanced query) returns only ownerless groups. Members: Graph can't filter on member
-# count, so every group is read with its first members expanded (one $expand per request) — only when asked for.
+# Owners: `owners/$count eq 0` (advanced query) returns groups with no owner at all. A group owned only by apps
+# (service principals — a provisioning or automation app) has no person accountable for it either, so it is listed
+# separately: Graph can't filter on the owners' type, so groups are read with their owners expanded (which, unlike
+# GET /groups/{id}/owners, includes service principals) up to a cap (20,000 groups) — past it, and past the member
+# read's cap, the page says the list is partial.
+# Members: Graph can't filter on member count, so groups are read with their first members expanded (one $expand per
+# request) — only when asked for. Filters are native ($applyAdvanced): no per-group JSONata, so 50k groups fit.
 datasources:
   ownerless:
     source: graph
@@ -45,6 +50,18 @@ datasources:
     paging: all
     maxItems: 50000
     cache: { ttl: 900 }
+  owned:
+    source: graph
+    when: ${ params.issue != 'noMembers' }
+    request:
+      path: /groups
+      query:
+        $select: id,displayName,mail,groupTypes,securityEnabled,mailEnabled,membershipRule,onPremisesSyncEnabled,isAssignableToRole,createdDateTime,visibility
+        $expand: owners($select=id,displayName,userPrincipalName)
+        $top: 999
+    paging: all
+    maxItems: 20000
+    cache: { ttl: 900 }
   membership:
     source: graph
     when: ${ params.issue != 'noOwners' }
@@ -55,52 +72,56 @@ datasources:
         $expand: members($select=id)
         $top: 999
     paging: all
-    maxItems: 100000
+    maxItems: 50000
     cache: { ttl: 900 }
   report:
     source: static
     data: >-
-      ${ { "ownerless": ds.ownerless.value, "membership": ds.membership.value } }
+      ${ {
+        "ownerless": ds.ownerless.value,
+        "owned": ds.owned.value,
+        "membership": ds.membership.value,
+        "partial": ds.ownerless.truncated = true or ds.owned.truncated = true or ds.membership.truncated = true
+      } }
     transform: >-
       ${ (
         $issue := params.issue ? params.issue : 'noOwners';
-        $noOwner := $merge([[value.ownerless].{ id: true }]);
-        $describe := function($g, $noOwners, $noMembers) {
-          {
-            "id": $g.id,
-            "displayName": $g.displayName,
-            "mail": $g.mail,
-            "kind": 'Unified' in $g.groupTypes ? 'Microsoft 365'
-                    : $g.securityEnabled and $g.mailEnabled ? 'Mail-enabled security'
-                    : $g.securityEnabled ? 'Security' : 'Distribution list',
-            "membership": 'DynamicMembership' in $g.groupTypes ? 'Dynamic' : 'Assigned',
-            "source": $g.onPremisesSyncEnabled = true ? 'Synced' : 'Cloud',
-            "roleAssignable": $g.isAssignableToRole = true,
-            "created": $g.createdDateTime,
-            "noOwners": $noOwners,
-            "noMembers": $noMembers,
-            "issue": $noOwners = true and $noMembers = true ? 'No owners or members'
-                     : $noOwners = true ? 'No owners' : 'No members'
-          }
-        };
-        $rows := $issue = 'noOwners'
-          ? [value.ownerless.$describe($, true, null)]
-          : [value.membership.(
-              $o := $issue = 'either' ? $lookup($noOwner, id) = true : null;
-              $m := $count(members) = 0;
-              ($o = true or $m) ? $describe($, $o, $m)
-            )];
-        $shown := $rows[$$.params.includeSynced = true or source = 'Cloud'];
+        $scope := $$.params.includeSynced = true ? [] : [{ "path": "onPremisesSyncEnabled", "type": "boolean", "op": "ne", "value": true }];
+        $f := function($rows, $clauses) { $applyAdvanced($rows, { "join": "and", "clauses": $append($scope, $clauses) }) };
+        $noOwner := $f(value.ownerless, []);
+        $appOnly := $f(value.owned, [
+          { "path": "owners", "type": "string", "op": "notEmpty", "value": null },
+          { "path": "owners.userPrincipalName", "type": "string", "op": "isEmpty", "value": null }
+        ]);
+        $noMembers := $issue = 'noOwners' ? [] : $f(value.membership, [{ "path": "members", "type": "string", "op": "isEmpty", "value": null }]);
+        $memberless := $append([], $noMembers.id);
+        $ownerIds := $append($append([], $noOwner.id), $appOnly.id);
+        $ownerRows := $append($append(
+          $withFields($f($noOwner, [{ "path": "id", "type": "guid", "op": "notIn", "value": $memberless }]), { "issue": "No owners", "noOwners": true }),
+          $withFields($f($noOwner, [{ "path": "id", "type": "guid", "op": "in", "value": $memberless }]), { "issue": "No owners or members", "noOwners": true, "noMembers": true })),
+          $withFields($appOnly, { "issue": "Owned by an app only", "noOwners": true, "appOnly": true })
+        );
+        $rows := $issue = 'noOwners' ? $ownerRows
+          : $issue = 'noMembers' ? $withFields($noMembers, { "issue": "No members", "noMembers": true })
+          : $append($ownerRows, $withFields($f($noMembers, [{ "path": "id", "type": "guid", "op": "notIn", "value": $ownerIds }]), { "issue": "No members", "noMembers": true }));
         {
-          "rows": [$shown^(displayName)],
-          "total": $count($shown),
-          "noOwners": $issue = 'noMembers' ? null : $count($shown[noOwners = true]),
-          "noMembers": $issue = 'noOwners' ? null : $count($shown[noMembers = true]),
-          "m365NoOwners": $issue = 'noMembers' ? null : $count($shown[noOwners = true and kind = 'Microsoft 365'])
+          "rows": $rows,
+          "partial": value.partial = true,
+          "total": $count($rows),
+          "noOwners": $issue = 'noMembers' ? null : $count($noOwner),
+          "appOnly": $issue = 'noMembers' ? null : $count($appOnly),
+          "noMembers": $issue = 'noOwners' ? null : $count($noMembers),
+          "m365NoOwners": $issue = 'noMembers' ? null : $count($applyAdvanced($append($noOwner, $appOnly), { "join": "and", "clauses": [{ "path": "groupTypes", "type": "string", "op": "eq", "value": "Unified" }] }))
         }
       ) }
 
 layout:
+  - widget: markdown
+    span: 12
+    when: ${ report.partial = true }
+    text: >-
+      **Partial list.** Microsoft has more groups than this report reads (20,000 with their owners, 50,000 with their
+      members); groups owned only by apps and groups without members are found among those read.
   - widget: kpi
     id: total
     data: report.total
@@ -110,13 +131,20 @@ layout:
   - widget: kpi
     id: noOwners
     data: report.noOwners
-    label: Without owners
+    label: Without any owner
     format: number
+    when: ${ params.issue != 'noMembers' }
+  - widget: kpi
+    id: appOnly
+    data: report.appOnly
+    label: Owned by an app only
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
     when: ${ params.issue != 'noMembers' }
   - widget: kpi
     id: m365NoOwners
     data: report.m365NoOwners
-    label: Microsoft 365 groups without owners
+    label: Microsoft 365 groups without a person as owner
     format: number
     status: "${ value > 0 ? 'warn' : 'ok' }"
     when: ${ params.issue != 'noMembers' }
@@ -133,12 +161,13 @@ layout:
     rowKey: id
     columns:
       - { field: displayName, label: Group, kind: identity, secondary: mail, sortable: true }
-      - { field: issue, label: Issue, kind: status, map: { "No owners": [warn, No owners], "No members": [info, No members], "No owners or members": [warn, No owners or members] }, filter: facet }
-      - { field: kind, label: Type, filter: facet }
-      - { field: membership, label: Membership, filter: facet }
-      - { field: source, label: Source, filter: facet }
-      - { field: roleAssignable, label: Role-assignable, kind: boolean }
-      - { field: created, label: Created, kind: date, filter: date, sortable: true }
+      - { field: issue, label: Issue, kind: status, map: { "No owners": [warn, No owners], "Owned by an app only": [warn, Owned by an app only], "No members": [info, No members], "No owners or members": [warn, No owners or members] }, filter: facet }
+      - { field: groupTypes, label: Group types, kind: tags, filter: facet }
+      - { field: securityEnabled, label: Security, kind: boolean, filter: facet }
+      - { field: mailEnabled, label: Mail-enabled, kind: boolean, filter: facet }
+      - { field: onPremisesSyncEnabled, label: Synced, kind: status, map: { "true": [info, Synced] }, filter: facet }
+      - { field: isAssignableToRole, label: Role-assignable, kind: boolean }
+      - { field: createdDateTime, label: Created, kind: date, filter: date, sortable: true }
       - { field: id, label: Object id, kind: guid, hidden: true }
     inspect:
       page: identity.group
@@ -150,10 +179,10 @@ layout:
         icon: user-plus
         inputs:
           groupId: ${ row.id }
-        when: ${ row.noOwners = true and row.source = 'Cloud' }
+        when: ${ row.noOwners = true and row.onPremisesSyncEnabled != true }
     empty:
       title: Nothing to clean up
-      body: Every cloud group in scope has an owner (and members, when you include that check).
+      body: Every cloud group in scope has a person as owner (and members, when you include that check).
 
 export:
   formats: [csv, xlsx]

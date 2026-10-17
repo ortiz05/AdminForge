@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/report.schema.json
 kind: report
 id: m365.sharepoint-site-usage
-version: 1.0.1
+version: 2.0.0
 title: SharePoint site storage and inactive sites
 summary: >-
   SharePoint sites with no activity for the chosen number of days (archive or delete candidates) and sites close to
@@ -60,7 +60,18 @@ savedViews:
 # Counts (files, active files, page views) cover the last 30 days; storage is current; the last activity date is the
 # site's latest activity whenever it was. With concealed report names the URL and owner are hashes.
 datasources:
-  sites:
+  # Tenant-wide storage from Microsoft's daily summary (one small report), not a sum over every site.
+  storage:
+    source: graph
+    label: SharePoint storage (usage report)
+    request:
+      beta: true
+      path: /reports/getSharePointSiteUsageStorage(period='D7')
+      query: { $format: application/json }
+    cache: { ttl: 3600 }
+    transform: >-
+      ${ { "used": (value.value^(>reportDate))[0].storageUsedInBytes } }
+  siteList:
     source: graph
     label: SharePoint site usage detail (usage report)
     request:
@@ -68,59 +79,59 @@ datasources:
       path: /reports/getSharePointSiteUsageDetail(period='D30')
       query: { $format: application/json }
     paging: all
-    maxItems: 100000
+    maxItems: 40000
     cache: { ttl: 3600 }
+    # Native filters ($applyAdvanced) on disjoint sets — near the storage limit, inactive, the rest — and the report's
+    # own rows (no per-site JSONata: it doesn't fit the budget beyond ~1,500 sites). The list keeps the first 10,000
+    # (near the limit first, largest first); the export has every site of the view.
     transform: >-
       ${ (
-        $days := params.days ? $number(params.days) : 180;
         $limit := (params.threshold ? $number(params.threshold) : 90) / 100;
+        $cutoff := $daysAgo(params.days ? $number(params.days) : 180);
         $view := params.view ? params.view : 'attention';
-        $all := [value.value[$not(isDeleted = true)].(
-          $idle := lastActivityDate ? -$daysUntil(lastActivityDate);
-          $share := storageAllocatedInBytes > 0 ? $round(storageUsedInBytes / storageAllocatedInBytes, 4);
-          $inactive := lastActivityDate ? $idle >= $days : true;
-          $near := $share ? $share >= $limit : false;
-          $open := $substring(siteUrl ? siteUrl : '', 0, 8) = 'https://';
-          {
-            "siteId": siteId,
-            "siteUrl": siteUrl,
-            "site": $open ? siteUrl : siteId,
-            "ownerDisplayName": ownerDisplayName,
-            "ownerPrincipalName": ownerPrincipalName,
-            "template": rootWebTemplate,
-            "state": $near ? 'storage' : $inactive ? 'inactive' : 'ok',
-            "inactive": $inactive,
-            "nearLimit": $near,
-            "lastActivityDate": lastActivityDate,
-            "daysInactive": $idle,
-            "storageUsedInBytes": storageUsedInBytes ? storageUsedInBytes : 0,
-            "storageAllocatedInBytes": storageAllocatedInBytes,
-            "percentUsed": $share,
-            "fileCount": fileCount,
-            "activeFileCount": activeFileCount,
-            "pageViewCount": pageViewCount,
-            "externalSharing": externalSharing,
-            "sensitivityLabel": siteSensitivityLabelId != '' ? siteSensitivityLabelId,
-            "openable": $open,
-            "reportRefreshDate": reportRefreshDate
-          }
-        )];
-        $rows := $view = 'all' ? $all
-          : $view = 'inactive' ? $all[inactive]
-          : $view = 'storage' ? $all[nearLimit]
-          : $all[inactive or nearLimit];
-        $inactiveRows := $all[inactive];
+        $f := function($rows, $clauses) { $applyAdvanced($rows, { "join": "and", "clauses": $clauses }) };
+        $all := $f(value.value, [{ "path": "isDeleted", "type": "boolean", "op": "ne", "value": true }]);
+        $near := $f($all, [
+          { "path": "storageAllocatedInBytes", "type": "number", "op": "gt", "value": 0 },
+          { "path": "storageUsedInBytes", "type": "number", "op": "ge", "field": "storageAllocatedInBytes", "times": $limit }
+        ]);
+        $notNear := { "join": "or", "clauses": [
+          { "path": "storageAllocatedInBytes", "type": "number", "op": "isEmpty", "value": null },
+          { "path": "storageUsedInBytes", "type": "number", "op": "lt", "field": "storageAllocatedInBytes", "times": $limit }
+        ] };
+        $inactive := $f($all, [{ "join": "or", "clauses": [
+          { "path": "lastActivityDate", "type": "date", "op": "isEmpty", "value": null },
+          { "path": "lastActivityDate", "type": "date", "op": "lt", "value": $cutoff }
+        ] }]);
+        $nearSorted := $near^(>storageUsedInBytes);
+        $nearRows := $withFields($nearSorted, { "state": "storage" });
+        $noDate := { "path": "lastActivityDate", "type": "date", "op": "isEmpty", "value": null };
+        $hasDate := { "path": "lastActivityDate", "type": "date", "op": "notEmpty", "value": null };
+        /* Never active first, then the longest idle (a sort key can't be empty; sorting a variable runs natively). */
+        $oldestFirst := function($rows) { ( $dated := $f($rows, [$hasDate]); $append($f($rows, [$noDate]), $dated^(lastActivityDate)) ) };
+        $rows := $view = 'storage' ? $nearRows
+          : $view = 'inactive' ? $withFields($oldestFirst($inactive), { "state": "inactive" })
+          : $view = 'all' ? $append($nearRows, $withFields($f($all, [$notNear]), { "state": "listed" }))
+          : $append($nearRows, $withFields($oldestFirst($f($inactive, [$notNear])), { "state": "inactive" }));
         {
-          "rows": [$rows^(state = 'storage' ? 0 : state = 'inactive' ? 1 : 2, nearLimit ? -percentUsed : 0, $exists(daysInactive) ? 1 : 0, >daysInactive, >storageUsedInBytes)],
-          "inactive": $count($inactiveRows),
-          "inactiveStorage": $sum([0, $inactiveRows.storageUsedInBytes]),
-          "nearLimit": $count($all[nearLimit]),
-          "storage": $sum([0, $all.storageUsedInBytes]),
+          "rows": $rows,
+          "partial": value.truncated = true,
+          "inactive": $count($inactive),
+          "inactiveStorage": $sum([0, $inactive.storageUsedInBytes]),
+          "nearLimit": $count($near),
           "sites": $count($all),
-          "largest": [$filter($all^(>storageUsedInBytes), function($v, $i) { $i < 10 }).{ "site": openable ? $replace(siteUrl, /^https:\/\/[^\/]+/, '') : siteId, "storage": storageUsedInBytes }],
-          "concealed": $count($all[$not(openable)]) > 0
+          "largest": [$take($nearSorted, 10).{ "site": $substring(siteUrl ? siteUrl : '', 0, 8) = 'https://' ? $replace(siteUrl, /^https:\/\/[^\/]+/, '') : siteId, "storage": storageUsedInBytes }],
+          "concealed": $exists($all[0].siteUrl) and $substring($all[0].siteUrl, 0, 8) != 'https://'
         }
       ) }
+  # What the page shows of siteList: its figures and the first 10,000 rows, so the browser gets a small answer. The
+  # export reads siteList itself — every row of the view (export.maxRows keeps its read at the same cap).
+  sites:
+    source: static
+    data: ${ ds.siteList }
+    cache: { ttl: 3600 }
+    transform: >-
+      ${ $merge([value, { "rows": $take(value.rows, 10000), "listCapped": $count(value.rows) > 10000 }]) }
 
 layout:
   - widget: markdown
@@ -130,6 +141,16 @@ layout:
       **Site names are concealed in usage reports.** URLs and owners show as hashes. A Global Administrator can turn off
       *Display concealed user, group, and site names in all reports* in the Microsoft 365 admin center → **Settings →
       Org settings → Services → Reports**.
+  - widget: markdown
+    span: 12
+    when: ${ sites.partial = true }
+    text: >-
+      **Partial data.** Microsoft has more sites than this report reads (40,000); the figures, the list and the
+      export cover the ones read.
+  - widget: markdown
+    span: 12
+    when: ${ sites.listCapped = true }
+    text: The list shows the first 10,000 sites (near the storage limit first, largest first); the CSV/XLSX export has all of them.
   - widget: kpi
     data: sites.inactive
     label: Inactive sites
@@ -147,12 +168,12 @@ layout:
     status: "${ value > 0 ? 'warn' : 'ok' }"
     href: /p/m365.sharepoint-site-usage?view=storage
   - widget: kpi
-    data: sites.storage
+    data: storage.used
     label: Storage used by all sites
     format: bytes
   - widget: chart
     id: largest
-    title: Largest sites
+    title: Largest sites near the storage limit
     type: bar
     span: 12
     rows: 2
@@ -166,30 +187,29 @@ layout:
     data: sites.rows
     rowKey: siteId
     columns:
-      - { field: site, label: Site, kind: identity, secondary: ownerDisplayName, sortable: true }
+      - { field: siteUrl, label: Site, kind: identity, secondary: siteId, sortable: true }
+      - { field: ownerDisplayName, label: Owner, filter: text }
       - field: state
         label: Status
         kind: status
-        map: { storage: [warn, Near the storage limit], inactive: [info, Inactive], ok: [ok, OK] }
+        map: { storage: [warn, Near the storage limit], inactive: [info, Inactive], listed: [neutral, Below the limit] }
         filter: facet
-      - { field: daysInactive, label: Days since activity, kind: number, align: end, sortable: true, filter: range }
-      - { field: lastActivityDate, label: Last activity, kind: date, filter: date }
+      - { field: lastActivityDate, label: Last activity, kind: date, filter: date, sortable: true }
       - { field: storageUsedInBytes, label: Storage, kind: bytes, align: end, sortable: true }
-      - { field: percentUsed, label: Of limit, kind: percent, align: end, sortable: true }
-      - { field: template, label: Template, filter: facet }
+      - { field: rootWebTemplate, label: Template, filter: facet }
       - { field: fileCount, label: Files, kind: number, align: end }
       - { field: activeFileCount, label: Active files (30 days), kind: number, align: end, hidden: true }
       - { field: pageViewCount, label: Page views (30 days), kind: number, align: end, hidden: true }
       - { field: ownerPrincipalName, label: Owner sign-in name, hidden: true }
       - { field: externalSharing, label: External sharing, kind: boolean, hidden: true }
-      - { field: storageAllocatedInBytes, label: Storage limit, kind: bytes, align: end, hidden: true }
+      - { field: storageAllocatedInBytes, label: Storage limit, kind: bytes, align: end }
       - { field: siteId, label: Site id, kind: guid, hidden: true }
       - { field: reportRefreshDate, label: Report date, kind: date, hidden: true }
     rowActions:
       - label: Open site
         icon: arrow-square-out
         href: ${ row.siteUrl }
-        when: ${ row.openable = true }
+        when: ${ $substring(row.siteUrl, 0, 8) = 'https://' }
     empty:
       title: No site needs attention
       body: Every site had activity within the window and is below the storage threshold.
@@ -197,5 +217,6 @@ layout:
 export:
   formats: [csv, xlsx]
   fileName: sharepoint-site-usage-${ params.view }
-  data: sites.rows
+  data: siteList.rows
+  maxRows: 40000
   columns: all

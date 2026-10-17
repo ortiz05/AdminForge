@@ -1,0 +1,13 @@
+{
+  "@odata.count": 1,
+  "value": [
+    {
+      "id": "10000000-0000-4000-8000-000000000203",
+      "displayName": "Example Field Ops",
+      "mail": "fieldops@example.com",
+      "mailNickname": "fieldops",
+      "visibility": "Private",
+      "createdDateTime": "2025-06-01T00:00:00Z"
+    }
+  ]
+}

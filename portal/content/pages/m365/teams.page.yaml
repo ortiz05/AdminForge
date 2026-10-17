@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/page.schema.json
 kind: page
 id: m365.teams
-version: 1.0.1
+version: 2.0.0
 title: Teams
 summary: Every team in the tenant with its owners, visibility and lifecycle dates — find ownerless and single-owner teams before they become orphaned.
 owner: m365-team
@@ -16,7 +16,9 @@ requires:
   licences: [teams]
 
 params:
-  q: { type: string, default: "", label: Search, placeholder: Team name or email }
+  q: { type: string, default: "", label: Search, placeholder: Team name or email starts with }
+  # Kept for one release so saved views and links from 1.x still open (visibility now filters the loaded rows).
+  visibility: { type: string, default: "", label: Visibility (no longer used), hidden: true }
   ownership:
     type: enum
     label: Owners
@@ -24,120 +26,118 @@ params:
     default: All
     values:
       - { value: All, label: Any number of owners }
-      - { value: none, label: No owners }
-      - { value: single, label: One owner }
-      - { value: healthy, label: Two or more owners }
-  visibility:
-    type: enum
-    label: Visibility
-    facet: true
-    default: All
-    values: [All, Public, Private]
+      - { value: none, label: No owner at all }
+      - { value: single, label: "One owner (a person or an app)" }
 
 filters:
   search: q
-  facets: [ownership, visibility]
+  facets: [ownership]
 
 savedViews:
   enabled: true
   shared: true
   presets:
-    - { name: Teams without owners, params: { ownership: none } }
+    - { name: Teams without any owner, params: { ownership: none } }
     - { name: Single-owner teams, params: { ownership: single } }
-    - { name: Public teams, params: { visibility: Public } }
 
+# Built for large tenants: the list pages through Graph, which searches it (name or email prefix) and, for the
+# ownership views, counts owners itself — an advanced query, which can't also expand the owners, so those rows have no
+# owner names (the drawer has them). The counts come from $count; nothing reads every team.
 datasources:
   teams:
     source: graph
     request:
       path: /groups
+      # Only the ownership views are advanced queries (owners/$count); the full list expands owners without one.
+      headers: { ConsistencyLevel: "${ params.ownership in ['none', 'single'] ? 'eventual' : '' }" }
       query:
-        $filter: "resourceProvisioningOptions/Any(x:x eq 'Team')"
+        $filter: >-
+          ${ $join([
+               "resourceProvisioningOptions/Any(x:x eq 'Team')",
+               params.ownership = 'none' ? 'owners/$count eq 0',
+               params.ownership = 'single' ? 'owners/$count eq 1',
+               params.q ? '(startswith(displayName, ' & $odata(params.q) & ') or startswith(mail, ' & $odata(params.q) & '))'
+             ][$], ' and ') }
         $select: id,displayName,description,mail,visibility,createdDateTime,renewedDateTime,expirationDateTime
         # Graph returns at most 20 expanded owners per group; teams with more show 20.
-        $expand: owners($select=id,displayName,userPrincipalName)
+        $expand: "${ params.ownership in ['none', 'single'] ? undefined : 'owners($select=id,displayName,userPrincipalName)' }"
+        $count: "${ params.ownership in ['none', 'single'] ? 'true' : undefined }"
         $top: 100
-    paging: all
-    maxItems: 10000
+    paging: cursor
     cache: { ttl: 300 }
-    # value = { value: [group + owners] }. Owner counts (people only: apps can own a group but not manage a team),
-    # ownership state, then search/facet filters.
+    # Owners for the rows of this page: people and apps apart (apps can own a group but not manage a team, so a team
+    # owned only by apps has no person as owner); the expanded owners include service principals. The ownership views
+    # come from Graph's own owner count, which doesn't say people from apps. Keeps @odata.nextLink / @odata.count.
     transform: >-
       ${ (
-        $p := params;
-        $q := $lowercase($trim($p.q ? $p.q : ''));
-        $all := [value.value.(
+        $view := $$.params.ownership in ['none', 'single'] ? $$.params.ownership;
+        $merge([value, { "value": [value.value.(
           $people := owners[$exists(userPrincipalName)];
+          $apps := owners[`@odata.type` = '#microsoft.graph.servicePrincipal'];
           $n := $count($people);
-          {
-            "id": id,
-            "displayName": displayName,
-            "description": description,
-            "mail": mail,
-            "visibility": visibility,
-            "createdDateTime": createdDateTime,
-            "renewedDateTime": renewedDateTime,
-            "expirationDateTime": expirationDateTime,
-            "ownerCount": $n,
-            "owners": $join($people.displayName, ', '),
-            "ownership": $n = 0 ? 'none' : $n = 1 ? 'single' : 'healthy'
-          }
-        )];
-        $rows := [$all[
-            ($q = '' or $contains($lowercase(displayName & ' ' & mail), $q))
-            and ($p.ownership = 'All' or $not($exists($p.ownership)) or ownership = $p.ownership)
-            and ($p.visibility = 'All' or $not($exists($p.visibility)) or visibility = $p.visibility)
-          ]];
-        {
-          "rows": $rows,
-          "total": $count($all),
-          "noOwner": $count($all[ownership = 'none']),
-          "singleOwner": $count($all[ownership = 'single']),
-          "public": $count($all[visibility = 'Public'])
-        }
+          $merge([$, {
+            "ownerCount": $view = 'none' ? 0 : $view = 'single' ? null : $n,
+            "appOwners": $count($apps),
+            "ownerNames": $join($people.displayName, ', '),
+            "ownership": $view = 'none' ? 'none' : $view = 'single' ? 'oneOwner'
+                         : $n = 0 ? ($count($apps) > 0 ? 'appOnly' : 'none') : $n = 1 ? 'single' : 'healthy'
+          }])
+        )] }])
       ) }
+  counts:
+    source: graphBatch
+    requests:
+      total:
+        path: /groups/$count
+        query: { $filter: "resourceProvisioningOptions/Any(x:x eq 'Team')" }
+        headers: { ConsistencyLevel: eventual }
+      noOwner:
+        path: /groups/$count
+        query: { $filter: "resourceProvisioningOptions/Any(x:x eq 'Team') and owners/$count eq 0" }
+        headers: { ConsistencyLevel: eventual }
+      singleOwner:
+        path: /groups/$count
+        query: { $filter: "resourceProvisioningOptions/Any(x:x eq 'Team') and owners/$count eq 1" }
+        headers: { ConsistencyLevel: eventual }
+    cache: { ttl: 600 }
 
 layout:
   - widget: kpi
     id: total
-    data: teams.total
+    data: counts.total
     label: Teams
     format: number
   - widget: kpi
     id: noOwner
-    data: teams.noOwner
-    label: Without owners
+    data: counts.noOwner
+    label: Without any owner
+    hint: Teams owned only by apps (no person) are marked in the list and in the Teams without owners report.
     format: number
     status: "${ value > 0 ? 'crit' : 'ok' }"
     href: /p/m365.teams?ownership=none
   - widget: kpi
     id: singleOwner
-    data: teams.singleOwner
-    label: With a single owner
+    data: counts.singleOwner
+    label: "With one owner (a person or an app)"
     format: number
     status: "${ value > 0 ? 'warn' : 'ok' }"
     href: /p/m365.teams?ownership=single
-  - widget: kpi
-    id: public
-    data: teams.public
-    label: Public
-    format: number
-    href: /p/m365.teams?visibility=Public
   - widget: table
     id: teams
     span: 12
-    data: teams.rows
+    data: teams.value
     rowKey: id
     columns:
       - { field: displayName, label: Team, kind: identity, secondary: mail }
       - field: ownership
         label: Ownership
         kind: status
-        map: { none: [crit, No owners], single: [warn, One owner], healthy: [ok, Two or more] }
+        map: { none: [crit, No owners], appOnly: [crit, Owned by an app only], single: [warn, One person], oneOwner: [warn, One owner], healthy: [ok, Two or more people] }
         filter: { type: facet, param: ownership }
-      - { field: ownerCount, label: Owners, kind: number, align: end, filter: range, sortable: true }
-      - { field: owners, label: Owner names }
-      - { field: visibility, label: Visibility, filter: { type: facet, param: visibility } }
+      - { field: ownerCount, label: People as owners, kind: number, align: end, filter: range, sortable: true }
+      - { field: appOwners, label: Apps as owners, kind: number, align: end, hidden: true }
+      - { field: ownerNames, label: Owner names }
+      - { field: visibility, label: Visibility, filter: facet }
       - { field: createdDateTime, label: Created, kind: date, filter: date, sortable: true }
       - { field: renewedDateTime, label: Renewed, kind: relativeTime, hidden: true }
       - { field: expirationDateTime, label: Expires, kind: date, hidden: true }
@@ -156,10 +156,10 @@ layout:
         href: "https://entra.microsoft.com/#view/Microsoft_AAD_IAM/GroupDetailsMenuBlade/~/Owners/groupId/${ $encode(row.id) }"
     empty:
       title: No teams match
-      body: Clear the owner and visibility filters. A tenant where nobody has created a team yet shows nothing here.
+      body: Clear the search and the owner filter. A tenant where nobody has created a team yet shows nothing here.
 
 export:
   formats: [csv, xlsx]
   fileName: teams
-  data: teams.rows
+  data: teams.value
   columns: all

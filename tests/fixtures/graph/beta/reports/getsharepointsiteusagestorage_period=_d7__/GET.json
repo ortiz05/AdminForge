@@ -1,0 +1,46 @@
+{
+  "value": [
+    {
+      "reportRefreshDate": "2026-10-14",
+      "reportDate": "2026-10-14",
+      "storageUsedInBytes": 2150000000000,
+      "reportPeriod": "7"
+    },
+    {
+      "reportRefreshDate": "2026-10-14",
+      "reportDate": "2026-10-13",
+      "storageUsedInBytes": 2149000000000,
+      "reportPeriod": "7"
+    },
+    {
+      "reportRefreshDate": "2026-10-14",
+      "reportDate": "2026-10-12",
+      "storageUsedInBytes": 2148000000000,
+      "reportPeriod": "7"
+    },
+    {
+      "reportRefreshDate": "2026-10-14",
+      "reportDate": "2026-10-11",
+      "storageUsedInBytes": 2147000000000,
+      "reportPeriod": "7"
+    },
+    {
+      "reportRefreshDate": "2026-10-14",
+      "reportDate": "2026-10-10",
+      "storageUsedInBytes": 2146000000000,
+      "reportPeriod": "7"
+    },
+    {
+      "reportRefreshDate": "2026-10-14",
+      "reportDate": "2026-10-09",
+      "storageUsedInBytes": 2145000000000,
+      "reportPeriod": "7"
+    },
+    {
+      "reportRefreshDate": "2026-10-14",
+      "reportDate": "2026-10-08",
+      "storageUsedInBytes": 2144000000000,
+      "reportPeriod": "7"
+    }
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#servicePrincipals",
+  "value": [
+    {
+      "@odata.type": "#microsoft.graph.servicePrincipal",
+      "id": "00000000-0000-4000-8000-0000000005a2",
+      "displayName": "Example Teams Provisioning",
+      "appId": "10000000-0000-4000-8000-0000000005a2",
+      "servicePrincipalType": "Application",
+      "accountEnabled": true
+    }
+  ]
+}

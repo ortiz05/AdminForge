@@ -57,6 +57,15 @@ function callsEval(node: unknown): boolean {
   return Object.values(node).some((v) => typeof v === 'object' && callsEval(v));
 }
 
+/** A variable named like AdminForge's internal bindings (`$__afDeadline`, `$__afOrderBy`, …): reserved. */
+function usesInternal(node: unknown): boolean {
+  if (!node || typeof node !== 'object') return false;
+  if (Array.isArray(node)) return node.some(usesInternal);
+  const n = node as { type?: string; value?: unknown };
+  if (n.type === 'variable' && typeof n.value === 'string' && n.value.startsWith('__af')) return true;
+  return Object.values(node).some((v) => typeof v === 'object' && usesInternal(v));
+}
+
 /** Compiles every `${ … }` in a definition and reports the ones that are malformed. Empty array = all good. */
 export function validateExpressions(def: unknown, opts: WalkOptions = {}): ExpressionIssue[] {
   const issues: ExpressionIssue[] = [];
@@ -69,11 +78,18 @@ export function validateExpressions(def: unknown, opts: WalkOptions = {}): Expre
         for (const seg of splitTemplate(str)) {
           if (seg.type !== 'expr') continue;
           try {
-            if (callsEval(compile(seg.source).ast()))
+            const ast = compile(seg.source).ast();
+            if (callsEval(ast))
               issues.push({
                 ...at,
                 expression: seg.source,
                 message: '$eval is not available in AdminForge expressions.',
+              });
+            if (usesInternal(ast))
+              issues.push({
+                ...at,
+                expression: seg.source,
+                message: 'Variables starting with $__af are reserved for AdminForge itself.',
               });
           } catch (err) {
             const e = err as ExpressionError;
@@ -129,8 +145,53 @@ function pathKey(n: AstNode | undefined): string | undefined {
   return undefined;
 }
 
+/** The encoders that make user data safe in a query (their result is never user data). */
+const ENCODERS = new Set(['odata', 'odataSearch', 'kql', 'encode', 'guid']);
+
+/**
+ * The root scope (`$`, `$$`) or a wildcard / descendant (`*`, `**`) — or a path starting with one: it reaches
+ * `params`, `inputs`, `row` and the rest without naming them (`$.*.q`, `**.q`, `$.params.q`).
+ */
+function reachesScope(n: AstNode | undefined, aliases: ReadonlySet<string> = new Set()): boolean {
+  if (!n) return false;
+  if (n.type === 'variable' && (n.value === '' || n.value === '$' || aliases.has(String(n.value))))
+    return true;
+  if (n.type === 'wildcard' || n.type === 'descendant') return true;
+  // A path starting with anything built from the scope: `$lookup($$, 'params').q`, `$sift($, …).params.q`.
+  if (n.type === 'path') return !!n.steps?.length && fromScope(n.steps[0], aliases);
+  // A block is what its last expression is, with the variables it binds from the scope: `($).params.q`,
+  // `($p := $; $p.params.q)`.
+  if (n.type === 'block' && Array.isArray(n.expressions) && n.expressions.length) {
+    const exprs = n.expressions as AstNode[];
+    const inner = new Set(aliases);
+    for (const e of exprs.slice(0, -1))
+      if (
+        e.type === 'bind' &&
+        (e.lhs as AstNode | undefined)?.type === 'variable' &&
+        fromScope(e.rhs as AstNode, inner)
+      )
+        inner.add(String((e.lhs as AstNode).value));
+    return fromScope(exprs[exprs.length - 1], inner);
+  }
+  return false;
+}
+
+/** `$each($, …)`, `$join($sift($, …))`, `$lookup($$, 'params')`: built from the scope, through any non-encoder. */
+function fromScope(n: AstNode | undefined, aliases: ReadonlySet<string> = new Set()): boolean {
+  if (!n) return false;
+  if (reachesScope(n, aliases)) return true;
+  if (n.type !== 'function' || !Array.isArray(n.arguments)) return false;
+  const name = (n.procedure as AstNode | undefined)?.value;
+  return (
+    typeof name === 'string' &&
+    !ENCODERS.has(name) &&
+    (n.arguments as AstNode[]).some((a) => fromScope(a, aliases))
+  );
+}
+
 const isUserData = (n: AstNode | undefined, trusted: ReadonlySet<string>): boolean => {
   if (!n) return false;
+  if (fromScope(n)) return true;
   const root =
     n.type === 'name'
       ? String(n.value)

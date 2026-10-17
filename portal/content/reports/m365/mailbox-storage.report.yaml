@@ -1,10 +1,10 @@
 $schema: ../../../packages/schemas/generated/report.schema.json
 kind: report
 id: m365.mailbox-storage
-version: 1.0.0
+version: 2.0.0
 title: Mailbox storage and inactive mailboxes
 summary: >-
-  Mailboxes close to or over their send quota, and mailboxes with no activity for the chosen number of days, from the
+  Mailboxes near (90% by default) or over their send quota, and mailboxes with no activity for the chosen number of days, from the
   Microsoft 365 mailbox usage report — storage used, quotas, items and archive per mailbox.
 owner: m365-team
 tags: [m365, exchange, usage, storage, hygiene, report]
@@ -60,7 +60,18 @@ savedViews:
 # Quotas are per mailbox (prohibit-send). Usage data lags 24–48 hours; when user details are concealed in reports the
 # names are hashes (no "@") and the mailbox can't be opened from here.
 datasources:
-  mailboxes:
+  # Tenant-wide storage from Microsoft's daily summary (one small report), not a sum over every mailbox.
+  storage:
+    source: graph
+    label: Mailbox storage (usage report)
+    request:
+      beta: true
+      path: /reports/getMailboxUsageStorage(period='D7')
+      query: { $format: application/json }
+    cache: { ttl: 3600 }
+    transform: >-
+      ${ { "used": (value.value^(>reportDate))[0].storageUsedInBytes } }
+  mailboxList:
     source: graph
     label: Mailbox usage detail (usage report)
     request:
@@ -68,55 +79,69 @@ datasources:
       path: /reports/getMailboxUsageDetail(period='D30')
       query: { $format: application/json }
     paging: all
-    maxItems: 100000
+    maxItems: 40000
     cache: { ttl: 3600 }
+    # Native filters ($applyAdvanced) on disjoint sets — over quota, near quota, inactive, the rest — so 100k mailboxes
+    # fit the transform budget (JSONata per mailbox doesn't). "Near quota": storage at or over the threshold share of
+    # the send quota. The list keeps the first 10,000 (over and near quota first, largest first; then the rest of the
+    # view); the export has every mailbox of the view.
     transform: >-
       ${ (
         $limit := (params.threshold ? $number(params.threshold) : 90) / 100;
-        $days := params.inactiveDays ? $number(params.inactiveDays) : 90;
+        $cutoff := $daysAgo(params.inactiveDays ? $number(params.inactiveDays) : 90);
         $view := params.view ? params.view : 'attention';
-        $all := [value.value[$not(isDeleted = true)].(
-          $quota := prohibitSendQuotaInBytes > 0 ? prohibitSendQuotaInBytes;
-          $used := storageUsedInBytes ? storageUsedInBytes : 0;
-          $share := $quota ? $round($used / $quota, 4);
-          $full := $quota ? $used >= $quota : false;
-          $near := $full or ($share ? $share >= $limit : false) or (issueWarningQuotaInBytes > 0 and $used >= issueWarningQuotaInBytes);
-          $inactive := lastActivityDate ? -$daysUntil(lastActivityDate) >= $days : (createdDate ? -$daysUntil(createdDate) >= $days : true);
-          {
-            "userPrincipalName": userPrincipalName,
-            "displayName": displayName,
-            "recipientType": recipientType,
-            "state": $full ? 'full' : $near ? 'nearQuota' : $inactive ? 'inactive' : 'ok',
-            "nearQuota": $near,
-            "inactive": $inactive,
-            "storageUsedInBytes": $used,
-            "prohibitSendQuotaInBytes": $quota,
-            "issueWarningQuotaInBytes": issueWarningQuotaInBytes,
-            "percentUsed": $share,
-            "itemCount": itemCount,
-            "deletedItemSizeInBytes": deletedItemSizeInBytes,
-            "hasArchive": hasArchive = true,
-            "lastActivityDate": lastActivityDate,
-            "createdDate": createdDate,
-            "concealed": $not($contains(userPrincipalName, '@')),
-            "reportRefreshDate": reportRefreshDate
-          }
-        )];
-        $rows := $view = 'all' ? $all
-          : $view = 'quota' ? $all[nearQuota]
-          : $view = 'inactive' ? $all[inactive]
-          : $all[nearQuota or inactive];
+        $f := function($rows, $clauses) { $applyAdvanced($rows, { "join": "and", "clauses": $clauses }) };
+        $all := $f(value.value, [{ "path": "isDeleted", "type": "boolean", "op": "ne", "value": true }]);
+        $atLimit := $f($all, [
+          { "path": "prohibitSendQuotaInBytes", "type": "number", "op": "gt", "value": 0 },
+          { "path": "storageUsedInBytes", "type": "number", "op": "ge", "field": "prohibitSendQuotaInBytes", "times": $limit }
+        ]);
+        $full := $f($atLimit, [{ "path": "storageUsedInBytes", "type": "number", "op": "ge", "field": "prohibitSendQuotaInBytes" }]);
+        $near := $f($atLimit, [{ "path": "storageUsedInBytes", "type": "number", "op": "lt", "field": "prohibitSendQuotaInBytes" }]);
+        $staleRows := $f($all, [{ "path": "lastActivityDate", "type": "date", "op": "lt", "value": $cutoff }]);
+        $neverRows := $f($all, [
+          { "path": "lastActivityDate", "type": "date", "op": "isEmpty", "value": null },
+          { "join": "or", "clauses": [
+            { "path": "createdDate", "type": "date", "op": "isEmpty", "value": null },
+            { "path": "createdDate", "type": "date", "op": "lt", "value": $cutoff }
+          ] }
+        ]);
+        $inactive := $append($staleRows, $neverRows);
+        $notNear := { "join": "or", "clauses": [
+          { "path": "prohibitSendQuotaInBytes", "type": "number", "op": "isEmpty", "value": null },
+          { "path": "storageUsedInBytes", "type": "number", "op": "lt", "field": "prohibitSendQuotaInBytes", "times": $limit }
+        ] };
+        $quotaRows := $append(
+          $withFields($full^(>storageUsedInBytes), { "state": "full" }),
+          $withFields($near^(>storageUsedInBytes), { "state": "nearQuota" })
+        );
+        $noDate := { "path": "lastActivityDate", "type": "date", "op": "isEmpty", "value": null };
+        $hasDate := { "path": "lastActivityDate", "type": "date", "op": "notEmpty", "value": null };
+        /* Never active first, then the longest idle (a sort key can't be empty; sorting a variable runs natively). */
+        $oldestFirst := function($rows) { ( $dated := $f($rows, [$hasDate]); $append($f($rows, [$noDate]), $dated^(lastActivityDate)) ) };
+        $rows := $view = 'quota' ? $quotaRows
+          : $view = 'inactive' ? $withFields($oldestFirst($inactive), { "state": "inactive" })
+          : $view = 'all' ? $append($quotaRows, $withFields($f($all, [$notNear]), { "state": "listed" }))
+          : $append($quotaRows, $withFields($oldestFirst($f($inactive, [$notNear])), { "state": "inactive" }));
         {
-          "rows": [$rows^(state = 'full' ? 0 : state = 'nearQuota' ? 1 : state = 'inactive' ? 2 : 3, >percentUsed, >storageUsedInBytes)],
-          "full": $count($all[state = 'full']),
-          "nearQuota": $count($all[nearQuota]),
-          "inactive": $count($all[inactive]),
-          "storage": $sum($all.storageUsedInBytes),
+          "rows": $rows,
+          "partial": value.truncated = true,
+          "full": $count($full),
+          "nearQuota": $count($atLimit),
+          "inactive": $count($inactive),
           "mailboxes": $count($all),
-          "largest": [($all^(>storageUsedInBytes))[[0..9]].{ "mailbox": displayName, "storage": storageUsedInBytes }],
-          "concealed": $count($all[concealed]) > 0
+          "largest": [($atLimit^(>storageUsedInBytes))[[0..9]].{ "mailbox": displayName, "storage": storageUsedInBytes }],
+          "concealed": $exists($all[0].userPrincipalName) and $not($contains($all[0].userPrincipalName, '@'))
         }
       ) }
+  # What the page shows of mailboxList: its figures and the first 10,000 rows, so the browser gets a small answer. The
+  # export reads mailboxList itself — every row of the view (export.maxRows keeps its read at the same cap).
+  mailboxes:
+    source: static
+    data: ${ ds.mailboxList }
+    cache: { ttl: 3600 }
+    transform: >-
+      ${ $merge([value, { "rows": $take(value.rows, 10000), "listCapped": $count(value.rows) > 10000 }]) }
 
 layout:
   - widget: markdown
@@ -126,11 +151,22 @@ layout:
       **User names are concealed in usage reports.** Rows show hashed names that can't be matched to mailboxes. A Global
       Administrator can turn off *Display concealed user, group, and site names in all reports* in the Microsoft 365
       admin center → **Settings → Org settings → Services → Reports**.
+  - widget: markdown
+    span: 12
+    when: ${ mailboxes.partial = true }
+    text: >-
+      **Partial data.** Microsoft has more mailboxes than this report reads (40,000); the figures, the list and the
+      export cover the ones read.
+  - widget: markdown
+    span: 12
+    when: ${ mailboxes.listCapped = true }
+    text: The list shows the first 10,000 mailboxes (over quota and near quota first, largest first); the CSV/XLSX export has all of them.
   - widget: kpi
     data: mailboxes.nearQuota
     label: Near or over quota
     format: number
     status: "${ mailboxes.full > 0 ? 'crit' : value > 0 ? 'warn' : 'ok' }"
+    hint: "${ 'Over the send quota, or near it (' & $string(params.threshold ? params.threshold : 90) & '% or more of it used)' }"
     href: /p/m365.mailbox-storage?view=quota
   - widget: kpi
     data: mailboxes.inactive
@@ -139,7 +175,7 @@ layout:
     status: "${ value > 0 ? 'info' : 'ok' }"
     href: /p/m365.mailbox-storage?view=inactive
   - widget: kpi
-    data: mailboxes.storage
+    data: storage.used
     label: Storage used
     format: bytes
   - widget: kpi
@@ -148,7 +184,7 @@ layout:
     format: number
   - widget: chart
     id: largest
-    title: Largest mailboxes
+    title: Largest mailboxes near or over quota
     type: bar
     span: 12
     rows: 2
@@ -170,9 +206,8 @@ layout:
           full: [crit, Over send quota]
           nearQuota: [warn, Near quota]
           inactive: [info, Inactive]
-          ok: [ok, OK]
+          listed: [neutral, Below quota]
         filter: facet
-      - { field: percentUsed, label: Quota used, kind: percent, align: end, sortable: true, filter: range }
       - { field: storageUsedInBytes, label: Storage, kind: bytes, align: end, sortable: true }
       - { field: prohibitSendQuotaInBytes, label: Send quota, kind: bytes, align: end }
       - { field: lastActivityDate, label: Last activity, kind: date, filter: date, sortable: true }
@@ -187,7 +222,7 @@ layout:
       - label: Open mailbox
         icon: tray
         href: /p/m365.mailbox?mailbox=${ $encode(row.userPrincipalName) }
-        when: ${ row.concealed = false }
+        when: ${ $contains(row.userPrincipalName, '@') }
     empty:
       title: No mailbox needs attention
       body: No mailbox is near its quota or inactive for the window. Usage data appears 24–48 hours after activity.
@@ -195,5 +230,6 @@ layout:
 export:
   formats: [csv, xlsx]
   fileName: mailbox-storage-${ params.view }
-  data: mailboxes.rows
+  data: mailboxList.rows
+  maxRows: 40000
   columns: all

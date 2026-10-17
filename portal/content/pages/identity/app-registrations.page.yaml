@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/page.schema.json
 kind: page
 id: identity.app-registrations
-version: 1.1.0
+version: 2.0.0
 title: App registrations
 summary: >-
   Applications registered in this tenant, with credential expiry status, sign-in audience, API permission counts and
@@ -18,17 +18,6 @@ requires:
 
 params:
   q: { type: string, default: "", label: Search, placeholder: App name starts with }
-  credentials:
-    type: enum
-    label: Credentials
-    facet: true
-    default: Any
-    values:
-      - { value: Any, label: Any }
-      - { value: expired, label: Has expired }
-      - { value: expiring, label: Expiring within 30 days }
-      - { value: ok, label: All valid }
-      - { value: none, label: No credentials }
   audience:
     type: enum
     label: Audience
@@ -41,11 +30,13 @@ params:
       - { value: AzureADandPersonalMicrosoftAccount, label: Organisations and personal accounts }
       - { value: PersonalMicrosoftAccount, label: Personal accounts only }
   owners: { type: enum, values: [Any, Owned, Ownerless], default: Any, label: Owners, facet: true }
+  # Kept for one release so saved views and links from 1.x still open (credential state now filters the loaded rows).
+  credentials: { type: string, default: "", label: Credentials (no longer used), hidden: true }
 
 filters:
   search: q
-  facets: [credentials, audience, owners]
-  # Compiled server-side into `${ advanced }` (OData). This list can't use advanced queries (it expands owners), so
+  facets: [audience, owners]
+  # Compiled server-side into `${ advanced }` (OData). The full list expands owners, which advanced queries can't, so
   # only operators /applications supports without ConsistencyLevel: eventual are offered.
   advanced:
     dialect: odata
@@ -61,34 +52,41 @@ savedViews:
   enabled: true
   shared: true
   presets:
-    - { name: Expired credentials, params: { credentials: expired } }
-    - { name: Expiring in 30 days, params: { credentials: expiring } }
     - { name: Ownerless apps, params: { owners: Ownerless } }
     - { name: Multi-tenant apps, params: { audience: AzureADMultipleOrgs } }
 
+# Built for large tenants (20k app registrations): the list pages through Graph, which filters it (audience, name,
+# owners); credential state is worked out for the rows of one page. The owner views are advanced queries ($count of
+# owners), which can't expand the owners — those rows have no owner names. Totals come from $count; the credential
+# figures read a capped list with native filters (past the cap the strip says they're partial — the credential expiry
+# report has every credential).
 datasources:
   apps:
     source: graph
     request:
       path: /applications
-      # No ConsistencyLevel/$search here: advanced queries can't be combined with $expand.
+      # Only the owner views are advanced queries (owners/$count); the full list expands owners without one.
+      headers: { ConsistencyLevel: "${ params.owners in ['Owned', 'Ownerless'] ? 'eventual' : '' }" }
       query:
         $select: id,appId,displayName,createdDateTime,signInAudience,publisherDomain,passwordCredentials,keyCredentials,requiredResourceAccess,web,spa,publicClient,notes,serviceManagementReference,verifiedPublisher
-        $expand: owners($select=id,displayName,userPrincipalName)
+        $expand: "${ params.owners in ['Owned', 'Ownerless'] ? undefined : 'owners($select=id,displayName,userPrincipalName)' }"
+        $count: "${ params.owners in ['Owned', 'Ownerless'] ? 'true' : undefined }"
         $top: 100
         $filter: >-
           ${ $join([
                params.audience != 'Any' ? 'signInAudience eq ' & $odata(params.audience),
                params.q ? 'startswith(displayName, ' & $odata(params.q) & ')',
+               params.owners = 'Owned' ? 'owners/$count ne 0',
+               params.owners = 'Ownerless' ? 'owners/$count eq 0',
                advanced
              ][$], ' and ') }
-    # All pages are loaded (apps are usually < 10k) so credential and owner facets filter the whole set.
-    paging: all
-    maxItems: 20000
+    paging: cursor
     cache: { ttl: 300 }
+    # Credential state, permission counts and owners for the rows of this page; keeps @odata.nextLink / @odata.count.
     transform: >-
       ${ (
-        $rows := [value.value.(
+        $view := $$.params.owners in ['Owned', 'Ownerless'] ? $$.params.owners;
+        $merge([value, { "value": [value.value.(
           $creds := $append(passwordCredentials.{ "type": "Secret", "end": endDateTime }, keyCredentials.{ "type": "Certificate", "end": endDateTime });
           $days := [$creds[end].$daysUntil(end)];
           $next := $count($days[$ >= 0]) > 0 ? $min($days[$ >= 0]) : null;
@@ -108,49 +106,72 @@ datasources:
             "apiPermissions": $count(requiredResourceAccess.resourceAccess),
             "applicationPermissions": $count(requiredResourceAccess.resourceAccess[type = 'Role']),
             "platforms": [web.redirectUris ? 'Web', spa.redirectUris ? 'SPA', publicClient.redirectUris ? 'Mobile/desktop'],
-            "ownerCount": $count(owners),
+            "ownerCount": $view = 'Ownerless' ? 0 : $view = 'Owned' ? null : $count(owners),
             "ownerNames": $join(owners.displayName, ', '),
             "verifiedPublisher": verifiedPublisher.displayName,
             "serviceManagementReference": serviceManagementReference,
             "notes": notes
           }
-        )];
-        $shown := $rows[
-          ($$.params.credentials = 'Any' or credentialState = $$.params.credentials)
-          and ($$.params.owners = 'Owned' ? ownerCount > 0 : $$.params.owners = 'Ownerless' ? ownerCount = 0 : true)
-        ];
+        )] }])
+      ) }
+  counts:
+    source: graphBatch
+    requests:
+      total: { path: /applications/$count, headers: { ConsistencyLevel: eventual } }
+      ownerless:
+        path: /applications/$count
+        query: { $filter: "owners/$count eq 0" }
+        headers: { ConsistencyLevel: eventual }
+    cache: { ttl: 600 }
+  credentials:
+    source: graph
+    request:
+      path: /applications
+      query:
+        $select: id,passwordCredentials,keyCredentials
+        $top: 999
+    paging: all
+    maxItems: 10000
+    cache: { ttl: 1800 }
+    # Apps with a credential past its end date, and apps whose next credential ends within 30 days — native filters.
+    transform: >-
+      ${ (
+        $now := $iso();
+        $soon := $daysAgo(-30);
+        $before := function($when) { { "join": "or", "clauses": [
+          { "path": "passwordCredentials.endDateTime", "type": "date", "op": "lt", "value": $when },
+          { "path": "keyCredentials.endDateTime", "type": "date", "op": "lt", "value": $when }
+        ] } };
+        $expired := $applyAdvanced(value.value, $before($now));
         {
-          "rows": [$shown^(credentialState = 'expired' ? 0 : credentialState = 'expiring' ? 1 : 2, displayName)],
-          "total": $count($rows),
-          "expired": $count($rows[credentialState = 'expired']),
-          "expiring": $count($rows[credentialState = 'expiring']),
-          "ownerless": $count($rows[ownerCount = 0])
+          "expired": $count($expired),
+          "expiring": $count($applyAdvanced(value.value, $before($soon))) - $count($expired)
         }
       ) }
 
 layout:
   - widget: kpi
     id: total
-    data: apps.total
+    data: counts.total
     label: App registrations
     format: number
   - widget: kpi
     id: expired
-    data: apps.expired
+    data: credentials.expired
     label: With expired credentials
     format: number
     status: "${ value > 0 ? 'crit' : 'ok' }"
-    href: /p/identity.app-registrations?credentials=expired
+    href: /p/identity.app-credential-expiry
   - widget: kpi
     id: expiring
-    data: apps.expiring
+    data: credentials.expiring
     label: Expiring within 30 days
     format: number
     status: "${ value > 0 ? 'warn' : 'ok' }"
-    href: /p/identity.app-registrations?credentials=expiring
+    href: /p/identity.app-credential-expiry
   - widget: kpi
     id: ownerless
-    data: apps.ownerless
+    data: counts.ownerless
     label: Without owners
     format: number
     status: "${ value > 0 ? 'warn' : 'ok' }"
@@ -158,7 +179,7 @@ layout:
   - widget: table
     id: apps
     span: 12
-    data: apps.rows
+    data: apps.value
     rowKey: id
     selection: multi
     columns:
@@ -167,7 +188,7 @@ layout:
         label: Credentials
         kind: status
         map: { expired: [crit, Expired], expiring: [warn, Expiring soon], ok: [ok, Valid], none: [neutral, None] }
-        filter: { type: facet, param: credentials }
+        filter: facet
       - { field: nextExpiryDays, label: Next expiry (days), kind: number, filter: range, sortable: true }
       - { field: secrets, label: Secrets, kind: number }
       - { field: certificates, label: Certificates, kind: number }
@@ -228,5 +249,5 @@ layout:
 export:
   formats: [csv, xlsx]
   fileName: app-registrations
-  data: apps.rows
+  data: apps.value
   columns: visible

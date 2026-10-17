@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/report.schema.json
 kind: report
 id: m365.teams-activity
-version: 1.0.0
+version: 2.0.0
 title: Inactive, public and guest-active teams
 summary: >-
   Teams with no activity for the chosen number of days (archive or delete candidates), public teams anyone in the
@@ -62,45 +62,44 @@ datasources:
       path: /reports/getTeamsTeamActivityDetail(period='D90')
       query: { $format: application/json }
     paging: all
-    maxItems: 100000
+    maxItems: 8000
     cache: { ttl: 3600 }
+    # Native filters ($applyAdvanced) and the report's own rows. Activity figures sit in `details` (beta) or on the row
+    # itself; the listed rows are flattened (so exports have them as columns), which costs JSONata time per team — the
+    # read stops at 8,000 teams and the page says the data is partial beyond that.
     transform: >-
       ${ (
-        $days := params.days ? $number(params.days) : 90;
+        $cutoff := $daysAgo(params.days ? $number(params.days) : 90);
         $view := params.view ? params.view : 'inactive';
-        $all := [value.value[$not(isDeleted = true)].(
-          $d := $exists(details) ? details[0] : $;
-          $idle := lastActivityDate ? -$daysUntil(lastActivityDate);
-          {
-            "teamId": teamId,
-            "teamName": teamName,
-            "teamType": teamType,
-            "lastActivityDate": lastActivityDate,
-            "daysInactive": $idle,
-            "inactive": lastActivityDate ? $idle >= $days : true,
-            "activeUsers": $d.activeUsers ? $d.activeUsers : 0,
-            "guests": $d.guests ? $d.guests : 0,
-            "externalUsers": $d.activeExternalUsers ? $d.activeExternalUsers : 0,
-            "activeChannels": $d.activeChannels ? $d.activeChannels : 0,
-            "messages": ($d.channelMessages ? $d.channelMessages : 0) + ($d.postMessages ? $d.postMessages : 0) + ($d.replyMessages ? $d.replyMessages : 0),
-            "meetings": $d.meetingsOrganized ? $d.meetingsOrganized : 0,
-            "openable": $contains(teamId ? teamId : '', /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/),
-            "reportRefreshDate": reportRefreshDate
-          }
-        )];
-        $exposed := function($t) { $t.guests > 0 or $t.externalUsers > 0 };
-        $rows := $view = 'all' ? $all
-          : $view = 'public' ? $all[teamType = 'Public']
-          : $view = 'guests' ? $all[$exposed($)]
-          : $all[inactive];
+        $f := function($rows, $clauses) { $applyAdvanced($rows, { "join": "and", "clauses": $clauses }) };
+        $all := $f(value.value, [{ "path": "isDeleted", "type": "boolean", "op": "ne", "value": true }]);
+        $idle := { "join": "or", "clauses": [
+          { "path": "lastActivityDate", "type": "date", "op": "isEmpty", "value": null },
+          { "path": "lastActivityDate", "type": "date", "op": "lt", "value": $cutoff }
+        ] };
+        $busy := { "path": "lastActivityDate", "type": "date", "op": "ge", "value": $cutoff };
+        $public := { "path": "teamType", "type": "string", "op": "eq", "value": "Public" };
+        $exposed := { "join": "or", "clauses": [
+          { "path": "details.guests", "type": "number", "op": "gt", "value": 0 },
+          { "path": "guests", "type": "number", "op": "gt", "value": 0 },
+          { "path": "details.activeExternalUsers", "type": "number", "op": "gt", "value": 0 },
+          { "path": "activeExternalUsers", "type": "number", "op": "gt", "value": 0 }
+        ] };
+        $inactive := $f($all, [$idle]);
+        $flat := function($rows, $activity) { [$rows.$merge([$, $exists(details) ? details[0] : {}, { "activity": $activity }])] };
+        $label := function($rows) { $append($flat($f($rows, [$idle]), 'inactive'), $flat($f($rows, [$busy]), 'active')) };
+        $rows := $view = 'all' ? $label($all)
+          : $view = 'public' ? $label($f($all, [$public]))
+          : $view = 'guests' ? $label($f($all, [$exposed]))
+          : $flat($inactive, 'inactive');
         {
-          "rows": [$rows^(inactive ? 0 : 1, $exists(daysInactive) ? 1 : 0, >daysInactive, >guests, teamName)],
-          "inactive": $count($all[inactive]),
-          "public": $count($all[teamType = 'Public']),
-          "inactivePublic": $count($all[inactive and teamType = 'Public']),
-          "guests": $count($all[$exposed($)]),
+          "rows": $rows,
+          "inactive": $count($inactive),
+          "public": $count($f($all, [$public])),
+          "inactivePublic": $count($f($inactive, [$public])),
+          "guests": $count($f($all, [$exposed])),
           "total": $count($all),
-          "concealed": $count($all[$not(openable)]) > 0
+          "concealed": $exists($all[0]) and $not($contains($all[0].teamId ? $all[0].teamId : '', /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/))
         }
       ) }
 
@@ -148,13 +147,12 @@ layout:
     rowKey: teamId
     columns:
       - { field: teamName, label: Team, kind: identity, secondary: teamId, sortable: true }
-      - field: inactive
+      - field: activity
         label: Activity
         kind: status
-        map: { "true": [warn, Inactive], "false": [ok, Active] }
+        map: { inactive: [warn, Inactive], active: [ok, Active] }
         filter: facet
-      - { field: daysInactive, label: Days since activity, kind: number, align: end, sortable: true, filter: range }
-      - { field: lastActivityDate, label: Last activity, kind: date, filter: date }
+      - { field: lastActivityDate, label: Last activity, kind: date, filter: date, sortable: true }
       - field: teamType
         label: Privacy
         kind: status
@@ -162,20 +160,20 @@ layout:
         filter: facet
       - { field: activeUsers, label: Active users, kind: number, align: end, sortable: true }
       - { field: guests, label: Active guests, kind: number, align: end, sortable: true }
-      - { field: externalUsers, label: Active external users, kind: number, align: end }
-      - { field: messages, label: Messages, kind: number, align: end, hidden: true }
-      - { field: meetings, label: Meetings, kind: number, align: end, hidden: true }
+      - { field: activeExternalUsers, label: Active external users, kind: number, align: end }
+      - { field: channelMessages, label: Channel messages, kind: number, align: end, hidden: true }
+      - { field: meetingsOrganized, label: Meetings, kind: number, align: end, hidden: true }
       - { field: activeChannels, label: Active channels, kind: number, align: end, hidden: true }
       - { field: reportRefreshDate, label: Report date, kind: date, hidden: true }
     rowActions:
       - label: Open team
         icon: microsoft-teams-logo
         href: /p/m365.team?id=${ $encode(row.teamId) }
-        when: ${ row.openable = true }
+        when: ${ $contains(row.teamId, /^[0-9a-fA-F-]{36}$/) }
       - label: Open in Teams admin center
         icon: arrow-square-out
         href: "https://admin.teams.microsoft.com/teams/manage/${ $encode(row.teamId) }"
-        when: ${ row.openable = true }
+        when: ${ $contains(row.teamId, /^[0-9a-fA-F-]{36}$/) }
     empty:
       title: No teams in this view
       body: No team matches. Usage data appears 24–48 hours after activity; new teams show up after their first report.

@@ -225,8 +225,11 @@ prefer the feature key.
 When a datasource reads only part of what Microsoft has — `paging: all` stopped at its `maxItems` (or the page limit),
 or a `graphBatch` collection answered with its first page — the API marks the result `truncated` and the renderer adds
 a note under the widget ("Partial data: Microsoft has more than this view reads…"), once per KPI strip. Nothing to
-configure; a page that should show everything pages through the server (`paging: cursor`) or counts at the source
-(`$count`) instead of raising `maxItems`.
+configure for widgets bound to that datasource; a derived datasource (`source: static` built from `ds.<name>`) doesn't
+carry the mark — its transform passes it on (`ds.<name>.truncated` when that datasource has no transform, else a flag
+its transform returns from `value.truncated`) and the page shows its own markdown note. A page that should show
+everything pages through the server (`paging: cursor`) or counts at the source (`$count`) instead of raising
+`maxItems`.
 
 ## Page URLs (renderer)
 

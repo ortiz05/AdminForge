@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/report.schema.json
 kind: report
 id: m365.anyone-link-sites
-version: 1.1.0
+version: 1.2.0
 title: Public and Anyone-link sites
 summary: SharePoint sites whose sharing allows Anyone links (optionally also new guests), plus the sites where Anyone links actually exist.
 owner: m365-team
@@ -61,7 +61,7 @@ datasources:
       path: /reports/getSharePointSiteUsageDetail(period='D7')
       query: { $format: application/json }
     paging: all
-    maxItems: 50000
+    maxItems: 1500
     cache: { ttl: 3600 }
     transform: >-
       ${ (

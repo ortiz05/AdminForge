@@ -184,8 +184,12 @@ async function run(id: string, params: Record<string, unknown> = {}, env: Record
   return { out, outbound };
 }
 
-const table = (id: string): Def =>
-  def(id).layout.find((b: Def) => b.widget === 'table' && b.data === def(id).export.data);
+// The exported table: the one bound to `export.data`, else the first table (as the export does — a report that caps
+// its table exports the uncapped list datasource behind it, which no table shows).
+const table = (id: string): Def => {
+  const tables = def(id).layout.filter((b: Def) => b.widget === 'table');
+  return tables.find((b: Def) => b.data === def(id).export.data) ?? tables[0];
+};
 const action = (id: string, labelOrPlaybook: string): Def =>
   table(id).rowActions.find((a: Def) => a.playbook === labelOrPlaybook || a.label === labelOrPlaybook);
 const when = (a: Def, row: Record<string, unknown>) => renderString(a.when, { row });
@@ -408,14 +412,18 @@ describe('identity.groups-without-owners', () => {
   it('lists ownerless cloud groups from the server-side filter only', async () => {
     const { out } = await run('identity.groups-without-owners');
     expect(out.membership).toBeNull();
-    expect(out.report).toMatchObject({ total: 4, noOwners: 4, noMembers: null, m365NoOwners: 1 });
+    // 2.0: plus the group owned only by an app (SG-HR-Provisioned-Sync), listed apart from the ownerless ones.
+    expect(out.report).toMatchObject({ total: 5, noOwners: 4, appOnly: 1, noMembers: null, m365NoOwners: 1 });
+    expect(out.report.rows.find((r: Out) => r.displayName === 'SG-HR-Provisioned-Sync').issue).toBe(
+      'Owned by an app only',
+    );
     const synced = (await run('identity.groups-without-owners', { includeSynced: true })).out.report;
     expect(synced.rows.map((r: Out) => r.displayName)).toContain('GG-Engineering (AD)');
   });
 
   it('combines owners and members when asked for either', async () => {
     const r = (await run('identity.groups-without-owners', { issue: 'either' })).out.report;
-    expect(r).toMatchObject({ total: 6, noOwners: 4, noMembers: 3 });
+    expect(r).toMatchObject({ total: 7, noOwners: 4, appOnly: 1, noMembers: 3 });
     expect(r.rows.find((g: Out) => g.displayName === 'Finance Announcements').issue).toBe(
       'No owners or members',
     );
@@ -448,12 +456,14 @@ describe('identity.password-policies', () => {
     const { out } = await run('identity.password-policies');
     expect(out.domains).toEqual({ policy: 'Passwords never expire', expires: false });
     expect(out.users).toMatchObject({ old: 5, neverExpires: 2, weak: 1 });
+    // One row per account, under its most severe finding (2.0: native filters for 100k members).
     const byName = Object.fromEntries(out.users.rows.map((r: Out) => [r.displayName, r]));
+    expect(out.users.rows).toHaveLength(new Set(out.users.rows.map((r: Out) => r.id)).size);
     expect(byName['Svc Reporting']).toMatchObject({
       severity: 'crit',
-      findings: ['Old password', 'Never expires'],
+      finding: 'Never expires, old password',
     });
-    expect(byName['Dana Okafor'].findings).toEqual(['Old password']); // synced: AD owns expiry
+    expect(byName['Dana Okafor'].finding).toBe('Old password'); // synced: AD owns expiry
     expect(byName['Rafael Castillo']).toBeUndefined(); // blocked
     const blocked = (await run('identity.password-policies', { includeDisabled: true })).out.users;
     expect(blocked.rows.map((r: Out) => r.displayName)).toContain('Rafael Castillo');

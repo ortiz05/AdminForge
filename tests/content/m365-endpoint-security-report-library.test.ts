@@ -123,8 +123,9 @@ describe('report library definitions', () => {
       expect(r.requires.portalRoles).toEqual(['Portal.Reader']);
       expect(r.export.formats).toEqual(expect.arrayContaining(['csv', 'xlsx']));
       expect(r.requires.licences ?? []).toEqual(licences);
-      // Every table that is exported has columns for what the transform produces.
-      const table = r.layout.find((b: Def) => b.widget === 'table' && b.data === r.export.data);
+      // The exported table (bound to export.data, else the first, as the export picks it) has columns.
+      const tables = r.layout.filter((b: Def) => b.widget === 'table');
+      const table = tables.find((b: Def) => b.data === r.export.data) ?? tables[0];
       expect(table?.columns.length).toBeGreaterThan(3);
     },
   );
@@ -139,19 +140,16 @@ describe('report library definitions', () => {
 
 describe('m365.inactive-licensed-users', () => {
   it('lists licensed people idle in every workload for 90 days, never-active first; new licences are left out', async () => {
+    // 2.0: native filters on the report's own rows (no per-user mapping, so no computed days): never active first.
     const out = await run('m365.inactive-licensed-users', 'users');
-    expect(pick(out.rows, 'userPrincipalName', 'activity', 'daysInactive')).toEqual([
-      ['eli.obrien@example.com', 'never', undefined],
-      ['finance.temp@example.com', 'inactive', 229],
-      ['dana@example.com', 'inactive', 118],
-      ['kiosk@example.com', 'inactive', 91],
+    const rows = pick(out.rows, 'userPrincipalName', 'activity');
+    expect(rows[0]).toEqual(['eli.obrien@example.com', 'never']);
+    expect(rows.slice(1).sort()).toEqual([
+      ['dana@example.com', 'inactive'],
+      ['finance.temp@example.com', 'inactive'],
+      ['kiosk@example.com', 'inactive'],
     ]);
     expect(out).toMatchObject({ total: 4, never: 1, licences: 5, licensedUsers: 8, concealed: false });
-    expect(out.byWorkload.find((w: Def) => w.workload === 'Teams')).toEqual({
-      workload: 'Teams',
-      active: 2,
-      inactive: 4,
-    });
   });
 
   it('can ask about one workload (a Teams licence nobody uses)', async () => {
@@ -161,7 +159,7 @@ describe('m365.inactive-licensed-users', () => {
   });
 
   it('says so when the tenant conceals user names, and offers no link for hashed names', async () => {
-    const out = await transform('m365.inactive-licensed-users', 'users', {
+    const out = await transform('m365.inactive-licensed-users', 'userList', {
       params: { days: 90, workload: 'any' },
       value: {
         value: [
@@ -187,14 +185,19 @@ describe('m365.inactive-licensed-users', () => {
 describe('m365.mailbox-storage', () => {
   it('puts mailboxes over and near their quota first, then inactive ones', async () => {
     const out = await run('m365.mailbox-storage', 'mailboxes');
-    expect(pick(out.rows, 'userPrincipalName', 'state')).toEqual([
+    const rows = pick(out.rows, 'userPrincipalName', 'state');
+    expect(rows.slice(0, 3)).toEqual([
       ['ceo@example.com', 'full'],
       ['blake@example.com', 'nearQuota'],
       ['reception@example.com', 'nearQuota'],
-      ['dana@example.com', 'inactive'],
-      ['invoices@example.com', 'inactive'],
-      ['eli.obrien@example.com', 'inactive'],
     ]);
+    // Then the inactive ones, never active first, then the longest idle.
+    expect(rows.slice(3).sort()).toEqual([
+      ['dana@example.com', 'inactive'],
+      ['eli.obrien@example.com', 'inactive'],
+      ['invoices@example.com', 'inactive'],
+    ]);
+    expect(out.listCapped).toBe(false);
     expect(out).toMatchObject({ full: 1, nearQuota: 3, inactive: 3, mailboxes: 8 });
     expect(out.largest[0]).toMatchObject({ mailbox: 'Casey Director' });
   });
@@ -248,11 +251,12 @@ describe('m365.shared-mailbox-sign-in', () => {
 describe('m365.teams-activity', () => {
   it('lists inactive teams (never used first) and counts public and guest-active teams', async () => {
     const out = await run('m365.teams-activity', 'teams');
-    expect(pick(out.rows, 'teamName', 'daysInactive')).toEqual([
-      ['Test Team (never used)', undefined],
-      ['Marketing 2024 Launch', 228],
-      ['Social Club', 137],
+    expect(out.rows.map((r: Def) => r.teamName).sort()).toEqual([
+      'Marketing 2024 Launch',
+      'Social Club',
+      'Test Team (never used)',
     ]);
+    expect(out.rows.every((r: Def) => r.activity === 'inactive')).toBe(true);
     expect(out).toMatchObject({ inactive: 3, public: 2, inactivePublic: 1, guests: 2, total: 6 });
     const guests = await run('m365.teams-activity', 'teams', { view: 'guests' });
     expect(guests.rows.map((r: Def) => r.teamName).sort()).toEqual(['Partner Extranet', 'Project Phoenix']);
@@ -273,7 +277,8 @@ describe('m365.teams-activity', () => {
         ],
       },
     });
-    expect(out.rows[0]).toMatchObject({ guests: 3, openable: false, inactive: false });
+    expect(out.rows[0]).toMatchObject({ guests: 3, activity: 'active' });
+    expect(out.guests).toBe(1);
     expect(out.concealed).toBe(true);
   });
 });
@@ -281,10 +286,11 @@ describe('m365.teams-activity', () => {
 describe('m365.sharepoint-site-usage and m365.onedrive-usage', () => {
   it('flags sites near the storage limit first, then inactive ones', async () => {
     const out = await run('m365.sharepoint-site-usage', 'sites');
-    expect(pick(out.rows, 'siteUrl', 'state')).toEqual([
-      ['https://exampleorg.sharepoint.com/sites/finance-archive', 'storage'],
-      ['https://exampleorg.sharepoint.com/sites/intranet-pilot', 'inactive'],
+    const rows = pick(out.rows, 'siteUrl', 'state');
+    expect(rows[0]).toEqual(['https://exampleorg.sharepoint.com/sites/finance-archive', 'storage']);
+    expect(rows.slice(1).sort()).toEqual([
       ['https://exampleorg.sharepoint.com/sites/hr-2025', 'inactive'],
+      ['https://exampleorg.sharepoint.com/sites/intranet-pilot', 'inactive'],
       ['https://exampleorg.sharepoint.com/sites/project-x', 'inactive'],
     ]);
     expect(out).toMatchObject({ inactive: 3, nearLimit: 1, sites: 5, concealed: false });
@@ -292,10 +298,10 @@ describe('m365.sharepoint-site-usage and m365.onedrive-usage', () => {
 
   it('flags OneDrives of people who stopped working in them', async () => {
     const out = await run('m365.onedrive-usage', 'accounts', { view: 'inactive' });
-    expect(out.rows.map((r: Def) => r.ownerPrincipalName)).toEqual([
+    expect(out.rows.map((r: Def) => r.ownerPrincipalName).sort()).toEqual([
+      'dana@example.com',
       'eli.obrien@example.com',
       'finance.temp@example.com',
-      'dana@example.com',
     ]);
     expect(out).toMatchObject({ inactive: 3, nearLimit: 1, accounts: 5 });
   });

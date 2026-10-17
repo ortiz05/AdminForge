@@ -1,6 +1,9 @@
 import jsonata from 'jsonata';
+import { DEADLINE_BINDING, deadlineGuard } from './budget';
 import { registerHelpers } from './helpers';
 import { MAX_SEQUENCE, registerLimits } from './limits';
+import { groupByFunction, rewriteGroupBy, type GroupSpec } from './group-by';
+import { orderByFunction, rewriteOrderBy, type Spec } from './order-by';
 
 /**
  * JSONata evaluation with AdminForge limits (§7.6): compiled expressions are cached (LRU), evaluation is timeboxed
@@ -17,6 +20,11 @@ export interface EvaluateOptions {
   timeoutMs?: number;
   /** Max evaluation depth (recursion guard). Default 500. */
   maxDepth?: number;
+  /**
+   * Compile for evaluation: order-bys (`^( … )`) are rewritten into a native sort (order-by.ts). `evaluate` sets it;
+   * validation and lint read the AST as written (the default).
+   */
+  forEvaluation?: boolean;
 }
 
 export const DEFAULT_TIMEOUT_MS = 250;
@@ -92,7 +100,7 @@ const cache = new Lru<jsonata.Expression>(1000);
 export function compile(expr: string, opts: EvaluateOptions = {}): jsonata.Expression {
   const timeout = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const stack = opts.maxDepth ?? DEFAULT_MAX_DEPTH;
-  const key = `${timeout}:${stack}:${expr}`;
+  const key = `${opts.forEvaluation ? 'eval:' : ''}${timeout}:${stack}:${expr}`;
   const hit = cache.get(key);
   if (hit) return hit;
   let compiled: jsonata.Expression;
@@ -104,8 +112,42 @@ export function compile(expr: string, opts: EvaluateOptions = {}): jsonata.Expre
   }
   registerHelpers(compiled);
   registerLimits(compiled);
+  if (opts.forEvaluation) fastPaths(compiled, timeout, stack);
   cache.set(key, compiled);
   return compiled;
+}
+
+/**
+ * Rewrites `compiled`'s groupings and order-bys into the native group-by (group-by.ts) and sort (order-by.ts) and
+ * registers them. Sub-expressions (a key, a value, a sort term) get both, so either may nest in the other.
+ */
+function fastPaths(compiled: jsonata.Expression, timeout: number, stack: number): void {
+  const groupSpecs: GroupSpec[] = [];
+  const sortSpecs: Spec[] = [];
+  const group = groupByFunction(groupSpecs);
+  const sort = orderByFunction(sortSpecs);
+  const register = (e: jsonata.Expression) => {
+    e.registerFunction('__afGroupBy', group);
+    e.registerFunction('__afOrderBy', sort);
+  };
+  const term = (ast: Record<string, unknown>): jsonata.Expression => {
+    const sub = jsonata('0', { timeout, stack, sequence: MAX_SEQUENCE });
+    const root = sub.ast() as unknown as Record<string, unknown>;
+    for (const k of Object.keys(root)) delete root[k];
+    Object.assign(root, ast);
+    registerHelpers(sub);
+    registerLimits(sub);
+    register(sub);
+    // Every step checks the whole evaluation's deadline (budget.ts) when the caller binds it: a sub-expression
+    // evaluated once per row gets what is left of the budget, not a fresh one per row.
+    sub.assign(Symbol.for('jsonata.__evaluate_entry') as unknown as string, deadlineGuard(timeout));
+    return sub;
+  };
+  const ast = compiled.ast() as unknown as Record<string, unknown>;
+  // Groupings first: an order-by whose path held a grouping can then use the native sort too.
+  const grouped = rewriteGroupBy(ast, term, groupSpecs);
+  const sorted = rewriteOrderBy(ast, term, sortSpecs);
+  if (grouped || sorted) register(compiled);
 }
 
 /** Number of cached compiled expressions (for tests and metrics). */
@@ -120,7 +162,17 @@ function plain(v: unknown): unknown {
     if ('_jsonata_lambda' in v || '_jsonata_function' in v) return undefined;
     if (Object.getPrototypeOf(v) !== Object.prototype && Object.getPrototypeOf(v) !== null) return v;
     const out: Record<string, unknown> = {};
-    for (const [k, val] of Object.entries(v)) out[k] = plain(val);
+    for (const [k, val] of Object.entries(v)) {
+      // A data key "__proto__" (a grouping by a value from the tenant) stays a key, never the copy's prototype.
+      if (k === '__proto__')
+        Object.defineProperty(out, k, {
+          value: plain(val),
+          enumerable: true,
+          writable: true,
+          configurable: true,
+        });
+      else out[k] = plain(val);
+    }
     return out;
   }
   return v;
@@ -133,14 +185,16 @@ export async function evaluate(
   opts: EvaluateOptions = {},
 ): Promise<unknown> {
   const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
-  const compiled = compile(expr, opts);
+  const compiled = compile(expr, { ...opts, forEvaluation: true });
   let timer: ReturnType<typeof setTimeout> | undefined;
   // JSONata checks the timeout at every evaluation step; the timer is a backstop for anything that yields instead.
   const deadline = new Promise<never>((_, reject) => {
     timer = setTimeout(() => reject(new ExpressionTimeoutError(expr, timeoutMs)), timeoutMs + 50);
   });
   try {
-    return plain(await Promise.race([compiled.evaluate(scope), deadline]));
+    // The absolute deadline, for the native fast paths' per-row sub-expressions (budget.ts).
+    const bindings = { [DEADLINE_BINDING]: Date.now() + timeoutMs };
+    return plain(await Promise.race([compiled.evaluate(scope, bindings), deadline]));
   } catch (err) {
     throw toExpressionError(err, expr, timeoutMs);
   } finally {

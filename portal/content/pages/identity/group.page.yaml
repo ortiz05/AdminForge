@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/page.schema.json
 kind: page
 id: identity.group
-version: 1.1.0
+version: 1.2.0
 title: Group
 summary: One group — properties, members (add/remove in bulk), owners, nesting, app assignments and group-based licensing.
 owner: identity-team
@@ -10,7 +10,7 @@ template: entity
 requires:
   portalRoles: [Portal.Reader]
   scopes:
-    graph: [Group.Read.All, GroupMember.Read.All, Directory.Read.All, Organization.Read.All]
+    graph: [Group.Read.All, GroupMember.Read.All, Directory.Read.All, Organization.Read.All, Application.Read.All]
   entraRoles: [Directory Readers]
 
 params:
@@ -69,17 +69,25 @@ datasources:
         $top: 100
     paging: cursor
     cache: { ttl: 60 }
+  # Owners by type: GET /groups/{id}/owners without a cast leaves service principals out (seen live), while
+  # owners/$count counts them — so the people and the apps are read separately and the count, the tables and the
+  # "no person owns this" notice agree.
   owners:
-    source: graph
-    request:
-      path: /groups/${ $encode($guid(params.id)) }/owners
-      query:
-        $select: id,displayName,userPrincipalName,mail,accountEnabled,appId
+    source: graphBatch
+    requests:
+      people:
+        path: /groups/${ $encode($guid(params.id)) }/owners/microsoft.graph.user
+        query: { $select: "id,displayName,userPrincipalName,mail,accountEnabled" }
+      apps:
+        path: /groups/${ $encode($guid(params.id)) }/owners/microsoft.graph.servicePrincipal
+        query: { $select: "id,displayName,appId,accountEnabled,servicePrincipalType" }
     cache: { ttl: 30 }
     transform: >-
-      ${ $merge([value, { "value": [value.value.$merge([$, {
-           "ownerType": `@odata.type` = '#microsoft.graph.servicePrincipal' ? 'Service principal' : 'User'
-         }])] }]) }
+      ${ {
+        "people": $append([], value.people.value),
+        "apps": $append([], value.apps.value),
+        "total": $count(value.people.value) + $count(value.apps.value)
+      } }
   parents:
     source: graph
     request:
@@ -177,7 +185,8 @@ tabs:
         data: memberCount.owners
         label: Owners
         format: number
-        status: "${ value = 0 ? 'warn' : 'ok' }"
+        status: "${ value = 0 or $count(owners.people) = 0 ? 'warn' : 'ok' }"
+        statusLabel: "${ value = 0 ? 'No owners' : $count(owners.people) = 0 ? 'Apps only' : $count(owners.people) & ' people' }"
       - widget: markdown
         id: noOwners
         span: 12
@@ -185,6 +194,13 @@ tabs:
         text: |
           **This group has no owners.** Nobody is accountable for its membership or receives access reviews.
           Add at least two owners.
+      - widget: markdown
+        id: appOwnersOnly
+        span: 12
+        when: ${ memberCount.owners > 0 and $count(owners.people) = 0 }
+        text: |
+          **No person owns this group** — only apps (service principals) do. Nobody is accountable for its membership
+          or receives access reviews. Add at least one person as owner.
       - widget: keyValue
         id: properties
         title: Properties
@@ -324,12 +340,12 @@ tabs:
     layout:
       - widget: table
         id: owners
+        title: People
         span: 12
-        data: owners.value
+        data: owners.people
         rowKey: id
         columns:
           - { field: displayName, label: Owner, kind: identity, secondary: userPrincipalName }
-          - { field: ownerType, label: Type }
           - { field: accountEnabled, label: Enabled, kind: status, map: { "true": [ok, Enabled], "false": [crit, Disabled] } }
           - { field: id, label: Object id, kind: guid, hidden: true }
         inspect:
@@ -343,11 +359,36 @@ tabs:
             inputs:
               groupId: ${ params.id }
               ownerId: ${ row.id }
-            when: ${ $count(owners.value) > 1 }
+            when: ${ $count(owners.people) > 1 }
         empty:
-          title: No owners
-          body: Add at least two owners so someone is accountable for this group.
+          title: No person owns this group
+          body: Add at least two people as owners so someone is accountable for this group.
           action: { playbook: identity.add-group-owner, label: Add owner, inputs: { groupId: "${ params.id }" } }
+      - widget: table
+        id: appOwners
+        title: Apps (service principals)
+        span: 12
+        when: ${ $count(owners.apps) > 0 }
+        data: owners.apps
+        rowKey: id
+        columns:
+          - { field: displayName, label: App, kind: identity, secondary: appId }
+          - { field: servicePrincipalType, label: Type }
+          - { field: accountEnabled, label: Sign-in, kind: status, map: { "true": [ok, Enabled], "false": [crit, Disabled] } }
+          - { field: id, label: Object id, kind: guid, hidden: true }
+        inspect:
+          page: identity.enterprise-app
+          params:
+            id: ${ row.id }
+            appId: ${ row.appId }
+        rowActions:
+          - playbook: identity.remove-group-owner
+            label: Remove owner
+            icon: user-minus
+            inputs:
+              groupId: ${ params.id }
+              ownerId: ${ row.id }
+            when: ${ owners.total > 1 }
 
   - id: nesting
     label: Nesting

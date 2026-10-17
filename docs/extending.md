@@ -55,6 +55,11 @@ Claude picks the matching skill automatically (or name it: "use the adding-a-pla
   privilege it didn't grant.
 - **Fixtures can't catch what Microsoft rejects:** run every new Graph request, Resource Graph or KQL query once
   against a real tenant, read-only (the page and schedule skills show how).
+- **Fixtures can't catch scale either:** `pnpm test:perf` (`tests/perf`, not part of `pnpm test`) runs every
+  datasource against a synthetic 100k-user tenant with budgets in `tests/perf/budgets.json`. Transforms over big lists
+  use the native helpers (`$applyAdvanced`, `$withFields`, `$take`); a derived datasource passes on the `truncated`
+  flag of what it reads and says when the data is partial; a capped table exports the whole list — the page skill has
+  the rules.
 
 ## Reviewers
 

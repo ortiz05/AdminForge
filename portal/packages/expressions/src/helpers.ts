@@ -1,4 +1,5 @@
 import type jsonata from 'jsonata';
+import { MAX_SEQUENCE } from './limits';
 import type * as NodeCrypto from 'node:crypto';
 
 /**
@@ -157,8 +158,30 @@ export interface RowsFilterCondition {
   /** Dot path into the row (`owner.displayName`). */
   path: string;
   type: 'string' | 'number' | 'boolean' | 'date' | 'guid' | 'enum';
-  op: 'eq' | 'ne' | 'gt' | 'ge' | 'lt' | 'le' | 'startsWith' | 'contains' | 'in' | 'isEmpty';
+  /** `notEmpty` (has a value; a list has an element) and `notContains` are for filters written in content. */
+  op:
+    | 'eq'
+    | 'ne'
+    | 'gt'
+    | 'ge'
+    | 'lt'
+    | 'le'
+    | 'startsWith'
+    | 'contains'
+    | 'notContains'
+    | 'in'
+    | 'notIn'
+    | 'isEmpty'
+    | 'notEmpty';
   value: string | number | boolean | Array<string | number | boolean> | null;
+  /**
+   * Compare with another field of the same row instead of `value` (`{ "path": "storageUsedInBytes", "type": "number",
+   * "op": "ge", "field": "prohibitSendQuotaInBytes", "times": 0.9 }`); `times` scales a number. For filters written in
+   * content, not the query builder. A row without either field matches only the negated operators (`ne`,
+   * `notContains`, `notIn`), as with `value`.
+   */
+  field?: string;
+  times?: number;
 }
 /** `advanced` in the expression scope of a `dialect: rows` page: conditions joined with and/or (nesting ≤ 2). */
 export interface RowsFilterGroup {
@@ -166,23 +189,73 @@ export interface RowsFilterGroup {
   clauses: Array<RowsFilterCondition | RowsFilterGroup>;
 }
 
-const ROWS_OPS = new Set(['eq', 'ne', 'gt', 'ge', 'lt', 'le', 'startsWith', 'contains', 'in', 'isEmpty']);
+const ROWS_OPS = new Set([
+  'eq',
+  'ne',
+  'gt',
+  'ge',
+  'lt',
+  'le',
+  'startsWith',
+  'contains',
+  'in',
+  'isEmpty',
+  'notEmpty',
+  'notContains',
+  'notIn',
+]);
 const ROWS_PATH = /^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)*$/;
 
-function readPath(row: unknown, path: string): unknown {
+/**
+ * The value at a dot path (split into `keys`). A list on the way (`passwordCredentials.endDateTime`) is read item by
+ * item, so the result is every value found (a condition then matches when any of them does); a single value stands
+ * for itself.
+ */
+function readPath(row: unknown, keys: readonly string[]): unknown {
+  // The usual case — fields of objects, no list on the way — without the bookkeeping.
   let v: unknown = row;
-  for (const key of path.split('.')) {
-    if (v === null || typeof v !== 'object' || Array.isArray(v) || !Object.hasOwn(v, key)) return undefined;
-    v = (v as Record<string, unknown>)[key];
+  let i = 0;
+  for (; i < keys.length; i++) {
+    if (v === null || typeof v !== 'object' || Array.isArray(v) || !Object.hasOwn(v, keys[i]!)) break;
+    v = (v as Record<string, unknown>)[keys[i]!];
   }
-  return v;
+  if (i === keys.length) return v;
+  if (!Array.isArray(v) || i === 0) return undefined;
+  let values: unknown[] = v;
+  for (; i < keys.length; i++) {
+    const next: unknown[] = [];
+    for (const x of values) {
+      if (x === null || typeof x !== 'object' || Array.isArray(x) || !Object.hasOwn(x, keys[i]!)) continue;
+      const y = (x as Record<string, unknown>)[keys[i]!];
+      if (Array.isArray(y)) for (const z of y) next.push(z);
+      else next.push(y);
+    }
+    values = next;
+  }
+  return values.length === 0 ? undefined : values;
 }
+
+/**
+ * Parsed dates of the running `$applyAdvanced` call: report rows repeat a few hundred day values across tens of
+ * thousands of rows, so each is parsed once. Reset per call (bounded).
+ */
+let dateMemo: Map<string, number> | undefined;
 
 /** Comparable form of one value: lower-cased text, epoch ms for dates, numbers and booleans as they are. */
 function comparable(type: RowsFilterCondition['type'], v: unknown): string | number | boolean | undefined {
   if (v === undefined || v === null || v === '') return undefined;
+  if (type === 'date' && typeof v === 'string' && dateMemo) {
+    let ms = dateMemo.get(v);
+    if (ms === undefined) {
+      ms = Date.parse(v);
+      if (dateMemo.size < 50_000) dateMemo.set(v, ms);
+    }
+    return Number.isNaN(ms) ? undefined : ms;
+  }
   if (type === 'date') {
-    const t = typeof v === 'string' || typeof v === 'number' ? new Date(v).getTime() : Number.NaN;
+    // Date.parse, not new Date(): the same instant without an object per row.
+    const t =
+      typeof v === 'string' ? Date.parse(v) : typeof v === 'number' ? new Date(v).getTime() : Number.NaN;
     return Number.isNaN(t) ? undefined : t;
   }
   if (type === 'number') return typeof v === 'number' ? v : Number.isNaN(Number(v)) ? undefined : Number(v);
@@ -193,16 +266,52 @@ function comparable(type: RowsFilterCondition['type'], v: unknown): string | num
   return undefined;
 }
 
-function matchOne(c: RowsFilterCondition, actual: unknown): boolean {
-  const a = comparable(c.type, actual);
+/** A condition with its path split and its values made comparable once, not once per row. */
+interface Compiled {
+  keys: string[];
+  /** `field`: the other field's path, and its `times`. */
+  other?: { keys: string[]; times: number };
+  type: RowsFilterCondition['type'];
+  op: RowsFilterCondition['op'];
+  want: string | number | boolean | undefined;
+  values: Array<string | number | boolean | undefined>;
+  /** `in` / `notIn` on long lists (thousands of ids): a set, not a scan per row. */
+  valueSet: Set<string | number | boolean | undefined>;
+}
+
+function compileCondition(c: RowsFilterCondition): Compiled {
   const values = (Array.isArray(c.value) ? c.value : [c.value]).map((v) => comparable(c.type, v));
-  const want = values[0];
+  const other =
+    typeof c.field === 'string'
+      ? {
+          keys: c.field.split('.'),
+          times: typeof c.times === 'number' && Number.isFinite(c.times) ? c.times : 1,
+        }
+      : undefined;
+  return {
+    keys: c.path.split('.'),
+    type: c.type,
+    op: c.op,
+    want: values[0],
+    values,
+    valueSet: new Set(values),
+    ...(other ? { other } : {}),
+  };
+}
+
+function matchOne(
+  c: Compiled,
+  op: RowsFilterCondition['op'],
+  actual: unknown,
+  want: string | number | boolean | undefined = c.want,
+): boolean {
+  const a = comparable(c.type, actual);
   if (a === undefined) return false;
-  switch (c.op) {
+  switch (op) {
     case 'eq':
       return a === want;
     case 'in':
-      return values.includes(a);
+      return c.other ? a === want : c.valueSet.has(a);
     case 'startsWith':
       return typeof a === 'string' && typeof want === 'string' && a.startsWith(want);
     case 'contains':
@@ -220,13 +329,36 @@ function matchOne(c: RowsFilterCondition, actual: unknown): boolean {
   }
 }
 
-function matchCondition(c: RowsFilterCondition, row: unknown): boolean {
-  const actual = readPath(row, c.path);
-  const list = Array.isArray(actual) ? actual : [actual];
+const blank = (v: unknown) => v === undefined || v === null || v === '';
+
+/** The value to compare with: the condition's own, or this row's value of `field` (× `times`). */
+function wantFor(c: Compiled, row: unknown): string | number | boolean | undefined {
+  if (!c.other) return c.want;
+  const v = comparable(c.type, readPath(row, c.other.keys));
+  return typeof v === 'number' && c.other.times !== 1 ? v * c.other.times : v;
+}
+
+function matchCondition(c: Compiled, row: unknown): boolean {
+  const want = wantFor(c, row);
+  const actual = readPath(row, c.keys);
+  // One value (the usual case): no list to build.
+  if (!Array.isArray(actual)) {
+    if (c.op === 'isEmpty') return blank(actual);
+    if (c.op === 'notEmpty') return !blank(actual);
+    if (c.op === 'ne') return !matchOne(c, 'eq', actual, want);
+    if (c.op === 'notContains') return !matchOne(c, 'contains', actual, want);
+    if (c.op === 'notIn') return !matchOne(c, 'in', actual, want);
+    return matchOne(c, c.op, actual, want);
+  }
+  const list = actual;
   if (c.op === 'isEmpty') return list.every((v) => v === undefined || v === null || v === '');
+  if (c.op === 'notEmpty') return list.some((v) => v !== undefined && v !== null && v !== '');
   // A list-valued field (tags, addresses) matches when any element does; `ne` when none equals the value.
-  if (c.op === 'ne') return !list.some((v) => matchOne({ ...c, op: 'eq' }, v));
-  return list.some((v) => matchOne(c, v));
+  if (c.op === 'ne') return !list.some((v) => matchOne(c, 'eq', v, want));
+  // No value contains the text (a row without the field doesn't either).
+  if (c.op === 'notContains') return !list.some((v) => matchOne(c, 'contains', v, want));
+  if (c.op === 'notIn') return !list.some((v) => matchOne(c, 'in', v, want));
+  return list.some((v) => matchOne(c, c.op, v, want));
 }
 
 function checkRowsFilter(g: unknown, depth: number): RowsFilterGroup {
@@ -246,26 +378,78 @@ function checkRowsFilter(g: unknown, depth: number): RowsFilterGroup {
     const { path, op } = (c ?? {}) as { path?: unknown; op?: unknown };
     if (typeof path !== 'string' || !ROWS_PATH.test(path)) bad('invalid path');
     if (typeof op !== 'string' || !ROWS_OPS.has(op)) bad('invalid operator');
+    const { field } = c as { field?: unknown };
+    if (field !== undefined && (typeof field !== 'string' || !ROWS_PATH.test(field))) bad('invalid field');
+    const { times } = c as { times?: unknown };
+    if (times !== undefined && (field === undefined || typeof times !== 'number' || !Number.isFinite(times)))
+      bad('times needs a field and a finite number');
   }
   return g as RowsFilterGroup;
 }
 
-function matchGroup(g: RowsFilterGroup, row: unknown): boolean {
-  const test = (c: RowsFilterCondition | RowsFilterGroup) =>
-    'join' in c ? matchGroup(c, row) : matchCondition(c, row);
-  return g.join === 'and' ? g.clauses.every(test) : g.clauses.some(test);
+type Matcher = (row: unknown) => boolean;
+
+/** The filter as one function over a row: every condition compiled once (applyAdvanced runs it on every row). */
+function compileGroup(g: RowsFilterGroup): Matcher {
+  const tests: Matcher[] = g.clauses.map((c) => {
+    if ('join' in c) return compileGroup(c);
+    const compiled = compileCondition(c);
+    return (row) => matchCondition(compiled, row);
+  });
+  return g.join === 'and' ? (row) => tests.every((f) => f(row)) : (row) => tests.some((f) => f(row));
 }
 
 /**
  * Rows that match the query builder's filter (`filters.advanced.dialect: rows`): `$applyAdvanced(rows, advanced)` in
  * a datasource transform. No filter (`advanced` undefined/null) returns the rows unchanged. Text comparisons ignore
- * case; dates compare as instants; a row without the field matches nothing but `ne`.
+ * case; dates compare as instants; a row without the field matches only the negated operators (`ne`, `notContains`,
+ * `notIn`) — and `isEmpty`. `isEmpty` / `notEmpty` look at plain values (a list counts its items; an object is never
+ * empty). Content may also pass a filter of
+ * its own (`{ "join": "and", "clauses": [{ "path": "accountEnabled", "type": "boolean", "op": "eq", "value": true }] }`):
+ * it runs natively, so filtering tens of thousands of rows costs milliseconds instead of JSONata's ~15 µs a row.
  */
 export function applyAdvanced(rows: unknown, filter: unknown): unknown[] {
   const list = rows === undefined || rows === null ? [] : Array.isArray(rows) ? rows : [rows];
   if (filter === undefined || filter === null) return [...list];
-  const g = checkRowsFilter(filter, 1);
-  return list.filter((row) => matchGroup(g, row));
+  const match = compileGroup(checkRowsFilter(filter, 1));
+  dateMemo = new Map();
+  try {
+    return list.filter(match);
+  } finally {
+    dateMemo = undefined;
+  }
+}
+
+/**
+ * `$withFields(rows, { "state": "never" })`: every object row with these fields added (or replaced) — natively, where
+ * `rows.$merge([$, {…}])` costs ~15 µs a row in JSONata. Non-object items pass through; the input isn't changed.
+ */
+export function withFields(rows: unknown, fields: unknown): unknown[] {
+  const list = rows === undefined || rows === null ? [] : Array.isArray(rows) ? rows : [rows];
+  if (!fields || typeof fields !== 'object' || Array.isArray(fields))
+    throw new Error('$withFields: the fields must be an object');
+  for (const [k, v] of Object.entries(fields)) {
+    // JSONata's internal flags and functions (a lambda would leave the expression's sandbox in the result).
+    if (k.startsWith('_jsonata')) throw new Error(`$withFields: "${k}" can't be a field name`);
+    if (
+      typeof v === 'function' ||
+      (v && typeof v === 'object' && ('_jsonata_lambda' in v || '_jsonata_function' in v))
+    )
+      throw new Error(`$withFields: "${k}" can't be a function`);
+  }
+  if (list.length > MAX_SEQUENCE) throw new Error(`$withFields: at most ${MAX_SEQUENCE} rows`);
+  return list.map((r) => (r && typeof r === 'object' && !Array.isArray(r) ? { ...r, ...fields } : r));
+}
+
+/**
+ * `$take(rows, n)`: the first `n` items — natively, where `rows[[0..n-1]]` on a variable is quadratic in JSONata (it
+ * tests every item against the whole range).
+ */
+export function take(rows: unknown, n: unknown): unknown[] {
+  const list = rows === undefined || rows === null ? [] : Array.isArray(rows) ? rows : [rows];
+  if (typeof n !== 'number' || !Number.isInteger(n) || n < 0)
+    throw new Error('$take: n must be a whole number ≥ 0');
+  return list.slice(0, n);
 }
 
 /** `now` from the evaluation scope when present (tests, consistent run timestamps), else the clock. */
@@ -292,6 +476,8 @@ export const HELPER_NAMES = [
   'uuid',
   'secureRandom',
   'applyAdvanced',
+  'withFields',
+  'take',
 ] as const;
 
 /** Registers the helpers on a compiled expression. */
@@ -315,4 +501,6 @@ export function registerHelpers(expr: jsonata.Expression): void {
     return daysUntil(v, scopeNow(this));
   });
   expr.registerFunction('applyAdvanced', (rows: unknown, filter: unknown) => applyAdvanced(rows, filter));
+  expr.registerFunction('withFields', (rows: unknown, fields: unknown) => withFields(rows, fields), '<xo:a>');
+  expr.registerFunction('take', (rows: unknown, n: unknown) => take(rows, n));
 }

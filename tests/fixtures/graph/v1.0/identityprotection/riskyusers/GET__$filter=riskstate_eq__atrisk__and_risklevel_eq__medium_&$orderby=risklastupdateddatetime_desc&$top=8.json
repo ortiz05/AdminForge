@@ -1,0 +1,20 @@
+{
+  "value": [
+    {
+      "id": "00000000-0000-4000-8000-000000000105",
+      "userDisplayName": "Sam Rivera",
+      "userPrincipalName": "sam.rivera@example.com",
+      "riskLevel": "medium",
+      "riskState": "atRisk",
+      "riskLastUpdatedDateTime": "2026-10-14T09:00:00Z"
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000106",
+      "userDisplayName": "Kim Patel",
+      "userPrincipalName": "kim.patel@example.com",
+      "riskLevel": "medium",
+      "riskState": "atRisk",
+      "riskLastUpdatedDateTime": "2026-10-14T09:00:00Z"
+    }
+  ]
+}

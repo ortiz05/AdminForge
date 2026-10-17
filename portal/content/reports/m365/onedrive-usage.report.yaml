@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/report.schema.json
 kind: report
 id: m365.onedrive-usage
-version: 1.0.1
+version: 2.0.0
 title: OneDrive storage and inactive accounts
 summary: >-
   OneDrive accounts with no activity for the chosen number of days (often people who left — hand the files over before
@@ -60,7 +60,18 @@ savedViews:
 # File counts cover the last 30 days; storage is current; the last activity date is the account's latest activity
 # whenever it was. With concealed report names the URL and owner are hashes.
 datasources:
-  accounts:
+  # Tenant-wide storage from Microsoft's daily summary (one small report), not a sum over every account.
+  storage:
+    source: graph
+    label: OneDrive storage (usage report)
+    request:
+      beta: true
+      path: /reports/getOneDriveUsageStorage(period='D7')
+      query: { $format: application/json }
+    cache: { ttl: 3600 }
+    transform: >-
+      ${ { "used": (value.value^(>reportDate))[0].storageUsedInBytes } }
+  accountList:
     source: graph
     label: OneDrive usage account detail (usage report)
     request:
@@ -68,52 +79,57 @@ datasources:
       path: /reports/getOneDriveUsageAccountDetail(period='D30')
       query: { $format: application/json }
     paging: all
-    maxItems: 100000
+    maxItems: 40000
     cache: { ttl: 3600 }
+    # Native filters ($applyAdvanced) on disjoint sets — near the storage limit, inactive, the rest — and the report's
+    # own rows (no per-account JSONata: it doesn't fit the budget beyond ~1,500 accounts). The list keeps the first
+    # 10,000 (near the limit first, largest first); the export has every account of the view.
     transform: >-
       ${ (
-        $days := params.days ? $number(params.days) : 90;
         $limit := (params.threshold ? $number(params.threshold) : 90) / 100;
+        $cutoff := $daysAgo(params.days ? $number(params.days) : 90);
         $view := params.view ? params.view : 'attention';
-        $all := [value.value[$not(isDeleted = true)].(
-          $idle := lastActivityDate ? -$daysUntil(lastActivityDate);
-          $share := storageAllocatedInBytes > 0 ? $round(storageUsedInBytes / storageAllocatedInBytes, 4);
-          $inactive := lastActivityDate ? $idle >= $days : true;
-          $near := $share ? $share >= $limit : false;
-          {
-            "siteId": siteId,
-            "siteUrl": siteUrl,
-            "ownerDisplayName": ownerDisplayName,
-            "ownerPrincipalName": ownerPrincipalName,
-            "state": $near ? 'storage' : $inactive ? 'inactive' : 'ok',
-            "inactive": $inactive,
-            "nearLimit": $near,
-            "lastActivityDate": lastActivityDate,
-            "daysInactive": $idle,
-            "storageUsedInBytes": storageUsedInBytes ? storageUsedInBytes : 0,
-            "storageAllocatedInBytes": storageAllocatedInBytes,
-            "percentUsed": $share,
-            "fileCount": fileCount,
-            "activeFileCount": activeFileCount,
-            "openable": $substring(siteUrl ? siteUrl : '', 0, 8) = 'https://',
-            "reportRefreshDate": reportRefreshDate
-          }
-        )];
-        $rows := $view = 'all' ? $all
-          : $view = 'inactive' ? $all[inactive]
-          : $view = 'storage' ? $all[nearLimit]
-          : $all[inactive or nearLimit];
-        $inactiveRows := $all[inactive];
+        $f := function($rows, $clauses) { $applyAdvanced($rows, { "join": "and", "clauses": $clauses }) };
+        $all := $f(value.value, [{ "path": "isDeleted", "type": "boolean", "op": "ne", "value": true }]);
+        $near := $f($all, [
+          { "path": "storageAllocatedInBytes", "type": "number", "op": "gt", "value": 0 },
+          { "path": "storageUsedInBytes", "type": "number", "op": "ge", "field": "storageAllocatedInBytes", "times": $limit }
+        ]);
+        $notNear := { "join": "or", "clauses": [
+          { "path": "storageAllocatedInBytes", "type": "number", "op": "isEmpty", "value": null },
+          { "path": "storageUsedInBytes", "type": "number", "op": "lt", "field": "storageAllocatedInBytes", "times": $limit }
+        ] };
+        $inactive := $f($all, [{ "join": "or", "clauses": [
+          { "path": "lastActivityDate", "type": "date", "op": "isEmpty", "value": null },
+          { "path": "lastActivityDate", "type": "date", "op": "lt", "value": $cutoff }
+        ] }]);
+        $nearRows := $withFields($near^(>storageUsedInBytes), { "state": "storage" });
+        $noDate := { "path": "lastActivityDate", "type": "date", "op": "isEmpty", "value": null };
+        $hasDate := { "path": "lastActivityDate", "type": "date", "op": "notEmpty", "value": null };
+        /* Never active first, then the longest idle (a sort key can't be empty; sorting a variable runs natively). */
+        $oldestFirst := function($rows) { ( $dated := $f($rows, [$hasDate]); $append($f($rows, [$noDate]), $dated^(lastActivityDate)) ) };
+        $rows := $view = 'storage' ? $nearRows
+          : $view = 'inactive' ? $withFields($oldestFirst($inactive), { "state": "inactive" })
+          : $view = 'all' ? $append($nearRows, $withFields($f($all, [$notNear]), { "state": "listed" }))
+          : $append($nearRows, $withFields($oldestFirst($f($inactive, [$notNear])), { "state": "inactive" }));
         {
-          "rows": [$rows^(state = 'storage' ? 0 : state = 'inactive' ? 1 : 2, nearLimit ? -percentUsed : 0, $exists(daysInactive) ? 1 : 0, >daysInactive, >storageUsedInBytes)],
-          "inactive": $count($inactiveRows),
-          "inactiveStorage": $sum([0, $inactiveRows.storageUsedInBytes]),
-          "nearLimit": $count($all[nearLimit]),
-          "storage": $sum([0, $all.storageUsedInBytes]),
+          "rows": $rows,
+          "partial": value.truncated = true,
+          "inactive": $count($inactive),
+          "inactiveStorage": $sum([0, $inactive.storageUsedInBytes]),
+          "nearLimit": $count($near),
           "accounts": $count($all),
-          "concealed": $count($all[$not(openable)]) > 0
+          "concealed": $exists($all[0].siteUrl) and $substring($all[0].siteUrl, 0, 8) != 'https://'
         }
       ) }
+  # What the page shows of accountList: its figures and the first 10,000 rows, so the browser gets a small answer. The
+  # export reads accountList itself — every row of the view (export.maxRows keeps its read at the same cap).
+  accounts:
+    source: static
+    data: ${ ds.accountList }
+    cache: { ttl: 3600 }
+    transform: >-
+      ${ $merge([value, { "rows": $take(value.rows, 10000), "listCapped": $count(value.rows) > 10000 }]) }
 
 layout:
   - widget: markdown
@@ -140,9 +156,19 @@ layout:
     status: "${ value > 0 ? 'warn' : 'ok' }"
     href: /p/m365.onedrive-usage?view=storage
   - widget: kpi
-    data: accounts.storage
+    data: storage.used
     label: OneDrive storage used
     format: bytes
+  - widget: markdown
+    span: 12
+    when: ${ accounts.partial = true }
+    text: >-
+      **Partial data.** Microsoft has more OneDrive accounts than this report reads (40,000); the figures, the list and the
+      export cover the ones read.
+  - widget: markdown
+    span: 12
+    when: ${ accounts.listCapped = true }
+    text: The list shows the first 10,000 OneDrives (near the storage limit first, largest first); the CSV/XLSX export has all of them.
   - widget: markdown
     span: 12
     text: |
@@ -161,26 +187,24 @@ layout:
       - field: state
         label: Status
         kind: status
-        map: { storage: [warn, Near the storage limit], inactive: [info, Inactive], ok: [ok, OK] }
+        map: { storage: [warn, Near the storage limit], inactive: [info, Inactive], listed: [neutral, Below the limit] }
         filter: facet
-      - { field: daysInactive, label: Days since activity, kind: number, align: end, sortable: true, filter: range }
-      - { field: lastActivityDate, label: Last activity, kind: date, filter: date }
+      - { field: lastActivityDate, label: Last activity, kind: date, filter: date, sortable: true }
       - { field: storageUsedInBytes, label: Storage, kind: bytes, align: end, sortable: true }
-      - { field: percentUsed, label: Of limit, kind: percent, align: end, sortable: true }
       - { field: fileCount, label: Files, kind: number, align: end }
       - { field: activeFileCount, label: Active files (30 days), kind: number, align: end, hidden: true }
-      - { field: storageAllocatedInBytes, label: Storage limit, kind: bytes, align: end, hidden: true }
+      - { field: storageAllocatedInBytes, label: Storage limit, kind: bytes, align: end }
       - { field: siteUrl, label: OneDrive URL, kind: link, hidden: true }
       - { field: reportRefreshDate, label: Report date, kind: date, hidden: true }
     rowActions:
       - label: Open OneDrive
         icon: arrow-square-out
         href: ${ row.siteUrl }
-        when: ${ row.openable = true }
+        when: ${ $substring(row.siteUrl, 0, 8) = 'https://' }
       - label: Find the owner
         icon: magnifying-glass
         href: /p/identity.users?q=${ $encode(row.ownerPrincipalName) }
-        when: ${ row.openable = true and $contains(row.ownerPrincipalName, '@') }
+        when: ${ $contains(row.ownerPrincipalName, '@') }
     empty:
       title: No OneDrive needs attention
       body: Every OneDrive had activity within the window and is below the storage threshold.
@@ -188,5 +212,6 @@ layout:
 export:
   formats: [csv, xlsx]
   fileName: onedrive-usage-${ params.view }
-  data: accounts.rows
+  data: accountList.rows
+  maxRows: 40000
   columns: all

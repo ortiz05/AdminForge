@@ -1,0 +1,13 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#servicePrincipals",
+  "value": [
+    {
+      "@odata.type": "#microsoft.graph.servicePrincipal",
+      "id": "00000000-0000-4000-8000-0000000005a1",
+      "displayName": "Example HR Provisioning",
+      "appId": "00000000-0000-4000-8000-0000000005b1",
+      "accountEnabled": true,
+      "servicePrincipalType": "Application"
+    }
+  ]
+}

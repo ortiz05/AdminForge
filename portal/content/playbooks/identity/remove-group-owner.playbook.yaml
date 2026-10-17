@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/playbook.schema.json
 kind: playbook
 id: identity.remove-group-owner
-version: 1.1.0
+version: 1.2.0
 title: Remove group owner
 summary: >-
   Removes an owner from a group. Refuses to remove the last owner, so groups never end up ownerless, and refuses
@@ -53,34 +53,68 @@ steps:
       ) }
     message: That account is marked as protected (a break-glass or emergency-access account). Change its group ownerships in the Microsoft Entra admin center, outside AdminForge.
 
-  - id: owners
+  # People and apps are read apart: GET /groups/{id}/owners without a cast leaves service principals out, so an app
+  # owner could never be found (or removed) otherwise.
+  - id: ownerPeople
     type: graph
     mode: read
-    describe: Read current owners
+    describe: Read the people who own the group
     request:
       method: GET
-      path: /groups/${ $encode($guid(inputs.groupId)) }/owners
+      path: /groups/${ $encode($guid(inputs.groupId)) }/owners/microsoft.graph.user
       query:
         $select: id,displayName,userPrincipalName
 
+  - id: ownerApps
+    type: graph
+    mode: read
+    describe: Read the apps that own the group
+    request:
+      method: GET
+      path: /groups/${ $encode($guid(inputs.groupId)) }/owners/microsoft.graph.servicePrincipal
+      query:
+        $select: id,displayName,appId
+
+  - id: owners
+    type: transform
+    expression: >-
+      ${ {
+        "people": $append([], steps.ownerPeople.output.value),
+        "apps": $append([], steps.ownerApps.output.value),
+        "all": $append($append([], steps.ownerPeople.output.value), steps.ownerApps.output.value)
+      } }
+
   - id: current
     type: transform
-    expression: ${ steps.owners.output.value[id = $lowercase($$.inputs.ownerId)][0] }
+    expression: >-
+      ${ (
+        $c := steps.owners.output.all[$lowercase(id) = $lowercase($$.inputs.ownerId)][0];
+        $c ? $merge([$c, {
+          "name": $c.userPrincipalName ? $c.userPrincipalName : $c.displayName,
+          "isPerson": $exists($c.userPrincipalName)
+        }])
+      ) }
 
   - id: isOwner
     type: assert
     that: ${ $exists(steps.current.output.id) }
     message: ${ 'That account is not an owner of ' & steps.group.output.displayName & '.' }
 
+  # Someone stays accountable: a person can only be removed while another person owns the group (apps can own a group
+  # but can't be accountable for it); an app while another owner remains.
   - id: notLastOwner
     type: assert
-    that: ${ $count(steps.owners.output.value) > 1 }
-    message: ${ steps.current.output.userPrincipalName & ' is the only owner of ' & steps.group.output.displayName & '. Add another owner first.' }
+    that: >-
+      ${ steps.current.output.isPerson ? $count(steps.owners.output.people) > 1 : $count(steps.owners.output.all) > 1 }
+    message: >-
+      ${ steps.current.output.isPerson
+         ? steps.current.output.name & ' is the only person who owns ' & steps.group.output.displayName & '. Add another person as owner first.'
+         : steps.current.output.name & ' is the only owner of ' & steps.group.output.displayName & '. Add a person as owner first.' }
 
   - id: removeOwner
     type: graph
     mode: write
-    describe: ${ 'Remove ' & steps.current.output.userPrincipalName & ' as owner of ' & steps.group.output.displayName }
+    describe: ${ 'Remove ' & steps.current.output.name & ' as owner of ' & steps.group.output.displayName }
     request:
       method: DELETE
       path: /groups/${ $encode($guid(inputs.groupId)) }/owners/${ $encode($guid(inputs.ownerId)) }/$ref
@@ -94,7 +128,7 @@ steps:
           "@odata.id": https://graph.microsoft.com/v1.0/directoryObjects/${ $guid(inputs.ownerId) }
 
 outputs:
-  summary: ${ steps.current.output.userPrincipalName & ' no longer owns ' & steps.group.output.displayName & '.' }
+  summary: ${ steps.current.output.name & ' no longer owns ' & steps.group.output.displayName & '.' }
 
 tests:
   - name: refuses AdminForge's role groups
@@ -112,22 +146,42 @@ tests:
     inputs: { groupId: 00000000-0000-4000-8000-000000000201, ownerId: 00000000-0000-4000-8000-000000000101 }
     mocks:
       group: { id: 00000000-0000-4000-8000-000000000201, displayName: SG-App-Payroll-Users }
-      owners: { value: [{ id: 00000000-0000-4000-8000-000000000101, userPrincipalName: a.lee@example.com }] }
+      ownerPeople: { value: [{ id: 00000000-0000-4000-8000-000000000101, userPrincipalName: a.lee@example.com }] }
+      ownerApps: { value: [] }
     expect: { status: failed, failedStep: notLastOwner }
+  - name: refuses to remove the last person even when an app also owns the group
+    inputs: { groupId: 00000000-0000-4000-8000-000000000201, ownerId: 00000000-0000-4000-8000-000000000101 }
+    mocks:
+      group: { id: 00000000-0000-4000-8000-000000000201, displayName: SG-App-Payroll-Users }
+      ownerPeople: { value: [{ id: 00000000-0000-4000-8000-000000000101, userPrincipalName: a.lee@example.com }] }
+      ownerApps: { value: [{ id: 00000000-0000-4000-8000-0000000005a1, displayName: Example HR Provisioning }] }
+    expect: { status: failed, failedStep: notLastOwner }
+  - name: removes an app owner while a person still owns the group
+    inputs: { groupId: 00000000-0000-4000-8000-000000000201, ownerId: 00000000-0000-4000-8000-0000000005a1 }
+    mocks:
+      group: { id: 00000000-0000-4000-8000-000000000201, displayName: SG-App-Payroll-Users }
+      ownerPeople: { value: [{ id: 00000000-0000-4000-8000-000000000101, userPrincipalName: a.lee@example.com }] }
+      ownerApps: { value: [{ id: 00000000-0000-4000-8000-0000000005a1, displayName: Example HR Provisioning }] }
+    expect:
+      status: succeeded
+      plan: [removeOwner]
+      outputs: { summary: Example HR Provisioning no longer owns SG-App-Payroll-Users. }
   - name: refuses someone who is not an owner
     inputs: { groupId: 00000000-0000-4000-8000-000000000201, ownerId: 00000000-0000-4000-8000-000000000105 }
     mocks:
       group: { id: 00000000-0000-4000-8000-000000000201, displayName: SG-App-Payroll-Users }
-      owners: { value: [{ id: 00000000-0000-4000-8000-000000000101, userPrincipalName: a.lee@example.com }] }
+      ownerPeople: { value: [{ id: 00000000-0000-4000-8000-000000000101, userPrincipalName: a.lee@example.com }] }
+      ownerApps: { value: [] }
     expect: { status: failed, failedStep: isOwner }
   - name: plans removing one of two owners
     inputs: { groupId: 00000000-0000-4000-8000-000000000201, ownerId: 00000000-0000-4000-8000-000000000102 }
     mocks:
       group: { id: 00000000-0000-4000-8000-000000000201, displayName: SG-App-Payroll-Users }
-      owners:
+      ownerPeople:
         value:
           - { id: 00000000-0000-4000-8000-000000000101, userPrincipalName: a.lee@example.com }
           - { id: 00000000-0000-4000-8000-000000000102, userPrincipalName: m.chen@example.com }
+      ownerApps: { value: [] }
     expect:
       status: succeeded
       plan: [removeOwner]

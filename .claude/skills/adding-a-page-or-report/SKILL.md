@@ -29,8 +29,36 @@ Pages, dashboards and reports are YAML in `portal/content/{pages,dashboards,repo
      `where isnull(x)` instead of `leftanti`; every union branch must project the columns used after it.
    - Results that can reach thousands of rows: a rows datasource without a transform (transforms have a 250 ms budget)
      plus a second Resource Graph `summarize` query for KPIs; `<ds>.totalRecords` works directly as a KPI.
-   - JSONata: `$filter(arr, function($v, $i) { $i < n })`, not `[[a..b]]` (slow on long lists); `$sum([0, …])` so
-     empty sums are 0; `$exists(x) = false`, not `$not(x)`; guard comparisons with `$type(x) = 'number'`. Build lookup sets with the grouping constructor (`ids{ $: true }`, then `$lookup`), not `$merge` of many objects or `in` over long lists.
+   - **Scale (100k users / 30k devices).** JSONata costs ~15 µs per operation and row (a filter, a `$merge`); a mapped
+     row with ten fields is ~10 operations (~0.15 ms), so a per-row mapping fits only ~1,500 rows in the 250 ms budget.
+     For big lists: filter and count at the source (`$filter`, `$count` + `ConsistencyLevel: eventual`, summary
+     reports), page lists with `paging: cursor`, and in transforms use the native helpers —
+     `$applyAdvanced(rows, { "join": "and", "clauses": [...] })`, `$withFields(rows, { "state": "x" })` to label rows,
+     `$take(rows, n)` to cap a list — and show Graph's own fields in columns instead of remapping every row (a value
+     inside a list, such as `details[0].x`, isn't exported: flatten those rows in the transform). Measure with
+     `AF_PERF_ONLY=<key> pnpm test:perf` (`tests/perf`).
+   - `$applyAdvanced` rules: ops `eq ne gt ge lt le startsWith contains notContains in notIn isEmpty notEmpty`;
+     `field` (+ `times`, a finite number) compares two fields of a row; paths are `.`-separated names and read through
+     lists (`passwordCredentials.endDateTime` matches when any credential does) — no `[n]` indexes and no keys that
+     contain a dot (`@odata.type`). `isEmpty` / `notEmpty` look at plain values (null, `''`, a list without items; an
+     object is never empty). A row without the field matches only the negated operators (`ne`, `notContains`,
+     `notIn`) and `isEmpty`.
+   - **Partial data.** Over a cap, `paging: all` marks the datasource's result `truncated` and the renderer notes it
+     under that datasource's own widgets (also after its transform). A derived datasource (`source: static` built from
+     `ds.X`) doesn't carry it: pass it on (`ds.X.truncated` when X has no transform; otherwise X's transform returns
+     `"partial": value.truncated = true`) and show a markdown note when it is set — never say the counts "include
+     every …" without that check. A table capped at 10,000 rows still exports every
+     row: the list datasource returns the whole sorted list (`export.data: <list>.rows`, `export.maxRows` = its
+     `maxItems`) and the page binds its widgets to a `source: static` view of it —
+     `${ $merge([value, { "rows": $take(value.rows, 10000), "listCapped": $count(value.rows) > 10000 }]) }` — so the
+     browser gets 10,000 rows (`m365.mailbox-storage`: `mailboxList` → `mailboxes`).
+   - JSONata: `$take(arr, n)` or a slice right after a sort (`rows^(x)[[0..9]]`), never `[[a..b]]` on a variable
+     (quadratic); sort before you cap (`$take(rows^(<date), n)`), and never sort on a key that can be empty (split the
+     rows with `isEmpty` / `notEmpty` first); `$sum([0, …])` so empty sums are 0; `$exists(x) = false`, not `$not(x)`;
+     guard comparisons with `$type(x) = 'number'`. The grouping constructor (`rows{ id: … }`) and `^( … )` run natively
+     and scale when their source is a plain path or variable and the keys/values don't use `$$`, `%`, `#` or `@` —
+     otherwise (a function call, a block or a condition as the source) JSONata runs them, ~15 µs a row. `in` over a
+     long list is a set lookup inside `$applyAdvanced` only.
    - Check every new request once against a real tenant, read-only (fixtures can't catch a request Microsoft
      rejects). Graph checks `$select`/`$expand`/`$filter` before licence checks, so even an unlicensed tenant
      confirms the syntax.

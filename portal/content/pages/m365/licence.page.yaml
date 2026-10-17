@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/page.schema.json
 kind: page
 id: m365.licence
-version: 1.0.0
+version: 2.0.0
 title: Licence
 summary: One subscription — who holds a seat, whether it was assigned directly or through a group, assignment errors, and the service plans it includes.
 owner: m365-team
@@ -10,22 +10,14 @@ template: entity
 requires:
   portalRoles: [Portal.Reader]
   scopes:
-    graph: [Organization.Read.All, User.Read.All, AuditLog.Read.All]
+    graph: [Organization.Read.All, User.Read.All, Group.Read.All, AuditLog.Read.All]
   entraRoles: [License Administrator, Global Reader]
 
 params:
   skuId: { type: guid, label: SKU, required: true, hidden: true }
   q: { type: string, default: "", label: Search, placeholder: Name or sign-in name }
-  assignment:
-    type: enum
-    label: Assigned
-    facet: true
-    default: All
-    values:
-      - { value: All, label: Directly or by group }
-      - { value: Direct, label: Directly }
-      - { value: Group, label: Through a group }
-      - { value: Error, label: With assignment errors }
+  # Kept for one release so saved views and links from 1.x still open (assignment now filters the loaded rows).
+  assignment: { type: string, default: "", label: Assigned (no longer used), hidden: true }
   enabled:
     type: enum
     label: Sign-in
@@ -35,14 +27,13 @@ params:
 
 filters:
   search: q
-  facets: [assignment, enabled]
+  facets: [enabled]
 
 savedViews:
   enabled: true
   shared: true
   presets:
     - { name: Disabled accounts holding a seat, params: { enabled: Disabled } }
-    - { name: Assignment errors, params: { assignment: Error } }
 
 datasources:
   sku:
@@ -72,64 +63,60 @@ datasources:
           "servicePlans": [$s.servicePlans.{ "servicePlanId": servicePlanId, "servicePlanName": servicePlanName, "provisioningStatus": provisioningStatus, "appliesTo": appliesTo }]
         }
       ) }
+  # Built for large tenants (an E3 or E5 SKU held by 100k people): the list pages through Graph, which filters and
+  # searches it; the transform only labels the rows of one page; the counts come from $count.
   users:
     source: graph
     request:
       path: /users
       headers: { ConsistencyLevel: eventual }
       query:
-        $filter: ${ 'assignedLicenses/any(x:x/skuId eq ' & $guid(params.skuId) & ')' }
+        $filter: >-
+          ${ $join([
+               'assignedLicenses/any(x:x/skuId eq ' & $guid(params.skuId) & ')',
+               params.enabled = 'Enabled' ? 'accountEnabled eq true',
+               params.enabled = 'Disabled' ? 'accountEnabled eq false'
+             ][$], ' and ') }
+        $search: >-
+          ${ params.q ? '"displayName:' & $odataSearch(params.q) & '" OR "userPrincipalName:' & $odataSearch(params.q) & '"' }
         $select: id,displayName,userPrincipalName,accountEnabled,userType,department,usageLocation,licenseAssignmentStates,signInActivity
         $count: true
-        $top: 999
-    paging: all
-    maxItems: 50000
+        $top: 100
+    paging: cursor
     cache: { ttl: 300 }
-    # One row per licensed user: how the seat was assigned (direct / group / both), assignment errors and last sign-in.
+    # How each seat was assigned (direct / group / both) and its assignment error, for the rows of this page; keeps
+    # @odata.nextLink / @odata.count.
     transform: >-
       ${ (
-        $p := params;
-        $sku := $lowercase($p.skuId);
-        $q := $lowercase($trim($p.q ? $p.q : ''));
-        $all := [value.value.(
+        $sku := $lowercase(params.skuId);
+        $merge([value, { "value": [value.value.(
           $states := licenseAssignmentStates[$lowercase(skuId) = $sku];
           $direct := $exists($states[$not($exists(assignedByGroup)) or assignedByGroup = null]);
           $group := $exists($states[$exists(assignedByGroup) and assignedByGroup != null]);
           $err := $states[error != 'None' and $exists(error)][0].error;
-          $last := signInActivity.lastSignInDateTime;
-          {
-            "id": id,
-            "displayName": displayName,
-            "userPrincipalName": userPrincipalName,
-            "accountEnabled": accountEnabled,
-            "userType": userType,
-            "department": department,
-            "usageLocation": usageLocation,
+          $merge([$, {
             "assignment": $direct and $group ? 'Both' : $group ? 'Group' : 'Direct',
-            "groupIds": [$states.assignedByGroup[$ != null]],
             "error": $err ? $err : null,
-            "state": $err ? 'Error' : $states[0].state,
-            "lastSignIn": $last,
-            "inactiveDays": $last ? -$daysUntil($last) : null
-          }
-        )];
-        $rows := [$all[
-            ($q = '' or $contains($lowercase(displayName & ' ' & userPrincipalName), $q))
-            and ($p.enabled = 'Any' or $not($exists($p.enabled)) or accountEnabled = ($p.enabled = 'Enabled'))
-            and ($p.assignment = 'All' or $not($exists($p.assignment))
-                 or ($p.assignment = 'Error' and $exists(error) and error != null)
-                 or ($p.assignment = 'Direct' and assignment in ['Direct', 'Both'])
-                 or ($p.assignment = 'Group' and assignment in ['Group', 'Both']))
-          ]];
-        {
-          "rows": $rows,
-          "total": $count($all),
-          "viaGroup": $count($all[assignment in ['Group', 'Both']]),
-          "errors": $count($all[$exists(error) and error != null]),
-          "disabled": $count($all[accountEnabled = false]),
-          "inactive": $count($all[accountEnabled = true and ($not($exists(lastSignIn)) or lastSignIn = null or inactiveDays > 90)])
-        }
+            "state": $err ? 'Error' : $states[0].state
+          }])
+        )] }])
       ) }
+  counts:
+    source: graphBatch
+    requests:
+      holders:
+        path: /users/$count
+        query: { $filter: "${ 'assignedLicenses/any(x:x/skuId eq ' & $guid(params.skuId) & ')' }" }
+        headers: { ConsistencyLevel: eventual }
+      disabled:
+        path: /users/$count
+        query: { $filter: "${ 'assignedLicenses/any(x:x/skuId eq ' & $guid(params.skuId) & ') and accountEnabled eq false' }" }
+        headers: { ConsistencyLevel: eventual }
+      groups:
+        path: /groups/$count
+        query: { $filter: "${ 'assignedLicenses/any(x:x/skuId eq ' & $guid(params.skuId) & ')' }" }
+        headers: { ConsistencyLevel: eventual }
+    cache: { ttl: 300 }
 
 header:
   title: ${ sku.skuPartNumber }
@@ -152,26 +139,26 @@ actions:
 layout:
   - widget: kpi
     id: assigned
-    data: users.total
+    data: counts.holders
     label: Users with a seat
     format: number
   - widget: kpi
-    id: viaGroup
-    data: users.viaGroup
-    label: Assigned through a group
+    id: groups
+    data: counts.groups
+    label: Groups assigning it
     format: number
   - widget: kpi
     id: disabled
-    data: users.disabled
+    data: counts.disabled
     label: Disabled accounts holding a seat
     format: number
     status: "${ value > 0 ? 'warn' : 'ok' }"
-  - widget: kpi
-    id: inactive
-    data: users.inactive
-    label: No sign-in for 90+ days
-    format: number
-    status: "${ value > 0 ? 'warn' : 'ok' }"
+    href: ${ '/p/m365.licence?skuId=' & $encode(params.skuId) & '&enabled=Disabled' }
+  - widget: markdown
+    span: 12
+    text: >-
+      Seats held by accounts that stopped signing in: [Inactive licensed users](/p/m365.inactive-licensed-users) ·
+      assignment errors for every licence: [Licence assignment errors](/p/identity.licence-assignment-errors).
 
 tabs:
   - id: users
@@ -180,7 +167,7 @@ tabs:
       - widget: table
         id: users
         span: 12
-        data: users.rows
+        data: users.value
         rowKey: id
         columns:
           - { field: displayName, label: Name, kind: identity, secondary: userPrincipalName }
@@ -201,8 +188,7 @@ tabs:
             filter: facet
           - { field: error, label: Error, filter: facet }
           - { field: department, label: Department, filter: text }
-          - { field: lastSignIn, label: Last sign-in, kind: relativeTime, filter: date, sortable: true }
-          - { field: inactiveDays, label: Days since sign-in, kind: number, filter: range, hidden: true }
+          - { field: signInActivity.lastSuccessfulSignInDateTime, label: Last sign-in, kind: relativeTime, filter: date }
           - { field: usageLocation, label: Usage location, filter: facet, hidden: true }
           - { field: userType, label: Type, filter: facet, hidden: true }
           - { field: id, label: Object id, kind: guid, hidden: true }

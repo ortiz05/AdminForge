@@ -1,7 +1,7 @@
 $schema: ../../packages/schemas/generated/dashboard.schema.json
 kind: dashboard
 id: m365.overview
-version: 1.0.1
+version: 1.1.0
 title: Microsoft 365 overview
 summary: Service health, changes that need action, licence headroom, adoption and team ownership at a glance.
 owner: m365-team
@@ -104,25 +104,23 @@ datasources:
       query: { $format: application/json }
     cache: { ttl: 3600 }
     transform: "${ [$sort(value.value, function($a, $b) { $a.reportDate > $b.reportDate })] }"
+  # Counted by Graph (advanced queries): no list of every team is read for three numbers.
   teams:
-    source: graph
-    # Same request as the Teams page, so the cached result is shared.
-    request:
-      path: /groups
-      query:
-        $filter: "resourceProvisioningOptions/Any(x:x eq 'Team')"
-        $select: id,displayName,description,mail,visibility,createdDateTime,renewedDateTime,expirationDateTime
-        $expand: owners($select=id,displayName,userPrincipalName)
-        $top: 100
-    paging: all
-    maxItems: 10000
-    cache: { ttl: 300 }
-    transform: >-
-      ${ {
-        "total": $count(value.value),
-        "noOwner": $count(value.value[$count(owners.userPrincipalName) = 0]),
-        "singleOwner": $count(value.value[$count(owners.userPrincipalName) = 1])
-      } }
+    source: graphBatch
+    requests:
+      total:
+        path: /groups/$count
+        query: { $filter: "resourceProvisioningOptions/Any(x:x eq 'Team')" }
+        headers: { ConsistencyLevel: eventual }
+      noOwner:
+        path: /groups/$count
+        query: { $filter: "resourceProvisioningOptions/Any(x:x eq 'Team') and owners/$count eq 0" }
+        headers: { ConsistencyLevel: eventual }
+      singleOwner:
+        path: /groups/$count
+        query: { $filter: "resourceProvisioningOptions/Any(x:x eq 'Team') and owners/$count eq 1" }
+        headers: { ConsistencyLevel: eventual }
+    cache: { ttl: 600 }
 
 layout:
   - widget: kpi
@@ -168,10 +166,11 @@ layout:
     id: teamsNoOwner
     span: 2
     data: teams.noOwner
-    label: Teams without owners
+    label: Teams without any owner
     format: number
     status: "${ value > 0 ? 'crit' : 'ok' }"
-    href: /p/m365.teams?ownership=none
+    hint: Teams owned only by apps (no person) are in the Teams without owners report.
+    href: /p/m365.teams-without-owners
   - widget: statusGrid
     id: services
     title: Service health

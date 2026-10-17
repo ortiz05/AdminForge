@@ -1,0 +1,22 @@
+{
+  "value": [
+    {
+      "reportRefreshDate": "2026-10-13",
+      "exchangeActive": 1201,
+      "exchangeInactive": 83,
+      "oneDriveActive": 948,
+      "oneDriveInactive": 336,
+      "sharePointActive": 902,
+      "sharePointInactive": 382,
+      "skypeForBusinessActive": 0,
+      "skypeForBusinessInactive": 0,
+      "yammerActive": 141,
+      "yammerInactive": 1143,
+      "teamsActive": 1176,
+      "teamsInactive": 108,
+      "office365Active": 1231,
+      "office365Inactive": 53,
+      "reportPeriod": "30"
+    }
+  ]
+}

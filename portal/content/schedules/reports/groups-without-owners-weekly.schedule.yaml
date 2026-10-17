@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/schedule.schema.json
 kind: schedule
 id: reports.groups-without-owners-weekly
-version: 1.0.0
+version: 1.0.1
 title: Weekly ownerless and empty groups report
 summary: >-
   Every Monday at 05:30 UTC, writes cloud groups that have no owner or no members as XLSX and emails it, keeping six months of history for group clean-up.
@@ -14,7 +14,8 @@ identity: automation
 job:
   kind: report
   ref: identity.groups-without-owners
-  # Pinned rather than left to the report's defaults so the archive stays comparable from run to run.
+  # Pinned rather than left to the report's defaults so the archive stays comparable from run to run. `either`: groups
+  # with no owner, groups owned only by apps (no person accountable) and groups without members.
   params: { issue: either, includeSynced: false }
   delivery:
     - type: file

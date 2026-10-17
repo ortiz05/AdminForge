@@ -93,13 +93,9 @@
       "maxBytes": 19856963,
       "mayTimeOut": true
     },
-    "identity.app-registrations#apps": {
-      "knownError": "content_error: every app with $expand=owners, facets and sort in the transform; needs cursor paging and owners/$count",
-      "expect": "error",
-      "maxRequests": 252,
-      "maxBytes": 36691556,
-      "mayTimeOut": true,
-      "maxEstimatedLiveMs": 76381
+    "identity.app-registrations#credentials": {
+      "knownSlow": "credential KPIs: Graph can't filter credentials by expiry; capped read with native filters (partial note)",
+      "knownTruncated": "stops at maxItems: credential KPIs: Graph can't filter credentials by expiry; capped read with native filters (partial note)"
     },
     "identity.apps-without-owners#report": {
       "knownError": "content_error: measured 2026-10-17 at enterprise scale",
@@ -150,22 +146,22 @@
     "identity.group-lifecycle#singleOwner": {
       "knownTruncated": "capped by design to fit the 250 ms transform budget; the report says when it stops (measured 2026-10-17 at enterprise scale)"
     },
+    "identity.groups-without-owners#owned": {
+      "knownSlow": "apps-only owners: Graph can't filter owner type; groups read with owners expanded, capped (partial note)",
+      "knownTruncated": "stops at maxItems: apps-only owners: Graph can't filter owner type; groups read with owners expanded, capped (partial note)",
+      "maxBytes": 20013431
+    },
     "identity.groups-without-owners#report": {
-      "knownError": "content_error: measured 2026-10-17 at enterprise scale",
-      "expect": "error",
+      "knownSlow": "native filters over the owner and member reads",
       "mayTimeOut": true
     },
     "identity.health#credentials": {
-      "knownError": "content_error: flattens every application credential in the transform; needs a snapshot",
-      "expect": "error",
-      "mayTimeOut": true
+      "knownSlow": "app credential KPIs: Graph can't filter credentials by expiry; capped read with native filters (partial note)",
+      "knownTruncated": "stops at maxItems: app credential KPIs: Graph can't filter credentials by expiry; capped read with native filters (partial note)"
     },
     "identity.health#stale": {
-      "knownError": "content_error: crawls up to 50k users at 120 per page for two KPIs; needs a snapshot or /users/$count",
-      "expect": "error",
-      "maxRequests": 114,
-      "mayTimeOut": true,
-      "maxEstimatedLiveMs": 34753
+      "knownSlow": "inactive-account KPI: Graph can count neither by last sign-in; capped read (partial note)",
+      "knownTruncated": "stops at maxItems: inactive-account KPI: Graph can count neither by last sign-in; capped read (partial note)"
     },
     "identity.inactive-guests#guests": {
       "knownError": "content_error: every guest with a per-row transform",
@@ -174,24 +170,30 @@
       "mayTimeOut": true,
       "maxEstimatedLiveMs": 26880
     },
-    "identity.inactive-users#users": {
-      "knownError": "content_error: reads every member at 120 per page (signInActivity) and maps/sorts all rows in the transform; needs a tenant-wide snapshot or server-side signInActivity filters",
-      "expect": "error",
-      "maxRequests": 960,
-      "maxBytes": 87438927,
-      "mayTimeOut": true,
-      "maxEstimatedLiveMs": 288630
+    "identity.inactive-users#inactive": {
+      "knownSlow": "Graph filters on the last successful sign-in (signInActivity caps pages at 120): only inactive accounts are read",
+      "maxRequests": 114,
+      "maxEstimatedLiveMs": 34378
+    },
+    "identity.inactive-users#never": {
+      "knownSlow": "never-signed-in accounts can only be found by reading members older than the window; capped (partial note) \u2014 snapshot follow-up",
+      "knownTruncated": "stops at maxItems: never-signed-in accounts can only be found by reading members older than the window; capped (partial note) \u2014 snapshot follow-up"
     },
     "identity.licence-assignment-errors#noLocation": {
       "knownTruncated": "capped by design to fit the 250 ms transform budget; the report says when it stops (measured 2026-10-17 at enterprise scale)"
     },
+    "identity.password-policies#userList": {
+      "knownSlow": "Graph can't filter password age or policies: members read (999 a page) with native filters; the whole list of findings for the export (copied after the evaluation, outside its 250 ms); capped at 60k (partial note) \u2014 snapshot follow-up",
+      "knownTruncated": "stops at maxItems: Graph can't filter password age or policies: members read (999 a page) with native filters; the whole list of findings for the export (copied after the evaluation, outside its 250 ms); capped at 60k (partial note) \u2014 snapshot follow-up",
+      "maxRequests": 79,
+      "maxBytes": 32400653,
+      "maxTransformMs": 844,
+      "maxEstimatedLiveMs": 24433,
+      "mayTimeOut": true
+    },
     "identity.password-policies#users": {
-      "knownError": "content_error: every member with a per-row transform",
-      "expect": "error",
-      "maxRequests": 117,
-      "maxBytes": 48841637,
-      "mayTimeOut": true,
-      "maxEstimatedLiveMs": 35880
+      "knownSlow": "the page's view of userList: copies the list (kept whole for the export) and keeps the figures and the first 10,000 rows",
+      "mayTimeOut": true
     },
     "identity.privileged-role-assignments#assignments": {
       "knownError": "content_error: measured 2026-10-17 at enterprise scale",
@@ -214,92 +216,92 @@
       "mayTimeOut": true
     },
     "m365.anyone-link-sites#links": {
-      "knownError": "content_error: usage report detail rows (one per user/site) through a transform; stream untransformed rows, KPIs from the *Counts reports",
-      "expect": "error",
-      "maxBytes": 44844783,
+      "knownSlow": "per-row transform, capped at 1,500 rows (partial note) \u2014 rewrite natively (backlog)",
+      "knownTruncated": "stops at maxItems: per-row transform, capped at 1,500 rows (partial note) \u2014 rewrite natively (backlog)"
+    },
+    "m365.inactive-licensed-users#userList": {
+      "knownSlow": "usage report rows with native filters; the whole list of the view for the export (copied after the evaluation, outside its 250 ms); capped at 30k (partial note) \u2014 snapshot follow-up",
+      "knownTruncated": "stops at maxItems: usage report rows with native filters; the whole list of the view for the export (copied after the evaluation, outside its 250 ms); capped at 30k (partial note) \u2014 snapshot follow-up",
+      "maxBytes": 28107764,
       "mayTimeOut": true
     },
-    "m365.inactive-licensed-users#users": {
-      "knownError": "content_error: usage report detail rows (one per user/site) through a transform; stream untransformed rows, KPIs from the *Counts reports",
-      "expect": "error",
-      "maxRequests": 56,
-      "maxBytes": 79963476,
-      "mayTimeOut": true,
-      "maxEstimatedLiveMs": 17506
-    },
-    "m365.licence#users": {
-      "knownError": "content_error: selects signInActivity (120 per page) across every holder of the SKU and filters in the transform; needs cursor paging with server-side $filter/$search",
-      "expect": "error",
-      "maxRequests": 446,
-      "maxBytes": 45245459,
-      "mayTimeOut": true,
-      "maxEstimatedLiveMs": 134505
+    "m365.mailbox-storage#mailboxList": {
+      "knownSlow": "usage report rows with native filters; the whole list of the view for the export (copied after the evaluation, outside its 250 ms); capped at 40k (partial note) \u2014 snapshot follow-up",
+      "knownTruncated": "stops at maxItems: usage report rows with native filters; the whole list of the view for the export (copied after the evaluation, outside its 250 ms); capped at 40k (partial note) \u2014 snapshot follow-up",
+      "maxBytes": 30537537,
+      "maxTransformMs": 632,
+      "mayTimeOut": true
     },
     "m365.mailbox-storage#mailboxes": {
-      "knownError": "content_error: usage report detail rows (one per user/site) through a transform; stream untransformed rows, KPIs from the *Counts reports",
-      "expect": "error",
-      "maxRequests": 56,
-      "maxBytes": 65148242,
-      "mayTimeOut": true,
-      "maxEstimatedLiveMs": 17505
+      "knownSlow": "the page's view of mailboxList: copies the list (kept whole for the export) and keeps the figures and the first 10,000 rows",
+      "mayTimeOut": true
+    },
+    "m365.mailbox-storage#storage": {
+      "knownError": "SyntheticNotModelled: Microsoft's daily storage summary report (one small request) isn't in the fake Graph yet",
+      "expect": "unmodelled"
     },
     "m365.message-center-actions#messages": {
       "knownError": "content_error: every message through a transform",
       "expect": "error",
       "mayTimeOut": true
     },
-    "m365.onedrive-usage#accounts": {
-      "knownError": "content_error: usage report detail rows (one per user/site) through a transform; stream untransformed rows, KPIs from the *Counts reports",
-      "expect": "error",
-      "maxRequests": 56,
-      "maxBytes": 47608104,
-      "mayTimeOut": true,
-      "maxEstimatedLiveMs": 17506
+    "m365.onedrive-usage#accountList": {
+      "knownSlow": "usage report rows with native filters; the whole list of the view for the export (copied after the evaluation, outside its 250 ms); capped at 40k (partial note) \u2014 snapshot follow-up",
+      "knownTruncated": "stops at maxItems: usage report rows with native filters; the whole list of the view for the export (copied after the evaluation, outside its 250 ms); capped at 40k (partial note) \u2014 snapshot follow-up",
+      "maxBytes": 22306811,
+      "maxTransformMs": 652,
+      "mayTimeOut": true
+    },
+    "m365.onedrive-usage#storage": {
+      "knownError": "SyntheticNotModelled: Microsoft's daily storage summary report (one small request) isn't in the fake Graph yet",
+      "expect": "unmodelled"
     },
     "m365.overview#messages": {
       "knownSlow": "measured 2026-10-17 at enterprise scale",
       "knownTruncated": "stops at maxItems 1000: measured 2026-10-17 at enterprise scale"
     },
-    "m365.overview#teams": {
-      "knownSlow": "measured 2026-10-17 at enterprise scale",
-      "maxRequests": 64,
-      "mayTimeOut": true,
-      "maxEstimatedLiveMs": 19572
+    "m365.sharepoint-site-usage#siteList": {
+      "knownSlow": "usage report rows with native filters; the whole list of the view for the export (copied after the evaluation, outside its 250 ms); capped at 40k (partial note) \u2014 snapshot follow-up",
+      "knownTruncated": "stops at maxItems: usage report rows with native filters; the whole list of the view for the export (copied after the evaluation, outside its 250 ms); capped at 40k (partial note) \u2014 snapshot follow-up",
+      "maxBytes": 35890938,
+      "mayTimeOut": true
     },
     "m365.sharepoint-site-usage#sites": {
-      "knownError": "content_error: usage report detail rows (one per user/site) through a transform; stream untransformed rows, KPIs from the *Counts reports",
-      "expect": "error",
-      "maxBytes": 44844819,
+      "knownSlow": "the page's view of siteList: copies the list (kept whole for the export) and keeps the figures and the first 10,000 rows",
+      "mayTimeOut": true
+    },
+    "m365.sharepoint-site-usage#storage": {
+      "knownError": "SyntheticNotModelled: Microsoft's daily storage summary report (one small request) isn't in the fake Graph yet",
+      "expect": "unmodelled"
+    },
+    "m365.sharepoint-sites#siteList": {
+      "knownSlow": "usage report rows with native filters; the whole list of the view for the export (copied after the evaluation, outside its 250 ms); capped at 40k (partial note) \u2014 snapshot follow-up",
+      "knownTruncated": "stops at maxItems: usage report rows with native filters; the whole list of the view for the export (copied after the evaluation, outside its 250 ms); capped at 40k (partial note) \u2014 snapshot follow-up",
+      "maxBytes": 35890908,
+      "maxTransformMs": 646,
       "mayTimeOut": true
     },
     "m365.sharepoint-sites#storage": {
-      "knownError": "content_error: usage report detail rows (one per user/site) through a transform; stream untransformed rows, KPIs from the *Counts reports",
-      "expect": "error",
-      "maxBytes": 44844783,
+      "knownSlow": "the page's view of siteList: copies the list (kept whole for the export) and keeps the figures and the first 10,000 rows",
       "mayTimeOut": true
     },
-    "m365.teams#teams": {
-      "knownError": "content_error: every team with $expand=owners, search in the transform",
-      "expect": "error",
-      "maxRequests": 64,
-      "mayTimeOut": true,
-      "maxEstimatedLiveMs": 19753
+    "m365.sharepoint-sites#usage": {
+      "knownError": "SyntheticNotModelled: Microsoft's daily storage summary report (one small request) isn't in the fake Graph yet",
+      "expect": "unmodelled"
     },
     "m365.teams-activity#teams": {
-      "knownError": "content_error: usage report detail rows (one per user/site) through a transform; stream untransformed rows, KPIs from the *Counts reports",
-      "expect": "error",
+      "knownSlow": "usage report rows flattened per team (JSONata per listed row) so columns and the export have the figures; capped at 8,000 (partial note)",
       "mayTimeOut": true
     },
     "m365.teams-without-owners#archived": {
-      "knownSlow": "measured 2026-10-17 at enterprise scale",
+      "knownSlow": "archive state for every team (Graph can't filter it by owners)",
       "maxRequests": 64,
-      "maxEstimatedLiveMs": 19434
+      "maxEstimatedLiveMs": 19378
     },
     "m365.teams-without-owners#teams": {
-      "knownSlow": "measured 2026-10-17 at enterprise scale",
+      "knownSlow": "teams read with owners expanded (owner types can't be filtered); 100 a page",
       "maxRequests": 64,
-      "mayTimeOut": true,
-      "maxEstimatedLiveMs": 19651
+      "maxEstimatedLiveMs": 19377
     },
     "security.risky-users-review#detections": {
       "knownError": "content_error: risk detections through a deep transform",

@@ -204,7 +204,9 @@ Closes the gaps found by comparing the build with the original plan (see the pla
   mailbox must be refused). `docs/operations.md`: Exchange RBAC for Applications needs
   `Enable-OrganizationCustomization` first, and it can take hours to apply.
 - **Create Exchange recipients:** `m365.create-shared-mailbox` (high risk: people get Full Access and optionally Send
-  As — never the engineer, only user mailboxes in the organization; sign-in to its account blocked unless allowed),
+  As — never the engineer, only user mailboxes in the organization; sign-in to its account blocked unless allowed —
+  1.1.0 changes sign-in through Microsoft Graph, because Exchange accepted `Set-Mailbox -AccountDisabled $false` live
+  without enabling the account; allowing it needs User Administrator),
   `m365.create-room-mailbox` (capacity, auto-accept, overlaps, booking window, longest booking) and
   `m365.create-distribution-list` (owners required — user mailboxes; members; internal senders only by default; the
   engineer, who needs a mailbox, is a temporary owner and steps down once everything worked). Each checks the accepted

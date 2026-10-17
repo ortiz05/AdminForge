@@ -77,7 +77,13 @@ async function start(
     initiator: opts.initiator ?? INITIATOR,
   });
   const jobs: RunnerJob[] = [];
-  const outbound: OutboundPort = { call: async (_i, call) => ({ data: graph(call) }) };
+  const calls: ServiceCall[] = [];
+  const outbound: OutboundPort = {
+    call: async (_i, call) => {
+      calls.push(call);
+      return { data: graph(call) };
+    },
+  };
   const runner: RunnerPort = {
     run: async (_i, job) => {
       jobs.push(job);
@@ -98,7 +104,7 @@ async function start(
   const first = await engine.execute('run-1', def);
   const steps = await store.listSteps('run-1');
   const planned = steps.flatMap((s) => s.plan ?? []);
-  return { first, jobs, planned, steps, writes: jobs.filter((j) => j.mode === 'write') };
+  return { first, jobs, calls, planned, steps, writes: jobs.filter((j) => j.mode === 'write') };
 }
 
 describe('m365.create-shared-mailbox', () => {
@@ -143,8 +149,9 @@ describe('m365.create-shared-mailbox', () => {
       memberAddresses: ['blake@example.com', 'dana@example.com'],
       memberObjectIds: [BLAKE, DANA],
       sendAs: true,
-      allowSignIn: false,
     });
+    // Exchange creates the account blocked: nothing to change through Graph.
+    expect(run.calls.some((c) => c.method === 'PATCH')).toBe(false);
     expect(p.existingObjectId ?? null).toBeNull();
     for (const id of p.memberObjectIds as string[]) expect(id).toMatch(GUID);
   });
@@ -169,6 +176,38 @@ describe('m365.create-shared-mailbox', () => {
       }),
     });
     expect(live.writes[0]!.parameters.existingObjectId).toBe('30000000-0000-4000-8000-000000000001');
+  });
+
+  it('allows sign-in through Microsoft Graph on the new account, only when asked', async () => {
+    const inputs = { ...base, members: [], allowSignIn: true };
+    const dry = await start('m365.create-shared-mailbox', inputs, { dryRun: true });
+    expect(dry.planned.map((p) => [p.stepId, p.method, p.path])).toEqual([
+      ['create', expect.anything(), 'exchange/New-SharedMailbox.ps1'],
+      ['signIn', 'PATCH', '/users/00000000-0000-0000-0000-000000000000'],
+    ]);
+    const mailbox = '20000000-0000-4000-8000-000000000101';
+    const result = (job: RunnerJob) => ({
+      address: job.parameters.primarySmtpAddress,
+      externalDirectoryObjectId: mailbox,
+      created: true,
+      accountDisabled: true,
+      fullAccessAdded: [],
+      sendAsAdded: [],
+      skipped: [],
+      failed: [],
+      verified: true,
+    });
+    const live = await start('m365.create-shared-mailbox', inputs, { write: result });
+    expect(live.first.status).toBe('succeeded');
+    expect(live.writes[0]!.parameters).not.toHaveProperty('allowSignIn');
+    const patch = live.calls.find((c) => c.method === 'PATCH');
+    expect(patch).toMatchObject({ path: `/users/${mailbox}`, body: { accountEnabled: true } });
+    const blocked = await start(
+      'm365.create-shared-mailbox',
+      { ...inputs, allowSignIn: false },
+      { write: result },
+    );
+    expect(blocked.calls.some((c) => c.method === 'PATCH')).toBe(false);
   });
 
   it('needs the address typed to confirm, and says so for an existing mailbox', () => {
@@ -428,8 +467,9 @@ describe('Exchange recipient creation: declarations and pages', () => {
       expect(def.requires.entraRoles).toContain('Exchange Recipient Administrator');
       expect(def.requires.scopes.exchange).toContain('Exchange.Manage');
       expect(def.confirm.type).toBe('typed');
-      const writes = def.steps.filter((s: Def) => s.mode === 'write');
+      const writes = def.steps.filter((s: Def) => s.mode === 'write' && s.type === 'runner');
       expect(writes).toHaveLength(1);
+      for (const s of def.steps.filter((x: Def) => x.mode === 'write')) expect(s.idempotent).toBe(true);
       expect(writes[0]).toMatchObject({ type: 'runner', idempotent: true });
       expect(writes[0].dryRunOutput).toBeDefined();
       expect(writes[0].describe).toBeTruthy();

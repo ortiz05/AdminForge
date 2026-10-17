@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/playbook.schema.json
 kind: playbook
 id: m365.create-shared-mailbox
-version: 1.0.0
+version: 1.1.0
 title: Create a shared mailbox
 summary: >-
   Creates a shared mailbox in an accepted domain, gives the people you choose Full Access (and Send As) and blocks
@@ -16,9 +16,10 @@ mode: write
 requires:
   portalRoles: [Portal.Operator]
   scopes:
-    graph: [User.ReadBasic.All]
+    graph: [User.ReadBasic.All, User.EnableDisableAccount.All]
     exchange: [Exchange.Manage]
-  entraRoles: [Exchange Recipient Administrator]
+  # User Administrator only to change whether the mailbox's account can sign in (allow, or block again on a re-run).
+  entraRoles: [Exchange Recipient Administrator, User Administrator]
   licences: [exchange]
 confirm:
   type: typed
@@ -74,6 +75,7 @@ inputs:
     description: >-
       Leave this off. Nobody should sign in to a shared mailbox directly — people open it through Full Access. Turn it
       on only when a device or application must sign in as the mailbox (it then needs a licence and a password).
+      Changing it needs User Administrator.
   reason: { type: string, label: Reason, minLength: 10, multiline: true, placeholder: e.g. Ticket REQ-1234 — inbox for the sales team }
 
 steps:
@@ -193,7 +195,7 @@ steps:
           : 'Create the shared mailbox ' & steps.plan.output.address & ($n > 0 ? '; give ' & $people & ' ' & $rights : '') & '; ' & $signIn
       ) }
     script: exchange/New-SharedMailbox.ps1
-    sha256: efeee618edc60243b7ca62164195523d779a8807bd64c3c68357e4489a956b4b
+    sha256: e95d06e66834243fc025e6810b8a02c870292d0f980595d6e42e85ad2614d9f6
     services: [exchange]
     timeoutSeconds: 900
     # existingObjectId lets the protected-object guard see the mailbox a re-run changes; the people's object ids are
@@ -206,15 +208,18 @@ steps:
       memberAddresses: ${ steps.plan.output.memberAddresses }
       memberObjectIds: ${ steps.plan.output.memberObjectIds }
       sendAs: ${ inputs.sendAs = true }
-      allowSignIn: ${ inputs.allowSignIn = true }
     idempotent: true
     # The runner returns one element per output event; this script emits one result object.
     dryRunOutput:
       - address: ${ steps.plan.output.address }
         displayName: ${ inputs.displayName }
         alias: ${ steps.plan.output.alias }
+        externalDirectoryObjectId: >-
+          ${ steps.target.output.objectId ? steps.target.output.objectId : '00000000-0000-0000-0000-000000000000' }
         created: ${ steps.target.output.existing != true }
-        accountDisabled: ${ inputs.allowSignIn != true }
+        # Exchange creates the account blocked; an existing one is planned as if it needed changing.
+        accountDisabled: >-
+          ${ steps.target.output.existing = true ? inputs.allowSignIn = true : true }
         fullAccessAdded: ${ steps.plan.output.memberAddresses }
         sendAsAdded: >-
           ${ inputs.sendAs = true ? steps.plan.output.memberAddresses : [] }
@@ -222,12 +227,29 @@ steps:
         failed: []
         verified: true
 
+  # Exchange creates a shared mailbox's account blocked and didn't change it afterwards (Set-Mailbox -AccountDisabled
+  # $false was accepted live but left it disabled), so sign-in is changed through Microsoft Graph, like Block sign-in
+  # on the Shared mailboxes page — only when the account isn't already as asked.
+  - id: signIn
+    type: graph
+    mode: write
+    describe: >-
+      ${ (inputs.allowSignIn = true ? "Allow sign-in to the mailbox's account" : "Block sign-in to the mailbox's account")
+         & (steps.target.output.existing = true ? ' (if it is not already)' : '') }
+    when: ${ steps.create.output[0].accountDisabled = (inputs.allowSignIn = true) }
+    request:
+      method: PATCH
+      path: /users/${ $encode($guid(steps.create.output[0].externalDirectoryObjectId)) }
+      body:
+        accountEnabled: ${ inputs.allowSignIn = true }
+    idempotent: true
+
 outputs:
   summary: >-
     ${ (
       $r := steps.create.output[0];
       ($r.created = true ? 'Created the shared mailbox ' : 'Finished the shared mailbox ')
-      & $r.address & '. Sign-in to its account is ' & ($r.accountDisabled = true ? 'blocked' : 'allowed') & '.'
+      & $r.address & '. Sign-in to its account is ' & (inputs.allowSignIn = true ? 'allowed' : 'blocked') & '.'
       & ($count($r.fullAccessAdded) > 0 ? ' Full Access for ' & $join($r.fullAccessAdded, ', ') & '.' : '')
       & ($count($r.sendAsAdded) > 0 ? ' Send As for ' & $join($r.sendAsAdded, ', ') & '.' : '')
     ) }
@@ -289,6 +311,34 @@ tests:
       steps: { resolve: skipped }
       outputs:
         summary: Finished the shared mailbox sales@example.com. Sign-in to its account is blocked.
+  - name: allows sign-in through Microsoft Graph when asked
+    inputs: { displayName: Scanner inbox, address: scanner@example.com, allowSignIn: true, reason: Ticket REQ-1008 scanner signs in }
+    mocks:
+      availability:
+        - acceptedDomains: [example.com]
+          items: [{ value: scanner@example.com, kind: address, taken: false }, { value: scanner, kind: alias, taken: false }]
+      create:
+        - { address: scanner@example.com, externalDirectoryObjectId: 20000000-0000-4000-8000-000000000102, created: true, accountDisabled: true, fullAccessAdded: [], sendAsAdded: [], skipped: [], failed: [], verified: true }
+    expect:
+      status: succeeded
+      plan: [create, signIn]
+      outputs:
+        summary: Created the shared mailbox scanner@example.com. Sign-in to its account is allowed.
+  - name: blocks sign-in again on a re-run when the account was allowed
+    inputs: { displayName: Scanner inbox, address: scanner@example.com, reason: Ticket REQ-1008 scanner retired }
+    mocks:
+      availability:
+        - acceptedDomains: [example.com]
+          items:
+            - { value: scanner@example.com, kind: address, taken: true, createdByAdminForge: true, recipientTypeDetails: SharedMailbox, typeLabel: a shared mailbox, primarySmtpAddress: scanner@example.com, displayName: Scanner inbox, externalDirectoryObjectId: 20000000-0000-4000-8000-000000000102 }
+            - { value: scanner, kind: alias, taken: false }
+      create:
+        - { address: scanner@example.com, externalDirectoryObjectId: 20000000-0000-4000-8000-000000000102, created: false, accountDisabled: false, fullAccessAdded: [], sendAsAdded: [], skipped: [], failed: [], verified: true }
+    expect:
+      status: succeeded
+      plan: [create, signIn]
+      outputs:
+        summary: Finished the shared mailbox scanner@example.com. Sign-in to its account is blocked.
   - name: waits for a mailbox Exchange is still setting up
     inputs: { displayName: Sales team, address: sales@example.com, reason: Ticket REQ-1001 second attempt }
     mocks:

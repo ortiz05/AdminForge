@@ -82,6 +82,9 @@ refuses anything else. Prefer Graph when it can do the job. Conventions in one p
       availability check covers it), mark the object straight away by the `Guid` the `New-*` cmdlet returned, then wait
       for its account; only a list's owners can change it, so the engineer (who needs a mailbox) is a temporary owner.
       The `CustomAttribute15` mark is a guard rail, not authorization (SECURITY.md → Known gaps).
+    - Sign-in of a mailbox's account: `Set-Mailbox -AccountDisabled $false` was accepted without error but left a new
+      shared mailbox's account disabled (live, 2026-10-17). Change it through Graph (`PATCH /users/{id}`
+      `accountEnabled`, User Administrator) in the playbook, as `m365.create-shared-mailbox` and Block sign-in do.
     - Inbox rules: address them by `RuleIdentity` with `-Mailbox`; the rule cmdlets need `-Force` (unattended) and
       can't see hidden rules (every mailbox has Exchange's hidden "Junk E-mail Rule").
     - Graph `mailboxSettings` of someone else's mailbox answers ErrorAccessDenied with delegated permissions — read

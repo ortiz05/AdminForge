@@ -95,7 +95,8 @@ AF_LIVE_INSECURE_TLS=1` for the host services), and compares them with the fixtu
   ≈ documented difference (with the Microsoft reason), · not knowable (not published here, no permission). Exit code 1
   on an unexplained mismatch. Masked: AF-Test names only. Definitions not published on the instance show as not
   knowable — re-run after `pnpm adminforge publish`.
-- **`run-playbook.ts <playbook> '<inputs JSON>' [--confirm-from <stepId>.<field>]`** — signs in, arms, previews
+- **`run-playbook.ts <playbook> '<inputs JSON>' [--confirm-from <stepId>.<field>]`** — signs in (an https
+  `PUBLIC_BASE_URL` is the deployed portal: `PUBLIC_BASE_URL=https://<lan-address>:8443 AF_LIVE_INSECURE_TLS=1`), arms, previews
   (retrying through Graph replication lag) and runs one playbook. Inputs may name the test objects instead of ids —
   placeholders resolve as the validation user through the portal itself, so no ids or addresses go on the command
   line or into the output (also inside arrays):
@@ -303,11 +304,11 @@ Made in the portal, not by the CLI, so the create playbooks themselves are what'
 `AF_TEST_SERVICE_ADMIN_ROLES=true` (re-run `provision test-identities`), the validation user enabled and armed, dry
 run then run, in an accepted domain:
 
-| Recipient           | Playbook                        | Inputs                                                          |
-| ------------------- | ------------------------------- | --------------------------------------------------------------- |
-| `AF-Test-Shared-03` | `m365.create-shared-mailbox`    | **Allow sign-in** on (the case the Shared mailboxes page flags) |
-| `AF-Test-Room-01`   | `m365.create-room-mailbox`      | capacity, booking options as you like                           |
-| `AF-Test-DL-02`     | `m365.create-distribution-list` | owner `AF-Test-User-01` (licensed — an owner needs a mailbox)   |
+| Recipient           | Playbook                        | Inputs                                                                                    |
+| ------------------- | ------------------------------- | ----------------------------------------------------------------------------------------- |
+| `AF-Test-Shared-03` | `m365.create-shared-mailbox`    | **Allow sign-in** on (the case the Shared mailboxes page flags)                           |
+| `AF-Test-Room-01`   | `m365.create-room-mailbox`      | capacity, booking options as you like                                                     |
+| `AF-Test-DL-02`     | `m365.create-distribution-list` | owner `AF-Test-User-01` (licensed — an owner needs a mailbox), **Keep me as an owner** on |
 
 Every create asks for the address to be typed. The distribution list needs the validation user to have a mailbox
 (`AF_TEST_LICENCE_SKU` licenses it): Exchange only lets a list's owners change it, so the engineer is an owner while

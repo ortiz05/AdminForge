@@ -365,11 +365,16 @@ Found by the organization and security evaluation; the fixed findings are in CHA
       "Without an owner". Check a list with owners shows them by name (Exchange returns recipient Names, which can be
       object ids for newer recipients) and resolve them to display names if not. `AF-Test-DL-02`, created with an
       owner by `m365.create-distribution-list`, is the list to check this with.
-- [ ] Live-validate the Exchange recipient playbooks (`m365.create-shared-mailbox`, `m365.create-room-mailbox`,
-      `m365.create-distribution-list`, `m365.remove-created-recipient`; tests/live/README.md › Exchange recipients
-      created through AdminForge): marking by the `New-*` result's id, the error texts for not found / throttled /
-      "matches multiple entries", owners given by mailbox address, the engineer stepping down, a re-run, and removal.
-      The engineer creating a list needs a mailbox (licence the validation user, `AF_TEST_LICENCE_SKU`).
+- [ ] Live-validate the rest of the Exchange recipient playbooks. Done 2026-10-17: creating AF-Test-Shared-03,
+      AF-Test-Room-01 and AF-Test-DL-02 (owner by mailbox address, engineer kept as owner) and an idempotent re-run of
+      each; found that Exchange ignored `-AccountDisabled $false` (fixed in `m365.create-shared-mailbox` 1.1.0, sign-in
+      through Graph — publish and re-check). Still open: the error texts for throttled / "matches multiple entries",
+      the engineer stepping down (a list created without "Keep me as an owner"), and `m365.remove-created-recipient`.
+- [ ] Shared mailboxes page "Sign-in allowed": it reads Exchange's `AccountDisabled` (`Get-MailboxSummary`), which
+      still said blocked more than 20 minutes after Graph had enabled AF-Test-Shared-03's account (live, 2026-10-17;
+      a fresh datasource cache key, so not the cache). Entra's `accountEnabled` is the truth for sign-in — and what
+      Block sign-in changes. Read it from Graph (`/users?$filter=id in (…)`, batched by the mailboxes'
+      `externalDirectoryObjectId`) or join a Graph datasource, then re-run `check-accuracy.ts m365.shared-mailboxes`.
 - [ ] The "created by AdminForge" mark (`CustomAttribute15`) is a guard rail, not a boundary (SECURITY.md → Known
       gaps). Follow-up: before finishing or removing, check the recipient's object id against the output of
       AdminForge's own successful create run (runs store), and refuse marked recipients AdminForge has no run for.

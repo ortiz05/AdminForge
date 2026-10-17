@@ -1110,6 +1110,8 @@ const CREATED = {
   room: 'AF-Test-Room-01',
   list: 'AF-Test-DL-02',
   listOwner: 'AF-Test-User-01', // licensed: a list owner needs a mailbox
+  // The validation user created it with "Keep me as an owner", so the live suite can remove it later.
+  listOwners: 2,
 };
 const notCreated = (page: string, check: string, name: string, playbook: string): Outcome => ({
   page,
@@ -1168,7 +1170,7 @@ add('m365.mailboxes#mailboxes', `${CREATED.room}: listed as a room mailbox`, asy
 });
 add(
   'm365.distribution-lists#lists',
-  `${CREATED.list}: owned by ${CREATED.listOwner} only, internal senders only`,
+  `${CREATED.list}: owned by ${CREATED.listOwner} (and the validation user), internal senders only`,
   async (page, check) => {
     const r = await createdRow('m365.distribution-lists', 'lists', CREATED.list);
     if ('problem' in r) return { page, check, status: 'unknowable', details: [r.problem] };
@@ -1180,8 +1182,7 @@ add(
       (m) => m === CREATED.listOwner.toLowerCase() || (owner !== undefined && m === owner.id.toLowerCase()),
     );
     return outcome(page, check, [
-      // The engineer who created it is a temporary owner and steps down at the end.
-      ...compareValue('owners', 1, r.row.ownerCount),
+      ...compareValue('owners', CREATED.listOwners, r.row.ownerCount),
       ...(ownerShown ? [] : [`${CREATED.listOwner}: not among the owners AdminForge shows`]),
       ...compareValue('accepts mail from outside', false, r.row.acceptsExternal),
       ...((await groupId(CREATED.list)) ? [] : [`${CREATED.list}: not a group in Graph`]),

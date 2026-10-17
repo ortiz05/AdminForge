@@ -1,7 +1,7 @@
 <#
 .SYNOPSIS
-    Creates a shared mailbox, marks it as created by AdminForge, sets whether its account can sign in and grants
-    Full Access (and optionally Send As) to the given people.
+    Creates a shared mailbox, marks it as created by AdminForge and grants Full Access (and optionally Send As) to
+    the given people.
 
 .DESCRIPTION
     Refuses an address or alias another recipient uses. Every person is checked before anything changes: their
@@ -10,10 +10,11 @@
     A new mailbox is created with New-Mailbox -Shared (Name = alias, which the availability check covers) and marked
     straight away by the id Exchange returns (CustomAttribute15 "AdminForge-created by <engineer> on <date>"), so a
     job that stops later leaves a mailbox AdminForge can still finish or remove. Then it waits until Exchange returns
-    the mailbox's account, sets whether that account can sign in (blocked unless allowSignIn — people open a shared
-    mailbox through Full Access) and grants each person only what they don't have yet.
+    the mailbox's account and grants each person only what they don't have yet. It doesn't change whether the account
+    can sign in: Exchange creates it blocked, and Set-Mailbox -AccountDisabled $false was accepted live without
+    enabling it, so the playbook changes sign-in through Microsoft Graph; this script reports the state it reads.
     When the address already belongs to a shared mailbox AdminForge created, nothing is created again: existingObjectId
-    must name that mailbox, and the run applies the sign-in setting and the permissions (idempotent). Permission
+    must name that mailbox, and the run grants the permissions still missing (idempotent). Permission
     failures are listed in the output and fail the job afterwards, asking for the playbook to be run again.
     The mark is a guard rail against mistakes, not a security boundary: anyone who can edit custom attributes can set
     it (SECURITY.md → Known gaps), which is why the playbooks ask for the address to be typed.
@@ -27,7 +28,6 @@
     memberAddresses     string[]  Primary SMTP addresses of the people to give Full Access (up to 50).
     memberObjectIds     string[]  Their Entra object ids, in the same order.
     sendAs              bool      Also grant Send As (default true).
-    allowSignIn         bool      Leave the mailbox's account able to sign in (default false).
 
 .PARAMETER Context
     Supplied by the runner: JobId, Mode (must be 'write'), Tenant, Services, User.
@@ -60,7 +60,6 @@ $existingObjectId = Get-AdminForgeInput $Inputs 'existingObjectId' -Pattern $gui
 $memberAddresses = Get-AdminForgeInput $Inputs 'memberAddresses' -Type StringArray -Pattern $smtp -MaxLength 320 -MaxCount 50
 $memberObjectIds = Get-AdminForgeInput $Inputs 'memberObjectIds' -Type StringArray -Pattern $guid -MaxCount 50
 $sendAs = Get-AdminForgeInput $Inputs 'sendAs' -Type Bool -Default $true
-$allowSignIn = Get-AdminForgeInput $Inputs 'allowSignIn' -Type Bool -Default $false
 if ($memberAddresses.Count -ne $memberObjectIds.Count) {
     throw (New-AdminForgeError -Category input -Message 'Each member needs both an address and an object id.')
 }
@@ -174,7 +173,7 @@ if (-not $byAddress) {
         throw (New-AdminForgeError -Category script -Message "Exchange created $address but didn't accept the AdminForge mark, so AdminForge can't finish or remove it. Ask an Exchange administrator to remove it in the Exchange admin center, then run the playbook again.")
     }
 } else {
-    Write-AdminForgeLog "$address was created by AdminForge before; applying its sign-in setting and permissions"
+    Write-AdminForgeLog "$address was created by AdminForge before; granting the permissions still missing"
 }
 
 # A new mailbox's account can take a moment to appear; read it back a few times.
@@ -193,10 +192,9 @@ if (-not $mailbox) {
     throw (New-AdminForgeError -Category script -Message "Exchange created $address and it is marked as created by AdminForge, but its account isn't ready yet. Run the playbook again in a few minutes; it finishes this mailbox.")
 }
 
-Write-AdminForgeProgress -Percent 55 -Message 'Setting sign-in'
-$settings = @{ Identity = $address; AccountDisabled = (-not $allowSignIn) }
-if (-not ([string]$mailbox.CustomAttribute15).StartsWith('AdminForge-created')) { $settings.CustomAttribute15 = $marker }
-Set-Mailbox @settings
+if (-not ([string]$mailbox.CustomAttribute15).StartsWith('AdminForge-created')) {
+    Set-Mailbox -Identity $address -CustomAttribute15 $marker
+}
 
 $fullAccess = [System.Collections.Generic.List[string]]::new()
 $sendAsAdded = [System.Collections.Generic.List[string]]::new()
@@ -250,7 +248,7 @@ $result = [ordered]@{
     failed                    = $failed.ToArray()
     verified                  = $false
 }
-$result.verified = [string]$after.RecipientTypeDetails -eq 'SharedMailbox' -and ([string]$after.CustomAttribute15).StartsWith('AdminForge-created') -and ($result.accountDisabled -eq (-not $allowSignIn))
+$result.verified = [string]$after.RecipientTypeDetails -eq 'SharedMailbox' -and ([string]$after.CustomAttribute15).StartsWith('AdminForge-created')
 
 Write-AdminForgeOutput -Data $result
 Write-AdminForgeProgress -Percent 100 -Message 'Done'

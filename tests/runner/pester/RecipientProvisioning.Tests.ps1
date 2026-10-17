@@ -102,7 +102,8 @@ BeforeAll {
         $type = if ($Room) { 'RoomMailbox' } else { 'SharedMailbox' }
         $global:AfRx.Calls.Add("New-Mailbox $type $PrimarySmtpAddress name=$Name")
         $new = & $global:AfAddRx $PrimarySmtpAddress $Alias $Name $DisplayName $type
-        $new.AccountDisabled = [bool]$Room
+        # Exchange creates the accounts of shared and room mailboxes blocked.
+        $new.AccountDisabled = $true
         $new
     }
     New-Stub 'Set-Mailbox' {
@@ -274,7 +275,7 @@ Describe 'New-SharedMailbox' {
         (Invoke-ContentScript 'exchange/New-SharedMailbox.ps1' $script:Inputs).Category | Should -Be 'readOnly'
     }
 
-    It 'creates it named after the alias, marks it straight away by its Exchange id, blocks sign-in and grants access' {
+    It 'creates it named after the alias, marks it straight away by its Exchange id and grants access' {
         $r = Invoke-ContentScript 'exchange/New-SharedMailbox.ps1' $script:Inputs -Mode write -User $script:Engineer
         $r.Failure | Should -BeNullOrEmpty
         $mbx = $global:AfRx.Recipients['sales@example.com']
@@ -289,10 +290,11 @@ Describe 'New-SharedMailbox' {
         $out.verified | Should -BeTrue
     }
 
-    It 'leaves sign-in on when asked' {
-        $r = Invoke-ContentScript 'exchange/New-SharedMailbox.ps1' (With $script:Inputs @{ allowSignIn = $true; memberAddresses = @(); memberObjectIds = @() }) -Mode write -User $script:Engineer
-        $r.Output[0].accountDisabled | Should -BeFalse
+    It "doesn't change sign-in itself (the playbook does, through Microsoft Graph) and reports what Exchange shows" {
+        $r = Invoke-ContentScript 'exchange/New-SharedMailbox.ps1' (With $script:Inputs @{ memberAddresses = @(); memberObjectIds = @() }) -Mode write -User $script:Engineer
+        $r.Output[0].accountDisabled | Should -BeTrue
         $r.Output[0].verified | Should -BeTrue
+        $global:AfRx.Calls | Where-Object { $_ -like 'Set-Mailbox*AccountDisabled*' } | Should -BeNullOrEmpty
     }
 
     It 'refuses giving the engineer access, by account or by address, before anything changes' {

@@ -25,6 +25,8 @@ export interface RunError {
 
 export interface RunStep {
   stepId: string;
+  type?: string;
+  mode?: string;
   status: string;
   output?: Record<string, unknown>;
   error?: RunError;

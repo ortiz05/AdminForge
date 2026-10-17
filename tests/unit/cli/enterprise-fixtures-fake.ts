@@ -34,6 +34,8 @@ export interface EnterpriseCloudOptions extends FixturesCloudOptions {
 
 export function createEnterpriseCloud(opts: EnterpriseCloudOptions) {
   const cloud = createFixturesCloud(opts);
+  // The provisioner's own service principal (Graph makes it an owner of the Microsoft 365 groups it creates).
+  cloud.sps.push({ id: randomUUID(), appId: opts.provisioner.clientId, displayName: 'Provisioner' });
   const aus: Array<Json & { id: string; memberIds: string[] }> = [];
   const phones = new Map<string, Json[]>();
   const taps = new Map<string, Json[]>();
@@ -155,6 +157,26 @@ export function createEnterpriseCloud(opts: EnterpriseCloudOptions) {
     if ((m = /^\/applications\/([^/]+)\/owners\/\$ref$/.exec(path)) && method === 'POST') {
       const id = String(body!['@odata.id']).split('/').pop()!;
       cloud.owners.set(m[1]!, [...(cloud.owners.get(m[1]!) ?? []), id]);
+      return json(204);
+    }
+    // Like Graph (seen live): the plain owners list leaves out service principal owners; the cast returns them.
+    if (
+      (m = /^\/groups\/([^/]+)\/owners(\/microsoft\.graph\.servicePrincipal)?$/.exec(path)) &&
+      method === 'GET'
+    ) {
+      const isSp = (id: string) => cloud.sps.some((s) => s.id === id);
+      const owners = cloud.owners.get(m[1]!) ?? [];
+      return json(200, {
+        value: owners.filter((id) => (m![2] ? isSp(id) : !isSp(id))).map((id) => ({ id })),
+      });
+    }
+    if ((m = /^\/groups\/([^/]+)\/owners\/([^/]+)\/\$ref$/.exec(path)) && method === 'DELETE') {
+      const list = cloud.owners.get(m[1]!) ?? [];
+      if (!list.includes(m[2]!)) return graphError(404, 'Request_ResourceNotFound', 'not an owner');
+      cloud.owners.set(
+        m[1]!,
+        list.filter((id) => id !== m![2]),
+      );
       return json(204);
     }
     if ((m = /^\/applications\/([^/]+)\/owners\/([^/]+)\/\$ref$/.exec(path)) && method === 'DELETE') {
@@ -290,12 +312,36 @@ export function createEnterpriseCloud(opts: EnterpriseCloudOptions) {
     return undefined;
   }
 
+  /** The service principal of the app that made a request (from its token's appid). */
+  const callerSp = (init?: RequestInit) => {
+    const auth = new Headers(init?.headers).get('authorization') ?? '';
+    const appid = (
+      JSON.parse(
+        Buffer.from(auth.replace('Bearer ', '').split('.')[1] ?? '', 'base64url').toString() || '{}',
+      ) as { appid?: string }
+    ).appid;
+    return cloud.sps.find((s) => s.appId === appid);
+  };
+
   const inner = cloud.fetch;
   const fetchImpl = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
     const url = new URL(String(input));
     if (url.host !== 'graph.microsoft.com') return inner(input, init);
     const method = init?.method ?? 'GET';
     const path = decodeURIComponent(url.pathname.replace(/^\/(v1\.0|beta)/, ''));
+    // Like Graph: a Microsoft 365 group created with application permissions gets the calling app as an owner.
+    if (
+      method === 'POST' &&
+      path === '/groups' &&
+      typeof init?.body === 'string' &&
+      /"Unified"/.test(init.body)
+    ) {
+      const res = await inner(input, init);
+      const created = (await res.clone().json()) as { id: string };
+      const sp = callerSp(init);
+      if (sp) cloud.owners.set(created.id, [...(cloud.owners.get(created.id) ?? []), sp.id as string]);
+      return res;
+    }
     const body =
       typeof init?.body === 'string' && init.body.startsWith('{')
         ? (JSON.parse(init.body) as Json)

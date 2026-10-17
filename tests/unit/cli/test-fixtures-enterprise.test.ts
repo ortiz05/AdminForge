@@ -118,7 +118,12 @@ describe('directory fixture', () => {
       cloud.groups.find((g) => g.uniqueName === 'af-test-group-01')!.id,
     );
     expect(members('AF-Test-Empty-01')).toEqual([]);
-    expect(cloud.owners.get(groupNamed(cloud, 'AF-Test-M365-01')!.id as string)).toHaveLength(1);
+    // Graph makes the provisioner an owner of the Microsoft 365 groups it creates: kept on M365-01 (a person and an
+    // app own it), removed from M365-02 (no owner at all).
+    const provisionerSp = cloud.sps.find((sp) => sp.appId === PROVISIONER.clientId)!.id;
+    expect(cloud.owners.get(groupNamed(cloud, 'AF-Test-M365-01')!.id as string)?.sort()).toEqual(
+      [byUpn(cloud, 'af-test-user-04@example.com')!.id, provisionerSp].sort(),
+    );
     expect(cloud.owners.get(groupNamed(cloud, 'AF-Test-M365-02')!.id as string) ?? []).toEqual([]);
     expect(groupNamed(cloud, 'AF-Test-Licence-01')!.assignedLicenses).toEqual([
       { skuId: SKU, disabledPlans: [cloud.plans.SWAY] },

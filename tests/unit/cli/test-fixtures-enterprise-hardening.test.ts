@@ -7,7 +7,7 @@ import {
   setTesterEnabled,
 } from '@adminforge/cli/src/commands/provision';
 import { removeTestFixtures } from '@adminforge/cli/src/commands/test-fixtures';
-import { DIRECTORY_MARKER } from '@adminforge/cli/src/provision/directory-fixture-catalog';
+import { DIRECTORY_MARKER, directoryCatalog } from '@adminforge/cli/src/provision/directory-fixture-catalog';
 import { APPS_NOTES } from '@adminforge/cli/src/provision/apps-fixture-plan';
 import { SIGNIN_MARKER } from '@adminforge/cli/src/provision/sign-ins-fixture';
 import { createEnterpriseCloud, type EnterpriseCloudOptions } from './enterprise-fixtures-fake';
@@ -193,6 +193,60 @@ describe('the sign-in accounts', () => {
     s.lines.length = 0;
     await setTesterEnabled(s.ctx, false);
     expect(s.text()).toMatch(/Sign-in accounts: .* not set — not checked/);
+  });
+});
+
+describe('the Microsoft 365 groups’ owners', () => {
+  const group = (cloud: Cloud, name: string) => cloud.groups.find((g) => g.displayName === name)!;
+  const provisionerSp = (cloud: Cloud) =>
+    cloud.sps.find((sp) => sp.appId === PROVISIONER.clientId)!.id as string;
+
+  it('the catalogue expects a person and the app on M365-01, nobody on M365-02', () => {
+    const groups = directoryCatalog('example.com').groups;
+    expect(groups.find((g) => g.key === 'm365')).toMatchObject({
+      provisionerOwner: 'keep',
+      expectedOwners: 2,
+    });
+    expect(groups.find((g) => g.key === 'm365NoOwner')).toMatchObject({
+      provisionerOwner: 'remove',
+      expectedOwners: 0,
+    });
+  });
+
+  it('converges: the provisioner is taken off M365-02 again and put back on M365-01', async () => {
+    const s = await identitiesThen('directory');
+    await provisionTestIdentities(s.ctx);
+    const sp = provisionerSp(s.cloud);
+    const m1 = group(s.cloud, 'AF-Test-M365-01').id as string;
+    const m2 = group(s.cloud, 'AF-Test-M365-02').id as string;
+    expect(s.cloud.owners.get(m1)).toContain(sp);
+    expect(s.cloud.owners.get(m2) ?? []).toEqual([]);
+    s.cloud.owners.set(m2, [sp]);
+    s.cloud.owners.set(
+      m1,
+      (s.cloud.owners.get(m1) ?? []).filter((id) => id !== sp),
+    );
+    await provisionTestIdentities(s.ctx);
+    expect(s.cloud.owners.get(m2)).toEqual([]);
+    expect(s.cloud.owners.get(m1)).toContain(sp);
+    // Removal is only ever of the provisioner's own reference on the marked M365-02.
+    expect(
+      s.cloud.calls
+        .filter((c) => /\/groups\/[^/]+\/owners\/[^/]+\/\$ref/.test(c) && c.startsWith('DELETE'))
+        .every((c) => c.includes(m2) && c.includes(sp)),
+    ).toBe(true);
+  });
+
+  it('someone else as an owner of M365-02 is ✗ and left alone', async () => {
+    const s = await identitiesThen('directory');
+    await provisionTestIdentities(s.ctx);
+    const m2 = group(s.cloud, 'AF-Test-M365-02').id as string;
+    const other = stranger(s.cloud);
+    s.cloud.owners.set(m2, [other]);
+    s.lines.length = 0;
+    await expect(provisionTestIdentities(s.ctx)).rejects.toThrow(/directory/);
+    expect(s.text()).toMatch(/✗[^\n]*AF-Test-M365-02[^\n]*1 owner\(s\) provisioning didn't add/);
+    expect(s.cloud.owners.get(m2)).toEqual([other]);
   });
 });
 

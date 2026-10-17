@@ -62,10 +62,23 @@ async function managerOf(graph: GraphClient, id: string): Promise<string | null>
 const ids = async (graph: GraphClient, path: string) =>
   (await graph.all<{ id: string }>({ path, query: { $select: 'id' } })).map((m) => m.id);
 
+/**
+ * A group's owners, service principals included: Graph's plain `/owners` list can leave out a service principal owner
+ * (seen live: the provisioner on the Microsoft 365 groups it created) that `$expand=owners` and the
+ * `/owners/microsoft.graph.servicePrincipal` cast do return — so both lists, merged.
+ */
+async function groupOwnerIds(graph: GraphClient, groupId: string): Promise<string[]> {
+  const all = await ids(graph, `/groups/${groupId}/owners`);
+  const apps = await ids(graph, `/groups/${groupId}/owners/microsoft.graph.servicePrincipal`);
+  return [...new Set([...all, ...apps])];
+}
+
 /** Reads what the directory fixture compares against. Read-only. */
 export async function readDirectoryState(
   graph: GraphClient,
   desired: DesiredFixtures,
+  /** AF_PROVISIONER_CLIENT_ID: Graph makes the provisioner an owner of the Microsoft 365 groups it creates. */
+  provisionerAppId?: string,
 ): Promise<DirectoryState> {
   const cat = desired.directory;
   const state: DirectoryState = { users: {}, targets: {}, guests: [], groups: {}, aus: [] };
@@ -85,6 +98,7 @@ export async function readDirectoryState(
   const group = await findGroup(graph, desired.testGroup.uniqueName);
   if (group && !isProvisionedTestGroup(desired, group)) state.testGroupForeign = true;
   else state.testGroupId = group?.id;
+  if (provisionerAppId) state.provisionerSpId = await servicePrincipalId(graph, provisionerAppId);
   state.guests = await graph.all({
     path: '/users',
     query: {
@@ -122,7 +136,7 @@ export async function readDirectoryState(
         groupTypes: x.groupTypes ?? [],
         membershipRule: x.membershipRule ?? null,
         memberIds: await ids(graph, `/groups/${x.id}/members`),
-        ownerIds: await ids(graph, `/groups/${x.id}/owners`),
+        ownerIds: await groupOwnerIds(graph, x.id),
         licences: (x.assignedLicenses ?? []).map((l) => ({
           skuId: l.skuId.toLowerCase(),
           disabledPlans: (l.disabledPlans ?? []).map((p) => p.toLowerCase()),
@@ -167,9 +181,20 @@ async function readLicence(graph: GraphClient, partNumber: string): Promise<Dire
   };
 }
 
+/** The service principal id of an app (the provisioner), or undefined. Read-only. */
+export async function servicePrincipalId(graph: GraphClient, appId: string): Promise<string | undefined> {
+  const { data } = await graph.request<{ value?: Array<{ id: string }> }>({
+    path: '/servicePrincipals',
+    query: { $filter: `appId eq ${odata(appId)}`, $select: 'id' },
+  });
+  return data.value?.[0]?.id;
+}
+
 export interface DirectoryApplyContext {
   graph: GraphClient;
   log: (line: string) => void;
+  /** AF_PROVISIONER_CLIENT_ID (the Microsoft 365 groups' app owner). */
+  provisionerAppId?: string;
   /** AF-Test-Group-01's id, refused unless it is the group the test identities created. */
   testGroupId: () => Promise<string>;
   /** Replication retry around calls on a just-created object. */
@@ -358,6 +383,50 @@ export async function applyDirectoryStep(
             if (!isAlreadyExists(err)) throw err;
           }
         });
+      }
+      if (step.provisionerOwner) {
+        const spId = ctx.provisionerAppId && (await servicePrincipalId(graph, ctx.provisionerAppId));
+        // Without a service principal the provisioner can't be an owner: nothing to remove, but nothing to add either.
+        if (!spId && step.provisionerOwner === 'add')
+          throw new ApiError(
+            409,
+            'NoProvisioner',
+            "the provisioner's service principal couldn't be found (AF_PROVISIONER_CLIENT_ID)",
+          );
+        if (spId && step.provisionerOwner === 'add')
+          await retry(async () => {
+            try {
+              await graph.request({
+                method: 'POST',
+                path: `/groups/${groupId}/owners/$ref`,
+                body: { '@odata.id': `${GRAPH}/servicePrincipals/${spId}` },
+              });
+            } catch (err) {
+              if (!isAlreadyExists(err)) throw err;
+            }
+          });
+        else if (spId)
+          try {
+            // Only the provisioner's own owner reference, only on this marked group. Retried while a just-created
+            // group's owner isn't visible yet; still absent afterwards means it isn't an owner (nothing to remove).
+            await retry(() =>
+              graph.request({ method: 'DELETE', path: `/groups/${groupId}/owners/${spId}/$ref` }),
+            );
+          } catch (err) {
+            if (!isMissing(err)) {
+              if (
+                err instanceof ApiError &&
+                err.status === 400 &&
+                /last owner|at least one owner/i.test(err.message)
+              )
+                throw new ApiError(
+                  409,
+                  'LastOwner',
+                  'Graph refuses to remove the last owner of a Microsoft 365 group — it stays owned by the provisioner only',
+                );
+              throw err;
+            }
+          }
       }
       if (step.licence) {
         const { skuId, disabledPlanIds } = step.licence;

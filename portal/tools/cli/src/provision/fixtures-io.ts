@@ -231,7 +231,9 @@ export async function fetchFixtureState(
     await readTestGroupMembers('ca-audit');
   }
   if (read('directory') || read('guest'))
-    state.directory = await readPart('directory', () => readDirectoryState(graph, desired));
+    state.directory = await readPart('directory', () =>
+      readDirectoryState(graph, desired, env.AF_PROVISIONER_CLIENT_ID || undefined),
+    );
   if (read('apps')) state.apps = await readPart('apps', () => readAppsState(graph, desired, now));
   if (read('auth-methods'))
     state.authMethods = await readPart('auth-methods', () => readAuthMethodsState(graph, desired));
@@ -248,6 +250,8 @@ export async function fetchFixtureState(
 
 export interface FixtureApplyContext {
   graph: GraphClient;
+  /** AF_PROVISIONER_CLIENT_ID (the directory fixture's Microsoft 365 groups: Graph makes it an owner). */
+  provisionerAppId?: string;
   /** The same identity without client retries (Conditional Access writes; default: `graph`). */
   graphOnce?: GraphClient;
   writeEnv: (updates: Record<string, string>) => void;
@@ -522,6 +526,7 @@ export async function applyFixtureOps(
             retry,
             password: ctx.password,
             testGroupId: ownTestGroupId,
+            provisionerAppId: ctx.provisionerAppId,
           });
           break;
         case 'apps':

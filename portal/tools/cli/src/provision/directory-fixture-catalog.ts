@@ -70,6 +70,15 @@ export interface DirectoryGroupSpec {
   /** Assigned members (dynamic groups have none: the rule decides). */
   members: MemberRef[];
   owners: DirectoryUserKey[];
+  /**
+   * The provisioner's service principal as an owner. Graph makes the calling app an owner of a Microsoft 365 group it
+   * creates (seen live: it is listed by `$expand=owners` and the `/owners/microsoft.graph.servicePrincipal` cast, not
+   * by the plain `/owners` list): `keep` it (a person-and-app owned group — 2 owners), or `remove` it (no owner at
+   * all). Absent: the provisioner isn't expected among its owners.
+   */
+  provisionerOwner?: 'keep' | 'remove';
+  /** Owners the group has when provisioned — users plus the provisioner kept (what check-accuracy expects). */
+  expectedOwners?: number;
   /** Exactly these members: anything else is removed (the empty group). Otherwise extra members are left. */
   exactMembers?: boolean;
   /** Group-based licensing: AF_TEST_LICENCE_SKU with this service plan turned off. */
@@ -253,12 +262,15 @@ export function directoryCatalog(domain: string): DirectoryCatalog {
       },
       {
         key: 'm365',
-        kind: 'Microsoft 365 group with an owner',
+        kind: 'Microsoft 365 group owned by a person and an app',
         uniqueName: 'af-test-m365-01',
         displayName: 'AF-Test-M365-01',
         body: m365Group('af-test-m365-01', 'AF-Test-M365-01'),
         members: [{ user: '04' }, { user: '05' }],
         owners: ['04'],
+        // Graph made the provisioner an owner when it created the group: kept, the "person and app" case.
+        provisionerOwner: 'keep',
+        expectedOwners: 2,
       },
       {
         key: 'm365NoOwner',
@@ -268,6 +280,9 @@ export function directoryCatalog(domain: string): DirectoryCatalog {
         body: m365Group('af-test-m365-02', 'AF-Test-M365-02'),
         members: [{ user: '06' }],
         owners: [],
+        // Graph made the provisioner an owner when it created the group: removed again.
+        provisionerOwner: 'remove',
+        expectedOwners: 0,
       },
       {
         key: 'empty',

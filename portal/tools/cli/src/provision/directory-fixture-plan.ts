@@ -63,6 +63,8 @@ export interface DirectoryState {
   targets: Record<string, string | undefined>;
   /** AF-Test-Group-01's id (nested into AF-Test-Nested-01) — only when it is the group the test identities created. */
   testGroupId?: string;
+  /** The provisioner's service principal id (Graph makes it an owner of the Microsoft 365 groups it creates). */
+  provisionerSpId?: string;
   /** Base targets (lower-case UPN) and AF-Test-Group-01 found at their names but not provisioning's: never used. */
   foreignTargets?: string[];
   testGroupForeign?: boolean;
@@ -109,6 +111,8 @@ export type DirectoryStep =
       addMembers: MemberRef[];
       removeMemberIds: string[];
       addOwners: DirectoryUserKey[];
+      /** The provisioner's own owner reference: removed (the no-owner group) or added (the person-and-app group). */
+      provisionerOwner?: 'add' | 'remove';
       licence?: { skuId: string; disabledPlanIds: string[] };
     }
   | { op: 'au'; create: boolean; addMembers: MemberRef[] }
@@ -345,6 +349,26 @@ export function planDirectory(
       const id = s.users[k]?.id;
       return !id || !owners.has(id);
     });
+    // The provisioner as an owner: Graph adds it when the group is created with application permissions.
+    const sp = s.provisionerSpId;
+    const provisionerOwner =
+      g.provisionerOwner === 'remove' && (!have || (sp && owners.has(sp)))
+        ? ('remove' as const)
+        : g.provisionerOwner === 'keep' && have && sp && !owners.has(sp)
+          ? ('add' as const)
+          : undefined;
+    // Owners nobody asked for (not the catalogue's users, not the provisioner): a person's to remove.
+    const allowed = new Set([...g.owners.map((k) => s.users[k]?.id), ...(g.provisionerOwner ? [sp] : [])]);
+    const strangers = have ? have.ownerIds.filter((id) => !allowed.has(id)).length : 0;
+    if (strangers && g.owners.length === 0) {
+      ops.push(
+        blocked(
+          groupTitle(g),
+          `has ${strangers} owner(s) provisioning didn't add — remove them to keep it ownerless`,
+        ),
+      );
+      continue;
+    }
     const patch =
       have && g.key === 'dynamic' && (have.membershipRule ?? '') !== DYNAMIC_RULE
         ? { membershipRule: DYNAMIC_RULE, membershipRuleProcessingState: 'On' }
@@ -365,6 +389,11 @@ export function planDirectory(
       ...addMembers.map((ref) => `+ member ${refName(d, ref)}`),
       ...(removeMemberIds.length ? [`− ${removeMemberIds.length} member(s) (it stays empty)`] : []),
       ...addOwners.map((k) => `+ owner AF-Test-User-${k}`),
+      ...(provisionerOwner === 'remove'
+        ? [`− owner: the provisioner${have ? '' : ' (Graph adds it on create)'}`]
+        : provisionerOwner === 'add'
+          ? ['+ owner: the provisioner (the app owner of a person-and-app owned group)']
+          : []),
       ...(groupLicence
         ? [
             `licence ${d.settings.licenceSku}${groupLicence.disabledPlanIds.length ? ` without ${g.licence!.disabledPlan}` : ''} for its members`,
@@ -387,6 +416,7 @@ export function planDirectory(
           addMembers,
           removeMemberIds,
           addOwners,
+          ...(provisionerOwner ? { provisionerOwner } : {}),
           ...(groupLicence ? { licence: groupLicence } : {}),
         },
         changes,

@@ -179,6 +179,7 @@ export function printFixturesPlan(run: FixturesRun, out: (line: string) => void)
 export function applyFixtures(ctx: CliContext, clients: Clients, run: FixturesRun): Promise<FixtureKey[]> {
   return applyFixtureOps(run.ops, run.desired, run.state, {
     graph: clients.graph,
+    provisionerAppId: ctx.env.AF_PROVISIONER_CLIENT_ID || undefined,
     graphOnce: clients.graphOnce,
     writeEnv: ctx.writeEnv,
     log: ctx.out,

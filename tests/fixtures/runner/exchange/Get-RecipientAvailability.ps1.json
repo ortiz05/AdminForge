@@ -1,0 +1,253 @@
+{
+  "$fixture": {
+    "variants": [
+      {
+        "match": {
+          "bodyIncludes": "\"events@example.com\""
+        },
+        "body": [
+          {
+            "acceptedDomains": [
+              "example.com",
+              "example.onmicrosoft.com"
+            ],
+            "items": [
+              {
+                "value": "events@example.com",
+                "kind": "address",
+                "taken": true,
+                "recipientTypeDetails": "SharedMailbox",
+                "displayName": "Events",
+                "primarySmtpAddress": "events@example.com",
+                "externalDirectoryObjectId": "30000000-0000-4000-8000-000000000001",
+                "createdByAdminForge": true,
+                "typeLabel": "a shared mailbox",
+                "ownerObjectIds": []
+              },
+              {
+                "value": "events",
+                "kind": "alias",
+                "taken": true,
+                "recipientTypeDetails": "SharedMailbox",
+                "displayName": "Events",
+                "primarySmtpAddress": "events@example.com",
+                "externalDirectoryObjectId": "30000000-0000-4000-8000-000000000001",
+                "createdByAdminForge": true,
+                "typeLabel": "a shared mailbox",
+                "ownerObjectIds": []
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "match": {
+          "bodyIncludes": "\"office-lisbon@example.com\""
+        },
+        "body": [
+          {
+            "acceptedDomains": [
+              "example.com",
+              "example.onmicrosoft.com"
+            ],
+            "items": [
+              {
+                "value": "office-lisbon@example.com",
+                "kind": "address",
+                "taken": true,
+                "recipientTypeDetails": "MailUniversalDistributionGroup",
+                "displayName": "Office Lisbon",
+                "primarySmtpAddress": "office-lisbon@example.com",
+                "externalDirectoryObjectId": "30000000-0000-4000-8000-000000000002",
+                "createdByAdminForge": true,
+                "typeLabel": "a distribution list",
+                "ownerObjectIds": [
+                  "00000000-0000-4000-8000-0000000000a1"
+                ]
+              },
+              {
+                "value": "office-lisbon",
+                "kind": "alias",
+                "taken": true,
+                "recipientTypeDetails": "MailUniversalDistributionGroup",
+                "displayName": "Office Lisbon",
+                "primarySmtpAddress": "office-lisbon@example.com",
+                "externalDirectoryObjectId": "30000000-0000-4000-8000-000000000002",
+                "createdByAdminForge": true,
+                "typeLabel": "a distribution list",
+                "ownerObjectIds": [
+                  "00000000-0000-4000-8000-0000000000a1"
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "match": {
+          "bodyIncludes": "\"reception@example.com\""
+        },
+        "body": [
+          {
+            "acceptedDomains": [
+              "example.com",
+              "example.onmicrosoft.com"
+            ],
+            "items": [
+              {
+                "value": "reception@example.com",
+                "kind": "address",
+                "taken": true,
+                "recipientTypeDetails": "SharedMailbox",
+                "displayName": "Reception",
+                "primarySmtpAddress": "reception@example.com",
+                "externalDirectoryObjectId": "30000000-0000-4000-8000-000000000003",
+                "createdByAdminForge": false,
+                "typeLabel": "a shared mailbox",
+                "ownerObjectIds": []
+              },
+              {
+                "value": "reception",
+                "kind": "alias",
+                "taken": true,
+                "recipientTypeDetails": "SharedMailbox",
+                "displayName": "Reception",
+                "primarySmtpAddress": "reception@example.com",
+                "externalDirectoryObjectId": "30000000-0000-4000-8000-000000000003",
+                "createdByAdminForge": false,
+                "typeLabel": "a shared mailbox",
+                "ownerObjectIds": []
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "match": {
+          "bodyIncludes": "\"room-atlas@example.com\""
+        },
+        "body": [
+          {
+            "acceptedDomains": [
+              "example.com",
+              "example.onmicrosoft.com"
+            ],
+            "items": [
+              {
+                "value": "room-atlas@example.com",
+                "kind": "address",
+                "taken": true,
+                "recipientTypeDetails": "RoomMailbox",
+                "displayName": "Room Atlas",
+                "primarySmtpAddress": "room-atlas@example.com",
+                "externalDirectoryObjectId": "30000000-0000-4000-8000-000000000004",
+                "createdByAdminForge": false,
+                "typeLabel": "a room mailbox",
+                "ownerObjectIds": []
+              },
+              {
+                "value": "room-atlas",
+                "kind": "alias",
+                "taken": true,
+                "recipientTypeDetails": "RoomMailbox",
+                "displayName": "Room Atlas",
+                "primarySmtpAddress": "room-atlas@example.com",
+                "externalDirectoryObjectId": "30000000-0000-4000-8000-000000000004",
+                "createdByAdminForge": false,
+                "typeLabel": "a room mailbox",
+                "ownerObjectIds": []
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "match": {
+          "bodyIncludes": "\"all-staff@example.com\""
+        },
+        "body": [
+          {
+            "acceptedDomains": [
+              "example.com",
+              "example.onmicrosoft.com"
+            ],
+            "items": [
+              {
+                "value": "all-staff@example.com",
+                "kind": "address",
+                "taken": true,
+                "recipientTypeDetails": "MailUniversalDistributionGroup",
+                "displayName": "All Staff",
+                "primarySmtpAddress": "all-staff@example.com",
+                "externalDirectoryObjectId": "30000000-0000-4000-8000-000000000005",
+                "createdByAdminForge": false,
+                "typeLabel": "a distribution list",
+                "ownerObjectIds": []
+              },
+              {
+                "value": "all-staff",
+                "kind": "alias",
+                "taken": true,
+                "recipientTypeDetails": "MailUniversalDistributionGroup",
+                "displayName": "All Staff",
+                "primarySmtpAddress": "all-staff@example.com",
+                "externalDirectoryObjectId": "30000000-0000-4000-8000-000000000005",
+                "createdByAdminForge": false,
+                "typeLabel": "a distribution list",
+                "ownerObjectIds": []
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "match": {
+          "bodyIncludes": "\"avery@example.com\""
+        },
+        "body": [
+          {
+            "acceptedDomains": [
+              "example.com",
+              "example.onmicrosoft.com"
+            ],
+            "items": [
+              {
+                "value": "avery@example.com",
+                "kind": "address",
+                "taken": true,
+                "recipientTypeDetails": "UserMailbox",
+                "displayName": "Avery Engineer",
+                "primarySmtpAddress": "avery@example.com",
+                "externalDirectoryObjectId": "30000000-0000-4000-8000-000000000006",
+                "createdByAdminForge": false,
+                "typeLabel": "a user mailbox",
+                "ownerObjectIds": []
+              },
+              {
+                "value": "avery",
+                "kind": "alias",
+                "taken": true,
+                "recipientTypeDetails": "UserMailbox",
+                "displayName": "Avery Engineer",
+                "primarySmtpAddress": "avery@example.com",
+                "externalDirectoryObjectId": "30000000-0000-4000-8000-000000000006",
+                "createdByAdminForge": false,
+                "typeLabel": "a user mailbox",
+                "ownerObjectIds": []
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "body": [
+      {
+        "acceptedDomains": [
+          "example.com",
+          "example.onmicrosoft.com"
+        ],
+        "items": []
+      }
+    ]
+  }
+}

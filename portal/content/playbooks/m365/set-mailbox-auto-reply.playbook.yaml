@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/playbook.schema.json
 kind: playbook
 id: m365.set-mailbox-auto-reply
-version: 1.0.0
+version: 1.0.1
 title: Set automatic replies
 summary: >-
   Turns a mailbox's automatic replies (out of office) on — now or for a period — or off. Messages are plain text; one
@@ -78,7 +78,7 @@ steps:
     mode: read
     describe: Read the mailbox and its current automatic replies
     script: exchange/Get-MailboxConfiguration.ps1
-    sha256: c86c6bf4f6a3ca272389fe8369e8b9137805f491685d69d58855595207aa9d99
+    sha256: 206236ad2a7b6d01b754210e0a1b0270d6e453cdeaa7998f4b3c6b85f523bdff
     services: [exchange]
     timeoutSeconds: 300
     parameters:

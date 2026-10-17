@@ -19,7 +19,7 @@
     @{ total; truncated; byType = @(@{ type; count }); acceptExternalSenders;
        groups = @(@{ displayName; primarySmtpAddress; alias; recipientTypeDetails; managedBy; memberJoinRestriction;
                      memberDepartRestriction; requireSenderAuthenticationEnabled; hiddenFromAddressListsEnabled;
-                     isDirSynced; whenCreated; memberCount }) }
+                     isDirSynced; whenCreated; memberCount; createdByAdminForge }) }
 
 .NOTES
     Tokens: exchange. Mode: read. Exchange role: View-Only Recipients (or higher).
@@ -49,7 +49,8 @@ $raw = @(Get-DistributionGroup -ResultSize $resultSize -RecipientTypeDetails $ty
 Write-AdminForgeLog "Read $($raw.Count) groups"
 
 $rows = @($raw | Select-Object DisplayName, PrimarySmtpAddress, Alias, RecipientTypeDetails, ManagedBy, MemberJoinRestriction,
-    MemberDepartRestriction, RequireSenderAuthenticationEnabled, HiddenFromAddressListsEnabled, IsDirSynced, WhenCreated)
+    MemberDepartRestriction, RequireSenderAuthenticationEnabled, HiddenFromAddressListsEnabled, IsDirSynced, WhenCreated,
+    CustomAttribute15)
 
 $groups = [System.Collections.Generic.List[object]]::new()
 $i = 0
@@ -77,6 +78,8 @@ foreach ($row in $rows) {
             isDirSynced                        = [bool]$row.IsDirSynced
             whenCreated                        = if ($row.WhenCreated) { ([datetime]$row.WhenCreated).ToUniversalTime().ToString('o') } else { $null }
             memberCount                        = $memberCount
+            # Set by AdminForge's create playbook; the page offers removal only for these.
+            createdByAdminForge                = ([string]$row.CustomAttribute15).StartsWith('AdminForge-created')
         })
 }
 if ($includeMemberCounts -and $rows.Count -gt $maxGroupsForMembers) {

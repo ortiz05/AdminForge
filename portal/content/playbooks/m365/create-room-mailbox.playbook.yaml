@@ -1,0 +1,231 @@
+$schema: ../../../packages/schemas/generated/playbook.schema.json
+kind: playbook
+id: m365.create-room-mailbox
+version: 1.0.0
+title: Create a room mailbox
+summary: >-
+  Creates a bookable meeting room in an accepted domain with its capacity and booking options (answer invitations
+  automatically, allow overlaps, how far ahead and how long it can be booked). Its account can't sign in. Marked as
+  created by AdminForge, so Remove a mailbox or list AdminForge created can remove it. Run again for the same address,
+  it sets the room's options again — the ones you leave at their defaults too.
+owner: m365-team
+tags: [m365, exchange, rooms]
+risk: low
+mode: write
+requires:
+  portalRoles: [Portal.Operator]
+  scopes:
+    exchange: [Exchange.Manage]
+  entraRoles: [Exchange Recipient Administrator]
+  licences: [exchange]
+confirm:
+  type: typed
+  value: ${ steps.plan.output.address }
+  message: >-
+    ${ (steps.target.output.existing = true
+        ? 'The room ' & steps.plan.output.address & ' already exists (created by AdminForge). Its options are set again to: '
+          & steps.plan.output.options & ' — options you left at their defaults replace what it has now.'
+        : 'Create the room ' & inputs.displayName & ' (' & steps.plan.output.address & '): ' & steps.plan.output.options
+          & '. People can book it as soon as it exists.')
+       & ' Type the address to confirm.' }
+
+inputs:
+  displayName: { type: string, label: Room name, minLength: 3, maxLength: 64, pattern: '^[^<>;"]{3,64}$', placeholder: Room 4.01 (8 seats) }
+  address:
+    type: string
+    format: email
+    pattern: '^[^\s@*]+@[^\s@*]+$'
+    label: Email address
+    description: In one of the organization's accepted domains.
+  alias:
+    type: string
+    required: false
+    label: Alias
+    maxLength: 64
+    pattern: '^[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]+)*$'
+    description: >-
+      The mail nickname (also its name in Exchange): letters, digits, dashes and underscores, with single dots between
+      them. Leave empty to use the part of the address before the @.
+  capacity: { type: number, label: Seats, default: 0, min: 0, max: 10000, integer: true, description: 0 leaves it unstated (or unchanged). }
+  autoAccept:
+    type: boolean
+    label: Accept or decline invitations automatically
+    default: true
+    description: Off leaves invitations tentative until a delegate answers them.
+  allowConflicts: { type: boolean, label: Allow overlapping bookings, default: false }
+  bookingWindowInDays: { type: number, label: Can be booked up to, unit: days ahead, default: 180, min: 1, max: 1080, integer: true }
+  maximumDurationHours: { type: number, label: Longest booking, unit: hours, default: 24, min: 1, max: 24, integer: true }
+  reason: { type: string, label: Reason, minLength: 10, multiline: true, placeholder: e.g. Ticket REQ-1234 — new room on floor 4 }
+
+steps:
+  - id: plan
+    type: transform
+    describe: Work out the alias and the options
+    expression: >-
+      ${ {
+        "address": $lowercase(inputs.address),
+        "domain": $lowercase($substringAfter(inputs.address, '@')),
+        "alias": inputs.alias ? inputs.alias : $substringBefore(inputs.address, '@'),
+        "options": $join([
+          inputs.capacity > 0 ? inputs.capacity & (inputs.capacity = 1 ? ' seat' : ' seats') : 'seats unchanged',
+          inputs.autoAccept = true ? 'invitations answered automatically' : 'invitations answered by a delegate',
+          inputs.allowConflicts = true ? 'overlapping bookings allowed' : 'no overlapping bookings',
+          'bookable up to ' & inputs.bookingWindowInDays & (inputs.bookingWindowInDays = 1 ? ' day' : ' days') & ' ahead',
+          'at most ' & inputs.maximumDurationHours & (inputs.maximumDurationHours = 1 ? ' hour' : ' hours') & ' per booking'
+        ], ', ')
+      } }
+
+  - id: aliasValid
+    type: assert
+    that: ${ $contains(steps.plan.output.alias, /^[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]+)*$/) and $length(steps.plan.output.alias) <= 64 }
+    message: >-
+      ${ "The alias '" & steps.plan.output.alias & "' can only hold letters, digits, dashes and underscores, with single dots between them (up to 64 characters). Type an alias." }
+
+  - id: availability
+    type: runner
+    mode: read
+    describe: Check that the address and alias are free
+    script: exchange/Get-RecipientAvailability.ps1
+    sha256: 1290aee189e94106475e0603f7bac4eab590fa18d947f24f6d7837033c39af0c
+    services: [exchange]
+    timeoutSeconds: 300
+    parameters:
+      addresses: ${ [steps.plan.output.address] }
+      aliases: ${ [steps.plan.output.alias] }
+
+  - id: domainAccepted
+    type: assert
+    that: ${ steps.plan.output.domain in steps.availability.output[0].acceptedDomains }
+    message: >-
+      ${ steps.plan.output.domain & " isn't an accepted domain of this organization. Use one of: "
+         & $join(steps.availability.output[0].acceptedDomains, ', ') & '.' }
+
+  - id: available
+    type: assert
+    # Free, or the room an earlier run of this playbook created (the run then sets its options again).
+    that: >-
+      ${ $count(steps.availability.output[0].items[taken = true and $not(
+           createdByAdminForge = true and recipientTypeDetails = 'RoomMailbox'
+           and $lowercase(primarySmtpAddress) = $$.steps.plan.output.address)]) = 0 }
+    message: >-
+      ${ (
+        $taken := steps.availability.output[0].items[taken = true][0];
+        $taken.value & ' is already used by ' & $taken.typeLabel & ' (' & $taken.displayName & '). Pick another address or alias.'
+      ) }
+
+  - id: target
+    type: transform
+    describe: Note whether an earlier run created the room
+    expression: >-
+      ${ (
+        $mine := steps.availability.output[0].items[kind = 'address' and taken = true][0];
+        { "existing": $exists($mine), "objectId": $mine.externalDirectoryObjectId ? $mine.externalDirectoryObjectId : null }
+      ) }
+
+  - id: existingReady
+    type: assert
+    that: ${ steps.target.output.existing = false or $boolean(steps.target.output.objectId) }
+    message: ${ steps.plan.output.address & ' is still being set up in Exchange. Run this again in a few minutes.' }
+
+  - id: create
+    type: runner
+    mode: write
+    describe: >-
+      ${ (steps.target.output.existing = true
+          ? 'Set the existing room ' & inputs.displayName & ' (' & steps.plan.output.address & ', created by AdminForge) to: '
+          : 'Create the room ' & inputs.displayName & ' (' & steps.plan.output.address & '): ')
+         & steps.plan.output.options }
+    script: exchange/New-RoomMailbox.ps1
+    sha256: e44bc5be14ab320146b4a4833888b9e5fc785104f1be172e2a373539f9b8a59e
+    services: [exchange]
+    timeoutSeconds: 900
+    # existingObjectId lets the protected-object guard see the room a re-run changes.
+    parameters:
+      displayName: ${ inputs.displayName }
+      alias: ${ steps.plan.output.alias }
+      primarySmtpAddress: ${ steps.plan.output.address }
+      existingObjectId: ${ steps.target.output.objectId }
+      capacity: ${ inputs.capacity }
+      autoAccept: ${ inputs.autoAccept = true }
+      allowConflicts: ${ inputs.allowConflicts = true }
+      bookingWindowInDays: ${ inputs.bookingWindowInDays }
+      maximumDurationHours: ${ inputs.maximumDurationHours }
+    idempotent: true
+    # The runner returns one element per output event; this script emits one result object.
+    dryRunOutput:
+      - address: ${ steps.plan.output.address }
+        displayName: ${ inputs.displayName }
+        created: ${ steps.target.output.existing != true }
+        capacity: ${ inputs.capacity }
+        automateProcessing: >-
+          ${ inputs.autoAccept = true ? 'AutoAccept' : 'AutoUpdate' }
+        allowConflicts: ${ inputs.allowConflicts = true }
+        bookingWindowInDays: ${ inputs.bookingWindowInDays }
+        maximumDurationInMinutes: ${ inputs.maximumDurationHours * 60 }
+        verified: true
+
+outputs:
+  summary: >-
+    ${ (
+      $r := steps.create.output[0];
+      $hours := $r.maximumDurationInMinutes / 60;
+      ($r.created = true ? 'Created the room ' : 'Set the options of the room ')
+      & $r.address
+      & ($r.capacity > 0 ? ' (' & $r.capacity & ($r.capacity = 1 ? ' seat)' : ' seats)') : '')
+      & '. Bookable up to ' & $r.bookingWindowInDays & ($r.bookingWindowInDays = 1 ? ' day' : ' days') & ' ahead, at most '
+      & $string($hours) & ($hours = 1 ? ' hour' : ' hours')
+      & ($r.automateProcessing = 'AutoAccept' ? ', answered automatically.' : ', answered by a delegate.')
+    ) }
+  address: ${ steps.create.output[0].address }
+  objectId: ${ steps.create.output[0].externalDirectoryObjectId }
+  verified: ${ steps.create.output[0].verified }
+
+tests:
+  - name: creates a room with its capacity and booking options
+    inputs: { displayName: Room 4.01, address: room401@example.com, capacity: 8, bookingWindowInDays: 90, maximumDurationHours: 4, reason: Ticket REQ-2001 new room on floor 4 }
+    mocks:
+      availability:
+        - acceptedDomains: [example.com]
+          items: [{ value: room401@example.com, kind: address, taken: false }, { value: room401, kind: alias, taken: false }]
+      create:
+        - { address: room401@example.com, displayName: Room 4.01, externalDirectoryObjectId: 20000000-0000-4000-8000-000000000201, created: true, capacity: 8, automateProcessing: AutoAccept, allowConflicts: false, bookingWindowInDays: 90, maximumDurationInMinutes: 240, verified: true }
+    expect:
+      status: succeeded
+      plan: [create]
+      outputs:
+        summary: Created the room room401@example.com (8 seats). Bookable up to 90 days ahead, at most 4 hours, answered automatically.
+        verified: true
+  - name: sets the options of a room an earlier run created
+    inputs: { displayName: Room 4.01, address: room401@example.com, maximumDurationHours: 1, autoAccept: false, reason: Ticket REQ-2001 shorter bookings }
+    mocks:
+      availability:
+        - acceptedDomains: [example.com]
+          items:
+            - { value: room401@example.com, kind: address, taken: true, createdByAdminForge: true, recipientTypeDetails: RoomMailbox, typeLabel: a room mailbox, primarySmtpAddress: room401@example.com, displayName: Room 4.01, externalDirectoryObjectId: 20000000-0000-4000-8000-000000000201 }
+            - { value: room401, kind: alias, taken: true, createdByAdminForge: true, recipientTypeDetails: RoomMailbox, typeLabel: a room mailbox, primarySmtpAddress: room401@example.com, displayName: Room 4.01, externalDirectoryObjectId: 20000000-0000-4000-8000-000000000201 }
+      create:
+        - { address: room401@example.com, created: false, capacity: 8, automateProcessing: AutoUpdate, allowConflicts: false, bookingWindowInDays: 180, maximumDurationInMinutes: 60, verified: true }
+    expect:
+      status: succeeded
+      plan: [create]
+      outputs:
+        summary: Set the options of the room room401@example.com (8 seats). Bookable up to 180 days ahead, at most 1 hour, answered by a delegate.
+  - name: refuses an address another recipient uses
+    inputs: { displayName: Board room, address: board@example.com, reason: Ticket REQ-2002 board room }
+    mocks:
+      availability:
+        - acceptedDomains: [example.com]
+          items:
+            - { value: board@example.com, kind: address, taken: true, createdByAdminForge: false, recipientTypeDetails: UserMailbox, typeLabel: a user mailbox, primarySmtpAddress: board@example.com, displayName: Board Secretary }
+            - { value: board, kind: alias, taken: false }
+    expect: { status: failed, failedStep: available }
+  - name: refuses a domain the organization doesn't accept
+    inputs: { displayName: Room 9, address: room9@fabrikam.example, reason: Ticket REQ-2003 wrong domain }
+    mocks:
+      availability:
+        - acceptedDomains: [example.com]
+          items: [{ value: room9@fabrikam.example, kind: address, taken: false }, { value: room9, kind: alias, taken: false }]
+    expect: { status: failed, failedStep: domainAccepted }
+  - name: refuses an alias with dots at the edges or in a row
+    inputs: { displayName: Room 9, address: room..9@example.com, reason: Ticket REQ-2004 alias check }
+    expect: { status: failed, failedStep: aliasValid }

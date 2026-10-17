@@ -35,7 +35,8 @@
                 "hiddenFromAddressListsEnabled": false,
                 "isDirSynced": false,
                 "whenCreated": "2023-07-03T09:00:00Z",
-                "memberCount": 12
+                "memberCount": 12,
+                "createdByAdminForge": false
               },
               {
                 "displayName": "Sales Team",
@@ -51,7 +52,8 @@
                 "hiddenFromAddressListsEnabled": false,
                 "isDirSynced": false,
                 "whenCreated": "2024-08-06T09:00:00Z",
-                "memberCount": 4
+                "memberCount": 4,
+                "createdByAdminForge": false
               },
               {
                 "displayName": "IT Alerts",
@@ -68,7 +70,8 @@
                 "hiddenFromAddressListsEnabled": false,
                 "isDirSynced": false,
                 "whenCreated": "2025-02-22T09:00:00Z",
-                "memberCount": 3
+                "memberCount": 3,
+                "createdByAdminForge": false
               },
               {
                 "displayName": "Finance Approvers",
@@ -84,7 +87,8 @@
                 "hiddenFromAddressListsEnabled": false,
                 "isDirSynced": false,
                 "whenCreated": "2025-06-02T09:00:00Z",
-                "memberCount": 2
+                "memberCount": 2,
+                "createdByAdminForge": false
               },
               {
                 "displayName": "Marketing Newsletter",
@@ -98,7 +102,8 @@
                 "hiddenFromAddressListsEnabled": false,
                 "isDirSynced": false,
                 "whenCreated": "2025-07-22T09:00:00Z",
-                "memberCount": 1
+                "memberCount": 1,
+                "createdByAdminForge": false
               },
               {
                 "displayName": "Legacy Helpdesk",
@@ -112,7 +117,8 @@
                 "hiddenFromAddressListsEnabled": true,
                 "isDirSynced": true,
                 "whenCreated": "2021-01-14T09:00:00Z",
-                "memberCount": 1
+                "memberCount": 1,
+                "createdByAdminForge": false
               },
               {
                 "displayName": "Engineering Leads",
@@ -128,7 +134,8 @@
                 "hiddenFromAddressListsEnabled": false,
                 "isDirSynced": false,
                 "whenCreated": "2026-05-18T09:00:00Z",
-                "memberCount": 2
+                "memberCount": 2,
+                "createdByAdminForge": false
               },
               {
                 "displayName": "Partners – Fabrikam",
@@ -144,7 +151,8 @@
                 "hiddenFromAddressListsEnabled": false,
                 "isDirSynced": false,
                 "whenCreated": "2026-05-28T09:00:00Z",
-                "memberCount": 4
+                "memberCount": 4,
+                "createdByAdminForge": false
               },
               {
                 "displayName": "Office – Lisbon",
@@ -160,7 +168,8 @@
                 "hiddenFromAddressListsEnabled": false,
                 "isDirSynced": true,
                 "whenCreated": "2021-11-10T09:00:00Z",
-                "memberCount": 1
+                "memberCount": 1,
+                "createdByAdminForge": true
               }
             ]
           }
@@ -197,7 +206,8 @@
             "hiddenFromAddressListsEnabled": false,
             "isDirSynced": false,
             "whenCreated": "2023-07-03T09:00:00Z",
-            "memberCount": null
+            "memberCount": null,
+            "createdByAdminForge": false
           },
           {
             "displayName": "Sales Team",
@@ -213,7 +223,8 @@
             "hiddenFromAddressListsEnabled": false,
             "isDirSynced": false,
             "whenCreated": "2024-08-06T09:00:00Z",
-            "memberCount": null
+            "memberCount": null,
+            "createdByAdminForge": false
           },
           {
             "displayName": "IT Alerts",
@@ -230,7 +241,8 @@
             "hiddenFromAddressListsEnabled": false,
             "isDirSynced": false,
             "whenCreated": "2025-02-22T09:00:00Z",
-            "memberCount": null
+            "memberCount": null,
+            "createdByAdminForge": false
           },
           {
             "displayName": "Finance Approvers",
@@ -246,7 +258,8 @@
             "hiddenFromAddressListsEnabled": false,
             "isDirSynced": false,
             "whenCreated": "2025-06-02T09:00:00Z",
-            "memberCount": null
+            "memberCount": null,
+            "createdByAdminForge": false
           },
           {
             "displayName": "Marketing Newsletter",
@@ -260,7 +273,8 @@
             "hiddenFromAddressListsEnabled": false,
             "isDirSynced": false,
             "whenCreated": "2025-07-22T09:00:00Z",
-            "memberCount": null
+            "memberCount": null,
+            "createdByAdminForge": false
           },
           {
             "displayName": "Legacy Helpdesk",
@@ -274,7 +288,8 @@
             "hiddenFromAddressListsEnabled": true,
             "isDirSynced": true,
             "whenCreated": "2021-01-14T09:00:00Z",
-            "memberCount": null
+            "memberCount": null,
+            "createdByAdminForge": false
           },
           {
             "displayName": "Engineering Leads",
@@ -290,7 +305,8 @@
             "hiddenFromAddressListsEnabled": false,
             "isDirSynced": false,
             "whenCreated": "2026-05-18T09:00:00Z",
-            "memberCount": null
+            "memberCount": null,
+            "createdByAdminForge": false
           },
           {
             "displayName": "Partners – Fabrikam",
@@ -306,7 +322,8 @@
             "hiddenFromAddressListsEnabled": false,
             "isDirSynced": false,
             "whenCreated": "2026-05-28T09:00:00Z",
-            "memberCount": null
+            "memberCount": null,
+            "createdByAdminForge": false
           },
           {
             "displayName": "Office – Lisbon",
@@ -322,7 +339,8 @@
             "hiddenFromAddressListsEnabled": false,
             "isDirSynced": true,
             "whenCreated": "2021-11-10T09:00:00Z",
-            "memberCount": null
+            "memberCount": null,
+            "createdByAdminForge": true
           }
         ]
       }

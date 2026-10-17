@@ -75,6 +75,13 @@ refuses anything else. Prefer Graph when it can do the job. Conventions in one p
     - `Get-EXOMailboxPermission -User <x>` throws NotFound ("No permissions were found …") when x has none: treat that
       as "not granted". Recipient links (`GrantSendOnBehalfTo`, `ForwardingAddress`, `ManagedBy`) hold recipient
       Names, often the Entra object id: compare through `Get-EXORecipient`, not by address.
+    - Lookups: only "couldn't find object" (ManagementObjectNotFound) means free or gone; throttling, permission and
+      "matches multiple entries" errors must stop the job, never count as "not there". Refuse `*` in addresses (an
+      identity wildcard).
+    - Creating recipients (`New-SharedMailbox`, `New-RoomMailbox`, `New-DistributionList`): pass `-Name` = alias (the
+      availability check covers it), mark the object straight away by the `Guid` the `New-*` cmdlet returned, then wait
+      for its account; only a list's owners can change it, so the engineer (who needs a mailbox) is a temporary owner.
+      The `CustomAttribute15` mark is a guard rail, not authorization (SECURITY.md → Known gaps).
     - Inbox rules: address them by `RuleIdentity` with `-Mailbox`; the rule cmdlets need `-Force` (unattended) and
       can't see hidden rules (every mailbox has Exchange's hidden "Junk E-mail Rule").
     - Graph `mailboxSettings` of someone else's mailbox answers ErrorAccessDenied with delegated permissions — read

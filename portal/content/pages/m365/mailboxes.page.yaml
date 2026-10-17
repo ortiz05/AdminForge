@@ -1,9 +1,9 @@
 $schema: ../../../packages/schemas/generated/page.schema.json
 kind: page
 id: m365.mailboxes
-version: 1.1.1
+version: 1.2.0
 title: Mailboxes
-summary: Exchange Online mailboxes by type with hold, archive and address-list flags. Filter with the query builder, open a mailbox to see who has access, and convert leavers' mailboxes to shared in bulk.
+summary: Exchange Online mailboxes by type with hold, archive and address-list flags. Filter with the query builder, open a mailbox to see who has access, convert leavers' mailboxes to shared in bulk, and create shared and room mailboxes.
 owner: m365-team
 tags: [m365, exchange, mailboxes]
 template: list-detail
@@ -109,6 +109,14 @@ datasources:
           }]
         }
       ) }
+
+actions:
+  - playbook: m365.create-shared-mailbox
+    label: Create shared mailbox
+    icon: users-three
+  - playbook: m365.create-room-mailbox
+    label: Create room mailbox
+    icon: door
 
 layout:
   - widget: markdown

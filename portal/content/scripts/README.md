@@ -43,6 +43,26 @@ recipe is the `adding-a-runner-script` skill (`.claude/skills/adding-a-runner-sc
   `trusteeObjectId`, `ownerObjectId`, …; the playbook resolves them through Graph) and refuses to act when they don't
   match what the service reports (`ExternalDirectoryObjectId` in Exchange, `msOnline-ObjectId` in SharePoint). Refuse
   acting for the caller where that grants them access (`$Context['User']`).
+- **Scripts that create something mark it straight away and only remove what they marked.** `New-SharedMailbox`,
+  `New-RoomMailbox` and `New-DistributionList` set `CustomAttribute15` to `AdminForge-created by <engineer> on <date>`
+  by the id the `New-*` cmdlet returned, before waiting for the account, so a job that stops leaves an object AdminForge
+  can still finish or remove. A second run for the same address finishes that object (idempotent) only when the
+  playbook passes its object id (`existingObjectId`); any other recipient using the address or alias is refused.
+  `Remove-CreatedRecipient` removes only a marked recipient of the kind asked whose `ExternalDirectoryObjectId`
+  matches, by its Exchange id. **The mark is a guard rail against mistakes, not authorization**: any Exchange
+  administrator can set it (SECURITY.md → Known gaps), so the playbooks also ask for the address to be typed.
+- **Recipient lookups:** only "couldn't find object" means a value is free or a recipient gone; throttling, permission
+  or "matches multiple entries" errors stop the job. Look recipients up by identity (`Get-EXORecipient -Identity`),
+  never with a filter built from input, and refuse `*` in addresses (an identity wildcard). `Get-RecipientAvailability`
+  is the read-only preflight: accepted domains, whether an address or alias is taken and by what (with a readable
+  `typeLabel`), and a list's owners as Entra object ids.
+- **People given access or ownership** are checked before anything changes, as `Set-MailboxPermission` does: the
+  object id must match, they must be a user mailbox in the organization (no guests, contacts or shared mailboxes) and
+  not the engineer running it. Keep these checks in step with `Set-MailboxPermission.ps1` and the playbooks'
+  `notYou` / guest asserts (`m365.grant-mailbox-permission`).
+- **Distribution lists:** Exchange only lets a list's owners change or remove it (Organization Management can bypass
+  that). `New-DistributionList` makes the engineer — who therefore needs a mailbox — a temporary owner, and takes them
+  off only when everything succeeded, so a re-run can retry what failed.
 
 ## Pins
 

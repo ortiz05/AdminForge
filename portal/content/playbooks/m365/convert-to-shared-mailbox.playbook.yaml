@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/playbook.schema.json
 kind: playbook
 id: m365.convert-to-shared-mailbox
-version: 1.0.1
+version: 1.0.2
 title: Convert to shared mailbox
 summary: Converts a user mailbox to a shared mailbox so colleagues keep access to the mail, and blocks direct sign-in to the account. The licence is left in place for a separate review.
 owner: m365-team
@@ -55,7 +55,7 @@ steps:
     mode: read
     describe: Read the mailbox type
     script: exchange/Get-MailboxConfiguration.ps1
-    sha256: c86c6bf4f6a3ca272389fe8369e8b9137805f491685d69d58855595207aa9d99
+    sha256: 206236ad2a7b6d01b754210e0a1b0270d6e453cdeaa7998f4b3c6b85f523bdff
     services: [exchange]
     timeoutSeconds: 300
     parameters:

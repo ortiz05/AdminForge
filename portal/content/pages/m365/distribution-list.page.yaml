@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/page.schema.json
 kind: page
 id: m365.distribution-list
-version: 1.0.1
+version: 1.1.0
 title: Distribution list
 summary: One distribution list or mail-enabled security group — delivery settings, owners and members. Add or remove members.
 owner: m365-team
@@ -23,7 +23,7 @@ datasources:
     source: runner
     label: Exchange settings (PowerShell)
     script: exchange/Get-DistributionLists.ps1
-    sha256: c01955b6360e5f136324f7287ec7dd63394bd0cb71c8d600293d8d01431b9404
+    sha256: fe5a90ac7c27b9e76e286cb4f094a976f5288429ce1293b989ae9c497c8deed9
     services: [exchange]
     timeoutSeconds: 900
     # Same parameters as the Distribution lists page, so the cached result is reused.
@@ -103,6 +103,14 @@ actions:
     inputs:
       identity: ${ params.address }
     when: ${ dl.isDirSynced = false }
+  # Offered only on lists carrying AdminForge's "created" mark (the playbook checks it again, and that you own it).
+  - playbook: m365.remove-created-recipient
+    label: Remove (created in AdminForge)
+    icon: trash
+    inputs:
+      address: ${ params.address }
+      kind: distributionList
+    when: ${ dl.createdByAdminForge = true and dl.recipientTypeDetails = 'MailUniversalDistributionGroup' }
   - label: Open in Exchange admin center
     icon: arrow-square-out
     href: https://admin.exchange.microsoft.com/#/groups

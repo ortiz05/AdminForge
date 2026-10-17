@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/page.schema.json
 kind: page
 id: m365.mailbox
-version: 1.1.0
+version: 1.2.0
 title: Mailbox
 summary: >-
   One Exchange Online mailbox: forwarding, address-list visibility, holds and automatic replies, and who can open it
@@ -25,7 +25,7 @@ datasources:
     source: runner
     label: Mailbox settings (PowerShell)
     script: exchange/Get-MailboxConfiguration.ps1
-    sha256: c86c6bf4f6a3ca272389fe8369e8b9137805f491685d69d58855595207aa9d99
+    sha256: 206236ad2a7b6d01b754210e0a1b0270d6e453cdeaa7998f4b3c6b85f523bdff
     services: [exchange]
     timeoutSeconds: 300
     parameters:
@@ -110,6 +110,14 @@ actions:
       mailbox: ${ params.mailbox }
       hidden: false
     when: ${ mailbox.hiddenFromAddressListsEnabled = true }
+  # Offered only on shared and room mailboxes carrying AdminForge's "created" mark (the playbook checks it again).
+  - playbook: m365.remove-created-recipient
+    label: Remove (created in AdminForge)
+    icon: trash
+    inputs:
+      address: ${ params.mailbox }
+      kind: "${ mailbox.recipientTypeDetails = 'RoomMailbox' ? 'roomMailbox' : 'sharedMailbox' }"
+    when: ${ mailbox.createdByAdminForge = true and mailbox.recipientTypeDetails in ['SharedMailbox', 'RoomMailbox'] }
   - playbook: m365.convert-to-shared-mailbox
     label: Convert to shared mailbox
     icon: users-three

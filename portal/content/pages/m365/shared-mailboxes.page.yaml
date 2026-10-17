@@ -1,11 +1,11 @@
 $schema: ../../../packages/schemas/generated/page.schema.json
 kind: page
 id: m365.shared-mailboxes
-version: 1.2.0
+version: 1.3.0
 title: Shared mailboxes
 summary: >-
   Shared mailboxes, which of them people can still sign in to (block it), and which need a licence because they have
-  an archive or litigation hold.
+  an archive or litigation hold. Create a shared mailbox from here.
 owner: m365-team
 tags: [m365, exchange, mailboxes]
 template: list-detail
@@ -73,6 +73,11 @@ datasources:
           "hidden": $v.hiddenFromAddressLists
         }
       ) }
+
+actions:
+  - playbook: m365.create-shared-mailbox
+    label: Create shared mailbox
+    icon: users-three
 
 layout:
   - widget: kpi

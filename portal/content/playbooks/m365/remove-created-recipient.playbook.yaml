@@ -1,0 +1,181 @@
+$schema: ../../../packages/schemas/generated/playbook.schema.json
+kind: playbook
+id: m365.remove-created-recipient
+version: 1.0.0
+title: Remove a mailbox or list AdminForge created
+summary: >-
+  Removes a shared mailbox, room mailbox or distribution list carrying AdminForge's "created" mark — the undo for the
+  three Create playbooks. Unmarked recipients are refused (remove them in the Exchange admin center); the mark guards
+  against mistakes, it isn't a permission. Only a list's owners can remove it, or someone with Organization
+  Management. An administrator can restore a removed mailbox for 30 days; a list is gone.
+owner: m365-team
+tags: [m365, exchange, shared-mailboxes, rooms, distribution-lists]
+risk: high
+mode: write
+requires:
+  portalRoles: [Portal.Operator]
+  scopes:
+    exchange: [Exchange.Manage]
+  entraRoles: [Exchange Recipient Administrator]
+  licences: [exchange]
+confirm:
+  type: typed
+  value: ${ inputs.address }
+  message: >-
+    Mail to it bounces from now on. An Exchange administrator can restore a removed mailbox for 30 days; a removed
+    distribution list can't be restored. Type the address to confirm.
+
+inputs:
+  address:
+    type: string
+    format: email
+    pattern: '^[^\s@*]+@[^\s@*]+$'
+    label: Email address
+  kind:
+    type: enum
+    label: What it is
+    values:
+      - { value: sharedMailbox, label: Shared mailbox }
+      - { value: roomMailbox, label: Room mailbox }
+      - { value: distributionList, label: Distribution list }
+  bypassSecurityGroupManagerCheck:
+    type: boolean
+    label: I'm not an owner of the list (needs Organization Management)
+    default: false
+    description: Distribution lists only. Exchange lets only a list's owners remove it unless you hold Organization Management.
+  reason: { type: string, label: Reason, minLength: 10, multiline: true, placeholder: e.g. Ticket REQ-1234 — project ended }
+
+steps:
+  - id: lookup
+    type: runner
+    mode: read
+    describe: Read the recipient
+    script: exchange/Get-RecipientAvailability.ps1
+    sha256: 1290aee189e94106475e0603f7bac4eab590fa18d947f24f6d7837033c39af0c
+    services: [exchange]
+    timeoutSeconds: 300
+    parameters:
+      addresses: ${ [$lowercase(inputs.address)] }
+
+  - id: plan
+    type: transform
+    describe: Work out what is removed
+    expression: >-
+      ${ (
+        $r := steps.lookup.output[0].items[0];
+        {
+          "exists": $r.taken = true,
+          "label": $lookup({ 'sharedMailbox': 'shared mailbox', 'roomMailbox': 'room mailbox', 'distributionList': 'distribution list' }, inputs.kind),
+          "type": $lookup({ 'sharedMailbox': 'SharedMailbox', 'roomMailbox': 'RoomMailbox', 'distributionList': 'MailUniversalDistributionGroup' }, inputs.kind),
+          "recipient": $r
+        }
+      ) }
+
+  # Nothing uses the address (or a run already removed it): the run succeeds without a write.
+  - id: createdHere
+    type: assert
+    when: ${ steps.plan.output.exists }
+    that: ${ steps.plan.output.recipient.createdByAdminForge = true }
+    message: >-
+      ${ inputs.address & " wasn't created by AdminForge, so it can't be removed here. Remove it in the Exchange admin center." }
+
+  - id: rightKind
+    type: assert
+    when: ${ steps.plan.output.exists }
+    that: ${ steps.plan.output.recipient.recipientTypeDetails = steps.plan.output.type }
+    message: >-
+      ${ inputs.address & ' is ' & steps.plan.output.recipient.typeLabel & ', not a ' & steps.plan.output.label & '. Pick what it is and try again.' }
+
+  - id: listOwner
+    type: assert
+    when: ${ steps.plan.output.exists and inputs.kind = 'distributionList' and inputs.bypassSecurityGroupManagerCheck != true }
+    that: ${ $lowercase(user.oid) in $append([], steps.plan.output.recipient.ownerObjectIds) }
+    message: >-
+      ${ "You're not an owner of " & inputs.address & ", and Exchange only lets a list's owners remove it. Ask one of its owners, or — if you hold Organization Management — tick that you're not an owner." }
+
+  - id: remove
+    type: runner
+    mode: write
+    when: ${ steps.plan.output.exists }
+    describe: >-
+      ${ 'Remove the ' & steps.plan.output.label & ' ' & steps.plan.output.recipient.displayName & ' (' & inputs.address & ')'
+         & (inputs.kind = 'distributionList' ? "; a removed list can't be restored" : '; an Exchange administrator can restore it for 30 days') }
+    script: exchange/Remove-CreatedRecipient.ps1
+    sha256: f6d3f972e840b569a939b7c08c7a719b1b1241cf56400781c3ff5f6bb9e849f7
+    services: [exchange]
+    timeoutSeconds: 600
+    parameters:
+      identity: ${ $lowercase(inputs.address) }
+      objectId: ${ $guid(steps.plan.output.recipient.externalDirectoryObjectId) }
+      kind: ${ inputs.kind }
+      bypassSecurityGroupManagerCheck: ${ inputs.kind = 'distributionList' and inputs.bypassSecurityGroupManagerCheck = true }
+    idempotent: true
+    # The runner returns one element per output event; this script emits one result object.
+    dryRunOutput:
+      - { identity: '${ $lowercase(inputs.address) }', kind: '${ inputs.kind }', removed: true, note: Removal planned. }
+
+outputs:
+  summary: >-
+    ${ steps.plan.output.exists
+       ? inputs.address & ' — ' & steps.remove.output[0].note
+       : 'Nothing uses ' & inputs.address & '; there was nothing to remove.' }
+  removed: ${ steps.remove.output[0].removed = true }
+
+tests:
+  - name: removes a shared mailbox AdminForge created
+    inputs: { address: Sales@example.com, kind: sharedMailbox, reason: Ticket REQ-1001 no longer needed }
+    mocks:
+      lookup:
+        - acceptedDomains: [example.com]
+          items: [{ value: sales@example.com, kind: address, taken: true, createdByAdminForge: true, recipientTypeDetails: SharedMailbox, typeLabel: a shared mailbox, primarySmtpAddress: sales@example.com, displayName: Sales team, externalDirectoryObjectId: 20000000-0000-4000-8000-000000000101 }]
+      remove:
+        - { identity: sales@example.com, kind: sharedMailbox, removed: true, note: 'The mailbox was removed. Exchange keeps it for 30 days, during which an Exchange administrator can restore it.' }
+    expect:
+      status: succeeded
+      plan: [remove]
+      outputs:
+        summary: Sales@example.com — The mailbox was removed. Exchange keeps it for 30 days, during which an Exchange administrator can restore it.
+        removed: true
+  - name: removes a list you own
+    inputs: { address: falcon@example.com, kind: distributionList, reason: Ticket REQ-1011 project ended }
+    mocks:
+      lookup:
+        - acceptedDomains: [example.com]
+          items: [{ value: falcon@example.com, kind: address, taken: true, createdByAdminForge: true, recipientTypeDetails: MailUniversalDistributionGroup, typeLabel: a distribution list, displayName: Project Falcon, externalDirectoryObjectId: 20000000-0000-4000-8000-000000000301, ownerObjectIds: [00000000-0000-4000-8000-00000000c0de] }]
+      remove:
+        - { identity: falcon@example.com, kind: distributionList, removed: true, note: The distribution list was removed. }
+    expect: { status: succeeded, plan: [remove] }
+  - name: refuses a list you don't own unless you say you have Organization Management
+    inputs: { address: falcon@example.com, kind: distributionList, reason: Ticket REQ-1012 project ended }
+    mocks:
+      lookup:
+        - acceptedDomains: [example.com]
+          items: [{ value: falcon@example.com, kind: address, taken: true, createdByAdminForge: true, recipientTypeDetails: MailUniversalDistributionGroup, typeLabel: a distribution list, displayName: Project Falcon, externalDirectoryObjectId: 20000000-0000-4000-8000-000000000301, ownerObjectIds: [10000000-0000-4000-8000-000000000002] }]
+    expect: { status: failed, failedStep: listOwner }
+  - name: refuses a mailbox AdminForge didn't create
+    inputs: { address: reception@example.com, kind: sharedMailbox, reason: Ticket REQ-1002 clean-up attempt }
+    mocks:
+      lookup:
+        - acceptedDomains: [example.com]
+          items: [{ value: reception@example.com, kind: address, taken: true, createdByAdminForge: false, recipientTypeDetails: SharedMailbox, typeLabel: a shared mailbox, displayName: Reception, externalDirectoryObjectId: 10000000-0000-4000-8000-000000000003 }]
+    expect: { status: failed, failedStep: createdHere }
+  - name: refuses the wrong kind
+    inputs: { address: falcon@example.com, kind: sharedMailbox, reason: Ticket REQ-1003 wrong kind picked }
+    mocks:
+      lookup:
+        - acceptedDomains: [example.com]
+          items: [{ value: falcon@example.com, kind: address, taken: true, createdByAdminForge: true, recipientTypeDetails: MailUniversalDistributionGroup, typeLabel: a distribution list, displayName: Project Falcon, externalDirectoryObjectId: 20000000-0000-4000-8000-000000000301 }]
+    expect: { status: failed, failedStep: rightKind }
+  - name: succeeds without a write when nothing uses the address (already removed)
+    inputs: { address: gone@example.com, kind: roomMailbox, reason: Ticket REQ-1004 already removed }
+    mocks:
+      lookup:
+        - acceptedDomains: [example.com]
+          items: [{ value: gone@example.com, kind: address, taken: false }]
+    expect:
+      status: succeeded
+      plan: []
+      steps: { remove: skipped }
+      outputs:
+        summary: Nothing uses gone@example.com; there was nothing to remove.
+        removed: false

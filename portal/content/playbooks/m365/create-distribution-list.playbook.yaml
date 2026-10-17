@@ -1,0 +1,441 @@
+$schema: ../../../packages/schemas/generated/playbook.schema.json
+kind: playbook
+id: m365.create-distribution-list
+version: 1.0.0
+title: Create a distribution list
+summary: >-
+  Creates a distribution list in an accepted domain with its owners and members; by default it only accepts mail from
+  inside the organization. Exchange only lets owners change a list, so you need a mailbox: you're an owner while it is
+  set up, and taken off at the end once everything worked. Marked as created by AdminForge. Run again for the same
+  address while you're still an owner, it adds what's missing.
+owner: m365-team
+tags: [m365, exchange, distribution-lists]
+risk: medium
+mode: write
+requires:
+  portalRoles: [Portal.Operator]
+  scopes:
+    graph: [User.ReadBasic.All]
+    exchange: [Exchange.Manage]
+  entraRoles: [Exchange Recipient Administrator]
+  licences: [exchange]
+confirm:
+  type: typed
+  value: ${ steps.plan.output.address }
+  message: >-
+    ${ (steps.target.output.existing = true
+        ? 'The list ' & steps.plan.output.address & ' already exists (created by AdminForge): the owners and members still missing are added, and it is set to '
+          & (inputs.allowExternalSenders = true ? 'accept' : 'refuse') & ' mail from outside the organization.'
+        : 'Create the distribution list ' & steps.plan.output.address & '?'
+          & (inputs.allowExternalSenders = true ? ' It will accept mail from outside the organization.' : ''))
+       & ' Type the address to confirm.' }
+
+inputs:
+  displayName: { type: string, label: Display name, minLength: 3, maxLength: 64, pattern: '^[^<>;"]{3,64}$', placeholder: Project Falcon }
+  address:
+    type: string
+    format: email
+    pattern: '^[^\s@*]+@[^\s@*]+$'
+    label: Email address
+    description: In one of the organization's accepted domains.
+  alias:
+    type: string
+    required: false
+    label: Alias
+    maxLength: 64
+    pattern: '^[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]+)*$'
+    description: >-
+      The mail nickname (also its name in Exchange): letters, digits, dashes and underscores, with single dots between
+      them. Leave empty to use the part of the address before the @.
+  owners:
+    type: user
+    multiple: true
+    maxItems: 20
+    label: Owners
+    description: Owners manage the list's members. People in your organization with a mailbox.
+  members:
+    type: user
+    multiple: true
+    maxItems: 100
+    required: false
+    label: Members
+    description: People in your organization; their primary email address is added.
+  addresses:
+    type: string
+    multiline: true
+    required: false
+    label: Other members
+    description: One email address per line — guests, mail contacts or other recipients that already exist in Exchange Online.
+    maxLength: 20000
+  allowExternalSenders: { type: boolean, label: Accept mail from outside the organization, default: false }
+  keepMeAsOwner:
+    type: boolean
+    label: Keep me as an owner too
+    default: false
+    description: >-
+      You're an owner while it's set up (Exchange only lets owners change a list). Off takes you off at the end once
+      everything worked; if something failed you stay an owner so that running it again can retry.
+  reason: { type: string, label: Reason, minLength: 10, multiline: true, placeholder: e.g. Ticket REQ-1234 — list for Project Falcon }
+
+steps:
+  - id: resolve
+    type: graph
+    mode: read
+    describe: Look up the email addresses of the owners, the members and you
+    request:
+      method: POST
+      path: /directoryObjects/getByIds
+      body:
+        ids: ${ $distinct($append($append($append([], inputs.owners), $append([], inputs.members)), [user.oid])) }
+        types: [user]
+
+  - id: plan
+    type: transform
+    describe: Work out the alias, the owners and the members
+    expression: >-
+      ${ (
+        $users := $append([], steps.resolve.output.value);
+        $ownerIds := [$append([], $$.inputs.owners).$lowercase($)];
+        $memberIds := [$append([], $$.inputs.members).$lowercase($)];
+        $owners := $users[$lowercase(id) in $ownerIds];
+        $members := $users[$lowercase(id) in $memberIds];
+        $me := $users[$lowercase(id) = $lowercase($$.user.oid)][0];
+        $typed := [$split(inputs.addresses ? inputs.addresses : '', /[\s,;]+/)[$ != '']];
+        {
+          "address": $lowercase(inputs.address),
+          "domain": $lowercase($substringAfter(inputs.address, '@')),
+          "alias": inputs.alias ? inputs.alias : $substringBefore(inputs.address, '@'),
+          "ownerAddresses": [$owners[mail != null].$lowercase(mail)],
+          "ownerObjectIds": [$owners[mail != null].id],
+          "ownersWithoutMail": [$owners[$not($exists(mail)) or mail = null].userPrincipalName],
+          "guestOwners": [$owners[$contains(userPrincipalName, '#EXT#') or userType = 'Guest'].userPrincipalName],
+          "memberAddresses": [$distinct([$append([$members[mail != null].mail], $typed)].$lowercase($))],
+          "membersWithoutMail": [$members[$not($exists(mail)) or mail = null].userPrincipalName],
+          "invalid": [$typed[$not($contains($, /^[^\s@*]+@[^\s@*]+\.[^\s@*]+$/))]],
+          "meHasMailbox": $exists($me.mail) and $me.mail != null
+        }
+      ) }
+
+  - id: youHaveMailbox
+    type: assert
+    that: ${ steps.plan.output.meHasMailbox = true }
+    message: >-
+      You need a mailbox in Exchange Online to set up a distribution list here: Exchange only lets a list's owners
+      change it, and you're one while it is set up. Ask an engineer with a mailbox, or create the list in the Exchange
+      admin center.
+
+  - id: ownersHaveMail
+    type: assert
+    that: ${ $count(steps.plan.output.ownersWithoutMail) = 0 and $count(steps.plan.output.ownerAddresses) > 0 }
+    message: >-
+      ${ "An owner needs a mailbox. These owners have none: " & $join(steps.plan.output.ownersWithoutMail, ', ') }
+
+  - id: noGuestOwners
+    type: assert
+    that: ${ $count(steps.plan.output.guestOwners) = 0 }
+    message: >-
+      ${ 'Owners must be people in your organization. These are guests: ' & $join(steps.plan.output.guestOwners, ', ') }
+
+  - id: membersHaveMail
+    type: assert
+    that: ${ $count(steps.plan.output.membersWithoutMail) = 0 }
+    message: >-
+      ${ "These people have no mailbox, so they can't be list members: " & $join(steps.plan.output.membersWithoutMail, ', ') }
+
+  - id: validAddresses
+    type: assert
+    that: ${ $count(steps.plan.output.invalid) = 0 }
+    message: >-
+      ${ 'These are not valid email addresses: ' & $join(steps.plan.output.invalid, ', ') }
+
+  - id: aliasValid
+    type: assert
+    that: ${ $contains(steps.plan.output.alias, /^[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]+)*$/) and $length(steps.plan.output.alias) <= 64 }
+    message: >-
+      ${ "The alias '" & steps.plan.output.alias & "' can only hold letters, digits, dashes and underscores, with single dots between them (up to 64 characters). Type an alias." }
+
+  - id: availability
+    type: runner
+    mode: read
+    describe: Check that the address and alias are free
+    script: exchange/Get-RecipientAvailability.ps1
+    sha256: 1290aee189e94106475e0603f7bac4eab590fa18d947f24f6d7837033c39af0c
+    services: [exchange]
+    timeoutSeconds: 300
+    parameters:
+      addresses: ${ [steps.plan.output.address] }
+      aliases: ${ [steps.plan.output.alias] }
+
+  - id: domainAccepted
+    type: assert
+    that: ${ steps.plan.output.domain in steps.availability.output[0].acceptedDomains }
+    message: >-
+      ${ steps.plan.output.domain & " isn't an accepted domain of this organization. Use one of: "
+         & $join(steps.availability.output[0].acceptedDomains, ', ') & '.' }
+
+  - id: available
+    type: assert
+    # Free, or the list an earlier run of this playbook created (the run then adds what's missing).
+    that: >-
+      ${ $count(steps.availability.output[0].items[taken = true and $not(
+           createdByAdminForge = true and recipientTypeDetails = 'MailUniversalDistributionGroup'
+           and $lowercase(primarySmtpAddress) = $$.steps.plan.output.address)]) = 0 }
+    message: >-
+      ${ (
+        $taken := steps.availability.output[0].items[taken = true][0];
+        $taken.value & ' is already used by ' & $taken.typeLabel & ' (' & $taken.displayName & '). Pick another address or alias.'
+      ) }
+
+  - id: target
+    type: transform
+    describe: Note whether an earlier run created the list, and whether you still own it
+    expression: >-
+      ${ (
+        $mine := steps.availability.output[0].items[kind = 'address' and taken = true][0];
+        {
+          "existing": $exists($mine),
+          "objectId": $mine.externalDirectoryObjectId ? $mine.externalDirectoryObjectId : null,
+          "youOwnIt": $lowercase(user.oid) in $append([], $mine.ownerObjectIds)
+        }
+      ) }
+
+  - id: existingReady
+    type: assert
+    that: ${ steps.target.output.existing = false or $boolean(steps.target.output.objectId) }
+    message: ${ steps.plan.output.address & ' is still being set up in Exchange. Run this again in a few minutes.' }
+
+  - id: stillOwner
+    type: assert
+    that: ${ steps.target.output.existing = false or steps.target.output.youOwnIt = true }
+    message: >-
+      ${ "You're not an owner of " & steps.plan.output.address & " any more, and Exchange only lets a list's owners change it. Ask one of its owners to add what's missing, or someone with Organization Management." }
+
+  - id: create
+    type: runner
+    mode: write
+    describe: >-
+      ${ (
+        $n := $count(steps.plan.output.memberAddresses);
+        $members := $n = 1 ? '1 member' : $n & ' members';
+        $senders := inputs.allowExternalSenders = true ? 'accepting mail from outside' : 'internal senders only';
+        steps.target.output.existing = true
+          ? 'Add the missing owners and members (of ' & $members & ') to the existing distribution list ' & steps.plan.output.address
+            & ' (created by AdminForge); ' & $senders
+          : 'Create the distribution list ' & steps.plan.output.address & ' owned by ' & $join(steps.plan.output.ownerAddresses, ', ')
+            & ' with ' & $members & '; ' & $senders
+      ) }
+    script: exchange/New-DistributionList.ps1
+    sha256: e863b539dbd51b09d495d7b62f2fdbd788857aea692e70fc2c204fe00f2c1a97
+    services: [exchange]
+    timeoutSeconds: 900
+    # existingObjectId lets the protected-object guard see the list a re-run changes; the owners' object ids are
+    # checked against Exchange before anything is created.
+    parameters:
+      displayName: ${ inputs.displayName }
+      alias: ${ steps.plan.output.alias }
+      primarySmtpAddress: ${ steps.plan.output.address }
+      existingObjectId: ${ steps.target.output.objectId }
+      ownerAddresses: ${ steps.plan.output.ownerAddresses }
+      ownerObjectIds: ${ steps.plan.output.ownerObjectIds }
+      memberAddresses: ${ steps.plan.output.memberAddresses }
+      allowExternalSenders: ${ inputs.allowExternalSenders = true }
+      keepMeAsOwner: ${ inputs.keepMeAsOwner = true }
+    idempotent: true
+    # The runner returns one element per output event; this script emits one result object.
+    dryRunOutput:
+      - address: ${ steps.plan.output.address }
+        displayName: ${ inputs.displayName }
+        created: ${ steps.target.output.existing != true }
+        owners: ${ steps.plan.output.ownerAddresses }
+        membersAdded: ${ steps.plan.output.memberAddresses }
+        memberCount: ${ $count(steps.plan.output.memberAddresses) }
+        allowExternalSenders: ${ inputs.allowExternalSenders = true }
+        youAreOwner: ${ inputs.keepMeAsOwner = true }
+        skipped: []
+        failed: []
+        verified: true
+
+outputs:
+  summary: >-
+    ${ (
+      $r := steps.create.output[0];
+      ($r.created = true ? 'Created the distribution list ' : 'Finished the distribution list ')
+      & $r.address & ', owned by ' & $join($r.owners, ', ') & ', with ' & $r.memberCount & ($r.memberCount = 1 ? ' member' : ' members')
+      & ($r.allowExternalSenders = true ? '; it accepts mail from outside the organization.' : '; internal senders only.')
+      & ($r.youAreOwner = true and inputs.keepMeAsOwner != true
+          ? " You're still one of its owners: taking you off didn't work. Remove yourself in Outlook, or ask another owner."
+          : '')
+    ) }
+  address: ${ steps.create.output[0].address }
+  objectId: ${ steps.create.output[0].externalDirectoryObjectId }
+  verified: ${ steps.create.output[0].verified }
+
+tests:
+  - name: creates a list with an owner, people and a typed address
+    inputs:
+      displayName: Project Falcon
+      address: falcon@example.com
+      owners: [10000000-0000-4000-8000-000000000002]
+      members: [10000000-0000-4000-8000-000000000005]
+      addresses: "Kim.Lee@partner.example\n"
+      reason: Ticket REQ-3001 list for Project Falcon
+    mocks:
+      resolve:
+        value:
+          - { id: 10000000-0000-4000-8000-000000000002, userPrincipalName: alex.wilber@example.com, mail: alex.wilber@example.com }
+          - { id: 10000000-0000-4000-8000-000000000005, userPrincipalName: isaiah.langer@example.com, mail: isaiah.langer@example.com }
+          - { id: 00000000-0000-4000-8000-00000000c0de, userPrincipalName: tester@example.com, mail: tester@example.com }
+      availability:
+        - acceptedDomains: [example.com]
+          items: [{ value: falcon@example.com, kind: address, taken: false }, { value: falcon, kind: alias, taken: false }]
+      create:
+        - { address: falcon@example.com, externalDirectoryObjectId: 20000000-0000-4000-8000-000000000301, created: true, owners: [alex.wilber@example.com], membersAdded: [isaiah.langer@example.com, kim.lee@partner.example], memberCount: 2, allowExternalSenders: false, youAreOwner: false, skipped: [], failed: [], verified: true }
+    expect:
+      status: succeeded
+      plan: [create]
+      outputs:
+        summary: Created the distribution list falcon@example.com, owned by alex.wilber@example.com, with 2 members; internal senders only.
+        verified: true
+  - name: adds what's missing to a list an earlier run created, while you're still an owner
+    inputs: { displayName: Project Falcon, address: falcon@example.com, owners: [10000000-0000-4000-8000-000000000002], reason: Ticket REQ-3001 second attempt }
+    mocks:
+      resolve:
+        value:
+          - { id: 10000000-0000-4000-8000-000000000002, userPrincipalName: alex.wilber@example.com, mail: alex.wilber@example.com }
+          - { id: 00000000-0000-4000-8000-00000000c0de, userPrincipalName: tester@example.com, mail: tester@example.com }
+      availability:
+        - acceptedDomains: [example.com]
+          items:
+            - { value: falcon@example.com, kind: address, taken: true, createdByAdminForge: true, recipientTypeDetails: MailUniversalDistributionGroup, typeLabel: a distribution list, primarySmtpAddress: falcon@example.com, displayName: Project Falcon, externalDirectoryObjectId: 20000000-0000-4000-8000-000000000301, ownerObjectIds: [10000000-0000-4000-8000-000000000002, 00000000-0000-4000-8000-00000000c0de] }
+            - { value: falcon, kind: alias, taken: true, createdByAdminForge: true, recipientTypeDetails: MailUniversalDistributionGroup, typeLabel: a distribution list, primarySmtpAddress: falcon@example.com, displayName: Project Falcon, externalDirectoryObjectId: 20000000-0000-4000-8000-000000000301 }
+      create:
+        - { address: falcon@example.com, created: false, owners: [alex.wilber@example.com], membersAdded: [], memberCount: 1, allowExternalSenders: false, youAreOwner: false, skipped: [], failed: [], verified: true }
+    expect:
+      status: succeeded
+      plan: [create]
+      outputs:
+        summary: Finished the distribution list falcon@example.com, owned by alex.wilber@example.com, with 1 member; internal senders only.
+  - name: refuses to finish a list you no longer own
+    inputs: { displayName: Project Falcon, address: falcon@example.com, owners: [10000000-0000-4000-8000-000000000002], reason: Ticket REQ-3001 third attempt }
+    mocks:
+      resolve:
+        value:
+          - { id: 10000000-0000-4000-8000-000000000002, userPrincipalName: alex.wilber@example.com, mail: alex.wilber@example.com }
+          - { id: 00000000-0000-4000-8000-00000000c0de, userPrincipalName: tester@example.com, mail: tester@example.com }
+      availability:
+        - acceptedDomains: [example.com]
+          items:
+            - { value: falcon@example.com, kind: address, taken: true, createdByAdminForge: true, recipientTypeDetails: MailUniversalDistributionGroup, typeLabel: a distribution list, primarySmtpAddress: falcon@example.com, displayName: Project Falcon, externalDirectoryObjectId: 20000000-0000-4000-8000-000000000301, ownerObjectIds: [10000000-0000-4000-8000-000000000002] }
+            - { value: falcon, kind: alias, taken: false }
+    expect: { status: failed, failedStep: stillOwner }
+  - name: says when taking you off the owners didn't work
+    inputs: { displayName: Project Falcon, address: falcon@example.com, owners: [10000000-0000-4000-8000-000000000002], reason: Ticket REQ-3005 step down }
+    mocks:
+      resolve:
+        value:
+          - { id: 10000000-0000-4000-8000-000000000002, userPrincipalName: alex.wilber@example.com, mail: alex.wilber@example.com }
+          - { id: 00000000-0000-4000-8000-00000000c0de, userPrincipalName: tester@example.com, mail: tester@example.com }
+      availability:
+        - acceptedDomains: [example.com]
+          items: [{ value: falcon@example.com, kind: address, taken: false }, { value: falcon, kind: alias, taken: false }]
+      create:
+        - { address: falcon@example.com, created: true, owners: [alex.wilber@example.com, tester@example.com], membersAdded: [], memberCount: 0, allowExternalSenders: false, youAreOwner: true, skipped: [], failed: [], verified: false }
+    expect:
+      status: succeeded
+      outputs:
+        summary: >-
+          Created the distribution list falcon@example.com, owned by alex.wilber@example.com, tester@example.com, with 0
+          members; internal senders only. You're still one of its owners: taking you off didn't work. Remove yourself in
+          Outlook, or ask another owner.
+        verified: false
+  - name: refuses when you have no mailbox
+    inputs: { displayName: Project Falcon, address: falcon@example.com, owners: [10000000-0000-4000-8000-000000000002], reason: Ticket REQ-3006 no mailbox }
+    mocks:
+      resolve:
+        value:
+          - { id: 10000000-0000-4000-8000-000000000002, userPrincipalName: alex.wilber@example.com, mail: alex.wilber@example.com }
+          - { id: 00000000-0000-4000-8000-00000000c0de, userPrincipalName: tester@example.com }
+    expect: { status: failed, failedStep: youHaveMailbox }
+  - name: refuses an owner without a mailbox
+    inputs:
+      displayName: Project Falcon
+      address: falcon@example.com
+      owners: [10000000-0000-4000-8000-000000000014]
+      reason: Ticket REQ-3002 owner without mailbox
+    mocks:
+      resolve:
+        value:
+          - { id: 10000000-0000-4000-8000-000000000014, userPrincipalName: svc.scanner@example.com }
+          - { id: 00000000-0000-4000-8000-00000000c0de, userPrincipalName: tester@example.com, mail: tester@example.com }
+    expect: { status: failed, failedStep: ownersHaveMail }
+  - name: refuses a guest as owner
+    inputs: { displayName: Project Falcon, address: falcon@example.com, owners: [10000000-0000-4000-8000-000000000021], reason: Ticket REQ-3007 guest owner }
+    mocks:
+      resolve:
+        value:
+          - { id: 10000000-0000-4000-8000-000000000021, userPrincipalName: kim_partner.example#EXT#@example.com, mail: kim@partner.example }
+          - { id: 00000000-0000-4000-8000-00000000c0de, userPrincipalName: tester@example.com, mail: tester@example.com }
+    expect: { status: failed, failedStep: noGuestOwners }
+  - name: refuses members without a mailbox
+    inputs:
+      displayName: Project Falcon
+      address: falcon@example.com
+      owners: [10000000-0000-4000-8000-000000000002]
+      members: [10000000-0000-4000-8000-000000000014]
+      reason: Ticket REQ-3008 member without mailbox
+    mocks:
+      resolve:
+        value:
+          - { id: 10000000-0000-4000-8000-000000000002, userPrincipalName: alex.wilber@example.com, mail: alex.wilber@example.com }
+          - { id: 10000000-0000-4000-8000-000000000014, userPrincipalName: svc.scanner@example.com }
+          - { id: 00000000-0000-4000-8000-00000000c0de, userPrincipalName: tester@example.com, mail: tester@example.com }
+    expect: { status: failed, failedStep: membersHaveMail }
+  - name: refuses malformed typed addresses and wildcards
+    inputs:
+      displayName: Project Falcon
+      address: falcon@example.com
+      owners: [10000000-0000-4000-8000-000000000002]
+      addresses: "not-an-address\n*@example.com"
+      reason: Ticket REQ-3003 typo check
+    mocks:
+      resolve:
+        value:
+          - { id: 10000000-0000-4000-8000-000000000002, userPrincipalName: alex.wilber@example.com, mail: alex.wilber@example.com }
+          - { id: 00000000-0000-4000-8000-00000000c0de, userPrincipalName: tester@example.com, mail: tester@example.com }
+    expect: { status: failed, failedStep: validAddresses }
+  - name: refuses an alias it can't take from the address
+    inputs: { displayName: Project Falcon, address: .falcon@example.com, owners: [10000000-0000-4000-8000-000000000002], reason: Ticket REQ-3009 alias check }
+    mocks:
+      resolve:
+        value:
+          - { id: 10000000-0000-4000-8000-000000000002, userPrincipalName: alex.wilber@example.com, mail: alex.wilber@example.com }
+          - { id: 00000000-0000-4000-8000-00000000c0de, userPrincipalName: tester@example.com, mail: tester@example.com }
+    expect: { status: failed, failedStep: aliasValid }
+  - name: refuses a domain the organization doesn't accept
+    inputs: { displayName: Project Falcon, address: falcon@fabrikam.example, owners: [10000000-0000-4000-8000-000000000002], reason: Ticket REQ-3010 wrong domain }
+    mocks:
+      resolve:
+        value:
+          - { id: 10000000-0000-4000-8000-000000000002, userPrincipalName: alex.wilber@example.com, mail: alex.wilber@example.com }
+          - { id: 00000000-0000-4000-8000-00000000c0de, userPrincipalName: tester@example.com, mail: tester@example.com }
+      availability:
+        - acceptedDomains: [example.com]
+          items: [{ value: falcon@fabrikam.example, kind: address, taken: false }, { value: falcon, kind: alias, taken: false }]
+    expect: { status: failed, failedStep: domainAccepted }
+  - name: refuses an address another recipient uses
+    inputs:
+      displayName: All staff
+      address: all@example.com
+      owners: [10000000-0000-4000-8000-000000000002]
+      reason: Ticket REQ-3004 duplicate
+    mocks:
+      resolve:
+        value:
+          - { id: 10000000-0000-4000-8000-000000000002, userPrincipalName: alex.wilber@example.com, mail: alex.wilber@example.com }
+          - { id: 00000000-0000-4000-8000-00000000c0de, userPrincipalName: tester@example.com, mail: tester@example.com }
+      availability:
+        - acceptedDomains: [example.com]
+          items:
+            - { value: all@example.com, kind: address, taken: true, createdByAdminForge: false, recipientTypeDetails: MailUniversalDistributionGroup, typeLabel: a distribution list, primarySmtpAddress: all@example.com, displayName: All staff }
+            - { value: all, kind: alias, taken: true, createdByAdminForge: false, recipientTypeDetails: MailUniversalDistributionGroup, typeLabel: a distribution list, primarySmtpAddress: all@example.com, displayName: All staff }
+    expect: { status: failed, failedStep: available }

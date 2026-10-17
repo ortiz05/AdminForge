@@ -1,9 +1,9 @@
 $schema: ../../../packages/schemas/generated/page.schema.json
 kind: page
 id: m365.distribution-lists
-version: 1.0.0
+version: 1.1.0
 title: Distribution lists
-summary: Distribution lists and mail-enabled security groups — owners, who can join, whether outside senders can mail them. Add members in bulk.
+summary: Distribution lists and mail-enabled security groups — owners, who can join, whether outside senders can mail them. Add members in bulk, or create a list.
 owner: m365-team
 tags: [m365, exchange, distribution-lists]
 template: list-detail
@@ -71,7 +71,7 @@ datasources:
     source: runner
     label: Distribution lists (PowerShell)
     script: exchange/Get-DistributionLists.ps1
-    sha256: c01955b6360e5f136324f7287ec7dd63394bd0cb71c8d600293d8d01431b9404
+    sha256: fe5a90ac7c27b9e76e286cb4f094a976f5288429ce1293b989ae9c497c8deed9
     services: [exchange]
     timeoutSeconds: 900
     parameters:
@@ -108,6 +108,11 @@ datasources:
           "synced": $count($all[isDirSynced = true])
         }
       ) }
+
+actions:
+  - playbook: m365.create-distribution-list
+    label: Create distribution list
+    icon: users-four
 
 layout:
   - widget: kpi

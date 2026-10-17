@@ -1,0 +1,349 @@
+$schema: ../../../packages/schemas/generated/playbook.schema.json
+kind: playbook
+id: m365.create-shared-mailbox
+version: 1.0.0
+title: Create a shared mailbox
+summary: >-
+  Creates a shared mailbox in an accepted domain, gives the people you choose Full Access (and Send As) and blocks
+  sign-in to its account unless you allow it. Never yourself; only people in your organization with a mailbox. Marked
+  as created by AdminForge, so Remove a mailbox or list AdminForge created can remove it. Run again for the same
+  address, it finishes that mailbox and sets its sign-in again.
+owner: m365-team
+tags: [m365, exchange, shared-mailboxes]
+# Grants mailbox access like Grant mailbox access does — on a re-run, to whatever the mailbox already holds.
+risk: high
+mode: write
+requires:
+  portalRoles: [Portal.Operator]
+  scopes:
+    graph: [User.ReadBasic.All]
+    exchange: [Exchange.Manage]
+  entraRoles: [Exchange Recipient Administrator]
+  licences: [exchange]
+confirm:
+  type: typed
+  value: ${ steps.plan.output.address }
+  message: >-
+    ${ (
+      $n := $count(steps.plan.output.memberAddresses);
+      $people := $n = 1 ? '1 person' : $n & ' people';
+      $rights := inputs.sendAs = true ? 'Full Access and Send As (they can send mail as it)' : 'Full Access';
+      (steps.target.output.existing = true
+        ? 'This finishes the existing shared mailbox ' & steps.plan.output.address & ' (created by AdminForge)'
+          & ($n > 0 ? ': ' & $people & ' get ' & $rights & ' to everything already in it' : '')
+          & '. Sign-in to its account is set to ' & (inputs.allowSignIn = true ? 'allowed' : 'blocked') & ' again.'
+        : 'This creates the shared mailbox ' & steps.plan.output.address
+          & ($n > 0 ? ' and gives ' & $people & ' ' & $rights : '') & '.')
+      & (inputs.allowSignIn = true
+          ? ' Its account will be able to sign in directly — only do this when a device or app has to sign in as the mailbox.'
+          : '')
+      & ' Type the address to confirm.'
+    ) }
+
+inputs:
+  displayName: { type: string, label: Display name, minLength: 3, maxLength: 64, pattern: '^[^<>;"]{3,64}$', placeholder: Sales team }
+  address:
+    type: string
+    format: email
+    label: Email address
+    pattern: '^[^\s@*]+@[^\s@*]+$'
+    description: In one of the organization's accepted domains, e.g. sales@example.com.
+  alias:
+    type: string
+    required: false
+    label: Alias
+    maxLength: 64
+    pattern: '^[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]+)*$'
+    description: >-
+      The mail nickname (also its name in Exchange): letters, digits, dashes and underscores, with single dots between
+      them. Leave empty to use the part of the address before the @.
+  members:
+    type: user
+    multiple: true
+    maxItems: 50
+    required: false
+    label: People with access
+    description: >-
+      They get Full Access (the mailbox appears in their Outlook). People in your organization with a mailbox; not
+      yourself — another engineer can grant you access.
+  sendAs: { type: boolean, label: Also let them send as the mailbox, default: true }
+  allowSignIn:
+    type: boolean
+    label: Allow sign-in to the mailbox's account
+    default: false
+    description: >-
+      Leave this off. Nobody should sign in to a shared mailbox directly — people open it through Full Access. Turn it
+      on only when a device or application must sign in as the mailbox (it then needs a licence and a password).
+  reason: { type: string, label: Reason, minLength: 10, multiline: true, placeholder: e.g. Ticket REQ-1234 — inbox for the sales team }
+
+steps:
+  - id: resolve
+    type: graph
+    mode: read
+    describe: Look up the email addresses of the selected people
+    when: ${ $count(inputs.members) > 0 }
+    request:
+      method: POST
+      path: /directoryObjects/getByIds
+      body:
+        ids: ${ $append([], inputs.members) }
+        types: [user]
+
+  - id: plan
+    type: transform
+    describe: Work out the alias and the people's addresses
+    expression: >-
+      ${ (
+        $users := $append([], steps.resolve.output.value);
+        {
+          "address": $lowercase(inputs.address),
+          "domain": $lowercase($substringAfter(inputs.address, '@')),
+          "alias": inputs.alias ? inputs.alias : $substringBefore(inputs.address, '@'),
+          "memberAddresses": [$users[mail != null].$lowercase(mail)],
+          "memberObjectIds": [$users[mail != null].id],
+          "includesMe": $lowercase(user.oid) in [$append([], inputs.members).$lowercase($)],
+          "guests": [$users[$contains(userPrincipalName, '#EXT#') or userType = 'Guest'].userPrincipalName],
+          "noMailbox": [$users[$not($exists(mail)) or mail = null].userPrincipalName]
+        }
+      ) }
+
+  # The same rules as Grant mailbox access: never yourself, only people in the organization with a mailbox. The script
+  # checks each person again in Exchange (their own user mailbox, matching the account picked) before creating anything.
+  - id: notYou
+    type: assert
+    that: ${ $not(steps.plan.output.includesMe = true) }
+    message: You can't give yourself access to a mailbox. Leave yourself out; another engineer can grant it with Grant mailbox access.
+
+  - id: noGuests
+    type: assert
+    that: ${ $count(steps.plan.output.guests) = 0 }
+    message: >-
+      ${ 'Mailbox access can only be given to people in your organization. These are guests: ' & $join(steps.plan.output.guests, ', ') }
+
+  - id: everyoneHasMail
+    type: assert
+    that: ${ $count(steps.plan.output.noMailbox) = 0 }
+    message: >-
+      ${ "These people have no mailbox, so they couldn't use the access: " & $join(steps.plan.output.noMailbox, ', ') }
+
+  - id: aliasValid
+    type: assert
+    that: ${ $contains(steps.plan.output.alias, /^[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]+)*$/) and $length(steps.plan.output.alias) <= 64 }
+    message: >-
+      ${ "The alias '" & steps.plan.output.alias & "' can only hold letters, digits, dashes and underscores, with single dots between them (up to 64 characters). Type an alias." }
+
+  - id: availability
+    type: runner
+    mode: read
+    describe: Check that the address and alias are free
+    script: exchange/Get-RecipientAvailability.ps1
+    sha256: 1290aee189e94106475e0603f7bac4eab590fa18d947f24f6d7837033c39af0c
+    services: [exchange]
+    timeoutSeconds: 300
+    parameters:
+      addresses: ${ [steps.plan.output.address] }
+      aliases: ${ [steps.plan.output.alias] }
+
+  - id: domainAccepted
+    type: assert
+    that: ${ steps.plan.output.domain in steps.availability.output[0].acceptedDomains }
+    message: >-
+      ${ steps.plan.output.domain & " isn't an accepted domain of this organization. Use one of: "
+         & $join(steps.availability.output[0].acceptedDomains, ', ') & '.' }
+
+  - id: available
+    type: assert
+    # Free, or the shared mailbox an earlier run of this playbook created (the run then finishes it).
+    that: >-
+      ${ $count(steps.availability.output[0].items[taken = true and $not(
+           createdByAdminForge = true and recipientTypeDetails = 'SharedMailbox'
+           and $lowercase(primarySmtpAddress) = $$.steps.plan.output.address)]) = 0 }
+    message: >-
+      ${ (
+        $taken := steps.availability.output[0].items[taken = true][0];
+        $taken.value & ' is already used by ' & $taken.typeLabel & ' (' & $taken.displayName & '). Pick another address or alias.'
+      ) }
+
+  - id: target
+    type: transform
+    describe: Note whether an earlier run created the mailbox
+    expression: >-
+      ${ (
+        $mine := steps.availability.output[0].items[kind = 'address' and taken = true][0];
+        { "existing": $exists($mine), "objectId": $mine.externalDirectoryObjectId ? $mine.externalDirectoryObjectId : null }
+      ) }
+
+  - id: existingReady
+    type: assert
+    that: ${ steps.target.output.existing = false or $boolean(steps.target.output.objectId) }
+    message: ${ steps.plan.output.address & ' is still being set up in Exchange. Run this again in a few minutes.' }
+
+  - id: create
+    type: runner
+    mode: write
+    describe: >-
+      ${ (
+        $n := $count(steps.plan.output.memberAddresses);
+        $people := $n = 1 ? '1 person' : $n & ' people';
+        $rights := inputs.sendAs = true ? 'Full Access and Send As' : 'Full Access';
+        $signIn := inputs.allowSignIn = true ? 'sign-in to its account allowed' : 'sign-in to its account blocked';
+        steps.target.output.existing = true
+          ? ($n > 0 ? 'Give ' & $people & ' ' & $rights & ' on the existing shared mailbox ' : 'Finish the existing shared mailbox ')
+            & steps.plan.output.address & ' (created by AdminForge); ' & $signIn
+          : 'Create the shared mailbox ' & steps.plan.output.address & ($n > 0 ? '; give ' & $people & ' ' & $rights : '') & '; ' & $signIn
+      ) }
+    script: exchange/New-SharedMailbox.ps1
+    sha256: efeee618edc60243b7ca62164195523d779a8807bd64c3c68357e4489a956b4b
+    services: [exchange]
+    timeoutSeconds: 900
+    # existingObjectId lets the protected-object guard see the mailbox a re-run changes; the people's object ids are
+    # checked against Exchange before anything is created.
+    parameters:
+      displayName: ${ inputs.displayName }
+      alias: ${ steps.plan.output.alias }
+      primarySmtpAddress: ${ steps.plan.output.address }
+      existingObjectId: ${ steps.target.output.objectId }
+      memberAddresses: ${ steps.plan.output.memberAddresses }
+      memberObjectIds: ${ steps.plan.output.memberObjectIds }
+      sendAs: ${ inputs.sendAs = true }
+      allowSignIn: ${ inputs.allowSignIn = true }
+    idempotent: true
+    # The runner returns one element per output event; this script emits one result object.
+    dryRunOutput:
+      - address: ${ steps.plan.output.address }
+        displayName: ${ inputs.displayName }
+        alias: ${ steps.plan.output.alias }
+        created: ${ steps.target.output.existing != true }
+        accountDisabled: ${ inputs.allowSignIn != true }
+        fullAccessAdded: ${ steps.plan.output.memberAddresses }
+        sendAsAdded: >-
+          ${ inputs.sendAs = true ? steps.plan.output.memberAddresses : [] }
+        skipped: []
+        failed: []
+        verified: true
+
+outputs:
+  summary: >-
+    ${ (
+      $r := steps.create.output[0];
+      ($r.created = true ? 'Created the shared mailbox ' : 'Finished the shared mailbox ')
+      & $r.address & '. Sign-in to its account is ' & ($r.accountDisabled = true ? 'blocked' : 'allowed') & '.'
+      & ($count($r.fullAccessAdded) > 0 ? ' Full Access for ' & $join($r.fullAccessAdded, ', ') & '.' : '')
+      & ($count($r.sendAsAdded) > 0 ? ' Send As for ' & $join($r.sendAsAdded, ', ') & '.' : '')
+    ) }
+  address: ${ steps.create.output[0].address }
+  objectId: ${ steps.create.output[0].externalDirectoryObjectId }
+  verified: ${ steps.create.output[0].verified }
+
+tests:
+  - name: creates the mailbox, blocks sign-in and gives two people Full Access and Send As
+    inputs:
+      displayName: Sales team
+      address: Sales@example.com
+      members: [10000000-0000-4000-8000-000000000002, 10000000-0000-4000-8000-000000000005]
+      reason: Ticket REQ-1001 inbox for the sales team
+    mocks:
+      resolve:
+        value:
+          - { id: 10000000-0000-4000-8000-000000000002, userPrincipalName: alex.wilber@example.com, mail: Alex.Wilber@example.com }
+          - { id: 10000000-0000-4000-8000-000000000005, userPrincipalName: isaiah.langer@example.com, mail: isaiah.langer@example.com }
+      availability:
+        - acceptedDomains: [example.com, example.onmicrosoft.com]
+          items:
+            - { value: sales@example.com, kind: address, taken: false, createdByAdminForge: false }
+            - { value: Sales, kind: alias, taken: false, createdByAdminForge: false }
+      create:
+        - address: sales@example.com
+          displayName: Sales team
+          alias: Sales
+          externalDirectoryObjectId: 20000000-0000-4000-8000-000000000101
+          created: true
+          accountDisabled: true
+          fullAccessAdded: [alex.wilber@example.com, isaiah.langer@example.com]
+          sendAsAdded: [alex.wilber@example.com, isaiah.langer@example.com]
+          skipped: []
+          failed: []
+          verified: true
+    expect:
+      status: succeeded
+      plan: [create]
+      outputs:
+        summary: >-
+          Created the shared mailbox sales@example.com. Sign-in to its account is blocked. Full Access for
+          alex.wilber@example.com, isaiah.langer@example.com. Send As for alex.wilber@example.com, isaiah.langer@example.com.
+        address: sales@example.com
+        verified: true
+  - name: finishes a mailbox an earlier run created
+    inputs: { displayName: Sales team, address: sales@example.com, alias: sales, reason: Ticket REQ-1001 second attempt }
+    mocks:
+      availability:
+        - acceptedDomains: [example.com]
+          items:
+            - { value: sales@example.com, kind: address, taken: true, createdByAdminForge: true, recipientTypeDetails: SharedMailbox, typeLabel: a shared mailbox, primarySmtpAddress: sales@example.com, displayName: Sales team, externalDirectoryObjectId: 20000000-0000-4000-8000-000000000101 }
+            - { value: sales, kind: alias, taken: true, createdByAdminForge: true, recipientTypeDetails: SharedMailbox, typeLabel: a shared mailbox, primarySmtpAddress: sales@example.com, displayName: Sales team, externalDirectoryObjectId: 20000000-0000-4000-8000-000000000101 }
+      create:
+        - { address: sales@example.com, created: false, accountDisabled: true, fullAccessAdded: [], sendAsAdded: [], skipped: [], failed: [], verified: true }
+    expect:
+      status: succeeded
+      plan: [create]
+      steps: { resolve: skipped }
+      outputs:
+        summary: Finished the shared mailbox sales@example.com. Sign-in to its account is blocked.
+  - name: waits for a mailbox Exchange is still setting up
+    inputs: { displayName: Sales team, address: sales@example.com, reason: Ticket REQ-1001 second attempt }
+    mocks:
+      availability:
+        - acceptedDomains: [example.com]
+          items:
+            - { value: sales@example.com, kind: address, taken: true, createdByAdminForge: true, recipientTypeDetails: SharedMailbox, typeLabel: a shared mailbox, primarySmtpAddress: sales@example.com, displayName: Sales team, externalDirectoryObjectId: '' }
+            - { value: sales, kind: alias, taken: false }
+    expect: { status: failed, failedStep: existingReady }
+  - name: refuses an address another mailbox uses
+    inputs: { displayName: Reception, address: reception@example.com, reason: Ticket REQ-1002 front desk }
+    mocks:
+      availability:
+        - acceptedDomains: [example.com]
+          items:
+            - { value: reception@example.com, kind: address, taken: true, createdByAdminForge: false, recipientTypeDetails: SharedMailbox, typeLabel: a shared mailbox, primarySmtpAddress: reception@example.com, displayName: Reception }
+            - { value: reception, kind: alias, taken: true, createdByAdminForge: false, recipientTypeDetails: SharedMailbox, typeLabel: a shared mailbox, primarySmtpAddress: reception@example.com, displayName: Reception }
+    expect: { status: failed, failedStep: available }
+  - name: refuses a domain the organization doesn't accept
+    inputs: { displayName: Partner desk, address: desk@fabrikam.example, reason: Ticket REQ-1003 wrong domain }
+    mocks:
+      availability:
+        - acceptedDomains: [example.com, example.onmicrosoft.com]
+          items: [{ value: desk@fabrikam.example, kind: address, taken: false }, { value: desk, kind: alias, taken: false }]
+    expect: { status: failed, failedStep: domainAccepted }
+  - name: refuses an alias it can't take from the address (a + in it)
+    inputs: { displayName: Ops, address: ops+team@example.com, reason: Ticket REQ-1004 operations }
+    expect: { status: failed, failedStep: aliasValid }
+  - name: refuses people without a mailbox
+    inputs:
+      displayName: Ops
+      address: ops@example.com
+      members: [10000000-0000-4000-8000-000000000014]
+      reason: Ticket REQ-1005 operations
+    mocks:
+      resolve:
+        value: [{ id: 10000000-0000-4000-8000-000000000014, userPrincipalName: svc.scanner@example.com }]
+    expect: { status: failed, failedStep: everyoneHasMail }
+  - name: refuses giving yourself access
+    inputs:
+      displayName: Ops
+      address: ops@example.com
+      members: [00000000-0000-4000-8000-00000000C0DE]
+      reason: Ticket REQ-1006 operations
+    mocks:
+      resolve:
+        value: [{ id: 00000000-0000-4000-8000-00000000c0de, userPrincipalName: tester@example.com, mail: tester@example.com }]
+    expect: { status: failed, failedStep: notYou }
+  - name: refuses guests
+    inputs:
+      displayName: Ops
+      address: ops@example.com
+      members: [10000000-0000-4000-8000-000000000021]
+      reason: Ticket REQ-1007 operations
+    mocks:
+      resolve:
+        value: [{ id: 10000000-0000-4000-8000-000000000021, userPrincipalName: kim_partner.example#EXT#@example.com, mail: kim@partner.example }]
+    expect: { status: failed, failedStep: noGuests }

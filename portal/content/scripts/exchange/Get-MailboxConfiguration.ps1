@@ -18,7 +18,7 @@
 
 .OUTPUTS
     @{ displayName; primarySmtpAddress; userPrincipalName; recipientTypeDetails; isDirSynced;
-       hiddenFromAddressListsEnabled; litigationHoldEnabled; archiveStatus;
+       hiddenFromAddressListsEnabled; litigationHoldEnabled; archiveStatus; createdByAdminForge;
        forwarding = @{ enabled; forwardingSmtpAddress; forwardingAddress; forwardingAddressTarget;
                        deliverToMailboxAndForward; targets; external };
        autoReply = @{ state; externalAudience; startTime; endTime } | $null }
@@ -40,11 +40,11 @@ $includeAutoReply = Get-AdminForgeInput $Inputs 'includeAutoReply' -Type Bool -D
 
 Write-AdminForgeProgress -Percent 10 -Message 'Reading mailbox'
 $properties = 'RecipientTypeDetails', 'IsDirSynced', 'HiddenFromAddressListsEnabled', 'LitigationHoldEnabled', 'ArchiveStatus',
-'ForwardingSmtpAddress', 'ForwardingAddress', 'DeliverToMailboxAndForward'
+'ForwardingSmtpAddress', 'ForwardingAddress', 'DeliverToMailboxAndForward', 'CustomAttribute15'
 try {
     $m = Get-EXOMailbox -Identity $identity -Properties $properties |
         Select-Object DisplayName, PrimarySmtpAddress, UserPrincipalName, RecipientTypeDetails, IsDirSynced, HiddenFromAddressListsEnabled,
-        LitigationHoldEnabled, ArchiveStatus, ForwardingSmtpAddress, ForwardingAddress, DeliverToMailboxAndForward
+        LitigationHoldEnabled, ArchiveStatus, ForwardingSmtpAddress, ForwardingAddress, DeliverToMailboxAndForward, CustomAttribute15
 } catch {
     throw (New-AdminForgeError -Category input -Message "Mailbox '$identity' was not found: $($_.Exception.Message)")
 }
@@ -96,6 +96,8 @@ $result = [ordered]@{
     hiddenFromAddressListsEnabled = [bool]$m.HiddenFromAddressListsEnabled
     litigationHoldEnabled         = [bool]$m.LitigationHoldEnabled
     archiveStatus                 = [string]$m.ArchiveStatus
+    # Set by AdminForge's create playbooks; the page offers removal only for these.
+    createdByAdminForge           = ([string]$m.CustomAttribute15).StartsWith('AdminForge-created')
     forwarding                    = [ordered]@{
         enabled                    = $targets.Count -gt 0 -or [bool]$recipientForward
         forwardingSmtpAddress      = $smtpForward

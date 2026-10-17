@@ -1,16 +1,19 @@
 $schema: ../../../packages/schemas/generated/schedule.schema.json
 kind: schedule
 id: reports.secure-score-summary-weekly
-version: 1.0.0
+version: 1.1.0
 title: Weekly Secure Score summary
 summary: >-
-  Every Monday at 07:55 UTC, writes the 25 open Secure Score improvement actions worth the most points as XLSX and
+  Retired — AdminForge doesn't cover the Microsoft Defender portal. Every Monday at 07:55 UTC, writes the 25 open Secure Score improvement actions worth the most points as XLSX and
   emails it to the report recipients; the score, its 7- and 30-day change and the trend are on the report page.
+# Retired: AdminForge doesn't cover the Microsoft Defender portal (security operations). To bring it back, set
+# status: active and enabled: true, and bump the version.
+status: retired
 owner: security-team
 tags: [security, secure-score, posture, report]
 cron: "55 7 * * 1"
 timezone: UTC
-enabled: true
+enabled: false
 identity: automation
 job:
   kind: report

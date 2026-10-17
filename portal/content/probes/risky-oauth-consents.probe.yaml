@@ -1,13 +1,16 @@
 $schema: ../../packages/schemas/generated/probe.schema.json
 kind: probe
 id: probes.risky-oauth-consents
-version: 1.0.0
+version: 1.1.0
 title: Risky OAuth app consents (last day)
 summary: >-
-  Consents and permission grants in the last 24 hours that include high-impact permissions (mail, files, sites,
+  Retired — AdminForge doesn't cover the Microsoft Defender portal. Consents and permission grants in the last 24 hours that include high-impact permissions (mail, files, sites,
   directory write, full mailbox access, offline access), from Microsoft Defender XDR advanced hunting
   (CloudAppEvents). Needs Defender for Cloud Apps data and the ThreatHunting.Read.All application permission; without
   them the probe reports the licence it needs.
+# Retired: AdminForge doesn't cover the Microsoft Defender portal (security operations). To bring it back, set
+# status: active and bump the version.
+status: retired
 owner: security-team
 tags: [kql, configuration, identity, apps, consent, security, defender, config-check]
 check:

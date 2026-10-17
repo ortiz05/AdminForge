@@ -57,7 +57,8 @@ afterAll(() => registry.close());
 
 /** One datasource of a report, exactly as the portal runs it in mock mode. */
 async function run(id: string, datasource: string, params: Record<string, unknown> = {}): Promise<Def> {
-  const page = await runner.page(id);
+  // The exact version, so retired definitions (kept for history, never the latest) still run here.
+  const page = await runner.page(id, def(id).version);
   const values = await runner.prepareParams(page, params, USER);
   const out = await runner.run({
     identity: { kind: 'automation', mode: 'read' },
@@ -495,12 +496,16 @@ describe('report schedules', () => {
     },
   );
 
-  it('runs every report except the Exchange PowerShell one, which waits for app-only Exchange', () => {
-    for (const { schedule } of Object.values(REPORTS))
+  it('runs every active report except the Exchange PowerShell one, which waits for app-only Exchange', () => {
+    for (const [id, { schedule }] of Object.entries(REPORTS)) {
+      // A retired report (the Defender portal ones) takes its schedule with it.
+      const retired = def(id).status === 'retired';
+      expect([schedule, def(schedule).status === 'retired']).toEqual([schedule, retired]);
       expect([schedule, def(schedule).enabled]).toEqual([
         schedule,
-        schedule !== 'reports.shared-mailbox-sign-in-weekly',
+        !retired && schedule !== 'reports.shared-mailbox-sign-in-weekly',
       ]);
+    }
     expect(def('reports.shared-mailbox-sign-in-weekly').requires.scopes).toEqual({
       exchange: ['Exchange.ManageAsApp'],
     });

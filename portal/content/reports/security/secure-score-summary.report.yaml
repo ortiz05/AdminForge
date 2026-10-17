@@ -1,12 +1,15 @@
 $schema: ../../../packages/schemas/generated/report.schema.json
 kind: report
 id: security.secure-score-summary
-version: 1.1.0
+version: 1.2.0
 title: Secure Score trend and top improvement actions
 summary: >-
-  Microsoft Secure Score today, its change over the last 7 and 30 days, how it compares with other tenants, and the
+  Retired — AdminForge doesn't cover the Microsoft Defender portal. Microsoft Secure Score today, its change over the last 7 and 30 days, how it compares with other tenants, and the
   improvement actions worth the most points — with the quick wins (low cost, low user impact) flagged — for the weekly
   security posture review.
+# Retired: AdminForge doesn't cover the Microsoft Defender portal (security operations). To bring it back, set
+# status: active and bump the version.
+status: retired
 owner: security-team
 tags: [security, secure-score, posture, report]
 nav: { section: reports, label: Secure Score summary, icon: shield-check, order: 154 }

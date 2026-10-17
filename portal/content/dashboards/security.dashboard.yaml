@@ -1,109 +1,22 @@
 $schema: ../../packages/schemas/generated/dashboard.schema.json
 kind: dashboard
 id: security.overview
-version: 1.0.1
+version: 2.0.0
 title: Security posture
-summary: Open incidents, new alerts, Secure Score, risky users and Defender for Cloud posture in one view.
+summary: Users at risk (Entra ID Protection) and Defender for Cloud secure score per subscription in one view.
 owner: security-team
 tags: [security, dashboard]
 nav: { section: security, label: Overview, icon: gauge, order: 5 }
 requires:
   portalRoles: [Portal.Reader]
   scopes:
-    graph: [SecurityIncident.Read.All, SecurityAlert.Read.All, SecurityEvents.Read.All, IdentityRiskyUser.Read.All]
+    graph: [IdentityRiskyUser.Read.All]
     arm: [user_impersonation]
   entraRoles: [Security Reader]
   azureRoles: [Security Reader]
 refresh: 300
 
 datasources:
-  incidents:
-    label: Open incidents
-    source: graph
-    request:
-      path: /security/incidents
-      query:
-        $top: 50
-        $filter: "status eq 'active' or status eq 'inProgress' or status eq 'awaitingAction'"
-    paging: all
-    maxItems: 2000
-    cache: { ttl: 120 }
-    requires: { licences: [defender] }
-    transform: >-
-      ${ (
-        $open := [value.value[status in ['active', 'inProgress', 'awaitingAction']]];
-        {
-          "open": $count($open),
-          "high": $count($open[severity = 'high']),
-          "unassigned": $count($open[$not($exists(assignedTo)) or assignedTo = null or assignedTo = '']),
-          "bySeverity": [
-            { "severity": "High", "count": $count($open[severity = 'high']) },
-            { "severity": "Medium", "count": $count($open[severity = 'medium']) },
-            { "severity": "Low", "count": $count($open[severity = 'low']) },
-            { "severity": "Informational", "count": $count($open[severity = 'informational']) }
-          ],
-          "latest": [($open^(>createdDateTime))[[0..7]]]
-        }
-      ) }
-  alerts:
-    label: Alerts created in the last 24 hours
-    source: graph
-    request:
-      path: /security/alerts_v2
-      query:
-        $top: 100
-        $filter: "${ 'createdDateTime ge ' & $daysAgo(1) }"
-    paging: all
-    maxItems: 2000
-    cache: { ttl: 120 }
-    requires: { licences: [defender] }
-    transform: >-
-      ${ (
-        $all := [value.value];
-        $labels := {
-          "microsoftDefenderForEndpoint": "Endpoint",
-          "microsoftDefenderForIdentity": "Identity",
-          "microsoftDefenderForOffice365": "Office 365",
-          "microsoftDefenderForCloudApps": "Cloud Apps",
-          "microsoftDefenderForCloud": "Cloud",
-          "microsoft365Defender": "Defender XDR",
-          "azureAdIdentityProtection": "ID Protection",
-          "dataLossPrevention": "DLP"
-        };
-        {
-          "count": $count($all),
-          "high": $count($all[severity = 'high']),
-          "byProduct": [$distinct($all.serviceSource).(
-            $s := $;
-            {
-              "product": ($l := $lookup($labels, $s); $l ? $l : $s),
-              "high": $count($all[serviceSource = $s and severity = 'high']),
-              "medium": $count($all[serviceSource = $s and severity = 'medium']),
-              "low": $count($all[serviceSource = $s and severity in ['low', 'informational']])
-            }
-          )]
-        }
-      ) }
-  score:
-    label: Secure Score
-    source: graph
-    request:
-      path: /security/secureScores
-      query:
-        $top: 30
-    cache: { ttl: 3600 }
-    transform: >-
-      ${ (
-        $rows := [(value.value^(createdDateTime)).{
-          "day": $substring(createdDateTime, 0, 10),
-          "percent": maxScore > 0 ? $round(currentScore / maxScore, 4) : 0
-        }];
-        {
-          "trend": $rows,
-          "percent": $count($rows) > 0 ? $rows[-1].percent : null,
-          "delta": $count($rows) > 1 ? $round($rows[-1].percent - $rows[0].percent, 4) : null
-        }
-      ) }
   risky:
     label: Users at risk
     source: graph
@@ -144,36 +57,15 @@ datasources:
         $rows := [value.value];
         {
           "rows": $rows,
-          "overall": $sum($rows.max) > 0 ? $round($sum($rows.current) / $sum($rows.max), 4) : 0
+          "overall": $sum([0, $rows.max]) > 0 ? $round($sum($rows.current) / $sum($rows.max), 4) : null
         }
       ) }
 
 layout:
   - widget: licenceGate
-    feature: defender
-    title: Microsoft Defender XDR isn't licensed in this tenant — incidents and alerts are unavailable
-  - widget: kpi
-    id: high_incidents
-    data: incidents.high
-    label: Open high-severity incidents
-    format: number
-    status: "${ value > 0 ? 'crit' : 'ok' }"
-    href: /p/security.incidents?status=open&severity=high
-  - widget: kpi
-    id: alerts_24h
-    data: alerts.count
-    label: New alerts (24 h)
-    format: number
-    status: "${ value > 0 ? 'warn' : 'ok' }"
-    href: /p/security.alerts?status=any
-  - widget: kpi
-    id: secure_score
-    data: score.percent
-    label: Secure Score
-    format: percent
-    delta: score.delta
-    status: "${ $type(value) = 'number' ? (value >= 0.7 ? 'ok' : value >= 0.5 ? 'warn' : 'crit') : 'neutral' }"
-    href: /p/security.secure-score
+    feature: identityProtection
+    title: Users at risk need Microsoft Entra ID P2
+    body: The users-at-risk figures and the list of users at high or medium risk.
   - widget: kpi
     id: high_risk_users
     data: risky.high
@@ -181,51 +73,20 @@ layout:
     format: number
     status: "${ value > 0 ? 'crit' : 'ok' }"
     href: /p/security.risky-users?riskState=atRisk&riskLevel=high
-  - widget: chart
-    id: score_trend
-    title: Secure Score (30 days)
-    span: 8
-    rows: 2
-    type: line
-    data: score.trend
-    x: day
-    y: percent
+  - widget: kpi
+    id: users_at_risk
+    data: risky.atRisk
+    label: Users at risk
+    format: number
+    status: "${ value > 0 ? 'warn' : 'ok' }"
+    href: /p/security.risky-users?riskState=atRisk
+  - widget: kpi
+    id: mdc_overall
+    data: mdc.overall
+    label: Defender for Cloud secure score
     format: percent
-    empty:
-      title: No Secure Score yet
-      body: Microsoft calculates the score once a day; a new tenant gets its first score within about 48 hours.
-  - widget: chart
-    id: incidents_by_severity
-    title: Open incidents by severity
-    span: 4
-    rows: 2
-    type: donut
-    data: incidents.bySeverity
-    x: severity
-    y: count
-    format: number
-  - widget: list
-    id: latest_incidents
-    title: Latest open incidents
-    span: 6
-    data: incidents.latest
-    primary: displayName
-    secondary: createdDateTime
-    secondaryFormat: relativeTime
-    status: { field: severity, map: { high: [crit, High], medium: [warn, Medium], low: [info, Low], informational: [neutral, Informational] } }
-    href: ${ '/p/security.incident?id=' & row.id }
-    limit: 8
-  - widget: chart
-    id: alerts_by_product
-    title: Alerts in the last 24 hours by product
-    span: 6
-    rows: 2
-    type: stackedBar
-    data: alerts.byProduct
-    x: product
-    y: [high, medium, low]
-    stack: true
-    format: number
+    status: "${ $type(value) = 'number' ? (value >= 0.7 ? 'ok' : value >= 0.5 ? 'warn' : 'crit') : 'neutral' }"
+    href: /p/security.defender-for-cloud
   - widget: list
     id: risky_users
     title: Users at high or medium risk
@@ -247,8 +108,13 @@ layout:
     x: subscriptionName
     y: percentage
     format: percent
+    empty:
+      title: No secure scores
+      body: >-
+        Defender for Cloud calculates a secure score for each subscription after it is first opened. You need Security
+        Reader (or Reader) on the subscription.
   - widget: markdown
     span: 12
     text: |
-      Drill in: [Incidents](/p/security.incidents) · [Alerts](/p/security.alerts) · [Secure Score](/p/security.secure-score) ·
-      [Risky users](/p/security.risky-users) · [Defender for Cloud](/p/security.defender-for-cloud). Figures refresh every 5 minutes.
+      Drill in: [Risky users](/p/security.risky-users) · [Defender for Cloud](/p/security.defender-for-cloud). Figures
+      refresh every 5 minutes.

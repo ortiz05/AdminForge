@@ -1,9 +1,12 @@
 $schema: ../../../packages/schemas/generated/page.schema.json
 kind: page
 id: security.alerts
-version: 1.0.0
+version: 1.1.0
 title: Alerts
-summary: Alerts from every Microsoft Defender product and Entra ID Protection (alerts_v2), with the incident each one belongs to.
+summary: Retired — AdminForge doesn't cover the Microsoft Defender portal. Alerts from every Microsoft Defender product and Entra ID Protection (alerts_v2), with the incident each one belongs to.
+# Retired: AdminForge doesn't cover the Microsoft Defender portal (security operations). To bring it back, set
+# status: active and bump the version.
+status: retired
 owner: security-team
 tags: [security, defender, alerts]
 template: list-detail

@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/runbook.schema.json
 kind: runbook
 id: identity.compromised-account
-version: 2.1.0
+version: 3.0.0
 title: Compromised account response
 summary: >-
   Guided response to a suspected account compromise: confirm and scope the signal, contain (block sign-in, revoke
@@ -27,7 +27,6 @@ requires:
       - User.EnableDisableAccount.All
       - User.RevokeSessions.All
       - UserAuthenticationMethod.ReadWrite.All
-      - SecurityIncident.ReadWrite.All
       - Policy.Read.All
   entraRoles: [User Administrator, Authentication Administrator, Security Operator]
 confirm:
@@ -49,12 +48,6 @@ inputs:
     multiline: true
     placeholder: Password spray, then a successful sign-in from an unfamiliar country
     description: Recorded on every action this runbook takes.
-  defenderIncidentId:
-    type: string
-    label: Defender incident id
-    required: false
-    pattern: "^[0-9]+$"
-    description: Optional — containment is recorded as a comment on this Microsoft Defender XDR incident.
   confirmCompromised:
     type: boolean
     label: Mark the user compromised in Identity Protection
@@ -218,21 +211,6 @@ sections:
           revokeSessions: false
           reason: ${ 'Compromised account response ' & inputs.ticket & ' — ' & inputs.reason }
 
-      - id: incidentNote
-        type: playbook
-        mode: write
-        describe: ${ 'Record containment on Defender incident ' & inputs.defenderIncidentId }
-        when: ${ $exists(inputs.defenderIncidentId) and inputs.defenderIncidentId != '' }
-        onError: continue
-        ref: security.update-incident
-        inputs:
-          incidentId: ${ inputs.defenderIncidentId }
-          status: inProgress
-          comment: >-
-            ${ $substring('Containment done in AdminForge by ' & user.upn & ' (' & inputs.ticket & '): sign-in blocked, sessions revoked'
-               & (inputs.removeMethods = true ? (steps.removeMethods.status in ['succeeded', 'planned'] ? ', MFA methods removed' : ', MFA methods could not be removed') : '')
-               & '. ' & inputs.reason, 0, 1000) }
-
       - id: containOther
         type: manual
         instructions: |
@@ -247,7 +225,7 @@ sections:
              : '- **Mail.** The account has no mailbox address; nothing to check in Exchange Online.' }
         checklist:
           - "Exchange Online: inbox rules the user didn't create turned off or removed, mailbox forwarding cleared, delegates checked"
-          - "Defender: isolate any device the attacker used"
+          - "Devices registered or joined in the user's name that they don't recognise removed; a managed device suspected of malware wiped from its Intune device page"
           - "Synced account: also disable it and reset the password in on-premises AD"
 
   - id: investigate
@@ -317,7 +295,6 @@ sections:
             review them on the [user's Roles tab](/p/identity.user?id=${ $encode(inputs.userId) }&tab=roles) and remove
             standing assignments that are not needed.
           - **${ steps.findings.output.methodsLeft }** MFA methods still registered.
-          - Use [Alerts](/p/security.alerts) and [Incidents](/p/security.incidents) for correlated activity.
         checklist:
           - Malicious directory changes reverted
           - Suspicious app consents revoked and the apps disabled
@@ -380,16 +357,15 @@ sections:
   - id: close
     title: 5. Close
     body: |
-      Record what happened and keep watching the account for two weeks. Resolve the Defender incident as
-      **True positive / Compromised account** with a short summary of what was found.
+      Record what happened in the ticket and keep watching the account for two weeks.
     steps:
       - id: closeout
         type: manual
-        instructions: Close the incident.
+        instructions: Close the ticket.
         checklist:
           - The user re-registered MFA (phishing-resistant if possible)
           - User risk shows remediated or dismissed in Identity Protection
-          - Ticket and Defender incident updated with timeline, findings and actions, then resolved
+          - Ticket updated with timeline, findings and actions, then resolved
           - Account added to heightened monitoring for 14 days
           - Root cause recorded (phishing, password reuse, token theft…); detection or policy gaps raised with security engineering
 
@@ -408,8 +384,8 @@ tests:
     errors:
       account: { status: 404, code: Request_ResourceNotFound }
     expect: { status: failed, failedStep: account }
-  - name: walks through containment and recovery with Identity Protection and a Defender incident
-    inputs: { userId: 00000000-0000-4000-8000-000000000102, ticket: INC-1002, reason: Password spray then a successful sign-in from NL, defenderIncidentId: "4224" }
+  - name: walks through containment and recovery with Identity Protection
+    inputs: { userId: 00000000-0000-4000-8000-000000000102, ticket: INC-1002, reason: Password spray then a successful sign-in from NL }
     user: { oid: 00000000-0000-4000-8000-0000000000a1, upn: avery@example.com }
     mocks:
       account: { id: 00000000-0000-4000-8000-000000000102, userPrincipalName: m.chen@example.com, accountEnabled: true, userType: Member, onPremisesSyncEnabled: null }
@@ -426,16 +402,15 @@ tests:
       disable: { summary: Sign-in disabled and sessions revoked for m.chen@example.com }
       confirmCompromised: { summary: m.chen@example.com confirmed compromised }
       removeMethods: { summary: Removed 2 MFA method(s) }
-      incidentNote: { summary: Incident 4224 updated }
       password: { summary: Password reset }
       tap: { summary: Temporary Access Pass issued }
       enable: { summary: Sign-in enabled for m.chen@example.com }
     expect:
       status: succeeded
-      steps: { disable: succeeded, revokeOnly: skipped, confirmCompromised: succeeded, removeMethods: succeeded, incidentNote: succeeded, password: succeeded, tap: succeeded, enable: succeeded, confirmed: skipped }
+      steps: { disable: succeeded, revokeOnly: skipped, confirmCompromised: succeeded, removeMethods: succeeded, password: succeeded, tap: succeeded, enable: succeeded, confirmed: skipped }
       outputs: { summary: "Incident INC-1002 for m.chen@example.com: contained, MFA methods removed, investigated and access restored." }
   - name: says when the MFA methods could not be removed
-    inputs: { userId: 00000000-0000-4000-8000-000000000102, ticket: INC-1002, reason: Password spray then a successful sign-in from NL, defenderIncidentId: "4224" }
+    inputs: { userId: 00000000-0000-4000-8000-000000000102, ticket: INC-1002, reason: Password spray then a successful sign-in from NL }
     user: { oid: 00000000-0000-4000-8000-0000000000a1, upn: avery@example.com }
     mocks:
       account: { id: 00000000-0000-4000-8000-000000000102, userPrincipalName: m.chen@example.com, accountEnabled: true, userType: Member, onPremisesSyncEnabled: null }
@@ -451,7 +426,6 @@ tests:
       methodsNow: { value: [{ "@odata.type": "#microsoft.graph.passwordAuthenticationMethod", id: 28c10230-6103-485e-b985-444c60001490 }] }
       disable: { summary: Sign-in disabled and sessions revoked for m.chen@example.com }
       confirmCompromised: { summary: m.chen@example.com confirmed compromised }
-      incidentNote: { summary: Incident 4224 updated }
       password: { summary: Password reset }
       tap: { summary: Temporary Access Pass issued }
       enable: { summary: Sign-in enabled for m.chen@example.com }
@@ -459,9 +433,9 @@ tests:
       removeMethods: { status: 403, code: Authorization_RequestDenied }
     expect:
       status: succeeded
-      steps: { disable: succeeded, revokeOnly: skipped, confirmCompromised: succeeded, removeMethods: failed, incidentNote: succeeded, password: succeeded, tap: succeeded, enable: succeeded, confirmed: skipped }
+      steps: { disable: succeeded, revokeOnly: skipped, confirmCompromised: succeeded, removeMethods: failed, password: succeeded, tap: succeeded, enable: succeeded, confirmed: skipped }
       outputs: { summary: "Incident INC-1002 for m.chen@example.com: contained, MFA methods could not be removed (see the run), investigated and access restored." }
-  - name: skips Identity Protection, the incident note and cloud recovery for a disabled synced account without P2
+  - name: skips Identity Protection and cloud recovery for a disabled synced account without P2
     inputs: { userId: 30000000-0000-4000-8000-000000000005, ticket: INC-1003, reason: SOC confirmed token theft from a managed device, removeMethods: false, tapForRecovery: false }
     user: { oid: 00000000-0000-4000-8000-0000000000a1, upn: avery@example.com }
     mocks:
@@ -477,5 +451,5 @@ tests:
     expect:
       status: succeeded
       plan: [revokeOnly]
-      steps: { disable: skipped, confirmCompromised: skipped, removeMethods: skipped, incidentNote: skipped, password: skipped, tap: skipped, enable: skipped }
+      steps: { disable: skipped, confirmCompromised: skipped, removeMethods: skipped, password: skipped, tap: skipped, enable: skipped }
       outputs: { summary: "Incident INC-1003 for eli.obrien@example.com: contained, investigated and access restored." }

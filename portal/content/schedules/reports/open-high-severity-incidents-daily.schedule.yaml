@@ -1,15 +1,18 @@
 $schema: ../../../packages/schemas/generated/schedule.schema.json
 kind: schedule
 id: reports.open-high-severity-incidents-daily
-version: 1.0.0
+version: 1.1.0
 title: Daily open high-severity incidents report
 summary: >-
-  Every weekday at 07:00 UTC, writes the open high-severity Defender XDR incidents (with owner and age) as XLSX for the morning security stand-up.
+  Retired — AdminForge doesn't cover the Microsoft Defender portal. Every weekday at 07:00 UTC, writes the open high-severity Defender XDR incidents (with owner and age) as XLSX for the morning security stand-up.
+# Retired: AdminForge doesn't cover the Microsoft Defender portal (security operations). To bring it back, set
+# status: active and enabled: true, and bump the version.
+status: retired
 owner: security-team
 tags: [security, incidents, report]
 cron: "0 7 * * 1-5"
 timezone: UTC
-enabled: true
+enabled: false
 identity: automation
 job:
   kind: report

@@ -1,11 +1,14 @@
 $schema: ../../../packages/schemas/generated/page.schema.json
 kind: page
 id: security.device-vulnerabilities
-version: 1.0.1
+version: 1.1.0
 title: Device vulnerabilities
 summary: >-
-  Software vulnerabilities (CVEs) on onboarded devices from Microsoft Defender Vulnerability Management: the most
+  Retired — AdminForge doesn't cover the Microsoft Defender portal. Software vulnerabilities (CVEs) on onboarded devices from Microsoft Defender Vulnerability Management: the most
   exposed devices, and the CVEs that affect the most devices, with CVSS score and whether an exploit is known.
+# Retired: AdminForge doesn't cover the Microsoft Defender portal (security operations). To bring it back, set
+# status: active and bump the version.
+status: retired
 owner: security-team
 tags: [security, defender, vulnerabilities, endpoint, kql]
 template: list-detail

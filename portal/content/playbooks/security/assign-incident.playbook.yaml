@@ -1,9 +1,12 @@
 $schema: ../../../packages/schemas/generated/playbook.schema.json
 kind: playbook
 id: security.assign-incident
-version: 1.0.0
+version: 1.1.0
 title: Assign incident
-summary: Assigns a Microsoft Defender XDR incident to an analyst. Already-assigned incidents are left as they are.
+summary: Retired — AdminForge doesn't cover the Microsoft Defender portal. Assigns a Microsoft Defender XDR incident to an analyst. Already-assigned incidents are left as they are.
+# Retired: AdminForge doesn't cover the Microsoft Defender portal (security operations). To bring it back, set
+# status: active and bump the version.
+status: retired
 owner: security-team
 tags: [security, defender, incidents, triage]
 risk: low

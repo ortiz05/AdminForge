@@ -1,9 +1,12 @@
 $schema: ../../../packages/schemas/generated/page.schema.json
 kind: page
 id: security.secure-score
-version: 1.1.0
+version: 1.2.0
 title: Secure Score
-summary: Microsoft Secure Score trend, comparison and the improvement actions that would raise it, ranked by points available.
+summary: Retired — AdminForge doesn't cover the Microsoft Defender portal. Microsoft Secure Score trend, comparison and the improvement actions that would raise it, ranked by points available.
+# Retired: AdminForge doesn't cover the Microsoft Defender portal (security operations). To bring it back, set
+# status: active and bump the version.
+status: retired
 owner: security-team
 tags: [security, secure-score, posture]
 template: dashboard

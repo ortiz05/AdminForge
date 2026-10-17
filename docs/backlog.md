@@ -294,22 +294,24 @@ Found by the organization and security evaluation; the fixed findings are in CHA
 - [ ] Intune `managedDevices` `$filter`: the query-builder fields/operators on `endpoint.devices` (eq, OS version
       startsWith, date ranges, enrolment type, management state, encryption) follow Microsoft's documentation but are
       not live-validated (no Intune licence). Trim any Intune rejects.
-- [ ] Defender device links (`security.microsoft.com/machines/v2/<id>/overview`) and CVE links: confirm the URL formats
+- [x] Dropped 2026-10-17 with the Defender portal content (retired, see `docs/licensing-review.md`): the five items
+      below. Reopen them only if that content comes back.
+- [ ] ~~Defender device links (`security.microsoft.com/machines/v2/<id>/overview`) and CVE links~~: confirm the URL formats
       on a tenant with Defender for Endpoint. Still unverified (2026-10-16): the validation tenant has Office 365 E5
       only, and `security.device-vulnerabilities` is gated on `defenderEndpoint`.
-- [ ] Defender XDR isn't set up in the validation tenant: Graph answers 403 "Account is not provisioned" for incidents,
+- [ ] ~~Defender XDR live check~~: Defender XDR isn't set up in the validation tenant: Graph answers 403 "Account is not provisioned" for incidents,
       alerts and advanced hunting, although Office 365 E5 licenses them. After a Global Administrator opens
       security.microsoft.com once, live-check the following: `security.overview`, the incidents and alerts pages,
       `security.open-high-severity-incidents`, `security.alerts-summary` and their schedules, the two Defender probes,
       and hunting on EmailEvents in Query Studio. Then run `security.assign-incident` / `security.update-incident`
       (dry run → run → compensate) only on a test incident (for example from an attack-simulation or user-reported
       test message), never a real one.
-- [ ] `probes.risky-oauth-consents` reads CloudAppEvents. Confirm whether Office 365 Cloud App Security (`ADALLOM_S_O365`,
+- [ ] ~~`probes.risky-oauth-consents` source~~: it reads CloudAppEvents. Confirm whether Office 365 Cloud App Security (`ADALLOM_S_O365`,
       in Office 365 E5) fills it with consent events. If only Defender for Cloud Apps does, declare that licence on the
       probe.
-- [ ] `defender` lists `ATP_ENTERPRISE` (Defender for Office 365 Plan 1). Plan 1 alone probably doesn't give Defender
+- [ ] ~~Narrow the `defender` plan list~~: `defender` lists `ATP_ENTERPRISE` (Defender for Office 365 Plan 1). Plan 1 alone probably doesn't give Defender
       XDR incidents or advanced hunting: confirm on a Plan 1 tenant and narrow the plan list.
-- [ ] Email threats (Defender for Office 365 Plan 2, licensed now): build a report on EmailEvents /
+- [ ] ~~Email threats report~~ (Defender for Office 365 Plan 2, licensed now): build a report on EmailEvents /
       EmailPostDeliveryEvents (phish and malware delivered, ZAP results, user-reported messages) once hunting works in
       the tenant.
 - [x] The leaver runbook (`identity.leaver` 1.2) no longer lists the mailbox and OneDrive tasks as manual: step 3 says

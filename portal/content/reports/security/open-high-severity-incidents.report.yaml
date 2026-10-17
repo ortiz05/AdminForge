@@ -1,9 +1,12 @@
 $schema: ../../../packages/schemas/generated/report.schema.json
 kind: report
 id: security.open-high-severity-incidents
-version: 1.0.0
+version: 1.1.0
 title: Open high-severity incidents
-summary: Every Microsoft Defender XDR incident that is still open at high (or high and medium) severity, oldest first, with age and ownership.
+summary: Retired — AdminForge doesn't cover the Microsoft Defender portal. Every Microsoft Defender XDR incident that is still open at high (or high and medium) severity, oldest first, with age and ownership.
+# Retired: AdminForge doesn't cover the Microsoft Defender portal (security operations). To bring it back, set
+# status: active and bump the version.
+status: retired
 owner: security-team
 tags: [security, defender, incidents, report]
 nav: { section: reports, label: Open high-severity incidents, icon: siren, order: 150 }

@@ -1,9 +1,12 @@
 $schema: ../../../packages/schemas/generated/page.schema.json
 kind: page
 id: security.incident
-version: 1.1.0
+version: 1.2.0
 title: Incident
-summary: One Microsoft Defender XDR incident — status, correlated alerts, impacted assets and analyst comments.
+summary: Retired — AdminForge doesn't cover the Microsoft Defender portal. One Microsoft Defender XDR incident — status, correlated alerts, impacted assets and analyst comments.
+# Retired: AdminForge doesn't cover the Microsoft Defender portal (security operations). To bring it back, set
+# status: active and bump the version.
+status: retired
 owner: security-team
 tags: [security, defender, incidents]
 template: entity

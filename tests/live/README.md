@@ -111,7 +111,7 @@ Run from the repository root with `pnpm exec tsx tests/live/scripts/<script>.ts`
   still never posts to Teams. Prints the run status, reason codes, file row counts and delivery statuses. A report
   whose `optional` datasource failed ends `failed — report_incomplete` (the file is still written). Keys are
   definition ids (`probes.graph-reachability`,
-  `reports.secure-score-summary-weekly`). No browser sign-in: it doesn't need the validation user.
+  `reports.app-credential-expiry-daily`). No browser sign-in: it doesn't need the validation user.
 
 - **`check-mail-sender.ts [--not-as <display name>]… [--sender-name <display name>]`** — report email through
   AdminForge's own notifier as the automation identity, without mailing anyone: one short message from

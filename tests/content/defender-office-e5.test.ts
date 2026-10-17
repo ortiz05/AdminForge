@@ -11,7 +11,8 @@ import { repoRoot } from '../lib/repo';
 // Microsoft Defender content as an Office 365 E5 tenant sees it (Defender for Office 365 Plan 2, no Defender for
 // Endpoint): Secure Score before Microsoft has calculated the first score, the control catalogue listing controls the
 // tenant isn't licensed for, mixed-case cost/impact ratings, and email evidence on incidents and alerts. Shapes follow
-// what Graph returned live on 2026-10-16 (values synthetic).
+// what Graph returned live on 2026-10-16 (values synthetic). This content is retired (AdminForge doesn't cover the
+// Defender portal); the tests stay so it still works if it is brought back.
 
 const NOW = '2026-10-15T12:00:00Z';
 const CONTENT = path.join(repoRoot, 'portal/content');
@@ -55,7 +56,8 @@ afterAll(() => registry.close());
 
 /** One datasource, exactly as the portal runs it in mock mode. */
 async function run(id: string, datasource: string, params: Record<string, unknown> = {}): Promise<Def> {
-  const page = await runner.page(id);
+  // The exact version, so retired definitions (kept for history, never the latest) still run here.
+  const page = await runner.page(id, def(id).version);
   const values = await runner.prepareParams(page, params, USER);
   const out = await runner.run({
     identity: { kind: 'automation', mode: 'read' },
@@ -100,14 +102,6 @@ describe('Secure Score before the first score is calculated (new tenant)', () =>
     );
     // The catalogue alone says nothing about what counts for this tenant: no rows, no invented points.
     expect(actions).toMatchObject({ pending: true, rows: [], pointsAvailable: null });
-  });
-
-  it('the dashboard KPI stays empty instead of reading 0 %', async () => {
-    expect(await transform('security.overview', 'score', { value: [] })).toMatchObject({
-      trend: [],
-      percent: null,
-      delta: null,
-    });
   });
 
   it('pages say why, and KPI tones never treat a missing score as critical', async () => {

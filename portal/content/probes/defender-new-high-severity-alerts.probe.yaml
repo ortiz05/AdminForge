@@ -1,13 +1,15 @@
 $schema: ../../packages/schemas/generated/probe.schema.json
 kind: probe
 id: probes.defender-new-high-severity-alerts
-version: 1.0.1
+version: 1.1.0
 title: No untriaged high-severity Defender alerts
 summary: >-
-  Critical while a high-severity Microsoft Defender XDR or Entra ID Protection alert is still New (nobody has started
-  on it). Open Security → Alerts with "New high severity" to triage it; the Defender alerts summary report has the
-  weekly picture. Needs a Defender licence (Office 365 E5 / Defender for Office 365 Plan 2 is enough) and Defender XDR
+  Retired — AdminForge doesn't cover the Microsoft Defender portal. Critical while a high-severity Microsoft Defender
+  XDR or Entra ID Protection alert is still New (nobody has started on it). Needs a Defender licence and Defender XDR
   set up for the tenant; until then the probe reports why it can't check instead of a status.
+# Retired: AdminForge doesn't cover the Microsoft Defender portal (security operations). To bring it back, set
+# status: active and bump the version.
+status: retired
 owner: security-team
 tags: [synthetic, security, defender, alerts, sweep-15m]
 check:

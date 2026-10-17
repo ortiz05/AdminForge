@@ -1,17 +1,20 @@
 $schema: ../../../packages/schemas/generated/schedule.schema.json
 kind: schedule
 id: reports.alerts-summary-weekly
-version: 1.0.0
+version: 1.1.0
 title: Weekly Defender alerts summary
 summary: >-
-  Every Monday at 07:50 UTC, writes every Defender and Entra ID Protection alert of the last 7 days (severity,
+  Retired — AdminForge doesn't cover the Microsoft Defender portal. Every Monday at 07:50 UTC, writes every Defender and Entra ID Protection alert of the last 7 days (severity,
   status, product, owner, time to resolve) as XLSX and emails it to the report recipients for the weekly security
   review.
+# Retired: AdminForge doesn't cover the Microsoft Defender portal (security operations). To bring it back, set
+# status: active and enabled: true, and bump the version.
+status: retired
 owner: security-team
 tags: [security, defender, alerts, report]
 cron: "50 7 * * 1"
 timezone: UTC
-enabled: true
+enabled: false
 identity: automation
 job:
   kind: report

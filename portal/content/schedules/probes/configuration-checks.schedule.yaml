@@ -1,13 +1,12 @@
 $schema: ../../../packages/schemas/generated/schedule.schema.json
 kind: schedule
 id: sweep.configuration-checks
-version: 1.1.0
+version: 1.1.1
 title: KQL configuration checks
 summary: >-
   Every 6 hours (00:40, 06:40, 12:40, 18:40 UTC), runs every active probe tagged config-check: KQL checks over Azure
-  Resource Graph and advanced hunting — storage exposure, open management ports, Key Vault, Arc, policy, Defender
-  recommendations, tags, risky consents, stale disks, VM backup, privileged RBAC, wildcard custom roles and public
-  databases. Offending resources are kept on each result.
+  Resource Graph — storage exposure, open management ports, Key Vault, Arc, policy, Defender for Cloud
+  recommendations, tags, stale disks, VM backup, privileged RBAC, wildcard custom roles and public databases. Offending resources are kept on each result.
 owner: portal-admins
 tags: [synthetic, probe-sweep, kql, configuration]
 cron: "40 */6 * * *"

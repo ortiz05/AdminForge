@@ -1,12 +1,15 @@
 $schema: ../../../packages/schemas/generated/report.schema.json
 kind: report
 id: security.alerts-summary
-version: 1.0.0
+version: 1.1.0
 title: Defender alerts by severity and status
 summary: >-
-  Every Microsoft Defender XDR and Entra ID Protection alert raised in the chosen period, by severity, status and
+  Retired — AdminForge doesn't cover the Microsoft Defender portal. Every Microsoft Defender XDR and Entra ID Protection alert raised in the chosen period, by severity, status and
   detecting product — with what is still open, who owns it and how long resolved alerts took — for the weekly security
   review.
+# Retired: AdminForge doesn't cover the Microsoft Defender portal (security operations). To bring it back, set
+# status: active and bump the version.
+status: retired
 owner: security-team
 tags: [security, defender, alerts, report]
 nav: { section: reports, label: Defender alerts summary, icon: warning, order: 152 }

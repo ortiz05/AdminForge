@@ -1,9 +1,12 @@
 $schema: ../../../packages/schemas/generated/playbook.schema.json
 kind: playbook
 id: security.update-incident
-version: 1.0.0
+version: 1.1.0
 title: Update incident status
-summary: Sets the status, classification and determination of a Microsoft Defender XDR incident and adds an analyst comment.
+summary: Retired — AdminForge doesn't cover the Microsoft Defender portal. Sets the status, classification and determination of a Microsoft Defender XDR incident and adds an analyst comment.
+# Retired: AdminForge doesn't cover the Microsoft Defender portal (security operations). To bring it back, set
+# status: active and bump the version.
+status: retired
 owner: security-team
 tags: [security, defender, incidents, triage]
 risk: medium

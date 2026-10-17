@@ -105,6 +105,14 @@ request syntax (it checks `$select`/`$expand`/`$filter` before licensing).
 
 ## Microsoft Defender with Office 365 E5 (2026-10-16)
 
+**Retired (2026-10-17).** AdminForge no longer covers the Microsoft Defender portal (security.microsoft.com): every
+definition in the table below is retired (`status: retired`, kept for run and audit history), the security overview
+dashboard keeps only risky users and Defender for Cloud, and `identity.compromised-account` 3.0 no longer comments on a
+Defender incident. Retired content earns no permissions, so `provision entra` no longer grants `SecurityIncident.*`,
+`SecurityAlert.Read.All`, `SecurityEvents.Read.All` or `ThreatHunting.Read.All` and drops them from the delegated
+consent; application permissions the automation identity already holds are removed with `provision entra --prune`.
+The findings stay for anyone who brings the content back.
+
 The validation tenant now has Office 365 E5: Defender service plans `MTP`, `THREAT_INTELLIGENCE` (Defender for Office
 365 Plan 2), `ATP_ENTERPRISE` and `ADALLOM_S_O365` (Office 365 Cloud App Security). No Defender for Endpoint
 (`WINDEFATP`), Defender for Identity or full Defender for Cloud Apps. Checked read-only with the validation user (Global
@@ -118,7 +126,7 @@ Reader) and the automation identity.
 | Secure Score: `security.secure-score`, the dashboard KPI, `security.secure-score-summary` and its weekly schedule                                                                                                                                             | No licence gate. `SecurityEvents.Read.All` (delegated and application)                                                                                                                               | **Works.** There was no snapshot early on 2026-10-16 (the pages now say "not calculated yet"); the first one arrived later that day. The snapshot's `maxScore` equals the sum of its `controlScores` controls' maximum points (verified). `secureScoreControlProfiles` also lists controls for products the tenant lacks (462 controls: 186 Defender for Endpoint, 79 Defender for Identity, SaaS connectors), so actions now come from `controlScores` only. Cost and impact come in mixed case or as "Unknown". `averageComparativeScores[].averageScore` is a percentage. The weekly schedule ran once with delivery suppressed and succeeded. |
 | Device vulnerabilities (`security.device-vulnerabilities`), Defender device and CVE links                                                                                                                                                                     | `defenderEndpoint`: `WINDEFATP`, or the `TVM_PREMIUM_1` add-on                                                                                                                                       | **Gated correctly:** the page shows "Requires Microsoft Defender for Endpoint Plan 2 (WINDEFATP)". Before this fix, the web gate mapped `WINDEFATP` to `defender`, which Office 365 E5 satisfies.                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 
-**To unblock incidents, alerts and hunting:** a Global Administrator or Security Administrator signs in to the Microsoft
+**To unblock incidents, alerts and hunting (if the content is brought back):** a Global Administrator or Security Administrator signs in to the Microsoft
 Defender portal (security.microsoft.com) once. Microsoft then sets up the tenant's Defender XDR data, which can take a
 few hours. After that, run `tests/live/scripts/check-page-datasources.ts` again for the Defender pages and reports, and
 run the two probes and the alerts schedule with `run-schedule-once.ts`.
@@ -171,7 +179,7 @@ Microsoft 365 E5 (`SPE_E5`) includes Entra ID P1 and P2 and Intune. Checked live
 the validation user (User Administrator, Global Reader, Message Center Reader eligible) against the Phase 1 fixtures
 (test licences, PIM eligibility, `AF-Test-Location`, the AF-Test Intune policies) and 14 report-only `AF-Audit:`
 Conditional Access policies. 31 list pages, dashboards and reports (63 datasources), 9 entity pages, 2 probes and
-8 report schedules: all read paths work except Defender XDR (2d, not set up yet).
+8 report schedules: all read paths work. Defender XDR (area 2d) was dropped: the Defender portal content is retired.
 
 | Feature                                                                                       | Needs                                                                                                                          | Verified live                                                                                                                                                                                                                                                                                                                                                |
 | --------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |

@@ -1,9 +1,12 @@
 $schema: ../../../packages/schemas/generated/page.schema.json
 kind: page
 id: security.alert
-version: 1.1.0
+version: 1.2.0
 title: Alert
-summary: One Microsoft Defender alert — what happened, recommended actions, evidence and comments.
+summary: Retired — AdminForge doesn't cover the Microsoft Defender portal. One Microsoft Defender alert — what happened, recommended actions, evidence and comments.
+# Retired: AdminForge doesn't cover the Microsoft Defender portal (security operations). To bring it back, set
+# status: active and bump the version.
+status: retired
 owner: security-team
 tags: [security, defender, alerts]
 template: entity

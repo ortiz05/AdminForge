@@ -11,8 +11,9 @@ schedules, synthetic probes, and KQL configuration checks are declarative conten
   apps (credential expiry), Entra devices, Conditional Access, named locations, auth methods, sign-in and audit logs.
 - **Microsoft 365**: service health, message center, licences, usage, Exchange mailboxes and distribution lists
   (PowerShell runner), Teams, SharePoint.
-- **Endpoint & Security**: Intune devices/compliance/configuration/apps/autopilot; Defender incidents/alerts,
-  Secure Score, risky users, Defender for Cloud.
+- **Endpoint & Security**: Intune devices/compliance/configuration/apps/autopilot; risky users (Identity Protection),
+  Defender for Cloud. The Microsoft Defender portal (incidents, alerts, hunting, Secure Score) is out of scope; that
+  content is retired.
 - **Azure**: subscriptions, Resource Graph inventory, resource detail, Azure Arc, monitoring (alerts, metrics,
   Log Analytics), Function Apps, RBAC.
 - **Automation**: playbooks (dry-run preview → confirm → run; approvals; bulk; show-once secrets), runbooks,

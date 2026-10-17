@@ -45,9 +45,9 @@ every utility, script and tool should be organised so it can be maintained on it
 | #   | Action                                                                                                                                   | Unblocks                                                               |
 | --- | ---------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
 | 0.1 | Assign Microsoft 365 E5 to every real person who needs it — when moving from another subscription, assign the new licence before removing the old one, and make sure nobody is left unlicensed when the old one lapses | Keeps their mailbox and OneDrive; Teams for them                       |
-| 0.2 | Sign in once to the Microsoft Defender portal (security.microsoft.com) as Global or Security Administrator                                | Defender XDR data provisioning (incidents, alerts, hunting) and Defender for Endpoint onboarding |
+| 0.2 | ~~Sign in once to the Microsoft Defender portal~~ — dropped 2026-10-17: AdminForge doesn't cover the Defender portal (its content is retired) | — |
 | 0.3 | Decide **Security Defaults vs Conditional Access**: Conditional Access policies can't be created while Security Defaults is on. Either keep Security Defaults (CA pages are validated read-only against an empty policy list) or switch to a Conditional Access baseline (require MFA for admins and all users, block legacy authentication) and turn Security Defaults off | Validating the CA pages against real policies, report-only test policy |
-| 0.4 | Enrol one test Windows device (a VM is fine) into Intune and onboard it to Defender for Endpoint, named `AF-Test-*`                        | Device pages, compliance state, device actions, vulnerabilities         |
+| 0.4 | Enrol one test Windows device (a VM is fine) into Intune, named `AF-Test-*`                                                              | Device pages, compliance state, device actions                          |
 | 0.5 | Allow test identities to consume E5 seats (the validation user and AF-Test-User-01..03: four seats)                                      | Licensed test mailboxes, OneDrives, Teams, PIM activation for the tester |
 | 0.6 | Rotate the provisioner secret (it was shared in chat) and remove the provisioner's admin role between provisioning runs                  | Security hygiene                                                       |
 
@@ -98,7 +98,7 @@ and item 6 (a risky user on demand — belongs to the Identity Protection live c
 | 2a Entra ID P1             | sign-ins (list, detail, user page panels), auth registration, users without MFA, inactive users/guests, CA policies and named locations, dynamic rule edit | every datasource as the tester; filters and facets on sign-ins; KQL-free `$filter` limits; empty-tenant states |
 | 2b Entra ID P2             | PIM page, role page, privileged role assignments; add/remove eligibility, activate; risky users and runbook | eligibility add → remove on AF-Test-User-01; tester activates its eligible role; confirm/dismiss on AF-Test-User-03 |
 | 2c Intune                  | devices, device page, compliance, configuration, apps, Autopilot, six endpoint reports, device actions | `managedDevices` query-builder `$filter` fields (backlog), report POST endpoints as reads (backlog), actions on the AF-Test device only |
-| 2d Defender XDR + Endpoint | incidents, alerts, hunting (email and device tables), vulnerabilities, device and CVE links   | after 0.2/0.4; incident playbooks on a test incident only                                                           |
+| 2d Defender XDR + Endpoint | **Dropped 2026-10-17** — the Defender portal content is retired (see below)                    | —                                                                                                                   |
 | 2e Licence plumbing        | playbook preflight checks feature keys, not only SKU names (backlog); one Entra P1 feature key across API and widget (backlog) | a playbook needing `pim` shows no false "Requires …"                                                                |
 
 Schedules and probes of each area are checked once as the automation identity with
@@ -111,7 +111,15 @@ show the Phase 1 fixtures. Fixes: the sign-in page filters the sign-ins list ins
 risky-user playbooks and runbooks filter `riskyUsers` instead of reading a user who was never at risk. PIM activation
 ran for real. Open: Identity Protection writes need Security Operator for the validation user (owner decision), device
 pages and actions wait for 0.4, `userRegistrationDetails` reports need 24–48 h, report-only CA results need sign-ins
-after the `AF-Audit:` policies; 2d waits for 0.2. Details: `docs/licensing-review.md`, `docs/backlog.md`.
+after the `AF-Audit:` policies. Details: `docs/licensing-review.md`, `docs/backlog.md`.
+
+**Scope change (2026-10-17):** the owner decided AdminForge is not a security-operations tool: nothing is read from the
+Microsoft Defender portal. Incidents, alerts, advanced hunting, Secure Score, device vulnerabilities, the incident
+playbooks and the reports, schedules and probes built on them are retired (`status: retired`); the security overview
+keeps risky users and Defender for Cloud, and the Defender XDR news feeds stay (public pages). Retired content earns no
+permissions: `provision entra` drops the delegated Defender scopes and `provision entra --prune` the automation
+identity's Defender application permissions. Query Studio's advanced hunting is switched off with `AF_QUERY_SOURCES`
+(the Read app then gets no `ThreatHunting.Read.All`). 0.2 and 2d are dropped; Identity Protection and Defender for Cloud stay.
 
 ## Phase 3 — unattended work and delivery
 
@@ -129,7 +137,7 @@ after the `AF-Audit:` policies; 2d waits for 0.2. Details: `docs/licensing-revie
   people who had a licence are left without one.
 - **Least privilege:** remove the automation identity's unused `TeamSettings.Read.All` and `Device.Read.All`; review
   the tester's opt-in service roles (`AF_TEST_SERVICE_ADMIN_ROLES`) against scoped alternatives (backlog).
-- **Data freshness** checks for Defender, Intune and usage reports (they arrive late in new tenants) so empty pages
+- **Data freshness** checks for Intune and usage reports (they arrive late in new tenants) so empty pages
   explain themselves.
 
 ## Phase 5 — tooling: organised, modular, documented
@@ -183,7 +191,7 @@ content scripts, deploy scripts, the live-validation scripts and the test harnes
 ## Order and acceptance
 
 1. Phase 0 (owner) and Phase 5 (tooling) can start at once; Phase 1 needs 0.5 (and 0.3 for Conditional Access).
-2. Phase 2 areas run in parallel once Phase 1 fixtures exist; 2d also needs 0.2 and 0.4.
+2. Phase 2 areas run in parallel once Phase 1 fixtures exist; device actions in 2c need 0.4.
 3. Phases 3 and 4 follow their areas.
 
 Done when, for each area: every definition's datasources answer on the host as the validation user (or explain a

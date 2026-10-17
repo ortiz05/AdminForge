@@ -76,6 +76,15 @@ Run from the repository root with `pnpm exec tsx tests/live/scripts/<script>.ts`
   datasource failed (licence-gated ones included — read the codes). Entity pages take their params after a `?`, as
   placeholders (`'identity.user?id=@user:AF-Test-User-01'`; a literal id works but stays in your shell history); params are
   never printed, and a placeholder that doesn't resolve fails that page only.
+- **`check-accuracy.ts [<definition id substring>…]`** — live accuracy (docs/enterprise-scenarios.md › Live accuracy):
+  runs the datasources of the list pages, entity pages, KPIs and reports whose answers the test fixtures make known,
+  as the validation user through the deployed portal (`PUBLIC_BASE_URL=https://<lan-address>:8443
+AF_LIVE_INSECURE_TLS=1` for the host services), and compares them with the fixture catalogue (imported from
+  `portal/tools/cli/src/provision/*-fixture-*`) and an independent Graph read (the automation identity, read-only;
+  the provisioner only where it can't read). One line per check: ✓ match, ✗ mismatch (field, expected vs shown),
+  ≈ documented difference (with the Microsoft reason), · not knowable (not published here, no permission). Exit code 1
+  on an unexplained mismatch. Masked: AF-Test names only. Definitions not published on the instance show as not
+  knowable — re-run after `pnpm adminforge publish`.
 - **`run-playbook.ts <playbook> '<inputs JSON>' [--confirm-from <stepId>.<field>]`** — signs in, arms, previews
   (retrying through Graph replication lag) and runs one playbook. Inputs may name the test objects instead of ids —
   placeholders resolve as the validation user through the portal itself, so no ids or addresses go on the command

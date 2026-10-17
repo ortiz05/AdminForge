@@ -46,7 +46,7 @@ describe('POST /api/schedules', () => {
       title: 'Inactive users, weekly',
       summary: 'For the identity team.',
       cron: '0 6 * * 1',
-      cronText: 'Every Monday at 06:00',
+      cronText: 'Every Monday at 06:00 Europe/London',
       timezone: 'Europe/London',
       enabled: true,
       identity: 'automation',

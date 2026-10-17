@@ -24,7 +24,16 @@ import { RunNowButton, ScheduleToggle } from './ScheduleControls';
 import { JOB_LABEL, runStatusView, schedulesQuery, type ScheduleItem } from './schedules';
 import { Callout, useDocumentTitle } from './ui';
 
-export const cadenceOf = (s: ScheduleItem) => s.cronText ?? describeCron(s.cron, s.timezone);
+/** The cadence in English with the browser's clock, naming the zone (the API's `cronText` only for custom shapes). */
+const cadenceWithoutZone = (s: ScheduleItem) => {
+  const text = describeCron(s.cron, s.timezone, { zone: false });
+  return text.startsWith('Custom:') && s.cronText ? s.cronText : text;
+};
+
+export const cadenceOf = (s: ScheduleItem) => {
+  const text = describeCron(s.cron, s.timezone);
+  return text.startsWith('Custom:') && s.cronText ? s.cronText : text;
+};
 
 /** Next run: the scheduler's own value, else computed from the cron (disabled schedules have none). */
 export function nextRunOf(s: ScheduleItem, now: number): string | null {
@@ -142,11 +151,14 @@ export function SchedulesPage() {
         kind: 'text',
         value: (s) => cadenceOf(s),
         cell: (s) => (
+          // The zone goes on the second line with the cron, so a long sentence never cuts it off.
           <span className="flex min-w-0 flex-col leading-tight">
             <span className="truncate text-fg-2" title={cadenceOf(s)}>
-              {cadenceOf(s)}
+              {cadenceWithoutZone(s)}
             </span>
-            <span className="truncate font-mono text-2xs text-fg-3">{s.cron}</span>
+            <span className="truncate font-mono text-2xs text-fg-3">
+              {s.cron} · {s.timezone.replace(/_/g, ' ')}
+            </span>
           </span>
         ),
         width: 'minmax(250px, 2fr)',

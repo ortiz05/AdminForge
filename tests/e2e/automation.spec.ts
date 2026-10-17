@@ -230,8 +230,11 @@ test('schedules: cadence in words, pause, enable a write-capable job (approval),
   await page.goto('/schedules');
 
   const grid = page.getByRole('grid', { name: 'Schedules' });
-  await expect(grid.getByText('Every Monday at 07:00 UTC')).toBeVisible();
-  await expect(grid.getByText('Every day at 06:00 Europe/London')).toBeVisible();
+  // The sentence, and the zone on the cron line under it.
+  await expect(grid.getByText('Every Monday at 07:00', { exact: true })).toBeVisible();
+  await expect(grid.getByText('0 7 * * 1 · UTC')).toBeVisible();
+  await expect(grid.getByText('Every day at 06:00', { exact: true })).toBeVisible();
+  await expect(grid.getByText('0 6 * * * · Europe/London')).toBeVisible();
   await expect(page.getByText('Schedules run as the automation identity, not as you')).toBeVisible();
   await expect(page.getByText('1 schedule failed on the last run')).toBeVisible();
 

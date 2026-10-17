@@ -324,8 +324,10 @@ export function SchedulePage({ scheduleKey }: { scheduleKey: string }) {
               <span className="mt-1 block">Approved by {s.approvedBy.join(', ')}.</span>
             )}
           </Callout>
-          <Panel eyebrow="Cadence" title={cadenceOf(s)}>
+          <Panel eyebrow="Cadence" title="When it runs">
             <div className="flex flex-col gap-4">
+              {/* The sentence wraps here (a panel title would cut it off). */}
+              <p className="text-sm font-medium text-fg">{cadenceOf(s)}</p>
               <Facts
                 items={[
                   [
@@ -334,7 +336,7 @@ export function SchedulePage({ scheduleKey }: { scheduleKey: string }) {
                       {s.cron}
                     </code>,
                   ],
-                  ['Time zone', s.timezone],
+                  ['Time zone', s.timezone.replace(/_/g, ' ')],
                   [
                     'Last run',
                     s.lastRunAt

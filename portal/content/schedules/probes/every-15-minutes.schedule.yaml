@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/schedule.schema.json
 kind: schedule
 id: sweep.every-15-minutes
-version: 1.0.0
+version: 1.0.1
 title: Probe sweep every 15 minutes
 summary: >-
   Every 15 minutes, runs every active probe tagged sweep-15m (Microsoft Graph and Azure Resource Manager reachability,
@@ -9,7 +9,7 @@ summary: >-
   automation identity. Tag a probe sweep-15m to add it.
 owner: portal-admins
 tags: [synthetic, probe-sweep]
-cron: "*/15 * * * *"
+every: every 15 minutes
 timezone: UTC
 enabled: true
 identity: automation

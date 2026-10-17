@@ -44,23 +44,30 @@ describe('nextRun', () => {
     ).toEqual(['2026-10-15T12:00:00.000Z', '2026-10-16T00:00:00.000Z', '2026-10-16T12:00:00.000Z']));
 });
 
-describe('describeCron', () => {
+describe('describeCron (the shared describer, 24-hour, naming the zone when given)', () => {
   it.each([
     ['*/15 * * * *', 'Every 15 minutes'],
     ['* * * * *', 'Every minute'],
-    ['7 * * * *', 'Every hour at minute 07'],
+    ['7 * * * *', 'Every hour at :07'],
     ['0 * * * *', 'Every hour, on the hour'],
-    ['20 */6 * * *', 'Every 6 hours at minute 20'],
+    ['20 */6 * * *', 'Every 6 hours at :20'],
     ['15 5 * * *', 'Every day at 05:15'],
-    ['0 6,18 * * *', 'Every day at 06:00, 18:00'],
+    ['0 6,18 * * *', 'Every day at 06:00 and 18:00'],
     ['0 7 * * 1', 'Every Monday at 07:00'],
-    ['0 7 * * 1-5', 'Weekdays at 07:00'],
+    ['0 7 * * 1-5', 'Every weekday (Mon–Fri) at 07:00'],
     ['0 7 * * MON,THU', 'Every Monday and Thursday at 07:00'],
     ['0 7 1 * *', 'On the 1st of every month at 07:00'],
     ['0 7 L * *', 'On the last day of every month at 07:00'],
+    ['30 8 * * 1#1', 'On the first Monday of every month at 08:30'],
     ['@weekly', 'Every Sunday at 00:00'],
     ['0 0 7 * * 1', 'Every Monday at 07:00'],
   ])('%s → %s', (cron, text) => expect(describeCron(cron)).toBe(text));
+  it('names the zone when one is given', () => {
+    expect(describeCron('0 7 * * 1-5', 'Europe/London')).toBe(
+      'Every weekday (Mon–Fri) at 07:00 Europe/London',
+    );
+    expect(describeCron('*/15 * * * *', 'UTC')).toBe('Every 15 minutes (UTC)');
+  });
   it.each(['0 0 1 JAN,JUL ?', '0-30/10 8-18 1-15 * 0,6', '30 0 7 * * *'])('returns null for %s', (cron) =>
     expect(describeCron(cron)).toBeNull(),
   );

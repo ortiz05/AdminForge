@@ -1,7 +1,9 @@
 import {
   DefinitionId,
+  describeCron as describeShared,
   formatContentError,
   parseDefinition,
+  parseSchedule,
   PORTAL_SCHEDULE_PREFIX,
   TimeZone,
   validateCron,
@@ -10,7 +12,7 @@ import { stringify } from 'yaml';
 import { z } from 'zod';
 import { AppError } from '../errors';
 import { assertNoTenantValues, type TenantValue } from '../query/scaffold';
-import { describeCron, nextRuns } from './cron';
+import { describeCron, nextRuns, runsTooOften } from './cron';
 
 /**
  * The schedule editor (R6): turns the form into schedule YAML the engineer commits through the normal review workflow
@@ -31,66 +33,104 @@ const RecipientKey = z
   );
 const Section = z.string().regex(/^[a-z][a-z0-9-]*$/);
 
-export const ScheduleScaffoldRequest = z.object({
-  title: z.string().trim().min(1).max(120),
-  /** `<section>.<name>`; default `<section>.<slug of title>`. */
-  key: DefinitionId.optional(),
-  section: Section.optional(),
-  summary: z.string().trim().max(500).optional(),
-  owner: z.string().trim().min(1).max(100).optional(),
-  cron: z.string().trim().min(1).max(100),
-  timezone: TimeZone,
-  enabled: z.boolean().default(true),
-  job: z.discriminatedUnion('kind', [
-    z.object({
-      kind: z.literal('report'),
-      ref: DefinitionId,
-      format: z.enum(['csv', 'xlsx', 'json']).default('xlsx'),
-      /** Keep the newest N files. */
-      retain: z.number().int().min(1).max(1000).optional(),
-      /** Env key holding recipient addresses (comma-separated); addresses are configuration, never content. */
-      emailEnv: RecipientKey.optional(),
-      /** Env key holding a Teams workflow webhook URL. */
-      teamsWebhookEnv: EnvKey.optional(),
-    }),
-    z.object({ kind: z.literal('probe'), tags: z.array(z.string().trim().min(1)).min(1).max(5) }),
-    z.object({
-      kind: z.literal('playbook'),
-      ref: DefinitionId,
-      mode: z.enum(['read', 'write']).default('read'),
-      inputs: z.record(z.string(), z.unknown()).optional(),
-      /** Content review note for write jobs (the in-app two-person approval is what enables it). */
-      reviewedBy: z.array(z.string().trim().min(1)).max(5).optional(),
-      dryRun: z.boolean().optional(),
-    }),
-    z.object({ kind: z.literal('contentHealth'), scopes: z.boolean().optional() }),
-  ]),
-  retries: z.number().int().min(0).max(10).default(2),
-  timeoutSeconds: z.number().int().min(60).max(14_400).optional(),
-  notifyOnFailure: z
-    .object({ emailEnv: RecipientKey.optional(), teamsWebhookEnv: EnvKey.optional() })
-    .optional(),
-});
+export const ScheduleScaffoldRequest = z
+  .object({
+    title: z.string().trim().min(1).max(120),
+    /** `<section>.<name>`; default `<section>.<slug of title>`. */
+    key: DefinitionId.optional(),
+    section: Section.optional(),
+    summary: z.string().trim().max(500).optional(),
+    owner: z.string().trim().min(1).max(100).optional(),
+    /** Cron — or `every`, the same in English ("every weekday at 07:00"), which the YAML then carries instead. */
+    cron: z.string().trim().min(1).max(100).optional(),
+    every: z.string().trim().min(1).max(200).optional(),
+    timezone: TimeZone,
+    enabled: z.boolean().default(true),
+    job: z.discriminatedUnion('kind', [
+      z.object({
+        kind: z.literal('report'),
+        ref: DefinitionId,
+        format: z.enum(['csv', 'xlsx', 'json']).default('xlsx'),
+        /** Keep the newest N files. */
+        retain: z.number().int().min(1).max(1000).optional(),
+        /** Env key holding recipient addresses (comma-separated); addresses are configuration, never content. */
+        emailEnv: RecipientKey.optional(),
+        /** Env key holding a Teams workflow webhook URL. */
+        teamsWebhookEnv: EnvKey.optional(),
+      }),
+      z.object({ kind: z.literal('probe'), tags: z.array(z.string().trim().min(1)).min(1).max(5) }),
+      z.object({
+        kind: z.literal('playbook'),
+        ref: DefinitionId,
+        mode: z.enum(['read', 'write']).default('read'),
+        inputs: z.record(z.string(), z.unknown()).optional(),
+        /** Content review note for write jobs (the in-app two-person approval is what enables it). */
+        reviewedBy: z.array(z.string().trim().min(1)).max(5).optional(),
+        dryRun: z.boolean().optional(),
+      }),
+      z.object({ kind: z.literal('contentHealth'), scopes: z.boolean().optional() }),
+    ]),
+    retries: z.number().int().min(0).max(10).default(2),
+    timeoutSeconds: z.number().int().min(60).max(14_400).optional(),
+    notifyOnFailure: z
+      .object({ emailEnv: RecipientKey.optional(), teamsWebhookEnv: EnvKey.optional() })
+      .optional(),
+  })
+  .refine((r) => (r.cron === undefined) !== (r.every === undefined), {
+    message: 'Send either cron or every',
+    path: ['cron'],
+  });
 export type ScheduleScaffoldRequest = z.infer<typeof ScheduleScaffoldRequest>;
 
 export interface CronPreview {
   valid: boolean;
-  /** Plain-language description ("Every Monday at 06:15"), when the expression is a common shape. */
+  /** The cron expression (as sent, or compiled from `every`); null when it couldn't be read. */
+  cron: string | null;
+  /** Plain-English description naming the zone ("Every Monday at 06:15 Europe/London"), when it is a common shape. */
   text: string | null;
-  /** The next runs in the schedule's time zone (ISO, UTC). */
+  /** The zone the runs are in: the request's, or one named at the end of `every` ("… Europe/London"). */
+  timezone: string;
+  /** The next runs in the schedule's time zone (ISO, UTC; DST-aware). */
   next: string[];
+  /** Two runs come closer than an hour: schedules created in the portal refuse it (`cron_too_frequent`). */
+  tooFrequent: boolean;
   problem?: string;
 }
 
-/** What a cron expression means and when it will next fire — for the editor's live preview. */
+/** What a cron expression means and when it will next fire — for the editors' live preview. */
 export function previewCron(cron: string, timezone: string, now: Date): CronPreview {
   const problem = validateCron(cron);
-  if (problem) return { valid: false, text: null, next: [], problem };
+  if (problem)
+    return { valid: false, cron: null, text: null, timezone, next: [], tooFrequent: false, problem };
   return {
     valid: true,
-    text: describeCron(cron),
+    cron,
+    text: describeCron(cron, timezone),
+    timezone,
     next: nextRuns(cron, timezone, now, 5).map((d) => d.toISOString()),
+    tooFrequent: runsTooOften(cron, timezone, now),
   };
+}
+
+/** `previewCron` for cron or English (`every`); English it can't read is `valid: false` with the reason. */
+export function previewSchedule(
+  input: { cron?: string; every?: string },
+  timezone: string,
+  now: Date,
+): CronPreview {
+  if (input.every === undefined) return previewCron(input.cron ?? '', timezone, now);
+  const parsed = parseSchedule(input.every);
+  if (!parsed.ok)
+    return {
+      valid: false,
+      cron: null,
+      text: null,
+      timezone,
+      next: [],
+      tooFrequent: false,
+      problem: parsed.error,
+    };
+  return previewCron(parsed.cron, parsed.timezone ?? timezone, now);
 }
 
 const slug = (title: string) =>
@@ -169,7 +209,9 @@ export interface ScheduleDocumentInput {
   summary?: string;
   owner: string;
   tags?: string[];
-  cron: string;
+  /** Cron, or `every` (English) instead. */
+  cron?: string;
+  every?: string;
   timezone: string;
   enabled: boolean;
   job: Record<string, unknown>;
@@ -193,7 +235,8 @@ export function scheduleDocument(i: ScheduleDocumentInput): Record<string, unkno
     ...(i.summary ? { summary: i.summary } : {}),
     owner: i.owner,
     ...(i.tags?.length ? { tags: i.tags } : {}),
-    cron: i.cron,
+    // English (`every:`) when the editor was given English; the schema compiles it to cron.
+    ...(i.every ? { every: i.every } : { cron: i.cron }),
     timezone: i.timezone,
     enabled: i.enabled,
     identity: 'automation',
@@ -204,6 +247,13 @@ export function scheduleDocument(i: ScheduleDocumentInput): Record<string, unkno
     ...(i.notifyOnFailure?.length ? { notify: { onFailure: i.notifyOnFailure } } : {}),
     ...(i.requires ? { requires: i.requires } : {}),
   };
+}
+
+/** Thrown for English the grammar can't read (the schedule editor's text box). */
+export function invalidEvery(problem: string | undefined): AppError {
+  return new AppError(400, 'invalid_cron', `AdminForge didn’t understand when it should run: ${problem}`, {
+    hint: 'Write it like “every weekday at 07:00”, “first Monday of the month at 08:30” or “every 4 hours” — or enter a cron expression.',
+  });
 }
 
 /** Thrown for an invalid cron expression (the editor and in-app schedules). */
@@ -225,8 +275,14 @@ export async function scaffoldSchedule(
     },
     deps.known,
   );
-  const preview = previewCron(r.cron, r.timezone, deps.now);
-  if (!preview.valid) throw invalidCron(preview.problem);
+  const preview = previewSchedule(r, r.timezone, deps.now);
+  if (!preview.valid)
+    throw r.every !== undefined ? invalidEvery(preview.problem) : invalidCron(preview.problem);
+  const cron = preview.cron!;
+  // English goes into the YAML as the describer's own sentence (no zone: that is `timezone`), so it reads the same in
+  // every file and always compiles back to the same cron; a cron expression typed into the English box stays cron.
+  const sentence = r.every !== undefined ? describeShared(cron) : undefined;
+  const every = sentence && !sentence.startsWith('Custom:') ? sentence : undefined;
 
   const section =
     r.section ?? (r.job.kind === 'probe' ? 'probes' : r.job.kind === 'report' ? 'reports' : 'ops');
@@ -283,8 +339,8 @@ export async function scaffoldSchedule(
     title: r.title,
     ...(r.summary ? { summary: r.summary } : {}),
     owner: r.owner ?? 'portal-admins',
-    cron: r.cron,
-    timezone: r.timezone,
+    ...(every ? { every } : { cron }),
+    timezone: preview.timezone,
     enabled: r.enabled,
     job,
     retries: r.retries,
@@ -297,7 +353,7 @@ export async function scaffoldSchedule(
   });
   const header = [
     `# Made with the schedule editor. Save as ${path}, then: pnpm adminforge validate && pnpm adminforge publish`,
-    preview.text ? `# Runs: ${preview.text} (${r.timezone}).` : null,
+    preview.text ? `# Runs: ${preview.text}.` : null,
     r.job.kind === 'playbook' && r.job.mode === 'write'
       ? '# Changes data: after publishing, enabling it needs a second person’s approval in the portal.'
       : null,

@@ -199,7 +199,7 @@ test('edit a portal schedule from its page, then delete it from the catalogue', 
   const form = page.getByRole('dialog', { name: 'Edit Inactive users, weekdays' });
   await expect(form.getByRole('combobox', { name: 'Repeats' })).toHaveText('Weekdays');
   await expect(form.getByLabel('At', { exact: true })).toHaveValue('06:30');
-  await expect(form.getByRole('combobox', { name: 'Time zone' })).toHaveText('Europe/London');
+  await expect(form.getByRole('combobox', { name: 'Time zone' })).toHaveValue('Europe/London');
   await expect(form.getByRole('combobox', { name: 'Inactive for at least' })).toHaveText('30 days');
   await expect(form.getByRole('combobox', { name: 'Email the file to' })).toHaveText('Report recipients');
   await expect(form.getByRole('combobox', { name: 'Alert in Teams' })).toHaveText('Teams alerts');
@@ -259,21 +259,21 @@ test('a Reader sees no Schedule button; a report without an export says why it c
   await expect(button).toHaveAccessibleDescription('This report has no export, so it can’t be scheduled.');
 });
 
-test('a cadence the API refuses shows its message and what to do, and the form stays open', async ({
+test('a cadence more often than hourly is refused on the field, before anything is sent', async ({
   page,
 }) => {
+  // The API refuses it too (cron_too_frequent); the form says so first, on the cadence field.
   const api = await open(page, '/reports?report=identity.inactive-guests&schedule=new');
   const form = page.getByRole('dialog', { name: 'Schedule Inactive guests' });
   await form.getByRole('combobox', { name: 'Repeats' }).click();
   await page.getByRole('option', { name: 'Custom (cron)' }).click();
   await form.getByRole('textbox', { name: 'Cron expression' }).fill('*/30 * * * *');
-  await expect(form.getByText(/Runs every 30 minutes/)).toBeVisible();
+  await expect(
+    form.getByText('Reports run at most once an hour. Try “every hour” or “every 2 hours”.'),
+  ).toBeVisible();
+  await expect(form.getByText('Fix the cron expression above to see when it runs.')).toBeVisible();
   await form.getByRole('button', { name: 'Create schedule' }).click();
-  const alert = form.getByRole('alert');
-  await expect(alert).toContainText('Reports can run at most once an hour.');
-  await expect(alert).toContainText('Choose Every hour or a slower cadence');
-  await expect(alert).toContainText('Reference 7c1e4b2a-0d3f-4e5a-9b6c-8d7e6f5a4b3c');
-  expect(api.state.posts).toHaveLength(1);
+  expect(api.state.posts).toHaveLength(0);
   await expect(form).toBeVisible();
 });
 

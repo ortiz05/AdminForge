@@ -30,7 +30,7 @@ export function ScheduleToggle({ schedule, withLabel }: { schedule: ScheduleItem
           tone: 'ok',
           title: `${schedule.title} enabled`,
           description: next
-            ? `Next run ${formatInZone(next, schedule.timezone)} (${schedule.timezone}).`
+            ? `Next run ${formatInZone(next, schedule.timezone)} (${schedule.timezone.replace(/_/g, ' ')}).`
             : undefined,
         });
       } else {

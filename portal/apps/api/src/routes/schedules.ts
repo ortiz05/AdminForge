@@ -7,7 +7,7 @@ import type { SchedulesModule } from '../schedules/module';
 import { tenantValuesFor } from '../query/tenant-values';
 import {
   copiedRequires,
-  previewCron,
+  previewSchedule,
   ScheduleScaffoldRequest,
   scaffoldSchedule,
 } from '../schedules/scaffold';
@@ -53,7 +53,17 @@ function key(raw: string): string {
   return r.data;
 }
 
-const CronPreviewRequest = z.object({ cron: z.string().trim().min(1).max(100), timezone: TimeZone });
+/** Cron, or the same in English (`every`: "every weekday at 07:00"); one of the two. */
+const CronPreviewRequest = z
+  .object({
+    cron: z.string().trim().min(1).max(100).optional(),
+    every: z.string().trim().min(1).max(200).optional(),
+    timezone: TimeZone,
+  })
+  .refine((b) => (b.cron === undefined) !== (b.every === undefined), {
+    message: 'Send either cron or every',
+    path: ['cron'],
+  });
 
 export function scheduleRoutes(api: FastifyInstance, ctx: AppContext, schedules: SchedulesModule) {
   const svc = schedules.service;
@@ -95,7 +105,7 @@ export function scheduleRoutes(api: FastifyInstance, ctx: AppContext, schedules:
   api.post('/schedules/preview', async (request) => {
     requireRole(requireSession(request), 'Portal.Reader', 'Previewing a schedule');
     const body = parseBody(CronPreviewRequest, request.body);
-    return previewCron(body.cron, body.timezone, ctx.now());
+    return previewSchedule(body, body.timezone, ctx.now());
   });
 
   api.post('/schedules/scaffold', async (request) => {

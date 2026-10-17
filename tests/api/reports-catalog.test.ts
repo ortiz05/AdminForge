@@ -103,7 +103,7 @@ describe('GET /api/reports', () => {
     ]);
     expect(item.schedules[1]).toMatchObject({
       cron: '0 6 * * 1',
-      cronText: 'Every Monday at 06:00',
+      cronText: 'Every Monday at 06:00 UTC',
       timezone: 'UTC',
       enabled: true,
       nextRunAt: '2026-10-19T06:00:00.000Z',

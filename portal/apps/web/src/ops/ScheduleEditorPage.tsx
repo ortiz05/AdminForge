@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import {
@@ -10,23 +10,29 @@ import {
   SegmentedControl,
   Switch,
   TextField,
+  WarningCircleIcon,
 } from '@adminforge/ui';
+import { describeCron as describeSentence } from '@adminforge/schemas';
 import { api } from '../lib/api';
 import { errorText } from '../lib/errors';
 import { arr, parser, pick, rec, str } from '../runs/json';
 import {
   CadenceFields,
+  cadenceProblem,
+  previewHint,
   cronFor,
   DEFAULT_CRON_PARTS,
   defaultZone,
-  zoneOptions,
+  useCronPreview,
   type CronParts,
 } from './cadence';
-import { describeCron, formatInZone, nextRuns } from './cron';
+import { describeCron, formatInZone } from './cron';
+import { TimeZoneField } from './TimeZoneField';
 import { Callout, useDocumentTitle } from './ui';
 
 /**
- * Schedule editor (R6): a cron builder with a plain-language preview, time zone, job, retry and failure alerts. It
+ * Schedule editor (R6): a cadence builder (choices, English or cron) with a plain-English preview and the next five
+ * runs from the API, a searchable time zone, job, retry and failure alerts. It
  * produces schedule YAML for review — content lives in git (D9), so the file is saved to portal/content/schedules,
  * validated and published like any other change (or handed to Claude Code with the adding-a-schedule-or-probe skill).
  */
@@ -76,14 +82,20 @@ export function ScheduleEditorPage() {
   const [enabled, setEnabled] = useState(true);
 
   const expr = cronFor(cron);
-  const preview = useMemo(() => {
-    try {
-      const runs = nextRuns(expr, timezone, 5);
-      return { text: describeCron(expr, timezone), runs, error: null as string | null };
-    } catch (e) {
-      return { text: null, runs: [] as Date[], error: (e as Error).message };
-    }
-  }, [expr, timezone]);
+  // A problem the cadence field already shows is said there, once; the preview only points at it.
+  const fieldProblem = cadenceProblem(cron);
+  const server = useCronPreview(fieldProblem ? '' : expr, timezone);
+  const answer = expr && server.data?.cron === expr.trim() ? server.data : undefined;
+  const serverProblem = !fieldProblem && answer && !answer.valid ? answer.problem : undefined;
+  const preview = {
+    text: expr && !fieldProblem && !serverProblem ? describeCron(expr, timezone) : null,
+    runs: answer?.next ?? [],
+    hint: fieldProblem ? previewHint(cron) : null,
+    error: serverProblem ?? null,
+  };
+  // English goes to the API as English (the YAML then says `every:`), without a zone: that is the zone field.
+  const sentence = cron.cadence === 'english' && expr ? describeSentence(expr) : '';
+  const when = sentence && !sentence.startsWith('Custom:') ? { every: sentence } : { cron: expr };
 
   const listKind = jobKind === 'report' || jobKind === 'playbook' ? jobKind : null;
   const defs = useQuery({
@@ -101,7 +113,7 @@ export function ScheduleEditorPage() {
         body: {
           title,
           ...(summary.trim() ? { summary: summary.trim() } : {}),
-          cron: expr,
+          ...when,
           timezone,
           enabled,
           retries: Number(retries) || 0,
@@ -180,8 +192,8 @@ export function ScheduleEditorPage() {
           with no YAML or review. Use this editor when the schedule should live in git.
         </Callout>
       )}
-      <div className="grid gap-6 lg:grid-cols-2">
-        <div className="flex flex-col gap-6">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <div className="flex min-w-0 flex-col gap-6">
           <Panel eyebrow="What" title="Name and job">
             <div className="flex flex-col gap-4">
               <TextField
@@ -281,13 +293,8 @@ export function ScheduleEditorPage() {
           </Panel>
           <Panel eyebrow="When" title="Cadence and time zone">
             <div className="flex flex-col gap-4">
-              <CadenceFields value={cron} onChange={setCron} />
-              <Select
-                label="Time zone"
-                value={timezone}
-                onValueChange={setTimezone}
-                options={zoneOptions()}
-              />
+              <CadenceFields value={cron} onChange={setCron} timezone={timezone} onTimezone={setTimezone} />
+              <TimeZoneField value={timezone} onChange={setTimezone} />
             </div>
           </Panel>
           <Panel eyebrow="If it fails" title="Retries and alerts">
@@ -313,20 +320,42 @@ export function ScheduleEditorPage() {
             </div>
           </Panel>
         </div>
-        <div className="flex flex-col gap-6">
-          <Panel eyebrow="Preview" title={preview.text ?? 'Not a valid schedule yet'}>
-            {preview.error ? (
-              <p className="text-sm text-crit">{preview.error}</p>
-            ) : (
-              <ul className="flex flex-col gap-1 font-mono text-sm text-fg-2">
-                <li className="text-xs text-fg-3">
-                  {expr} · next runs ({timezone})
-                </li>
-                {preview.runs.map((d) => (
-                  <li key={d.toISOString()}>{formatInZone(d, timezone)}</li>
-                ))}
-              </ul>
-            )}
+        {/* Stays in view next to the form on wide screens, so the preview is beside the cadence being edited. */}
+        <div className="flex min-w-0 flex-col gap-6 lg:sticky lg:top-(--af-layout-rail-h) lg:self-start lg:pt-1">
+          <Panel eyebrow="Preview" title="When it runs">
+            <div className="flex flex-col gap-3">
+              {preview.hint ? (
+                <p className="text-sm text-fg-3">{preview.hint}</p>
+              ) : preview.error ? (
+                <p className="flex items-start gap-1.5 text-sm text-crit">
+                  <WarningCircleIcon size={16} weight="fill" aria-hidden className="mt-0.5 shrink-0" />
+                  {preview.error}
+                </p>
+              ) : (
+                preview.text && <p className="text-sm font-medium text-fg">{preview.text}</p>
+              )}
+              {!preview.hint && !preview.error && expr && (
+                <ul
+                  className="flex flex-col gap-1 font-mono text-sm text-fg-2"
+                  aria-label="Next runs"
+                  aria-busy={server.isFetching}
+                >
+                  <li className="text-xs break-all text-fg-3">
+                    {expr} · next runs ({timezone.replace(/_/g, ' ')})
+                  </li>
+                  {preview.runs.map((iso) => (
+                    <li key={iso}>
+                      <time dateTime={iso}>{formatInZone(iso, timezone)}</time>
+                    </li>
+                  ))}
+                  {server.isError && (
+                    <li className="font-sans text-xs text-fg-3">
+                      The next runs couldn’t be worked out right now; the schedule itself is fine.
+                    </li>
+                  )}
+                </ul>
+              )}
+            </div>
           </Panel>
           <Panel eyebrow="Result" title="Schedule YAML">
             <div className="flex flex-col gap-4">
@@ -338,7 +367,7 @@ export function ScheduleEditorPage() {
                     ? 'Give the schedule a title first.'
                     : needsRef
                       ? 'Choose what it runs first.'
-                      : preview.error
+                      : preview.hint || preview.error
                         ? 'Fix the schedule first.'
                         : undefined
                 }

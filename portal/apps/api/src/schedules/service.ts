@@ -249,7 +249,7 @@ export class ScheduleService {
       title: def.title,
       summary: def.summary ?? null,
       cron: def.cron,
-      cronText: describeCron(def.cron),
+      cronText: describeCron(def.cron, def.timezone),
       timezone: def.timezone,
       enabled: row.enabled,
       identity: 'automation',

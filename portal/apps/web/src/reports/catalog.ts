@@ -1,7 +1,7 @@
 import { queryOptions } from '@tanstack/react-query';
 import { api, isRecord } from '../lib/api';
 import { arr, bool, num, parser, pick, rec } from '../runs/json';
-import { cronFor, type Cadence, type CronParts } from '../ops/cadence';
+import { cadenceProblem, cronFor, type Cadence, type CronParts } from '../ops/cadence';
 import { describeCron } from '../ops/cron';
 import { readSchedule, runStatusView, type ScheduleItem, type ScheduleTarget } from '../ops/schedules';
 
@@ -334,8 +334,11 @@ export function tagCounts(items: readonly ReportItem[]): Array<{ tag: string; co
     .sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag));
 }
 
-export const cadenceText = (s: Pick<ScheduleSummary, 'cron' | 'cronText' | 'timezone'>) =>
-  s.cronText ?? describeCron(s.cron, s.timezone);
+/** The cadence in English with the browser's clock (the API's `cronText` is 24-hour), always naming the zone. */
+export const cadenceText = (s: Pick<ScheduleSummary, 'cron' | 'cronText' | 'timezone'>) => {
+  const text = describeCron(s.cron, s.timezone);
+  return text.startsWith('Custom:') && s.cronText ? s.cronText : text;
+};
 
 /** The Schedule column: the cadence of the one enabled schedule, a count, "1 paused", or "Not scheduled". */
 export function scheduleText(r: ReportItem): { text: string; muted: boolean } {
@@ -359,20 +362,26 @@ export function lastRunOf(r: ReportItem): { status: string | null; at: string } 
 /** Cadences offered for reports: at most hourly (the API refuses anything more frequent). */
 export const REPORT_CADENCES: readonly Cadence[] = [
   'hourly',
+  'hours',
   'daily',
   'weekdays',
   'weekly',
   'monthly',
+  'monthlyWeekday',
+  'english',
   'custom',
 ];
 
 const CADENCE_WORD: Record<Cadence, string> = {
   minutes: 'every few minutes',
   hourly: 'hourly',
+  hours: 'every few hours',
   daily: 'daily',
   weekdays: 'weekdays',
   weekly: 'weekly',
   monthly: 'monthly',
+  monthlyWeekday: 'monthly',
+  english: 'scheduled',
   custom: 'scheduled',
 };
 
@@ -442,7 +451,10 @@ export function formIssues(
   const retain = Number(form.retain);
   if (!Number.isInteger(retain) || retain < 1 || retain > 1000)
     issues.retain = 'Enter a whole number from 1 to 1000.';
-  if (!cronFor(form.cron)) issues.cron = 'Enter a cron expression.';
+  // The API refuses report schedules that run more than once an hour; the field says so first.
+  const cadence = cadenceProblem(form.cron, { hourlyOnly: true });
+  if (cadence) issues.cron = cadence;
+  else if (!cronFor(form.cron)) issues.cron = 'Enter a cron expression.';
   for (const p of report.params) {
     if (!p.schedulable) continue;
     const v = form.params[p.name];

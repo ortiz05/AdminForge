@@ -1,3 +1,4 @@
+// Component tests run with the en-US locale, so schedule times show the 12-hour clock ("7:00 am"); e2e runs en-GB.
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { __resetPrefsForTests } from '@adminforge/web/src/lib/prefs';
@@ -17,8 +18,10 @@ describe('Schedules, monitoring, audit, appearance, settings', () => {
   it('/schedules: cadence in words, automation identity, failures, next runs', async () => {
     renderApp({ path: '/schedules' });
     const grid = await screen.findByRole('grid', { name: 'Schedules' });
-    expect(await within(grid).findByText('Every Monday at 07:00 UTC')).toBeInTheDocument();
-    expect(within(grid).getByText('Every 5 minutes')).toBeInTheDocument();
+    // The sentence, then the cron with the zone on the line under it (so the zone is never cut off).
+    expect(await within(grid).findByText('Every Monday at 7:00 am')).toBeInTheDocument();
+    expect(within(grid).getByText('0 7 * * 1 · UTC')).toBeInTheDocument();
+    expect(within(grid).getByText('Every 5 minutes')).toHaveAttribute('title', 'Every 5 minutes (UTC)');
     expect(screen.getByText('Schedules run as the automation identity, not as you')).toBeInTheDocument();
     expect(screen.getByRole('alert')).toHaveTextContent('1 schedule failed on the last run');
     expect(screen.getByRole('list', { name: 'Upcoming runs' })).toBeInTheDocument();
@@ -46,7 +49,8 @@ describe('Schedules, monitoring, audit, appearance, settings', () => {
   it('/schedules/:key: history with artifacts, failures highlighted, run now', async () => {
     const { state } = renderApp({ path: '/schedules/maintenance.content-health' });
     expect(await screen.findByRole('heading', { level: 1, name: 'Content health' })).toBeInTheDocument();
-    expect(screen.getByText('Every day at 06:00 Europe/London', { selector: 'h2' })).toBeInTheDocument();
+    const cadence = screen.getByRole('region', { name: 'When it runs' });
+    expect(within(cadence).getByText('Every day at 6:00 am Europe/London')).toBeInTheDocument();
     const history = await screen.findByRole('table', { name: /Runs of Content health/ });
     expect(within(history).getByText(/2 definitions need permissions/)).toBeInTheDocument();
     expect(screen.getAllByRole('alert')[0]).toHaveTextContent('The last run failed');

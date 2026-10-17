@@ -105,7 +105,7 @@ for (const theme of THEMES) {
   test(`schedules · ${theme}`, async ({ page }) => {
     await open(page, theme, '/schedules');
     await expect(
-      page.getByRole('grid', { name: 'Schedules' }).getByText('Every Monday at 07:00 UTC'),
+      page.getByRole('grid', { name: 'Schedules' }).getByText('Every Monday at 07:00', { exact: true }),
     ).toBeVisible();
     await shoot(page, `schedules-${theme}.png`);
   });

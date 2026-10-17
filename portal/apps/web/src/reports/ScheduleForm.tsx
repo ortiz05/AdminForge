@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { useIsMutating, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Button,
@@ -13,17 +13,22 @@ import {
   Switch,
   TextField,
   useToast,
+  WarningCircleIcon,
 } from '@adminforge/ui';
 import { ApiRequestError } from '../lib/api';
 import {
   CadenceFields,
+  cadenceProblem,
   cronFor,
   DEFAULT_CRON_PARTS,
   defaultZone,
+  effectiveCadence,
   partsFromCron,
-  zoneOptions,
+  previewHint,
+  useCronPreview,
 } from '../ops/cadence';
-import { describeCron, formatInZone, nextRuns } from '../ops/cron';
+import { describeCron, formatInZone } from '../ops/cron';
+import { TimeZoneField } from '../ops/TimeZoneField';
 import { schedulesQuery, type ScheduleItem } from '../ops/schedules';
 import { Callout, QueryError } from '../ops/ui';
 import {
@@ -72,28 +77,46 @@ function initialState(report: ReportItem, existing: ScheduleItem | undefined): S
   };
 }
 
-/** "Runs every Monday at 06:00 UTC · next Mon 19 Oct, 06:00". */
-function Preview({ cron, timezone }: { cron: string; timezone: string }) {
-  const next = useMemo(() => nextRuns(cron, timezone, 1)[0], [cron, timezone]);
-  const text = describeCron(cron, timezone);
+/**
+ * "Runs every Monday at 06:00 UTC · next Mon 19 Oct, 06:00" — the sentence from the shared describer (browser clock),
+ * the next run from the API's preview (the scheduler's own DST-aware computation). While the cadence field shows a
+ * problem the preview only points at it (`hint`), so the problem is said once. Not a live region: the cadence fields
+ * announce what English was understood as, once typing pauses.
+ */
+function Preview({ cron, timezone, hint }: { cron: string; timezone: string; hint?: string }) {
+  const preview = useCronPreview(hint ? '' : cron, timezone);
+  const data = cron && preview.data?.cron === cron.trim() ? preview.data : undefined;
+  const next = data?.next[0];
+  const text = cron ? describeCron(cron, timezone) : '';
+  const invalid = !hint && data && !data.valid;
+  const tooOften = !hint && data?.tooFrequent;
   return (
     <p
-      aria-live="polite"
       className={cn(
         'flex min-h-(--af-control-h) items-center gap-2 rounded-(--af-input-radius) border border-line bg-raised px-2.5 py-1.5 text-sm',
-        next ? 'text-fg-2' : 'text-crit',
+        hint ? 'text-fg-3' : invalid || tooOften ? 'text-crit' : 'text-fg-2',
       )}
     >
-      <CalendarBlankIcon size={14} aria-hidden className="shrink-0 text-fg-3" />
-      {next ? (
+      {invalid || tooOften ? (
+        <WarningCircleIcon size={14} weight="fill" aria-hidden className="shrink-0" />
+      ) : (
+        <CalendarBlankIcon size={14} aria-hidden className="shrink-0 text-fg-3" />
+      )}
+      {hint ? (
+        <span>{hint}</span>
+      ) : invalid ? (
+        <span>{data?.problem ?? 'Not a valid schedule yet.'}</span>
+      ) : (
         <span>
           {text.startsWith('Custom:')
             ? `Runs on a custom schedule (${cron})`
             : `Runs ${text[0]!.toLowerCase()}${text.slice(1)}`}
-          <span className="text-fg-3"> · next {formatInZone(next, timezone)}</span>
+          {tooOften ? (
+            <span> · more often than once an hour, which schedules made here can’t run</span>
+          ) : (
+            next && <span className="text-fg-3"> · next {formatInZone(next, timezone)}</span>
+          )}
         </span>
-      ) : (
-        <span>Not a valid cron expression yet.</span>
       )}
     </p>
   );
@@ -257,12 +280,17 @@ function FormBody({
     if (save.isError) save.reset();
     setForm((f) => ({ ...f, ...patch }));
   };
+  // Stable, so the cadence fields can hand over a zone typed in English without re-rendering in a loop.
+  const setTimezone = useCallback(
+    (timezone: string) => setForm((f) => (f.timezone === timezone ? f : { ...f, timezone })),
+    [],
+  );
   const setCron = (cron: ScheduleFormState['cron']) => {
     if (save.isError) save.reset();
     setForm((f) => ({
       ...f,
       cron,
-      title: f.titleEdited ? f.title : defaultScheduleTitle(report, cron.cadence),
+      title: f.titleEdited ? f.title : defaultScheduleTitle(report, effectiveCadence(cron)),
     }));
   };
 
@@ -321,19 +349,23 @@ function FormBody({
             cadences={REPORT_CADENCES}
             customClassName="sm:col-span-2"
             error={shownIssues.cron ?? cronRefused}
+            timezone={form.timezone}
+            onTimezone={setTimezone}
+            hourlyOnly
           />
-        </div>
-        <div className="grid items-end gap-3 sm:grid-cols-3">
-          <Select
-            label="Time zone"
+          <TimeZoneField
             value={form.timezone}
-            onValueChange={(timezone) => set({ timezone })}
-            options={zoneOptions(form.timezone)}
+            onChange={(timezone) => {
+              if (save.isError) save.reset();
+              setTimezone(timezone);
+            }}
           />
-          <div className="sm:col-span-2">
-            <Preview cron={expr} timezone={form.timezone} />
-          </div>
         </div>
+        <Preview
+          cron={expr}
+          timezone={form.timezone}
+          hint={cadenceProblem(form.cron, { hourlyOnly: true }) ? previewHint(form.cron) : undefined}
+        />
       </Group>
 
       {report.params.length > 0 && (

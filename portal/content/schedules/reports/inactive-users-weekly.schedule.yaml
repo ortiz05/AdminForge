@@ -1,13 +1,14 @@
 $schema: ../../../packages/schemas/generated/schedule.schema.json
 kind: schedule
 id: reports.inactive-users-weekly
-version: 1.0.0
+version: 1.0.1
 title: Weekly inactive users report
 summary: >-
   Every Monday at 05:50 UTC, writes enabled member accounts with no sign-in for 90 days or more (including accounts that never signed in) as XLSX and emails it, keeping six months of history for the offboarding review. Sign-in activity needs Microsoft Entra ID P1.
 owner: identity-team
 tags: [identity, users, hygiene, report]
-cron: "50 5 * * 1"
+# When it runs, in English (compiled to cron "50 5 * * 1"; `cron:` works too).
+every: every Monday at 05:50
 timezone: UTC
 enabled: true
 identity: automation

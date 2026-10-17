@@ -30,7 +30,8 @@ schedule may not use it (`adminforge validate` refuses it).
 2. **Scaffold:** `pnpm adminforge new probe <section>/<name>` / `new schedule <section>/<name>`, design the query
    in **Query Studio** (`/query`; it offers the sources the installation switched on, `AF_QUERY_SOURCES`) and use
    _Save as probe/report/schedule_, or build a schedule in the **schedule
-   editor** (`/schedules/new`: cron builder with preview, job, retries, alerts → YAML for review).
+   editor** (`/schedules/new`: choices, plain English or cron, with the next runs, any IANA time zone, job, retries,
+   alerts → YAML for review).
 3. **Pick the check:** `check.kind` = `http`, `dnsResolve`, `certExpiry`, `graph`, `graphCount` (how many items a
    Graph list holds), `arm`, `tokenAcquisition`, `appCredentialExpiry`, `licenseThreshold`, `signInHealth`,
    `functionHealth`, `auditChain` (AdminForge's own audit log), or **`kql`**.
@@ -39,7 +40,11 @@ schedule may not use it (`adminforge validate` refuses it).
      (Defender licence). `metric: rowCount` or `{ column, aggregate }`; `detailsLimit` keeps the offending rows.
    - Put `// af:<probe id>` as the first KQL line (fixtures match on it).
 4. **Thresholds** `{ warn, crit }` in the direction `PROBE_METRICS` defines for the kind; `intervalHint`, `timeoutMs`.
-5. **Schedules:** `cron` (5/6 fields), `timezone` (IANA), `identity: automation`, `job.kind` =
+5. **Schedules:** when it runs as `every:` in plain English — `every weekday at 07:00`, `every Monday at 08:30`,
+   `mon, wed and fri at 18:00`, `first Monday of the month at 08:30`, `last Friday of the month at 17:00`, `last day
+of the month at 23:00`, `on the 15th of every month at 06:00`, `every 4 hours`, `every hour at :15`, `every 15
+minutes` — or `cron` (5/6 fields; one of the two). Validation compiles `every` to cron and names any word it doesn't
+   understand. Then `timezone` (IANA; never inside `every`), `identity: automation`, `job.kind` =
    - `probe` (`ref` / `refs` / `select.tags`, optional `concurrency`);
    - `report` (`ref`, `params`, `delivery: [{ type: file, format, path, retain }]`, plus `{ type: email, to }` and
      `{ type: teams, webhook }`). Recipients and webhooks are **always** `${ env.X }` keys (configuration, never

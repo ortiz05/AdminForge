@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { DefinitionId, Expr, Mode, RetryPolicy, Template, envelopeShape } from './common';
 import { RunnerSpec } from './datasource';
+import { isValidTimeZone, parseSchedule, validateCron } from './cadence';
 import { NewsJob } from './news';
 
 /**
@@ -16,98 +17,7 @@ import { NewsJob } from './news';
  */
 export const PORTAL_SCHEDULE_PREFIX = 'portal.';
 
-const CRON_NICKNAMES = new Set([
-  '@yearly',
-  '@annually',
-  '@monthly',
-  '@weekly',
-  '@daily',
-  '@midnight',
-  '@hourly',
-]);
-const MONTHS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
-const DAYS = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
-
-interface CronField {
-  name: string;
-  min: number;
-  max: number;
-  names?: string[];
-  /** Offset added to a name's index (months are 1-based). */
-  nameBase?: number;
-  dom?: boolean;
-  dow?: boolean;
-}
-const SECOND: CronField = { name: 'second', min: 0, max: 59 };
-const FIELDS: CronField[] = [
-  { name: 'minute', min: 0, max: 59 },
-  { name: 'hour', min: 0, max: 23 },
-  { name: 'day of month', min: 1, max: 31, dom: true },
-  { name: 'month', min: 1, max: 12, names: MONTHS, nameBase: 1 },
-  { name: 'day of week', min: 0, max: 7, names: DAYS, nameBase: 0, dow: true },
-];
-
-function cronValue(token: string, f: CronField): number | undefined {
-  if (/^\d+$/.test(token)) {
-    const n = Number(token);
-    return n >= f.min && n <= f.max ? n : undefined;
-  }
-  const i = f.names?.indexOf(token.toUpperCase()) ?? -1;
-  return i >= 0 ? i + (f.nameBase ?? 0) : undefined;
-}
-
-function checkCronField(text: string, f: CronField): string | undefined {
-  for (const part of text.split(',')) {
-    if (part === '') return `empty list item in ${f.name}`;
-    if (part === '?' && (f.dom || f.dow)) continue;
-    if (f.dom && /^(L|L-\d{1,2}|\d{1,2}W|LW)$/.test(part)) continue;
-    if (f.dow && /^[0-7A-Za-z]{1,3}(L|#[1-5])$/.test(part)) {
-      if (cronValue(part.replace(/(L|#[1-5])$/, ''), f) === undefined) return `invalid ${f.name} "${part}"`;
-      continue;
-    }
-    const [range, step, extra] = part.split('/');
-    if (extra !== undefined) return `invalid step in ${f.name} "${part}"`;
-    if (step !== undefined && !(/^\d+$/.test(step) && Number(step) >= 1 && Number(step) <= f.max))
-      return `invalid step in ${f.name} "${part}"`;
-    if (range === '*') continue;
-    const [a, b, more] = (range ?? '').split('-');
-    if (more !== undefined) return `invalid range in ${f.name} "${part}"`;
-    const lo = cronValue(a ?? '', f);
-    if (lo === undefined) return `${f.name} "${a}" is out of range ${f.min}-${f.max}`;
-    if (b !== undefined) {
-      const hi = cronValue(b, f);
-      if (hi === undefined) return `${f.name} "${b}" is out of range ${f.min}-${f.max}`;
-      if (hi < lo) return `${f.name} range "${range}" is reversed`;
-    }
-  }
-  return undefined;
-}
-
-/** Validates a 5-field (`m h dom mon dow`) or 6-field (seconds first) cron expression, or a nickname like `@daily`. Returns an error message or undefined. */
-export function validateCron(expr: string): string | undefined {
-  const text = expr.trim();
-  if (CRON_NICKNAMES.has(text.toLowerCase())) return undefined;
-  const parts = text.split(/\s+/);
-  if (parts.length !== 5 && parts.length !== 6) return `Expected 5 or 6 cron fields, got ${parts.length}`;
-  const fields = parts.length === 6 ? [SECOND, ...FIELDS] : FIELDS;
-  for (let i = 0; i < parts.length; i++) {
-    const err = checkCronField(parts[i]!, fields[i]!);
-    if (err) return `Invalid cron: ${err}`;
-  }
-  return undefined;
-}
-
-/** True for IANA zone names the runtime knows (and `UTC`). */
-export function isValidTimeZone(tz: string): boolean {
-  if (!/^(UTC|GMT|[A-Za-z_]+(\/[A-Za-z0-9_+-]+)+)$/.test(tz)) return false;
-  try {
-    new Intl.DateTimeFormat('en-US', { timeZone: tz });
-    return true;
-  } catch {
-    return false;
-  }
-}
-
+// Cron and time-zone validation live with the English describer and grammar (./cadence).
 export const Cron = z.string().superRefine((v, ctx) => {
   const err = validateCron(v);
   if (err) ctx.addIssue({ code: 'custom', message: err });
@@ -245,11 +155,28 @@ export const ScheduleJob = z.discriminatedUnion('kind', [
 ]);
 export type ScheduleJob = z.infer<typeof ScheduleJob>;
 
+/**
+ * When a schedule runs, in English instead of cron: "weekdays at 07:00", "first Monday of the month at 08:30", "every 4
+ * hours", "last day of the month at 23:00" (the grammar in ./cadence). Validation compiles it to `cron`.
+ */
+export const Every = z
+  .string()
+  .trim()
+  .min(1)
+  .max(200)
+  .meta({
+    description:
+      'When it runs, in plain English, instead of cron — e.g. "every weekday at 07:00", "every Monday at 08:30", "first Monday of the month at 8:30", "last day of the month at 23:00", "every 4 hours", "every 15 minutes". The time zone goes in `timezone`.',
+    examples: ['every weekday at 07:00', 'first Monday of the month at 08:30', 'every 4 hours'],
+  });
+
 export const Schedule = z
   .strictObject({
     kind: z.literal('schedule'),
     ...envelopeShape,
-    cron: Cron,
+    /** Five or six cron fields — or leave it out and say it in English with `every`. */
+    cron: Cron.optional(),
+    every: Every.optional(),
     timezone: TimeZone.default('UTC'),
     enabled: z.boolean().default(true),
     /** Unattended runs always use the automation identity (ADR-011). */
@@ -274,5 +201,37 @@ export const Schedule = z
         path: ['job', 'approvedBy'],
         message: 'Write script schedules need approvedBy (two-person approval)',
       });
-  });
+    if (def.every === undefined) {
+      if (def.cron === undefined)
+        ctx.addIssue({
+          code: 'custom',
+          path: ['cron'],
+          message: 'Say when it runs: `cron` (e.g. "0 7 * * 1-5") or `every` (e.g. "every weekday at 07:00")',
+        });
+      return;
+    }
+    const parsed = parseSchedule(def.every);
+    if (!parsed.ok) {
+      ctx.addIssue({ code: 'custom', path: ['every'], message: parsed.error });
+      return;
+    }
+    if (parsed.timezone)
+      ctx.addIssue({
+        code: 'custom',
+        path: ['every'],
+        message: `Put the time zone in \`timezone: ${parsed.timezone}\`, not in \`every\``,
+      });
+    // A definition read back after validation carries both; they must agree.
+    else if (def.cron !== undefined && def.cron.trim() !== parsed.cron)
+      ctx.addIssue({
+        code: 'custom',
+        path: ['every'],
+        message: `Use either \`cron\` or \`every\`, not both (\`every\` means "${parsed.cron}")`,
+      });
+  })
+  // `every` is compiled to `cron`, so everything downstream reads `cron`.
+  .transform((def) => ({
+    ...def,
+    cron: def.cron ?? (parseSchedule(def.every!) as { cron: string }).cron,
+  }));
 export type Schedule = z.infer<typeof Schedule>;

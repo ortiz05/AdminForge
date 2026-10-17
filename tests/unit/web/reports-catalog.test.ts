@@ -128,8 +128,9 @@ describe('filters', () => {
   });
 
   it('describes the schedule column and the latest run', () => {
+    // The browser's clock: 24-hour in en-GB, 12-hour where the locale uses am/pm (these tests run as en-US).
     expect(scheduleText(byKey(items, 'identity.app-credential-expiry'))).toEqual({
-      text: 'Every Monday at 07:00 UTC',
+      text: expect.stringMatching(/^Every Monday at (07:00|7:00 am) UTC$/),
       muted: false,
     });
     expect(scheduleText(byKey(items, 'identity.inactive-users')).text).toBe('2 schedules');
@@ -186,8 +187,15 @@ describe('cadence builder', () => {
     ['15 * * * *', 'hourly'],
     ['0 8 1 * *', 'monthly'],
     ['5 22 * * *', 'daily'],
-    ['0 */2 * * *', 'custom'],
+    ['0 */2 * * *', 'hours'],
+    ['20 */6 * * *', 'hours'],
+    ['0 6 * * 1,3,5', 'weekly'],
+    ['30 8 * * 1#1', 'monthlyWeekday'],
+    ['0 17 * * 5L', 'monthlyWeekday'],
+    ['0 23 L * *', 'monthly'],
+    ['0 */5 * * *', 'custom'],
     ['0 8 31 * *', 'custom'],
+    ['0 9 * * 1#5', 'custom'],
   ])('%s reads back as %s and round-trips', (cron, cadence) => {
     const parts = partsFromCron(cron);
     expect(parts.cadence).toBe(cadence);

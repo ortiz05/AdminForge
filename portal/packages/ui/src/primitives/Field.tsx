@@ -52,7 +52,7 @@ export function FieldShell({
       {children({ id, describedBy, invalid: Boolean(error) })}
       {error && (
         <p id={errorId} className={s.error()}>
-          <WarningCircleIcon size={14} weight="fill" aria-hidden />
+          <WarningCircleIcon size={14} weight="fill" aria-hidden className={s.errorIcon()} />
           {error}
         </p>
       )}

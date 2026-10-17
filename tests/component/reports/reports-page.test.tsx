@@ -80,7 +80,7 @@ describe('Reports catalogue', { timeout: 20_000 }, () => {
     const name = within(form).getByRole('textbox', { name: 'Name' });
     await waitFor(() => expect(name).toHaveFocus());
     expect(name).toHaveValue('Inactive guests, weekly');
-    expect(within(form).getByText(/Runs every Monday at 06:00 UTC/)).toBeInTheDocument();
+    expect(within(form).getByText(/Runs every Monday at 6:00 am UTC/)).toBeInTheDocument();
     expect(await within(form).findByRole('combobox', { name: 'Email the file to' })).toBeInTheDocument();
     expect(await axeViolations()).toEqual([]);
 

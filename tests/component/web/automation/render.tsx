@@ -12,6 +12,7 @@ import { overview } from '../../../support/web/fixtures/overview';
 import { me, NAV } from '../../../support/web/fixtures/session';
 import type { MockHandler } from '../../../support/web/mock-handler';
 import { automationApi, type AutomationOptions } from '../../../support/web/mock-automation';
+import { schedulePreview } from '../../../support/web/mock-schedule-preview';
 
 const json = (body: unknown, status = 200) =>
   new Response(status === 204 ? null : JSON.stringify(body), {
@@ -57,6 +58,7 @@ export function renderApp({
       if (url.pathname === '/api/nav') return json(NAV);
       if (url.pathname === '/api/overview') return json(overview());
       if (url.pathname === '/api/runs') return json({ items: [] });
+      if (method === 'POST' && url.pathname === '/api/schedules/preview') return json(schedulePreview(body));
       return json({ error: { code: 'not_found', message: `No mock for ${method} ${url.pathname}` } }, 404);
     }),
   );

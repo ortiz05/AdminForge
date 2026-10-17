@@ -14,6 +14,7 @@ import type { MeResponse } from '@adminforge/schemas';
 import { overview } from '../../support/web/fixtures/overview';
 import { FIXED_NOW, me, NAV } from '../../support/web/fixtures/session';
 import type { MockHandler } from '../../support/web/mock-handler';
+import { schedulePreview } from '../../support/web/mock-schedule-preview';
 
 export type { MockHandler, MockReply, MockRequest } from '../../support/web/mock-handler';
 
@@ -105,6 +106,9 @@ export async function mockApi(page: Page, opts: MockOptions = {}) {
         }
         case 'GET /api/runs':
           return json(route, { items: [] });
+        case 'POST /api/schedules/preview':
+          // The schedule editors' live preview: what the BFF would answer (shared describer and grammar).
+          return json(route, schedulePreview(body));
         case 'GET /api/news/summary':
           // The shell reads it on every page: nothing unread or breaking unless a spec says otherwise.
           return json(route, {

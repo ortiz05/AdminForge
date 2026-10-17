@@ -69,6 +69,7 @@ export {
   UserIcon,
   UserMinusIcon,
   UserPlusIcon,
+  WarningCircleIcon,
   WarningIcon,
   WrenchIcon,
   XIcon,

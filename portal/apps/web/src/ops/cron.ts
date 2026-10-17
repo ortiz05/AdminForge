@@ -1,135 +1,40 @@
+import { describeCron as describeShared, isValidTimeZone } from '@adminforge/schemas';
 import { Cron } from 'croner';
 
 /**
- * Cron in plain words ("Every Monday at 07:00 UTC") and the next run times (croner, time-zone aware). The scheduler
- * sends its own `cronText`; this is the fallback and the preview for anything typed in the portal.
+ * Cron in plain English ("Every weekday (Mon–Fri) at 7:00 am Europe/London") and the next run times (croner, time-zone
+ * aware). The sentence comes from the describer the API uses too (@adminforge/schemas cadence.ts), with the browser's
+ * 12- or 24-hour clock; the editors' live preview asks the API for the next runs (POST /api/schedules/preview), lists
+ * compute them here.
  */
 
-const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-const DAY_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-const MONTHS = [
-  'January',
-  'February',
-  'March',
-  'April',
-  'May',
-  'June',
-  'July',
-  'August',
-  'September',
-  'October',
-  'November',
-  'December',
-];
-const DOW_NAMES: Record<string, number> = { SUN: 0, MON: 1, TUE: 2, WED: 3, THU: 4, FRI: 5, SAT: 6 };
-const NICK: Record<string, string> = {
-  '@yearly': '0 0 1 1 *',
-  '@annually': '0 0 1 1 *',
-  '@monthly': '0 0 1 * *',
-  '@weekly': '0 0 * * 0',
-  '@daily': '0 0 * * *',
-  '@midnight': '0 0 * * *',
-  '@hourly': '0 * * * *',
-};
-
-const pad = (n: number) => String(n).padStart(2, '0');
-const isNum = (s: string) => /^\d+$/.test(s);
-
-function dayList(field: string): number[] | null {
-  const out = new Set<number>();
-  const value = (x: string) => (isNum(x) ? Number(x) : DOW_NAMES[x.toUpperCase()]);
-  for (const part of field.split(',')) {
-    const [a = '', b, extra] = part.split('-');
-    if (extra !== undefined) return null;
-    const lo = value(a);
-    if (lo === undefined || lo > 7) return null;
-    if (b === undefined) {
-      out.add(lo % 7);
-      continue;
-    }
-    const hi = value(b);
-    if (hi === undefined || hi > 7 || hi < lo) return null;
-    for (let d = lo; d <= hi; d++) out.add(d % 7);
+/** Whether the browser's locale writes times with am/pm (en-US) rather than 24-hour (en-GB). */
+export function prefersHour12(): boolean {
+  try {
+    const cycle = new Intl.DateTimeFormat(undefined, { hour: 'numeric' }).resolvedOptions().hourCycle;
+    return cycle === 'h11' || cycle === 'h12';
+  } catch {
+    return false;
   }
-  return [...out].sort((x, y) => x - y);
 }
 
-function joinWords(words: string[]): string {
-  return words.length <= 1
-    ? (words[0] ?? '')
-    : `${words.slice(0, -1).join(', ')} and ${words[words.length - 1]}`;
-}
-
-function zoneLabel(tz: string): string {
-  return tz === 'UTC' || tz === 'Etc/UTC' ? 'UTC' : tz.replace(/_/g, ' ');
-}
-
-/** Plain-language cadence for common shapes; "Custom: <cron>" otherwise. */
-export function describeCron(expr: string, timezone = 'UTC'): string {
-  let text = expr.trim();
-  text = NICK[text.toLowerCase()] ?? text;
-  let parts = text.split(/\s+/);
-  if (parts.length === 6) {
-    if (parts[0] !== '0') return `Custom: ${expr}`;
-    parts = parts.slice(1);
-  }
-  if (parts.length !== 5) return `Custom: ${expr}`;
-  const [min, hour, dom, mon, dow] = parts as [string, string, string, string, string];
-  const tz = zoneLabel(timezone);
-
-  const every = /^\*\/(\d+)$/;
-  if (every.test(min) && hour === '*' && dom === '*' && mon === '*' && dow === '*') {
-    const n = Number(every.exec(min)![1]);
-    return n === 1 ? 'Every minute' : `Every ${n} minutes`;
-  }
-  if (min === '*' && hour === '*' && dom === '*' && mon === '*' && dow === '*') return 'Every minute';
-  if (isNum(min) && hour === '*' && dom === '*' && mon === '*' && dow === '*')
-    return Number(min) === 0 ? 'Every hour, on the hour' : `Every hour at ${pad(Number(min))} past`;
-  if (isNum(min) && every.test(hour) && dom === '*' && mon === '*' && dow === '*') {
-    const n = Number(every.exec(hour)![1]);
-    return Number(min) === 0
-      ? `Every ${n} hours, on the hour`
-      : `Every ${n} hours at ${pad(Number(min))} past`;
-  }
-  if (!isNum(min) || !/^\d+(,\d+)*$/.test(hour)) return `Custom: ${expr}`;
-  const at = hour
-    .split(',')
-    .map((h) => `${pad(Number(h))}:${pad(Number(min))}`)
-    .join(', ');
-  const time = `at ${at} ${tz}`;
-
-  if (dom === '*' && mon === '*' && (dow === '*' || dow === '?')) return `Every day ${time}`;
-  if (dom === '*' || dom === '?') {
-    if (mon !== '*') return `Custom: ${expr}`;
-    const days = dayList(dow);
-    if (!days) return `Custom: ${expr}`;
-    if (days.join() === '1,2,3,4,5') return `Every weekday (Mon–Fri) ${time}`;
-    if (days.join() === '0,6') return `Every weekend day ${time}`;
-    if (days.length === 1) return `Every ${DAY_NAMES[days[0]!]} ${time}`;
-    return `Every ${joinWords(days.map((d) => DAY_SHORT[d]!))} ${time}`;
-  }
-  if (isNum(dom) && (dow === '*' || dow === '?')) {
-    const d = Number(dom);
-    const suffix =
-      d % 10 === 1 && d !== 11
-        ? 'st'
-        : d % 10 === 2 && d !== 12
-          ? 'nd'
-          : d % 10 === 3 && d !== 13
-            ? 'rd'
-            : 'th';
-    if (mon === '*') return `On the ${d}${suffix} of every month ${time}`;
-    if (isNum(mon)) return `Every year on ${d} ${MONTHS[Number(mon) - 1] ?? mon} ${time}`;
-  }
-  if (dom === 'L' && mon === '*' && (dow === '*' || dow === '?'))
-    return `On the last day of every month ${time}`;
-  return `Custom: ${expr}`;
+/** Plain-English cadence naming the zone, for every shape the editors build; "Custom: <cron>" otherwise. */
+export function describeCron(
+  expr: string,
+  timezone = 'UTC',
+  /** `zone: false` leaves the zone out (shown next to it instead). */
+  opts: { hour12?: boolean; zone?: boolean } = {},
+): string {
+  return describeShared(expr, {
+    ...(opts.zone === false ? {} : { timezone }),
+    hour12: opts.hour12 ?? prefersHour12(),
+  });
 }
 
 /** Next `count` run times after `from`, in the schedule's time zone; [] when the expression is invalid. */
 export function nextRuns(expr: string, timezone: string, count: number, from: Date = new Date()): Date[] {
   try {
-    const job = new Cron(expr, { timezone, paused: true });
+    const job = new Cron(expr, { timezone, paused: true, mode: '5-or-6-parts' });
     const runs = job.nextRuns(count, from);
     job.stop();
     return runs;
@@ -138,20 +43,92 @@ export function nextRuns(expr: string, timezone: string, count: number, from: Da
   }
 }
 
-/** "Mon 19 Oct, 07:00" in the schedule's own zone. */
-export function formatInZone(date: Date | string, timezone: string): string {
+/** "Mon 19 Oct, 07:00" (or "7:00 am" where the browser uses a 12-hour clock) in the schedule's own zone. */
+export function formatInZone(date: Date | string, timezone: string, opts: { hour12?: boolean } = {}): string {
   const d = typeof date === 'string' ? new Date(date) : date;
+  const hour12 = opts.hour12 ?? prefersHour12();
   try {
     return new Intl.DateTimeFormat('en-GB', {
       timeZone: timezone,
       weekday: 'short',
       day: 'numeric',
       month: 'short',
-      hour: '2-digit',
+      hour: hour12 ? 'numeric' : '2-digit',
       minute: '2-digit',
-      hourCycle: 'h23',
+      hourCycle: hour12 ? 'h12' : 'h23',
     }).format(d);
   } catch {
     return d.toISOString().slice(0, 16).replace('T', ' ');
+  }
+}
+
+/** UTC, the browser's zone, then every IANA zone the browser knows (A→Z); a fixed list where Intl can't enumerate. */
+export function timeZoneList(...extra: Array<string | undefined>): string[] {
+  const browser = browserZone();
+  let all: string[];
+  try {
+    all = (Intl as { supportedValuesOf?: (k: string) => string[] }).supportedValuesOf?.('timeZone') ?? [];
+  } catch {
+    all = [];
+  }
+  if (!all.length) all = [...COMMON_ZONES];
+  const modern = (z: string) => {
+    const name = MODERN_NAMES[z];
+    return name && isValidTimeZone(name) ? name : z;
+  };
+  return [...new Set(['UTC', browser, ...extra.filter((z): z is string => !!z), ...all.map(modern)])];
+}
+
+/**
+ * Browsers list some zones by their old ICU names (Asia/Calcutta); engineers look for the current IANA name
+ * (Asia/Kolkata), which the scheduler accepts too.
+ */
+const MODERN_NAMES: Record<string, string> = {
+  'Asia/Calcutta': 'Asia/Kolkata',
+  'Asia/Saigon': 'Asia/Ho_Chi_Minh',
+  'Asia/Katmandu': 'Asia/Kathmandu',
+  'Asia/Rangoon': 'Asia/Yangon',
+  'Europe/Kiev': 'Europe/Kyiv',
+  'America/Buenos_Aires': 'America/Argentina/Buenos_Aires',
+  'America/Catamarca': 'America/Argentina/Catamarca',
+  'America/Cordoba': 'America/Argentina/Cordoba',
+  'America/Jujuy': 'America/Argentina/Jujuy',
+  'America/Mendoza': 'America/Argentina/Mendoza',
+  'America/Indianapolis': 'America/Indiana/Indianapolis',
+  'America/Louisville': 'America/Kentucky/Louisville',
+  'America/Godthab': 'America/Nuuk',
+  'Atlantic/Faeroe': 'Atlantic/Faroe',
+  'Pacific/Enderbury': 'Pacific/Kanton',
+  'Pacific/Ponape': 'Pacific/Pohnpei',
+  'Pacific/Truk': 'Pacific/Chuuk',
+};
+
+/** The common zones (used where the browser can't list them all). */
+export const COMMON_ZONES = [
+  'UTC',
+  'Europe/London',
+  'Europe/Berlin',
+  'America/New_York',
+  'America/Chicago',
+  'America/Los_Angeles',
+  'Asia/Singapore',
+  'Australia/Sydney',
+] as const;
+
+/** The browser's own zone when the scheduler accepts it, else UTC. */
+export function browserZone(): string {
+  const zone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+  return isValidTimeZone(zone) ? zone : 'UTC';
+}
+
+/** "UTC+01:00" for a zone right now ("" when the browser can't tell). */
+export function zoneOffset(timezone: string, at: Date = new Date()): string {
+  try {
+    const part = new Intl.DateTimeFormat('en-US', { timeZone: timezone, timeZoneName: 'longOffset' })
+      .formatToParts(at)
+      .find((p) => p.type === 'timeZoneName')?.value;
+    return part ? part.replace(/^GMT$/, 'UTC±00:00').replace(/^GMT/, 'UTC') : '';
+  } catch {
+    return '';
   }
 }

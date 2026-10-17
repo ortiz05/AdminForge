@@ -63,7 +63,7 @@ describe('schedules API', () => {
       title: 'Schedule sweep.every-15-minutes',
       summary: 'Probe sweep',
       cron: '*/15 * * * *',
-      cronText: 'Every 15 minutes',
+      cronText: 'Every 15 minutes (UTC)',
       timezone: 'UTC',
       enabled: true,
       identity: 'automation',
@@ -80,7 +80,7 @@ describe('schedules API', () => {
     expect(items.find((i) => i.key === 'reports.weekly')).toMatchObject({
       enabled: false,
       nextRunAt: null,
-      cronText: 'Every Monday at 07:00',
+      cronText: 'Every Monday at 07:00 Europe/London',
       timezone: 'Europe/London',
       job: { kind: 'report', ref: 'azure.example' },
     });

@@ -7,7 +7,9 @@ export const field = tv({
     label: 'text-sm font-medium text-fg',
     optional: 'ml-1 font-normal text-fg-3',
     hint: 'text-xs text-fg-3',
-    error: 'flex items-center gap-1 text-xs font-medium text-crit',
+    // Icon on the first line, full size, however many lines the message wraps to.
+    error: 'flex items-start gap-1 text-xs font-medium text-crit',
+    errorIcon: 'mt-0.5 shrink-0',
   },
 });
 

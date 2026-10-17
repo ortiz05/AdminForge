@@ -496,10 +496,14 @@ export async function provisionStatus(ctx: CliContext): Promise<StatusResult> {
     }
     // The enterprise fixtures' marked objects (users, apps, groups, policies, sign-in accounts) must not be here either.
     const leftovers = await planFixturesRun(ctx, clients, settings, desired, 'remove');
-    const enterprise = (leftovers?.ops ?? []).filter((o) => o.action === 'delete' && o.fixture !== 'approver');
+    const enterprise = (leftovers?.ops ?? []).filter(
+      (o) => o.action === 'delete' && o.fixture !== 'approver',
+    );
     if (enterprise.length) {
       const left = `${enterprise.length} AF-Test fixture object(s) left over in a non-test environment`;
-      ctx.out(`    ✗ ${left} — run \`pnpm adminforge provision test-identities --remove-fixtures\` (dry run first)`);
+      ctx.out(
+        `    ✗ ${left} — run \`pnpm adminforge provision test-identities --remove-fixtures\` (dry run first)`,
+      );
       failures.push(left);
     }
   } else {
@@ -515,7 +519,9 @@ export async function provisionStatus(ctx: CliContext): Promise<StatusResult> {
         '    ⚠ The validation user is enabled: it holds standing directory roles. Disable it between live runs: `pnpm adminforge provision test-identities --disable`.',
       );
     // The opted-in licensed test fixtures: ✗ when missing, drifted or blocked (no permission, refused object).
-    const fixtures = refused ? undefined : await planFixturesRun(ctx, clients, settings, plan.desired, 'status');
+    const fixtures = refused
+      ? undefined
+      : await planFixturesRun(ctx, clients, settings, plan.desired, 'status');
     if (fixtures) {
       fixtureOps = fixtures.ops;
       renderStatus(fixtureOps, ctx.out);

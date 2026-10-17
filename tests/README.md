@@ -8,18 +8,20 @@ imports a test library. Test files mirror what they test (`unit/<package>/…`, 
 
 The vitest projects are defined in `vitest.config.ts`; each one maps to a folder.
 
-| Project     | Folder                     | Environment                                    | What it covers                                                                                           |
-| ----------- | -------------------------- | ---------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| `unit`      | `unit/<package>/`          | node                                           | Pure logic per package: api, cli, connectors, design-tokens, engine, expressions, runner, scheduler, …   |
-| `component` | `component/<area>/`        | jsdom (`component/setup.ts`)                   | React components: `ui` primitives, widgets, web pages, Query Studio; `axe` checks via `component/axe.ts` |
-| `api`       | `api/`                     | node (`api/setup.ts`), files run one at a time | BFF routes through Fastify `inject` with a mock session; DB-backed suites (see below)                    |
-| `content`   | `content/`                 | node                                           | Every definition in `portal/content` validates; widget configs; focused tests for content-specific logic |
-| `guards`    | `guards/`                  | node                                           | No secrets or tenant-specific values in committable files; design tokens only in UI code                 |
-| `live`      | `live/**/*.test.ts` (none) | node                                           | Reserved; the live suite is Playwright (`live/README.md`)                                                |
+| Project     | Folder                     | Environment                                    | What it covers                                                                                                             |
+| ----------- | -------------------------- | ---------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `unit`      | `unit/<package>/`          | node                                           | Pure logic per package: api, cli, connectors, design-tokens, engine, expressions, runner, scheduler, …                     |
+| `component` | `component/<area>/`        | jsdom (`component/setup.ts`)                   | React components: `ui` primitives, widgets, web pages, Query Studio; `axe` checks via `component/axe.ts`                   |
+| `api`       | `api/`                     | node (`api/setup.ts`), files run one at a time | BFF routes through Fastify `inject` with a mock session; DB-backed suites (see below)                                      |
+| `content`   | `content/`                 | node                                           | Every definition in `portal/content` validates; widget configs; focused tests for content-specific logic                   |
+| `guards`    | `guards/`                  | node                                           | No secrets or tenant-specific values in committable files; design tokens only in UI code                                   |
+| `live`      | `live/**/*.test.ts` (none) | node                                           | Reserved; the live suite is Playwright (`live/README.md`)                                                                  |
+| `perf`      | `perf/**/*.test.ts`        | node                                           | Enterprise-scale budgets against a synthetic 100k-user tenant — `pnpm test:perf` only ([`perf/README.md`](perf/README.md)) |
 
 ```bash
 pnpm test                       # unit, component, api, content, guards
 pnpm guard                      # guards only (also the pre-commit hook)
+pnpm test:perf                  # enterprise-scale datasource budgets (not part of pnpm test; ~4 min)
 pnpm --filter @adminforge/tests exec vitest run --project <unit|component|api|content|guards> [path filter]
 pnpm --filter @adminforge/tests exec vitest --project component   # watch mode
 ```

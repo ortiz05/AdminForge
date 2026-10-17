@@ -1,0 +1,309 @@
+{
+  "scale": "enterprise",
+  "liveLatencyMs": 250,
+  "default": {
+    "maxRequests": 25,
+    "maxBytes": 10000000,
+    "maxTransformMs": 250,
+    "maxHeapPeakMB": 512,
+    "maxEstimatedLiveMs": 8000
+  },
+  "datasources": {
+    "endpoint.apps#apps": {
+      "knownError": "content_error: every app with $expand=assignments, search in the transform",
+      "expect": "error",
+      "maxRequests": 40,
+      "mayTimeOut": true
+    },
+    "endpoint.autopilot-not-enrolled#devices": {
+      "knownError": "content_error: every managed/Entra device with a per-row transform; needs Intune report exports or untransformed rows",
+      "expect": "error",
+      "maxRequests": 55,
+      "mayTimeOut": true,
+      "maxEstimatedLiveMs": 17133
+    },
+    "endpoint.device-security-gaps#devices": {
+      "knownError": "content_error: every managed/Entra device with a per-row transform; needs Intune report exports or untransformed rows",
+      "expect": "error",
+      "maxRequests": 40,
+      "maxBytes": 18815120,
+      "mayTimeOut": true
+    },
+    "endpoint.non-compliant-devices#devices": {
+      "knownError": "content_error: every managed/Entra device with a per-row transform; needs Intune report exports or untransformed rows",
+      "expect": "error",
+      "mayTimeOut": true
+    },
+    "endpoint.os-versions#devices": {
+      "knownError": "content_error: every managed/Entra device with a per-row transform; needs Intune report exports or untransformed rows",
+      "expect": "error",
+      "maxRequests": 40,
+      "mayTimeOut": true
+    },
+    "endpoint.recovery-key-escrow#devices": {
+      "knownTruncated": "capped by design to fit the 250 ms transform budget; the report says when it stops (measured 2026-10-17 at enterprise scale)"
+    },
+    "endpoint.recovery-key-escrow#keys": {
+      "knownTruncated": "capped by design to fit the 250 ms transform budget; the report says when it stops (measured 2026-10-17 at enterprise scale)"
+    },
+    "endpoint.stale-devices#entra": {
+      "knownError": "content_error: every managed/Entra device with a per-row transform; needs Intune report exports or untransformed rows",
+      "expect": "error",
+      "mayTimeOut": true
+    },
+    "endpoint.stale-devices#intune": {
+      "knownError": "content_error: every managed/Entra device with a per-row transform; needs Intune report exports or untransformed rows",
+      "expect": "error",
+      "mayTimeOut": true
+    },
+    "endpoint.windows-laps-coverage#backups": {
+      "knownError": "SyntheticNotModelled: measured 2026-10-17 at enterprise scale",
+      "expect": "unmodelled"
+    },
+    "endpoint.windows-laps-coverage#devices": {
+      "knownTruncated": "capped by design to fit the 250 ms transform budget; the report says when it stops (measured 2026-10-17 at enterprise scale)"
+    },
+    "identity.app-credential-expiry#credentials": {
+      "knownError": "content_error: every app/service principal credential flattened in the transform; needs a snapshot",
+      "expect": "error",
+      "mayTimeOut": true
+    },
+    "identity.app-credential-hygiene#apps": {
+      "knownSlow": "every app/service principal credential flattened in the transform; needs a snapshot",
+      "maxBytes": 15750986
+    },
+    "identity.app-credential-hygiene#credentials": {
+      "knownError": "content_error: every app/service principal credential flattened in the transform; needs a snapshot",
+      "expect": "error",
+      "mayTimeOut": true
+    },
+    "identity.app-permissions#grants": {
+      "knownSlow": "every grant/app role assignment; getByIds covers only the first 1,000 ids",
+      "maxRequests": 41,
+      "maxBytes": 16580834
+    },
+    "identity.app-permissions#holders": {
+      "knownError": "content_error: every grant/app role assignment; getByIds covers only the first 1,000 ids",
+      "expect": "error",
+      "mayTimeOut": true
+    },
+    "identity.app-registration-risks#apps": {
+      "knownError": "content_error: every app/service principal credential flattened in the transform; needs a snapshot",
+      "expect": "error",
+      "maxBytes": 19856963,
+      "mayTimeOut": true
+    },
+    "identity.app-registrations#apps": {
+      "knownError": "content_error: every app with $expand=owners, facets and sort in the transform; needs cursor paging and owners/$count",
+      "expect": "error",
+      "maxRequests": 252,
+      "maxBytes": 36691556,
+      "mayTimeOut": true,
+      "maxEstimatedLiveMs": 76381
+    },
+    "identity.apps-without-owners#report": {
+      "knownError": "content_error: measured 2026-10-17 at enterprise scale",
+      "expect": "error",
+      "mayTimeOut": true
+    },
+    "identity.auth-method-strength#weak": {
+      "knownTruncated": "capped by design to fit the 250 ms transform budget; the report says when it stops (measured 2026-10-17 at enterprise scale)"
+    },
+    "identity.ca-report-only-impact#signins": {
+      "knownTruncated": "a sample by design: the newest 300 sign-ins of the window from Graph (the page says so); Log Analytics counts every sign-in"
+    },
+    "identity.conditional-access#policies": {
+      "knownSlow": "measured 2026-10-17 at enterprise scale",
+      "mayTimeOut": true
+    },
+    "identity.consent-grants#grants": {
+      "knownSlow": "every grant/app role assignment; getByIds covers only the first 1,000 ids",
+      "maxRequests": 66,
+      "maxBytes": 19469526,
+      "maxEstimatedLiveMs": 20125
+    },
+    "identity.consent-grants#objects": {
+      "knownError": "content_error: every grant/app role assignment; getByIds covers only the first 1,000 ids",
+      "expect": "error",
+      "mayTimeOut": true
+    },
+    "identity.directory-changes#audits": {
+      "knownError": "content_error: a 20k cap over 7 days of audit events is exceeded in a large tenant; transform over all rows",
+      "expect": "error",
+      "knownTruncated": "stops at maxItems 20000: a 20k cap over 7 days of audit events is exceeded in a large tenant; transform over all rows",
+      "maxBytes": 22545158,
+      "mayTimeOut": true
+    },
+    "identity.disabled-users-with-licences#users": {
+      "knownError": "content_error: transform over every disabled user",
+      "expect": "error",
+      "mayTimeOut": true
+    },
+    "identity.group-lifecycle#deleted": {
+      "knownError": "SyntheticNotModelled: measured 2026-10-17 at enterprise scale",
+      "expect": "unmodelled"
+    },
+    "identity.group-lifecycle#policy": {
+      "knownError": "SyntheticNotModelled: measured 2026-10-17 at enterprise scale",
+      "expect": "unmodelled"
+    },
+    "identity.group-lifecycle#singleOwner": {
+      "knownTruncated": "capped by design to fit the 250 ms transform budget; the report says when it stops (measured 2026-10-17 at enterprise scale)"
+    },
+    "identity.groups-without-owners#report": {
+      "knownError": "content_error: measured 2026-10-17 at enterprise scale",
+      "expect": "error",
+      "mayTimeOut": true
+    },
+    "identity.health#credentials": {
+      "knownError": "content_error: flattens every application credential in the transform; needs a snapshot",
+      "expect": "error",
+      "mayTimeOut": true
+    },
+    "identity.health#stale": {
+      "knownError": "content_error: crawls up to 50k users at 120 per page for two KPIs; needs a snapshot or /users/$count",
+      "expect": "error",
+      "maxRequests": 114,
+      "mayTimeOut": true,
+      "maxEstimatedLiveMs": 34753
+    },
+    "identity.inactive-guests#guests": {
+      "knownError": "content_error: every guest with a per-row transform",
+      "expect": "error",
+      "maxRequests": 87,
+      "mayTimeOut": true,
+      "maxEstimatedLiveMs": 26880
+    },
+    "identity.inactive-users#users": {
+      "knownError": "content_error: reads every member at 120 per page (signInActivity) and maps/sorts all rows in the transform; needs a tenant-wide snapshot or server-side signInActivity filters",
+      "expect": "error",
+      "maxRequests": 960,
+      "maxBytes": 87438927,
+      "mayTimeOut": true,
+      "maxEstimatedLiveMs": 288630
+    },
+    "identity.licence-assignment-errors#noLocation": {
+      "knownTruncated": "capped by design to fit the 250 ms transform budget; the report says when it stops (measured 2026-10-17 at enterprise scale)"
+    },
+    "identity.password-policies#users": {
+      "knownError": "content_error: every member with a per-row transform",
+      "expect": "error",
+      "maxRequests": 117,
+      "maxBytes": 48841637,
+      "mayTimeOut": true,
+      "maxEstimatedLiveMs": 35880
+    },
+    "identity.privileged-role-assignments#assignments": {
+      "knownError": "content_error: measured 2026-10-17 at enterprise scale",
+      "expect": "error",
+      "mayTimeOut": true
+    },
+    "identity.unused-apps#activity": {
+      "knownError": "SyntheticNotModelled: measured 2026-10-17 at enterprise scale",
+      "expect": "unmodelled"
+    },
+    "identity.unused-apps#apps": {
+      "knownTruncated": "capped by design to fit the 250 ms transform budget; the report says when it stops (measured 2026-10-17 at enterprise scale)"
+    },
+    "identity.unused-apps#grants": {
+      "knownTruncated": "capped by design to fit the 250 ms transform budget; the report says when it stops (measured 2026-10-17 at enterprise scale)"
+    },
+    "identity.users-without-mfa#report": {
+      "knownError": "content_error: transform and sort over every registration row",
+      "expect": "error",
+      "mayTimeOut": true
+    },
+    "m365.anyone-link-sites#links": {
+      "knownError": "content_error: usage report detail rows (one per user/site) through a transform; stream untransformed rows, KPIs from the *Counts reports",
+      "expect": "error",
+      "maxBytes": 44844783,
+      "mayTimeOut": true
+    },
+    "m365.inactive-licensed-users#users": {
+      "knownError": "content_error: usage report detail rows (one per user/site) through a transform; stream untransformed rows, KPIs from the *Counts reports",
+      "expect": "error",
+      "maxRequests": 56,
+      "maxBytes": 79963476,
+      "mayTimeOut": true,
+      "maxEstimatedLiveMs": 17506
+    },
+    "m365.licence#users": {
+      "knownError": "content_error: selects signInActivity (120 per page) across every holder of the SKU and filters in the transform; needs cursor paging with server-side $filter/$search",
+      "expect": "error",
+      "maxRequests": 446,
+      "maxBytes": 45245459,
+      "mayTimeOut": true,
+      "maxEstimatedLiveMs": 134505
+    },
+    "m365.mailbox-storage#mailboxes": {
+      "knownError": "content_error: usage report detail rows (one per user/site) through a transform; stream untransformed rows, KPIs from the *Counts reports",
+      "expect": "error",
+      "maxRequests": 56,
+      "maxBytes": 65148242,
+      "mayTimeOut": true,
+      "maxEstimatedLiveMs": 17505
+    },
+    "m365.message-center-actions#messages": {
+      "knownError": "content_error: every message through a transform",
+      "expect": "error",
+      "mayTimeOut": true
+    },
+    "m365.onedrive-usage#accounts": {
+      "knownError": "content_error: usage report detail rows (one per user/site) through a transform; stream untransformed rows, KPIs from the *Counts reports",
+      "expect": "error",
+      "maxRequests": 56,
+      "maxBytes": 47608104,
+      "mayTimeOut": true,
+      "maxEstimatedLiveMs": 17506
+    },
+    "m365.overview#messages": {
+      "knownSlow": "measured 2026-10-17 at enterprise scale",
+      "knownTruncated": "stops at maxItems 1000: measured 2026-10-17 at enterprise scale"
+    },
+    "m365.overview#teams": {
+      "knownSlow": "measured 2026-10-17 at enterprise scale",
+      "maxRequests": 64,
+      "mayTimeOut": true,
+      "maxEstimatedLiveMs": 19572
+    },
+    "m365.sharepoint-site-usage#sites": {
+      "knownError": "content_error: usage report detail rows (one per user/site) through a transform; stream untransformed rows, KPIs from the *Counts reports",
+      "expect": "error",
+      "maxBytes": 44844819,
+      "mayTimeOut": true
+    },
+    "m365.sharepoint-sites#storage": {
+      "knownError": "content_error: usage report detail rows (one per user/site) through a transform; stream untransformed rows, KPIs from the *Counts reports",
+      "expect": "error",
+      "maxBytes": 44844783,
+      "mayTimeOut": true
+    },
+    "m365.teams#teams": {
+      "knownError": "content_error: every team with $expand=owners, search in the transform",
+      "expect": "error",
+      "maxRequests": 64,
+      "mayTimeOut": true,
+      "maxEstimatedLiveMs": 19753
+    },
+    "m365.teams-activity#teams": {
+      "knownError": "content_error: usage report detail rows (one per user/site) through a transform; stream untransformed rows, KPIs from the *Counts reports",
+      "expect": "error",
+      "mayTimeOut": true
+    },
+    "m365.teams-without-owners#archived": {
+      "knownSlow": "measured 2026-10-17 at enterprise scale",
+      "maxRequests": 64,
+      "maxEstimatedLiveMs": 19434
+    },
+    "m365.teams-without-owners#teams": {
+      "knownSlow": "measured 2026-10-17 at enterprise scale",
+      "maxRequests": 64,
+      "mayTimeOut": true,
+      "maxEstimatedLiveMs": 19651
+    },
+    "security.risky-users-review#detections": {
+      "knownError": "content_error: risk detections through a deep transform",
+      "expect": "error"
+    }
+  }
+}

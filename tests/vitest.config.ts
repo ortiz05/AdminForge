@@ -33,6 +33,20 @@ export default defineConfig({
         extends: true,
         test: { name: 'live', include: ['live/**/*.test.ts'], environment: 'node', testTimeout: 60_000 },
       },
+      // Enterprise-scale budgets against the synthetic tenant (tests/perf/README.md): `pnpm test:perf` only — not
+      // part of `pnpm test`; the suite skips itself unless AF_PERF=1.
+      {
+        extends: true,
+        test: {
+          name: 'perf',
+          include: ['perf/**/*.test.ts'],
+          environment: 'node',
+          fileParallelism: false,
+          testTimeout: 900_000,
+          hookTimeout: 900_000,
+          execArgv: ['--max-old-space-size=8192', '--expose-gc'],
+        },
+      },
     ],
   },
 });

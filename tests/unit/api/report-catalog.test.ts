@@ -216,6 +216,7 @@ describe('schedulesByReport', () => {
         createdBy: 'avery@example.com',
         canManage: true,
         pendingApprovalId: null,
+        runsAs: { kind: 'automation', name: null, label: 'automation identity' },
       },
     ]);
   });

@@ -26,9 +26,16 @@ export default function InspectorPage({ target, onTitle, onPageTitle, onFullPage
   const q = useQuery(definitionQuery(target.page));
   const navigate = useNavigate();
   const itab = useRouterState({ select: (s) => (s.location.search as SearchPatch).itab });
+  // The shell reads `target` from the URL on every render (a new object each time): keyed by its value, the page gets
+  // new params only when the URL changes. Otherwise a title it reports re-renders the shell, which gives it a new data
+  // scope, which evaluates the title again — a loop that froze the browser on the sign-in page.
+  const paramsKey = JSON.stringify(target.params);
   const search = useMemo(
-    () => ({ ...target.params, ...(typeof itab === 'string' ? { tab: itab } : {}) }),
-    [target.params, itab],
+    () => ({
+      ...(JSON.parse(paramsKey) as Record<string, unknown>),
+      ...(typeof itab === 'string' ? { tab: itab } : {}),
+    }),
+    [paramsKey, itab],
   );
   const pageTitle = q.data?.title;
   useEffect(() => onPageTitle(pageTitle), [pageTitle, onPageTitle]);

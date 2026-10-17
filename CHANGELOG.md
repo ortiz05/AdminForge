@@ -559,6 +559,11 @@ Security review of the licensed build-out (2026-10-16) fixed:
 
 ### Fixed
 
+- Opening a sign-in event in the inspector froze the browser: the drawer's title flipped hundreds of times a second
+  (no requests, no URL change). An entity page whose header title is an expression reported it to the inspector, the
+  inspector rebuilt the page's params on every render, and the new data scope evaluated the title again. The inspector
+  page now gets new params only when the URL changes, and the header reports a title once it has one
+  (`tests/e2e/inspector-sign-in-event.spec.ts`; replayed with 60 real sign-ins).
 - The inspector no longer gets stuck in a sign-in/refresh loop when Microsoft keeps asking for a fresh sign-in: the
   app follows a 401 to sign-in at most once per tab per minute, then says "Sign-in didn't finish" with "Sign in again";
   capabilities lookups never start a sign-in themselves.

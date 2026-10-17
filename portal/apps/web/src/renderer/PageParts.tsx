@@ -94,7 +94,11 @@ export function EntityHeader({
   const statusLabel = useTemplate<unknown>(header?.statusLabel, runtime.scope, Boolean(header?.statusLabel));
   const ids = useTemplate<Record<string, unknown>>(header?.ids, runtime.scope, Boolean(header?.ids));
   const titleText = asText(title.value);
-  useEffect(() => onTitle?.(titleText || undefined), [titleText, onTitle]);
+  // Only a settled title: a title being evaluated again (new data) isn't "no title".
+  const titlePending = title.pending;
+  useEffect(() => {
+    if (!titlePending) onTitle?.(titleText || undefined);
+  }, [titleText, titlePending, onTitle]);
 
   const tone =
     statusKnown && TONES.has(asText(status.value))

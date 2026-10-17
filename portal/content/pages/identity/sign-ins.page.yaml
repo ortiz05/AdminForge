@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/page.schema.json
 kind: page
 id: identity.sign-ins
-version: 1.1.0
+version: 1.2.0
 title: Sign-in logs
 summary: >-
   Interactive user sign-ins — filter by time range, result, user, application, country, IP address, Conditional
@@ -152,6 +152,7 @@ layout:
       page: identity.sign-in
       params:
         id: ${ row.id }
+        at: ${ row.createdDateTime }
     rowActions:
       - { label: Open user, icon: user, href: "/p/identity.user?id=${ $encode(row.userId) }" }
       - playbook: identity.revoke-sessions

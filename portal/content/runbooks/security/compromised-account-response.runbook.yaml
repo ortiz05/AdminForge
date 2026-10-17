@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/runbook.schema.json
 kind: runbook
 id: security.compromised-account-response
-version: 1.1.0
+version: 1.2.0
 title: Compromised account response
 summary: Retired — merged into identity.compromised-account (Compromised account response), which covers confirm, contain, investigate, recover and close.
 status: retired
@@ -43,14 +43,24 @@ sections:
           path: /users/${ $encode($guid(inputs.userId)) }
           query:
             $select: id,displayName,userPrincipalName,accountEnabled,lastPasswordChangeDateTime,onPremisesSyncEnabled
-      - id: risk
+      # A filter, not GET riskyUsers/{id}: a user who was never at risk isn't in riskyUsers, and Graph answers the
+      # direct read with a 404 that has no readable message. The filter returns an empty list instead.
+      - id: riskLookup
         type: graph
         mode: read
         describe: Read Identity Protection risk (if any)
         onError: continue
         request:
           method: GET
-          path: /identityProtection/riskyUsers/${ $encode($guid(inputs.userId)) }
+          path: /identityProtection/riskyUsers
+          query:
+            $filter: ${ 'id eq ' & $odata($guid(inputs.userId)) }
+
+      # Only this user's row: an answer (or a fixture) holding other users must not stand in for theirs.
+      - id: risk
+        type: transform
+        expression: ${ ($id := $lowercase(inputs.userId); steps.riskLookup.output.value[$lowercase(id) = $id][0]) }
+
       - id: detections
         type: graph
         mode: read
@@ -161,7 +171,7 @@ tests:
     inputs: { userId: 30000000-0000-4000-8000-000000000001, reason: Incident 4224 - password spray then a successful sign-in from NL., incidentId: '4224' }
     mocks:
       user: { id: 30000000-0000-4000-8000-000000000001, displayName: Avery Engineer, userPrincipalName: avery@example.com, accountEnabled: true, onPremisesSyncEnabled: false }
-      risk: { riskLevel: high, riskState: atRisk }
+      riskLookup: { value: [{ id: 30000000-0000-4000-8000-000000000001, riskLevel: high, riskState: atRisk }] }
       detections: { value: [] }
     expect:
       status: succeeded
@@ -171,7 +181,7 @@ tests:
     inputs: { userId: 30000000-0000-4000-8000-000000000005, reason: Already confirmed by the SOC; blocking sign-in now. }
     mocks:
       user: { id: 30000000-0000-4000-8000-000000000005, displayName: "Eli O'Brien", userPrincipalName: eli.obrien@example.com, accountEnabled: true, onPremisesSyncEnabled: true }
-      risk: { riskLevel: high, riskState: confirmedCompromised }
+      riskLookup: { value: [{ id: 30000000-0000-4000-8000-000000000005, riskLevel: high, riskState: confirmedCompromised }] }
       detections: { value: [] }
     expect:
       status: succeeded

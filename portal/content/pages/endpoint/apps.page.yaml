@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/page.schema.json
 kind: page
 id: endpoint.apps
-version: 1.0.0
+version: 1.0.1
 title: Apps
 summary: >-
   Apps managed by Intune — Win32, Microsoft Store, Microsoft 365 Apps, line-of-business, store and web apps — by
@@ -52,7 +52,9 @@ datasources:
     request:
       path: /deviceAppManagement/mobileApps
       query:
-        $select: id,displayName,publisher,description,createdDateTime,lastModifiedDateTime,isFeatured,publishingState,isAssigned
+        # v1.0 has no isAssigned (beta only): whether an app is assigned comes from its assignments.
+        $select: id,displayName,publisher,description,createdDateTime,lastModifiedDateTime,isFeatured,publishingState
+        $expand: assignments($select=id)
     paging: all
     maxItems: 10000
     cache: { ttl: 300 }
@@ -81,7 +83,7 @@ datasources:
             "odataType": $t,
             "kind": $type($t),
             "platform": $platform($t),
-            "assigned": isAssigned = true,
+            "assigned": $count(assignments) > 0,
             "featured": isFeatured = true,
             "state": publishingState,
             "created": createdDateTime,

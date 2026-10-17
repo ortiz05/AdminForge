@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/page.schema.json
 kind: page
 id: identity.user
-version: 1.2.0
+version: 1.3.1
 title: User
 summary: One user account — profile, groups, roles, devices, authentication methods, sign-ins, licences and audit history.
 owner: identity-team
@@ -232,8 +232,9 @@ datasources:
 header:
   title: ${ profile.displayName }
   subtitle: "${ profile.userPrincipalName & (profile.jobTitle ? ' · ' & profile.jobTitle : '') & (profile.department ? ' · ' & profile.department : '') }"
-  status: "${ profile.accountEnabled ? 'ok' : 'crit' }"
-  statusLabel: "${ profile.accountEnabled ? 'Sign-in allowed' : 'Sign-in blocked' }"
+  # Tri-state: no pill until accountEnabled is known (a failed or partial read isn't "Sign-in blocked").
+  status: "${ profile.accountEnabled = true ? 'ok' : profile.accountEnabled = false ? 'crit' : null }"
+  statusLabel: "${ profile.accountEnabled = true ? 'Sign-in allowed' : profile.accountEnabled = false ? 'Sign-in blocked' : null }"
   ids:
     Object id: ${ profile.id }
 
@@ -602,6 +603,7 @@ tabs:
           page: identity.sign-in
           params:
             id: ${ row.id }
+            at: ${ row.createdDateTime }
         empty:
           title: No sign-ins in the last 30 days
           body: Interactive sign-ins appear here within a few minutes.

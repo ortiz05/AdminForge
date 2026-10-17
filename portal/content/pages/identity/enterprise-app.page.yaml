@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/page.schema.json
 kind: page
 id: identity.enterprise-app
-version: 1.1.0
+version: 1.2.0
 title: Enterprise app
 summary: >-
   One enterprise app (service principal) — properties, user and group assignments, granted permissions (admin and
@@ -357,6 +357,7 @@ tabs:
           page: identity.sign-in
           params:
             id: ${ row.id }
+            at: ${ row.createdDateTime }
         empty:
           title: No recent sign-ins
           body: Nobody signed in to this app in the retention window (30 days).

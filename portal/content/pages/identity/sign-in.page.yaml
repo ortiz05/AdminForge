@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/page.schema.json
 kind: page
 id: identity.sign-in
-version: 1.0.0
+version: 1.1.0
 title: Sign-in
 summary: One sign-in event — result and failure reason, location, device, and the Conditional Access policies that applied.
 owner: identity-team
@@ -16,43 +16,66 @@ requires:
 
 params:
   id: { type: guid, label: Sign-in id, required: true, hidden: true }
+  # When the sign-in happened (the lists pass it): bounds the lookup, which is what keeps it fast.
+  at: { type: date, time: true, label: Signed in at, hidden: true }
 
 datasources:
   signIn:
     source: graph
     request:
-      path: /auditLogs/signIns/${ $encode($guid(params.id)) }
-    cache: { ttl: 3600 }
+      # Not GET /auditLogs/signIns/{id}: Graph can take minutes to answer it and then time out. A filter on the id,
+      # bounded to five minutes around the sign-in's time (`at`, which every list passes), answers in about a second —
+      # also when the sign-in isn't there. Without `at` (an old link) the search covers the last 7 days: an id that
+      # isn't in the log took ~10 s over 7 days and timed out (165 s) over 30 (measured 2026-10-16).
+      path: /auditLogs/signIns
+      query:
+        $filter: >-
+          ${ $join([
+               "id eq " & $odata($guid(params.id)),
+               "createdDateTime ge " & (params.at ? $iso($toMillis(params.at) - 300000) : $daysAgo(7)),
+               params.at ? "createdDateTime le " & $iso($toMillis(params.at) + 300000)
+             ][$], ' and ') }
+        $top: 1
+    # Short: sign-ins reach the log a few minutes late, so "not found" must not stick for long.
+    cache: { ttl: 300 }
+    # The row with this id (Graph returns only that one; the check keeps any other answer from showing).
     transform: >-
-      ${ $merge([value, {
-           "result": value.status.errorCode = 0 ? 'success' : 'failure',
-           "place": $join([value.location.city, value.location.state, value.location.countryOrRegion][$], ', '),
-           "coordinates": value.location.geoCoordinates.latitude ? value.location.geoCoordinates.latitude & ', ' & value.location.geoCoordinates.longitude : null,
-           "policies": [value.appliedConditionalAccessPolicies.{
-             "id": id,
-             "displayName": displayName,
-             "result": result,
-             "grant": $join(enforcedGrantControls, ', '),
-             "session": $join(enforcedSessionControls, ', ')
-           }^(result = 'failure' ? 0 : result = 'success' ? 1 : 2, displayName)]
-         }]) }
+      ${ (
+        $id := $lowercase(params.id);
+        $s := value.value[$lowercase(id) = $id][0];
+        $s ? $merge([$s, {
+          "result": $s.status.errorCode = 0 ? 'success' : 'failure',
+          "place": $join([$s.location.city, $s.location.state, $s.location.countryOrRegion][$], ', '),
+          "coordinates": $s.location.geoCoordinates.latitude ? $s.location.geoCoordinates.latitude & ', ' & $s.location.geoCoordinates.longitude : null,
+          "policies": [$s.appliedConditionalAccessPolicies.{
+            "id": id,
+            "displayName": displayName,
+            "result": result,
+            "grant": $join(enforcedGrantControls, ', '),
+            "session": $join(enforcedSessionControls, ', ')
+          }^(result = 'failure' ? 0 : result = 'success' ? 1 : 2, displayName)]
+        }])
+      ) }
 
+# `signIn` is empty when the sign-in isn't in the log (older than 30 days, or an edited link).
 header:
-  title: "${ signIn.userDisplayName & ' → ' & signIn.appDisplayName }"
-  subtitle: "${ signIn.createdDateTime & ' · ' & signIn.ipAddress & (signIn.place ? ' · ' & signIn.place : '') }"
-  status: "${ signIn.result = 'success' ? 'ok' : 'crit' }"
-  statusLabel: "${ signIn.result = 'success' ? 'Success' : 'Failure ' & signIn.status.errorCode }"
+  title: "${ signIn.id ? signIn.userDisplayName & ' → ' & signIn.appDisplayName : 'Sign-in not found' }"
+  subtitle: "${ signIn.id ? signIn.createdDateTime & ' · ' & signIn.ipAddress & (signIn.place ? ' · ' & signIn.place : '') : '' }"
+  status: "${ signIn.id ? (signIn.result = 'success' ? 'ok' : 'crit') : 'neutral' }"
+  statusLabel: "${ signIn.id ? (signIn.result = 'success' ? 'Success' : 'Failure ' & signIn.status.errorCode) : 'Not found' }"
   ids:
-    Request id: ${ signIn.id }
+    Request id: "${ signIn.id ? signIn.id : params.id }"
     Correlation id: ${ signIn.correlationId }
 
 actions:
   - label: Open user
     icon: user
+    when: ${ $exists(signIn.userId) }
     href: "/p/identity.user?id=${ $encode(signIn.userId) }"
   - playbook: identity.revoke-sessions
     label: Revoke the user's sessions
     icon: sign-out
+    when: ${ $exists(signIn.userId) }
     inputs:
       userId: ${ signIn.userId }
 
@@ -60,6 +83,14 @@ tabs:
   - id: details
     label: Details
     layout:
+      - widget: markdown
+        id: notFound
+        span: 12
+        when: ${ $not($exists(signIn.id)) }
+        text: |
+          **This sign-in wasn't found.** Microsoft keeps sign-ins for 30 days, so it may be older than that; a sign-in
+          from the last few minutes may not have arrived yet; and a link without the sign-in's time only searches the
+          last 7 days. Open it again from [Sign-in logs](/p/identity.sign-ins) to see what the log holds now.
       - widget: keyValue
         id: basics
         title: Sign-in

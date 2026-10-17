@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/playbook.schema.json
 kind: playbook
 id: security.dismiss-risky-user
-version: 1.0.0
+version: 1.1.0
 title: Dismiss user risk
 summary: Clears Microsoft Entra ID Protection risk for one user after you have verified the activity was legitimate.
 owner: security-team
@@ -16,7 +16,7 @@ requires:
   licences: [identityProtection]
 confirm:
   type: click
-  message: "${ 'Dismissing risk for ' & steps.lookup.output.userPrincipalName & ' closes all of their open risk detections without remediation.' }"
+  message: "${ 'Dismissing risk for ' & steps.risk.output.userPrincipalName & ' closes all of their open risk detections without remediation.' }"
 approval:
   required: false
 
@@ -25,23 +25,35 @@ inputs:
   reason: { type: string, label: Why the activity is legitimate, minLength: 10, multiline: true }
 
 steps:
+  # A filter, not GET riskyUsers/{id}: for a user who was never at risk Graph answers that with a 404 that has no
+  # readable message. The filter returns an empty list instead, and real errors (403, …) still fail the step.
   - id: lookup
     type: graph
     mode: read
     describe: Read the user's current risk
     request:
       method: GET
-      path: /identityProtection/riskyUsers/${ $encode($guid(inputs.userId)) }
+      path: /identityProtection/riskyUsers
+      query:
+        $filter: ${ 'id eq ' & $odata($guid(inputs.userId)) }
+
+  # Only this user's row: an answer (or a fixture) holding other users must not stand in for theirs.
+  - id: risk
+    type: transform
+    expression: ${ ($id := $lowercase(inputs.userId); steps.lookup.output.value[$lowercase(id) = $id][0]) }
 
   - id: has_risk
     type: assert
-    that: ${ steps.lookup.output.riskState in ['atRisk', 'confirmedCompromised'] }
-    message: "${ steps.lookup.output.userPrincipalName & ' has no open risk to dismiss (risk state: ' & steps.lookup.output.riskState & ').' }"
+    that: ${ steps.risk.output.riskState in ['atRisk', 'confirmedCompromised'] }
+    message: >-
+      ${ steps.risk.output
+         ? steps.risk.output.userPrincipalName & ' has no open risk to dismiss (risk state: ' & steps.risk.output.riskState & ').'
+         : 'This user has never been at risk in Identity Protection, so there is no risk to dismiss.' }
 
   - id: dismiss
     type: graph
     mode: write
-    describe: ${ 'Dismiss risk for ' & steps.lookup.output.userPrincipalName }
+    describe: ${ 'Dismiss risk for ' & steps.risk.output.userPrincipalName }
     request:
       method: POST
       path: /identityProtection/riskyUsers/dismiss
@@ -51,13 +63,13 @@ steps:
     dryRunOutput: null
 
 outputs:
-  summary: ${ 'Risk dismissed for ' & steps.lookup.output.userPrincipalName }
+  summary: ${ 'Risk dismissed for ' & steps.risk.output.userPrincipalName }
 
 tests:
   - name: dismisses risk for a user at risk
     inputs: { userId: 10000000-0000-4000-8000-000000000006, reason: Verified with the user - travel booked in advance. }
     mocks:
-      lookup: { id: 10000000-0000-4000-8000-000000000006, riskState: atRisk, riskLevel: medium, userPrincipalName: farah.haddad@example.com }
+      lookup: { value: [{ id: 10000000-0000-4000-8000-000000000006, riskState: atRisk, riskLevel: medium, userPrincipalName: farah.haddad@example.com }] }
     expect:
       status: succeeded
       plan: [dismiss]
@@ -65,5 +77,15 @@ tests:
   - name: refuses a user whose risk is already remediated
     inputs: { userId: 10000000-0000-4000-8000-00000000000b, reason: Duplicate request from the queue. }
     mocks:
-      lookup: { id: 10000000-0000-4000-8000-00000000000b, riskState: remediated, riskLevel: none, userPrincipalName: kai.lindqvist@example.com }
+      lookup: { value: [{ id: 10000000-0000-4000-8000-00000000000b, riskState: remediated, riskLevel: none, userPrincipalName: kai.lindqvist@example.com }] }
+    expect: { status: failed, failedStep: has_risk }
+  - name: refuses a user who was never at risk
+    inputs: { userId: 10000000-0000-4000-8000-000000000010, reason: Checking a user nobody flagged. }
+    mocks:
+      lookup: { value: [] }
+    expect: { status: failed, failedStep: has_risk }
+  - name: never reads another user's risk as this user's
+    inputs: { userId: 10000000-0000-4000-8000-000000000010, reason: Checking a user nobody flagged. }
+    mocks:
+      lookup: { value: [{ id: 10000000-0000-4000-8000-000000000006, riskState: atRisk, riskLevel: medium, userPrincipalName: farah.haddad@example.com }] }
     expect: { status: failed, failedStep: has_risk }

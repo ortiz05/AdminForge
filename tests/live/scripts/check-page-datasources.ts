@@ -3,11 +3,16 @@
 //
 // Usage (repository root; the validation user enabled — see tests/live/README.md):
 //   pnpm exec tsx tests/live/scripts/check-page-datasources.ts <page key>…   e.g. m365.overview security.overview
+//   Entity pages take their params after a `?`, preferably as placeholders (lib/placeholders.ts):
+//   'identity.user?id=@user:AF-Test-User-01'  'identity.group?id=@group:AF-Test-Group-01'
+//   The params are never printed (the output names the page key only). A literal id works too, but it stays in your
+//   shell history — use a placeholder whenever one exists for the kind.
 // Inputs: page keys (definition ids); the env file and <env>.admin.env for the sign-in.
 // Output: `<key>#<datasource> [<source>]: ok | <code>: <message>` — messages masked (lib/mask.ts), cut to 140 chars.
 //   Exit code 1 when a page is unknown or a datasource failed.
 // Safety: read-only (POST /api/datasources/execute-many runs datasources in read mode, as the portal does).
 import { maskError } from '../lib/mask';
+import { resolvePlaceholders } from '../lib/placeholders';
 import { openPortalSession } from '../lib/portal-session';
 
 const pages = process.argv.slice(2);
@@ -15,7 +20,17 @@ if (!pages.length) throw new Error('usage: check-page-datasources.ts <page key>�
 const s = await openPortalSession({ forwardToApi: false });
 let failed = 0;
 try {
-  for (const key of pages) {
+  for (const arg of pages) {
+    const [key = '', query = ''] = arg.split(/\?(.*)/s);
+    let params: Record<string, string>;
+    try {
+      ({ inputs: params } = await resolvePlaceholders(s, Object.fromEntries(new URLSearchParams(query))));
+    } catch (err) {
+      // Names the placeholder as typed, never what it would have resolved to.
+      failed++;
+      console.log(`${key}: ${maskError(err, { max: 140 })}`);
+      continue;
+    }
     let def: { datasources?: Record<string, { source: string }>; version?: string } | undefined;
     for (const kind of ['page', 'dashboard', 'report']) {
       const r = await s.api<typeof def>('GET', `/api/definitions/${kind}/${encodeURIComponent(key)}`);
@@ -36,7 +51,7 @@ try {
       page: key,
       version: def.version,
       datasources: Object.keys(def.datasources),
-      params: {},
+      params,
     });
     if (r.status !== 200) {
       failed++;

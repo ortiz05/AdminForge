@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/playbook.schema.json
 kind: playbook
 id: security.confirm-risky-user-compromised
-version: 1.0.0
+version: 1.1.0
 title: Confirm user compromised
 summary: Marks a user as compromised in Microsoft Entra ID Protection. Their user risk becomes high, so risk-based Conditional Access policies apply at the next sign-in.
 owner: security-team
@@ -36,15 +36,23 @@ steps:
       query:
         $select: id,displayName,userPrincipalName,accountEnabled
 
-  # Users who never had a risk detection are not in riskyUsers (404); they can still be confirmed compromised.
-  - id: risk
+  # Users who never had a risk detection are not in riskyUsers; they can still be confirmed compromised. A filter,
+  # not GET riskyUsers/{id}: it returns an empty list for them (the direct read is a 404 without a readable message),
+  # and real errors (403, …) still fail the step instead of being skipped.
+  - id: riskLookup
     type: graph
     mode: read
     describe: Read the user's current risk (if any)
-    onError: continue
     request:
       method: GET
-      path: /identityProtection/riskyUsers/${ $encode($guid(inputs.userId)) }
+      path: /identityProtection/riskyUsers
+      query:
+        $filter: ${ 'id eq ' & $odata($guid(inputs.userId)) }
+
+  # Only this user's row: an answer (or a fixture) holding other users must not stand in for theirs.
+  - id: risk
+    type: transform
+    expression: ${ ($id := $lowercase(inputs.userId); steps.riskLookup.output.value[$lowercase(id) = $id][0]) }
 
   - id: not_already_confirmed
     type: assert
@@ -74,7 +82,7 @@ tests:
     inputs: { userId: 30000000-0000-4000-8000-000000000001, reason: Incident 4224 - password spray then successful sign-in. }
     mocks:
       user: { id: 30000000-0000-4000-8000-000000000001, userPrincipalName: avery@example.com, accountEnabled: true }
-      risk: { id: 30000000-0000-4000-8000-000000000001, riskState: atRisk, riskLevel: high }
+      riskLookup: { value: [{ id: 30000000-0000-4000-8000-000000000001, riskState: atRisk, riskLevel: high }] }
     expect:
       status: succeeded
       plan: [confirm]
@@ -83,15 +91,21 @@ tests:
     inputs: { userId: 10000000-0000-4000-8000-000000000010, reason: Reported by the user's manager after a phishing call. }
     mocks:
       user: { id: 10000000-0000-4000-8000-000000000010, userPrincipalName: nora.fischer@example.com, accountEnabled: true }
-    errors:
-      risk: { status: 404, code: ResourceNotFound, message: Risky user not found }
+      riskLookup: { value: [] }
     expect:
       status: succeeded
       plan: [confirm]
-      steps: { risk: failed }
   - name: refuses a user already confirmed compromised
     inputs: { userId: 30000000-0000-4000-8000-000000000005, reason: Duplicate request from the queue. }
     mocks:
       user: { id: 30000000-0000-4000-8000-000000000005, userPrincipalName: eli.obrien@example.com, accountEnabled: false }
-      risk: { id: 30000000-0000-4000-8000-000000000005, riskState: confirmedCompromised, riskLevel: high }
+      riskLookup: { value: [{ id: 30000000-0000-4000-8000-000000000005, riskState: confirmedCompromised, riskLevel: high }] }
     expect: { status: failed, failedStep: not_already_confirmed }
+  - name: never reads another user's risk as this user's
+    inputs: { userId: 10000000-0000-4000-8000-000000000010, reason: Reported by the user's manager after a phishing call. }
+    mocks:
+      user: { id: 10000000-0000-4000-8000-000000000010, userPrincipalName: nora.fischer@example.com, accountEnabled: true }
+      riskLookup: { value: [{ id: 30000000-0000-4000-8000-000000000005, riskState: confirmedCompromised, riskLevel: high }] }
+    expect:
+      status: succeeded
+      plan: [confirm]

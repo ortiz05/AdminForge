@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/runbook.schema.json
 kind: runbook
 id: identity.compromised-account
-version: 2.0.1
+version: 2.1.0
 title: Compromised account response
 summary: >-
   Guided response to a suspected account compromise: confirm and scope the signal, contain (block sign-in, revoke
@@ -97,14 +97,23 @@ sections:
             $filter: ${ 'userId eq ' & $odata($guid(inputs.userId)) & ' and createdDateTime ge ' & $daysAgo(7) }
             $top: 200
 
-      - id: risk
+      # A filter, not GET riskyUsers/{id}: a user who was never at risk isn't in riskyUsers, and Graph answers the
+      # direct read with a 404 that has no readable message. The filter returns an empty list instead.
+      - id: riskLookup
         type: graph
         mode: read
         describe: Identity Protection risk (needs Entra ID P2)
         onError: continue
         request:
           method: GET
-          path: /identityProtection/riskyUsers/${ $encode($guid(inputs.userId)) }
+          path: /identityProtection/riskyUsers
+          query:
+            $filter: ${ 'id eq ' & $odata($guid(inputs.userId)) }
+
+      # Only this user's row: an answer (or a fixture) holding other users must not stand in for theirs.
+      - id: risk
+        type: transform
+        expression: ${ ($id := $lowercase(inputs.userId); steps.riskLookup.output.value[$lowercase(id) = $id][0]) }
 
       - id: detections
         type: graph
@@ -129,8 +138,8 @@ sections:
               "countries": [$distinct($s.location.countryOrRegion)],
               "ips": [$distinct($s.ipAddress)],
               "apps": [$distinct($s.appDisplayName)],
-              "riskLevel": steps.risk.output.riskLevel ? steps.risk.output.riskLevel : 'unknown',
-              "riskState": steps.risk.output.riskState ? steps.risk.output.riskState : 'unknown',
+              "riskLevel": steps.risk.output.riskLevel ? steps.risk.output.riskLevel : $exists(steps.riskLookup.output) ? 'none' : 'unknown',
+              "riskState": steps.risk.output.riskState ? steps.risk.output.riskState : $exists(steps.riskLookup.output) ? 'none' : 'unknown',
               "identityProtection": $exists(steps.detections.output.value),
               "detections": $count(steps.detections.output.value),
               "detectionTypes": [$distinct(steps.detections.output.value.riskEventType)]
@@ -221,7 +230,8 @@ sections:
           status: inProgress
           comment: >-
             ${ $substring('Containment done in AdminForge by ' & user.upn & ' (' & inputs.ticket & '): sign-in blocked, sessions revoked'
-               & (inputs.removeMethods = true ? ', MFA methods removed' : '') & '. ' & inputs.reason, 0, 1000) }
+               & (inputs.removeMethods = true ? (steps.removeMethods.status in ['succeeded', 'planned'] ? ', MFA methods removed' : ', MFA methods could not be removed') : '')
+               & '. ' & inputs.reason, 0, 1000) }
 
       - id: containOther
         type: manual
@@ -384,9 +394,12 @@ sections:
           - Root cause recorded (phishing, password reuse, token theft…); detection or policy gaps raised with security engineering
 
 outputs:
+  # Says what happened: removing the MFA methods may fail (onError: continue) without stopping the response.
   summary: >-
     ${ 'Incident ' & inputs.ticket & ' for ' & steps.account.output.userPrincipalName & ': contained'
-       & (inputs.removeMethods = true ? ', MFA methods removed' : '')
+       & (inputs.removeMethods = true
+          ? (steps.removeMethods.status in ['succeeded', 'planned'] ? ', MFA methods removed' : ', MFA methods could not be removed (see the run)')
+          : '')
        & ', investigated and access restored.' }
 
 tests:
@@ -404,7 +417,7 @@ tests:
         value:
           - { id: s1, createdDateTime: "2026-01-14T03:12:00Z", appDisplayName: Office 365 Exchange Online, ipAddress: 203.0.113.50, status: { errorCode: 0 }, location: { countryOrRegion: NL } }
           - { id: s2, createdDateTime: "2026-01-14T03:10:00Z", appDisplayName: Office 365 Exchange Online, ipAddress: 203.0.113.50, status: { errorCode: 50126 }, location: { countryOrRegion: NL } }
-      risk: { id: 00000000-0000-4000-8000-000000000102, riskLevel: high, riskState: atRisk }
+      riskLookup: { value: [{ id: 00000000-0000-4000-8000-000000000102, riskLevel: high, riskState: atRisk }] }
       detections: { value: [{ id: d1, riskEventType: passwordSpray }, { id: d2, riskEventType: unfamiliarFeatures }] }
       changesBy: { value: [{ activityDateTime: "2026-01-14T03:20:00Z", activityDisplayName: Consent to application }] }
       consents: { value: [{ clientId: 00000000-0000-4000-8000-000000000404, consentType: Principal, scope: Mail.Read offline_access }] }
@@ -421,6 +434,33 @@ tests:
       status: succeeded
       steps: { disable: succeeded, revokeOnly: skipped, confirmCompromised: succeeded, removeMethods: succeeded, incidentNote: succeeded, password: succeeded, tap: succeeded, enable: succeeded, confirmed: skipped }
       outputs: { summary: "Incident INC-1002 for m.chen@example.com: contained, MFA methods removed, investigated and access restored." }
+  - name: says when the MFA methods could not be removed
+    inputs: { userId: 00000000-0000-4000-8000-000000000102, ticket: INC-1002, reason: Password spray then a successful sign-in from NL, defenderIncidentId: "4224" }
+    user: { oid: 00000000-0000-4000-8000-0000000000a1, upn: avery@example.com }
+    mocks:
+      account: { id: 00000000-0000-4000-8000-000000000102, userPrincipalName: m.chen@example.com, accountEnabled: true, userType: Member, onPremisesSyncEnabled: null }
+      signIns:
+        value:
+          - { id: s1, createdDateTime: "2026-01-14T03:12:00Z", appDisplayName: Office 365 Exchange Online, ipAddress: 203.0.113.50, status: { errorCode: 0 }, location: { countryOrRegion: NL } }
+          - { id: s2, createdDateTime: "2026-01-14T03:10:00Z", appDisplayName: Office 365 Exchange Online, ipAddress: 203.0.113.50, status: { errorCode: 50126 }, location: { countryOrRegion: NL } }
+      riskLookup: { value: [{ id: 00000000-0000-4000-8000-000000000102, riskLevel: high, riskState: atRisk }] }
+      detections: { value: [{ id: d1, riskEventType: passwordSpray }, { id: d2, riskEventType: unfamiliarFeatures }] }
+      changesBy: { value: [{ activityDateTime: "2026-01-14T03:20:00Z", activityDisplayName: Consent to application }] }
+      consents: { value: [{ clientId: 00000000-0000-4000-8000-000000000404, consentType: Principal, scope: Mail.Read offline_access }] }
+      roles: { value: [] }
+      methodsNow: { value: [{ "@odata.type": "#microsoft.graph.passwordAuthenticationMethod", id: 28c10230-6103-485e-b985-444c60001490 }] }
+      disable: { summary: Sign-in disabled and sessions revoked for m.chen@example.com }
+      confirmCompromised: { summary: m.chen@example.com confirmed compromised }
+      incidentNote: { summary: Incident 4224 updated }
+      password: { summary: Password reset }
+      tap: { summary: Temporary Access Pass issued }
+      enable: { summary: Sign-in enabled for m.chen@example.com }
+    errors:
+      removeMethods: { status: 403, code: Authorization_RequestDenied }
+    expect:
+      status: succeeded
+      steps: { disable: succeeded, revokeOnly: skipped, confirmCompromised: succeeded, removeMethods: failed, incidentNote: succeeded, password: succeeded, tap: succeeded, enable: succeeded, confirmed: skipped }
+      outputs: { summary: "Incident INC-1002 for m.chen@example.com: contained, MFA methods could not be removed (see the run), investigated and access restored." }
   - name: skips Identity Protection, the incident note and cloud recovery for a disabled synced account without P2
     inputs: { userId: 30000000-0000-4000-8000-000000000005, ticket: INC-1003, reason: SOC confirmed token theft from a managed device, removeMethods: false, tapForRecovery: false }
     user: { oid: 00000000-0000-4000-8000-0000000000a1, upn: avery@example.com }
@@ -432,7 +472,7 @@ tests:
       methodsNow: { value: [] }
     errors:
       signIns: { status: 403, code: Authentication_RequestFromNonPremiumTenantOrB2CTenant }
-      risk: { status: 403, code: Forbidden }
+      riskLookup: { status: 403, code: Forbidden }
       detections: { status: 403, code: Forbidden }
     expect:
       status: succeeded

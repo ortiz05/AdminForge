@@ -320,6 +320,37 @@ Found by the organization and security evaluation; the fixed findings are in CHA
       rules), the mailbox page and Clear forwarding instead of a manual "remove inbox rules and forwarding" item.
 - [ ] Scheduled (automation) inbox-rule scans need app-only Exchange in the runner (see Engine & runner).
 
+## Entra ID P1/P2 and Intune (plan Phase 2 validation, 2026-10-16)
+
+- [x] `identity.sign-in` 1.1.0: `GET /auditLogs/signIns/{id}` took ~165 s and failed, so the inspector never showed
+      the sign-in; the page filters the list on the id, bounded to ±5 min of the sign-in's time (`at`, passed by the
+      sign-ins, user and enterprise app pages): ~1–2 s, found or not. Without `at` (old links) it searches the last
+      7 days — a missing id took ~9 s over 7 days and timed out over 30 (measured 2026-10-16). A sign-in that isn't
+      found says so (header, note, no actions) and is cached 5 minutes, not an hour.
+- [x] `endpoint.apps` 1.0.1: `isAssigned` doesn't exist on v1.0 `mobileApp`; assignment state comes from `assignments`.
+- [x] Risky-user lookups (`security.dismiss-risky-user` 1.1.0, `security.confirm-risky-user-compromised` 1.1.0, both
+      compromised-account runbooks) filter `riskyUsers` instead of reading `riskyUsers/{id}`, which is a 404 without a
+      readable message for a user who was never at risk.
+- [ ] Identity Protection writes can't be validated live: the validation user has no Security Operator. Option: make it
+      PIM-eligible for Security Operator (a test fixture) and activate it in the live suite before confirm/dismiss on
+      AF-Test-User-03 — owner's decision (it raises the tester's reachable privilege).
+- [ ] Platform: a playbook's `requires.entraRoles` isn't checked before the run, so a person without the role gets
+      Graph's "Signed in user is missing required roles" as the step error. Check it in the preview (or at least map the
+      403 to a hint naming the declared role).
+- [ ] Platform: Graph errors with an empty message show as "UnknownError: Microsoft returned an error without a
+      readable description"; a 404 should say the object wasn't found (e.g. `security.risky-user` opened for a user
+      with no risk record).
+- [ ] PIM: no playbook to deactivate an activated role (`selfDeactivate`); activations only expire.
+- [ ] Dynamic groups: add a dynamic `AF-Test-Dynamic-01` test fixture (and a delete-group playbook, or provisioning
+      cleanup) so `identity.edit-dynamic-rule` and dynamic `identity.create-group` can be run for real.
+- [ ] Re-check the `userRegistrationDetails` pages and reports (authentication methods registration, users without
+      MFA, the users page MFA filter) once Microsoft fills the report in (24–48 h after licensing).
+- [ ] Intune device pages and device actions (sync, restart, retire, wipe) need an enrolled `AF-Test-*` device (plan
+      0.4).
+- [ ] Live tooling: for ~10 minutes after `provision test-identities --enable` every Graph call can answer `reauth`
+      (Continuous Access Evaluation still applies the session revocation from `--disable`), and the session then fails
+      CSRF. The live scripts should recognise it and say "wait a few minutes after enabling", or retry.
+
 ## Navigation / product
 
 - [ ] Decide between the content "Probe dashboard" (`automation.monitoring`, nav: Automation) and the coded

@@ -282,6 +282,8 @@ Closes the gaps found by comparing the build with the original plan (see the pla
 
 ### Changed
 
+- A bulk run's `run.created` audit event records the inputs every item shares (`inputsTemplate`, redacted), so the
+  reason for a bulk change is kept.
 - **Shared mailbox sign-in state comes from Microsoft Entra ID:** the Shared mailboxes page (1.4) and the Shared
   mailboxes with sign-in allowed report (1.1) read each mailbox's account `accountEnabled` from Graph
   (`/directoryObjects/getByIds`, 1,000 accounts a call — five calls for the page's 5,000 mailboxes, ten for the

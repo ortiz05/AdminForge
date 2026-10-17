@@ -549,7 +549,9 @@ else gets 404 `run_not_found` (not 403).
 - **Body:** `playbook`, `version?`, `items` (1–1000 input objects), `inputsTemplate?` (merged under each item),
   `dryRun?`, `concurrency?` (1–10), `stopOnError?`, `previewRunId?`, `confirmation?`. Every item is validated up
   front (first 10 problems reported). For a typed confirm, `confirmation` is the **number of items**.
-- **Response:** 202 `{runId, status, items}` — one parent run (`trigger: bulk`) with a child run per item.
+- **Response:** 202 `{runId, status, items}` — one parent run (`trigger: bulk`) with a child run per item. Audited
+  `run.created` with the item count and `inputsTemplate` as `inputs` (redacted per `redact: true`), so the reason
+  for a bulk change is kept.
 - **Errors:** as `POST /api/runs`; `invalid_inputs` 400 names `items[i]`.
 
 #### `GET /api/runs`

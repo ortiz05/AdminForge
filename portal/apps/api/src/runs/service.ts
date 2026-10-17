@@ -708,6 +708,11 @@ export class RunService {
         trigger: 'bulk',
         risk: def.risk,
         items: items.length,
+        // The inputs every item shares (a reason, a message), redacted like a single run's: the per-item runs don't
+        // record their inputs, so this is where the audit log keeps why.
+        ...(input.inputsTemplate && Object.keys(input.inputsTemplate).length
+          ? { inputs: redactInputs(def.inputs, input.inputsTemplate) }
+          : {}),
         ...(confirmed ?? {}),
       },
       result: 'success',

@@ -108,8 +108,6 @@ async function ownersOf(groupId: string) {
 const groupId = async (displayName: string) =>
   (await all<{ id: string }>('/groups', { $filter: `displayName eq '${displayName}'`, $select: 'id' }))[0]
     ?.id;
-const APP_OWNER_WHY =
-  'Microsoft 365 groups created with application permissions keep the creating app (the provisioner) as owner; the fixture catalogue lists people only';
 
 // ── AdminForge, as the portal runs it ────────────────────────────────────────────────────────────────────────────
 const session: PortalSession = await openPublicSession();
@@ -245,6 +243,43 @@ add(
     },
     'Graph counts are eventually consistent for a few minutes after accounts change',
   ),
+);
+
+// Guests (the `guest` fixture): AF-Test-Guest-01 (enabled, never signed in) and AF-Test-Guest-02 (disabled).
+const fixtureGuests = catalog.guests;
+add(
+  'identity.users#users',
+  'the Guests view lists the fixture guests, enabled and disabled as provisioned',
+  using('identity.users', 'users', { userType: 'Guest', q: 'AF-Test-Guest' }, (v) => {
+    const rows = byName(rowsOf(v));
+    return [
+      ...compareSets(
+        'fixture guests listed',
+        fixtureGuests.map((g) => g.displayName),
+        fixtureNames([...rows.keys()]).filter((n) => /^AF-Test-Guest-/.test(n)),
+      ),
+      ...fixtureGuests.flatMap((g) => [
+        ...compareValue(`${g.displayName} userType`, 'Guest', rows.get(g.displayName)?.userType),
+        ...compareValue(
+          `${g.displayName} enabled`,
+          g.accountEnabled,
+          rows.get(g.displayName)?.accountEnabled,
+        ),
+      ]),
+    ];
+  }),
+);
+add(
+  'identity.inactive-guests#guests',
+  'guests created inside the window are not reported inactive (the fixture guests are new)',
+  using('identity.inactive-guests', 'guests', { days: 90 }, (v) => {
+    const listed = fixtureNames(
+      rowsOf((v as Row)?.rows ?? v)
+        .map(nameOf)
+        .filter((n): n is string => !!n),
+    ).filter((n) => /^AF-Test-Guest-/.test(n));
+    return compareSets('fixture guests reported inactive', [], listed);
+  }),
 );
 
 add(
@@ -412,15 +447,14 @@ for (const g of fixtureGroups) {
         expectedOwners,
         owners.users,
       );
-      if (diffs.length || people.length) return outcome(page, check, [...diffs, ...people]);
-      return owners.apps
-        ? outcome(
-            page,
-            check,
-            [`${g.displayName}: ${owners.apps} app owner(s) beyond the catalogue's people`],
-            APP_OWNER_WHY,
-          )
-        : outcome(page, check, []);
+      // The catalogue records the app owner provisioning keeps on purpose (AF-Test-M365-01: a person and the
+      // provisioner) or removes (AF-Test-M365-02: no owner): an app owner is expected, not a difference to explain.
+      const apps = compareValue(
+        `${g.displayName} owners who are apps (catalogue)`,
+        g.expectedOwners === undefined ? 0 : g.expectedOwners - expectedOwners.length,
+        owners.apps,
+      );
+      return outcome(page, check, [...diffs, ...people, ...apps]);
     },
   );
   add(
@@ -887,38 +921,55 @@ const accounts = signInAccounts(domain);
 add(
   'identity.sign-ins#signIns',
   'the sign-in accounts’ sign-ins (7 days): count and failures vs Graph',
+  using('identity.sign-ins', 'signIns', { range: 'P7D', user: 'af-test-signin' }, async (v) => {
+    const rows = rowsOf(v);
+    const since = new Date(now.getTime() - 7 * 86_400_000).toISOString();
+    const graphRows = await all<{ status?: { errorCode?: number }; userDisplayName?: string }>(
+      '/auditLogs/signIns',
+      {
+        $filter: `createdDateTime ge ${since} and startswith(userPrincipalName,'af-test-signin')`,
+        $select: 'id,status,userDisplayName',
+      },
+    );
+    const failures = (list: Array<{ status?: unknown }>) =>
+      list.filter((r) => ((r.status as { errorCode?: number } | undefined)?.errorCode ?? 0) !== 0).length;
+    // AdminForge and Graph read the same log: any difference here is AdminForge's.
+    return [
+      ...compareValue('sign-ins (Graph)', graphRows.length, rows.length),
+      ...compareValue('failed sign-ins (Graph)', failures(graphRows), failures(rows)),
+      ...compareSets(
+        'accounts seen (Graph)',
+        fixtureNames(graphRows.map((r) => r.userDisplayName)),
+        fixtureNames(rows.map((r) => r.userDisplayName as string)),
+      ),
+    ];
+  }),
+);
+add(
+  'identity.sign-ins#accounts',
+  'every sign-in account has sign-ins in the log, AF-Test-SignIn-01 a successful one',
   using(
     'identity.sign-ins',
     'signIns',
     { range: 'P7D', user: 'af-test-signin' },
-    async (v) => {
+    (v) => {
       const rows = rowsOf(v);
-      const since = new Date(now.getTime() - 7 * 86_400_000).toISOString();
-      const graphRows = await all<{ status?: { errorCode?: number }; userDisplayName?: string }>(
-        '/auditLogs/signIns',
-        {
-          $filter: `createdDateTime ge ${since} and startswith(userPrincipalName,'af-test-signin')`,
-          $select: 'id,status,userDisplayName',
-        },
-      );
-      const failures = (list: Array<{ status?: unknown }>) =>
-        list.filter((r) => ((r.status as { errorCode?: number } | undefined)?.errorCode ?? 0) !== 0).length;
+      const ok = (name: string) =>
+        rows.filter(
+          (r) =>
+            r.userDisplayName === name &&
+            ((r.status as { errorCode?: number } | undefined)?.errorCode ?? 0) === 0,
+        ).length;
       return [
-        ...compareValue('sign-ins (Graph)', graphRows.length, rows.length),
-        ...compareValue('failed sign-ins (Graph)', failures(graphRows), failures(rows)),
-        ...compareSets(
-          'accounts seen (Graph)',
-          fixtureNames(graphRows.map((r) => r.userDisplayName)),
-          fixtureNames(rows.map((r) => r.userDisplayName as string)),
-        ),
         ...compareSets(
           'accounts seen (catalogue)',
           accounts.map((a) => a.displayName),
           fixtureNames(rows.map((r) => r.userDisplayName as string)),
         ),
+        ...compareValue('AF-Test-SignIn-01 has a successful sign-in', true, ok(accounts[0]!.displayName) > 0),
       ];
     },
-    'Microsoft delivers sign-in logs with a delay (usually minutes, up to about two hours); re-run later before treating a missing account as a bug',
+    'Microsoft delivers sign-in logs with a delay (usually minutes, up to about two hours) — if an account is still missing after that, run tests/live/scripts/generate-sign-ins.ts again (a sign-in that never happened looks the same)',
   ),
 );
 
@@ -1049,6 +1100,95 @@ add(
     'Microsoft refreshes the registration report every few hours; new accounts appear 24–48 h later',
   ),
 );
+
+// ── BEGIN Exchange recipients created through AdminForge ─────────────────────────────────────────────────────────
+// Made with m365.create-shared-mailbox / create-room-mailbox / create-distribution-list (tests/live/README.md ›
+// Exchange recipients created through AdminForge); not knowable until they exist. Compared with what they were created
+// with and, independently, with the Entra account or group behind each one (Graph).
+const CREATED = {
+  shared: 'AF-Test-Shared-03', // sign-in allowed on purpose: the case the Shared mailboxes page flags
+  room: 'AF-Test-Room-01',
+  list: 'AF-Test-DL-02',
+  listOwner: 'AF-Test-User-01', // licensed: a list owner needs a mailbox
+};
+const notCreated = (page: string, check: string, name: string, playbook: string): Outcome => ({
+  page,
+  check,
+  status: 'unknowable',
+  details: [`${name} not created yet (${playbook})`],
+});
+/** The Entra account behind a recipient, by its display name. */
+const accountOf = async (displayName: string) =>
+  (
+    await all<{ id: string; accountEnabled?: boolean }>('/users', {
+      $filter: `displayName eq '${displayName}'`,
+      $select: 'id,accountEnabled',
+    })
+  )[0];
+/** The row named `name` in a page datasource searched for it, or why there is none. */
+async function createdRow(
+  key: string,
+  ds: string,
+  name: string,
+): Promise<{ problem: string } | { row: Row | undefined; value: Row }> {
+  const d = await data(key, ds, { q: name });
+  if ('problem' in d) return { problem: d.problem };
+  return { row: rowsOf(d.value).find((r) => nameOf(r) === name), value: d.value as Row };
+}
+
+add(
+  'm365.shared-mailboxes#shared',
+  `${CREATED.shared}: shared mailbox, sign-in allowed`,
+  async (page, check) => {
+    const r = await createdRow('m365.shared-mailboxes', 'shared', CREATED.shared);
+    if ('problem' in r) return { page, check, status: 'unknowable', details: [r.problem] };
+    if (!r.row) return notCreated(page, check, CREATED.shared, 'm365.create-shared-mailbox');
+    const account = await accountOf(CREATED.shared);
+    const allowed = r.row.accountDisabled === false;
+    return outcome(page, check, [
+      ...compareValue('sign-in allowed (as created)', true, allowed),
+      ...compareValue(
+        'sign-in allowed (Graph accountEnabled)',
+        account?.accountEnabled ?? 'no account',
+        allowed,
+      ),
+      ...compareRange('Sign-in allowed KPI', r.value.signInAllowed, 1, Number.MAX_SAFE_INTEGER),
+    ]);
+  },
+);
+add('m365.mailboxes#mailboxes', `${CREATED.room}: listed as a room mailbox`, async (page, check) => {
+  const r = await createdRow('m365.mailboxes', 'mailboxes', CREATED.room);
+  if ('problem' in r) return { page, check, status: 'unknowable', details: [r.problem] };
+  if (!r.row) return notCreated(page, check, CREATED.room, 'm365.create-room-mailbox');
+  const account = await accountOf(CREATED.room);
+  return outcome(page, check, [
+    ...compareValue('type', 'RoomMailbox', r.row.recipientTypeDetails),
+    ...(account ? [] : [`${CREATED.room}: no Entra account behind it in Graph`]),
+  ]);
+});
+add(
+  'm365.distribution-lists#lists',
+  `${CREATED.list}: owned by ${CREATED.listOwner} only, internal senders only`,
+  async (page, check) => {
+    const r = await createdRow('m365.distribution-lists', 'lists', CREATED.list);
+    if ('problem' in r) return { page, check, status: 'unknowable', details: [r.problem] };
+    if (!r.row) return notCreated(page, check, CREATED.list, 'm365.create-distribution-list');
+    const owner = await accountOf(CREATED.listOwner);
+    // Exchange returns owners as recipient Names: the display name, or the object id for newer recipients.
+    const managedBy = ((r.row.managedBy as unknown[] | undefined) ?? []).map((m) => String(m).toLowerCase());
+    const ownerShown = managedBy.some(
+      (m) => m === CREATED.listOwner.toLowerCase() || (owner !== undefined && m === owner.id.toLowerCase()),
+    );
+    return outcome(page, check, [
+      // The engineer who created it is a temporary owner and steps down at the end.
+      ...compareValue('owners', 1, r.row.ownerCount),
+      ...(ownerShown ? [] : [`${CREATED.listOwner}: not among the owners AdminForge shows`]),
+      ...compareValue('accepts mail from outside', false, r.row.acceptsExternal),
+      ...((await groupId(CREATED.list)) ? [] : [`${CREATED.list}: not a group in Graph`]),
+    ]);
+  },
+);
+// ── END Exchange recipients created through AdminForge ───────────────────────────────────────────────────────────
 
 // ── run ──────────────────────────────────────────────────────────────────────────────────────────────────────────
 const outcomes: Outcome[] = [];

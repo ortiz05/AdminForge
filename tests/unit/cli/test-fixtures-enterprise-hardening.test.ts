@@ -311,18 +311,36 @@ describe('the guest', () => {
     expect(s.cloud.users.filter((u) => u.userType === 'Guest')).toHaveLength(1);
   });
 
-  it('a guest that can’t be marked is deleted again', async () => {
+  it('an invited guest that can’t be marked is deleted again (the directly created one is marked from the start)', async () => {
     const s = await identitiesThen('guest', { failGuestMark: true });
     await expect(provisionTestIdentities(s.ctx)).rejects.toThrow(/guest/);
-    expect(s.cloud.users.filter((u) => u.userType === 'Guest')).toEqual([]);
+    expect(s.cloud.users.filter((u) => u.displayName === 'AF-Test-Guest-01')).toEqual([]);
+    expect(s.cloud.users.find((u) => u.displayName === 'AF-Test-Guest-02')).toMatchObject({
+      employeeType: DIRECTORY_MARKER,
+    });
+  });
+
+  it('an unmarked account at a guest’s UPN is refused and never removed', async () => {
+    const s = await identitiesThen('guest');
+    s.cloud.users.push({
+      id: randomUUID(),
+      userPrincipalName: 'af-test-guest-02_example.com#EXT#@example.com',
+      displayName: 'Someone else',
+      userType: 'Guest',
+    });
+    await expect(provisionTestIdentities(s.ctx)).rejects.toThrow(/guest/);
+    expect(s.text()).toMatch(/✗[^\n]*AF-Test-Guest-02[^\n]*not created by provisioning/);
+    await removeTestFixtures(s.ctx);
+    expect(s.cloud.users.filter((u) => u.displayName === 'Someone else')).toHaveLength(1);
   });
 
   it('a marked guest is removed by --remove-fixtures', async () => {
     const s = await identitiesThen('guest');
     await provisionTestIdentities(s.ctx);
-    expect(s.cloud.users.find((u) => u.userType === 'Guest')).toMatchObject({
-      employeeType: DIRECTORY_MARKER,
-    });
+    expect(s.cloud.users.filter((u) => u.userType === 'Guest').map((u) => u.employeeType)).toEqual([
+      DIRECTORY_MARKER,
+      DIRECTORY_MARKER,
+    ]);
     await removeTestFixtures(s.ctx);
     expect(s.cloud.users.filter((u) => u.userType === 'Guest')).toEqual([]);
   });

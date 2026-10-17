@@ -4,10 +4,11 @@
  * countries (and one left unset), a manager chain whose top manager is disabled, a disabled user licensed directly, a
  * user with no attributes at all, one whose password never expires, a dynamic, a nested, two Microsoft 365 (one
  * without an owner), an empty and a group-licensing group, and an administrative unit holding every AF-Test user —
- * plus the `guest` fixture's guest, who never redeems their invitation. Plan: provision/directory-fixture-plan.ts;
- * Graph I/O: provision/directory-fixture-io.ts.
+ * plus the `guest` fixture's two guests (one invited and never redeemed where the tenant accepts invitations, else
+ * created directly as a guest-type account; one disabled). Plan: provision/directory-fixture-plan.ts; Graph I/O:
+ * provision/directory-fixture-io.ts.
  *
- * Every object is AF-Test-*, carries provisioning's marker (users and the guest: `employeeType` DIRECTORY_MARKER;
+ * Every object is AF-Test-*, carries provisioning's marker (users and guests: `employeeType` DIRECTORY_MARKER;
  * groups and the administrative unit: the marker in the description) and is safe to delete. Values only make sense
  * in a test tenant: departments start with "AF-Test " so the dynamic group's rule can never match a real person.
  * Names include an apostrophe and non-Latin letters (search and filter escaping, `$odataSearch()`). Passwords are
@@ -15,7 +16,7 @@
  */
 import { TESTER_MARKER } from './identities-plan';
 
-/** `employeeType` of the directory fixture's users and guest: provisioning's own. */
+/** `employeeType` of the directory fixture's users and guests: provisioning's own. */
 export const DIRECTORY_MARKER = 'AdminForge test fixture';
 /** Group and administrative unit descriptions carry TESTER_MARKER (the same rule as the Intune fixtures). */
 export const DIRECTORY_DESCRIPTION = `${TESTER_MARKER} fixture (directory), created by \`adminforge provision test-identities\`. Safe to delete.`;
@@ -85,9 +86,28 @@ export interface DirectoryGroupSpec {
   licence?: { disabledPlan: string };
 }
 
+/**
+ * A guest account. Where the tenant accepts invitations the first one is invited (a real "PendingAcceptance" guest,
+ * no email sent); otherwise — and always for the second — it is created directly as a guest-type account with the
+ * UPN Entra gives an external user. Either way it never signs in: no password is stored, example.com receives nothing.
+ */
+export interface DirectoryGuestSpec {
+  key: '01' | '02';
+  displayName: string;
+  /** External address (example.com, RFC 2606): nobody can receive or redeem anything. */
+  email: string;
+  /** `<local>_<domain>#EXT#@<tenant domain>`, the shape Entra gives external accounts. */
+  upn: string;
+  accountEnabled: boolean;
+  /** Invite first where the tenant allows it; refused or not allowed → created directly. */
+  invite: boolean;
+  /** The directory user set as the guest's sponsor. */
+  sponsor?: DirectoryUserKey;
+}
+
 export interface DirectoryCatalog {
   users: DirectoryUserSpec[];
-  guest: { displayName: string; email: string };
+  guests: DirectoryGuestSpec[];
   groups: DirectoryGroupSpec[];
   au: { displayName: string; description: string };
 }
@@ -235,8 +255,26 @@ export function directoryCatalog(domain: string): DirectoryCatalog {
         accountEnabled: true,
       }),
     ],
-    // example.com (RFC 2606): nobody can receive or redeem the invitation, and none is sent.
-    guest: { displayName: 'AF-Test-Guest-01', email: 'af-test-guest-01@example.com' },
+    // example.com (RFC 2606): nobody can receive or redeem anything, and no invitation email is sent.
+    guests: [
+      {
+        key: '01',
+        displayName: 'AF-Test-Guest-01',
+        email: 'af-test-guest-01@example.com',
+        upn: `af-test-guest-01_example.com#EXT#@${domain}`,
+        accountEnabled: true,
+        invite: true,
+        sponsor: '04',
+      },
+      {
+        key: '02',
+        displayName: 'AF-Test-Guest-02',
+        email: 'af-test-guest-02@example.com',
+        upn: `af-test-guest-02_example.com#EXT#@${domain}`,
+        accountEnabled: false,
+        invite: false,
+      },
+    ],
     groups: [
       {
         key: 'dynamic',

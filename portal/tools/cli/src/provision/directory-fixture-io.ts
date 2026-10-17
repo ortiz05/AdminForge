@@ -1,12 +1,18 @@
 /**
  * Microsoft Graph I/O for the `directory` test fixture (provision/directory-fixture-plan.ts decides), as the
- * provisioner identity: reads the catalogue's users (attributes, licences, manager), the guest, the groups (members,
- * owners, licences), the administrative unit and the licence SKU; applies one operation (`applyDirectoryStep`).
- * Passwords are random and never stored or printed; the guest's invitation is never sent. Only objects carrying
+ * provisioner identity: reads the catalogue's users (attributes, licences, manager), the guests (and their sponsors),
+ * the groups (members, owners, licences), the administrative unit and the licence SKU; applies one operation
+ * (`applyDirectoryStep`). Passwords are random and never stored or printed; no invitation email is ever sent (a guest
+ * is invited without one or, where Microsoft refuses the invitation, created directly as a guest-type account). Only objects carrying
  * provisioning's marker are changed or deleted (the plan refuses the rest).
  */
 import { ApiError, type GraphClient } from '@adminforge/connectors';
-import { DIRECTORY_MARKER, type DirectoryUserKey, type MemberRef } from './directory-fixture-catalog';
+import {
+  DIRECTORY_MARKER,
+  type DirectoryGuestSpec,
+  type DirectoryUserKey,
+  type MemberRef,
+} from './directory-fixture-catalog';
 import {
   hasMarker,
   isDirectoryUser,
@@ -99,13 +105,25 @@ export async function readDirectoryState(
   if (group && !isProvisionedTestGroup(desired, group)) state.testGroupForeign = true;
   else state.testGroupId = group?.id;
   if (provisionerAppId) state.provisionerSpId = await servicePrincipalId(graph, provisionerAppId);
-  state.guests = await graph.all({
-    path: '/users',
-    query: {
-      $filter: `mail eq ${odata(cat.guest.email)}`,
-      $select: 'id,displayName,mail,employeeType,userType',
-    },
-  });
+  state.guests = [];
+  for (const g of cat.guests) {
+    const found = await graph.all<DirectoryState['guests'][number]>({
+      path: '/users',
+      query: {
+        $filter: `mail eq ${odata(g.email)} or userPrincipalName eq ${odata(g.upn)}`,
+        $select: 'id,displayName,mail,userPrincipalName,employeeType,userType,accountEnabled',
+      },
+    });
+    for (const x of found) {
+      if (state.guests.some((y) => y.id === x.id)) continue;
+      // Sponsors are read for provisioning's own guests only (anything else is refused by the plan, never read further).
+      if (x.employeeType === DIRECTORY_MARKER && x.displayName === g.displayName)
+        x.sponsorIds = (
+          await graph.all<{ id: string }>({ path: `/users/${x.id}/sponsors`, query: { $select: 'id' } })
+        ).map((s) => s.id);
+      state.guests.push(x);
+    }
+  }
   state.invitesAllowed = await graph
     .request<{ allowInvitesFrom?: string }>({
       path: '/policies/authorizationPolicy',
@@ -200,6 +218,83 @@ export interface DirectoryApplyContext {
   /** Replication retry around calls on a just-created object. */
   retry: <T>(fn: () => Promise<T>) => Promise<T>;
   password?: () => string;
+}
+
+/**
+ * A refused invitation — the tenant's policy or a new tenant's limits (403 "Guest invitations not allowed for your
+ * company"), or a provisioner without User.Invite.All (401 "Insufficient privileges"): the guest is created directly.
+ */
+const isInvitationRefused = (err: unknown) =>
+  err instanceof ApiError &&
+  (err.status === 401 || err.status === 403 || (err.status === 400 && /invit/i.test(err.message)));
+
+/**
+ * Creates a fixture guest that never signs in and returns its id. `invite`: invited without an email first (a real
+ * "PendingAcceptance" guest), marked at once and deleted again if it can't be; a refused invitation falls back to a
+ * direct create — a guest-type account with the external UPN, the external address and the marker from the start,
+ * and a random password nobody stores.
+ */
+async function createGuest(
+  ctx: DirectoryApplyContext,
+  g: DirectoryGuestSpec,
+  invite: boolean,
+): Promise<string> {
+  const { graph, retry, log } = ctx;
+  if (invite) {
+    let guestId: string | undefined;
+    try {
+      const { data } = await graph.request<{ invitedUser?: { id: string } }>({
+        method: 'POST',
+        path: '/invitations',
+        body: {
+          invitedUserEmailAddress: g.email,
+          invitedUserDisplayName: g.displayName,
+          inviteRedirectUrl: 'https://myapplications.microsoft.com',
+          sendInvitationMessage: false,
+        },
+      });
+      guestId = data.invitedUser?.id;
+      if (!guestId)
+        throw new ApiError(502, 'NoInvitedUser', 'the invitation answered without the invited user');
+    } catch (err) {
+      if (!isInvitationRefused(err)) throw err;
+      log(
+        `    invitation refused by Microsoft (${(err as ApiError).status}) — creating the guest directly instead`,
+      );
+    }
+    if (guestId) {
+      const id = guestId;
+      try {
+        await retry(() =>
+          graph.request({
+            method: 'PATCH',
+            path: `/users/${id}`,
+            body: { employeeType: DIRECTORY_MARKER, ...(g.accountEnabled ? {} : { accountEnabled: false }) },
+          }),
+        );
+      } catch (err) {
+        await graph.request({ method: 'DELETE', path: `/users/${id}` }).catch(() => undefined);
+        throw err;
+      }
+      return id;
+    }
+  }
+  const password = ctx.password ?? (() => generatePassword());
+  const { data } = await graph.request<{ id: string }>({
+    method: 'POST',
+    path: '/users',
+    body: {
+      accountEnabled: g.accountEnabled,
+      displayName: g.displayName,
+      mailNickname: g.email.split('@')[0],
+      userPrincipalName: g.upn,
+      mail: g.email,
+      userType: 'Guest',
+      employeeType: DIRECTORY_MARKER,
+      passwordProfile: { password: password(), forceChangePasswordNextSignIn: false },
+    },
+  });
+  return data.id;
 }
 
 /** Applies one directory operation. Throws ApiError on a Graph refusal (the caller prints ✗ and goes on). */
@@ -322,34 +417,44 @@ export async function applyDirectoryStep(
       return;
     }
     case 'guest': {
-      // No email is sent, and example.com can't receive one: the invitation stays unredeemed.
-      const { data } = await graph.request<{ invitedUser?: { id: string } }>({
-        method: 'POST',
-        path: '/invitations',
-        body: {
-          invitedUserEmailAddress: cat.guest.email,
-          invitedUserDisplayName: cat.guest.displayName,
-          inviteRedirectUrl: 'https://myapplications.microsoft.com',
-          sendInvitationMessage: false,
-        },
-      });
-      const guestId = data.invitedUser?.id;
-      if (!guestId)
-        throw new ApiError(502, 'NoInvitedUser', 'the invitation answered without the invited user');
-      // Marked at once; a guest that can't be marked is deleted again, so no unmarked fixture guest is left behind.
-      try {
-        await retry(() =>
-          graph.request({
-            method: 'PATCH',
-            path: `/users/${guestId}`,
-            body: { employeeType: DIRECTORY_MARKER },
-          }),
-        );
-      } catch (err) {
-        await graph.request({ method: 'DELETE', path: `/users/${guestId}` }).catch(() => undefined);
-        throw err;
+      const g = cat.guests.find((x) => x.key === step.key)!;
+      let id: string;
+      if (step.create) id = await createGuest(ctx, g, step.invite === true);
+      else {
+        const found = await graph.all<{ id: string; displayName?: string; employeeType?: string }>({
+          path: '/users',
+          query: { $filter: `userPrincipalName eq ${odata(g.upn)}`, $select: 'id,displayName,employeeType' },
+        });
+        const own = found.find((x) => x.employeeType === DIRECTORY_MARKER && x.displayName === g.displayName);
+        if (!own)
+          throw new ApiError(409, 'NotProvisioned', 'the guest is not provisioning’s any more — left alone');
+        id = own.id;
+        if (step.patch) {
+          const patch = step.patch;
+          await retry(() => graph.request({ method: 'PATCH', path: `/users/${id}`, body: patch }));
+        }
       }
-      log(`  ✓ invited (no email): ${title}`);
+      if (step.sponsor) {
+        const sponsorUpn = cat.users.find((u) => u.key === step.sponsor)!.upn;
+        const sponsor = await graph.all<{ id: string; employeeType?: string }>({
+          path: '/users',
+          query: { $filter: `userPrincipalName eq ${odata(sponsorUpn)}`, $select: 'id,employeeType' },
+        });
+        const sponsorId = sponsor.find((u) => u.employeeType === DIRECTORY_MARKER)?.id;
+        if (sponsorId)
+          try {
+            await retry(() =>
+              graph.request({
+                method: 'POST',
+                path: `/users/${id}/sponsors/$ref`,
+                body: { '@odata.id': `https://graph.microsoft.com/v1.0/users/${sponsorId}` },
+              }),
+            );
+          } catch (err) {
+            if (!isAlreadyExists(err)) throw err;
+          }
+      }
+      log(`  ✓ ${step.create ? 'created' : 'updated'}: ${title}`);
       return;
     }
     case 'group': {

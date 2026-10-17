@@ -103,20 +103,20 @@ Every configuration key is documented in `config/example.env`.
   the directory role and several are tier-0, so remove them between runs — `provision status` warns while they're
   held):
 
-  | Fixture          | Permission                                                                                                         |
-  | ---------------- | ------------------------------------------------------------------------------------------------------------------ |
-  | licences         | `LicenseAssignment.ReadWrite.All`                                                                                  |
-  | `pim`            | `RoleEligibilitySchedule.ReadWrite.Directory`                                                                      |
-  | `named-location` | `Policy.Read.All` and `Policy.ReadWrite.ConditionalAccess`                                                         |
-  | `intune`         | `DeviceManagementConfiguration.ReadWrite.All`                                                                      |
-  | `approver`       | none beyond the validation user's (its directory role covers it)                                                   |
-  | `ca-audit`       | `Policy.Read.All`, `Policy.ReadWrite.ConditionalAccess` and `Application.Read.All` (for the application condition) |
-  | `directory`      | `LicenseAssignment.ReadWrite.All` (its licences); users, groups and the administrative unit: the directory role    |
-  | `guest`          | `User.Invite.All` (and a tenant that accepts invitations)                                                          |
-  | `apps`           | none beyond its directory role                                                                                     |
-  | `auth-methods`   | `UserAuthenticationMethod.ReadWrite.All` where its directory role doesn't cover it                                 |
-  | `intune-more`    | `DeviceManagementConfiguration.ReadWrite.All` and `DeviceManagementApps.ReadWrite.All`                             |
-  | `sign-ins`       | none beyond its directory role                                                                                     |
+  | Fixture          | Permission                                                                                                              |
+  | ---------------- | ----------------------------------------------------------------------------------------------------------------------- |
+  | licences         | `LicenseAssignment.ReadWrite.All`                                                                                       |
+  | `pim`            | `RoleEligibilitySchedule.ReadWrite.Directory`                                                                           |
+  | `named-location` | `Policy.Read.All` and `Policy.ReadWrite.ConditionalAccess`                                                              |
+  | `intune`         | `DeviceManagementConfiguration.ReadWrite.All`                                                                           |
+  | `approver`       | none beyond the validation user's (its directory role covers it)                                                        |
+  | `ca-audit`       | `Policy.Read.All`, `Policy.ReadWrite.ConditionalAccess` and `Application.Read.All` (for the application condition)      |
+  | `directory`      | `LicenseAssignment.ReadWrite.All` (its licences); users, groups and the administrative unit: the directory role         |
+  | `guest`          | none beyond the directory role; `User.Invite.All` to invite (optional: a refused invitation creates the guest directly) |
+  | `apps`           | none beyond its directory role                                                                                          |
+  | `auth-methods`   | `UserAuthenticationMethod.ReadWrite.All` where its directory role doesn't cover it                                      |
+  | `intune-more`    | `DeviceManagementConfiguration.ReadWrite.All` and `DeviceManagementApps.ReadWrite.All`                                  |
+  | `sign-ins`       | none beyond its directory role                                                                                          |
 
 ### `provision azure-test [--dry-run] [--no-verify] | --destroy [--yes]`
 

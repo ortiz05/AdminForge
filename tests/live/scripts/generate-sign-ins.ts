@@ -99,6 +99,10 @@ try {
     const context = await browser.newContext();
     page = await context.newPage();
     await page.goto(MY_APPS);
+    // My Apps is a single-page app that sends the browser to Microsoft's sign-in page from script. Wait for that page:
+    // signInWithEntra returns as soon as the browser is off Microsoft's sign-in pages, so called on My Apps itself it
+    // returned at once and nothing signed in (no successful sign-in in the log).
+    await page.waitForURL(/login\.microsoftonline\.com/, { timeout: 60_000 });
     const { registeredTotp } = await signInWithEntra(page, {
       upn: one!.upn,
       password: env[one!.passwordKey]!,
@@ -106,6 +110,8 @@ try {
       totpKey: one!.totpKey,
     });
     if (registeredTotp) env[one!.totpKey!] = registeredTotp;
+    // Signed in only once Microsoft has sent the browser back to My Apps.
+    await page.waitForURL(/myapplications\.microsoft\.com/, { timeout: 60_000 });
     console.log(`✓ ${one!.displayName}: signed in${registeredTotp ? ' (MFA registered now)' : ''}`);
     await context.close();
   });

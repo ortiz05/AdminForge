@@ -103,10 +103,26 @@ describe('directory fixture', () => {
     expect(cloud.managers.get(u('06').id as string)).toBe(u('07').id);
   });
 
-  it('creates the guest without an invitation email, the groups and the administrative unit', async () => {
+  it('creates the guests (one invited without an email, one disabled), the groups and the administrative unit', async () => {
     const { cloud } = await provisioned();
-    const guest = cloud.users.find((x) => x.userType === 'Guest')!;
-    expect(guest).toMatchObject({ displayName: 'AF-Test-Guest-01', employeeType: DIRECTORY_MARKER });
+    const guest = (name: string) => cloud.users.find((x) => x.displayName === name)!;
+    // Guest-01: invited (the tenant accepts invitations), never redeemed, sponsored by AF-Test-User-04.
+    expect(guest('AF-Test-Guest-01')).toMatchObject({
+      userType: 'Guest',
+      employeeType: DIRECTORY_MARKER,
+      externalUserState: 'PendingAcceptance',
+    });
+    expect(cloud.sponsors.get(guest('AF-Test-Guest-01').id as string)).toEqual([
+      byUpn(cloud, 'af-test-user-04@example.com')!.id,
+    ]);
+    // Guest-02: created directly as a guest-type account, disabled, marked from the start.
+    expect(guest('AF-Test-Guest-02')).toMatchObject({
+      userType: 'Guest',
+      employeeType: DIRECTORY_MARKER,
+      accountEnabled: false,
+      userPrincipalName: 'af-test-guest-02_example.com#EXT#@example.com',
+      mail: 'af-test-guest-02@example.com',
+    });
     expect(cloud.calls.filter((c) => c.endsWith('/invitations'))).toHaveLength(1);
     expect(groupNamed(cloud, 'AF-Test-Dynamic-01')).toMatchObject({
       groupTypes: ['DynamicMembership'],
@@ -309,23 +325,57 @@ describe('all enterprise fixtures', () => {
     expect(byUpn(s.cloud, 'af-test-user-01@example.com')).toBeTruthy();
   });
 
-  it('a refused invitation prints ✗ with the permission and the rest goes on', async () => {
+  it('a refused invitation (Microsoft limits new tenants) falls back to creating the guest directly', async () => {
     const s = setup(ALL, { forbidInvitations: true });
     await provisionEntra(s.ctx);
-    await expect(provisionTestIdentities(s.ctx)).rejects.toThrow(/\(guest\)/);
+    await provisionTestIdentities(s.ctx);
     const text = s.lines.join('\n');
-    expect(text).toMatch(/✗ AF-Test-Guest-01.*User\.Invite\.All/);
-    // The directory fixture itself is unaffected.
-    expect(groupNamed(s.cloud, 'AF-Test-Dynamic-01')).toBeTruthy();
-    expect(appNamed(s.cloud, 'AF-Test-App-Expiring')).toBeTruthy();
+    expect(text).toMatch(/invitation refused by Microsoft \(403\) — creating the guest directly instead/);
+    expect(text).not.toMatch(/✗[^\n]*AF-Test-Guest/);
+    expect(s.cloud.users.find((u) => u.displayName === 'AF-Test-Guest-01')).toMatchObject({
+      userType: 'Guest',
+      employeeType: DIRECTORY_MARKER,
+      userPrincipalName: 'af-test-guest-01_example.com#EXT#@example.com',
+    });
+    // A second run has nothing to do for it.
+    const again = await provisionTestIdentities(s.ctx);
+    expect(
+      again.fixtureOps
+        .filter((o) => /AF-Test-Guest/.test(o.title) && o.action !== 'noop')
+        .map((o) => o.title),
+    ).toEqual([]);
   });
 
-  it('skips the guest (no ✗) where the tenant allows no guest invitations', async () => {
+  it('a provisioner without User.Invite.All (401) also falls back to creating the guest directly', async () => {
+    const s = setup(ALL, { forbidInvitations: 401 });
+    await provisionEntra(s.ctx);
+    await provisionTestIdentities(s.ctx);
+    expect(s.lines.join('\n')).toMatch(/invitation refused by Microsoft \(401\)/);
+    expect(s.cloud.users.find((u) => u.displayName === 'AF-Test-Guest-01')).toMatchObject({
+      userType: 'Guest',
+      employeeType: DIRECTORY_MARKER,
+    });
+  });
+
+  it('where the tenant allows no invitations, the guests are created directly (none is attempted)', async () => {
     const s = setup(ALL, { invitesFrom: 'none' });
     await provisionEntra(s.ctx);
     await provisionTestIdentities(s.ctx);
-    expect(s.cloud.users.some((u) => u.userType === 'Guest')).toBe(false);
-    expect(s.lines.join('\n')).toMatch(/AF-Test-Guest-01.*doesn't allow guest invitations/s);
+    expect(s.cloud.calls.filter((c) => c.endsWith('/invitations'))).toEqual([]);
+    expect(s.cloud.users.filter((u) => u.userType === 'Guest').map((u) => u.displayName)).toEqual([
+      'AF-Test-Guest-01',
+      'AF-Test-Guest-02',
+    ]);
+    expect(s.lines.join('\n')).toMatch(/AF-Test-Guest-01.*doesn't allow invitations/s);
+  });
+
+  it('without the directory fixture the guests are created with no sponsor (said in the plan)', async () => {
+    const s = setup({ ...ALL, AF_TEST_FIXTURES: 'guest' });
+    await provisionEntra(s.ctx);
+    await provisionTestIdentities(s.ctx);
+    const g = s.cloud.users.find((u) => u.displayName === 'AF-Test-Guest-01')!;
+    expect(s.cloud.sponsors.get(g.id as string) ?? []).toEqual([]);
+    expect(s.lines.join('\n')).toMatch(/no sponsor: AF-Test-User-04 isn't the directory fixture's/);
   });
 
   it('every new fixture permission is a standing one `provision status` warns about', () => {

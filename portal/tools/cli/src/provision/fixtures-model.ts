@@ -13,7 +13,9 @@
  *   - `ca-audit`: example Conditional Access policies, report-only — never enforced (provision/ca-audit-catalog.ts);
  *   - `directory`: AF-Test-User-04..12 with attributes and a manager chain, dynamic / nested / Microsoft 365 / empty /
  *     group-licensing groups and an administrative unit (provision/directory-fixture-*.ts);
- *   - `guest`: AF-Test-Guest-01, invited without an email, never redeemed (directory-fixture-plan.ts `planGuest`);
+ *   - `guest`: AF-Test-Guest-01 (invited without an email where Microsoft accepts invitations, else created directly as
+ *     a guest-type account; sponsored by AF-Test-User-04) and AF-Test-Guest-02 (disabled, created directly) — neither
+ *     ever signs in (directory-fixture-plan.ts `planGuest`);
  *   - `apps`: app registrations with expiring, long-lived and many credentials, a risky one, an ownerless one and a
  *     SAML app — never granted anything (provision/apps-fixture-*.ts);
  *   - `auth-methods`: an SMS method (fictitious number) and a Temporary Access Pass (provision/auth-methods-fixture.ts);
@@ -69,8 +71,9 @@ export const FIXTURE_PERMISSIONS: Readonly<Record<FixtureKey, readonly string[]>
   // condition (the Azure management policy names an app) — it answers 403 "Application.Read.All scope is required".
   // Role template ids and the authentication strength are well-known ids, so nothing else needs reading.
   'ca-audit': ['Policy.Read.All', 'Policy.ReadWrite.ConditionalAccess', 'Application.Read.All'],
-  // Users, groups and the administrative unit are covered by the provisioner's directory role; group-based licensing
-  // and inviting a guest are not, app-only.
+  // Users, groups, directly created guests and the administrative unit are covered by the provisioner's directory
+  // role; group-based licensing and inviting a guest are not, app-only (a refused invitation falls back to creating the
+  // guest directly, so User.Invite.All is optional).
   directory: ['LicenseAssignment.ReadWrite.All'],
   guest: ['User.Invite.All'],
   apps: [],

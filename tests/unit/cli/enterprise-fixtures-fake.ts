@@ -22,8 +22,11 @@ const graphError = (status: number, code: string, message: string) =>
 export interface EnterpriseCloudOptions extends FixturesCloudOptions {
   /** Service plans of every SKU (name → id). */
   plans?: Record<string, string>;
-  /** Refuse invitations (403), like a provisioner without User.Invite.All. */
-  forbidInvitations?: boolean;
+  /**
+   * Refuse invitations: true = 403 "Guest invitations not allowed" (a new tenant's limits), 401 = "Insufficient
+   * privileges" (a provisioner without User.Invite.All).
+   */
+  forbidInvitations?: boolean | 401;
   /** `authorizationPolicy.allowInvitesFrom` (default everyone). */
   invitesFrom?: string;
   /** Refuse marking a just-invited guest (PATCH employeeType on a guest answers 400). */
@@ -42,6 +45,8 @@ export function createEnterpriseCloud(opts: EnterpriseCloudOptions) {
   /** Every TAP code Graph returned (to check none reaches the output). */
   const tapCodes: string[] = [];
   const managers = new Map<string, string>();
+  /** Guest id → sponsor ids. */
+  const sponsors = new Map<string, string[]>();
   const appProtections: Record<string, Json[]> = {
     iosManagedAppProtections: [],
     androidManagedAppProtections: [],
@@ -66,19 +71,44 @@ export function createEnterpriseCloud(opts: EnterpriseCloudOptions) {
         })),
       });
     if (method === 'GET' && path === '/users') {
-      const f = /^mail eq '([^']*)'$/.exec(url.searchParams.get('$filter') ?? '');
+      // `mail eq '…'`, `userPrincipalName eq '…'`, or several joined with `or` (the guests' address or UPN).
+      const filter = url.searchParams.get('$filter') ?? '';
+      const clauses = [...filter.matchAll(/(\w+) eq '((?:[^']|'')*)'/g)].map((c): [string, string] => [
+        c[1]!,
+        c[2]!.replace(/''/g, "'").toLowerCase(),
+      ]);
       return json(200, {
-        value: cloud.users.filter((u) => !f || String(u.mail ?? '').toLowerCase() === f[1]!.toLowerCase()),
+        value: cloud.users.filter(
+          (u) =>
+            !clauses.length ||
+            clauses.some(([field, value]) => String(u[field] ?? '').toLowerCase() === value),
+        ),
       });
+    }
+    if ((m = /^\/users\/([^/]+)\/sponsors$/.exec(path)) && method === 'GET')
+      return json(200, { value: (sponsors.get(m[1]!) ?? []).map((id) => ({ id })) });
+    if ((m = /^\/users\/([^/]+)\/sponsors\/\$ref$/.exec(path)) && method === 'POST') {
+      const list = sponsors.get(m[1]!) ?? [];
+      const id = String(body!['@odata.id']).split('/').pop()!;
+      if (list.includes(id))
+        return graphError(400, 'Request_BadRequest', 'One or more added object references already exist.');
+      sponsors.set(m[1]!, [...list, id]);
+      return new Response(null, { status: 204 });
     }
     if (method === 'GET' && path === '/policies/authorizationPolicy')
       return json(200, { allowInvitesFrom: opts.invitesFrom ?? 'everyone' });
     if (method === 'POST' && path === '/invitations') {
+      if (opts.forbidInvitations === 401)
+        return graphError(
+          401,
+          'Unauthorized',
+          'Insufficient privileges to perform requested operation by the application.',
+        );
       if (opts.forbidInvitations)
         return graphError(
           403,
           'Authorization_RequestDenied',
-          'Insufficient privileges to complete the operation.',
+          'Guest invitations not allowed for your company.',
         );
       const id = randomUUID();
       const email = String(body!.invitedUserEmailAddress);
@@ -360,6 +390,7 @@ export function createEnterpriseCloud(opts: EnterpriseCloudOptions) {
     taps,
     tapCodes,
     managers,
+    sponsors,
     appProtections,
     appProtectionAssignments,
     plans,

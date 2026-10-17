@@ -1,12 +1,12 @@
 /**
  * The `directory` test fixture's plan (pure): the catalogue (provision/directory-fixture-catalog.ts) against what the
- * tenant has → one operation per user, the guest, each group and the administrative unit (create, update with what
+ * tenant has → one operation per user, each guest, each group and the administrative unit (create, update with what
  * differs, or nothing), or the removal plan. Graph I/O: provision/directory-fixture-io.ts.
  *
- * Ownership: a user or the guest is provisioning's when it carries DIRECTORY_MARKER in `employeeType` (and has its
+ * Ownership: a user or a guest is provisioning's when it carries DIRECTORY_MARKER in `employeeType` (and has its
  * catalogue display name); a group or the administrative unit when its description carries the marker. Anything else
- * with the same UPN or name is refused (blocked) and never changed or removed — the guest too (the invitation and the
- * marking are one step: a guest that can't be marked is deleted again). AF-Test-User-01..03 and AF-Test-Group-01 are
+ * with the same UPN, address or name is refused (blocked) and never changed or removed — guests too (a directly created
+ * guest carries the marker from the start; an invited one is marked at once or deleted again). AF-Test-User-01..03 and AF-Test-Group-01 are
  * used (members, nesting) only when they are the ones the test identities created.
  *
  * Licences come from AF_TEST_LICENCE_SKU: one direct licence (a disabled user) and the licence group's members, all
@@ -19,11 +19,12 @@ import {
   directorySeats,
   type DirectoryGroupKey,
   type DirectoryGroupSpec,
+  type DirectoryGuestSpec,
   type DirectoryUserKey,
   type DirectoryUserSpec,
   type MemberRef,
 } from './directory-fixture-catalog';
-import { isUnreadable, type DesiredFixtures, type FixtureOp, type Unreadable } from './fixtures-model';
+import { isUnreadable, wants, type DesiredFixtures, type FixtureOp, type Unreadable } from './fixtures-model';
 import { TESTER_MARKER } from './identities-plan';
 
 export const DIRECTORY_SECTION = 'Test fixtures: directory';
@@ -68,13 +69,17 @@ export interface DirectoryState {
   /** Base targets (lower-case UPN) and AF-Test-Group-01 found at their names but not provisioning's: never used. */
   foreignTargets?: string[];
   testGroupForeign?: boolean;
-  /** Users with the guest's address (normally none or one). */
+  /** Users with a catalogue guest's address or UPN (normally none or one each). */
   guests: Array<{
     id: string;
     displayName?: string;
     mail?: string | null;
+    userPrincipalName?: string | null;
     employeeType?: string | null;
     userType?: string | null;
+    accountEnabled?: boolean | null;
+    /** Sponsors (object ids) — read for provisioning's own guests only. */
+    sponsorIds?: string[];
   }>;
   /** Groups with each catalogue display name. */
   groups: Partial<Record<DirectoryGroupKey, DirectoryGroupState[]>>;
@@ -102,7 +107,17 @@ export type DirectoryStep =
       manager?: DirectoryUserKey;
       licenceSkuId?: string;
     }
-  | { op: 'guest' }
+  | {
+      op: 'guest';
+      key: '01' | '02';
+      create: boolean;
+      /** Create: invite first (the tenant accepts invitations); a refused invitation falls back to a direct create. */
+      invite?: boolean;
+      /** `accountEnabled` to set on an existing guest. */
+      patch?: Record<string, unknown>;
+      /** The directory user to add as the guest's sponsor. */
+      sponsor?: DirectoryUserKey;
+    }
   | {
       op: 'group';
       key: DirectoryGroupKey;
@@ -157,7 +172,8 @@ export const hasMarker = (o: { description?: string | null }) =>
 
 const userTitle = (u: DirectoryUserSpec) => `${u.displayName} (user)`;
 const groupTitle = (g: DirectoryGroupSpec) => `${g.displayName} (${g.kind})`;
-const GUEST_TITLE = (name: string) => `${name} (guest, invitation never redeemed — none is sent)`;
+const GUEST_TITLE = (g: DirectoryGuestSpec) =>
+  `${g.displayName} (guest${g.accountEnabled ? '' : ', disabled'}, never signs in${g.sponsor ? `, sponsored by AF-Test-User-${g.sponsor}` : ''})`;
 const AU_TITLE = (name: string) => `${name} (administrative unit, every AF-Test user)`;
 
 const same = (a: string | null | undefined, b: string | null | undefined) => (a ?? '') === (b ?? '');
@@ -473,7 +489,8 @@ function planRemoval(d: DesiredFixtures, s: DirectoryState): FixtureOp[] {
 }
 
 export const GUEST_SECTION = 'Test fixtures: guest';
-const guestBase = { fixture: 'guest', section: GUEST_SECTION } as const;
+// Each guest fails on its own, like the directory fixture's operations.
+const guestBase = { fixture: 'guest', section: GUEST_SECTION, independent: true } as const;
 const guestBlocked = (title: string, why: string): FixtureOp => ({
   ...guestBase,
   kind: 'note',
@@ -497,9 +514,13 @@ const guestStep = (
 });
 
 /**
- * Pure: the `guest` fixture — AF-Test-Guest-01, invited without an email to an example.com address, so it stays
- * "never redeemed". Its own opt-in: Microsoft refuses guest invitations in some tenants (new ones especially) even
- * where the external collaboration settings allow them, and the rest of the directory fixture doesn't depend on it.
+ * Pure: the `guest` fixture — AF-Test-Guest-01 and -02. Its own opt-in, apart from `directory`. Guest-01 is invited
+ * without an email where the tenant accepts invitations (a real "PendingAcceptance" guest); Microsoft refuses
+ * invitations in some tenants (new ones especially) even where the external collaboration settings allow them, and
+ * then — or where the settings don't allow them — it is created directly as a guest-type account with the UPN Entra
+ * gives external users. Guest-02 (disabled) is always created directly. Neither ever signs in. A guest is
+ * provisioning's when it carries DIRECTORY_MARKER and its catalogue name; anything else at its address or UPN is
+ * refused and never changed or removed. The sponsor is added only when that user is the directory fixture's own.
  */
 export function planGuest(
   d: DesiredFixtures,
@@ -507,43 +528,90 @@ export function planGuest(
   remove: boolean,
 ): FixtureOp[] {
   const cat = d.directory;
-  const guestTitle = GUEST_TITLE(cat.guest.displayName);
-  if (isUnreadable(s)) return [guestBlocked(guestTitle, s.unreadable)];
+  if (isUnreadable(s)) return cat.guests.map((g) => guestBlocked(GUEST_TITLE(g), s.unreadable));
   if (!s) return [];
-  if (remove)
-    return s.guests
-      .filter(
-        (g) =>
-          g.displayName === cat.guest.displayName &&
-          (g.mail ?? '').toLowerCase() === cat.guest.email.toLowerCase() &&
-          g.employeeType === DIRECTORY_MARKER,
-      )
-      .map((g) => guestStep('delete', guestTitle, { op: 'delete', what: 'guest', id: g.id }));
-  const ops: FixtureOp[] = [];
-  const guests = s.guests.filter((g) => (g.mail ?? '').toLowerCase() === cat.guest.email.toLowerCase());
-  const marked = guests.filter(
-    (g) => g.employeeType === DIRECTORY_MARKER && g.displayName === cat.guest.displayName,
-  );
-  if (guests.length > 1)
-    ops.push(guestBlocked(guestTitle, `${guests.length} accounts have this address — left alone`));
-  else if (marked.length) ops.push({ ...guestBase, kind: 'note', action: 'noop', title: guestTitle });
-  else if (guests.length) ops.push(guestBlocked(guestTitle, FOREIGN));
-  else if (s.invitesAllowed === false)
-    ops.push({
-      ...guestBase,
-      kind: 'note',
-      action: 'skip',
-      title: guestTitle,
-      changes: [
-        "the tenant doesn't allow guest invitations (External collaboration settings) — no guest; that tenant-wide setting is the owner's to change",
-      ],
-    });
-  else
-    ops.push(
-      guestStep('create', guestTitle, { op: 'guest' }, [
-        'invited without an email (sendInvitationMessage: false), marked at once (deleted again if it can’t be)',
-      ]),
+  const at = (g: DirectoryGuestSpec) =>
+    s.guests.filter(
+      (x) =>
+        (x.mail ?? '').toLowerCase() === g.email.toLowerCase() ||
+        (x.userPrincipalName ?? '').toLowerCase() === g.upn.toLowerCase(),
     );
-
+  const ours = (g: DirectoryGuestSpec, x: DirectoryState['guests'][number]) =>
+    x.employeeType === DIRECTORY_MARKER && x.displayName === g.displayName;
+  if (remove)
+    return cat.guests.flatMap((g) =>
+      at(g)
+        .filter((x) => ours(g, x))
+        .map((x) => guestStep('delete', GUEST_TITLE(g), { op: 'delete', what: 'guest', id: x.id })),
+    );
+  const ops: FixtureOp[] = [];
+  for (const g of cat.guests) {
+    const title = GUEST_TITLE(g);
+    const found = at(g);
+    const sponsorUser = g.sponsor ? s.users[g.sponsor] : undefined;
+    const sponsorSpec = g.sponsor ? cat.users.find((u) => u.key === g.sponsor) : undefined;
+    // Only the directory fixture's own user (marked) can be a sponsor — already there, or created earlier in this run
+    // (the directory fixture is planned and applied before this one); otherwise no sponsor (said, not refused).
+    const sponsorOwn = sponsorUser && sponsorSpec && isDirectoryUser(sponsorSpec, sponsorUser);
+    const sponsorComing = !!g.sponsor && !sponsorUser && wants(d.settings, 'directory');
+    const sponsorId = sponsorOwn ? sponsorUser.id : sponsorComing ? 'planned' : undefined;
+    if (found.length > 1) {
+      ops.push(guestBlocked(title, `${found.length} accounts have its address or UPN — left alone`));
+      continue;
+    }
+    const x = found[0];
+    if (x && !ours(g, x)) {
+      ops.push(guestBlocked(title, FOREIGN));
+      continue;
+    }
+    if (x) {
+      const changes: string[] = [];
+      const patch: Record<string, unknown> = {};
+      if ((x.accountEnabled ?? true) !== g.accountEnabled) {
+        patch.accountEnabled = g.accountEnabled;
+        changes.push(`accountEnabled → ${g.accountEnabled}`);
+      }
+      const addSponsor = sponsorId && !(x.sponsorIds ?? []).includes(sponsorId);
+      if (addSponsor) changes.push(`sponsor → AF-Test-User-${g.sponsor}`);
+      if (!changes.length) {
+        ops.push({ ...guestBase, kind: 'note', action: 'noop', title });
+        continue;
+      }
+      ops.push(
+        guestStep(
+          'update',
+          title,
+          {
+            op: 'guest',
+            key: g.key,
+            create: false,
+            ...(Object.keys(patch).length ? { patch } : {}),
+            ...(addSponsor ? { sponsor: g.sponsor } : {}),
+          },
+          changes,
+        ),
+      );
+      continue;
+    }
+    const invite = g.invite && s.invitesAllowed !== false;
+    ops.push(
+      guestStep(
+        'create',
+        title,
+        { op: 'guest', key: g.key, create: true, invite, ...(sponsorId ? { sponsor: g.sponsor } : {}) },
+        [
+          invite
+            ? 'invited without an email (sendInvitationMessage: false); if Microsoft refuses the invitation, created directly as a guest-type account'
+            : g.invite
+              ? "created directly as a guest-type account (the tenant doesn't allow invitations — a tenant-wide setting provisioning never changes)"
+              : 'created directly as a guest-type account',
+          'marked at once (an invited guest that can’t be marked is deleted again)',
+          ...(g.sponsor && !sponsorId
+            ? [`no sponsor: AF-Test-User-${g.sponsor} isn't the directory fixture's (opt in \`directory\`)`]
+            : []),
+        ],
+      ),
+    );
+  }
   return ops;
 }

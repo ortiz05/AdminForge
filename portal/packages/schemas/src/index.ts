@@ -7,6 +7,7 @@ export * from './datasource';
 export * from './widgets';
 export * from './page';
 export * from './playbook';
+export * from './cadence';
 export * from './schedule';
 export * from './probe';
 export * from './connection';

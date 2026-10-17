@@ -80,7 +80,9 @@ describe('optional datasources: what is never swallowed', () => {
     expect(results.rows).toEqual({
       error: expect.objectContaining({
         code: 'dependency_failed',
-        message: expect.stringContaining('"enrich"'),
+        // The person sees what really failed (the missing role), not the chain of internal datasource names.
+        message: 'Datasource secret needs the Portal.Admin role.',
+        hint: expect.stringContaining('Portal.Admin'),
       }),
     });
     expect(results.summary).toEqual({ error: expect.objectContaining({ code: 'dependency_failed' }) });
@@ -146,7 +148,8 @@ describe('optional datasources: what is suppressed is recorded', () => {
       errors: {
         'ds.enrich': expect.objectContaining({
           code: 'dependency_failed',
-          message: expect.stringContaining('"secret"'),
+          message: 'Try later.',
+          hint: expect.stringContaining('request-id: req-1'),
         }),
       },
     });

@@ -102,7 +102,8 @@ describe('optional datasources', () => {
     expect(results.strict).toEqual({
       error: expect.objectContaining({
         code: 'dependency_failed',
-        message: expect.stringContaining('"required"'),
+        // The dependency's own error, not the internal datasource names.
+        message: expect.not.stringContaining('"required"'),
       }),
     });
   });

@@ -257,6 +257,9 @@ Found by the organization and security evaluation; the fixed findings are in CHA
       identity health — inactive accounts 2,400, app
       credentials 10,000 apps; app registrations credential KPIs 10,000 apps; groups owned only by apps 20,000 groups
       read; teams without owners 10,000 teams.
+- [x] (1) and (2) below are done: a non-streamed export reads at most the datasource's own `maxItems` (and marks the file
+      truncated when that read stopped at its cap), and `dependency_failed` shows the dependency's own message, hint and
+      sign-in link. (3) stays open.
 - [ ] API follow-ups from the scale rewrite (2026-10-17): (1) exports run the export datasource with
       `maxItems = EXPORT_MAX_ROWS` (100k) instead of its own cap, so a list sized for the 250 ms transform budget can
       time out on export — content sets `export.maxRows` to the datasource's cap meanwhile; the export should keep

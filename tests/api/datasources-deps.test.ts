@@ -101,7 +101,8 @@ describe('datasource dependencies (ds.<name>)', () => {
     expect(results.second).toEqual({
       error: expect.objectContaining({
         code: 'dependency_failed',
-        message: expect.stringContaining('needs "first"'),
+        // What really failed (the first datasource's own error), not the chain of internal datasource names.
+        message: expect.not.stringMatching(/needs "first"|Datasource "second"/),
       }),
     });
     expect(results.third).toEqual({ error: expect.objectContaining({ code: 'dependency_failed' }) });

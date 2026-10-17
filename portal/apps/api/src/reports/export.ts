@@ -29,6 +29,11 @@ export interface ExportPlan {
   /** Rows come page by page (no transform, a collection result): streamed without holding everything in memory. */
   streamable: boolean;
   maxRows: number;
+  /**
+   * The datasource's own `maxItems` (a transformed datasource is sized for its transform budget): a non-streamed export
+   * reads at most that many items, never more because the export allows more.
+   */
+  datasourceCap?: number;
 }
 
 const CONTENT_TYPES: Record<ExportFormat, string> = {
@@ -127,6 +132,9 @@ export async function planExport(
     fileName: await exportFileName(spec, page, params, format),
     streamable,
     maxRows: Math.min(spec.maxRows ?? opts.maxRows, opts.maxRows),
+    ...(typeof (ds as { maxItems?: unknown }).maxItems === 'number'
+      ? { datasourceCap: (ds as { maxItems: number }).maxItems }
+      : {}),
   };
 }
 
@@ -188,11 +196,15 @@ export async function* exportPages(
     ...base,
     datasource: plan.datasource,
     paging: 'all',
-    maxItems: plan.maxRows,
+    maxItems: Math.min(plan.maxRows, plan.datasourceCap ?? plan.maxRows),
     noCache: true,
   });
   const rows = asRows(getPath(out.data, plan.path));
-  yield withIncomplete({ rows: rows.slice(0, plan.maxRows), truncated: rows.length > plan.maxRows }, out);
+  // Cut by the export's own limit, or the read stopped at the datasource's cap: either way the file says so.
+  yield withIncomplete(
+    { rows: rows.slice(0, plan.maxRows), truncated: rows.length > plan.maxRows || out.truncated === true },
+    out,
+  );
 }
 
 /** Collects the `incomplete` entries of export pages as they stream past (first failure per datasource kept). */

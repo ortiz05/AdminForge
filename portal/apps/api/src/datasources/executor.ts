@@ -269,7 +269,11 @@ export function pathTemplateOf(path: string): string {
 
 const DS_REF = /\bds\.([A-Za-z_][A-Za-z0-9_]*)/g;
 
-/** `dependency_failed` (424). Keeps the dependency's own error as `cause`, so `optional` can see what really failed. */
+/**
+ * `dependency_failed` (424). Keeps the dependency's own error as `cause`, so `optional` can see what really failed.
+ * The person sees what really failed — its message, hint and, for a sign-in problem, the sign-in link — never the
+ * internal datasource names (`datasource`, `dependency` stay on the error for logs).
+ */
 export class DependencyFailed extends AppError {
   constructor(
     readonly datasource: string,
@@ -277,12 +281,10 @@ export class DependencyFailed extends AppError {
     readonly cause: unknown,
   ) {
     const info = toErrorInfo(cause);
-    super(
-      424,
-      'dependency_failed',
-      `Datasource "${datasource}" needs "${dependency}", which failed: ${info.message}`,
-      info.hint ? { hint: info.hint } : {},
-    );
+    super(424, 'dependency_failed', info.message, {
+      ...(info.hint ? { hint: info.hint } : {}),
+      ...(info.login ? { login: info.login } : {}),
+    });
     this.name = 'DependencyFailed';
   }
 }

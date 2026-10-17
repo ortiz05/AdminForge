@@ -209,7 +209,7 @@ describe.skipIf(!hasTools)('create-app-role.sh', () => {
     }
   });
 
-  it('prefers the owner file\'s DATABASE_MIGRATION_URL (written by db:harden) to the env file', () => {
+  it("prefers the owner file's DATABASE_MIGRATION_URL (written by db:harden) to the env file", () => {
     const owner = 'postgres://adminforge_owner:owner-secret@127.0.0.1:55432/adminforge';
     const s = sandbox(`DATABASE_URL=${OWNER_URL}\nDATABASE_MIGRATION_URL=${OWNER_URL}\n`);
     try {

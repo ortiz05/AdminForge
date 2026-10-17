@@ -407,11 +407,7 @@
         "definitions_kind_key_version": {
           "name": "definitions_kind_key_version",
           "nullsNotDistinct": false,
-          "columns": [
-            "kind",
-            "key",
-            "version"
-          ]
+          "columns": ["kind", "key", "version"]
         }
       },
       "policies": {},
@@ -743,10 +739,7 @@
         "news_items_feed_external_uq": {
           "name": "news_items_feed_external_uq",
           "nullsNotDistinct": false,
-          "columns": [
-            "feed_key",
-            "external_id"
-          ]
+          "columns": ["feed_key", "external_id"]
         }
       },
       "policies": {},
@@ -931,12 +924,8 @@
           "name": "probe_results_schedule_run_id_schedule_runs_id_fk",
           "tableFrom": "probe_results",
           "tableTo": "schedule_runs",
-          "columnsFrom": [
-            "schedule_run_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["schedule_run_id"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -1028,12 +1017,8 @@
           "name": "run_step_events_run_id_runs_id_fk",
           "tableFrom": "run_step_events",
           "tableTo": "runs",
-          "columnsFrom": [
-            "run_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["run_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1152,12 +1137,8 @@
           "name": "run_steps_run_id_runs_id_fk",
           "tableFrom": "run_steps",
           "tableTo": "runs",
-          "columnsFrom": [
-            "run_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["run_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1165,10 +1146,7 @@
       "compositePrimaryKeys": {
         "run_steps_run_id_seq_pk": {
           "name": "run_steps_run_id_seq_pk",
-          "columns": [
-            "run_id",
-            "seq"
-          ]
+          "columns": ["run_id", "seq"]
         }
       },
       "uniqueConstraints": {},
@@ -1413,12 +1391,8 @@
           "name": "runs_schedule_id_schedules_id_fk",
           "tableFrom": "runs",
           "tableTo": "schedules",
-          "columnsFrom": [
-            "schedule_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["schedule_id"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         },
@@ -1426,12 +1400,8 @@
           "name": "runs_parent_run_id_runs_id_fk",
           "tableFrom": "runs",
           "tableTo": "runs",
-          "columnsFrom": [
-            "parent_run_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["parent_run_id"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -1635,12 +1605,8 @@
           "name": "schedule_runs_schedule_id_schedules_id_fk",
           "tableFrom": "schedule_runs",
           "tableTo": "schedules",
-          "columnsFrom": [
-            "schedule_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["schedule_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -1648,12 +1614,8 @@
           "name": "schedule_runs_run_id_runs_id_fk",
           "tableFrom": "schedule_runs",
           "tableTo": "runs",
-          "columnsFrom": [
-            "run_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["run_id"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -1769,9 +1731,7 @@
         "schedules_key_unique": {
           "name": "schedules_key_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "key"
-          ]
+          "columns": ["key"]
         }
       },
       "policies": {},

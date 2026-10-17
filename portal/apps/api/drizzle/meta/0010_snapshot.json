@@ -406,11 +406,7 @@
       "uniqueConstraints": {
         "definitions_kind_key_version": {
           "name": "definitions_kind_key_version",
-          "columns": [
-            "kind",
-            "key",
-            "version"
-          ],
+          "columns": ["kind", "key", "version"],
           "nullsNotDistinct": false
         }
       },
@@ -742,10 +738,7 @@
       "uniqueConstraints": {
         "news_items_feed_external_uq": {
           "name": "news_items_feed_external_uq",
-          "columns": [
-            "feed_key",
-            "external_id"
-          ],
+          "columns": ["feed_key", "external_id"],
           "nullsNotDistinct": false
         }
       },
@@ -930,13 +923,9 @@
         "probe_results_schedule_run_id_schedule_runs_id_fk": {
           "name": "probe_results_schedule_run_id_schedule_runs_id_fk",
           "tableFrom": "probe_results",
-          "columnsFrom": [
-            "schedule_run_id"
-          ],
+          "columnsFrom": ["schedule_run_id"],
           "tableTo": "schedule_runs",
-          "columnsTo": [
-            "id"
-          ],
+          "columnsTo": ["id"],
           "onUpdate": "no action",
           "onDelete": "set null"
         }
@@ -1027,13 +1016,9 @@
         "run_step_events_run_id_runs_id_fk": {
           "name": "run_step_events_run_id_runs_id_fk",
           "tableFrom": "run_step_events",
-          "columnsFrom": [
-            "run_id"
-          ],
+          "columnsFrom": ["run_id"],
           "tableTo": "runs",
-          "columnsTo": [
-            "id"
-          ],
+          "columnsTo": ["id"],
           "onUpdate": "no action",
           "onDelete": "cascade"
         }
@@ -1151,13 +1136,9 @@
         "run_steps_run_id_runs_id_fk": {
           "name": "run_steps_run_id_runs_id_fk",
           "tableFrom": "run_steps",
-          "columnsFrom": [
-            "run_id"
-          ],
+          "columnsFrom": ["run_id"],
           "tableTo": "runs",
-          "columnsTo": [
-            "id"
-          ],
+          "columnsTo": ["id"],
           "onUpdate": "no action",
           "onDelete": "cascade"
         }
@@ -1165,10 +1146,7 @@
       "compositePrimaryKeys": {
         "run_steps_run_id_seq_pk": {
           "name": "run_steps_run_id_seq_pk",
-          "columns": [
-            "run_id",
-            "seq"
-          ]
+          "columns": ["run_id", "seq"]
         }
       },
       "uniqueConstraints": {},
@@ -1412,26 +1390,18 @@
         "runs_schedule_id_schedules_id_fk": {
           "name": "runs_schedule_id_schedules_id_fk",
           "tableFrom": "runs",
-          "columnsFrom": [
-            "schedule_id"
-          ],
+          "columnsFrom": ["schedule_id"],
           "tableTo": "schedules",
-          "columnsTo": [
-            "id"
-          ],
+          "columnsTo": ["id"],
           "onUpdate": "no action",
           "onDelete": "set null"
         },
         "runs_parent_run_id_runs_id_fk": {
           "name": "runs_parent_run_id_runs_id_fk",
           "tableFrom": "runs",
-          "columnsFrom": [
-            "parent_run_id"
-          ],
+          "columnsFrom": ["parent_run_id"],
           "tableTo": "runs",
-          "columnsTo": [
-            "id"
-          ],
+          "columnsTo": ["id"],
           "onUpdate": "no action",
           "onDelete": "set null"
         }
@@ -1634,26 +1604,18 @@
         "schedule_runs_schedule_id_schedules_id_fk": {
           "name": "schedule_runs_schedule_id_schedules_id_fk",
           "tableFrom": "schedule_runs",
-          "columnsFrom": [
-            "schedule_id"
-          ],
+          "columnsFrom": ["schedule_id"],
           "tableTo": "schedules",
-          "columnsTo": [
-            "id"
-          ],
+          "columnsTo": ["id"],
           "onUpdate": "no action",
           "onDelete": "no action"
         },
         "schedule_runs_run_id_runs_id_fk": {
           "name": "schedule_runs_run_id_runs_id_fk",
           "tableFrom": "schedule_runs",
-          "columnsFrom": [
-            "run_id"
-          ],
+          "columnsFrom": ["run_id"],
           "tableTo": "runs",
-          "columnsTo": [
-            "id"
-          ],
+          "columnsTo": ["id"],
           "onUpdate": "no action",
           "onDelete": "set null"
         }
@@ -1768,9 +1730,7 @@
       "uniqueConstraints": {
         "schedules_key_unique": {
           "name": "schedules_key_unique",
-          "columns": [
-            "key"
-          ],
+          "columns": ["key"],
           "nullsNotDistinct": false
         }
       },

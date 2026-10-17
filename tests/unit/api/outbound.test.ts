@@ -283,7 +283,11 @@ describe('outbound executor', () => {
       maxItems: 3,
     });
     // Cut at maxItems with more pages left: the result says it is partial.
-    expect(res.data).toEqual({ value: [{ id: 1 }, { id: 2 }, { id: 3 }], '@odata.count': 9, truncated: true });
+    expect(res.data).toEqual({
+      value: [{ id: 1 }, { id: 2 }, { id: 3 }],
+      '@odata.count': 9,
+      truncated: true,
+    });
     expect(res.truncated).toBe(true);
     expect(c.calls).toHaveLength(2);
 

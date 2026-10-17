@@ -1,7 +1,12 @@
 import { loadConfig } from '@adminforge/api/src/config';
 
 /** AF_QUERY_SOURCES: the Query Studio sources an installation offers (routes/query.ts refuses the others). */
-const base = { NODE_ENV: 'test', PUBLIC_BASE_URL: 'http://localhost:5173', AUTH_MODE: 'mock', DATA_MODE: 'fixtures' };
+const base = {
+  NODE_ENV: 'test',
+  PUBLIC_BASE_URL: 'http://localhost:5173',
+  AUTH_MODE: 'mock',
+  DATA_MODE: 'fixtures',
+};
 
 describe('AF_QUERY_SOURCES', () => {
   it('offers every source when unset or empty', () => {
@@ -13,7 +18,8 @@ describe('AF_QUERY_SOURCES', () => {
 
   it('keeps the listed sources, trimmed and without repeats', () => {
     expect(
-      loadConfig({ ...base, AF_QUERY_SOURCES: ' resourceGraph, logAnalytics ,resourceGraph' }).AF_QUERY_SOURCES,
+      loadConfig({ ...base, AF_QUERY_SOURCES: ' resourceGraph, logAnalytics ,resourceGraph' })
+        .AF_QUERY_SOURCES,
     ).toEqual(['resourceGraph', 'logAnalytics']);
   });
 

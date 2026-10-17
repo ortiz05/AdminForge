@@ -47,7 +47,11 @@ export interface AuditRow extends AuditEvent {
 }
 
 export type VerifyResult =
-  | { ok: true; count: number; /** The tail when the walk ended (absent for an empty chain). */ tail?: Checkpoint }
+  | {
+      ok: true;
+      count: number;
+      /** The tail when the walk ended (absent for an empty chain). */ tail?: Checkpoint;
+    }
   | { ok: false; brokenAt: number; seq: number };
 
 /** A point in the chain: the last verified event's seq and hash. */

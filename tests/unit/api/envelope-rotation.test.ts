@@ -13,9 +13,12 @@ function sealV1(plaintext: string, key: Buffer, aad: string, tagLength = 16) {
   const cipher = createCipheriv('aes-256-gcm', key, iv, { authTagLength: tagLength });
   cipher.setAAD(Buffer.from(aad, 'utf8'));
   const ct = Buffer.concat([cipher.update(plaintext, 'utf8'), cipher.final()]);
-  return ['1', iv.toString('base64url'), cipher.getAuthTag().toString('base64url'), ct.toString('base64url')].join(
-    '.',
-  );
+  return [
+    '1',
+    iv.toString('base64url'),
+    cipher.getAuthTag().toString('base64url'),
+    ct.toString('base64url'),
+  ].join('.');
 }
 
 describe('envelope key ids and rotation', () => {
@@ -47,7 +50,12 @@ describe('envelope key ids and rotation', () => {
   });
 
   it('reads TOKEN_CACHE_PREVIOUS_KEYS from the configuration and checks each is 32 bytes', () => {
-    const base = { NODE_ENV: 'test', PUBLIC_BASE_URL: 'http://localhost:5173', AUTH_MODE: 'mock', DATA_MODE: 'fixtures' };
+    const base = {
+      NODE_ENV: 'test',
+      PUBLIC_BASE_URL: 'http://localhost:5173',
+      AUTH_MODE: 'mock',
+      DATA_MODE: 'fixtures',
+    };
     const config = loadConfig({
       ...base,
       TOKEN_CACHE_KEY: newKey.toString('base64'),
@@ -57,7 +65,11 @@ describe('envelope key ids and rotation', () => {
     expect(ring.current.equals(newKey)).toBe(true);
     expect(ring.previous.map((k) => k.equals(oldKey))).toEqual([true]);
     expect(() =>
-      loadConfig({ ...base, TOKEN_CACHE_KEY: newKey.toString('base64'), TOKEN_CACHE_PREVIOUS_KEYS: 'c2hvcnQ=' }),
+      loadConfig({
+        ...base,
+        TOKEN_CACHE_KEY: newKey.toString('base64'),
+        TOKEN_CACHE_PREVIOUS_KEYS: 'c2hvcnQ=',
+      }),
     ).toThrow(/TOKEN_CACHE_PREVIOUS_KEYS/);
   });
 });

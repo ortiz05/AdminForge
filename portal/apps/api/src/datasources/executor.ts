@@ -9,6 +9,7 @@ import {
   type Provenance,
 } from '@adminforge/connectors';
 import {
+  ExpressionTimeoutError,
   collectExpressions,
   renderString,
   renderTemplate,
@@ -792,8 +793,18 @@ export class DatasourceRunner {
 
     if (ds.transform) {
       const value = out.data;
+      const render = () => renderString(ds.transform!, { ...scope, value });
       try {
-        out.data = await this.expr(() => renderString(ds.transform!, { ...scope, value }), 'transform');
+        out.data = await this.expr(async () => {
+          try {
+            return await render();
+          } catch (err) {
+            // The budget is wall-clock, so another request's big crawl (garbage collection, reading a large response)
+            // can take it from a transform that normally fits: once more on the same data before failing.
+            if (err instanceof ExpressionTimeoutError && !input.signal?.aborted) return render();
+            throw err;
+          }
+        }, 'transform');
       } catch (err) {
         // Kept no longer than the datasource's own cache, and only once: a raw result that failed again goes.
         if (key && ttl && !incomplete && !raw)
@@ -897,6 +908,10 @@ export class DatasourceRunner {
       return await fn();
     } catch (err) {
       if (err instanceof AppError) throw err;
+      if (err instanceof ExpressionTimeoutError)
+        throw new AppError(500, 'content_error', 'Preparing this data took longer than AdminForge allows.', {
+          hint: 'Try again in a moment, or narrow the filters. If it keeps happening, tell a Portal Admin which page it was.',
+        });
       throw new AppError(
         500,
         'content_error',

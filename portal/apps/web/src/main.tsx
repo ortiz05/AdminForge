@@ -1,3 +1,5 @@
+// First: no eval probe under the Content-Security-Policy (lib/no-eval.ts).
+import './lib/no-eval';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App, createAppRouter, createQueryClient } from './app/router';

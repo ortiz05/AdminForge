@@ -669,6 +669,10 @@ Security review of the licensed build-out (2026-10-16) fixed:
 
 ### Fixed
 
+- Every page load logged a Content-Security-Policy violation in the browser console ("blocked a JavaScript eval …
+  params-….js"): Zod 4 probes `Function('')` to decide whether to compile its validators, which `script-src 'self'`
+  forbids. The web app turns compilation off before anything validates (`disableEvalProbe`); a production-build test
+  now loads a page under the API's script policy and fails on any violation.
 - VMs without backup (1.0.1) and App Service security (1.0.1) joined two other tables in one Resource Graph query,
   which Azure refuses: subscription names now come from a small lookup joined with `$attach`. The same limit is fixed
   in the new AVD and Arc views before release.

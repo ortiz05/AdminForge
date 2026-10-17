@@ -356,6 +356,18 @@ export class Scheduler {
     }
   }
 
+  /**
+   * Whether the run before `currentRunId` already ended waiting for the creator's sign-in: a "Me" schedule nobody has
+   * signed in for yet fails (and notifies) once, then skips quietly like one whose sign-in was lost.
+   */
+  private async alreadyWaitingForSignIn(scheduleId: string, currentRunId: string): Promise<boolean> {
+    const recent = await this.o.store.listRuns(scheduleId, { limit: 3 });
+    const previous = recent.find(
+      (r) => r.id !== currentRunId && r.status !== 'running' && r.status !== 'queued',
+    );
+    return previous?.error?.code === 'needs_sign_in';
+  }
+
   /** Automation is paused: the occurrence (a due tick, or a queued run) is recorded as skipped with why, and audited. */
   private async skipPaused(
     s: ScheduleRow,
@@ -550,8 +562,12 @@ export class Scheduler {
       if (reason instanceof RunAborted) {
         status = reason.code === 'timeout' ? 'timeout' : 'failed';
         error = { code: reason.code, message: reason.message };
-      } else if (reason instanceof NeedsSignIn && reason.known) {
-        // Already waiting for the creator to sign in: recorded, without telling anyone again.
+      } else if (
+        reason instanceof NeedsSignIn &&
+        (reason.known || (await this.alreadyWaitingForSignIn(s.id, run.id)))
+      ) {
+        // Already waiting for the creator to sign in (a lost grant, or one never given whose first run already said
+        // so): recorded, without telling anyone again.
         status = 'skipped';
         error = {
           code: reason.code,

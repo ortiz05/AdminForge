@@ -143,6 +143,18 @@ describe('schedule identities', () => {
     });
   });
 
+  it('never signed in: only the first run fails and notifies; later ones are skipped quietly until the creator signs in', async () => {
+    const { h, runs, fire } = await setup({ user: 'creator' }, null);
+    await fire();
+    await fire();
+    await fire();
+    const all = await runs();
+    expect(all.map((r) => r.status)).toEqual(['failed', 'skipped', 'skipped']);
+    expect(all[2]).toMatchObject({ error: { code: 'needs_sign_in' } });
+    expect(h.audit.rows.filter((r) => r.action === 'schedule.failed')).toHaveLength(1);
+    expect(h.jobs.calls).toEqual([]);
+  });
+
   it('Entra refuses the refresh: needs sign-in is stored, the first run fails and notifies, later ones are skipped quietly', async () => {
     const { h, row, auth, grants, runs, fire } = await setup({ user: 'creator' }, {});
     auth.next = () => {

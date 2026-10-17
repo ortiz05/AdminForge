@@ -2,7 +2,7 @@ import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import path from 'node:path';
 import { loadEnv } from '@adminforge/config';
-import { PORTAL_ROLES, type PortalRole } from '@adminforge/schemas';
+import { KQL_SOURCES, PORTAL_ROLES, type PortalRole } from '@adminforge/schemas';
 import { z } from 'zod';
 import { workspaceRoot } from './paths';
 
@@ -18,6 +18,26 @@ const RoleList = z
       .filter(Boolean),
   )
   .pipe(z.array(z.enum(PORTAL_ROLES)).min(1, 'at least one portal role is required'));
+
+/**
+ * Comma-separated Query Studio sources this installation offers (AF_QUERY_SOURCES); unset = all of them. An
+ * installation that doesn't use Microsoft Defender XDR leaves `advancedHunting` out (routes/query.ts refuses it).
+ */
+const QuerySourceList = z
+  .string()
+  .transform((s) => [
+    ...new Set(
+      s
+        .split(',')
+        .map((x) => x.trim())
+        .filter(Boolean),
+    ),
+  ])
+  .pipe(
+    z
+      .array(z.enum(KQL_SOURCES, { error: `must be ${KQL_SOURCES.join(', ')} (comma-separated)` }))
+      .min(1, 'at least one Query Studio source is required'),
+  );
 
 /** Loopback interface names and addresses (mock sign-in may only listen on these). */
 export const isLoopbackHost = (host: string): boolean => {
@@ -137,6 +157,8 @@ const Schema = z
     AF_CONNECTION_AUDIENCE_HOSTS: z.string().optional(),
     SEARCH_TIMEOUT_MS: z.coerce.number().int().min(250).max(30_000).default(2500),
     EXPORT_MAX_ROWS: z.coerce.number().int().min(1).max(1_000_000).default(100_000),
+    /** Query Studio sources offered (resourceGraph, logAnalytics, advancedHunting); unset = all three. */
+    AF_QUERY_SOURCES: QuerySourceList.prefault(KQL_SOURCES.join(',')),
     // PowerShell runner on this host (apps/runner); both unset = PowerShell steps/datasources disabled.
     RUNNER_URL: z.url().optional(),
     RUNNER_SHARED_KEY: z.string().min(40).optional(),

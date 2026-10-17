@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { PORTAL_ROLES } from './constants';
+import { KQL_SOURCES, PORTAL_ROLES } from './constants';
 
 export { PORTAL_ROLES };
 export const PortalRole = z.enum(PORTAL_ROLES);
@@ -49,6 +49,8 @@ export const MeResponse = z.object({
     .optional(),
   authMode: z.enum(['entra', 'mock']),
   dataMode: z.enum(['live', 'fixtures']),
+  /** Query Studio sources this installation offers (AF_QUERY_SOURCES). Absent (an older API) = all of them. */
+  querySources: z.array(z.enum(KQL_SOURCES)).optional(),
 });
 export type MeResponse = z.infer<typeof MeResponse>;
 

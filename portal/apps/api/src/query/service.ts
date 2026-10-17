@@ -8,6 +8,7 @@ import type { SessionRecord } from '../auth/session-store';
 import { outboundAppError } from '../execution/outbound';
 import type { OutboundExecutor } from '../execution/types';
 import { runKql, type KqlColumn } from '../probes/kql';
+import { requireQuerySource } from './sources';
 
 /**
  * Query Studio backend (R12): ad-hoc KQL against Resource Graph, Log Analytics or advanced hunting, run with the
@@ -75,6 +76,8 @@ export class QueryService {
       outbound: OutboundExecutor;
       audit: AuditWriter;
       env: () => Record<string, unknown>;
+      /** Sources this installation offers (AF_QUERY_SOURCES); required, so a new caller can't fail open. */
+      sources: readonly KqlSource[];
     },
   ) {}
 
@@ -91,6 +94,8 @@ export class QueryService {
 
   async run(c: QueryCaller, body: QueryRequest, signal?: AbortSignal): Promise<QueryResponse> {
     requireRole(c.session, 'Portal.Reader', 'Query Studio');
+    // A source switched off for this installation is refused before anything is sent (or audited as a query).
+    requireQuerySource(this.deps.sources, body.source);
     const started = performance.now();
     const workspace =
       body.source === 'logAnalytics'

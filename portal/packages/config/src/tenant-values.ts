@@ -9,8 +9,9 @@
  * A value counts when it is at least 8 characters and not an obviously generic one (true/false, a number, a bare
  * loopback origin, a postgres URL on 127.0.0.1); values of *DOMAIN* keys also count lower-cased. Microsoft-published
  * licence SKU part numbers under AF_LICENCE_SKU_<n> and AF_TEST_LICENCE_SKU are exempt — they are the same in every
- * tenant and appear in committed content — but only when the value looks like a part number. So is AF_TEST_FIXTURES
- * when it lists only the literal fixture names (TEST_FIXTURE_NAMES; the documentation shows such lists).
+ * tenant and appear in committed content — but only when the value looks like a part number. So are option lists that
+ * name only AdminForge's own options: AF_TEST_FIXTURES (TEST_FIXTURE_NAMES) and AF_QUERY_SOURCES (QUERY_SOURCE_NAMES);
+ * the documentation shows such lists.
  *
  * Dependency-free (no node: imports) so guards, hooks and the CLI can load it without pulling in anything else.
  */
@@ -24,12 +25,26 @@ export const PUBLIC_CATALOGUE_KEY = /^(AF_LICENCE_SKU_\d+|AF_TEST_LICENCE_SKU)$/
  */
 export const TEST_FIXTURE_NAMES = ['pim', 'named-location', 'intune', 'approver', 'ca-audit'] as const;
 
-/** Configuration keys whose values are lists of AdminForge option names (the test fixtures), not tenant data. */
-export const OPTION_LIST_KEY = /^AF_TEST_FIXTURES$/;
+/**
+ * Query Studio sources an installation can offer (AF_QUERY_SOURCES) — the KQL_SOURCES of @adminforge/schemas, repeated
+ * here because this file has no dependencies (tests/unit/config/tenant-values-option-lists.test.ts keeps them equal).
+ */
+export const QUERY_SOURCE_NAMES = ['resourceGraph', 'logAnalytics', 'advancedHunting'] as const;
+
+/** Configuration keys whose values are lists of AdminForge option names, and the names each may list. */
+export const OPTION_LISTS: Readonly<Record<string, readonly string[]>> = {
+  AF_TEST_FIXTURES: TEST_FIXTURE_NAMES,
+  AF_QUERY_SOURCES: QUERY_SOURCE_NAMES,
+};
+
+/** Whether `value` is a comma-separated list of `names` only (case and spaces ignored). */
+const isOptionList = (value: string, names: readonly string[]) => {
+  const known = new Set(names.map((n) => n.toLowerCase()));
+  return value.split(',').every((n) => known.has(n.trim().toLowerCase()));
+};
 
 /** Whether a value is a comma-separated list of the literal fixture names only (case and spaces ignored). */
-export const isFixtureList = (value: string) =>
-  value.split(',').every((n) => (TEST_FIXTURE_NAMES as readonly string[]).includes(n.trim().toLowerCase()));
+export const isFixtureList = (value: string) => isOptionList(value, TEST_FIXTURE_NAMES);
 
 /** What a SKU part number looks like (ENTERPRISEPREMIUM, SPE_E5). Anything else — even a real one — is tenant data. */
 export const SKU_PART_NUMBER = /^[A-Z0-9_]{2,64}$/;
@@ -55,11 +70,11 @@ const MIN_LENGTH = 8;
 /**
  * A configuration value that is not tenant data: a public Microsoft catalogue name (an AF_LICENCE_SKU_<n> or
  * AF_TEST_LICENCE_SKU key whose value looks like a SKU part number), or a list of AdminForge option names
- * (AF_TEST_FIXTURES). Anything else under such a key (a domain, an id, a tenant's own name) is still tenant data.
+ * (OPTION_LISTS). Anything else under such a key (a domain, an id, a tenant's own name) is still tenant data.
  */
 export const isPublicCatalogueValue = (key: string, value: string) =>
   (PUBLIC_CATALOGUE_KEY.test(key) && SKU_PART_NUMBER.test(value)) ||
-  (OPTION_LIST_KEY.test(key) && isFixtureList(value));
+  (Object.hasOwn(OPTION_LISTS, key) && isOptionList(value, OPTION_LISTS[key]!));
 
 export interface TenantValuesOptions {
   /**

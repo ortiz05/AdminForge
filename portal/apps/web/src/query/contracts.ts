@@ -15,6 +15,16 @@ export type QuerySource = (typeof SOURCES)[number];
 export const isSource = (v: unknown): v is QuerySource =>
   typeof v === 'string' && (SOURCES as readonly string[]).includes(v);
 
+/**
+ * The sources this installation offers, from GET /api/me `querySources` (AF_QUERY_SOURCES; an older API sends none,
+ * meaning all of them). The API refuses the others (403 `source_off`), so the studio doesn't offer them.
+ */
+export function enabledSources(querySources: readonly string[] | undefined): readonly QuerySource[] {
+  if (!querySources) return SOURCES;
+  const list = SOURCES.filter((s) => querySources.includes(s));
+  return list.length ? list : SOURCES;
+}
+
 export interface QueryRequest {
   source: QuerySource;
   query: string;

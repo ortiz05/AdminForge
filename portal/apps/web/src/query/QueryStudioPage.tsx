@@ -34,9 +34,11 @@ import {
   Textarea,
   TextField,
 } from '@adminforge/ui';
+import { useMe } from '../lib/session';
 import { Callout, useDocumentTitle } from '../ops/ui';
 import {
   defenderFeatureQuery,
+  enabledSources,
   runQuery,
   SAVE_KINDS,
   SOURCES,
@@ -231,18 +233,29 @@ function DefenderNote() {
   return null;
 }
 
-/** Query Studio (/query): read-only KQL over Resource Graph, Log Analytics and Defender advanced hunting (R12). */
+/** "A, B and C" */
+const listOf = (items: readonly string[]) =>
+  items.length > 1 ? `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}` : (items[0] ?? '');
+
+/**
+ * Query Studio (/query): read-only KQL over Resource Graph, Log Analytics and Defender advanced hunting (R12) — the
+ * sources this installation offers (GET /api/me `querySources`). A link naming a source that is switched off opens
+ * the first offered source instead, without the link's query (it is written for the other source).
+ */
 export function QueryStudioPage({ search }: { search: QuerySearch }) {
   useDocumentTitle('Query Studio');
   const navigate = useNavigate();
-  const initialSource: QuerySource = search.source ?? 'resourceGraph';
+  const me = useMe();
+  const sources = useMemo(() => enabledSources(me.querySources), [me.querySources]);
+  const linkedOff = search.source && !sources.includes(search.source) ? search.source : undefined;
+  const initialSource: QuerySource = search.source && !linkedOff ? search.source : sources[0]!;
   const [source, setSource] = useState<QuerySource>(initialSource);
   const [drafts, setDrafts] = useState<Record<QuerySource, string>>(() => {
     const d = Object.fromEntries(SOURCES.map((s) => [s, SOURCE_META[s].starter])) as Record<
       QuerySource,
       string
     >;
-    if (search.q) d[initialSource] = search.q;
+    if (search.q && !linkedOff) d[initialSource] = search.q;
     return d;
   });
   const [subscriptions, setSubscriptions] = useState<string[]>([]);
@@ -382,7 +395,7 @@ export function QueryStudioPage({ search }: { search: QuerySearch }) {
       <PageHeader
         eyebrow="Automation"
         title="Query Studio"
-        description="Read-only KQL across Azure Resource Graph, Log Analytics and Defender advanced hunting, with your own access. Save a query as a report, probe or schedule for review."
+        description={`Read-only KQL across ${listOf(sources.map((s) => SOURCE_META[s].label))}, with your own access. Save a query as a report, probe or schedule for review.`}
         actions={
           saveRequest ? (
             <Menu>
@@ -425,7 +438,7 @@ export function QueryStudioPage({ search }: { search: QuerySearch }) {
                     aria-label="Source"
                     value={source}
                     onValueChange={(v) => changeSource(v as QuerySource)}
-                    options={SOURCES.map((s) => ({ value: s, label: SOURCE_META[s].short }))}
+                    options={sources.map((s) => ({ value: s, label: SOURCE_META[s].short }))}
                   />
                 </div>
                 {source === 'resourceGraph' && (
@@ -461,6 +474,18 @@ export function QueryStudioPage({ search }: { search: QuerySearch }) {
               </Button>
             </div>
 
+            {linkedOff && (
+              <div className="pt-3">
+                <Callout
+                  tone="info"
+                  title={`${SOURCE_META[linkedOff].label} is switched off for this AdminForge`}
+                  className="mx-(--af-pad-panel) mb-3"
+                >
+                  You followed a link to it; {SOURCE_META[initialSource].label} is shown instead. Whoever runs
+                  this AdminForge can switch it back on.
+                </Callout>
+              </div>
+            )}
             {source === 'advancedHunting' && (
               <div className="pt-3">
                 <DefenderNote />
@@ -512,6 +537,7 @@ export function QueryStudioPage({ search }: { search: QuerySearch }) {
 
         <Sidebar
           source={source}
+          sources={sources}
           current={query}
           onPickStarter={pickStarter}
           onPickHistory={pickHistory}

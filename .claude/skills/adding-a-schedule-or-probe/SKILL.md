@@ -28,7 +28,8 @@ schedule may not use it (`adminforge validate` refuses it).
 1. **Reuse first.** Probes are swept by tag: tag a new probe (`tags: [hourly]`, `[config-check]`) and an existing
    sweep schedule (`schedules/probes/*.schedule.yaml`, `job.select.tags`) picks it up — often no new schedule needed.
 2. **Scaffold:** `pnpm adminforge new probe <section>/<name>` / `new schedule <section>/<name>`, design the query
-   in **Query Studio** (`/query`) and use _Save as probe/report/schedule_, or build a schedule in the **schedule
+   in **Query Studio** (`/query`; it offers the sources the installation switched on, `AF_QUERY_SOURCES`) and use
+   _Save as probe/report/schedule_, or build a schedule in the **schedule
    editor** (`/schedules/new`: cron builder with preview, job, retries, alerts → YAML for review).
 3. **Pick the check:** `check.kind` = `http`, `dnsResolve`, `certExpiry`, `graph`, `graphCount` (how many items a
    Graph list holds), `arm`, `tokenAcquisition`, `appCredentialExpiry`, `licenseThreshold`, `signInHealth`,

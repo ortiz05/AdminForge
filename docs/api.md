@@ -342,7 +342,8 @@ and bound to the browser. A reused, expired, foreign or wrong-kind `state` → 4
 - **Response** (`MeResponse`): `user {oid, upn, name, tenantId}`, `tenant {name, domain}`, `roles`, `mode`
   (`read`/`armed`), `armedUntil`, `canArm` (Operator, and mock mode or a configured Write app), `armExtended`,
   `armMaxMinutes`, **`csrf`**, `prefs`, `defaults {theme?, density?}` (organisation defaults from Admin → Appearance),
-  `authMode` (`entra`/`mock`), `dataMode` (`live`/`fixtures`).
+  `authMode` (`entra`/`mock`), `dataMode` (`live`/`fixtures`), `querySources` (the Query Studio sources this
+  installation offers, from `AF_QUERY_SOURCES`; an older API leaves it out, meaning all three).
 
 #### `PUT /api/me/prefs`
 
@@ -837,7 +838,12 @@ lastRunAt, lastSuccessAt, pollMinutes, newestAt, quiet, items, error}` per activ
 
 ## Query Studio
 
-Source: `src/routes/query.ts`, `src/query/service.ts`, `src/query/scaffold.ts`.
+Source: `src/routes/query.ts`, `src/query/service.ts`, `src/query/scaffold.ts`, `src/query/sources.ts`.
+
+An installation can switch sources off with `AF_QUERY_SOURCES` (default: all three — e.g.
+`resourceGraph,logAnalytics` where nobody works in the Defender portal). Both endpoints refuse a source that is off
+with 403 `source_off` before anything is sent to Microsoft, built or audited as a query; the web app reads the list
+from [`GET /api/me`](#get-apime) (`querySources`) and offers only those.
 
 #### `POST /api/query`
 
@@ -849,8 +855,8 @@ Source: `src/routes/query.ts`, `src/query/service.ts`, `src/query/scaffold.ts`.
   - `timespan?` — ISO 8601 duration (`PT1H`, `P7D`); logAnalytics defaults to `P1D`.
 - **Response:** `{columns: [{name, type}], rows, rowCount, truncated, ms, provenance}` — at most 5000 rows.
 - **Audit:** `query.executed` with the query's sha256, its first 200 characters and length (success and failure).
-- **Errors:** `invalid_request` 400, `forbidden` 403, `upstream_*`, `throttled` 429, `licence_required` 403,
-  `policy_denied` 403.
+- **Errors:** `invalid_request` 400, `forbidden` 403, `source_off` 403 (the source is switched off for this
+  installation), `upstream_*`, `throttled` 429, `licence_required` 403, `policy_denied` 403.
 - One query statement at a time (`let`/`set`/`declare` before it are fine); `render` must be the last operator. Otherwise 400 `invalid_query`.
 
 #### `POST /api/query/scaffold`
@@ -866,7 +872,7 @@ Source: `src/routes/query.ts`, `src/query/service.ts`, `src/query/scaffold.ts`.
 - **Response:** `{yaml, path, key}` — content YAML validated against the schemas, to commit through review.
 - **Errors:** `tenant_value_in_query` 400 (query, title, summary, owner, key, column names, job ref or metric column
   hold a configured tenant value, a GUID or an `onmicrosoft.com` domain), `invalid_request` 400 (e.g. invalid cron),
-  `invalid_scaffold` 400.
+  `invalid_scaffold` 400, `source_off` 403.
 
 ## Reports & exports
 

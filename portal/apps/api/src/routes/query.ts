@@ -3,6 +3,7 @@ import { requireRole, requireSession } from '../auth/guards';
 import type { AppContext } from '../context';
 import { parseBody } from '../errors';
 import { scaffoldFromQuery, ScaffoldRequest } from '../query/scaffold';
+import { requireQuerySource } from '../query/sources';
 import { tenantValuesFor } from '../query/tenant-values';
 import { QueryRequest, QueryService } from '../query/service';
 
@@ -16,9 +17,11 @@ import { QueryRequest, QueryService } from '../query/service';
  *   server). Ids are configuration (R2): literal `subscriptions`/`workspace` are ignored (the YAML references
  *   `${ env.AF_SUBSCRIPTION_ID }` / `${ env.AF_LOG_ANALYTICS_WORKSPACE_ID }`), and text holding a configured tenant
  *   value, a GUID or an onmicrosoft.com domain is refused with 400 `tenant_value_in_query` (naming the kind, not the value).
+ * Both refuse a source this installation switched off (AF_QUERY_SOURCES) with 403 `source_off`, before any call.
  */
 export function queryRoutes(api: FastifyInstance, ctx: AppContext) {
-  const svc = new QueryService({ outbound: ctx.outbound, audit: ctx.audit, env: ctx.contentEnv });
+  const sources = ctx.config.AF_QUERY_SOURCES;
+  const svc = new QueryService({ outbound: ctx.outbound, audit: ctx.audit, env: ctx.contentEnv, sources });
 
   api.post('/query', { config: { rateLimit: { max: 60, timeWindow: '1 minute' } } }, async (request) => {
     const session = requireSession(request);
@@ -32,6 +35,8 @@ export function queryRoutes(api: FastifyInstance, ctx: AppContext) {
   api.post('/query/scaffold', async (request) => {
     const session = requireSession(request);
     requireRole(session, 'Portal.Reader', 'Query Studio');
-    return scaffoldFromQuery(parseBody(ScaffoldRequest, request.body), tenantValues(session));
+    const body = parseBody(ScaffoldRequest, request.body);
+    requireQuerySource(sources, body.source);
+    return scaffoldFromQuery(body, tenantValues(session));
   });
 }

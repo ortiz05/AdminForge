@@ -40,6 +40,7 @@ export async function buildMe(ctx: AppContext, session: SessionRecord): Promise<
     defaults: await orgDefaults(ctx),
     authMode: ctx.config.AUTH_MODE,
     dataMode: ctx.config.DATA_MODE,
+    querySources: [...ctx.config.AF_QUERY_SOURCES],
   };
 }
 

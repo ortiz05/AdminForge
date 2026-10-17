@@ -84,8 +84,15 @@ function StarterList({
   );
 }
 
-function HistoryList({ onPick }: { onPick: (e: HistoryEntry) => void }) {
-  const history = useHistory();
+function HistoryList({
+  sources,
+  onPick,
+}: {
+  sources: readonly QuerySource[];
+  onPick: (e: HistoryEntry) => void;
+}) {
+  // Runs on a source that has since been switched off stay in this browser but aren't offered.
+  const history = useHistory().filter((e) => sources.includes(e.source));
   const now = useNow(30_000);
   if (!history.length)
     return (
@@ -143,6 +150,7 @@ function HistoryList({ onPick }: { onPick: (e: HistoryEntry) => void }) {
 
 export function Sidebar({
   source,
+  sources,
   current,
   onPickStarter,
   onPickHistory,
@@ -150,6 +158,8 @@ export function Sidebar({
   onTabChange,
 }: {
   source: QuerySource;
+  /** The sources this installation offers (history on any other is hidden). */
+  sources: readonly QuerySource[];
   current: string;
   onPickStarter: (q: StarterQuery) => void;
   onPickHistory: (e: HistoryEntry) => void;
@@ -170,7 +180,7 @@ export function Sidebar({
           <StarterList source={source} current={current} onPick={onPickStarter} />
         </TabsContent>
         <TabsContent value="history" className="p-2">
-          <HistoryList onPick={onPickHistory} />
+          <HistoryList sources={sources} onPick={onPickHistory} />
         </TabsContent>
       </Tabs>
     </aside>

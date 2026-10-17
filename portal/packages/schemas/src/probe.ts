@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { DefinitionId, Duration, Expr, Identifier, envelopeShape, exprOr } from './common';
 import { Guid } from './params';
+import { KQL_SOURCES } from './constants';
 import { RESOURCE_GRAPH_UNION_MESSAGE, startsWithUnion } from './datasource';
 
 /**
@@ -141,7 +142,7 @@ export const SignInHealthCheck = z.strictObject({
 export const AuditChainCheck = z.strictObject({ kind: z.literal('auditChain') });
 
 /** Where a `kql` check runs (R12). */
-export const KQL_SOURCES = ['resourceGraph', 'logAnalytics', 'advancedHunting'] as const;
+export { KQL_SOURCES };
 export const KqlSource = z.enum(KQL_SOURCES);
 export type KqlSource = z.infer<typeof KqlSource>;
 

@@ -12,6 +12,7 @@
  * Pure (no files, no network): commands/env.ts reads the files and prints the result.
  */
 import { parseEnv } from '@adminforge/config';
+import { KQL_SOURCES } from '@adminforge/schemas';
 import { isGuid } from '../provision/ids';
 import { originProblem } from '../provision/settings';
 
@@ -112,6 +113,15 @@ function validate(key: string, value: string): string | undefined {
   if (key === 'DATA_MODE' && !['live', 'fixtures'].includes(value)) return 'expected live or fixtures';
   if (key === 'AF_ENV_LABEL' && !/^[a-z0-9][a-z0-9-]{0,19}$/.test(value))
     return 'expected lowercase letters, digits, dashes (max 20)';
+  if (key === 'AF_QUERY_SOURCES') {
+    const names = value
+      .split(',')
+      .map((v) => v.trim())
+      .filter(Boolean);
+    // The API refuses an empty list at startup (apps/api/src/config.ts), which stops the worker and scheduler too.
+    if (!names.length || !names.every((v) => (KQL_SOURCES as readonly string[]).includes(v)))
+      return `expected ${KQL_SOURCES.join(', ')} (comma-separated, at least one)`;
+  }
   if (key === 'DATABASE_URL' && value.includes('CHANGE_ME'))
     return 'still contains the CHANGE_ME placeholder';
   return undefined;

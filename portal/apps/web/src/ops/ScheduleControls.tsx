@@ -4,7 +4,13 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { Button, ConfirmDialog, PlayIcon, StatusPill, Switch, TrashIcon, useToast } from '@adminforge/ui';
 import { formatInZone, nextRuns } from './cron';
-import { deleteSchedule, runScheduleNow, setScheduleEnabled, type ScheduleItem } from './schedules';
+import {
+  deleteSchedule,
+  runScheduleNow,
+  runsAsPhrase,
+  setScheduleEnabled,
+  type ScheduleItem,
+} from './schedules';
 
 /**
  * Enable / disable a schedule. Read-only jobs switch at once. Write-capable ones (playbook or script jobs that change
@@ -84,7 +90,7 @@ export function ScheduleToggle({ schedule, withLabel }: { schedule: ScheduleItem
           open
           onOpenChange={(o) => !o && setConfirming(false)}
           title={`Ask for approval to enable ${schedule.title}?`}
-          description="This schedule can change your tenant. It runs unattended as the automation identity, so a second person with the Playbook Approver role must approve before it turns on."
+          description={`This schedule can change your tenant. It runs unattended ${runsAsPhrase(schedule.runsAs)}, so a second person with the Playbook Approver role must approve before it turns on.`}
           confirmLabel="Request approval"
           intent="primary"
           onConfirm={() => mutation.mutateAsync(true).then(() => undefined)}
@@ -94,7 +100,10 @@ export function ScheduleToggle({ schedule, withLabel }: { schedule: ScheduleItem
   );
 }
 
-/** Run the job now (as the automation identity). Write-capable jobs confirm first. */
+/**
+ * Run the job now, as whoever the schedule runs as. Write-capable jobs confirm first; one that waits for its creator to
+ * sign in is locked, saying so.
+ */
 export function RunNowButton({ schedule, size = 'sm' }: { schedule: ScheduleItem; size?: 'sm' | 'md' }) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -105,7 +114,7 @@ export function RunNowButton({ schedule, size = 'sm' }: { schedule: ScheduleItem
       toast({
         tone: 'info',
         title: `${schedule.title} started`,
-        description: 'It runs as the automation identity; the result appears in its history.',
+        description: `It runs ${runsAsPhrase(schedule.runsAs)}; the result appears in its history.`,
       });
       void queryClient.invalidateQueries({ queryKey: ['schedules'] });
       void queryClient.invalidateQueries({ queryKey: ['reports'] });
@@ -114,15 +123,25 @@ export function RunNowButton({ schedule, size = 'sm' }: { schedule: ScheduleItem
     onError: (e) =>
       toast({ tone: 'crit', title: `${schedule.title} didn’t start`, description: errorDescription(e) }),
   });
+  const r = schedule.runsAs;
+  const locked =
+    r.kind === 'user' && r.signIn !== 'signed_in'
+      ? r.canSignIn
+        ? 'Sign in for this schedule first.'
+        : `Waits for ${r.name ?? 'its creator'} to sign in.`
+      : undefined;
   return (
     <>
       <Button
         size={size}
         pending={mutation.isPending}
+        locked={locked}
+        title={locked}
         aria-label={size === 'sm' ? `Run ${schedule.title} now` : undefined}
         onClick={() => (schedule.writeCapable ? setConfirming(true) : mutation.mutate())}
       >
-        <PlayIcon size={12} weight="fill" aria-hidden />
+        {/* Locked: the button shows its lock instead (same width as the others in the list). */}
+        {!locked && <PlayIcon size={12} weight="fill" aria-hidden />}
         Run now
       </Button>
       {confirming && (
@@ -130,7 +149,7 @@ export function RunNowButton({ schedule, size = 'sm' }: { schedule: ScheduleItem
           open
           onOpenChange={(o) => !o && setConfirming(false)}
           title={`Run ${schedule.title} now?`}
-          description="This job can change your tenant. It runs immediately as the automation identity, outside its schedule, and is audited as started by you."
+          description={`This job can change your tenant. It runs immediately ${runsAsPhrase(schedule.runsAs)}, outside its schedule, and is audited as started by you.`}
           confirmLabel="Run now"
           intent="primary"
           onConfirm={() => mutation.mutateAsync().then(() => undefined)}

@@ -26,11 +26,11 @@ import type { Out } from '../shared/output';
 import { ConfigError } from '../shared/errors';
 import { clientCredentialToken } from './auth';
 import { clientAssertion } from './certificate';
-import { ENV_KEYS, type ContentScopes } from './entra-desired';
+import { envKeysFor, type ContentScopes } from './entra-desired';
 import { isGuid } from './ids';
 import type { AppKey, ProvisionSettings } from './model';
 import type { RetryOptions } from './retry';
-import { automationCertificate, type Env } from './settings';
+import { appCertificate, type Env } from './settings';
 
 export const GRAPH_SCOPE = 'https://graph.microsoft.com/.default';
 export const ARM_SCOPE = 'https://management.azure.com/.default';
@@ -94,17 +94,19 @@ export function provisionerClients(ctx: CliContext, settings: ProvisionSettings)
 }
 
 /**
- * How one of AdminForge's own apps authenticates from this machine: the automation identity uses the certificate in
- * AF_AUTOMATION_CERT_PATH when set (like the API), otherwise each app uses its client secret from the env file.
+ * How one of AdminForge's own apps authenticates from this machine: an app-only identity uses its certificate
+ * (AF_AUTOMATION_CERT_PATH, or a named identity's AF_IDENTITY_<NAME>_CERT_PATH) when set, like the API; otherwise each
+ * app uses its client secret from the env file.
  */
 export function appCredential(
   ctx: Pick<CliContext, 'env'>,
   app: AppKey,
 ): { clientId: string; credential: Credential; kind: 'certificate' | 'secret' } | undefined {
-  const id = ctx.env[ENV_KEYS[app].clientId];
+  const keys = envKeysFor(app);
+  const id = ctx.env[keys.clientId];
   if (!isGuid(id)) return undefined;
-  if (app === 'automation') {
-    const cert = automationCertificate(ctx.env, { requireKey: true });
+  if (keys.cert) {
+    const cert = appCertificate(ctx.env, keys.cert, { requireKey: true });
     if (cert)
       return {
         clientId: id,
@@ -112,7 +114,7 @@ export function appCredential(
         credential: { clientAssertion: (aud) => clientAssertion(cert, { clientId: id, tokenEndpoint: aud }) },
       };
   }
-  const secret = ctx.env[ENV_KEYS[app].secret];
+  const secret = ctx.env[keys.secret];
   return secret ? { clientId: id, kind: 'secret', credential: { clientSecret: secret } } : undefined;
 }
 

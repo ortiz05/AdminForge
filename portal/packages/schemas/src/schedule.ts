@@ -5,9 +5,12 @@ import { isValidTimeZone, parseSchedule, validateCron } from './cadence';
 import { NewsJob } from './news';
 
 /**
- * Schedules (R6, ADR-011): cron jobs run on this host by the scheduler service as the configured **automation identity**
- * (application permissions). `requires.scopes` lists the application permissions the job needs; `adminforge validate
- * --scopes` checks them against the automation identity. Write-capable jobs need two-person approval (`approvedBy`).
+ * Schedules (R6, ADR-011, ADR-014): cron jobs run on this host by the scheduler service as the identity they name —
+ * the **automation identity** (default), a **named app identity** (`{ app: <name> }`, its own app registration with
+ * application permissions) or, for read-only schedules created in the portal, **their creator** (`{ user: creator }`,
+ * the creator's own delegated read access). `requires.scopes` lists the application permissions an app-only job needs;
+ * `adminforge validate --scopes` checks them against the identity the schedule names. Write-capable jobs need
+ * two-person approval (`approvedBy`).
  */
 
 /**
@@ -159,6 +162,52 @@ export type ScheduleJob = z.infer<typeof ScheduleJob>;
  * When a schedule runs, in English instead of cron: "weekdays at 07:00", "first Monday of the month at 08:30", "every 4
  * hours", "last day of the month at 23:00" (the grammar in ./cadence). Validation compiles it to `cron`.
  */
+/**
+ * A named app identity (AF_SCHEDULE_IDENTITIES): lower-case letters and digits, single dashes between them (2–31
+ * characters), so "--" never occurs in a name and the app's alternate key `adminforge-identity-<name>--<label>` is
+ * unambiguous. Its settings live in the env file as AF_IDENTITY_<NAME>_CLIENT_ID, … (`identityEnvPrefix`).
+ */
+export const IDENTITY_NAME = /^(?=.{2,31}$)[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/;
+export const IdentityName = z
+  .string()
+  .regex(IDENTITY_NAME, 'Expected a lower-case name like reports-team (letters, digits, single dashes)')
+  .refine((n) => n !== 'automation', {
+    message: '"automation" is the default identity; leave `identity` out',
+  });
+
+/** `AF_IDENTITY_<NAME>_` for an identity name (dashes become underscores). */
+export const identityEnvPrefix = (name: string) => `AF_IDENTITY_${name.toUpperCase().replace(/-/g, '_')}_`;
+
+/**
+ * Who a schedule runs as (ADR-014): the automation identity (default), a named app identity, or the creator of a
+ * schedule made in the portal (read-only jobs only: reports and probes).
+ */
+export const ScheduleIdentity = z.union(
+  [
+    z.literal('automation'),
+    z.strictObject({ app: IdentityName }),
+    z.strictObject({ user: z.literal('creator') }),
+  ],
+  { error: 'Expected automation, { app: <name> } or { user: creator }' },
+);
+export type ScheduleIdentity = z.infer<typeof ScheduleIdentity>;
+
+/** `automation`, `app:<name>` or `user` — one string per kind of identity (keys, logs, the API). */
+export function identityKey(identity: ScheduleIdentity | undefined): string {
+  if (!identity || identity === 'automation') return 'automation';
+  return 'app' in identity ? `app:${identity.app}` : 'user';
+}
+
+/** How an identity reads in the UI and the audit log ("automation identity", "app identity reports-team", "its creator"). */
+export function identityLabel(identity: ScheduleIdentity | undefined, creator?: string | null): string {
+  if (!identity || identity === 'automation') return 'automation identity';
+  if ('app' in identity) return `app identity ${identity.app}`;
+  return creator ? `${creator} (their own access)` : 'its creator (their own access)';
+}
+
+/** Job kinds that may run as the creator: they only read. */
+const USER_JOBS = new Set(['report', 'probe']);
+
 export const Every = z
   .string()
   .trim()
@@ -179,8 +228,8 @@ export const Schedule = z
     every: Every.optional(),
     timezone: TimeZone.default('UTC'),
     enabled: z.boolean().default(true),
-    /** Unattended runs always use the automation identity (ADR-011). */
-    identity: z.literal('automation').default('automation'),
+    /** Who it runs as (ADR-014): the automation identity (default), `{ app: <name> }` or `{ user: creator }`. */
+    identity: ScheduleIdentity.default('automation'),
     job: ScheduleJob,
     retry: RetryPolicy.optional(),
     /** Run time limit (default 900; max 4h). */
@@ -195,6 +244,30 @@ export const Schedule = z
       .optional(),
   })
   .superRefine((def, ctx) => {
+    const identity = def.identity;
+    if (identity !== 'automation' && 'user' in identity) {
+      // A person's own access only ever reads, and only for a schedule a person made (content has no creator).
+      if (!USER_JOBS.has(def.job.kind))
+        ctx.addIssue({
+          code: 'custom',
+          path: ['identity'],
+          message: `A ${def.job.kind} job can't run as its creator: only reports and probes can (they only read). Use the automation identity or an app identity.`,
+        });
+      if (!def.id.startsWith(PORTAL_SCHEDULE_PREFIX))
+        ctx.addIssue({
+          code: 'custom',
+          path: ['identity'],
+          message:
+            'Only schedules created in the portal run as their creator; a schedule in content has no creator. Use the automation identity or `{ app: <name> }`.',
+        });
+    }
+    // AdminForge's own housekeeping (news collection, content health) always runs as the automation identity.
+    if (identity !== 'automation' && (def.job.kind === 'news' || def.job.kind === 'contentHealth'))
+      ctx.addIssue({
+        code: 'custom',
+        path: ['identity'],
+        message: `${def.job.kind} jobs always run as the automation identity; leave \`identity\` out.`,
+      });
     if (def.job.kind === 'script' && def.job.mode === 'write' && !def.job.approvedBy?.length)
       ctx.addIssue({
         code: 'custom',

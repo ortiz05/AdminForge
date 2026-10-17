@@ -24,7 +24,7 @@ import { AppError } from '../errors';
 import { SCHEDULED_DATA_ROLES } from '../schedules/service';
 import type { RunQueue } from './queue';
 import { failTree, outdatedRun, pinnedDefinition, rootOf, runOutdated, wroteAnything } from './run-worker';
-import { decisionOf } from './store';
+import { decisionOf, executedAs } from './store';
 import { automationFingerprint, writesInTree, type PlaybookRef } from './fingerprint';
 import {
   RUN_STATUS_ACTIVE as NON_TERMINAL,
@@ -84,6 +84,8 @@ export interface ScheduledRunInput {
     approvedBy?: string[] | null;
     /** Fingerprint of the playbook (and children) the second person approved (runs/fingerprint.ts). */
     approvedTarget?: string | null;
+    /** The named app identity the schedule runs as (ADR-014); absent = the automation identity. */
+    identity?: string | null;
   };
   /** Playbook key, or { ref, version }. */
   playbook: string | { ref: string; version?: string };
@@ -373,7 +375,7 @@ export class RunService {
   private newRun(
     def: AutomationDefinition,
     pinned: { version: string; sha256: string },
-    fields: Partial<Pick<NewRun, 'id'>> &
+    fields: Partial<Pick<NewRun, 'id' | 'identityName'>> &
       Pick<
         NewRun,
         | 'dryRun'
@@ -394,6 +396,7 @@ export class RunService {
       definitionVersion: pinned.version,
       definitionSha256: pinned.sha256,
       parentRunId: null,
+      identityName: null,
       ...fields,
     };
   }
@@ -768,6 +771,7 @@ export class RunService {
         dryRun,
         trigger: 'schedule',
         identity: 'automation',
+        identityName: input.schedule.identity ?? null,
         // An oid, so self-approval checks work: Run now's requester (who then can't approve gates in it), else the
         // schedule's creator when that is an oid. Cron runs of content schedules have no initiating person.
         initiatorOid:
@@ -783,7 +787,7 @@ export class RunService {
     );
     await this.deps.audit.append({
       actorOid: 'automation',
-      actorUpn: 'automation identity',
+      actorUpn: executedAs(row),
       mode: writes && !dryRun ? 'write' : 'read',
       action: 'run.created',
       targetType: 'run',
@@ -797,7 +801,7 @@ export class RunService {
         schedule: input.schedule.key,
         scheduledBy: input.schedule.createdBy ?? null,
         approvedBy: input.schedule.approvedBy ?? [],
-        executedAs: 'automation identity',
+        executedAs: executedAs(row),
         inputs: redactInputs(def.inputs, inputs),
       },
       result: 'success',

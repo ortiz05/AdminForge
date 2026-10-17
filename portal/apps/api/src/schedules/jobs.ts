@@ -32,9 +32,11 @@ import type { ScheduleStore } from './store';
 import type { ScheduleRow, ScheduleRunRow } from './types';
 
 /**
- * What each `job.kind` does when a schedule fires (R6, ADR-011). Everything runs as the automation identity in read
- * mode, except playbook jobs, which hand over to the runs worker (`RunService.createScheduledRun`, identity
- * `automation`, two-person approval for write playbooks).
+ * What each `job.kind` does when a schedule fires (R6, ADR-011, ADR-014). Reports and probes run in read mode as the
+ * identity the schedule names (`JobContext.identity`: the automation identity, a named app identity, or the creator's
+ * stored grant); playbook jobs hand over to the runs worker (`RunService.createScheduledRun`, identity `automation`
+ * with the app identity's name, two-person approval for write playbooks); news and content health always run as the
+ * automation identity.
  */
 
 export const AUTOMATION: ExecutionIdentity = { kind: 'automation', mode: 'read' };
@@ -49,6 +51,10 @@ export const AUTOMATION_USER: UserScope = {
 export interface JobContext {
   schedule: ScheduleRow;
   def: Schedule;
+  /** Who reports and probes run as (scheduler: `ScheduleIdentities.prepare`); default the automation identity. */
+  identity?: ExecutionIdentity;
+  /** `user` in expressions for scheduled reports (the creator for a user schedule); default AUTOMATION_USER. */
+  user?: UserScope;
   run: ScheduleRunRow;
   signal: AbortSignal;
   correlationId: string;
@@ -81,6 +87,8 @@ export interface JobDeps {
   /** Scheduled playbook runs; null when the runs module is not available in this process. */
   runs: { service: RunService; repo: RunRepository } | null;
   automationClientId: string | null;
+  /** Application ids of the named app identities (ADR-014), for content health's permission check. */
+  identityClientIds?: Readonly<Record<string, string>>;
   exportMaxRows: number;
   now: () => Date;
   /** Abortable sleep (tests inject a fake). */
@@ -112,6 +120,10 @@ const defaultSleep = (ms: number, signal: AbortSignal) =>
   });
 
 const INACTIVE = new Set(['draft', 'retired']);
+
+/** The named app identity a schedule runs as, or null (the automation identity, or the creator). */
+export const appIdentityOf = (def: Pick<Schedule, 'identity'>): string | null =>
+  def.identity !== 'automation' && def.identity && 'app' in def.identity ? def.identity.app : null;
 
 /** "Scheduled in AdminForge by <upn>." for schedules created in the portal; null for content. */
 export const scheduledInPortalBy = (s: Pick<ScheduleRow, 'source' | 'definition'>): string | null =>
@@ -170,7 +182,7 @@ export function createJobRunner(deps: JobDeps): JobRunner {
         key,
         probe,
         { ...deps.probes, outbound: deps.outbound },
-        { signal: ctx.signal, correlationId: ctx.correlationId },
+        { signal: ctx.signal, correlationId: ctx.correlationId, identity: ctx.identity ?? AUTOMATION },
       );
       counts[outcome.status]++;
       results.push({ key, status: outcome.status, metric: outcome.metric, code: outcome.code });
@@ -250,7 +262,9 @@ export function createJobRunner(deps: JobDeps): JobRunner {
       kind: 'report',
       key: job.ref,
     };
-    const params = await deps.datasources.prepareParams(page, job.params ?? {}, AUTOMATION_USER);
+    const identity = ctx.identity ?? AUTOMATION;
+    const user = ctx.user ?? AUTOMATION_USER;
+    const params = await deps.datasources.prepareParams(page, job.params ?? {}, user);
     const spec = page.def.export;
     if (!spec)
       throw new AppError(
@@ -274,8 +288,8 @@ export function createJobRunner(deps: JobDeps): JobRunner {
         exportPages(
           deps.datasources,
           {
-            identity: AUTOMATION,
-            user: AUTOMATION_USER,
+            identity,
+            user,
             page,
             params,
             correlationId: ctx.correlationId,
@@ -414,7 +428,10 @@ export function createJobRunner(deps: JobDeps): JobRunner {
         error: {
           code: 'report_incomplete',
           message: `The report was written without ${missing.map((m) => `“${m.label}”`).join(', ')}: ${missing[0]!.message}`,
-          hint: 'The automation identity may lack an application permission or licence for that data (check with pnpm adminforge validate --scopes); the files are kept with this run.',
+          hint:
+            identity.kind === 'grant'
+              ? 'The schedule runs with its creator’s own access, which may not reach that data (a role or licence on their account); the files are kept with this run.'
+              : `${identity.kind === 'automation' && identity.app ? `The app identity ${identity.app}` : 'The automation identity'} may lack an application permission or licence for that data (check with pnpm adminforge validate --scopes); the files are kept with this run.`,
         },
       };
     }
@@ -438,6 +455,7 @@ export function createJobRunner(deps: JobDeps): JobRunner {
           ...(ctx.requestedByOid ? { requestedByOid: ctx.requestedByOid } : {}),
           approvedBy: ctx.schedule.approvedBy ? [ctx.schedule.approvedBy] : [],
           approvedTarget: ctx.schedule.approvedTarget,
+          ...(appIdentityOf(ctx.def) ? { identity: appIdentityOf(ctx.def) } : {}),
         },
         playbook: job.ref,
         inputs: job.inputs,
@@ -515,11 +533,14 @@ export function createJobRunner(deps: JobDeps): JobRunner {
             scopes: job.scopes,
             outbound: deps.outbound,
             automationClientId: deps.automationClientId,
+            ...(deps.identityClientIds ? { identityClientIds: deps.identityClientIds } : {}),
             ...(licensed ? { licensed } : {}),
             correlationId: ctx.correlationId,
             signal: ctx.signal,
           });
-          const failing = report.problems > 0 || (report.scopes?.missing.length ?? 0) > 0;
+          const named = Object.values(report.scopes?.identities ?? {});
+          const namedMissing = named.reduce((n, d) => n + d.missing.length, 0);
+          const failing = report.problems > 0 || (report.scopes?.missing.length ?? 0) > 0 || namedMissing > 0;
           return failing
             ? {
                 status: 'failed',
@@ -531,6 +552,7 @@ export function createJobRunner(deps: JobDeps): JobRunner {
                     report.scopes?.missing.length
                       ? `${report.scopes.missing.length} declared permission(s) the automation identity lacks`
                       : '',
+                    namedMissing ? `${namedMissing} declared permission(s) the app identities lack` : '',
                   ]
                     .filter(Boolean)
                     .join('; '),

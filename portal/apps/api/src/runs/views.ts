@@ -22,6 +22,7 @@ export function runSummary(row: RunRow, title?: string): RunSummary {
     dryRun: row.dryRun,
     trigger: row.trigger,
     identity: row.identity,
+    identityName: row.identityName ?? null,
     initiatorOid: row.initiatorOid,
     initiatorUpn: row.initiatorUpn,
     parentRunId: row.parentRunId,

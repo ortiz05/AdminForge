@@ -13,7 +13,7 @@ import type { LoadedDefinition, Scopes } from '@adminforge/schemas';
 import { AUTOMATION_BUILTIN_USES, RESOURCES, type ResourceKey } from '../provision/catalog';
 import {
   baselinePermissions,
-  CEILINGS,
+  ceilingReason,
   desiredPermissions,
   type CeilingSettings,
   type ContentScopes,
@@ -29,7 +29,8 @@ export const SCOPE_SERVICES = [
   'sharepointAdmin',
 ] as const;
 export type ScopeService = (typeof SCOPE_SERVICES)[number];
-export type ScopeApp = 'read' | 'write' | 'automation';
+/** The Read, Write and automation apps, and each named app identity (`identity:<name>`, ADR-014). */
+export type ScopeApp = 'read' | 'write' | 'automation' | `identity:${string}`;
 
 /** Microsoft first-party resource app ids (identical in every tenant). */
 export const RESOURCE_APP_IDS: Record<ScopeService, string> = {
@@ -56,8 +57,27 @@ export const serviceForResource = (resource: ResourceKey): ScopeService => RESOU
 /** Sign-in scopes every delegated app holds; never reported as unused. */
 const OIDC = new Set(['openid', 'profile', 'offline_access', 'email', 'user.read']);
 
-export type ScopeSet = Record<ScopeApp, Partial<Record<ScopeService, Set<string>>>>;
+type Bucket = Partial<Record<ScopeService, Set<string>>>;
+export type ScopeSet = Record<'read' | 'write' | 'automation', Bucket> & {
+  [identity: `identity:${string}`]: Bucket | undefined;
+};
 export const emptyScopeSet = (): ScopeSet => ({ read: {}, write: {}, automation: {} });
+
+/** The scopes of one app in a set (created empty for a named app identity seen for the first time). */
+export function bucket(set: ScopeSet, app: ScopeApp): Bucket {
+  const s = set as Record<string, Bucket | undefined>;
+  return (s[app] ??= {});
+}
+
+/** Every app in a set: the built-in three, then the named app identities it mentions. */
+export const appsOf = (...sets: ScopeSet[]): ScopeApp[] => [
+  'read',
+  'write',
+  'automation',
+  ...new Set(
+    sets.flatMap((s) => Object.keys(s).filter((k): k is `identity:${string}` => k.startsWith('identity:'))),
+  ),
+];
 
 export interface Declared {
   scopes: ScopeSet;
@@ -67,8 +87,13 @@ export interface Declared {
   connections: string[];
 }
 
-/** Which app a definition's `requires.scopes` belong to: schedules/probes/feeds → automation identity; write content → Write app. */
+/**
+ * Which app a definition's `requires.scopes` belong to: a schedule naming an app identity → that identity (ADR-014);
+ * other schedules, probes and feeds → the automation identity; write content → the Write app; the rest → the Read app.
+ */
 export function appFor(def: LoadedDefinition['def']): ScopeApp {
+  if (def.kind === 'schedule' && def.identity !== 'automation' && def.identity && 'app' in def.identity)
+    return `identity:${def.identity.app}`;
   if (def.kind === 'schedule' || def.kind === 'probe' || def.kind === 'feed') return 'automation';
   if ((def.kind === 'playbook' || def.kind === 'runbook') && def.mode === 'write') return 'write';
   return 'read';
@@ -81,7 +106,7 @@ export function declaredScopes(defs: readonly LoadedDefinition[]): Declared {
   const add = (app: ScopeApp, s: Scopes | undefined, file: string) => {
     for (const service of SCOPE_SERVICES) {
       for (const scope of s?.[service] ?? []) {
-        (scopes[app][service] ??= new Set()).add(scope);
+        (bucket(scopes, app)[service] ??= new Set()).add(scope);
         const k = `${app}:${service}:${scope}`;
         files.set(k, [...(files.get(k) ?? []), file]);
       }
@@ -144,11 +169,14 @@ export interface Provisioned {
 /** Pure: the same desired permissions `provision entra` computes, keyed like content declarations. */
 export function provisionedScopes(settings: CeilingSettings, declared: ScopeSet): Provisioned {
   const { requests, withheld } = desiredPermissions(settings, declared as ContentScopes);
-  const toSet = (reqs: Record<ScopeApp, Array<{ resource: ResourceKey; values: readonly string[] }>>) => {
+  const toSet = (
+    reqs: Partial<Record<string, Array<{ resource: ResourceKey; values: readonly string[] }>>>,
+  ) => {
     const set = emptyScopeSet();
-    for (const app of ['read', 'write', 'automation'] as const)
-      for (const r of reqs[app])
-        for (const v of r.values) (set[app][serviceForResource(r.resource)] ??= new Set()).add(v);
+    for (const [app, list] of Object.entries(reqs))
+      for (const r of list ?? [])
+        for (const v of r.values)
+          (bucket(set, app as ScopeApp)[serviceForResource(r.resource)] ??= new Set()).add(v);
     return set;
   };
   return {
@@ -157,7 +185,7 @@ export function provisionedScopes(settings: CeilingSettings, declared: ScopeSet)
     withheld: new Map(
       withheld.map((w) => [
         `${w.app}:${serviceForResource(w.resource)}:${w.value}`.toLowerCase(),
-        CEILINGS[w.ceiling].reason,
+        ceilingReason(w),
       ]),
     ),
   };
@@ -179,10 +207,12 @@ export function compareScopes(
   present?: ReadonlySet<ScopeService>,
 ): ScopeComparison {
   const out: ScopeComparison = { missing: [], unused: [], withheld: [], unlicensed: [], baseline: [] };
-  for (const app of ['read', 'write', 'automation'] as const) {
+  const look = (set: ScopeSet | undefined, app: ScopeApp) =>
+    (set as Record<string, Bucket | undefined> | undefined)?.[app] ?? {};
+  for (const app of appsOf(declared.scopes, consented)) {
     for (const service of SCOPE_SERVICES) {
-      const want = declared.scopes[app][service] ?? new Set<string>();
-      const have = consented[app][service] ?? new Set<string>();
+      const want = look(declared.scopes, app)[service] ?? new Set<string>();
+      const have = look(consented, app)[service] ?? new Set<string>();
       for (const scope of [...want].sort()) {
         if (satisfied(have, scope)) continue;
         const finding = { app, service, scope, files: declared.files.get(`${app}:${service}:${scope}`) };
@@ -197,8 +227,8 @@ export function compareScopes(
           (w) => w.toLowerCase() === scope.toLowerCase() || satisfied(new Set([scope]), w),
         );
         if (used) continue;
-        if (provisioned && has(provisioned.expected[app][service], scope)) {
-          if (has(provisioned.baseline[app][service], scope))
+        if (provisioned && has(look(provisioned.expected, app)[service], scope)) {
+          if (has(look(provisioned.baseline, app)[service], scope))
             out.baseline.push({
               app,
               service,
@@ -226,7 +256,8 @@ const odata = (s: string) => `'${s.replace(/'/g, "''")}'`;
 
 /**
  * What Entra actually granted: tenant-wide delegated grants (oauth2PermissionGrants, AllPrincipals) for the Read and
- * Write apps, and application permissions (appRoleAssignments) for the automation identity. Read with the provisioner.
+ * Write apps, and application permissions (appRoleAssignments) for the automation identity and each named app
+ * identity. Read with the provisioner.
  */
 export async function consentedScopes(
   graph: GraphClient,
@@ -256,8 +287,8 @@ export async function consentedScopes(
     }
     return resources.get(id) ?? null;
   };
-  for (const app of ['read', 'write', 'automation'] as const) {
-    const appId = apps[app];
+  for (const [key, appId] of Object.entries(apps)) {
+    const app = key as ScopeApp;
     if (!appId) continue;
     const found = await graph.request<{ value: Sp[] }>({
       path: '/servicePrincipals',
@@ -268,7 +299,7 @@ export async function consentedScopes(
       notFound.push(app);
       continue;
     }
-    if (app === 'automation') {
+    if (app === 'automation' || app.startsWith('identity:')) {
       const assignments = await graph.all<{ resourceId: string; appRoleId: string }>({
         path: `/servicePrincipals/${encodeURIComponent(sp.id)}/appRoleAssignments`,
       });
@@ -276,7 +307,7 @@ export async function consentedScopes(
         const res = await resource(a.resourceId);
         const service = res ? SERVICE_BY_APP_ID.get(res.appId) : undefined;
         const value = res?.appRoles?.find((r) => r.id === a.appRoleId)?.value;
-        if (service && value) (scopes.automation[service] ??= new Set()).add(value);
+        if (service && value) (bucket(scopes, app)[service] ??= new Set()).add(value);
       }
     } else {
       const grants = await graph.all<{ resourceId: string; scope?: string; consentType?: string }>({
@@ -288,7 +319,7 @@ export async function consentedScopes(
         const service = res ? SERVICE_BY_APP_ID.get(res.appId) : undefined;
         if (!service) continue;
         for (const s of (g.scope ?? '').split(/\s+/).filter(Boolean))
-          (scopes[app][service] ??= new Set()).add(s);
+          (bucket(scopes, app)[service] ??= new Set()).add(s);
       }
     }
   }

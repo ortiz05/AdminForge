@@ -21,7 +21,15 @@ import {
 import { ApiRequestError } from '../lib/api';
 import { describeCron, formatInZone, nextRuns } from './cron';
 import { RunNowButton, ScheduleToggle } from './ScheduleControls';
-import { JOB_LABEL, runStatusView, schedulesQuery, type ScheduleItem } from './schedules';
+import {
+  JOB_LABEL,
+  lastRunView,
+  runsAsShort,
+  runStatusView,
+  schedulesQuery,
+  signInView,
+  type ScheduleItem,
+} from './schedules';
 import { Callout, useDocumentTitle } from './ui';
 
 /** The cadence in English with the browser's clock, naming the zone (the API's `cronText` only for custom shapes). */
@@ -99,6 +107,8 @@ export function SchedulesPage() {
   useDocumentTitle('Schedules');
   const items = useMemo(() => q.data?.items ?? [], [q.data]);
   const failing = items.filter((s) => runStatusView(s.lastStatus).tone === 'crit');
+  // Schedules that use the caller's own access and can't run until they sign in for them.
+  const mine = items.filter((s) => s.runsAs.canSignIn && signInView(s.runsAs) !== null);
   const pending = items.filter((s) => s.pendingApprovalId && !s.enabled);
   const enabled = items.filter((s) => s.enabled);
   const soonest = enabled
@@ -143,7 +153,7 @@ export function SchedulesPage() {
             </span>
           </span>
         ),
-        width: 'minmax(260px, 2.4fr)',
+        width: 'minmax(240px, 2.4fr)',
       },
       {
         id: 'cadence',
@@ -161,7 +171,7 @@ export function SchedulesPage() {
             </span>
           </span>
         ),
-        width: 'minmax(250px, 2fr)',
+        width: 'minmax(198px, 2fr)',
       },
       {
         id: 'job',
@@ -172,19 +182,45 @@ export function SchedulesPage() {
         width: 'minmax(110px, 0.8fr)',
       },
       {
+        id: 'runsAs',
+        header: 'Runs as',
+        kind: 'text',
+        value: (s) => runsAsShort(s.runsAs),
+        cell: (s) => {
+          const signIn = signInView(s.runsAs);
+          return (
+            <span className="flex min-w-0 flex-col items-start gap-0.5 leading-tight">
+              <span className="max-w-full truncate text-fg-2" title={s.runsAs.label}>
+                {runsAsShort(s.runsAs)}
+              </span>
+              {/* Two lines like every other cell: the sign-in state when it needs one, else "Own access". */}
+              {signIn ? (
+                <StatusPill status={signIn.tone} size="sm">
+                  {signIn.label}
+                </StatusPill>
+              ) : (
+                s.runsAs.kind === 'user' && <span className="text-2xs text-fg-3">Own access</span>
+              )}
+            </span>
+          );
+        },
+        filter: 'facet',
+        width: 'minmax(132px, 1.2fr)',
+      },
+      {
         id: 'next',
         header: 'Next run',
         kind: 'relativeTime',
         value: (s) => nextRunOf(s, now),
-        width: 'minmax(96px, 0.6fr)',
+        width: 'minmax(88px, 0.6fr)',
       },
       {
         id: 'last',
         header: 'Last run',
         kind: 'status',
-        value: (s) => runStatusView(s.lastStatus),
+        value: (s) => lastRunView(s, { short: true }),
         cell: (s) => {
-          const v = runStatusView(s.lastStatus);
+          const v = lastRunView(s, { short: true });
           return (
             <span className="flex min-w-0 items-center gap-2">
               <StatusPill status={v.tone} size="sm">
@@ -202,7 +238,7 @@ export function SchedulesPage() {
             </span>
           );
         },
-        width: 'minmax(180px, 1.1fr)',
+        width: 'minmax(150px, 1.1fr)',
       },
       {
         id: 'enabled',
@@ -224,7 +260,7 @@ export function SchedulesPage() {
         filter: 'none',
         hideable: false,
         pin: 'end',
-        width: 'minmax(110px, 0.6fr)',
+        width: 'minmax(100px, 0.6fr)',
       },
     ],
     [now],
@@ -251,15 +287,31 @@ export function SchedulesPage() {
         }
       />
       <div className="flex flex-col gap-6">
-        <Callout
-          tone="neutral"
-          icon={<RobotIcon size={18} />}
-          title="Schedules run as the automation identity, not as you"
-        >
-          Unattended runs use a separate app registration with application permissions. Each run is audited as
-          “scheduled by the person who enabled it, executed as the automation identity”. Schedules that can
-          change the tenant need a second person to approve before they turn on.
+        <Callout tone="neutral" icon={<RobotIcon size={18} />} title="Who schedules run as">
+          Unattended runs use an app registration with application permissions: the automation identity, or an
+          app identity a schedule names. A report schedule can instead use its creator’s own read access. Each
+          run is audited as scheduled by the person who enabled it and executed as the identity it ran as.
+          Schedules that can change the tenant need a second person to approve before they turn on.
         </Callout>
+        {mine.length > 0 && (
+          <Callout
+            tone="warn"
+            title={`${mine.length} schedule${mine.length === 1 ? '' : 's'} need${mine.length === 1 ? 's' : ''} you to sign in`}
+          >
+            <span className="flex flex-wrap gap-x-3 gap-y-1">
+              {mine.map((s) => (
+                <Link
+                  key={s.key}
+                  to="/schedules/$key"
+                  params={{ key: s.key }}
+                  className="font-medium text-fg underline-offset-2 hover:underline"
+                >
+                  {s.title}
+                </Link>
+              ))}
+            </span>
+          </Callout>
+        )}
         {failing.length > 0 && (
           <Callout
             tone="crit"

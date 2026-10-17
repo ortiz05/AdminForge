@@ -22,7 +22,8 @@ describe('Schedules, monitoring, audit, appearance, settings', () => {
     expect(await within(grid).findByText('Every Monday at 7:00 am')).toBeInTheDocument();
     expect(within(grid).getByText('0 7 * * 1 · UTC')).toBeInTheDocument();
     expect(within(grid).getByText('Every 5 minutes')).toHaveAttribute('title', 'Every 5 minutes (UTC)');
-    expect(screen.getByText('Schedules run as the automation identity, not as you')).toBeInTheDocument();
+    expect(screen.getByText('Who schedules run as')).toBeInTheDocument();
+    expect(within(grid).getByText('App: monitoring')).toBeInTheDocument();
     expect(screen.getByRole('alert')).toHaveTextContent('1 schedule failed on the last run');
     expect(screen.getByRole('list', { name: 'Upcoming runs' })).toBeInTheDocument();
     expect(await axeViolations()).toEqual([]);

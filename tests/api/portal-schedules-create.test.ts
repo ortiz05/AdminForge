@@ -233,6 +233,8 @@ describe('POST /api/schedules', () => {
         ],
       },
       teams: { lists: [{ key: 'AF_TEAMS_ALERTS_WEBHOOK', label: 'Teams alerts' }] },
+      // Run as: no app identities configured; mock sign-in can't use a creator's own access.
+      identities: { apps: [], user: false },
     });
     expect(res.body).not.toContain('@example.com');
     await t.close();
@@ -242,6 +244,7 @@ describe('POST /api/schedules', () => {
     expect((await op2.get('/api/schedules/delivery-options')).json()).toEqual({
       email: { available: false, lists: [{ key: 'AF_REPORT_RECIPIENTS', label: 'Report recipients' }] },
       teams: { lists: [] },
+      identities: { apps: [], user: false },
     });
     await noMail.close();
   });

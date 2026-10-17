@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { DefinitionId } from './common';
-import { TimeZone } from './schedule';
+import { ScheduleIdentity, TimeZone } from './schedule';
 
 /**
  * Contracts of the Reports catalogue and in-app report schedules:
@@ -49,6 +49,16 @@ export const ScheduleSummary = z.object({
   /** Whether the caller may edit or delete it (portal schedule; Operator; the creator or Portal.Admin). */
   canManage: z.boolean(),
   pendingApprovalId: z.string().nullable(),
+  /** Who it runs as (ADR-014); absent from an older API = the automation identity. */
+  runsAs: z
+    .object({
+      kind: z.enum(['automation', 'app', 'user']),
+      name: z.string().nullable(),
+      label: z.string(),
+      signIn: z.enum(['signed_in', 'needs_sign_in', 'not_signed_in']).optional(),
+      canSignIn: z.boolean().optional(),
+    })
+    .optional(),
 });
 export type ScheduleSummary = z.infer<typeof ScheduleSummary>;
 
@@ -103,10 +113,19 @@ export type ReportDetailResponse = z.infer<typeof ReportDetailResponse>;
 
 const DeliveryList = z.object({ key: z.string(), label: z.string() });
 
+/**
+ * Who schedules may run as here (ADR-014): the configured app identities (names) and whether a schedule can run with
+ * its creator's own access (Entra sign-in configured). Also GET /api/schedules/identities (Portal.Reader).
+ */
+export const ScheduleIdentityOptions = z.object({ apps: z.array(z.string()), user: z.boolean() });
+export type ScheduleIdentityOptions = z.infer<typeof ScheduleIdentityOptions>;
+
 /** GET /api/schedules/delivery-options: configured recipient lists and Teams webhooks (names, never values). */
 export const DeliveryOptionsResponse = z.object({
   email: z.object({ available: z.boolean(), lists: z.array(DeliveryList) }),
   teams: z.object({ lists: z.array(DeliveryList) }),
+  /** Absent from an older API = the automation identity only. */
+  identities: ScheduleIdentityOptions.optional(),
 });
 export type DeliveryOptionsResponse = z.infer<typeof DeliveryOptionsResponse>;
 
@@ -122,6 +141,11 @@ export const PortalScheduleRequest = z.object({
   cron: z.string().trim().min(1).max(100),
   timezone: TimeZone,
   enabled: z.boolean().default(true),
+  /**
+   * Who it runs as (ADR-014): the automation identity, a configured app identity, or `{ user: creator }` — the
+   * creator's own read access, granted once through POST /auth/schedule-consent.
+   */
+  identity: ScheduleIdentity.default('automation'),
   job: z.object({
     /** Only report jobs can be created in the portal; every other kind is content. */
     kind: z.literal('report'),

@@ -62,7 +62,10 @@ export type TestApp = Awaited<ReturnType<typeof makeApp>>;
 export async function makeApp(config: Config, extra: Pick<AppDeps, 'auth' | 'fetch' | 'database'> = {}) {
   const clock = new Clock();
   if (extra.auth instanceof FakeAuthClient) extra.auth.now = clock.now;
-  return buildTestApp(config, { clock, deps: extra });
+  const t = await buildTestApp(config, { clock, deps: extra });
+  // Like MSAL, a redemption writes the account to the partition it names.
+  if (extra.auth instanceof FakeAuthClient) extra.auth.cache = t.tokenCache;
+  return t;
 }
 
 /** "name=value" from a response's Set-Cookie for `name`. */
@@ -110,6 +113,8 @@ export class FakeAuthClient implements AuthClient {
     forceRefresh?: boolean;
   }> = [];
   forgets: Array<{ kind: string; partitionKey: string }> = [];
+  /** The app's token cache (wired by makeApp): redemptions write to it, as MSAL does. */
+  cache?: { set(key: string, value: string): Promise<void> };
   claims: (kind: 'read' | 'write') => Partial<IdClaims> = () => ({});
   /** The app's clock (wired by makeApp): ID tokens carry auth_time = now, as after a fresh interactive sign-in. */
   now: () => Date = () => new Date();
@@ -139,6 +144,7 @@ export class FakeAuthClient implements AuthClient {
   }) {
     this.redeems.push(input);
     if (input.code === 'bad-code') throw new Error('invalid_grant');
+    await this.cache?.set(input.partitionKey, JSON.stringify({ account: `redeemed:${input.code}` }));
     const claims: IdClaims = {
       oid: USER_OID,
       tid: TENANT_ID,

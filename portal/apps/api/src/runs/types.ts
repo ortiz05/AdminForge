@@ -25,6 +25,8 @@ export interface RunRow {
   /** interactive | bulk | schedule | child */
   trigger: 'interactive' | 'bulk' | 'schedule' | 'child';
   identity: 'delegated' | 'automation';
+  /** With `automation`: the named app identity it ran as (ADR-014); null = the automation identity. */
+  identityName: string | null;
   initiatorOid: string | null;
   initiatorUpn: string | null;
   /** Session the initiator's steps run with (sha256 of the session id; never sent to clients). */
@@ -195,6 +197,8 @@ export interface RunSummary {
   dryRun: boolean;
   trigger: RunRow['trigger'];
   identity: RunRow['identity'];
+  /** Automation runs: the named app identity it ran as (ADR-014); null for the automation identity. */
+  identityName: string | null;
   initiatorOid: string | null;
   initiatorUpn: string | null;
   parentRunId: string | null;
@@ -283,6 +287,7 @@ export function toRecord(row: RunRow): RunRecord {
     status: row.status,
     dryRun: row.dryRun,
     identity: row.identity,
+    identityName: row.identityName,
     trigger: row.trigger,
     initiator:
       row.identity === 'automation'

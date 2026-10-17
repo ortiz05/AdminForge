@@ -113,6 +113,8 @@ interface CheckContext {
   key: string;
   probe: Probe;
   deps: ProbeDeps;
+  /** Who the checks call Microsoft as: the schedule's identity (default the automation identity, ADR-014). */
+  identity: ExecutionIdentity;
   scope: Scope;
   signal: AbortSignal;
   correlationId?: string;
@@ -286,7 +288,7 @@ async function service(
   let data: unknown;
   try {
     const res = await x.deps.outbound.execute(
-      AUTOMATION,
+      x.identity,
       c.kind === 'graph'
         ? { service: 'graph', method: 'GET', path, query, beta: c.beta, requires: x.probe.requires }
         : {
@@ -332,7 +334,7 @@ async function graphCount(
   const path = await text(c.path, x.scope);
   const query = cleanQuery(await renderTemplate(c.query ?? {}, x.scope));
   const res = await x.deps.outbound.execute<{ value?: unknown[] }>(
-    AUTOMATION,
+    x.identity,
     {
       service: 'graph',
       method: 'GET',
@@ -421,7 +423,7 @@ async function functionHealth(
     );
   const t0 = performance.now();
   const res = await x.deps.outbound.execute(
-    AUTOMATION,
+    x.identity,
     {
       service: 'function',
       method: 'GET',
@@ -625,7 +627,7 @@ async function appCredentialExpiry(
   x: CheckContext,
 ): Promise<CheckResult> {
   const res = await x.deps.outbound.execute<{ value?: GraphApplication[] }>(
-    AUTOMATION,
+    x.identity,
     {
       service: 'graph',
       method: 'GET',
@@ -696,7 +698,7 @@ async function licenseThreshold(
       'Set the env key the probe uses for the SKU part number.',
     );
   const res = await x.deps.outbound.execute<{ value?: GraphSku[] }>(
-    AUTOMATION,
+    x.identity,
     { service: 'graph', method: 'GET', path: '/subscribedSkus', requires: x.probe.requires },
     { signal: x.signal, correlationId: x.correlationId },
   );
@@ -782,7 +784,7 @@ async function signInHealth(
   }
   const max = 20_000;
   const res = await x.deps.outbound.execute<{ value?: GraphSignIn[] }>(
-    AUTOMATION,
+    x.identity,
     {
       service: 'graph',
       method: 'GET',
@@ -851,7 +853,7 @@ async function kql(c: Extract<ProbeCheck, { kind: 'kql' }>, x: CheckContext): Pr
       ? 'P1D'
       : undefined;
   const r = await runKql(
-    AUTOMATION,
+    x.identity,
     x.deps.outbound,
     {
       source: c.source,
@@ -984,7 +986,7 @@ export async function runProbe(
   key: string,
   probe: Probe,
   deps: ProbeDeps,
-  opts: { signal?: AbortSignal; correlationId?: string } = {},
+  opts: { signal?: AbortSignal; correlationId?: string; identity?: ExecutionIdentity } = {},
 ): Promise<ProbeOutcome> {
   const ts = deps.now();
   const thresholds = effectiveThresholds(probe);
@@ -1016,6 +1018,7 @@ export async function runProbe(
       key,
       probe,
       deps,
+      identity: opts.identity ?? AUTOMATION,
       scope,
       signal,
       correlationId: opts.correlationId,

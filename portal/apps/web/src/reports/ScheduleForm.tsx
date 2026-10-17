@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { useIsMutating, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useNavigate } from '@tanstack/react-router';
 import {
   Button,
   CalendarBlankIcon,
@@ -29,7 +30,8 @@ import {
 } from '../ops/cadence';
 import { describeCron, formatInZone } from '../ops/cron';
 import { TimeZoneField } from '../ops/TimeZoneField';
-import { schedulesQuery, type ScheduleItem } from '../ops/schedules';
+import { scheduleSignInReturn, scheduleSignInUrl, schedulesQuery, type ScheduleItem } from '../ops/schedules';
+import { browser } from '../lib/browser';
 import { Callout, QueryError } from '../ops/ui';
 import {
   defaultScheduleTitle,
@@ -41,6 +43,7 @@ import {
   paramDefault,
   paramDefaultText,
   REPORT_CADENCES,
+  runAsOptions,
   saveReportSchedule,
   scheduleRequest,
   type ReportFormat,
@@ -63,6 +66,7 @@ function initialState(report: ReportItem, existing: ScheduleItem | undefined): S
     };
   }
   return {
+    runAs: 'automation',
     title: defaultScheduleTitle(report, DEFAULT_CRON_PARTS.cadence),
     titleEdited: false,
     cron: DEFAULT_CRON_PARTS,
@@ -260,19 +264,47 @@ function FormBody({
   const issues = formIssues(report, form);
   const shownIssues = submitted ? issues : {};
 
+  const navigate = useNavigate();
   const save = useMutation({
     mutationKey: SAVE_KEY,
-    mutationFn: () => saveReportSchedule(scheduleRequest(report, form), existing?.key),
-    onSuccess: () => {
+    mutationFn: async () => {
+      const saved = await saveReportSchedule(scheduleRequest(report, form), existing?.key);
+      // "Me": the schedule can use the engineer's access only after they sign in for it (Entra, then back here).
+      if (
+        saved &&
+        saved.runsAs.kind === 'user' &&
+        saved.runsAs.signIn !== 'signed_in' &&
+        saved.runsAs.canSignIn
+      ) {
+        // The schedule is saved either way: a sign-in that can't start is finished from the schedule's page, never
+        // by saving again (that would create a second schedule).
+        const signIn = await scheduleSignInUrl(saved.key, scheduleSignInReturn(saved.key)).catch(() => null);
+        return { saved, signIn, signInFailed: signIn === null };
+      }
+      return { saved, signIn: null, signInFailed: false };
+    },
+    onSuccess: ({ saved, signIn, signInFailed }) => {
+      void queryClient.invalidateQueries({ queryKey: ['reports'] });
+      void queryClient.invalidateQueries({ queryKey: ['schedules'] });
+      if (signIn) {
+        browser.assign(signIn);
+        return;
+      }
+      if (signInFailed && saved) {
+        toast({
+          tone: 'warn',
+          title: existing ? 'Schedule saved' : 'Schedule created',
+          description: 'Sign in for it from its page so it can run.',
+        });
+        return;
+      }
       toast({
         tone: 'ok',
         title: existing ? 'Schedule saved' : 'Schedule created',
         description: existing
           ? `${form.title.trim()} runs with the new settings from its next due time.`
-          : `${form.title.trim()} runs from its next due time, as the automation identity.`,
+          : `${form.title.trim()} runs from its next due time, as ${saved?.runsAs.label ?? 'the automation identity'}.`,
       });
-      void queryClient.invalidateQueries({ queryKey: ['reports'] });
-      void queryClient.invalidateQueries({ queryKey: ['schedules'] });
     },
   });
   // The last attempt's refusal stays until the form changes.
@@ -307,7 +339,13 @@ function FormBody({
     setSubmitted(true);
     if (Object.keys(issues).length || save.isPending) return;
     // Only while the form is still open: a save that finishes after Cancel doesn't navigate again.
-    save.mutate(undefined, { onSuccess: () => onDone() });
+    save.mutate(undefined, {
+      onSuccess: ({ saved, signInFailed }) => {
+        onDone();
+        // The sign-in couldn't start: finish it from the schedule's page (closing the form first).
+        if (signInFailed && saved) void navigate({ to: '/schedules/$key', params: { key: saved.key } });
+      },
+    });
   };
 
   const email = delivery.data?.email;
@@ -324,6 +362,8 @@ function FormBody({
   const withSaved = (options: typeof emailOptions, key: string) =>
     key && !options.some((o) => o.value === key) ? [...options, { value: key, label: key }] : options;
   const emailReady = Boolean(email?.available && email.lists.length);
+  // Only where there is a choice: another app identity, or the engineer's own access (ADR-014).
+  const runAs = delivery.isSuccess ? runAsOptions(delivery.data.identities, existing?.identity) : [];
   const err = save.error;
   // A refused cadence also shows on the cadence fields, where it gets fixed.
   const cronRefused =
@@ -426,6 +466,12 @@ function FormBody({
         </div>
       </Group>
 
+      {runAs.length > 1 && (
+        <Group legend="Access">
+          <RunAsField value={form.runAs} options={runAs} onChange={(v) => set({ runAs: v })} />
+        </Group>
+      )}
+
       <Group legend="Delivery">
         {delivery.isError ? (
           <QueryError compact title="Delivery options didn’t load" error={delivery.error} />
@@ -510,6 +556,37 @@ function FormBody({
 
 const SAVE_KEY = ['reports', 'schedule-save'] as const;
 
+/** "Run as": who the schedule reads as (ADR-014), with one line on what that identity can see. */
+function RunAsField({
+  value,
+  options,
+  onChange,
+}: {
+  value: string;
+  options: ReturnType<typeof runAsOptions>;
+  onChange: (value: string) => void;
+}) {
+  const chosen = options.find((o) => o.value === value) ?? options[0];
+  const hint = [
+    chosen?.description,
+    chosen?.value === 'user' &&
+      'After you save, Microsoft asks you to sign in once so this schedule can use your access.',
+  ]
+    .filter(Boolean)
+    .join(' ');
+  return (
+    <div className="grid items-start gap-3 sm:grid-cols-2">
+      <Select
+        label="Run as"
+        value={chosen?.value ?? 'automation'}
+        onValueChange={onChange}
+        options={options.map((o) => ({ value: o.value, label: o.label }))}
+        hint={hint || undefined}
+      />
+    </div>
+  );
+}
+
 /** Whether `editKey` names a schedule of this report the caller may change (from GET /api/schedules). */
 function useEditable(report: ReportItem, editKey: string | undefined) {
   const schedules = useQuery({ ...schedulesQuery, enabled: Boolean(editKey) });
@@ -526,7 +603,7 @@ export function scheduleFormTitle(report: ReportItem, editKey: string | undefine
 }
 
 export const SCHEDULE_FORM_DESCRIPTION =
-  'Runs as the automation identity, at most once an hour, from its next due time. Recipients come from this installation’s configuration.';
+  'Runs at most once an hour, from its next due time. Recipients come from this installation’s configuration.';
 
 /**
  * The report schedule form (`?schedule=new` or `?edit=<key>`), shown in the report's side sheet in place of its

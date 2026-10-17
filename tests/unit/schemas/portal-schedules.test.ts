@@ -64,6 +64,7 @@ describe('PortalScheduleRequest', () => {
       cron: '0 6 * * 1',
       timezone: 'Europe/London',
       enabled: true,
+      identity: 'automation',
       job: { kind: 'report', ref: 'identity.inactive-users', format: 'xlsx', retain: 26 },
     });
   });

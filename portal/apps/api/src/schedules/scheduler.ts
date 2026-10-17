@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { postTeams, sendEmail, type DeliveryDeps, type DeliveryStatus } from '../delivery/notifier';
 import type { NotifyTargetSpec } from '@adminforge/schemas';
-import { isWriteCapable, parseDuration, type Schedule } from '@adminforge/schemas';
+import { identityLabel, isWriteCapable, parseDuration, type Schedule } from '@adminforge/schemas';
 import type { AuditWriter } from '../audit/writer';
 import { toErrorInfo } from '../datasources/executor';
 import type { DefinitionSource } from '../definitions/types';
@@ -9,6 +9,7 @@ import { AppError } from '../errors';
 import { AUTOMATION_PAUSED } from '../execution/emergency';
 import { nextRun } from './cron';
 import type { CreatorAccessChecker, CreatorVerdict } from './creator-access';
+import { CreatorAccessLost, NeedsSignIn, type PreparedIdentity, type ScheduleIdentities } from './grants';
 import type { ScheduleEvents } from './events';
 import { scheduledInPortalBy, type JobRunner } from './jobs';
 import { realTimers, type LeaderElector, type Timers } from './leader';
@@ -61,6 +62,11 @@ export interface SchedulerOptions {
    * Entra sign-in, e.g. mock mode: not checked, like the sessions' role re-check).
    */
   creatorAccess?: CreatorAccessChecker | null;
+  /**
+   * Who each schedule runs as (ADR-014): app identities and creators' grants. Absent: every schedule runs as the
+   * automation identity, and one that names its creator can't run.
+   */
+  identities?: ScheduleIdentities | null;
 }
 
 export const DEFAULT_TIMEOUT_SECONDS = 900;
@@ -79,6 +85,9 @@ const PERMANENT = new Set([
   'writes_paused',
   'protected_object',
   'creator_access_removed',
+  // The creator must sign in for the schedule again; retrying can't help.
+  'needs_sign_in',
+  'identity_not_configured',
   // The files were written and delivered (marked incomplete); retrying would send the report again.
   'report_incomplete',
 ]);
@@ -484,6 +493,8 @@ export class Scheduler {
     let result: Record<string, unknown> | null = null;
     let runId: string | null = null;
     let artifactPath: string | null = null;
+    let runAs: PreparedIdentity | null = null;
+    const asCreator = def.identity !== 'automation' && 'user' in def.identity;
     try {
       if (isWriteCapable(def) && !s.approvedBy)
         throw new AppError(
@@ -492,13 +503,41 @@ export class Scheduler {
           'This schedule changes data and runs only after a second person approved enabling it.',
         );
       if (s.source === 'portal' && this.o.creatorAccess) await this.confirmCreator(s, run, correlationId);
+      if (this.o.identities)
+        runAs = await this.o.identities.prepare(s, await this.creatorRoles(s)).catch(async (err: unknown) => {
+          // Entra says the creator lost what the schedule needs (roles, account): their grant is gone, so turn it off.
+          if (err instanceof CreatorAccessLost)
+            // (prepare already removed the grant.)
+            await this.turnOffForCreator(s, run, correlationId, {
+              detail: err.detail,
+              ...(err.missing.length ? { missingRoles: err.missing } : {}),
+              grantRemoved: true,
+            });
+          throw err;
+        });
+      else if (def.identity !== 'automation')
+        throw new AppError(
+          503,
+          'identity_not_configured',
+          'This AdminForge runs schedules only as the automation identity.',
+          { hint: 'Run it as the automation identity, or run the scheduler with Entra sign-in configured.' },
+        );
       if (signal.aborted) throw signal.reason;
       const abort = new Promise<never>((_, reject) =>
         signal.addEventListener('abort', () => reject(signal.reason), { once: true }),
       );
       abort.catch(() => undefined);
       const r = await Promise.race([
-        this.o.jobs.run({ schedule: s, def, run, signal, correlationId, scheduledBy, requestedByOid }),
+        this.o.jobs.run({
+          schedule: s,
+          def,
+          run,
+          signal,
+          correlationId,
+          scheduledBy,
+          requestedByOid,
+          ...(runAs ? { identity: runAs.identity, user: runAs.user } : {}),
+        }),
         abort,
       ]);
       status = r.status ?? 'succeeded';
@@ -511,12 +550,28 @@ export class Scheduler {
       if (reason instanceof RunAborted) {
         status = reason.code === 'timeout' ? 'timeout' : 'failed';
         error = { code: reason.code, message: reason.message };
+      } else if (reason instanceof NeedsSignIn && reason.known) {
+        // Already waiting for the creator to sign in: recorded, without telling anyone again.
+        status = 'skipped';
+        error = {
+          code: reason.code,
+          message: reason.message,
+          ...(reason.extras.hint ? { hint: reason.extras.hint } : {}),
+        };
+        result = { reason: reason.message };
       } else {
         status = 'failed';
         const info = toErrorInfo(err);
         error = { code: info.code, message: info.message, ...(info.hint ? { hint: info.hint } : {}) };
       }
     }
+    // Microsoft refused the creator's stored access in the middle of the run: the schedule now needs sign-in.
+    if (asCreator && runAs && error?.code === 'reauth' && this.o.identities) {
+      await this.o.identities.markNeedsSignIn(s.id, 'reauth');
+      const n = new NeedsSignIn(def.owner, false);
+      error = { code: n.code, message: n.message, ...(n.extras.hint ? { hint: n.extras.hint } : {}) };
+    }
+    const executedAs = runAs?.executedAs ?? identityLabel(def.identity, def.owner);
     const ended = this.o.now();
     const keep = {
       ...(requestedBy ? { requestedBy } : {}),
@@ -538,6 +593,7 @@ export class Scheduler {
       error,
       scheduledBy,
       correlationId,
+      executedAs,
     );
     this.o.events.publish({ type: 'schedule.updated', data: { key: s.key, scheduleRunId: run.id, status } });
     if (status === 'failed' || status === 'timeout')
@@ -561,17 +617,23 @@ export class Scheduler {
    * fails with `creator_access_removed` and the schedule is turned off (audited); can't tell → `creator_unverified`
    * (this run only; the schedule stays on).
    */
-  private async confirmCreator(s: ScheduleRow, run: ScheduleRunRow, correlationId: string): Promise<void> {
+  /** The roles a creator must hold for a schedule they made: Portal.Operator, the schedule's and the report's. */
+  private async creatorRoles(s: ScheduleRow): Promise<string[]> {
     const def = s.definition;
     const ref = def.job.kind === 'report' ? def.job.ref : null;
     const report = ref ? (await this.o.definitions.list('report')).find((r) => r.key === ref) : undefined;
-    const roles = [
+    return [
       ...new Set([
         'Portal.Operator',
         ...(def.requires?.portalRoles ?? []),
         ...(report?.def.requires?.portalRoles ?? []),
       ]),
     ];
+  }
+
+  private async confirmCreator(s: ScheduleRow, run: ScheduleRunRow, correlationId: string): Promise<void> {
+    const def = s.definition;
+    const roles = await this.creatorRoles(s);
     const verdict: CreatorVerdict = s.createdBy
       ? await this.o.creatorAccess!.check(s.createdBy, roles, correlationId)
       : { status: 'unverified', problem: 'The schedule has no creator.' };
@@ -593,7 +655,34 @@ export class Scheduler {
           : verdict.reason === 'guest'
             ? 'their account is now a guest'
             : `they no longer hold the ${verdict.missing!.join(' and ')} role`;
+    await this.turnOffForCreator(s, run, correlationId, {
+      detail: verdict.reason,
+      ...(verdict.missing ? { missingRoles: verdict.missing } : {}),
+    });
+    throw new AppError(
+      403,
+      'creator_access_removed',
+      `${def.owner} created this schedule, but ${why}, so it was turned off and didn’t run.`,
+      {
+        hint: 'Someone who may open the report can schedule it again from Reports; turning this one back on works only once the creator’s access is restored.',
+      },
+    );
+  }
+
+  /**
+   * The creator lost access: the schedule is turned off (audited `schedule.disabled`) and, for one that runs with
+   * their own access, their grant and its sealed tokens are removed — nothing of theirs outlives their access.
+   */
+  private async turnOffForCreator(
+    s: ScheduleRow,
+    run: ScheduleRunRow,
+    correlationId: string,
+    why: Record<string, unknown>,
+  ): Promise<void> {
+    const def = s.definition;
     await this.o.store.updateSchedule(s.id, { enabled: false, nextRunAt: null });
+    const asCreator = def.identity !== 'automation' && 'user' in def.identity;
+    if (asCreator && !why.grantRemoved) await this.o.identities?.remove(s.id);
     await this.o.audit
       .append({
         actorOid: 'automation',
@@ -608,8 +697,8 @@ export class Scheduler {
           reason: 'creator_access_removed',
           createdBy: def.owner,
           creatorOid: s.createdBy,
-          detail: verdict.reason,
-          ...(verdict.missing ? { missingRoles: verdict.missing } : {}),
+          ...why,
+          ...(asCreator ? { grantRemoved: true } : {}),
           scheduleRunId: run.id,
           version: def.version,
           sha256: s.sha256,
@@ -619,14 +708,6 @@ export class Scheduler {
         this.o.log?.error?.({ err: { message: (err as Error).message } }, 'scheduler: audit failed'),
       );
     this.o.events.publish({ type: 'schedules.changed', data: { key: s.key } });
-    throw new AppError(
-      403,
-      'creator_access_removed',
-      `${def.owner} created this schedule, but ${why}, so it was turned off and didn’t run.`,
-      {
-        hint: 'Someone who may open the report can schedule it again from Reports; turning this one back on works only once the creator’s access is restored.',
-      },
-    );
   }
 
   private async auditRun(
@@ -637,6 +718,7 @@ export class Scheduler {
     error: RunErrorInfo | null,
     scheduledBy: string | null,
     correlationId = randomUUID(),
+    executedAs = identityLabel(s.definition.identity, s.definition.owner),
   ) {
     const def = s.definition;
     // Portal schedules: the creator's UPN (the row keeps their oid), also for skipped runs.
@@ -656,7 +738,7 @@ export class Scheduler {
         result: status === 'succeeded' || status === 'skipped' ? 'success' : 'failure',
         correlationId,
         details: {
-          summary: `Scheduled by ${by}, executed as automation identity.`,
+          summary: `Scheduled by ${by}, executed as ${executedAs}.`,
           scheduleRunId: run.id,
           trigger: run.trigger,
           status,
@@ -665,7 +747,7 @@ export class Scheduler {
           sha256: s.sha256,
           scheduledBy: by,
           approvedBy: s.approvedBy,
-          executedAs: 'automation identity',
+          executedAs,
           durationMs,
           ...(run.runId ? { runId: run.runId } : {}),
           ...(run.artifactPath ? { artifact: run.artifactPath } : {}),

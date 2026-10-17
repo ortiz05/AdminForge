@@ -162,7 +162,7 @@ function certificateOps(
     kind: 'keyCredential',
     action: registered && !others ? 'noop' : app && registered ? 'update' : 'create',
     section: 'Local credentials',
-    title: `${desired.body.displayName}: certificate from AF_AUTOMATION_CERT_PATH`,
+    title: `${desired.body.displayName}: certificate from ${desired.env.cert ?? 'AF_AUTOMATION_CERT_PATH'}`,
     changes: [
       ...(registered ? [] : ['not registered on the app']),
       ...(others ? [`replaces ${others} other certificate(s)`] : []),
@@ -178,7 +178,9 @@ function certificateOps(
       action: 'delete',
       section: 'Local credentials',
       title: `${desired.body.displayName}: client secret${c.displayName ? ` "${c.displayName}"` : ''}`,
-      changes: ['certificate configured (AF_AUTOMATION_CERT_PATH): client secrets are removed'],
+      changes: [
+        `certificate configured (${desired.env.cert ?? 'AF_AUTOMATION_CERT_PATH'}): client secrets are removed`,
+      ],
       keyId: c.keyId,
     });
   return ops;

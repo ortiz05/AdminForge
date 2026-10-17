@@ -1,8 +1,9 @@
+import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
 import { playbookHref } from '../../portal/apps/web/src/playbooks/url';
-import { IDS } from '../support/web/fixtures/automation';
+import { CREATOR_SCHEDULE_KEY, creatorScheduleHandler, IDS } from '../support/web/fixtures/automation';
 import { FIXED_NOW, armedMe, me } from '../support/web/fixtures/session';
-import { growViewportToPage, mockApi, setPrefs, settle } from './support/mock-api';
+import { growViewportToPage, mockApi, setPrefs, settle, type MockHandler } from './support/mock-api';
 import { automationApi } from '../support/web/mock-automation';
 
 /** Visual baselines for the automation and admin screens, in Steel (dark) and Daylight (light). */
@@ -10,12 +11,21 @@ import { automationApi } from '../support/web/mock-automation';
 const THEMES = ['steel', 'daylight'] as const;
 const ADMIN = me({ roles: ['Portal.Reader', 'Portal.Operator', 'Playbook.Approver', 'Portal.Admin'] });
 
-async function open(page: Page, theme: string, path: string, session = ADMIN) {
+async function open(page: Page, theme: string, path: string, session = ADMIN, handlers: MockHandler[] = []) {
   const auto = automationApi();
-  await mockApi(page, { me: session, handlers: [auto.handler] });
+  await mockApi(page, { me: session, handlers: [...handlers, auto.handler] });
   await setPrefs(page, { theme, density: 'comfortable' });
   await page.goto(path);
   return auto;
+}
+
+async function noAxeViolations(page: Page) {
+  const results = await new AxeBuilder({ page })
+    .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'])
+    .analyze();
+  expect(
+    results.violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(' ')).slice(0, 3)}`),
+  ).toEqual([]);
 }
 
 async function shoot(page: Page, name: string, { full = true } = {}) {
@@ -107,13 +117,33 @@ for (const theme of THEMES) {
     await expect(
       page.getByRole('grid', { name: 'Schedules' }).getByText('Every Monday at 07:00', { exact: true }),
     ).toBeVisible();
+    await noAxeViolations(page);
     await shoot(page, `schedules-${theme}.png`);
   });
 
   test(`schedule detail · ${theme}`, async ({ page }) => {
     await open(page, theme, '/schedules/reports.app-credential-expiry');
     await expect(page.getByRole('table', { name: /Runs of/ })).toBeVisible();
+    await noAxeViolations(page);
     await shoot(page, `schedule-detail-${theme}.png`);
+  });
+
+  test(`schedule detail · needs sign-in · ${theme}`, async ({ page }) => {
+    // A report schedule that runs with its creator's own access, after Microsoft asked for a new sign-in (ADR-014).
+    await open(page, theme, `/schedules/${CREATOR_SCHEDULE_KEY}`, ADMIN, [
+      creatorScheduleHandler('needs_sign_in').handler,
+    ]);
+    await expect(page.getByRole('button', { name: 'Sign in again' })).toBeVisible();
+    await expect(page.getByRole('table', { name: /Runs of/ })).toContainText('Skipped (needs sign-in)');
+    await noAxeViolations(page);
+    await shoot(page, `schedule-detail-needs-sign-in-${theme}.png`);
+  });
+
+  test(`schedules · needs sign-in · ${theme}`, async ({ page }) => {
+    await open(page, theme, '/schedules', ADMIN, [creatorScheduleHandler('needs_sign_in').handler]);
+    await expect(page.getByText('1 schedule needs you to sign in')).toBeVisible();
+    await noAxeViolations(page);
+    await shoot(page, `schedules-needs-sign-in-${theme}.png`);
   });
 
   test(`monitoring · ${theme}`, async ({ page }) => {

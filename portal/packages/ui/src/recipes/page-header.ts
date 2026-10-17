@@ -13,6 +13,6 @@ export const pageHeader = tv({
     title: 'af-page-title min-w-0',
     description: 'max-w-3xl text-fg-2',
     meta: 'flex flex-wrap items-center gap-2',
-    actions: 'flex shrink-0 flex-wrap items-center gap-2',
+    actions: 'flex min-w-0 max-w-full flex-wrap items-center gap-2',
   },
 });

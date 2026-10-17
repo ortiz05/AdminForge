@@ -35,6 +35,7 @@ const toRun = (r: RunsRow): RunRow => ({
   dryRun: r.dryRun,
   trigger: r.trigger as RunRow['trigger'],
   identity: r.identity as RunRow['identity'],
+  identityName: r.identityName ?? null,
   initiatorOid: r.initiatorOid,
   initiatorUpn: r.initiatorUpn,
   sessionHash: r.sessionHash,

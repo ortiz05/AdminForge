@@ -3,7 +3,14 @@ import { api, isRecord } from '../lib/api';
 import { arr, bool, num, parser, pick, rec } from '../runs/json';
 import { cadenceProblem, cronFor, type Cadence, type CronParts } from '../ops/cadence';
 import { describeCron } from '../ops/cron';
-import { readSchedule, runStatusView, type ScheduleItem, type ScheduleTarget } from '../ops/schedules';
+import {
+  readRunsAs,
+  readSchedule,
+  runStatusView,
+  type RunsAs,
+  type ScheduleItem,
+  type ScheduleTarget,
+} from '../ops/schedules';
 
 /**
  * The report catalogue (/reports) — built against the API contract:
@@ -55,6 +62,8 @@ export interface ScheduleSummary {
   createdBy: string | null;
   canManage: boolean;
   pendingApprovalId: string | null;
+  /** Who it runs as (ADR-014). */
+  runsAs: RunsAs;
 }
 
 export interface ReportItem {
@@ -96,6 +105,8 @@ export interface ReportDetail extends ReportItem {
 export interface DeliveryOptions {
   email: { available: boolean; lists: Array<{ key: string; label: string }> };
   teams: { lists: Array<{ key: string; label: string }> };
+  /** Who schedules may run as here (ADR-014): app identity names; whether creators' own access can be used. */
+  identities: { apps: string[]; user: boolean };
 }
 
 // ── Readers ────────────────────────────────────────────────────────────────────────────────────────
@@ -150,6 +161,7 @@ function readSummary(raw: unknown): ScheduleSummary | null {
     createdBy: pick(o, 'createdBy') ?? null,
     canManage: bool(o.canManage) ?? false,
     pendingApprovalId: pick(o, 'pendingApprovalId') ?? null,
+    runsAs: readRunsAs(o.runsAs),
   };
 }
 
@@ -231,9 +243,11 @@ export const DeliveryOptionsResponse = parser((input): DeliveryOptions => {
       const key = pick(x, 'key');
       return key ? [{ key, label: pick(x, 'label') ?? key }] : [];
     });
+  const ids = rec(o.identities);
   return {
     email: { available: bool(rec(o.email).available) ?? false, lists: lists(o.email) },
     teams: { lists: lists(o.teams) },
+    identities: { apps: strings(ids.apps), user: bool(ids.user) ?? false },
   };
 });
 
@@ -276,6 +290,7 @@ export interface ReportScheduleRequest {
     teamsKey?: string;
   };
   notifyOnFailure?: { emailKey?: string; teamsKey?: string };
+  identity?: 'automation' | { app: string } | { user: 'creator' };
 }
 
 const ScheduleResponse = parser((input) => readSchedule(input));
@@ -396,6 +411,8 @@ export function formatsFor(report: Pick<ReportItem, 'exportFormats'>): ReportFor
 }
 
 export interface ScheduleFormState {
+  /** Who it runs as: `automation`, `app:<name>` or `user` (ADR-014). */
+  runAs: string;
   title: string;
   /** Someone typed a name: it no longer follows the cadence. */
   titleEdited: boolean;
@@ -483,6 +500,8 @@ export function scheduleRequest(
     title: form.title.trim(),
     cron: cronFor(form.cron),
     timezone: form.timezone,
+    // Omitted = the automation identity (also what an edit back to it sends).
+    ...(form.runAs !== 'automation' ? { identity: identityFor(form.runAs) } : {}),
     job: {
       kind: 'report',
       ref: report.key,
@@ -496,13 +515,60 @@ export function scheduleRequest(
   };
 }
 
+/** The request's `identity` for a run-as choice. */
+export function identityFor(runAs: string): ReportScheduleRequest['identity'] {
+  if (runAs === 'user') return { user: 'creator' };
+  if (runAs.startsWith('app:')) return { app: runAs.slice(4) };
+  return 'automation';
+}
+
+/** One "Run as" choice: what to call it and what it can read. */
+export interface RunAsOption {
+  value: string;
+  label: string;
+  description: string;
+}
+
+/**
+ * The run-as choices for a report schedule: the automation identity, each app identity this AdminForge has, and the
+ * engineer's own access where people sign in with Entra. A saved choice the installation no longer offers stays.
+ */
+export function runAsOptions(
+  identities: DeliveryOptions['identities'] | undefined,
+  saved?: string,
+): RunAsOption[] {
+  const out: RunAsOption[] = [
+    {
+      value: 'automation',
+      label: 'Automation identity',
+      description:
+        'AdminForge’s app for schedules. It reads with its own application permissions, not yours, so the file can hold more than you could see yourself.',
+    },
+    ...(identities?.apps ?? []).map((name) => ({
+      value: `app:${name}`,
+      label: `App identity ${name}`,
+      description: `Reads with its own application permissions, not yours, so the file can hold more than you could see yourself. Only the permissions its schedules need.`,
+    })),
+  ];
+  if (identities?.user || saved === 'user')
+    out.push({
+      value: 'user',
+      label: 'Me (my own access)',
+      description:
+        'Your own read access: the file holds only what you can see, and only you (and portal administrators) can open it. Email and Teams deliveries still go where you send them. Microsoft may ask you to sign in again later.',
+    });
+  if (saved && !out.some((o) => o.value === saved))
+    out.push({ value: saved, label: saved.replace(/^app:/, 'App identity '), description: '' });
+  return out;
+}
+
 /** The values an edited schedule starts from: its own, falling back to the report's defaults. */
 export function formValuesFromSchedule(
   report: Pick<ReportItem, 'params' | 'exportFormats'>,
   s: ScheduleItem,
 ): Pick<
   ScheduleFormState,
-  'params' | 'format' | 'retain' | 'emailKey' | 'teamsKey' | 'alertEmailKey' | 'alertTeamsKey'
+  'params' | 'format' | 'retain' | 'emailKey' | 'teamsKey' | 'alertEmailKey' | 'alertTeamsKey' | 'runAs'
 > {
   let file: { format: string; retain: number | null } | undefined;
   let email: (ScheduleTarget & { format: string | null }) | undefined;
@@ -525,6 +591,7 @@ export function formValuesFromSchedule(
     teamsKey: teams?.key ?? '',
     alertEmailKey: s.notify.find((n) => n.type === 'email')?.key ?? '',
     alertTeamsKey: s.notify.find((n) => n.type === 'teams')?.key ?? '',
+    runAs: s.identity === 'user' || s.identity.startsWith('app:') ? s.identity : 'automation',
   };
 }
 

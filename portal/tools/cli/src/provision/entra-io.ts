@@ -152,6 +152,23 @@ export async function fetchEntraState(
       sp: state.sps[key] ? await ids(`/servicePrincipals/${state.sps[key]!.id}/owners`) : [],
     };
   }
+  // Named app identities of this environment that are no longer configured (alternate key …--<label>).
+  const automationKey = desired.apps.find((a) => a.key === 'automation')?.uniqueName;
+  const label = automationKey?.replace(/^adminforge-automation-/, '');
+  if (label) {
+    const wanted = new Set(desired.apps.map((a) => a.uniqueName));
+    const named = await graph.all<{ appId: string; displayName: string; uniqueName?: string | null }>({
+      path: '/applications',
+      query: {
+        $filter: `startswith(displayName,${odata('AdminForge Identity ')})`,
+        $select: 'appId,displayName,uniqueName',
+      },
+    });
+    state.retiredIdentities = named
+      .filter((a) => a.uniqueName?.startsWith('adminforge-identity-') && a.uniqueName.endsWith(`--${label}`))
+      .filter((a) => !wanted.has(a.uniqueName!))
+      .map((a) => ({ displayName: a.displayName, appId: a.appId }));
+  }
   const provisioner = env.AF_PROVISIONER_CLIENT_ID;
   if (provisioner) state.provisionerSpId = (await findServicePrincipal(graph, provisioner))?.id;
   for (const g of desired.groups) {

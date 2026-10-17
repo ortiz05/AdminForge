@@ -41,7 +41,7 @@ export const primitives = {
     temper: { 800: '#234B86', 700: '#2E5FA8', 400: '#82A9EE', 300: '#A9C4F5' },
     ember: { 700: '#A8480B', 500: '#F47A2E' },
     patina: { 700: '#1E6E58', 400: '#5DC2A2' },
-    straw: { 700: '#86650F', 400: '#E6C36A' },
+    straw: { 700: '#7A5C0D', 400: '#E6C36A' },
     cinder: { 700: '#B03030', 400: '#F27474' },
     hc: {
       black: '#000000',

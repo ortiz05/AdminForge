@@ -20,7 +20,7 @@ import {
 import { AppLink } from '../lib/links';
 import { formatInZone, nextRuns } from '../ops/cron';
 import { DeleteScheduleButton, RunNowButton, ScheduleToggle } from '../ops/ScheduleControls';
-import { runStatusView, scheduleRunsPage, type ScheduleItem } from '../ops/schedules';
+import { lastRunView, scheduleRunsPage, type ScheduleItem } from '../ops/schedules';
 import { Facts, formatBytes, QueryError } from '../ops/ui';
 import {
   SCHEDULE_FORM_DESCRIPTION,
@@ -56,7 +56,8 @@ export function summaryAsItem(s: ScheduleSummary, ref: string): ScheduleItem {
   return {
     ...s,
     summary: null,
-    identity: 'automation',
+    identity:
+      s.runsAs.kind === 'user' ? 'user' : s.runsAs.kind === 'app' ? `app:${s.runsAs.name}` : 'automation',
     job: { kind: 'report', ref, params: null },
     writeCapable: false,
     approvedBy: [],
@@ -125,7 +126,7 @@ function ScheduleRow({
       ? new Date(s.nextRunAt)
       : (nextRuns(s.cron, s.timezone, 1, new Date(now))[0] ?? null)
     : null;
-  const last = runStatusView(s.lastStatus);
+  const last = lastRunView(s);
   return (
     <li className="flex flex-col gap-2.5 rounded-md border border-line bg-raised px-3 py-3">
       <div className="flex items-start justify-between gap-3">

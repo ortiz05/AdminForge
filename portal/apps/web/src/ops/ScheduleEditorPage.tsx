@@ -27,6 +27,7 @@ import {
   type CronParts,
 } from './cadence';
 import { describeCron, formatInZone } from './cron';
+import { scheduleIdentitiesQuery } from './schedules';
 import { TimeZoneField } from './TimeZoneField';
 import { Callout, useDocumentTitle } from './ui';
 
@@ -80,6 +81,8 @@ export function ScheduleEditorPage() {
   const [retries, setRetries] = useState('2');
   const [alertEnv, setAlertEnv] = useState('');
   const [enabled, setEnabled] = useState(true);
+  const [runAs, setRunAs] = useState('automation');
+  const identities = useQuery(scheduleIdentitiesQuery);
 
   const expr = cronFor(cron);
   // A problem the cadence field already shows is said there, once; the preview only points at it.
@@ -105,6 +108,10 @@ export function ScheduleEditorPage() {
     staleTime: 60_000,
   });
 
+  // Content health always runs as the automation identity (ADR-014); the rest may name a configured app identity.
+  const appIdentities = jobKind === 'contentHealth' ? [] : (identities.data?.apps ?? []);
+  const runsAsChoice = runAs.startsWith('app:') && appIdentities.includes(runAs.slice('app:'.length));
+
   const scaffold = useMutation({
     mutationFn: () =>
       api('/api/schedules/scaffold', {
@@ -117,6 +124,7 @@ export function ScheduleEditorPage() {
           timezone,
           enabled,
           retries: Number(retries) || 0,
+          ...(runsAsChoice ? { identity: { app: runAs.slice('app:'.length) } } : {}),
           job:
             jobKind === 'report'
               ? {
@@ -288,6 +296,27 @@ export function ScheduleEditorPage() {
                     />
                   )}
                 </>
+              )}
+              {appIdentities.length > 0 && (
+                <Select
+                  label="Run as"
+                  value={runsAsChoice ? runAs : 'automation'}
+                  onValueChange={setRunAs}
+                  options={[
+                    { value: 'automation', label: 'Automation identity' },
+                    ...appIdentities.map((name) => ({ value: `app:${name}`, label: `App identity ${name}` })),
+                  ]}
+                  hint={
+                    runsAsChoice ? (
+                      <>
+                        Its own app registration, with only the permissions its schedules declare:{' '}
+                        <code className="font-mono">pnpm adminforge provision entra</code> grants them.
+                      </>
+                    ) : (
+                      'AdminForge’s app for schedules, with the application permissions content declares.'
+                    )
+                  }
+                />
               )}
             </div>
           </Panel>

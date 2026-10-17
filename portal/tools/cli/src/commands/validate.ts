@@ -15,7 +15,8 @@
  * unused scopes don't fail.
  */
 import { provisionerClients } from '../provision/clients';
-import { ceilingSettings, provisionSettings } from '../provision/settings';
+import { ceilingSettings, provisionSettings, scheduleIdentityNames } from '../provision/settings';
+import { identityEnvPrefix } from '@adminforge/schemas';
 import { checkContent } from '../content/check';
 import { relPath, type ContentCliContext } from '../content/context';
 import {
@@ -26,11 +27,14 @@ import {
   type ScopeApp,
 } from '../content/scopes';
 
-const APP_LABEL: Record<ScopeApp, string> = {
+const LABELS: Record<string, string> = {
   read: 'Read app',
   write: 'Write app',
   automation: 'Automation identity',
 };
+/** "Read app", "Automation identity", "App identity reports-team" (ADR-014). */
+const appLabel = (app: ScopeApp) =>
+  LABELS[app] ?? (app.startsWith('identity:') ? `App identity ${app.slice('identity:'.length)}` : app);
 
 /** `adminforge validate [--scopes]` — true when there are no errors (warnings and unused scopes don't fail). */
 export async function validateContent(
@@ -53,6 +57,13 @@ export async function validateContent(
     read: ctx.env.AF_READ_CLIENT_ID,
     write: ctx.env.AF_WRITE_CLIENT_ID,
     automation: ctx.env.AF_AUTOMATION_CLIENT_ID,
+    // Named app identities (AF_SCHEDULE_IDENTITIES): their own app registrations.
+    ...Object.fromEntries(
+      scheduleIdentityNames(ctx.env).map((n) => [
+        `identity:${n}`,
+        ctx.env[`${identityEnvPrefix(n)}CLIENT_ID`],
+      ]),
+    ),
   };
   const graph =
     ctx.graph ??
@@ -73,27 +84,27 @@ export async function validateContent(
     f?.length ? `  (${f.slice(0, 3).join(', ')}${f.length > 3 ? ', …' : ''})` : '';
   ctx.out('');
   ctx.out('Scopes declared by content vs. granted in Entra:');
-  for (const app of ['read', 'write', 'automation'] as const)
-    if (!apps[app]) ctx.out(`  ⚠ ${APP_LABEL[app]}: client id not set in the env file; not checked.`);
+  for (const app of Object.keys(apps) as ScopeApp[])
+    if (!apps[app]) ctx.out(`  ⚠ ${appLabel(app)}: client id not set in the env file; not checked.`);
   for (const app of notFound)
-    ctx.out(`  ✗ ${APP_LABEL[app]}: no service principal found for the configured client id.`);
+    ctx.out(`  ✗ ${appLabel(app)}: no service principal found for the configured client id.`);
   for (const m of missing)
-    ctx.out(`  ✗ missing  ${APP_LABEL[m.app]} · ${m.service} · ${m.scope}${files(m.files)}`);
+    ctx.out(`  ✗ missing  ${appLabel(m.app)} · ${m.service} · ${m.scope}${files(m.files)}`);
   for (const w of withheld)
-    ctx.out(`  ⚠ withheld ${APP_LABEL[w.app]} · ${w.service} · ${w.scope} — ${w.reason}${files(w.files)}`);
+    ctx.out(`  ⚠ withheld ${appLabel(w.app)} · ${w.service} · ${w.scope} — ${w.reason}${files(w.files)}`);
   for (const u of unlicensed)
     ctx.out(
-      `  ⚠ skipped  ${APP_LABEL[u.app]} · ${u.service} · ${u.scope} — workload not in this tenant (not licensed)${files(u.files)}`,
+      `  ⚠ skipped  ${appLabel(u.app)} · ${u.service} · ${u.scope} — workload not in this tenant (not licensed)${files(u.files)}`,
     );
   for (const u of unused)
     ctx.out(
-      `  · unused   ${APP_LABEL[u.app]} · ${u.service} · ${u.scope}  (not expected by provisioning: ${u.app === 'automation' ? 'remove the app role assignment' : '`provision entra` removes it'})`,
+      `  · unused   ${appLabel(u.app)} · ${u.service} · ${u.scope}  (not expected by provisioning: ${u.app === 'automation' || u.app.startsWith('identity:') ? '`provision entra --prune` removes the app role assignment' : '`provision entra` removes it'})`,
     );
   for (const b of baseline)
     ctx.out(
       b.builtin
-        ? `  · built-in ${APP_LABEL[b.app]} · ${b.service} · ${b.scope}  (${b.builtin})`
-        : `  · unused   ${APP_LABEL[b.app]} · ${b.service} · ${b.scope}  (baseline in provision/catalog.ts; no content declares it)`,
+        ? `  · built-in ${appLabel(b.app)} · ${b.service} · ${b.scope}  (${b.builtin})`
+        : `  · unused   ${appLabel(b.app)} · ${b.service} · ${b.scope}  (baseline in provision/catalog.ts; no content declares it)`,
     );
   if (declared.connections.length)
     ctx.out(`  · not checked (own audiences): connections ${declared.connections.join(', ')}`);

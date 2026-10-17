@@ -1,6 +1,6 @@
 import { and, eq, lt, or, sql } from 'drizzle-orm';
 import type { Db } from '../db/client';
-import { sessions, tokenCache } from '../db/schema';
+import { scheduleGrants, sessions, tokenCache } from '../db/schema';
 
 /** A signed-in session as stored (the cookie's id is never stored, only its sha256). */
 export interface SessionRecord {
@@ -40,7 +40,9 @@ export interface SessionStore {
   delete(idHash: string): Promise<void>;
   /**
    * Housekeeping: drops token-cache partitions of unusable sessions (expired, idle, or disarmed by
-   * time) right away, and the session rows themselves after `retainDays`. Returns rows removed.
+   * time) right away, and the session rows themselves after `retainDays`. Returns rows removed. A schedule's grant
+   * partition (`schedule:<id>`, ADR-014) belongs to the schedule, not a session: it stays while the schedule's grant
+   * row exists and goes once it doesn't (the schedule was deleted, or its creator lost access).
    */
   purge(input: { now: Date; idleMinutes: number; retainDays?: number }): Promise<number>;
 }
@@ -92,11 +94,17 @@ export class PgSessionStore implements SessionStore {
       await tx.execute(sql`
         delete from ${tokenCache} t using ${sessions} s
         where t.partition_key = 'write:' || s.id_hash and s.write_expires_at < ${now}`);
-      // Orphaned partitions (session row already gone).
+      // Orphaned partitions (session row already gone). Schedules' grants are not sessions' (ADR-014).
       await tx.execute(sql`
         delete from ${tokenCache} t
         where t.updated_at < ${new Date(now.getTime() - DAY_MS)}
+          and t.partition_key not like 'schedule:%'
           and not exists (select 1 from ${sessions} s where t.partition_key in ('read:' || s.id_hash, 'write:' || s.id_hash))`);
+      // A schedule's grant partition without its grant row: the schedule is gone, or the grant was withdrawn.
+      await tx.execute(sql`
+        delete from ${tokenCache} t
+        where t.partition_key like 'schedule:%'
+          and not exists (select 1 from ${scheduleGrants} g where t.partition_key = 'schedule:' || g.schedule_id::text)`);
       const retainCutoff = new Date(now.getTime() - retainDays * DAY_MS);
       const removed = await tx
         .delete(sessions)

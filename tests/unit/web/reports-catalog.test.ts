@@ -85,6 +85,7 @@ describe('catalogue contract', () => {
     expect(DeliveryOptionsResponse.parse({})).toEqual({
       email: { available: false, lists: [] },
       teams: { lists: [] },
+      identities: { apps: [], user: false },
     });
   });
 });
@@ -215,6 +216,7 @@ describe('schedule form → request', () => {
   const { items } = catalogue();
   const users = byKey(items, 'identity.inactive-users');
   const base: ScheduleFormState = {
+    runAs: 'automation',
     title: ' Inactive users, weekly ',
     titleEdited: false,
     cron: DEFAULT_CRON_PARTS,
@@ -291,6 +293,7 @@ describe('schedule form → request', () => {
       teamsKey: '',
       alertEmailKey: '',
       alertTeamsKey: 'AF_TEAMS_ALERTS_WEBHOOK',
+      runAs: 'automation',
     });
     expect(formatsFor({ exportFormats: ['csv'] })).toEqual(['csv', 'json']);
   });

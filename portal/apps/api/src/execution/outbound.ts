@@ -27,8 +27,8 @@ import {
   type TokenProvider,
 } from '@adminforge/connectors';
 import { renderString } from '@adminforge/expressions';
-import type { Connection, Requires } from '@adminforge/schemas';
-import { appOnlyScope, type AutomationTokenProvider } from '../auth/automation';
+import { identityEnvPrefix, type Connection, type Requires } from '@adminforge/schemas';
+import { appOnlyScope, type AppIdentityRegistry, type AutomationTokenProvider } from '../auth/automation';
 import { isArmed, type SessionRecord } from '../auth/session-store';
 import {
   decodeClaimsChallenge,
@@ -42,7 +42,14 @@ import { AppError, toAppError } from '../errors';
 import { writesPausedError } from './emergency';
 import { ProtectedObjects, type ProtectedConfig, type WriteTarget } from './protected';
 import { timeoutOverride } from './timeouts';
-import type { ExecutionIdentity, OutboundExecutor, ServiceCall, ServiceCallResult } from './types';
+import {
+  identityCacheKey,
+  isUnattended,
+  type ExecutionIdentity,
+  type OutboundExecutor,
+  type ServiceCall,
+  type ServiceCallResult,
+} from './types';
 
 /**
  * The single outbound path (ADR-003, §5.4): request policy → token for the identity/mode → connector → normalised
@@ -101,6 +108,8 @@ export interface OutboundDeps {
   /** Delegated tokens for function-connection audiences (null with mock sign-in). */
   auth: AuthClient | null;
   automation: AutomationTokenProvider | null;
+  /** Named app identities schedules may run as (ADR-014); absent = none configured. */
+  identities?: Pick<AppIdentityRegistry, 'get'>;
   /** Network fetch, or the fixture fetch in DATA_MODE=fixtures. */
   fetch: typeof fetch;
   /** Published `kind: connection` definitions by key (function calls). */
@@ -395,11 +404,12 @@ const LICENCE_TEXT =
 export function errorHint(
   err: ApiError,
   service: ServiceId,
-  identity: Pick<ExecutionIdentity, 'kind' | 'mode'>,
+  identity: Pick<ExecutionIdentity, 'kind' | 'mode'> & { app?: string },
   requires?: Requires,
   connection?: string,
 ): { hint: string; licence: boolean; message?: string } {
   const ref = err.requestId ? ` Microsoft request-id ${err.requestId}.` : '';
+  const who = identity.app ? `the app identity ${identity.app}` : 'the automation identity';
   if (err.code === RESPONSE_TOO_LARGE)
     return {
       hint: 'Narrow it down (filters, fewer columns, a shorter time range or a smaller page) so the result is smaller. A portal administrator can raise OUTBOUND_MAX_BYTES.',
@@ -415,7 +425,7 @@ export function errorHint(
     return {
       hint:
         identity.kind === 'automation'
-          ? `Microsoft treated the automation identity as an unlicensed user; check that the call uses its application permissions.${ref}`
+          ? `Microsoft treated ${who} as an unlicensed user; check that the call uses its application permissions.${ref}`
           : `Ask your licensing admin to assign you a licence that includes the service (for teams and channels: Microsoft Teams, e.g. Office 365 E3 or E5). Other pages are unaffected.${ref}`,
       licence: false,
       message: USER_NOT_LICENSED,
@@ -447,14 +457,22 @@ export function errorHint(
       const roles = requires?.azureRoles?.length ? requires.azureRoles.join(' or ') : 'Reader';
       parts.push(
         identity.kind === 'automation'
-          ? `The automation identity needs the Azure role ${roles} on the target scope.`
-          : `Needs the Azure role ${roles} on the target scope (your account's Azure RBAC).`,
+          ? `${capital(who)} needs the Azure role ${roles} on the target scope.`
+          : identity.kind === 'grant'
+            ? `The schedule’s creator needs the Azure role ${roles} on the target scope (their Azure RBAC).`
+            : `Needs the Azure role ${roles} on the target scope (your account's Azure RBAC).`,
       );
     } else if (identity.kind === 'automation') {
       parts.push(
         scopes?.length
-          ? `The automation identity needs the application permission ${scopes.join(', ')} (check with adminforge validate --scopes).`
-          : 'The automation identity lacks an application permission for this call (check with adminforge validate --scopes).',
+          ? `${capital(who)} needs the application permission ${scopes.join(', ')} (check with adminforge validate --scopes).`
+          : `${capital(who)} lacks an application permission for this call (check with adminforge validate --scopes).`,
+      );
+    } else if (identity.kind === 'grant') {
+      parts.push(
+        scopes?.length
+          ? `The schedule runs with its creator’s own access, which needs ${scopes.join(', ')} consented to the AdminForge Read app and the right Entra role on their account.`
+          : 'The schedule runs with its creator’s own access, which isn’t enough for this data. Run it as the automation identity or an app identity instead.',
       );
     } else {
       const app = identity.mode === 'write' ? 'Write' : 'Read';
@@ -731,7 +749,7 @@ class Limiter {
     service: ServiceId,
     identity: string,
     fn: () => Promise<T>,
-    opts: { signal?: AbortSignal; waitMs?: number; lane?: Lane } = {},
+    opts: { signal?: AbortSignal; waitMs?: number; lane?: Lane; unattended?: boolean } = {},
   ): Promise<T> {
     const { signal, waitMs } = opts;
     const lane = opts.lane ?? 'interactive';
@@ -744,7 +762,8 @@ class Limiter {
       if (user.idle) this.sems.delete(userKey);
       throw err;
     }
-    const pool = this.pool(service, identity === 'automation');
+    // App-only identities and schedules' grants (nobody waiting) share the unattended pool, apart from people's.
+    const pool = this.pool(service, opts.unattended ?? identity === 'automation');
     try {
       await pool.acquire(lane, signal, waitMs ? Math.max(1, waitMs - (Date.now() - started)) : undefined);
       try {
@@ -934,9 +953,6 @@ const asText = async (value: string, env: Record<string, unknown>, what: string)
 
 // ── The executor ────────────────────────────────────────────────────────────
 
-const identityKey = (identity: ExecutionIdentity) =>
-  identity.kind === 'automation' ? 'automation' : identity.session.userOid;
-
 type Query = Record<string, string | number | boolean | undefined | null>;
 
 interface Dispatch {
@@ -1038,10 +1054,11 @@ export class Outbound implements OutboundExecutor {
       // only a call that keeps going becomes a crawl.
       const lane =
         opts.lane ?? (opts.crawlAfter !== undefined && n >= opts.crawlAfter ? 'crawl' : 'interactive');
-      return this.limiter.run(service, identityKey(identity), attempt, {
+      return this.limiter.run(service, identityCacheKey(identity), attempt, {
         signal,
         waitMs: n === 0 ? capped : undefined,
         lane,
+        unattended: isUnattended(identity),
       });
     };
   }
@@ -1274,11 +1291,22 @@ export class Outbound implements OutboundExecutor {
   ): Promise<T> {
     if (this.deps.config.DATA_MODE === 'fixtures') return run(async () => 'fixture-token');
     if (identity.kind === 'automation') {
-      const automation = this.deps.automation;
+      const automation = identity.app
+        ? (this.deps.identities?.get(identity.app) ?? null)
+        : this.deps.automation;
       if (!automation)
-        throw new AppError(503, 'automation_not_configured', 'The automation identity is not configured.', {
-          hint: 'Set AF_AUTOMATION_CLIENT_ID and AF_AUTOMATION_CERT_PATH (or AF_AUTOMATION_CLIENT_SECRET) in the env file.',
-        });
+        throw identity.app
+          ? new AppError(
+              503,
+              'identity_not_configured',
+              `The app identity ${identity.app} isn’t configured on this AdminForge.`,
+              {
+                hint: `Add ${identity.app} to AF_SCHEDULE_IDENTITIES with its ${identityEnvPrefix(identity.app)}CLIENT_ID and certificate (or secret), then run pnpm adminforge provision entra (docs/operations.md → App identities).`,
+              },
+            )
+          : new AppError(503, 'automation_not_configured', 'The automation identity is not configured.', {
+              hint: 'Set AF_AUTOMATION_CLIENT_ID and AF_AUTOMATION_CERT_PATH (or AF_AUTOMATION_CLIENT_SECRET) in the env file.',
+            });
       const scope = fn
         ? appOnlyScope(fn.audience)
         : resourceScopes(this.deps.config)[service as BrokerService]?.[0];
@@ -1289,6 +1317,33 @@ export class Outbound implements OutboundExecutor {
           `${service} is not configured for this installation.`,
         );
       return withClaimsRetry((claims) => run(() => automation.token(scope, claims ? { claims } : {})));
+    }
+    if (identity.kind === 'grant') {
+      // A schedule's creator, through the read access they granted it: the Read app only, never a write.
+      if (identity.mode !== 'read') throw new PolicyDenied('A schedule running as its creator only reads.');
+      const auth = this.deps.auth;
+      if (!auth) throw liveDataUnavailable();
+      const scopes = fn ? fn.scopes : resourceScopes(this.deps.config)[service as BrokerService];
+      if (!scopes)
+        throw new AppError(
+          503,
+          'service_not_configured',
+          `${service} is not configured for this installation.`,
+        );
+      const { grant } = identity;
+      return withClaimsRetry(
+        (claims) =>
+          run(() =>
+            auth.token({
+              kind: 'read',
+              partitionKey: grant.partitionKey,
+              homeAccountId: grant.homeAccountId,
+              scopes,
+              ...(claims ? { claims } : {}),
+            }),
+          ),
+        'read',
+      );
     }
     const { session, mode } = identity;
     if (fn) {
@@ -1686,6 +1741,8 @@ export class Outbound implements OutboundExecutor {
     };
   }
 }
+
+const capital = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 const liveDataUnavailable = () =>
   new AppError(409, 'live_data_unavailable', 'Live data needs Entra sign-in.', {

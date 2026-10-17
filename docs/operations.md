@@ -459,11 +459,51 @@ pnpm adminforge provision entra && systemctl --user restart adminforge-api admin
 pnpm adminforge provision status
 ```
 
+### Named app identities (ADR-014)
+
+A schedule can run as an app identity of its own instead of the shared automation identity — e.g. a team's reports
+that need `AuditLog.Read.All` without granting it to every schedule:
+
+```sh
+# <env>.env: AF_SCHEDULE_IDENTITIES=reports-team   (lower-case letters, digits, dashes; comma-separated)
+pnpm adminforge provision entra --dry-run   # + AdminForge Identity reports-team [<label>], its secret, its roles
+pnpm adminforge provision entra             # writes AF_IDENTITY_REPORTS_TEAM_CLIENT_ID / _CLIENT_SECRET
+pnpm adminforge provision status            # checks its token and that it holds exactly its roles
+systemctl --user restart adminforge-api adminforge-worker adminforge-scheduler
+```
+
+Its permissions are what the schedules naming it (`identity: { app: reports-team }`) declare in `requires.scopes`,
+under the automation identity's ceilings **and its own opt-ins**: a write, sensitive-read or tier-0 permission needs
+`AF_IDENTITY_<NAME>_ALLOW_WRITE_PERMISSIONS` / `_ALLOW_SENSITIVE_READS` / `_ALLOW_PRIVILEGED_PERMISSIONS=true` in
+addition to the matching `AF_AUTOMATION_ALLOW_*` key (the dry run names the missing ones). A certificate works as for
+the automation identity: set `AF_IDENTITY_<NAME>_CERT_PATH` and provisioning registers it and removes the secrets.
+`validate --scopes` compares each identity separately; `--prune` removes roles it no longer needs. Names are lower-case
+letters and digits with single dashes; the app's alternate key is `adminforge-identity-<name>--<label>`.
+
+Removing a name from `AF_SCHEDULE_IDENTITIES` makes its schedules fail with `identity_not_configured`; the app
+registration and its permissions stay, so `provision status` fails ("no longer in AF_SCHEDULE_IDENTITIES") until you
+delete it in the Entra admin centre (AdminForge keeps refusing writes to it meanwhile). The report schedule form and
+the schedule editor offer the configured names under **Run as** — to **every** Operator, so list only identities
+whose read access any Operator may use for a report.
+
+### Schedules that run with their creator's access
+
+"Run as: Me" in the report schedule form (portal report schedules, read-only) needs no setup beyond Entra sign-in.
+Schedules → the schedule shows **Needs sign-in** when Microsoft asked for a new sign-in (password reset, sign-in
+policy, a long break): runs are skipped and the owner was notified; only the creator can press **Sign in again**. When
+the creator leaves (loses `Portal.Operator` or a role the report needs), the next run removes the stored sign-in and
+turns the schedule off (`creator_access_removed`); someone else must create their own schedule. A Portal Admin saving
+someone's "Me" schedule ends its sign-in too (the creator signs in for the changed schedule). Its files open only for
+the creator and Portal Admins. The sign-in needs the `auth_time` claim on the Read app: run `pnpm adminforge
+provision entra` once after upgrading (until then the sign-in is refused with `signin_not_fresh`). Both databases need
+migration 0012 (`schedule_grants`, `runs.identity_name`) before the API and scheduler start.
+
 ### Permission opt-ins
 
 `AF_ALLOW_PRIVILEGED_WRITE_SCOPES` (tier-0 delegated scopes on the Write app), `AF_AUTOMATION_ALLOW_WRITE_PERMISSIONS`
-(application permissions that change data) and `AF_AUTOMATION_ALLOW_SENSITIVE_READS` (mail, files, sites, chats, …)
-are deliberate decisions: set them in `<env>.admin.env`, review `provision entra --dry-run`, and record the decision in your change record (not in this repository: it's installation state). `provision status` fails on privilege that provisioning didn't grant.
+(application permissions that change data), `AF_AUTOMATION_ALLOW_SENSITIVE_READS` (mail, files, sites, chats, …),
+`AF_AUTOMATION_ALLOW_PRIVILEGED_PERMISSIONS` (tier-0 application permissions for any app-only identity) and each
+named identity's `AF_IDENTITY_<NAME>_ALLOW_*` keys are deliberate decisions: set them in `<env>.admin.env`, review `provision entra --dry-run`, and record the decision in your change record (not in this repository: it's installation state). `provision status` fails on privilege that provisioning didn't grant.
 
 Removing permissions: `provision entra` drops delegated scopes nothing needs any more, but leaves application
 permissions it no longer grants (after content is retired, a baseline permission is dropped, or a ceiling is turned

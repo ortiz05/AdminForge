@@ -312,6 +312,8 @@ export function automationApi(opts: AutomationOptions = {}) {
     }
 
     // Schedules and probes
+    if (method === 'GET' && path === '/api/schedules/identities')
+      return { body: { apps: ['monitoring'], user: false } };
     if (method === 'GET' && path === '/api/schedules') {
       const items = schedules().items.map((s) => ({
         ...s,

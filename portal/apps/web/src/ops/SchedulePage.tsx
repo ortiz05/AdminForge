@@ -1,4 +1,5 @@
-import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
+import { useEffect, useRef } from 'react';
+import { useInfiniteQuery, useMutation, useQuery } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
 import {
   Badge,
@@ -18,15 +19,25 @@ import {
   STATUS_ICON,
   StatusPill,
   useNow,
+  UserIcon,
+  useToast,
+  WarningCircleIcon,
 } from '@adminforge/ui';
 import { RouterLink } from '../app/RouterLink';
+import { ApiRequestError } from '../lib/api';
+import { browser } from '../lib/browser';
 import { formatInZone, nextRuns } from './cron';
 import { cadenceOf } from './SchedulesPage';
 import { DeleteScheduleButton, RunNowButton, ScheduleToggle } from './ScheduleControls';
 import {
   JOB_LABEL,
+  lastRunView,
+  runsAsSentence,
   runStatusView,
+  runView,
   scheduleRunsPage,
+  scheduleSignInReturn,
+  scheduleSignInUrl,
   schedulesQuery,
   type ScheduleItem,
   type ScheduleRun,
@@ -127,7 +138,7 @@ function History({ s }: { s: ScheduleItem }) {
             </thead>
             <tbody>
               {runs.map((r) => {
-                const v = runStatusView(r.status);
+                const v = runView(r);
                 const failed = v.tone === 'crit';
                 const Glyph = STATUS_ICON[v.tone];
                 return (
@@ -149,6 +160,7 @@ function History({ s }: { s: ScheduleItem }) {
                           {r.error.code && <span className="ml-1 font-mono">({r.error.code})</span>}
                         </p>
                       )}
+                      {!r.error && r.reason && <p className="mt-1 max-w-md text-xs text-fg-2">{r.reason}</p>}
                     </td>
                     <td className="px-3 py-2.5 whitespace-nowrap">
                       {r.startedAt ? (
@@ -222,11 +234,27 @@ function History({ s }: { s: ScheduleItem }) {
 }
 
 /** One schedule: identity, cadence with the next runs, the job, and its history with report downloads. */
-export function SchedulePage({ scheduleKey }: { scheduleKey: string }) {
+export function SchedulePage({ scheduleKey, signedIn = false }: { scheduleKey: string; signedIn?: boolean }) {
   const navigate = useNavigate();
   const now = useNow(60_000);
   const q = useQuery(schedulesQuery);
   const s = q.data?.items.find((x) => x.key === scheduleKey);
+  const { toast } = useToast();
+  const announced = useRef(false);
+  // Back from the Entra sign-in for this schedule: say it worked (once), then drop the marker from the address.
+  useEffect(() => {
+    if (!signedIn || !s || announced.current) return;
+    announced.current = true;
+    if (s.runsAs.kind === 'user' && s.runsAs.signIn === 'signed_in')
+      toast({
+        tone: 'ok',
+        title: `Signed in for ${s.title}`,
+        description: s.nextRunAt
+          ? `It runs with your access from ${formatInZone(s.nextRunAt, s.timezone)}.`
+          : 'It runs with your access once it is turned on.',
+      });
+    void navigate({ to: '/schedules/$key', params: { key: scheduleKey }, search: {}, replace: true });
+  }, [signedIn, s, scheduleKey, navigate, toast]);
   useDocumentTitle(s?.title ?? 'Schedule');
   const crumbs = [{ label: 'Schedules', href: '/schedules' }, { label: s?.title ?? scheduleKey }];
 
@@ -259,7 +287,7 @@ export function SchedulePage({ scheduleKey }: { scheduleKey: string }) {
     );
 
   const upcoming = s.enabled ? nextRuns(s.cron, s.timezone, 5, new Date(now)) : [];
-  const last = runStatusView(s.lastStatus);
+  const last = lastRunView(s);
   return (
     <>
       <PageHeader
@@ -307,19 +335,37 @@ export function SchedulePage({ scheduleKey }: { scheduleKey: string }) {
       />
       <div className="grid items-start gap-6 xl:grid-cols-3">
         <div className="flex min-w-0 flex-col gap-6 xl:col-span-2">
+          <SignInCallout s={s} />
           {last.tone === 'crit' && (
             <Callout tone="crit" role="alert" title="The last run failed">
-              Check the error in the history below. If it says a permission is missing, the automation
-              identity needs that application permission — run{' '}
-              <code className="font-mono text-xs">pnpm adminforge validate --scopes</code>.
+              {s.runsAs.kind === 'user' ? (
+                <>
+                  Check the error in the history below. It runs with {s.runsAs.name ?? 'its creator'}’s own
+                  access, so a missing permission means their roles or the Read app’s permissions changed.
+                </>
+              ) : (
+                <>
+                  Check the error in the history below. If it says a permission is missing, the{' '}
+                  {s.runsAs.kind === 'app' ? `app identity ${s.runsAs.name}` : 'automation identity'} needs
+                  that application permission — run{' '}
+                  <code className="font-mono text-xs">pnpm adminforge validate --scopes</code>.
+                </>
+              )}
             </Callout>
           )}
           <History s={s} />
         </div>
         <div className="flex min-w-0 flex-col gap-6">
-          <Callout tone="neutral" icon={<RobotIcon size={18} />} title="Runs as the automation identity">
-            Not as you, and not as whoever enabled it: the automation identity’s application permissions
-            decide what it can read and change.
+          <Callout
+            tone="neutral"
+            icon={s.runsAs.kind === 'user' ? <UserIcon size={18} /> : <RobotIcon size={18} />}
+            title={runsAsSentence(s.runsAs)}
+          >
+            {s.runsAs.kind === 'user'
+              ? 'It reads only what its creator can see, with their read-only access, and never changes anything. Only they (and portal administrators) can open its files. It stops when they lose access to AdminForge.'
+              : s.runsAs.kind === 'app'
+                ? `Not as you, and not as whoever enabled it: the application permissions of app identity ${s.runsAs.name} decide what it can read and change.`
+                : 'Not as you, and not as whoever enabled it: the automation identity’s application permissions decide what it can read and change.'}
             {s.approvedBy.length > 0 && (
               <span className="mt-1 block">Approved by {s.approvedBy.join(', ')}.</span>
             )}
@@ -383,5 +429,54 @@ export function SchedulePage({ scheduleKey }: { scheduleKey: string }) {
         </div>
       </div>
     </>
+  );
+}
+
+/**
+ * A schedule that runs with its creator's access needs their sign-in for it (ADR-014): before the first run, and again
+ * when Microsoft asks (password reset, sign-in policy, a long break). Only the creator can sign in for it.
+ */
+function SignInCallout({ s }: { s: ScheduleItem }) {
+  const signIn = useMutation({
+    mutationFn: () => scheduleSignInUrl(s.key, scheduleSignInReturn(s.key)),
+    onSuccess: (url) => browser.assign(url),
+  });
+  const r = s.runsAs;
+  if (r.kind !== 'user' || r.signIn === 'signed_in') return null;
+  const again = r.signIn === 'needs_sign_in';
+  const err = signIn.error;
+  const who = r.name ?? 'its creator';
+  return (
+    <Callout
+      tone="warn"
+      title={again ? 'Needs sign-in' : 'Not signed in yet'}
+      action={
+        r.canSignIn ? (
+          <Button size="sm" pending={signIn.isPending} onClick={() => signIn.mutate()}>
+            {again ? 'Sign in again' : 'Sign in'}
+          </Button>
+        ) : undefined
+      }
+    >
+      {r.canSignIn
+        ? again
+          ? 'Microsoft asked for a new sign-in, so runs are skipped until you sign in for this schedule again. Your own session stays as it is.'
+          : 'It runs with your own access once you sign in for it. Until then it doesn’t run. Your own session stays as it is.'
+        : again
+          ? `Microsoft asked ${who} to sign in again, so runs are skipped. Ask them to open this schedule and sign in. A portal administrator can turn it off or delete it.`
+          : `It runs with ${who}’s own access once they sign in for it. Ask them to open this schedule and sign in. A portal administrator can turn it off or delete it.`}
+      {err && (
+        <span role="alert" className="mt-2 flex flex-col gap-0.5">
+          <span className="flex items-center gap-1.5 font-medium text-crit">
+            <WarningCircleIcon size={14} weight="fill" aria-hidden />
+            {err.message}
+          </span>
+          {err instanceof ApiRequestError && err.hint && <span className="text-fg-2">{err.hint}</span>}
+          {err instanceof ApiRequestError && err.correlationId && (
+            <span className="font-mono text-xs text-fg-2">Reference {err.correlationId}</span>
+          )}
+        </span>
+      )}
+    </Callout>
   );
 }

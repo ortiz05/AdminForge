@@ -66,6 +66,13 @@ minutes` — or `cron` (5/6 fields; one of the two). Validation compiles `every`
 6. **Permissions:** the automation identity needs **application** permissions / Azure RBAC for what it reads. Declare
    them in `requires.scopes` / `requires.azureRoles`; if new, add them to provisioning
    (`portal/tools/cli/src/provision/catalog.ts`) and run `pnpm adminforge provision entra`.
+   **Who it runs as** (ADR-014): keep `identity: automation` unless the schedule needs permissions the shared identity
+   shouldn't hold — then `identity: { app: <name> }` with a name from `AF_SCHEDULE_IDENTITIES` (add it to the env file
+   if new); `provision entra` gives that app registration exactly the `requires.scopes` of the schedules naming it, and
+   `validate --scopes` checks it separately; a write, sensitive-read or tier-0 permission also needs that identity's own
+   `AF_IDENTITY_<NAME>_ALLOW_*` opt-in. `news` and `contentHealth` jobs always use `automation`. `{ user: creator }`
+   is only for report schedules created in the portal ("Run as: Me") — content can't use it. Runner (PowerShell)
+   datasources work only as the automation identity.
 7. **Fixtures** for mock mode (Resource Graph variants in `tests/fixtures/resourceGraph/POST.json`, matched by the
    `// af:` comment); **validate:** `pnpm adminforge validate`, content tests, `pnpm guard`.
 8. **Try it once live (read-only):** against the dev database, as the automation identity, with delivery kept away

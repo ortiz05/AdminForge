@@ -102,7 +102,8 @@ export const preauth = pgTable(
   'preauth',
   {
     state: text('state').primaryKey(),
-    kind: text('kind', { enum: ['read', 'write'] }).notNull(),
+    /** read = sign-in; write = arm; schedule = a schedule's creator granting it their read access (ADR-014). */
+    kind: text('kind', { enum: ['read', 'write', 'schedule'] }).notNull(),
     verifier: text('verifier').notNull(),
     nonce: text('nonce').notNull(),
     returnTo: text('return_to').notNull(),
@@ -228,6 +229,8 @@ export const runs = pgTable(
     trigger: text('trigger').notNull().default('interactive'),
     /** delegated | automation */
     identity: text('identity').notNull().default('delegated'),
+    /** With `automation`: the named app identity the schedule runs as (ADR-014); null = the automation identity. */
+    identityName: text('identity_name'),
     initiatorOid: text('initiator_oid'),
     initiatorUpn: text('initiator_upn'),
     sessionHash: text('session_hash'),
@@ -349,6 +352,30 @@ export const schedules = pgTable(
     updatedAt: ts('updated_at').notNull().defaultNow(),
   },
   (t) => [check('schedules_last_status_check', oneOf(t.lastStatus, DB_SCHEDULE_RUN_STATUSES))],
+);
+
+/**
+ * Schedules that run with their creator's own delegated read access (ADR-014): who granted it and whether it still
+ * works. The refresh token itself is sealed in `token_cache` under `schedule:<schedule_id>`; deleting the schedule
+ * deletes this row, and housekeeping then drops the partition.
+ */
+export const scheduleGrants = pgTable(
+  'schedule_grants',
+  {
+    scheduleId: uuid('schedule_id')
+      .primaryKey()
+      .references(() => schedules.id, { onDelete: 'cascade' }),
+    userOid: text('user_oid').notNull(),
+    upn: text('upn').notNull(),
+    homeAccountId: text('home_account_id').notNull(),
+    /** active | needs_sign_in */
+    status: text('status').notNull(),
+    /** Why it needs sign-in (an error code), when it does. */
+    reason: text('reason'),
+    consentedAt: ts('consented_at').notNull(),
+    checkedAt: ts('checked_at'),
+  },
+  (t) => [check('schedule_grants_status_check', oneOf(t.status, ['active', 'needs_sign_in']))],
 );
 
 /** Every execution of a schedule (cron or "run now"). */

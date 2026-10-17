@@ -1,6 +1,7 @@
 import { lintExpressions, validateExpressions } from '@adminforge/expressions';
 import {
   formatContentError,
+  identityKey,
   KINDS,
   validateDefinition,
   validateReferences,
@@ -43,6 +44,11 @@ export interface ScopeDrift {
   /** Definitions not checked because the tenant lacks a licence they require (their permissions wait for it). */
   unlicensed?: string[];
   reason?: string;
+  /**
+   * The same check for each named app identity schedules run as (ADR-014), by name: what its schedules declare
+   * against what that identity holds.
+   */
+  identities?: Record<string, Omit<ScopeDrift, 'identities' | 'unlicensed'>>;
 }
 
 export interface ContentHealthReport {
@@ -133,6 +139,8 @@ export async function contentHealth(
     scopes?: boolean;
     outbound?: OutboundExecutor;
     automationClientId?: string | null;
+    /** Application ids of the named app identities (ADR-014), by name. */
+    identityClientIds?: Readonly<Record<string, string>>;
     /** Whether the tenant holds one of these licences (null = unknown → checked as usual). */
     licensed?: (licences: string[]) => Promise<boolean | null>;
     correlationId?: string;
@@ -155,7 +163,9 @@ export async function contentHealth(
 
   let scopes: ScopeDrift | null = null;
   if (opts.scopes) {
-    const declared = new Map<string, string[]>();
+    // What each app-only identity's work declares: the automation identity's (schedules, probes, feeds) and every
+    // named app identity's (the schedules naming it). Creators' schedules use delegated access: not app roles.
+    const byIdentity = new Map<string, Map<string, string[]>>([['automation', new Map()]]);
     const unlicensed: string[] = [];
     for (const e of entries) {
       // Everything the automation identity runs: schedules, probes and News and changes feeds.
@@ -170,44 +180,74 @@ export async function contentHealth(
         unlicensed.push(e.def.id);
         continue;
       }
+      const who = e.def.kind === 'schedule' ? identityKey(e.def.identity) : 'automation';
+      if (who === 'user') continue;
+      const name = who.startsWith('app:') ? who.slice(4) : 'automation';
+      const declared = byIdentity.get(name) ?? new Map<string, string[]>();
+      byIdentity.set(name, declared);
       for (const service of CHECKED)
         for (const s of e.def.requires?.scopes?.[service] ?? [])
           declared.set(`${service}:${s}`, [...(declared.get(`${service}:${s}`) ?? []), e.file]);
     }
+    const declared = byIdentity.get('automation')!;
+    // Drift of one app-only identity: declared but not granted, granted but declared by nothing.
+    const drift = async (clientId: string, wanted: Map<string, string[]>) => {
+      const granted = await grantedAppRoles(opts.outbound!, clientId, {
+        correlationId: opts.correlationId,
+        signal: opts.signal,
+      });
+      const missing = [...wanted.keys()].filter((k) => {
+        const [service, scope] = k.split(':') as [string, string];
+        return !satisfied(
+          new Set(
+            [...granted].filter((g) => g.startsWith(`${service}:`)).map((g) => g.slice(service.length + 1)),
+          ),
+          scope,
+        );
+      });
+      const wantedLower = [...wanted.keys()].map((k) => k.toLowerCase());
+      const unused = [...granted].filter(
+        (g) => !wantedLower.some((d) => d === g || d === g.replace('.readwrite.', '.read.')),
+      );
+      return { checked: true, missing: missing.sort(), unused: unused.sort() };
+    };
+    const identities: Record<string, Omit<ScopeDrift, 'identities' | 'unlicensed'>> = {};
+    for (const [name, wanted] of byIdentity) {
+      if (name === 'automation') continue;
+      const clientId = opts.identityClientIds?.[name];
+      if (!clientId || !opts.outbound) {
+        identities[name] = {
+          checked: false,
+          missing: [],
+          unused: [],
+          reason: `The app identity ${name} isn’t configured on this AdminForge.`,
+        };
+        continue;
+      }
+      try {
+        identities[name] = await drift(clientId, wanted);
+      } catch (err) {
+        identities[name] = { checked: false, missing: [], unused: [], reason: (err as Error).message };
+      }
+    }
+    const named = Object.keys(identities).length ? { identities } : {};
     if (!opts.outbound || !opts.automationClientId)
       scopes = {
         checked: false,
         missing: [],
         unused: [],
         reason: 'The automation identity is not configured.',
+        ...named,
       };
     else {
       try {
-        const granted = await grantedAppRoles(opts.outbound, opts.automationClientId, {
-          correlationId: opts.correlationId,
-          signal: opts.signal,
-        });
-        const missing = [...declared.keys()].filter((k) => {
-          const [service, scope] = k.split(':') as [string, string];
-          return !satisfied(
-            new Set(
-              [...granted].filter((g) => g.startsWith(`${service}:`)).map((g) => g.slice(service.length + 1)),
-            ),
-            scope,
-          );
-        });
-        const declaredLower = [...declared.keys()].map((k) => k.toLowerCase());
-        const unused = [...granted].filter(
-          (g) => !declaredLower.some((d) => d === g || d === g.replace('.readwrite.', '.read.')),
-        );
         scopes = {
-          checked: true,
-          missing: missing.sort(),
-          unused: unused.sort(),
+          ...(await drift(opts.automationClientId, declared)),
           ...(unlicensed.length ? { unlicensed: unlicensed.sort() } : {}),
+          ...named,
         };
       } catch (err) {
-        scopes = { checked: false, missing: [], unused: [], reason: (err as Error).message };
+        scopes = { checked: false, missing: [], unused: [], reason: (err as Error).message, ...named };
       }
     }
   }

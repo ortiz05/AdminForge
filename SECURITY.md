@@ -176,7 +176,42 @@ the reason.
 
 ## Unattended work (schedules)
 
-- Runs as the automation identity, audited as "scheduled by X, executed as the automation identity".
+- Runs as the schedule's `identity` (ADR-014), audited as "scheduled by X, executed as <identity>" on the run and
+  every audit event (`runs.identity_name` keeps the name):
+  - the **automation identity** (default);
+  - a **named app identity** (`identity: { app: <name> }`, listed in `AF_SCHEDULE_IDENTITIES`): an app registration of
+    its own that `provision entra` grants only the application permissions of the schedules naming it, under the
+    automation identity's ceilings **and** its own opt-ins (`AF_IDENTITY_<NAME>_ALLOW_WRITE_PERMISSIONS`,
+    `_ALLOW_SENSITIVE_READS`, `_ALLOW_PRIVILEGED_PERMISSIONS`, each only together with the matching global key), so
+    one identity's write access never extends to another. Tier-0 application permissions (role management, app
+    credentials and consent, tenant policies) need `AF_AUTOMATION_ALLOW_PRIVILEGED_PERMISSIONS=true` for any app-only
+    identity, the automation identity included. Its client id is protected like the built-in apps — and so is an
+    identity taken out of `AF_SCHEDULE_IDENTITIES` (found by its "AdminForge Identity …" name; `provision status`
+    fails until it is deleted); a client id listed in `AF_PROTECTED_APP_IDS` is refused as an identity. It shares
+    the automation rate-limit pool, and its tokens and caches are keyed by its name. Changing a write schedule's
+    identity changes its definition, so the two-person approval must be given again. **Any** Operator can pick any
+    configured identity for a report schedule they create in the portal (reports only, read-only), so list only
+    identities whose read access every Operator may use;
+  - its **creator's own read access** (`identity: { user: creator }`, portal report schedules only, read-only jobs):
+    the creator signs in once for the schedule through the **Read app** (`POST /auth/schedule-consent`, CSRF,
+    `prompt=login` + `max_age=0`, and the callback requires `auth_time` within 5 minutes, as arming does). The code is
+    redeemed into a temporary partition and moved to the schedule's own (`schedule:<id>`) only on success, so a failed
+    sign-in never disturbs a working grant; the orphan purge keeps that partition only while the grant exists. The
+    grant is written only for a schedule that still runs as its creator and isn't deleted — checked again after
+    writing, so a delete or a change of "Run as" racing the sign-in can't leave one behind. Before every run the
+    creator's roles are read again (`refreshClaims`; without the `acct` claim the run doesn't happen) and the creator
+    check below runs; it never uses the Write app or a session and refuses any write. When Microsoft asks for a new
+    sign-in (`invalid_grant`, reauth) the schedule is marked **needs sign-in**, later runs are skipped and the owner is
+    notified; only the creator can sign in again. Deleting the schedule, changing its identity, someone else (a Portal
+    Admin) saving it, or the creator losing access deletes the grant and its tokens — and a confirmed loss of access
+    also turns the schedule off (`schedule.disabled`), whichever check notices it. Its **files are the creator's**:
+    they hold what the creator can see (their directory roles, data a ceiling withholds from the automation
+    identity), so only the creator downloads them, or a Portal Admin (audited `artifact.downloaded` with
+    `adminOverride`); other Operators see the runs but no file. Email and Teams deliveries go to the lists the creator
+    chose. Runner (PowerShell) datasources are refused for app identities and creators
+    (`runner_identity_not_supported`). Secret-bearing reads (`outbound.sensitive_read`) record the identity and the
+    schedule. **Trade-off:** a stolen database plus `TOKEN_CACHE_KEY` also yields these read-only refresh tokens
+    (rotate the key: they then need a new sign-in).
 - Write-capable schedules need a second person's approval to be enabled. The emergency stop pauses all of them at once. The approval covers the schedule definition
   **and a fingerprint of the playbook and every child playbook it can start**. Publishing a new version of any of them
   voids the approval: the next run is refused (`approval_outdated`), audited, and the schedule is switched off until
@@ -214,9 +249,11 @@ the reason.
     even after the report is retired. Content schedules may not use the `portal.` key namespace (refused by
     `adminforge validate`), so content can't collide with or replace one.
 
-  **Accepted risk:** an Operator can collect a report's data with the automation identity's application permissions
-  (within the report's reviewed queries; only its simple params can be set). Operators can already download the files of content
-  schedules, so this adds no new kind of access. A report that must not be scheduled or downloaded by Operators sets
+  **Accepted risk:** an Operator can collect a report's data with the automation identity's (or any configured app
+  identity's) application permissions (within the report's reviewed queries; only its simple params can be set).
+  Operators can already download the files of content schedules, so this adds no new kind of access. A schedule that
+  uses its creator's own access is different — its files can hold more than other Operators may see — so only the
+  creator (or a Portal Admin, audited) opens them. A report that must not be scheduled or downloaded by Operators sets
   `requires.portalRoles` (e.g. `Portal.Admin`).
 
 ## Data handling

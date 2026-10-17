@@ -15,13 +15,17 @@ import {
 import type { AuditWriter } from '../audit/writer';
 import { toRecord, type RunNotification, type RunRepository, type RunRow, type TaskRow } from './types';
 
-/** Audit actor fields for something a run did (delegated: the engineer; automation: the automation identity). */
+/** "automation identity" or "app identity <name>": who an automation run executed as (ADR-011, ADR-014). */
+export const executedAs = (row: Pick<RunRow, 'identityName'>) =>
+  row.identityName ? `app identity ${row.identityName}` : 'automation identity';
+
+/** Audit actor fields for something a run did (delegated: the engineer; automation: the app-only identity). */
 export function runAuditActor(
-  row: Pick<RunRow, 'identity' | 'initiatorOid' | 'initiatorUpn' | 'sessionHash'>,
+  row: Pick<RunRow, 'identity' | 'identityName' | 'initiatorOid' | 'initiatorUpn' | 'sessionHash'>,
   actor?: Actor | null,
 ) {
   if (row.identity === 'automation')
-    return { actorOid: 'automation', actorUpn: 'automation identity', sessionHash: null };
+    return { actorOid: 'automation', actorUpn: executedAs(row), sessionHash: null };
   return {
     actorOid: actor?.oid ?? row.initiatorOid,
     actorUpn: actor?.upn ?? row.initiatorUpn,
@@ -52,6 +56,7 @@ export class RepositoryRunStore implements RunStore {
       | 'initiatorOid'
       | 'parentRunId'
       | 'identity'
+      | 'identityName'
       | 'initiatorUpn'
       | 'sessionHash'
       | 'definitionKey'
@@ -88,6 +93,7 @@ export class RepositoryRunStore implements RunStore {
         initiatorUpn: full.initiatorUpn,
         parentRunId: full.parentRunId,
         identity: full.identity,
+        identityName: full.identityName,
         sessionHash: full.sessionHash,
         definitionKey: full.definitionKey,
         definitionVersion: full.definitionVersion,
@@ -128,7 +134,7 @@ export class RepositoryRunStore implements RunStore {
               }
             : {}),
           ...(row.identity === 'automation'
-            ? { scheduledBy: row.initiatorUpn ?? row.initiatorOid, executedAs: 'automation identity' }
+            ? { scheduledBy: row.initiatorUpn ?? row.initiatorOid, executedAs: executedAs(row) }
             : {}),
         },
         result: auditResult(patch.status),
@@ -184,7 +190,7 @@ export class RepositoryRunStore implements RunStore {
             }
           : {}),
         ...(row.identity === 'automation'
-          ? { scheduledBy: row.initiatorUpn ?? row.initiatorOid, executedAs: 'automation identity' }
+          ? { scheduledBy: row.initiatorUpn ?? row.initiatorOid, executedAs: executedAs(row) }
           : {}),
       },
       result: record.status === 'succeeded' ? 'success' : 'failure',

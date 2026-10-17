@@ -1,7 +1,7 @@
 import type { ServiceId } from '@adminforge/connectors';
 import type { Config } from '../config';
 import { AppError } from '../errors';
-import type { ExecutionIdentity } from './types';
+import { identityCacheKey, type ExecutionIdentity } from './types';
 
 /**
  * Protected objects (finding IAM-01): the central guard for declared writes, so no playbook — whatever it checks
@@ -29,6 +29,7 @@ export type ProtectedConfig = Partial<
     | 'AF_AUTOMATION_CLIENT_ID'
     | 'AF_PROTECTED_APP_IDS'
     | 'AF_PROTECTED_USER_IDS'
+    | 'SCHEDULE_IDENTITIES'
   >
 >;
 
@@ -144,10 +145,13 @@ export const protectedObjectsUnavailable = () =>
   );
 
 const readerKey = (who: ExecutionIdentity) =>
-  who.kind === 'automation' ? 'automation' : `user:${who.session.userOid}`;
+  who.kind === 'delegated' ? `user:${who.session.userOid}` : identityCacheKey(who);
+
+/** Display-name prefix of the named app identities' registrations (provision/entra-desired.ts `appNames`). */
+const IDENTITY_APP_PREFIX = 'AdminForge Identity ';
 
 export class ProtectedObjects {
-  /** Lower-case app ids: Read, Write, Automation, AF_PROTECTED_APP_IDS. */
+  /** Lower-case app ids: Read, Write, Automation, the named app identities, AF_PROTECTED_APP_IDS. */
   private readonly appIds: string[];
   /** App ids whose service principals carry the portal roles (Read, Write). */
   private readonly roleApps: Set<string>;
@@ -161,9 +165,13 @@ export class ProtectedObjects {
 
   constructor(private readonly o: ProtectedOptions) {
     const c = o.config;
-    const own = [c.AF_READ_CLIENT_ID, c.AF_WRITE_CLIENT_ID, c.AF_AUTOMATION_CLIENT_ID].flatMap((id) =>
-      idList(id),
-    );
+    // AdminForge's own apps, including every named app identity a schedule may run as (ADR-014).
+    const own = [
+      c.AF_READ_CLIENT_ID,
+      c.AF_WRITE_CLIENT_ID,
+      c.AF_AUTOMATION_CLIENT_ID,
+      ...(c.SCHEDULE_IDENTITIES ?? []).map((i) => i.clientId),
+    ].flatMap((id) => idList(id));
     this.appIds = [...new Set([...own, ...idList(c.AF_PROTECTED_APP_IDS)])];
     this.roleApps = new Set([...idList(c.AF_READ_CLIENT_ID), ...idList(c.AF_WRITE_CLIENT_ID)]);
     this.configured = new Set([...this.appIds, ...idList(c.AF_PROTECTED_USER_IDS)]);
@@ -244,9 +252,24 @@ export class ProtectedObjects {
       const id = (data as { id?: unknown } | null)?.id;
       return typeof id === 'string' && GUID.test(id) ? id.toLowerCase() : undefined;
     };
+    // Named app identities no longer configured (removed from AF_SCHEDULE_IDENTITIES, ADR-014) keep their
+    // registrations and application permissions until someone deletes them: still AdminForge's, still protected.
+    // (Only where AdminForge's own apps are configured: without them there is nothing of AdminForge's to look for.)
+    const retired = this.appIds.length
+      ? await read(
+          '/applications',
+          { $filter: `startswith(displayName,'${IDENTITY_APP_PREFIX}')`, $select: 'id,appId', $top: '999' },
+          true,
+        )
+      : null;
+    const known = new Set(this.appIds);
+    const retiredIds = ((retired as { value?: Array<{ appId?: unknown }> } | null)?.value ?? [])
+      .map((a) => (typeof a?.appId === 'string' && GUID.test(a.appId) ? a.appId.toLowerCase() : null))
+      .filter((a): a is string => !!a && !known.has(a));
+    for (const appId of retiredIds) ids.add(appId);
     // An app id with no registration or service principal in this tenant (404) is simply skipped.
     const objects = await Promise.all(
-      this.appIds.map(async (appId) => {
+      [...this.appIds, ...retiredIds].map(async (appId) => {
         const [app, sp] = await Promise.all([
           read(`/applications(appId='${appId}')`, { $select: 'id,appId' }),
           read(`/servicePrincipals(appId='${appId}')`, { $select: 'id,appId' }),

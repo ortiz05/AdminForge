@@ -12,9 +12,19 @@
  * Pure (no files, no network): commands/env.ts reads the files and prints the result.
  */
 import { parseEnv } from '@adminforge/config';
-import { KQL_SOURCES } from '@adminforge/schemas';
+import { identityEnvPrefix, KQL_SOURCES } from '@adminforge/schemas';
 import { isGuid } from '../provision/ids';
 import { originProblem } from '../provision/settings';
+
+/** The keys of a named app identity (AF_IDENTITY_<NAME>_…), documented once as a pattern in config/example.env. */
+const IDENTITY_KEY_SUFFIXES = [
+  'CLIENT_ID',
+  'CLIENT_SECRET',
+  'CERT_PATH',
+  'ALLOW_WRITE_PERMISSIONS',
+  'ALLOW_SENSITIVE_READS',
+  'ALLOW_PRIVILEGED_PERMISSIONS',
+];
 
 /** What a key is needed for. A key is reported as required when any selected purpose needs it. */
 export type Purpose = 'provision' | 'portal' | 'schedules' | 'validation';
@@ -160,7 +170,16 @@ export function checkEnv(
     keys.push(report);
     byKey.set(key, report);
   }
-  const unknown = Object.keys(fileValues).filter((k) => !(k in example));
+  // A named app identity's keys (AF_IDENTITY_<NAME>_…, ADR-014) are documented once as a pattern, for each name listed
+  // in AF_SCHEDULE_IDENTITIES.
+  const identityPrefixes = (processEnv.AF_SCHEDULE_IDENTITIES ?? fileValues.AF_SCHEDULE_IDENTITIES ?? '')
+    .split(',')
+    .map((n) => n.trim())
+    .filter(Boolean)
+    .map(identityEnvPrefix);
+  const identityKey = (k: string) =>
+    identityPrefixes.some((p) => IDENTITY_KEY_SUFFIXES.some((s) => k === `${p}${s}`));
+  const unknown = Object.keys(fileValues).filter((k) => !(k in example) && !identityKey(k));
   const ok = (k: string) => {
     const r = byKey.get(k);
     return !!r && (r.state === 'set' || r.state === 'default');

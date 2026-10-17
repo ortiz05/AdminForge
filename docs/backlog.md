@@ -244,17 +244,28 @@ Found by the organization and security evaluation; the fixed findings are in CHA
       or a mapped object (~0.15 ms for a rich per-row mapping), so per-row transforms fit ~1,500 rows. The rewritten
       content (2026-10-17) uses native `$applyAdvanced` / `$withFields` / `$take` and reaches 30–60k rows; beyond that
       it caps and says the data is partial. Engine follow-ups: (1) `plain()` in `expressions/src/evaluate.ts`
-      deep-copies every transform result — ~100 ms for a 50k-row result; copy only what needs it. (2) Run report and
+      deep-copies every transform result — ~70 ms for 27k usage rows, paid twice when a page view (`source: static`)
+      copies a list datasource; copy only what needs it (copy-on-write, keeping it a fresh, prototype-safe value). (2) Run report and
       schedule transforms off the event loop with a larger budget (scheduled runs don't block a page). (3) Per-tenant
       snapshots (precomputed by the automation identity, read with an "as of" time and role gating) for the answers
       Graph can't give at the source: inactive and never-signed-in members at 100k, password age, usage reports
       beyond 40k accounts/sites, apps owned only by apps beyond 20k groups.
 - [ ] Caps of the content rewritten for scale (2026-10-17; each page says when it is partial): inactive users —
-      never-signed-in accounts 3,000; password age — 10,000 old passwords listed (counts over every member);
-      mailbox storage, OneDrive and SharePoint site usage, SharePoint sites — 40,000 rows read, 10,000 listed;
-      inactive licensed users 30,000; teams activity 40,000; identity health — inactive accounts 2,400, app
+      no successful sign-in recorded 3,000; password age — 60,000 members read, 10,000 findings listed (the export
+      and the counts have all read); mailbox storage, OneDrive and SharePoint site usage, SharePoint sites — 40,000
+      rows read, 10,000 listed (the export has all read); inactive licensed users 30,000; teams activity 8,000;
+      identity health — inactive accounts 2,400, app
       credentials 10,000 apps; app registrations credential KPIs 10,000 apps; groups owned only by apps 20,000 groups
       read; teams without owners 10,000 teams.
+- [ ] API follow-ups from the scale rewrite (2026-10-17): (1) exports run the export datasource with
+      `maxItems = EXPORT_MAX_ROWS` (100k) instead of its own cap, so a list sized for the 250 ms transform budget can
+      time out on export — content sets `export.maxRows` to the datasource's cap meanwhile; the export should keep
+      `min(maxItems, EXPORT_MAX_ROWS)`. (2) `dependency_failed` messages name internal datasources ('Datasource
+      "mailboxes" needs "mailboxList", which failed: …') and reach the page — e.g. every usage report's view while
+      Microsoft has no usage data; show the dependency's own message and hint. (3) A transform can't tell a page load
+      from an export, so a capped table exports through a second, list datasource that the page view copies
+      (`m365.mailbox-storage`: `mailboxList` → `mailboxes`); an export flag in the transform scope would avoid the
+      copy.
 - [ ] Usage reports that still run their per-row transform and stop at 1,500 rows (marked partial): anyone-link
       sites. Rewrite like `m365.mailbox-storage` (native filters, Graph fields in the columns).
 - [ ] Owner types: Graph's `GET /groups/{id}/owners` without a cast leaves service principals out (live 2026-10-17)

@@ -16,7 +16,7 @@ import { AppError } from '../errors';
 import type { RunEventBus } from './events';
 import type { SessionIdentityResolver } from './identity';
 import { RetryLater, type RunQueue } from './queue';
-import type { RepositoryRunStore } from './store';
+import { executedAs, type RepositoryRunStore } from './store';
 import { RUN_STATUS_ACTIVE, type RunRepository, type RunRow } from './types';
 
 type Log = {
@@ -359,7 +359,7 @@ export class RunWorker {
     await this.deps.audit
       ?.append({
         actorOid: run.identity === 'automation' ? 'automation' : run.initiatorOid,
-        actorUpn: run.identity === 'automation' ? 'automation identity' : run.initiatorUpn,
+        actorUpn: run.identity === 'automation' ? executedAs(run) : run.initiatorUpn,
         mode: null,
         action: 'run.expired',
         targetType: 'run',

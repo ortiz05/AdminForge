@@ -20,7 +20,13 @@ import { missingLicences, requiresBadge, type LicenceService } from '../capabili
 import type { DefinitionRegistry, ResolvedDefinition } from '../definitions/types';
 import { AppError } from '../errors';
 import { errorHint, outboundAppError, readableMessage } from '../execution/outbound';
-import type { ExecutionIdentity, OutboundExecutor, ServiceCall } from '../execution/types';
+import {
+  identityCacheKey,
+  identitySessionKey,
+  type ExecutionIdentity,
+  type OutboundExecutor,
+  type ServiceCall,
+} from '../execution/types';
 import {
   AdvancedFilterError,
   advancedParamOf,
@@ -702,7 +708,7 @@ export class DatasourceRunner {
         };
     }
     if (!key) return this.execute(input, ds, paging, '', 0);
-    const who = input.identity.kind === 'automation' ? 'automation' : input.identity.session.idHash;
+    const who = identitySessionKey(input.identity);
     return this.inflight.run(`${who}|${key}`, input.signal, (signal) =>
       this.execute({ ...input, signal }, ds, paging, key, ttl),
     );
@@ -813,7 +819,7 @@ export class DatasourceRunner {
     const { page } = input;
     const deps = this.dependencies(page, name);
     return cacheKey([
-      input.identity.kind === 'automation' ? 'automation' : input.identity.session.userOid,
+      identityCacheKey(input.identity),
       input.identity.mode,
       page.kind,
       page.key,
@@ -918,6 +924,15 @@ export class DatasourceRunner {
         'parameters',
       )) ?? {};
     const started = performance.now();
+    // The runner signs in with forwarded delegated tokens or as the automation identity; a schedule's grant and a
+    // named app identity can't reach it yet.
+    if (input.identity.kind === 'grant' || (input.identity.kind === 'automation' && input.identity.app))
+      throw new AppError(
+        501,
+        'runner_identity_not_supported',
+        'PowerShell data sources can only run as you or as the automation identity, not as this schedule’s identity.',
+        { hint: 'Run this schedule as the automation identity, or use a report without PowerShell data.' },
+      );
     const identity: ExecutionIdentity =
       input.identity.kind === 'automation'
         ? { kind: 'automation', mode: 'read' }

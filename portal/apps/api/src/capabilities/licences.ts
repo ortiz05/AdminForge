@@ -1,4 +1,4 @@
-import type { ExecutionIdentity, OutboundExecutor } from '../execution/types';
+import { identityCacheKey, type ExecutionIdentity, type OutboundExecutor } from '../execution/types';
 import { FEATURES, type FeatureKey } from './features';
 
 /** A tenant subscription (SKU) as AdminForge reads it from Graph `subscribedSkus`. */
@@ -100,14 +100,15 @@ export class LicenceService {
     identity: ExecutionIdentity,
     opts: { correlationId?: string; signal?: AbortSignal } = {},
   ): Promise<TenantLicences | null> {
-    const key = identity.kind === 'automation' ? 'automation' : identity.session.tenantId;
+    // One tenant's licences: shared by everyone signed in, read once per unattended identity.
+    const key = identity.kind === 'delegated' ? identity.session.tenantId : identityCacheKey(identity);
     const hit = this.cache.get(key);
     const t = this.now().getTime();
     if (hit && hit.expires > t) return hit.value;
     const entry = { value: Promise.resolve<TenantLicences | null>(null), expires: t + OK_TTL_MS };
     entry.value = this.outbound
       .execute(
-        identity.kind === 'automation' ? identity : { ...identity, mode: 'read' },
+        identity.kind === 'delegated' ? { ...identity, mode: 'read' } : identity,
         { service: 'graph', method: 'GET', path: '/subscribedSkus' },
         opts,
       )

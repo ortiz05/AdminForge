@@ -12,6 +12,12 @@ import { ProbeViews } from '../probes/views';
 import type { RunsModule } from '../runs/module';
 import { automationGraph, CreatorAccess, type CreatorAccessChecker } from './creator-access';
 import { ScheduleEvents } from './events';
+import {
+  MemoryScheduleGrantStore,
+  PgScheduleGrantStore,
+  ScheduleIdentities,
+  type ScheduleGrantStore,
+} from './grants';
 import { createJobRunner, type JobRunner } from './jobs';
 import { LeaderElector, pgAdvisoryLock, type LeaderLock, type Timers } from './leader';
 import { PgScheduleStore } from './pg-store';
@@ -55,6 +61,8 @@ export interface SchedulesOptions {
    * with Entra; none in mock mode). Tests inject a fake.
    */
   creatorAccess?: CreatorAccessChecker | null;
+  /** Creators' grants for schedules that run with their own access (default: Postgres, else memory). */
+  grants?: ScheduleGrantStore;
 }
 
 export interface SchedulesModule {
@@ -64,6 +72,8 @@ export interface SchedulesModule {
   service: ScheduleService;
   /** Report schedules created in the portal (POST/PUT/DELETE /api/schedules, delivery options). */
   portal: PortalSchedules;
+  /** Who schedules run as (ADR-014): app identities, creators' grants (consent, renewal, removal). */
+  identities: ScheduleIdentities;
   probes: ProbeViews;
   /** Dependencies for running probes directly (CLI one-shots). */
   probeDeps: ProbeDeps;
@@ -96,6 +106,14 @@ export function createSchedulesModule(
     ...(log ? { log } : {}),
   });
   const artifacts = new ArtifactStore(ctx.config.ADMINFORGE_ARTIFACTS_DIR);
+  const identities = new ScheduleIdentities({
+    grants:
+      opts.grants ??
+      (ctx.database ? new PgScheduleGrantStore(ctx.database.db) : new MemoryScheduleGrantStore()),
+    auth: ctx.auth,
+    tokenCache: ctx.tokenCache,
+    now: ctx.now,
+  });
   const probeDeps: ProbeDeps = {
     outbound: ctx.outbound,
     automation: ctx.automation,
@@ -135,6 +153,9 @@ export function createSchedulesModule(
       artifacts,
       runs: runs ? { service: runs.service, repo: runs.repo } : null,
       automationClientId: ctx.automation?.clientId ?? null,
+      identityClientIds: Object.fromEntries(
+        (ctx.config.SCHEDULE_IDENTITIES ?? []).map((i) => [i.name, i.clientId]),
+      ),
       exportMaxRows: ctx.config.EXPORT_MAX_ROWS,
       now: ctx.now,
       ...(opts.sleep ? { sleep: opts.sleep } : {}),
@@ -147,6 +168,7 @@ export function createSchedulesModule(
     });
   const service = new ScheduleService({
     store,
+    grants: identities.grants,
     automationPaused: () => isPaused(ctx.settings, 'automation'),
     definitions: ctx.definitions,
     audit: ctx.audit,
@@ -179,6 +201,13 @@ export function createSchedulesModule(
     // Only key names are checked against it (configured or not); values are never returned.
     deliveryEnv: () => delivery.env,
     now: ctx.now,
+    identities: {
+      // The configured names (their credentials are checked when a run needs a token).
+      apps: () => (ctx.config.SCHEDULE_IDENTITIES ?? []).map((i) => i.name),
+      // A creator's own access needs Entra sign-in (the consent round trip and token refresh).
+      user: ctx.auth !== null && ctx.config.AUTH_MODE === 'entra',
+      removeGrant: (id) => identities.remove(id),
+    },
   });
   // Run views of scheduled runs follow the schedule's `requires.portalRoles` (default Portal.Operator).
   runs?.service.useSchedules(
@@ -219,6 +248,7 @@ export function createSchedulesModule(
     scheduler = new Scheduler({
       store,
       creatorAccess,
+      identities,
       definitions: ctx.definitions,
       jobs,
       audit: ctx.audit,
@@ -250,6 +280,7 @@ export function createSchedulesModule(
     artifacts,
     service,
     portal,
+    identities,
     probes,
     probeDeps,
     jobs,

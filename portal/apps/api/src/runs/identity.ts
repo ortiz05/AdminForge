@@ -93,7 +93,16 @@ export class SessionIdentityResolver implements IdentityResolver {
 
   async resolve(run: RunRecord, actor: Actor, mode: Mode): Promise<ResolvedIdentity> {
     if (run.identity === 'automation')
-      return { actor, mode, handle: { kind: 'automation', mode } satisfies ExecutionIdentity };
+      return {
+        actor,
+        mode,
+        // A schedule that names an app identity runs as it (ADR-014), children included.
+        handle: {
+          kind: 'automation',
+          mode,
+          ...(run.identityName ? { app: run.identityName } : {}),
+        } satisfies ExecutionIdentity,
+      };
     const who = actor.upn ?? 'The engineer running this';
     const session = await this.liveSession(
       await this.sessionFor(run.id, actor),

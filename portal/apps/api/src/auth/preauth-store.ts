@@ -3,16 +3,22 @@ import type { Db } from '../db/client';
 import { preauth } from '../db/schema';
 import type { AppKind } from './types';
 
-/** Extra data carried through an arm round trip (audited at the callback). */
+/** Extra data carried through an arm round trip (audited at the callback), or the schedule a grant is for. */
 export interface PreauthDetails {
   minutes?: number;
   reason?: string;
+  /** kind `schedule`: the schedule whose creator is granting it their read access (ADR-014). */
+  scheduleId?: string;
+  scheduleKey?: string;
 }
+
+/** read = sign-in; write = arm; schedule = a schedule's creator granting it their read access (Read app). */
+export type PreauthKind = AppKind | 'schedule';
 
 /** A pending sign-in or arm: OAuth state, PKCE verifier, nonce, and where to go afterwards. */
 export interface PreauthRecord {
   state: string;
-  kind: AppKind;
+  kind: PreauthKind;
   verifier: string;
   nonce: string;
   returnTo: string;

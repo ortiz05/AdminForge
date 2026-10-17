@@ -93,6 +93,8 @@ export interface RunSummary {
   /** interactive | bulk | schedule | child */
   trigger: string;
   identity: 'delegated' | 'automation';
+  /** Automation runs: the named app identity it ran as (ADR-014); null = the automation identity. */
+  identityName: string | null;
   initiator: RunActor;
   createdAt: string | null;
   startedAt: string | null;
@@ -259,6 +261,7 @@ export function readRunSummary(raw: unknown): RunSummary | null {
     dryRun: bool(o.dryRun) ?? false,
     trigger: pick(o, 'trigger') ?? 'interactive',
     identity: o.identity === 'automation' ? 'automation' : 'delegated',
+    identityName: o.identity === 'automation' ? (pick(o, 'identityName') ?? null) : null,
     initiator: readActor(o),
     createdAt: pick(o, 'createdAt') ?? pick(o, 'startedAt') ?? null,
     startedAt: pick(o, 'startedAt') ?? null,

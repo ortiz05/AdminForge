@@ -104,6 +104,8 @@ export interface RunRecord {
   dryRun: boolean;
   /** delegated = the engineer's session (ADR-010); automation = the app-only automation identity (ADR-011). */
   identity: 'delegated' | 'automation';
+  /** With `automation`: the named app identity a schedule runs as (ADR-014); absent/null = the automation identity. */
+  identityName?: string | null;
   /** interactive | bulk | schedule | child */
   trigger: string;
   initiator: Actor;

@@ -2,7 +2,13 @@ import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import path from 'node:path';
 import { loadEnv } from '@adminforge/config';
-import { KQL_SOURCES, PORTAL_ROLES, type PortalRole } from '@adminforge/schemas';
+import {
+  IDENTITY_NAME,
+  identityEnvPrefix,
+  KQL_SOURCES,
+  PORTAL_ROLES,
+  type PortalRole,
+} from '@adminforge/schemas';
 import { z } from 'zod';
 import { DEFAULT_TIMEOUT_OVERRIDES, TimeoutOverrideList } from './execution/timeouts';
 import { workspaceRoot } from './paths';
@@ -161,6 +167,11 @@ const Schema = z
     AF_PROTECTED_USER_IDS: GuidList.optional(),
 
     // ── Automation identity, content registry, outbound calls (definitions/datasources) ──
+    /**
+     * Named app identities schedules may run as (ADR-014), comma-separated lower-case names. Each one's settings are
+     * AF_IDENTITY_<NAME>_CLIENT_ID and …_CERT_PATH (preferred) or …_CLIENT_SECRET (scheduleIdentities()).
+     */
+    AF_SCHEDULE_IDENTITIES: z.string().optional(),
     AF_AUTOMATION_CLIENT_ID: z.guid().optional(),
     AF_AUTOMATION_CLIENT_SECRET: z.string().optional(),
     /** PEM with certificate + private key; preferred over the secret. */
@@ -361,7 +372,103 @@ const Schema = z
     };
   });
 
-export type Config = z.infer<typeof Schema>;
+/** One named app identity (AF_SCHEDULE_IDENTITIES): its app registration and credential (never logged). */
+export interface AppIdentityConfig {
+  name: string;
+  clientId: string;
+  certPath?: string;
+  clientSecret?: string;
+}
+
+export type Config = z.infer<typeof Schema> & {
+  /** The named app identities, read from AF_IDENTITY_<NAME>_* (loadConfig; absent in hand-built test configs). */
+  SCHEDULE_IDENTITIES?: readonly AppIdentityConfig[];
+};
+
+const GUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * The named app identities from AF_SCHEDULE_IDENTITIES and their AF_IDENTITY_<NAME>_* keys. Problems name keys only,
+ * never values. Mock sign-in may name identities but never hold their credentials.
+ */
+export function scheduleIdentities(
+  env: Record<string, string>,
+  parsed: Pick<
+    z.infer<typeof Schema>,
+    | 'AF_SCHEDULE_IDENTITIES'
+    | 'AUTH_MODE'
+    | 'AF_AUTOMATION_CLIENT_ID'
+    | 'AF_READ_CLIENT_ID'
+    | 'AF_WRITE_CLIENT_ID'
+    | 'AF_PROTECTED_APP_IDS'
+  >,
+): { identities: AppIdentityConfig[]; problems: string[] } {
+  const problems: string[] = [];
+  const identities: AppIdentityConfig[] = [];
+  const names = (parsed.AF_SCHEDULE_IDENTITIES ?? '')
+    .split(',')
+    .map((n) => n.trim())
+    .filter(Boolean);
+  const taken = new Set(
+    [parsed.AF_AUTOMATION_CLIENT_ID, parsed.AF_READ_CLIENT_ID, parsed.AF_WRITE_CLIENT_ID]
+      .filter((v): v is string => !!v)
+      .map((v) => v.toLowerCase()),
+  );
+  // Apps AdminForge must never change are never something it signs in as either.
+  const protectedIds = new Set(
+    (parsed.AF_PROTECTED_APP_IDS ?? '')
+      .split(/[\s,]+/)
+      .filter(Boolean)
+      .map((v) => v.toLowerCase()),
+  );
+  for (const name of new Set(names)) {
+    if (!IDENTITY_NAME.test(name) || name === 'automation') {
+      problems.push(
+        'AF_SCHEDULE_IDENTITIES: names are lower-case letters and digits with single dashes between (2–31 characters), and not "automation"',
+      );
+      continue;
+    }
+    const prefix = identityEnvPrefix(name);
+    const clientId = env[`${prefix}CLIENT_ID`];
+    const certPath = env[`${prefix}CERT_PATH`];
+    const clientSecret = env[`${prefix}CLIENT_SECRET`];
+    if (!clientId || !GUID.test(clientId)) {
+      problems.push(
+        `${prefix}CLIENT_ID: must be the application (client) id of the ${name} app registration`,
+      );
+      continue;
+    }
+    if (taken.has(clientId.toLowerCase())) {
+      problems.push(
+        `${prefix}CLIENT_ID: must be an app registration of its own, not the Read, Write or automation app`,
+      );
+      continue;
+    }
+    if (protectedIds.has(clientId.toLowerCase())) {
+      problems.push(
+        `${prefix}CLIENT_ID: is listed in AF_PROTECTED_APP_IDS; a protected app can't be a schedule identity`,
+      );
+      continue;
+    }
+    taken.add(clientId.toLowerCase());
+    if (parsed.AUTH_MODE === 'mock') {
+      if (certPath || clientSecret)
+        problems.push(
+          `${prefix}${certPath ? 'CERT_PATH' : 'CLIENT_SECRET'}: must not be set with AUTH_MODE=mock (mock sign-in never holds tenant credentials)`,
+        );
+    } else if (!certPath && !clientSecret) {
+      problems.push(`${prefix}CLIENT_ID: needs ${prefix}CERT_PATH or ${prefix}CLIENT_SECRET`);
+      continue;
+    }
+    identities.push({
+      name,
+      clientId,
+      ...(certPath ? { certPath } : {}),
+      ...(clientSecret ? { clientSecret } : {}),
+    });
+  }
+  return { identities, problems };
+}
 
 /** Empty values in the env file mean "not set". */
 function compact(env: Record<string, string | undefined>): Record<string, string> {
@@ -375,12 +482,16 @@ function compact(env: Record<string, string | undefined>): Record<string, string
  * Errors name the offending keys only — values (which may be secrets) are never echoed.
  */
 export function loadConfig(env: Record<string, string | undefined> = loadEnv()): Config {
-  const parsed = Schema.safeParse(compact(env));
+  const values = compact(env);
+  const parsed = Schema.safeParse(values);
   if (!parsed.success) {
     const lines = parsed.error.issues.map((i) => `  ${i.path.join('.') || '(config)'}: ${i.message}`);
     throw new Error(`Invalid AdminForge configuration:\n${lines.join('\n')}`);
   }
-  return parsed.data;
+  const { identities, problems } = scheduleIdentities(values, parsed.data);
+  if (problems.length)
+    throw new Error(`Invalid AdminForge configuration:\n${problems.map((p) => `  ${p}`).join('\n')}`);
+  return { ...parsed.data, SCHEDULE_IDENTITIES: identities };
 }
 
 /**

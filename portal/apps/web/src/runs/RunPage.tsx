@@ -320,7 +320,9 @@ export function RunPage({ id }: { id: string }) {
   const failedAt = entries.findIndex((e) => e.status === 'failed' || e.status === 'needs_review');
   const description = [
     run.identity === 'automation'
-      ? 'Ran as the automation identity'
+      ? run.identityName
+        ? `Ran as app identity ${run.identityName}`
+        : 'Ran as the automation identity'
       : `Started by ${run.initiator.upn === me.user.upn ? 'you' : (run.initiator.upn ?? 'someone')}`,
     run.createdAt ? formatRelative(run.createdAt, now) : null,
     took ? (terminal ? `took ${took}` : `running for ${took}`) : null,
@@ -638,7 +640,9 @@ export function RunPage({ id }: { id: string }) {
             )}
             {run.identity === 'automation' && (
               <Callout tone="neutral" icon={<RobotIcon size={18} />} title="Unattended run">
-                Scheduled runs use the automation identity’s application permissions, not a person’s session.
+                {run.identityName
+                  ? `Scheduled runs use the application permissions of app identity ${run.identityName}, not a person’s session.`
+                  : 'Scheduled runs use the automation identity’s application permissions, not a person’s session.'}
               </Callout>
             )}
           </div>

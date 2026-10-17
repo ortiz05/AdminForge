@@ -18,6 +18,7 @@ import { safeReturnTo } from './return-to';
 import { portalRoles } from './roles';
 import { clearSessionCookie, endSession, startSession } from './session-plugin';
 import { signInRateLimit, SignInFailureAudits } from '../rate-limit';
+import { completeScheduleConsent } from './schedule-consent';
 import { assertCsrf } from '../security/csrf';
 import { hasAccountStatus, isGuestAccount, partitionKey } from './types';
 
@@ -145,7 +146,10 @@ export function entraSignInRoutes(app: FastifyInstance, ctx: AppContext) {
     '/auth/callback',
     { config: { rateLimit: signInRateLimit(ctx.config) } },
     async (request, reply) => {
-      const pending = await finishRoundTrip(ctx, 'read', request.query.state, request);
+      // The Read app's callback also finishes a schedule's grant (ADR-014): its own flow, the session unchanged.
+      const pending = await finishRoundTrip(ctx, ['read', 'schedule'], request.query.state, request);
+      if (pending.kind === 'schedule')
+        return completeScheduleConsent(ctx, app.schedules, request, reply, pending);
       const fail = async (err: AppError, details: Record<string, unknown> = {}) => {
         // Anyone can send a browser here with an error: at most a few failure events per address and minute.
         const turn = failureAudits.next(request.ip);

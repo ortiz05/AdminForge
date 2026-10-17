@@ -56,7 +56,13 @@ import {
   readSecurityDefaults,
   setUserEnabled,
 } from '../provision/identities-io';
-import type { DesiredEntra, EntraOp, EntraState, ProvisionSettings } from '../provision/model';
+import {
+  isAppOnly,
+  type DesiredEntra,
+  type EntraOp,
+  type EntraState,
+  type ProvisionSettings,
+} from '../provision/model';
 import { envSubset, provisionSettings, testIdentityLabels } from '../provision/settings';
 import { findUnexpected, unexpectedFailures } from '../provision/unexpected';
 import { azureTestStatus } from './azure-test';
@@ -458,6 +464,13 @@ export async function provisionStatus(ctx: CliContext): Promise<StatusResult> {
         : `    ${u.problems.length ? '✗' : '✓'} ${u.title}${u.problems.length ? ` — ${u.problems.join('; ')}` : ''}`,
     );
   failures.push(...unexpectedFailures(unexpected));
+  // A named app identity taken out of AF_SCHEDULE_IDENTITIES keeps its registration and permissions until deleted.
+  for (const r of run.state.retiredIdentities ?? []) {
+    ctx.out(
+      `    ✗ ${r.displayName}: no longer in AF_SCHEDULE_IDENTITIES, but the app registration and its application permissions remain — delete it in the Entra admin centre (AdminForge keeps protecting it until then), or list it again`,
+    );
+    failures.push(`${r.displayName}: retired app identity still registered`);
+  }
   const prunable = unwantedAppPermissions(run.desired, run.state).length;
   if (prunable)
     ctx.out(
@@ -577,8 +590,10 @@ export async function provisionStatus(ctx: CliContext): Promise<StatusResult> {
   };
   const doFetch = ctx.fetch ?? fetch;
 
-  for (const app of ['read', 'write', 'automation'] as const) {
-    const desiredApp = run.desired.apps.find((a) => a.key === app)!;
+  // The built-in apps and every named app identity (ADR-014).
+  for (const desiredApp of run.desired.apps) {
+    const app = desiredApp.key;
+    const appOnly = isAppOnly(app);
     const name = desiredApp.body.displayName;
     let credential: ReturnType<typeof appCredential>;
     try {
@@ -591,7 +606,7 @@ export async function provisionStatus(ctx: CliContext): Promise<StatusResult> {
       check(
         false,
         `${name}: client credentials in env file`,
-        `${desiredApp.env.clientId} / ${desiredApp.env.secret}${app === 'automation' ? ' (or AF_AUTOMATION_CERT_PATH)' : ''} missing`,
+        `${desiredApp.env.clientId} / ${desiredApp.env.secret}${desiredApp.env.cert ? ` (or ${desiredApp.env.cert})` : ''} missing`,
       );
       continue;
     }
@@ -603,12 +618,12 @@ export async function provisionStatus(ctx: CliContext): Promise<StatusResult> {
         scope: GRAPH_SCOPE,
         fetch: ctx.fetch,
       })();
-      if (app !== 'automation') {
+      if (!appOnly) {
         check(true, `${name}: stored client secret is accepted by Entra`);
         continue;
       }
       if (credential.kind === 'certificate')
-        check(true, `${name}: certificate (AF_AUTOMATION_CERT_PATH) is accepted by Entra`);
+        check(true, `${name}: certificate (${desiredApp.env.cert}) is accepted by Entra`);
       const roles = tokenRoles(token);
       const expected = desiredApp.appPermissions.flatMap((p) => p.roles.map((r) => r.value));
       const missing = expected.filter((r) => !roles.includes(r));

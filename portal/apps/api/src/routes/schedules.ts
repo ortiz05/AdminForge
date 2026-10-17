@@ -20,7 +20,9 @@ import type { Caller } from '../schedules/service';
  *         job: {kind, ref?, refs?, select?, params?}, nextRunAt, lastRunAt, lastStatus, writeCapable, approvedBy?, source,
  *         createdBy, canManage, delivery?, notify?, pendingApprovalId}]}
  * - GET   /api/schedules/:key → one item (same shape)
- * - GET   /api/schedules/delivery-options → {email: {available, lists}, teams: {lists}} (Portal.Operator; key names only)
+ * - GET   /api/schedules/delivery-options → {email: {available, lists}, teams: {lists}, identities: {apps, user}}
+ *         (Portal.Operator; key names only)
+ * - GET   /api/schedules/identities → {apps, user}: who schedules may run as here (Portal.Reader; ADR-014)
  * - POST  /api/schedules (report schedule created in the portal; Portal.Operator; audited) → 201 item
  * - PUT   /api/schedules/:key (portal schedule; its creator or Portal.Admin; audited) → 200 item
  * - DELETE /api/schedules/:key (portal schedule; its creator or Portal.Admin; soft delete; audited) → 204
@@ -78,6 +80,7 @@ export function scheduleRoutes(api: FastifyInstance, ctx: AppContext, schedules:
   api.get('/schedules/delivery-options', async (request) =>
     schedules.portal.deliveryOptions(requireSession(request)),
   );
+  api.get('/schedules/identities', async (request) => schedules.portal.identities(requireSession(request)));
 
   api.post(
     '/schedules',
@@ -139,7 +142,8 @@ export function scheduleRoutes(api: FastifyInstance, ctx: AppContext, schedules:
   );
 
   api.get<{ Params: { key: string } }>('/schedules/:key/runs', async (request) => {
-    requireRole(requireSession(request), 'Portal.Reader', 'Schedule history');
+    const session = requireSession(request);
+    requireRole(session, 'Portal.Reader', 'Schedule history');
     const q = RunsQuery.safeParse(request.query ?? {});
     if (!q.success)
       throw new AppError(
@@ -147,7 +151,7 @@ export function scheduleRoutes(api: FastifyInstance, ctx: AppContext, schedules:
         'invalid_request',
         'cursor must be a cursor from a previous page; limit 1-100.',
       );
-    return svc.runs(key(request.params.key), { cursor: q.data.cursor, limit: q.data.limit });
+    return svc.runs(key(request.params.key), { cursor: q.data.cursor, limit: q.data.limit }, session);
   });
 
   api.get<{ Params: { scheduleRunId: string } }>(
@@ -164,7 +168,13 @@ export function scheduleRoutes(api: FastifyInstance, ctx: AppContext, schedules:
           targetType: 'schedule_run',
           targetId: request.params.scheduleRunId,
           result: 'success',
-          details: { schedule: file.scheduleKey, name: file.name, size: file.size },
+          details: {
+            schedule: file.scheduleKey,
+            name: file.name,
+            size: file.size,
+            // A Portal Admin opening the files of a schedule that runs with someone else's access.
+            ...(file.adminOverride ? { adminOverride: true } : {}),
+          },
         })
         .catch((err: unknown) => request.log.error({ err }, 'audit of artifact download failed'));
       return reply

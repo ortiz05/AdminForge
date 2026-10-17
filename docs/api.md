@@ -140,6 +140,7 @@ at `RATE_LIMIT_PER_ADDRESS_PER_MINUTE` (default 20,000). An address is an IPv4 a
 | `GET /auth/login`, `GET /auth/callback` (per address)                                    | 300              |
 | `POST /auth/logout`                                                                      | 30               |
 | `POST /auth/arm`, `GET /auth/arm/callback`, `POST /auth/arm/extend`, `POST /auth/disarm` | 10               |
+| `POST /auth/schedule-consent`                                                            | 10               |
 | `GET /api/search`                                                                        | 240              |
 | `POST /api/query`                                                                        | 60               |
 | `GET /api/events`                                                                        | 60               |
@@ -213,6 +214,7 @@ session holding that role). Every non-GET `/api` call additionally needs the CSR
 | `GET`    | `/api/schedules`                  | Portal.Reader          | [Schedules](#get-apischedules)                      |
 | `GET`    | `/api/schedules/:key`             | Portal.Reader          | [Schedules](#get-apischeduleskey)                   |
 | `GET`    | `/api/schedules/delivery-options` | Portal.Operator        | [Schedules](#get-apischedulesdelivery-options)      |
+| `GET`    | `/api/schedules/identities`       | Portal.Reader          | [Schedules](#get-apischedulesidentities)            |
 | `POST`   | `/api/schedules`                  | Portal.Operator        | [Schedules](#post-apischedules)                     |
 | `PUT`    | `/api/schedules/:key`             | Creator / Admin        | [Schedules](#put-apischeduleskey)                   |
 | `DELETE` | `/api/schedules/:key`             | Creator / Admin        | [Schedules](#delete-apischeduleskey)                |
@@ -328,6 +330,26 @@ and bound to the browser. A reused, expired, foreign or wrong-kind `state` → 4
   `user_mismatch` 403 (verified with a different account); `step_up_required` 403 (the auth context was not
   satisfied); `step_up_unverified` 403 (no auth context configured and no `auth_time` claim); `step_up_stale` 403
   (`auth_time` older than 300 s — Entra reused an SSO session).
+
+#### `POST /auth/schedule-consent`
+
+Lets a report schedule run with its creator's own access (ADR-014, `identity: { user: creator }`).
+
+- **Who:** `Portal.Operator` + CSRF, and only the schedule's creator (by object id). 10/min. Entra mode only.
+- **Query:** `returnTo` (as for login; the web app sends `/schedules/<key>?signedIn=1`). **Body:** `{key}` — a portal
+  report schedule, not deleted, whose identity is the creator.
+- **Response:** 200 `{redirect}` — the **Read app** authorize URL with `prompt=login` and `max_age=0` (a fresh
+  sign-in, never a silent SSO grant) and `login_hint` = the session's UPN. Entra returns to `GET /auth/callback`,
+  which checks the same session, tenant, member account (`acct`) and object id, an `auth_time` within 300 s, that the
+  schedule still exists and runs as that creator and that they hold `Portal.Operator`. The code is redeemed into a
+  temporary token partition and moved to the schedule's own (`schedule:<id>`, never a session's) only then; the grant
+  is stored (`schedule_grants`, status `active`) and checked again against the schedule after writing. Audited
+  `schedule.consented`; redirects to `returnTo`. A failure removes only the temporary partition (a working grant
+  stays), is audited (`schedule.consented`, result `failure`, the reason) and goes to the problem page.
+- **Errors:** `unauthenticated` 401, `csrf` 403, `forbidden` 403 (not an Operator), `not_schedule_creator` 403,
+  `schedule_not_found` 404 (also deleted), `schedule_not_user_identity` 409; on the callback also `signin_not_fresh`
+  403 (no or old `auth_time`; the hint says whether `provision entra` must add the claim), `wrong_account` 403,
+  `signin_failed` 400.
 
 #### `POST /auth/arm/extend`
 
@@ -536,9 +558,10 @@ else gets 404 `run_not_found` (not 403).
 - **Query:** `scope` (`mine` default, `all`), `status` (comma list of statuses, or `active`), `playbook` (key),
   `parent` (run id), `from`/`to` (ISO), `limit` (1–200, default 50), `cursor`.
 - **Response:** `{items: RunSummary[], cursor?}`. RunSummary:
-  `id, kind, definitionKey, definitionVersion, title?, status, dryRun, trigger, identity, initiatorOid, initiatorUpn,`
-  `parentRunId, scheduleId, createdAt, startedAt, endedAt, updatedAt` — `trigger` is `interactive`, `bulk` or
-  `schedule`; `identity` is `delegated` or `automation`.
+  `id, kind, definitionKey, definitionVersion, title?, status, dryRun, trigger, identity, identityName, initiatorOid,`
+  `initiatorUpn, parentRunId, scheduleId, createdAt, startedAt, endedAt, updatedAt` — `trigger` is `interactive`,
+  `bulk` or `schedule`; `identity` is `delegated` or `automation`; `identityName` is the named app identity an
+  automation run ran as (ADR-014), else `null`.
 - **Errors:** `forbidden` 403, `invalid_request` 400 (bad status, date or cursor).
 - **Visibility:** a run is visible to its initiator, or to Operator/Approver/Admin holding every role in the run's
   definition `requires.portalRoles`. Runs of the automation identity need the schedule's `requires.portalRoles`
@@ -653,17 +676,23 @@ else gets 404 `run_not_found` (not 403).
 
 Source: `src/routes/schedules.ts`, `probes.ts`, `src/schedules/service.ts`, `portal.ts`, `scaffold.ts`. Schedules are
 content (YAML, `source: "content"`), except **report schedules created in the portal** (`source: "portal"`, Reports →
-Schedule), which live only in the database under the reserved `portal.` key namespace. The scheduler runs both as the
-automation identity. Schedule keys look like `reports.weekly-licences` or `portal.identity-inactive-users-3f9a2c`
+Schedule), which live only in the database under the reserved `portal.` key namespace. The scheduler runs each as its
+`identity` (ADR-014): the automation identity, a named app identity (`{ app: <name> }`, configured in
+`AF_SCHEDULE_IDENTITIES`) or — portal report schedules only — its creator's own read access (`{ user: creator }`). Schedule keys look like `reports.weekly-licences` or `portal.identity-inactive-users-3f9a2c`
 (invalid keys → 404 `schedule_not_found`).
 
 #### `GET /api/schedules`
 
 - **Who:** `Portal.Reader`.
 - **Response:** `{items}` (deleted portal schedules are left out), each `ScheduleItem`:
-  `{key, title, summary, cron, cronText, timezone, enabled, identity: "automation", job, nextRunAt, lastRunAt,`
+  `{key, title, summary, cron, cronText, timezone, enabled, identity, runsAs, job, nextRunAt, lastRunAt,`
   `lastStatus, writeCapable, approvedBy?, source, createdBy, canManage, delivery?, notify?, pendingApprovalId}` with
   `job` = `{kind, ref?, refs?, select?, params?}`.
+  - `identity`: `"automation"`, `"app:<name>"` or `"user"`; `runsAs` = `{kind: "automation" | "app" | "user", name,`
+    `label, signIn?, canSignIn?}` — `name` is the app identity or the creator's UPN; for `user`, `signIn` =
+    `signed_in` | `needs_sign_in` (Microsoft asked for a new sign-in: runs are skipped, the owner was notified) |
+    `not_signed_in`, and `canSignIn` = the caller is the creator (only they can renew it). The report catalogue's
+    schedule summaries carry the same `runsAs`.
   - `cron` is always set, also for content written with `every:` (compiled); `cronText` is the plain-English sentence
     naming the zone ("Every weekday (Mon–Fri) at 07:00 Europe/London", 24-hour), or `null` for custom shapes. The web
     app describes the cron itself with the browser's 12- or 24-hour clock.
@@ -690,6 +719,13 @@ automation identity. Schedule keys look like `reports.weekly-licences` or `porta
   installation, by name, except the approval keys (`AF_APPROVALS_*`); `available` = the sender mailbox
   (`AF_MAIL_SENDER`) is configured. Values are never returned.
   Label: `AF_` and a trailing `_WEBHOOK` dropped, sentence case (`AF_TEAMS_ALERTS_WEBHOOK` → "Teams alerts").
+  Also `identities` (as `GET /api/schedules/identities`).
+
+#### `GET /api/schedules/identities`
+
+- **Who:** `Portal.Reader` (the schedule editor uses it too).
+- **Response:** `{apps: string[], user: boolean}` — the names in `AF_SCHEDULE_IDENTITIES` (empty in mock mode unless
+  set), and whether a schedule can run with its creator's access (Entra sign-in). Names only, never client ids.
 
 #### `POST /api/schedules`
 
@@ -697,13 +733,17 @@ Schedules a report in the portal. It runs from its next due time — no git revi
 
 - **Who:** `Portal.Operator` **and** every role in the report's `requires.portalRoles`. 20/min. Allowed while
   automation is paused (the scheduler skips its runs until resumed).
-- **Body:** `{title (1–120), summary? (≤ 500), cron, timezone (IANA), enabled? (default true), job, notifyOnFailure?}`
-  with `job` = `{kind: "report", ref, params?, format, retain?, emailKey?, teamsKey?}` — `format` is `xlsx`, `csv` or
+- **Body:** `{title (1–120), summary? (≤ 500), cron, timezone (IANA), enabled? (default true), identity?, job}` plus
+  `notifyOnFailure?`, with `job` = `{kind: "report", ref, params?, format, retain?, emailKey?, teamsKey?}` — `format` is `xlsx`, `csv` or
   `json`, `retain` 1–1000 (default 26) — and `notifyOnFailure` = `{emailKey?, teamsKey?}`. Keys are configuration key
   **names**. `title` and `summary` are one line of plain text: no control or format characters (bidi overrides,
   zero-width), no links or markup (`http(s):`, `www.`, `](`, `<`, `>`) — they reach email subjects and Teams cards.
   `params` may only set what the schedule form offers (`schedulable: true` in the catalogue); on `PUT`, a value of
   `"[redacted]"` for a `redact: true` param keeps the stored value.
+  `identity` (default `"automation"`) is `{app: <name>}` (a name in `AF_SCHEDULE_IDENTITIES`) or `{user: "creator"}`:
+  the schedule then runs only after the creator signs in for it (`POST /auth/schedule-consent`; the web app does this
+  right after saving). Changing it away from the creator, deleting the schedule or the creator losing access deletes
+  the stored sign-in.
 - **Response:** 201 `ScheduleItem` (`source: "portal"`, `createdBy` = you, `canManage: true`).
 - **What is stored:** a schedule definition built like the schedule editor's YAML and validated with the Schedule
   schema — `id` = `portal.<report key with . → ->-<6 hex>` (never reused), `version: 1.0.0`, `owner` = your UPN,
@@ -723,7 +763,9 @@ Schedules a report in the portal. It runs from its next due time — no git revi
   runs), `delivery_not_configured` 400 (a key that isn't a configured recipient list / webhook, an approval key, or
   email without `AF_MAIL_SENDER`; the hint names the key for administrators), `schedule_limit` 409 (25 active portal
   schedules per person, 200 in total, 50 created per person in 24 hours with deleted ones counted — counted and
-  inserted atomically), `invalid_request` 400 (incl. a name or summary that isn't plain single-line text).
+  inserted atomically), `invalid_request` 400 (incl. a name or summary that isn't plain single-line text),
+  `identity_not_configured` 400 (an app identity not in `AF_SCHEDULE_IDENTITIES`), `user_identity_unavailable` 400
+  (the creator's access without Entra sign-in).
 - **Runs:** before every run (cron, retry, Run now) the scheduler confirms, as the automation identity, that the creator
   is still an enabled member (not a guest) holding `Portal.Operator` and every role of the schedule and the report's
   current version. The run history then shows `creator_access_removed` (confirmed loss: the schedule was turned off,
@@ -808,8 +850,10 @@ for custom shapes), timezone (the zone used), next: ISO[5] (DST-aware, the sched
 
 - **Who:** `Portal.Reader`.
 - **Query:** `cursor?`, `limit` (1–100, default 25).
-- **Response:** `{items, cursor?}`, each `{id, trigger, status, startedAt, endedAt, runId?, artifact?, error?}` —
-  `artifact` is `{name, href, size}` with `href` = `/api/artifacts/<id>`; `runId` links a playbook job's run.
+- **Response:** `{items, cursor?}`, each `{id, trigger, status, startedAt, endedAt, runId?, artifact?, error?, reason?}` —
+  `artifact` is `{name, href, size}` with `href` = `/api/artifacts/<id>`, left out for someone who may not open it (a
+  schedule that runs with its creator's access: anyone but the creator or a Portal Admin); `runId` links a playbook
+  job's run; `reason` says why a `skipped` run didn't happen (overlap, paused, deleted, needs sign-in).
 - **Errors:** `schedule_not_found` 404, `invalid_request` 400.
 
 #### `GET /api/probes`
@@ -958,9 +1002,10 @@ Source: `src/routes/report-catalog.ts`, `reports.ts`, `src/reports/catalog.ts`, 
 
 - **Who:** `Portal.Reader` **and** every role in the schedule's `requires.portalRoles` (default `Portal.Operator`)
   **and**, for report jobs, every role in the report's `requires.portalRoles` — scheduled files were collected with the
-  automation identity's application permissions. 60/min.
+  automation identity's application permissions. A schedule that runs with its creator's own access (ADR-014): only
+  the creator, or a Portal Admin. 60/min.
 - **Response:** the report file (`Content-Disposition: attachment`, `Content-Length`, `nosniff`). Audited
-  `artifact.downloaded`.
+  `artifact.downloaded` (with `adminOverride: true` when a Portal Admin opens a creator schedule's file).
 - **Errors:** `artifact_not_found` 404 (no file, removed by retention, or not a run id), `forbidden` 403. Opened as a
   link (navigation), any error — including `unauthenticated` — becomes a 303 to `/sign-in-problem?…&during=download`.
 

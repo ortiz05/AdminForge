@@ -1,7 +1,27 @@
-import { isWriteCapable, type PortalRole, type Schedule } from '@adminforge/schemas';
+import {
+  identityKey,
+  identityLabel,
+  isWriteCapable,
+  type PortalRole,
+  type Schedule,
+} from '@adminforge/schemas';
 
 /** Who may see data a schedule collected with application permissions, unless its `requires.portalRoles` says otherwise. */
 export const SCHEDULED_DATA_ROLES: readonly PortalRole[] = ['Portal.Operator'];
+
+/**
+ * Who opens the files of a schedule that runs with its creator's own access (ADR-014): the creator, or a Portal Admin
+ * (`admin`, audited); anyone else is `denied`. `n/a` for other schedules (their roles decide).
+ */
+export function creatorFilesAccess(
+  row: Pick<ScheduleRow, 'definition' | 'createdBy'>,
+  session: SessionRecord,
+): 'n/a' | 'creator' | 'admin' | 'denied' {
+  const identity = row.definition.identity;
+  if (!identity || identity === 'automation' || !('user' in identity)) return 'n/a';
+  if (row.createdBy && row.createdBy === session.userOid) return 'creator';
+  return hasRole(session, 'Portal.Admin') ? 'admin' : 'denied';
+}
 import type { AuditInput, AuditWriter } from '../audit/writer';
 import { hasRole, requireRole } from '../auth/guards';
 import type { SessionRecord } from '../auth/session-store';
@@ -14,6 +34,7 @@ import { describeCron, nextRun } from './cron';
 import { deliveryView, type DeliveryView, type NotifyView } from './delivery-keys';
 import { maskRedacted, mayOpen } from '../reports/catalog';
 import type { ScheduleEvents } from './events';
+import type { ScheduleGrantRow, ScheduleGrantStore } from './grants';
 import type { ScheduleStore } from './store';
 import { contentSchedules, contentSignature, syncSchedules } from './sync';
 import type {
@@ -45,7 +66,10 @@ export interface ScheduleItem {
   cronText: string | null;
   timezone: string;
   enabled: boolean;
-  identity: 'automation';
+  /** `automation`, `app:<name>` or `user` (identityKey). */
+  identity: string;
+  /** Who it runs as (ADR-014), for people. */
+  runsAs: RunsAsView;
   job: {
     kind: Schedule['job']['kind'];
     ref?: string;
@@ -72,6 +96,22 @@ export interface ScheduleItem {
   pendingApprovalId: string | null;
 }
 
+/** Who a schedule runs as, as the schedule list and page show it. */
+export interface RunsAsView {
+  kind: 'automation' | 'app' | 'user';
+  /** The app identity's name, or the creator's UPN. */
+  name: string | null;
+  /** "automation identity", "app identity reports-team", "avery@example.com (their own access)". */
+  label: string;
+  /**
+   * Creator schedules: whether the creator's grant works (`signed_in`), was refused by Microsoft (`needs_sign_in`), or
+   * was never given (`not_signed_in`).
+   */
+  signIn?: 'signed_in' | 'needs_sign_in' | 'not_signed_in';
+  /** Creator schedules: the caller is the creator and may sign in for it. */
+  canSignIn?: boolean;
+}
+
 export interface ScheduleRunItem {
   id: string;
   trigger: string;
@@ -81,6 +121,8 @@ export interface ScheduleRunItem {
   runId?: string;
   artifact?: { name: string; href: string; size: number | null };
   error?: { code: string; message: string; hint?: string };
+  /** Skipped runs: why. */
+  reason?: string;
 }
 
 /** Schedule approvals in the inbox shape the web UI reads (same as run TaskViews, subjectType 'schedule'). */
@@ -130,6 +172,26 @@ export function canManage(row: Pick<ScheduleRow, 'source' | 'createdBy'>, sessio
   return (!!row.createdBy && row.createdBy === session.userOid) || hasRole(session, 'Portal.Admin');
 }
 
+/** Who a schedule runs as, for its list row and page (the grant decides a creator schedule's sign-in state). */
+export function runsAsView(
+  row: Pick<ScheduleRow, 'definition' | 'createdBy' | 'source'>,
+  session?: SessionRecord,
+  grant?: ScheduleGrantRow | null,
+): RunsAsView {
+  const identity = row.definition.identity;
+  if (!identity || identity === 'automation')
+    return { kind: 'automation', name: null, label: identityLabel(identity) };
+  if ('app' in identity) return { kind: 'app', name: identity.app, label: identityLabel(identity) };
+  const owner = row.source === 'portal' ? row.definition.owner : null;
+  return {
+    kind: 'user',
+    name: owner,
+    label: identityLabel(identity, owner),
+    signIn: !grant ? 'not_signed_in' : grant.status === 'active' ? 'signed_in' : 'needs_sign_in',
+    canSignIn: !!session && !!row.createdBy && row.createdBy === session.userOid,
+  };
+}
+
 /** Audit actor fields for a schedules API caller. */
 export function actorOf(c: Caller): Omit<AuditInput, 'action' | 'result'> {
   return {
@@ -174,8 +236,21 @@ export class ScheduleService {
       notifyApprovers?: (request: { title: string; requestedBy: string; key: string }) => Promise<void>;
       /** The emergency stop (execution/emergency.ts): while automation is paused, Run now is refused up front. */
       automationPaused?: () => Promise<boolean>;
+      /** Creators' grants (ADR-014), for the "needs sign-in" state of schedules that run with their access. */
+      grants?: Pick<ScheduleGrantStore, 'get'>;
     },
   ) {}
+
+  /** The grants of creator schedules among `rows` (by schedule id). */
+  async grantsFor(rows: readonly ScheduleRow[]): Promise<Map<string, ScheduleGrantRow | null>> {
+    const out = new Map<string, ScheduleGrantRow | null>();
+    const grants = this.deps.grants;
+    if (!grants) return out;
+    for (const r of rows)
+      if (r.definition.identity !== 'automation' && 'user' in r.definition.identity)
+        out.set(r.id, await grants.get(r.id));
+    return out;
+  }
 
   /** What an enable approval covers besides the schedule itself: the playbook a playbook job runs. */
   private async targetFingerprint(def: Schedule): Promise<string | undefined> {
@@ -239,6 +314,7 @@ export class ScheduleService {
     now: Date,
     session?: SessionRecord,
     reports?: ReadonlyMap<string, ReportAccess>,
+    grant?: ScheduleGrantRow | null,
   ): ScheduleItem {
     const def = row.definition;
     const job = def.job;
@@ -252,7 +328,8 @@ export class ScheduleService {
       cronText: describeCron(def.cron, def.timezone),
       timezone: def.timezone,
       enabled: row.enabled,
-      identity: 'automation',
+      identity: identityKey(def.identity),
+      runsAs: runsAsView(row, session, grant),
       job: {
         kind: job.kind,
         ...('ref' in job && job.ref ? { ref: job.ref } : {}),
@@ -291,13 +368,26 @@ export class ScheduleService {
       r.source === 'portal' ? !isDeleted(r) : keys.has(r.key),
     );
     const reports = await this.reports();
-    return { items: rows.map((r) => this.item(r, pending.get(r.key) ?? null, now, session, reports)) };
+    const grants = await this.grantsFor(rows);
+    return {
+      items: rows.map((r) =>
+        this.item(r, pending.get(r.key) ?? null, now, session, reports, grants.get(r.id)),
+      ),
+    };
   }
 
   async get(key: string, session?: SessionRecord): Promise<ScheduleItem> {
     const { row } = await this.row(key);
     const pending = (await this.pendingApprovals()).find((a) => a.subjectId === key);
-    return this.item(row, pending?.id ?? null, this.deps.now(), session, await this.reports());
+    const grants = await this.grantsFor([row]);
+    return this.item(
+      row,
+      pending?.id ?? null,
+      this.deps.now(),
+      session,
+      await this.reports(),
+      grants.get(row.id),
+    );
   }
 
   /** PATCH { enabled }: 200 when done; 202 { approvalId } when a write-capable schedule needs a second person. */
@@ -351,7 +441,7 @@ export class ScheduleService {
         approvers: APPROVERS,
         minApprovals: 1,
         title: `Enable schedule: ${def.title}`,
-        message: `${c.session.upn} asks to enable "${def.title}", which runs a ${def.job.kind} job that changes data (${def.cron} ${def.timezone}) as the automation identity. A second person must approve.`,
+        message: `${c.session.upn} asks to enable "${def.title}", which runs a ${def.job.kind} job that changes data (${def.cron} ${def.timezone}) as ${def.identity === 'automation' ? 'the automation identity' : identityLabel(def.identity, def.owner)}. A second person must approve.`,
         definitionKey: key,
         definitionVersion: def.version,
         sha256: row.sha256,
@@ -375,7 +465,13 @@ export class ScheduleService {
         targetType: 'schedule',
         targetId: key,
         result: 'success',
-        details: { approvalId: a.id, version: def.version, sha256: row.sha256, job: def.job.kind },
+        details: {
+          approvalId: a.id,
+          version: def.version,
+          sha256: row.sha256,
+          job: def.job.kind,
+          identity: identityKey(def.identity),
+        },
       });
       return { statusCode: 202, body: { approvalId: a.id } };
     }
@@ -465,6 +561,7 @@ export class ScheduleService {
   async runs(
     key: string,
     opts: { cursor?: string; limit: number },
+    session?: SessionRecord,
   ): Promise<{ items: ScheduleRunItem[]; cursor?: string }> {
     const { row } = await this.row(key);
     const rows = await this.deps.store.listRuns(row.id, {
@@ -472,13 +569,15 @@ export class ScheduleService {
       ...(opts.cursor ? { before: decodeRunCursor(opts.cursor) } : {}),
     });
     const page = rows.slice(0, opts.limit);
-    const items = await Promise.all(page.map((r) => this.runItem(r)));
+    // A schedule that uses its creator's access: only they (or a Portal Admin) get links to its files.
+    const files = !session || creatorFilesAccess(row, session) !== 'denied';
+    const items = await Promise.all(page.map((r) => this.runItem(r, files)));
     return { items, ...(rows.length > opts.limit ? { cursor: encodeRunCursor(page.at(-1)!) } : {}) };
   }
 
-  private async runItem(r: ScheduleRunRow): Promise<ScheduleRunItem> {
+  private async runItem(r: ScheduleRunRow, files = true): Promise<ScheduleRunItem> {
     let artifact: ScheduleRunItem['artifact'];
-    if (r.artifactPath) {
+    if (r.artifactPath && files) {
       const listed = (
         r.result?.artifacts as Array<{ path?: string; name?: string; size?: number }> | undefined
       )?.find((a) => a.path === r.artifactPath);
@@ -497,6 +596,8 @@ export class ScheduleService {
       ...(r.runId ? { runId: r.runId } : {}),
       ...(artifact ? { artifact } : {}),
       ...(r.error ? { error: r.error } : {}),
+      // Why a run didn't happen (overlap, paused, deleted, needs sign-in): written by the scheduler, never tenant data.
+      ...(r.status === 'skipped' && typeof r.result?.reason === 'string' ? { reason: r.result.reason } : {}),
     };
   }
 
@@ -504,9 +605,9 @@ export class ScheduleService {
   async artifact(
     scheduleRunId: string,
     session: SessionRecord,
-  ): Promise<OpenedArtifact & { scheduleKey: string }> {
+  ): Promise<OpenedArtifact & { scheduleKey: string; adminOverride: boolean }> {
     const run = /^[0-9a-f-]{36}$/i.test(scheduleRunId) ? await this.deps.store.getRun(scheduleRunId) : null;
-    if (run) await this.assertArtifactAccess(session, run.scheduleKey);
+    const adminOverride = run ? await this.assertArtifactAccess(session, run.scheduleKey) : false;
     const opened = run?.artifactPath ? await this.deps.artifacts.open(run.artifactPath) : null;
     if (!run || !opened)
       throw new AppError(
@@ -514,17 +615,25 @@ export class ScheduleService {
         'artifact_not_found',
         'This run has no report file (or it was removed by retention).',
       );
-    return { ...opened, scheduleKey: run.scheduleKey };
+    return { ...opened, scheduleKey: run.scheduleKey, adminOverride };
   }
 
   /**
    * Scheduled reports are collected with the automation identity's application permissions, which can see more than
    * a viewer's own Entra roles. Downloading one needs the schedule's `requires.portalRoles` (default: Operator) and the
-   * report's own `requires.portalRoles`.
+   * report's own `requires.portalRoles`. A schedule that runs with its creator's own access collected what *they* can
+   * see (their directory roles, data a ceiling withholds from the automation identity): only the creator opens its
+   * files, or a Portal Admin — true is returned then, and the download is audited as an admin override.
    */
-  private async assertArtifactAccess(session: SessionRecord, scheduleKey: string) {
+  private async assertArtifactAccess(session: SessionRecord, scheduleKey: string): Promise<boolean> {
     const action = 'Downloading this scheduled report';
-    const schedule = (await this.deps.store.getSchedule(scheduleKey))?.definition;
+    const row = await this.deps.store.getSchedule(scheduleKey);
+    const schedule = row?.definition;
+    const creator = row ? creatorFilesAccess(row, session) : 'n/a';
+    if (creator === 'denied')
+      throw new AppError(403, 'forbidden', 'Only the person who created this schedule can open its files.', {
+        hint: 'It runs with their own access, so its files hold what they can see. Ask them for the file, or ask a portal administrator.',
+      });
     for (const role of schedule?.requires?.portalRoles ?? SCHEDULED_DATA_ROLES)
       requireRole(session, role, action);
     if (schedule?.job.kind === 'report') {
@@ -533,6 +642,7 @@ export class ScheduleService {
         { requires?: { portalRoles?: PortalRole[] } } | undefined;
       for (const role of report?.requires?.portalRoles ?? []) requireRole(session, role, action);
     }
+    return creator === 'admin';
   }
 
   // ── Approvals (enable write-capable schedules: two-person rule) ──

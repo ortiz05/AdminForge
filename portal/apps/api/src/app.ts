@@ -8,6 +8,7 @@ import Fastify, { type FastifyInstance, type FastifyServerOptions } from 'fastif
 import { armLifecycleRoutes, entraArmRoutes } from './auth/arm-routes';
 import { mockAuthRoutes } from './auth/mock-routes';
 import { entraSignInRoutes, sessionEndRoutes } from './auth/routes';
+import { scheduleConsentRoutes } from './auth/schedule-consent';
 import { requireRole } from './auth/guards';
 import { registerSessions } from './auth/session-plugin';
 import { webDistAvailable, type Config } from './config';
@@ -237,6 +238,7 @@ export async function buildApp(
     if (!ctx.auth) throw new Error('AUTH_MODE=entra needs an AuthClient');
     entraSignInRoutes(app, ctx);
     entraArmRoutes(app, ctx);
+    scheduleConsentRoutes(app, ctx, () => app.schedules);
   }
 
   await app.register(

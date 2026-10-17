@@ -121,6 +121,7 @@ export const scheduleSummary = (s: ScheduleItem): ScheduleSummary => ({
   createdBy: s.createdBy,
   canManage: s.canManage,
   pendingApprovalId: s.pendingApprovalId,
+  runsAs: s.runsAs,
 });
 
 /** Report key → schedules running it (content and portal). */

@@ -259,8 +259,9 @@ describe('protected objects (central write guard)', () => {
     const reads = () => t.sent.filter((s) => s.method === 'GET').length;
     await out.execute(ARMED, harmless);
     const first = reads();
-    // 4 apps × (application + service principal) + the Read and Write apps' appRoleAssignedTo.
-    expect(first).toBe(10);
+    // 4 apps × (application + service principal) + the Read and Write apps' appRoleAssignedTo + the lookup of
+    // retired app identities by name.
+    expect(first).toBe(11);
     clock.t += 9 * 60_000;
     await out.execute(AUTOMATION_WRITE, harmless);
     expect(reads()).toBe(first);

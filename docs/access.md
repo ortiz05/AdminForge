@@ -69,6 +69,16 @@ validate --scopes` compares them), within ceilings that need a deliberate opt-in
   created the schedule is still an enabled member holding the portal roles it needs. That reads the user
   (**User.Read.All**), their group memberships (**GroupMember.Read.All**) and the Read app's role assignments
   (**Application.Read.All**) — all in the default automation permission set.
+- **Named app identities** (schedules that say `identity: { app: <name> }`, ADR-014): one app registration per name in
+  `AF_SCHEDULE_IDENTITIES`, with only the application permissions of the schedules naming it, under the automation
+  identity's ceilings plus opt-ins of its own (`AF_IDENTITY_<NAME>_ALLOW_*`) — so one team's schedules don't need the
+  union of everyone's permissions. Any Operator may pick any configured identity for a report schedule. Tier-0
+  application permissions need `AF_AUTOMATION_ALLOW_PRIVILEGED_PERMISSIONS=true` for every app-only identity.
+- **A creator's own access** (portal report schedules set to "Run as: Me"): no new app or permission. The creator
+  signs in once for the schedule through the Read app; it reads only what they can, never writes, and stops (the
+  stored sign-in is deleted) when they lose `Portal.Operator` or a role the report needs, or the schedule is deleted,
+  switched to another identity or changed by someone else. Only they (and Portal Admins) open its files. Offboarding
+  someone therefore also ends their schedules' access.
 
 ## Who sees News and changes
 

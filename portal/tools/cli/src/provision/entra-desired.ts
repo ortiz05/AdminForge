@@ -32,25 +32,41 @@ import {
   isSensitiveReadAppRole,
   isWriteCapableDelegatedScope,
 } from './privilege';
-import type {
-  AppKey,
-  ApplicationBody,
-  DesiredApp,
-  DesiredEntra,
-  DesiredGroup,
-  EntraState,
-  ProvisionSettings,
-  RequiredResourceAccess,
-  Skipped,
+import { identityEnvPrefix } from '@adminforge/schemas';
+import {
+  identityAppKey,
+  identityNameOf,
+  isAppOnly,
+  isIdentityApp,
+  type AppKey,
+  type ApplicationBody,
+  type DesiredApp,
+  type DesiredEntra,
+  type DesiredGroup,
+  type EntraState,
+  type ProvisionSettings,
+  type RequiredResourceAccess,
+  type Skipped,
 } from './model';
 
-const APP_TITLES: Record<AppKey, string> = { read: 'Read', write: 'Write', automation: 'Automation' };
+const APP_TITLES: Record<'read' | 'write' | 'automation', string> = {
+  read: 'Read',
+  write: 'Write',
+  automation: 'Automation',
+};
 
-/** Display name and alternate key (uniqueName) of each app registration. */
-export const appNames = (label: string, key: AppKey) => ({
-  displayName: `AdminForge ${APP_TITLES[key]} [${label}]`,
-  uniqueName: `adminforge-${key}-${label}`,
-});
+/**
+ * Display name and alternate key (uniqueName) of each app registration: "AdminForge Read [dev]" / adminforge-read-dev,
+ * and for a named app identity "AdminForge Identity reports-team [dev]" / adminforge-identity-reports-team--dev ("--"
+ * never occurs in a name, so `ops-test` in `dev` and `ops` in `test-dev` can't share an app).
+ */
+export const appNames = (label: string, key: AppKey) =>
+  isIdentityApp(key)
+    ? {
+        displayName: `AdminForge Identity ${identityNameOf(key)} [${label}]`,
+        uniqueName: `adminforge-identity-${identityNameOf(key)}--${label}`,
+      }
+    : { displayName: `AdminForge ${APP_TITLES[key]} [${label}]`, uniqueName: `adminforge-${key}-${label}` };
 
 export const roleKebab = (role: string) => role.toLowerCase().replace(/\./g, '-');
 
@@ -60,11 +76,19 @@ export const groupNames = (label: string, role: PortalRole) => ({
   uniqueName: `sg-adminforge-${label}-${roleKebab(role)}`,
 });
 
-export const ENV_KEYS: Record<AppKey, { clientId: string; secret: string }> = {
+export const ENV_KEYS: Record<'read' | 'write' | 'automation', { clientId: string; secret: string }> = {
   read: { clientId: 'AF_READ_CLIENT_ID', secret: 'AF_READ_CLIENT_SECRET' },
   write: { clientId: 'AF_WRITE_CLIENT_ID', secret: 'AF_WRITE_CLIENT_SECRET' },
   automation: { clientId: 'AF_AUTOMATION_CLIENT_ID', secret: 'AF_AUTOMATION_CLIENT_SECRET' },
 };
+
+/** The env keys of any app: the built-in three, or a named identity's AF_IDENTITY_<NAME>_CLIENT_ID / _CLIENT_SECRET. */
+export function envKeysFor(key: AppKey): { clientId: string; secret: string; cert?: string } {
+  if (!isIdentityApp(key))
+    return key === 'automation' ? { ...ENV_KEYS.automation, cert: 'AF_AUTOMATION_CERT_PATH' } : ENV_KEYS[key];
+  const prefix = identityEnvPrefix(identityNameOf(key));
+  return { clientId: `${prefix}CLIENT_ID`, secret: `${prefix}CLIENT_SECRET`, cert: `${prefix}CERT_PATH` };
+}
 
 type Resources = EntraState['resources'];
 
@@ -164,9 +188,7 @@ const idTokenClaims = (...names: string[]) =>
 export const isReadOnlyAppRole = (value: string) => ['Read', 'ReadBasic'].includes(value.split('.')[1] ?? '');
 
 /** Permissions declared by content (`requires.scopes`), per app and service — see content/scopes.ts. */
-export type ContentScopes = Partial<
-  Record<'read' | 'write' | 'automation', Partial<Record<string, Iterable<string>>>>
->;
+export type ContentScopes = Partial<Record<AppKey, Partial<Record<string, Iterable<string>>>>>;
 
 /** Content service key (content/scopes.ts) → resource. ARM and Log Analytics come from the baseline only. */
 const SERVICE_RESOURCE: Record<string, ResourceKey | undefined> = {
@@ -235,7 +257,34 @@ export const CEILINGS = {
     reason:
       'reads mail, files, chats or other personal content tenant-wide; set AF_AUTOMATION_ALLOW_SENSITIVE_READS=true to grant it to the automation identity',
   },
+  appPrivileged: {
+    envKey: 'AF_AUTOMATION_ALLOW_PRIVILEGED_PERMISSIONS',
+    reason:
+      'tier-0 application permission (an unattended identity could change who holds privilege); set AF_AUTOMATION_ALLOW_PRIVILEGED_PERMISSIONS=true and AF_AUTOMATION_ALLOW_WRITE_PERMISSIONS=true to grant it',
+  },
+  // A named app identity (ADR-014) needs its own opt-in on top of the global one; AF_IDENTITY_<NAME>_ is filled in.
+  identityWrite: {
+    envKey: 'AF_IDENTITY_<NAME>_ALLOW_WRITE_PERMISSIONS',
+    reason:
+      'changes data; set AF_IDENTITY_<NAME>_ALLOW_WRITE_PERMISSIONS=true and AF_AUTOMATION_ALLOW_WRITE_PERMISSIONS=true to grant it to this app identity',
+  },
+  identitySensitive: {
+    envKey: 'AF_IDENTITY_<NAME>_ALLOW_SENSITIVE_READS',
+    reason:
+      'reads mail, files, chats or other personal content tenant-wide; set AF_IDENTITY_<NAME>_ALLOW_SENSITIVE_READS=true and AF_AUTOMATION_ALLOW_SENSITIVE_READS=true to grant it to this app identity',
+  },
+  identityPrivileged: {
+    envKey: 'AF_IDENTITY_<NAME>_ALLOW_PRIVILEGED_PERMISSIONS',
+    reason:
+      'tier-0 application permission; set AF_IDENTITY_<NAME>_ALLOW_PRIVILEGED_PERMISSIONS=true, AF_AUTOMATION_ALLOW_PRIVILEGED_PERMISSIONS=true and both write opt-ins to grant it to this app identity',
+  },
 } as const;
+
+/** Why `w` is withheld, naming the identity's own keys for a named app identity. */
+export const ceilingReason = (w: Pick<Withheld, 'app' | 'ceiling'>): string =>
+  isIdentityApp(w.app)
+    ? CEILINGS[w.ceiling].reason.replace(/AF_IDENTITY_<NAME>_/g, identityEnvPrefix(identityNameOf(w.app)))
+    : CEILINGS[w.ceiling].reason;
 
 /** A permission the baseline or content asks for that a ceiling withholds. */
 export interface Withheld {
@@ -250,9 +299,11 @@ export type CeilingSettings = Pick<
   | 'allowAutomationWrites'
   | 'allowPrivilegedWriteScopes'
   | 'allowAutomationSensitiveReads'
+  | 'allowAppPrivileged'
   | 'emailDelivery'
   | 'advancedHunting'
->;
+> &
+  Partial<Pick<ProvisionSettings, 'identities'>>;
 
 /** Which ceiling (if any) withholds `value` from `app`. */
 export function ceilingFor(
@@ -261,10 +312,21 @@ export function ceilingFor(
   resource: ResourceKey,
   value: string,
 ): keyof typeof CEILINGS | undefined {
-  if (app === 'automation') {
-    if (!settings.allowAutomationWrites && !isReadOnlyAppRole(value)) return 'automationWrite';
-    if (!settings.allowAutomationSensitiveReads && isSensitiveReadAppRole(value))
-      return 'automationSensitive';
+  // Every app-only identity is held to the automation identity's ceilings; a named one (ADR-014) also to its own
+  // opt-ins — one identity's permission to write never extends to another's.
+  if (isAppOnly(app)) {
+    const named = isIdentityApp(app);
+    const own = named ? settings.identities?.find((i) => i.name === identityNameOf(app)) : undefined;
+    const lifted = (global: boolean | undefined, mine: boolean | undefined) => !!global && (!named || !!mine);
+    if (isPrivilegedDelegatedScope(value) && !lifted(settings.allowAppPrivileged, own?.allowPrivileged))
+      return named ? 'identityPrivileged' : 'appPrivileged';
+    if (!isReadOnlyAppRole(value) && !lifted(settings.allowAutomationWrites, own?.allowWrites))
+      return named ? 'identityWrite' : 'automationWrite';
+    if (
+      isSensitiveReadAppRole(value) &&
+      !lifted(settings.allowAutomationSensitiveReads, own?.allowSensitiveReads)
+    )
+      return named ? 'identitySensitive' : 'automationSensitive';
     return undefined;
   }
   if (!settings.allowPrivilegedWriteScopes && resource === 'graph' && isPrivilegedDelegatedScope(value))
@@ -298,8 +360,16 @@ export function desiredPermissions(
       });
       return values.length ? [{ ...r, values }] : [];
     });
+  // Each named app identity: exactly what the schedules naming it declare (no baseline), under the same ceilings.
+  const named = Object.fromEntries(
+    (settings.identities ?? []).map(({ name }) => {
+      const key = identityAppKey(name);
+      return [key, ceiling(key, mergeByResource(declared(key, 'Role')))];
+    }),
+  ) as unknown as Record<AppKey, PermissionRequest[]>;
   return {
     requests: {
+      ...named,
       read: ceiling(
         'read',
         mergeByResource([
@@ -345,16 +415,16 @@ export function buildDesiredEntra(
   const { requests, withheld } = desiredPermissions(settings, content);
   for (const w of withheld)
     skipped.push(
-      w.app === 'automation'
+      isAppOnly(w.app)
         ? {
             section: 'App role assignments',
-            title: `automation → ${RESOURCES[w.resource].name}: ${w.value}`,
-            reason: CEILINGS[w.ceiling].reason,
+            title: `${isIdentityApp(w.app) ? identityNameOf(w.app) : 'automation'} → ${RESOURCES[w.resource].name}: ${w.value}`,
+            reason: ceilingReason(w),
           }
         : {
             section: 'Consent grants',
             title: `${appNames(label, w.app).displayName} → ${RESOURCES[w.resource].name}: ${w.value}`,
-            reason: CEILINGS[w.ceiling].reason,
+            reason: ceilingReason(w),
           },
     );
 
@@ -397,9 +467,10 @@ export function buildDesiredEntra(
         allowedMemberTypes: ['User'],
         isEnabled: true,
       })),
-      // acct tells member (0) from guest (1) accounts, so the API can refuse guests from the ID token itself.
+      // acct tells member (0) from guest (1) accounts, so the API can refuse guests from the ID token itself;
+      // auth_time proves the sign-in that lets a schedule use someone's access was a fresh one.
       optionalClaims: {
-        idToken: idTokenClaims('acrs', 'login_hint', 'acct'),
+        idToken: idTokenClaims('auth_time', 'acrs', 'login_hint', 'acct'),
         accessToken: [],
         saml2Token: [],
       },
@@ -427,8 +498,25 @@ export function buildDesiredEntra(
       sp: { appRoleAssignmentRequired: true, tags: [ENTERPRISE_APP_TAG] },
       grants: [],
       appPermissions: resolved.map((r) => ({ resource: r.resource, roles: r.items })),
-      env: ENV_KEYS.automation,
+      env: envKeysFor('automation'),
       ...(settings.automationCertificate ? { certificate: settings.automationCertificate } : {}),
+    });
+  }
+
+  // Named app identities (ADR-014): app registrations like the automation one, each with its own permissions.
+  for (const identity of settings.identities ?? []) {
+    const key = identityAppKey(identity.name);
+    const names = appNames(label, key);
+    const { rra, resolved } = resolvePermissions(names.displayName, requests[key] ?? [], resources, skipped);
+    apps.push({
+      key,
+      uniqueName: names.uniqueName,
+      body: appBody(names.displayName, [], rra),
+      sp: { appRoleAssignmentRequired: true, tags: [ENTERPRISE_APP_TAG] },
+      grants: [],
+      appPermissions: resolved.map((r) => ({ resource: r.resource, roles: r.items })),
+      env: envKeysFor(key),
+      ...(identity.certificate ? { certificate: identity.certificate } : {}),
     });
   }
 

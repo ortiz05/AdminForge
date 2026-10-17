@@ -15,6 +15,7 @@
  * commands/validate.ts (`--scopes`) and provision/clients.ts.
  */
 import { readFileSync } from 'node:fs';
+import { IDENTITY_NAME, identityEnvPrefix } from '@adminforge/schemas';
 import { ConfigError } from '../shared/errors';
 import { CertificateError, parseCertificatePem, type LoadedCertificate } from './certificate';
 import { ENV_KEYS, type CeilingSettings } from './entra-desired';
@@ -50,7 +51,18 @@ export const ceilingSettings = (env: Env): CeilingSettings => ({
   allowAutomationWrites: env.AF_AUTOMATION_ALLOW_WRITE_PERMISSIONS === 'true',
   allowPrivilegedWriteScopes: env.AF_ALLOW_PRIVILEGED_WRITE_SCOPES === 'true',
   allowAutomationSensitiveReads: env.AF_AUTOMATION_ALLOW_SENSITIVE_READS === 'true',
+  allowAppPrivileged: env.AF_AUTOMATION_ALLOW_PRIVILEGED_PERMISSIONS === 'true',
   emailDelivery: Boolean(env.AF_MAIL_SENDER?.trim()),
+  // Each named identity's own opt-ins (ADR-014): a global opt-in alone never lifts a ceiling for a named identity.
+  identities: scheduleIdentityNames(env).map((name) => {
+    const p = identityEnvPrefix(name);
+    return {
+      name,
+      allowWrites: env[`${p}ALLOW_WRITE_PERMISSIONS`] === 'true',
+      allowSensitiveReads: env[`${p}ALLOW_SENSITIVE_READS`] === 'true',
+      allowPrivileged: env[`${p}ALLOW_PRIVILEGED_PERMISSIONS`] === 'true',
+    };
+  }),
   // Unset or blank = every Query Studio source, the API's default (apps/api/src/config.ts).
   advancedHunting:
     !env.AF_QUERY_SOURCES?.trim() ||
@@ -69,13 +81,43 @@ export function automationCertificate(
   env: Env,
   opts: { requireKey?: boolean } = {},
 ): LoadedCertificate | undefined {
-  const file = env.AF_AUTOMATION_CERT_PATH;
+  return appCertificate(env, 'AF_AUTOMATION_CERT_PATH', opts);
+}
+
+/**
+ * The named app identities (AF_SCHEDULE_IDENTITIES, ADR-014): lower-case names; each one's keys are
+ * AF_IDENTITY_<NAME>_CLIENT_ID, …_CERT_PATH and …_CLIENT_SECRET. Throws ConfigError on a bad name.
+ */
+export function scheduleIdentityNames(env: Env): string[] {
+  const names = [
+    ...new Set(
+      (env.AF_SCHEDULE_IDENTITIES ?? '')
+        .split(',')
+        .map((n) => n.trim())
+        .filter(Boolean),
+    ),
+  ];
+  for (const n of names)
+    if (!IDENTITY_NAME.test(n) || n === 'automation')
+      throw new ConfigError(
+        'AF_SCHEDULE_IDENTITIES must be lower-case names (letters, digits and dashes, 2–31 characters), not "automation".',
+      );
+  return names;
+}
+
+/** A certificate file (PEM; optionally with its private key) named by the env key `key`. */
+export function appCertificate(
+  env: Env,
+  key: string,
+  opts: { requireKey?: boolean } = {},
+): LoadedCertificate | undefined {
+  const file = env[key];
   if (!file) return undefined;
   let pem: string;
   try {
     pem = readFileSync(file, 'utf8');
   } catch {
-    throw new ConfigError('AF_AUTOMATION_CERT_PATH is set but the file cannot be read.');
+    throw new ConfigError(`${key} is set but the file cannot be read.`);
   }
   try {
     return parseCertificatePem(pem, opts);
@@ -109,6 +151,11 @@ export function provisionSettings(env: Env): ProvisionSettings {
       );
   }
   const certificate = automationCertificate(env);
+  const ceilings = ceilingSettings(env);
+  const identities = (ceilings.identities ?? []).map((id) => {
+    const cert = appCertificate(env, `${identityEnvPrefix(id.name)}CERT_PATH`);
+    return { ...id, ...(cert ? { certificate: cert.info } : {}) };
+  });
   return {
     label,
     baseUrl,
@@ -116,8 +163,9 @@ export function provisionSettings(env: Env): ProvisionSettings {
     tenantId,
     subscriptionId,
     primaryDomain: env.AF_PRIMARY_DOMAIN || undefined,
-    ...ceilingSettings(env),
+    ...ceilings,
     ...(certificate ? { automationCertificate: certificate.info } : {}),
+    identities,
     testIdentitiesAllowed: testIdentityLabels(env).includes(label),
   };
 }
@@ -126,6 +174,11 @@ export function provisionSettings(env: Env): ProvisionSettings {
 export function envSubset(env: Env): Record<string, string | undefined> {
   const keys = [
     ...Object.values(ENV_KEYS).flatMap((k) => [k.clientId, k.secret]),
+    // Named app identities (ADR-014): their client ids and secrets, like the built-in apps'.
+    ...scheduleIdentityNames(env).flatMap((n) => [
+      `${identityEnvPrefix(n)}CLIENT_ID`,
+      `${identityEnvPrefix(n)}CLIENT_SECRET`,
+    ]),
     'AF_PROVISIONER_CLIENT_ID',
     'AF_TEST_USER_UPN',
     'AF_TEST_USER_PASSWORD',

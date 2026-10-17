@@ -5,8 +5,8 @@ import type { AppContext } from '../context';
 import { AppError } from '../errors';
 import { randomToken, sha256Hex } from '../security/tokens';
 import { sessionCookieName, sessionCookieOptions } from './session-plugin';
-import { PREAUTH_TTL_MS, type PreauthDetails, type PreauthRecord } from './preauth-store';
-import type { AppKind, IdClaims } from './types';
+import { PREAUTH_TTL_MS, type PreauthDetails, type PreauthKind, type PreauthRecord } from './preauth-store';
+import type { IdClaims } from './types';
 
 const crypto = new CryptoProvider();
 
@@ -29,7 +29,7 @@ export function browserBinding(ctx: AppContext, request: FastifyRequest, reply: 
 export async function beginRoundTrip(
   ctx: AppContext,
   input: {
-    kind: AppKind;
+    kind: PreauthKind;
     returnTo: string;
     /** browserBinding() of the request that starts it. */
     binding: string;
@@ -59,16 +59,20 @@ const invalidState = () =>
     login: '/auth/login?returnTo=%2F',
   });
 
-/** Consumes the pending record for `state` (single use) and checks kind, expiry and the browser binding. */
+/**
+ * Consumes the pending record for `state` (single use) and checks kind, expiry and the browser binding. `kind` may
+ * list several kinds that share a callback (the Read app's: sign-in and a schedule's grant).
+ */
 export async function finishRoundTrip(
   ctx: AppContext,
-  kind: AppKind,
+  kind: PreauthKind | readonly PreauthKind[],
   state: unknown,
   request: FastifyRequest,
 ): Promise<PreauthRecord> {
   if (typeof state !== 'string' || state.length < 16 || state.length > 128) throw invalidState();
   const record = await ctx.preauth.take(state);
-  if (!record || record.kind !== kind || record.expiresAt.getTime() <= ctx.now().getTime())
+  const kinds: readonly PreauthKind[] = typeof kind === 'string' ? [kind] : kind;
+  if (!record || !kinds.includes(record.kind) || record.expiresAt.getTime() <= ctx.now().getTime())
     throw invalidState();
   const binding = request.cookies[bindingCookieName(ctx.config)];
   const expected = Buffer.from(record.bindingHash ?? '', 'utf8');

@@ -2,6 +2,8 @@ import {
   DefinitionId,
   describeCron as describeShared,
   formatContentError,
+  IdentityName,
+  type ScheduleIdentity,
   parseDefinition,
   parseSchedule,
   PORTAL_SCHEDULE_PREFIX,
@@ -46,6 +48,11 @@ export const ScheduleScaffoldRequest = z
     every: z.string().trim().min(1).max(200).optional(),
     timezone: TimeZone,
     enabled: z.boolean().default(true),
+    /**
+     * Who it runs as (ADR-014): the automation identity or a named app identity. Content schedules have no creator,
+     * so "the creator's own access" is for schedules made from Reports only.
+     */
+    identity: z.union([z.literal('automation'), z.strictObject({ app: IdentityName })]).default('automation'),
     job: z.discriminatedUnion('kind', [
       z.object({
         kind: z.literal('report'),
@@ -214,6 +221,8 @@ export interface ScheduleDocumentInput {
   every?: string;
   timezone: string;
   enabled: boolean;
+  /** Who it runs as (ADR-014); default the automation identity. */
+  identity?: ScheduleIdentity;
   job: Record<string, unknown>;
   /** Retries with exponential backoff from 5 minutes (0/absent = none). */
   retries?: number;
@@ -239,7 +248,7 @@ export function scheduleDocument(i: ScheduleDocumentInput): Record<string, unkno
     ...(i.every ? { every: i.every } : { cron: i.cron }),
     timezone: i.timezone,
     enabled: i.enabled,
-    identity: 'automation',
+    identity: i.identity ?? 'automation',
     job: i.job,
     ...(i.retries ? { retry: { max: i.retries, backoff: 'exponential', delay: '5m' } } : {}),
     ...(i.timeoutSeconds ? { timeoutSeconds: i.timeoutSeconds } : {}),
@@ -342,6 +351,7 @@ export async function scaffoldSchedule(
     ...(every ? { every } : { cron }),
     timezone: preview.timezone,
     enabled: r.enabled,
+    identity: r.identity,
     job,
     retries: r.retries,
     ...(r.timeoutSeconds ? { timeoutSeconds: r.timeoutSeconds } : {}),

@@ -1,8 +1,13 @@
 import { createFixtureFetch } from '@adminforge/connectors';
 import type { Connection } from '@adminforge/schemas';
-import type { AuditWriter } from '../audit/writer';
+import type { AuditInput, AuditWriter } from '../audit/writer';
 import { MemorySettingsStore, PgSettingsStore, type SettingsStore } from '../admin/settings-store';
-import { createAutomationTokenProvider, type AutomationTokenProvider } from '../auth/automation';
+import {
+  createAppIdentityRegistry,
+  createAutomationTokenProvider,
+  type AppIdentityRegistry,
+  type AutomationTokenProvider,
+} from '../auth/automation';
 import type { TokenBroker } from '../auth/token-broker';
 import type { AuthClient } from '../auth/types';
 import { LicenceService } from '../capabilities/licences';
@@ -13,7 +18,7 @@ import type { DefinitionRegistry } from '../definitions/types';
 import { EventBus } from '../events/bus';
 import { isPaused } from '../execution/emergency';
 import { createOutboundExecutor, templatePath, type SensitiveRead } from '../execution/outbound';
-import type { OutboundExecutor } from '../execution/types';
+import { identityName, type OutboundExecutor } from '../execution/types';
 import { liveRunner } from './runner';
 import { MemoryViewStore, PgViewStore, type ViewStore } from '../views/store';
 import { contentEnv } from './env';
@@ -27,6 +32,8 @@ export interface ContentServices {
   outbound: OutboundExecutor;
   /** App-only tokens of the automation identity (null when not configured). */
   automation: AutomationTokenProvider | null;
+  /** The automation identity and the named app identities schedules may run as (ADR-014). */
+  identities: AppIdentityRegistry;
   licences: LicenceService;
   datasources: DatasourceRunner;
   events: EventBus;
@@ -64,26 +71,16 @@ export function createContentServices(
       : config.AUTH_MODE === 'mock'
         ? null
         : createAutomationTokenProvider(config, { log });
+  // Named app identities (AF_SCHEDULE_IDENTITIES): never with mock sign-in either.
+  const identities =
+    deps.identities ??
+    createAppIdentityRegistry(config.AUTH_MODE === 'mock' ? { ...config, SCHEDULE_IDENTITIES: [] } : config, {
+      log,
+      automation,
+    });
   // Secret-bearing reads (App Service app settings): values are stripped by the executor; the read is audited.
   const onSensitiveRead = async (r: SensitiveRead) => {
-    const s = r.identity.kind === 'delegated' ? r.identity.session : null;
-    await base.audit.append({
-      actorOid: s?.userOid ?? null,
-      actorUpn: s?.upn ?? (r.identity.kind === 'automation' ? 'automation identity' : null),
-      sessionHash: s?.idHash ?? null,
-      mode: r.identity.mode,
-      action: 'outbound.sensitive_read',
-      targetType: r.service,
-      targetId: r.path,
-      result: r.result,
-      correlationId: r.correlationId,
-      details: {
-        method: r.method,
-        template: templatePath(r.path),
-        ...(r.names !== undefined ? { names: r.names } : {}),
-        valuesReturned: false,
-      },
-    });
+    await base.audit.append(sensitiveReadAudit(r));
   };
   const settings = deps.settings ?? (db ? new PgSettingsStore(db) : new MemorySettingsStore());
   const outbound =
@@ -93,6 +90,7 @@ export function createContentServices(
       broker: base.broker,
       auth: base.auth,
       automation,
+      identities,
       // DATA_MODE=fixtures: synthetic responses from ADMINFORGE_FIXTURES_DIR, never Microsoft.
       fetch:
         config.DATA_MODE === 'fixtures' ? createFixtureFetch(config.ADMINFORGE_FIXTURES_DIR) : base.fetch,
@@ -141,11 +139,46 @@ export function createContentServices(
     definitions,
     outbound,
     automation,
+    identities,
     licences,
     datasources,
     events,
     views: deps.views ?? (db ? new PgViewStore(db) : new MemoryViewStore()),
     settings,
     contentEnv: env,
+  };
+}
+
+/** The audit event of a secret-bearing read (values are never returned): who, and for unattended reads which identity and schedule. */
+export function sensitiveReadAudit(r: SensitiveRead): AuditInput {
+  const s = r.identity.kind === 'delegated' ? r.identity.session : null;
+  const grant = r.identity.kind === 'grant' ? r.identity.grant : null;
+  return {
+    actorOid: s?.userOid ?? grant?.oid ?? null,
+    actorUpn:
+      s?.upn ??
+      grant?.upn ??
+      (r.identity.kind === 'automation'
+        ? r.identity.app
+          ? `app identity ${r.identity.app}`
+          : 'automation identity'
+        : null),
+    sessionHash: s?.idHash ?? null,
+    mode: r.identity.mode,
+    action: 'outbound.sensitive_read',
+    targetType: r.service,
+    targetId: r.path,
+    result: r.result,
+    correlationId: r.correlationId,
+    details: {
+      method: r.method,
+      template: templatePath(r.path),
+      ...(r.names !== undefined ? { names: r.names } : {}),
+      valuesReturned: false,
+      // Unattended reads (ADR-014): which identity read it, for which schedule.
+      ...(r.identity.kind !== 'delegated' ? { executedAs: identityName(r.identity) } : {}),
+      ...(grant ? { schedule: grant.scheduleKey } : {}),
+      ...(r.identity.kind === 'automation' && r.identity.schedule ? { schedule: r.identity.schedule } : {}),
+    },
   };
 }

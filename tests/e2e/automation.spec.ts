@@ -235,7 +235,7 @@ test('schedules: cadence in words, pause, enable a write-capable job (approval),
   await expect(grid.getByText('0 7 * * 1 · UTC')).toBeVisible();
   await expect(grid.getByText('Every day at 06:00', { exact: true })).toBeVisible();
   await expect(grid.getByText('0 6 * * * · Europe/London')).toBeVisible();
-  await expect(page.getByText('Schedules run as the automation identity, not as you')).toBeVisible();
+  await expect(page.getByText('Who schedules run as')).toBeVisible();
   await expect(page.getByText('1 schedule failed on the last run')).toBeVisible();
 
   await grid.getByRole('switch', { name: 'Disable Weekly app credential expiry report' }).click();

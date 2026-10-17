@@ -9,9 +9,19 @@
 import type { PlanAction } from '../shared/output';
 import type { PortalRole, ResourceKey } from './catalog';
 
-/** The three AdminForge app registrations. */
-export type AppKey = 'read' | 'write' | 'automation';
+/** A named app identity schedules may run as (ADR-014, AF_SCHEDULE_IDENTITIES): `identity:<name>`. */
+export type IdentityAppKey = `identity:${string}`;
+/** AdminForge's app registrations: the Read, Write and Automation apps, and each named app identity. */
+export type AppKey = 'read' | 'write' | 'automation' | IdentityAppKey;
+/** The three built-in app registrations (every installation has them). */
 export const APP_KEYS: readonly AppKey[] = ['read', 'write', 'automation'];
+
+export const identityAppKey = (name: string): IdentityAppKey => `identity:${name}`;
+export const isIdentityApp = (key: string): key is IdentityAppKey => key.startsWith('identity:');
+/** The app identity's name (`identity:reports-team` → `reports-team`). */
+export const identityNameOf = (key: IdentityAppKey) => key.slice('identity:'.length);
+/** App-only identities: the automation identity and the named app identities (application permissions). */
+export const isAppOnly = (key: string) => key === 'automation' || isIdentityApp(key);
 
 /**
  * What provisioning will do with one object. `skip` = cannot be done here (licensing/permissions/config);
@@ -47,6 +57,13 @@ export interface ProvisionSettings {
    */
   allowAutomationSensitiveReads?: boolean;
   /**
+   * Grant tier-0 application permissions (provision/privilege.ts: role management, app credentials and consent,
+   * tenant policies, …) to an app-only identity — the automation identity or a named one — when content declares them
+   * (AF_AUTOMATION_ALLOW_PRIVILEGED_PERMISSIONS=true, on top of AF_AUTOMATION_ALLOW_WRITE_PERMISSIONS). Off by default:
+   * an unattended identity holding them could change who holds privilege in the tenant.
+   */
+  allowAppPrivileged?: boolean;
+  /**
    * AF_MAIL_SENDER is set: reports and alerts are emailed as the automation identity, which needs the Mail.Send
    * application permission — a write permission, so still only with AF_AUTOMATION_ALLOW_WRITE_PERMISSIONS=true.
    */
@@ -58,6 +75,21 @@ export interface ProvisionSettings {
   advancedHunting?: boolean;
   /** AF_AUTOMATION_CERT_PATH: the automation identity authenticates with this certificate instead of a secret. */
   automationCertificate?: CertificateInfo;
+  /**
+   * The named app identities schedules may run as (AF_SCHEDULE_IDENTITIES, ADR-014), each an app registration of its
+   * own with application permissions, a certificate from AF_IDENTITY_<NAME>_CERT_PATH when set (else a secret).
+   */
+  identities?: Array<{
+    name: string;
+    certificate?: CertificateInfo;
+    /**
+     * Per-identity opt-ins, each on top of the matching global one (both must be "true"):
+     * AF_IDENTITY_<NAME>_ALLOW_WRITE_PERMISSIONS, _ALLOW_SENSITIVE_READS, _ALLOW_PRIVILEGED_PERMISSIONS.
+     */
+    allowWrites?: boolean;
+    allowSensitiveReads?: boolean;
+    allowPrivileged?: boolean;
+  }>;
   /** Whether AF_ENV_LABEL is a test environment (AF_TEST_IDENTITY_LABELS, default dev,test): test identities allowed. */
   testIdentitiesAllowed?: boolean;
 }
@@ -241,8 +273,15 @@ export interface DesiredApp {
   grants: Array<{ resource: ResourceKey; scopes: string[] }>;
   /** Application permissions (app role assignments on resource service principals). */
   appPermissions: Array<{ resource: ResourceKey; roles: Array<{ value: string; id: string }> }>;
-  env: { clientId: string; secret: string };
-  /** Certificate credential that replaces the client secret (automation identity with AF_AUTOMATION_CERT_PATH). */
+  env: {
+    clientId: string;
+    secret: string;
+    /** The certificate path key (app-only identities). */ cert?: string;
+  };
+  /**
+   * Certificate credential that replaces the client secret (an app-only identity with its …_CERT_PATH: the automation
+   * identity's AF_AUTOMATION_CERT_PATH, a named identity's AF_IDENTITY_<NAME>_CERT_PATH).
+   */
   certificate?: CertificateInfo;
 }
 
@@ -296,6 +335,11 @@ export interface EntraState {
   owners?: Partial<Record<AppKey, { app: string[]; sp: string[] }>>;
   /** Object id of the provisioner's own service principal (to tell its ownership apart). */
   provisionerSpId?: string;
+  /**
+   * App registrations of named app identities of this environment that AF_SCHEDULE_IDENTITIES no longer lists
+   * (ADR-014): they keep their application permissions until deleted. AdminForge's write guard still protects them.
+   */
+  retiredIdentities?: Array<{ displayName: string; appId: string }>;
 }
 
 // ── Operations (the plan) ─────────────────────────────────────────────────────

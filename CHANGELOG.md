@@ -11,6 +11,19 @@ Closes the gaps found by comparing the build with the original plan (see the pla
 
 ### Added
 
+- **Who a schedule runs as** (ADR-014): `identity: automation | { app: <name> } | { user: creator }`. Named app
+  identities (`AF_SCHEDULE_IDENTITIES`, `AF_IDENTITY_<NAME>_CLIENT_ID` / `_CERT_PATH` / `_CLIENT_SECRET`) are
+  provisioned, checked and pruned by `provision entra` / `status` with exactly the permissions of their schedules, and
+  `validate --scopes` compares them one by one. Portal report schedules can run with their creator's own read access
+  (one sign-in through the Read app, `POST /auth/schedule-consent`; "Needs sign-in" with **Sign in again** when
+  Microsoft asks). Runs and audit events record "executed as …" (migration 0012: `schedule_grants`,
+  `runs.identity_name`); the UI has a **Run as** field in the report schedule form and the schedule editor and a
+  **Runs as** column; `GET /api/schedules/identities`.
+  Hardening from review: a creator schedule's files open only for the creator (or a Portal Admin, audited); lost access
+  removes the grant and turns the schedule off on either check; the sign-in requires a fresh `auth_time` (Read app
+  claim) and lands in a temporary partition first; per-identity opt-ins `AF_IDENTITY_<NAME>_ALLOW_*` and
+  `AF_AUTOMATION_ALLOW_PRIVILEGED_PERMISSIONS` for tier-0 application permissions; retired identities stay protected
+  and fail `provision status`; approvals and audit events name the identity.
 - **Enterprise-scale performance tests** (`tests/perf/`, `pnpm test:perf`, `docs/performance.md`): a deterministic
   synthetic tenant (100k users, 50k groups incl. a 100k-member one, 30k managed devices, 20k apps, 1M sign-ins a day
   computed on demand), a fake Microsoft Graph that pages, caps, counts, searches and throttles like Graph and refuses
@@ -199,13 +212,18 @@ Closes the gaps found by comparing the build with the original plan (see the pla
   whole collections; inactive users read only inactive accounts (Graph's sign-in filter); password age, mailbox storage,
   OneDrive, SharePoint site usage, SharePoint sites, teams activity and inactive licensed users use native filters on
   Graph's own rows (they failed beyond ~1,500 accounts before), with storage totals from Microsoft's daily summary
-  reports. Past their caps they say the data is partial; the counts stay complete where Graph can count.
+  reports. Past their caps they say the data is partial (derived report data included); the counts stay complete where
+  Graph can count. Tables over 10,000 rows show the first 10,000 (sorted first) and the CSV/XLSX export has every row
+  read. Inactive users count accounts with no successful sign-in recorded (failed-only sign-ins included).
 - **Owners: people and apps.** `GET /groups/{id}/owners` leaves service principals out, so the group and team pages
   read people and apps apart and agree with the owner count; the groups and teams owner reports list "Owned by an app
-  only" apart from "No owners", and the teams list labels each team accordingly.
+  only" apart from "No owners", and the teams list labels each team accordingly. "Remove group owner" finds app owners
+  too and keeps a person accountable (it won't remove the last person who owns a group).
 - **Expressions:** the grouping constructor (`rows{ key: value }`) runs natively — it failed past ~500 keys ("nested or
   recursing too deeply"); `$applyAdvanced` is compiled once per call and takes filters written in content (`notEmpty`,
-  `notContains`, `notIn`, field-to-field comparisons, paths through lists); new `$withFields` and `$take`.
+  `notContains`, `notIn`, field-to-field comparisons, paths through lists); new `$withFields` and `$take`. The native
+  grouping and sorting share the expression's single time budget, read own properties only, and leave sources they
+  can't reproduce exactly (function results, blocks, conditions) to JSONata; `$__af*` variables are reserved.
 
 - **Database connections** carry per-connection limits and a name (`DATABASE_STATEMENT_TIMEOUT_MS` [60 s],
   `DATABASE_LOCK_TIMEOUT_MS` [15 s], `DATABASE_IDLE_IN_TRANSACTION_TIMEOUT_MS` [60 s], `application_name

@@ -103,6 +103,8 @@ export class RunChildRunner implements ChildRunner {
         dryRun: req.dryRun,
         trigger: 'child',
         identity: parent.identity,
+        // A child runs as its parent: the same app identity (ADR-014).
+        identityName: parent.identityName ?? null,
         initiatorOid: automation ? parent.initiatorOid : req.actor.oid,
         initiatorUpn: automation ? parent.initiatorUpn : req.actor.upn,
         sessionHash,

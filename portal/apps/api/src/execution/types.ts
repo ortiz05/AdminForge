@@ -4,12 +4,61 @@ import type { SessionRecord } from '../auth/session-store';
 import type { WriteTarget } from './protected';
 
 /**
+ * A person's own delegated read access, kept for one schedule (ADR-014): its creator signed in for it, and the refresh
+ * token lives sealed in the schedule's own token-cache partition. Read-only by construction (the Read app).
+ */
+export interface ScheduleGrant {
+  scheduleId: string;
+  scheduleKey: string;
+  oid: string;
+  upn: string;
+  /** The MSAL account in `partitionKey`. */
+  homeAccountId: string;
+  /** `schedule:<scheduleId>` (schedules/grants.ts). */
+  partitionKey: string;
+}
+
+/**
  * Who an outbound call runs as.
  * - delegated: the signed-in engineer (Read app tokens, or Write app tokens while armed) — interactive work.
- * - automation: the app-only automation identity — unattended schedules on this host (ADR-011).
+ * - automation: an app-only identity — unattended schedules on this host: the automation identity (ADR-011), or with
+ *   `app` the named app identity a schedule chose (ADR-014).
+ * - grant: a schedule's creator, through the delegated read access they granted that schedule (ADR-014).
  */
 export type ExecutionIdentity =
-  { kind: 'delegated'; session: SessionRecord; mode: Mode } | { kind: 'automation'; mode: Mode };
+  | { kind: 'delegated'; session: SessionRecord; mode: Mode }
+  | {
+      kind: 'automation';
+      mode: Mode;
+      app?: string;
+      /** The schedule it runs for (audit only). */ schedule?: string;
+    }
+  | { kind: 'grant'; grant: ScheduleGrant; mode: 'read' };
+
+/**
+ * Whose results and limits a call shares: a person (oid), the automation identity, one named app identity, or one
+ * schedule's grant. Results are never shared between two different keys (datasources/cache.ts, the limiter).
+ */
+export function identityCacheKey(identity: ExecutionIdentity): string {
+  if (identity.kind === 'automation') return identity.app ? `automation:app:${identity.app}` : 'automation';
+  if (identity.kind === 'grant') return `grant:${identity.grant.scheduleId}`;
+  return identity.session.userOid;
+}
+
+/** The same, down to the browser session for people (identical loads are shared only within one session). */
+export const identitySessionKey = (identity: ExecutionIdentity): string =>
+  identity.kind === 'delegated' ? identity.session.idHash : identityCacheKey(identity);
+
+/** Unattended: an app-only identity or a schedule's stored grant (no person waits on the call). */
+export const isUnattended = (identity: Pick<ExecutionIdentity, 'kind'>) => identity.kind !== 'delegated';
+
+/** "the automation identity", "the app identity reports-team", "avery@example.com's own access". */
+export function identityName(identity: ExecutionIdentity): string {
+  if (identity.kind === 'automation')
+    return identity.app ? `the app identity ${identity.app}` : 'the automation identity';
+  if (identity.kind === 'grant') return `${identity.grant.upn}'s own access`;
+  return identity.session.upn;
+}
 
 /** A fully rendered call to a Microsoft API or a configured connection. Built only from published content. */
 export interface ServiceCall {

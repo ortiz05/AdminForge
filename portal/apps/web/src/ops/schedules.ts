@@ -1,6 +1,6 @@
 import { queryOptions } from '@tanstack/react-query';
 import type { StatusTone } from '@adminforge/ui';
-import { api, isRecord } from '../lib/api';
+import { api, isRecord, RedirectResponse } from '../lib/api';
 import { arr, bool, listOf, num, parser, pick, query, rec } from '../runs/json';
 
 /**
@@ -26,7 +26,10 @@ export interface ScheduleItem {
   cronText: string | null;
   timezone: string;
   enabled: boolean;
-  identity: 'automation';
+  /** `automation`, `app:<name>` or `user` (ADR-014). */
+  identity: string;
+  /** Who it runs as, and for a schedule that uses its creator's access, whether that still works. */
+  runsAs: RunsAs;
   /** `params`: report jobs' parameter values (the rest use the report's defaults). */
   job: { kind: JobKind | string; ref: string | null; params: Record<string, unknown> | null };
   nextRunAt: string | null;
@@ -46,6 +49,116 @@ export interface ScheduleItem {
   /** Report jobs: who hears about a failed run. */
   notify: ScheduleTarget[];
 }
+
+/** Who a schedule runs as (ADR-014). */
+export interface RunsAs {
+  kind: 'automation' | 'app' | 'user';
+  /** The app identity's name, or the creator's UPN. */
+  name: string | null;
+  /** "automation identity", "app identity reports-team", "avery@example.com (their own access)". */
+  label: string;
+  /** Creator schedules: whether the creator's sign-in for it works. */
+  signIn: 'signed_in' | 'needs_sign_in' | 'not_signed_in' | null;
+  /** Creator schedules: the caller created it, so they can sign in for it. */
+  canSignIn: boolean;
+}
+
+const AUTOMATION_RUNS_AS: RunsAs = {
+  kind: 'automation',
+  name: null,
+  label: 'automation identity',
+  signIn: null,
+  canSignIn: false,
+};
+
+export function readRunsAs(raw: unknown): RunsAs {
+  const o = rec(raw);
+  const kind = o.kind === 'app' || o.kind === 'user' ? o.kind : 'automation';
+  if (kind === 'automation') return AUTOMATION_RUNS_AS;
+  const signIn =
+    o.signIn === 'signed_in' || o.signIn === 'needs_sign_in' || o.signIn === 'not_signed_in'
+      ? o.signIn
+      : null;
+  return {
+    kind,
+    name: pick(o, 'name') ?? null,
+    label: pick(o, 'label') ?? (kind === 'app' ? 'an app identity' : 'its creator'),
+    signIn: kind === 'user' ? (signIn ?? 'not_signed_in') : null,
+    canSignIn: kind === 'user' && (bool(o.canSignIn) ?? false),
+  };
+}
+
+/** "as the automation identity" / "as app identity reports-team" / "with avery@example.com’s own access". */
+export function runsAsPhrase(r: RunsAs): string {
+  if (r.kind === 'user') return r.name ? `with ${r.name}’s own access` : 'with its creator’s own access';
+  return r.kind === 'app' ? `as app identity ${r.name ?? ''}`.trim() : 'as the automation identity';
+}
+
+/** "Runs as the automation identity", "Runs as app identity reports-team", "Runs with avery@example.com’s own access". */
+export const runsAsSentence = (r: RunsAs) => `Runs ${runsAsPhrase(r)}`;
+
+/** "Automation", "App: reports-team", "avery@example.com" (their own access) — for a list cell (`label` is its title). */
+export function runsAsShort(r: RunsAs): string {
+  if (r.kind === 'app') return `App: ${r.name ?? ''}`;
+  if (r.kind === 'user') return r.name ?? 'Its creator';
+  return 'Automation';
+}
+
+/** A creator schedule that can't run until its creator signs in for it; null when nothing is needed. */
+export function signInView(r: RunsAs): { tone: StatusTone; label: string } | null {
+  if (r.kind !== 'user' || r.signIn === 'signed_in') return null;
+  return r.signIn === 'needs_sign_in'
+    ? { tone: 'warn', label: 'Needs sign-in' }
+    : { tone: 'warn', label: 'Not signed in yet' };
+}
+
+/**
+ * The last run's status; a run skipped because its creator must sign in says so (not "still running"). `short` (the
+ * list, where the Runs as column already says "Needs sign-in"): just "Skipped".
+ */
+export function lastRunView(
+  s: Pick<ScheduleItem, 'lastStatus' | 'runsAs'>,
+  { short = false }: { short?: boolean } = {},
+): { tone: StatusTone; label: string } {
+  if (s.lastStatus === 'skipped') {
+    if (signInView(s.runsAs)) return { tone: 'warn', label: short ? 'Skipped' : 'Skipped (needs sign-in)' };
+    if (short) return { tone: 'neutral', label: 'Skipped' };
+  }
+  return runStatusView(s.lastStatus);
+}
+
+/** Where the Entra sign-in for a schedule comes back to: its page, which then says it worked (`signedIn=1`). */
+export const scheduleSignInReturn = (key: string) => `/schedules/${encodeURIComponent(key)}?signedIn=1`;
+
+/**
+ * POST /auth/schedule-consent: the Entra sign-in that lets a schedule use its creator's own access (only the creator).
+ * Returns where the browser goes next.
+ */
+export async function scheduleSignInUrl(key: string, returnTo: string): Promise<string> {
+  const { redirect } = await api(`/auth/schedule-consent?returnTo=${encodeURIComponent(returnTo)}`, {
+    method: 'POST',
+    body: { key },
+    schema: RedirectResponse,
+  });
+  return redirect;
+}
+
+/** GET /api/schedules/identities: who schedules may run as here (app identity names; creators' own access). */
+export const scheduleIdentitiesQuery = queryOptions({
+  queryKey: ['schedules', 'identities'] as const,
+  queryFn: ({ signal }) =>
+    api('/api/schedules/identities', {
+      schema: parser((input) => {
+        const o = rec(input);
+        return {
+          apps: arr(o.apps).filter((x): x is string => typeof x === 'string'),
+          user: bool(o.user) ?? false,
+        };
+      }),
+      signal,
+    }),
+  staleTime: 5 * 60_000,
+});
 
 /** An email list or Teams channel, by configuration key name. */
 export interface ScheduleTarget {
@@ -87,7 +200,8 @@ export function readSchedule(raw: unknown): ScheduleItem | null {
     cronText: pick(o, 'cronText') ?? null,
     timezone: pick(o, 'timezone') ?? 'UTC',
     enabled: bool(o.enabled) ?? false,
-    identity: 'automation',
+    identity: pick(o, 'identity') ?? 'automation',
+    runsAs: readRunsAs(o.runsAs),
     job: {
       kind: pick(job, 'kind') ?? 'report',
       ref: pick(job, 'ref') ?? null,
@@ -129,6 +243,17 @@ export interface ScheduleRun {
   runId: string | null;
   artifact: { name: string; href: string; size: number | null } | null;
   error: { message: string; code: string | null } | null;
+  /** Skipped runs: why ("The previous run was still running …"). */
+  reason: string | null;
+}
+
+/** A run's status in words; a skipped run says why in short when it is waiting for its creator to sign in. */
+export function runView(r: Pick<ScheduleRun, 'status' | 'error'>): { tone: StatusTone; label: string } {
+  if (r.status === 'skipped')
+    return r.error?.code === 'needs_sign_in'
+      ? { tone: 'warn', label: 'Skipped (needs sign-in)' }
+      : { tone: 'neutral', label: 'Skipped' };
+  return runStatusView(r.status);
 }
 
 export function readScheduleRun(raw: unknown): ScheduleRun | null {
@@ -154,6 +279,7 @@ export function readScheduleRun(raw: unknown): ScheduleRun | null {
         : pick(rec(e), 'message')
           ? { message: pick(rec(e), 'message')!, code: pick(rec(e), 'code') ?? null }
           : null,
+    reason: pick(o, 'reason') ?? null,
   };
 }
 

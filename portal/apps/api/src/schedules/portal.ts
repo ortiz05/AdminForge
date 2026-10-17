@@ -1,9 +1,11 @@
 import { createHash, randomBytes } from 'node:crypto';
 import {
+  identityKey,
   PortalScheduleRequest,
   Schedule,
   validateCron,
   type DeliveryOptionsResponse,
+  type ScheduleIdentityOptions,
   type PortalRole,
 } from '@adminforge/schemas';
 import { canonical } from '../audit/chain';
@@ -61,9 +63,15 @@ export interface PortalScheduleDeps {
   now: () => Date;
   /** Six hex characters for new keys (tests make it predictable). */
   suffix?: () => string;
+  /** Who schedules may run as here (ADR-014): configured app identities, and whether creators' access can be used. */
+  identities?: { apps: () => string[]; user: boolean; removeGrant: (scheduleId: string) => Promise<void> };
 }
 
 const sha256 = (def: Schedule) => createHash('sha256').update(canonical(def)).digest('hex');
+
+/** Runs with its creator's own access (ADR-014). */
+const wasUser = (row: Pick<ScheduleRow, 'definition'>) =>
+  row.definition.identity !== 'automation' && 'user' in row.definition.identity;
 
 /** Validates the built document with the content schema (the same one `adminforge validate` uses). */
 function parseSchedule(doc: Record<string, unknown>): Schedule {
@@ -167,7 +175,40 @@ export class PortalSchedules {
   /** GET /api/schedules/delivery-options (Portal.Operator). */
   deliveryOptions(session: SessionRecord): DeliveryOptionsResponse {
     requireRole(session, 'Portal.Operator', 'Scheduling reports');
-    return deliveryOptions(this.deps.deliveryEnv());
+    return { ...deliveryOptions(this.deps.deliveryEnv()), identities: this.identityOptions() };
+  }
+
+  /** GET /api/schedules/identities (Portal.Reader): the run-as choices, for the schedule editor too (names only). */
+  identities(session: SessionRecord): ScheduleIdentityOptions {
+    requireRole(session, 'Portal.Reader', 'Creating a schedule');
+    return this.identityOptions();
+  }
+
+  private identityOptions(): ScheduleIdentityOptions {
+    return { apps: this.deps.identities?.apps() ?? [], user: this.deps.identities?.user ?? false };
+  }
+
+  /** The run-as choice is one this AdminForge offers: a configured app identity, or creators' access with Entra. */
+  private checkIdentity(body: PortalScheduleRequest) {
+    const identity = body.identity;
+    if (identity === 'automation') return;
+    if ('app' in identity) {
+      if (!(this.deps.identities?.apps() ?? []).includes(identity.app))
+        throw new AppError(
+          400,
+          'identity_not_configured',
+          `There is no app identity called ${identity.app} on this AdminForge.`,
+          { hint: 'Pick one of the identities offered under “Run as”, or the automation identity.' },
+        );
+      return;
+    }
+    if (!this.deps.identities?.user)
+      throw new AppError(
+        400,
+        'user_identity_unavailable',
+        'Schedules can run with your own access only when people sign in with Microsoft Entra.',
+        { hint: 'Run it as the automation identity instead.' },
+      );
   }
 
   /** POST /api/schedules → the new schedule (201). */
@@ -259,6 +300,11 @@ export class PortalSchedules {
       { sha256: row.sha256 },
     );
     if (!updated) throw changedMeanwhile();
+    // No longer running with the creator's access: their grant for it goes (row and sealed tokens). Someone else
+    // (a Portal Admin) changing a schedule that uses the creator's access also ends it: the creator agreed to what they
+    // set up, so they sign in for the changed schedule again.
+    if (wasUser(row) && (!wasUser(updated) || c.session.userOid !== row.createdBy))
+      await this.deps.identities?.removeGrant(row.id);
     // Turned on or off while this was being saved (the toggle doesn't change the sha256): keep the next run consistent.
     const saved =
       updated.enabled === row.enabled
@@ -294,6 +340,8 @@ export class PortalSchedules {
       { sha256: row.sha256 },
     );
     if (!updated) throw changedMeanwhile();
+    // A deleted schedule keeps no one's access (the row stays for its history; the grant doesn't).
+    await this.deps.identities?.removeGrant(row.id);
     let cancelled = 0;
     for (const q of await this.deps.store.runsInStatus(['queued']))
       if (
@@ -359,6 +407,7 @@ export class PortalSchedules {
   ): Promise<{ report: ReportDef; reportVersion: string; params: Record<string, unknown> }> {
     assertPlainText('name', body.title);
     assertPlainText('summary', body.summary);
+    this.checkIdentity(body);
     const problem = validateCron(body.cron);
     if (problem) throw invalidCron(problem);
     if (runsTooOften(body.cron, body.timezone, now))
@@ -449,6 +498,7 @@ export class PortalSchedules {
       cron: body.cron,
       timezone: body.timezone,
       enabled: o.enabled,
+      identity: body.identity,
       job: reportJobDocument({
         ref: body.job.ref,
         format: body.job.format,
@@ -483,6 +533,7 @@ export class PortalSchedules {
       cron: body.cron,
       timezone: body.timezone,
       enabled: row.enabled,
+      identity: identityKey(row.definition.identity),
       format: body.job.format,
       retain: body.job.retain,
       params: maskRedacted(checked.params, declared),

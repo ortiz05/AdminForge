@@ -958,7 +958,9 @@ export function schedules() {
         cronText: null,
         timezone: 'UTC',
         enabled: true,
-        identity: 'automation',
+        // A named app identity (ADR-014), so the list's "Runs as" column shows both kinds.
+        identity: 'app:monitoring',
+        runsAs: { kind: 'app', name: 'monitoring', label: 'app identity monitoring' },
         job: { kind: 'probe', ref: 'probes.graph-reachability' },
         nextRunAt: at(3 * MIN),
         lastRunAt: at(-2 * MIN),
@@ -1586,4 +1588,91 @@ export function bulkPreviewDetail() {
     tasks: [],
     children: [child(0, 'a.lee@example.com'), child(1, 'm.chen@example.com')],
   };
+}
+
+/**
+ * A portal report schedule that runs with its creator's own access (ADR-014), in a given sign-in state, and a handler
+ * that adds it to GET /api/schedules (its history is empty) and answers POST /auth/schedule-consent.
+ */
+export const CREATOR_SCHEDULE_KEY = 'portal.inactive-guests-me';
+export function creatorSchedule(signIn: 'signed_in' | 'needs_sign_in' | 'not_signed_in', canSignIn = true) {
+  return {
+    key: CREATOR_SCHEDULE_KEY,
+    title: 'Inactive guests, with my access',
+    summary: null,
+    cron: '0 6 * * 1',
+    cronText: null,
+    timezone: 'UTC',
+    enabled: true,
+    identity: 'user',
+    runsAs: {
+      kind: 'user',
+      name: 'avery@example.com',
+      label: 'avery@example.com (their own access)',
+      signIn,
+      canSignIn,
+    },
+    job: { kind: 'report', ref: 'identity.inactive-guests' },
+    nextRunAt: at(3 * DAY),
+    // Never ran before its creator signed in; after Microsoft asked for a new sign-in, its last run was skipped.
+    lastRunAt: signIn === 'not_signed_in' ? null : at(-4 * DAY),
+    lastStatus: signIn === 'needs_sign_in' ? 'skipped' : signIn === 'signed_in' ? 'succeeded' : null,
+    writeCapable: false,
+    source: 'portal',
+    createdBy: 'avery@example.com',
+    canManage: canSignIn,
+    delivery: [{ type: 'file', format: 'xlsx', retain: 26 }],
+    notify: [],
+  };
+}
+export function creatorScheduleHandler(
+  signIn: 'signed_in' | 'needs_sign_in' | 'not_signed_in',
+  canSignIn = true,
+) {
+  const consents: Array<{ url: string; body: unknown }> = [];
+  const handler = ({
+    method,
+    path,
+    url,
+    body,
+  }: {
+    method: string;
+    path: string;
+    url: URL;
+    body?: unknown;
+  }) => {
+    if (method === 'GET' && path === '/api/schedules')
+      return { body: { items: [creatorSchedule(signIn, canSignIn), ...schedules().items] } };
+    if (method === 'GET' && path === `/api/schedules/${CREATOR_SCHEDULE_KEY}/runs`)
+      return {
+        body: {
+          items:
+            signIn === 'needs_sign_in'
+              ? [
+                  {
+                    id: 'sr-me-1',
+                    trigger: 'cron',
+                    status: 'skipped',
+                    startedAt: at(-4 * DAY),
+                    endedAt: at(-4 * DAY),
+                    error: {
+                      code: 'needs_sign_in',
+                      message:
+                        'This schedule runs with avery@example.com’s own access, and Microsoft needs them to sign in again, so it didn’t run.',
+                    },
+                    reason:
+                      'This schedule runs with avery@example.com’s own access, and Microsoft needs them to sign in again, so it didn’t run.',
+                  },
+                ]
+              : [],
+          cursor: null,
+        },
+      };
+    if (method === 'POST' && path === '/auth/schedule-consent') {
+      consents.push({ url: `${url.pathname}${url.search}`, body });
+      return { body: { redirect: 'https://login.example.com/authorize?mock=1' } };
+    }
+    return undefined;
+  };
+  return { handler, consents };
 }

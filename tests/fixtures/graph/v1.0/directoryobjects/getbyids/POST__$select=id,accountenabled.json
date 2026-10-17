@@ -1,0 +1,41 @@
+{
+  "$fixture": {
+    "status": 200,
+    "body": {
+      "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#directoryObjects(id,accountEnabled)",
+      "value": []
+    },
+    "variants": [
+      {
+        "match": {
+          "bodyIncludes": "10000000-0000-4000-8000-000000000c0"
+        },
+        "body": {
+          "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#directoryObjects(id,accountEnabled)",
+          "value": [
+            {
+              "@odata.type": "#microsoft.graph.user",
+              "id": "10000000-0000-4000-8000-000000000c01",
+              "accountEnabled": true
+            },
+            {
+              "@odata.type": "#microsoft.graph.user",
+              "id": "10000000-0000-4000-8000-000000000c02",
+              "accountEnabled": true
+            },
+            {
+              "@odata.type": "#microsoft.graph.user",
+              "id": "10000000-0000-4000-8000-000000000c03",
+              "accountEnabled": false
+            },
+            {
+              "@odata.type": "#microsoft.graph.user",
+              "id": "10000000-0000-4000-8000-000000000c04",
+              "accountEnabled": false
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

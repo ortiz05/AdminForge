@@ -370,11 +370,12 @@ Found by the organization and security evaluation; the fixed findings are in CHA
       each; found that Exchange ignored `-AccountDisabled $false` (fixed in `m365.create-shared-mailbox` 1.1.0, sign-in
       through Graph — publish and re-check). Still open: the error texts for throttled / "matches multiple entries",
       the engineer stepping down (a list created without "Keep me as an owner"), and `m365.remove-created-recipient`.
-- [ ] Shared mailboxes page "Sign-in allowed": it reads Exchange's `AccountDisabled` (`Get-MailboxSummary`), which
-      still said blocked more than 20 minutes after Graph had enabled AF-Test-Shared-03's account (live, 2026-10-17;
-      a fresh datasource cache key, so not the cache). Entra's `accountEnabled` is the truth for sign-in — and what
-      Block sign-in changes. Read it from Graph (`/users?$filter=id in (…)`, batched by the mailboxes'
-      `externalDirectoryObjectId`) or join a Graph datasource, then re-run `check-accuracy.ts m365.shared-mailboxes`.
+- [x] Shared mailboxes page "Sign-in allowed" (done 2026-10-17): it read Exchange's `AccountDisabled`
+      (`Get-MailboxSummary`), which still said blocked more than 20 minutes after Graph had enabled AF-Test-Shared-03's
+      account (live; a fresh datasource cache key, so not the cache). The page (1.4) and the Shared mailboxes with
+      sign-in allowed report (1.1) now take Entra's `accountEnabled` (getByIds by the mailboxes'
+      `externalDirectoryObjectId`, 1,000 a call) and keep Exchange's state, labelled, only for accounts Entra didn't
+      return. `check-accuracy.ts m365.shared` checks both against Graph.
 - [ ] The "created by AdminForge" mark (`CustomAttribute15`) is a guard rail, not a boundary (SECURITY.md → Known
       gaps). Follow-up: before finishing or removing, check the recipient's object id against the output of
       AdminForge's own successful create run (runs store), and refuse marked recipients AdminForge has no run for.

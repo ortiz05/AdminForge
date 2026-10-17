@@ -213,8 +213,9 @@ describe('m365.mailbox-storage', () => {
 describe('m365.shared-mailbox-sign-in', () => {
   it('lists shared mailboxes whose account can sign in, with the object id Block sign-in needs', async () => {
     const out = await run('m365.shared-mailbox-sign-in', 'mailboxes');
+    // Sign-in state from Microsoft Entra ID over Exchange's copy: shared-mailbox-sign-in-state.test.ts.
     expect(pick(out.rows, 'primarySmtpAddress', 'signIn', 'canBlock')).toEqual([
-      ['support@example.com', 'allowed', true],
+      ['invoices@example.com', 'allowed', true],
       ['reception@example.com', 'allowed', true],
       ['events@example.com', 'unknown', false],
     ]);
@@ -235,8 +236,8 @@ describe('m365.shared-mailbox-sign-in', () => {
     const text = readFileSync(path.join(CONTENT, 'scripts/exchange/Get-MailboxSummary.ps1'));
     const sha = createHash('sha256').update(text).digest('hex');
     const pins: Array<[string, string]> = [
-      ['m365.shared-mailbox-sign-in', 'mailboxes'],
-      ['m365.shared-mailboxes', 'shared'],
+      ['m365.shared-mailbox-sign-in', 'summary'],
+      ['m365.shared-mailboxes', 'summary'],
       ['m365.mailboxes', 'mailboxes'],
     ];
     for (const [id, ds] of pins) expect([id, def(id).datasources[ds].sha256]).toEqual([id, sha]);
@@ -514,6 +515,7 @@ describe('report schedules', () => {
     }
     expect(def('reports.shared-mailbox-sign-in-weekly').requires.scopes).toEqual({
       exchange: ['Exchange.ManageAsApp'],
+      graph: ['User.Read.All'],
     });
   });
 });

@@ -222,6 +222,15 @@ Closes the gaps found by comparing the build with the original plan (see the pla
 
 ### Changed
 
+- **Shared mailbox sign-in state comes from Microsoft Entra ID:** the Shared mailboxes page (1.4) and the Shared
+  mailboxes with sign-in allowed report (1.1) read each mailbox's account `accountEnabled` from Graph
+  (`/directoryObjects/getByIds`, 1,000 accounts a call — five calls for the page's 5,000 mailboxes, ten for the
+  report's 10,000; each skipped when its slice is empty) instead of Exchange's `AccountDisabled`, which still said
+  blocked more than 20 minutes after Entra enabled an account (live, 2026-10-17). A mailbox whose account Entra didn't
+  return, or couldn't be read, keeps Exchange's state and says so (hidden column "Sign-in state from", a note with the
+  count). Both now declare Graph `User.Read.All` (the weekly schedule too — the automation identity holds it). Content
+  tests (`shared-mailbox-sign-in-state.test.ts`, `content-at-scale-shared-mailboxes.test.ts`) and the live accuracy
+  check cover it.
 - **More reports fit an enterprise tenant:** the endpoint device reports (OS versions, security gaps, non-compliant,
   stale, Autopilot), the Intune apps page, inactive guests, directory changes, message center actions, the risky-users
   review and app credential expiry filter, sort and group natively instead of mapping every row with JSONata and say

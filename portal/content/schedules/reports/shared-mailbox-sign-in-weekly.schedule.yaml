@@ -1,12 +1,13 @@
 $schema: ../../../packages/schemas/generated/schedule.schema.json
 kind: schedule
 id: reports.shared-mailbox-sign-in-weekly
-version: 1.0.0
+version: 1.0.1
 title: Weekly shared mailboxes with sign-in allowed report
 summary: >-
   Every Monday at 06:55 UTC, writes shared mailboxes whose account can still sign in as XLSX and emails it to the
   report recipients. Disabled until the automation identity is set up for app-only Exchange Online
-  (Exchange.ManageAsApp, a certificate credential, and an Exchange role such as View-Only Recipients).
+  (Exchange.ManageAsApp, a certificate credential, and an Exchange role such as View-Only Recipients); it also reads
+  each mailbox's account from Microsoft Entra ID (User.Read.All, which the automation identity holds).
 owner: m365-team
 tags: [m365, exchange, security, report]
 cron: "55 6 * * 1"
@@ -34,4 +35,5 @@ requires:
   # Application permissions held by the automation identity (ADR-011).
   scopes:
     exchange: [Exchange.ManageAsApp]
+    graph: [User.Read.All]
   licences: [exchange]

@@ -101,7 +101,9 @@ Pages, dashboards and reports are YAML in `portal/content/{pages,dashboards,repo
      never sort on a key that can be `null`. Usage reports may conceal names: detect it by the missing `@` in the UPN.
    - Graph patterns: resolve names with `POST /directoryObjects/getByIds` (an allowed read, ≤ 1,000 ids) and skip it
      with `when` when there are no ids (Graph rejects an empty list); wrap id lists in `$append([], …)` because a
-     one-element list becomes a single string; read PIM through `graphBatch`; in directory audit events a group's
+     one-element list becomes a single string; more than 1,000 ids: one datasource per 1,000, each taking its slice
+     with a native sort and slice — `$pluck((ds.x.rows^(<unique field>))[[1000..1999]], 'id')` — and `when` that
+     slice has ids (`m365.shared-mailboxes`: `accounts1`…`accounts5`, merged with `$attach`); read PIM through `graphBatch`; in directory audit events a group's
      name is only in `modifiedProperties`, so filter with `targetResources/any(t:t/id eq …)`.
    - Fixtures: long queries get hashed file names (find them with `fixtureKey()`); add POST fixtures as `variants`
      rather than overwriting a shared file.

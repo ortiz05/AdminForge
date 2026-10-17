@@ -1146,7 +1146,8 @@ add(
     if ('problem' in r) return { page, check, status: 'unknowable', details: [r.problem] };
     if (!r.row) return notCreated(page, check, CREATED.shared, 'm365.create-shared-mailbox');
     const account = await accountOf(CREATED.shared);
-    const allowed = r.row.accountDisabled === false;
+    // The page takes the state from Microsoft Entra ID (getByIds), not Exchange's lagging AccountDisabled.
+    const allowed = r.row.signIn === 'allowed';
     return outcome(page, check, [
       ...compareValue('sign-in allowed (as created)', true, allowed),
       ...compareValue(
@@ -1154,7 +1155,30 @@ add(
         account?.accountEnabled ?? 'no account',
         allowed,
       ),
+      ...compareValue('sign-in state read from', 'entra', r.row.signInFrom),
       ...compareRange('Sign-in allowed KPI', r.value.signInAllowed, 1, Number.MAX_SAFE_INTEGER),
+    ]);
+  },
+);
+add(
+  'm365.shared-mailbox-sign-in#mailboxes',
+  `${CREATED.shared}: listed with sign-in allowed, Block sign-in offered`,
+  async (page, check) => {
+    const d = await data('m365.shared-mailbox-sign-in', 'mailboxes');
+    if ('problem' in d) return { page, check, status: 'unknowable', details: [d.problem] };
+    const row = rowsOf(d.value).find((r) => nameOf(r) === CREATED.shared);
+    const account = await accountOf(CREATED.shared);
+    if (!account) return notCreated(page, check, CREATED.shared, 'm365.create-shared-mailbox');
+    // Listed only while its account can sign in (the report leaves blocked mailboxes out by default).
+    return outcome(page, check, [
+      ...compareValue('listed (Graph accountEnabled)', account.accountEnabled === true, row !== undefined),
+      ...(row
+        ? [
+            ...compareValue('sign-in', 'allowed', row.signIn),
+            ...compareValue('sign-in state read from', 'entra', row.signInFrom),
+            ...compareValue('Block sign-in offered', true, row.canBlock),
+          ]
+        : []),
     ]);
   },
 );

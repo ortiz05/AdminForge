@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/report.schema.json
 kind: report
 id: m365.shared-mailbox-sign-in
-version: 1.0.0
+version: 1.1.0
 title: Shared mailboxes with sign-in allowed
 summary: >-
   Shared mailboxes whose account can still sign in. Nobody should sign in to a shared mailbox directly — people open it
@@ -13,6 +13,8 @@ requires:
   portalRoles: [Portal.Reader]
   scopes:
     exchange: [Exchange.Manage]
+    # Whether each mailbox's account can sign in (accountEnabled, through getByIds).
+    graph: [User.Read.All]
   entraRoles: [Exchange Recipient Administrator, Global Reader]
   licences: [exchange]
 
@@ -22,12 +24,15 @@ params:
 filters:
   facets: [includeBlocked]
 
-# Exchange Online reports whether the account behind each mailbox is disabled (synced from Microsoft Entra ID).
-# Mailboxes whose state Exchange didn't return are listed as Unknown and counted separately.
+# Whether each mailbox's account can sign in comes from Microsoft Entra ID (accountEnabled — what Block sign-in
+# changes): Exchange's AccountDisabled is a copy that can lag behind it by half an hour or more. getByIds reads 1,000
+# accounts a call; the mailboxes are taken in address order (a native sort and slice) so each call gets its own 1,000.
+# A mailbox whose account Entra didn't return (or couldn't be read: optional) keeps Exchange's state and says so;
+# without either it is Unknown and counted separately.
 datasources:
-  mailboxes:
+  summary:
     source: runner
-    label: Shared mailboxes and their sign-in state (PowerShell)
+    label: Shared mailboxes (PowerShell)
     script: exchange/Get-MailboxSummary.ps1
     sha256: 5b35292d4c039dad7036b7e99434a13f2da0c618e2241505a6997b75f02ad12d
     services: [exchange]
@@ -38,19 +43,185 @@ datasources:
       includeMailboxes: true
       includeAccountState: true
     cache: { ttl: 900 }
+    transform: "${ value[0] }" # the runner returns [output]: one summary object
+  accounts1:
+    source: graph
+    label: Sign-in state from Microsoft Entra ID (accounts 1–1,000)
+    when: "${ $count($pluck((ds.summary.mailboxes^(primarySmtpAddress))[[0..999]], 'externalDirectoryObjectId')) > 0 }"
+    optional: true
+    request:
+      method: POST
+      path: /directoryObjects/getByIds
+      query: { $select: "id,accountEnabled" }
+      body:
+        ids: "${ $append([], $pluck((ds.summary.mailboxes^(primarySmtpAddress))[[0..999]], 'externalDirectoryObjectId')) }"
+        types: [user]
+    transform: '${ value.value{ id: { "accountEnabled": accountEnabled, "signInFrom": "entra" } } }'
+    cache: { ttl: 300 }
+  accounts2:
+    source: graph
+    label: Sign-in state from Microsoft Entra ID (accounts 1,001–2,000)
+    when: "${ $count($pluck((ds.summary.mailboxes^(primarySmtpAddress))[[1000..1999]], 'externalDirectoryObjectId')) > 0 }"
+    optional: true
+    request:
+      method: POST
+      path: /directoryObjects/getByIds
+      query: { $select: "id,accountEnabled" }
+      body:
+        ids: "${ $append([], $pluck((ds.summary.mailboxes^(primarySmtpAddress))[[1000..1999]], 'externalDirectoryObjectId')) }"
+        types: [user]
+    transform: '${ value.value{ id: { "accountEnabled": accountEnabled, "signInFrom": "entra" } } }'
+    cache: { ttl: 300 }
+  accounts3:
+    source: graph
+    label: Sign-in state from Microsoft Entra ID (accounts 2,001–3,000)
+    when: "${ $count($pluck((ds.summary.mailboxes^(primarySmtpAddress))[[2000..2999]], 'externalDirectoryObjectId')) > 0 }"
+    optional: true
+    request:
+      method: POST
+      path: /directoryObjects/getByIds
+      query: { $select: "id,accountEnabled" }
+      body:
+        ids: "${ $append([], $pluck((ds.summary.mailboxes^(primarySmtpAddress))[[2000..2999]], 'externalDirectoryObjectId')) }"
+        types: [user]
+    transform: '${ value.value{ id: { "accountEnabled": accountEnabled, "signInFrom": "entra" } } }'
+    cache: { ttl: 300 }
+  accounts4:
+    source: graph
+    label: Sign-in state from Microsoft Entra ID (accounts 3,001–4,000)
+    when: "${ $count($pluck((ds.summary.mailboxes^(primarySmtpAddress))[[3000..3999]], 'externalDirectoryObjectId')) > 0 }"
+    optional: true
+    request:
+      method: POST
+      path: /directoryObjects/getByIds
+      query: { $select: "id,accountEnabled" }
+      body:
+        ids: "${ $append([], $pluck((ds.summary.mailboxes^(primarySmtpAddress))[[3000..3999]], 'externalDirectoryObjectId')) }"
+        types: [user]
+    transform: '${ value.value{ id: { "accountEnabled": accountEnabled, "signInFrom": "entra" } } }'
+    cache: { ttl: 300 }
+  accounts5:
+    source: graph
+    label: Sign-in state from Microsoft Entra ID (accounts 4,001–5,000)
+    when: "${ $count($pluck((ds.summary.mailboxes^(primarySmtpAddress))[[4000..4999]], 'externalDirectoryObjectId')) > 0 }"
+    optional: true
+    request:
+      method: POST
+      path: /directoryObjects/getByIds
+      query: { $select: "id,accountEnabled" }
+      body:
+        ids: "${ $append([], $pluck((ds.summary.mailboxes^(primarySmtpAddress))[[4000..4999]], 'externalDirectoryObjectId')) }"
+        types: [user]
+    transform: '${ value.value{ id: { "accountEnabled": accountEnabled, "signInFrom": "entra" } } }'
+    cache: { ttl: 300 }
+  accounts6:
+    source: graph
+    label: Sign-in state from Microsoft Entra ID (accounts 5,001–6,000)
+    when: "${ $count($pluck((ds.summary.mailboxes^(primarySmtpAddress))[[5000..5999]], 'externalDirectoryObjectId')) > 0 }"
+    optional: true
+    request:
+      method: POST
+      path: /directoryObjects/getByIds
+      query: { $select: "id,accountEnabled" }
+      body:
+        ids: "${ $append([], $pluck((ds.summary.mailboxes^(primarySmtpAddress))[[5000..5999]], 'externalDirectoryObjectId')) }"
+        types: [user]
+    transform: '${ value.value{ id: { "accountEnabled": accountEnabled, "signInFrom": "entra" } } }'
+    cache: { ttl: 300 }
+  accounts7:
+    source: graph
+    label: Sign-in state from Microsoft Entra ID (accounts 6,001–7,000)
+    when: "${ $count($pluck((ds.summary.mailboxes^(primarySmtpAddress))[[6000..6999]], 'externalDirectoryObjectId')) > 0 }"
+    optional: true
+    request:
+      method: POST
+      path: /directoryObjects/getByIds
+      query: { $select: "id,accountEnabled" }
+      body:
+        ids: "${ $append([], $pluck((ds.summary.mailboxes^(primarySmtpAddress))[[6000..6999]], 'externalDirectoryObjectId')) }"
+        types: [user]
+    transform: '${ value.value{ id: { "accountEnabled": accountEnabled, "signInFrom": "entra" } } }'
+    cache: { ttl: 300 }
+  accounts8:
+    source: graph
+    label: Sign-in state from Microsoft Entra ID (accounts 7,001–8,000)
+    when: "${ $count($pluck((ds.summary.mailboxes^(primarySmtpAddress))[[7000..7999]], 'externalDirectoryObjectId')) > 0 }"
+    optional: true
+    request:
+      method: POST
+      path: /directoryObjects/getByIds
+      query: { $select: "id,accountEnabled" }
+      body:
+        ids: "${ $append([], $pluck((ds.summary.mailboxes^(primarySmtpAddress))[[7000..7999]], 'externalDirectoryObjectId')) }"
+        types: [user]
+    transform: '${ value.value{ id: { "accountEnabled": accountEnabled, "signInFrom": "entra" } } }'
+    cache: { ttl: 300 }
+  accounts9:
+    source: graph
+    label: Sign-in state from Microsoft Entra ID (accounts 8,001–9,000)
+    when: "${ $count($pluck((ds.summary.mailboxes^(primarySmtpAddress))[[8000..8999]], 'externalDirectoryObjectId')) > 0 }"
+    optional: true
+    request:
+      method: POST
+      path: /directoryObjects/getByIds
+      query: { $select: "id,accountEnabled" }
+      body:
+        ids: "${ $append([], $pluck((ds.summary.mailboxes^(primarySmtpAddress))[[8000..8999]], 'externalDirectoryObjectId')) }"
+        types: [user]
+    transform: '${ value.value{ id: { "accountEnabled": accountEnabled, "signInFrom": "entra" } } }'
+    cache: { ttl: 300 }
+  accounts10:
+    source: graph
+    label: Sign-in state from Microsoft Entra ID (accounts 9,001–10,000)
+    when: "${ $count($pluck((ds.summary.mailboxes^(primarySmtpAddress))[[9000..9999]], 'externalDirectoryObjectId')) > 0 }"
+    optional: true
+    request:
+      method: POST
+      path: /directoryObjects/getByIds
+      query: { $select: "id,accountEnabled" }
+      body:
+        ids: "${ $append([], $pluck((ds.summary.mailboxes^(primarySmtpAddress))[[9000..9999]], 'externalDirectoryObjectId')) }"
+        types: [user]
+    transform: '${ value.value{ id: { "accountEnabled": accountEnabled, "signInFrom": "entra" } } }'
+    cache: { ttl: 300 }
+  mailboxes:
+    source: static
+    data: {}
+    label: Shared mailboxes and their sign-in state
+    # Every step is native ($attach, $applyAdvanced, $withFields, sorting): 10,000 mailboxes fit the transform budget
+    # (content-at-scale-shared-mailboxes.test.ts).
     transform: >-
       ${ (
-        $v := value[0];  /* runner result = [output data]; one summary object */
-        $all := [$v.mailboxes.$merge([$, {
-          "signIn": accountDisabled = false ? 'allowed' : accountDisabled = true ? 'blocked' : 'unknown',
-          "canBlock": accountDisabled = false and $exists(externalDirectoryObjectId) and externalDirectoryObjectId != null
-        }])];
-        $rows := [$all[signIn != 'blocked' or $$.params.includeBlocked = true]];
+        $v := ds.summary;
+        $is := function($path, $type, $op, $value) { { "path": $path, "type": $type, "op": $op, "value": $value } };
+        $f := function($rows, $join, $clauses) { $applyAdvanced($rows, { "join": $join, "clauses": $clauses }) };
+        $byId := $merge($append([{}], [ds.accounts1, ds.accounts2, ds.accounts3, ds.accounts4, ds.accounts5, ds.accounts6, ds.accounts7, ds.accounts8, ds.accounts9, ds.accounts10]
+          [$type($) = 'object']));
+        $all := $attach($v.mailboxes, 'externalDirectoryObjectId', $byId, { "accountEnabled": null, "signInFrom": "exchange" });
+        $entra := $is('signInFrom', 'string', 'eq', 'entra');
+        $exchange := $is('signInFrom', 'string', 'eq', 'exchange');
+        $state := function($enabled, $disabled) { [
+          { "join": "and", "clauses": [$entra, $is('accountEnabled', 'boolean', $enabled = null ? 'isEmpty' : 'eq', $enabled)] },
+          { "join": "and", "clauses": [$exchange, $is('accountDisabled', 'boolean', $disabled = null ? 'isEmpty' : 'eq', $disabled)] }
+        ] };
+        $allowed := $f($all, 'or', $state(true, false));
+        $blocked := $f($all, 'or', $state(false, true));
+        $unknown := $f($all, 'or', $state(null, null));
+        /* Block sign-in needs the account's object id. */
+        $hasId := [$is('externalDirectoryObjectId', 'string', 'notEmpty', null)];
+        $canBlock := $withFields($f($allowed, 'and', $hasId), { "signIn": "allowed", "canBlock": true });
+        $noId := $withFields($f($allowed, 'and', [$is('externalDirectoryObjectId', 'string', 'isEmpty', null)]), { "signIn": "allowed", "canBlock": false });
+        $allowedRows := $append($canBlock, $noId);
+        $unknownRows := $withFields($unknown, { "signIn": "unknown", "canBlock": false });
+        $blockedRows := params.includeBlocked = true ? $withFields($blocked, { "signIn": "blocked", "canBlock": false }) : [];
+        /* Allowed first, then unknown, then blocked; by name within each. */
+        $shown := $append($append($allowedRows^(displayName), $unknownRows^(displayName)), $blockedRows^(displayName));
         {
-          "rows": [$rows^(signIn = 'allowed' ? 0 : signIn = 'unknown' ? 1 : 2, displayName)],
-          "allowed": $count($all[signIn = 'allowed']),
-          "unknown": $count($all[signIn = 'unknown']),
-          "blocked": $count($all[signIn = 'blocked']),
+          "rows": $append([], $shown),
+          "allowed": $count($allowed),
+          "unknown": $count($unknown),
+          "blocked": $count($blocked),
+          "fromExchange": $count($f($all, 'and', [$exchange])),
           "total": $v.total,
           "truncated": $v.truncated = true
         }
@@ -81,6 +252,13 @@ layout:
     text: Only the first 10,000 shared mailboxes were read; the counts above cover those.
   - widget: markdown
     span: 12
+    when: ${ mailboxes.fromExchange > 0 }
+    text: >-
+      ${ mailboxes.fromExchange } shared mailboxes show Exchange Online's copy of the sign-in state, which can lag
+      behind Microsoft Entra ID: their account wasn't found there or couldn't be read. Open the Sign-in state from
+      column to see which.
+  - widget: markdown
+    span: 12
     text: |
       **What to do.** Use **Block sign-in** on each mailbox (or select several). People with Full Access keep using
       the mailbox from their own Outlook. If an application signs in as the mailbox to send mail, move it to an app
@@ -99,6 +277,12 @@ layout:
         kind: status
         map: { allowed: [crit, Allowed], unknown: [info, Unknown], blocked: [ok, Blocked] }
         filter: facet
+      - field: signInFrom
+        label: Sign-in state from
+        kind: status
+        map: { entra: [neutral, Microsoft Entra ID], exchange: [info, Exchange Online (can lag)] }
+        filter: facet
+        hidden: true
       - { field: whenCreated, label: Created, kind: date, filter: date, sortable: true }
       - { field: litigationHoldEnabled, label: Litigation hold, kind: boolean, hidden: true }
       - { field: archiveStatus, label: Archive, hidden: true }

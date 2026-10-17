@@ -986,7 +986,8 @@ const disabledManagers = fixtureUsers.filter((u) => !u.accountEnabled).map((u) =
 add(
   'identity.user-attribute-completeness#managers',
   'fixture users whose manager is disabled',
-  using('identity.user-attribute-completeness', 'managers', {}, (v) => {
+  // The manager check only runs when asked for (`managers: true`, a slower read).
+  using('identity.user-attribute-completeness', 'managers', { managers: true }, (v) => {
     const expected = disabledManagers.flatMap(reportsTo);
     const shown = fixtureNames(
       rowsOf(v)

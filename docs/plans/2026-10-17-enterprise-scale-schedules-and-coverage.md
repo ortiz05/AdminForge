@@ -153,3 +153,24 @@ hybrid sync, usage history, tenant-wide settings (sharing, group expiry, enrolme
 
 Wave 1 in parallel: A1–A2, B1, D. Wave 2: C (after D, same forms), E, F. Wave 3: A3–A4, G, B2, deploy and live
 validation. Each wave is reviewed, committed and deployed before the next one starts on the same files.
+
+## Progress (2026-10-17)
+
+Every phase is built, reviewed (security, design, content), committed and deployed to the host; the host database is
+hardened (B2: `pnpm db:harden`, superuser rotated, migrations 0009–0012) and `provision entra` applied.
+
+- **A** — 39 of 326 datasources failed against the synthetic 100k-user tenant; the engine (coalescing, lanes,
+  deadlines, per-session limits, native sort and grouping, `truncated` + the "Partial data" note) and 16 rewritten
+  pages and reports fix them or cap them honestly. Load test: at 200 sessions the median page load went from 9.8 s to
+  2.1 s with no refusals; 1,000 sessions exceed Graph's per-app budget, so the remaining lever is fewer calls
+  (per-tenant snapshots, backlog). `pnpm test:perf`, budgets and `docs/performance.md`.
+- **B** — repo and host done. Owner decisions left: GPG key for backups (nightly backups run unencrypted meanwhile via
+  `adminforge-backup.service.d/plaintext-until-gpg.conf`), an off-host copy, a dedicated service account outside
+  `docker`/`sudo` (C1), freeing disk space.
+- **C** — named app identities and "Run as: Me" (ADR-014). No named identity is configured yet (`AF_SCHEDULE_IDENTITIES`).
+- **D** — plain-English cadence everywhere, `every:` in content.
+- **E** — 11 new reports, 6 probes, 3 schedules; seat probe over every SKU.
+- **F** — directory, apps, auth-methods, intune-more and sign-ins fixtures live (8 of 25 seats); guests wait for the
+  tenant to allow invitations.
+- **G** — `docs/enterprise-scenarios.md` and `tests/live/scripts/check-accuracy.ts` (70 checks on 25 definitions; the
+  owner bugs it found are fixed).

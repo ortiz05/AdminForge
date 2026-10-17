@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/schedule.schema.json
 kind: schedule
 id: reports.non-compliant-devices-daily
-version: 1.0.0
+version: 1.1.0
 title: Daily non-compliant devices report
 summary: >-
   Every weekday at 06:40 UTC, writes the Intune devices that are not compliant or in their grace period (every OS and
@@ -11,9 +11,7 @@ owner: endpoint-team
 tags: [endpoint, intune, compliance, report]
 every: every weekday at 06:40
 timezone: UTC
-# Off until the report's transforms handle enterprise volume (they time out on tens of thousands of devices; the
-# content-fix stream is reworking them — docs/backlog.md). Turn on once its perf budget passes.
-enabled: false
+enabled: true
 identity: automation
 job:
   kind: report

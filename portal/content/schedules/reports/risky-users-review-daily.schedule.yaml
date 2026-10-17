@@ -1,11 +1,12 @@
 $schema: ../../../packages/schemas/generated/schedule.schema.json
 kind: schedule
 id: reports.risky-users-review-daily
-version: 1.0.0
+version: 1.0.1
 title: Daily risky users review
 summary: >-
   Every weekday at 07:10 UTC, writes the accounts Entra ID Protection still considers at risk or confirmed
-  compromised (with days at risk and recent detections) as XLSX and emails it to the report recipients.
+  compromised (with days at risk and recent detections) as XLSX and emails it to the report recipients — the first
+  1,000 (confirmed compromised and high risk first); the report says when there are more.
 owner: security-team
 tags: [security, identity-protection, risk, report]
 cron: "10 7 * * 1-5"

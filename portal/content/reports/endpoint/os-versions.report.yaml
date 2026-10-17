@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/report.schema.json
 kind: report
 id: endpoint.os-versions
-version: 1.1.0
+version: 2.0.0
 title: OS version distribution
 summary: >-
   Operating system versions across Intune-managed devices, with Windows builds named by release (24H2, 23H2…) and
@@ -33,6 +33,8 @@ datasources:
     paging: all
     maxItems: 100000
     cache: { ttl: 3600 }
+    # Devices are grouped natively (by OS, then version): the release name is worked out once per version, not per
+    # device, and the devices on out-of-support releases are picked natively — 30k devices fit the transform budget.
     transform: >-
       ${ (
         $windows := {
@@ -51,38 +53,64 @@ datasources:
                 { "release": $w ? $w.release : 'Windows build ' & $build, "supported": $w ? $w.supported : false } )
             : { "release": $os & ' ' & $join($split($ver, '.')[[0..1]], '.'), "supported": true }
         };
-        $all := [value.value.(
-          $l := $label(operatingSystem, osVersion ? osVersion : '0.0.0');
+        /* A grouping key must be text: devices without an OS or version are counted, not grouped. */
+        $devices := value.value;
+        $grouped := $applyAdvanced($devices, { "join": "and", "clauses": [
+          { "path": "operatingSystem", "type": "string", "op": "notEmpty", "value": null },
+          { "path": "osVersion", "type": "string", "op": "notEmpty", "value": null }
+        ] });
+        $byOs := $grouped{ operatingSystem: $ };
+        $versions := [$keys($byOs).(
+          $os := $;
+          $items := $lookup($byOs, $os);
+          $counts := $items{ osVersion: $count($) };
+          $keys($counts).(
+            $l := $label($os, $);
+            { "os": $os, "version": $, "devices": $lookup($counts, $), "release": $l.release, "supported": $l.supported }
+          )
+        )];
+        $total := $count($devices);
+        $releases := $versions{ release: {
+          "os": (os)[0], "devices": $sum(devices), "supported": (supported)[0], "versions": $join($distinct(version)[[0..4]], ', ')
+        } };
+        $groups := [$keys($releases).(
+          $r := $lookup($releases, $);
           {
-            "id": id, "deviceName": deviceName, "userPrincipalName": userPrincipalName, "os": operatingSystem,
-            "release": $l.release, "supported": $l.supported, "version": osVersion, "model": model,
-            "ownership": managedDeviceOwnerType, "lastSyncDateTime": lastSyncDateTime
+            "release": $, "os": $r.os, "devices": $r.devices,
+            "share": $total > 0 ? $round($r.devices / $total, 3) : 0,
+            "supported": $r.supported, "versions": $r.versions
           }
         )];
-        $outdated := $all[supported = false].$merge([$, { "daysSinceSync": lastSyncDateTime ? -$daysUntil(lastSyncDateTime) }]);
-        $total := $count($all);
-        $groups := [$distinct($all.release).(
-          $r := $;
-          $m := $all[release = $r];
-          {
-            "release": $r,
-            "os": $m[0].os,
-            "devices": $count($m),
-            "share": $total > 0 ? $round($count($m) / $total, 3) : 0,
-            "supported": $m[0].supported,
-            "versions": $join($distinct($m.version)[[0..4]], ', ')
-          }
-        )];
+        /* Devices on out-of-support builds: one native pass for all of them, grouped per build to label the release. */
+        $bad := $versions[supported = false];
+        $outdatedAll := $applyAdvanced($grouped, { "join": "and", "clauses": [
+          { "path": "operatingSystem", "type": "string", "op": "eq", "value": "Windows" },
+          { "path": "osVersion", "type": "string", "op": "in", "value": $append(['-'], $bad.version) }
+        ] });
+        $byBuild := $outdatedAll{ osVersion: $ };
+        $outdated := $append([], [$bad.( $b := $; $withFields($lookup($byBuild, $b.version), { "release": $b.release }) )]^(release, deviceName));
+        $unknown := $total - $count($grouped);
+        $unknownRow := $unknown > 0 ? [{ "release": "Unknown OS or version", "os": null, "devices": $unknown,
+          "share": $total > 0 ? $round($unknown / $total, 3) : 0, "supported": null, "versions": "" }] : [];
         {
-          "rows": [$groups^(os, >devices)],
+          "rows": $append([$groups^(os, >devices)], $unknownRow),
           "total": $total,
-          "unsupported": $sum($groups[supported = false].devices),
-          "outdated": [$outdated^(release, deviceName)],
-          "chart": [($groups^(>devices))[[0..5]]]
+          "unsupported": $sum([0, $groups[supported = false].devices]),
+          "outdated": $take($outdated, 10000),
+          "outdatedCount": $count($outdated),
+          "outdatedCapped": $count($outdated) > 10000,
+          "chart": [($groups^(>devices))[[0..5]]],
+          "partial": value.truncated = true
         }
       ) }
 
 layout:
+  - widget: markdown
+    span: 12
+    when: ${ devices.partial = true }
+    text: >-
+      **Partial data.** Intune has more managed devices than this report reads (100,000); the figures and lists cover
+      the ones read.
   - widget: kpi
     id: total
     data: devices.total
@@ -124,6 +152,11 @@ layout:
     empty:
       title: No managed devices
       body: No devices are enrolled in Intune.
+  - widget: markdown
+    span: 12
+    when: ${ devices.outdatedCapped = true }
+    text: >-
+      ${ 'The list below shows the first 10,000 of ' & $formatNumber(devices.outdatedCount, '#,##0') & ' devices on out-of-support releases; the CSV/XLSX export has the release summary.' }
   - widget: table
     id: outdated
     title: Devices on out-of-support releases
@@ -133,11 +166,10 @@ layout:
     columns:
       - { field: deviceName, label: Device, kind: identity, secondary: userPrincipalName, sortable: true }
       - { field: release, label: Release, filter: facet, sortable: true }
-      - { field: version, label: Build, kind: code }
-      - { field: ownership, label: Ownership, filter: facet }
-      - { field: daysSinceSync, label: Days since check-in, kind: number, align: end, sortable: true, filter: range }
+      - { field: osVersion, label: Build, kind: code }
+      - { field: managedDeviceOwnerType, label: Ownership, filter: facet }
+      - { field: lastSyncDateTime, label: Last check-in, kind: relativeTime, sortable: true }
       - { field: model, label: Model, hidden: true }
-      - { field: lastSyncDateTime, label: Last check-in, kind: datetime, hidden: true }
     inspect:
       page: endpoint.device
       params:

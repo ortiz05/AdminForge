@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/report.schema.json
 kind: report
 id: endpoint.autopilot-not-enrolled
-version: 1.0.0
+version: 2.0.0
 title: Autopilot devices not enrolled
 summary: >-
   Windows Autopilot devices that haven't enrolled in Intune — never contacted, failed, blocked or waiting for a reset —
@@ -57,35 +57,59 @@ datasources:
     paging: all
     maxItems: 100000
     cache: { ttl: 1800 }
+    # Native filters on disjoint sets ($applyAdvanced): failed or blocked, then the rest; never contacted (Autopilot
+    # reports 0001-01-01, shown as no date) before the longest silent. 100k identities fit the transform budget.
     transform: >-
       ${ (
         $state := params.state ? params.state : 'any';
         $min := params.minDays ? $number(params.minDays) : 0;
-        $contacted := function($d) { $d and $substring($d, 0, 4) != '0001' };
-        $all := [value.value[enrollmentState != 'enrolled'].$merge([$, {
-          "contacted": $contacted(lastContactedDateTime),
-          "lastContact": $contacted(lastContactedDateTime) ? lastContactedDateTime,
-          "daysSinceContact": $contacted(lastContactedDateTime) ? -$daysUntil(lastContactedDateTime),
-          "group": groupTag ? groupTag : '(none)',
-          "assignedUser": userPrincipalName ? userPrincipalName
-        }])];
-        $rows := [$all[
-            ($state = 'any'
-              or ($state = 'failed' and enrollmentState in ['failed', 'blocked'])
-              or enrollmentState = $state)
-            and ($min = 0 or $not(contacted) or daysSinceContact >= $min)
-          ]];
+        $f := function($rows, $clauses) { $applyAdvanced($rows, { "join": "and", "clauses": $clauses }) };
+        $all := $f(value.value, [
+          { "path": "enrollmentState", "type": "string", "op": "notEmpty", "value": null },
+          { "path": "enrollmentState", "type": "string", "op": "ne", "value": "enrolled" }
+        ]);
+        $neverClause := { "join": "or", "clauses": [
+          { "path": "lastContactedDateTime", "type": "date", "op": "isEmpty", "value": null },
+          { "path": "lastContactedDateTime", "type": "date", "op": "lt", "value": "1900-01-01T00:00:00Z" }
+        ] };
+        $contactedClause := { "path": "lastContactedDateTime", "type": "date", "op": "ge", "value": "1900-01-01T00:00:00Z" };
+        $failedClause := { "path": "enrollmentState", "type": "string", "op": "in", "value": ['failed', 'blocked'] };
+        $otherClause := { "path": "enrollmentState", "type": "string", "op": "notIn", "value": ['failed', 'blocked'] };
+        $stateClause := $state = 'any' ? [] : $state = 'failed' ? [$failedClause]
+          : [{ "path": "enrollmentState", "type": "string", "op": "eq", "value": $state }];
+        /* "At least N days" as before: N whole days since the last contact (the day of contact counts as day 0). */
+        $longEnough := $min = 0 ? [] : [{ "path": "lastContactedDateTime", "type": "date", "op": "lt", "value": $daysAgo($min - 1) }];
+        $part := function($clause) { (
+          $neverRows := $f($all, $append([$clause, $neverClause], $stateClause));
+          $never := $withFields($neverRows^(serialNumber), { "lastContactedDateTime": null, "contacted": false });
+          $seen := $f($all, $append($append([$clause, $contactedClause], $stateClause), $longEnough));
+          $append($never, $withFields($seen^(lastContactedDateTime), { "contacted": true }))
+        ) };
+        /* A grouping key must be text: only identities with a group tag are grouped. */
+        $tagged := $f($all, [{ "path": "groupTag", "type": "string", "op": "notEmpty", "value": null }]);
+        $groups := $tagged{ groupTag: $count($) };
+        $untagged := $count($f($all, [{ "path": "groupTag", "type": "string", "op": "isEmpty", "value": null }]));
         {
-          "rows": [$rows^(enrollmentState in ['failed', 'blocked'] ? 0 : 1, contacted ? 1 : 0, >daysSinceContact, serialNumber)],
+          "rows": $append([], $append($part($failedClause), $part($otherClause))),
           "notEnrolled": $count($all),
-          "failed": $count($all[enrollmentState in ['failed', 'blocked']]),
-          "neverContacted": $count($all[$not(contacted)]),
-          "noGroupTag": $count($all[group = '(none)']),
-          "byGroup": $append([], [$distinct($all.group).( $g := $; { "group": $g, "devices": $count($all[group = $g]) } )^(>devices)][[0..5]])
+          "failed": $count($f($all, [$failedClause])),
+          "neverContacted": $count($f($all, [$neverClause])),
+          "noGroupTag": $untagged,
+          "byGroup": $append([], ([$append(
+            [$keys($groups).{ "group": $, "devices": $lookup($groups, $) }],
+            $untagged > 0 ? [{ "group": "(none)", "devices": $untagged }] : []
+          )]^(>devices))[[0..5]]),
+          "partial": value.truncated = true
         }
       ) }
 
 layout:
+  - widget: markdown
+    span: 12
+    when: ${ devices.partial = true }
+    text: >-
+      **Partial data.** Autopilot has more devices than this report reads (100,000); the figures and the list cover the
+      ones read.
   - widget: kpi
     data: devices.notEnrolled
     label: Not enrolled
@@ -136,12 +160,11 @@ layout:
         kind: status
         map: { notContacted: [neutral, Never contacted], pendingReset: [info, Pending reset], failed: [crit, Failed], blocked: [crit, Blocked], unknown: [neutral, Unknown] }
         filter: facet
-      - { field: daysSinceContact, label: Days since contact, kind: number, align: end, sortable: true, filter: range }
-      - { field: group, label: Group tag, filter: facet }
+      - { field: lastContactedDateTime, label: Last contact, kind: relativeTime, sortable: true }
+      - { field: groupTag, label: Group tag, filter: facet }
       - { field: model, label: Model, filter: facet }
       - { field: manufacturer, label: Manufacturer, hidden: true }
-      - { field: assignedUser, label: Assigned user }
-      - { field: lastContact, label: Last contact, kind: datetime, hidden: true }
+      - { field: userPrincipalName, label: Assigned user }
       - { field: purchaseOrderIdentifier, label: Purchase order, hidden: true }
       - { field: id, label: Autopilot id, kind: guid, hidden: true }
     rowActions:

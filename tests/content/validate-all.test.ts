@@ -163,6 +163,11 @@ describe('identity.app-credential-expiry', () => {
       total: 0,
       expired: 0,
       critical: 0,
+      apps: 0,
+      soonApps: 0,
+      expiredApps: 0,
+      listCapped: false,
+      partial: false,
     });
   });
 });

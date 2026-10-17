@@ -445,13 +445,13 @@ describe('identity.ca-report-only-impact', () => {
 });
 
 describe('quick wins', () => {
-  it('the new schedules say when in English and deliver to the report recipients; the device ones wait for their fix', () => {
+  it('the new schedules say when in English and deliver to the report recipients; the device ones are on (2.0 fits)', () => {
     for (const [id, ref, enabled, every] of [
-      ['reports.stale-devices-weekly', 'endpoint.stale-devices', false, 'every Monday at 06:15'],
+      ['reports.stale-devices-weekly', 'endpoint.stale-devices', true, 'every Monday at 06:15'],
       [
         'reports.non-compliant-devices-daily',
         'endpoint.non-compliant-devices',
-        false,
+        true,
         'every weekday at 06:40',
       ],
       [

@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/report.schema.json
 kind: report
 id: identity.inactive-guests
-version: 1.0.0
+version: 2.0.0
 title: Inactive guests
 summary: >-
   Guest accounts that haven't signed in for the chosen number of days, plus invitations never redeemed — the external
@@ -29,57 +29,120 @@ params:
       - { value: 365, label: 1 year }
   pending: { type: enum, values: [Include, Only, Exclude], default: Include, label: Unredeemed invitations, facet: true }
 
+# Microsoft narrows each set: accounts whose last successful sign-in is older than the window (Graph can't combine a
+# signInActivity filter with others, so guests are picked natively), guests created before the window that never
+# signed in, and unredeemed invitations. Filters run natively ($applyAdvanced) — 100k guests fit the transform budget.
 datasources:
-  guests:
+  inactive:
     source: graph
     request:
       path: /users
       query:
         $select: id,displayName,userPrincipalName,mail,accountEnabled,userType,companyName,createdDateTime,creationType,externalUserState,externalUserStateChangeDateTime,signInActivity
-        $filter: userType eq 'Guest'
+        $filter: "${ 'signInActivity/lastSuccessfulSignInDateTime le ' & $daysAgo($number(params.days ? params.days : 90)) }"
         $top: 120
     paging: all
-    maxItems: 100000
+    maxItems: 50000
     cache: { ttl: 3600 }
+  never:
+    source: graph
+    request:
+      path: /users
+      query:
+        $select: id,displayName,userPrincipalName,mail,accountEnabled,userType,companyName,createdDateTime,creationType,externalUserState,externalUserStateChangeDateTime,signInActivity
+        $filter: "${ \"userType eq 'Guest' and createdDateTime le \" & $daysAgo($number(params.days ? params.days : 90)) }"
+        $top: 120
+    paging: all
+    maxItems: 20000
+    cache: { ttl: 3600 }
+  invitations:
+    source: graph
+    when: ${ params.pending != 'Exclude' }
+    request:
+      path: /users
+      query:
+        $select: id,displayName,userPrincipalName,mail,accountEnabled,userType,companyName,createdDateTime,creationType,externalUserState,externalUserStateChangeDateTime
+        $filter: userType eq 'Guest' and externalUserState eq 'PendingAcceptance'
+        $top: 999
+    paging: all
+    maxItems: 20000
+    cache: { ttl: 3600 }
+  guestCount:
+    source: graph
+    request:
+      path: /users
+      headers: { ConsistencyLevel: eventual }
+      query:
+        $filter: userType eq 'Guest'
+        $count: true
+        $top: 1
+        $select: id
+    cache: { ttl: 3600 }
+    transform: ${ $lookup(value, '@odata.count') }
+  guests:
+    source: static
+    label: Inactive guests
+    data: {}
     transform: >-
       ${ (
-        $days := params.days ? $number(params.days) : 90;
-        $latest := function($a) {
-          $a.lastSuccessfulSignInDateTime ? $a.lastSuccessfulSignInDateTime
-          : ([$a.lastSignInDateTime, $a.lastNonInteractiveSignInDateTime][$])^(>$)[0]
-        };
-        $rows := [value.value[userType = 'Guest'].(
-          $last := $latest(signInActivity);
-          $pendingInvite := externalUserState = 'PendingAcceptance';
-          $since := $pendingInvite ? (externalUserStateChangeDateTime ? externalUserStateChangeDateTime : createdDateTime) : $last;
-          {
-            "id": id,
-            "displayName": displayName,
-            "mail": mail,
-            "userPrincipalName": userPrincipalName,
-            "homeDomain": mail ? $substringAfter(mail, '@') : null,
-            "company": companyName,
-            "accountEnabled": accountEnabled,
-            "invitation": $pendingInvite ? 'Pending' : externalUserState = 'Accepted' ? 'Accepted' : 'Other',
-            "invited": createdDateTime,
-            "lastSignIn": $last,
-            "daysInactive": $since ? -$daysUntil($since) : -$daysUntil(createdDateTime)
-          }
-        )];
-        $hits := $rows[
-          daysInactive >= $days and accountEnabled = true
-          and ($$.params.pending = 'Include' or ($$.params.pending = 'Only') = (invitation = 'Pending'))
-        ];
+        $cutoff := $daysAgo($number(params.days ? params.days : 90));
+        $pending := params.pending ? params.pending : 'Include';
+        $f := function($rows, $clauses) { $applyAdvanced($rows, { "join": "and", "clauses": $clauses }) };
+        $guest := { "path": "userType", "type": "string", "op": "eq", "value": "Guest" };
+        $enabled := { "path": "accountEnabled", "type": "boolean", "op": "eq", "value": true };
+        $redeemed := { "path": "externalUserState", "type": "string", "op": "ne", "value": "PendingAcceptance" };
+        $successful := "signInActivity.lastSuccessfulSignInDateTime";
+        $inactive := $pending = 'Only' ? [] : $f(ds.inactive.value, [$guest, $enabled, $redeemed,
+          { "path": $successful, "type": "date", "op": "le", "value": $cutoff }]);
+        $never := $pending = 'Only' ? [] : $f(ds.never.value, [$guest, $enabled, $redeemed,
+          { "path": "createdDateTime", "type": "date", "op": "le", "value": $cutoff },
+          { "path": $successful, "type": "date", "op": "isEmpty", "value": null }]);
+        /* Unredeemed since before the window: by the state change date, or the invitation date when there is none. */
+        $unredeemed := { "path": "externalUserState", "type": "string", "op": "eq", "value": "PendingAcceptance" };
+        $invites := $pending = 'Exclude' ? [] : $append(
+          $f(ds.invitations.value, [$guest, $unredeemed, $enabled, { "path": "externalUserStateChangeDateTime", "type": "date", "op": "le", "value": $cutoff }]),
+          $f(ds.invitations.value, [$guest, $unredeemed, $enabled,
+            { "path": "externalUserStateChangeDateTime", "type": "date", "op": "isEmpty", "value": null },
+            { "join": "or", "clauses": [
+              { "path": "createdDateTime", "type": "date", "op": "isEmpty", "value": null },
+              { "path": "createdDateTime", "type": "date", "op": "le", "value": $cutoff } ] }]));
+        /* A sort key can't be empty: accounts created before mid-2018 have no createdDateTime, listed first. */
+        $undated := { "path": "createdDateTime", "type": "date", "op": "isEmpty", "value": null };
+        $dated := { "path": "createdDateTime", "type": "date", "op": "notEmpty", "value": null };
+        $byInvited := function($rows) { ( $d := $f($rows, [$dated]); $append($f($rows, [$undated]), $d^(createdDateTime)) ) };
+        /* Accepted, or an older guest without the state ("Other"). */
+        $accepted := { "path": "externalUserState", "type": "string", "op": "eq", "value": "Accepted" };
+        $other := { "path": "externalUserState", "type": "string", "op": "ne", "value": "Accepted" };
+        $state := function($rows, $s) { $append(
+          $withFields($f($rows, [$accepted]), { "invitation": "Accepted", "state": $s }),
+          $withFields($f($rows, [$other]), { "invitation": "Other", "state": $s })) };
+        $rows := $append([], $append($append(
+          $withFields($byInvited($invites), { "invitation": "Pending", "state": "pending" }),
+          $state($never^(createdDateTime), "never")),
+          $state($inactive^(signInActivity.lastSuccessfulSignInDateTime), "inactive")));
+        /* Home domains of the first 10,000 listed (a domain is part of the address, so this needs JSONata per row). */
+        $sample := $take($f($rows, [{ "path": "mail", "type": "string", "op": "contains", "value": "@" }]), 10000);
+        $domains := $sample{ $substringAfter(mail, '@'): $count($) };
         {
-          "rows": [$hits^(>daysInactive)],
-          "total": $count($hits),
-          "pending": $count($hits[invitation = 'Pending']),
-          "domains": $append([], [$distinct($hits.homeDomain).( $d := $; { "domain": $d, "guests": $count($hits[homeDomain = $d]) } )^(>guests)][[0..5]]),
-          "allGuests": $count($rows)
+          "rows": $rows,
+          "total": $count($rows),
+          "pending": $count($invites),
+          "never": $count($never),
+          "domains": $append([], ([$keys($domains).{ "domain": $, "guests": $lookup($domains, $) }]^(>guests))[[0..5]]),
+          "domainsSampled": $count($rows) > 10000,
+          "allGuests": ds.guestCount,
+          "partial": ds.inactive.truncated = true or ds.never.truncated = true or ds.invitations.truncated = true
         }
       ) }
 
 layout:
+  - widget: markdown
+    span: 12
+    when: ${ guests.partial = true }
+    text: >-
+      **Partial data.** Microsoft has more matching accounts than this report reads (50,000 inactive accounts, 20,000
+      guests created before the window, 20,000 unredeemed invitations); the figures, the list and the export cover the
+      ones read.
   - widget: kpi
     id: total
     data: guests.total
@@ -96,6 +159,10 @@ layout:
     data: guests.allGuests
     label: Guests in the directory
     format: number
+  - widget: markdown
+    span: 12
+    when: ${ guests.domainsSampled = true }
+    text: The home domains chart counts the first 10,000 guests listed.
   - widget: chart
     id: domains
     title: Top home domains (inactive guests)
@@ -114,12 +181,15 @@ layout:
     selection: multi
     columns:
       - { field: displayName, label: Guest, kind: identity, secondary: mail, sortable: true }
-      - { field: homeDomain, label: Home domain, filter: facet }
-      - { field: company, label: Company, hidden: true }
+      - { field: companyName, label: Company, hidden: true }
       - { field: invitation, label: Invitation, kind: status, map: { Pending: [warn, Not redeemed], Accepted: [ok, Accepted], Other: [neutral, Other] }, filter: { type: facet, param: pending } }
-      - { field: daysInactive, label: Days inactive, kind: number, filter: range, sortable: true }
-      - { field: lastSignIn, label: Last sign-in, kind: date }
-      - { field: invited, label: Invited, kind: date }
+      - field: state
+        label: Why it's listed
+        kind: status
+        map: { pending: [warn, Invitation not redeemed], never: [warn, No successful sign-in recorded], inactive: [info, Inactive] }
+        filter: facet
+      - { field: signInActivity.lastSuccessfulSignInDateTime, label: Last successful sign-in, kind: relativeTime, sortable: true }
+      - { field: createdDateTime, label: Invited, kind: date, sortable: true }
       - { field: userPrincipalName, label: Sign-in name, hidden: true }
       - { field: id, label: Object id, kind: guid, hidden: true }
     inspect:

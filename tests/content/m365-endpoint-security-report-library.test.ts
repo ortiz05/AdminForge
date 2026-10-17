@@ -369,9 +369,9 @@ describe('endpoint reports', () => {
     expect(rooted.rows.map((r: Def) => r.deviceName)).toEqual(['Galaxy A15 – J. Okafor']);
   });
 
-  it('endpoint.os-versions (1.1) also lists the devices on out-of-support releases', async () => {
+  it('endpoint.os-versions (2.0) also lists the devices on out-of-support releases', async () => {
     const out = await run('endpoint.os-versions', 'devices');
-    expect(def('endpoint.os-versions').version).toBe('1.1.0');
+    expect(def('endpoint.os-versions').version).toBe('2.0.0');
     expect(out.unsupported).toBe(2);
     expect(pick(out.outdated, 'deviceName', 'release')).toEqual([
       ['EX-LT-0193', 'Windows 10 22H2'],

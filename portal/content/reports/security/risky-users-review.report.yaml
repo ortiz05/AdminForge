@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/report.schema.json
 kind: report
 id: security.risky-users-review
-version: 1.0.0
+version: 2.0.0
 title: Risky users review
 summary: >-
   Accounts Microsoft Entra ID Protection still considers at risk (or confirmed compromised), how long the risk has gone
@@ -69,12 +69,17 @@ datasources:
     paging: all
     maxItems: 20000
     cache: { ttl: 300 }
-    # Grouped by user once, so the review below looks each user up instead of scanning every detection.
+    # Grouped by user once (natively), so the review below looks each user up instead of scanning every detection.
+    # Microsoft filters the 30 days (checked again natively); detections without a user (sign-in-only) are dropped.
     transform: >-
       ${ (
-        $d := value.value[$type(userId) = 'string' and -$daysUntil(detectedDateTime) <= 30];
+        $d := $applyAdvanced(value.value, { "join": "and", "clauses": [
+          { "path": "userId", "type": "string", "op": "notEmpty", "value": null },
+          { "path": "detectedDateTime", "type": "date", "op": "ge", "value": $daysAgo(30) }
+        ] });
         {
           "total": $count($d),
+          "partial": value.truncated = true,
           "byUser": $count($d) > 0 ? $d{ userId: {
             "count": $count(riskEventType),
             "types": [$distinct(riskEventType)],
@@ -86,15 +91,29 @@ datasources:
     source: static
     label: Review
     data: {}
+    # Users are filtered, split by state and level and sorted natively ($applyAdvanced): confirmed compromised first,
+    # then high, medium and low, longest at risk first. Each listed user's detections are looked up with JSONata, so
+    # that is done for the first 1,000 of the list; the figures count every user.
     transform: >-
       ${ (
         $p := params;
         $levels := $p.level = 'high' ? ['high'] : $p.level = 'highMedium' ? ['high', 'medium'] : ['high', 'medium', 'low'];
         $min := $p.minDays ? $number($p.minDays) : 0;
         $det := ds.detections.byUser;
-        $all := [ds.users.value[$not(isDeleted = true) and riskState in ['atRisk', 'confirmedCompromised']].(
-          $u := $;
-          $mine := $lookup($det, $u.id);
+        $f := function($rows, $clauses) { $applyAdvanced($rows, { "join": "and", "clauses": $clauses }) };
+        /* "At risk for at least N days" as before: N whole days since the last risk update. */
+        $long := $min > 0 ? [{ "path": "riskLastUpdatedDateTime", "type": "date", "op": "lt", "value": $daysAgo($min - 1) }] : [];
+        $all := $f(ds.users.value, [
+          { "path": "isDeleted", "type": "boolean", "op": "ne", "value": true },
+          { "path": "riskState", "type": "string", "op": "in", "value": ['atRisk', 'confirmedCompromised'] }
+        ]);
+        $compromised := $f($all, [{ "path": "riskState", "type": "string", "op": "eq", "value": "confirmedCompromised" }]);
+        $atRisk := $f($all, [{ "path": "riskState", "type": "string", "op": "eq", "value": "atRisk" }]);
+        $level := function($l) { ( $x := $f($atRisk, $append([{ "path": "riskLevel", "type": "string", "op": "eq", "value": $l }], $long)); $x^(riskLastUpdatedDateTime) ) };
+        $first := $f($compromised, $long);
+        $ordered := $append($first^(riskLastUpdatedDateTime), [$levels.$level($)]);
+        $rows := [$take($ordered, 1000).(
+          $mine := $lookup($det, id);
           {
             "id": id,
             "userDisplayName": userDisplayName,
@@ -109,19 +128,31 @@ datasources:
             "lastDetection": $mine.last
           }
         )];
-        $rows := $all[(riskState = 'confirmedCompromised' or riskLevel in $levels) and daysAtRisk >= $min];
-        $order := { "high": 0, "medium": 1, "low": 2 };
-        $atRisk := $all[riskState = 'atRisk'];
+        $highMedium := $f($atRisk, [{ "path": "riskLevel", "type": "string", "op": "in", "value": ['high', 'medium'] }]);
         {
-          "rows": [$rows^(riskState = 'confirmedCompromised' ? 0 : 1, $lookup($order, riskLevel), >daysAtRisk)],
-          "high": $count($atRisk[riskLevel = 'high']),
-          "medium": $count($atRisk[riskLevel = 'medium']),
-          "waiting": $count($atRisk[riskLevel in ['high', 'medium'] and daysAtRisk > 7]),
-          "compromised": $count($all[riskState = 'confirmedCompromised'])
+          "rows": $rows,
+          "high": $count($f($atRisk, [{ "path": "riskLevel", "type": "string", "op": "eq", "value": "high" }])),
+          "medium": $count($f($atRisk, [{ "path": "riskLevel", "type": "string", "op": "eq", "value": "medium" }])),
+          "waiting": $count($f($highMedium, [{ "path": "riskLastUpdatedDateTime", "type": "date", "op": "lt", "value": $daysAgo(7) }])),
+          "compromised": $count($compromised),
+          "listed": $count($ordered),
+          "listCapped": $count($ordered) > 1000,
+          "partial": ds.users.truncated = true or ds.detections.partial = true
         }
       ) }
 
 layout:
+  - widget: markdown
+    span: 12
+    when: ${ review.partial = true }
+    text: >-
+      **Partial data.** Identity Protection has more users at risk or detections than this report reads (20,000 each);
+      the figures and the list cover the ones read.
+  - widget: markdown
+    span: 12
+    when: ${ review.listCapped = true }
+    text: >-
+      ${ 'The list and the export show the first 1,000 of ' & $formatNumber(review.listed, '#,##0') & ' users (confirmed compromised and high risk first); the figures count all of them.' }
   - widget: kpi
     data: review.high
     label: High risk

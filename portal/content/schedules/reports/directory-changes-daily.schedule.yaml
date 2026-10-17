@@ -1,10 +1,11 @@
 $schema: ../../../packages/schemas/generated/schedule.schema.json
 kind: schedule
 id: reports.directory-changes-daily
-version: 1.0.0
+version: 1.0.1
 title: Daily high-impact directory changes report
 summary: >-
-  Every day at 04:45 UTC, writes the previous 24 hours of high-impact Entra directory changes (roles and PIM, consents and app permissions, app credentials and owners, Conditional Access, domains and federation) as CSV and emails it, keeping three months of history beyond Entra's own 7 or 30 days.
+  Every day at 04:45 UTC, writes the previous 24 hours of high-impact Entra directory changes (roles and PIM, consents and app permissions, app credentials and owners, Conditional Access, domains and federation) as CSV and emails it, keeping three months of history beyond Entra's own 7 or 30 days. The file lists the newest 500 changes of the day (the
+  report's figures count all of them and say when there are more).
 owner: identity-team
 tags: [identity, audit, security, report]
 cron: "45 4 * * *"

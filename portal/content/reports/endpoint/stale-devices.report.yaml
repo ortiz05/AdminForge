@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/report.schema.json
 kind: report
 id: endpoint.stale-devices
-version: 1.0.0
+version: 2.0.0
 title: Stale devices
 summary: >-
   Microsoft Entra devices with no activity for the chosen number of days (cleanup candidates), and Intune-managed
@@ -38,7 +38,8 @@ params:
       - { value: Workplace, label: Registered }
 
 datasources:
-  entra:
+  entraList:
+    label: Entra devices
     source: graph
     request:
       path: /devices
@@ -55,21 +56,35 @@ datasources:
     paging: all
     maxItems: 100000
     cache: { ttl: 1800 }
+    # Microsoft filters the inactivity window; the next step is set natively on disjoint sets ($applyAdvanced,
+    # $withFields), oldest first — 100k stale devices fit the transform budget.
     transform: >-
       ${ (
-        $days := $number($$.params.days ? $$.params.days : 90);
-        $rows := [value.value[approximateLastSignInDateTime and $daysUntil(approximateLastSignInDateTime) <= -$days].$merge([$, {
-          "daysInactive": -$daysUntil(approximateLastSignInDateTime),
-          "cleanup": trustType = 'ServerAd' ? 'Delete in AD' : accountEnabled = true ? 'Disable, then delete' : 'Delete'
-        }])];
+        $f := function($rows, $clauses) { $applyAdvanced($rows, { "join": "and", "clauses": $clauses }) };
+        $hybrid := { "path": "trustType", "type": "string", "op": "eq", "value": "ServerAd" };
+        $cloud := { "path": "trustType", "type": "string", "op": "ne", "value": "ServerAd" };
+        $all := $append($append(
+          $withFields($f(value.value, [$hybrid]), { "cleanup": "Delete in AD" }),
+          $withFields($f(value.value, [$cloud, { "path": "accountEnabled", "type": "boolean", "op": "eq", "value": true }]), { "cleanup": "Disable, then delete" })),
+          $withFields($f(value.value, [$cloud, { "path": "accountEnabled", "type": "boolean", "op": "ne", "value": true }]), { "cleanup": "Delete" }));
+        $withOs := $f($all, [{ "path": "operatingSystem", "type": "string", "op": "notEmpty", "value": null }]);
+        $byOs := $withOs{ operatingSystem: $count($) };
         {
-          "rows": [$rows^(>daysInactive)],
-          "total": $count($rows),
-          "enabled": $count($rows[accountEnabled = true]),
-          "hybrid": $count($rows[trustType = 'ServerAd']),
-          "byOs": $append([], [$distinct($rows.operatingSystem).( $o := $; { "os": $o, "devices": $count($rows[operatingSystem = $o]) } )^(>devices)][[0..5]])
+          "rows": $append([], $all^(approximateLastSignInDateTime)),
+          "total": $count($all),
+          "enabled": $count($f($all, [{ "path": "accountEnabled", "type": "boolean", "op": "eq", "value": true }])),
+          "hybrid": $count($f($all, [$hybrid])),
+          "byOs": $append([], ([$keys($byOs).{ "os": $, "devices": $lookup($byOs, $) }]^(>devices))[[0..5]]),
+          "partial": value.truncated = true
         }
       ) }
+  # What the page shows of entraList: its figures and the first 10,000 devices. The export reads entraList itself.
+  entra:
+    source: static
+    data: ${ ds.entraList }
+    cache: { ttl: 1800 }
+    transform: >-
+      ${ $merge([value, { "rows": $take(value.rows, 10000), "listCapped": $count(value.rows) > 10000 }]) }
   intune:
     source: graph
     requires: { licences: [intune], scopes: { graph: [DeviceManagementManagedDevices.Read.All] } }
@@ -82,14 +97,31 @@ datasources:
     paging: all
     maxItems: 100000
     cache: { ttl: 1800 }
+    # Intune filters the window; oldest check-in first, the page shows the first 10,000.
     transform: >-
-      ${ {
-        "rows": [value.value[lastSyncDateTime and $daysUntil(lastSyncDateTime) <= -$number($$.params.days ? $$.params.days : 90)]
-                   .$merge([$, { "daysSinceSync": -$daysUntil(lastSyncDateTime) }])^(>daysSinceSync)],
-        "total": $count(value.value[lastSyncDateTime and $daysUntil(lastSyncDateTime) <= -$number($$.params.days ? $$.params.days : 90)])
-      } }
+      ${ (
+        $sorted := $append([], value.value^(lastSyncDateTime));
+        {
+          "rows": $take($sorted, 10000),
+          "total": $count(value.value),
+          "listCapped": $count(value.value) > 10000,
+          "partial": value.truncated = true
+        }
+      ) }
 
 layout:
+  - widget: markdown
+    span: 12
+    when: ${ entra.partial = true or intune.partial = true }
+    text: >-
+      **Partial data.** Microsoft has more stale devices than this report reads (100,000 of each kind); the figures,
+      the lists and the export cover the ones read.
+  - widget: markdown
+    span: 12
+    when: ${ entra.listCapped = true or intune.listCapped = true }
+    text: >-
+      Each list shows its first 10,000 devices (longest inactive first). The CSV/XLSX export has every stale Entra
+      device; the Intune list is on this page only.
   - widget: kpi
     id: total
     data: entra.total
@@ -145,8 +177,7 @@ layout:
         map: { AzureAd: [info, Entra joined], ServerAd: [info, Hybrid joined], Workplace: [neutral, Registered] }
         filter: { type: facet, param: joinType }
       - { field: accountEnabled, label: Enabled, kind: boolean, filter: facet }
-      - { field: daysInactive, label: Days inactive, kind: number, filter: range, sortable: true }
-      - { field: approximateLastSignInDateTime, label: Last activity, kind: date }
+      - { field: approximateLastSignInDateTime, label: Last activity, kind: relativeTime, sortable: true }
       - { field: cleanup, label: Next step, filter: facet }
       - { field: isManaged, label: Managed, kind: boolean, hidden: true }
       - { field: registrationDateTime, label: Registered, kind: date, hidden: true }
@@ -189,8 +220,7 @@ layout:
       - { field: deviceName, label: Device, kind: identity, secondary: userPrincipalName }
       - { field: operatingSystem, label: OS, filter: facet }
       - { field: managedDeviceOwnerType, label: Ownership, filter: facet }
-      - { field: daysSinceSync, label: Days since check-in, kind: number, filter: range }
-      - { field: lastSyncDateTime, label: Last check-in, kind: date }
+      - { field: lastSyncDateTime, label: Last check-in, kind: relativeTime }
       - { field: serialNumber, label: Serial number, kind: code, hidden: true }
     inspect:
       page: endpoint.device
@@ -212,5 +242,6 @@ layout:
 export:
   formats: [csv, xlsx]
   fileName: stale-devices-${ params.days }d
-  data: entra.rows
+  data: entraList.rows
+  maxRows: 100000
   columns: all

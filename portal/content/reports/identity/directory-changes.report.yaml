@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/report.schema.json
 kind: report
 id: identity.directory-changes
-version: 1.0.0
+version: 2.0.0
 title: High-impact directory changes
 summary: >-
   Changes from the Entra directory audit log that deserve a second pair of eyes — role assignments and PIM settings,
@@ -103,24 +103,38 @@ datasources:
     paging: all
     maxItems: 20000
     cache: { ttl: 300 }
+    # Each event gets its area natively — one $applyAdvanced pass per rule over every event — so the figures count
+    # all of them. The detail (role, permissions, properties, who and what) needs JSONata per event, so it is worked out
+    # for the newest 500 events the list and the export show.
     transform: >-
       ${ (
-        $rules := ds.rules;
-        $areaOf := function($a) {
-          $rules[match = 'exact' ? name = $a : $substring($a, 0, $length(name)) = name][0].area
-        };
+        $events := value.value;
+        $f := function($rows, $clauses) { $applyAdvanced($rows, { "join": "and", "clauses": $clauses }) };
+        /* One native pass per area: exact names with `in`, prefixes (PIM variants) with startsWith. */
+        $allRules := ds.rules;
+        $labelled := [$distinct($allRules.area).(
+          $area := $;
+          $rules := $allRules[area = $area];
+          $exact := [$rules[match = 'exact'].name];
+          $prefixes := [$rules[match = 'prefix'].{ "path": "activityDisplayName", "type": "string", "op": "startsWith", "value": name }];
+          $withFields($applyAdvanced($events, { "join": "or", "clauses": $append(
+            $count($exact) > 0 ? [{ "path": "activityDisplayName", "type": "string", "op": "in", "value": $exact }] : [],
+            $prefixes
+          ) }), { "area": $area })
+        )];
+        $sorted := $labelled^(>activityDateTime);
+        $inArea := function($area) { $count($f($labelled, [{ "path": "area", "type": "string", "op": "eq", "value": $area }])) };
         $unquote := function($v) { $v ? $trim($replace($replace($string($v), '"', ''), /[\[\]]/, '')) : null };
-        $all := [value.value.(
-          $area := $areaOf(activityDisplayName);
+        $rows := [$take($sorted, 500).(
           $props := [targetResources.modifiedProperties];
           $prop := function($n) { $props[displayName = $n][0] };
           $role := $unquote($prop('Role.DisplayName').newValue);
           $perms := $unquote($prop('ConsentAction.Permissions').newValue);
           $target := targetResources[0];
-          $area ? {
+          {
             "id": id,
             "time": activityDateTime,
-            "area": $area,
+            "area": area,
             "activity": activityDisplayName,
             "result": result,
             "reason": resultReason,
@@ -138,19 +152,32 @@ datasources:
             "correlationId": correlationId
           }
         )];
-        $shown := $all[$$.params.result = 'Any' or result = $$.params.result];
         {
-          "rows": [$shown^(>time)],
-          "roles": $count($shown[area = 'Roles']),
-          "consent": $count($shown[area = 'Consent']),
-          "credentials": $count($shown[area = 'Credentials']),
-          "conditionalAccess": $count($shown[area = 'Conditional Access']),
-          "domains": $count($shown[area = 'Domains']),
-          "failures": $count($shown[result = 'failure'])
+          "rows": $rows,
+          "roles": $inArea('Roles'),
+          "consent": $inArea('Consent'),
+          "credentials": $inArea('Credentials'),
+          "conditionalAccess": $inArea('Conditional Access'),
+          "domains": $inArea('Domains'),
+          "failures": $count($f($labelled, [{ "path": "result", "type": "string", "op": "eq", "value": "failure" }])),
+          "events": $count($labelled),
+          "listCapped": $count($labelled) > 500,
+          "partial": value.truncated = true
         }
       ) }
 
 layout:
+  - widget: markdown
+    span: 12
+    when: ${ audits.partial = true }
+    text: >-
+      **Partial data.** The directory audit log has more matching events than this report reads (20,000); the figures
+      count the newest ones read. Narrow the time range or the area.
+  - widget: markdown
+    span: 12
+    when: ${ audits.listCapped = true }
+    text: >-
+      ${ 'The list and the export show the newest 500 of ' & $formatNumber(audits.events, '#,##0') & ' changes; the figures count all of them. Narrow the time range or the area for the rest.' }
   - widget: kpi
     id: roles
     data: audits.roles

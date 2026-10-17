@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/page.schema.json
 kind: page
 id: endpoint.apps
-version: 1.0.1
+version: 2.0.0
 title: Apps
 summary: >-
   Apps managed by Intune — Win32, Microsoft Store, Microsoft 365 Apps, line-of-business, store and web apps — by
@@ -58,9 +58,11 @@ datasources:
     paging: all
     maxItems: 10000
     cache: { ttl: 300 }
+    # Apps are grouped natively by Graph type: the type and platform are worked out once per type, and the facets,
+    # assignment and search filter natively ($applyAdvanced) — 10,000 apps fit the transform budget.
     transform: >-
       ${ (
-        $q := $lowercase(params.q ? params.q : '');
+        $q := params.q ? params.q : '';
         $type := function($t) {
           $t in ['win32LobApp', 'winGetApp'] ? 'Win32'
           : $t in ['officeSuiteApp', 'macOSOfficeSuiteApp'] ? 'M365'
@@ -74,36 +76,35 @@ datasources:
           : $contains($t, 'macOS') ? 'macOS' : $contains($t, 'ios') or $contains($t, 'IOS') ? 'iOS'
           : $contains($t, 'ndroid') ? 'Android' : 'Other'
         };
-        $rows := [value.value.(
-          $t := $substringAfter(`@odata.type`, '#microsoft.graph.');
-          {
-            "id": id,
-            "displayName": displayName,
-            "publisher": publisher,
-            "odataType": $t,
-            "kind": $type($t),
-            "platform": $platform($t),
-            "assigned": $count(assignments) > 0,
-            "featured": isFeatured = true,
-            "state": publishingState,
-            "created": createdDateTime,
-            "modified": lastModifiedDateTime
-          }
+        $f := function($rows, $clauses) { $applyAdvanced($rows, { "join": "and", "clauses": $clauses }) };
+        $apps := value.value;
+        $byType := $apps{ `@odata.type`: $ };
+        $typed := [$keys($byType).(
+          $t := $substringAfter($, '#microsoft.graph.');
+          $withFields($lookup($byType, $), { "odataType": $t, "kind": $type($t), "platform": $platform($t) })
         )];
+        $assigned := { "path": "assignments", "type": "string", "op": "notEmpty", "value": null };
+        $unassigned := { "path": "assignments", "type": "string", "op": "isEmpty", "value": null };
+        $labelled := $append(
+          $withFields($f($typed, [$assigned]), { "assigned": true }),
+          $withFields($f($typed, [$unassigned]), { "assigned": false })
+        );
+        $shown := $f($labelled, $append($append($append(
+          params.platform != 'Any' ? [{ "path": "platform", "type": "string", "op": "eq", "value": params.platform }] : [],
+          params.kind != 'Any' ? [{ "path": "kind", "type": "string", "op": "eq", "value": params.kind }] : []),
+          params.assigned != 'Any' ? [{ "path": "assigned", "type": "boolean", "op": "eq", "value": params.assigned = 'Assigned' }] : []),
+          $q != '' ? [{ "join": "or", "clauses": [
+            { "path": "displayName", "type": "string", "op": "contains", "value": $q },
+            { "path": "publisher", "type": "string", "op": "contains", "value": $q }
+          ] }] : []));
+        $byPlatform := $labelled{ platform: $count($) };
         {
-          "rows": [$rows[
-            ($$.params.platform = 'Any' or platform = $$.params.platform)
-            and ($$.params.kind = 'Any' or kind = $$.params.kind)
-            and ($$.params.assigned = 'Any' or ($$.params.assigned = 'Assigned') = assigned)
-            and ($q = '' or $contains($lowercase(displayName), $q) or $contains($lowercase(publisher ? publisher : ''), $q))
-          ]^(displayName)],
-          "total": $count($rows),
-          "win32": $count($rows[kind = 'Win32']),
-          "unassigned": $count($rows[assigned = false]),
-          "byPlatform": [$distinct($rows.platform).(
-            $p := $;
-            { "platform": $p, "apps": $count($rows[platform = $p]) }
-          )^(>apps)]
+          "rows": $append([], $shown^(displayName)),
+          "total": $count($labelled),
+          "win32": $count($f($labelled, [{ "path": "kind", "type": "string", "op": "eq", "value": "Win32" }])),
+          "unassigned": $count($f($labelled, [$unassigned])),
+          "byPlatform": $append([], [$keys($byPlatform).{ "platform": $, "apps": $lookup($byPlatform, $) }]^(>apps)),
+          "partial": value.truncated = true
         }
       ) }
 
@@ -111,6 +112,11 @@ layout:
   - widget: licenceGate
     feature: intune
     title: Intune isn't licensed in this tenant
+  - widget: markdown
+    span: 12
+    when: ${ apps.partial = true }
+    text: >-
+      **Partial data.** Intune has more apps than this page reads (10,000); the figures and the list cover the ones read.
   - widget: kpi
     id: total
     data: apps.total
@@ -149,10 +155,10 @@ layout:
       - { field: kind, label: Type, filter: { type: facet, param: kind } }
       - { field: platform, label: Platform, filter: { type: facet, param: platform } }
       - { field: assigned, label: Assigned, kind: status, map: { "true": [ok, Assigned], "false": [neutral, Not assigned] }, filter: { type: facet, param: assigned } }
-      - { field: state, label: Publishing, hidden: true }
-      - { field: featured, label: Featured in Company Portal, kind: boolean, hidden: true }
-      - { field: modified, label: Modified, kind: relativeTime, sortable: true }
-      - { field: created, label: Created, kind: date, hidden: true }
+      - { field: publishingState, label: Publishing, hidden: true }
+      - { field: isFeatured, label: Featured in Company Portal, kind: boolean, hidden: true }
+      - { field: lastModifiedDateTime, label: Modified, kind: relativeTime, sortable: true }
+      - { field: createdDateTime, label: Created, kind: date, hidden: true }
       - { field: odataType, label: Graph type, kind: code, hidden: true }
       - { field: id, label: App id, kind: guid, hidden: true }
     rowActions:

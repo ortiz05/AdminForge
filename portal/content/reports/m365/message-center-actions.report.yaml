@@ -1,7 +1,7 @@
 $schema: ../../../packages/schemas/generated/report.schema.json
 kind: report
 id: m365.message-center-actions
-version: 1.0.0
+version: 2.0.0
 title: Message center actions and major changes
 summary: >-
   Message center posts that need action by a date (overdue ones and those due within the chosen number of days) and
@@ -73,47 +73,58 @@ datasources:
     paging: all
     maxItems: 3000
     cache: { ttl: 900 }
+    # Posts are sorted into disjoint sets natively ($applyAdvanced on the act-by date): overdue (passed in the last 30
+    # days), due within the horizon, and major changes updated in the last 90 days without an act-by date in either.
+    # Services per post are counted with one native pass per service.
     transform: >-
       ${ (
         $horizon := params.horizon ? $number(params.horizon) : 60;
         $svc := params.service ? params.service : 'All';
-        $rows := [value.value[$svc = 'All' or $svc in services].(
-          $due := actionRequiredByDateTime ? $daysUntil(actionRequiredByDateTime);
-          $kind := $not($exists($due)) ? (isMajorChange = true ? 'major' : 'none')
-            : $due < -30 ? 'none'
-            : $due < 0 ? 'overdue'
-            : $due <= $horizon ? 'due'
-            : isMajorChange = true ? 'major' : 'none';
-          {
-            "id": id,
-            "title": title,
-            "services": services,
-            "category": category,
-            "severity": severity,
-            "isMajorChange": isMajorChange = true,
-            "kind": $kind,
-            "actionRequiredByDateTime": actionRequiredByDateTime,
-            "daysToAct": $due,
-            "lastModifiedDateTime": lastModifiedDateTime,
-            "startDateTime": startDateTime,
-            "recent": -$daysUntil(lastModifiedDateTime) <= 90,
-            "tags": tags
-          }
-        )[kind in ['overdue', 'due'] or (kind = 'major' and recent and $$.params.majorChanges != false)]];
+        $f := function($rows, $clauses) { $applyAdvanced($rows, { "join": "and", "clauses": $clauses }) };
+        /* Whole days as before: "due within N days" = N whole days left, so before now + N + 1 days. */
+        $now := $daysAgo(0);
+        $until := $daysAgo(-($horizon + 1));
+        $all := $svc = 'All' ? value.value : $f(value.value, [{ "path": "services", "type": "string", "op": "eq", "value": $svc }]);
+        $by := "actionRequiredByDateTime";
+        $overdue := $f($all, [
+          { "path": $by, "type": "date", "op": "lt", "value": $now },
+          { "path": $by, "type": "date", "op": "ge", "value": $daysAgo(30) }
+        ]);
+        $due := $f($all, [
+          { "path": $by, "type": "date", "op": "ge", "value": $now },
+          { "path": $by, "type": "date", "op": "lt", "value": $until }
+        ]);
+        $major := params.majorChanges = false ? [] : $f($all, [
+          { "path": "isMajorChange", "type": "boolean", "op": "eq", "value": true },
+          { "path": "lastModifiedDateTime", "type": "date", "op": "ge", "value": $daysAgo(90) },
+          { "join": "or", "clauses": [
+            { "path": $by, "type": "date", "op": "isEmpty", "value": null },
+            { "path": $by, "type": "date", "op": "ge", "value": $until }
+          ] }
+        ]);
+        $rows := $append($append(
+          $withFields($overdue^(actionRequiredByDateTime), { "kind": "overdue" }),
+          $withFields($due^(actionRequiredByDateTime), { "kind": "due" })),
+          $withFields($major^(>lastModifiedDateTime), { "kind": "major" }));
+        $services := $distinct($rows.services);
         {
-          "rows": [$rows^(kind = 'overdue' ? 0 : kind = 'due' ? 1 : 2, daysToAct, >lastModifiedDateTime)],
-          "overdue": $count($rows[kind = 'overdue']),
-          "dueSoon": $count($rows[kind = 'due' and daysToAct <= 14]),
-          "due": $count($rows[kind = 'due']),
-          "major": $count($rows[isMajorChange]),
-          "byService": $append([], [($distinct($rows.services).(
-            $s := $;
-            { "service": $s, "posts": $count($rows[$s in services]) }
-          ))^(>posts)][[0..7]])
+          "rows": $rows,
+          "overdue": $count($overdue),
+          "dueSoon": $count($f($due, [{ "path": $by, "type": "date", "op": "lt", "value": $daysAgo(-15) }])),
+          "due": $count($due),
+          "major": $count($f($rows, [{ "path": "isMajorChange", "type": "boolean", "op": "eq", "value": true }])),
+          "byService": $append([], ([$services.( $s := $; { "service": $s, "posts": $count($f($rows, [{ "path": "services", "type": "string", "op": "eq", "value": $s }])) } )]^(>posts))[[0..7]]),
+          "partial": value.truncated = true
         }
       ) }
 
 layout:
+  - widget: markdown
+    span: 12
+    when: ${ messages.partial = true }
+    text: >-
+      **Partial data.** Message center has more matching posts than this report reads (3,000); the figures and the
+      list cover the newest ones.
   - widget: kpi
     data: messages.overdue
     label: Act-by date passed
@@ -155,8 +166,7 @@ layout:
         kind: status
         map: { overdue: [crit, Act-by date passed], due: [warn, Action by date], major: [info, Major change] }
         filter: facet
-      - { field: actionRequiredByDateTime, label: Act by, kind: date, sortable: true, filter: date }
-      - { field: daysToAct, label: Days left, kind: number, align: end, sortable: true }
+      - { field: actionRequiredByDateTime, label: Act by, kind: relativeTime, sortable: true }
       - { field: services, label: Services, kind: tags }
       - field: category
         label: Category

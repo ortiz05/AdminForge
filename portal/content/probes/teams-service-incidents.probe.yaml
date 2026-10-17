@@ -1,7 +1,7 @@
 $schema: ../../packages/schemas/generated/probe.schema.json
 kind: probe
 id: probes.teams-service-incidents
-version: 1.0.0
+version: 1.0.1
 title: Microsoft Teams without an open incident
 summary: >-
   Critical while Microsoft has an open service incident for Microsoft Teams (chat, meetings, calling), listed with its
@@ -9,6 +9,10 @@ summary: >-
 owner: m365-team
 tags: [synthetic, service-health, teams, sweep-15m]
 group: teams
+remedy: >-
+  Microsoft has an open incident for Microsoft Teams. Open it to see who is affected, Microsoft's workaround and when
+  the next update is due, and tell the service desk.
+link: { label: Open Service health, href: "/p/m365.service-health?service=Microsoft%20Teams" }
 check:
   kind: graphCount
   path: /admin/serviceAnnouncement/issues

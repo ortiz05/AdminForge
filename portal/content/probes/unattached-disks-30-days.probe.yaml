@@ -1,7 +1,7 @@
 $schema: ../../packages/schemas/generated/probe.schema.json
 kind: probe
 id: probes.unattached-disks-30-days
-version: 1.0.1
+version: 1.0.2
 title: Managed disks unattached for 30 days or more
 summary: >-
   Managed disks that no VM has used for at least 30 days (detached since LastOwnershipUpdateTime, or never attached
@@ -10,6 +10,10 @@ summary: >-
 owner: azure-team
 tags: [kql, configuration, azure, cost, compute, config-check]
 group: azure
+remedy: >-
+  Managed disks have been unattached for over 30 days and are still billed. Confirm with the owner, take a snapshot if
+  the data may be needed, then delete them.
+link: { label: Open orphaned resources, href: "/p/azure.orphaned-resources" }
 check:
   kind: kql
   source: resourceGraph

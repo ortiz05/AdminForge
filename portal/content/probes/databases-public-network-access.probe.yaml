@@ -1,7 +1,7 @@
 $schema: ../../packages/schemas/generated/probe.schema.json
 kind: probe
 id: probes.databases-public-network-access
-version: 1.0.1
+version: 1.0.2
 title: Databases with public network access on
 summary: >-
   Azure SQL servers, SQL Managed Instances (public data endpoint), PostgreSQL and MySQL flexible servers, Cosmos DB
@@ -11,6 +11,11 @@ summary: >-
 owner: azure-team
 tags: [kql, configuration, azure, databases, network, security, config-check]
 group: azure
+remedy: >-
+  A database server accepts connections from the public internet. Turn off public network access and connect through a
+  private endpoint, or limit the firewall to the addresses that need it. Check with the application owner first: some
+  clients may connect over the internet today.
+link: { label: Open databases with public access, href: "/p/azure.databases-public-access" }
 check:
   kind: kql
   source: resourceGraph

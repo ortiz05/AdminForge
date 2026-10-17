@@ -1,12 +1,16 @@
 $schema: ../../packages/schemas/generated/probe.schema.json
 kind: probe
 id: probes.dns-spf
-version: 1.0.3
+version: 1.0.4
 title: SPF record for the primary domain
 summary: Resolves the TXT records of AF_MAIL_DOMAIN and expects an SPF record that includes Exchange Online.
 owner: m365-team
 tags: [synthetic, m365, exchange, dns, email-security, sweep-1h]
 group: exchange
+remedy: >-
+  The mail domain's SPF record is missing or doesn't include Exchange Online (include:spf.protection.outlook.com), so
+  mail you send may be marked as spam. Fix the TXT record that starts with v=spf1; a domain may have only one.
+link: { label: Open Domains (Microsoft 365), href: "https://admin.microsoft.com/#/Domains" }
 check:
   kind: dnsResolve
   name: ${ env.AF_MAIL_DOMAIN }

@@ -1,7 +1,7 @@
 $schema: ../../packages/schemas/generated/probe.schema.json
 kind: probe
 id: probes.storage-public-blob-access
-version: 1.0.1
+version: 1.0.2
 title: Storage accounts allowing public blob access
 summary: >-
   Storage accounts where anonymous (public) blob access is allowed or was never turned off — any container on them can
@@ -10,6 +10,10 @@ summary: >-
 owner: azure-team
 tags: [kql, configuration, azure, storage, security, config-check]
 group: azure
+remedy: >-
+  A storage account allows anonymous public read of its blobs. Turn off "Allow Blob anonymous access" unless the
+  account deliberately hosts public content; share with SAS tokens or Entra ID instead.
+link: { label: Open storage account security, href: "/p/azure.storage-account-security" }
 check:
   kind: kql
   source: resourceGraph

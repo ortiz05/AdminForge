@@ -1,7 +1,7 @@
 $schema: ../../packages/schemas/generated/probe.schema.json
 kind: probe
 id: probes.nsg-open-management-ports
-version: 1.0.1
+version: 1.0.2
 title: NSG rules open to the internet on management ports
 summary: >-
   Inbound Allow rules in network security groups whose source is any address (*, 0.0.0.0/0, Internet) and whose
@@ -10,6 +10,11 @@ summary: >-
 owner: azure-team
 tags: [kql, configuration, azure, network, security, config-check]
 group: azure
+remedy: >-
+  A network security group allows RDP, SSH or another management port from the internet, the most common way servers
+  are broken into. Remove the rule or limit it to known addresses; reach the servers through Azure Bastion or
+  just-in-time VM access instead.
+link: { label: Open network security groups, href: "https://portal.azure.com/#browse/Microsoft.Network%2FNetworkSecurityGroups" }
 check:
   kind: kql
   source: resourceGraph

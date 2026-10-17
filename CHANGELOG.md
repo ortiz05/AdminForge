@@ -11,6 +11,13 @@ Closes the gaps found by comparing the build with the original plan (see the pla
 
 ### Added
 
+- **A probe's result says what failed, why, and what to do.** Its detail on Synthetic monitoring shows **What it
+  found** (the rows behind the result, e.g. which SAML apps' certificates expire and when; Operators only, since the
+  automation identity collected them), **What to do** (new probe field `remedy`) with a button to the AdminForge page
+  or Microsoft admin centre where it's fixed (new `link`, `/p/` targets validated), and **What this checks**. Sign-in
+  checks name the most common error code and reason in their message. A dashboard's `probeStatus` row opens to the
+  remedy and a link to the full result. Every active probe has a remedy (`tests/content/probe-remedies.test.ts`);
+  `GET /api/probes` returns `summary`, `remedy` and `link`.
 - **Synthetic monitoring of Microsoft 365, by service.** `/monitoring` groups probes by the service they watch
   (new probe `group:` — a navigation section key or `platform`; `GET /api/probes` returns `group` and `groups`), with
   a **By service / By check** switch and `?group=<key>` for one service; Exchange Online, SharePoint Online and Teams

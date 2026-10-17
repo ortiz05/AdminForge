@@ -1,7 +1,7 @@
 $schema: ../../packages/schemas/generated/probe.schema.json
 kind: probe
 id: probes.exchange-mail-flow
-version: 1.0.0
+version: 1.0.1
 title: Mail flow — end-to-end delivery
 summary: >-
   Synthetic transaction: sends a test message from the report sender (AF_MAIL_SENDER) to a dedicated test mailbox
@@ -12,6 +12,13 @@ summary: >-
 owner: m365-team
 tags: [synthetic, synthetic-transaction, exchange, mail-flow]
 group: exchange
+remedy: >-
+  The test message didn't arrive in time, or it landed in Junk Email. Check Service health for Exchange Online first.
+  If there's no incident, run a message trace in the Exchange admin center for the subject "AdminForge mail flow
+  check": it shows where the message stopped (a mail flow rule, a connector, quarantine or a delay). "Not configured"
+  or "forbidden" means the test mailboxes or their Exchange application permissions are missing (docs/operations.md ›
+  Synthetic transactions).
+link: { label: Open Message trace (Exchange), href: "https://admin.exchange.microsoft.com/#/messagetrace" }
 check:
   kind: mailFlow
   from: ${ env.AF_MAIL_SENDER }

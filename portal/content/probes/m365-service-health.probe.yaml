@@ -1,12 +1,17 @@
 $schema: ../../packages/schemas/generated/probe.schema.json
 kind: probe
 id: probes.m365-service-health
-version: 1.0.2
+version: 1.0.3
 title: Microsoft 365 service health API
 summary: Reads the service health overview as the automation identity, so the Service health page and alerts keep working.
 owner: m365-team
 tags: [synthetic, m365, graph, sweep-15m]
 group: m365
+remedy: >-
+  Service health couldn't be read as the automation identity, so Service health and its alerts are blind. Check
+  Microsoft Graph reachability; if Graph answers, the automation identity lost ServiceHealth.Read.All — the AdminForge
+  administrator checks Provisioning status.
+link: { label: Open Service health, href: "/p/m365.service-health" }
 check:
   kind: graph
   path: /admin/serviceAnnouncement/healthOverviews

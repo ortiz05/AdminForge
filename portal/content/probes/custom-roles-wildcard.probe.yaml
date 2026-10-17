@@ -1,7 +1,7 @@
 $schema: ../../packages/schemas/generated/probe.schema.json
 kind: probe
 id: probes.custom-roles-wildcard
-version: 1.0.1
+version: 1.0.2
 title: Custom Azure roles that allow everything or can grant access
 summary: >-
   Custom Azure RBAC roles whose actions include "*" (every action, like Owner) or Microsoft.Authorization writes (they
@@ -10,6 +10,12 @@ summary: >-
 owner: azure-team
 tags: [kql, configuration, azure, rbac, security, config-check]
 group: azure
+remedy: >-
+  A custom Azure role allows every action (*), or can create role assignments or definitions
+  (Microsoft.Authorization), so whoever holds it can do far more than intended or grant themselves more access.
+  Replace the wildcard and the authorization actions with the specific actions the role needs, or retire it in favour
+  of a built-in role.
+link: { label: Open custom role risks, href: "/p/azure.custom-role-risks" }
 check:
   kind: kql
   source: resourceGraph

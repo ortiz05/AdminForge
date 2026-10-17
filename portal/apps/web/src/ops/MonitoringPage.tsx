@@ -31,8 +31,10 @@ import {
   probeResultsQuery,
   probesQuery,
   type ProbeItem,
+  type ProbePoint,
   type ProbeStatus,
 } from './schedules';
+import { splitHref } from '../lib/links';
 import { useNav } from '../lib/session';
 import { Callout, Facts, QueryError, useDocumentTitle } from './ui';
 
@@ -178,12 +180,137 @@ function ProbeTile({
   );
 }
 
+/** `lastSignInDateTime` → "Last sign in date time", `OSVersion` → "OS version" (sentence case; acronyms stay). */
+function columnLabel(name: string): string {
+  const words = name.match(/[A-Z]{2,}(?=[A-Z][a-z]|\d|\b|$)|[A-Z]?[a-z]+|[A-Z]+|\d+/g) ?? [name];
+  const label = words.map((w) => (/^[A-Z][a-z]/.test(w) ? w.toLowerCase() : w)).join(' ');
+  return label.charAt(0).toUpperCase() + label.slice(1);
+}
+
+function cellText(v: unknown): string {
+  if (v === null || v === undefined || v === '') return '—';
+  if (typeof v === 'boolean') return v ? 'Yes' : 'No';
+  if (typeof v === 'number') return formatNumber(v);
+  if (typeof v === 'string') return /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(v) ? formatTimestamp(v) : v;
+  return JSON.stringify(v);
+}
+
+const MAX_FOUND_ROWS = 25;
+const MAX_FOUND_COLUMNS = 6;
+
+/**
+ * "What it found": the rows behind a result — the certificates about to expire, the resources that break a rule, the
+ * failure reasons — so engineers don't go looking. Rows were read with application permissions: Operators see them,
+ * others see why they don't.
+ */
+function FoundItems({ result }: { result: ProbePoint | undefined }) {
+  if (!result) return null;
+  if (result.detailsHidden)
+    return (
+      <section aria-labelledby="probe-found" className="flex flex-col gap-2">
+        <h3 id="probe-found" className="af-eyebrow">
+          What it found
+        </h3>
+        <p className="text-sm text-fg-3">
+          The items behind this result are shown to Operators: the check read them with the automation
+          identity’s application permissions.
+        </p>
+      </section>
+    );
+  const d = result.details;
+  if (!d || !d.rows.length) return null;
+  const columns = d.columns.slice(0, MAX_FOUND_COLUMNS);
+  const rows = d.rows.slice(0, MAX_FOUND_ROWS);
+  const more = Math.max(d.totalRows, d.rows.length) - rows.length;
+  return (
+    <section aria-labelledby="probe-found" className="flex flex-col gap-2">
+      <h3 id="probe-found" className="af-eyebrow">
+        What it found
+      </h3>
+      <div className="overflow-x-auto rounded-(--af-panel-radius) border border-line">
+        <table className="w-full text-left text-xs">
+          <caption className="sr-only">Items behind the latest result</caption>
+          <thead className="bg-sunken text-fg-3">
+            <tr>
+              {columns.map((c) => (
+                <th key={c} scope="col" className="px-3 py-2 font-medium whitespace-nowrap">
+                  {columnLabel(c)}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r, i) => (
+              <tr key={i} className="border-t border-line">
+                {columns.map((c) => {
+                  const text = cellText(r[c]);
+                  return (
+                    <td key={c} className="max-w-64 truncate px-3 py-1.5 text-fg-2" title={text}>
+                      {text}
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {(more > 0 || d.truncated) && (
+        <p className="text-xs text-fg-3">
+          {more > 0 ? `${formatNumber(more)} more not shown here` : 'More not shown here'}
+          {d.columns.length > columns.length ? `; ${d.columns.length - columns.length} more columns` : ''} —
+          the linked page lists every one.
+        </p>
+      )}
+    </section>
+  );
+}
+
+/** "What to do" (the probe's remedy) and a way to act: an AdminForge page, or a Microsoft admin centre. */
+function NextSteps({ p }: { p: ProbeItem }) {
+  if (!p.remedy && !p.link) return null;
+  const link = p.link;
+  const external = link ? /^https:\/\//.test(link.href) : false;
+  const target = link && !external ? splitHref(link.href) : null;
+  return (
+    <section aria-labelledby="probe-next" className="flex flex-col gap-2">
+      <h3 id="probe-next" className="af-eyebrow">
+        What to do
+      </h3>
+      {p.remedy && <p className="text-sm text-fg-2">{p.remedy}</p>}
+      {link &&
+        (external ? (
+          <a
+            href={link.href}
+            target="_blank"
+            rel="noreferrer"
+            className={cn(button({ intent: 'secondary', size: 'sm' }), 'self-start')}
+          >
+            {link.label}
+          </a>
+        ) : (
+          <Link
+            to={target!.pathname as never}
+            search={target!.search as never}
+            className={cn(button({ intent: 'secondary', size: 'sm' }), 'self-start')}
+          >
+            {link.label}
+          </Link>
+        ))}
+    </section>
+  );
+}
+
 function ProbeDetail({ p, service, onClose }: { p: ProbeItem; service?: string; onClose: () => void }) {
   const now = useNow(60_000);
   // Rounded to 5 minutes so the query key (and the fetch) only changes every few minutes.
   const since = new Date(Math.floor((now - DAY_MS) / 300_000) * 300_000).toISOString();
   const q = useQuery(probeResultsQuery(p.key, since));
-  const points = (q.data?.items.length ? q.data.items : p.series).slice(-288);
+  // Results come newest first; the chart and "Recent problems" read them oldest first.
+  const points = [...(q.data?.items.length ? q.data.items : p.series)]
+    .sort((a, b) => Date.parse(a.ts) - Date.parse(b.ts))
+    .slice(-288);
+  const newest = q.data?.items.length ? points[points.length - 1] : undefined;
   const unit = p.latest?.unit ?? p.thresholds.unit;
   const status = statusOf(p);
   const failures = points
@@ -207,6 +334,17 @@ function ProbeDetail({ p, service, onClose }: { p: ProbeItem; service?: string; 
             {p.latest.message}
           </Callout>
         )}
+        <FoundItems result={newest} />
+        {status !== 'ok' && <NextSteps p={p} />}
+        {p.summary && (
+          <section aria-labelledby="probe-what" className="flex flex-col gap-2">
+            <h3 id="probe-what" className="af-eyebrow">
+              What this checks
+            </h3>
+            <p className="text-sm text-fg-2">{p.summary}</p>
+          </section>
+        )}
+        {status === 'ok' && <NextSteps p={p} />}
         <Facts
           items={[
             ['Latest', formatMetric(p.latest?.metric, unit)],

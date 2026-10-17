@@ -1,7 +1,7 @@
 $schema: ../../packages/schemas/generated/probe.schema.json
 kind: probe
 id: probes.teams-online-meeting
-version: 1.0.0
+version: 1.0.1
 title: Teams meetings — create and delete
 summary: >-
   Synthetic transaction: creates a Teams online meeting for a dedicated test user (AF_SYNTHETIC_USER_ID) an hour
@@ -11,6 +11,11 @@ summary: >-
 owner: m365-team
 tags: [synthetic, synthetic-transaction, teams, meetings]
 group: teams
+remedy: >-
+  Creating or cleaning up the test online meeting failed or was slow. Check Service health for Microsoft Teams.
+  "Forbidden" means the application access policy that lets the automation identity create meetings for the test user
+  is missing; "not configured" means the test user isn't set (docs/operations.md › Synthetic transactions).
+link: { label: Open Service health, href: "/p/m365.service-health?service=Microsoft%20Teams" }
 check:
   kind: onlineMeeting
   organizer: ${ env.AF_SYNTHETIC_USER_ID }

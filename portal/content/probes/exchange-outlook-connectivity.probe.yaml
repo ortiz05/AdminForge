@@ -1,7 +1,7 @@
 $schema: ../../packages/schemas/generated/probe.schema.json
 kind: probe
 id: probes.exchange-outlook-connectivity
-version: 1.0.0
+version: 1.0.1
 title: Outlook connectivity endpoint (MAPI over HTTP)
 summary: >-
   Calls the endpoint Outlook for Windows and Mac connects to (outlook.office365.com/mapi) without signing in. Exchange
@@ -10,6 +10,11 @@ summary: >-
 owner: m365-team
 tags: [synthetic, exchange, http, outlook, sweep-15m]
 group: exchange
+remedy: >-
+  Outlook's connection endpoint for Exchange Online didn't answer as expected, so Outlook may show as disconnected.
+  Check Service health for Exchange Online. If there's no incident and it continues, check this host's network, then
+  open a Microsoft support request.
+link: { label: Open Service health, href: "/p/m365.service-health?service=Exchange%20Online" }
 check:
   kind: http
   url: https://outlook.office365.com/mapi/emsmdb/

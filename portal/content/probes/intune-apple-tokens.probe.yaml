@@ -1,7 +1,7 @@
 $schema: ../../packages/schemas/generated/probe.schema.json
 kind: probe
 id: probes.intune-apple-tokens
-version: 1.0.1
+version: 1.0.2
 title: Apple enrolment (ADE) tokens expiring
 summary: >-
   Counts the Apple automated device enrolment (ADE) tokens that have expired or expire within 30 days, or whose last
@@ -11,6 +11,11 @@ summary: >-
 owner: endpoint-team
 tags: [endpoint, intune, apple, certificates, sweep-6h]
 group: endpoint
+remedy: >-
+  An Apple automated device enrolment token is expired, expires soon, or failed its last sync with Apple Business
+  Manager, so new Apple devices can't enrol with their profile. Download a new token from Apple Business Manager (the
+  same account that created it) and upload it to the existing token in Intune › Devices › Enrollment › Apple.
+link: { label: Open Intune connector health, href: "/p/endpoint.intune-connector-health" }
 check:
   kind: graphCount
   path: /deviceManagement/depOnboardingSettings

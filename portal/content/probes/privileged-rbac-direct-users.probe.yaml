@@ -1,7 +1,7 @@
 $schema: ../../packages/schemas/generated/probe.schema.json
 kind: probe
 id: probes.privileged-rbac-direct-users
-version: 1.0.1
+version: 1.0.2
 title: Privileged Azure roles assigned directly to users
 summary: >-
   Owner, User Access Administrator or Role Based Access Control Administrator assigned straight to a user (not a group
@@ -11,6 +11,11 @@ summary: >-
 owner: azure-team
 tags: [kql, configuration, azure, rbac, security, config-check]
 group: azure
+remedy: >-
+  People hold Owner, User Access Administrator or Role Based Access Control Administrator directly on Azure scopes,
+  instead of through a group or PIM. Move each assignment to a group or make it eligible in PIM, then remove the
+  direct one.
+link: { label: Open privileged RBAC assignments, href: "/p/azure.privileged-rbac-assignments" }
 check:
   kind: kql
   source: resourceGraph

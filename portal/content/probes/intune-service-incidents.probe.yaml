@@ -1,7 +1,7 @@
 $schema: ../../packages/schemas/generated/probe.schema.json
 kind: probe
 id: probes.intune-service-incidents
-version: 1.0.0
+version: 1.0.1
 title: Microsoft Intune without an open incident
 summary: >-
   Critical while Microsoft has an open service incident for Microsoft Intune (enrolment, policy, app delivery), listed
@@ -9,6 +9,10 @@ summary: >-
 owner: endpoint-team
 tags: [synthetic, service-health, intune, sweep-15m]
 group: endpoint
+remedy: >-
+  Microsoft has an open incident for Microsoft Intune. Open it to see who is affected, Microsoft's workaround and when
+  the next update is due, and tell the service desk.
+link: { label: Open Service health, href: "/p/m365.service-health?service=Microsoft%20Intune" }
 check:
   kind: graphCount
   path: /admin/serviceAnnouncement/issues

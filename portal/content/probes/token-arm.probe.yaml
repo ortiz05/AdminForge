@@ -1,14 +1,18 @@
 $schema: ../../packages/schemas/generated/probe.schema.json
 kind: probe
 id: probes.token-arm
-version: 1.0.2
+version: 1.0.3
 title: Token acquisition — Azure Resource Manager
 summary: >-
   Acquires an app-only token for Azure Resource Manager as the automation identity (certificate or secret from local
-  configuration). Azure inventory, Resource Graph and Function App schedules depend on it.
+  configuration). Azure inventory, Resource Graph checks and Cost Management reports depend on it.
 owner: portal-admins
 tags: [synthetic, identity, tokens, sweep-1h]
 group: platform
+remedy: >-
+  The automation identity couldn't get a token for Azure Resource Manager, so every schedule and probe that uses Azure
+  Resource Manager fails until it can. Usually its certificate expired or was replaced, or admin consent was removed.
+  The AdminForge administrator checks Provisioning status (docs/operations.md).
 check:
   kind: tokenAcquisition
   service: arm

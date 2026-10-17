@@ -362,6 +362,36 @@ export interface ProbePoint {
   metric: number | null;
   status: ProbeStatus;
   message?: string | null;
+  /** What the check found (results only): the rows behind the result, e.g. the expiring certificates. */
+  details?: ProbeDetails | null;
+  /** The result had rows, but they were read with application permissions and the viewer isn't an Operator. */
+  detailsHidden?: boolean;
+}
+
+export interface ProbeDetails {
+  rows: Array<Record<string, unknown>>;
+  columns: string[];
+  totalRows: number;
+  truncated: boolean;
+}
+
+function readDetails(raw: unknown): ProbeDetails | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const o = rec(raw);
+  const rows = arr(o.rows).filter(
+    (r): r is Record<string, unknown> => !!r && typeof r === 'object' && !Array.isArray(r),
+  );
+  const declared = arr(o.columns).flatMap((c) => {
+    const name = typeof c === 'string' ? c : pick(rec(c), 'name');
+    return name ? [name] : [];
+  });
+  const columns = declared.length ? declared : [...new Set(rows.flatMap((r) => Object.keys(r)))];
+  return {
+    rows,
+    columns,
+    totalRows: num(o.totalRows) ?? rows.length,
+    truncated: o.truncated === true,
+  };
 }
 
 export interface ProbeItem {
@@ -370,6 +400,11 @@ export interface ProbeItem {
   kind: string;
   /** The service it watches (a navigation section key, or `platform`), or null. */
   group: string | null;
+  /** What it checks and why it matters. */
+  summary: string | null;
+  /** What to do when it warns or fails, and where to act. */
+  remedy: string | null;
+  link: { label: string; href: string } | null;
   latest: (ProbePoint & { unit: string | null; message: string | null }) | null;
   series: ProbePoint[];
   thresholds: { warn: number | null; crit: number | null; unit: string | null; worse: 'higher' | 'lower' };
@@ -393,6 +428,8 @@ function readPoint(raw: unknown): ProbePoint | null {
     metric: num(o.metric) ?? num(o.value) ?? null,
     status: asProbeStatus(o.status),
     message: pick(o, 'message') ?? null,
+    ...(o.details !== undefined ? { details: readDetails(o.details) } : {}),
+    ...(o.detailsHidden === true ? { detailsHidden: true } : {}),
   };
 }
 
@@ -427,6 +464,16 @@ export function readProbe(raw: unknown): ProbeItem | null {
     title: pick(o, 'title') ?? key,
     kind,
     group: pick(o, 'group') ?? null,
+    summary: pick(o, 'summary') ?? null,
+    remedy: pick(o, 'remedy') ?? null,
+    link: (() => {
+      const l = rec(o.link);
+      const label = pick(l, 'label');
+      const href = pick(l, 'href');
+      return label && href && /^(\/(?![/\\])|https:\/\/)/.test(href) && !/[\s\\]/.test(href)
+        ? { label, href }
+        : null;
+    })(),
     latest:
       latestPoint && latestRaw
         ? {

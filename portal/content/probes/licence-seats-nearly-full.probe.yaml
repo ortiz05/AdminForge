@@ -1,7 +1,7 @@
 $schema: ../../packages/schemas/generated/probe.schema.json
 kind: probe
 id: probes.licence-seats-nearly-full
-version: 1.0.1
+version: 1.0.2
 title: Licence seats nearly full or lapsed
 summary: >-
   Counts the tenant's own paid licence SKUs that are at least 90 % assigned, or where people still hold licences while
@@ -11,6 +11,11 @@ summary: >-
 owner: m365-team
 tags: [synthetic, m365, licences, sweep-6h]
 group: m365
+remedy: >-
+  A licence is nearly all assigned, or people still hold licences from a subscription in its grace period or
+  suspended. Buy more seats, or free them from disabled and inactive users (Licence utilization lists them); renew a
+  subscription in grace before it lapses.
+link: { label: Open Licences, href: "/p/m365.licences" }
 check:
   kind: graphCount
   path: /subscribedSkus

@@ -1,7 +1,7 @@
 $schema: ../../packages/schemas/generated/probe.schema.json
 kind: probe
 id: probes.intune-vpp-tokens
-version: 1.0.1
+version: 1.0.2
 title: Apple Volume Purchase (VPP) tokens expiring or failing
 summary: >-
   Counts the Apple Volume Purchase (VPP) tokens that are expired or invalid, expire within 30 days, belong to another
@@ -10,6 +10,11 @@ summary: >-
 owner: endpoint-team
 tags: [endpoint, intune, apple, apps, sweep-6h]
 group: endpoint
+remedy: >-
+  An Apple Volume Purchase Program (Apps and Books) token is expired, expires soon, or failed to sync, so app
+  assignments and updates for Apple devices stop. Download a new token from Apple Business Manager and upload it to
+  the existing token in Intune › Tenant administration › Connectors and tokens.
+link: { label: Open Intune connector health, href: "/p/endpoint.intune-connector-health" }
 check:
   kind: graphCount
   path: /deviceAppManagement/vppTokens

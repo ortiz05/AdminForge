@@ -1,12 +1,17 @@
 $schema: ../../packages/schemas/generated/probe.schema.json
 kind: probe
 id: probes.dns-autodiscover
-version: 1.0.3
+version: 1.0.4
 title: Autodiscover record for the primary domain
 summary: Resolves autodiscover.<primary domain> and expects the CNAME to autodiscover.outlook.com that Outlook clients need.
 owner: m365-team
 tags: [synthetic, m365, exchange, dns, sweep-1h]
 group: exchange
+remedy: >-
+  The mail domain's autodiscover record is missing or wrong, so Outlook and mobile clients can't find their mailbox
+  settings. At the domain's DNS host, set the CNAME autodiscover → autodiscover.outlook.com, as the Microsoft 365
+  admin center lists it for the domain.
+link: { label: Open Domains (Microsoft 365), href: "https://admin.microsoft.com/#/Domains" }
 check:
   kind: dnsResolve
   name: ${ 'autodiscover.' & env.AF_MAIL_DOMAIN }

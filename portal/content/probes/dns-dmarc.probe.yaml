@@ -1,12 +1,17 @@
 $schema: ../../packages/schemas/generated/probe.schema.json
 kind: probe
 id: probes.dns-dmarc
-version: 1.0.3
+version: 1.0.4
 title: DMARC record for the primary domain
 summary: Resolves _dmarc.<primary domain> and expects a published DMARC policy (v=DMARC1).
 owner: m365-team
 tags: [synthetic, m365, exchange, dns, email-security, sweep-1h]
 group: exchange
+remedy: >-
+  The mail domain has no DMARC record, so receivers can't tell spoofed mail from yours and may junk or reject
+  legitimate mail. Publish a TXT record named _dmarc on the domain: start with p=none and a reporting address, then move to
+  quarantine or reject once the reports are clean.
+link: { label: Open Domains (Microsoft 365), href: "https://admin.microsoft.com/#/Domains" }
 check:
   kind: dnsResolve
   name: ${ '_dmarc.' & env.AF_MAIL_DOMAIN }

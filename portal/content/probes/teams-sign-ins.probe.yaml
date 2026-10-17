@@ -1,7 +1,7 @@
 $schema: ../../packages/schemas/generated/probe.schema.json
 kind: probe
 id: probes.teams-sign-ins
-version: 1.0.0
+version: 1.0.1
 title: Microsoft Teams sign-in failure rate
 summary: >-
   Failure rate of interactive sign-ins to Microsoft Teams over the last hour (Entra sign-in logs, filtered to the
@@ -10,6 +10,11 @@ summary: >-
 owner: m365-team
 tags: [synthetic, sign-ins, teams, sweep-1h]
 group: teams
+remedy: >-
+  More sign-ins to Microsoft Teams are failing than usual. The result names the most common error code; in the failed
+  sign-ins it tells you the cause: a Conditional Access policy, MFA, or a disabled account. Fix the policy, or contact
+  the affected users.
+link: { label: Open failed sign-ins, href: "/p/identity.sign-ins?status=Failure" }
 check:
   kind: signInHealth
   window: PT1H

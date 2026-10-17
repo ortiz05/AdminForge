@@ -11,6 +11,7 @@ import {
   formatRelative,
   formatTimestamp,
   useNow,
+  type LinkComponent,
   type StatusTone,
 } from '@adminforge/ui';
 import { WidgetPanel } from '../../lib/WidgetPanel';
@@ -39,7 +40,7 @@ function metricText(p: ProbeSummary): string {
   return p.unit ? `${n} ${p.unit}` : n;
 }
 
-function ProbeRow({ probe, now }: { probe: ProbeSummary; now: number }) {
+function ProbeRow({ probe, now, L }: { probe: ProbeSummary; now: number; L: LinkComponent }) {
   const [open, setOpen] = useState(false);
   const detailId = useId();
   const points = (probe.history ?? []).map((h) => h.metric).filter((m): m is number => typeof m === 'number');
@@ -107,6 +108,20 @@ function ProbeRow({ probe, now }: { probe: ProbeSummary; now: number }) {
         <p className={cn('mt-2', probe.status === 'ok' ? 'text-fg-2' : 'text-fg')}>
           {probe.message || (probe.status === 'ok' ? 'Within thresholds.' : 'No message was recorded.')}
         </p>
+        {probe.remedy && probe.status !== 'ok' && probe.status !== 'unknown' && (
+          <p className="mt-1.5 text-fg-2">
+            <span className="font-medium text-fg">What to do: </span>
+            {probe.remedy}
+          </p>
+        )}
+        {probe.href && (
+          <L
+            href={probe.href}
+            className="mt-2 inline-flex text-xs text-accent underline-offset-2 hover:underline"
+          >
+            What it found and its history
+          </L>
+        )}
       </div>
     </li>
   );
@@ -176,7 +191,7 @@ export function ProbeStatusWidget({ config, runtime }: WidgetProps<ProbeStatusCo
     >
       <ul className="flex flex-col pb-1" aria-label={config.title ?? 'Probes'}>
         {probes.map((p) => (
-          <ProbeRow key={p.key} probe={p} now={now} />
+          <ProbeRow key={p.key} probe={p} now={now} L={runtime.Link} />
         ))}
       </ul>
     </WidgetPanel>

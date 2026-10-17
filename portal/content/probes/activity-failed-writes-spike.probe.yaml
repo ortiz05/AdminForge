@@ -1,7 +1,7 @@
 $schema: ../../packages/schemas/generated/probe.schema.json
 kind: probe
 id: probes.activity-failed-writes-spike
-version: 1.0.1
+version: 1.0.2
 title: Failed Azure write operations (last hour)
 summary: >-
   Failed Azure Resource Manager write and delete operations in the last hour from the AzureActivity table of the
@@ -11,6 +11,13 @@ summary: >-
 owner: azure-team
 tags: [kql, azure, monitoring, security, log-analytics, sweep-1h]
 group: azure
+remedy: >-
+  Many Azure write or delete operations failed in the last hour. The details show which resource provider spiked
+  against its usual hour. Usual causes: a deployment pipeline retrying, a service principal that lost its role
+  (AuthorizationFailed), or a new Azure Policy that denies the change. In the Activity log, filter on Failed, group by
+  caller and operation, and contact the caller's owner; a policy denial names the assignment in the operation's
+  details.
+link: { label: Open the Activity log, href: "https://portal.azure.com/#view/Microsoft_Azure_ActivityLog/ActivityLogBlade" }
 check:
   kind: kql
   source: logAnalytics

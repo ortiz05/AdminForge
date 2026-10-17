@@ -1,7 +1,7 @@
 $schema: ../../packages/schemas/generated/probe.schema.json
 kind: probe
 id: probes.policy-non-compliance
-version: 1.0.1
+version: 1.0.2
 title: Azure Policy non-compliant resources
 summary: >-
   Resources in a NonCompliant state, per policy assignment and definition (latest policy states from Resource Graph).
@@ -9,6 +9,10 @@ summary: >-
 owner: azure-team
 tags: [kql, configuration, azure, policy, governance, config-check]
 group: azure
+remedy: >-
+  Resources don't comply with Azure Policy assignments. Start with the policies that have the most non-compliant
+  resources: fix the resources, or run the policy's remediation task where it has one.
+link: { label: Open policy compliance, href: "/p/azure.policy-compliance" }
 check:
   kind: kql
   source: resourceGraph

@@ -1,12 +1,16 @@
 $schema: ../../packages/schemas/generated/probe.schema.json
 kind: probe
 id: probes.arm-reachability
-version: 1.0.2
+version: 1.0.3
 title: Azure Resource Manager reachability
 summary: Lists subscriptions visible to the automation identity and measures round-trip latency.
 owner: portal-admins
 tags: [synthetic, azure, sweep-15m]
 group: azure
+remedy: >-
+  Azure Resource Manager didn't answer from this host, so Azure pages and checks fail until it does. Check Azure
+  status; if there's no incident, check this host's network.
+link: { label: Open Azure status, href: "https://azure.status.microsoft/en-us/status" }
 check:
   kind: arm
   path: /subscriptions

@@ -1,7 +1,7 @@
 $schema: ../../packages/schemas/generated/probe.schema.json
 kind: probe
 id: probes.global-admins-too-few
-version: 1.0.1
+version: 1.0.2
 title: Global Administrators (at least two)
 summary: >-
   Counts the user accounts that hold the Global Administrator role directly and is critical when fewer than two do,
@@ -10,6 +10,11 @@ summary: >-
 owner: identity-team
 tags: [identity, privileged, roles, sweep-6h]
 group: identity
+remedy: >-
+  There are fewer Global Administrators than the threshold: if the only one is locked out, nobody can recover the
+  tenant. Add a second Global Administrator, ideally an emergency-access (break-glass) account excluded from
+  Conditional Access, as Microsoft recommends.
+link: { label: Open the Global Administrator role, href: "/p/identity.role?id=62e90394-69f5-4237-9190-012177145e10" }
 check:
   kind: graphCount
   path: /directoryRoles(roleTemplateId='62e90394-69f5-4237-9190-012177145e10')/members

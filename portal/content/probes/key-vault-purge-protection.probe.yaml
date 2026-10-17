@@ -1,7 +1,7 @@
 $schema: ../../packages/schemas/generated/probe.schema.json
 kind: probe
 id: probes.key-vault-purge-protection
-version: 1.0.1
+version: 1.0.2
 title: Key Vaults without purge protection
 summary: >-
   Key Vaults where purge protection is off, so a deleted vault, key, secret or certificate can be purged before the
@@ -9,6 +9,10 @@ summary: >-
 owner: azure-team
 tags: [kql, configuration, azure, key-vault, security, config-check]
 group: azure
+remedy: >-
+  A key vault doesn't have purge protection, so a deleted key, secret or vault can be purged for good before its
+  retention period ends. Turn on purge protection (it can't be turned off again); check with the vault's owner first.
+link: { label: Open Key Vault configuration, href: "/p/azure.key-vault-configuration" }
 check:
   kind: kql
   source: resourceGraph

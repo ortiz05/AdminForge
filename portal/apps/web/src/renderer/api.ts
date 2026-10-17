@@ -275,6 +275,8 @@ export function toProbeSummary(p: ProbeItem): ProbeSummary {
     key: p.key,
     title: p.title,
     group: p.group,
+    remedy: p.remedy,
+    href: `/monitoring?probe=${encodeURIComponent(p.key)}`,
     status: p.latest?.status ?? 'unknown',
     metric: p.latest?.metric ?? null,
     unit: p.latest?.unit ?? p.thresholds.unit ?? undefined,

@@ -1,7 +1,7 @@
 $schema: ../../packages/schemas/generated/probe.schema.json
 kind: probe
 id: probes.global-admins-too-many
-version: 1.0.1
+version: 1.0.2
 title: Global Administrators (too many)
 summary: >-
   Counts the accounts that hold the Global Administrator role directly. Microsoft recommends fewer than five: warns at
@@ -9,6 +9,11 @@ summary: >-
 owner: identity-team
 tags: [identity, privileged, roles, sweep-6h]
 group: identity
+remedy: >-
+  More people hold Global Administrator directly than the threshold, and each one is a way to take over the tenant.
+  Review who holds it; move people to narrower roles (User, Exchange or Intune Administrator, …) or make the role
+  eligible through PIM instead of permanent.
+link: { label: Open the Global Administrator role, href: "/p/identity.role?id=62e90394-69f5-4237-9190-012177145e10" }
 check:
   kind: graphCount
   path: /directoryRoles(roleTemplateId='62e90394-69f5-4237-9190-012177145e10')/members

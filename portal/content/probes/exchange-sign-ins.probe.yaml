@@ -1,7 +1,7 @@
 $schema: ../../packages/schemas/generated/probe.schema.json
 kind: probe
 id: probes.exchange-sign-ins
-version: 1.0.0
+version: 1.0.1
 title: Exchange Online sign-in failure rate
 summary: >-
   Failure rate of interactive sign-ins to Exchange Online over the last hour (Entra sign-in logs, filtered to the
@@ -10,6 +10,11 @@ summary: >-
 owner: m365-team
 tags: [synthetic, sign-ins, exchange, sweep-1h]
 group: exchange
+remedy: >-
+  More sign-ins to Exchange Online are failing than usual. The result names the most common error code; in the failed
+  sign-ins it tells you the cause: a Conditional Access policy, MFA, a disabled or locked account, or an old client
+  that uses basic authentication. Fix the policy, or contact the affected users.
+link: { label: Open failed sign-ins, href: "/p/identity.sign-ins?status=Failure" }
 check:
   kind: signInHealth
   window: PT1H

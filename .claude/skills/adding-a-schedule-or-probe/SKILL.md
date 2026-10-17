@@ -54,6 +54,12 @@ schedule may not use it (`adminforge validate` refuses it).
    `exchange`, `sharepoint`, `teams`, `endpoint`, `azure`, `billing`, …) or `platform` for AdminForge itself.
    Synthetic monitoring groups tiles by it, each section's "Service checks" item (`/monitoring?group=<key>`) and a
    dashboard's `probeStatus` with `group:` show it; without it the probe lands under "Other checks".
+   **Say what to do** when it warns or fails: `remedy:` (plain sentences, ≤ 1000 characters: the likely causes, the
+   first step, and what "not configured" / "forbidden" mean for this check) and `link: { label, href }` — an AdminForge
+   page that lists the items (`/p/<key>?<filter>=…`, validated to exist) or a Microsoft admin centre (https). The probe's
+   detail on Synthetic monitoring shows them with the rows behind the result (`fields` / `detailsLimit`: keep the
+   columns that say _which_ item and _why_ — a name, the date or value that broke the rule), so engineers don't go
+   looking. Every active probe needs a remedy (`tests/content/probe-remedies.test.ts`).
 5. **Thresholds** `{ warn, crit }` in the direction `PROBE_METRICS` defines for the kind; `intervalHint`, `timeoutMs`.
 6. **Schedules:** when it runs as `every:` in plain English — `every weekday at 07:00`, `every Monday at 08:30`,
    `mon, wed and fri at 18:00`, `first Monday of the month at 08:30`, `last Friday of the month at 17:00`, `last day
@@ -112,6 +118,7 @@ minutes` — or `cron` (5/6 fields; one of the two). Validation compiles `every`
 | An HTTP probe that POSTs                                                                 | Set `allowPost: true`; HTTP probes never follow redirects or reach private addresses other than the portal                                                             |
 | Literal email addresses in `delivery.to`                                                 | Recipients are configuration: `${ env.AF_REPORT_RECIPIENTS }` (keys ending RECIPIENTS/EMAIL/ALERTS)                                                                    |
 | Content schedule id `portal.…`                                                           | Reserved for report schedules created in the portal; use `<section>.<name>` (e.g. `reports.weekly-…`)                                                                  |
+| A probe without `remedy`, or details rows that don't say which item                      | `remedy:` + `link:`; `fields` with a name and the value that broke the rule (the detail shows them as "What it found" to Operators)                                    |
 | A probe without `group`                                                                  | `group: <nav section key>` (or `platform`) — otherwise it shows under "Other checks", not on its service's page                                                        |
 | An anonymous HTTP probe expecting one exact status                                       | Tenants differ (SharePoint answers 401 or 403): accept every status that means "up", e.g. `status: [401, 403]`; check with curl first                                  |
 | Filtering service health on a name from a fixture                                        | Names change ("OneDrive for Business" is now "Microsoft OneDrive"): read `healthOverviews` live and filter on both names                                               |

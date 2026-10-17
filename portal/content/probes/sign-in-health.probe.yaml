@@ -1,7 +1,7 @@
 $schema: ../../packages/schemas/generated/probe.schema.json
 kind: probe
 id: probes.sign-in-health
-version: 1.0.2
+version: 1.0.3
 title: Tenant sign-in failure rate
 summary: >-
   Failure rate of interactive sign-ins across the tenant over the last hour (from the Entra sign-in logs). A sudden
@@ -9,6 +9,11 @@ summary: >-
 owner: identity-team
 tags: [synthetic, identity, sign-ins, sweep-1h]
 group: identity
+remedy: >-
+  More sign-ins are failing across the tenant than usual. The result names the most common error code; in the failed
+  sign-ins it tells you the cause (Conditional Access, MFA, a wrong password or a blocked location). A sudden rise
+  from one IP address or country can be a password-spray attack: check Risky users too.
+link: { label: Open failed sign-ins, href: "/p/identity.sign-ins?status=Failure" }
 check:
   kind: signInHealth
   window: PT1H

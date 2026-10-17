@@ -1,7 +1,7 @@
 $schema: ../../packages/schemas/generated/probe.schema.json
 kind: probe
 id: probes.entra-service-incidents
-version: 1.0.0
+version: 1.0.1
 title: Microsoft Entra without an open incident
 summary: >-
   Critical while Microsoft has an open service incident for Microsoft Entra (sign-in, MFA, Conditional Access,
@@ -9,6 +9,10 @@ summary: >-
 owner: identity-team
 tags: [synthetic, service-health, entra, sign-ins, sweep-15m]
 group: identity
+remedy: >-
+  Microsoft has an open incident for Microsoft Entra. Open it to see who is affected, Microsoft's workaround and when
+  the next update is due, and tell the service desk so they can answer calls.
+link: { label: Open Service health, href: "/p/m365.service-health?service=Microsoft%20Entra" }
 check:
   kind: graphCount
   path: /admin/serviceAnnouncement/issues

@@ -1,7 +1,7 @@
 $schema: ../../packages/schemas/generated/probe.schema.json
 kind: probe
 id: probes.entra-home-realm-discovery
-version: 1.0.0
+version: 1.0.1
 title: Entra ID sign-in — realm discovery for the primary domain
 summary: >-
   Asks login.microsoftonline.com how people in the primary domain sign in — the first call of every interactive
@@ -10,6 +10,11 @@ summary: >-
 owner: identity-team
 tags: [synthetic, identity, sign-ins, http, sweep-15m]
 group: identity
+remedy: >-
+  Microsoft Entra's sign-in discovery endpoint didn't answer as expected, so people may be unable to sign in. Check
+  Service health for Microsoft Entra. If there's no incident and it continues, check this host's network and DNS, then
+  open a Microsoft support request.
+link: { label: Open Service health, href: "/p/m365.service-health?service=Microsoft%20Entra" }
 check:
   kind: http
   url: ${ 'https://login.microsoftonline.com/common/userrealm/?user=' & $encode('adminforge-check@' & env.AF_PRIMARY_DOMAIN) & '&api-version=2.1' }

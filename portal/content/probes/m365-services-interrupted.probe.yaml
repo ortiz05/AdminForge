@@ -1,7 +1,7 @@
 $schema: ../../packages/schemas/generated/probe.schema.json
 kind: probe
 id: probes.m365-services-interrupted
-version: 1.0.0
+version: 1.0.1
 title: Microsoft 365 services without an interruption
 summary: >-
   Counts the Microsoft 365 services whose current health in Microsoft's service health overview is "service
@@ -10,6 +10,10 @@ summary: >-
 owner: m365-team
 tags: [synthetic, service-health, m365, sweep-15m]
 group: m365
+remedy: >-
+  One or more Microsoft 365 services have a service interruption. Open Service health to see which ones, who is
+  affected, Microsoft's workaround and the next update time; tell the service desk.
+link: { label: Open Service health, href: "/p/m365.service-health" }
 check:
   kind: graphCount
   path: /admin/serviceAnnouncement/healthOverviews

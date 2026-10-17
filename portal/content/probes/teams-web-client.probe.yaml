@@ -1,7 +1,7 @@
 $schema: ../../packages/schemas/generated/probe.schema.json
 kind: probe
 id: probes.teams-web-client
-version: 1.0.0
+version: 1.0.1
 title: Teams web app
 summary: >-
   Loads the Teams web app (teams.cloud.microsoft) the way a current Edge browser does, without signing in, and expects
@@ -9,6 +9,10 @@ summary: >-
 owner: m365-team
 tags: [synthetic, teams, http, sweep-15m]
 group: teams
+remedy: >-
+  The Teams web client didn't answer as expected. Check Service health for Microsoft Teams. If there's no incident and
+  it continues, check this host's network, then open a Microsoft support request.
+link: { label: Open Service health, href: "/p/m365.service-health?service=Microsoft%20Teams" }
 check:
   kind: http
   url: https://teams.cloud.microsoft/v2/

@@ -1,7 +1,7 @@
 $schema: ../../packages/schemas/generated/probe.schema.json
 kind: probe
 id: probes.teams-channels
-version: 1.0.0
+version: 1.0.1
 title: Teams service — channels of the test team
 summary: >-
   Lists the channels of a test team (AF_SYNTHETIC_TEAM_ID) through Microsoft Graph's Teams API as the automation
@@ -10,6 +10,11 @@ summary: >-
 owner: m365-team
 tags: [synthetic, teams, graph, sweep-15m]
 group: teams
+remedy: >-
+  Reading the test team's channels failed or was slow while the directory still answers, so Teams itself is probably
+  in trouble. Check Service health for Microsoft Teams. "Forbidden" means the automation identity lost access to the
+  test team (docs/operations.md › Synthetic transactions).
+link: { label: Open Service health, href: "/p/m365.service-health?service=Microsoft%20Teams" }
 check:
   kind: graph
   path: /teams/${ $encode(env.AF_SYNTHETIC_TEAM_ID) }/channels

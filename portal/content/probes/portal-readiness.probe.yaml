@@ -1,12 +1,15 @@
 $schema: ../../packages/schemas/generated/probe.schema.json
 kind: probe
 id: probes.portal-readiness
-version: 1.0.2
+version: 1.0.3
 title: AdminForge readiness
 summary: Calls the portal's own /readyz endpoint (API up and database reachable) at the configured public URL and measures latency.
 owner: portal-admins
 tags: [synthetic, portal, http, sweep-15m]
 group: platform
+remedy: >-
+  AdminForge isn't ready: its API or database didn't answer, so pages may fail to load. The AdminForge administrator
+  checks the API service and its database on the host (docs/troubleshooting.md).
 check:
   kind: http
   url: ${ env.PUBLIC_BASE_URL & '/readyz' }

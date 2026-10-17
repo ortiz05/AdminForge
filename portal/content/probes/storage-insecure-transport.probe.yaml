@@ -1,7 +1,7 @@
 $schema: ../../packages/schemas/generated/probe.schema.json
 kind: probe
 id: probes.storage-insecure-transport
-version: 1.0.1
+version: 1.0.2
 title: Storage accounts without HTTPS-only or TLS 1.2
 summary: >-
   Storage accounts that accept plain HTTP (supportsHttpsTrafficOnly off) or TLS older than 1.2 (minimumTlsVersion
@@ -9,6 +9,10 @@ summary: >-
 owner: azure-team
 tags: [kql, configuration, azure, storage, security, config-check]
 group: azure
+remedy: >-
+  A storage account accepts unencrypted HTTP or TLS older than 1.2. Turn on "Secure transfer required" and set the
+  minimum TLS version to 1.2; check first that no old client still uses it.
+link: { label: Open storage account security, href: "/p/azure.storage-account-security" }
 check:
   kind: kql
   source: resourceGraph

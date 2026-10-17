@@ -1,7 +1,7 @@
 $schema: ../../packages/schemas/generated/probe.schema.json
 kind: probe
 id: probes.token-teams
-version: 1.0.2
+version: 1.0.3
 title: Token acquisition — Skype and Teams Tenant Admin API
 summary: >-
   Acquires an app-only token for Skype and Teams Tenant Admin API as the automation identity (certificate or secret
@@ -9,6 +9,10 @@ summary: >-
 owner: portal-admins
 tags: [synthetic, identity, tokens, sweep-1h]
 group: platform
+remedy: >-
+  The automation identity couldn't get a token for Teams administration, so every schedule and probe that uses Teams
+  administration fails until it can. Usually its certificate expired or was replaced, or admin consent was removed.
+  The AdminForge administrator checks Provisioning status (docs/operations.md).
 check:
   kind: tokenAcquisition
   service: teams

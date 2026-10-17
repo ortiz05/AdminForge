@@ -1,12 +1,17 @@
 $schema: ../../packages/schemas/generated/probe.schema.json
 kind: probe
 id: probes.audit-chain
-version: 1.0.1
+version: 1.0.2
 title: Audit log integrity
 summary: Re-walks AdminForge's hash-chained audit log; critical when an event was changed or removed.
 owner: portal-admins
 tags: [synthetic, portal, audit, sweep-1h]
 group: platform
+remedy: >-
+  AdminForge's audit log failed its integrity check: an entry is missing or changed after it was written. Don't delete
+  or edit anything. Tell the security team and the AdminForge administrator straight away, with the time of this
+  result.
+link: { label: Open the audit log, href: "/audit" }
 check:
   kind: auditChain
 intervalHint: PT1H

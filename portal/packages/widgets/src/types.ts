@@ -71,6 +71,10 @@ export interface ProbeSummary {
   title: string;
   /** The service it watches (the probe's `group`), when it names one. */
   group?: string | null;
+  /** What to do when it warns or fails (the probe's `remedy`). */
+  remedy?: string | null;
+  /** Where its full result is (what it found, history): built by the app, e.g. `/monitoring?probe=…`. */
+  href?: string;
   status: ProbeHealth;
   metric?: number | null;
   unit?: string;

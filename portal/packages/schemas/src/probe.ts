@@ -333,6 +333,24 @@ export const Probe = z
     thresholds: z.strictObject({ warn: z.number().optional(), crit: z.number().optional() }).optional(),
     /** Suggested interval when scheduled without an explicit cron, e.g. PT5M. */
     intervalHint: Duration.optional(),
+    /**
+     * What to do when the probe warns or fails — shown with its result on Synthetic monitoring, so engineers don't have
+     * to go looking (plain text: the likely causes and the first step).
+     */
+    remedy: z.string().min(1).max(1000).optional(),
+    /**
+     * Where to act or look further: an AdminForge page (`/p/<key>?…`, `/monitoring…`, `/reports…`) or a Microsoft admin
+     * centre URL (https).
+     */
+    link: z
+      .strictObject({
+        label: z.string().min(1).max(80),
+        // Not `//host` (protocol-relative: another site) nor a backslash, which browsers read as a slash.
+        href: z
+          .string()
+          .regex(/^(\/(?![/\\])[^\s\\]*|https:\/\/[^\s\\]+)$/, 'Use an in-app path (/p/…) or an https URL'),
+      })
+      .optional(),
     timeoutMs: z.number().int().min(100).max(120_000).optional(),
   })
   .superRefine((def, ctx) => {

@@ -860,9 +860,14 @@ async function signInHealth(
       details,
     };
   const metric = Math.round((failures.length / list.length) * 1000) / 10;
+  // The most common failure, so the result says why (an aggregate: no names, unlike the details rows).
+  const top = details.rows[0] as { errorCode: number; failureReason: string; signIns: number } | undefined;
+  const reason = top?.failureReason
+    ? ` (${top.failureReason.length > 120 ? `${top.failureReason.slice(0, 117)}…` : top.failureReason})`
+    : '';
   return {
     metric,
-    message: `${metric}% of ${list.length}${list.length >= max ? '+' : ''} sign-ins failed in the last ${c.window}.`,
+    message: `${metric}% of ${list.length}${list.length >= max ? '+' : ''} sign-ins failed in the last ${c.window}${top ? `; most often error ${top.errorCode}${reason}, ${top.signIns} time${top.signIns === 1 ? '' : 's'}` : ''}.`,
     details,
   };
 }

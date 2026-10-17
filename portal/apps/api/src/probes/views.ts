@@ -13,6 +13,11 @@ export interface ProbeItem {
   kind: string;
   /** The service it watches (`group`: a navigation section key, or `platform`), or null. */
   group: string | null;
+  /** What it checks and why it matters (the probe's summary). */
+  summary: string | null;
+  /** What to do when it warns or fails, and where to act (the probe's `remedy` and `link`). */
+  remedy: string | null;
+  link: { label: string; href: string } | null;
   latest: {
     status: ProbeStatus;
     metric: number | null;
@@ -95,6 +100,9 @@ export class ProbeViews {
           title: probe.title,
           kind: probe.check.kind,
           group: probe.group ?? null,
+          summary: probe.summary ?? null,
+          remedy: probe.remedy ?? null,
+          link: probe.link ?? null,
           latest: l
             ? { status: l.status, metric: l.metric, unit: t.unit, ts: l.ts.toISOString(), message: l.message }
             : null,

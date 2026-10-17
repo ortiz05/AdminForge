@@ -1,7 +1,7 @@
 $schema: ../../packages/schemas/generated/probe.schema.json
 kind: probe
 id: probes.resources-missing-required-tags
-version: 1.0.1
+version: 1.0.2
 title: Resources missing required tags
 summary: >-
   Top-level Azure resources missing any of the tags listed in AF_REQUIRED_TAGS (comma-separated, compared without
@@ -9,6 +9,10 @@ summary: >-
 owner: azure-team
 tags: [kql, configuration, azure, governance, tags, config-check]
 group: azure
+remedy: >-
+  Resources are missing a required tag, so their cost can't be charged back and their owner can't be found. Ask the
+  resource group's owner to tag them; an Azure Policy that requires or inherits the tag stops it happening again.
+link: { label: Open untagged resources, href: "/p/azure.untagged-resources" }
 check:
   kind: kql
   source: resourceGraph

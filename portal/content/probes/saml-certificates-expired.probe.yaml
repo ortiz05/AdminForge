@@ -1,7 +1,7 @@
 $schema: ../../packages/schemas/generated/probe.schema.json
 kind: probe
 id: probes.saml-certificates-expired
-version: 1.0.1
+version: 1.0.2
 title: SAML signing certificates expired or within 7 days
 summary: >-
   Critical while any enabled SAML enterprise application's newest token-signing certificate has expired or expires
@@ -10,6 +10,11 @@ summary: >-
 owner: identity-team
 tags: [identity, apps, saml, certificates, sweep-6h]
 group: identity
+remedy: >-
+  A SAML app's signing certificate has expired or expires within 7 days: single sign-on to that app is broken, or
+  about to be. In Entra ID › Enterprise applications › the app › Single sign-on, create a new certificate, make it
+  active, and give it (or the federation metadata) to the app's vendor or administrator.
+link: { label: Open SAML certificate expiry, href: "/p/identity.saml-certificate-expiry" }
 check:
   kind: graphCount
   path: /servicePrincipals

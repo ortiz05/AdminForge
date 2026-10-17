@@ -1,7 +1,7 @@
 $schema: ../../packages/schemas/generated/probe.schema.json
 kind: probe
 id: probes.subscription-lifecycle
-version: 1.0.1
+version: 1.0.2
 title: Subscriptions lapsed or trial ending
 summary: >-
   Counts the Microsoft cloud subscriptions in their grace period (Warning), Suspended or Locked out, and trials that end
@@ -10,6 +10,10 @@ summary: >-
 owner: m365-team
 tags: [m365, licensing, subscriptions, sweep-6h]
 group: m365
+remedy: >-
+  A Microsoft cloud subscription is in its grace period, suspended or locked out, or a trial ends soon: people with
+  its licences lose access when it moves on. Renew or buy it before the date shown, or move people to another licence.
+link: { label: Open Subscription renewals, href: "/p/m365.subscription-renewals" }
 check:
   kind: graphCount
   path: /directory/subscriptions

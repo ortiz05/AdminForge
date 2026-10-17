@@ -210,6 +210,10 @@ prefer the feature key.
   group: exchange # every probe whose `group` is exchange (a service's own checks)
 ```
 
+A row opens to its latest message, the probe's `remedy` ("What to do", while it warns or fails) and a link to its full
+result on Synthetic monitoring — what it found (the rows behind the result, for Operators), its history and where to
+act (the probe's `link`).
+
 ## Optional keys (beyond the examples above)
 
 - **kpi**: `field` (number inside an object result, default `value`), `unit`, `statusLabel` (template; default by tone), `deltaFormat`, `deltaGood: up|down` (default up), `deltaPeriod`, `trend` (datasource path of a number list → sparkline), `hint` (template).

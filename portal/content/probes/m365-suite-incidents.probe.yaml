@@ -1,7 +1,7 @@
 $schema: ../../packages/schemas/generated/probe.schema.json
 kind: probe
 id: probes.m365-suite-incidents
-version: 1.0.0
+version: 1.0.1
 title: Microsoft 365 suite and apps without an open incident
 summary: >-
   Critical while Microsoft has an open service incident (not an advisory) for the Microsoft 365 suite or the Microsoft
@@ -10,6 +10,10 @@ summary: >-
 owner: m365-team
 tags: [synthetic, service-health, m365, sweep-15m]
 group: m365
+remedy: >-
+  Microsoft has an open incident for the Microsoft 365 suite or portal. Open it to see who is affected, Microsoft's
+  workaround and when the next update is due.
+link: { label: Open Service health, href: "/p/m365.service-health?service=Microsoft%20365%20suite" }
 check:
   kind: graphCount
   path: /admin/serviceAnnouncement/issues

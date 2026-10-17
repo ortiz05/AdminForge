@@ -1,7 +1,7 @@
 $schema: ../../packages/schemas/generated/probe.schema.json
 kind: probe
 id: probes.vms-without-backup
-version: 1.0.1
+version: 1.0.2
 title: Virtual machines without Azure Backup
 summary: >-
   Azure virtual machines that no Recovery Services vault protects (no AzureIaasVM backup item points at them). A vault
@@ -10,6 +10,11 @@ summary: >-
 owner: azure-team
 tags: [kql, configuration, azure, backup, resilience, config-check]
 group: azure
+remedy: >-
+  Virtual machines aren't protected by Azure Backup, so a deleted disk or ransomware means their data is gone. Enable
+  backup to a Recovery Services vault with the standard policy, or confirm with the owner that the VM holds nothing
+  worth keeping.
+link: { label: Open VMs without backup, href: "/p/azure.vms-without-backup" }
 check:
   kind: kql
   source: resourceGraph

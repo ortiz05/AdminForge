@@ -1,12 +1,17 @@
 $schema: ../../packages/schemas/generated/probe.schema.json
 kind: probe
 id: probes.dns-mx
-version: 1.0.3
+version: 1.0.4
 title: Mail exchanger (MX) for the primary domain
 summary: Resolves the MX record of AF_MAIL_DOMAIN and expects it to point at Exchange Online Protection.
 owner: m365-team
 tags: [synthetic, m365, exchange, dns, sweep-1h]
 group: exchange
+remedy: >-
+  The mail domain's MX record doesn't point at Exchange Online Protection, so inbound mail may bounce or go elsewhere.
+  At the domain's DNS host, set the MX record to the value the Microsoft 365 admin center shows for the domain; the
+  change takes up to the record's TTL to spread.
+link: { label: Open Domains (Microsoft 365), href: "https://admin.microsoft.com/#/Domains" }
 check:
   kind: dnsResolve
   name: ${ env.AF_MAIL_DOMAIN }

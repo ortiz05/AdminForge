@@ -1,7 +1,7 @@
 $schema: ../../packages/schemas/generated/probe.schema.json
 kind: probe
 id: probes.sign-in-health-adminforge
-version: 1.0.2
+version: 1.0.3
 title: AdminForge sign-in failure rate
 summary: >-
   Failure rate of sign-ins to the AdminForge Read app (AF_READ_CLIENT_ID) over the last hour. Catches Conditional
@@ -9,6 +9,10 @@ summary: >-
 owner: portal-admins
 tags: [synthetic, portal, sign-ins, sweep-1h]
 group: platform
+remedy: >-
+  Sign-ins to AdminForge are failing. The result names the most common error code; in the failed sign-ins it says
+  whether it's Conditional Access, a person not assigned to the app, or missing consent.
+link: { label: Open failed sign-ins, href: "/p/identity.sign-ins?status=Failure" }
 check:
   kind: signInHealth
   window: PT1H

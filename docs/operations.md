@@ -133,6 +133,14 @@ domain, an open-incident check per workload (Exchange, SharePoint, OneDrive, Tea
 "service interruption", sign-in failure rates per workload (Exchange, SharePoint, Teams; Entra ID P1 sign-in logs),
 the Intune service through Graph and the channels of a test team (`AF_SYNTHETIC_TEAM_ID`, no new permission).
 
+A probe's detail (click a tile) says what failed and why without going looking: the latest message (sign-in checks
+name the most common error code and reason), **What it found** — the rows behind the result, e.g. which SAML apps'
+certificates expire and when, which storage accounts allow public access — **What to do** (the probe's `remedy`) with
+a button to the AdminForge page or Microsoft admin centre where it's fixed (`link`), and **What this checks**. The rows
+were collected with the automation identity's application permissions, so only Operators see them (others see the
+message, the remedy and the link, whose page reads with their own permissions). A dashboard's service checks
+(`probeStatus`) open to the same remedy and link to the detail.
+
 **Synthetic transactions** (ADR-015; `sweep.synthetic-transactions`, every 15 minutes) do what a person does and
 remove what they made: they act **only** on dedicated test objects named in `AF_SYNTHETIC_*` keys (the mail check also
 sends from `AF_MAIL_SENDER`), and do nothing ("not configured", the run succeeds with a note) until those are set. Use

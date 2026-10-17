@@ -1,7 +1,7 @@
 $schema: ../../packages/schemas/generated/probe.schema.json
 kind: probe
 id: probes.intune-graph-reachability
-version: 1.0.0
+version: 1.0.1
 title: Intune service through Microsoft Graph
 summary: >-
   Reads one managed device from Intune through Microsoft Graph as the automation identity and measures the round trip.
@@ -9,6 +9,10 @@ summary: >-
 owner: endpoint-team
 tags: [synthetic, endpoint, intune, graph, sweep-15m]
 group: endpoint
+remedy: >-
+  Intune's Microsoft Graph API didn't answer from this host, so the Endpoint pages and checks fail. Check Service
+  health for Microsoft Intune; if there's no incident, check this host's network.
+link: { label: Open Service health, href: "/p/m365.service-health?service=Microsoft%20Intune" }
 check:
   kind: graph
   path: /deviceManagement/managedDevices

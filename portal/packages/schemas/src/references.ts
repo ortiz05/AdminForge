@@ -109,6 +109,17 @@ export function validateReferences(entries: readonly DefinitionEntry[]): Content
       !navSections.has(def.group)
     )
       err(['group'], `Unknown probe group "${def.group}": use a navigation section key or platform.`);
+    if (def.kind === 'probe' && def.link) {
+      // A probe's link to a page, dashboard or report must name one that exists.
+      const key = /^\/p\/([^/?#]+)/.exec(def.link.href)?.[1];
+      let decoded: string | undefined;
+      try {
+        decoded = key === undefined ? undefined : decodeURIComponent(key);
+      } catch {
+        err(['link', 'href'], `"${key}" isn't a valid page key (a malformed % escape).`);
+      }
+      if (decoded) find(decoded, ['page', 'dashboard', 'report'], ['link', 'href']);
+    }
     if (def.kind === 'report' && def.area && hasNavigation && !navSections.has(def.area))
       err(['area'], `Unknown navigation section "${def.area}" for the Reports catalogue area.`);
 

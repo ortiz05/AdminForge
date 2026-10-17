@@ -8,7 +8,7 @@ import { SCHEDULED_DATA_ROLES } from '../schedules/service';
 
 /**
  * Synthetic probes (R6, R12):
- * - GET /api/probes → {items: [{key, title, kind, group, latest: {status, metric, unit, ts, message} | null,
+ * - GET /api/probes → {items: [{key, title, kind, group, summary, remedy, link, latest: {status, metric, unit, ts, message} | null,
  *       series: [{ts, metric, status}] (last 24 h), thresholds: {warn, crit, unit, worse}}],
  *       groups: [{key, label, icon}] (the services the probes watch, in navigation order)}
  * - GET /api/probes/:key/results?since=<ISO> → {items: [{ts, status, metric, unit, durationMs, message,

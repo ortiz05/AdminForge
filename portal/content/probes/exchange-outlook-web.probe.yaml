@@ -1,7 +1,7 @@
 $schema: ../../packages/schemas/generated/probe.schema.json
 kind: probe
 id: probes.exchange-outlook-web
-version: 1.0.0
+version: 1.0.1
 title: Outlook on the web front door
 summary: >-
   Opens Outlook on the web (outlook.office365.com/owa) without signing in and expects Exchange Online to send the
@@ -9,6 +9,10 @@ summary: >-
 owner: m365-team
 tags: [synthetic, exchange, http, outlook, sweep-15m]
 group: exchange
+remedy: >-
+  Outlook on the web didn't answer as expected. Check Service health for Exchange Online. If there's no incident and
+  it continues, check this host's network, then open a Microsoft support request.
+link: { label: Open Service health, href: "/p/m365.service-health?service=Exchange%20Online" }
 check:
   kind: http
   url: https://outlook.office365.com/owa/

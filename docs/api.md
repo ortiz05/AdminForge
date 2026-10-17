@@ -861,8 +861,10 @@ for custom shapes), timezone (the zone used), next: ISO[5] (DST-aware, the sched
 #### `GET /api/probes`
 
 - **Who:** `Portal.Reader`.
-- **Response:** `{items, groups}`. Items: `{key, title, kind, group, latest, series, thresholds}` — `group` is the
-  service the probe watches (a navigation section key or `platform`) or `null`; `latest` is
+- **Response:** `{items, groups}`. Items: `{key, title, kind, group, summary, remedy, link, latest, series,
+thresholds}` — `group` is the service the probe watches (a navigation section key or `platform`) or `null`;
+  `summary` (what it checks), `remedy` (what to do when it warns or fails) and `link` (`{label, href}`: an in-app path
+  or an https admin centre URL) come from the probe's definition, or `null`; `latest` is
   `{status, metric, unit, ts, message}` or `null`; `series` is `[{ts, metric, status}]` for the last 24 h;
   `thresholds` is `{warn, crit, unit, worse}`. Groups: `[{key, label, icon}]` for the groups the probes use, in
   navigation order (labels from navigation.yaml; `platform` is "AdminForge"), for Synthetic monitoring's "by service"

@@ -1,7 +1,7 @@
 $schema: ../../packages/schemas/generated/probe.schema.json
 kind: probe
 id: probes.sharepoint-file-round-trip
-version: 1.0.0
+version: 1.0.1
 title: SharePoint files — upload, download, delete
 summary: >-
   Synthetic transaction: uploads a 16 KB test file to the default document library of a dedicated test site
@@ -11,6 +11,12 @@ summary: >-
 owner: m365-team
 tags: [synthetic, synthetic-transaction, sharepoint, files]
 group: sharepoint
+remedy: >-
+  Uploading, reading back or deleting the test file in the test site failed or was slow. Check Service health for
+  SharePoint Online first. "Forbidden" means the automation identity lost its access to the test site (the
+  Sites.Selected grant); "not configured" means the test site isn't set (docs/operations.md › Synthetic transactions).
+  Slow results with no incident usually mean SharePoint is throttling the tenant.
+link: { label: Open Service health, href: "/p/m365.service-health?service=SharePoint%20Online" }
 check:
   kind: fileRoundTrip
   site: ${ env.AF_SYNTHETIC_SITE_ID }

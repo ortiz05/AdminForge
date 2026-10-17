@@ -1,7 +1,7 @@
 $schema: ../../packages/schemas/generated/probe.schema.json
 kind: probe
 id: probes.arm-subscription-access
-version: 1.0.2
+version: 1.0.3
 title: Default subscription access
 summary: >-
   Lists one resource group in the default subscription (AF_SUBSCRIPTION_ID) as the automation identity. Fails when the
@@ -9,6 +9,10 @@ summary: >-
 owner: azure-team
 tags: [synthetic, azure, arm, rbac, sweep-15m]
 group: azure
+remedy: >-
+  The automation identity can't read the default subscription, so Azure checks and reports are blind. Check that it
+  still holds Reader on the subscription (or its management group) and that the subscription isn't disabled.
+link: { label: Open Subscriptions, href: "/p/azure.subscriptions" }
 check:
   kind: arm
   path: /subscriptions/${ $encode(env.AF_SUBSCRIPTION_ID) }/resourcegroups

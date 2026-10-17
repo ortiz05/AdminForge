@@ -4,7 +4,9 @@ import path from 'node:path';
 import { loadEnv } from '@adminforge/config';
 import { KQL_SOURCES, PORTAL_ROLES, type PortalRole } from '@adminforge/schemas';
 import { z } from 'zod';
+import { DEFAULT_TIMEOUT_OVERRIDES, TimeoutOverrideList } from './execution/timeouts';
 import { workspaceRoot } from './paths';
+import type { Keyring } from './security/envelope';
 
 const ALL_ROLES = PORTAL_ROLES.join(',');
 
@@ -77,7 +79,16 @@ const Schema = z
     PUBLIC_BASE_URL: z.url().transform((u) => u.replace(/\/+$/, '')),
     /** Fastify trustProxy: `true`/`false`, or IPs/CIDRs/proxy-addr presets (loopback = a proxy on this host, e.g. Caddy). */
     TRUST_PROXY: z.string().default('loopback'),
+    /** Requests per minute per signed-in session (per address before sign-in). */
     RATE_LIMIT_PER_MINUTE: z.coerce.number().int().min(1).default(600),
+    /** Requests per minute per session that the browser marks as background (polling, refetch on focus). */
+    RATE_LIMIT_BACKGROUND_PER_MINUTE: z.coerce.number().int().min(1).default(600),
+    /** Requests per minute per client address, all sessions together (a corporate NAT is one address). */
+    RATE_LIMIT_PER_ADDRESS_PER_MINUTE: z.coerce.number().int().min(1).default(20_000),
+    /** `/auth/login` and `/auth/callback` per client address (whatever cookie comes with them). */
+    RATE_LIMIT_SIGNIN_PER_ADDRESS_PER_MINUTE: z.coerce.number().int().min(1).default(300),
+    /** Requests to /api and /auth without a valid session, per client address. */
+    RATE_LIMIT_ANONYMOUS_PER_ADDRESS_PER_MINUTE: z.coerce.number().int().min(1).default(600),
 
     AUTH_MODE: z.enum(['entra', 'mock']).default('entra'),
     DATA_MODE: z.enum(['live', 'fixtures']).default('live'),
@@ -86,7 +97,26 @@ const Schema = z
     MOCK_ROLES: RoleList.prefault(ALL_ROLES),
 
     DATABASE_URL: z.string().optional(),
+    /** Connections per process pool (the API, the worker and the scheduler each have one). */
+    DATABASE_POOL_MAX: z.coerce.number().int().min(1).max(100).default(10),
+    /**
+     * Per-connection limits (milliseconds) so a stuck statement or an open transaction can't hold the audit chain's lock:
+     * statement_timeout, lock_timeout, idle_in_transaction_session_timeout (db/client.ts).
+     */
+    DATABASE_STATEMENT_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(3_600_000).default(60_000),
+    DATABASE_LOCK_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(3_600_000).default(15_000),
+    DATABASE_IDLE_IN_TRANSACTION_TIMEOUT_MS: z.coerce
+      .number()
+      .int()
+      .min(1_000)
+      .max(3_600_000)
+      .default(60_000),
     TOKEN_CACHE_KEY: z.string().optional(),
+    /**
+     * Earlier token-cache keys (comma-separated, base64), still accepted for opening blobs sealed before a rotation;
+     * new blobs are always sealed with TOKEN_CACHE_KEY (security/envelope.ts).
+     */
+    TOKEN_CACHE_PREVIOUS_KEYS: z.string().optional(),
     /** Retention (days): finished runs with their steps and events, schedule history, probe results, report files. */
     RETENTION_RUN_DAYS: z.coerce.number().int().min(7).max(3650).default(180),
     RETENTION_SCHEDULE_RUN_DAYS: z.coerce.number().int().min(7).max(3650).default(180),
@@ -140,9 +170,38 @@ const Schema = z
     CONTENT_DIR: z.string().optional(),
     /** Watch CONTENT_DIR and reload on change (default: on in development). */
     CONTENT_WATCH: z.stringbool().optional(),
-    OUTBOUND_CONCURRENCY: z.coerce.number().int().min(1).max(256).default(16),
+    /**
+     * Slots per Microsoft service for people's calls in one API process (lanes: execution/outbound.ts). 48: within
+     * Graph's directory limit for one app in a large tenant (8,000 resource units per 10 s) when every slot is busy;
+     * measured in docs/performance.md. 429s (Retry-After) remain the backstop for stricter services (Intune, reports).
+     */
+    OUTBOUND_CONCURRENCY: z.coerce.number().int().min(1).max(256).default(48),
     OUTBOUND_USER_CONCURRENCY: z.coerce.number().int().min(1).max(64).default(6),
+    /**
+     * Share of a service's OUTBOUND_CONCURRENCY slots that crawls (`paging: all`, `$batch`) may hold at once; the rest
+     * stays free for list pages and entity reads, which are served first (execution/outbound.ts, lanes).
+     */
+    OUTBOUND_CRAWL_SHARE: z.coerce.number().min(0.1).max(1).default(0.5),
+    /** Slots per service for the automation identity (schedules, probes), apart from people's. */
+    OUTBOUND_AUTOMATION_CONCURRENCY: z.coerce.number().int().min(1).max(256).default(8),
     OUTBOUND_TIMEOUT_MS: z.coerce.number().int().min(1000).max(300_000).default(30_000),
+    /**
+     * Longer single attempts for calls known to be slow (execution/timeouts.ts): `service=ms` or
+     * `service:/path-prefix=ms`, comma-separated. A timed-out attempt is otherwise tried once more.
+     */
+    OUTBOUND_TIMEOUT_OVERRIDES: TimeoutOverrideList.prefault(DEFAULT_TIMEOUT_OVERRIDES),
+    /**
+     * Longest wait for a free outbound slot (OUTBOUND_CONCURRENCY / OUTBOUND_USER_CONCURRENCY) before a person's
+     * request is refused as busy (503 outbound_busy). 0 = wait as long as it takes. Schedules always wait.
+     */
+    OUTBOUND_QUEUE_WAIT_MS: z.coerce.number().int().min(0).max(600_000).default(15_000),
+    /**
+     * Longest a page, dashboard or report datasource may take for a person (every page and retry included) before it
+     * stops with 504 datasource_timeout. 0 = no limit. Exports and schedules aren't cut short.
+     */
+    DATASOURCE_DEADLINE_MS: z.coerce.number().int().min(0).max(1_800_000).default(120_000),
+    /** Memory for cached datasource results per process, in MB (entries are also capped at 1,000). */
+    DATASOURCE_CACHE_MAX_MB: z.coerce.number().int().min(1).max(16_384).default(256),
     /** Largest response body accepted from Microsoft or a connection, in bytes (streamed; larger is refused). */
     OUTBOUND_MAX_BYTES: z.coerce
       .number()
@@ -195,6 +254,15 @@ const Schema = z
         });
       }
       need('DATABASE_URL', 'in production');
+      // `true` trusts X-Forwarded-For from anyone: every rate limit, address cap and audited address could be forged.
+      if (env.TRUST_PROXY.trim().toLowerCase() === 'true')
+        ctx.addIssue({
+          code: 'custom',
+          path: ['TRUST_PROXY'],
+          message: 'must name the proxies (e.g. loopback, or their addresses) in production, not true',
+        });
+      const tls = databaseTlsProblem(env.DATABASE_URL);
+      if (tls) ctx.addIssue({ code: 'custom', path: ['DATABASE_URL'], message: tls });
       const url = new URL(env.PUBLIC_BASE_URL);
       if (url.protocol !== 'https:' && url.hostname !== 'localhost') {
         ctx.addIssue({
@@ -204,6 +272,16 @@ const Schema = z
         });
       }
     }
+    for (const prev of (env.TOKEN_CACHE_PREVIOUS_KEYS ?? '')
+      .split(',')
+      .map((k) => k.trim())
+      .filter(Boolean))
+      if (Buffer.from(prev, 'base64').length !== 32)
+        ctx.addIssue({
+          code: 'custom',
+          path: ['TOKEN_CACHE_PREVIOUS_KEYS'],
+          message: 'each entry must be a 32-byte key, base64 (comma-separated)',
+        });
     if (env.TOKEN_CACHE_KEY && Buffer.from(env.TOKEN_CACHE_KEY, 'base64').length !== 32) {
       ctx.addIssue({
         code: 'custom',
@@ -305,9 +383,47 @@ export function loadConfig(env: Record<string, string | undefined> = loadEnv()):
   return parsed.data;
 }
 
-/** The token-cache key as bytes, or undefined when not configured. */
-export function tokenCacheKey(config: Config): Buffer | undefined {
-  return config.TOKEN_CACHE_KEY ? Buffer.from(config.TOKEN_CACHE_KEY, 'base64') : undefined;
+/**
+ * The token-cache keys (TOKEN_CACHE_KEY seals; it and TOKEN_CACHE_PREVIOUS_KEYS open), or undefined when not
+ * configured. Rotation: docs/operations.md → Postgres hardening.
+ */
+export function tokenCacheKey(config: Config): Keyring | undefined {
+  if (!config.TOKEN_CACHE_KEY) return undefined;
+  const previous = (config.TOKEN_CACHE_PREVIOUS_KEYS ?? '')
+    .split(',')
+    .map((k) => k.trim())
+    .filter(Boolean)
+    .map((k) => Buffer.from(k, 'base64'));
+  return { current: Buffer.from(config.TOKEN_CACHE_KEY, 'base64'), previous };
+}
+
+const LOOPBACK = new Set(['127.0.0.1', '::1', 'localhost', '']);
+
+/**
+ * Production talks to a database on another host only over verified TLS: `sslmode=verify-full` in the URL (with
+ * `sslrootcert` when the server's CA isn't a public one). A loopback address or a Unix socket stays on this host. The
+ * URL is judged the way node-postgres reads it (pg-connection-string): the last of a repeated parameter wins, and a
+ * `host=` parameter replaces the URL's host. Used for DATABASE_URL (loadConfig) and DATABASE_MIGRATION_URL
+ * (db/migrate.ts).
+ */
+export function databaseTlsProblem(databaseUrl: string | undefined): string | undefined {
+  if (!databaseUrl) return undefined;
+  let url: URL;
+  try {
+    url = new URL(databaseUrl);
+  } catch {
+    return 'must be a postgres:// URL';
+  }
+  if (url.protocol === 'socket:') return undefined;
+  const params = new Map<string, string>();
+  for (const [k, v] of url.searchParams.entries()) params.set(k, v);
+  const hosts = (params.get('host') ?? url.hostname.replace(/^\[(.+)\]$/, '$1'))
+    .split(',')
+    .map((h) => decodeURIComponent(h.trim()));
+  if (hosts.every((h) => LOOPBACK.has(h) || h.startsWith('/'))) return undefined;
+  return params.get('sslmode') === 'verify-full'
+    ? undefined
+    : 'a database on another host needs ?sslmode=verify-full in production (TLS with the server certificate checked)';
 }
 
 export const writeAppConfigured = (config: Config) =>

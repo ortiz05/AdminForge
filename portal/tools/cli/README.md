@@ -61,7 +61,8 @@ Every configuration key is documented in `config/example.env`.
   `--enable` / `--disable` only turn the validation user's sign-in on before a live run and off afterwards
   (`--disable` also revokes its sessions; enabling only in test environments).
 - **Licensed test fixtures (opt-in):** with `AF_TEST_LICENCE_SKU` (a SKU part number such as `SPE_E5`) and/or
-  `AF_TEST_FIXTURES` (`pim`, `named-location`, `intune`, `approver`, `ca-audit`) in the admin file, the same run also provisions
+  `AF_TEST_FIXTURES` (`pim`, `named-location`, `intune`, `approver`, `ca-audit`, `directory`, `guest`, `apps`,
+  `auth-methods`, `intune-more`, `sign-ins`) in the admin file, the same run also provisions
   — after the identities — a licence for the validation user and AF-Test-User-01…03, PIM eligibility (AF-Test-User-01:
   Reports Reader; the validation user: Message Center Reader; never active), the named location `AF-Test-Location`
   (192.0.2.0/24, not trusted), an `AF-Test` Intune compliance policy and configuration profile assigned to
@@ -70,11 +71,18 @@ Every configuration key is documented in `config/example.env`.
   validation user's), and 14 example Conditional Access policies `AF-Audit: …` that are only ever **report-only**
   (device-dependent and location examples on AF-Test-Group-01 only — refused while it has other members or dynamic
   membership — the rest on all users / admin roles / guests minus `AF_PROTECTED_USER_IDS` and the sync accounts;
-  catalogue in `provision/ca-audit-catalog.ts`; updates are checked before each attempt and read back). Only objects
+  catalogue in `provision/ca-audit-catalog.ts`; updates are checked before each attempt and read back), and the
+  enterprise fixtures — AF-Test-User-04…12 with attributes and a manager chain, dynamic / nested / Microsoft 365 /
+  empty / group-licensing groups and an administrative unit (`directory`), a never-redeemed guest (`guest`), app
+  registrations with expiring, long-lived and many credentials, a risky and an ownerless one and a SAML app, never
+  granted anything (`apps`), an SMS method and a Temporary Access Pass (`auth-methods`), more Intune policies
+  (`intune-more`) and two accounts that only sign in (`sign-ins`, for `tests/live/scripts/generate-sign-ins.ts`) —
+  see tests/live/README.md → Licensed test fixtures. Only objects
   provisioning created are changed (markers, provisioning's names, the exact range; for Conditional Access, a catalogue
   name on a policy that is report-only); same-named others are refused. `--enable` enables the validation user only, `--enable --approver` also the
-  approver; `--disable` always disables both (each attempted, each reported). `--remove-fixtures` removes what the
-  opted-in fixtures created and a marked approver in any case, in any environment label (with `--dry-run`: the plan
+  approver; `--disable` always disables both and the sign-in accounts (each attempted, each reported). `--remove-fixtures` removes what the
+  opted-in fixtures created, the enterprise fixtures' marked objects and a marked approver in any case (and exits 1
+  when a fixture couldn't be read), in any environment label (with `--dry-run`: the plan
   only). A fixture Graph refuses prints `✗` with the permission the provisioner needs (Graph's own reason and the
   permission it names, when its message names one), the others go on, and the run exits 1. Without the opt-in nothing changes (a leftover approver is still flagged).
 - **Options:** `--dry-run` (plan only), `--enable`, `--disable` (mutually exclusive; not with `--dry-run`),
@@ -82,12 +90,13 @@ Every configuration key is documented in `config/example.env`.
 - **Reads:** `AF_TENANT_ID`, `AF_ENV_LABEL`, `AF_PRIMARY_DOMAIN`, `AF_TEST_IDENTITY_LABELS`, the provisioner
   credentials, and from the admin file `AF_TEST_USER_UPN`, `AF_TEST_USER_PASSWORD`, `AF_TEST_SERVICE_ADMIN_ROLES`
   (Exchange/SharePoint admin roles for the validation user; off unless `true`), `AF_TEST_LICENCE_SKU`,
-  `AF_TEST_FIXTURES`, `AF_TEST_APPROVER_UPN`, `AF_TEST_APPROVER_PASSWORD`; with `ca-audit`, `AF_PROTECTED_USER_IDS`
-  (excluded from the audit policies).
+  `AF_TEST_FIXTURES`, `AF_TEST_APPROVER_UPN`, `AF_TEST_APPROVER_PASSWORD`, `AF_TEST_SIGNIN_<n>_UPN` /
+  `_PASSWORD` (presence only); with `ca-audit`, `AF_PROTECTED_USER_IDS` (excluded from the audit policies).
 - **Changes:** Entra ID users, group memberships, directory roles and the registration campaign's exclusions; with
   the fixtures, licences, PIM eligibility, a named location, Intune policies and report-only Conditional Access
   policies; writes `AF_TEST_USER_UPN`,
-  `AF_TEST_USER_PASSWORD` (and `AF_TEST_APPROVER_UPN`, `AF_TEST_APPROVER_PASSWORD`) to `<env>.admin.env`. **Safe:**
+  `AF_TEST_USER_PASSWORD` (and `AF_TEST_APPROVER_UPN`, `AF_TEST_APPROVER_PASSWORD`, `AF_TEST_SIGNIN_<n>_UPN`,
+  `AF_TEST_SIGNIN_<n>_PASSWORD`) to `<env>.admin.env`. **Safe:**
   only with `--dry-run`.
 - **Provisioner permissions for the fixtures** (Microsoft Graph application permissions with admin consent — its
   directory role does not cover these APIs app-only; the plan prints a hint for each one its token lacks; they outlive
@@ -102,6 +111,12 @@ Every configuration key is documented in `config/example.env`.
   | `intune`         | `DeviceManagementConfiguration.ReadWrite.All`                                                                      |
   | `approver`       | none beyond the validation user's (its directory role covers it)                                                   |
   | `ca-audit`       | `Policy.Read.All`, `Policy.ReadWrite.ConditionalAccess` and `Application.Read.All` (for the application condition) |
+  | `directory`      | `LicenseAssignment.ReadWrite.All` (its licences); users, groups and the administrative unit: the directory role    |
+  | `guest`          | `User.Invite.All` (and a tenant that accepts invitations)                                                          |
+  | `apps`           | none beyond its directory role                                                                                     |
+  | `auth-methods`   | `UserAuthenticationMethod.ReadWrite.All` where its directory role doesn't cover it                                 |
+  | `intune-more`    | `DeviceManagementConfiguration.ReadWrite.All` and `DeviceManagementApps.ReadWrite.All`                             |
+  | `sign-ins`       | none beyond its directory role                                                                                     |
 
 ### `provision azure-test [--dry-run] [--no-verify] | --destroy [--yes]`
 

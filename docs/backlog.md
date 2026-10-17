@@ -131,8 +131,10 @@ Found by the organization and security evaluation; the fixed findings are in CHA
       `execution/outbound.ts`, `runs/service.ts`, `engine/src/engine.ts` and `probes/checks.ts` along their seams;
       share the GUID pattern, `sleep` and backoff helpers; `typecheck` shouldn't build the apps (`turbo.json`); move
       real-pwsh tests out of the unit project.
-- [ ] Content: merge `identity.licence-utilization` and `m365.licence-utilization`; one SKU-name map (three YAML copies
-      and `web/src/lib/overview.ts`); one spelling of utilisation; `reports.app-credential-expiry` → a cadence suffix.
+- [x] Content: merge `identity.licence-utilization` and `m365.licence-utilization` — done 2026-10-17 (the identity one is
+      retired; seats stay in Licence utilization, group licensing errors moved to Licence assignment errors).
+- [ ] Content: one SKU-name map (YAML copies and `web/src/lib/overview.ts`); one spelling of utilisation;
+      `reports.app-credential-expiry` → a cadence suffix.
 - [ ] Docs: a test that every API error code is documented exactly once (`docs/troubleshooting.md`); a skill for
       adding an expression helper.
 - [ ] Docs: `docs/decisions.md` (D1/D2 and "Validation tenant specifics") records installation details — the repository
@@ -231,6 +233,64 @@ Found by the organization and security evaluation; the fixed findings are in CHA
 - [x] Read-mode allowlist: Graph `POST /directoryObjects/getByIds`; ARM `…/config/appsettings/list` with values stripped server-side (names only; the read is audited).
 - [ ] Example connection `connections/hr-sync`: env keys for base URL + audience.
 - [x] Default Log Analytics workspace key (`AF_LOG_ANALYTICS_WORKSPACE_ID`).
+
+## Engineer report library (plan 2026-10-17, phase E)
+
+- [x] **Grouping constructor at scale (fixed 2026-10-17).** The "nested or recursing too deeply" failure came from
+      JSONata evaluating every group's value at once (`Promise.all`), each pending evaluation counting towards the
+      shared depth guard — any `rows{ key: <path> }` with more than ~500 keys failed. It now runs natively
+      (`portal/packages/expressions/src/group-by.ts`, differential-tested against JSONata): 50k keys within budget.
+- [ ] **Transform cost at enterprise scale (engine, phase A).** JSONata costs ~15 µs per row for a filter, a `$merge`
+      or a mapped object (~0.15 ms for a rich per-row mapping), so per-row transforms fit ~1,500 rows. The rewritten
+      content (2026-10-17) uses native `$applyAdvanced` / `$withFields` / `$take` and reaches 30–60k rows; beyond that
+      it caps and says the data is partial. Engine follow-ups: (1) `plain()` in `expressions/src/evaluate.ts`
+      deep-copies every transform result — ~100 ms for a 50k-row result; copy only what needs it. (2) Run report and
+      schedule transforms off the event loop with a larger budget (scheduled runs don't block a page). (3) Per-tenant
+      snapshots (precomputed by the automation identity, read with an "as of" time and role gating) for the answers
+      Graph can't give at the source: inactive and never-signed-in members at 100k, password age, usage reports
+      beyond 40k accounts/sites, apps owned only by apps beyond 20k groups.
+- [ ] Caps of the content rewritten for scale (2026-10-17; each page says when it is partial): inactive users —
+      never-signed-in accounts 3,000; password age — 10,000 old passwords listed (counts over every member);
+      mailbox storage, OneDrive and SharePoint site usage, SharePoint sites — 40,000 rows read, 10,000 listed;
+      inactive licensed users 30,000; teams activity 40,000; identity health — inactive accounts 2,400, app
+      credentials 10,000 apps; app registrations credential KPIs 10,000 apps; groups owned only by apps 20,000 groups
+      read; teams without owners 10,000 teams.
+- [ ] Usage reports that still run their per-row transform and stop at 1,500 rows (marked partial): anyone-link
+      sites. Rewrite like `m365.mailbox-storage` (native filters, Graph fields in the columns).
+- [ ] Owner types: Graph's `GET /groups/{id}/owners` without a cast leaves service principals out (live 2026-10-17)
+      while `$expand=owners` and `owners/$count` include them. Content now reads the casts or the expansion; the Graph
+      owner-count views (`owners/$count eq 0|1`) can't tell people from apps, so "one owner" there means a person or an
+      app — say so wherever such a view is added.
+- [ ] Caps the new reports keep for that budget (each says so on the page; a join whose lookup list was cut short
+      shows nothing rather than false findings): Conditional Access report-only impact 300 Graph sign-ins (every
+      sign-in through Log Analytics), BitLocker escrow 2,000 devices/keys, Windows LAPS 1,500 devices/backups, unused
+      applications 1,000 apps/sign-in records (2,000 grants), authentication method strength 1,000 users, licence
+      assignment errors 500 rows per list, group lifecycle 2,000 per list, SAML 500 apps, the manager check 5,000 users.
+      Each transform is tested at its cap against the 250 ms budget (+20 %) in `tests/content/engineer-report-library.test.ts`.
+- [ ] `reports.stale-devices-weekly` and `reports.non-compliant-devices-daily` ship `enabled: false`: their reports'
+      transforms time out at enterprise scale (`tests/perf/budgets.json`). Turn them on when the content-fix stream's
+      rework of `endpoint.stale-devices` and `endpoint.non-compliant-devices` meets its perf budget.
+- [ ] Conditional Access report-only impact through Log Analytics (`SigninLogs`, `mv-expand ConditionalAccessPolicies`)
+      is untested live: no workspace receives the validation tenant's sign-in logs. Check it once a workspace is set.
+- [ ] BitLocker escrow and Windows LAPS coverage aren't scheduled: the automation identity would need
+      `BitlockerKey.ReadBasic.All` and `DeviceLocalCredential.ReadBasic.All` (metadata only). Both were only path-checked
+      live (403 for the automation identity); check them with the validation user once the Read app has
+      `DeviceLocalCredential.ReadBasic.All`.
+- [x] `probes.arm-subscription-access` failed while `AF_SUBSCRIPTION_ID` is unset (the path became
+      `/subscriptions//resourcegroups`). Graph, ARM and graphCount probes whose path names an unset `env.X` now report
+      `not_configured` ("AF_SUBSCRIPTION_ID is not set, so this check has nothing to look at") without calling anything
+      (`probes/checks.ts` `requireConfiguredPath`, tests/unit/api/probe-unset-setting.test.ts).
+- [ ] A probe for single Graph objects with an expiry (the Apple MDM push certificate, which is the most damaging one to
+      lose): `graphCount` reads lists only. Needs a `graphValue`-style check kind; the connector health report covers it.
+- [ ] Licence assignment errors: users holding the same SKU directly and through a group (blocks licence clean-up)
+      can't be found server-side — `licenseAssignmentStates` isn't filterable and `any(… ne null)` is refused.
+- [ ] SAML certificate expiry follows the signing certificate that expires last: the active one is only exposed as
+      `preferredTokenSigningKeyThumbprint` (hex), which can't be matched to `keyCredentials[].customKeyIdentifier`
+      (base64) in an expression.
+- [ ] `AF_LICENCE_SKU_1` / `AF_LICENCE_SKU_2` are now used only by the retired fixed-SKU seat probes; drop them from
+      `config/example.env` (and the env check) once no installation sets them.
+- [x] `reports.app-credential-expiry` and `reports.app-credential-expiry-daily` are not duplicates: a daily CSV kept for
+      a month and the weekly XLSX archive kept for a quarter. The cadence-suffix rename stays under Platform evaluation.
 
 ## Exchange / Teams / OneDrive / Defender (fixture-validated only)
 
@@ -352,6 +412,33 @@ Found by the organization and security evaluation; the fixed findings are in CHA
 - [ ] Live tooling: for ~10 minutes after `provision test-identities --enable` every Graph call can answer `reauth`
       (Continuous Access Evaluation still applies the session revocation from `--disable`), and the session then fails
       CSRF. The live scripts should recognise it and say "wait a few minutes after enabling", or retry.
+
+## Live accuracy (2026-10-17)
+
+First run of `tests/live/scripts/check-accuracy.ts` against the host services (docs/enterprise-scenarios.md).
+
+- [ ] `identity.group#owners` misses service-principal owners. Graph v1.0 `GET /groups/{id}/owners` (the datasource's
+      request) returned only the people for AF-Test-M365-01 (1 of 2 owners) and nothing for AF-Test-M365-02 (0 of 1),
+      while the page's own owner KPI (`memberCount.owners`, `owners/$count`) says 2 and 1 — the owners table and the KPI
+      disagree on the same page. The missing owner is the app (provisioner service principal) that created these
+      Microsoft 365 groups with application permissions; `/owners/microsoft.graph.servicePrincipal` (v1.0) and beta
+      `/owners` return it. Fix: read `/owners/microsoft.graph.user` and `/owners/microsoft.graph.servicePrincipal` (a
+      graphBatch) and keep `ownerType`; bump the page.
+- [ ] `identity.groups-without-owners#report` counts an app as an owner (`$filter=owners/$count eq 0`), so a group owned
+      only by a service principal (AF-Test-M365-02) is not reported, though no person can manage it. Decide whether "no
+      owner" means no person; if so, add a "no person owner" check (the user cast) and say so in the report.
+- [ ] Fixture `directory` (Phase F): AF-Test-M365-02 is meant to have no owner, but Graph keeps the provisioner's
+      service principal as owner of Microsoft 365 groups it creates (AF-Test-M365-01 has it too, beside AF-Test-User-04).
+      Remove the provisioner's owner reference after creating the group (keep the catalogue's people), or model the app
+      owner in the catalogue. check-accuracy.ts reports it as a documented difference until then.
+- [ ] AF-Test-SignIn-01's successful sign-in (scripts/generate-sign-ins.ts) is not in the sign-in logs about an hour
+      later — v1.0 and beta, interactive and non-interactive — while AF-Test-SignIn-02's eight attempts are (50126 wrong
+      password, 50072 MFA registration required, 50057 disabled). Re-run check-accuracy.ts later (Microsoft can take
+      up to about two hours); if still missing, check that the script's success path really completes an Entra
+      sign-in for that account.
+- [ ] Re-run check-accuracy.ts after the Phase E reports are published (`identity.user-attribute-completeness`,
+      `identity.saml-certificate-expiry`, `identity.licence-assignment-errors` showed as not published) and after the
+      registration report catches up (8 of 12 members after a day; Microsoft refreshes it every few hours).
 
 ## Navigation / product
 

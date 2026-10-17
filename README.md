@@ -52,8 +52,8 @@ cp config/example.env ~/.config/adminforge/dev.env   # fill in tenant settings (
 # provisioner credentials go in ~/.config/adminforge/dev.admin.env (mode 600; CLI and live tests only)
 pnpm install                                         # also points git at .githooks (pre-commit guard tests)
 git config core.hooksPath .githooks                  # same, explicitly (needed if install ran outside a git checkout)
-pnpm --filter @adminforge/api init:local             # generates DB password, token-cache key, local defaults
-pnpm db:up && pnpm --filter @adminforge/api db:migrate
+pnpm --filter @adminforge/api init:local             # generates the dev DB URL, token-cache key, local defaults
+pnpm db:up && pnpm db:harden && pnpm --filter @adminforge/api db:migrate   # non-superuser roles, then tables
 pnpm adminforge env check                            # key names and states only, never values
 pnpm adminforge provision entra                      # Read/Write/Automation apps, groups, consent (idempotent)
 pnpm adminforge provision status                     # every provisioned object ✓/✗ plus live token checks

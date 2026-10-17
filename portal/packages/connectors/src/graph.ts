@@ -1,4 +1,4 @@
-import { ApiError, createHttpClient, retryDelay, type HttpClientOptions } from './http';
+import { abortableSleep, ApiError, createHttpClient, retryDelay, type HttpClientOptions } from './http';
 import { defaultSleep } from './types';
 
 export interface GraphRequest {
@@ -188,7 +188,13 @@ export function createGraphClient(opts: GraphClientOptions) {
         if (!throttled.length) continue;
         const header = (r: BatchResponse) =>
           Object.entries(r.headers ?? {}).find(([k]) => k.toLowerCase() === 'retry-after')?.[1] ?? null;
-        await sleep(Math.max(...throttled.map((r) => retryDelay(header(r), 0))));
+        const delayMs = Math.max(...throttled.map((r) => retryDelay(header(r), 0)));
+        try {
+          opts.onRetry?.({ status: 429, reason: 'throttled', attempt: 0, delayMs, url: `${base}/$batch` });
+        } catch {
+          /* telemetry never breaks a call */
+        }
+        await abortableSleep(sleep, delayMs, opts.signal);
         const retry = chunk.filter((c) => throttled.some((t) => t.id === c.id));
         for (const r of await sendChunk(retry, beta))
           out[r.id] = { status: r.status, body: decodeBatchBody(r) };

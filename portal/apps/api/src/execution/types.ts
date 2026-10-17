@@ -1,4 +1,4 @@
-import type { Mode, Provenance, ServiceId } from '@adminforge/connectors';
+import type { Gate, Mode, Provenance, ServiceId } from '@adminforge/connectors';
 import type { Requires } from '@adminforge/schemas';
 import type { SessionRecord } from '../auth/session-store';
 import type { WriteTarget } from './protected';
@@ -59,6 +59,11 @@ export interface ServiceCallResult<T = unknown> {
   provenance: Provenance;
   /** Opaque cursor for the next page when paging is a cursor. */
   nextCursor?: string;
+  /**
+   * `paging: all` stopped before the end (maxItems or the page limit), or a `$batch` collection answered with its
+   * first page only: `data` holds part of the result.
+   */
+  truncated?: boolean;
 }
 
 /**
@@ -77,4 +82,9 @@ export interface OutboundExecutor {
    * changes are paused or when it names one of AdminForge's protected objects (./protected.ts).
    */
   assertWritable?(identity: ExecutionIdentity, targets: WriteTarget[], correlationId?: string): Promise<void>;
+  /**
+   * The executor's concurrency slot for one attempt of a call made with a connector directly (the overview's
+   * `$batch`), so such calls share the same limits as everything else.
+   */
+  gate?(identity: ExecutionIdentity, service: ServiceId, signal?: AbortSignal): Gate;
 }

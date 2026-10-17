@@ -92,6 +92,8 @@ export interface DatasourceOutcome {
   /** graphBatch sub-requests that failed. */
   partial?: Record<string, WidgetError>;
   skipped?: boolean;
+  /** Only part of the result (the datasource's item cap, or a `$batch` collection's first page). */
+  truncated?: boolean;
 }
 
 function readOutcome(raw: unknown): DatasourceOutcome {
@@ -115,6 +117,7 @@ function readOutcome(raw: unknown): DatasourceOutcome {
     provenance: isRecord(raw.provenance) ? (raw.provenance as unknown as Provenance) : null,
     ...(isRecord(raw.errors) ? { partial: raw.errors as Record<string, WidgetError> } : {}),
     ...(raw.skipped ? { skipped: true } : {}),
+    ...(raw.truncated === true ? { truncated: true } : {}),
   };
 }
 

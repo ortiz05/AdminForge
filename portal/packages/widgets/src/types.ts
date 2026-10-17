@@ -28,6 +28,8 @@ export interface WidgetData {
   retry?: () => void;
   /** Sample data shown because the tenant lacks a licence (mock mode only). */
   preview?: boolean;
+  /** Only part of the result: Microsoft had more than the datasource reads (`paging: all` cap, a `$batch` first page). */
+  truncated?: boolean;
 }
 
 /**

@@ -135,7 +135,27 @@ export function WidgetBlockView({ block, index, runtime, data, variant, idPrefix
       variant={variant}
     />
   );
+  // Part of the result only: say so under the widget rather than let a cut list or count read as complete. KPI cells
+  // are covered once by their strip (KpiGroup).
+  if (widgetData.truncated && widgetData.status === 'ready' && variant !== 'cell')
+    return (
+      <div className={cn('flex min-w-0 flex-col gap-1', className)}>
+        {content}
+        <PartialNote>
+          Partial data: Microsoft has more than this view reads. Narrow the filters, or open a report for the
+          full list.
+        </PartialNote>
+      </div>
+    );
   return className ? <div className={className}>{content}</div> : content;
+}
+
+function PartialNote({ children }: { children: string }) {
+  return (
+    <p className="px-1 text-2xs text-fg-2" role="note">
+      {children}
+    </p>
+  );
 }
 
 /** Consecutive KPIs share one strip; its foot names each distinct source once. */
@@ -161,6 +181,7 @@ function KpiGroup({
     }
     return [...seen.values()];
   }, [items, data]);
+  const partial = items.some(({ block }) => block.data && data.resolve(block.data).truncated);
   const wide = stripColumns(items.length);
   // Empty cells keep the panel surface when the last row isn't full (the strip's hairlines are its background). The
   // inspector has two layouts (two columns, `wide` from @4xl), each with its own fillers shown only in that layout.
@@ -193,6 +214,11 @@ function KpiGroup({
           <div key={`filler-wide-${i}`} className="hidden bg-panel @4xl:block" aria-hidden />
         ))}
       </KpiStrip>
+      {partial && (
+        <PartialNote>
+          Some figures count only the first items Microsoft returned, so the real numbers may be higher.
+        </PartialNote>
+      )}
       {provenances.length > 0 && (
         <div className="flex flex-wrap justify-end gap-x-6 gap-y-1 px-1">
           {provenances.length <= 2 ? (

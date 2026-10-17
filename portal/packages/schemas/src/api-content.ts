@@ -104,6 +104,11 @@ export const DatasourceResult = z.object({
   errors: z.record(z.string(), ErrorInfo).optional(),
   /** The datasource's `when` was false; data is null. */
   skipped: z.literal(true).optional(),
+  /**
+   * Part of the result only: `paging: all` stopped at maxItems (or the page limit), or a `$batch` collection answered
+   * with its first page. Widgets can say "showing the first N".
+   */
+  truncated: z.literal(true).optional(),
 });
 export type DatasourceResult = z.infer<typeof DatasourceResult>;
 

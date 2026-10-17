@@ -113,6 +113,49 @@ Azure Resource Manager. The tenant feeds need the automation app's ServiceMessag
 (`pnpm adminforge provision entra`) and Reader on the subscriptions. Feed failures and their codes are listed in
 `docs/news.md`.
 
+## Sizing for a large tenant
+
+The API's limits for Microsoft calls and page loads (all in the env file; defaults in brackets):
+
+- **Outbound slots** — `OUTBOUND_CONCURRENCY` [48] per service per process for people and
+  `OUTBOUND_USER_CONCURRENCY` [6] per person per service. A slot is taken for each attempt — each page, each retry —
+  and released while a throttled call waits on `Retry-After`, so throttling doesn't pin the slots.
+  - **Lanes**: list pages, entity reads, `$batch` requests, writes and the first two pages of a `paging: all` are
+    served first; the pages after those (a crawl) may hold only `OUTBOUND_CRAWL_SHARE` [0.5] of the slots, so a
+    dashboard that crawls a whole collection can't keep the users list waiting.
+  - **Schedules** (the automation identity) have their own `OUTBOUND_AUTOMATION_CONCURRENCY` [8] slots per service.
+  - **Busy**: only the first attempt of a person's read waits at most `OUTBOUND_QUEUE_WAIT_MS` [15 s] (then 503
+    `outbound_busy` — nothing was sent). Writes, retries, later pages and polls of a long-running operation always
+    wait, so a change that reached Microsoft is never answered "try again".
+  - **Microsoft's limits** are per app and tenant: for directory reads one app in a tenant over 500 users gets 8,000
+    resource units per 10 s (a request costs 1–3, `$select` −1, `$expand` +1), Intune 1,000 requests per 20 s, the
+    sign-in and audit reports 5 requests per 10 s. 48 slots stay within the directory budget when all are busy; the
+    stricter services answer 429 and AdminForge waits their `Retry-After`. All API processes of an installation share
+    those budgets (the Read app's), so more processes don't buy more Graph. Raise `OUTBOUND_CONCURRENCY` (64 measured
+    well, see performance.md) only while the `microsoft call` log lines show no `throttled` / `throttledRetries`.
+- **Timeouts** — `OUTBOUND_TIMEOUT_MS` [30 s] per attempt, one more try after a timeout; the slow reads in
+  `OUTBOUND_TIMEOUT_OVERRIDES` [sign-in and audit logs, usage reports, Log Analytics: 120 s] get one longer attempt
+  instead. `DATASOURCE_DEADLINE_MS` [120 s] caps one datasource of a person's page load, every page and retry
+  included (504 `datasource_timeout`); exports and schedules aren't cut short. A page left while it loads stops its
+  calls.
+- **Cache** — results are cached per person for each datasource's `cache.ttl`, at most 1,000 entries and
+  `DATASOURCE_CACHE_MAX_MB` [256 MB] per API process; identical concurrent loads of one session share one execution;
+  publishing a page drops only that page's cached results.
+- **Request limits** — per session, not per address: `RATE_LIMIT_PER_MINUTE` [600], background requests apart
+  (`RATE_LIMIT_BACKGROUND_PER_MINUTE` [600]), and `RATE_LIMIT_PER_ADDRESS_PER_MINUTE` [20,000] for one address across
+  all its sessions (behind a NAT every engineer shares one). Sign-in counts per address
+  (`RATE_LIMIT_SIGNIN_PER_ADDRESS_PER_MINUTE` [300]; behind a NAT where hundreds sign in at 9:00, raise it), and so does
+  anything without a valid session (`RATE_LIMIT_ANONYMOUS_PER_ADDRESS_PER_MINUTE` [600]). An IPv6 address counts by
+  its /64.
+- **Transforms** — run on the API's event loop with a 250 ms budget (wall clock: with many people loading heavy pages
+  at once, a transform can run out of budget sooner; it is then tried again on the data already fetched for 60 s
+  instead of fetching everything again). Sorting (`^( … )`) and a constant slice right after it (`[[0..9]]`) run
+  natively: 100k rows in a few hundred ms. Other per-row work over whole collections doesn't scale the same way —
+  content for big collections filters and counts at the source (`$filter`, `$count`, KQL `summarize`).
+
+Measured numbers at 100k users and 1,000 concurrent engineers, and a sizing guide: [performance.md](performance.md)
+(`pnpm test:perf` for the datasource budgets, `tests/perf/load.ts` for a load test before a large roll-out).
+
 ## Upgrade
 
 ```sh
@@ -120,7 +163,8 @@ git pull
 pnpm install --frozen-lockfile
 pnpm build
 pnpm --filter @adminforge/api db:migrate                               # dev database
-ADMINFORGE_ENV_OVERLAY=host pnpm --filter @adminforge/api db:migrate   # services' database
+ADMINFORGE_ENV_OVERLAY=host pnpm --filter @adminforge/api db:migrate   # services' database (as adminforge_owner)
+pnpm db:harden --dry-run                                               # should report nothing to change
 ADMINFORGE_ENV_OVERLAY=host pnpm adminforge publish                     # needs a clean checkout of origin/main
 pnpm adminforge validate --scopes     # if permissions changed: pnpm adminforge provision entra
 pnpm --filter @adminforge/runner modules:install   # only if portal/apps/runner/modules.lock.json changed
@@ -135,24 +179,96 @@ Runner workers start with `portal/apps/runner/ps/powershell.config.json` (PowerS
 logging off). If the journal grew before that, reclaim it with `journalctl --user --vacuum-size=…`. Installed
 Caddyfiles made from an older example should add `header -Via` at site level (`header_down -Via` has no effect).
 
-## Database roles
+## Postgres hardening
 
-The services don't connect as the database owner. `portal/deploy/db/create-app-role.sh` creates `adminforge_app`
-(no superuser, no DDL; row access on every table; **insert/select only on `audit_events`**, so a compromised service
-can't rewrite the audit log or drop its triggers) and rewrites the host overlay: `DATABASE_URL` → `adminforge_app`,
-`DATABASE_MIGRATION_URL` → the owner (used only by `db:migrate`). The run queue (pg-boss) installs and partitions its own tables, so `adminforge_app` owns the `pgboss` schema and everything in it (and nothing in `public`). Tables added by later migrations get the same row access through default privileges; a migration that adds another append-only table must `REVOKE UPDATE, DELETE,
-TRUNCATE` on it from `adminforge_app` itself.
+The database holds the audit log, sessions, the sealed token cache, runs, schedules and approvals. It is set up so that
+no process that serves requests can rewrite history or take over the cluster:
 
-The services' configuration loader drops `DATABASE_MIGRATION_URL` and `POSTGRES_PASSWORD`; only `db:migrate` asks
-for them. Two more steps make the owner credential less useful to a compromised process: make the owner a
-**non-superuser** role (create one with `CREATEROLE` and ownership of the database, and keep the container's superuser
-for maintenance), and refuse the owner and superuser over TCP except from where you run migrations (`pg_hba.conf`).
+| Role                                     | What it is for                                                         | Where its credential lives                            |
+| ---------------------------------------- | ---------------------------------------------------------------------- | ----------------------------------------------------- |
+| `adminforge` (the container's superuser) | one-off administration over the container's local socket only          | `<env>.owner.env` (`POSTGRES_PASSWORD`, new clusters) |
+| `adminforge_owner` (`AF_PG_OWNER`)       | owns the services' database, runs its migrations; no superuser         | `<env>.host.owner.env` (`DATABASE_MIGRATION_URL`)     |
+| `adminforge_app`                         | the services: row access only; audit log insert/select only            | `<env>.host.env` (`DATABASE_URL`)                     |
+| `adminforge_dev` (`AF_PG_DEV_USER`)      | owns `adminforge_dev` and `adminforge_test` (`pnpm dev`, the DB tests) | `<env>.env` (`DATABASE_URL`)                          |
+
+- **No superuser in any connection string the services read.** The superuser may sign in only over the container's
+  local socket (`docker exec … psql`); `pg_hba.conf` rejects it over TCP (`portal/deploy/db/initdb/`). The API, the
+  worker and the scheduler refuse to start in production when the role they connect as (`current_user` or
+  `session_user`) is a superuser or `BYPASSRLS`, can update, delete or truncate `audit_events`, is a member of the audit
+  table's owner, can create objects in `public`, or holds `pg_read_server_files` / `pg_write_server_files` /
+  `pg_execute_server_program` — and when that check can't run at all (fail closed). Development warns about a
+  superuser or `BYPASSRLS` role only. The owner's credentials are in the **owner files** (`*.owner.env`, mode 600),
+  which only `db:migrate` and the database scripts read — the services' configuration loader never opens them. That
+  keeps them out of the services' memory, not out of reach: any code running as the services' Unix account can read
+  the files. Only a dedicated service account (go-live checklist) separates them for real.
+- **Passwords never reach the server.** `db:harden` and `create-app-role.sh` compute a SCRAM-SHA-256 verifier on this
+  side (`portal/deploy/db/scram.mjs`) and send only that, in sessions that turn statement logging off — the server log
+  (which records DDL) never sees a password. If `db:harden` or `create-app-role.sh` ran in an earlier version against a
+  container that already logged DDL, run `pnpm db:harden --rotate` and `create-app-role.sh … --rotate`, then recreate
+  the container (`pnpm db:down && pnpm db:up`) so the old log goes with it.
+- **`adminforge_app`** (`portal/deploy/db/create-app-role.sh`): no DDL; row access on every table; **insert/select
+  only on `audit_events`**, so a compromised service can't rewrite the audit log or drop its triggers. The run queue
+  (pg-boss) installs and partitions its own tables, so it owns the `pgboss` schema (and nothing in `public`). Tables
+  added by later migrations get row access through the owner's default privileges; a migration that adds another
+  append-only table must `REVOKE UPDATE, DELETE, TRUNCATE` on it from `adminforge_app` itself. Per-role limits:
+  `statement_timeout` 60 s, `idle_in_transaction_session_timeout` 60 s, `lock_timeout` 15 s, and a connection cap of
+  3 × (`DATABASE_POOL_MAX` + 4 for the run queue + 3 LISTEN clients) + 1 scheduler lock + 10 for the CLI — 62 with the
+  default pool of 10 (`db:harden` sets it from the overlay's `DATABASE_POOL_MAX`; raise `max_connections` with it).
+- **Every connection** also carries its own limits and a name (`application_name = adminforge-api|worker|scheduler|
+listen-…|scheduler-lock|cli|migrate`): `DATABASE_STATEMENT_TIMEOUT_MS`, `DATABASE_LOCK_TIMEOUT_MS`,
+  `DATABASE_IDLE_IN_TRANSACTION_TIMEOUT_MS`, pool size `DATABASE_POOL_MAX` — one stuck transaction can't stall every
+  audited action (they share the audit chain's lock). Migrations run without a time limit. `idle_session_timeout` is
+  never set: the LISTEN clients and the scheduler's session lock idle by design.
+- **Databases are closed to `PUBLIC`**; each owner and `adminforge_app` (its database only) keep `CONNECT`.
+- **Integrity in the database:** foreign keys (a run's steps and events go with it; a purged parent run, schedule or
+  schedule run leaves the link empty; a schedule with history can't be deleted) and CHECK constraints on every status
+  column (migration 0009); **approval decisions are append-only** (migrations 0010–0011): a new approval starts
+  pending with no decisions; a recorded decision never changes, except that the same person resuming a run may rebind
+  its `sessionHash` — only to a session of theirs (the run worker likewise acts only through a session of the person
+  the run or decision names); a decided approval is final; and an approval is deleted only together with its run or
+  schedule (checked at commit), so a rejection can't be deleted and replaced by a fresh approval. The trigger functions
+  run with a fixed `search_path`, so objects in a schema the services own (`pgboss`) can't change their checks. This
+  stops history being rewritten; it can't stop a compromised service recording a forged decision — the audit log
+  records every decision too.
+- **Audit chain anchor:** every verification (the probe, the Audit page, `adminforge audit verify`) walks the chain in
+  batches and the services write the verified tail as an `audit chain checkpoint` log line (`seq`, `hash`) to the
+  journal. Someone who can rewrite the table can re-hash the chain, but not checkpoints already in the journal: compare
+  them with `adminforge audit verify` (it prints the tail), and forward the journal off the host to make the anchor
+  independent of this machine.
+- **Server:** the container image is pinned by digest; Postgres logs connections, disconnections, DDL, lock waits and
+  statements slower than 2 s (`docker logs adminforge-dev-postgres-1`, rotated at 5 × 10 MB); no privilege escalation
+  in the container; 2 GB and 256 processes at most. The port is bound to loopback only. A database on another host
+  needs `?sslmode=verify-full` in `DATABASE_URL` (production refuses anything else). A change to the compose file's
+  `command` or limits applies when `pnpm db:up` recreates the container (data is kept in the volume).
+
+**Set up or repair** (idempotent; `--dry-run` first — it only reads the catalog). Stop the api, worker and scheduler
+before applying: each script runs as one transaction and waits at most 10 s for a lock (ownership changes need the
+tables the services hold), and the services must reconnect afterwards anyway. It refuses to run while the overlay's
+`DATABASE_URL` still uses the superuser (run `create-app-role.sh` first) or names a database other than
+`AF_PG_DATABASE`, and saves each new credential as soon as its role has it.
 
 ```sh
-portal/deploy/db/create-app-role.sh ~/.config/adminforge/dev.host.env            # once (idempotent)
-portal/deploy/db/create-app-role.sh ~/.config/adminforge/dev.host.env --rotate   # new password
+pnpm db:harden --dry-run
+pnpm db:harden                     # owners, ownership moved from the superuser, app role limits, PUBLIC, pg_hba
+portal/deploy/db/create-app-role.sh ~/.config/adminforge/dev.host.env   # if adminforge_app doesn't exist yet, then db:harden again
+pnpm db:harden --rotate            # new passwords for adminforge_owner and adminforge_dev
+pnpm db:harden --rotate-superuser  # new superuser password (it is in older, unencrypted backups)
+portal/deploy/db/create-app-role.sh ~/.config/adminforge/dev.host.env --rotate   # new password for adminforge_app
 systemctl --user restart adminforge-api adminforge-worker adminforge-scheduler
 ```
+
+`db:harden` moves `POSTGRES_PASSWORD` from the env file and `DATABASE_MIGRATION_URL` from the overlay into the owner
+files, points the env file's `DATABASE_URL` at `adminforge_dev` (the development database; run `db:migrate` once if it
+was new), and prints names only, never a value. Tested against a fake `psql` in `tests/unit/deploy/harden-postgres.test.ts`;
+the SQL was exercised against throwaway postgres:18 containers in both layouts (an older cluster where the superuser
+owned everything, and a new one) before it was committed.
+
+**`TOKEN_CACHE_KEY` rotation:** sealed blobs carry the id of the key that sealed them. For a routine rotation put the
+old key in `TOKEN_CACHE_PREVIOUS_KEYS`, a new one (`openssl rand -base64 32`) in `TOKEN_CACHE_KEY`, restart api, worker
+and scheduler together: new tokens are sealed with the new key, existing ones still open; after `SESSION_ABSOLUTE_HOURS`
+remove the old key. **If the key may have leaked, never keep it** in `TOKEN_CACHE_PREVIOUS_KEYS`: set only the new key
+and empty the token cache (`truncate token_cache` in the services' database) — everyone signs in again, which is the
+point (nothing else is lost).
 
 ## Backup and restore
 
@@ -164,14 +280,18 @@ downtime). Each backup is a folder in `~/adminforge-backups/<UTC timestamp>/` (m
   or refresh tokens and a restore signs everyone out;
 - `config.tgz` — the services' configuration in `~/.config/adminforge` (env files incl. client secrets and
   `TOKEN_CACHE_KEY`). **Never included:** `<env>.admin.env` (provisioner and validation-user credentials — re-issue
-  them instead of restoring them) and stray copies (`*.bak*`);
+  them instead of restoring them), the database owner's credentials (`*.owner.env`, and `DATABASE_MIGRATION_URL` /
+  `POSTGRES_PASSWORD` lines an older env file still has — after a restore, `pnpm db:harden --rotate`) and stray copies
+  (`*.bak*`);
 - `data.tgz` — report files and Caddy's data. Caddy's private keys (local CA and site certificate) are included only
   when the backup is encrypted; otherwise a restore issues a new local CA and browsers must trust it again.
 
-**Encryption:** set `AF_BACKUP_GPG_RECIPIENT` (in the backup unit's environment) to a GPG key whose **private key is not
-on this host** — e.g. the platform owner's key, imported with `gpg --import owner.pub` and trusted. Every file is then
-written as `*.gpg` and the plaintext is shredded; restore with `gpg --decrypt` on a machine that holds the private
-key. Unencrypted backups still hold the services' client secrets and `TOKEN_CACHE_KEY`.
+**Encryption (required):** set `AF_BACKUP_GPG_RECIPIENT` in a drop-in of the backup unit
+(`systemctl --user edit adminforge-backup.service` → `Environment=AF_BACKUP_GPG_RECIPIENT=<fingerprint>`) to a GPG key
+whose **private key is not on this host** — e.g. the platform owner's key, imported with `gpg --import owner.pub` and
+trusted. Every file is then written as `*.gpg` and the plaintext is shredded; restore with `gpg --decrypt` on a machine
+that holds the private key. Without a recipient the backup **refuses to run** unless the drop-in says
+`Environment=AF_BACKUP_ALLOW_PLAINTEXT=1` — plaintext backups hold the services' client secrets and `TOKEN_CACHE_KEY`.
 
 Folders older than 14 days are deleted (`AF_BACKUP_KEEP_DAYS`; also `AF_BACKUP_DIR`, `AF_BACKUP_PG_CONTAINER`,
 `AF_BACKUP_DATABASE`; the container, user, database and port default to `portal/deploy/defaults.env`). Install it with:
@@ -183,8 +303,11 @@ systemctl --user daemon-reload && systemctl --user enable --now adminforge-backu
 systemctl --user start adminforge-backup     # one now; journalctl --user -u adminforge-backup for the result
 ```
 
-Copy backups off the host (they are the only copy otherwise) and keep them encrypted and access-controlled: they hold
-the services' client secrets and the token-cache key. Without `TOKEN_CACHE_KEY` the sealed token cache can't be read (everyone signs
+**Off the host:** a backup on the same disk as the database doesn't survive the disk. Copy each encrypted folder to
+storage this host can't delete from — e.g. a second unit after the backup (`ExecStartPost=`) running
+`restic backup ~/adminforge-backups` or `rclone copy ~/adminforge-backups remote:adminforge-backups` to an
+object-lock (immutable) bucket — and keep them access-controlled: they hold the services' client secrets and the
+token-cache key. Without `TOKEN_CACHE_KEY` the sealed token cache can't be read (everyone signs
 in again; nothing else is lost).
 
 **Restore:** stop the api, worker and scheduler; restore the dump
@@ -224,8 +347,8 @@ If AdminForge or an account using it may be compromised, stop it from acting bef
 1. Install the prerequisites (README), clone the repository at the deployed commit, `pnpm install --frozen-lockfile`,
    `pnpm build`.
 2. Restore `config.tgz` to `~/.config/adminforge` and `data.tgz` to `~/.local/share`; start Postgres (`pnpm db:up`)
-   and restore the dump as above; then run `portal/deploy/db/create-app-role.sh` (the role lives in the Postgres
-   cluster, not in the dump). Re-issue the provisioner credential (`<env>.admin.env` is never backed up).
+   and restore the dump as above; then run `pnpm db:harden`, `portal/deploy/db/create-app-role.sh` and
+   `pnpm db:harden` again (the roles live in the Postgres cluster, not in the dump). Re-issue the provisioner credential (`<env>.admin.env` is never backed up).
 3. Install the units (portal/deploy/README.md) and start them. If the host name or address changed, update the
    Caddyfile, `PUBLIC_BASE_URL` overrides and `AF_REDIRECT_BASE_URLS`, then `pnpm adminforge provision entra`.
 4. Check: `/readyz` is `ok`, `adminforge audit verify` passes, the live suite passes (`tests/live/README.md`).
@@ -260,7 +383,9 @@ AdminForgeSender`. (Granting Entra `Mail.Send` needs `AF_AUTOMATION_ALLOW_WRITE_
       sender's own message `sent`, sending as the other mailbox `refused`.
 - [ ] Backups: timer enabled, encrypted to an off-host key (`AF_BACKUP_GPG_RECIPIENT`), copied off the host, restore
       drill recorded above.
-- [ ] Services connect as `adminforge_app` (`portal/deploy/db/create-app-role.sh`), not the database owner.
+- [ ] Services connect as `adminforge_app` (`portal/deploy/db/create-app-role.sh`), not the database owner, and
+      `pnpm db:harden --dry-run` reports nothing to change (non-superuser owners, limits, no superuser over TCP).
+- [ ] The services' journal is forwarded off the host (it holds the audit chain's checkpoints).
 - [ ] `AF_PROTECTED_APP_IDS` lists the provisioner's client id (AdminForge's own playbooks then refuse to touch it).
 - [ ] Monitoring page green (portal readiness, audit chain, token probes); licence gaps reviewed
       (`docs/licensing-review.md`).
@@ -270,15 +395,15 @@ AdminForgeSender`. (Granting Entra `Mail.Send` needs `AF_AUTOMATION_ALLOW_WRITE_
 
 ## Secret and key rotation
 
-| Secret                                   | How                                                                                                                                                                                                                                                                                                                                          | Effect                                                      |
-| ---------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------- |
-| Provisioner client secret                | Create a new secret on the provisioner app in Entra, put it in `<env>.admin.env`, delete the old one in Entra. **Do this now if it was ever shared** (for example in a chat).                                                                                                                                                                | None on the services                                        |
-| Read / Write / Automation client secrets | Valid 180 days. `provision entra` creates a new one only when the stored one is missing or expired: to rotate early, empty the key (`AF_READ_CLIENT_SECRET=`), run `pnpm adminforge provision entra`, restart api/worker/scheduler, then delete the old credential in Entra. The `probes.app-credential-expiry` probe warns ahead of expiry. | Brief restart                                               |
-| `TOKEN_CACHE_KEY`                        | `openssl rand -base64 32`, update `<env>.env`, restart api/worker                                                                                                                                                                                                                                                                            | Everyone signs in again; pending show-once secrets are lost |
-| Caddy local CA (if trusted by clients)   | Delete `~/.local/share/caddy/pki/authorities/local`, restart `adminforge-proxy`, distribute the new `root.crt`, **remove the old root from every client**                                                                                                                                                                                    | Browsers warn until the new root is trusted                 |
-| `RUNNER_SHARED_KEY`                      | New value in both `<env>.env` and `<env>.runner.env`, restart runner, api and worker together                                                                                                                                                                                                                                                | Runner calls fail until all three restarted                 |
-| `POSTGRES_PASSWORD`                      | `ALTER ROLE adminforge PASSWORD …` in the container, update `POSTGRES_PASSWORD` and both `DATABASE_URL`s, restart                                                                                                                                                                                                                            | Brief restart                                               |
-| Live-test user password / TOTP seed      | `pnpm adminforge provision test-identities` (password); re-run `tests/live/scripts/register-test-user-mfa.ts` (TOTP)                                                                                                                                                                                                                         | Test tenants only                                           |
+| Secret                                   | How                                                                                                                                                                                                                                                                                                                                          | Effect                                              |
+| ---------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------- |
+| Provisioner client secret                | Create a new secret on the provisioner app in Entra, put it in `<env>.admin.env`, delete the old one in Entra. **Do this now if it was ever shared** (for example in a chat).                                                                                                                                                                | None on the services                                |
+| Read / Write / Automation client secrets | Valid 180 days. `provision entra` creates a new one only when the stored one is missing or expired: to rotate early, empty the key (`AF_READ_CLIENT_SECRET=`), run `pnpm adminforge provision entra`, restart api/worker/scheduler, then delete the old credential in Entra. The `probes.app-credential-expiry` probe warns ahead of expiry. | Brief restart                                       |
+| `TOKEN_CACHE_KEY`                        | Old key into `TOKEN_CACHE_PREVIOUS_KEYS`, a new one (`openssl rand -base64 32`) into `TOKEN_CACHE_KEY` in `<env>.env`, restart api/worker/scheduler; drop the old key after `SESSION_ABSOLUTE_HOURS` (→ Postgres hardening)                                                                                                                  | None (without the old key: everyone signs in again) |
+| Caddy local CA (if trusted by clients)   | Delete `~/.local/share/caddy/pki/authorities/local`, restart `adminforge-proxy`, distribute the new `root.crt`, **remove the old root from every client**                                                                                                                                                                                    | Browsers warn until the new root is trusted         |
+| `RUNNER_SHARED_KEY`                      | New value in both `<env>.env` and `<env>.runner.env`, restart runner, api and worker together                                                                                                                                                                                                                                                | Runner calls fail until all three restarted         |
+| Database passwords                       | `pnpm db:harden --rotate` (owners), `--rotate-superuser` (container superuser), `portal/deploy/db/create-app-role.sh … --rotate` (services); restart api/worker/scheduler                                                                                                                                                                    | Brief restart                                       |
+| Live-test user password / TOTP seed      | `pnpm adminforge provision test-identities` (password); re-run `tests/live/scripts/register-test-user-mfa.ts` (TOTP)                                                                                                                                                                                                                         | Test tenants only                                   |
 
 ### The provisioner
 
@@ -295,8 +420,10 @@ The provisioner is the most powerful credential AdminForge uses, and it lives on
 - The opt-in licensed test fixtures (`AF_TEST_LICENCE_SKU`, `AF_TEST_FIXTURES`) need Microsoft Graph **application
   permissions** on it — its directory role doesn't cover those APIs app-only (`LicenseAssignment.ReadWrite.All`,
   `RoleEligibilitySchedule.ReadWrite.Directory`, `Policy.Read.All` + `Policy.ReadWrite.ConditionalAccess` (+
-  `Application.Read.All` for the audit Conditional Access policies), `DeviceManagementConfiguration.ReadWrite.All`;
-  table in `tests/live/README.md`), and the Teams test objects need
+  `Application.Read.All` for the audit Conditional Access policies), `DeviceManagementConfiguration.ReadWrite.All`
+  (+ `DeviceManagementApps.ReadWrite.All` for `intune-more`), `User.Invite.All` for `guest`, and
+  `UserAuthenticationMethod.ReadWrite.All` for `auth-methods` where the directory role doesn't cover it; table in
+  `tests/live/README.md`), and the Teams test objects need
   `Team.Create`. **Application permissions survive removing the directory role**, and PIM eligibility, Conditional
   Access and Intune configuration are tier-0: grant only the ones the run needs, and remove them when it's done.
   `provision status` shows a ⚠ listing any of them the provisioner's token still holds (it decodes the token; names
@@ -312,7 +439,7 @@ The provisioner is the most powerful credential AdminForge uses, and it lives on
     $graph = Get-MgServicePrincipal -Filter "appId eq '00000003-0000-0000-c000-000000000000'"
     $drop = 'LicenseAssignment.ReadWrite.All','RoleEligibilitySchedule.ReadWrite.Directory','Policy.Read.All',
             'Policy.ReadWrite.ConditionalAccess','DeviceManagementConfiguration.ReadWrite.All','Application.Read.All',
-            'Team.Create'
+            'DeviceManagementApps.ReadWrite.All','User.Invite.All','UserAuthenticationMethod.ReadWrite.All','Team.Create'
     Get-MgServicePrincipalAppRoleAssignment -ServicePrincipalId $sp.Id |
       Where-Object { $_.ResourceId -eq $graph.Id -and
         ($graph.AppRoles | Where-Object Id -eq $_.AppRoleId).Value -in $drop } |

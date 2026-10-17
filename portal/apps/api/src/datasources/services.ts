@@ -130,6 +130,8 @@ export function createContentServices(
       licences,
       env,
       now: base.now,
+      cacheMaxBytes: config.DATASOURCE_CACHE_MAX_MB * 1024 * 1024,
+      deadlineMs: config.DATASOURCE_DEADLINE_MS,
       ...(log ? { log } : {}),
     });
   const events = deps.events ?? new EventBus();

@@ -214,6 +214,7 @@ export function usePageData(
             value: merged(pages, rest),
             provenance: first.provenance,
             hasMore: Boolean(cursor) && !live?.error,
+            ...(first.truncated ? { truncated: true } : {}),
             loadingMore: Boolean(live?.loading),
             loadMore: () => loadMore(root, first, q.dataUpdatedAt),
             retry: () => refetch(root),

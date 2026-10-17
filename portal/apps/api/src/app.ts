@@ -12,6 +12,7 @@ import { requireRole } from './auth/guards';
 import { registerSessions } from './auth/session-plugin';
 import { webDistAvailable, type Config } from './config';
 import { createContext, type AppContext, type AppDeps } from './context';
+import { assertDatabaseRole } from './db/client';
 import { serializeError } from './logging';
 import { AppError, DenialAudit, registerErrorHandler, sendError, unauthenticated } from './errors';
 import { contentRoutes } from './routes/content';
@@ -22,6 +23,7 @@ import { overviewRoutes } from './routes/overview';
 import { approvalRoutes } from './routes/approvals';
 import { probeRoutes } from './routes/probes';
 import { newsRoutes } from './routes/news';
+import { registerAddressCap, registerAnonymousCap, rateLimitOptions } from './rate-limit';
 import { queryRoutes } from './routes/query';
 import { reportCatalogRoutes } from './routes/report-catalog';
 import { runRoutes } from './routes/runs';
@@ -152,6 +154,14 @@ export async function buildApp(
   app.addHook('onClose', async () => {
     await ctx.database?.close();
   });
+  // Never a superuser: production refuses to start, development warns (db/client.ts).
+  app.addHook('onReady', async () => {
+    if (ctx.database)
+      await assertDatabaseRole(ctx.database, {
+        production: config.NODE_ENV === 'production',
+        warn: (msg) => app.log.warn(msg),
+      });
+  });
   // Runs (playbook engine): RunService + queue; the worker also runs here with RUN_WORKER_IN_PROCESS=true or without a database.
   const runs = createRunsModule(ctx, { ...deps.runs, log: app.log });
   app.decorate('runs', runs);
@@ -210,9 +220,13 @@ export async function buildApp(
     hsts: config.NODE_ENV === 'production' ? { maxAge: 31_536_000, includeSubDomains: true } : false,
     referrerPolicy: { policy: 'no-referrer' },
   });
-  await app.register(rateLimit, { max: config.RATE_LIMIT_PER_MINUTE, timeWindow: '1 minute' });
+  // Per session (per address before sign-in), background requests apart, and a coarse cap per address (rate-limit.ts).
+  registerAddressCap(app, config);
+  await app.register(rateLimit, rateLimitOptions(config));
 
   registerSessions(app, ctx);
+  // After the session hook: requests to /api and /auth without a valid session share a per-address allowance.
+  registerAnonymousCap(app, config);
 
   healthRoutes(app, ctx);
   sessionEndRoutes(app, ctx);

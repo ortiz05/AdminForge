@@ -99,7 +99,10 @@ Codes that can come from (almost) any endpoint:
 | 404    | `upstream_not_found`      | Microsoft answered 404.                                                                                  |
 | 400    | `upstream_bad_request`    | Microsoft answered 400.                                                                                  |
 | 429    | `throttled`               | Microsoft is throttling (not the portal's own limit).                                                    |
-| 429    | `rate_limited`            | The portal's own per-IP rate limit (see below).                                                          |
+| 429    | `rate_limited`            | The portal's own rate limit, per session or per address (see below).                                     |
+| 499    | `client_closed`           | The browser closed the request before it finished (not shown; the work stopped).                         |
+| 503    | `outbound_busy`           | No outbound slot for Microsoft calls came free within `OUTBOUND_QUEUE_WAIT_MS`; try again.               |
+| 504    | `datasource_timeout`      | A page, dashboard or report datasource ran past `DATASOURCE_DEADLINE_MS` for a person; narrow filters.   |
 | 502    | `upstream_error`          | Microsoft answered 5xx (or something unexpected).                                                        |
 | 504    | `upstream_unreachable`    | No response from Microsoft (network, timeout).                                                           |
 | 404    | `not_found`               | No such route (non-page paths; page paths get the SPA).                                                  |
@@ -120,12 +123,22 @@ A failing `GET`/`HEAD` to **`/auth/*`** or **`/api/artifacts/*`** that is a top-
 
 ### Rate limits
 
-Per client IP (`TRUST_PROXY` decides which address counts). Every route shares the global budget of
-`RATE_LIMIT_PER_MINUTE` (default 600 per minute) unless it has its own:
+Per signed-in session (the session cookie, hashed — never validated or logged here), and per client address before
+sign-in (`TRUST_PROXY` decides which address counts): behind a corporate NAT every engineer shares one address, so
+counting per address would let one busy colleague lock everyone out. Every route shares the global budget of
+`RATE_LIMIT_PER_MINUTE` (default 600 per minute) unless it has its own (per session as well). Requests sent with
+`X-AdminForge-Background: 1` (polling, refetch on focus) count against a separate allowance,
+`RATE_LIMIT_BACKGROUND_PER_MINUTE` (default 600), so they can't starve what the person clicks — under the global
+budget only: on a route with its own limit they share it. Sign-in (`/auth/login`, `/auth/callback`) counts per client
+address whatever cookie comes with it (`RATE_LIMIT_SIGNIN_PER_ADDRESS_PER_MINUTE`, default 300), so an invented cookie
+buys no fresh allowance; requests to `/api` and `/auth` without a valid session share
+`RATE_LIMIT_ANONYMOUS_PER_ADDRESS_PER_MINUTE` (default 600) per address; one address across all its sessions is capped
+at `RATE_LIMIT_PER_ADDRESS_PER_MINUTE` (default 20,000). An address is an IPv4 address or an IPv6 /64.
 
 | Route(s)                                                                                 | Limit per minute |
 | ---------------------------------------------------------------------------------------- | ---------------- |
-| `GET /auth/login`, `GET /auth/callback`, `POST /auth/logout`                             | 30               |
+| `GET /auth/login`, `GET /auth/callback` (per address)                                    | 300              |
+| `POST /auth/logout`                                                                      | 30               |
 | `POST /auth/arm`, `GET /auth/arm/callback`, `POST /auth/arm/extend`, `POST /auth/disarm` | 10               |
 | `GET /api/search`                                                                        | 240              |
 | `POST /api/query`                                                                        | 60               |
@@ -450,12 +463,21 @@ delegated **read** identity; the client names a page and a datasource, never a U
 - **Response** (`DatasourceResult`): `data`; `cursor?` (next page); `provenance`
   (`{service, path, ms, requestId?, cachedAt?}`, or `null` for static/skipped datasources); `errors?` (graphBatch
   sub-request failures, and `ds.<name>` for an `optional: true` datasource it uses — directly or further up the chain —
-  that failed, so it ran with `null` in its place: the result is incomplete); `skipped?` (its `when` was false).
+  that failed, so it ran with `null` in its place: the result is incomplete); `skipped?` (its `when` was false);
+  `truncated?` (`true`: `paging: all` stopped at `maxItems` or the page limit, or a `$batch` collection answered with
+  its first page only — `data` is part of the result; for Graph and Resource Graph `data` carries `truncated: true`
+  too, so a transform can say so).
+- **Sharing, caching, limits:** identical concurrent requests of one session share one execution; results are cached
+  per user for `cache.ttl` seconds keyed on the params the datasource's expressions use (all of them when that can't be
+  told) and on its dependencies' own keys; a page's cached results are dropped when that page is published again. A
+  person's request stops after `DATASOURCE_DEADLINE_MS` (504 `datasource_timeout`) and when the browser goes away
+  (`client_closed`); a transform that failed is tried again on the data already fetched for 60 s.
 - **Errors:** `definition_not_found` 404, `datasource_not_found` 404, `forbidden` 403, `invalid_params` 400,
   `licence_required` 403, `policy_denied` 403, `dependency_failed` 424 (a `ds.<name>` it uses failed and is not
   `optional: true` — or failed with `forbidden`, `policy_denied`, `licence_required`, `reauth`, `rearm` or `not_armed`
   anywhere up the chain, which `optional` never hides),
-  `content_error` 500, `runner_not_configured` 503 (PowerShell datasources), `reauth` 401, upstream codes.
+  `content_error` 500, `runner_not_configured` 503 (PowerShell datasources), `outbound_busy` 503,
+  `datasource_timeout` 504, `reauth` 401, upstream codes.
 - **Version:** `version`, if sent, must be the current published version: an older one answers 409 `version_superseded` (reload the page), a retired key 409 `definition_retired`.
 
 #### `POST /api/datasources/execute-many`
@@ -642,6 +664,9 @@ automation identity. Schedule keys look like `reports.weekly-licences` or `porta
   `{key, title, summary, cron, cronText, timezone, enabled, identity: "automation", job, nextRunAt, lastRunAt,`
   `lastStatus, writeCapable, approvedBy?, source, createdBy, canManage, delivery?, notify?, pendingApprovalId}` with
   `job` = `{kind, ref?, refs?, select?, params?}`.
+  - `cron` is always set, also for content written with `every:` (compiled); `cronText` is the plain-English sentence
+    naming the zone ("Every weekday (Mon–Fri) at 07:00 Europe/London", 24-hour), or `null` for custom shapes. The web
+    app describes the cron itself with the browser's 12- or 24-hour clock.
   - `createdBy`: the creator's UPN for portal schedules, `null` for content.
   - `canManage`: a portal schedule **and** the caller holds `Portal.Operator` **and** created it (by object id) or holds
     `Portal.Admin` — whether Edit/Delete are offered.
@@ -731,15 +756,21 @@ Schedules a report in the portal. It runs from its next due time — no git revi
 #### `POST /api/schedules/preview`
 
 - **Who:** `Portal.Reader`. Stores nothing.
-- **Body:** `{cron (≤ 100), timezone (IANA)}`.
-- **Response:** `{valid, text (plain language, or null), next: ISO[5], problem?}` — an invalid expression is a 200 with
-  `valid: false`, not an error.
-- **Errors:** `invalid_request` 400 (missing fields, unknown time zone).
+- **Body:** `{cron (≤ 100) | every (≤ 200), timezone (IANA)}` — exactly one of `cron` and `every` (plain English:
+  "every weekday at 07:00", "first Monday of the month at 8:30", "every 4 hours"; the grammar is
+  `@adminforge/schemas` cadence.ts). A zone named at the end of `every` ("… Europe/London") wins over `timezone`.
+- **Response:** `{valid, cron (as sent or compiled; null when unreadable), text (plain English naming the zone, or null
+for custom shapes), timezone (the zone used), next: ISO[5] (DST-aware, the scheduler's own computation), tooFrequent
+(two runs less than an hour apart — refused for schedules created in Reports), problem?}`. An invalid expression or
+  English it can't read is a 200 with `valid: false` and the reason (naming the word it didn't understand), not an
+  error.
+- **Errors:** `invalid_request` 400 (missing fields, both `cron` and `every`, unknown time zone).
 
 #### `POST /api/schedules/scaffold`
 
 - **Who:** `Portal.Reader`. Stores nothing — the YAML goes through git → `adminforge validate` → publish.
-- **Body:** `title`, `key?`, `section?`, `summary?`, `owner?`, `cron`, `timezone`, `enabled` (default true), `job`,
+- **Body:** `title`, `key?`, `section?`, `summary?`, `owner?`, `cron` or `every` (English — the YAML then says
+  `every:`, written as the describer's own sentence), `timezone`, `enabled` (default true), `job`,
   `retries` (0–10, default 2), `timeoutSeconds?` (60–14400), `notifyOnFailure? {emailEnv?, teamsWebhookEnv?}`, where
   `job` is one of:
   `{kind: report, ref, format: csv|xlsx|json, retain?, emailEnv?, teamsWebhookEnv?}`, `{kind: probe, tags (1–5)}`,

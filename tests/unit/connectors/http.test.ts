@@ -110,15 +110,31 @@ describe('http client', () => {
     expect(f.calls).toHaveLength(1);
     expect(sleep).not.toHaveBeenCalled();
   });
-  it('does not retry when the caller aborts', async () => {
+  it('does not retry when the caller aborts during a request', async () => {
     const controller = new AbortController();
-    controller.abort();
     const abort = Object.assign(new Error('aborted'), { name: 'AbortError' });
-    const { http, f } = client([abort, { status: 200, body: {} }]);
+    const fetch = vi.fn(async () => {
+      controller.abort();
+      throw abort;
+    });
+    const http = createHttpClient({
+      getToken: async () => 'tok',
+      fetch,
+      sleep: async () => {},
+      maxRetries: 2,
+    });
     expect(await http.send({ url: 'https://x.example/a', signal: controller.signal }).catch((e) => e)).toBe(
       abort,
     );
-    expect(f.calls).toHaveLength(1);
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+  it('sends nothing for a request that is already aborted', async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const { http, f } = client([{ status: 200, body: {} }]);
+    const err = await http.send({ url: 'https://x.example/a', signal: controller.signal }).catch((e) => e);
+    expect(err).toMatchObject({ name: 'AbortError' });
+    expect(f.calls).toHaveLength(0);
   });
   it('classifies transient errors', () => {
     expect(isTransient(new ApiError(429, 'x', 'x'))).toBe(true);

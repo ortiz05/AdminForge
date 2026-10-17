@@ -32,8 +32,10 @@ Approver or Groups Administrator, and is **disabled** except while `pnpm test:li
 `AF_TEST_SERVICE_ADMIN_ROLES=true` (admin file; default off) and only where the tenant licenses the workload does it
 also hold Exchange Recipient Administrator and SharePoint Administrator — tenant-wide service admin roles, needed only
 to run the Exchange and SharePoint write playbooks live; without the opt-in, re-provisioning removes them. It is
-excluded from Entra's authentication-methods registration campaign (so is the approver fixture below; nobody else is,
-and the campaign is otherwise unchanged) so unattended sign-in isn't interrupted. Provisioning manages only an account it created: the UPN must
+excluded from Entra's authentication-methods registration campaign so unattended sign-in isn't interrupted — a write
+to that tenant-wide policy: provisioning re-reads the campaign and sends it back unchanged except for this one user in
+its exclusions. The only other accounts it ever adds there are the approver fixture ("AF Tester 2") and the sign-ins
+fixture's AF-Test-SignIn-01 and -02 (each taken out again before it is deleted); nobody else is excluded. Provisioning manages only an account it created: the UPN must
 start with `af-` and the account must carry the `employeeType` marker "AdminForge validation" set at creation (or the
 display name "AF Tester"); any other account at `AF_TEST_USER_UPN` is refused before anything changes — no password
 reset, roles, groups, campaign exclusion, enabling or disabling. `provision status` fails on any other directory role
@@ -65,6 +67,27 @@ provisioning leaves it alone. **If one were switched on:**
 | Block unknown device platforms                    | may end AdminForge sessions — first check its report-only results for the Read/Write apps' non-interactive sign-ins |
 | Admin sign-in frequency and no persistent browser | admins re-authenticate every 4 hours; parked delegated runs fail when their token outlives it                       |
 | Device and location examples (AF-Test-Group-01)   | block the validation user (no compliant device, not inside the documentation range)                                 |
+
+**Enterprise fixtures** (opt-in, `AF_TEST_FIXTURES=directory,guest,apps,auth-methods,intune-more,sign-ins`, test labels
+only): synthetic `AF-Test-*` users, groups, an administrative unit, a guest, app registrations, authentication
+methods, Intune policies and two sign-in accounts, so reports have known answers. None holds a portal role, a
+directory role or a permission: the fixture apps are **never** granted, consented or assigned anything (the risky one
+only _requests_ Mail.ReadWrite), their secrets are dropped the moment Graph returns them and their certificates are
+throwaway (the key is never kept); the Temporary Access Pass is dropped likewise. The directory users' passwords are
+random and unstored, nobody signs in as them, and the dynamic group's rule matches a test-only department value. Only
+the two sign-in accounts have stored passwords (admin file); they must hold nothing — `provision status` fails on any
+group, unit or role membership, directory role (direct, scoped or through a group), PIM eligibility, licence or app
+role assignment — stay disabled except during `tests/live/scripts/generate-sign-ins.ts` (which disables them on exit,
+Ctrl-C included; status warns while one is enabled), and are disabled by `--disable`. Everything carries
+provisioning's marker — the guest too (a guest that can't be marked is deleted again) — and same-named objects without
+it are refused, never changed or removed; AF-Test-User-01..03 and AF-Test-Group-01 are used (owner, members, nesting,
+policy assignment) only when they are the test identities' own, and the policies are refused while AF-Test-Group-01
+has other members. Fixture apps are ownerless or owned by AF-Test-User-01 (never the risky one), and `provision
+status` fails on any service principal, permission grant or assignment on them (the SAML app's own service principal
+excepted, which must have no grants or assignments and requires assignment). Tenant-wide settings (guest invitations,
+the authentication methods policy's method switches, group expiry) are never changed; the one tenant-wide write is
+the registration campaign exclusion of the two sign-in accounts (above). A fixture the tenant refuses prints `✗` with
+the reason.
 
 ## Signing in
 
@@ -267,7 +290,9 @@ Every sign-in, arm/disarm, run, approval, schedule change, content publish, sens
 emergency stop and retention purge is appended to an append-only (database-enforced), hash-chained log. Refused
 security-relevant requests are recorded too (`request.denied`: forbidden, CSRF, policy denials, self-approval, wrong
 confirmation, stale preview, protected objects, paused writes, session mismatch) with the route, code and status only —
-at most one event per minute per session and code, then a `suppressed` count. `content.published` records the git
+at most one event per minute per session and code, then a `suppressed` count. Failed sign-ins (`session.signin`
+failures — anyone can send a browser to `/auth/callback` with an error) are recorded at most 10 a minute per client
+address (IPv6: per /64), then a `suppressed` count. `content.published` records the git
 commit and whether the content was reviewed (committed and on `origin/main`); `--allow-unreviewed` is recorded with
 its reasons. The Audit page,
 `adminforge audit verify` and the hourly `probes.audit-chain` check verify the chain. History (runs, schedule runs,
@@ -279,19 +304,34 @@ probe results, report files) is purged after its retention period; the audit log
   `127.0.0.1` and trusts `X-Forwarded-*` only from loopback. Security headers: CSP (`script-src 'self'`,
   `frame-ancestors 'none'`), HSTS, `nosniff`, `no-referrer`, a `Permissions-Policy` that turns off camera,
   microphone, geolocation, payment and USB, `no-store` on API and auth responses; rate limits on every route and
-  tighter ones on sign-in and arming. Production source maps are kept out of what's served
+  tighter ones on sign-in and arming (sign-in and anything without a valid session count per client address, never
+  per cookie; `TRUST_PROXY=true`, which would let anyone forge the address, is refused in production). Production source maps are kept out of what's served
   (`portal/apps/web/sourcemaps/`), and the example Caddyfile drops the `Via` header.
 - Request logs carry the signed-in user's object id, never query values on `/api` (parameter names only), cookies,
   auth codes or the CSRF header. The public `/readyz` answer never names configuration keys or commands.
-- The services connect to Postgres as `adminforge_app`, not the owner: row access only, no DDL outside the run queue's own `pgboss` schema, and insert/select only on the audit log (on top of its append-only triggers). Migrations use the owner via `DATABASE_MIGRATION_URL`; the services' configuration loader drops it and `POSTGRES_PASSWORD` (only `db:migrate` asks for them). Make the owner a non-superuser role and refuse it over TCP from anywhere but the host (`docs/operations.md`).
-- Backups (`adminforge-backup.timer`) never include `<env>.admin.env` (provisioner and validation-user credentials)
-  or stray copies, and include Caddy's private keys only when encrypted to an off-host GPG key
-  (`AF_BACKUP_GPG_RECIPIENT`). They never contain sessions, pending sign-ins or the token cache (table definitions
-  only; a restore signs everyone out). Unencrypted backups still hold the services' client secrets and
-  `TOKEN_CACHE_KEY`: encrypt them and copy them off the host. The backup unit gets the same hardening drop-in.
+- The services connect to Postgres as `adminforge_app`, not the owner: row access only, no DDL outside the run queue's
+  own `pgboss` schema, insert/select only on the audit log (on top of its append-only triggers), per-role statement,
+  lock and idle-in-transaction limits and a connection cap; production refuses to start (fail closed) on a role —
+  `current_user` or `session_user` — that is a superuser or `BYPASSRLS`, can change audit events, belongs to the audit
+  table's owner, can create in `public` or holds a `pg_*_server_*` role. Migrations run as a **non-superuser owner**
+  (`adminforge_owner`) through `DATABASE_MIGRATION_URL`, kept with `POSTGRES_PASSWORD` in owner files (`*.owner.env`)
+  that the services' configuration never reads — though code running as the services' Unix account can still read
+  them (a dedicated account is what separates them). Passwords are set as client-side SCRAM verifiers in sessions that
+  log no statements, so the server log never holds one. The container's superuser can sign in over its local socket
+  only (`pg_hba.conf` rejects it over TCP); databases are closed to `PUBLIC`; foreign keys and status CHECKs hold in the
+  database; approval decisions are append-only there — rebinding only to the decider's own session, deletion only with
+  the run or schedule, trigger functions on a fixed `search_path` (`docs/operations.md` → Postgres hardening;
+  `pnpm db:harden`).
+- Backups (`adminforge-backup.timer`) are encrypted to an off-host GPG key (`AF_BACKUP_GPG_RECIPIENT`) and refuse to
+  run without one unless plaintext is accepted explicitly (`AF_BACKUP_ALLOW_PLAINTEXT=1`). They never include
+  `<env>.admin.env`, the database owner's credentials (owner files and owner keys in older env files) or stray copies,
+  and include Caddy's private keys only when encrypted. They never contain sessions, pending sign-ins or the token
+  cache (table definitions only; a restore signs everyone out). Copy them off the host. The backup unit gets the same
+  hardening drop-in.
 - Configuration lives outside the repository in layered files, all mode 600 in a 700 directory:
   `<env>.env` (runtime), `<env>.admin.env` (provisioner and live-test credentials, CLI only), `<env>.host.env`
-  (the services' own database) and `<env>.runner.env` (runner key only). The services and `pnpm dev` use separate
+  (the services' own database), `<env>.owner.env` / `<env>.host.owner.env` (database owner and superuser, migrations
+  and database scripts only) and `<env>.runner.env` (runner key only). The services and `pnpm dev` use separate
   databases, so a developer's API never picks up production jobs.
 - `/readyz` reports the run worker and scheduler from their heartbeats (cached 5 s, rate-limited), and every Microsoft
   call is logged as one structured line (path template, status, duration, throttling, request id) for tracing by
@@ -350,7 +390,8 @@ Tracked in `docs/backlog.md`:
   provisioning, or use a short-lived secret per run (`docs/operations.md`). **Graph application permissions survive
   removing the directory role**: the test fixtures' `RoleEligibilitySchedule.ReadWrite.Directory` (PIM),
   `Policy.ReadWrite.ConditionalAccess` and `DeviceManagementConfiguration.ReadWrite.All` are tier-0, and
-  `LicenseAssignment.ReadWrite.All` and `Team.Create` are standing write access too. Grant them only for a
+  `LicenseAssignment.ReadWrite.All`, `DeviceManagementApps.ReadWrite.All`, `UserAuthenticationMethod.ReadWrite.All`,
+  `User.Invite.All` and `Team.Create` are standing write access too. Grant them only for a
   provisioning run and remove them afterwards (`docs/operations.md` → The provisioner); `provision status` shows a ⚠
   while the provisioner's token still holds any of them.
 - **Two-person approval through one credential file (accepted risk, test labels only).** The approver fixture's
@@ -380,8 +421,9 @@ Tracked in `docs/backlog.md`:
 
 - The session id is not rotated when write access is turned on (a cookie stolen while read-only could ride a later
   arm by the real user). Mitigated by the cookie flags and expiry; rotation needs runs and pending secrets re-keyed.
-- The audit chain is unkeyed: someone with database write access could rewrite and re-hash its tail. Anchor the head
-  outside the database for stronger guarantees.
+- The audit chain is unkeyed: someone with database write access could rewrite and re-hash its tail. Each verification
+  writes the verified tail (`seq`, `hash`) to the services' journal as an external checkpoint; forward the journal off
+  the host so the anchor doesn't share the database's fate.
 - Definitions loaded from the database are trusted as published (not re-validated on load), and the services'
   database role can insert and update them; `publish`'s review check is a process control on a local ref, not a
   security boundary. Two-person review needs branch protection and a second code owner on the repository.
@@ -392,5 +434,10 @@ Tracked in `docs/backlog.md`:
   dedicated system user with system units for that. Until then, write-mode PowerShell (FullLanguage) and any process of
   the same account can read the services' configuration.
 - The Read and Write apps authenticate with client secrets (certificates are supported for the automation identity
-  only), and one key (`TOKEN_CACHE_KEY`) seals both the token cache and run-secret hand-offs, without a key id.
+  only), and one key (`TOKEN_CACHE_KEY`) seals both the token cache and run-secret hand-offs. Blobs name their key
+  (key id), so it can be rotated with `TOKEN_CACHE_PREVIOUS_KEYS` without signing everyone out.
+- A compromised service can still record a forged approval decision (the database keeps decisions append-only and the
+  audit log records each one, but neither knows who clicked); approval integrity rests on the API process. Likewise
+  the owner files only keep the owner's credentials out of the services' configuration: code running as the
+  services' Unix account can read them.
 - Browsers must trust Caddy's local CA for LAN access; use a certificate from your own CA and a DNS name for wider use.

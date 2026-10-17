@@ -30,8 +30,9 @@ import {
   rowsFilter,
   type AdvancedGroup,
 } from './advanced';
-import { cacheKey, TtlCache } from './cache';
+import { cacheKey, Inflight, TtlCache } from './cache';
 import { defaultTimespan, InvalidParams, resolveParams } from './params';
+import { paramsUsed } from './used-params';
 
 export const PAGE_KINDS = ['page', 'dashboard', 'report'] as const satisfies readonly Kind[];
 export type PageKind = (typeof PAGE_KINDS)[number];
@@ -71,6 +72,11 @@ export interface DatasourceOutput {
   errors?: Record<string, ErrorInfo>;
   /** `when` was false. */
   skipped?: true;
+  /**
+   * The data is part of the result: `paging: all` stopped at maxItems (or the page limit), or a `$batch` collection
+   * answered with its first page only. Widgets say "showing the first N".
+   */
+  truncated?: true;
 }
 
 export interface RunInput {
@@ -92,6 +98,12 @@ export interface RunInput {
   deps?: Record<string, unknown>;
   /** With `deps`: failures of `optional` dependencies behind them (`ds.<name>` → error), recorded in `errors`. */
   depErrors?: Record<string, ErrorInfo>;
+  /**
+   * Longest this datasource may take, dependencies and every retry included (504 datasource_timeout after). Default:
+   * DATASOURCE_DEADLINE_MS for a person's page load (delegated, declared paging); none for exports and schedules.
+   * 0 = none.
+   */
+  deadlineMs?: number;
 }
 
 /** A PowerShell job for a `source: runner` datasource (always read mode). */
@@ -170,9 +182,32 @@ export interface DatasourceDeps {
   env: () => Record<string, unknown>;
   now: () => Date;
   cache?: TtlCache<DatasourceOutput>;
+  /** Byte cap of the default cache (DATASOURCE_CACHE_MAX_MB); default 256 MB. */
+  cacheMaxBytes?: number;
+  /** DATASOURCE_DEADLINE_MS: a person's page load stops after this long (0 = never). Default 120 s. */
+  deadlineMs?: number;
   /** Suppressed failures of `optional` datasources are logged here (names and codes only). */
   log?: { warn(obj: object, msg: string): void };
 }
+
+/** 504 datasource_timeout: a person's page load ran past DATASOURCE_DEADLINE_MS. */
+export const datasourceTimeout = (label: string | undefined, ms: number, filterable: boolean) =>
+  new AppError(
+    504,
+    'datasource_timeout',
+    `${label ?? 'This data'} took longer than ${Math.round(ms / 1000)} seconds to load, so AdminForge stopped loading it.`,
+    {
+      hint: filterable
+        ? 'Narrow the filters (a shorter date range, a search or a facet) and try again.'
+        : 'Try again in a few minutes. If it keeps happening, tell a Portal Admin which page it was.',
+    },
+  );
+
+/** Raw (pre-transform) results kept after a transform failed, so trying again doesn't fetch everything again. */
+const RAW_RETRY_TTL_SECONDS = 60;
+
+/** The query builder's compiled filter, which counts as its param. */
+const ADVANCED_REF = /\badvanced\b/;
 
 const toErrorInfo = (err: unknown): ErrorInfo => {
   const e = outboundAppError(err);
@@ -315,12 +350,37 @@ const merge = (a?: Requires, b?: Requires): Requires | undefined =>
 export class DatasourceRunner {
   readonly cache: TtlCache<DatasourceOutput>;
   private readonly depCache = new Map<string, string[]>();
+  private readonly paramRefCache = new Map<string, string[] | '*'>();
+  /** Identical concurrent executions (same user, session and key) share one (§ enterprise scale). */
+  private readonly inflight = new Inflight<DatasourceOutput>();
+  /** Raw results whose transform failed (see RAW_RETRY_TTL_SECONDS). */
+  private readonly rawCache: TtlCache<DatasourceOutput>;
 
   constructor(private readonly deps: DatasourceDeps) {
-    this.cache = deps.cache ?? new TtlCache<DatasourceOutput>(1000, deps.now);
-    deps.definitions.onChange(() => {
-      this.cache.clear();
+    this.cache = deps.cache ?? new TtlCache<DatasourceOutput>(1000, deps.now, deps.cacheMaxBytes);
+    this.rawCache = new TtlCache<DatasourceOutput>(
+      100,
+      deps.now,
+      Math.round((deps.cacheMaxBytes ?? 256 * 1024 * 1024) / 4),
+    );
+    deps.definitions.onChange((change) => {
       this.depCache.clear();
+      this.paramRefCache.clear();
+      // A changed page, dashboard or report drops only its own results; anything else (a connection, `all`) drops all.
+      const keys = change?.keys;
+      if (
+        change?.all ||
+        !keys?.length ||
+        keys.some((k) => !PAGE_KINDS.some((kind) => k.startsWith(`${kind}:`)))
+      ) {
+        this.cache.clear();
+        this.rawCache.clear();
+        return;
+      }
+      for (const k of keys) {
+        this.cache.deleteTag(k);
+        this.rawCache.deleteTag(k);
+      }
     });
   }
 
@@ -488,6 +548,7 @@ export class DatasourceRunner {
           const deps: Record<string, unknown> = {};
           const depErrors: Record<string, ErrorInfo> = {};
           for (const d of this.dependencies(base.page, name)) {
+            base.signal?.throwIfAborted();
             try {
               const out = await exec(d);
               deps[d] = out.data;
@@ -496,7 +557,12 @@ export class DatasourceRunner {
               deps[d] = this.suppress({ ...base, datasource: name }, d, err, depErrors);
             }
           }
-          return limit(() => this.run({ ...base, datasource: name, deps, depErrors }));
+          // A page left (or out of time) while it waited for a turn doesn't start its remaining datasources.
+          base.signal?.throwIfAborted();
+          return limit(() => {
+            base.signal?.throwIfAborted();
+            return this.run({ ...base, datasource: name, deps, depErrors });
+          });
         })();
         p.catch(() => undefined);
         memo.set(name, p);
@@ -523,6 +589,7 @@ export class DatasourceRunner {
     const values: Record<string, unknown> = {};
     const errors: Record<string, ErrorInfo> = {};
     for (const dep of names) {
+      input.signal?.throwIfAborted();
       try {
         const out = await this.run({
           ...input,
@@ -549,11 +616,13 @@ export class DatasourceRunner {
    * anywhere in the chain behind it: those fail the dependent with `dependency_failed`.
    */
   private suppress(
-    input: Pick<RunInput, 'page' | 'datasource' | 'correlationId'>,
+    input: Pick<RunInput, 'page' | 'datasource' | 'correlationId' | 'signal'>,
     dep: string,
     err: unknown,
     into: Record<string, ErrorInfo>,
   ): null {
+    // A closed page or a spent deadline is never an optional failure: it ends the whole load.
+    if (input.signal?.aborted) throw input.signal.reason ?? err;
     if (this.datasource(input.page, dep).optional !== true || blockingCause(err))
       throw new DependencyFailed(input.datasource, dep, err);
     const info = toErrorInfo(err);
@@ -571,12 +640,84 @@ export class DatasourceRunner {
     return null;
   }
 
+  /**
+   * Runs one datasource. A person's page load (delegated identity, declared paging) gets the deadline
+   * (DATASOURCE_DEADLINE_MS); identical concurrent executions are shared; results are cached for `cache.ttl` seconds
+   * per user + mode + page version + datasource + the params it uses + its dependencies (by their own keys).
+   */
   async run(input: RunInput): Promise<DatasourceOutput> {
+    const ms =
+      input.deadlineMs ??
+      (input.identity.kind === 'delegated' && input.paging === undefined
+        ? (this.deps.deadlineMs ?? 120_000)
+        : 0);
+    if (!ms) return this.runOnce({ ...input, deadlineMs: 0 });
+    const timer = AbortSignal.timeout(ms);
+    const signal = input.signal ? AbortSignal.any([input.signal, timer]) : timer;
+    try {
+      // Dependencies run inside this deadline, not with one of their own.
+      return await this.runOnce({ ...input, signal, deadlineMs: 0 });
+    } catch (err) {
+      if (timer.aborted && !input.signal?.aborted) {
+        const ds = this.datasource(input.page, input.datasource);
+        const def = input.page.def;
+        const filterable = Object.keys(def.params ?? {}).length > 0 || !!def.filters;
+        throw datasourceTimeout((ds as { label?: string }).label, ms, filterable);
+      }
+      throw err;
+    }
+  }
+
+  private async runOnce(input: RunInput): Promise<DatasourceOutput> {
     const { page, user } = input;
     const ds = this.datasource(page, input.datasource);
-    const requires = merge(page.def.requires, ds.requires);
+    // Roles of the whole chain first: a cached result built from a datasource the person may no longer read is
+    // never served (the cache is per user, but roles change).
     if (ds.requires?.portalRoles)
       this.assertAccess(user.roles, ds.requires, `Datasource ${input.datasource}`);
+    for (const name of this.chain(page, input.datasource)) {
+      const r = this.datasource(page, name).requires;
+      try {
+        if (r?.portalRoles) this.assertAccess(user.roles, r, `Datasource ${name}`);
+      } catch (err) {
+        // The same answer as when the dependency runs and is refused (never hidden by `optional`).
+        throw new DependencyFailed(input.datasource, name, err);
+      }
+    }
+
+    const paging =
+      input.paging ??
+      ('paging' in ds ? (ds.paging === 'cursor' ? { cursor: input.cursor } : ds.paging) : undefined);
+    const ttl = input.noCache ? 0 : (ds.cache?.ttl ?? 0);
+    // Exports (noCache) neither read nor share: they run on their own.
+    const key = input.noCache ? '' : this.keyFor(input, input.datasource, paging, input.maxItems);
+    if (ttl) {
+      const hit = this.cache.get(key);
+      if (hit)
+        return {
+          ...hit.value,
+          provenance: hit.value.provenance
+            ? { ...hit.value.provenance, cachedAt: hit.cachedAt.toISOString() }
+            : null,
+        };
+    }
+    if (!key) return this.execute(input, ds, paging, '', 0);
+    const who = input.identity.kind === 'automation' ? 'automation' : input.identity.session.idHash;
+    return this.inflight.run(`${who}|${key}`, input.signal, (signal) =>
+      this.execute({ ...input, signal }, ds, paging, key, ttl),
+    );
+  }
+
+  /** The work behind `run`: dependencies, `when`, licences, the call, the transform, the cache. */
+  private async execute(
+    input: RunInput,
+    ds: Datasource,
+    paging: unknown,
+    key: string,
+    ttl: number,
+  ): Promise<DatasourceOutput> {
+    const { page, user } = input;
+    const requires = merge(page.def.requires, ds.requires);
     const depNames = this.dependencies(page, input.datasource);
     const resolved = !depNames.length
       ? { values: {}, errors: {} }
@@ -596,35 +737,6 @@ export class DatasourceRunner {
         return { data: null, provenance: null, skipped: true, ...(incomplete ? { errors: incomplete } : {}) };
     }
 
-    const paging =
-      input.paging ??
-      ('paging' in ds ? (ds.paging === 'cursor' ? { cursor: input.cursor } : ds.paging) : undefined);
-    const ttl = input.noCache ? 0 : (ds.cache?.ttl ?? 0);
-    const key = ttl
-      ? cacheKey([
-          input.identity.kind === 'automation' ? 'automation' : input.identity.session.userOid,
-          input.identity.mode,
-          page.kind,
-          page.key,
-          page.sha256,
-          input.datasource,
-          input.params,
-          paging ?? null,
-          input.maxItems ?? null,
-          depNames.length ? depValues : null,
-        ])
-      : '';
-    if (ttl) {
-      const hit = this.cache.get(key);
-      if (hit)
-        return {
-          ...hit.value,
-          provenance: hit.value.provenance
-            ? { ...hit.value.provenance, cachedAt: hit.cachedAt.toISOString() }
-            : null,
-        };
-    }
-
     if (requires?.licences?.length && this.deps.licences) {
       const missing = missingLicences(
         await this.deps.licences.get(input.identity, { correlationId: input.correlationId }),
@@ -636,8 +748,15 @@ export class DatasourceRunner {
         });
     }
 
+    const tag = `${page.kind}:${page.key}`;
+    // A transform that failed a moment ago (timeout under load) is tried again on the data already fetched.
+    // Only for cached datasources (ttl > 0): an uncached one must always show fresh data.
+    const raw = key && ttl && ds.transform && !incomplete ? this.rawCache.get(key) : undefined;
     let out: DatasourceOutput;
-    if (ds.source === 'static') {
+    if (raw) {
+      out = { ...raw.value };
+      this.rawCache.delete(key);
+    } else if (ds.source === 'static') {
       out = { data: await this.expr(() => renderTemplate(ds.data, scope), 'data'), provenance: null };
     } else if (ds.source === 'runner') {
       out = await this.runScript(ds, input, scope);
@@ -657,6 +776,7 @@ export class DatasourceRunner {
         data: res.data,
         provenance: res.provenance,
         ...(res.nextCursor ? { cursor: res.nextCursor } : {}),
+        ...(res.truncated ? { truncated: true as const } : {}),
       };
       if (ds.source === 'graphBatch')
         Object.assign(out, this.batchResult(res.data, input.identity, requires));
@@ -664,11 +784,104 @@ export class DatasourceRunner {
 
     if (ds.transform) {
       const value = out.data;
-      out.data = await this.expr(() => renderString(ds.transform!, { ...scope, value }), 'transform');
+      try {
+        out.data = await this.expr(() => renderString(ds.transform!, { ...scope, value }), 'transform');
+      } catch (err) {
+        // Kept no longer than the datasource's own cache, and only once: a raw result that failed again goes.
+        if (key && ttl && !incomplete && !raw)
+          this.rawCache.set(key, { ...out, data: value }, Math.min(ttl, RAW_RETRY_TTL_SECONDS), { tag });
+        throw err;
+      }
     }
     if (incomplete) out.errors = { ...out.errors, ...incomplete };
-    if (ttl) this.cache.set(key, out, ttl);
+    // Results missing an optional dependency aren't kept: the next load may have it.
+    else if (ttl) this.cache.set(key, out, ttl, { tag });
     return out;
+  }
+
+  /**
+   * Cache (and sharing) key of a datasource without running anything: its dependencies count by their own keys, not
+   * their values, and only the params its expressions use count (all of them when that can't be told).
+   */
+  private keyFor(
+    input: RunInput,
+    name: string,
+    paging: unknown,
+    maxItems: number | undefined,
+    memo = new Map<string, string>(),
+  ): string {
+    const { page } = input;
+    const deps = this.dependencies(page, name);
+    return cacheKey([
+      input.identity.kind === 'automation' ? 'automation' : input.identity.session.userOid,
+      input.identity.mode,
+      page.kind,
+      page.key,
+      page.sha256,
+      name,
+      this.usedParams(page, name, input.params),
+      paging ?? null,
+      maxItems ?? null,
+      deps.length
+        ? deps.map((d) => {
+            let k = memo.get(d);
+            if (k === undefined) {
+              const dep = this.datasource(page, d);
+              const declared =
+                'paging' in dep ? (dep.paging === 'cursor' ? { cursor: undefined } : dep.paging) : undefined;
+              k = this.keyFor(input, d, declared, undefined, memo);
+              memo.set(d, k);
+            }
+            return [d, k];
+          })
+        : null,
+    ]);
+  }
+
+  /** Every datasource `name` depends on, directly or further up the chain (no duplicates). */
+  private chain(page: LoadedPage, name: string): string[] {
+    const out = new Set<string>();
+    const walk = (n: string) => {
+      for (const d of this.dependencies(page, n))
+        if (!out.has(d)) {
+          out.add(d);
+          walk(d);
+        }
+    };
+    walk(name);
+    return [...out];
+  }
+
+  /** The params a datasource's expressions reference (the query builder's filter as `advanced`). */
+  private usedParams(
+    page: LoadedPage,
+    name: string,
+    params: Record<string, unknown>,
+  ): Record<string, unknown> {
+    const memoKey = `${page.kind}:${page.key}:${page.sha256}:${name}`;
+    let refs = this.paramRefCache.get(memoKey);
+    if (refs === undefined) {
+      refs = this.paramRefs(page, name);
+      this.paramRefCache.set(memoKey, refs);
+    }
+    if (refs === '*') return params;
+    return Object.fromEntries(refs.filter((n) => Object.hasOwn(params, n)).map((n) => [n, params[n]]));
+  }
+
+  private paramRefs(page: LoadedPage, name: string): string[] | '*' {
+    const ds = this.datasource(page, name);
+    // Log Analytics without its own timespan takes the page's timespan param implicitly.
+    if (ds.source === 'logAnalytics' && !ds.timespan) return '*';
+    const advanced = advancedParamOf(page.def.filters);
+    const names = new Set<string>();
+    for (const e of collectExpressions(ds)) {
+      // `params.<name>` only; root, `$$`, wildcard or indexed access means all of them (used-params.ts).
+      const used = paramsUsed(e.source);
+      if (used === '*') return '*';
+      for (const n of used) names.add(n);
+      if (advanced && ADVANCED_REF.test(e.source)) names.add(advanced);
+    }
+    return [...names].sort();
   }
 
   private async expr<T>(fn: () => Promise<T>, what: string): Promise<T> {

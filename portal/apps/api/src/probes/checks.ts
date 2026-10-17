@@ -131,6 +131,22 @@ const text = async (v: string, scope: Scope) => {
   return out === undefined || out === null ? '' : String(out).trim();
 };
 
+/**
+ * A probe whose path names a setting this installation doesn't have (e.g. `${ env.AF_SUBSCRIPTION_ID }` unset) has
+ * nothing to look at: "not configured", naming the setting, instead of a failed call to a broken path.
+ */
+function requireConfiguredPath(template: string, scope: Scope): void {
+  const env = (scope.env ?? {}) as Record<string, unknown>;
+  const missing = [...new Set([...template.matchAll(/\benv\.([A-Z][A-Z0-9_]*)/g)].map((m) => m[1]!))].filter(
+    (k) => env[k] === undefined || env[k] === null || String(env[k]).trim() === '',
+  );
+  if (missing.length)
+    throw new NotConfigured(
+      `${missing.join(', ')} ${missing.length === 1 ? 'is' : 'are'} not set, so this check has nothing to look at.`,
+      'Set it in the env file, or turn the probe off.',
+    );
+}
+
 type Query = Record<string, string | number | boolean>;
 const cleanQuery = (q: unknown): Query | undefined => {
   if (!q || typeof q !== 'object') return undefined;
@@ -262,6 +278,7 @@ async function service(
   c: Extract<ProbeCheck, { kind: 'graph' | 'arm' }>,
   x: CheckContext,
 ): Promise<CheckResult> {
+  requireConfiguredPath(c.path, x.scope);
   const path = await text(c.path, x.scope);
   const query = cleanQuery(await renderTemplate(c.query ?? {}, x.scope));
   const t0 = performance.now();
@@ -311,6 +328,7 @@ async function graphCount(
   c: Extract<ProbeCheck, { kind: 'graphCount' }>,
   x: CheckContext,
 ): Promise<CheckResult> {
+  requireConfiguredPath(c.path, x.scope);
   const path = await text(c.path, x.scope);
   const query = cleanQuery(await renderTemplate(c.query ?? {}, x.scope));
   const res = await x.deps.outbound.execute<{ value?: unknown[] }>(

@@ -7,6 +7,7 @@ import { requireSession } from '../auth/guards';
 import type { SessionRecord } from '../auth/session-store';
 import type { AppContext } from '../context';
 import { AppError } from '../errors';
+import { clientSignal } from './datasources';
 
 export const SectionError = z.object({ code: z.string(), message: z.string(), hint: z.string() });
 export type SectionError = z.infer<typeof SectionError>;
@@ -227,6 +228,7 @@ async function loadLive(
   ctx: AppContext,
   request: FastifyRequest,
   session: SessionRecord,
+  signal: AbortSignal,
 ): Promise<OverviewResponse> {
   if (!ctx.broker) {
     throw new AppError(409, 'live_data_unavailable', 'Live data needs Entra sign-in.', {
@@ -244,6 +246,8 @@ async function loadLive(
   const decision = evaluate('read', { service: 'graph', method: 'POST', path: '/$batch', body });
   if (!decision.allowed) throw new AppError(403, 'policy_denied', decision.reason);
 
+  // Through the outbound executor's concurrency slots (per attempt), like every other Microsoft call.
+  const gate = ctx.outbound.gate?.({ kind: 'delegated', session, mode: 'read' }, 'graph', signal);
   const result = await ctx.broker.withToken(session, 'graph', 'read', (getToken) =>
     createGraphClient({
       getToken,
@@ -251,6 +255,8 @@ async function loadLive(
       correlationId: request.id,
       timeoutMs: 20_000,
       maxRetries: 2,
+      signal,
+      ...(gate ? { gate } : {}),
     }).request<{ responses: BatchResponse[] }>({
       method: 'POST',
       path: '/$batch',
@@ -261,8 +267,10 @@ async function loadLive(
 }
 
 export function overviewRoutes(api: FastifyInstance, ctx: AppContext) {
-  api.get('/overview', async (request) => {
+  api.get('/overview', async (request, reply) => {
     const session = requireSession(request);
-    return ctx.config.DATA_MODE === 'fixtures' ? loadFixture(ctx) : loadLive(ctx, request, session);
+    return ctx.config.DATA_MODE === 'fixtures'
+      ? loadFixture(ctx)
+      : loadLive(ctx, request, session, clientSignal(reply));
   });
 }

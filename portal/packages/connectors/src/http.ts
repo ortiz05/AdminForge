@@ -118,6 +118,50 @@ export interface HttpClientOptions {
   redirect?: 'follow' | 'error' | 'manual';
   /** Largest response body accepted, in bytes (default DEFAULT_MAX_RESPONSE_BYTES); larger ones are refused. */
   maxResponseBytes?: number;
+  /**
+   * Runs one attempt — the request and reading its body — under the caller's concurrency limit (the API's outbound
+   * slots). Token acquisition and the waits between attempts (Retry-After, backoff) happen outside it, so a throttled
+   * crawl doesn't hold a slot while it sleeps.
+   */
+  gate?: Gate;
+  /** Applies to every request without its own `signal` (the caller's abort: a closed page, a deadline). */
+  signal?: AbortSignal;
+  /**
+   * How often an attempt that timed out is tried again (default 1): a request that took the whole timeout once
+   * usually does again, and each try costs the full timeout. Throttling and server errors keep `maxRetries`.
+   */
+  maxTimeoutRetries?: number;
+  /** Called before every retry (telemetry: retried throttling is otherwise invisible). Never throws into the call. */
+  onRetry?: (info: RetryInfo) => void;
+}
+
+/** Wraps one attempt (see HttpClientOptions.gate). */
+export type Gate = <T>(attempt: () => Promise<T>) => Promise<T>;
+
+export interface RetryInfo {
+  /** HTTP status of the attempt (0 = network failure or timeout). */
+  status: number;
+  reason: 'throttled' | 'server' | 'network' | 'timeout';
+  /** The attempt that failed (0-based). */
+  attempt: number;
+  delayMs: number;
+  url: string;
+}
+
+/** Waits `ms` with `sleep`, or rejects as soon as `signal` aborts (with its reason). */
+export async function abortableSleep(sleep: Sleep, ms: number, signal?: AbortSignal): Promise<void> {
+  if (!signal) return sleep(ms);
+  signal.throwIfAborted();
+  let onAbort: (() => void) | undefined;
+  const aborted = new Promise<never>((_, reject) => {
+    onAbort = () => reject(signal.reason ?? new DOMException('This operation was aborted', 'AbortError'));
+    signal.addEventListener('abort', onAbort, { once: true });
+  });
+  try {
+    await Promise.race([sleep(ms), aborted]);
+  } finally {
+    signal.removeEventListener('abort', onAbort!);
+  }
 }
 
 const SERVER_RETRYABLE = new Set([500, 502, 503, 504]);
@@ -202,67 +246,121 @@ function networkError(err: unknown, url: string): ApiError {
   );
 }
 
-/** Authenticated JSON client with retries (Retry-After honoured), timeouts, and normalised errors. */
+/** What one attempt came to: a response to return or throw, a retry, or a fetch failure. */
+type Attempt<T> =
+  | { kind: 'done'; result: HttpResult<T> }
+  | { kind: 'error'; error: ApiError }
+  | { kind: 'retry'; status: number; retryAfter: string | null }
+  | { kind: 'failed'; error: unknown };
+
+const ungated: Gate = (attempt) => attempt();
+
+/**
+ * Authenticated JSON client with retries (Retry-After honoured), timeouts, and normalised errors. Each attempt runs
+ * through `gate` (the caller's concurrency slot); waits between attempts don't hold it and end early when the
+ * request is aborted.
+ */
 export function createHttpClient(opts: HttpClientOptions) {
   const doFetch = opts.fetch ?? fetch;
   const maxRetries = opts.maxRetries ?? 4;
+  const maxTimeoutRetries = opts.maxTimeoutRetries ?? 1;
   const sleep = opts.sleep ?? defaultSleep;
+  const gate = opts.gate ?? ungated;
   const reqIdHeader = opts.requestIdHeader ?? 'request-id';
   const maxBytes = opts.maxResponseBytes ?? DEFAULT_MAX_RESPONSE_BYTES;
+
+  const notify = (info: RetryInfo) => {
+    try {
+      opts.onRetry?.(info);
+    } catch {
+      /* telemetry never breaks a call */
+    }
+  };
 
   async function send<T>(req: HttpRequest): Promise<HttpResult<T>> {
     const method = (req.method ?? 'GET').toUpperCase();
     const idempotent = req.idempotent ?? IDEMPOTENT_METHODS.has(method);
+    const signal = req.signal ?? opts.signal;
+    let timeouts = 0;
     for (let attempt = 0; ; attempt++) {
+      signal?.throwIfAborted();
       const started = performance.now();
       // Token failures (re-auth needed, not armed, …) propagate unchanged and are never retried here.
       const token = await opts.getToken();
-      const signals = [req.signal, opts.timeoutMs ? AbortSignal.timeout(opts.timeoutMs) : undefined].filter(
-        (s): s is AbortSignal => !!s,
-      );
-      let res: Response;
-      try {
-        res = await doFetch(req.url, {
-          method,
-          ...(opts.redirect ? { redirect: opts.redirect } : {}),
-          headers: {
-            Authorization: `Bearer ${token}`,
-            Accept: 'application/json',
-            ...(req.body !== undefined ? { 'Content-Type': 'application/json' } : {}),
-            ...(opts.correlationId && opts.correlationHeader
-              ? { [opts.correlationHeader]: opts.correlationId }
-              : {}),
-            ...req.headers,
-          },
-          body: req.body !== undefined ? JSON.stringify(req.body) : undefined,
-          signal: signals.length > 1 ? AbortSignal.any(signals) : signals[0],
-        });
-      } catch (err) {
-        // Only genuine fetch failures are retried: network errors (TypeError) and timeouts/aborts we did not ask for.
-        if (req.signal?.aborted || !isFetchFailure(err)) throw err;
-        if (idempotent && attempt < maxRetries) {
-          await sleep(retryDelay(null, attempt));
-          continue;
+      const outcome = await gate(async (): Promise<Attempt<T>> => {
+        const signals = [signal, opts.timeoutMs ? AbortSignal.timeout(opts.timeoutMs) : undefined].filter(
+          (s): s is AbortSignal => !!s,
+        );
+        let res: Response;
+        try {
+          res = await doFetch(req.url, {
+            method,
+            ...(opts.redirect ? { redirect: opts.redirect } : {}),
+            headers: {
+              Authorization: `Bearer ${token}`,
+              Accept: 'application/json',
+              ...(req.body !== undefined ? { 'Content-Type': 'application/json' } : {}),
+              ...(opts.correlationId && opts.correlationHeader
+                ? { [opts.correlationHeader]: opts.correlationId }
+                : {}),
+              ...req.headers,
+            },
+            body: req.body !== undefined ? JSON.stringify(req.body) : undefined,
+            signal: signals.length > 1 ? AbortSignal.any(signals) : signals[0],
+          });
+        } catch (err) {
+          return { kind: 'failed', error: err };
         }
-        throw networkError(err, req.url);
-      }
-      const requestId = res.headers.get(reqIdHeader) ?? res.headers.get('x-ms-request-id') ?? undefined;
-      const retryAfter = res.headers.get('retry-after');
-      const retryable =
-        res.status === 429 ||
-        (res.status === 503 && retryAfter !== null) ||
-        (idempotent && SERVER_RETRYABLE.has(res.status));
-      if (retryable && attempt < maxRetries) {
-        await res.body?.cancel().catch(() => undefined);
-        await sleep(retryDelay(retryAfter, attempt));
+        const requestId = res.headers.get(reqIdHeader) ?? res.headers.get('x-ms-request-id') ?? undefined;
+        const retryAfter = res.headers.get('retry-after');
+        const retryable =
+          res.status === 429 ||
+          (res.status === 503 && retryAfter !== null) ||
+          (idempotent && SERVER_RETRYABLE.has(res.status));
+        if (retryable && attempt < maxRetries) {
+          await res.body?.cancel().catch(() => undefined);
+          return { kind: 'retry', status: res.status, retryAfter };
+        }
+        // Streamed with a cap: a huge (or endless) body must not be buffered whole into memory.
+        const { text } = await readBodyText(res, maxBytes, { url: req.url, requestId });
+        const data = parseBody(text, res.headers.get('content-type') ?? '');
+        const ms = Math.round(performance.now() - started);
+        if (!res.ok)
+          return {
+            kind: 'error',
+            error: errorFrom(res.status, res.statusText, data, res.headers, requestId),
+          };
+        return {
+          kind: 'done',
+          result: { data: data as T, status: res.status, requestId, ms, headers: res.headers },
+        };
+      });
+      if (outcome.kind === 'done') return outcome.result;
+      if (outcome.kind === 'error') throw outcome.error;
+      if (outcome.kind === 'retry') {
+        const delayMs = retryDelay(outcome.retryAfter, attempt);
+        notify({
+          status: outcome.status,
+          reason: outcome.status === 429 || outcome.retryAfter !== null ? 'throttled' : 'server',
+          attempt,
+          delayMs,
+          url: req.url,
+        });
+        await abortableSleep(sleep, delayMs, signal);
         continue;
       }
-      // Streamed with a cap: a huge (or endless) body must not be buffered whole into memory.
-      const { text } = await readBodyText(res, maxBytes, { url: req.url, requestId });
-      const data = parseBody(text, res.headers.get('content-type') ?? '');
-      const ms = Math.round(performance.now() - started);
-      if (!res.ok) throw errorFrom(res.status, res.statusText, data, res.headers, requestId);
-      return { data: data as T, status: res.status, requestId, ms, headers: res.headers };
+      // Only genuine fetch failures are retried: network errors (TypeError) and timeouts/aborts we did not ask for.
+      const err = outcome.error;
+      if (signal?.aborted || !isFetchFailure(err)) throw err;
+      const timedOut = (err as { name?: string } | undefined)?.name === 'TimeoutError';
+      if (timedOut) timeouts++;
+      if (idempotent && attempt < maxRetries && (!timedOut || timeouts <= maxTimeoutRetries)) {
+        const delayMs = retryDelay(null, attempt);
+        notify({ status: 0, reason: timedOut ? 'timeout' : 'network', attempt, delayMs, url: req.url });
+        await abortableSleep(sleep, delayMs, signal);
+        continue;
+      }
+      throw networkError(err, req.url);
     }
   }
   return { send };

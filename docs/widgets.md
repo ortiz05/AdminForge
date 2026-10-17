@@ -220,6 +220,14 @@ prefer the feature key.
 - **markdown**: `text` may contain `${ … }` (page scope); inserted values are plain text, never HTML.
 - `percent` values are fractions (0.42 → 42%).
 
+## Partial data
+
+When a datasource reads only part of what Microsoft has — `paging: all` stopped at its `maxItems` (or the page limit),
+or a `graphBatch` collection answered with its first page — the API marks the result `truncated` and the renderer adds
+a note under the widget ("Partial data: Microsoft has more than this view reads…"), once per KPI strip. Nothing to
+configure; a page that should show everything pages through the server (`paging: cursor`) or counts at the source
+(`$count`) instead of raising `maxItems`.
+
 ## Page URLs (renderer)
 
 `/p/<key>` renders any page, dashboard or report. The URL carries:

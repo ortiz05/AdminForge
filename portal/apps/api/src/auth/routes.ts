@@ -17,6 +17,7 @@ import {
 import { safeReturnTo } from './return-to';
 import { portalRoles } from './roles';
 import { clearSessionCookie, endSession, startSession } from './session-plugin';
+import { signInRateLimit, SignInFailureAudits } from '../rate-limit';
 import { assertCsrf } from '../security/csrf';
 import { hasAccountStatus, isGuestAccount, partitionKey } from './types';
 
@@ -110,13 +111,15 @@ export function sessionEndRoutes(app: FastifyInstance, ctx: AppContext) {
 
 /** Read sign-in with Entra (AUTH_MODE=entra). */
 export function entraSignInRoutes(app: FastifyInstance, ctx: AppContext) {
+  const failureAudits = new SignInFailureAudits();
   const cfg = ctx.config;
   const auth = ctx.auth!;
 
   // `?account=choose` shows Entra's account picker (after a no-access or wrong-account sign-in).
   app.get<{ Querystring: { returnTo?: string; claims?: string; account?: string } }>(
     '/auth/login',
-    { config: { rateLimit: AUTH_RATE_LIMIT } },
+    // Per client address, whatever cookie comes with it (rate-limit.ts).
+    { config: { rateLimit: signInRateLimit(ctx.config) } },
     async (request, reply) => {
       const returnTo = safeReturnTo(request.query.returnTo);
       const claims = decodeClaimsParam(request.query.claims);
@@ -140,16 +143,23 @@ export function entraSignInRoutes(app: FastifyInstance, ctx: AppContext) {
 
   app.get<{ Querystring: CallbackQuery }>(
     '/auth/callback',
-    { config: { rateLimit: AUTH_RATE_LIMIT } },
+    { config: { rateLimit: signInRateLimit(ctx.config) } },
     async (request, reply) => {
       const pending = await finishRoundTrip(ctx, 'read', request.query.state, request);
       const fail = async (err: AppError, details: Record<string, unknown> = {}) => {
-        await ctx.audit.append({
-          ...auditActor(ctx, request, null),
-          action: 'session.signin',
-          result: 'failure',
-          details: { reason: err.code, ...details },
-        });
+        // Anyone can send a browser here with an error: at most a few failure events per address and minute.
+        const turn = failureAudits.next(request.ip);
+        if (turn.write)
+          await ctx.audit.append({
+            ...auditActor(ctx, request, null),
+            action: 'session.signin',
+            result: 'failure',
+            details: {
+              reason: err.code,
+              ...details,
+              ...(turn.suppressed ? { suppressed: turn.suppressed } : {}),
+            },
+          });
         return err;
       };
       const entraError = providerError('read', request.query);

@@ -17,9 +17,11 @@ import {
   RESOURCE_GRAPH_PATH,
   RESPONSE_TOO_LARGE,
   type FunctionConnection,
+  type Gate,
   type GraphRequest,
   type Mode,
   type Provenance,
+  type RetryInfo,
   type ServiceId,
   type Sleep,
   type TokenProvider,
@@ -39,6 +41,7 @@ import type { Config } from '../config';
 import { AppError, toAppError } from '../errors';
 import { writesPausedError } from './emergency';
 import { ProtectedObjects, type ProtectedConfig, type WriteTarget } from './protected';
+import { timeoutOverride } from './timeouts';
 import type { ExecutionIdentity, OutboundExecutor, ServiceCall, ServiceCallResult } from './types';
 
 /**
@@ -53,7 +56,11 @@ import type { ExecutionIdentity, OutboundExecutor, ServiceCall, ServiceCallResul
  *   automation → app-only tokens of the automation identity; DATA_MODE=fixtures → no tokens at all.
  * - Paging: `all` collects up to maxItems; cursor pages hand out sealed, opaque cursors (HMAC-bound to the call) so
  *   a client can never steer a nextLink/skip token at another resource.
- * - Concurrency: per service, and per identity per service. Correlation id → client-request-id / x-ms-client-request-id.
+ * - Concurrency: per service, and per identity per service, taken for each attempt (each page, each retry) and
+ *   released while a throttled call waits; a person's request that can't get a slot within OUTBOUND_QUEUE_WAIT_MS
+ *   is refused as busy. Correlation id → client-request-id / x-ms-client-request-id.
+ * - Timeouts: OUTBOUND_TIMEOUT_MS with one more try, or one longer attempt for the slow reads in
+ *   OUTBOUND_TIMEOUT_OVERRIDES (./timeouts.ts). The caller's abort signal reaches every request and wait.
  */
 
 export const GRAPH_BASE = 'https://graph.microsoft.com';
@@ -74,7 +81,17 @@ export type OutboundConfig = Pick<
   | 'OUTBOUND_TIMEOUT_MS'
   | 'TOKEN_CACHE_KEY'
 > &
-  Partial<Pick<Config, 'OUTBOUND_MAX_BYTES' | 'AF_CONNECTION_AUDIENCE_HOSTS'>> &
+  Partial<
+    Pick<
+      Config,
+      | 'OUTBOUND_MAX_BYTES'
+      | 'AF_CONNECTION_AUDIENCE_HOSTS'
+      | 'OUTBOUND_TIMEOUT_OVERRIDES'
+      | 'OUTBOUND_QUEUE_WAIT_MS'
+      | 'OUTBOUND_CRAWL_SHARE'
+      | 'OUTBOUND_AUTOMATION_CONCURRENCY'
+    >
+  > &
   ProtectedConfig;
 
 export interface OutboundDeps {
@@ -113,7 +130,12 @@ export interface CallRecord {
   path: string;
   status: number;
   ms: number;
+  /** The final answer was 429, or an attempt was throttled and retried. */
   throttled: boolean;
+  /** Attempts retried (throttling, server errors, network failures, timeouts). */
+  retries: number;
+  /** Of those, retried because Microsoft throttled (429, or 503 with Retry-After). */
+  throttledRetries: number;
   identity: ExecutionIdentity['kind'];
   mode: string;
   correlationId: string;
@@ -541,24 +563,37 @@ class Semaphore {
   get idle() {
     return this.active === 0 && this.queue.length === 0;
   }
-  async acquire(signal?: AbortSignal): Promise<void> {
+  /** Waits for a slot: until `signal` aborts, or at most `waitMs` (then rejects with outbound_busy). */
+  async acquire(signal?: AbortSignal, waitMs?: number): Promise<void> {
+    signal?.throwIfAborted();
     if (this.active < this.max) {
       this.active++;
       return;
     }
     await new Promise<void>((resolve, reject) => {
-      const grant = () => {
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const leave = () => {
         signal?.removeEventListener('abort', onAbort);
+        clearTimeout(timer);
+        const i = this.queue.indexOf(grant);
+        if (i >= 0) this.queue.splice(i, 1);
+      };
+      const grant = () => {
+        leave();
         this.active++;
         resolve();
       };
       const onAbort = () => {
-        const i = this.queue.indexOf(grant);
-        if (i >= 0) this.queue.splice(i, 1);
+        leave();
         reject(signal!.reason ?? new Error('aborted'));
       };
       this.queue.push(grant);
       signal?.addEventListener('abort', onAbort, { once: true });
+      if (waitMs)
+        timer = setTimeout(() => {
+          leave();
+          reject(outboundBusy());
+        }, waitMs);
     });
   }
   release(): void {
@@ -567,38 +602,171 @@ class Semaphore {
   }
 }
 
+/** 503 outbound_busy: every slot for Microsoft calls stayed taken for OUTBOUND_QUEUE_WAIT_MS. */
+export const outboundBusy = () =>
+  new AppError(503, 'outbound_busy', 'AdminForge is handling too many Microsoft requests right now.', {
+    hint: 'Try again in a moment. If it keeps happening, tell a Portal Admin: the outbound limits may be too low for the load.',
+  });
+
+/**
+ * What an attempt is for: `interactive` — one page of a list, an entity read, a `$batch`, a write, the first
+ * CRAWL_AFTER_PAGES pages of a `paging: all` — is served first; `crawl` — the pages after those — may use only
+ * OUTBOUND_CRAWL_SHARE of a service's slots, so a dashboard that crawls a whole collection can't take every slot
+ * from the people clicking through lists.
+ */
+export type Lane = 'interactive' | 'crawl';
+
+/** Pages of a `paging: all` served as interactive work before the rest of it counts as a crawl. */
+export const CRAWL_AFTER_PAGES = 2;
+
+/** One service's slots: interactive waiters go first, crawls never hold more than `crawlMax`. */
+class Pool {
+  active = 0;
+  crawlActive = 0;
+  private readonly waiting: Record<Lane, Array<() => void>> = { interactive: [], crawl: [] };
+  constructor(
+    readonly max: number,
+    readonly crawlMax: number,
+  ) {}
+  get idle() {
+    return this.active === 0 && !this.waiting.interactive.length && !this.waiting.crawl.length;
+  }
+  private free(lane: Lane) {
+    if (this.active >= this.max) return false;
+    if (lane === 'crawl') return this.crawlActive < this.crawlMax && !this.waiting.interactive.length;
+    return true;
+  }
+  private take(lane: Lane) {
+    this.active++;
+    if (lane === 'crawl') this.crawlActive++;
+  }
+  /** Waits for a slot in `lane`: until `signal` aborts, or at most `waitMs` (then rejects with outbound_busy). */
+  async acquire(lane: Lane, signal?: AbortSignal, waitMs?: number): Promise<void> {
+    signal?.throwIfAborted();
+    if (this.free(lane) && !(lane === 'interactive' && this.waiting.interactive.length)) {
+      this.take(lane);
+      return;
+    }
+    await new Promise<void>((resolve, reject) => {
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const queue = this.waiting[lane];
+      const leave = () => {
+        signal?.removeEventListener('abort', onAbort);
+        clearTimeout(timer);
+        const i = queue.indexOf(grant);
+        if (i >= 0) queue.splice(i, 1);
+      };
+      const grant = () => {
+        leave();
+        this.take(lane);
+        resolve();
+      };
+      const onAbort = () => {
+        leave();
+        reject(signal!.reason ?? new Error('aborted'));
+        this.drain();
+      };
+      queue.push(grant);
+      signal?.addEventListener('abort', onAbort, { once: true });
+      if (waitMs)
+        timer = setTimeout(() => {
+          leave();
+          reject(outboundBusy());
+          this.drain();
+        }, waitMs);
+    });
+  }
+  release(lane: Lane): void {
+    this.active--;
+    if (lane === 'crawl') this.crawlActive--;
+    this.drain();
+  }
+  /** Hands free slots out: interactive waiters first, then crawls within their share. */
+  private drain(): void {
+    while (this.waiting.interactive.length && this.free('interactive')) this.waiting.interactive[0]!();
+    while (this.waiting.crawl.length && this.free('crawl')) this.waiting.crawl[0]!();
+  }
+}
+
+export interface LimiterSizes {
+  /** Slots per service for people (OUTBOUND_CONCURRENCY). */
+  perService: number;
+  /** Slots per person (or the automation identity) per service (OUTBOUND_USER_CONCURRENCY). */
+  perIdentity: number;
+  /** Share of a service's slots crawls may hold (OUTBOUND_CRAWL_SHARE). */
+  crawlShare: number;
+  /** Slots per service for the automation identity, apart from people's (OUTBOUND_AUTOMATION_CONCURRENCY). */
+  automation: number;
+}
+
+/**
+ * Concurrency for Microsoft calls, per attempt: a slot per identity per service, then one of the service's slots —
+ * people share a pool with lanes (Pool), the automation identity (schedules, probes) has its own pool, so neither
+ * starves the other.
+ */
 class Limiter {
   private readonly sems = new Map<string, Semaphore>();
-  constructor(
-    private readonly perService: number,
-    private readonly perIdentity: number,
-  ) {}
+  private readonly pools = new Map<string, Pool>();
+  constructor(private readonly sizes: LimiterSizes) {}
   private sem(key: string, max: number) {
     let s = this.sems.get(key);
     if (!s) this.sems.set(key, (s = new Semaphore(max)));
     return s;
   }
-  /** Identity slot first, then the service slot (waiting for one never holds the other). */
-  async run<T>(service: ServiceId, identity: string, fn: () => Promise<T>, signal?: AbortSignal): Promise<T> {
+  private pool(service: ServiceId, automation: boolean) {
+    const key = automation ? `${service}:automation` : service;
+    let p = this.pools.get(key);
+    if (!p) {
+      const max = automation ? this.sizes.automation : this.sizes.perService;
+      const crawlMax = automation ? max : Math.max(1, Math.floor(max * this.sizes.crawlShare));
+      this.pools.set(key, (p = new Pool(max, crawlMax)));
+    }
+    return p;
+  }
+  /**
+   * Identity slot first, then the service slot (waiting for one never holds the other). `waitMs` bounds the wait for
+   * both together.
+   */
+  async run<T>(
+    service: ServiceId,
+    identity: string,
+    fn: () => Promise<T>,
+    opts: { signal?: AbortSignal; waitMs?: number; lane?: Lane } = {},
+  ): Promise<T> {
+    const { signal, waitMs } = opts;
+    const lane = opts.lane ?? 'interactive';
     const userKey = `${service}:${identity}`;
-    const user = this.sem(userKey, this.perIdentity);
-    await user.acquire(signal);
-    const svc = this.sem(service, this.perService);
+    const user = this.sem(userKey, this.sizes.perIdentity);
+    const started = Date.now();
     try {
-      await svc.acquire(signal);
+      await user.acquire(signal, waitMs);
+    } catch (err) {
+      if (user.idle) this.sems.delete(userKey);
+      throw err;
+    }
+    const pool = this.pool(service, identity === 'automation');
+    try {
+      await pool.acquire(lane, signal, waitMs ? Math.max(1, waitMs - (Date.now() - started)) : undefined);
       try {
         return await fn();
       } finally {
-        svc.release();
+        pool.release(lane);
       }
     } finally {
       user.release();
       if (user.idle) this.sems.delete(userKey);
     }
   }
-  /** Active calls (tests/metrics). */
+  /** Attempts in flight for a service (both pools) or an identity key (tests/metrics). */
   activeFor(key: string) {
-    return this.sems.get(key)?.active ?? 0;
+    return (
+      this.sems.get(key)?.active ??
+      (this.pools.get(key)?.active ?? 0) + (this.pools.get(`${key}:automation`)?.active ?? 0)
+    );
+  }
+  /** Crawl attempts in flight for a service (tests/metrics). */
+  crawlsFor(service: ServiceId) {
+    return this.pools.get(service)?.crawlActive ?? 0;
   }
 }
 
@@ -782,6 +950,8 @@ interface Dispatch {
   getToken: TokenProvider;
   correlationId: string;
   signal?: AbortSignal;
+  /** Retries of this call (telemetry). */
+  stats: { retries: number; throttledRetries: number };
 }
 
 interface Dispatched {
@@ -791,6 +961,8 @@ interface Dispatched {
   nextCursor?: string;
   /** Provenance path when it differs from the default template. */
   path?: string;
+  /** Part of the result only (see ServiceCallResult.truncated). */
+  truncated?: boolean;
 }
 
 export class Outbound implements OutboundExecutor {
@@ -801,7 +973,12 @@ export class Outbound implements OutboundExecutor {
   readonly protectedObjects: ProtectedObjects;
 
   constructor(private readonly deps: OutboundDeps) {
-    this.limiter = new Limiter(deps.config.OUTBOUND_CONCURRENCY, deps.config.OUTBOUND_USER_CONCURRENCY);
+    this.limiter = new Limiter({
+      perService: deps.config.OUTBOUND_CONCURRENCY,
+      perIdentity: deps.config.OUTBOUND_USER_CONCURRENCY,
+      crawlShare: deps.config.OUTBOUND_CRAWL_SHARE ?? 0.5,
+      automation: deps.config.OUTBOUND_AUTOMATION_CONCURRENCY ?? 8,
+    });
     this.cursors = new CursorSeal(deps.config.TOKEN_CACHE_KEY);
     this.now = deps.now ?? (() => new Date());
     this.protectedObjects = new ProtectedObjects({
@@ -832,9 +1009,46 @@ export class Outbound implements OutboundExecutor {
     });
   }
 
-  /** In-flight calls for a service (tests/metrics). */
+  /** In-flight attempts for a service (tests/metrics). */
   active(service: ServiceId): number {
     return this.limiter.activeFor(service);
+  }
+
+  /**
+   * The concurrency slot for each attempt of one call by `identity` on `service`. A person's first attempt of a read
+   * waits at most OUTBOUND_QUEUE_WAIT_MS (then 503 outbound_busy — nothing has been sent yet). Declared writes and
+   * every later attempt (retries, further pages, polls of a long-running operation) wait as long as it takes: once
+   * something reached Microsoft, being busy must never turn into "try again". The automation identity always waits
+   * (schedules have their own timeouts).
+   */
+  gate(
+    identity: ExecutionIdentity,
+    service: ServiceId,
+    signal?: AbortSignal,
+    opts: { lane?: Lane; write?: boolean; crawlAfter?: number } = {},
+  ): Gate {
+    const capped =
+      identity.kind === 'delegated' && !opts.write
+        ? (this.deps.config.OUTBOUND_QUEUE_WAIT_MS ?? 15_000) || undefined
+        : undefined;
+    let attempts = 0;
+    return (attempt) => {
+      const n = attempts++;
+      // `crawlAfter`: the first attempts of a `paging: all` are interactive (a user's groups fit in a page or two);
+      // only a call that keeps going becomes a crawl.
+      const lane =
+        opts.lane ?? (opts.crawlAfter !== undefined && n >= opts.crawlAfter ? 'crawl' : 'interactive');
+      return this.limiter.run(service, identityKey(identity), attempt, {
+        signal,
+        waitMs: n === 0 ? capped : undefined,
+        lane,
+      });
+    };
+  }
+
+  /** Crawl attempts in flight for a service (tests/metrics). */
+  crawls(service: ServiceId): number {
+    return this.limiter.crawlsFor(service);
   }
 
   /** The emergency stop and the protected-object guard for writes sent elsewhere (the PowerShell runner). */
@@ -919,26 +1133,23 @@ export class Outbound implements OutboundExecutor {
     const template = call.pathTemplate ?? fn?.template ?? templatePath(path);
     const sensitive = service === 'arm' && method === 'POST' && APP_SETTINGS_LIST.test(path);
     const started = performance.now();
+    const stats = { retries: 0, throttledRetries: 0 };
     try {
-      const out = await this.limiter.run(
-        service,
-        identityKey(identity),
-        () =>
-          this.withToken(identity, service, fn, (getToken) =>
-            this.dispatch({
-              identity,
-              call,
-              method,
-              path,
-              body,
-              batch,
-              fn,
-              getToken,
-              correlationId,
-              signal: opts.signal,
-            }),
-          ),
-        opts.signal,
+      // Concurrency slots are taken per attempt inside the connectors (`gate`), not for the whole call.
+      const out = await this.withToken(identity, service, fn, (getToken) =>
+        this.dispatch({
+          identity,
+          call,
+          method,
+          path,
+          body,
+          batch,
+          fn,
+          getToken,
+          correlationId,
+          signal: opts.signal,
+          stats,
+        }),
       );
       if (sensitive) {
         out.data = settingNamesOnly(out.data);
@@ -971,12 +1182,14 @@ export class Outbound implements OutboundExecutor {
         provenance.ms,
         correlationId,
         out.requestId,
+        stats,
       );
       return {
         data: out.data as T,
         status: out.status,
         provenance,
         ...(out.nextCursor ? { nextCursor: out.nextCursor } : {}),
+        ...(out.truncated ? { truncated: true } : {}),
       };
     } catch (err) {
       if (sensitive)
@@ -999,6 +1212,7 @@ export class Outbound implements OutboundExecutor {
           provenance.ms,
           correlationId,
           err.requestId,
+          stats,
         );
         const { hint, licence, message } = errorHint(err, service, identity, call.requires, call.connection);
         throw new OutboundError(err, service, hint, licence, provenance, message);
@@ -1027,6 +1241,7 @@ export class Outbound implements OutboundExecutor {
     ms: number,
     correlationId: string,
     requestId: string | undefined,
+    stats: { retries: number; throttledRetries: number },
   ) {
     if (!this.deps.onCall) return;
     try {
@@ -1036,7 +1251,9 @@ export class Outbound implements OutboundExecutor {
         path: template,
         status,
         ms,
-        throttled: status === 429,
+        throttled: status === 429 || stats.throttledRetries > 0,
+        retries: stats.retries,
+        throttledRetries: stats.throttledRetries,
         identity: identity.kind,
         mode: identity.mode,
         correlationId,
@@ -1090,11 +1307,25 @@ export class Outbound implements OutboundExecutor {
   // ── Connectors ──
 
   private client(d: Dispatch) {
+    const slow = timeoutOverride(this.deps.config.OUTBOUND_TIMEOUT_OVERRIDES, d.call.service, d.path);
     return {
       getToken: d.getToken,
       fetch: this.deps.fetch,
       correlationId: d.correlationId,
-      timeoutMs: this.deps.config.OUTBOUND_TIMEOUT_MS,
+      // Slow reads get one longer attempt; everything else one more try after a timeout.
+      timeoutMs: slow?.ms ?? this.deps.config.OUTBOUND_TIMEOUT_MS,
+      maxTimeoutRetries: slow ? 0 : 1,
+      // A `paging: all` past its second page is a crawl and takes at most its share of the slots; a write is never
+      // refused as busy. A `$batch` is one short request (the counts on a list page): interactive.
+      gate: this.gate(d.identity, d.call.service, d.signal, {
+        ...(d.call.paging === 'all' ? { crawlAfter: CRAWL_AFTER_PAGES } : {}),
+        write: d.call.declaredWrite === true,
+      }),
+      ...(d.signal ? { signal: d.signal } : {}),
+      onRetry: (info: RetryInfo) => {
+        d.stats.retries++;
+        if (info.reason === 'throttled') d.stats.throttledRetries++;
+      },
       maxResponseBytes: this.deps.config.OUTBOUND_MAX_BYTES ?? DEFAULT_MAX_RESPONSE_BYTES,
       ...(this.deps.sleep ? { sleep: this.deps.sleep } : {}),
       ...(this.deps.maxRetries !== undefined ? { maxRetries: this.deps.maxRetries } : {}),
@@ -1131,6 +1362,11 @@ export class Outbound implements OutboundExecutor {
     const { call } = d;
     if (d.batch) {
       const out = await client.batch(d.batch);
+      // A collection in a $batch answers with its first page only: say so when Graph had more.
+      const truncated = d.batch.some((i) => {
+        const b = out[i.id]?.body as { '@odata.nextLink'?: unknown } | undefined;
+        return !!b && typeof b === 'object' && typeof b['@odata.nextLink'] === 'string';
+      });
       return {
         status: 200,
         data: {
@@ -1140,6 +1376,7 @@ export class Outbound implements OutboundExecutor {
             body: out[i.id]?.body,
           })),
         },
+        ...(truncated ? { truncated: true } : {}),
       };
     }
     const req: GraphRequest = {
@@ -1177,13 +1414,17 @@ export class Outbound implements OutboundExecutor {
         url = r.data?.['@odata.nextLink'];
         if (url) checkLink(url);
       }
+      // More pages left (maxItems or the page limit reached first), or the last page went past maxItems.
+      const truncated = value.length > max || !!url;
       return {
         status: first?.status ?? 200,
         requestId: first?.requestId,
         data: {
           value: value.slice(0, max),
           ...(first?.count !== undefined ? { '@odata.count': first.count } : {}),
+          ...(truncated ? { truncated: true } : {}),
         },
+        ...(truncated ? { truncated: true } : {}),
       };
     }
     let url: string;
@@ -1244,12 +1485,20 @@ export class Outbound implements OutboundExecutor {
       const max = this.maxItems(call);
       const value: unknown[] = [];
       let first: { status: number; requestId?: string } | undefined;
+      let pages = 0;
       for await (const page of client.pages(req, MAX_PAGES)) {
         first ??= { status: 200 };
+        pages++;
         value.push(...page);
         if (value.length >= max) break;
       }
-      return { status: first?.status ?? 200, data: { value: value.slice(0, max) } };
+      // ARM's pager hides nextLink: reaching maxItems (or the page limit) means there may be more.
+      const truncated = value.length >= max || pages >= MAX_PAGES;
+      return {
+        status: first?.status ?? 200,
+        data: { value: value.slice(0, max), ...(truncated ? { truncated: true } : {}) },
+        ...(truncated ? { truncated: true } : {}),
+      };
     }
     if (typeof paging === 'object') {
       const r = paging.cursor
@@ -1294,10 +1543,17 @@ export class Outbound implements OutboundExecutor {
         value.push(...page.rows);
         if (value.length >= max) break;
       }
+      const kept = Math.min(value.length, max);
+      const truncated = (first?.totalRecords ?? value.length) > kept;
       return {
         status: 200,
         requestId: first?.requestId,
-        data: { value: value.slice(0, max), totalRecords: first?.totalRecords ?? value.length },
+        data: {
+          value: value.slice(0, max),
+          totalRecords: first?.totalRecords ?? value.length,
+          ...(truncated ? { truncated: true } : {}),
+        },
+        ...(truncated ? { truncated: true } : {}),
       };
     }
     const cursor = typeof paging === 'object' ? paging : undefined;

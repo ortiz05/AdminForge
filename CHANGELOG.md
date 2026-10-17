@@ -11,6 +11,56 @@ Closes the gaps found by comparing the build with the original plan (see the pla
 
 ### Added
 
+- **Enterprise-scale performance tests** (`tests/perf/`, `pnpm test:perf`, `docs/performance.md`): a deterministic
+  synthetic tenant (100k users, 50k groups incl. a 100k-member one, 30k managed devices, 20k apps, 1M sign-ins a day
+  computed on demand), a fake Microsoft Graph that pages, caps, counts, searches and throttles like Graph and refuses
+  what it doesn't model, every page/dashboard/report datasource run through the real engine against it with budgets
+  (requests, bytes, transform time, heap, estimated live time, truncation) that fail when something gets slower or new
+  content doesn't meet the default, and a load test (`tests/perf/load.ts`) with up to thousands of signed-in sessions.
+  First results: 39 of 326 datasources fail at 100k users (transforms out of budget after fetching whole collections),
+  and one API process with 16 Graph slots serves ~25–30 page loads a second before people get `outbound_busy`.
+- **Engineer report library** (plan 2026-10-17, phase E): SAML signing certificate expiry (with a daily schedule and
+  two probes: 30 days warn, 7 days or expired critical), subscription renewals and lapses (probe: grace period,
+  suspended, trials ending), Intune connector and token health (Apple push certificate, ADE and VPP tokens, Managed
+  Google Play, Autopilot sync — "Not configured" when unused; ADE and VPP probes), licence assignment errors (per group,
+  the failed members with the reason, licensed users without a usage location), user attribute completeness (with an
+  optional manager check), group lifecycle (expiring Microsoft 365 groups, single-owner, paused dynamic and restorable
+  deleted groups), unused applications, authentication method strength, BitLocker recovery key escrow and Windows LAPS
+  coverage (metadata only), and Conditional Access report-only impact (every sign-in through Log Analytics, a sample of
+  the newest 300 from Graph otherwise; the Log Analytics path is optional and falls back to the sample). Weekly
+  stale-devices and daily non-compliant-devices schedules, shipped off until those reports meet their perf budget; one
+  licence-seat
+  probe over every SKU the tenant has (replaces the fixed E3/E5 probes, retired); the duplicate identity licence
+  utilisation report is retired in favour of Licence utilization and Licence assignment errors. Every list is filtered
+  by Graph and capped where its transform fits the 250 ms budget (measured; scale tests in
+  `tests/content/engineer-report-library.test.ts`).
+- **Enterprise test fixtures** (plan 2026-10-17, phase F; opt-in in `AF_TEST_FIXTURES`, each its own module):
+  `directory` (AF-Test-User-04…12 with departments, job titles, employee ids, four usage locations and one unset, a
+  manager chain with a disabled manager, a disabled user licensed directly, one with no attributes, one whose password
+  never expires; dynamic, nested, Microsoft 365 with and without an owner, empty and group-licensing groups; the
+  administrative unit AF-Test-AU-01), `guest` (never redeemed, no email sent), `apps` (expiring, long-lived and many
+  credentials kept true over time, a risky and an ownerless app, a SAML app with a signing certificate expiring within
+  a month — never granted anything; secrets dropped at once, certificates throwaway), `auth-methods` (a fictitious SMS
+  number, a Temporary Access Pass never shown), `intune-more` (iOS, Android and an unassigned macOS compliance policy,
+  an update ring, app protection) and `sign-ins` (two accounts that only sign in, for the new
+  `tests/live/scripts/generate-sign-ins.ts`: a success with MFA, a wrong password, a disabled account). Everything is
+  marked, refused when someone else's, removed by `--remove-fixtures`; each operation fails on its own; licences only
+  with free seats; `--disable` disables the sign-in accounts too. Graph's 409 "concurrent requests" is retried. `provision status` fails on anything a sign-in account holds, warns while one is enabled, fails on any service
+  principal, grant or assignment on a fixture app (the risky app is ownerless), and shows fixtures no longer opted in
+  as left over (`--remove-fixtures` removes them anyway, and exits 1 when something couldn't be read); the assigned
+  Intune policies are refused while AF-Test-Group-01 has other members; a guest or SAML app that can't be marked is
+  deleted again.
+- **Schedule times in plain English** (plan 2026-10-17, phase D): one describer and a small closed grammar
+  (`@adminforge/schemas` cadence.ts) shared by the API, the web app and content. Content schedules may say `every:
+"first Monday of the month at 08:30"` instead of `cron:` (validation compiles it and names any word it doesn't
+  understand; the zone stays in `timezone`). The schedule editor and the report schedule form gain every few hours,
+  several days of the week, the Nth or last weekday of the month, the last day of the month and a "Type it in English"
+  box that echoes what it understood (and takes a zone typed at the end); a searchable field offers every IANA time
+  zone with its offset, defaulting to the browser's. Their next runs come from `POST /api/schedules/preview`, which
+  now takes `cron` or `every` and answers with the cron, a sentence naming the zone and `tooFrequent`; the schedule
+  editor's YAML says `every:` when given English. The report schedule form refuses anything more often than once an
+  hour on the cadence field, before saving; a problem shows once, on the field, and screen readers hear what a
+  sentence was understood as when typing pauses.
 - **`provision entra --prune`:** removes application permissions on AdminForge's three apps that provisioning no longer
   grants (retired content, a dropped baseline permission, a ceiling turned back off, or added by hand) — only roles on
   the resources provisioning knows; review with `--dry-run --prune` first. Without it the plan counts them in one ⚠ line
@@ -143,6 +193,57 @@ Closes the gaps found by comparing the build with the original plan (see the pla
 
 ### Changed
 
+- **Content rewritten for large tenants** (100k users; measured with `pnpm test:perf`): the licence page, teams page
+  and app registrations page page through Graph with server-side search and filters (one request instead of 50–350);
+  the identity health and Microsoft 365 dashboards count at the source (`$count`, batched windows) instead of reading
+  whole collections; inactive users read only inactive accounts (Graph's sign-in filter); password age, mailbox storage,
+  OneDrive, SharePoint site usage, SharePoint sites, teams activity and inactive licensed users use native filters on
+  Graph's own rows (they failed beyond ~1,500 accounts before), with storage totals from Microsoft's daily summary
+  reports. Past their caps they say the data is partial; the counts stay complete where Graph can count.
+- **Owners: people and apps.** `GET /groups/{id}/owners` leaves service principals out, so the group and team pages
+  read people and apps apart and agree with the owner count; the groups and teams owner reports list "Owned by an app
+  only" apart from "No owners", and the teams list labels each team accordingly.
+- **Expressions:** the grouping constructor (`rows{ key: value }`) runs natively — it failed past ~500 keys ("nested or
+  recursing too deeply"); `$applyAdvanced` is compiled once per call and takes filters written in content (`notEmpty`,
+  `notContains`, `notIn`, field-to-field comparisons, paths through lists); new `$withFields` and `$take`.
+
+- **Database connections** carry per-connection limits and a name (`DATABASE_STATEMENT_TIMEOUT_MS` [60 s],
+  `DATABASE_LOCK_TIMEOUT_MS` [15 s], `DATABASE_IDLE_IN_TRANSACTION_TIMEOUT_MS` [60 s], `application_name
+adminforge-<process>`) and a configurable pool size (`DATABASE_POOL_MAX` [10]); migrations run without a time limit.
+- **Local setup:** `init:local` writes your dev database URL for the non-superuser `adminforge_dev` and puts the
+  container's superuser password in `dev.owner.env`; `pnpm db:up` / `db:down` go through `portal/deploy/db/compose.sh`
+  (it adds the owner file); then `pnpm db:harden` before `db:migrate`. `adminforge env check` reads the owner files
+  (states only) and says when owner keys still sit in a file the services read.
+
+- **Cadence wording:** every schedule sentence now names its time zone ("Every 15 minutes (UTC)", "Every weekday
+  (Mon–Fri) at 07:00 Europe/London"); the API's `cronText` and the web app use the same describer (they differed),
+  and the web app shows times with the browser's 12- or 24-hour clock. Form field errors that wrap keep their icon
+  on the first line at full size (`field` recipe).
+- **Page loads at enterprise scale** (plan 2026-10-17, phase A):
+  - Microsoft calls take a concurrency slot per attempt (each page, each retry) and release it while a throttled call
+    waits; a person waits at most `OUTBOUND_QUEUE_WAIT_MS` (503 `outbound_busy`); schedules queue. The overview's
+    `$batch` goes through the same slots.
+  - A timed-out attempt is tried once more, not four times; the slow reads (`OUTBOUND_TIMEOUT_OVERRIDES`: sign-in and
+    audit logs, usage reports, Log Analytics) get one 2-minute attempt. A person's datasource stops after
+    `DATASOURCE_DEADLINE_MS` (504 `datasource_timeout`), and a page left while it loads stops calling Microsoft.
+  - Identical concurrent loads of one session share one execution; the cache is capped by size
+    (`DATASOURCE_CACHE_MAX_MB`) as well as entries, keys on the params a datasource uses and on its dependencies' keys
+    (a cached dependent no longer re-runs its dependencies), and drops only the republished page's results. A transform
+    that failed is tried again on the data already fetched.
+  - `paging: all` and `$batch` collections say when they're partial (`truncated`).
+  - Order-by (`^( … )`) and a constant slice after it run natively: 100k rows sort in a few hundred ms (JSONata's
+    own sort took over a second for 10k rows and ran out of memory at 50k).
+  - Request limits count per session (background requests apart, `RATE_LIMIT_BACKGROUND_PER_MINUTE`) with a coarse
+    per-address cap (`RATE_LIMIT_PER_ADDRESS_PER_MINUTE`): behind a NAT, one busy engineer no longer locks out the rest.
+  - Retried throttling shows in the `microsoft call` log line (`retries`, `throttledRetries`). Sizing:
+    `docs/operations.md` → Sizing for a large tenant.
+  - **Lanes for Microsoft calls**: list pages, entity reads, batches, writes and the first two pages of a crawl are
+    served first; the rest of a `paging: all` holds at most `OUTBOUND_CRAWL_SHARE` (half) of the slots; schedules have
+    their own (`OUTBOUND_AUTOMATION_CONCURRENCY`). `OUTBOUND_CONCURRENCY` defaults to 48 (was 16: within Graph's
+    directory budget for one app in a large tenant). Load test at 200 engineers: no `outbound_busy` (users list p50
+    1.3 s, was 4.6 s); `docs/performance.md`.
+  - Only a person's read can be refused as busy, and only before it is sent: writes, retries, further pages and
+    long-running-operation polls always wait.
 - The inspector drawer is three times wider, never over the navigation: it covers the list (with a scrim that closes
   it) when too little would be left, and lays out the entity page's widgets and KPIs in columns. "Open full page"
   moved to its header and keeps the current tab.
@@ -236,6 +337,47 @@ Closes the gaps found by comparing the build with the original plan (see the pla
   `AF_QUERY_SOURCES` (above). A content test keeps active definitions from linking to retired ones.
 
 ### Security
+
+- **Rate limits and sign-in**: `/auth/login` and `/auth/callback` count per client address whatever cookie comes
+  with them (`RATE_LIMIT_SIGNIN_PER_ADDRESS_PER_MINUTE`), requests without a valid session share
+  `RATE_LIMIT_ANONYMOUS_PER_ADDRESS_PER_MINUTE`, IPv6 counts per /64, and the background allowance no longer doubles a
+  route's own limit — invented cookies buy no fresh allowance. Failed-sign-in audit events are written at most 10 a
+  minute per address, then a `suppressed` count. `TRUST_PROXY=true` is refused in production.
+- **Expression budget**: a sort term or group key evaluated per row shares the whole evaluation's 250 ms (each row
+  used to get its own); keys JSONata compares only pair by pair fall back to its own sort, and constant slices follow
+  its index rules exactly. Datasource cache keys count all params whenever an expression reaches them through the root
+  scope or a wildcard, and the query lint treats those as user data. A cached result is refused when a role a
+  dependency needs is gone; a closed page is never swallowed as an optional failure.
+- **Postgres hardening** (`docs/operations.md` → Postgres hardening, `pnpm db:harden [--dry-run] [--rotate]
+[--rotate-superuser]`): the services' database and the dev/test databases get **non-superuser owners**
+  (`adminforge_owner`, `adminforge_dev`) and everything the bootstrap superuser owned moves to them; the superuser can
+  sign in over the container's socket only (`pg_hba.conf` rejects it over TCP; new clusters get the rule and password
+  TCP auth at initdb); databases are closed to `PUBLIC`; `adminforge_app` gets per-role `statement_timeout`,
+  `lock_timeout` and `idle_in_transaction_session_timeout` and a connection cap. The owner's URL and the superuser
+  password live in owner files (`<env>.owner.env`, `<env>.<overlay>.owner.env`) that only migrations and the database
+  scripts read; `create-app-role.sh` writes the owner URL there and runs as the container superuser. Passwords are
+  sent only as client-side SCRAM-SHA-256 verifiers (`portal/deploy/db/scram.mjs`) in sessions that log no statements,
+  and Postgres never logs bind parameters; each new credential is saved as soon as its role has it; scripts run as one
+  transaction with a lock timeout and refuse while the services still use the superuser. The API, worker and scheduler
+  refuse to start in production (fail closed) when their role — `current_user` or `session_user` — is a superuser or
+  `BYPASSRLS`, can change audit events, belongs to the audit table's owner, can create in `public` or holds a
+  `pg_*_server_*` role (development warns about superuser or `BYPASSRLS`), and a database on another host needs
+  `sslmode=verify-full` (judged as node-postgres parses the URL; migrations too).
+- **Database integrity:** foreign keys between runs, steps, events, schedules, schedule runs and probe results, and
+  CHECK constraints on every status column (migration 0009, added `NOT VALID` then validated); **approval decisions
+  are append-only** in the database (migrations 0010–0011): approvals start pending, a recorded decision never changes
+  (`sessionHash` may be rebound only to a session of the person who decided — the run worker acts only through such a
+  session too), a decided approval is final, an approval is deleted only together with its run or schedule, and the
+  trigger functions run with a fixed `search_path`.
+- **Audit chain:** verification walks the chain in batches (memory stays flat) and records the verified tail
+  (`seq`, `hash`) in the services' journal as an external checkpoint; `adminforge audit verify` prints the tail to
+  compare.
+- **Token-cache key rotation:** envelopes carry a key id and a pinned 16-byte GCM tag; `TOKEN_CACHE_PREVIOUS_KEYS`
+  keeps blobs sealed before a rotation readable (older `1.` envelopes still open).
+- **Backups refuse to run unencrypted** unless `AF_BACKUP_ALLOW_PLAINTEXT=1`, and never contain the database owner's
+  credentials (owner files, and owner keys an older env file still has).
+- **Postgres container:** image pinned by digest; connection, DDL, lock-wait and slow-statement logging; rotated
+  container logs; `no-new-privileges`, memory and process limits (applied when `pnpm db:up` recreates the container).
 
 Platform evaluation (2026-10-16) — organization and security best practices (OWASP ASVS 5.0, NIST SSDF, Microsoft
 identity platform guidance, systemd hardening, OpenSSF Scorecard). Fixed:

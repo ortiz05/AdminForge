@@ -9,6 +9,8 @@ export interface WidgetError {
   message: string;
   hint?: string;
   correlationId?: string;
+  /** `reauth`: where the browser signs in again — the error offers "Sign in again" instead of "Try again". */
+  login?: string;
 }
 
 /** What the renderer resolved for a widget's `data` reference. */
@@ -114,6 +116,13 @@ export interface WidgetRuntime {
   dataMode: 'live' | 'fixtures';
   /** Synthetic probe results (a hook: call it unconditionally). */
   useProbes: (keys: string[] | undefined) => ProbesState;
+  /** Starts a sign-in at `login` (a `reauth` error's URL), keeping the person's place. */
+  signIn?: (login: string) => void;
+  /**
+   * The page shows one "Sign in again" banner for its `reauth` errors, so widgets with that error stay quiet instead
+   * of repeating it.
+   */
+  signInBanner?: boolean;
 }
 
 export interface WidgetProps<C> {

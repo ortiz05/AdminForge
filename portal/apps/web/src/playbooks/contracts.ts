@@ -85,6 +85,8 @@ export const capabilitiesQuery = queryOptions({
   queryFn: ({ signal }) =>
     api('/api/me/capabilities', {
       signal,
+      // Auxiliary lookup (feature gates, PIM badge, preflight): never starts a sign-in by itself (lib/sign-in-guard.ts).
+      background: true,
       schema: parser((input): Capabilities => {
         const o = rec(input);
         const r = rec(o.roles);

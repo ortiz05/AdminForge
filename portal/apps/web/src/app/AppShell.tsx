@@ -6,6 +6,7 @@ import { useRouterState } from '@tanstack/react-router';
 import type { ArmRequest, MeResponse } from '@adminforge/schemas';
 import { Brand, Button, ErrorState, Skeleton, useMediaQuery, useToast } from '@adminforge/ui';
 import { api, ApiRequestError, ExtendResponse, loginUrl, RedirectResponse } from '../lib/api';
+import { maySignInAutomatically } from '../lib/sign-in-guard';
 import { browser } from '../lib/browser';
 import {
   NARROW_NAV_QUERY,
@@ -321,15 +322,21 @@ export function AppShell({ children }: { children: ReactNode }) {
     const err = session.error;
     if (err instanceof ApiRequestError && err.status === 401 && err.signingIn)
       return <Splash message="Taking you to sign-in…" />;
-    if (err instanceof ApiRequestError && err.status === 401)
-      // Ended while nobody was using the tab: signing in again is the person's call (lib/api.ts).
+    if (err instanceof ApiRequestError && err.status === 401) {
+      // Ended while nobody was using the tab: signing in again is the person's call (lib/api.ts). Or the tab just came
+      // back from a sign-in and the session still isn't accepted — following it again would loop (lib/sign-in-guard.ts).
+      const loop = !maySignInAutomatically();
       return (
         <div className="flex min-h-dvh flex-col items-center justify-center gap-8 p-8">
           <Brand size="lg" />
           <ErrorState
-            title="You’re signed out"
+            title={loop ? 'Sign-in didn’t finish' : 'You’re signed out'}
             message={err.message}
-            hint={err.hint}
+            hint={
+              loop
+                ? 'Sign in again. If this screen comes back, give a portal administrator the reference.'
+                : err.hint
+            }
             code={err.code}
             correlationId={err.correlationId}
             action={
@@ -340,6 +347,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           />
         </div>
       );
+    }
     return (
       <div className="flex min-h-dvh flex-col items-center justify-center gap-8 p-8">
         <Brand size="lg" />

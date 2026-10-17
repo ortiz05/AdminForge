@@ -227,5 +227,11 @@ prefer the feature key.
 - page params by name (`?userType=Guest&days=90`; defaults are omitted);
 - table state per table block id: `<id>.sort=-field,other`, `<id>.cols=a,b,c` (visible columns in order), `<id>.density=compact`, `<id>.q=text`, `<id>.f={"col":["A"]}`;
 - `view=<saved view id>`, `tab=<tab id>`;
-- the inspector: `inspect=page:<entity page key>&i.<param>=…` (its tab: `itab`);
+- the inspector: `inspect=page:<entity page key>&i.<param>=…` (its tab: `itab`). The inspector drawer is
+  `--af-layout-inspector-wide-factor` (3) × the standard drawer width, but never over the navigation rail
+  (`--af-layout-inspector-wide-w` and its `-nav-collapsed` twin). When that leaves less than 24rem of the list beside
+  it, it covers the list — a light scrim that closes it, the page inert, Escape still closes; on wider screens it stays
+  beside the list and rows switch what it shows. "Open full page" is in its header and opens the inspector's tab. The
+  entity page's widgets (and KPI strips) keep their `span`s and columns once the drawer is at least 56rem wide
+  (container query) and stack below that;
 - the playbook drawer: `playbook=<key>&inputs=<base64url JSON>` or, for bulk actions, `&items=<base64url JSON array>` (one inputs object per selected row; see `apps/web/src/playbooks/url.ts`).

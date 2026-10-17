@@ -104,9 +104,12 @@ function FieldValue({
     case 'tags': {
       const list = tagList(value);
       return list.length ? (
-        <span className="flex flex-wrap gap-1">
+        <span className="flex min-w-0 flex-wrap gap-1">
           {list.map((t) => (
-            <Badge key={t}>{t}</Badge>
+            // A long value (a proxy address) shrinks with an ellipsis instead of overflowing the panel.
+            <Badge key={t} title={t} className="max-w-full min-w-0 shrink">
+              <span className="min-w-0 truncate">{t}</span>
+            </Badge>
           ))}
         </span>
       ) : (

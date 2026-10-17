@@ -64,6 +64,11 @@ closes it; changing a filter replaces the entry. Deep links must work on a fresh
 
 ## Behaviour every screen gets right
 
+- **Sign-in on 401.** `api()` sends the browser to sign in only for a request the person made, and at most once per tab
+  within a minute (`lib/sign-in-guard.ts`): a second 401 right after the round trip shows the error with "Sign in
+  again" instead of looping through single sign-on. Auxiliary lookups (capabilities, badges, pollers) pass
+  `background: true` so they never start a sign-in themselves. A page whose data needs a fresh Microsoft sign-in
+  (`reauth`) shows one "Sign in again" banner; its widgets show a quiet note instead of each repeating the error.
 - **Loading, empty and error states.** `Skeleton` while loading; `EmptyState` that says what's missing and offers the
   way out ("Clear filters", "Schedule a report"); `ErrorState` / `errorText()` / `errorDescription()`
   (`src/lib/errors.tsx`) to show the API's message, hint and reference — never raw JSON.

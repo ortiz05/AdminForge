@@ -26,6 +26,7 @@ import { isExternal, launchPlaybook, playbookLabel } from '../../lib/actions';
 import { evaluateTemplate, tryResolveSync, useWhen } from '../../lib/expr';
 import { formatBytes, formatDate, formatPercentValue } from '../../lib/format';
 import { asRows, getPath } from '../../lib/path';
+import { signInErrorView, signInNote } from '../../lib/sign-in-error';
 import { mapStatus, type StatusMap } from '../../lib/status';
 import type { WidgetProps, WidgetRuntime } from '../../types';
 import type { TableColumnConfig, TableConfig } from './schema';
@@ -509,16 +510,20 @@ export function TableWidget({ config, data, runtime, instanceId, variant }: Widg
 
   const label = config.title ?? 'Results';
   const loading = data.status === 'loading' || data.status === 'idle';
+  const signIn = data.status === 'error' ? signInErrorView(data.error, runtime) : null;
   const error =
     data.status === 'error'
-      ? {
-          title: `${label} didn’t load`,
-          message: data.error?.message ?? 'The data source returned an error.',
-          hint: data.error?.hint,
-          code: data.error?.code,
-          correlationId: data.error?.correlationId,
-          onRetry: data.retry,
-        }
+      ? signIn?.quiet
+        ? { quiet: true, title: signInNote(label).title, message: signInNote(label).body }
+        : {
+            title: `${label} didn’t load`,
+            message: data.error?.message ?? 'The data source returned an error.',
+            hint: data.error?.hint,
+            code: data.error?.code,
+            correlationId: data.error?.correlationId,
+            onRetry: data.retry,
+            ...(signIn ? { action: signIn.action } : {}),
+          }
       : null;
 
   const footer: ReactNode =

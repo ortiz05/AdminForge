@@ -24,6 +24,8 @@ import {
   type TableViewState,
   type WidgetRuntime,
 } from '@adminforge/widgets';
+import { loginUrl } from '../lib/api';
+import { browser } from '../lib/browser';
 import { AppLink, useNavigateHref } from '../lib/links';
 import { useMe, useNav } from '../lib/session';
 import { playbookSearch } from '../playbooks/url';
@@ -48,7 +50,7 @@ import {
   withIds,
   type TableColumns,
 } from './page-model';
-import { EntityHeader, RefreshControl } from './PageParts';
+import { EntityHeader, RefreshControl, SignInBanner } from './PageParts';
 import { ParamsForm } from './ParamsForm';
 import { advancedParamOf, decodeFilter, paramIssues } from './QueryBuilder';
 import { paramsToSearch, resolveParams } from './params';
@@ -80,6 +82,8 @@ export interface PageViewProps {
   /** Saved view id from `?view=` (main page only). */
   viewId?: string;
   onTitle?: (title: string | undefined) => void;
+  /** Inspector only: the address of this page on its own (the drawer header shows "Open full page"). */
+  onFullPageHref?: (href: string | undefined) => void;
 }
 
 const NO_PROBES: ProbesState = { status: 'loading', probes: [] };
@@ -142,7 +146,7 @@ function useTableViews(
  * Renders any published page, dashboard or report with its template (§6.6): dashboard · list-detail · entity ·
  * report · settings. Params live in the URL; data comes from the BFF; widgets come from @adminforge/widgets.
  */
-export function PageView({ def, search, update, inspector, viewId, onTitle }: PageViewProps) {
+export function PageView({ def, search, update, inspector, viewId, onTitle, onFullPageHref }: PageViewProps) {
   const me = useMe();
   const nav = useNav();
   const navigate = useNavigate();
@@ -151,6 +155,13 @@ export function PageView({ def, search, update, inspector, viewId, onTitle }: Pa
   const template = (def.template as string | undefined) ?? (def.kind === 'report' ? 'report' : 'dashboard');
 
   const params = useMemo(() => resolveParams(def.params, search), [def.params, search]);
+  // The full page opens on the tab the inspector shows.
+  const inspectorTab = inspector && typeof search.tab === 'string' ? search.tab : undefined;
+  const fullPageHref = inspector
+    ? contentHref(def.id, inspectorTab ? { ...params.send, tab: inspectorTab } : params.send)
+    : undefined;
+  useEffect(() => onFullPageHref?.(fullPageHref), [fullPageHref, onFullPageHref]);
+  useEffect(() => () => onFullPageHref?.(undefined), [onFullPageHref]);
   // Query builder (`filters.advanced`): the URL carries the structured filter as base64url JSON (`?adv=…`); requests
   // send it as the JSON object and the BFF validates and compiles it. (`client` dialect builders aren't offered.)
   const advSpec = def.filters?.advanced?.dialect === 'client' ? undefined : def.filters?.advanced;
@@ -187,6 +198,15 @@ export function PageView({ def, search, update, inspector, viewId, onTitle }: Pa
     [blocked, def, allBlocks],
   );
   const data = usePageData(def, send, needed, !blocked && (!gateRelevant || !caps.isPending));
+  // Microsoft wants a fresh sign-in for some of the page's data (`reauth`): one banner offers it, and the widgets
+  // with that error stay quiet instead of repeating it (runtime.signInBanner).
+  const signInError = useMemo(() => {
+    for (const name of needed) {
+      const e = data.resolve(name).error;
+      if (e?.code === 'reauth') return e;
+    }
+    return undefined;
+  }, [needed, data]);
 
   // A 400 invalid_params lists every problem; show each next to its control (advanced filter or facet).
   const serverIssues = useMemo(() => {
@@ -249,6 +269,8 @@ export function PageView({ def, search, update, inspector, viewId, onTitle }: Pa
       feature: (key: string) => caps.data?.features[key],
       dataMode: me.dataMode,
       useProbes,
+      signIn: (login: string) => browser.assign(loginUrl(login)),
+      signInBanner: Boolean(signInError),
     }),
     [
       def.id,
@@ -263,6 +285,7 @@ export function PageView({ def, search, update, inspector, viewId, onTitle }: Pa
       caps.data,
       me.dataMode,
       useProbes,
+      signInError,
     ],
   );
 
@@ -405,6 +428,7 @@ export function PageView({ def, search, update, inspector, viewId, onTitle }: Pa
       </Badge>
     ) : undefined;
 
+  const signInBanner = signInError && <SignInBanner error={signInError} />;
   const gate = licence.missing.length > 0 && (
     <LicenceGatePanel missing={licence.missing} preview={preview} className={cn(!blocked && 'mb-0')} />
   );
@@ -424,7 +448,8 @@ export function PageView({ def, search, update, inspector, viewId, onTitle }: Pa
     const tabs = def.tabs ?? [];
     const setTab = (t: string) => void update({ tab: t === tabs[0]?.id ? undefined : t }, { replace: true });
     return (
-      <div className="flex flex-col gap-(--af-gap-grid)">
+      // In the inspector the widget grid follows the drawer's width (container query, renderer/blocks.tsx).
+      <div className={cn('flex flex-col gap-(--af-gap-grid)', inspector && '@container')}>
         <EntityHeader
           def={def}
           runtime={runtime}
@@ -432,8 +457,10 @@ export function PageView({ def, search, update, inspector, viewId, onTitle }: Pa
           section={section}
           inspector={inspector}
           onTitle={onTitle}
+          data={data}
         />
         {gate}
+        {signInBanner}
         {!blocked && headerBlocks.length > 0 && grid(headerBlocks)}
         {!blocked &&
           (tabs.length > 1 ? (
@@ -450,16 +477,6 @@ export function PageView({ def, search, update, inspector, viewId, onTitle }: Pa
           ) : (
             grid(blocks)
           ))}
-        {inspector && (
-          <div className="flex justify-end border-t border-line pt-3">
-            <AppLink
-              href={contentHref(def.id, params.send)}
-              className="text-sm font-medium text-accent underline-offset-2 hover:underline"
-            >
-              Open full page
-            </AppLink>
-          </div>
-        )}
       </div>
     );
   }
@@ -494,6 +511,7 @@ export function PageView({ def, search, update, inspector, viewId, onTitle }: Pa
       <div className="flex flex-col gap-(--af-gap-grid)">
         {header}
         {gate}
+        {signInBanner}
         {!blocked && (
           <>
             <ParamsForm
@@ -539,6 +557,7 @@ export function PageView({ def, search, update, inspector, viewId, onTitle }: Pa
       <div className="flex flex-col gap-(--af-gap-grid)">
         {header}
         {gate}
+        {signInBanner}
         <div className="grid gap-(--af-gap-grid) lg:grid-cols-12">
           <nav aria-label={`${def.title} sections`} className="lg:col-span-3">
             <ul className="flex flex-col gap-0.5">
@@ -572,6 +591,7 @@ export function PageView({ def, search, update, inspector, viewId, onTitle }: Pa
     <div className="flex flex-col gap-(--af-gap-grid)">
       {header}
       {gate}
+      {signInBanner}
       {!blocked && filterParams.length + (def.filters?.search ? 1 : 0) + (advanced ? 1 : 0) > 0 && (
         <FilterRegion
           declared={def.params ?? {}}

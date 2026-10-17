@@ -25,6 +25,21 @@ const SPAN: Record<number, string> = {
   11: 'lg:col-span-11',
   12: 'lg:col-span-12',
 };
+/** The same spans in the inspector, by the drawer's own width (container query on the inspector page). */
+const INSPECTOR_SPAN: Record<number, string> = {
+  1: '@4xl:col-span-1',
+  2: '@4xl:col-span-2',
+  3: '@4xl:col-span-3',
+  4: '@4xl:col-span-4',
+  5: '@4xl:col-span-5',
+  6: '@4xl:col-span-6',
+  7: '@4xl:col-span-7',
+  8: '@4xl:col-span-8',
+  9: '@4xl:col-span-9',
+  10: '@4xl:col-span-10',
+  11: '@4xl:col-span-11',
+  12: '@4xl:col-span-12',
+};
 /** KPI strip columns by count (xl): up to six in one row; 7–8 as two rows of four; more as rows of six. */
 const stripColumns = (n: number) => (n <= 6 ? n : n <= 8 ? 4 : 6);
 const STRIP_COLS: Record<number, string> = {
@@ -35,6 +50,16 @@ const STRIP_COLS: Record<number, string> = {
   5: 'md:grid-cols-3 xl:grid-cols-5',
   6: 'md:grid-cols-3 xl:grid-cols-6',
 };
+/** The same strip in the inspector, by the drawer's width: two columns, the page's count once it is wide (@4xl). */
+const INSPECTOR_STRIP_COLS: Record<number, string> = {
+  1: '@4xl:grid-cols-1',
+  2: '@4xl:grid-cols-2',
+  3: '@4xl:grid-cols-3',
+  4: '@4xl:grid-cols-4',
+  5: '@4xl:grid-cols-5',
+  6: '@4xl:grid-cols-6',
+};
+const fillersFor = (count: number, columns: number) => (columns - (count % columns)) % columns;
 
 export type Block = WidgetBlock & { description?: string };
 
@@ -85,7 +110,7 @@ interface BlockProps {
 /** One widget: validated against its schema, hidden while `when` is false, given its resolved data. */
 export function WidgetBlockView({ block, index, runtime, data, variant, idPrefix, className }: BlockProps) {
   const parsed = useMemo(() => parseWidgetConfig(block as Block & Record<string, unknown>), [block]);
-  const visible = useWhen(block.when, runtime.scope);
+  const visible = useWhen(block.when, runtime.scope, { sticky: true });
   if (!parsed.ok)
     return (
       <div className={className}>
@@ -136,14 +161,16 @@ function KpiGroup({
     }
     return [...seen.values()];
   }, [items, data]);
-  const n = compact ? 2 : stripColumns(items.length);
-  // Empty cells keep the panel surface when the last row isn't full (the strip's hairlines are its background).
-  const fillers = (n - (items.length % n)) % n;
+  const wide = stripColumns(items.length);
+  // Empty cells keep the panel surface when the last row isn't full (the strip's hairlines are its background). The
+  // inspector has two layouts (two columns, `wide` from @4xl), each with its own fillers shown only in that layout.
+  const fillers = compact ? fillersFor(items.length, 2) : fillersFor(items.length, wide);
+  const wideFillers = compact ? fillersFor(items.length, wide) : 0;
   return (
     <div className="flex flex-col gap-1.5">
       <KpiStrip
         label="Key figures"
-        className={cn('grid-cols-2', compact ? 'md:grid-cols-2 xl:grid-cols-2' : STRIP_COLS[n])}
+        className={cn('grid-cols-2', compact ? INSPECTOR_STRIP_COLS[wide] : STRIP_COLS[wide])}
       >
         {items.map(({ block, index }) => (
           <WidgetBlockView
@@ -156,7 +183,14 @@ function KpiGroup({
           />
         ))}
         {Array.from({ length: fillers }, (_, i) => (
-          <div key={`filler-${i}`} className="hidden bg-panel xl:block" aria-hidden />
+          <div
+            key={`filler-${i}`}
+            className={compact ? 'bg-panel @4xl:hidden' : 'hidden bg-panel xl:block'}
+            aria-hidden
+          />
+        ))}
+        {Array.from({ length: wideFillers }, (_, i) => (
+          <div key={`filler-wide-${i}`} className="hidden bg-panel @4xl:block" aria-hidden />
         ))}
       </KpiStrip>
       {provenances.length > 0 && (
@@ -200,7 +234,10 @@ function group(blocks: readonly Block[]): Group[] {
   return out;
 }
 
-/** The 12-column widget grid (§6.6). In the inspector everything stacks in one column. */
+/**
+ * The 12-column widget grid (§6.6). In the inspector it follows the drawer's width instead of the window's: one column
+ * while the drawer is narrow, the page's own spans once it is wide (≥ 56rem, container query).
+ */
 export function WidgetGrid({
   blocks,
   runtime,
@@ -218,10 +255,19 @@ export function WidgetGrid({
 }) {
   const groups = useMemo(() => group(blocks), [blocks]);
   return (
-    <div className={cn('grid grid-cols-1 gap-(--af-gap-grid)', !inspector && 'lg:grid-cols-12', className)}>
+    <div
+      className={cn(
+        'grid grid-cols-1 gap-(--af-gap-grid)',
+        inspector ? '@4xl:grid-cols-12' : 'lg:grid-cols-12',
+        className,
+      )}
+    >
       {groups.map((g) =>
         g.kind === 'kpis' ? (
-          <div key={`kpis-${g.items[0]!.index}`} className={inspector ? undefined : 'lg:col-span-12'}>
+          <div
+            key={`kpis-${g.items[0]!.index}`}
+            className={inspector ? '@4xl:col-span-12' : 'lg:col-span-12'}
+          >
             <KpiGroup items={g.items} runtime={runtime} data={data} compact={Boolean(inspector)} />
           </div>
         ) : (
@@ -234,11 +280,10 @@ export function WidgetGrid({
             idPrefix={idPrefix}
             variant={inspector ? 'inspector' : 'tile'}
             // A grid wrapper stretches the panel to the row's height, so neighbouring panels end level.
-            className={
-              inspector
-                ? 'grid min-w-0'
-                : cn('grid min-w-0', SPAN[g.block.span ?? getWidget(g.block.widget)?.span ?? 12])
-            }
+            className={cn(
+              'grid min-w-0',
+              (inspector ? INSPECTOR_SPAN : SPAN)[g.block.span ?? getWidget(g.block.widget)?.span ?? 12],
+            )}
           />
         ),
       )}

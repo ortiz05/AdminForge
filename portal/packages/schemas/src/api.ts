@@ -58,8 +58,11 @@ export const ApiErrorBody = z.object({
     code: z.string(),
     message: z.string(),
     hint: z.string().optional(),
-    /** Present on 401: where to send the browser to sign in. */
-    login: z.string().optional(),
+    /** Present on 401: where to send the browser to sign in — only the app's own /auth/login. */
+    login: z
+      .string()
+      .regex(/^\/auth\/login(?:\?|$)/)
+      .optional(),
     /** Present when a claims challenge or step-up is required. */
     reauth: z.object({ url: z.string() }).optional(),
     /** Upstream identifier an administrator can look up (e.g. AADSTS50105, a Graph error code). */

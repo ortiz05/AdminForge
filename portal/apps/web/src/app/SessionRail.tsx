@@ -66,7 +66,8 @@ export function SessionRail({ me, onOpenPalette, armControl, userMenu, indicator
         >
           <MagnifyingGlassIcon size={15} aria-hidden className="shrink-0" />
           <span className="min-w-0 flex-1 truncate text-sm">Jump to a page or action…</span>
-          <Kbd keys={[modKey(), 'K']} className="armed:opacity-80" />
+          {/* No shortcut to show on a phone, and the hint would run into the indicators beside it. */}
+          <Kbd keys={[modKey(), 'K']} className="armed:opacity-80 max-sm:hidden" />
         </button>
       </div>
       <div className={s.right()}>

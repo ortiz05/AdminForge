@@ -256,6 +256,13 @@ export const scale = {
     'nav-w': '240px',
     'nav-w-collapsed': '56px',
     'inspector-w': '460px',
+    // The inspector drawer: inspector-wide-factor × inspector-w, but never over the navigation rail — the twin is for
+    // a collapsed rail. With less than ~24rem of list left beside it, the inspector covers the list (web Inspector).
+    'inspector-wide-factor': '3',
+    'inspector-wide-w':
+      'min(calc(var(--af-layout-inspector-wide-factor) * var(--af-layout-inspector-w)), calc(100vw - var(--af-layout-nav-w)))',
+    'inspector-wide-w-nav-collapsed':
+      'min(calc(var(--af-layout-inspector-wide-factor) * var(--af-layout-inspector-w)), calc(100vw - var(--af-layout-nav-w-collapsed)))',
     'dock-h': '36px',
     'content-max': '1680px',
   },

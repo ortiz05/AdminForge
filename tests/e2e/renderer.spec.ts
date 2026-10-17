@@ -213,7 +213,7 @@ test.describe('identity.users (list-detail)', () => {
     await dialog.getByLabel('Name').fill('Guests to review');
     await dialog.getByRole('switch', { name: 'Share with everyone' }).click();
     await dialog.getByRole('button', { name: 'Save view' }).click();
-    await expect(page.getByText('Saved view “Guests to review”')).toBeVisible();
+    await expect(page.getByText('Saved view “Guests to review”', { exact: true })).toBeVisible();
     const post = calls.find((c) => c.method === 'POST' && c.path === '/api/views');
     expect(post?.body).toMatchObject({
       page: 'identity.users',

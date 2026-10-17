@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate, useRouterState } from '@tanstack/react-router';
-import { ErrorState, SkeletonText } from '@adminforge/ui';
-import { ApiRequestError } from '../lib/api';
+import { Button, ErrorState, SkeletonText } from '@adminforge/ui';
+import { ApiRequestError, loginUrl } from '../lib/api';
+import { browser } from '../lib/browser';
 import { definitionQuery } from './api';
 import { PageView, type SearchPatch, type SearchUpdate } from './PageView';
 import { INSPECT_PREFIX, type InspectState } from './url-state';
@@ -13,13 +14,15 @@ export interface InspectorPageProps {
   onTitle: (title: string | undefined) => void;
   /** The page's own title (drawer eyebrow), e.g. "User". */
   onPageTitle: (title: string | undefined) => void;
+  /** The entity page on its own (drawer header "Open full page"); undefined until the page has loaded. */
+  onFullPageHref: (href: string | undefined) => void;
 }
 
 /**
  * An entity page inside the inspector drawer. Its params live under `i.<name>` in the URL (so the inspector is
  * deep-linkable next to the list's own params) and its tab under `itab`.
  */
-export default function InspectorPage({ target, onTitle, onPageTitle }: InspectorPageProps) {
+export default function InspectorPage({ target, onTitle, onPageTitle, onFullPageHref }: InspectorPageProps) {
   const q = useQuery(definitionQuery(target.page));
   const navigate = useNavigate();
   const itab = useRouterState({ select: (s) => (s.location.search as SearchPatch).itab });
@@ -66,6 +69,18 @@ export default function InspectorPage({ target, onTitle, onPageTitle }: Inspecto
         hint={e?.hint}
         code={e?.code}
         correlationId={e?.correlationId}
+        action={
+          // A sign-in problem isn't fixed by asking again: offer the sign-in (not taken automatically after a loop).
+          e?.status === 401 && e.login ? (
+            <Button size="sm" intent="primary" onClick={() => browser.assign(loginUrl(e.login!))}>
+              Sign in again
+            </Button>
+          ) : e?.status === 404 ? undefined : (
+            <Button size="sm" onClick={() => void q.refetch()}>
+              Try again
+            </Button>
+          )
+        }
       />
     );
   }
@@ -77,6 +92,7 @@ export default function InspectorPage({ target, onTitle, onPageTitle }: Inspecto
       update={update}
       inspector
       onTitle={onTitle}
+      onFullPageHref={onFullPageHref}
     />
   );
 }

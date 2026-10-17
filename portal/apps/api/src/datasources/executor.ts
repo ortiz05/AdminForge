@@ -54,6 +54,8 @@ export interface ErrorInfo {
   code: string;
   message: string;
   hint?: string;
+  /** `reauth`: where the browser signs in again (the app's own /auth/login, with any claims challenge). */
+  login?: string;
 }
 
 export interface DatasourceOutput {
@@ -174,7 +176,12 @@ export interface DatasourceDeps {
 
 const toErrorInfo = (err: unknown): ErrorInfo => {
   const e = outboundAppError(err);
-  return { code: e.code, message: e.message, ...(e.extras.hint ? { hint: e.extras.hint } : {}) };
+  return {
+    code: e.code,
+    message: e.message,
+    ...(e.extras.hint ? { hint: e.extras.hint } : {}),
+    ...(e.code === 'reauth' && typeof e.extras.login === 'string' ? { login: e.extras.login } : {}),
+  };
 };
 export { toErrorInfo };
 

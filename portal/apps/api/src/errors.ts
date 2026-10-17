@@ -99,6 +99,7 @@ export function toAppError(err: unknown): AppError {
     }
     const url = loginUrl('/', err.claims);
     return new AppError(401, 'reauth', 'Microsoft needs you to sign in again.', {
+      hint: 'Sign in again to continue. If this keeps coming back, give a portal administrator the reference.',
       login: url,
       reauth: { url },
     });

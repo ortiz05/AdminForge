@@ -1,6 +1,18 @@
-import { lazy, Suspense, useCallback, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useState } from 'react';
 import { useNavigate, useSearch } from '@tanstack/react-router';
-import { Drawer, EmptyState, IdChip, MagnifyingGlassIcon, SkeletonText, shorten } from '@adminforge/ui';
+import {
+  ArrowsOutSimpleIcon,
+  button,
+  cn,
+  Drawer,
+  EmptyState,
+  IdChip,
+  MagnifyingGlassIcon,
+  SkeletonText,
+  shorten,
+} from '@adminforge/ui';
+import { AppLink } from '../lib/links';
+import { useInspectorCoversList } from './inspector-cover';
 import { readInspect, withoutInspect } from '../renderer/inspect-url';
 
 // The renderer (widgets, expressions) stays out of the first load: it arrives when something is inspected.
@@ -34,12 +46,23 @@ export function Inspector() {
   const navigate = useNavigate();
   const [entityTitle, setEntityTitle] = useState<string | undefined>();
   const [pageTitle, setPageTitle] = useState<string | undefined>();
+  const [fullPageHref, setFullPageHref] = useState<string | undefined>();
   const page = readInspect(search);
   const value = typeof search.inspect === 'string' ? search.inspect : undefined;
   const target = !page && value ? parseInspect(value) : null;
   const open = Boolean(page || target);
+  // Too little list left beside it: cover the list (scrim closes, page inert) instead of sharing the screen.
+  const covers = useInspectorCoversList();
+  const covering = open && covers;
+  useEffect(() => {
+    const main = document.getElementById('main');
+    if (!covering || !main) return;
+    main.setAttribute('inert', '');
+    return () => main.removeAttribute('inert');
+  }, [covering]);
   const onTitle = useCallback((t: string | undefined) => setEntityTitle(t), []);
   const onPageTitle = useCallback((t: string | undefined) => setPageTitle(t), []);
+  const onFullPageHref = useCallback((h: string | undefined) => setFullPageHref(h), []);
 
   const close = () =>
     void navigate({
@@ -54,6 +77,22 @@ export function Inspector() {
       onOpenChange={(o) => !o && close()}
       modal={false}
       docked
+      size="wide"
+      cover={covering}
+      initialFocus="container"
+      actions={
+        page && fullPageHref ? (
+          // At the top so it's one click away however long the entity page is.
+          <AppLink
+            href={fullPageHref}
+            className={cn(button({ intent: 'secondary', size: 'sm' }), 'max-sm:size-7 max-sm:px-0')}
+          >
+            <ArrowsOutSimpleIcon size={14} aria-hidden />
+            {/* Icon-only on a phone (the header is narrow); the name stays for screen readers. */}
+            <span className="max-sm:sr-only">Open full page</span>
+          </AppLink>
+        ) : undefined
+      }
       eyebrow={page ? `Inspector${pageTitle ? ` · ${pageTitle}` : ''}` : 'Inspector'}
       title={
         page
@@ -71,6 +110,7 @@ export function Inspector() {
             target={page}
             onTitle={onTitle}
             onPageTitle={onPageTitle}
+            onFullPageHref={onFullPageHref}
           />
         </Suspense>
       )}

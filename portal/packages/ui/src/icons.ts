@@ -7,6 +7,7 @@ export {
   ArrowCounterClockwiseIcon,
   ArrowLeftIcon,
   ArrowSquareOutIcon,
+  ArrowsOutSimpleIcon,
   ArrowUUpLeftIcon,
   BookmarkSimpleIcon,
   BroadcastIcon,

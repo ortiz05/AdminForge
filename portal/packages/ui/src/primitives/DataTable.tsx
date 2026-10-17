@@ -119,6 +119,10 @@ export interface DataTableError {
   code?: string;
   correlationId?: string;
   onRetry?: () => void;
+  /** Replaces the "Try again" button (e.g. "Sign in again" for a `reauth` error). */
+  action?: ReactNode;
+  /** Shown as a neutral note (title + message, no error styling) — the page explains the problem once elsewhere. */
+  quiet?: boolean;
 }
 
 /** The parts of a table's state worth keeping in a URL or a saved view. */
@@ -1123,6 +1127,16 @@ export function DataTable<T extends RowData>({
               ))}
               <span className="sr-only">Loading {label}</span>
             </div>
+          ) : error?.quiet ? (
+            <div role="rowgroup">
+              <div role="row">
+                <div role="gridcell" aria-colspan={colCount}>
+                  <EmptyState compact title={error.title ?? `Couldn't load ${label.toLowerCase()}`}>
+                    {error.message}
+                  </EmptyState>
+                </div>
+              </div>
+            </div>
           ) : error ? (
             <div role="rowgroup">
               <div role="row">
@@ -1135,11 +1149,12 @@ export function DataTable<T extends RowData>({
                     code={error.code}
                     correlationId={error.correlationId}
                     action={
-                      error.onRetry && (
+                      error.action ??
+                      (error.onRetry && (
                         <Button size="sm" onClick={error.onRetry}>
                           Try again
                         </Button>
-                      )
+                      ))
                     }
                   />
                 </div>

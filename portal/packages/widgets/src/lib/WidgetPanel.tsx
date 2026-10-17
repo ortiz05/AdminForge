@@ -12,6 +12,7 @@ import {
 } from '@adminforge/ui';
 import type { WidgetData, WidgetRuntime } from '../types';
 import { ActionButton } from './actions';
+import { signInErrorView, signInNote } from './sign-in-error';
 import type { EmptySpec } from './schema-common';
 
 export interface WidgetPanelProps {
@@ -65,6 +66,7 @@ export function WidgetPanel({
 }: WidgetPanelProps) {
   const title = config.title;
   const label = title ?? name;
+  const signIn = data.status === 'error' ? signInErrorView(data.error, runtime) : null;
   let body: ReactNode;
   if (data.status === 'loading' || data.status === 'idle') {
     body = (
@@ -81,6 +83,13 @@ export function WidgetPanel({
         {data.error.hint ? ` ${data.error.hint}` : ''}
       </EmptyState>
     );
+  } else if (data.status === 'error' && signIn?.quiet) {
+    const note = signInNote(label);
+    body = (
+      <EmptyState compact title={note.title}>
+        {note.body}
+      </EmptyState>
+    );
   } else if (data.status === 'error') {
     const err = data.error ?? { message: 'The data source returned an error.' };
     body = (
@@ -92,11 +101,13 @@ export function WidgetPanel({
         code={err.code}
         correlationId={err.correlationId}
         action={
-          data.retry && (
-            <Button size="sm" onClick={data.retry}>
-              Try again
-            </Button>
-          )
+          signIn
+            ? signIn.action
+            : data.retry && (
+                <Button size="sm" onClick={data.retry}>
+                  Try again
+                </Button>
+              )
         }
       />
     );

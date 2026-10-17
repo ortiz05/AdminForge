@@ -12,6 +12,7 @@ import {
 } from '@adminforge/ui';
 import { capabilitiesQuery } from '../playbooks/contracts';
 import { playbookSearch } from '../playbooks/url';
+import { ApiRequestError } from '../lib/api';
 
 /** The in-portal activation playbook (content: identity.pim-activate). */
 export const PIM_ACTIVATE_PLAYBOOK = 'identity.pim-activate';
@@ -29,9 +30,12 @@ export function PimIndicator({ className }: { className?: string }) {
   const eligible = caps.data?.eligible ?? null;
 
   if (caps.isPending || active === null || eligible === null) {
+    const signIn = caps.error instanceof ApiRequestError && caps.error.status === 401;
     const why = caps.isPending
       ? 'Checking your privileged roles…'
-      : 'Privileged roles can’t be read: PIM needs Microsoft Entra ID P2 and permission to read role schedules.';
+      : signIn
+        ? 'Privileged roles can’t be read until you sign in again.'
+        : 'Privileged roles can’t be read: PIM needs Microsoft Entra ID P2 and permission to read role schedules.';
     return (
       <Tooltip content={why} side="bottom">
         <button type="button" className={className} aria-label={`Privileged roles: ${why}`} aria-disabled>

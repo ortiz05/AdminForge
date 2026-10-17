@@ -18,7 +18,16 @@ export const ProvenanceInfo = z.object({
 export type ProvenanceInfo = z.infer<typeof ProvenanceInfo>;
 
 /** A partial failure (one datasource, one $batch sub-request, one capability section). */
-export const ErrorInfo = z.object({ code: z.string(), message: z.string(), hint: z.string().optional() });
+export const ErrorInfo = z.object({
+  code: z.string(),
+  message: z.string(),
+  hint: z.string().optional(),
+  /** `reauth`: where the browser signs in again — only the app's own /auth/login. */
+  login: z
+    .string()
+    .regex(/^\/auth\/login(?:\?|$)/)
+    .optional(),
+});
 export type ErrorInfo = z.infer<typeof ErrorInfo>;
 
 // ── Definitions ──────────────────────────────────────────────────────────────

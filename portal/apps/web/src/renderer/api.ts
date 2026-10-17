@@ -106,6 +106,7 @@ function readOutcome(raw: unknown): DatasourceOutcome {
         message: typeof raw.error.message === 'string' ? raw.error.message : 'The data source failed.',
         hint: typeof raw.error.hint === 'string' ? raw.error.hint : undefined,
         correlationId: typeof raw.error.correlationId === 'string' ? raw.error.correlationId : undefined,
+        ...(typeof raw.error.login === 'string' ? { login: raw.error.login } : {}),
       },
     };
   return {
@@ -193,7 +194,13 @@ export async function loadNextPage(
 /** ApiRequestError → the widgets' error shape. */
 export function toWidgetError(e: unknown): WidgetError {
   if (e instanceof ApiRequestError)
-    return { code: e.code, message: e.message, hint: e.hint, correlationId: e.correlationId };
+    return {
+      code: e.code,
+      message: e.message,
+      hint: e.hint,
+      correlationId: e.correlationId,
+      ...(e.login ? { login: e.login } : {}),
+    };
   return {
     message: 'AdminForge couldn’t load this data. Try again; if it keeps happening, reload the page.',
   };
@@ -232,7 +239,9 @@ function readCapabilities(raw: unknown): Capabilities {
 
 export const capabilitiesQuery = queryOptions({
   queryKey: ['capabilities'] as const,
-  queryFn: ({ signal }) => api('/api/me/capabilities', { schema: { parse: readCapabilities }, signal }),
+  // Auxiliary lookup (feature gates): never starts a sign-in by itself (lib/sign-in-guard.ts).
+  queryFn: ({ signal }) =>
+    api('/api/me/capabilities', { schema: { parse: readCapabilities }, signal, background: true }),
   staleTime: 5 * 60_000,
   retry: false,
 });

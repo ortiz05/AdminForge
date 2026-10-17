@@ -1,6 +1,7 @@
 import { parseApiError } from './contracts';
 import { browser } from './browser';
 import { isUserActive } from './activity';
+import { maySignInAutomatically, noteAutomaticSignIn } from './sign-in-guard';
 
 /** Anything with zod's `parse` — the contracts in @adminforge/schemas, or a small hand-written guard. */
 export interface Parser<T> {
@@ -35,9 +36,24 @@ export function rememberCsrf(token: string | undefined): void {
   csrfToken = token;
 }
 
-/** Keeps the user's place: the sign-in round trip comes back to the page they were on. */
+const SIGN_IN_PATH = '/auth/login';
+
+/**
+ * Keeps the user's place: the sign-in round trip comes back to the page they were on. Only this site's own
+ * /auth/login is ever followed (with its `claims`, nothing else), whatever an error body says — a `login` that points
+ * anywhere else (another origin, `//host`, another path) falls back to a plain sign-in.
+ */
 export function loginUrl(login: string, here: Location = window.location): string {
-  const url = new URL(login, here.origin);
+  let given: URL | undefined;
+  try {
+    given = new URL(login, here.origin);
+  } catch {
+    given = undefined;
+  }
+  const own = given && given.origin === here.origin && given.pathname === SIGN_IN_PATH;
+  const url = new URL(SIGN_IN_PATH, here.origin);
+  const claims = own ? given!.searchParams.get('claims') : null;
+  if (claims) url.searchParams.set('claims', claims);
   url.searchParams.set('returnTo', `${here.pathname}${here.search}`);
   return `${url.pathname}${url.search}`;
 }
@@ -119,8 +135,12 @@ export async function api<T = unknown>(path: string, options: RequestOptions<T> 
       return api(path, { ...options, background, csrfRetried: true });
     // Signed out: off to sign-in, but only from a request the person made. An unattended tab never starts a sign-in
     // (single sign-on would quietly open a new session and defeat the idle timeout); the shell offers it instead.
-    const signingIn = res.status === 401 && Boolean(err.login) && !background;
-    if (signingIn) browser.assign(loginUrl(err.login!));
+    // Nor does a 401 right after a sign-in round trip: that would loop (lib/sign-in-guard.ts).
+    const signingIn = res.status === 401 && Boolean(err.login) && !background && maySignInAutomatically();
+    if (signingIn) {
+      noteAutomaticSignIn();
+      browser.assign(loginUrl(err.login!));
+    }
     throw new ApiRequestError(
       res.status,
       err.code,

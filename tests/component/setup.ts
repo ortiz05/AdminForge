@@ -30,6 +30,9 @@ if (typeof window !== 'undefined') {
   proto.setPointerCapture ??= function setPointerCapture() {};
 }
 
+// Each test is a fresh tab: per-tab state (the automatic sign-in guard, lib/sign-in-guard.ts) starts empty.
+if (typeof window !== 'undefined') beforeEach(() => window.sessionStorage.clear());
+
 // Component suites share the machine with the api/unit projects; the 1 s Testing Library default for findBy/waitFor
 // is too tight under full parallel load. Real regressions still fail (they never appear at all).
 import { configure } from '@testing-library/react';

@@ -156,6 +156,8 @@ export const defenderFeatureQuery = queryOptions({
   queryFn: ({ signal }) =>
     api('/api/me/capabilities', {
       signal,
+      // Auxiliary lookup (feature gates, PIM badge, preflight): never starts a sign-in by itself (lib/sign-in-guard.ts).
+      background: true,
       schema: {
         parse(input): FeatureState | null {
           const f = isRecord(input) && isRecord(input.features) ? input.features.defender : undefined;

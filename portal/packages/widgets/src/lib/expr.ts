@@ -131,11 +131,22 @@ export function useRowTemplates(
   return state && state.rows === rows ? state.values : undefined;
 }
 
-/** `when` semantics: absent → shown; only `true` (or a truthy evaluated value) shows. */
-export function useWhen(when: unknown, scope: Scope): boolean | undefined {
+/**
+ * `when` semantics: absent → shown; only `true` (or a truthy evaluated value) shows. `undefined` until the first
+ * answer — and, by default, again while a new scope re-evaluates, so an action is never offered on the strength of an
+ * older answer (a bulk action gated on the current selection, say).
+ *
+ * `{ sticky: true }` (page blocks only): while a new scope re-evaluates (opening the inspector, a refetch), the last
+ * decision for the same condition stands — a block that stays visible must not unmount and mount again, which would
+ * drop focus, scroll position and table state (and focus return when the inspector closes).
+ */
+export function useWhen(when: unknown, scope: Scope, opts: { sticky?: boolean } = {}): boolean | undefined {
   const r = useTemplate<unknown>(when, scope, when !== undefined);
-  if (when === undefined) return true;
-  if (r.error) return false;
-  if (r.pending) return undefined;
-  return Boolean(r.value);
+  const settled = when === undefined ? true : r.error ? false : r.pending ? undefined : Boolean(r.value);
+  const [last, setLast] = useState<{ when: unknown; shown: boolean } | undefined>(undefined);
+  // Remember the latest settled decision (React's "adjust state while rendering": runs only when it changes).
+  if (settled !== undefined && (!last || last.when !== when || last.shown !== settled))
+    setLast({ when, shown: settled });
+  if (settled !== undefined) return settled;
+  return opts.sticky && last && last.when === when ? last.shown : undefined;
 }

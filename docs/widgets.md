@@ -15,7 +15,9 @@ Every block in a page/dashboard/report `layout:` is a widget. Common keys (valid
 
 Formats used by several widgets: `number`, `percent`, `bytes`, `duration`, `date`, `datetime`, `relativeTime`, `text`.
 Status values everywhere: `ok`, `warn`, `crit`, `info`, `neutral` (always rendered with icon + label).
-A `map` turns raw values into status + label: `map: { "true": [ok, Enabled], "false": [crit, Disabled] }`.
+A `map` turns raw values into status + label: `map: { "true": [ok, Enabled], "false": [crit, Disabled] }`. A status
+says whether something is fine; a plain category (a type, a source, a join type) is not a status — in a table it is an
+`enum` column with labels only (`map: { AzureAd: Entra joined }`).
 
 ## kpi
 
@@ -29,10 +31,11 @@ A `map` turns raw values into status + label: `map: { "true": [ok, Enabled], "fa
   href: /p/identity.users?userType=Member  # optional drill-down
 ```
 
-Labels and hints are cut off rather than wrapped. At `span: 2` (six KPIs in a row on a laptop) a label fits about 22
-characters: "Patching overdue", not "Patching overdue (30 days)" — put the detail in the page's text or the linked
-list. The line under the number shows the status label first and then the `hint` (or the delta's period), which gets
-only what's left: keep a hint to two or three words, or leave it out on a KPI that shows a status.
+Labels wrap to two lines and are cut off after that; hints are cut off rather than wrapped. At `span: 2` (six KPIs in
+a row on a laptop) a line fits about 22 characters: "Patching overdue (30 days)" still reads in full, anything longer
+belongs in the page's text or the linked list. The line under the number shows the status label first and then the
+`hint` (or the delta's period), which gets only what's left: keep a hint to two or three words, or leave it out on a
+KPI that shows a status.
 
 ## table
 
@@ -71,9 +74,10 @@ Column `kind` (default `text`):
 
 | Kind           | Renders                                                                                                                                                                                               |
 | -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `text`         | Plain text                                                                                                                                                                                            |
+| `text`         | Plain text (`wrap: true`: up to two lines, e.g. a message)                                                                                                                                            |
+| `enum`         | A category as text: the `map` label (`value: label`, `"null": label` when missing) or the value; facet filter by default (types, sources, join types)                                                 |
 | `identity`     | Primary text plus a second line from `secondary` (a field path)                                                                                                                                       |
-| `status`       | Icon + label from `map` (`value: [tone, label]` or `{ tone, label }`)                                                                                                                                 |
+| `status`       | Icon + label from `map` (`value: [tone, label]` or `{ tone, label }`) for a value that is fine or not: at least one maps to `ok`, `warn` or `crit`                                                    |
 | `relativeTime` | "3 days ago", exact time on hover                                                                                                                                                                     |
 | `datetime`     | Short timestamp                                                                                                                                                                                       |
 | `date`         | Date only                                                                                                                                                                                             |
@@ -88,7 +92,13 @@ Column `kind` (default `text`):
 
 Other column keys: `sortable`, `hidden` (off by default; still in the column chooser and exports), `width` (px),
 `align: start|center|end`. Column `filter`: `text`, `facet`, `range`, `date`, or `{ type, param }` to bind it to a page
-param (server-side filtering).
+param (server-side filtering). `wrap: true` (text columns): up to two lines before the ellipsis — one in compact
+density — for messages and descriptions.
+
+Text that doesn't fit a cell or header ends in an ellipsis and shows in full on hover. Time cells (`relativeTime`,
+`date`, `datetime`) are never cut off: a fixed `width` narrower than the kind needs (112 px for a relative time or a
+date, 150 for a datetime; status 110, guid 150, identity 160) is raised to it. Computed KQL flags with no good or bad
+(`'true'`/`'false'` text) are `enum` columns: `map: { "true": "On", "false": "Off" }`.
 
 A column's `field` is a path into the row and takes `[n]` for a list item (`owners[0].displayName`). Exports (and
 scheduled report files) read every cell with the table's own path reader and `map` lookup, so the file holds what the

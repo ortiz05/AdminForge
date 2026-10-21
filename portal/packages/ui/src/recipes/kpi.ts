@@ -3,7 +3,8 @@ import { tv } from './tv';
 export const kpi = tv({
   slots: {
     root: 'flex min-w-0 flex-col gap-2 p-(--af-pad-panel)',
-    label: 'truncate text-sm font-medium text-fg-2',
+    // Two lines before the ellipsis: a KPI label is the only words the number has (design review D-15).
+    label: 'line-clamp-2 text-sm font-medium text-fg-2',
     valueRow: 'flex min-h-8 items-end justify-between gap-3',
     value: 'af-kpi-value flex min-w-0 items-baseline gap-1.5 text-fg',
     unit: 'font-body text-sm font-medium text-fg-3',

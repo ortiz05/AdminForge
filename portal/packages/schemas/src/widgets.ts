@@ -26,6 +26,7 @@ export const COLUMN_KINDS = [
   'text',
   'identity',
   'status',
+  'enum',
   'relativeTime',
   'datetime',
   'date',
@@ -47,7 +48,7 @@ const StatusEntry = z.union([
   z.tuple([StatusTone, z.string()]),
   z.strictObject({ tone: StatusTone, label: z.string() }),
 ]);
-export type ColumnMapEntry = readonly [StatusTone, string] | { tone: StatusTone; label: string };
+export type ColumnMapEntry = string | readonly [StatusTone, string] | { tone: StatusTone; label: string };
 
 /** Raw value → map key: booleans and numbers by their text, null/undefined as "null". */
 export const columnMapKey = (v: unknown): string =>
@@ -71,7 +72,7 @@ export function columnMapEntry(
 
 /** The words of a map entry. */
 export const columnMapLabel = (e: ColumnMapEntry): string =>
-  Array.isArray(e) ? e[1] : (e as { label: string }).label;
+  typeof e === 'string' ? e : Array.isArray(e) ? e[1] : (e as { label: string }).label;
 
 /**
  * A `tags` cell's chips: a list as-is, an object (Azure tags `{ env: 'prod' }`) as `env: prod`, a single value as one
@@ -86,32 +87,55 @@ export function tagList(v: unknown): string[] {
   return [String(v)];
 }
 
-export const TableColumn = z.looseObject({
-  /** Dot path into the row, e.g. `signInActivity.lastSignInDateTime`. */
-  field: z.string().min(1),
-  label: z.string().min(1),
-  kind: ColumnKind.optional(),
-  /** Second line for `identity` columns (e.g. userPrincipalName). */
-  secondary: z.string().optional(),
-  /**
-   * `status` columns: raw value → `[tone, label]` or `{ tone, label }`. Keys are the value as text (`"true"`, `"30"`,
-   * `"null"` for a missing value); text values also match case-insensitively.
-   */
-  map: z.record(z.string(), StatusEntry).optional(),
-  sortable: z.boolean().optional(),
-  /** Column filter; bind to a page param with `{ type, param }` to filter server-side, otherwise rows are filtered client-side. */
-  filter: z
-    .union([ColumnFilterType, z.strictObject({ type: ColumnFilterType, param: Identifier.optional() })])
-    .optional(),
-  /** Hidden by default (available in the column chooser and exports). */
-  hidden: z.boolean().optional(),
-  width: z.number().int().positive().optional(),
-  align: z.enum(['start', 'center', 'end']).optional(),
-  /** Cell link: page key + params (templated with `row`). */
-  link: z
-    .strictObject({ page: DefinitionId, params: z.record(z.string(), z.unknown()).optional() })
-    .optional(),
-});
+/** `status` and `enum` map entries have different shapes; say which one belongs where. */
+function checkColumnMap(col: { kind?: string; map?: Record<string, unknown> }, ctx: z.RefinementCtx) {
+  for (const [key, entry] of Object.entries(col.map ?? {})) {
+    if (col.kind === 'status' && typeof entry === 'string')
+      ctx.addIssue({
+        code: 'custom',
+        path: ['map', key],
+        message: `A status column maps each value to [tone, label]. "${key}" has only a label: use kind: enum for plain labels.`,
+      });
+    if (col.kind === 'enum' && typeof entry !== 'string')
+      ctx.addIssue({
+        code: 'custom',
+        path: ['map', key],
+        message: `An enum column maps each value to its label (${key}: <label>). Tones belong to kind: status, for values that say whether something is fine.`,
+      });
+  }
+}
+
+export const TableColumn = z
+  .looseObject({
+    /** Dot path into the row, e.g. `signInActivity.lastSignInDateTime`. */
+    field: z.string().min(1),
+    label: z.string().min(1),
+    kind: ColumnKind.optional(),
+    /** Second line for `identity` columns (e.g. userPrincipalName). */
+    secondary: z.string().optional(),
+    /**
+     * Raw value → what the cell shows. `status` columns: `[tone, label]` or `{ tone, label }`; `enum` columns: the
+     * label (`AzureAd: Entra joined`). Keys are the value as text (`"true"`, `"30"`, `"null"` for a missing value);
+     * text values also match case-insensitively.
+     */
+    map: z.record(z.string(), z.union([z.string(), StatusEntry])).optional(),
+    sortable: z.boolean().optional(),
+    /** Column filter; bind to a page param with `{ type, param }` to filter server-side, otherwise rows are filtered client-side. */
+    filter: z
+      .union([ColumnFilterType, z.strictObject({ type: ColumnFilterType, param: Identifier.optional() })])
+      .optional(),
+    /** Hidden by default (available in the column chooser and exports). */
+    hidden: z.boolean().optional(),
+    width: z.number().int().positive().optional(),
+    align: z.enum(['start', 'center', 'end']).optional(),
+    /** Cell link: page key + params (templated with `row`). */
+    link: z
+      .strictObject({ page: DefinitionId, params: z.record(z.string(), z.unknown()).optional() })
+      .optional(),
+    /** Text-like columns: up to two lines, then an ellipsis (messages, descriptions); the full text on hover. */
+    wrap: z.boolean().optional(),
+  })
+  .superRefine(checkColumnMap);
 export type TableColumn = z.infer<typeof TableColumn>;
 
 /** Launch a playbook for one row (scope: `row`) or open an external deep link. */

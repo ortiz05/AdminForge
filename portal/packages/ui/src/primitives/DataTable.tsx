@@ -8,6 +8,7 @@ import {
   type DragEvent,
   type KeyboardEvent,
   type MouseEvent,
+  type PointerEvent,
   type ReactNode,
 } from 'react';
 import {
@@ -63,7 +64,7 @@ import { StatusPill } from './StatusPill';
 import { Checkbox } from './Toggles';
 import { dataTable } from '../recipes/data-table';
 
-export type ColumnKind = 'text' | 'identity' | 'status' | 'relativeTime' | 'number' | 'id' | 'tags';
+export type ColumnKind = 'text' | 'identity' | 'status' | 'enum' | 'relativeTime' | 'number' | 'id' | 'tags';
 export interface IdentityValue {
   primary: string;
   secondary?: string;
@@ -91,7 +92,10 @@ export interface DataColumn<T> {
   /**
    * How the value is rendered, sorted and filtered. `value` must return:
    * identity → IdentityValue · status → StatusValue · relativeTime → ISO string | null ·
-   * number → number | null · tags → string[] · text / id → string.
+   * number → number | null · tags → string[] · text / id / enum → string.
+   *
+   * `status` is for values that say whether something is fine (a tone and its words); a plain category (a type, a
+   * source, a join type) is `enum`: its label as text, filtered by facet.
    */
   kind?: ColumnKind;
   value: (row: T) => unknown;
@@ -99,6 +103,10 @@ export interface DataColumn<T> {
   cell?: (row: T) => ReactNode;
   /** CSS grid track, e.g. "minmax(220px, 2fr)" or "120px". Defaults by kind. */
   width?: string;
+  /** Narrowest a fixed `width` ("90px") may make the column, in px (default by kind: time cells never truncate). */
+  minWidth?: number;
+  /** Text cells: `2` wraps to two lines before the ellipsis (messages, descriptions; one line in compact density). */
+  lines?: 1 | 2;
   align?: 'start' | 'end';
   sortable?: boolean;
   /** Defaults by kind (text-like → text, status/tags → facet, time/number → none). */
@@ -188,16 +196,55 @@ const DEFAULT_WIDTH: Record<ColumnKind, string> = {
   identity: 'minmax(220px, 2.2fr)',
   text: 'minmax(140px, 1fr)',
   status: 'minmax(130px, 0.9fr)',
-  relativeTime: 'minmax(110px, 0.7fr)',
+  enum: 'minmax(120px, 0.8fr)',
+  relativeTime: 'minmax(112px, 0.7fr)',
   number: 'minmax(96px, 0.6fr)',
   id: 'minmax(150px, 0.8fr)',
   tags: 'minmax(170px, 1.2fr)',
 };
 
+/**
+ * Floors for a fixed `width`: what a cell of the kind needs to stay readable. A relative time ("59 min ago") always
+ * fits — time cells are never cut off; a status pill keeps its glyph and a short word; an id chip its head and tail.
+ */
+const MIN_WIDTH: Record<ColumnKind, number> = {
+  identity: 160,
+  text: 80,
+  status: 110,
+  enum: 88,
+  relativeTime: 112,
+  number: 72,
+  id: 150,
+  tags: 120,
+};
+
+/** The column's grid track: its own width (a fixed one no narrower than the kind's floor) or the kind's default. */
+export function columnTrack(c: Pick<DataColumn<unknown>, 'kind' | 'width' | 'minWidth'>): string {
+  const kind = c.kind ?? 'text';
+  if (!c.width) return DEFAULT_WIDTH[kind];
+  const px = /^(\d+(?:\.\d+)?)px$/.exec(c.width);
+  return px ? `${Math.max(Number(px[1]), c.minWidth ?? MIN_WIDTH[kind])}px` : c.width;
+}
+
+/**
+ * Truncated header and cell text (`data-af-clip`) gets its full text as a tooltip when the pointer reaches it —
+ * measured then, so text that fits carries no redundant title.
+ */
+function titleIfClipped(e: PointerEvent<HTMLElement>) {
+  const target = e.target as HTMLElement;
+  const el =
+    target.closest<HTMLElement>('[data-af-clip]') ??
+    target.closest('[role="columnheader"], [role="gridcell"]')?.querySelector<HTMLElement>('[data-af-clip]');
+  if (!el) return;
+  if (el.scrollWidth > el.clientWidth || el.scrollHeight > el.clientHeight) el.title = el.textContent ?? '';
+  else el.removeAttribute('title');
+}
+
 const DEFAULT_FILTER: Record<ColumnKind, ColumnFilterKind> = {
   identity: 'text',
   text: 'text',
   status: 'facet',
+  enum: 'facet',
   relativeTime: 'none',
   number: 'none',
   id: 'text',
@@ -342,11 +389,12 @@ function Cell<T extends RowData>({ col, row, now }: { col: DataColumn<T>; row: T
       );
     }
     case 'relativeTime':
+      // Never cut off: the column's floor (MIN_WIDTH) fits the longest relative time.
       return (
         <time
           dateTime={asString(v)}
           title={formatTimestamp(v as string)}
-          className="truncate text-fg-2 tabular-nums"
+          className="whitespace-nowrap text-fg-2 tabular-nums"
         >
           {formatRelative(v as string, now)}
         </time>
@@ -375,7 +423,18 @@ function Cell<T extends RowData>({ col, row, now }: { col: DataColumn<T>; row: T
       );
     }
     default:
-      return <span className="truncate">{asString(v)}</span>;
+      return col.lines === 2 ? (
+        <span
+          data-af-clip=""
+          className="line-clamp-2 text-xs leading-snug break-words whitespace-normal compact:line-clamp-1"
+        >
+          {asString(v)}
+        </span>
+      ) : (
+        <span data-af-clip="" className="truncate">
+          {asString(v)}
+        </span>
+      );
   }
 }
 
@@ -689,10 +748,7 @@ export function DataTable<T extends RowData>({
 
   const rows = t.getRowModel().rows;
   const visibleColumns = orderedColumns.filter((c) => columnVisibility[c.id] !== false);
-  const template = [
-    selectable ? '44px' : null,
-    ...visibleColumns.map((c) => c.width ?? DEFAULT_WIDTH[c.kind ?? 'text']),
-  ]
+  const template = [selectable ? '44px' : null, ...visibleColumns.map((c) => columnTrack(c))]
     .filter(Boolean)
     .join(' ');
 
@@ -999,6 +1055,7 @@ export function DataTable<T extends RowData>({
         aria-busy={loading || undefined}
         className={s.scroller()}
         style={{ maxHeight }}
+        onPointerOver={titleIfClipped}
       >
         <div className={s.inner()}>
           <div role="rowgroup" className={s.head()}>
@@ -1031,8 +1088,12 @@ export function DataTable<T extends RowData>({
                   e.preventDefault();
                   moveColumn(c.id, e.key === 'ArrowLeft' ? -1 : 1);
                 };
-                const headerText = (
-                  <span className={cn('truncate', c.headerHidden && 'sr-only')}>{c.header}</span>
+                const headerText = c.headerHidden ? (
+                  <span className="sr-only">{c.header}</span>
+                ) : (
+                  <span data-af-clip="" className="truncate">
+                    {c.header}
+                  </span>
                 );
                 return (
                   <div

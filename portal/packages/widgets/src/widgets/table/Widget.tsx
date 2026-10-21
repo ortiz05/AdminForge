@@ -1,5 +1,12 @@
 import { useMemo, useState, type ReactNode } from 'react';
-import { tagList, type BulkAction, type RowAction } from '@adminforge/schemas';
+import {
+  columnMapEntry,
+  columnMapLabel,
+  tagList,
+  type BulkAction,
+  type ColumnMapEntry,
+  type RowAction,
+} from '@adminforge/schemas';
 import {
   ArrowSquareOutIcon,
   Button,
@@ -39,6 +46,13 @@ export { tagList };
 /** Display text of a raw value. */
 const str = (v: unknown): string => (v == null ? '' : typeof v === 'object' ? JSON.stringify(v) : String(v));
 
+/** An `enum` cell's words: the `map` label (the export's own lookup), else the value as text. */
+function enumLabel(v: unknown, map: Readonly<Record<string, ColumnMapEntry>> | undefined): string | null {
+  const hit = map ? columnMapEntry(map, v) : undefined;
+  if (hit !== undefined) return columnMapLabel(hit);
+  return v == null || v === '' ? null : str(v);
+}
+
 /** "2026-10-15 14:03" (UTC) for datetime cells; the title carries the full timestamp. */
 const shortTimestamp = (v: unknown) => {
   const full = formatTimestamp(v as string);
@@ -51,7 +65,7 @@ function TimeCell({ value, kind }: { value: unknown; kind: 'date' | 'datetime' }
     <time
       dateTime={str(value)}
       title={formatTimestamp(value as string)}
-      className="truncate text-fg-2 tabular-nums"
+      className="whitespace-nowrap text-fg-2 tabular-nums"
     >
       {kind === 'date' ? formatDate(value) : shortTimestamp(value)}
     </time>
@@ -106,7 +120,11 @@ function LinkCell({ col, row, runtime }: { col: TableColumnConfig; row: Row; run
         <span className="sr-only"> (opens in a new tab)</span>
       </a>
     );
-  return <span className="truncate">{text}</span>;
+  return (
+    <span data-af-clip="" className="truncate">
+      {text}
+    </span>
+  );
 }
 
 /** Content column → DataTable column. Extra kinds render through custom cells but sort/filter on raw values. */
@@ -122,6 +140,7 @@ export function toDataColumn(col: TableColumnConfig, id: string, runtime: Widget
     hidden: col.hidden,
     width,
     align: col.align === 'end' ? ('end' as const) : undefined,
+    ...(col.wrap ? { lines: 2 as const } : {}),
   };
   const filter = filterOf(col);
   const withFilter = (
@@ -148,6 +167,8 @@ export function toDataColumn(col: TableColumnConfig, id: string, runtime: Widget
       });
     case 'status':
       return withFilter('status', { value: (row) => mapStatus(get(row), col.map as StatusMap | undefined) });
+    case 'enum':
+      return withFilter('enum', { value: (row) => enumLabel(get(row), col.map) });
     case 'relativeTime':
       return withFilter('relativeTime', { value: (row) => (get(row) as string | null | undefined) ?? null });
     case 'date':
@@ -156,7 +177,9 @@ export function toDataColumn(col: TableColumnConfig, id: string, runtime: Widget
       return withFilter('relativeTime', {
         value: (row) => (get(row) as string | null | undefined) ?? null,
         cell: (row) => <TimeCell value={get(row)} kind={k} />,
+        // Never cut off: "2026-10-15" / "2026-10-15 14:03" fit these floors.
         width: width ?? (k === 'date' ? 'minmax(112px, 0.7fr)' : 'minmax(150px, 0.8fr)'),
+        minWidth: k === 'date' ? 112 : 150,
       });
     }
     case 'number':
@@ -221,7 +244,9 @@ export function toDataColumn(col: TableColumnConfig, id: string, runtime: Widget
           return v == null || v === '' ? (
             <span className={TABLE_MUTED_TEXT}>—</span>
           ) : (
-            <code className="truncate font-mono text-xs text-fg-2">{str(v)}</code>
+            <code data-af-clip="" className="truncate font-mono text-xs text-fg-2">
+              {str(v)}
+            </code>
           );
         },
       });

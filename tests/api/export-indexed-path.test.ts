@@ -4,7 +4,7 @@ import { fixturesApp, setupContent, type ContentEnv } from './content-helpers';
 import { mockLogin } from './helpers';
 
 // What a table shows is what its export holds (design review D-06): the export reads cells with the table's own path
-// reader (`owners[0].displayName`, `value[0].items`), map lookup (case-insensitive, `"null"` keys) and tag list.
+// reader (`owners[0].displayName`, `value[0].items`) and map lookup (case-insensitive, `"null"` keys, enum labels).
 // The export used to split paths on dots only, so an indexed column rendered but exported empty.
 const REPORT = `
 kind: report
@@ -46,8 +46,9 @@ layout:
       - { field: "owners[0].displayName", label: First owner }
       - { field: "licences.skus[0].name", label: Licence }
       - { field: state, label: State, kind: status, map: { enabled: [ok, Enabled], disabled: [crit, Disabled] } }
+      - { field: kind, label: Type, kind: enum, map: { Unified: Microsoft 365, Security: Security } }
       - { field: tags, label: Tags, kind: tags }
-      - { field: sync, label: Source, kind: status, map: { "true": [info, Synced from AD], "null": [ok, Cloud] } }
+      - { field: sync, label: Source, kind: enum, map: { "true": Synced from AD, "null": Cloud } }
   - widget: table
     data: "nested.value[0].items"
     columns:
@@ -106,7 +107,7 @@ beforeAll(() => {
 afterAll(() => env.cleanup());
 
 describe('exports hold what the table shows', () => {
-  it('indexed paths, status labels, tags: every exported cell equals the rendered one', async () => {
+  it('indexed paths, status and enum labels, tags: every exported cell equals the rendered one', async () => {
     const parsed = parseDefinition(REPORT, 'indexed-paths.report.yaml');
     if (!parsed.ok) throw new Error(JSON.stringify(parsed.errors));
     const columns = (parsed.def as unknown as { layout: Array<{ columns: TableColumn[] }> }).layout[0]!
@@ -122,10 +123,10 @@ describe('exports hold what the table shows', () => {
     });
     expect(res.statusCode).toBe(200);
     const [header, ...lines] = csvLines(res.body);
-    expect(header).toBe('Name,First owner,Licence,State,Tags,Source');
+    expect(header).toBe('Name,First owner,Licence,State,Type,Tags,Source');
     expect(lines).toEqual([
-      'Alpha,Avery Engineer,E5,Enabled,env: prod; team,Cloud',
-      'Beta,,,Disabled,a; b,Synced from AD',
+      'Alpha,Avery Engineer,E5,Enabled,Microsoft 365,env: prod; team,Cloud',
+      'Beta,,,Disabled,Security,a; b,Synced from AD',
     ]);
     // The same cells, as the table widget renders them.
     expect(lines).toEqual(ROWS.map((row) => columns.map((c) => shown(c, row)).join(',')));

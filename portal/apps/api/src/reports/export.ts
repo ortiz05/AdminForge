@@ -230,8 +230,8 @@ export function trackIncomplete(pages: AsyncIterable<ExportPage>): {
 }
 
 /**
- * A cell's export value: the words a `status` column shows (the table's own lookup), the table's tag list, JSON for
- * objects, Date for date columns (xlsx).
+ * A cell's export value: the words a `status` or `enum` column shows (the table's own lookup), joined lists, JSON
+ * for objects, Date for date columns (xlsx).
  */
 export function cellValue(
   row: Record<string, unknown>,
@@ -239,10 +239,10 @@ export function cellValue(
   format: ExportFormat,
 ): string | number | boolean | Date | null {
   const v = getPath(row, col.field);
-  if (col.kind === 'status') {
+  if (col.kind === 'status' || col.kind === 'enum') {
     const hit = col.map ? columnMapEntry(col.map, v) : undefined;
     if (hit !== undefined) return columnMapLabel(hit);
-    if (isStatusTone(v)) return STATUS_TONE_LABEL[v];
+    if (col.kind === 'status' && isStatusTone(v)) return STATUS_TONE_LABEL[v];
   }
   if (v === undefined || v === null) return null;
   if (col.kind === 'tags') return tagList(v).join('; ') || null;

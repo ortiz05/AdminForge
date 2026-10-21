@@ -168,12 +168,17 @@ function ProbeTile({
       </span>
       <span className="flex flex-col gap-0.5 text-xs text-fg-3">
         {threshold && <span className="font-mono text-2xs">{threshold}</span>}
-        <span className="truncate">
-          {p.latest ? `checked ${formatRelative(p.latest.ts, now)}` : 'not checked yet'}
-          {rate ? ` · ${rate}` : ''}
+        {/* The time is never cut: the pass rate wraps to the next line instead. */}
+        <span className="flex flex-wrap gap-x-1">
+          <span className="whitespace-nowrap">
+            {p.latest ? `checked ${formatRelative(p.latest.ts, now)}` : 'not checked yet'}
+          </span>
+          {rate && <span className="whitespace-nowrap">· {rate}</span>}
         </span>
         {p.latest?.message && status !== 'ok' && (
-          <span className={cn('truncate', TONE_TEXT[tone])}>{p.latest.message}</span>
+          <span className={cn('line-clamp-2 break-words', TONE_TEXT[tone])} title={p.latest.message}>
+            {p.latest.message}
+          </span>
         )}
       </span>
     </button>
@@ -187,11 +192,13 @@ function columnLabel(name: string): string {
   return label.charAt(0).toUpperCase() + label.slice(1);
 }
 
+const ISO_TIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/;
+
 function cellText(v: unknown): string {
   if (v === null || v === undefined || v === '') return '—';
   if (typeof v === 'boolean') return v ? 'Yes' : 'No';
   if (typeof v === 'number') return formatNumber(v);
-  if (typeof v === 'string') return /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(v) ? formatTimestamp(v) : v;
+  if (typeof v === 'string') return ISO_TIME.test(v) ? formatTimestamp(v) : v;
   return JSON.stringify(v);
 }
 
@@ -244,8 +251,17 @@ function FoundItems({ result }: { result: ProbePoint | undefined }) {
               <tr key={i} className="border-t border-line">
                 {columns.map((c) => {
                   const text = cellText(r[c]);
+                  // Times are short and carry the meaning: never cut them.
+                  const time = typeof r[c] === 'string' && ISO_TIME.test(r[c]);
                   return (
-                    <td key={c} className="max-w-64 truncate px-3 py-1.5 text-fg-2" title={text}>
+                    <td
+                      key={c}
+                      className={cn(
+                        'px-3 py-1.5 text-fg-2',
+                        time ? 'whitespace-nowrap tabular-nums' : 'max-w-64 truncate',
+                      )}
+                      title={time ? undefined : text}
+                    >
                       {text}
                     </td>
                   );
@@ -266,38 +282,73 @@ function FoundItems({ result }: { result: ProbePoint | undefined }) {
   );
 }
 
-/** "What to do" (the probe's remedy) and a way to act: an AdminForge page, or a Microsoft admin centre. */
+/** The probe's link: an AdminForge page that lists its items, or a Microsoft admin centre. */
+function ProbeLink({ link }: { link: NonNullable<ProbeItem['link']> }) {
+  const className = cn(button({ intent: 'secondary', size: 'sm' }), 'self-start');
+  if (/^https:\/\//.test(link.href))
+    return (
+      <a href={link.href} target="_blank" rel="noreferrer" className={className}>
+        {link.label}
+      </a>
+    );
+  const target = splitHref(link.href);
+  return (
+    <Link to={target.pathname as never} search={target.search as never} className={className}>
+      {link.label}
+    </Link>
+  );
+}
+
+/** "What to do" (the probe's remedy) and where to act — for a degraded or failing result only. */
 function NextSteps({ p }: { p: ProbeItem }) {
   if (!p.remedy && !p.link) return null;
-  const link = p.link;
-  const external = link ? /^https:\/\//.test(link.href) : false;
-  const target = link && !external ? splitHref(link.href) : null;
   return (
     <section aria-labelledby="probe-next" className="flex flex-col gap-2">
       <h3 id="probe-next" className="af-eyebrow">
         What to do
       </h3>
       {p.remedy && <p className="text-sm text-fg-2">{p.remedy}</p>}
-      {link &&
-        (external ? (
-          <a
-            href={link.href}
-            target="_blank"
-            rel="noreferrer"
-            className={cn(button({ intent: 'secondary', size: 'sm' }), 'self-start')}
-          >
-            {link.label}
-          </a>
-        ) : (
-          <Link
-            to={target!.pathname as never}
-            search={target!.search as never}
-            className={cn(button({ intent: 'secondary', size: 'sm' }), 'self-start')}
-          >
-            {link.label}
-          </Link>
-        ))}
+      {p.link && <ProbeLink link={p.link} />}
     </section>
+  );
+}
+
+/** "What this checks", and — while nothing is wrong — the link to where its items are (no remedy to follow). */
+function WhatItChecks({ p, withLink }: { p: ProbeItem; withLink: boolean }) {
+  const link = withLink ? p.link : null;
+  if (!p.summary && !link) return null;
+  return (
+    <section aria-labelledby="probe-what" className="flex flex-col gap-2">
+      <h3 id="probe-what" className="af-eyebrow">
+        What this checks
+      </h3>
+      {p.summary && <p className="text-sm text-fg-2">{p.summary}</p>}
+      {link && <ProbeLink link={link} />}
+    </section>
+  );
+}
+
+/** Fewer results than this in the window: an empty state says so instead of a one-point chart. */
+const MIN_CHART_POINTS = 2;
+
+/** Why there's no history chart: no results in the window, a pass-or-fail check, or a single result so far. */
+function HistoryEmpty({ points, measured, ran }: { points: number; measured: number; ran: boolean }) {
+  const [title, body] =
+    points === 0
+      ? [
+          'No results in the last 24 hours',
+          ran ? 'The latest result is older than that.' : 'It hasn’t run yet: its sweep schedule runs it.',
+        ]
+      : measured === 0
+        ? ['Nothing to chart', 'This check passes or fails; it has no measurement to draw.']
+        : [
+            'Not enough results to chart yet',
+            'The chart starts once there are two results in the last 24 hours.',
+          ];
+  return (
+    <EmptyState compact title={title}>
+      {body}
+    </EmptyState>
   );
 }
 
@@ -313,6 +364,9 @@ function ProbeDetail({ p, service, onClose }: { p: ProbeItem; service?: string; 
   const newest = q.data?.items.length ? points[points.length - 1] : undefined;
   const unit = p.latest?.unit ?? p.thresholds.unit;
   const status = statusOf(p);
+  // The remedy is for a degraded or failing result; healthy and not-yet-run probes only keep their link.
+  const failing = status === 'warn' || status === 'crit';
+  const measured = points.filter((x) => x.metric !== null).length;
   const failures = points
     .filter((x) => x.status === 'crit' || x.status === 'warn')
     .slice(-8)
@@ -335,16 +389,8 @@ function ProbeDetail({ p, service, onClose }: { p: ProbeItem; service?: string; 
           </Callout>
         )}
         <FoundItems result={newest} />
-        {status !== 'ok' && <NextSteps p={p} />}
-        {p.summary && (
-          <section aria-labelledby="probe-what" className="flex flex-col gap-2">
-            <h3 id="probe-what" className="af-eyebrow">
-              What this checks
-            </h3>
-            <p className="text-sm text-fg-2">{p.summary}</p>
-          </section>
-        )}
-        {status === 'ok' && <NextSteps p={p} />}
+        {failing && <NextSteps p={p} />}
+        <WhatItChecks p={p} withLink={!failing} />
         <Facts
           items={[
             ['Latest', formatMetric(p.latest?.metric, unit)],
@@ -370,7 +416,7 @@ function ProbeDetail({ p, service, onClose }: { p: ProbeItem; service?: string; 
           <QueryError compact title="Results didn’t load" error={q.error} onRetry={() => void q.refetch()} />
         ) : q.isPending && !p.series.length ? (
           <Skeleton shape="block" className="h-56 w-full" />
-        ) : points.some((x) => x.metric !== null) ? (
+        ) : measured >= MIN_CHART_POINTS ? (
           <Chart
             title={`${p.title}, last 24 hours`}
             kind="line"
@@ -381,7 +427,7 @@ function ProbeDetail({ p, service, onClose }: { p: ProbeItem; service?: string; 
             valueFormat={(v) => formatMetric(v, unit)}
           />
         ) : (
-          <EmptyState compact title="No results in the last 24 hours" />
+          <HistoryEmpty points={points.length} measured={measured} ran={!!p.latest} />
         )}
         <section aria-label="Recent problems" className="flex flex-col gap-2">
           <h3 className="af-eyebrow">Recent problems</h3>
@@ -535,7 +581,7 @@ export function MonitoringPage({ search }: { search: MonitoringSearch }) {
             variant="cell"
             label="Healthy"
             value={q.isPending ? null : counts.ok}
-            status={{ tone: 'ok', label: `of ${probes.length} probes` }}
+            status={{ tone: 'ok', label: `of ${probes.length} ${probes.length === 1 ? 'probe' : 'probes'}` }}
             loading={q.isPending}
           />
           <Kpi

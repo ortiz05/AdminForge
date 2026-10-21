@@ -137,8 +137,10 @@ export function walkChain(
     if (chainHash(at.hash, event, key) !== hash) return result(index);
     if (cut) {
       const d = detailsOf(event);
-      // It names the part it ends, and never takes the chain back to a key it already left.
-      if ((d.previousKeyId ?? null) !== at.keyId || at.used?.includes(keyId!)) return result(index);
+      // It names the part it ends, and never takes the chain back to a key it already left. A stretch it couldn't
+      // verify that ends wrong is reported where that stretch starts (a forged cut-over), not at this genuine one.
+      if ((d.previousKeyId ?? null) !== at.keyId || at.used?.includes(keyId!))
+        return result(at.gap ? at.gap.index : index);
       if (at.gap) {
         const declared =
           d.previousKeyLost === true &&

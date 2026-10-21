@@ -483,6 +483,17 @@ describe('a keyed chain', () => {
       expect(await reopen(rows, env).verify()).toMatchObject({ ok: false, seq: 3, missingKey: id(L) });
     });
 
+    it('pinned: a pinned cut-over renamed to the lost key is refused at start, even with the lost id still set', async () => {
+      const rows = await build();
+      rows[2]!.details = { keyId: id(L), previousKeyId: null };
+      const tampered = reopen(rows, {
+        ...env,
+        AUDIT_CHAIN_LOST_KEY_IDS: id(L),
+        AUDIT_CHAIN_KEYED_SINCE: '3',
+      });
+      expect(thrown(() => tampered.prepareChain())).toMatchObject({ reason: 'unverified', keyId: id(L) });
+    });
+
     it('a second unknown cut-over inside the verifiable part is not covered either', async () => {
       const rows = await build();
       rows[4]!.action = CHAIN_KEYED_ACTION; // seq 5 forged as a cut-over to an unknown key
@@ -492,6 +503,39 @@ describe('a keyed chain', () => {
         seq: 5,
         missingKey: 'f1f1f1f1f1f1f1f1',
       });
+    });
+  });
+
+  it('a pinned first cut-over whose key was lost: accepted when it is being declared, and once it was', async () => {
+    const L = newKey();
+    const K = newKey();
+    const lId = chainKeysFrom({ AUDIT_CHAIN_KEY: L })!.current.id;
+    const l = reopen([], { AUDIT_CHAIN_KEY: L });
+    await l.append(input('u'));
+    l.prepareChain();
+    await l.append(input('l'));
+    const env = { AUDIT_CHAIN_KEY: K, AUDIT_CHAIN_LOST_KEY_IDS: lId, AUDIT_CHAIN_KEYED_SINCE: '2' };
+    const k = reopen(l.rows, env);
+    expect(k.prepareChain().cutOver).toMatchObject({ seq: 4, previousKeyLost: true });
+    expect(reopen(k.rows, env).prepareChain().cutOver).toBeUndefined();
+    expect(await reopen(k.rows, env).verify()).toMatchObject({ ok: true, lostKey: { seq: 2, keyId: lId } });
+  });
+
+  it('a forged cut-over before a genuine rotation is reported where it is, not at the rotation', async () => {
+    const P = newKey();
+    const K = newKey();
+    const p = reopen([], { AUDIT_CHAIN_KEY: P });
+    p.prepareChain();
+    await p.append(input('p', 2));
+    await p.append(input('p', 3));
+    const k = reopen(p.rows, { AUDIT_CHAIN_KEY: K, AUDIT_CHAIN_PREVIOUS_KEYS: P });
+    k.prepareChain();
+    k.rows[1]!.action = CHAIN_KEYED_ACTION;
+    k.rows[1]!.details = { keyId: 'f1f1f1f1f1f1f1f1', previousKeyId: null };
+    expect(await reopen(k.rows, { AUDIT_CHAIN_KEY: K, AUDIT_CHAIN_PREVIOUS_KEYS: P }).verify()).toEqual({
+      ok: false,
+      brokenAt: 1,
+      seq: 2,
     });
   });
 

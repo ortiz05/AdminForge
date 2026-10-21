@@ -163,7 +163,7 @@ export class AuditChainKeyError extends Error {
   ) {
     super(
       reason === 'no_key'
-        ? `The audit log is keyed from event seq ${seq} (key id ${keyId}), but AUDIT_CHAIN_KEY is not set, so nothing can be added to it. Set AUDIT_CHAIN_KEY to the installation's key (its Secret). If that key is lost, set a new one and put the lost key's id in AUDIT_CHAIN_LOST_KEY_IDS: the events it keyed then can no longer be verified.`
+        ? `The audit log is keyed from event seq ${seq} (key id ${keyId}), but AUDIT_CHAIN_KEY is not set, so nothing can be added to it. Set AUDIT_CHAIN_KEY to the installation's key (its Secret). If that key is lost, set a new one and put the lost key's id in AUDIT_CHAIN_LOST_KEY_IDS — only if an "audit chain cut-over" line in the shipped log names that id at that seq (otherwise the event was forged): the events it keyed then can no longer be verified.`
         : reason === 'not_held'
           ? `The audit log is keyed from event seq ${seq} with a key (id ${keyId}) that AUDIT_CHAIN_KEY and AUDIT_CHAIN_PREVIOUS_KEYS don't hold, so nothing can be added to it here. Use the installation's keys (its Secret; in the pod: kubectl exec deploy/adminforge -c api -- adminforge …), with the earlier key in AUDIT_CHAIN_PREVIOUS_KEYS after a rotation. If that key is lost, put its id in AUDIT_CHAIN_LOST_KEY_IDS — but only if an "audit chain cut-over" line in the shipped log names that id at that seq: otherwise the event was forged, so investigate who had write access to the volume instead.`
           : `Since event seq ${seq} the audit log names key id ${keyId}, and AUDIT_CHAIN_KEY is a key it already moved on from. Either this process has an old Secret (use the installation's current key), or that event was forged: compare with the "audit chain cut-over" lines in the shipped log.`,
@@ -281,19 +281,39 @@ type RowAt = (seq: number) => AuditRow | undefined;
  * Throws when the cut-over AUDIT_CHAIN_KEYED_SINCE pins is not there, or doesn't verify with a configured key (one row:
  * it must re-hash onto its own prev hash). A key declared lost can't be checked; the walk reports that stretch.
  */
-function assertPinned(keys: ChainKeyring | null, rowAt: RowAt): void {
+function assertPinned(keys: ChainKeyring | null, rowAt: RowAt, cuts: readonly KeyedPart[]): void {
   const pin = keys?.keyedSince ?? null;
   if (pin === null) return;
   const row = rowAt(pin);
   const id = row && row.action === CHAIN_KEYED_ACTION ? cutOverKeyId(row) : undefined;
   if (!row || !id) throw new AuditChainPinError(pin);
   const key = keys!.get(id);
-  if (!key) {
-    if (keys!.lost.has(id)) return;
-    throw new AuditChainPinError(pin, 'unverified', id);
+  if (key) {
+    if (!rehashes(row, key)) throw new AuditChainPinError(pin, 'unverified', id);
+    return;
   }
+  // A lost key's cut-over can't be checked itself. Accept it where a verified cut-over declared that very part lost —
+  // or where it is the newest part, about to be declared lost now; a pinned row renamed to a lost key is neither.
+  const declared = cuts.some((c) => {
+    const k = keys!.get(c.keyId);
+    const r = k && rowAt(c.seq);
+    const d = (r?.details ?? {}) as Partial<CutOverDetails>;
+    return (
+      !!r &&
+      rehashes(r, k) &&
+      d.previousKeyLost === true &&
+      d.previousKeyId === id &&
+      d.previousKeyFrom === row.prevHash
+    );
+  });
+  if (keys!.lost.has(id) && (declared || cuts.at(-1)?.seq === pin)) return;
+  throw new AuditChainPinError(pin, 'unverified', id);
+}
+
+/** Whether one event re-hashes onto its own prev hash with `key`. */
+function rehashes(row: AuditRow, key: ChainKey): boolean {
   const { seq: _seq, prevHash, hash, ...event } = row;
-  if (chainHash(prevHash, event, key) !== hash) throw new AuditChainPinError(pin, 'unverified', id);
+  return chainHash(prevHash, event, key) === hash;
 }
 
 /**
@@ -311,7 +331,7 @@ function cutOverFor(
     if (part) throw new AuditChainKeyError(part.seq, part.keyId, 'no_key');
     return null;
   }
-  assertPinned(keys, rowAt);
+  assertPinned(keys, rowAt, cuts);
   if (part?.keyId === keys.current.id) return null;
   // A process started with an old key (a stale environment) must not take the chain back to it.
   if (part && cuts.some((c) => c.keyId === keys.current.id))
@@ -456,7 +476,7 @@ export class SqliteAuditWriter implements AuditWriter {
    */
   assertCanAppend(): void {
     partKey(this.keys, newestCutOver(this.db));
-    assertPinned(this.keys, (seq) => rowAtIn(this.db, seq));
+    assertPinned(this.keys, (seq) => rowAtIn(this.db, seq), cutOversIn(this.db));
   }
 
   prepareChain(): ChainPrepared {
@@ -597,7 +617,12 @@ export class SqliteAuditWriter implements AuditWriter {
       );
       if (brokenAt !== Infinity) {
         this.broken();
-        return { ok: false, brokenAt, seq: seqAt(brokenAt), checked: checked + brokenAt - count + 1 };
+        return {
+          ok: false,
+          brokenAt,
+          seq: seqAt(brokenAt),
+          checked: checked + Math.max(0, brokenAt - count) + 1,
+        };
       }
       if (res.missing) missing ??= { ...res.missing, seq: seqAt(res.missing.index) };
       if (res.lost) lost ??= { ...res.lost, seq: seqAt(res.lost.index) };
@@ -658,7 +683,7 @@ export class MemoryAuditWriter implements AuditWriter {
 
   assertCanAppend(): void {
     partKey(this.keys, this.cutOvers().at(-1));
-    assertPinned(this.keys, (seq) => this.rows.find((r) => r.seq === seq));
+    assertPinned(this.keys, (seq) => this.rows.find((r) => r.seq === seq), this.cutOvers());
   }
 
   prepareChain(): ChainPrepared {

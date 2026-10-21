@@ -1,3 +1,4 @@
+import { isForbiddenHeader } from '@adminforge/connectors';
 import { encodePathSegment } from '@adminforge/expressions';
 import type { Compensation, Step } from '@adminforge/schemas';
 import { StepError } from './errors';
@@ -26,9 +27,6 @@ type Query = NonNullable<ServiceCall['query']>;
 
 const RESOURCE_GRAPH_PATH = '/providers/Microsoft.ResourceGraph/resources';
 const RESOURCE_GRAPH_API_VERSION = '2022-10-01';
-/** Headers content may never set (the executor owns auth). */
-const FORBIDDEN_HEADER =
-  /^(authorization|cookie|proxy-authorization|host|x-ms-client-request-id|client-request-id)$/i;
 
 function asQuery(v: unknown, field: string): Query | undefined {
   if (v === undefined || v === null) return undefined;
@@ -48,8 +46,8 @@ function asHeaders(v: unknown): Record<string, string> | undefined {
     throw new StepError('invalid_request', 'headers must render to an object.');
   const out: Record<string, string> = {};
   for (const [k, x] of Object.entries(v as Record<string, unknown>)) {
-    if (FORBIDDEN_HEADER.test(k))
-      throw new StepError('invalid_request', `Header ${k} cannot be set by content.`);
+    // Headers content may never set (the executor owns auth and correlation): one list, in the connectors (S-02).
+    if (isForbiddenHeader(k)) throw new StepError('invalid_request', `Header ${k} cannot be set by content.`);
     if (x !== undefined && x !== null) out[k] = String(x);
   }
   return Object.keys(out).length ? out : undefined;

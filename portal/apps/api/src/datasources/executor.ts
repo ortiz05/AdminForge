@@ -3,6 +3,7 @@ import path from 'node:path';
 import {
   ApiError,
   evaluate,
+  isForbiddenHeader,
   RESOURCE_GRAPH_API_VERSION,
   RESOURCE_GRAPH_PATH,
   type Mode,
@@ -245,11 +246,27 @@ function cleanQuery(q: unknown): Record<string, QueryValue> | undefined {
   return out;
 }
 
+/**
+ * Rendered request headers → what goes out (empty values dropped). A header AdminForge owns (the bearer token, the
+ * correlation id, cookies, the host: `FORBIDDEN_HEADERS`) is refused, not dropped (S-02): validate refuses a definition
+ * declaring one, so meeting one here means content published before that rule, and the call must not go out as if the
+ * header had been honoured.
+ */
 function cleanHeaders(h: unknown): Record<string, string> | undefined {
   if (!h || typeof h !== 'object') return undefined;
   const out: Record<string, string> = {};
-  for (const [k, v] of Object.entries(h as Record<string, unknown>))
+  for (const [k, v] of Object.entries(h as Record<string, unknown>)) {
+    if (isForbiddenHeader(k))
+      throw new AppError(
+        400,
+        'invalid_request',
+        'This data asks Microsoft for something AdminForge doesn’t allow.',
+        {
+          hint: 'For the content author: the datasource sets a request header AdminForge always sets itself. Remove it from the definition (adminforge validate points at it) and publish it again.',
+        },
+      );
     if (v !== undefined && v !== null && v !== '') out[k] = String(v);
+  }
   return out;
 }
 

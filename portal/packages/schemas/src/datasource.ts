@@ -8,7 +8,31 @@ import { DefinitionId, Expr, HttpMethod, Identifier, Requires, exprOr } from './
 
 const QueryValue = z.union([z.string(), z.number(), z.boolean(), z.null()]);
 const Query = z.record(z.string(), QueryValue);
-const Headers = z.record(z.string(), z.string());
+/**
+ * Headers AdminForge sets itself on every call (S-02): the bearer token, the correlation id, cookies, the host. Lower
+ * case; matched in any case. The same list as `FORBIDDEN_HEADERS` in @adminforge/connectors (a test keeps them equal:
+ * schemas depends on nothing but zod and yaml), which the HTTP client, the datasource executor and the engine apply.
+ */
+export const FORBIDDEN_HEADER_NAMES: readonly string[] = [
+  'authorization',
+  'cookie',
+  'proxy-authorization',
+  'host',
+  'x-ms-client-request-id',
+  'client-request-id',
+];
+
+/** Request headers content may set: any but FORBIDDEN_HEADER_NAMES (validate refuses those, at the header's line). */
+export const RequestHeaders = z.record(z.string(), z.string()).superRefine((headers, ctx) => {
+  for (const name of Object.keys(headers))
+    if (FORBIDDEN_HEADER_NAMES.includes(name.trim().toLowerCase()))
+      ctx.addIssue({
+        code: 'custom',
+        path: [name],
+        message: `AdminForge sets this header itself (the sign-in token, the correlation id, cookies and the host); remove ${name} from the request.`,
+      });
+});
+
 /** Path relative to the service root (no scheme/host), starting with `/`. */
 const ServicePath = z
   .string()
@@ -19,7 +43,7 @@ export const GraphRequestSpec = z.strictObject({
   /** Relative to /v1.0 (or /beta), e.g. `/users/${ $encode(inputs.userId) }`. */
   path: ServicePath,
   query: Query.optional(),
-  headers: Headers.optional(),
+  headers: RequestHeaders.optional(),
   body: z.unknown().optional(),
   /** Use /beta (flagged as preview in the UI and in validate output). */
   beta: z.boolean().optional(),
@@ -35,7 +59,7 @@ export const ArmRequestSpec = z.strictObject({
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}(-preview)?$/, 'Expected an ARM api-version like 2022-12-01'),
   query: Query.optional(),
-  headers: Headers.optional(),
+  headers: RequestHeaders.optional(),
   body: z.unknown().optional(),
 });
 export type ArmRequestSpec = z.infer<typeof ArmRequestSpec>;
@@ -121,7 +145,7 @@ export const FunctionCallSpec = {
   /** Values for `{name}` placeholders in the operation path. */
   pathParams: z.record(z.string(), z.unknown()).optional(),
   query: Query.optional(),
-  headers: Headers.optional(),
+  headers: RequestHeaders.optional(),
   body: z.unknown().optional(),
 };
 

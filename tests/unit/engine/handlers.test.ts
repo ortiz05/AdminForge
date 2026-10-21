@@ -39,16 +39,20 @@ describe('handlers: service calls', () => {
       paging: 'all',
       maxItems: 50,
     });
-    const bad = harness(
-      playbook([
-        {
-          id: 'x',
-          type: 'graph',
-          mode: 'read',
-          request: { method: 'GET', path: '/me', headers: { Authorization: 'Bearer x' } },
-        },
-      ]),
-    );
+    // The schema refuses the header at validate time (S-02); a definition published before that still meets the
+    // engine's own refusal.
+    const def = playbook([
+      {
+        id: 'x',
+        type: 'graph',
+        mode: 'read',
+        request: { method: 'GET', path: '/me', headers: { Prefer: 'x' } },
+      },
+    ]);
+    (def.steps[0] as { request: { headers: Record<string, string> } }).request.headers = {
+      Authorization: 'Bearer x',
+    };
+    const bad = harness(def);
     expect((await bad.exec()).error).toMatchObject({
       code: 'invalid_request',
       message: 'Header Authorization cannot be set by content.',

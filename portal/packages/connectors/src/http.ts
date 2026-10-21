@@ -167,6 +167,52 @@ export async function abortableSleep(sleep: Sleep, ms: number, signal?: AbortSig
 const SERVER_RETRYABLE = new Set([500, 502, 503, 504]);
 const IDEMPOTENT_METHODS = new Set(['GET', 'HEAD', 'OPTIONS', 'PUT', 'DELETE']);
 
+/**
+ * Headers AdminForge owns on every outbound call (S-02), lower case: the bearer token, the correlation id Microsoft
+ * logs (Graph's and ARM's spelling), cookies and the host. Content may never set them — the request schema refuses them
+ * at validate time (a mirrored list in @adminforge/schemas, which depends on nothing but zod and yaml), the datasource
+ * executor and the playbook engine refuse them at run time, and `createHttpClient` drops them from what a caller passes
+ * before adding its own, so nothing can replace or double the token or the correlation id.
+ */
+export const FORBIDDEN_HEADERS: ReadonlySet<string> = new Set([
+  'authorization',
+  'cookie',
+  'proxy-authorization',
+  'host',
+  'x-ms-client-request-id',
+  'client-request-id',
+]);
+
+/** Whether `name` is one of FORBIDDEN_HEADERS, in any letter case. */
+export const isForbiddenHeader = (name: string): boolean => FORBIDDEN_HEADERS.has(name.trim().toLowerCase());
+
+/** Defaults the caller may replace (one value each, whatever the caller's letter case). */
+const CALLER_OVERRIDABLE = new Set(['accept', 'content-type']);
+
+/**
+ * The headers of one attempt: AdminForge's defaults, then the caller's (forbidden names dropped; a caller Accept or
+ * Content-Type replaces the default rather than joining it), then the bearer token and the correlation id.
+ */
+function requestHeaders(
+  caller: Record<string, string> | undefined,
+  own: { token: string; hasBody: boolean; correlation?: [string, string] },
+): Record<string, string> {
+  const out: Record<string, string> = {
+    Accept: 'application/json',
+    ...(own.hasBody ? { 'Content-Type': 'application/json' } : {}),
+  };
+  for (const [name, value] of Object.entries(caller ?? {})) {
+    if (isForbiddenHeader(name)) continue;
+    const lower = name.toLowerCase();
+    if (CALLER_OVERRIDABLE.has(lower))
+      for (const k of Object.keys(out)) if (k.toLowerCase() === lower) delete out[k];
+    out[name] = value;
+  }
+  out.Authorization = `Bearer ${own.token}`;
+  if (own.correlation) out[own.correlation[0]] = own.correlation[1];
+  return out;
+}
+
 /** Delay before the next attempt: Retry-After (seconds or HTTP date, capped at 120 s) or exponential backoff with jitter. */
 export function retryDelay(retryAfter: string | null, attempt: number): number {
   if (retryAfter !== null && retryAfter.trim() !== '') {
@@ -296,15 +342,13 @@ export function createHttpClient(opts: HttpClientOptions) {
           res = await doFetch(req.url, {
             method,
             ...(opts.redirect ? { redirect: opts.redirect } : {}),
-            headers: {
-              Authorization: `Bearer ${token}`,
-              Accept: 'application/json',
-              ...(req.body !== undefined ? { 'Content-Type': 'application/json' } : {}),
+            headers: requestHeaders(req.headers, {
+              token,
+              hasBody: req.body !== undefined,
               ...(opts.correlationId && opts.correlationHeader
-                ? { [opts.correlationHeader]: opts.correlationId }
+                ? { correlation: [opts.correlationHeader, opts.correlationId] as [string, string] }
                 : {}),
-              ...req.headers,
-            },
+            }),
             body: req.body !== undefined ? JSON.stringify(req.body) : undefined,
             signal: signals.length > 1 ? AbortSignal.any(signals) : signals[0],
           });

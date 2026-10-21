@@ -19,6 +19,7 @@ import {
   FunctionCallSpec,
   GraphRequestSpec,
   LogAnalyticsSpec,
+  RequestHeaders,
   ResourceGraphSpec,
   RunnerSpec,
 } from './datasource';
@@ -56,7 +57,7 @@ export const HttpRequestSpec = z.strictObject({
   method: HttpMethod.default('GET'),
   url: HttpUrl,
   query: z.record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.null()])).optional(),
-  headers: z.record(z.string(), z.string()).optional(),
+  headers: RequestHeaders.optional(),
   body: z.unknown().optional(),
 });
 

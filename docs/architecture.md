@@ -102,9 +102,10 @@ switches the schedule off until it is approved again.
 
 A time the scheduler missed by more than an hour (the pod was down that long) is not run late: it becomes a `skipped`
 run with `schedule_missed`, dated when it was due, audited, and shown as the schedule's last run. **Run now** on a
-switched-off schedule runs the job but writes its file only — no email, Teams post or notification until the schedule
-is on. A run that reaches `timeoutSeconds` is recorded at once, but its slot (and its schedule's overlap policy) stays
-taken until the job itself ends, at most two minutes more.
+disabled schedule (or one disabled before the run started) runs the job but only writes its file — no email, Teams post
+or notification until the schedule is enabled; the scheduler's `--schedule` one-shot delivers as configured. A run that
+reaches `timeoutSeconds` is recorded at once and sends nothing more, but its slot (and its schedule's overlap policy)
+stays taken until the job itself ends, at most two minutes more.
 
 ## Health and housekeeping
 
@@ -120,7 +121,8 @@ hours it applies **retention** (`RETENTION_*`). Each purge deletes 2,000 rows pe
 between batches, a pass stops after 2 seconds and continues at the next 10-minute pass, and the freed pages go back to
 the file system in steps (`incremental_vacuum`) — better-sqlite3 is synchronous, so housekeeping never holds HTTP, runs
 or schedules for long. The audit log is never purged; `probes.audit-chain` checks it hourly from the last verified
-checkpoint and walks the whole chain at start and once a day.
+checkpoint and walks the whole chain at start, once a day and after any break it found. An event older than the
+checkpoint that changed is found by the next full walk (or the Audit page, or `adminforge audit verify`).
 
 ## Identities
 

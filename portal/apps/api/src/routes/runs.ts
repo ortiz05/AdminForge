@@ -21,6 +21,7 @@ import { assertCsrf } from '../security/csrf';
  * - GET  /api/runs?scope=mine|all&status=active|<s>,<s>&playbook=&from=&to=&parent=&limit=&cursor= → {items: RunSummary[], cursor?}
  * - GET  /api/runs/:id → {run, steps, plan, tasks, children}
  * - GET  /api/runs/:id/events (SSE, Last-Event-ID) → data {id, type:'run'|'step'|'log'|'progress', ts, stepSeq, data}; `event: end` when finished
+ *   At most MAX_RUN_STREAMS_PER_SESSION open per session (429 too_many_streams)
  * - POST /api/runs/:id/cancel → {runId, status}
  * - POST /api/runs/:id/resume → 202 {runId, status}
  * - POST /api/runs/:id/approvals/:stepId {decision:'approve'|'reject', comment?} → {status, approvals, required}
@@ -29,6 +30,12 @@ import { assertCsrf } from '../security/csrf';
  *   once, for the initiator's session, within 5 minutes; 404 secret_not_available otherwise
  * `:stepId` is the step path (URL-encoded), e.g. `approve`, `loop[2].approve`, `$approval` (implicit gate).
  */
+
+/**
+ * Open run streams per session (one per open run page, across tabs and windows), like GET /api/events: a further one
+ * is refused with 429 until one closes (the run page polls meanwhile). Each stream re-reads its session every 10 s.
+ */
+export const MAX_RUN_STREAMS_PER_SESSION = 5;
 
 const Key = z.string().trim().min(1).max(200);
 const Version = z.string().trim().min(1).max(64);
@@ -110,8 +117,15 @@ export const callerOf = (request: FastifyRequest): Caller => ({
   ip: request.ip ?? null,
 });
 
-export function runRoutes(api: FastifyInstance, ctx: AppContext, runs: RunsModule) {
+export function runRoutes(
+  api: FastifyInstance,
+  ctx: AppContext,
+  runs: RunsModule,
+  opts: { maxStreams?: number } = {},
+) {
   const { service } = runs;
+  /** idHash → run streams open for that session. */
+  const streams = new Map<string, number>();
 
   api.post('/runs', async (request, reply) => {
     const row = await service.create(callerOf(request), parseBody(CreateRunBody, request.body));
@@ -147,6 +161,26 @@ export function runRoutes(api: FastifyInstance, ctx: AppContext, runs: RunsModul
     async (request, reply) => {
       const caller = callerOf(request);
       const row = await service.assertViewable(caller, request.params.id);
+      const idHash = caller.session.idHash;
+      const open = streams.get(idHash) ?? 0;
+      if (open >= (opts.maxStreams ?? MAX_RUN_STREAMS_PER_SESSION))
+        throw new AppError(
+          429,
+          'too_many_streams',
+          'Live updates of runs are already open in too many tabs or windows.',
+          {
+            hint: 'Close the run pages you don’t need, then reload this one. It still refreshes on its own meanwhile.',
+          },
+        );
+      streams.set(idHash, open + 1);
+      let released = false;
+      const release = () => {
+        if (released) return;
+        released = true;
+        const left = (streams.get(idHash) ?? 1) - 1;
+        if (left > 0) streams.set(idHash, left);
+        else streams.delete(idHash);
+      };
       const header = request.headers['last-event-id'];
       const raw = (Array.isArray(header) ? header[0] : header) ?? request.query.lastEventId ?? '0';
       const last = /^\d{1,15}$/.test(raw) ? Number(raw) : 0;
@@ -156,13 +190,25 @@ export function runRoutes(api: FastifyInstance, ctx: AppContext, runs: RunsModul
         if (!fresh || !sessionLive(fresh, ctx.now(), ctx.config.SESSION_IDLE_MINUTES)) return false;
         return service.canView(fresh, (await runs.repo.getRun(row.id)) ?? row);
       };
-      await streamRunEvents(
-        request,
-        reply,
-        { repo: runs.repo, bus: runs.bus, secrets: runs.secrets, stillAllowed, pollMs: runs.streamPollMs },
-        row.id,
-        last,
-      );
+      try {
+        await streamRunEvents(
+          request,
+          reply,
+          {
+            repo: runs.repo,
+            bus: runs.bus,
+            secrets: runs.secrets,
+            stillAllowed,
+            pollMs: runs.streamPollMs,
+            onClose: release,
+          },
+          row.id,
+          last,
+        );
+      } catch (err) {
+        release();
+        throw err;
+      }
     },
   );
 

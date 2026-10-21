@@ -62,6 +62,8 @@ export async function streamRunEvents(
     /** Whether the session may still watch this run (false ends the stream; an error keeps it open). */
     stillAllowed?: () => Promise<boolean>;
     pollMs?: number;
+    /** Called once when the stream closes, however it ends (the route's per-session stream count). */
+    onClose?: () => void;
   },
   runId: string,
   lastEventId: number,
@@ -98,10 +100,16 @@ export async function streamRunEvents(
     unsubscribe();
     untrack();
     detach();
+    deps.onClose?.();
     raw.end();
   };
   // The response closes when the client goes away (the request's own 'close' fires as soon as its body is read).
   raw.on('close', close);
+  // Gone before the listener was attached: close now (and give back the stream's slot).
+  if (raw.destroyed) {
+    close();
+    return;
+  }
 
   const end = (status: RunStatus) => {
     if (closed) return;

@@ -228,6 +228,9 @@ const Schema = z
     RUN_WORKER_CONCURRENCY: z.coerce.number().int().min(1).max(64).default(8),
     // Runs one person may have queued or running at once, previews included (F-08; parked runs don't count).
     RUN_MAX_OPEN_PER_USER: z.coerce.number().int().min(1).max(100).default(5),
+    // Seconds a stop (SIGTERM) may take before the API logs what is still open and exits 1 (D-24). Keep it below the
+    // pod's terminationGracePeriodSeconds (60 s) and above what the run worker (15 s) and the scheduler (30 s) need.
+    SHUTDOWN_TIMEOUT_SECONDS: z.coerce.number().int().min(5).max(3600).default(50),
     // Schedules the scheduler (in the API process, R6) runs at once.
     SCHEDULER_CONCURRENCY: z.coerce.number().int().min(1).max(32).default(4),
     /** Scheduled report files: <dir>/<schedule>/<timestamp>.<ext> (default ~/.local/share/adminforge/artifacts). */

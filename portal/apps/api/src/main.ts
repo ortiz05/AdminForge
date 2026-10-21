@@ -4,6 +4,7 @@ import { reclaimSpace } from './db/client';
 import { assertDatabaseFile } from './db/file-check';
 import { runMigrations } from './db/migrate';
 import { applyRetention } from './housekeeping/retention';
+import { onShutdownSignal } from './shutdown';
 
 const HOUSEKEEPING_MS = 10 * 60_000;
 /** History retention runs at most this often (it scans by age; cheap when there is nothing to delete). */
@@ -57,19 +58,18 @@ async function housekeeping() {
 const timer = setInterval(() => void housekeeping(), HOUSEKEEPING_MS);
 timer.unref();
 
-let closing = false;
-for (const signal of ['SIGINT', 'SIGTERM'] as const) {
-  process.on(signal, () => {
-    if (closing) return;
-    closing = true;
+// D-24: the stop has a deadline of its own, below the pod's terminationGracePeriodSeconds (shutdown.ts).
+const shutdown = onShutdownSignal({
+  close: async () => {
     clearInterval(timer);
-    app.log.info({ signal }, 'shutting down');
-    app.close().then(
-      () => process.exit(0),
-      () => process.exit(1),
-    );
-  });
-}
+    await app.close();
+  },
+  deadlineMs: config.SHUTDOWN_TIMEOUT_SECONDS * 1000,
+  log: app.log,
+  pending: () => ({ runs: app.runs.worker.activeRuns() }),
+  exit: (code) => process.exit(code),
+});
+for (const signal of ['SIGINT', 'SIGTERM'] as const) process.on(signal, () => shutdown(signal));
 
 await app.listen({ port: config.API_PORT, host: config.API_HOST });
 app.log.info(

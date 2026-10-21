@@ -77,15 +77,29 @@ function definitions() {
         message: "${ 'Set the PIN to ' & inputs.pin & '?' }",
       }),
     )
-    .add(playbook('test.shady', { type: 'typed', value: '${ steps.lookup.output.app }' }));
+    .add(playbook('test.shady', { type: 'typed', value: '${ steps.lookup.output.app }' }))
+    .add(
+      playbook('test.blank', {
+        type: 'typed',
+        value: '${ steps.lookup.output.blank }',
+        message: "${ 'Revoke ' & steps.lookup.output.bidi & '?' }",
+      }),
+    );
 }
+
+/** A name with nothing visible to type (a Hangul filler and a zero-width space). */
+const BLANK = '\u{3164}\u{200b}';
+/** A name with a right-to-left override that would reverse the sentence after it. */
+const BIDI = 'Contoso\u{202e}ppa\u{202c} Helper';
 
 async function setup() {
   const t = await runsApp({
     config: mockConfig(),
     definitions: definitions(),
     outbound: new FakeExecutor((c) =>
-      c.method === 'GET' ? { upn: UPN, displayName: 'Adele Lee', app: SHADY } : null,
+      c.method === 'GET'
+        ? { upn: UPN, displayName: 'Adele Lee', app: SHADY, blank: BLANK, bidi: BIDI }
+        : null,
     ),
   });
   const avery = await t.login(AVERY, ALL_ROLES, { armed: true });
@@ -158,7 +172,22 @@ describe('the preview carries the rendered confirmation', () => {
     // Another Operator may see the run, but never what to type to confirm it (only its initiator can).
     const blake = await t.login(BLAKE, ALL_ROLES, { armed: true });
     const theirs = await blake.get(`/api/runs/${id}`);
-    if (theirs.statusCode === 200) expect(theirs.json().run.confirm).toBeNull();
+    expect(theirs.statusCode).toBe(200);
+    expect(theirs.json().run.confirm).toBeNull();
+    // A bulk preview confirms the number of items, which the browser knows: nothing rendered.
+    const bulk = await avery.post('/api/runs/bulk', {
+      playbook: 'test.typed',
+      items: [{ userId: USER, pin: '482913' }],
+      dryRun: true,
+    });
+    expect(bulk.statusCode).toBe(202);
+    await t.drain();
+    expect(await confirmOf(bulk.json().runId)).toBeNull();
+    const children = (await avery.get(`/api/runs/${bulk.json().runId}`)).json().children as Array<{
+      id: string;
+    }>;
+    expect(children.length).toBe(1);
+    for (const c of children) expect(await confirmOf(c.id)).toBeNull();
     // The real run that the preview confirms carries none.
     const run = await avery.post('/api/runs', {
       playbook: 'test.typed',
@@ -194,6 +223,25 @@ describe('the preview carries the rendered confirmation', () => {
     expect(latin.body).not.toContain('Convert');
     const ok = await confirm('  pdf   CONVERT\u{435}R ');
     expect(ok.statusCode).toBe(202);
+    await t.close();
+  });
+
+  it('a name with nothing visible can’t be asked for; bidi controls never reach the message', async () => {
+    const { t, avery, preview, confirmOf } = await setup();
+    const id = await preview('test.blank');
+    expect(await confirmOf(id)).toEqual({
+      type: 'typed',
+      value: null,
+      message: 'Revoke Contosoppa Helper?',
+    });
+    const res = await avery.post('/api/runs', {
+      playbook: 'test.blank',
+      inputs: { userId: USER, pin: '482913' },
+      previewRunId: id,
+      confirmation: BLANK,
+    });
+    expect(res.statusCode).toBe(409);
+    expect(res.json().error.code).toBe('preview_stale');
     await t.close();
   });
 });

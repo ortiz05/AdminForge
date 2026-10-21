@@ -1,5 +1,10 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
-import { confirmationMatches, unusualCharacters, type UnusualCharacter } from '@adminforge/schemas';
+import {
+  confirmationMatches,
+  unusualCharacters,
+  withoutBidiControls,
+  type UnusualCharacter,
+} from '@adminforge/schemas';
 import { errorText } from '../lib/errors';
 import {
   Button,
@@ -9,6 +14,7 @@ import {
   IdChip,
   LockKeyOpenIcon,
   Skeleton,
+  STATUS_ICON,
   formatRelative,
   formatTimestamp,
   useNow,
@@ -362,28 +368,33 @@ export function PlaybookSections({ flow, problems }: { flow: PlaybookFlow; probl
 }
 
 /**
- * The text to type, with every character that isn't plain marked where it sits: look-alikes highlighted, invisible
- * ones shown by their code point (not selectable, so copying the text copies only the text).
+ * The text to type, with what could make it pass for another name marked where it sits: look-alike letters
+ * underlined on a warn tint, invisible characters replaced by their code point (not selectable and hidden from screen
+ * readers, so copying copies only the visible text, which confirms just the same; the note under the field names
+ * them).
  */
 function ConfirmText({ text, unusual }: { text: string; unusual: UnusualCharacter[] }) {
-  const marked = new Map(unusual.map((u) => [u.char, u]));
+  const marked = new Map(unusual.filter((u) => u.misleading).map((u) => [u.char, u]));
   return (
     <code className="rounded-sm bg-sunken px-1 py-0.5 break-all text-fg">
       {Array.from(text).map((ch, i) => {
         const u = marked.get(ch);
         if (!u) return ch;
+        // An invisible character is shown by its code point only: the comparison ignores it, and a bidi control
+        // left in the text could reorder what follows.
         return u.invisible ? (
-          <span key={i}>
-            {ch}
-            <span
-              aria-hidden
-              className="mx-px rounded-sm bg-warn-subtle px-0.5 text-2xs text-warn select-none"
-            >
-              {u.codePoint}
-            </span>
+          <span
+            key={i}
+            aria-hidden
+            className="mx-px rounded-sm bg-warn-subtle px-0.5 text-2xs text-fg-2 select-none"
+          >
+            {u.codePoint}
           </span>
         ) : (
-          <span key={i} className="rounded-sm bg-warn-subtle text-warn">
+          <span
+            key={i}
+            className="rounded-sm bg-warn-subtle px-px text-fg underline decoration-warn decoration-2 underline-offset-2"
+          >
             {ch}
           </span>
         );
@@ -392,24 +403,56 @@ function ConfirmText({ text, unusual }: { text: string; unusual: UnusualCharacte
   );
 }
 
-/** What in the text to type isn't a plain letter or digit: an app or object name may imitate another one. */
+const MAX_LISTED = 5;
+const article = (word: string) => (/^[AEIOU]/.test(word) ? 'an' : 'a');
+
+/** One unusual character in words: "a Cyrillic “е” (U+0435)", "an invisible character (U+200B)". */
+function describeCharacter(u: UnusualCharacter): string {
+  if (u.invisible) return `an invisible character (${u.codePoint})`;
+  if (u.kind === 'space') return `a space that isn’t a plain one (${u.codePoint})`;
+  if (u.kind.startsWith('different form')) return `“${u.char}”, a ${u.kind} (${u.codePoint})`;
+  if (u.script) return `${article(u.script)} ${u.script} “${u.char}” (${u.codePoint})`;
+  return `“${u.char}” (${u.kind}, ${u.codePoint})`;
+}
+
+/** "x, y and z" — at most five, then "and 3 more". */
+function listCharacters(list: UnusualCharacter[]): string {
+  const shown = list.slice(0, MAX_LISTED).map(describeCharacter);
+  const rest = list.length - shown.length;
+  if (rest > 0) return `${shown.join(', ')} and ${rest} more`;
+  return shown.length > 1 ? `${shown.slice(0, -1).join(', ')} and ${shown.at(-1)}` : (shown[0] ?? '');
+}
+
+/**
+ * Under the field (its description): what in the text isn't plain. Characters that can make a name pass for another
+ * one (an app named to imitate a trusted one) get a warning; others (accents, curly quotes, another writing system)
+ * only a note that copying is easier than typing.
+ */
 function UnusualNote({ unusual }: { unusual: UnusualCharacter[] }) {
+  const misleading = unusual.filter((u) => u.misleading);
+  const other = unusual.filter((u) => !u.misleading);
+  if (misleading.length === 0)
+    return (
+      <>
+        It has characters a keyboard may not type: {listCharacters(other)}. To confirm, copy the name from the
+        line above.
+      </>
+    );
+  const Warn = STATUS_ICON.warn;
   return (
-    <span role="note" aria-label="Characters to check" className="flex flex-col gap-1 text-fg-2">
+    <span className="flex flex-col gap-1 text-fg-2">
+      <span className="flex items-start gap-1">
+        <Warn size={14} weight="fill" aria-hidden className="mt-0.5 shrink-0 text-warn" />
+        <span>
+          <span className="font-semibold text-fg">Check the name:</span> it has characters that can make it
+          pass for another — {listCharacters(misleading)}.
+          {other.length > 0 && ` It also has ${listCharacters(other)}.`}
+        </span>
+      </span>{' '}
       <span>
-        <span className="font-semibold text-warn">Check the name:</span> it contains{' '}
-        {unusual.length === 1 ? 'a character that isn’t' : 'characters that aren’t'} a plain letter or digit —{' '}
-        {unusual.map((u, i) => (
-          <span key={u.codePoint}>
-            {i > 0 && ', '}
-            {u.invisible ? 'an ' : ''}
-            {!u.invisible && <span className="font-mono text-fg">{u.char} </span>}
-            {u.kind} ({u.codePoint})
-          </span>
-        ))}
-        .
+        Make sure it’s the one you meant to change. To confirm, copy the name from the line above; case,
+        spaces and invisible characters don’t count.
       </span>
-      <span>Copy it from here to type it exactly. Case, spacing and invisible characters don’t count.</span>
     </span>
   );
 }
@@ -479,16 +522,23 @@ function RunConfirmDialog({ flow, label }: { flow: PlaybookFlow; label: string }
         {!flow.bulk && flow.preview.detail && flow.preview.detail.plan.length > 0 && (
           <ul className="flex list-disc flex-col gap-0.5 pl-4 text-sm text-fg-2">
             {flow.preview.detail.plan.map((p, i) => (
-              <li key={`${p.stepPath}-${i}`}>{p.describe ?? p.stepId}</li>
+              <li key={`${p.stepPath}-${i}`}>{withoutBidiControls(p.describe ?? p.stepId)}</li>
             ))}
           </ul>
         )}
         {confirm.message && <p className="text-sm text-fg-2">{confirm.message}</p>}
         {asksToType && confirm.text === null && (
-          <p role="alert" className="rounded-md bg-crit-subtle px-3 py-2 text-sm text-crit">
-            The preview didn’t produce the text to type, so this can’t be confirmed. Preview again; if it
-            keeps happening, tell the playbook’s owner.
-          </p>
+          <Callout tone="crit" role="alert" title="This change can’t be confirmed">
+            <p>
+              The preview didn’t produce the text to type. Cancel, then select Preview again. If it keeps
+              happening, tell the playbook’s owner ({def.owner}).
+            </p>
+            {flow.preview.id && (
+              <p className="mt-2">
+                <IdChip value={flow.preview.id} label="Preview" />
+              </p>
+            )}
+          </Callout>
         )}
         {asksToType && confirm.text !== null && (
           <TextField
@@ -513,9 +563,9 @@ function RunConfirmDialog({ flow, label }: { flow: PlaybookFlow; label: string }
           />
         )}
         {failure && (
-          <p role="alert" className="rounded-md bg-crit-subtle px-3 py-2 text-sm text-crit">
+          <Callout tone="crit" role="alert" title="AdminForge couldn’t start that">
             {failure}
-          </p>
+          </Callout>
         )}
       </form>
     </Dialog>

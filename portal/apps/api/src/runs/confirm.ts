@@ -1,6 +1,6 @@
 import { containsRedacted, redact } from '@adminforge/engine';
 import { renderTemplate } from '@adminforge/expressions';
-import type { Confirm } from '@adminforge/schemas';
+import { normalizeConfirmation, withoutBidiControls, type Confirm } from '@adminforge/schemas';
 
 /**
  * A playbook's confirmation as the person sees it (GET /api/runs/:id → `run.confirm` on their own succeeded preview),
@@ -30,7 +30,8 @@ async function renderText(template: string, scope: Record<string, unknown>): Pro
 
 /**
  * `confirm.value`, rendered: the text a typed confirmation compares with. Null when it can't be rendered, isn't text,
- * or carries a masked value (`[redacted]`, or a `redact: true` input) — nobody can be asked to type that.
+ * has nothing visible to type (an app named with invisible characters only), or carries a masked value (`[redacted]`,
+ * or a `redact: true` input) — nobody can be asked to type that.
  */
 export async function confirmValue(
   confirm: Confirm,
@@ -39,12 +40,14 @@ export async function confirmValue(
 ): Promise<string | null> {
   if (!confirm.value) return null;
   const v = await renderText(confirm.value, scope);
-  return v === null || containsRedacted(v) || redact(v, secrets) !== v ? null : v;
+  if (v === null || normalizeConfirmation(v) === '') return null;
+  return containsRedacted(v) || redact(v, secrets) !== v ? null : v;
 }
 
 /**
- * `confirm.message`, rendered for the person who previewed (the dialog shows it next to the value to type). Null when
- * it can't be rendered, or when it would show a `redact: true` input.
+ * `confirm.message`, rendered for the person who previewed (the dialog shows it next to the value to type), without
+ * bidi controls (tenant names in it can't reorder the sentence). Null when it can't be rendered, or when it would show
+ * a `redact: true` input.
  */
 export async function confirmMessage(
   confirm: Confirm,
@@ -53,7 +56,7 @@ export async function confirmMessage(
 ): Promise<string | null> {
   if (!confirm.message) return null;
   const m = await renderText(confirm.message, scope);
-  return m === null || redact(m, secrets) !== m ? null : m.trim();
+  return m === null || redact(m, secrets) !== m ? null : withoutBidiControls(m).trim();
 }
 
 /** The confirmation of a preview, rendered (null for `confirm: none` or none at all). */

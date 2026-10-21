@@ -112,14 +112,16 @@ describe('Playbook confirm dialog: the message and value rendered by the API', (
     expect(within(drawer).getByText('You’ll type a confirmation before it runs.')).toBeInTheDocument();
     expect(within(dialog).getByText(message)).toBeInTheDocument();
     expect(document.body.textContent).not.toContain('${');
-    // The text to type, and what in it isn't plain.
-    const note = within(dialog).getByRole('note', { name: 'Characters to check' });
-    expect(note).toHaveTextContent('U+200B');
-    expect(note).toHaveTextContent('invisible character');
-    expect(note).toHaveTextContent('U+0435');
-    expect(note).toHaveTextContent('Cyrillic letter');
+    // What in the text to type can make it pass for another name: the field's description says (the invisible
+    // character's code-point tag in the label is hidden from screen readers).
     const field = within(dialog).getByLabelText(/to confirm/);
-    expect(field).toHaveAccessibleDescription(/Cyrillic letter/);
+    expect(field).toHaveAccessibleName('Type PDF Convert\u{435}r to confirm');
+    expect(field).toHaveAccessibleDescription(
+      'Check the name: it has characters that can make it pass for another \u{2014} an invisible character ' +
+        '(U+200B) and a Cyrillic \u{201c}\u{435}\u{201d} (U+0435). Make sure it\u{2019}s the one you meant to ' +
+        'change. To confirm, copy the name from the line above; case, spaces and invisible characters ' +
+        'don\u{2019}t count.',
+    );
     expect(await axeViolations()).toEqual([]);
 
     const go = within(dialog).getByRole('button', { name: 'Revoke delegated permission grant' });
@@ -147,8 +149,21 @@ describe('Playbook confirm dialog: the message and value rendered by the API', (
       value: 'Legacy Automation',
       message: null,
     });
-    expect(within(dialog).queryByRole('note', { name: 'Characters to check' })).toBeNull();
     expect(within(dialog).getByText('Legacy Automation')).toBeInTheDocument();
+    expect(within(dialog).getByLabelText(/to confirm/)).not.toHaveAccessibleDescription();
+  });
+
+  it('accents and other writing systems: only says copying is easier, no warning', async () => {
+    const { dialog } = await openConfirm(revokeGrant as never, GRANT_INPUTS, {
+      type: 'typed',
+      value: 'Caf\u{e9} Booking',
+      message: null,
+    });
+    expect(within(dialog).getByLabelText(/to confirm/)).toHaveAccessibleDescription(
+      'It has characters a keyboard may not type: a Latin \u{201c}\u{e9}\u{201d} (U+00E9). To confirm, copy ' +
+        'the name from the line above.',
+    );
+    expect(within(dialog).queryByText(/Check the name/)).toBeNull();
   });
 
   it('a value the preview didn’t produce: says so and can’t be confirmed', async () => {
@@ -157,11 +172,13 @@ describe('Playbook confirm dialog: the message and value rendered by the API', (
       value: null,
       message: null,
     });
-    expect(
-      within(dialog).getByText(
-        'The preview didn’t produce the text to type, so this can’t be confirmed. Preview again; if it keeps happening, tell the playbook’s owner.',
-      ),
-    ).toBeInTheDocument();
+    const alert = within(dialog).getByRole('alert');
+    expect(alert).toHaveTextContent('This change can\u{2019}t be confirmed');
+    expect(alert).toHaveTextContent(
+      'The preview didn\u{2019}t produce the text to type. Cancel, then select Preview again. If it keeps ' +
+        'happening, tell the playbook\u{2019}s owner (identity-team).',
+    );
+    expect(within(alert).getByRole('button', { name: `Copy Preview ${PREVIEW}` })).toBeInTheDocument();
     expect(within(dialog).queryByLabelText(/to confirm/)).toBeNull();
     const go = within(dialog).getByRole('button', { name: 'Revoke delegated permission grant' });
     expect(go).toHaveAttribute('aria-disabled', 'true');

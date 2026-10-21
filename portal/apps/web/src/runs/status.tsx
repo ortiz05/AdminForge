@@ -6,7 +6,7 @@ import {
   statusPill,
   type StatusTone,
 } from '@adminforge/ui';
-import type { RunStatus, StepStatus } from './contracts';
+import type { RunStatus, RunSummary, StepStatus } from './contracts';
 
 /** Run states in words engineers use, with the tone that carries them (never colour alone: glyph + label). */
 export const RUN_STATUS_VIEW: Record<RunStatus, { tone: StatusTone; label: string }> = {
@@ -22,6 +22,21 @@ export const RUN_STATUS_VIEW: Record<RunStatus, { tone: StatusTone; label: strin
   compensated: { tone: 'warn', label: 'Rolled back' },
   needs_review: { tone: 'crit', label: 'Needs review' },
 };
+
+/**
+ * A run's state in words, as every place shows it (run page, runbook, Runs list, run dock): the status's own label,
+ * made precise by what the run waits for. S-08: a run started before its session last turned write access on waits
+ * for its person to resume it (`waitingReason: 'prearm'`), not for write access.
+ */
+export function runStatusView(
+  status: RunStatus,
+  waitingReason?: RunSummary['waitingReason'],
+): { tone: StatusTone; label: string } {
+  const view = RUN_STATUS_VIEW[status];
+  return status === 'awaiting_arm' && waitingReason === 'prearm'
+    ? { ...view, label: 'Waiting to be resumed' }
+    : view;
+}
 
 export const STEP_STATUS_VIEW: Record<StepStatus, { tone: StatusTone; label: string }> = {
   pending: { tone: 'neutral', label: 'Not started' },
@@ -80,24 +95,25 @@ export function StatusGlyph({
   return <Glyph size={size} weight="fill" aria-hidden className={cls} />;
 }
 
+/** A run's status pill; its label comes from `runStatusView`, so a run reads the same everywhere. */
 export function RunStatusPill({
   status,
+  waitingReason,
   size = 'md',
   className,
-  label,
 }: {
   status: RunStatus;
+  /** What the run waits for, when that says more than its status (the run's `waitingReason`). */
+  waitingReason?: RunSummary['waitingReason'];
   size?: 'sm' | 'md';
   className?: string;
-  /** Says more precisely what the run waits for than the status's own label. */
-  label?: string;
 }) {
-  const view = RUN_STATUS_VIEW[status];
+  const view = runStatusView(status, waitingReason);
   const s = statusPill({ status: view.tone, size });
   return (
     <span className={s.root({ className })} data-status={status}>
       <StatusGlyph status={status} tone={view.tone} size={size === 'sm' ? 12 : 14} className={s.icon()} />
-      <span className={s.label()}>{label ?? view.label}</span>
+      <span className={s.label()}>{view.label}</span>
     </span>
   );
 }

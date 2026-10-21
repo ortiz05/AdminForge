@@ -617,9 +617,10 @@ waits for, and `Portal.Admin`; `metadata` for everyone else (S-25). Automation r
   `parent` (run id), `from`/`to` (ISO), `limit` (1–200, default 50), `cursor`.
 - **Response:** `{items: RunSummary[], cursor?}`. RunSummary:
   `id, kind, definitionKey, definitionVersion, title?, status, dryRun, trigger, identity, identityName, initiatorOid,`
-  `initiatorUpn, parentRunId, scheduleId, createdAt, startedAt, endedAt, updatedAt` — `trigger` is `interactive`,
-  `bulk` or `schedule`; `identity` is `delegated` or `automation`; `identityName` is the named app identity an
-  automation run ran as (ADR-014), else `null`.
+  `initiatorUpn, parentRunId, scheduleId, createdAt, startedAt, endedAt, updatedAt, waitingReason?` — `trigger` is
+  `interactive`, `bulk` or `schedule`; `identity` is `delegated` or `automation`; `identityName` is the named app
+  identity an automation run ran as (ADR-014), else `null`; `waitingReason: 'prearm'` on an `awaiting_arm` run that
+  waits for its person to resume it (`waiting.reason` below), so lists label it as the run page does.
 - **Errors:** `forbidden` 403, `invalid_request` 400 (bad status, date or cursor).
 - **Visibility:** a run is visible to its initiator, or to Operator/Approver/Admin holding every role in the run's
   definition `requires.portalRoles`. Runs of the automation identity need the schedule's `requires.portalRoles`

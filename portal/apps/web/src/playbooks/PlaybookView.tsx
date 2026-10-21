@@ -205,7 +205,7 @@ function BulkPreview({ detail }: { detail: RunDetail }) {
             className="flex items-center justify-between gap-3 border-t border-line px-3 py-2 first:border-t-0"
           >
             <span className="min-w-0 truncate text-fg">{c.title}</span>
-            <RunStatusPill status={c.status} size="sm" />
+            <RunStatusPill status={c.status} waitingReason={c.waitingReason} size="sm" />
           </li>
         ))}
       </ul>
@@ -241,7 +241,7 @@ function PreviewSection({ flow }: { flow: PlaybookFlow }) {
         </h2>
         <span className="flex items-center gap-2 text-xs text-fg-3">
           {detail ? (
-            <RunStatusPill status={detail.run.status} size="sm" />
+            <RunStatusPill status={detail.run.status} waitingReason={detail.run.waitingReason} size="sm" />
           ) : (
             <Skeleton className="h-5 w-20" />
           )}

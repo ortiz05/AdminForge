@@ -11,9 +11,7 @@ import {
   ConfirmDialog,
   formatRelative,
   formatTimestamp,
-  HourglassMediumIcon,
   IdChip,
-  LockKeyOpenIcon,
   PageHeader,
   Panel,
   RobotIcon,
@@ -25,17 +23,16 @@ import {
 } from '@adminforge/ui';
 import { activeRunsQueryKey } from './keys';
 import { RouterLink } from '../app/RouterLink';
-import { useShell } from '../app/shell-context';
-import { api, ApiRequestError, loginUrl } from '../lib/api';
-import { browser } from '../lib/browser';
+import { api, ApiRequestError } from '../lib/api';
 import { useMe } from '../lib/session';
 import { Callout, elapsed, Facts, QueryError, useDocumentTitle } from '../ops/ui';
 import { definitionQuery } from '../playbooks/contracts';
 import { humanize, labelOf as inputLabel } from '../playbooks/form';
 import { ApprovalCard, ManualStepCard } from './HumanTasks';
 import { readApprovalItem } from './approvals';
-import { isTerminal, labelOf, latestSteps, type RunDetail, type StepIndex } from './contracts';
+import { isTerminal, labelOf, type RunDetail, type StepIndex } from './contracts';
 import { LogView } from './LogView';
+import { ParkedBanner } from './ParkedBanner';
 import { PlanView } from './PlanView';
 import { RunDataHidden } from './RunDataHidden';
 import { buildTimeline, RunTimeline, stepIndex } from './RunTimeline';
@@ -72,150 +69,6 @@ function InputValue({ value, unit }: { value: unknown; unit?: string }) {
   if (typeof value === 'object')
     return <code className="font-mono text-xs break-all">{JSON.stringify(value)}</code>;
   return <span className="break-words">{String(value)}</span>;
-}
-
-/** What the run is waiting for, and the one thing that moves it on. */
-function ParkedBanner({
-  detail,
-  index,
-  onResume,
-  resuming,
-}: {
-  detail: RunDetail;
-  index: StepIndex;
-  onResume: () => void;
-  resuming: boolean;
-}) {
-  const me = useMe();
-  const { arm, openArmDialog } = useShell();
-  const run = detail.run;
-  const steps = latestSteps(detail.steps);
-  const waitingStep = run.waiting?.stepId ?? steps.find((s) => s.status === 'waiting')?.stepId;
-  const status =
-    run.waiting?.kind === 'arm'
-      ? 'awaiting_arm'
-      : run.waiting?.kind === 'reauth'
-        ? 'awaiting_reauth'
-        : run.status;
-
-  // S-08: started before its session last turned write access on — it changes nothing until its person resumes it.
-  const prearm = status === 'awaiting_arm' && run.waiting?.reason === 'prearm';
-  const started = run.waiting?.startedAt ?? run.startedAt ?? run.createdAt;
-
-  // Write access and a fresh sign-in are the initiator's to give: anyone else is told who the run waits for.
-  const mine = run.initiator.oid !== null && run.initiator.oid === me.user.oid;
-  if (!mine && (status === 'awaiting_arm' || status === 'awaiting_reauth')) {
-    const who = run.initiator.upn ?? 'the person who started it';
-    return (
-      <Callout
-        tone="neutral"
-        icon={<HourglassMediumIcon size={18} />}
-        title={
-          prearm
-            ? `Paused until ${who} resumes it`
-            : status === 'awaiting_arm'
-              ? `Paused until ${who} arms write access`
-              : `Paused until ${who} signs in again`
-        }
-      >
-        {prearm
-          ? 'It started before they last armed write access, so nothing changes until they check it’s theirs and resume it.'
-          : 'The next step runs with their access, so nothing else runs until they do.'}
-      </Callout>
-    );
-  }
-  if (prearm)
-    return (
-      <Callout
-        tone="warn"
-        icon={<LockKeyOpenIcon size={18} />}
-        title="Paused: check this run is yours, then resume it"
-        action={
-          arm.armed ? (
-            <Button intent="primary" pending={resuming} onClick={onResume}>
-              Resume run
-            </Button>
-          ) : me.canArm ? (
-            <Button onClick={openArmDialog}>
-              <LockKeyOpenIcon size={14} aria-hidden />
-              Arm write access
-            </Button>
-          ) : undefined
-        }
-      >
-        {!arm.armed && (me.canArm ? 'Arm write access, then resume it. ' : '')}
-        It started{' '}
-        {started ? (
-          <time dateTime={started} title={formatTimestamp(started)}>
-            {formatRelative(started)}
-          </time>
-        ) : (
-          'earlier'
-        )}
-        , before you last armed write access, so nothing changes until you resume it. Check the {run.kind},
-        its inputs and the start time are yours. If you don’t recognise it, cancel it and tell your security
-        team.
-        {!arm.armed &&
-          !me.canArm &&
-          ' Resuming it needs the Portal Operator role: ask a portal administrator for it.'}
-      </Callout>
-    );
-  switch (status) {
-    case 'awaiting_arm':
-      return (
-        <Callout
-          tone="warn"
-          icon={<LockKeyOpenIcon size={18} />}
-          title="Paused: the next step changes your tenant and needs write access"
-          action={
-            arm.armed ? (
-              <Button intent="primary" pending={resuming} onClick={onResume}>
-                Resume run
-              </Button>
-            ) : me.canArm ? (
-              <Button onClick={openArmDialog}>
-                <LockKeyOpenIcon size={14} aria-hidden />
-                Arm write access
-              </Button>
-            ) : undefined
-          }
-        >
-          {arm.armed
-            ? 'Write access is on. Resume to continue from where the run stopped.'
-            : `Write access ended before ${waitingStep ? `“${labelOf(index, waitingStep)}”` : 'the next step'} could start. Arm again, then resume — nothing that already ran is repeated.`}
-        </Callout>
-      );
-    case 'awaiting_reauth':
-      return (
-        <Callout
-          tone="warn"
-          title="Paused: Microsoft asked you to sign in again"
-          action={
-            <>
-              <Button onClick={() => browser.assign(loginUrl('/auth/login'))}>Sign in again</Button>
-              <Button intent="ghost" pending={resuming} onClick={onResume}>
-                Resume run
-              </Button>
-            </>
-          }
-        >
-          Your session needs fresh credentials (sign-in frequency, Conditional Access, or revoked tokens).
-          Sign in, then resume.
-        </Callout>
-      );
-    case 'needs_review': {
-      const stuck = steps.find((s) => s.status === 'needs_review');
-      return (
-        <Callout tone="crit" title="Needs review: a step may or may not have happened">
-          {stuck ? `“${labelOf(index, stuck.stepId)}”` : 'A step'} can’t be retried safely and was in flight
-          when the worker stopped. Check the target in the Microsoft admin center before running anything
-          again.
-        </Callout>
-      );
-    }
-    default:
-      return null;
-  }
 }
 
 /** Pending approval gates and manual steps of this run, decided right here. */
@@ -321,14 +174,6 @@ export function RunPage({ id }: { id: string }) {
     onError: (e) =>
       toast({ tone: 'crit', title: 'The run wasn’t cancelled', description: errorDescription(e) }),
   });
-  const resume = useMutation({
-    mutationFn: () => api(`/api/runs/${encodeURIComponent(id)}/resume`, { method: 'POST' }),
-    onSuccess: () => {
-      toast({ tone: 'info', title: 'Run resumed' });
-      refresh();
-    },
-    onError: (e) => toast({ tone: 'crit', title: 'The run didn’t resume', description: errorDescription(e) }),
-  });
 
   const crumbs = [{ label: 'Runs', href: '/runs' }, { label: run?.title ?? 'Run' }];
 
@@ -402,10 +247,7 @@ export function RunPage({ id }: { id: string }) {
         title={run.title}
         meta={
           <>
-            <RunStatusPill
-              status={run.status}
-              label={run.waiting?.reason === 'prearm' ? 'Waiting to be resumed' : undefined}
-            />
+            <RunStatusPill status={run.status} waitingReason={run.waitingReason} />
             {run.dryRun && <Badge tone="accent">Dry run · nothing changed</Badge>}
             {live && (
               <span className="inline-flex items-center gap-1.5 text-xs text-fg-3">
@@ -469,12 +311,7 @@ export function RunPage({ id }: { id: string }) {
           notices={notices.filter((n) => !secrets.some((s) => secretKey(s) === secretKey(n)))}
           labelFor={(stepId) => labelOf(index, stepId)}
         />
-        <ParkedBanner
-          detail={detail}
-          index={index}
-          onResume={() => resume.mutate()}
-          resuming={resume.isPending}
-        />
+        <ParkedBanner detail={detail} index={index} />
         {run.error && run.status !== 'needs_review' && (
           <Callout
             tone={run.status === 'compensated' ? 'warn' : 'crit'}
@@ -564,7 +401,7 @@ export function RunPage({ id }: { id: string }) {
                           {c.title}
                         </Link>
                       </span>
-                      <RunStatusPill status={c.status} size="sm" />
+                      <RunStatusPill status={c.status} waitingReason={c.waitingReason} size="sm" />
                     </li>
                   ))}
                 </ul>

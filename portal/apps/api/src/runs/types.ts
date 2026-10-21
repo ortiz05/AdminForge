@@ -268,6 +268,8 @@ export interface RunSummary {
   startedAt: string | null;
   endedAt: string | null;
   updatedAt: string;
+  /** `prearm` on an `awaiting_arm` run that waits for its person to resume it (S-08; `waiting.reason` on the view). */
+  waitingReason?: 'prearm';
 }
 
 /**

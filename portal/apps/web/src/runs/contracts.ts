@@ -103,6 +103,8 @@ export interface RunSummary {
   /** Label of the step in flight, for the dock ("step 4/9 · Revoke sessions"). */
   currentStep: string | null;
   parentRunId: string | null;
+  /** `prearm`: waits for its person to resume it (S-08) — every status pill says "Waiting to be resumed". */
+  waitingReason: 'prearm' | null;
 }
 
 export interface PlanEntry {
@@ -280,6 +282,9 @@ export function readRunSummary(raw: unknown): RunSummary | null {
     progress: readProgress(o.progress),
     currentStep: pick(o, 'currentStep', 'currentStepName') ?? null,
     parentRunId: pick(o, 'parentRunId') ?? null,
+    // The list sends `waitingReason`; a run view has it beside `waiting.reason`.
+    waitingReason:
+      pick(o, 'waitingReason') === 'prearm' || pick(rec(o.waiting), 'reason') === 'prearm' ? 'prearm' : null,
   };
 }
 

@@ -27,8 +27,9 @@ import { latestSteps, type RunDetail, type RunStep, type StepStatus } from './co
 import { ManualStepCard } from './HumanTasks';
 import { ErrorCode, RunDataHidden } from './RunDataHidden';
 import { Markdown } from './Markdown';
+import { ParkedBanner } from './ParkedBanner';
 import { STEP_STATUS_VIEW, RunStatusPill, StatusGlyph } from './status';
-import { TYPE_LABEL } from './RunTimeline';
+import { stepIndex, TYPE_LABEL } from './RunTimeline';
 import { SecretPanel } from './SecretPanel';
 import { secretKey } from './secrets';
 import { useRunLive } from './useRunLive';
@@ -336,6 +337,7 @@ function RunbookBody({ def, version, runId }: { def: Runbook; version: string; r
   const live = useRunLive(runId ?? '', { enabled: Boolean(runId) });
   const detail: RunDetail | undefined = runId ? live.detail : undefined;
   const byId = useMemo(() => new Map(latestSteps(detail?.steps ?? []).map((s) => [s.stepId, s])), [detail]);
+  const index = useMemo(() => stepIndex(def), [def]);
   const allSteps = def.sections.flatMap((s) => s.steps ?? []);
   const doneCount = allSteps.filter((s) =>
     ['succeeded', 'skipped', 'planned'].includes(byId.get(s.id)?.status ?? ''),
@@ -358,7 +360,7 @@ function RunbookBody({ def, version, runId }: { def: Runbook; version: string; r
         description={def.summary}
         meta={
           <>
-            {detail && <RunStatusPill status={detail.run.status} />}
+            {detail && <RunStatusPill status={detail.run.status} waitingReason={detail.run.waitingReason} />}
             <Badge tone={def.mode === 'write' ? 'outline' : 'neutral'}>
               {def.mode === 'write' ? 'Changes tenant' : 'Read-only'}
             </Badge>
@@ -405,6 +407,8 @@ function RunbookBody({ def, version, runId }: { def: Runbook; version: string; r
               onDismiss={() => live.dismissSecret(secretKey(s))}
             />
           ))}
+          {/* What a parked run waits for and how it moves on: the same banner as on the run page. */}
+          {detail && <ParkedBanner detail={detail} index={index} />}
           {def.sections.map((section, i) => (
             <section
               key={section.id}

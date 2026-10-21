@@ -6,7 +6,7 @@ import { api } from '../lib/api';
 import { isTerminal, RunDetailResponse, RunListResponse, type RunSummary } from './contracts';
 import { canStream, usePortalEvent } from './event-stream';
 import { activeRunsQueryKey } from './keys';
-import { RUN_STATUS_VIEW, StatusGlyph } from './status';
+import { runStatusView, StatusGlyph } from './status';
 
 const MAX_CHIPS = 3;
 const RECENT_MS = 10 * 60_000;
@@ -23,7 +23,7 @@ function progressText(run: RunSummary): string {
 }
 
 function DockChip({ run, now }: { run: RunSummary; now: number }) {
-  const view = RUN_STATUS_VIEW[run.status];
+  const view = runStatusView(run.status, run.waitingReason);
   const done = isTerminal(run.status);
   const detail = done
     ? run.endedAt
@@ -98,7 +98,7 @@ export default function DockRuns() {
   const all = [...live, ...finished];
   const shown = all.slice(0, MAX_CHIPS);
   const more = all.length - shown.length;
-  const announce = finished[0] ? `${finished[0].title}: ${RUN_STATUS_VIEW[finished[0].status].label}` : '';
+  const announce = finished[0] ? `${finished[0].title}: ${runStatusView(finished[0].status).label}` : '';
 
   return (
     <>

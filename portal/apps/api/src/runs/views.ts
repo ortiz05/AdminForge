@@ -42,6 +42,10 @@ export function runSummary(row: RunRow, title?: string): RunSummary {
     startedAt: iso(row.startedAt),
     endedAt: iso(row.endedAt),
     updatedAt: row.updatedAt.toISOString(),
+    // S-08: lists say what the run page says ("Waiting to be resumed"), not only "Needs write access".
+    ...(row.status === 'awaiting_arm' && sessionBinding(row.sessionHash).prearm
+      ? { waitingReason: 'prearm' as const }
+      : {}),
   };
 }
 

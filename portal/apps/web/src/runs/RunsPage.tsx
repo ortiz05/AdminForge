@@ -16,7 +16,7 @@ import { ApiRequestError } from '../lib/api';
 import { useDocumentTitle } from '../ops/ui';
 import type { RunSummary } from './contracts';
 import { fetchRunsPage, type RunsFilter } from './queries';
-import { RUN_STATUS_VIEW, RunStatusPill } from './status';
+import { RunStatusPill, runStatusView } from './status';
 
 export interface RunsSearch {
   scope?: 'mine' | 'all';
@@ -91,8 +91,8 @@ export function RunsPage({ search }: { search: RunsSearch }) {
         id: 'status',
         header: 'Status',
         kind: 'status',
-        value: (r) => ({ tone: RUN_STATUS_VIEW[r.status].tone, label: RUN_STATUS_VIEW[r.status].label }),
-        cell: (r) => <RunStatusPill status={r.status} size="sm" />,
+        value: (r) => runStatusView(r.status, r.waitingReason),
+        cell: (r) => <RunStatusPill status={r.status} waitingReason={r.waitingReason} size="sm" />,
         width: 'minmax(160px, 1fr)',
       },
       {

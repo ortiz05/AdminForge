@@ -17,6 +17,9 @@ import type { ActionSpec } from './schema-common';
 
 export const isExternal = (href: string) => /^https?:\/\//i.test(href);
 
+/** Why a content action's link shows as text: its target (from data) isn't an address AdminForge opens. */
+export const UNSAFE_LINK_REASON = 'This link’s address isn’t one AdminForge opens, so it is shown as text.';
+
 /** "identity.disable-user" → "Disable user" (when content gives no label). */
 export function playbookLabel(key: string): string {
   const name = key.split('.').pop() ?? key;
@@ -111,9 +114,11 @@ export function ActionButton({
             className,
           )}
           data-unsafe-href=""
+          title={UNSAFE_LINK_REASON}
         >
           {icon}
           {action.label}
+          <span className="sr-only">. {UNSAFE_LINK_REASON}</span>
         </span>
       );
     const target = safe.href;

@@ -1,5 +1,15 @@
 import { Link, useRouterState } from '@tanstack/react-router';
-import { Button, EmptyState, Kbd, modKey, PageHeader, Panel, SquaresFourIcon } from '@adminforge/ui';
+import {
+  Button,
+  EmptyState,
+  Kbd,
+  modKey,
+  PageHeader,
+  Panel,
+  SquaresFourIcon,
+  button,
+  cn,
+} from '@adminforge/ui';
 import { useShell } from '../app/shell-context';
 
 /**
@@ -26,10 +36,7 @@ export function NotFoundPage() {
                 Open the command palette
                 <Kbd keys={[modKey(), 'K']} />
               </Button>
-              <Link
-                to="/"
-                className="inline-flex h-(--af-control-h) items-center rounded-md px-3 font-semibold text-accent hover:bg-hover"
-              >
+              <Link to="/" className={cn(button({ intent: 'ghost' }), 'text-accent')}>
                 Go to Overview
               </Link>
             </>

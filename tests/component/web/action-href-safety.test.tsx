@@ -1,7 +1,8 @@
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { ActionButton } from '@adminforge/widgets';
+import { ActionButton, UNSAFE_LINK_REASON } from '@adminforge/widgets';
 import { __resetPrefsForTests } from '@adminforge/web/src/lib/prefs';
+import { axeViolations } from '../axe';
 import { spyRuntime } from '../widgets/helpers';
 import { PERSON_PAGE, RESULTS, guid } from './renderer-fixtures';
 import { renderPage } from './render-page';
@@ -15,13 +16,16 @@ const SLOW = { timeout: 8_000 };
 const UNSAFE = ['javascript:alert(1)', '//evil.example/x', '/\\evil.example/x', 'data:text/html,hi'];
 
 describe('ActionButton hrefs', () => {
-  it.each(UNSAFE)('%s renders as text, not a link', (href) => {
+  it.each(UNSAFE)('%s renders as text, not a link, and says why', async (href) => {
     const { runtime, navigate } = spyRuntime();
     render(<ActionButton action={{ label: 'Open details', href }} scope={runtime.scope} runtime={runtime} />);
     expect(screen.queryByRole('link')).toBeNull();
     expect(screen.queryByRole('button')).toBeNull();
-    expect(screen.getByText('Open details')).toBeInTheDocument();
+    const text = screen.getByText(/^Open details/);
+    expect(text).toHaveTextContent(UNSAFE_LINK_REASON);
+    expect(text).toHaveAttribute('title', UNSAFE_LINK_REASON);
     expect(navigate).not.toHaveBeenCalled();
+    expect(await axeViolations()).toEqual([]);
   });
 
   it('a templated unsafe value from data renders as text too', async () => {
@@ -33,8 +37,36 @@ describe('ActionButton hrefs', () => {
         runtime={runtime}
       />,
     );
-    expect(await screen.findByText('Open site')).toBeInTheDocument();
+    expect(await screen.findByText(/^Open site/)).toBeInTheDocument();
     expect(screen.queryByRole('link')).toBeNull();
+  });
+
+  it('external: true never turns an unsafe value into a link', () => {
+    const { runtime } = spyRuntime();
+    render(
+      <ActionButton
+        action={{ label: 'Portal', href: 'javascript:alert(1)', external: true }}
+        scope={runtime.scope}
+        runtime={runtime}
+      />,
+    );
+    expect(screen.queryByRole('link')).toBeNull();
+    expect(screen.getByText(/^Portal/)).toHaveAttribute('data-unsafe-href');
+  });
+
+  it('mailto: is a safe target and opens in a new tab', () => {
+    const { runtime } = spyRuntime();
+    render(
+      <ActionButton
+        action={{ label: 'Mail the owner', href: 'mailto:owner@example.com' }}
+        scope={runtime.scope}
+        runtime={runtime}
+      />,
+    );
+    expect(screen.getByRole('link', { name: /Mail the owner/ })).toHaveAttribute(
+      'href',
+      'mailto:owner@example.com',
+    );
   });
 
   it('safe in-app and https targets stay links', () => {
@@ -107,6 +139,8 @@ describe('"More actions" hrefs', { timeout: 20_000 }, () => {
     );
     const website = await screen.findByRole('menuitem', { name: 'Website' }, SLOW);
     await waitFor(() => expect(website).toHaveAttribute('aria-disabled', 'true'), SLOW);
+    expect(website).toHaveAccessibleDescription(UNSAFE_LINK_REASON);
+    expect(await axeViolations()).toEqual([]);
     expect(screen.getByRole('menuitem', { name: 'Off-site' })).toHaveAttribute('aria-disabled', 'true');
     await userEvent.click(website);
     await userEvent.click(screen.getByRole('menuitem', { name: 'Off-site' }));

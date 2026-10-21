@@ -20,6 +20,7 @@ import {
   followHref,
   launchPlaybook,
   playbookLabel,
+  UNSAFE_LINK_REASON,
   usePlaybookWriteState,
   useTemplate,
   type PlaybookWriteState,
@@ -92,12 +93,15 @@ function MoreItem({
   const write = usePlaybookWriteState(runtime, action.playbook);
   const hintId = useId();
   const safe = action.href && typeof href.value === 'string' ? safeUrl(href.value) : null;
+  const unsafe = Boolean(action.href) && !safe;
   const lockHint = write && !write.armed ? write.hint : undefined;
+  const description = lockHint ?? (unsafe ? UNSAFE_LINK_REASON : undefined);
   return (
     <MenuItem
       icon={action.icon ? <Icon name={action.icon} size={15} /> : undefined}
-      disabled={Boolean(action.href) && !safe}
-      aria-describedby={lockHint ? hintId : undefined}
+      disabled={unsafe}
+      title={unsafe ? UNSAFE_LINK_REASON : undefined}
+      aria-describedby={description ? hintId : undefined}
       shortcut={
         safe?.external ? (
           <ArrowSquareOutIcon size={12} aria-label="Opens in a new tab" />
@@ -110,9 +114,9 @@ function MoreItem({
       onSelect={() => onRun(safe?.href)}
     >
       {labelOf(action)}
-      {lockHint && (
+      {description && (
         <span id={hintId} hidden>
-          {lockHint}
+          {description}
         </span>
       )}
     </MenuItem>

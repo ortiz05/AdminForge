@@ -14,9 +14,9 @@ export {
 } from './service';
 export { RunWorker, pinnedDefinition, rootOf } from './run-worker';
 export { RunEventBus } from './events';
-export { InProcessRunQueue, PgBossRunQueue, RetryLater, RUN_QUEUE, type RunQueue } from './queue';
+export { InProcessRunQueue, RetryLater, SqliteRunQueue, type RunQueue } from './queue';
 export { MemoryRunRepository } from './memory-repository';
-export { PgRunRepository } from './pg-repository';
+export { SqliteRunRepository } from './sqlite-repository';
 export { RepositoryRunStore, decisionOf } from './store';
 export { SessionIdentityResolver } from './identity';
 export { RunChildRunner, childRunId } from './children';

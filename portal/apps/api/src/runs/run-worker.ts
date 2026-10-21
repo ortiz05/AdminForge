@@ -180,7 +180,6 @@ export class RunWorker {
     this.unsubscribe = this.deps.bus.subscribe('*', (n) => {
       if (n.type === 'run' && n.status === 'cancelled') this.active.get(n.runId)?.abort();
     });
-    await this.deps.bus.start();
     await this.deps.queue.work((runId, signal) => this.process(runId, signal), { concurrency });
     if (opts.sweep !== false) {
       this.timer = setInterval(
@@ -219,6 +218,7 @@ export class RunWorker {
     const ac = new AbortController();
     const onAbort = () => ac.abort();
     signal?.addEventListener('abort', onAbort, { once: true });
+    lock.lost?.addEventListener('abort', onAbort, { once: true });
     this.active.set(runId, ac);
     try {
       row = await repo.getRun(runId);
@@ -264,6 +264,7 @@ export class RunWorker {
           .catch((err: unknown) => this.deps.log?.warn({ err, runId }, 'token refresh after run failed'));
     } finally {
       signal?.removeEventListener('abort', onAbort);
+      lock.lost?.removeEventListener('abort', onAbort);
       this.active.delete(runId);
       await lock.release();
     }

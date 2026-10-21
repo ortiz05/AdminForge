@@ -1,10 +1,10 @@
 import type { ContentError, DefinitionOf, Kind } from '@adminforge/schemas';
 import type { Config } from '../config';
 import type { Database } from '../db/client';
+import type { Signals } from '../db/signals';
 import { AppError } from '../errors';
 import { DbDefinitionStore, DEFINITIONS_CHANNEL } from './db-store';
 import { FsDefinitionSource } from './fs-source';
-import { PgListener } from './notify';
 import {
   recordKey,
   type ChangeListener,
@@ -30,35 +30,25 @@ export const definitionNotFound = (kind: string, key: string, version?: string) 
   );
 
 /**
- * Published definitions from Postgres with an in-process cache. `NOTIFY definitions_changed` (from any publisher, any
- * replica) drops the affected entries; a (re)connect of the listener drops everything, since notifications sent while
- * disconnected are lost.
+ * Published definitions from the database with an in-process cache. The `definitions_changed` signal (from any
+ * publisher: this process's editor, or the CLI's `publish` in another process) drops the affected entries; a resync
+ * (signals were missed) drops everything.
  */
 export class CachedDbSource implements DefinitionSource {
   private readonly cache = new Map<string, Promise<DefinitionRecord | null>>();
   private readonly lists = new Map<string, Promise<DefinitionRecord[]>>();
   private readonly listeners = new Set<ChangeListener>();
-  private listener: PgListener | null = null;
+  private readonly unsubscribe: Array<() => void> = [];
 
   constructor(
     readonly store: DbDefinitionStore,
-    opts: { listenUrl?: string; log?: Log } = {},
+    opts: { signals?: Pick<Signals, 'on' | 'onResync'> | null } = {},
   ) {
-    if (opts.listenUrl) {
-      let first = true;
-      this.listener = new PgListener(
-        opts.listenUrl,
-        DEFINITIONS_CHANNEL,
-        (payload) => this.invalidate(parseChange(payload)),
-        {
-          log: opts.log,
-          onConnect: () => {
-            if (!first) this.invalidate({ all: true });
-            first = false;
-          },
-        },
+    if (opts.signals) {
+      this.unsubscribe.push(
+        opts.signals.on(DEFINITIONS_CHANNEL, (payload) => this.invalidate(parseChange(payload))),
+        opts.signals.onResync(() => this.invalidate({ all: true })),
       );
-      void this.listener.start();
     }
   }
 
@@ -104,7 +94,7 @@ export class CachedDbSource implements DefinitionSource {
   }
 
   async close(): Promise<void> {
-    await this.listener?.stop();
+    for (const u of this.unsubscribe.splice(0)) u();
     this.listeners.clear();
   }
 }
@@ -155,9 +145,9 @@ function unavailableSource(): DefinitionSource {
     throw new AppError(
       503,
       'content_unavailable',
-      'Published content is not available: CONTENT_SOURCE=db but no database is connected.',
+      'Published content is not available: CONTENT_SOURCE=db but no database is configured.',
       {
-        hint: 'Set DATABASE_URL, or CONTENT_SOURCE=fs for development.',
+        hint: 'Set DATABASE_PATH, or CONTENT_SOURCE=fs for development.',
       },
     );
   };
@@ -170,16 +160,18 @@ function unavailableSource(): DefinitionSource {
   };
 }
 
-/** CONTENT_SOURCE=fs → portal/content (hot reload when CONTENT_WATCH); db → published versions + LISTEN/NOTIFY. */
+/** CONTENT_SOURCE=fs → portal/content (hot reload when CONTENT_WATCH); db → published versions + signals. */
 export function createDefinitionRegistry(
-  config: Pick<Config, 'CONTENT_SOURCE' | 'CONTENT_DIR' | 'CONTENT_WATCH' | 'DATABASE_URL'>,
+  config: Pick<Config, 'CONTENT_SOURCE' | 'CONTENT_DIR' | 'CONTENT_WATCH'>,
   database: Database | null,
   log?: Log,
 ): DefinitionRegistry {
   if (config.CONTENT_SOURCE === 'db') {
     if (!database) return registryFrom(unavailableSource(), 'db');
     return registryFrom(
-      new CachedDbSource(new DbDefinitionStore(database.db), { listenUrl: config.DATABASE_URL, log }),
+      new CachedDbSource(new DbDefinitionStore(database.db, () => new Date(), database.signals), {
+        signals: database.signals,
+      }),
       'db',
     );
   }

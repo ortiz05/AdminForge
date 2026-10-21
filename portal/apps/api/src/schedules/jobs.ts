@@ -241,7 +241,7 @@ export function createJobRunner(deps: JobDeps): JobRunner {
   async function newsJob(ctx: JobContext, job: NewsJob): Promise<JobResult> {
     if (!deps.news)
       throw new AppError(503, 'news_not_available', 'News collection isn’t available in this process.', {
-        hint: 'Run the schedule on the scheduler service (or the API with SCHEDULER_IN_PROCESS=true).',
+        hint: 'Run the schedule from the portal, where the scheduler runs (the API process).',
       });
     const r = await deps.news.refresh({
       ...(job.refs ? { refs: job.refs } : {}),

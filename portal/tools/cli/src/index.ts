@@ -19,6 +19,7 @@ import { loadEnv, repoRoot, writeEnvKeys } from '@adminforge/config';
 import { ApiError } from '@adminforge/connectors';
 import { auditVerify } from './commands/audit';
 import { destroyAzureTestRun, provisionAzureTest } from './commands/azure-test';
+import { dbBackup, dbSignOutEveryone, importPostgres } from './commands/db';
 import { envCheck } from './commands/env';
 import { recordFixtures } from './commands/fixtures';
 import { newDefinition } from './commands/new';
@@ -204,7 +205,7 @@ program
 const audit = program.command('audit').description('The tamper-evident audit log');
 audit
   .command('verify')
-  .description('Re-walk the audit hash chain (ADMINFORGE_ENV_OVERLAY=host checks the services’ database)')
+  .description('Re-walk the audit hash chain in the database at DATABASE_PATH (read-only)')
   .option('--env <name>', 'env file to use (~/.config/adminforge/<name>.env)', 'dev')
   .action(async (opts: { env?: string }) => {
     useEnv(opts.env);
@@ -212,10 +213,55 @@ audit
       process.exitCode = 1;
   });
 
+const db = program.command('db').description('The database file (DATABASE_PATH)');
+db.command('backup')
+  .argument('<file>', 'where to write the copy (a new file), or - for stdout')
+  .description(
+    'A consistent copy of the database without sessions, sign-ins and tokens, checked (integrity, audit chain), mode 600. Not encrypted: encrypt it before it leaves the machine (with -, pipe it into gpg)',
+  )
+  .option('--plaintext', 'write the unencrypted copy to <file> (with - it goes to stdout, for gpg)')
+  .option('--env <name>', 'env file to use (~/.config/adminforge/<name>.env)')
+  .action(async (file: string, opts: { env?: string; plaintext?: boolean }) => {
+    useEnv(opts.env);
+    await dbBackup(
+      loadEnv(process.env),
+      file,
+      { out: (l) => console.log(l), err: (l) => console.error(l) },
+      { plaintext: opts.plaintext },
+    );
+  });
+db.command('sign-out-everyone')
+  .description(
+    'Emergency: end every session at once (sessions, pending sign-ins and their tokens are deleted; audited). Takes effect while the portal runs. --schedule-grants also voids the stored access of schedules that run as their creator',
+  )
+  .option('--yes', 'really do it')
+  .option('--schedule-grants', "also delete schedules' grant tokens (their creators must consent again)")
+  .option('--env <name>', 'env file to use (~/.config/adminforge/<name>.env)')
+  .action(async (opts: { yes?: boolean; scheduleGrants?: boolean; env?: string }) => {
+    useEnv(opts.env);
+    await dbSignOutEveryone(loadEnv(process.env), (l) => console.log(l), opts);
+  });
+db.command('import-postgres')
+  .description(
+    'One-time move from a Postgres release: copy its database (URL from DATABASE_URL in the env file) into a new SQLite file and verify the audit chain. Sessions are not copied (everyone signs in again)',
+  )
+  .option('--to <file>', 'the new database file (default DATABASE_PATH)')
+  .option('--from-env <key>', 'the variable that holds the Postgres URL', 'DATABASE_URL')
+  .option('--dry-run', 'check the source and show what would be copied, without writing')
+  .option('--env <name>', 'env file to use (~/.config/adminforge/<name>.env)')
+  .action(async (opts: { to?: string; fromEnv?: string; dryRun?: boolean; env?: string }) => {
+    useEnv(opts.env);
+    await importPostgres(loadEnv(process.env), (l) => console.log(l), {
+      to: opts.to,
+      fromEnv: opts.fromEnv,
+      dryRun: opts.dryRun,
+    });
+  });
+
 program
   .command('publish')
   .description(
-    'Publish new definition versions from portal/content to Postgres (idempotent by sha256) and NOTIFY definitions_changed. Runs the validate and test checks first, and publishes only reviewed content: committed, and the commit merged to origin/main (as last fetched)',
+    'Publish new definition versions from portal/content to the database at DATABASE_PATH (idempotent by sha256) and tell the running portal. Runs the validate and test checks first, and publishes only reviewed content: committed, and the commit merged to origin/main (as last fetched) — in an image, built from such a commit',
   )
   .option('--env <name>', 'env file to use (~/.config/adminforge/<name>.env)', 'dev')
   .option('--dry-run', 'show what would be published (and whether it would be refused) without writing')

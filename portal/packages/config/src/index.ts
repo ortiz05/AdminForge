@@ -7,10 +7,9 @@ import path from 'node:path';
  *   1. $ADMINFORGE_ENV_FILE, or ~/.config/adminforge/$ADMINFORGE_ENV.env (default env "dev") — runtime config;
  *   2. <same name>.admin.env — provisioner and live-test credentials, read only by admin tooling (CLI, live tests),
  *      never by the services;
- *   3. <same name>.$ADMINFORGE_ENV_OVERLAY.env — per-deployment overrides (e.g. "host": the services' own database);
- * plus, for migrations and the database scripts only, <same name>.owner.env and <overlay>.owner.env — the database
- * owner's credentials (OWNER_ENV_KEYS), read only with `owner: true`, never by the services, the CLI or `pnpm dev`.
- * process.env always wins over the files, so containers and CI can inject values directly.
+ *   3. <same name>.$ADMINFORGE_ENV_OVERLAY.env — per-deployment overrides.
+ * process.env always wins over the files, so containers (Kubernetes: a Secret as environment) and CI can inject
+ * values directly.
  */
 export function envFilePath(env: NodeJS.ProcessEnv = process.env): string {
   if (env.ADMINFORGE_ENV_FILE) return path.resolve(env.ADMINFORGE_ENV_FILE);
@@ -43,29 +42,8 @@ export const ADMIN_ENV_KEYS = [
 
 const isAdminKey = (key: string) => (ADMIN_ENV_KEYS as readonly string[]).includes(key);
 
-/**
- * The database owner's credentials: `DATABASE_MIGRATION_URL` (the non-superuser owner role that runs migrations —
- * portal/deploy/db/harden-postgres.ts writes it to <overlay>.owner.env) and `POSTGRES_PASSWORD` (the container's
- * bootstrap superuser, needed only when `pnpm db:up` creates a new cluster). They live in the owner files
- * (`ownerEnvFilePaths`), which only migrations and the database scripts read; an older layout that still has them in
- * the env file or the overlay is tolerated, but loadEnv drops them there unless `owner: true`.
- */
-export const OWNER_ENV_KEYS = ['DATABASE_MIGRATION_URL', 'POSTGRES_PASSWORD'] as const;
-
-const isOwnerKey = (key: string) => (OWNER_ENV_KEYS as readonly string[]).includes(key);
-
 /** The admin-only file next to the env file. */
 export const adminEnvFilePath = (env: NodeJS.ProcessEnv = process.env) => sibling(envFilePath(env), 'admin');
-
-/**
- * The owner files: <env>.owner.env (the dev database's owner and the container superuser) and, with an overlay,
- * <env>.<overlay>.owner.env (that deployment's database owner). Mode 600; only migrations and the database scripts read
- * them (`loadEnv(…, { owner: true })`).
- */
-export function ownerEnvFilePaths(env: NodeJS.ProcessEnv = process.env): string[] {
-  const overlay = overlayEnvFilePath(env);
-  return [sibling(envFilePath(env), 'owner'), ...(overlay ? [sibling(overlay, 'owner')] : [])];
-}
 
 /** The overlay file for $ADMINFORGE_ENV_OVERLAY, if one is named (letters, digits and dashes only). */
 export function overlayEnvFilePath(env: NodeJS.ProcessEnv = process.env): string | undefined {
@@ -79,24 +57,12 @@ export function overlayEnvFilePath(env: NodeJS.ProcessEnv = process.env): string
 export interface LoadEnvOptions {
   /** Also read <env>.admin.env (provisioner and live-test credentials). Admin tooling only. */
   admin?: boolean;
-  /**
-   * Keep the database owner's credentials (OWNER_ENV_KEYS) found in the files. Migrations only (`db:migrate`): the
-   * services, the CLI and `pnpm dev` never get them, even though they read the same files.
-   */
-  owner?: boolean;
 }
 
 /** The files `loadEnv` reads, lowest precedence first (missing files are skipped). */
 export function envFiles(env: NodeJS.ProcessEnv = process.env, opts: LoadEnvOptions = {}): string[] {
   const overlay = overlayEnvFilePath(env);
-  const [baseOwner, overlayOwner] = ownerEnvFilePaths(env);
-  return [
-    envFilePath(env),
-    ...(opts.owner ? [baseOwner!] : []),
-    ...(opts.admin ? [adminEnvFilePath(env)] : []),
-    ...(overlay ? [overlay] : []),
-    ...(opts.owner && overlayOwner ? [overlayOwner] : []),
-  ];
+  return [envFilePath(env), ...(opts.admin ? [adminEnvFilePath(env)] : []), ...(overlay ? [overlay] : [])];
 }
 
 export function parseEnv(text: string): Record<string, string> {
@@ -117,7 +83,7 @@ export function parseEnv(text: string): Record<string, string> {
 /**
  * The layered files (see envFilePath) overlaid by process.env. Missing files → process.env only. Keys from the files
  * that the caller didn't ask for are dropped: admin keys without `admin` (also from a base file that still holds
- * them — older layout), owner keys without `owner`. Values set in process.env itself are kept as given.
+ * them — older layout). Values set in process.env itself are kept as given.
  */
 export function loadEnv(
   env: NodeJS.ProcessEnv = process.env,
@@ -127,7 +93,6 @@ export function loadEnv(
   for (const file of envFiles(env, opts))
     if (existsSync(file)) Object.assign(fromFiles, parseEnv(readFileSync(file, 'utf8')));
   if (!opts.admin) for (const key of ADMIN_ENV_KEYS) delete fromFiles[key];
-  if (!opts.owner) for (const key of OWNER_ENV_KEYS) delete fromFiles[key];
   return { ...fromFiles, ...env };
 }
 
@@ -151,24 +116,14 @@ export function updateEnvFile(updates: Record<string, string>, file = envFilePat
   chmodSync(file, 0o600);
 }
 
-/**
- * Upserts keys where they belong: admin keys in <env>.admin.env; the container superuser's POSTGRES_PASSWORD in
- * <env>.owner.env (the file `pnpm db:up` passes to compose); DATABASE_MIGRATION_URL in the overlay's owner file when
- * ADMINFORGE_ENV_OVERLAY is set (that deployment's database owner), else <env>.owner.env; everything else in the env
- * file.
- */
+/** Upserts keys where they belong: admin keys in <env>.admin.env, everything else in the env file. */
 export function writeEnvKeys(updates: Record<string, string>, env: NodeJS.ProcessEnv = process.env): void {
   const pick = (keep: (k: string) => boolean) =>
     Object.fromEntries(Object.entries(updates).filter(([k]) => keep(k)));
-  const [baseOwner, overlayOwner] = ownerEnvFilePaths(env);
-  const runtime = pick((k) => !isAdminKey(k) && !isOwnerKey(k));
+  const runtime = pick((k) => !isAdminKey(k));
   const admin = pick(isAdminKey);
-  const superuser = pick((k) => k === 'POSTGRES_PASSWORD');
-  const migration = pick((k) => isOwnerKey(k) && k !== 'POSTGRES_PASSWORD');
   if (Object.keys(runtime).length) updateEnvFile(runtime, envFilePath(env));
   if (Object.keys(admin).length) updateEnvFile(admin, adminEnvFilePath(env));
-  if (Object.keys(superuser).length) updateEnvFile(superuser, baseOwner!);
-  if (Object.keys(migration).length) updateEnvFile(migration, overlayOwner ?? baseOwner!);
 }
 
 /** Removes keys from one env file (comments and order kept; a missing file is left alone). */

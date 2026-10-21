@@ -5,7 +5,7 @@ import { componentStates } from '../health/heartbeat';
 
 /** /readyz answers from a cached state at most this old: callers can't turn it into database load. */
 export const READY_CACHE_MS = 5_000;
-/** Per client address; monitors poll every few seconds at most (the portal-readiness probe every 5 minutes). */
+/** Per client address; monitors poll every few seconds at most (the portal-readiness probe every 15 minutes). */
 export const READYZ_RATE_LIMIT = { max: 60, timeWindow: '1 minute' };
 
 type Readiness =
@@ -23,7 +23,7 @@ export function healthRoutes(app: FastifyInstance, ctx: AppContext) {
       // Once per refresh (not per caller): the reason is for administrators, never in the public answer.
       app.log.warn(
         { err: { name: (err as Error).name } },
-        'not ready: the database is not reachable (is Postgres running, and is DATABASE_URL correct?)',
+        'not ready: the database can not be read (check DATABASE_PATH and the volume it is on)',
       );
       return { ready: false };
     }

@@ -1,5 +1,5 @@
 import { and, eq } from 'drizzle-orm';
-import type { Db } from '../db/client';
+import { writeTx, type Db } from '../db/client';
 import { settings } from '../db/schema';
 
 export interface SettingRecord<T = unknown> {
@@ -23,7 +23,7 @@ export interface SettingsStore {
   ): Promise<SettingRecord<T> | null>;
 }
 
-export class PgSettingsStore implements SettingsStore {
+export class SqliteSettingsStore implements SettingsStore {
   constructor(private readonly db: Db) {}
 
   async get<T>(key: string): Promise<SettingRecord<T> | null> {
@@ -36,22 +36,25 @@ export class PgSettingsStore implements SettingsStore {
     value: T,
     opts: { updatedBy: string | null; now: Date; expectedVersion?: number },
   ): Promise<SettingRecord<T> | null> {
-    return this.db.transaction(async (tx) => {
-      const [current] = await tx.select().from(settings).where(eq(settings.key, key)).for('update').limit(1);
+    // BEGIN IMMEDIATE: the version check and the write happen under the write lock (no other writer in between).
+    return writeTx(this.db, (tx) => {
+      const current = tx.select().from(settings).where(eq(settings.key, key)).limit(1).get();
       const version = current?.version ?? 0;
       if (opts.expectedVersion !== undefined && opts.expectedVersion !== version) return null;
       if (!current) {
-        const [row] = await tx
+        const row = tx
           .insert(settings)
           .values({ key, value, version: 1, updatedBy: opts.updatedBy, updatedAt: opts.now })
-          .returning();
-        return { ...row!, value: row!.value as T };
+          .returning()
+          .get();
+        return { ...row, value: row.value as T };
       }
-      const [row] = await tx
+      const row = tx
         .update(settings)
         .set({ value, version: version + 1, updatedBy: opts.updatedBy, updatedAt: opts.now })
         .where(and(eq(settings.key, key), eq(settings.version, version)))
-        .returning();
+        .returning()
+        .get();
       return row ? { ...row, value: row.value as T } : null;
     });
   }

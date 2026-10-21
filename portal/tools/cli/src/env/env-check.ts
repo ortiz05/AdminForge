@@ -30,6 +30,19 @@ const IDENTITY_KEY_SUFFIXES = [
 export type Purpose = 'provision' | 'portal' | 'schedules' | 'validation';
 export const PURPOSES: readonly Purpose[] = ['provision', 'portal', 'schedules', 'validation'];
 
+/** Configuration keys of the Postgres-based releases, retired with ADR-016. */
+export const RETIRED_KEYS = [
+  'DATABASE_URL',
+  'DATABASE_MIGRATION_URL',
+  'DATABASE_POOL_MAX',
+  'DATABASE_STATEMENT_TIMEOUT_MS',
+  'DATABASE_LOCK_TIMEOUT_MS',
+  'DATABASE_IDLE_IN_TRANSACTION_TIMEOUT_MS',
+  'POSTGRES_PASSWORD',
+  'RUN_WORKER_IN_PROCESS',
+  'SCHEDULER_IN_PROCESS',
+] as const;
+
 export const REQUIRED: Record<Purpose, readonly string[]> = {
   provision: [
     'AF_TENANT_ID',
@@ -43,8 +56,7 @@ export const REQUIRED: Record<Purpose, readonly string[]> = {
     'PUBLIC_BASE_URL',
     'AUTH_MODE',
     'DATA_MODE',
-    'DATABASE_URL',
-    'POSTGRES_PASSWORD',
+    'DATABASE_PATH',
     'TOKEN_CACHE_KEY',
     'AF_TENANT_ID',
     'AF_READ_CLIENT_ID',
@@ -128,11 +140,11 @@ function validate(key: string, value: string): string | undefined {
       .split(',')
       .map((v) => v.trim())
       .filter(Boolean);
-    // The API refuses an empty list at startup (apps/api/src/config.ts), which stops the worker and scheduler too.
+    // The API refuses an empty list at startup (apps/api/src/config.ts), which stops the worker and scheduler with it.
     if (!names.length || !names.every((v) => (KQL_SOURCES as readonly string[]).includes(v)))
       return `expected ${KQL_SOURCES.join(', ')} (comma-separated, at least one)`;
   }
-  if (key === 'DATABASE_URL' && value.includes('CHANGE_ME'))
+  if (key === 'DATABASE_PATH' && value.includes('CHANGE_ME'))
     return 'still contains the CHANGE_ME placeholder';
   return undefined;
 }
@@ -179,7 +191,11 @@ export function checkEnv(
     .map(identityEnvPrefix);
   const identityKey = (k: string) =>
     identityPrefixes.some((p) => IDENTITY_KEY_SUFFIXES.some((s) => k === `${p}${s}`));
-  const unknown = Object.keys(fileValues).filter((k) => !(k in example) && !identityKey(k));
+  // Retired keys get their own message (commands/env.ts), not "typo?".
+  const retired = new Set<string>(RETIRED_KEYS);
+  const unknown = Object.keys(fileValues).filter(
+    (k) => !(k in example) && !identityKey(k) && !retired.has(k),
+  );
   const ok = (k: string) => {
     const r = byKey.get(k);
     return !!r && (r.state === 'set' || r.state === 'default');

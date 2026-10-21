@@ -8,7 +8,7 @@ import type { NewsItemRow } from './types';
  * - a critical/high advisory, change or retirement with activity in the last 3 days;
  * - anything whose action-required date falls within the next 14 days, with activity in the last 14 days;
  * - planned maintenance (not resolved) starting within the next 3 days.
- * The Postgres store applies the same rules in SQL (pg-store.ts `breakingSql`); tests hold both to this one.
+ * The SQLite store applies the same rules in SQL (sqlite-store.ts `breakingSql`); tests hold both to this one.
  */
 
 export const DAY_MS = 86_400_000;

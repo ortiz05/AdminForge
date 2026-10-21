@@ -1,10 +1,13 @@
-import pg from 'pg';
-import { connectionConfig } from '../db/client';
+import { randomUUID } from 'node:crypto';
+import type { Database } from '../db/client';
+import { Leases } from '../db/leases';
 
 /**
- * Single active scheduler (R6): leader election with a Postgres session-level advisory lock held on a dedicated
- * connection. The leader re-checks its connection every interval; if the connection drops, Postgres releases the lock
- * and a standby acquires it on its next attempt. Standbys retry every interval.
+ * Single active scheduler (R6): leader election with a lease in the database (`leases`, name `adminforge.scheduler`).
+ * The leader renews it every interval; if it stops (the process died or hung), the lease expires and another process
+ * using the same file takes it on its next attempt. There is normally one process (the API, ADR-016): the lease is
+ * what keeps a second one — a misconfigured second pod, `pnpm dev` pointed at the same file — from running every
+ * schedule twice.
  */
 
 export interface LeaderLock {
@@ -106,7 +109,7 @@ export class LeaderElector {
       return;
     }
     const held = await this.lock.check().catch(() => false);
-    if (!held) await this.demote('lost the scheduler lock (database connection dropped)');
+    if (!held) await this.demote('lost the scheduler lease (it expired, or another process took it)');
   }
 
   private async demote(reason: string) {
@@ -127,58 +130,23 @@ export class LeaderElector {
   }
 }
 
-/** Lock key: pg_try_advisory_lock(hashtext('adminforge.scheduler')). */
 export const SCHEDULER_LOCK_NAME = 'adminforge.scheduler';
+/** How long a leader's lease lasts without renewal (renewed every election interval, 5 s by default). */
+export const SCHEDULER_LEASE_MS = 30_000;
 
-/** The advisory lock on a dedicated connection (never from the pool: session locks belong to one connection). */
-export function pgAdvisoryLock(url: string, name = SCHEDULER_LOCK_NAME): LeaderLock {
-  let client: pg.Client | null = null;
-  let broken = false;
-  const drop = async () => {
-    const c = client;
-    client = null;
-    if (c) {
-      c.removeAllListeners();
-      c.on('error', () => undefined);
-      await c.end().catch(() => undefined);
-    }
-  };
-  const connect = async () => {
-    if (client && !broken) return client;
-    await drop();
-    broken = false;
-    const c = new pg.Client(connectionConfig(url, { name: 'scheduler-lock' }));
-    c.on('error', () => {
-      broken = true;
-    });
-    c.on('end', () => {
-      broken = true;
-    });
-    await c.connect();
-    client = c;
-    return c;
-  };
+/** The scheduler's lease (one holder id per process lifetime of this lock). */
+export function leaseLock(
+  database: Pick<Database, 'sqlite' | 'signals'>,
+  opts: { name?: string; ttlMs?: number; now?: () => number } = {},
+): LeaderLock {
+  const leases = new Leases(database.sqlite, opts.now);
+  const name = opts.name ?? SCHEDULER_LOCK_NAME;
+  const ttl = opts.ttlMs ?? SCHEDULER_LEASE_MS;
+  const holder = `${database.signals.origin}:scheduler:${randomUUID()}`;
   return {
-    async tryAcquire() {
-      const c = await connect();
-      const r = await c.query<{ ok: boolean }>('select pg_try_advisory_lock(hashtext($1)) as ok', [name]);
-      if (!r.rows[0]?.ok) await drop();
-      return r.rows[0]?.ok === true;
-    },
-    async check() {
-      if (!client || broken) return false;
-      try {
-        await client.query('select 1');
-        return true;
-      } catch {
-        return false;
-      }
-    },
-    async release() {
-      if (client && !broken)
-        await client.query('select pg_advisory_unlock(hashtext($1))', [name]).catch(() => undefined);
-      await drop();
-    },
+    tryAcquire: async () => leases.tryAcquire(name, holder, ttl),
+    check: async () => leases.renew(name, holder, ttl),
+    release: async () => leases.release(name, holder),
   };
 }
 

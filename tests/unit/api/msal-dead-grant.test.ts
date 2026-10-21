@@ -49,7 +49,7 @@ describe('MSAL AuthClient maps a dead refresh token to ReauthRequired', () => {
     NODE_ENV: 'test',
     PUBLIC_BASE_URL: 'http://localhost:5173',
     AUTH_MODE: 'entra',
-    DATABASE_URL: 'postgres://unused@127.0.0.1:1/unused',
+    DATABASE_PATH: '/nonexistent/adminforge-test-unused.db',
     TOKEN_CACHE_KEY: Buffer.alloc(32, 7).toString('base64'),
     AF_TENANT_ID: '11111111-2222-4333-8444-555555555555',
     AF_READ_CLIENT_ID: '22222222-3333-4444-8555-666666666666',

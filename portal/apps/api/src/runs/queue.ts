@@ -1,9 +1,9 @@
-import { PgBoss } from 'pg-boss';
+import type { Database } from '../db/client';
 
 /**
- * The run queue (§4.3: `POST /api/runs` → pg-boss job → worker). One job = "drive run X from its checkpoint". Jobs are
- * keyed by run id (pg-boss `stately` policy: at most one queued and one active job per run), retried with backoff
- * when a worker fails or dies (heartbeats), and deferred with `startAfter` for `wait` steps.
+ * The run queue (§4.3: `POST /api/runs` → job → worker). One job = "drive run X from its checkpoint". Jobs are keyed
+ * by run id — at most one queued and one active job per run (the `stately` policy pg-boss had) — retried with backoff
+ * when the handler fails, and deferred with `startAfter` for `wait` steps (an earlier start replaces a later one).
  */
 
 export type RunJobHandler = (runId: string, signal: AbortSignal) => Promise<void>;
@@ -17,94 +17,271 @@ export class RetryLater extends Error {
 }
 
 export interface RunQueue {
-  readonly kind: 'memory' | 'pg-boss';
+  readonly kind: 'memory' | 'sqlite';
   start(): Promise<void>;
   enqueue(runId: string, opts?: { startAfter?: Date }): Promise<void>;
-  /** Consume jobs (worker role). */
+  /** Consume jobs (the API process, ADR-016). */
   work(handler: RunJobHandler, opts: { concurrency: number }): Promise<void>;
   stop(): Promise<void>;
 }
 
 type Log = { warn(obj: object, msg: string): void; error?(obj: object, msg: string): void };
 
-export const RUN_QUEUE = 'adminforge.runs';
+export interface SqliteQueueOptions {
+  /** How often due jobs are looked for (an enqueue in this process wakes the consumer at once). Default 1 s. */
+  pollMs?: number;
+  /** An active job's lease; renewed every `renewMs`. A process that dies stops renewing, and the job runs again. */
+  leaseMs?: number;
+  renewMs?: number;
+  /** Retry backoff: `retryDelayMs` doubling per failure up to `retryDelayMaxMs`; dropped after `retryLimit`. */
+  retryDelayMs?: number;
+  retryDelayMaxMs?: number;
+  retryLimit?: number;
+  /** RetryLater (the run is locked elsewhere): try again after this long, without counting a failure. */
+  busyDelayMs?: number;
+  /** How long stop() waits for running jobs before aborting them (they are queued again, not lost). */
+  gracefulMs?: number;
+  now?: () => number;
+}
 
-/** pg-boss 12 queue. */
-export class PgBossRunQueue implements RunQueue {
-  readonly kind = 'pg-boss' as const;
-  private boss: PgBoss | null = null;
-  private starting: Promise<PgBoss> | null = null;
+interface ClaimedJob {
+  id: number;
+  runId: string;
+  attempts: number;
+  /** This claim's own lease holder: a stale handler of an earlier claim of the same row can't touch this one. */
+  holder: string;
+}
+
+/**
+ * The `run_jobs` table as a queue (replaces pg-boss). Claims happen in an immediate transaction, so a job is driven by
+ * one consumer at a time even if two processes poll; the worker's own run lock (a lease) and its stale-run sweep are
+ * the second line of defence.
+ */
+export class SqliteRunQueue implements RunQueue {
+  readonly kind = 'sqlite' as const;
+  private handler: RunJobHandler | null = null;
+  private concurrency = 4;
+  /** Running jobs by claim (a row re-claimed after its lease lapsed is a new claim). */
+  private readonly active = new Map<string, { job: ClaimedJob; ac: AbortController; done: Promise<void> }>();
+  private claims = 0;
+  private timers: NodeJS.Timeout[] = [];
+  private stopping = false;
+  private polling = false;
+  private again = false;
+  private readonly holder: string;
+  private readonly o: Required<Omit<SqliteQueueOptions, 'now'>> & { now: () => number };
 
   constructor(
-    private readonly connectionString: string,
+    private readonly database: Pick<Database, 'sqlite' | 'signals'>,
     private readonly log?: Log,
-  ) {}
-
-  private ensure(): Promise<PgBoss> {
-    if (this.boss) return Promise.resolve(this.boss);
-    this.starting ??= (async () => {
-      const boss = new PgBoss({
-        connectionString: this.connectionString,
-        application_name: 'adminforge-runs',
-        max: 4,
-      });
-      boss.on('error', (err: unknown) =>
-        this.log?.warn({ err: { message: (err as Error)?.message } }, 'pg-boss error'),
-      );
-      await boss.start();
-      if (!(await boss.getQueue(RUN_QUEUE))) {
-        try {
-          await boss.createQueue(RUN_QUEUE, {
-            policy: 'stately',
-            retryLimit: 50,
-            retryDelay: 5,
-            retryBackoff: true,
-            retryDelayMax: 300,
-            // A run may take up to 4 h of active time; dead workers are detected by heartbeats instead.
-            expireInSeconds: 5 * 3600,
-            heartbeatSeconds: 60,
-            deleteAfterSeconds: 7 * 86_400,
-          });
-        } catch (err) {
-          if (!(await boss.getQueue(RUN_QUEUE))) throw err;
-        }
-      }
-      this.boss = boss;
-      return boss;
-    })().finally(() => {
-      this.starting = null;
-    });
-    return this.starting;
+    opts: SqliteQueueOptions = {},
+  ) {
+    this.holder = `${database.signals.origin}:runs`;
+    this.o = {
+      pollMs: opts.pollMs ?? 1_000,
+      leaseMs: opts.leaseMs ?? 90_000,
+      renewMs: opts.renewMs ?? 30_000,
+      retryDelayMs: opts.retryDelayMs ?? 5_000,
+      retryDelayMaxMs: opts.retryDelayMaxMs ?? 300_000,
+      retryLimit: opts.retryLimit ?? 50,
+      busyDelayMs: opts.busyDelayMs ?? 5_000,
+      gracefulMs: opts.gracefulMs ?? 10_000,
+      now: opts.now ?? Date.now,
+    };
   }
 
-  async start(): Promise<void> {
-    await this.ensure();
+  private get sqlite() {
+    return this.database.sqlite;
   }
+
+  async start(): Promise<void> {}
 
   async enqueue(runId: string, opts: { startAfter?: Date } = {}): Promise<void> {
-    const boss = await this.ensure();
-    await boss.send(
-      RUN_QUEUE,
-      { runId },
-      { singletonKey: runId, ...(opts.startAfter ? { startAfter: opts.startAfter } : {}) },
-    );
+    const t = this.o.now();
+    const at = Math.max(t, opts.startAfter?.getTime() ?? t);
+    this.upsertQueued(runId, at, 0);
+    if (at <= t) this.kick();
   }
 
   async work(handler: RunJobHandler, opts: { concurrency: number }): Promise<void> {
-    const boss = await this.ensure();
-    await boss.work<{ runId: string }>(
-      RUN_QUEUE,
-      { localConcurrency: Math.max(1, opts.concurrency), batchSize: 1, pollingIntervalSeconds: 1 },
-      async (jobs) => {
-        for (const job of jobs) await handler(job.data.runId, job.signal);
-      },
-    );
+    this.handler = handler;
+    this.concurrency = Math.max(1, opts.concurrency);
+    this.stopping = false;
+    const every = (fn: () => void, ms: number) => {
+      const t = setInterval(fn, ms);
+      t.unref();
+      this.timers.push(t);
+    };
+    every(() => this.kick(), this.o.pollMs);
+    every(() => this.renew(), this.o.renewMs);
+    this.kick();
+  }
+
+  /** Queued row for a run: the earliest start wins, and a retry keeps the higher failure count. */
+  private upsertQueued(runId: string, at: number, attempts: number) {
+    this.sqlite
+      .prepare(
+        `insert into run_jobs (run_id, state, start_after, attempts, created_at) values (?, 'queued', ?, ?, ?)
+         on conflict (run_id, state) do update set start_after = min(run_jobs.start_after, excluded.start_after),
+           attempts = max(run_jobs.attempts, excluded.attempts)`,
+      )
+      .run(runId, at, attempts, this.o.now());
+  }
+
+  /** Looks for due jobs now (coalesced: a poll already in progress runs once more). */
+  private kick() {
+    if (!this.handler || this.stopping) return;
+    if (this.polling) {
+      this.again = true;
+      return;
+    }
+    this.polling = true;
+    try {
+      do {
+        this.again = false;
+        this.requeueExpired();
+        while (this.active.size < this.concurrency && !this.stopping) {
+          const job = this.claim();
+          if (!job) break;
+          this.run(job);
+        }
+      } while (this.again && !this.stopping);
+    } catch (err) {
+      this.log?.warn({ err: { message: (err as Error).message } }, 'run queue poll failed');
+    } finally {
+      this.polling = false;
+    }
+  }
+
+  private claim(): ClaimedJob | null {
+    const t = this.o.now();
+    const holder = `${this.holder}:${++this.claims}`;
+    const tx = this.sqlite.transaction((): ClaimedJob | null => {
+      const row = this.sqlite
+        .prepare(
+          `select id, run_id as runId, attempts from run_jobs q
+            where state = 'queued' and start_after <= ?
+              and not exists (select 1 from run_jobs a where a.run_id = q.run_id and a.state = 'active')
+            order by start_after, id limit 1`,
+        )
+        .get(t) as Omit<ClaimedJob, 'holder'> | undefined;
+      if (!row) return null;
+      this.sqlite
+        .prepare("update run_jobs set state = 'active', lease_holder = ?, lease_until = ? where id = ?")
+        .run(holder, t + this.o.leaseMs, row.id);
+      return { ...row, holder };
+    });
+    return tx.immediate();
+  }
+
+  private run(job: ClaimedJob) {
+    const ac = new AbortController();
+    const done = (async () => {
+      try {
+        await this.handler!(job.runId, ac.signal);
+        // Stopped mid-run (shutdown): the run isn't finished, so its job goes back in the queue.
+        if (ac.signal.aborted) this.release(job, this.o.now(), job.attempts);
+        else this.complete(job);
+      } catch (err) {
+        this.fail(job, err);
+      } finally {
+        this.active.delete(job.holder);
+        this.kick();
+      }
+    })();
+    this.active.set(job.holder, { job, ac, done });
+  }
+
+  private complete(job: ClaimedJob) {
+    this.sqlite.prepare('delete from run_jobs where id = ? and lease_holder = ?').run(job.id, job.holder);
+  }
+
+  /** Ends the active row and queues the run again at `at` (unless a queued row is already earlier). */
+  private release(job: ClaimedJob, at: number, attempts: number) {
+    this.sqlite
+      .transaction(() => {
+        this.complete(job);
+        this.upsertQueued(job.runId, at, attempts);
+      })
+      .immediate();
+  }
+
+  private fail(job: ClaimedJob, err: unknown) {
+    try {
+      if (err instanceof RetryLater) {
+        this.release(job, this.o.now() + this.o.busyDelayMs, job.attempts);
+        return;
+      }
+      const attempts = job.attempts + 1;
+      if (attempts > this.o.retryLimit) {
+        this.complete(job);
+        (this.log?.error ?? this.log?.warn)?.call(
+          this.log,
+          { err: { message: (err as Error)?.message }, runId: job.runId, attempts },
+          'run job failed too often; dropped (the stale-run sweep queues the run again if it is still open)',
+        );
+        return;
+      }
+      this.log?.warn(
+        { err: { message: (err as Error)?.message }, runId: job.runId, attempts },
+        'run job failed',
+      );
+      const delay = Math.min(this.o.retryDelayMaxMs, this.o.retryDelayMs * 2 ** (attempts - 1));
+      this.release(job, this.o.now() + delay, attempts);
+    } catch (e) {
+      this.log?.warn(
+        { err: { message: (e as Error).message }, runId: job.runId },
+        'run job bookkeeping failed',
+      );
+    }
+  }
+
+  /** Active jobs whose lease ran out (their process died) are queued again, counting as a failed attempt. */
+  private requeueExpired() {
+    const t = this.o.now();
+    this.sqlite
+      .transaction(() => {
+        this.sqlite
+          .prepare(
+            `delete from run_jobs where state = 'active' and lease_until < ?
+               and exists (select 1 from run_jobs q where q.run_id = run_jobs.run_id and q.state = 'queued')`,
+          )
+          .run(t);
+        this.sqlite
+          .prepare(
+            `update run_jobs set state = 'queued', lease_holder = null, lease_until = null, start_after = ?,
+               attempts = attempts + 1
+             where state = 'active' and lease_until < ?`,
+          )
+          .run(t, t);
+      })
+      .immediate();
+  }
+
+  private renew() {
+    if (!this.active.size) return;
+    try {
+      const stmt = this.sqlite.prepare(
+        'update run_jobs set lease_until = ? where id = ? and lease_holder = ?',
+      );
+      const until = this.o.now() + this.o.leaseMs;
+      for (const { job } of this.active.values()) stmt.run(until, job.id, job.holder);
+    } catch (err) {
+      this.log?.warn({ err: { message: (err as Error).message } }, 'run queue lease renewal failed');
+    }
   }
 
   async stop(): Promise<void> {
-    const boss = this.boss ?? (this.starting ? await this.starting.catch(() => null) : null);
-    this.boss = null;
-    await boss?.stop({ graceful: true, timeout: 10_000 }).catch(() => undefined);
+    this.stopping = true;
+    for (const t of this.timers) clearInterval(t);
+    this.timers = [];
+    const running = () => Promise.allSettled([...this.active.values()].map((a) => a.done));
+    const graceful = new Promise((r) => setTimeout(r, this.o.gracefulMs).unref());
+    await Promise.race([running(), graceful]);
+    // Still running: stop at the next checkpoint; their jobs go back in the queue (run() handles the abort).
+    for (const a of this.active.values()) a.ac.abort();
+    await Promise.race([running(), new Promise((r) => setTimeout(r, 5_000).unref())]);
+    this.handler = null;
   }
 }
 

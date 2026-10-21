@@ -86,7 +86,6 @@ export async function streamRunEvents(
   let pumping = false;
   let again = false;
   let unsubscribe: () => void = () => undefined;
-  let unReconnect: () => void = () => undefined;
   let untrack: () => void = () => undefined;
   let detach: () => void = () => undefined;
   let poll: NodeJS.Timeout | null = null;
@@ -97,7 +96,6 @@ export async function streamRunEvents(
     clearInterval(heartbeat);
     if (poll) clearInterval(poll);
     unsubscribe();
-    unReconnect();
     untrack();
     detach();
     raw.end();
@@ -164,7 +162,6 @@ export async function streamRunEvents(
 
   // Subscribe before the replay so nothing that lands in between is missed.
   unsubscribe = deps.bus.subscribe(runId, () => void pump());
-  unReconnect = deps.bus.onReconnect(() => void pump());
   untrack = deps.bus.track(close);
   // Show-once secrets of this run reach only the initiator's own open streams, live, and are never stored (no id).
   if (deps.secrets && request.session)
@@ -173,10 +170,5 @@ export async function streamRunEvents(
       sessionHash: request.session.idHash,
       send: (m) => void (!closed && raw.write(`data: ${JSON.stringify(m)}\n\n`)),
     });
-  // LISTEN must be up before the replay, or an event landing in between would only show up with the next one.
-  await Promise.race([
-    deps.bus.start().catch(() => undefined),
-    new Promise((r) => setTimeout(r, 2_000).unref?.()),
-  ]);
   await pump();
 }

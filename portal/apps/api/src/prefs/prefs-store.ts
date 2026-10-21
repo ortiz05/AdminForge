@@ -14,7 +14,7 @@ const sanitize = (value: unknown): UserPrefs => {
   return parsed.success ? parsed.data : {};
 };
 
-export class PgPrefsStore implements PrefsStore {
+export class SqlitePrefsStore implements PrefsStore {
   constructor(private readonly db: Db) {}
 
   async get(userOid: string): Promise<UserPrefs> {

@@ -1,6 +1,6 @@
 /**
  * `@adminforge/api/tooling/scheduler` — the scheduler wiring tools may use: the runs and schedules modules, the
- * `Scheduler` (for one-shot runs without leadership) and probes. Used by the scheduler service
+ * `Scheduler` (for one-shot runs without leadership) and probes. Used by the scheduler one-shots
  * (`portal/apps/scheduler/src/main.ts` and `one-shot.ts`) and, through `one-shot.ts`,
  * `tests/live/scripts/run-schedule-once.ts`.
  *

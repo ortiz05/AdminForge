@@ -1,1 +1,0 @@
-ALTER TABLE "preauth" ADD COLUMN "binding_hash" text;

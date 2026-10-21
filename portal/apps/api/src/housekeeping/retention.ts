@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { and, inArray, isNotNull, lt, sql } from 'drizzle-orm';
 import type { ArtifactStore } from '../artifacts/store';
 import type { AuditWriter } from '../audit/writer';
-import type { Db } from '../db/client';
+import { writeTx, type Db } from '../db/client';
 import {
   approvals,
   probeResults,
@@ -42,7 +42,7 @@ const DAY_MS = 86_400_000;
 /**
  * Deletes history older than the policy: finished runs (with their steps, events and decided run approvals), schedule
  * run history, deleted portal schedules without history, probe results, report files and News and changes items past
- * their feed's retention. Batched so a large backlog doesn't hold long locks. The audit log is
+ * their feed's retention. Batched so a large backlog doesn't hold the write lock for long. The audit log is
  * append-only and is never touched; the purge itself is audited (counts only).
  */
 export async function applyRetention(
@@ -75,34 +75,39 @@ export async function applyRetention(
       .select({ id: runs.id })
       .from(runs)
       .where(
-        and(inArray(runs.status, FINISHED), lt(sql`coalesce(${runs.endedAt}, ${runs.updatedAt})`, runCutoff)),
+        and(
+          inArray(runs.status, FINISHED),
+          lt(sql`coalesce(${runs.endedAt}, ${runs.updatedAt})`, runCutoff.getTime()),
+        ),
       )
       .limit(BATCH);
     if (!old.length) break;
     const ids = old.map((r) => r.id);
-    await db.transaction(async (tx) => {
-      result.events += (
-        await tx
-          .delete(runStepEvents)
-          .where(inArray(runStepEvents.runId, ids))
-          .returning({ id: runStepEvents.id })
-      ).length;
-      result.steps += (
-        await tx.delete(runSteps).where(inArray(runSteps.runId, ids)).returning({ runId: runSteps.runId })
-      ).length;
-      result.approvals += (
-        await tx
-          .delete(approvals)
-          .where(
-            and(
-              sql`${approvals.subjectType} = 'run'`,
-              inArray(approvals.subjectId, ids),
-              sql`${approvals.status} <> 'pending'`,
-            ),
-          )
-          .returning({ id: approvals.id })
-      ).length;
-      result.runs += (await tx.delete(runs).where(inArray(runs.id, ids)).returning({ id: runs.id })).length;
+    writeTx(db, (tx) => {
+      // The run first: its steps and events go with it (ON DELETE CASCADE), and an approval may only be deleted once
+      // its run is gone (the approvals_delete_with_subject trigger).
+      result.events += tx
+        .delete(runStepEvents)
+        .where(inArray(runStepEvents.runId, ids))
+        .returning({ id: runStepEvents.id })
+        .all().length;
+      result.steps += tx
+        .delete(runSteps)
+        .where(inArray(runSteps.runId, ids))
+        .returning({ runId: runSteps.runId })
+        .all().length;
+      result.runs += tx.delete(runs).where(inArray(runs.id, ids)).returning({ id: runs.id }).all().length;
+      result.approvals += tx
+        .delete(approvals)
+        .where(
+          and(
+            sql`${approvals.subjectType} = 'run'`,
+            inArray(approvals.subjectId, ids),
+            sql`${approvals.status} <> 'pending'`,
+          ),
+        )
+        .returning({ id: approvals.id })
+        .all().length;
     });
     if (old.length < BATCH) break;
   }
@@ -121,7 +126,7 @@ export async function applyRetention(
       .where(
         and(
           sql`${schedules.source} = 'portal'`,
-          sql`${schedules.definition}->>'status' = 'retired'`,
+          sql`${schedules.definition} ->> 'status' = 'retired'`,
           lt(schedules.createdAt, cutoff(1)),
           sql`not exists (select 1 from ${scheduleRuns} where ${scheduleRuns.scheduleId} = ${schedules.id})`,
         ),

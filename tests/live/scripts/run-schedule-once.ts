@@ -1,9 +1,9 @@
 // Live: run one schedule (or probes) once as the automation identity against the DEV database — the scheduler
-// service's own one-shot module (portal/apps/scheduler/src/one-shot.ts: `Scheduler.runOnce`, `runProbe`, the same
+// one-shots' own module (portal/apps/scheduler/src/one-shot.ts: `Scheduler.runOnce`, `runProbe`, the same
 // status lines), with email and Teams delivery suppressed or redirected so no real recipient gets anything. This
 // script adds only the safety guards below and the delivery override.
 //
-// Usage (from the repository root, dev env file; never with ADMINFORGE_ENV_OVERLAY=host):
+// Usage (from the repository root, dev env file only — no ADMINFORGE_ENV_OVERLAY):
 //   pnpm exec tsx tests/live/scripts/run-schedule-once.ts --schedule <key> [--deliver none|sender]
 //   pnpm exec tsx tests/live/scripts/run-schedule-once.ts --probe <key> [--probe <key>…] [--no-store]
 //
@@ -12,14 +12,12 @@
 // --deliver sender: every recipient list a schedule names (configured or not) is AF_MAIL_SENDER itself — the report
 //   mailbox sends to itself, no person receives mail; Teams webhooks are blanked. Needs AF_MAIL_SENDER.
 // Refused: playbook schedules (they would enqueue a real run for the dev API's worker — use run-playbook.ts, which
-// previews first), DATABASE_URL from the process environment, and a dev database that is also the host services'
-// (the `host` overlay resolving to the same DATABASE_URL). Database URLs are compared, never printed.
+// previews first), DATABASE_PATH from the process environment (a deployment's file), and an env overlay.
 // Output: a line on database, identity and delivery; then the run status, reason codes, file row counts and delivery
 //   statuses, or one line per probe (key, kind, status, code, metric) — log lines on stderr are masked (lib/mask.ts).
 //   Exit code 1 unless the schedule succeeded / every probe is ok or warn.
-import { existsSync } from 'node:fs';
 import { parseArgs } from 'node:util';
-import { loadEnv, overlayEnvFilePath } from '@adminforge/config';
+import { loadEnv } from '@adminforge/config';
 import { mask, maskError } from '../lib/mask';
 
 const { values } = parseArgs({
@@ -36,34 +34,15 @@ const usage =
 if (!values.schedule === !values.probe?.length) throw new Error(usage);
 if (values.deliver !== 'none' && values.deliver !== 'sender') throw new Error(usage);
 
-// The dev database only: the host services use the `host` overlay (<env>.host.env) and their own database.
+// The dev database only: the database file named in the dev env file, never one handed in through the environment.
 const usesDatabase = !!values.schedule || !values['no-store'];
-const overlay = process.env.ADMINFORGE_ENV_OVERLAY;
-if (overlay === 'host')
+if (process.env.ADMINFORGE_ENV_OVERLAY)
   throw new Error(
-    'Refusing ADMINFORGE_ENV_OVERLAY=host: that is the host services’ database. Run against the dev database (unset it).',
+    'Refusing ADMINFORGE_ENV_OVERLAY: this script runs against the dev env file only. Unset it.',
   );
-if (usesDatabase && process.env.DATABASE_URL !== undefined)
+if (usesDatabase && process.env.DATABASE_PATH !== undefined)
   throw new Error(
-    'Refusing DATABASE_URL from the process environment: this script uses only the dev env file’s database. Unset it.',
-  );
-const devDatabase = loadEnv({ ...process.env, ADMINFORGE_ENV_OVERLAY: '' }).DATABASE_URL;
-if (usesDatabase && overlay && devDatabase !== loadEnv().DATABASE_URL)
-  throw new Error(
-    `Refusing ADMINFORGE_ENV_OVERLAY=${overlay}: it points at another database than the dev env file.`,
-  );
-// Where host services are configured, their database must not be this one (they would race this run's jobs).
-const hostEnv = { ...process.env, ADMINFORGE_ENV_OVERLAY: 'host' };
-const hostFile = overlayEnvFilePath(hostEnv);
-if (
-  usesDatabase &&
-  hostFile &&
-  existsSync(hostFile) &&
-  loadEnv().DATABASE_URL &&
-  loadEnv(hostEnv).DATABASE_URL === loadEnv().DATABASE_URL
-)
-  throw new Error(
-    'Refusing: the database this script would use is also the host services’ database (the host overlay resolves to the same DATABASE_URL). Give the services their own database in <env>.host.env (portal/deploy).',
+    'Refusing DATABASE_PATH from the process environment: this script uses only the dev env file’s database. Unset it.',
   );
 
 // API and scheduler modules load only after the guards (and before the configuration is read).
@@ -98,8 +77,10 @@ const say = (level: string) => (obj: object, msg: string) => {
 const log = { info: () => undefined, warn: say('warn'), error: say('error') };
 
 const config = loadConfig();
-if (values.schedule && !config.DATABASE_URL)
-  throw new Error('No DATABASE_URL in the env file: schedules need the dev database (`pnpm db:up`).');
+if (values.schedule && !config.DATABASE_PATH)
+  throw new Error(
+    'No DATABASE_PATH in the env file: schedules need the dev database (init:local writes one).',
+  );
 
 // Teams is never posted from here, whatever the configuration says.
 const refuse: typeof fetch = async () => {

@@ -2,7 +2,7 @@ import { createCipheriv, randomBytes } from 'node:crypto';
 import { keyId, open, seal } from '@adminforge/api/src/security/envelope';
 import { loadConfig, tokenCacheKey } from '@adminforge/api/src/config';
 
-// TOKEN_CACHE_KEY rotation (docs/operations.md → Postgres hardening): blobs name the key that sealed them, earlier keys
+// TOKEN_CACHE_KEY rotation (docs/operations.md → Database): blobs name the key that sealed them, earlier keys
 // (TOKEN_CACHE_PREVIOUS_KEYS) still open old blobs, and the GCM tag is always the full 16 bytes.
 const oldKey = randomBytes(32);
 const newKey = randomBytes(32);

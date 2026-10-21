@@ -14,7 +14,7 @@ import type { Probe } from '@adminforge/schemas';
 
 /**
  * One-shot runs as the automation identity: one schedule now, or probes now, without the leader lock — and the
- * status lines they print. Shared by the scheduler service's one-shot flags (`main.ts --schedule/--probe/--once`) and
+ * status lines they print. Shared by the scheduler's one-shot flags (`main.ts --schedule/--probe/--once`) and
  * the live script `tests/live/scripts/run-schedule-once.ts`, which adds its own safety guards (dev database only, no
  * playbook schedules) and a delivery override so no real recipient gets mail.
  *
@@ -34,7 +34,7 @@ export interface OneShotLog {
 
 export interface OneShotOptions {
   log: OneShotLog;
-  /** No database: probe results are not stored, and schedules can't run (their state lives in Postgres). */
+  /** No database: probe results are not stored, and schedules can't run (their state lives in the database). */
   noStore?: boolean;
   /**
    * Email/Teams delivery override for this process: report delivery (the jobs) and `notify.onFailure`/`onSuccess`
@@ -68,7 +68,7 @@ export function openOneShot(config: Config, opts: OneShotOptions): OneShot {
     publicBaseUrl: config.PUBLIC_BASE_URL,
     ...opts.delivery,
   };
-  // Scheduled playbook runs are enqueued for the run worker (ROLE=worker); a one-shot never executes them itself.
+  // Scheduled playbook runs are queued for the run worker (the API process); a one-shot never executes them itself.
   const runs = createRunsModule(ctx, { inProcessWorker: false, log });
   const schedules = createSchedulesModule(ctx, runs, {
     inProcess: false,

@@ -5,9 +5,9 @@
  * - this one (`@adminforge/api/tooling`): configuration, the process context, database, definition store, outbound
  *   executor, automation identity, datasource runner, audit writer and email delivery. Used by the CLI
  *   (`portal/tools/cli/src/content/api-bridge.ts`: `publish`, `fixtures record`, `audit`), the live scripts
- *   (`tests/live/scripts/check-mail-sender.ts`, `run-schedule-once.ts`) and the scheduler service.
+ *   (`tests/live/scripts/check-mail-sender.ts`, `run-schedule-once.ts`) and the scheduler one-shots.
  * - `@adminforge/api/tooling/scheduler` (`tooling-scheduler.ts`): the runs and schedules modules, the scheduler and
- *   probes. Used by the scheduler service (`portal/apps/scheduler`) and, through its one-shot module,
+ *   probes. Used by the scheduler one-shots (`portal/apps/scheduler`) and, through its one-shot module,
  *   `run-schedule-once.ts`. Kept apart because loading it costs most of a second (job queue, report writers, news),
  *   which every CLI command would otherwise pay at start-up.
  *
@@ -32,10 +32,15 @@ export { createContext, type AppContext, type AppDeps } from './context';
 /** Log fields with bound database values stripped (the scheduler's JSON log lines). */
 export { safeLogFields } from './logging';
 
-// Database (CLI: publish, audit; the scheduler's startup role check).
-export { assertDatabaseRole, createDatabase, type Database } from './db/client';
+// Database (CLI: publish, audit, db backup / import-postgres; the scheduler one-shots' file check).
+export { createDatabase, writeTx, type Database, type Db } from './db/client';
+export { assertDatabaseFile, checkDatabaseFile } from './db/file-check';
+export { migrateDatabase, runMigrations, triggerStatement } from './db/migrate';
+export { BACKUP_EMPTIED_TABLES, backupDatabase, type BackupResult } from './db/backup';
+export { signOutEveryone } from './auth/session-store';
+export * as dbSchema from './db/schema';
 
-// Definitions: the Postgres store `publish` writes and the file source it reads (CLI).
+// Definitions: the database store `publish` writes and the file source it reads (CLI).
 export {
   DbDefinitionStore,
   FsDefinitionSource,
@@ -53,7 +58,7 @@ export { DatasourceRunner, type UserScope } from './datasources/executor';
 export { hiddenFromContent } from './datasources/env';
 
 // Audit writer (CLI: publish and audit).
-export { PgAuditWriter, type AuditInput } from './audit/writer';
+export { SqliteAuditWriter, type AuditInput } from './audit/writer';
 
 // Email and Teams delivery: the configuration keys delivery reads and the notifier (scheduler one-shots,
 // run-schedule-once, check-mail-sender).

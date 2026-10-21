@@ -7,7 +7,7 @@ const base = { NODE_ENV: 'test', PUBLIC_BASE_URL: 'http://localhost:5173' };
 const entra = {
   ...base,
   AUTH_MODE: 'entra',
-  DATABASE_URL: 'postgres://x@127.0.0.1:55432/x',
+  DATABASE_PATH: '/var/lib/adminforge/adminforge.db',
   TOKEN_CACHE_KEY: Buffer.alloc(32, 1).toString('base64'),
   AF_TENANT_ID: '11111111-2222-4333-8444-555555555555',
   AF_READ_CLIENT_ID: '22222222-3333-4444-8555-666666666666',
@@ -17,7 +17,7 @@ const entra = {
 describe('loadConfig', () => {
   it('requires tenant and Read app settings when AUTH_MODE=entra', () => {
     expect(() => loadConfig({ ...base, AUTH_MODE: 'entra' })).toThrow(
-      /AF_TENANT_ID[\s\S]*AF_READ_CLIENT_ID[\s\S]*AF_READ_CLIENT_SECRET[\s\S]*TOKEN_CACHE_KEY[\s\S]*DATABASE_URL/,
+      /AF_TENANT_ID[\s\S]*AF_READ_CLIENT_ID[\s\S]*AF_READ_CLIENT_SECRET[\s\S]*TOKEN_CACHE_KEY[\s\S]*DATABASE_PATH/,
     );
     expect(loadConfig(entra).AUTH_MODE).toBe('entra');
   });
@@ -37,7 +37,12 @@ describe('loadConfig', () => {
 
   it('refuses mock auth in production', () => {
     expect(() =>
-      loadConfig({ ...base, NODE_ENV: 'production', AUTH_MODE: 'mock', DATABASE_URL: 'postgres://x' }),
+      loadConfig({
+        ...base,
+        NODE_ENV: 'production',
+        AUTH_MODE: 'mock',
+        DATABASE_PATH: '/var/lib/adminforge/x.db',
+      }),
     ).toThrow(/mock auth is not allowed in production/);
   });
 
@@ -114,7 +119,7 @@ describe('loadConfig', () => {
 });
 
 describe('TRUST_PROXY', () => {
-  it('defaults to loopback (a reverse proxy on this host, e.g. Caddy)', () => {
+  it('defaults to loopback (a reverse proxy in the same pod or on the same machine)', () => {
     expect(loadConfig(entra).TRUST_PROXY).toBe('loopback');
   });
 

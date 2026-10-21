@@ -1,11 +1,12 @@
 import type { Definition, Kind } from '@adminforge/schemas';
-import { and, eq, inArray, sql } from 'drizzle-orm';
-import type { Db } from '../db/client';
+import { and, eq, inArray } from 'drizzle-orm';
+import { writeTx, type Db, type Tx } from '../db/client';
+import type { Signals } from '../db/signals';
 import { definitions } from '../db/schema';
 import { compareSemVer, recordKey, type DefinitionRecord, type DefinitionsChanged } from './types';
 
 export const DEFINITIONS_CHANNEL = 'definitions_changed';
-/** Postgres NOTIFY payloads must stay under 8000 bytes; larger change sets are sent as `{all:true}`. */
+/** Signals stay small; larger change sets are sent as `{all:true}` (everything is reloaded). */
 const MAX_PAYLOAD = 7000;
 const LIVE = ['published', 'retired'];
 
@@ -38,7 +39,8 @@ export interface PublishResult {
   refused: number;
   /**
    * Unchanged versions whose stored body was rewritten in the authored key order (same content and sha256). Bodies
-   * published while the column was jsonb came back with sorted keys; the next publish restores their order.
+   * published while the Postgres column was jsonb (and imported as they were) have sorted keys; the next publish
+   * restores their order.
    */
   refreshed: number;
   /** Nothing is written when anything is refused (publishing is all-or-nothing). */
@@ -81,14 +83,16 @@ const toRecord = (row: Row): DefinitionRecord => ({
 });
 
 /**
- * Published definitions in Postgres (`definitions` table). Publishing is idempotent per sha256, refuses a version
+ * Published definitions in the database (`definitions` table). Publishing is idempotent per sha256, refuses a version
  * reused with different content (and versions older than the latest), and is all-or-nothing. Every publish that
- * creates rows sends `NOTIFY definitions_changed` in the same transaction.
+ * creates rows records the `definitions_changed` signal in the same transaction (every process drops those cache
+ * entries).
  */
 export class DbDefinitionStore {
   constructor(
     private readonly db: Db,
     private readonly now: () => Date = () => new Date(),
+    private readonly signals: Pick<Signals, 'publish' | 'emitLocal'> | null = null,
   ) {}
 
   private static plan(entries: PublishEntry[], existing: Meta[]): PublishItem[] {
@@ -139,7 +143,7 @@ export class DbDefinitionStore {
     });
   }
 
-  private async meta(db: Pick<Db, 'select'>, keys?: string[]): Promise<Meta[]> {
+  private meta(db: Pick<Db, 'select'> | Tx, keys?: string[]): Meta[] {
     const q = db
       .select({
         id: definitions.id,
@@ -150,16 +154,13 @@ export class DbDefinitionStore {
         status: definitions.status,
       })
       .from(definitions);
-    return keys ? q.where(inArray(definitions.key, keys)) : q;
+    return (keys ? q.where(inArray(definitions.key, keys)) : q).all();
   }
 
   /** What `publish` would do, without writing. */
   async plan(entries: PublishEntry[]): Promise<PublishItem[]> {
     if (!entries.length) return [];
-    return DbDefinitionStore.plan(
-      entries,
-      await this.meta(this.db, [...new Set(entries.map((e) => e.def.id))]),
-    );
+    return DbDefinitionStore.plan(entries, this.meta(this.db, [...new Set(entries.map((e) => e.def.id))]));
   }
 
   async publish(entries: PublishEntry[], opts: { dryRun?: boolean } = {}): Promise<PublishResult> {
@@ -177,57 +178,60 @@ export class DbDefinitionStore {
       const items = await this.plan(entries);
       return summary(items, false, false);
     }
-    return this.db.transaction(async (tx) => {
-      // One publisher at a time across processes (CLI, CI, the portal editor).
-      await tx.execute(sql`select pg_advisory_xact_lock(hashtext('adminforge.definitions_publish'))`);
+    // BEGIN IMMEDIATE: one publisher at a time across processes (the CLI, the portal editor).
+    const outcome = writeTx(this.db, (tx) => {
       const items = DbDefinitionStore.plan(
         entries,
-        await this.meta(tx, [...new Set(entries.map((e) => e.def.id))]),
+        this.meta(tx, [...new Set(entries.map((e) => e.def.id))]),
       );
-      if (items.some((i) => i.action === 'refused')) return summary(items, false, false);
+      if (items.some((i) => i.action === 'refused'))
+        return { items, applied: false, changed: [] as string[] };
       const now = this.now();
-      const restored = await this.restoreKeyOrder(
+      const restored = this.restoreKeyOrder(
         tx,
         entries.filter((_, i) => items[i]!.action === 'unchanged'),
       );
       refreshed = restored.length;
       const creates = entries.filter((_, i) => items[i]!.action === 'create');
-      if (!creates.length) {
-        if (!restored.length) return summary(items, true, false);
-        await tx.execute(sql`select pg_notify(${DEFINITIONS_CHANNEL}, ${notifyPayload(restored)})`);
-        return summary(items, true, true);
-      }
-      await tx.insert(definitions).values(
-        creates.map((e) => ({
-          kind: e.def.kind,
-          key: e.def.id,
-          version: e.def.version,
-          status: e.def.status === 'retired' ? 'retired' : 'published',
-          source: e.source ?? 'git',
-          body: e.def,
-          sha256: e.sha256,
-          authorOid: e.authorOid ?? null,
-          approverOid: e.approverOid ?? null,
-          createdAt: now,
-          publishedAt: now,
-        })),
-      );
-      const keys = [...new Set([...creates.map((e) => recordKey(e.def.kind, e.def.id)), ...restored])].sort();
-      await tx.execute(sql`select pg_notify(${DEFINITIONS_CHANNEL}, ${notifyPayload(keys)})`);
-      return summary(items, true, true);
+      if (creates.length)
+        tx.insert(definitions)
+          .values(
+            creates.map((e) => ({
+              kind: e.def.kind,
+              key: e.def.id,
+              version: e.def.version,
+              status: e.def.status === 'retired' ? 'retired' : 'published',
+              source: e.source ?? 'git',
+              body: e.def,
+              sha256: e.sha256,
+              authorOid: e.authorOid ?? null,
+              approverOid: e.approverOid ?? null,
+              createdAt: now,
+              publishedAt: now,
+            })),
+          )
+          .run();
+      const changed = [
+        ...new Set([...creates.map((e) => recordKey(e.def.kind, e.def.id)), ...restored]),
+      ].sort();
+      // The signal row commits with the versions it announces (or not at all): other processes can't miss it.
+      if (changed.length)
+        this.signals?.publish(DEFINITIONS_CHANNEL, notifyPayload(changed), { local: false });
+      return { items, applied: true, changed };
     });
+    // This process's own listeners, once committed.
+    const notified = outcome.changed.length > 0 && this.signals !== null;
+    if (notified) this.signals!.emitLocal(DEFINITIONS_CHANNEL, notifyPayload(outcome.changed));
+    return summary(outcome.items, outcome.applied, notified);
   }
 
   /**
    * Rewrites the stored body of unchanged versions (same sha256) whose key order differs from the authored file, and
    * returns their record keys. The content is identical; only the order of object keys is restored.
    */
-  private async restoreKeyOrder(
-    tx: Pick<Db, 'select' | 'update'>,
-    unchanged: PublishEntry[],
-  ): Promise<string[]> {
+  private restoreKeyOrder(tx: Tx, unchanged: PublishEntry[]): string[] {
     if (!unchanged.length) return [];
-    const rows = await tx
+    const rows = tx
       .select({
         id: definitions.id,
         kind: definitions.kind,
@@ -236,14 +240,15 @@ export class DbDefinitionStore {
         body: definitions.body,
       })
       .from(definitions)
-      .where(inArray(definitions.key, [...new Set(unchanged.map((e) => e.def.id))]));
+      .where(inArray(definitions.key, [...new Set(unchanged.map((e) => e.def.id))]))
+      .all();
     const restored = new Set<string>();
     for (const e of unchanged) {
       const row = rows.find(
         (r) => r.kind === e.def.kind && r.key === e.def.id && r.version === e.def.version,
       );
       if (!row || JSON.stringify(row.body) === JSON.stringify(e.def)) continue;
-      await tx.update(definitions).set({ body: e.def }).where(eq(definitions.id, row.id));
+      tx.update(definitions).set({ body: e.def }).where(eq(definitions.id, row.id)).run();
       restored.add(recordKey(e.def.kind, e.def.id));
     }
     return [...restored].sort();

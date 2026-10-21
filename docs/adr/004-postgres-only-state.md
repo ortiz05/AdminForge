@@ -1,6 +1,6 @@
 # ADR-004: PostgreSQL is the only stateful dependency
 
-Status: accepted (2026-10-15)
+Status: superseded by ADR-016 (2026-10-20) — was accepted 2026-10-15
 
 ## Context
 

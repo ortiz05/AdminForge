@@ -1,6 +1,6 @@
 import { and, eq, lt, or, sql } from 'drizzle-orm';
-import type { Db } from '../db/client';
-import { scheduleGrants, sessions, tokenCache } from '../db/schema';
+import { writeTx, type Db } from '../db/client';
+import { sessions } from '../db/schema';
 
 /** A signed-in session as stored (the cookie's id is never stored, only its sha256). */
 export interface SessionRecord {
@@ -53,7 +53,7 @@ export const isArmed = (s: Pick<SessionRecord, 'writeAccountId' | 'writeExpiresA
 
 const DAY_MS = 86_400_000;
 
-export class PgSessionStore implements SessionStore {
+export class SqliteSessionStore implements SessionStore {
   constructor(private readonly db: Db) {}
 
   async create(session: SessionRecord): Promise<void> {
@@ -85,28 +85,34 @@ export class PgSessionStore implements SessionStore {
   }): Promise<number> {
     const idleCutoff = new Date(now.getTime() - idleMinutes * 60_000);
     const unusable = or(lt(sessions.expiresAt, now), lt(sessions.lastSeenAt, idleCutoff));
-    return this.db.transaction(async (tx) => {
+    const t = now.getTime();
+    const idle = idleCutoff.getTime();
+    return writeTx(this.db, (tx) => {
       // Refresh tokens of sessions nobody can use any more go first.
-      await tx.execute(sql`
-        delete from ${tokenCache} t using ${sessions} s
-        where (t.partition_key = 'read:' || s.id_hash or t.partition_key = 'write:' || s.id_hash)
-          and (s.expires_at < ${now} or s.last_seen_at < ${idleCutoff})`);
-      await tx.execute(sql`
-        delete from ${tokenCache} t using ${sessions} s
-        where t.partition_key = 'write:' || s.id_hash and s.write_expires_at < ${now}`);
+      tx.run(sql`
+        delete from token_cache where exists (
+          select 1 from sessions s
+           where (token_cache.partition_key = 'read:' || s.id_hash or token_cache.partition_key = 'write:' || s.id_hash)
+             and (s.expires_at < ${t} or s.last_seen_at < ${idle}))`);
+      tx.run(sql`
+        delete from token_cache where exists (
+          select 1 from sessions s
+           where token_cache.partition_key = 'write:' || s.id_hash and s.write_expires_at < ${t})`);
       // Orphaned partitions (session row already gone). Schedules' grants are not sessions' (ADR-014).
-      await tx.execute(sql`
-        delete from ${tokenCache} t
-        where t.updated_at < ${new Date(now.getTime() - DAY_MS)}
-          and t.partition_key not like 'schedule:%'
-          and not exists (select 1 from ${sessions} s where t.partition_key in ('read:' || s.id_hash, 'write:' || s.id_hash))`);
+      tx.run(sql`
+        delete from token_cache
+         where updated_at < ${t - DAY_MS}
+           and partition_key not like 'schedule:%'
+           and not exists (
+             select 1 from sessions s where token_cache.partition_key in ('read:' || s.id_hash, 'write:' || s.id_hash))`);
       // A schedule's grant partition without its grant row: the schedule is gone, or the grant was withdrawn.
-      await tx.execute(sql`
-        delete from ${tokenCache} t
-        where t.partition_key like 'schedule:%'
-          and not exists (select 1 from ${scheduleGrants} g where t.partition_key = 'schedule:' || g.schedule_id::text)`);
-      const retainCutoff = new Date(now.getTime() - retainDays * DAY_MS);
-      const removed = await tx
+      tx.run(sql`
+        delete from token_cache
+         where partition_key like 'schedule:%'
+           and not exists (
+             select 1 from schedule_grants g where token_cache.partition_key = 'schedule:' || g.schedule_id)`);
+      const retainCutoff = new Date(t - retainDays * DAY_MS);
+      const removed = tx
         .delete(sessions)
         .where(
           and(
@@ -117,10 +123,33 @@ export class PgSessionStore implements SessionStore {
             ),
           ),
         )
-        .returning({ idHash: sessions.idHash });
+        .returning({ idHash: sessions.idHash })
+        .all();
       return removed.length;
     });
   }
+}
+
+/**
+ * Emergency: everyone is signed out at once (`adminforge db sign-out-everyone`). Deletes every session, pending sign-in
+ * and the sessions' sealed tokens; with `scheduleGrants`, also the tokens of schedules that run with their creator's
+ * access (they then need the creator's consent again). The API reads sessions from the database on every request, so
+ * this takes effect while it runs: the next request and every open event stream end with "signed out".
+ */
+export function signOutEveryone(
+  db: Db,
+  opts: { scheduleGrants?: boolean } = {},
+): { sessions: number; signIns: number; tokens: number } {
+  return writeTx(db, (tx) => {
+    const tokens = tx.run(
+      opts.scheduleGrants
+        ? sql`delete from token_cache`
+        : sql`delete from token_cache where partition_key not like 'schedule:%'`,
+    ).changes;
+    const signIns = tx.run(sql`delete from preauth`).changes;
+    const removed = tx.run(sql`delete from sessions`).changes;
+    return { sessions: removed, signIns, tokens };
+  });
 }
 
 /** In-memory store for tests and DB-less mock mode. */

@@ -1,7 +1,7 @@
 import { createFixtureFetch } from '@adminforge/connectors';
 import type { Connection } from '@adminforge/schemas';
 import type { AuditInput, AuditWriter } from '../audit/writer';
-import { MemorySettingsStore, PgSettingsStore, type SettingsStore } from '../admin/settings-store';
+import { MemorySettingsStore, SqliteSettingsStore, type SettingsStore } from '../admin/settings-store';
 import {
   createAppIdentityRegistry,
   createAutomationTokenProvider,
@@ -20,7 +20,7 @@ import { isPaused } from '../execution/emergency';
 import { createOutboundExecutor, templatePath, type SensitiveRead } from '../execution/outbound';
 import { identityName, type OutboundExecutor } from '../execution/types';
 import { liveRunner } from './runner';
-import { MemoryViewStore, PgViewStore, type ViewStore } from '../views/store';
+import { MemoryViewStore, SqliteViewStore, type ViewStore } from '../views/store';
 import { contentEnv } from './env';
 import { DatasourceRunner, fixtureRunner } from './executor';
 
@@ -82,7 +82,7 @@ export function createContentServices(
   const onSensitiveRead = async (r: SensitiveRead) => {
     await base.audit.append(sensitiveReadAudit(r));
   };
-  const settings = deps.settings ?? (db ? new PgSettingsStore(db) : new MemorySettingsStore());
+  const settings = deps.settings ?? (db ? new SqliteSettingsStore(db) : new MemorySettingsStore());
   const outbound =
     deps.outbound ??
     createOutboundExecutor({
@@ -133,8 +133,7 @@ export function createContentServices(
       ...(log ? { log } : {}),
     });
   const events = deps.events ?? new EventBus();
-  if (!deps.events)
-    events.wire({ definitions, databaseUrl: config.DATABASE_URL, database: base.database, log });
+  if (!deps.events) events.wire({ definitions });
   return {
     definitions,
     outbound,
@@ -143,7 +142,7 @@ export function createContentServices(
     licences,
     datasources,
     events,
-    views: deps.views ?? (db ? new PgViewStore(db) : new MemoryViewStore()),
+    views: deps.views ?? (db ? new SqliteViewStore(db) : new MemoryViewStore()),
     settings,
     contentEnv: env,
   };

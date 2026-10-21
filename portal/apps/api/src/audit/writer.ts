@@ -1,5 +1,5 @@
-import { asc, desc, gt, sql } from 'drizzle-orm';
-import type { Db } from '../db/client';
+import { asc, desc, gt } from 'drizzle-orm';
+import { writeTx, type Db } from '../db/client';
 import { auditEvents } from '../db/schema';
 import { chainHash, GENESIS, verifyChain } from './chain';
 
@@ -61,9 +61,9 @@ export interface Checkpoint {
 }
 
 /**
- * Where a verified tail is recorded outside the database (the external anchor): by default one JSON line on stdout,
- * which journald keeps for the host services. Someone who rewrites the table can re-hash the chain, but not the
- * checkpoints already in the journal (or forwarded off-host): compare them with `adminforge audit verify`.
+ * Where a verified tail is recorded outside the database (the external anchor): by default one JSON line on stdout —
+ * the api container's log, which the cluster's log shipping keeps off the volume. Someone who rewrites the table can
+ * re-hash the chain, but not the checkpoints already shipped: compare them with `adminforge audit verify`.
  */
 export type CheckpointSink = (checkpoint: Checkpoint & { count: number; ts: string }) => void;
 
@@ -87,7 +87,7 @@ export function toAuditEvent(input: AuditInput, now: Date): AuditEvent {
     action: input.action,
     targetType: input.targetType ?? null,
     targetId: input.targetId ?? null,
-    // JSON round trip: drops undefined members exactly as jsonb storage would.
+    // JSON round trip: drops undefined members exactly as JSON storage does.
     details: input.details ? (JSON.parse(JSON.stringify(input.details)) as Record<string, unknown>) : null,
     result: input.result,
     correlationId: input.correlationId,
@@ -110,10 +110,10 @@ function verifyRows(rows: AuditRow[], genesis = GENESIS, offset = 0): VerifyResu
 /** Rows per round trip when walking the chain: memory stays flat however long the audit log grows. */
 export const VERIFY_BATCH = 2_000;
 
-/** Lock key shared by every writer of the chain (pg_advisory_xact_lock). */
-const AUDIT_LOCK = sql`select pg_advisory_xact_lock(hashtext('adminforge.audit_events'))`;
+/** Pause between verify batches so a long chain never holds the event loop for long (better-sqlite3 is synchronous). */
+const yieldToLoop = () => new Promise<void>((resolve) => setImmediate(resolve));
 
-export class PgAuditWriter implements AuditWriter {
+export class SqliteAuditWriter implements AuditWriter {
   constructor(
     private readonly db: Db,
     private readonly now: () => Date = () => new Date(),
@@ -123,21 +123,23 @@ export class PgAuditWriter implements AuditWriter {
 
   async append(input: AuditInput): Promise<AuditRow> {
     const event = toAuditEvent(input, this.now());
-    return this.db.transaction(async (tx) => {
-      // Serialises appenders across processes so prev_hash always points at the true tail.
-      await tx.execute(AUDIT_LOCK);
-      const [last] = await tx
+    // BEGIN IMMEDIATE takes the write lock before reading the tail, so every appender — in this process or another
+    // (the CLI) — chains onto the true tail.
+    return writeTx(this.db, (tx) => {
+      const last = tx
         .select({ hash: auditEvents.hash })
         .from(auditEvents)
         .orderBy(desc(auditEvents.seq))
-        .limit(1);
+        .limit(1)
+        .get();
       const prevHash = last?.hash ?? GENESIS;
       const hash = chainHash(prevHash, { ...event });
-      const [row] = await tx
+      const row = tx
         .insert(auditEvents)
         .values({ ...event, ts: new Date(event.ts), prevHash, hash })
-        .returning({ seq: auditEvents.seq });
-      return { ...event, seq: row!.seq, prevHash, hash };
+        .returning({ seq: auditEvents.seq })
+        .get();
+      return { ...event, seq: row.seq, prevHash, hash };
     });
   }
 
@@ -170,6 +172,7 @@ export class PgAuditWriter implements AuditWriter {
       prev = tail!.hash;
       after = tail!.seq;
       if (rows.length < this.batch) break;
+      await yieldToLoop();
     }
     if (tail) this.checkpoints?.({ ...tail, count, ts: this.now().toISOString() });
     return { ok: true, count, ...(tail ? { tail } : {}) };

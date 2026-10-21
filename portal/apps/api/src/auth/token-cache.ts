@@ -62,7 +62,7 @@ export class FixedPartition implements IPartitionManager {
   }
 }
 
-export class PgSealedBlobStore implements SealedBlobStore {
+export class SqliteSealedBlobStore implements SealedBlobStore {
   constructor(private readonly db: Db) {}
 
   async get(partitionKey: string): Promise<string | null> {

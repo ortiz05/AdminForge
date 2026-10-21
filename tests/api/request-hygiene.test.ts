@@ -65,6 +65,18 @@ describe('response headers and public readiness (APP-10)', () => {
         throw new Error('ECONNREFUSED');
       },
       db: { select: () => ({ from: () => ({ where: async () => [] }) }) },
+      // What building the app reads without querying: the startup file check (`:memory:` has no file to check), the
+      // stores' connection handle, the run queue's lease holder (`origin`) and the schedule events' subscription.
+      path: ':memory:',
+      sqlite: {},
+      signals: {
+        origin: 'test',
+        on: () => () => undefined,
+        onResync: () => () => undefined,
+        publish: () => undefined,
+        prune: () => 0,
+        stop: () => undefined,
+      },
       close: async () => {},
     } as unknown as Database;
     const t = await makeApp(mockConfig(), { database: db });
@@ -73,7 +85,7 @@ describe('response headers and public readiness (APP-10)', () => {
     const error = res.json().error;
     expect(error.code).toBe('not_ready');
     expect(error.message).toBe('AdminForge isn’t ready to serve requests.');
-    expect(JSON.stringify(res.json())).not.toMatch(/DATABASE_URL|db:up|Postgres|pnpm/);
+    expect(JSON.stringify(res.json())).not.toMatch(/DATABASE_PATH|SQLite|sqlite|pnpm/);
     await t.app.close();
   });
 });

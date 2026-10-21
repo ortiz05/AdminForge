@@ -1,13 +1,13 @@
 /**
  * Log serializers. A failed database query arrives as drizzle's DrizzleQueryError, whose message, stack and `params`
- * carry every bound value — CSRF tokens, PKCE verifiers, sealed token blobs, raw run inputs. Postgres' own error adds
- * the offending key values in `detail`. None of that may reach a log line.
+ * carry every bound value — CSRF tokens, PKCE verifiers, sealed token blobs, raw run inputs. A database driver's own error
+ * may add the offending values (`detail`). None of that may reach a log line.
  */
 
 const MAX_MESSAGE = 2000;
 const MAX_STACK = 8000;
 const MAX_DEPTH = 3;
-/** Own properties that carry bound values (drizzle `params`, pg `detail`, `parameters`). */
+/** Own properties that carry bound values (drizzle `params`, a driver's `detail`, `parameters`). */
 const DROPPED = new Set(['params', 'parameters', 'detail', 'values']);
 
 /** Drops drizzle's "\nparams: …" tail from an error message (and from the message part of a stack). */

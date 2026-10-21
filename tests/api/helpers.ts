@@ -43,7 +43,8 @@ export function entraConfig(overrides: Record<string, string> = {}): Config {
     PUBLIC_BASE_URL: 'http://localhost:5173',
     AUTH_MODE: 'entra',
     DATA_MODE: 'live',
-    DATABASE_URL: 'postgres://unused@127.0.0.1:1/unused',
+    // Required with Entra sign-in; the test app passes `database: null` (in-memory stores), so no file is opened.
+    DATABASE_PATH: '/nonexistent/adminforge-test-unused.db',
     TOKEN_CACHE_KEY: TEST_KEY,
     AF_TENANT_ID: TENANT_ID,
     AF_READ_CLIENT_ID: READ_CLIENT_ID,

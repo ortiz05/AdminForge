@@ -37,7 +37,7 @@ const toRecord = (r: typeof savedViews.$inferSelect): ViewRecord => ({
   state: (r.state ?? {}) as Record<string, unknown>,
 });
 
-export class PgViewStore implements ViewStore {
+export class SqliteViewStore implements ViewStore {
   constructor(private readonly db: Db) {}
 
   async list(pageKey: string, userOid: string): Promise<ViewRecord[]> {
@@ -94,7 +94,7 @@ export class PgViewStore implements ViewStore {
   /** Test helper: rows for a page (any user). */
   async countFor(pageKey: string): Promise<number> {
     const [r] = await this.db
-      .select({ n: sql<number>`count(*)::int` })
+      .select({ n: sql<number>`count(*)` })
       .from(savedViews)
       .where(eq(savedViews.pageKey, pageKey));
     return r?.n ?? 0;

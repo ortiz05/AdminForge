@@ -4,10 +4,10 @@ import { signInWithEntra, testUserCredentials } from './entra-login';
 import { createApiCall, type PortalSession } from './portal-session';
 
 /**
- * A signed-in session for scripts that talk to a deployed AdminForge through its public URL — the host services behind
- * Caddy (`PUBLIC_BASE_URL=https://<lan-address>:8443`) — rather than a dev API on API_PORT: the API calls go to the same
- * origin the browser signed in on. `AF_LIVE_INSECURE_TLS=1` accepts a private CA (Caddy `tls internal`), as in the live
- * suite (tests/live/e2e/playwright.config.ts).
+ * A signed-in session for scripts that talk to a deployed AdminForge through its public URL — the cluster's Ingress
+ * (`PUBLIC_BASE_URL=https://adminforge.example.com`) — rather than a dev API on API_PORT: the API calls go to the same
+ * origin the browser signed in on. `AF_LIVE_INSECURE_TLS=1` accepts a private CA, as in the live suite
+ * (tests/live/e2e/playwright.config.ts).
  *
  * Inputs: the env file plus `<env>.admin.env` (PUBLIC_BASE_URL, AF_TEST_USER_*), `process.env` overriding both.
  * Outputs: a `PortalSession`; nothing is printed. Safety: the validation user only. Used by scripts/check-accuracy.ts.

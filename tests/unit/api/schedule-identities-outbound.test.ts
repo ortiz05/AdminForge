@@ -24,7 +24,7 @@ const BASE = {
   AF_READ_CLIENT_ID: '00000000-0000-4000-8000-00000000a0f1',
   AF_READ_CLIENT_SECRET: 's',
   TOKEN_CACHE_KEY: Buffer.alloc(32, 7).toString('base64'),
-  DATABASE_URL: 'postgres://adminforge_app:x@127.0.0.1:55432/adminforge_test',
+  DATABASE_PATH: '/var/lib/adminforge/adminforge.db',
 };
 const REPORTS_APP = '00000000-0000-4000-8000-00000000a001';
 

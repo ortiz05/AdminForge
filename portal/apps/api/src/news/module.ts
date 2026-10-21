@@ -3,7 +3,7 @@ import type { AppContext } from '../context';
 import type { HostLookup } from '../probes/addresses';
 import { fetchFeed } from './fetch-feed';
 import { MemoryNewsStore } from './memory-store';
-import { PgNewsStore } from './pg-store';
+import { SqliteNewsStore } from './sqlite-store';
 import { NewsService } from './service';
 import type { NewsStore } from './types';
 
@@ -33,7 +33,7 @@ export function createNewsService(
     opts.fetch ?? (fixtures ? createFixtureFetch(ctx.config.ADMINFORGE_FIXTURES_DIR) : ctx.fetch);
   const lookup = opts.lookup ?? (fixtures ? FIXTURE_LOOKUP : undefined);
   return new NewsService({
-    store: opts.store ?? (ctx.database ? new PgNewsStore(ctx.database) : new MemoryNewsStore()),
+    store: opts.store ?? (ctx.database ? new SqliteNewsStore(ctx.database) : new MemoryNewsStore()),
     definitions: ctx.definitions,
     collectors: {
       outbound: ctx.outbound,

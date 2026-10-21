@@ -19,7 +19,7 @@ import type {
 } from './types';
 
 /**
- * Persistence for the scheduler and the schedules/probes API. Postgres in every real install (`PgScheduleStore`);
+ * Persistence for the scheduler and the schedules/probes API. Postgres in every real install (`SqliteScheduleStore`);
  * the in-memory store backs tests and DB-less mock mode. Conditional updates (`expect`) make every transition safe
  * across processes (two schedulers during a hand-over, the API and the scheduler).
  */

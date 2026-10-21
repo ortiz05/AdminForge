@@ -14,7 +14,7 @@ import type {
 
 const DAY_MS = 86_400_000;
 
-/** Same semantics as the Postgres store (pg-store.ts), for mock mode and tests. */
+/** Same semantics as the SQLite store (sqlite-store.ts), for mock mode and tests. */
 export function matchesFilter(r: NewsItemRow, f: NewsFilter): boolean {
   if (!r.audience.every((role) => f.roles.includes(role))) return false;
   if (f.feeds && !f.feeds.includes(r.feedKey)) return false;

@@ -49,6 +49,18 @@ describe('health, headers, errors', () => {
 
     const down = {
       ping: async () => Promise.reject(new Error('ECONNREFUSED')),
+      // What building the app reads without querying: the startup file check (`:memory:` has no file to check), the
+      // stores' connection handle, the run queue's lease holder (`origin`) and the schedule events' subscription.
+      path: ':memory:',
+      sqlite: {},
+      signals: {
+        origin: 'test',
+        on: () => () => undefined,
+        onResync: () => () => undefined,
+        publish: () => undefined,
+        prune: () => 0,
+        stop: () => undefined,
+      },
       close: async () => {},
     } as unknown as Database;
     const bad = await makeApp(mockConfig(), { database: down });

@@ -45,8 +45,8 @@ export function bareDatasourceRefs(def: unknown): Array<{ path: string; name: st
 
 /**
  * `ds.<name>` references to a datasource declared later in the file (or to itself). Authors list a datasource's
- * dependencies above it, which also rules out loops. (The runtime doesn't rely on this order: published definitions are
- * stored in Postgres, which doesn't keep key order, so the executor follows the references instead.)
+ * dependencies above it, which also rules out loops. (The runtime doesn't rely on this order — definitions published
+ * while the Postgres column was jsonb lost it — so the executor follows the references instead.)
  */
 export function datasourceOrderProblems(def: unknown): Array<{ datasource: string; message: string }> {
   const all = (def as { datasources?: Record<string, unknown> } | null)?.datasources;

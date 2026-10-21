@@ -1,7 +1,7 @@
 import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import path from 'node:path';
-import { loadEnv } from '@adminforge/config';
+import { ADMIN_ENV_KEYS, loadEnv } from '@adminforge/config';
 import {
   IDENTITY_NAME,
   identityEnvPrefix,
@@ -83,7 +83,7 @@ const Schema = z
     /** Interface to bind; defaults to loopback except in production containers. */
     API_HOST: z.string().optional(),
     PUBLIC_BASE_URL: z.url().transform((u) => u.replace(/\/+$/, '')),
-    /** Fastify trustProxy: `true`/`false`, or IPs/CIDRs/proxy-addr presets (loopback = a proxy on this host, e.g. Caddy). */
+    /** Fastify trustProxy: `true`/`false`, or IPs/CIDRs/proxy-addr presets (in Kubernetes: the ingress controller's pod network). */
     TRUST_PROXY: z.string().default('loopback'),
     /** Requests per minute per signed-in session (per address before sign-in). */
     RATE_LIMIT_PER_MINUTE: z.coerce.number().int().min(1).default(600),
@@ -102,21 +102,13 @@ const Schema = z
     WEB_DIST_DIR: z.string().optional(),
     MOCK_ROLES: RoleList.prefault(ALL_ROLES),
 
-    DATABASE_URL: z.string().optional(),
-    /** Connections per process pool (the API, the worker and the scheduler each have one). */
-    DATABASE_POOL_MAX: z.coerce.number().int().min(1).max(100).default(10),
     /**
-     * Per-connection limits (milliseconds) so a stuck statement or an open transaction can't hold the audit chain's lock:
-     * statement_timeout, lock_timeout, idle_in_transaction_session_timeout (db/client.ts).
+     * The SQLite database file (ADR-016): an absolute path on local block storage — in Kubernetes, the PersistentVolume
+     * mounted at /var/lib/adminforge (portal/deploy/kubernetes). Unset = in-memory stores (mock mode, tests).
      */
-    DATABASE_STATEMENT_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(3_600_000).default(60_000),
-    DATABASE_LOCK_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(3_600_000).default(15_000),
-    DATABASE_IDLE_IN_TRANSACTION_TIMEOUT_MS: z.coerce
-      .number()
-      .int()
-      .min(1_000)
-      .max(3_600_000)
-      .default(60_000),
+    DATABASE_PATH: z.string().optional(),
+    /** How long a write waits for another process's write lock (the CLI publishing, a one-shot) before failing. */
+    DATABASE_BUSY_TIMEOUT_MS: z.coerce.number().int().min(100).max(600_000).default(15_000),
     TOKEN_CACHE_KEY: z.string().optional(),
     /**
      * Earlier token-cache keys (comma-separated, base64), still accepted for opening blobs sealed before a rotation;
@@ -176,7 +168,7 @@ const Schema = z
     AF_AUTOMATION_CLIENT_SECRET: z.string().optional(),
     /** PEM with certificate + private key; preferred over the secret. */
     AF_AUTOMATION_CERT_PATH: z.string().optional(),
-    /** fs = portal/content from disk (hot reload); db = published versions in Postgres. Default: db in production, else fs. */
+    /** fs = portal/content from disk (hot reload); db = published versions in the database. Default: db in production, else fs. */
     CONTENT_SOURCE: z.enum(['fs', 'db']).optional(),
     CONTENT_DIR: z.string().optional(),
     /** Watch CONTENT_DIR and reload on change (default: on in development). */
@@ -229,14 +221,12 @@ const Schema = z
     EXPORT_MAX_ROWS: z.coerce.number().int().min(1).max(1_000_000).default(100_000),
     /** Query Studio sources offered (resourceGraph, logAnalytics, advancedHunting); unset = all three. */
     AF_QUERY_SOURCES: QuerySourceList.prefault(KQL_SOURCES.join(',')),
-    // PowerShell runner on this host (apps/runner); both unset = PowerShell steps/datasources disabled.
+    // PowerShell runner (apps/runner; the pod's sidecar on 127.0.0.1); both unset = PowerShell steps/datasources disabled.
     RUNNER_URL: z.url().optional(),
     RUNNER_SHARED_KEY: z.string().min(40).optional(),
-    // Consume run jobs inside the API process (single-process installs); otherwise run `ROLE=worker`.
-    RUN_WORKER_IN_PROCESS: z.stringbool().default(false),
+    // Run jobs the API process works on at once (the API is the run worker, ADR-016).
     RUN_WORKER_CONCURRENCY: z.coerce.number().int().min(1).max(64).default(4),
-    // Scheduler (R6): run it inside the API process (dev / single-process installs); otherwise run apps/scheduler.
-    SCHEDULER_IN_PROCESS: z.stringbool().default(false),
+    // Schedules the scheduler (in the API process, R6) runs at once.
     SCHEDULER_CONCURRENCY: z.coerce.number().int().min(1).max(32).default(4),
     /** Scheduled report files: <dir>/<schedule>/<timestamp>.<ext> (default ~/.local/share/adminforge/artifacts). */
     ADMINFORGE_ARTIFACTS_DIR: z.string().optional(),
@@ -251,7 +241,7 @@ const Schema = z
         'AF_READ_CLIENT_ID',
         'AF_READ_CLIENT_SECRET',
         'TOKEN_CACHE_KEY',
-        'DATABASE_URL',
+        'DATABASE_PATH',
       ] as const) {
         need(key, 'when AUTH_MODE=entra');
       }
@@ -264,7 +254,13 @@ const Schema = z
           message: 'mock auth is not allowed in production',
         });
       }
-      need('DATABASE_URL', 'in production');
+      need('DATABASE_PATH', 'in production');
+      if (env.DATABASE_PATH && !path.isAbsolute(env.DATABASE_PATH))
+        ctx.addIssue({
+          code: 'custom',
+          path: ['DATABASE_PATH'],
+          message: 'must be an absolute path in production (the file on the persistent volume)',
+        });
       // `true` trusts X-Forwarded-For from anyone: every rate limit, address cap and audited address could be forged.
       if (env.TRUST_PROXY.trim().toLowerCase() === 'true')
         ctx.addIssue({
@@ -272,8 +268,6 @@ const Schema = z
           path: ['TRUST_PROXY'],
           message: 'must name the proxies (e.g. loopback, or their addresses) in production, not true',
         });
-      const tls = databaseTlsProblem(env.DATABASE_URL);
-      if (tls) ctx.addIssue({ code: 'custom', path: ['DATABASE_URL'], message: tls });
       const url = new URL(env.PUBLIC_BASE_URL);
       if (url.protocol !== 'https:' && url.hostname !== 'localhost') {
         ctx.addIssue({
@@ -315,7 +309,7 @@ const Schema = z
       });
     }
     if ((env.CONTENT_SOURCE ?? (env.NODE_ENV === 'production' ? 'db' : 'fs')) === 'db')
-      need('DATABASE_URL', 'when CONTENT_SOURCE=db');
+      need('DATABASE_PATH', 'when CONTENT_SOURCE=db');
     for (const host of (env.AF_CONNECTION_AUDIENCE_HOSTS ?? '').split(/[\s,]+/).filter(Boolean)) {
       if (!/^(?=.{1,253}\.?$)([A-Za-z0-9-]{1,63}\.)*[A-Za-z0-9-]{1,63}\.?$/.test(host))
         ctx.addIssue({
@@ -352,7 +346,7 @@ const Schema = z
     const root = workspaceRoot();
     return {
       ...env,
-      // Loopback unless asked otherwise: on a host the API sits behind Caddy (TLS); a container sets 0.0.0.0.
+      // Loopback unless asked otherwise (a developer's machine); the container sets 0.0.0.0 (the pod's Service reaches it).
       API_HOST: env.API_HOST ?? '127.0.0.1',
       ADMINFORGE_FIXTURES_DIR: path.resolve(
         env.ADMINFORGE_FIXTURES_DIR ?? path.join(root, 'tests', 'fixtures'),
@@ -369,6 +363,10 @@ const Schema = z
           homedir(),
         ),
       ),
+      // `~/…` for a developer's own file (init:local writes one); production requires an absolute path (above).
+      ...(env.DATABASE_PATH
+        ? { DATABASE_PATH: path.resolve(env.DATABASE_PATH.replace(/^~(?=$|[\\/])/, homedir())) }
+        : {}),
     };
   });
 
@@ -489,14 +487,34 @@ export function loadConfig(env: Record<string, string | undefined> = loadEnv()):
     throw new Error(`Invalid AdminForge configuration:\n${lines.join('\n')}`);
   }
   const { identities, problems } = scheduleIdentities(values, parsed.data);
+  if (parsed.data.NODE_ENV === 'production') problems.push(...strayCredentials(values));
   if (problems.length)
     throw new Error(`Invalid AdminForge configuration:\n${problems.map((p) => `  ${p}`).join('\n')}`);
   return { ...parsed.data, SCHEDULE_IDENTITIES: identities };
 }
 
+/** Keys of the Postgres releases that carry a database password. */
+const RETIRED_CREDENTIAL_KEYS = ['DATABASE_URL', 'DATABASE_MIGRATION_URL', 'POSTGRES_PASSWORD'] as const;
+
+/**
+ * Credentials the running portal must never hold: provisioner and test-account keys (they belong in <env>.admin.env on
+ * an operator's machine), and the Postgres releases' database passwords — both arrive when a whole env file is turned
+ * into the pod's Secret. Names only, never values.
+ */
+function strayCredentials(values: Record<string, string>): string[] {
+  const out: string[] = [];
+  for (const key of ADMIN_ENV_KEYS)
+    if (values[key])
+      out.push(`${key}: must not be set where the portal runs (admin-only: keep it in <env>.admin.env)`);
+  for (const key of RETIRED_CREDENTIAL_KEYS)
+    if (values[key])
+      out.push(`${key}: no longer used (ADR-016) and holds a database password — remove it from the Secret`);
+  return out;
+}
+
 /**
  * The token-cache keys (TOKEN_CACHE_KEY seals; it and TOKEN_CACHE_PREVIOUS_KEYS open), or undefined when not
- * configured. Rotation: docs/operations.md → Postgres hardening.
+ * configured. Rotation: docs/operations.md → Database.
  */
 export function tokenCacheKey(config: Config): Keyring | undefined {
   if (!config.TOKEN_CACHE_KEY) return undefined;
@@ -506,35 +524,6 @@ export function tokenCacheKey(config: Config): Keyring | undefined {
     .filter(Boolean)
     .map((k) => Buffer.from(k, 'base64'));
   return { current: Buffer.from(config.TOKEN_CACHE_KEY, 'base64'), previous };
-}
-
-const LOOPBACK = new Set(['127.0.0.1', '::1', 'localhost', '']);
-
-/**
- * Production talks to a database on another host only over verified TLS: `sslmode=verify-full` in the URL (with
- * `sslrootcert` when the server's CA isn't a public one). A loopback address or a Unix socket stays on this host. The
- * URL is judged the way node-postgres reads it (pg-connection-string): the last of a repeated parameter wins, and a
- * `host=` parameter replaces the URL's host. Used for DATABASE_URL (loadConfig) and DATABASE_MIGRATION_URL
- * (db/migrate.ts).
- */
-export function databaseTlsProblem(databaseUrl: string | undefined): string | undefined {
-  if (!databaseUrl) return undefined;
-  let url: URL;
-  try {
-    url = new URL(databaseUrl);
-  } catch {
-    return 'must be a postgres:// URL';
-  }
-  if (url.protocol === 'socket:') return undefined;
-  const params = new Map<string, string>();
-  for (const [k, v] of url.searchParams.entries()) params.set(k, v);
-  const hosts = (params.get('host') ?? url.hostname.replace(/^\[(.+)\]$/, '$1'))
-    .split(',')
-    .map((h) => decodeURIComponent(h.trim()));
-  if (hosts.every((h) => LOOPBACK.has(h) || h.startsWith('/'))) return undefined;
-  return params.get('sslmode') === 'verify-full'
-    ? undefined
-    : 'a database on another host needs ?sslmode=verify-full in production (TLS with the server certificate checked)';
 }
 
 export const writeAppConfigured = (config: Config) =>

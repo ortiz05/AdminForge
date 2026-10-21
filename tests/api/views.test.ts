@@ -1,8 +1,8 @@
 import { createDatabase, type Database } from '@adminforge/api/src/db/client';
-import { PgViewStore } from '@adminforge/api/src/views/store';
+import { SqliteViewStore } from '@adminforge/api/src/views/store';
 import { ApiErrorBody, SavedView, SavedViewList } from '@adminforge/schemas';
 import { fixturesApp, setupContent, type ContentEnv } from './content-helpers';
-import { testDatabaseUrl } from './db';
+import { testDatabasePath } from './db';
 import { mockLogin } from './helpers';
 
 let env: ContentEnv;
@@ -173,21 +173,21 @@ describe('saved views (/api/views)', () => {
   });
 });
 
-const url = await testDatabaseUrl();
+const file = await testDatabasePath();
 
-describe.skipIf(!url)('PgViewStore', () => {
+describe('SqliteViewStore', () => {
   let database: Database;
   const page = `test.views-${Date.now()}`;
   beforeAll(() => {
-    database = createDatabase(url!);
+    database = createDatabase(file);
   });
   afterAll(async () => {
-    await database.pool.query('delete from saved_views where page_key = $1', [page]);
+    database.sqlite.prepare('delete from saved_views where page_key = ?').run(page);
     await database.close();
   });
 
   it('lists own + shared views by name; updates and deletes by id', async () => {
-    const store = new PgViewStore(database.db);
+    const store = new SqliteViewStore(database.db);
     const now = new Date('2026-10-15T12:00:00.000Z');
     const mine = await store.create(
       { userOid: 'me', pageKey: page, name: 'B mine', state: { params: { a: 1 } }, shared: false },

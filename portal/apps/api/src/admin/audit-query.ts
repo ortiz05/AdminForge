@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, ilike, like, lt, lte, type SQL } from 'drizzle-orm';
+import { and, desc, eq, gte, lt, lte, sql, type AnyColumn, type SQL } from 'drizzle-orm';
 import type { AuditRow, AuditWriter } from '../audit/writer';
 import type { Database } from '../db/client';
 import { auditEvents } from '../db/schema';
@@ -58,7 +58,13 @@ const toItem = (r: RowLike): AuditItem => ({
   details: (r.details as Record<string, unknown> | null) ?? null,
 });
 
-/** Newest first, keyset-paged by seq. Works on Postgres or the in-memory chain (tests, DB-less mock mode). */
+/**
+ * `column LIKE pattern ESCAPE '\'` — SQLite has no default escape character, and its LIKE ignores case for ASCII
+ * letters (as ILIKE did for the UPN search).
+ */
+const likeEscaped = (column: AnyColumn, pattern: string) => sql`${column} like ${pattern} escape '\\'`;
+
+/** Newest first, keyset-paged by seq. Works on the database or the in-memory chain (tests, DB-less mock mode). */
 export async function queryAudit(
   database: Database | null,
   audit: AuditWriter,
@@ -75,12 +81,12 @@ export async function queryAudit(
       where.push(
         GUID.test(q.actor)
           ? eq(auditEvents.actorOid, q.actor.toLowerCase())
-          : ilike(auditEvents.actorUpn, `%${escapeLike(q.actor)}%`),
+          : likeEscaped(auditEvents.actorUpn, `%${escapeLike(q.actor)}%`),
       );
     if (q.action)
       where.push(
         prefix !== undefined
-          ? like(auditEvents.action, `${escapeLike(prefix)}%`)
+          ? likeEscaped(auditEvents.action, `${escapeLike(prefix)}%`)
           : eq(auditEvents.action, q.action),
       );
     if (q.from) where.push(gte(auditEvents.ts, q.from));

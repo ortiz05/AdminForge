@@ -1,5 +1,3 @@
-import type { Database } from '../db/client';
-import { PgListener } from '../definitions/notify';
 import type { DefinitionSource } from '../definitions/types';
 
 /** An event for browsers (`GET /api/events`). `userOid` restricts delivery to one user's connections. */
@@ -10,9 +8,6 @@ export interface PortalEvent {
 }
 
 type Listener = (event: PortalEvent) => void;
-
-/** Postgres channel the runs worker NOTIFYs on (relayed as `run.updated`). */
-export const RUN_EVENTS_CHANNEL = 'run_events';
 
 const OID_FIELDS = ['initiatorOid', 'userOid', 'actorOid'] as const;
 
@@ -29,22 +24,16 @@ export function runEventAudience(payload: unknown): string[] | undefined {
 }
 
 /**
- * In-process fan-out for SSE. Sources: definition changes (fs watcher or NOTIFY definitions_changed), the runs
- * worker's NOTIFY `run_events` (when a database is configured), and anything in-process calls `publish` with.
+ * In-process fan-out for SSE. Sources: definition changes (fs watcher, or the `definitions_changed` signal), the run
+ * worker's notifications (`relayRun`; the worker runs in this process, ADR-016), and anything in-process calls
+ * `publish` with.
  */
 export class EventBus {
   private readonly listeners = new Set<Listener>();
-  private runListener: PgListener | null = null;
   private unsubscribe: (() => void) | null = null;
-  private runStarted = false;
 
   subscribe(listener: Listener): () => void {
     this.listeners.add(listener);
-    // LISTEN run_events only once someone is listening (worker processes never open a stream).
-    if (this.runListener && !this.runStarted) {
-      this.runStarted = true;
-      void this.runListener.start();
-    }
     return () => this.listeners.delete(listener);
   }
 
@@ -58,37 +47,23 @@ export class EventBus {
     }
   }
 
-  /** Relays definition changes and (with a database URL) the runs worker's `run_events` notifications. */
-  wire(opts: {
-    definitions: DefinitionSource;
-    databaseUrl?: string | null;
-    database?: Database | null;
-    log?: { warn(obj: object, msg: string): void };
-  }): void {
+  /** Relays definition changes. */
+  wire(opts: { definitions: DefinitionSource }): void {
     this.unsubscribe = opts.definitions.onChange((change) =>
       this.publish({ type: 'definitions.changed', data: change }),
     );
-    if (opts.databaseUrl && opts.database) {
-      this.runListener = new PgListener(
-        opts.databaseUrl,
-        RUN_EVENTS_CHANNEL,
-        (payload) => {
-          let data: unknown;
-          try {
-            data = JSON.parse(payload);
-          } catch {
-            data = { raw: payload };
-          }
-          // Streamed log/progress lines are for the run's own stream (GET /api/runs/:id/events), not the dock.
-          const kind = (data as { type?: unknown } | null)?.type;
-          if (kind === 'log' || kind === 'progress') return;
-          const audience = runEventAudience(data);
-          if (!audience) this.publish({ type: 'run.updated', data });
-          else for (const userOid of audience) this.publish({ type: 'run.updated', data, userOid });
-        },
-        { log: opts.log },
-      );
-    }
+  }
+
+  /**
+   * A run notification from the worker, relayed as `run.updated` to the people it concerns (everyone signed in when it
+   * names nobody). Streamed log/progress lines are for the run's own stream (GET /api/runs/:id/events), not the dock.
+   */
+  relayRun(n: unknown): void {
+    const kind = (n as { type?: unknown } | null)?.type;
+    if (kind === 'log' || kind === 'progress') return;
+    const audience = runEventAudience(n);
+    if (!audience) this.publish({ type: 'run.updated', data: n });
+    else for (const userOid of audience) this.publish({ type: 'run.updated', data: n, userOid });
   }
 
   get size(): number {
@@ -97,7 +72,6 @@ export class EventBus {
 
   async close(): Promise<void> {
     this.unsubscribe?.();
-    await this.runListener?.stop();
     this.listeners.clear();
   }
 }

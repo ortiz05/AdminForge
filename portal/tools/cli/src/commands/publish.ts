@@ -1,28 +1,31 @@
 /**
  * `adminforge publish [--env <name>] [--dry-run] [--allow-unreviewed]` — publishes new definition versions from
- * portal/content to Postgres, the way the portal serves them.
+ * portal/content to the database (the SQLite file at DATABASE_PATH), the way the portal serves them. In Kubernetes it
+ * runs in the pod: `kubectl exec deploy/adminforge -c api -- adminforge publish`.
  *
  * Steps, in order — any failure stops before the database is touched:
  *   1. the `adminforge validate` check (content/check.ts) and every playbook test (content/playbook-tests.ts);
- *   2. the review rule (content/review-state.ts): content committed and merged to origin/main as last fetched —
- *      otherwise refused, unless --allow-unreviewed (then recorded in the audit event; --dry-run only warns);
- *   3. the API's DbDefinitionStore writes new versions and sends NOTIFY definitions_changed — idempotent by sha256
- *      (an unchanged version is skipped) and all-or-nothing (changed content without a version bump, or an older
- *      version, is refused, and then nothing is written);
+ *   2. the review rule (content/review-state.ts): content committed and merged to origin/main as last fetched — or,
+ *      in an image, built from such a commit (BUILD.json) — otherwise refused, unless --allow-unreviewed (then
+ *      recorded in the audit event; --dry-run only warns);
+ *   3. the API's DbDefinitionStore writes new versions and sends the `definitions_changed` signal (the running API
+ *      drops those cache entries) — idempotent by sha256 (an unchanged version is skipped) and all-or-nothing (changed
+ *      content without a version bump, or an older version, is refused, and then nothing is written);
  *   4. one `content.published` audit event in the database's hash chain (actor `cli`, the local user@host, versions,
  *      git state), awaited — only when something new was created.
  *
- * Reads DATABASE_URL (`--env` picks the env file, default dev; use the dev database, never the services' host
- * overlay). Changes the definitions and audit tables of that database; nothing in the tenant. Exit code 1 when
- * nothing could be published or a version was refused.
+ * Reads DATABASE_PATH (`--env` picks the env file, default dev) and brings that file's schema up to date first (as
+ * the API does at start). Changes the definitions and audit tables of that database; nothing in the tenant. Exit
+ * code 1 when nothing could be published or a version was refused.
  */
 import { randomUUID } from 'node:crypto';
 import { hostname, userInfo } from 'node:os';
-import { ConfigError } from '../shared/errors';
+import { databasePath } from '../shared/database-path';
 import {
   createDatabase,
   DbDefinitionStore,
-  PgAuditWriter,
+  migrateDatabase,
+  SqliteAuditWriter,
   type PublishEntry,
   type PublishResult,
 } from '../content/api-bridge';
@@ -34,8 +37,8 @@ import { reviewState } from '../content/review-state';
 /**
  * `adminforge publish [--dry-run] [--allow-unreviewed]` — runs the same checks as `adminforge validate` and
  * `adminforge test`, publishes only reviewed content (committed, and the commit merged to origin/main) unless
- * `--allow-unreviewed` (recorded in the audit event), then writes new versions to Postgres (idempotent by sha256) and
- * sends NOTIFY definitions_changed. Null when nothing was attempted.
+ * `--allow-unreviewed` (recorded in the audit event), then writes new versions to the database (idempotent by sha256)
+ * and sends the `definitions_changed` signal. Null when nothing was attempted.
  */
 export async function publishContent(
   ctx: ContentCliContext,
@@ -63,7 +66,9 @@ export async function publishContent(
   );
 
   // Only reviewed content: committed, and the commit merged to origin/main (as last fetched).
-  const review = (ctx.review ?? reviewState)(ctx.contentDir);
+  const review = (ctx.review ?? ((dir: string) => reviewState(dir, undefined, { repoRoot: ctx.repoRoot })))(
+    ctx.contentDir,
+  );
   const unreviewed = review.problems.length > 0;
   if (unreviewed) {
     const mark = opts.allowUnreviewed ? '⚠' : '✗';
@@ -92,11 +97,13 @@ export async function publishContent(
   let audit = ctx.audit;
   if (ctx.openStore) target = await ctx.openStore();
   else {
-    const url = ctx.env.DATABASE_URL;
-    if (!url) throw new ConfigError('DATABASE_URL is not set in the env file.');
-    const database = createDatabase(url, { max: 2, name: 'cli' });
-    target = { store: new DbDefinitionStore(database.db), close: () => database.close() };
-    const writer = new PgAuditWriter(database.db, ctx.now);
+    const database = createDatabase(databasePath(ctx.env), { name: 'cli', pollSignals: false });
+    migrateDatabase(database);
+    target = {
+      store: new DbDefinitionStore(database.db, ctx.now, database.signals),
+      close: () => database.close(),
+    };
+    const writer = new SqliteAuditWriter(database.db, ctx.now);
     audit ??= (input) => writer.append(input);
   }
   try {
@@ -118,7 +125,12 @@ export async function publishContent(
             (i) => `${i.kind}:${i.key}@${i.version}${i.status === 'retired' ? ' (retired)' : ''}`,
           ),
           refused: result.refused,
-          git: { commit: review.commit, dirty: review.dirty, onOriginMain: review.onOriginMain },
+          git: {
+            commit: review.commit,
+            dirty: review.dirty,
+            onOriginMain: review.onOriginMain,
+            ...(review.source === 'image' ? { source: 'image' } : {}),
+          },
           unreviewed,
           ...(unreviewed ? { reasons: [...new Set(review.problems.map((p) => p.reason))] } : {}),
         },
@@ -132,7 +144,7 @@ export async function publishContent(
     }
     const verb = opts.dryRun ? 'would publish' : result.applied ? 'published' : 'nothing published';
     ctx.out(
-      `${result.refused ? '✗' : '✓'} ${verb}: ${result.created} new version(s), ${result.unchanged} unchanged, ${result.refused} refused${result.refreshed ? `, ${result.refreshed} restored to their authored key order` : ''}${opts.dryRun ? ' (dry run)' : ''}${result.notified ? '; NOTIFY definitions_changed sent' : ''}.`,
+      `${result.refused ? '✗' : '✓'} ${verb}: ${result.created} new version(s), ${result.unchanged} unchanged, ${result.refused} refused${result.refreshed ? `, ${result.refreshed} restored to their authored key order` : ''}${opts.dryRun ? ' (dry run)' : ''}${result.notified ? '; the running portal was told (definitions_changed)' : ''}.`,
     );
     return result;
   } finally {

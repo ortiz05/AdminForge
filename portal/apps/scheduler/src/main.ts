@@ -1,21 +1,19 @@
 import { parseArgs } from 'node:util';
-import { assertDatabaseRole, createContext, loadConfig, safeLogFields } from '@adminforge/api/tooling';
-import { createRunsModule, createSchedulesModule } from '@adminforge/api/tooling/scheduler';
+import { loadConfig, safeLogFields } from '@adminforge/api/tooling';
 import { openOneShot, PROBE_HEADER, probeLine, probeSummary, scheduleRunLines } from './one-shot';
 
 /**
- * AdminForge scheduler service (R6, ADR-011): runs content schedules on this host as the automation identity.
- * Only one scheduler is active at a time (Postgres advisory lock); start a second one as a hot standby.
+ * AdminForge scheduler one-shots (R6, ADR-011). The scheduler itself runs inside the API process (ADR-016: one process
+ * owns the SQLite file); these commands run beside it, against the same DATABASE_PATH:
  *
- *   node dist/main.js                       run the service (needs DATABASE_URL)
  *   node dist/main.js --once                run every probe once and print statuses (no tenant data is printed)
  *   node dist/main.js --probe <key> …       run the named probes once (one --probe per key)
  *   node dist/main.js --schedule <key>      run one schedule now (as a manual run, audited) and exit
  *   add --no-store to one-shots to skip writing probe_results
  *
- * The one-shots are `one-shot.ts` (shared with tests/live/scripts/run-schedule-once.ts). API modules come only from
- * `@adminforge/api/tooling` and `@adminforge/api/tooling/scheduler`. In development the API can run the scheduler
- * in-process instead: SCHEDULER_IN_PROCESS=true.
+ * A `--schedule` run that starts a playbook queues it; the API's run worker picks it up. The one-shots are
+ * `one-shot.ts` (shared with tests/live/scripts/run-schedule-once.ts). API modules come only from
+ * `@adminforge/api/tooling` and `@adminforge/api/tooling/scheduler`.
  */
 
 type Level = 'debug' | 'info' | 'warn' | 'error';
@@ -48,94 +46,43 @@ const { values } = parseArgs({
   allowPositionals: false,
 });
 
+const USAGE =
+  'Usage: adminforge-scheduler (--once | --probe <key> [--probe <key>…] | --schedule <key>) [--no-store]\n';
 if (values.help) {
-  process.stdout.write(
-    'Usage: adminforge-scheduler [--once | --probe <key> [--probe <key>…] | --schedule <key>] [--no-store]\n',
-  );
+  process.stdout.write(USAGE);
   process.exit(0);
 }
 
 const config = loadConfig();
 const out = (line: string) => process.stdout.write(`${line}\n`);
 
-if (values.schedule || values.once || values.probe?.length) {
-  const oneShot = openOneShot(config, { log, noStore: values['no-store'] });
-  let code = 0;
-  try {
-    if (values.schedule) {
-      const run = await oneShot.runSchedule(values.schedule, `cli:${process.env.USER ?? 'operator'}`);
-      for (const line of scheduleRunLines(values.schedule, run)) out(line);
-      code = run.status === 'succeeded' ? 0 : 1;
-    } else {
-      const result = await oneShot.runProbes(values.probe);
-      if (result.missing.length) log.warn({ missing: result.missing }, 'unknown probes skipped');
-      out(PROBE_HEADER);
-      for (const r of result.results) out(probeLine(r));
-      out(`\n${probeSummary(result)}`);
-    }
-  } catch (err) {
-    log.error(
-      { err: { message: (err as Error).message } },
-      values.schedule ? 'schedule run failed' : 'probe run failed',
-    );
-    code = 1;
-  }
-  await oneShot.close();
-  process.exit(code);
-}
-
-if (!config.DATABASE_URL) {
-  log.error({}, 'The scheduler needs DATABASE_URL (schedules, runs and the leader lock live in Postgres).');
-  process.exit(1);
-}
-
-const ctx = createContext(config, { databaseName: 'scheduler' }, { warn: log.warn });
-if (ctx.database)
-  await assertDatabaseRole(ctx.database, {
-    production: config.NODE_ENV === 'production',
-    warn: (msg) => log.warn({}, msg),
-  }).catch((err: unknown) => {
-    log.error({}, (err as Error).message);
-    process.exit(1);
-  });
-// Scheduled playbook runs are enqueued for the run worker (ROLE=worker); this process does not execute them.
-const runs = createRunsModule(ctx, { inProcessWorker: false, log });
-const schedules = createSchedulesModule(ctx, runs, { inProcess: true, log });
-
-async function close(code: number): Promise<never> {
-  await schedules.stop().catch(() => undefined);
-  await runs.stop().catch(() => undefined);
-  await ctx.events.close().catch(() => undefined);
-  await ctx.definitions.close().catch(() => undefined);
-  await ctx.database?.close().catch(() => undefined);
-  process.exit(code);
-}
-
-await runs.queue
-  .start()
-  .catch((err: unknown) =>
-    log.warn(
-      { err: { message: (err as Error).message } },
-      'run queue unavailable; playbook schedules will fail until it is',
-    ),
+if (!values.schedule && !values.once && !values.probe?.length) {
+  process.stderr.write(
+    `${USAGE}The scheduler service runs inside the API process now (ADR-016); this command only runs one-shots.\n`,
   );
-await schedules.start();
-log.info(
-  {
-    concurrency: config.SCHEDULER_CONCURRENCY,
-    authMode: config.AUTH_MODE,
-    dataMode: config.DATA_MODE,
-    automation: ctx.automation ? ctx.automation.credential : 'not configured',
-  },
-  'AdminForge scheduler ready (standing by for the leader lock)',
-);
-
-let closing = false;
-for (const signal of ['SIGINT', 'SIGTERM'] as const) {
-  process.on(signal, () => {
-    if (closing) return;
-    closing = true;
-    log.info({ signal }, 'shutting down (letting running jobs finish)');
-    void close(0);
-  });
+  process.exit(2);
 }
+
+const oneShot = openOneShot(config, { log, noStore: values['no-store'] });
+let code = 0;
+try {
+  if (values.schedule) {
+    const run = await oneShot.runSchedule(values.schedule, `cli:${process.env.USER ?? 'operator'}`);
+    for (const line of scheduleRunLines(values.schedule, run)) out(line);
+    code = run.status === 'succeeded' ? 0 : 1;
+  } else {
+    const result = await oneShot.runProbes(values.probe);
+    if (result.missing.length) log.warn({ missing: result.missing }, 'unknown probes skipped');
+    out(PROBE_HEADER);
+    for (const r of result.results) out(probeLine(r));
+    out(`\n${probeSummary(result)}`);
+  }
+} catch (err) {
+  log.error(
+    { err: { message: (err as Error).message } },
+    values.schedule ? 'schedule run failed' : 'probe run failed',
+  );
+  code = 1;
+}
+await oneShot.close();
+process.exit(code);

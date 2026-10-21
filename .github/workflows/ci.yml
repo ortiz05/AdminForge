@@ -19,6 +19,8 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     services:
+      # Only for the one-time importer's test (tests/api/import-postgres.test.ts): AdminForge itself keeps its state in
+      # one SQLite file (ADR-016), and every database-backed suite makes its own.
       postgres:
         image: postgres:18-alpine
         env:
@@ -35,7 +37,7 @@ jobs:
       AUTH_MODE: mock
       DATA_MODE: fixtures
       PUBLIC_BASE_URL: http://localhost:5173
-      DATABASE_URL: postgres://adminforge:adminforge-ci@localhost:5432/adminforge
+      TEST_POSTGRES_URL: postgres://adminforge:adminforge-ci@localhost:5432/adminforge
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
@@ -52,7 +54,6 @@ jobs:
       - run: pnpm format:check
       - run: pnpm --filter @adminforge/design-tokens build
       - run: pnpm typecheck
-      - run: pnpm --filter @adminforge/api db:migrate
       - name: Tests (unit, component, api, content, scale)
         run: pnpm test
 

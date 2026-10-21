@@ -46,7 +46,7 @@ export interface ScheduleGrantStore {
 /** The token-cache partition of a schedule's grant (AAD of its sealed blob, so it opens for this schedule only). */
 export const grantPartition = (scheduleId: string) => `schedule:${scheduleId}`;
 
-export class PgScheduleGrantStore implements ScheduleGrantStore {
+export class SqliteScheduleGrantStore implements ScheduleGrantStore {
   constructor(private readonly db: Db) {}
 
   async get(scheduleId: string): Promise<ScheduleGrantRow | null> {

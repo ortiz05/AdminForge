@@ -1,8 +1,5 @@
 import type { SecretDelivery, SecretSink } from '@adminforge/engine';
 import type { AuditWriter } from '../audit/writer';
-import type { Database } from '../db/client';
-import { PgListener } from '../definitions/notify';
-import { open, seal, type EnvelopeKey } from '../security/envelope';
 import { rootOf } from './run-worker';
 import type { RunRepository } from './types';
 
@@ -13,16 +10,11 @@ import type { RunRepository } from './types';
  *   open at that moment (`{type:'secret', …}`, no event id, never stored), or
  * - holds them in memory for at most 5 minutes for the first `GET /api/runs/:id/secret/:stepPath` from that session,
  *   then drops them.
- * Either way `run.secret.revealed` is audited (field names only). With Postgres the hand-off from a worker process to
- * the API process(es) is a `NOTIFY run_secrets` whose payload is sealed with the AES-256-GCM envelope
- * (TOKEN_CACHE_KEY; AAD = run + step), so Postgres only ever sees ciphertext; a `revealed` notice makes every other
- * replica drop its copy.
+ * Either way `run.secret.revealed` is audited (field names only). The run worker is part of the API process
+ * (ADR-016), so a secret never crosses a process boundary and never reaches the database, not even sealed.
  */
 
-export const SECRETS_CHANNEL = 'run_secrets';
 export const SECRET_TTL_MS = 5 * 60_000;
-/** Postgres NOTIFY payloads are limited to 8000 bytes. */
-const MAX_NOTIFY_BYTES = 7900;
 
 interface Held {
   runId: string;
@@ -71,21 +63,11 @@ const message = (h: Held): SecretMessage => ({
 export class SecretBroker {
   private readonly held = new Map<string, { secret: Held; timer: NodeJS.Timeout }>();
   private readonly streams = new Set<SecretStream>();
-  private readonly listener: PgListener | null;
-  private started: Promise<void> | null = null;
-  readonly transport: 'memory' | 'notify';
 
   constructor(
     private readonly deps: {
       repo: RunRepository;
       audit: AuditWriter;
-      /** 32-byte envelope key (TOKEN_CACHE_KEY, with any previous keys) for the cross-process hand-off. */
-      key: EnvelopeKey;
-      /** Postgres for NOTIFY; null keeps everything in this process. */
-      database: Database | null;
-      listenUrl?: string | null;
-      /** This process serves browsers (API). Worker processes only publish. */
-      serve: boolean;
       ttlMs?: number;
       log?: Log;
       /**
@@ -94,30 +76,14 @@ export class SecretBroker {
        */
       sessionLive?: (sessionHash: string) => Promise<boolean>;
     },
-  ) {
-    this.transport = deps.database && deps.listenUrl ? 'notify' : 'memory';
-    this.listener =
-      this.transport === 'notify' && deps.serve
-        ? new PgListener(
-            deps.listenUrl!,
-            SECRETS_CHANNEL,
-            (p) => void this.onNotify(p),
-            deps.log ? { log: deps.log } : {},
-          )
-        : null;
-  }
+  ) {}
 
-  start(): Promise<void> {
-    this.started ??= this.listener?.start() ?? Promise.resolve();
-    return this.started;
-  }
+  async start(): Promise<void> {}
 
   async stop(): Promise<void> {
-    this.started = null;
     for (const { timer } of this.held.values()) clearTimeout(timer);
     this.held.clear();
     this.streams.clear();
-    await this.listener?.stop();
   }
 
   /** Number of secrets currently held in memory (tests/metrics). */
@@ -147,10 +113,6 @@ export class SecretBroker {
           correlationId: row.correlationId,
           producedAt: s.producedAt,
         };
-        if (this.transport === 'notify') {
-          await this.publish(held);
-          return { status: 'sent' };
-        }
         return { status: await this.handoff(held) };
       },
     };
@@ -251,57 +213,5 @@ export class SecretBroker {
       result: 'success',
       correlationId: h.correlationId,
     });
-    if (this.transport === 'notify')
-      await this.notify({ t: 'revealed', k: keyOf(h.runId, h.stepPath) }).catch(() => undefined);
-  }
-
-  private aad = (k: string) => `adminforge.run-secret:${k}`;
-
-  private async publish(h: Held) {
-    const k = keyOf(h.runId, h.stepPath);
-    const payload = { t: 'secret', k, s: seal(JSON.stringify(h), this.deps.key, this.aad(k)) };
-    if (Buffer.byteLength(JSON.stringify(payload)) > MAX_NOTIFY_BYTES)
-      throw new Error('The secret output is too large to hand over.');
-    await this.notify(payload);
-  }
-
-  private async notify(payload: Record<string, unknown>) {
-    await this.deps.database!.pool.query('select pg_notify($1, $2)', [
-      SECRETS_CHANNEL,
-      JSON.stringify(payload),
-    ]);
-  }
-
-  private async onNotify(raw: string) {
-    let p: { t?: string; k?: string; s?: string };
-    try {
-      p = JSON.parse(raw) as typeof p;
-    } catch {
-      return;
-    }
-    if (typeof p.k !== 'string') return;
-    if (p.t === 'revealed') {
-      const entry = this.held.get(p.k);
-      if (entry) {
-        clearTimeout(entry.timer);
-        this.held.delete(p.k);
-      }
-      return;
-    }
-    if (p.t !== 'secret' || typeof p.s !== 'string') return;
-    let h: Held;
-    try {
-      h = JSON.parse(open(p.s, this.deps.key, this.aad(p.k))) as Held;
-    } catch (err) {
-      this.deps.log?.warn(
-        { err: { message: (err as Error).message } },
-        'run secret could not be opened (TOKEN_CACHE_KEY differs between processes?)',
-      );
-      return;
-    }
-    if (keyOf(h.runId, h.stepPath) !== p.k) return;
-    await this.handoff(h).catch((err) =>
-      this.deps.log?.warn({ err: { message: (err as Error).message } }, 'run secret hand-off failed'),
-    );
   }
 }

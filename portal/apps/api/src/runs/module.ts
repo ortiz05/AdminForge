@@ -1,11 +1,9 @@
-import { randomBytes } from 'node:crypto';
 import { loadEnv } from '@adminforge/config';
 import { notifyApprovers, type DeliveryDeps } from '../delivery/notifier';
 import { RoleCheck } from '../auth/session-plugin';
 import { isArmed } from '../auth/session-store';
 import { Heartbeat } from '../health/heartbeat';
 import { Engine, type Clock, type Limits, type RunnerPort } from '@adminforge/engine';
-import { tokenCacheKey } from '../config';
 import type { AppContext } from '../context';
 import type { DefinitionResolver } from '../definitions/types';
 import type { OutboundExecutor } from '../execution/types';
@@ -13,15 +11,15 @@ import { RunChildRunner } from './children';
 import { RunEventBus } from './events';
 import { SessionIdentityResolver } from './identity';
 import { MemoryRunRepository } from './memory-repository';
-import { PgRunRepository } from './pg-repository';
+import { SqliteRunRepository } from './sqlite-repository';
 import { createOutboundPort, createRunnerPort } from './ports';
-import { InProcessRunQueue, PgBossRunQueue, type RunQueue } from './queue';
+import { InProcessRunQueue, SqliteRunQueue, type RunQueue } from './queue';
 import { RunWorker } from './run-worker';
 import { SecretBroker } from './secrets';
 import { RunService } from './service';
 import { RUN_STREAM_POLL_MS, sessionLive } from './sse';
 import { RepositoryRunStore } from './store';
-import type { RunRepository } from './types';
+import type { RunNotification, RunRepository } from './types';
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -35,7 +33,7 @@ type Log = {
   error?(obj: object, msg: string): void;
 };
 
-/** Overrides for tests and for the worker entry point. Everything defaults from AppContext + configuration. */
+/** Overrides for tests and the scheduler one-shots. Everything defaults from AppContext + configuration. */
 export interface RunsOptions {
   repository?: RunRepository;
   queue?: RunQueue;
@@ -43,15 +41,14 @@ export interface RunsOptions {
   outbound?: OutboundExecutor;
   /** null disables runner steps; default: RUNNER_URL + RUNNER_SHARED_KEY from configuration. */
   runner?: RunnerPort | null;
-  /** Consume jobs in this process. Default: RUN_WORKER_IN_PROCESS=true, or always with the in-memory queue. */
+  /** Consume jobs in this process. Default: yes outside tests (the API is the worker, ADR-016), and always in memory. */
   inProcessWorker?: boolean;
   /** Tests: replaces the post-run token refresh (playbooks with `refreshTokens: true`). */
   refreshTokens?: (sessionHash: string) => Promise<void>;
+  /** Run jobs worked on at once (default RUN_WORKER_CONCURRENCY). */
   workerConcurrency?: number;
   /** Periodic sweep (approval expiry, lost jobs) in the in-process worker. Default true. */
   sweep?: boolean;
-  /** This process serves browsers and receives show-once secrets (default true; the worker entry passes false). */
-  serveSecrets?: boolean;
   /** How long an unfetched secret is held (default 5 minutes). */
   secretTtlMs?: number;
   /** How often an open run stream re-checks its session and access (default 10 s; tests shorten it). */
@@ -81,9 +78,9 @@ export interface RunsModule {
 }
 
 /**
- * Wires the runs feature (§4.3, §7.8): repository (Postgres or memory), queue (pg-boss or in-process), event bus
- * (LISTEN run_events), the engine with its ports, the worker and the service used by the routes and the scheduler.
- * Nothing touches Postgres/pg-boss until a run is created, an event stream opens, or the worker starts.
+ * Wires the runs feature (§4.3, §7.8): repository (SQLite or memory), queue (the `run_jobs` table or in-process), the
+ * run event bus, the engine with its ports, the worker and the service used by the routes and the scheduler. The API
+ * process is the worker (ADR-016): run notifications and show-once secrets stay in this process.
  */
 export function createRunsModule(ctx: AppContext, opts: RunsOptions = {}): RunsModule {
   const log = opts.log;
@@ -94,31 +91,17 @@ export function createRunsModule(ctx: AppContext, opts: RunsOptions = {}): RunsM
 
   const repo =
     opts.repository ??
-    (ctx.database ? new PgRunRepository(ctx.database, ctx.now) : new MemoryRunRepository(ctx.now));
-  const bus = new RunEventBus(
-    ctx.database && ctx.config.DATABASE_URL && !(repo instanceof MemoryRunRepository)
-      ? { listenUrl: ctx.config.DATABASE_URL, ...(log ? { log } : {}) }
-      : {},
-  );
-  if (repo instanceof MemoryRunRepository) {
-    repo.onNotify = (n) => {
+    (ctx.database ? new SqliteRunRepository(ctx.database, ctx.now) : new MemoryRunRepository(ctx.now));
+  const bus = new RunEventBus();
+  if (repo instanceof MemoryRunRepository || repo instanceof SqliteRunRepository) {
+    repo.onNotify = (n: RunNotification) => {
       bus.dispatch(n);
-      // Without Postgres there is no NOTIFY for the platform stream to relay: publish run.updated directly.
-      if (n.type === 'run' || n.type === 'step')
-        ctx.events?.publish({
-          type: 'run.updated',
-          data: n,
-          ...(n.initiatorOid ? { userOid: n.initiatorOid } : {}),
-        });
+      ctx.events?.relayRun(n);
     };
   }
   const queue =
-    opts.queue ??
-    (ctx.database && ctx.config.DATABASE_URL
-      ? new PgBossRunQueue(ctx.config.DATABASE_URL, log)
-      : new InProcessRunQueue(log));
-  const consuming =
-    opts.inProcessWorker ?? (queue.kind === 'memory' || (!testing && ctx.config.RUN_WORKER_IN_PROCESS));
+    opts.queue ?? (ctx.database ? new SqliteRunQueue(ctx.database, log) : new InProcessRunQueue(log));
+  const consuming = opts.inProcessWorker ?? (queue.kind === 'memory' || !testing);
 
   let runner: RunnerPort | undefined;
   if (opts.runner !== undefined) runner = opts.runner ?? undefined;
@@ -160,15 +143,9 @@ export function createRunsModule(ctx: AppContext, opts: RunsOptions = {}): RunsM
         'approver notification incomplete',
       );
   });
-  const pg = !!ctx.database && !!ctx.config.DATABASE_URL && !(repo instanceof MemoryRunRepository);
   const secrets = new SecretBroker({
     repo,
     audit: ctx.audit,
-    // Cross-process hand-off needs the same key in API and worker (TOKEN_CACHE_KEY); a random key works in-process.
-    key: tokenCacheKey(ctx.config) ?? randomBytes(32),
-    database: pg ? ctx.database : null,
-    listenUrl: pg ? (ctx.config.DATABASE_URL ?? null) : null,
-    serve: opts.serveSecrets ?? true,
     ...(opts.secretTtlMs ? { ttlMs: opts.secretTtlMs } : {}),
     ...(log ? { log } : {}),
     sessionLive: async (hash) =>
@@ -228,7 +205,7 @@ export function createRunsModule(ctx: AppContext, opts: RunsOptions = {}): RunsM
   const service = new RunService({ repo, queue, store, definitions, audit: ctx.audit, env, now: ctx.now });
 
   let started = false;
-  // Tells /readyz the run worker is alive (only where this process consumes the queue, on Postgres).
+  // Tells /readyz the run worker is alive (only where this process consumes the queue, with a database).
   const heartbeat =
     consuming && ctx.database && !testing
       ? new Heartbeat(ctx.database.db, 'worker', ctx.now, (err) =>
@@ -252,7 +229,9 @@ export function createRunsModule(ctx: AppContext, opts: RunsOptions = {}): RunsM
       started = true;
       await secrets.start();
       if (consuming) {
-        await worker.start(opts.workerConcurrency ?? 4, { sweep: opts.sweep ?? !testing });
+        await worker.start(opts.workerConcurrency ?? ctx.config.RUN_WORKER_CONCURRENCY, {
+          sweep: opts.sweep ?? !testing,
+        });
         heartbeat?.start();
       }
     },

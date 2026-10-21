@@ -1,27 +1,20 @@
-import { localKeys, missingLocalKeys } from '@adminforge/api/src/scripts/init-local';
+import { DEV_DATABASE_PATH, localKeys, missingLocalKeys } from '@adminforge/api/src/scripts/init-local';
 
 describe('init:local', () => {
-  it('adds every missing key: the dev role URL in the env file, the superuser password in the owner file', () => {
+  it('adds every missing key, with a development database file of its own', () => {
     const add = localKeys({});
     expect(Object.keys(add.env).sort()).toEqual([
       'AF_ENV_LABEL',
       'API_PORT',
       'AUTH_MODE',
-      'DATABASE_URL',
+      'DATABASE_PATH',
       'DATA_MODE',
       'PUBLIC_BASE_URL',
       'TOKEN_CACHE_KEY',
     ]);
-    expect(Object.keys(add.owner)).toEqual(['POSTGRES_PASSWORD']);
-    // The development database's own non-superuser owner (pnpm db:harden creates it with this password).
-    const url = new URL(add.env.DATABASE_URL!);
-    expect([url.username, url.hostname, url.port, url.pathname]).toEqual([
-      'adminforge_dev',
-      '127.0.0.1',
-      '55432',
-      '/adminforge_dev',
-    ]);
-    expect(decodeURIComponent(url.password)).not.toBe(add.owner.POSTGRES_PASSWORD);
+    // A SQLite file under the developer's own home (the API creates and migrates it at start), never a deployment's.
+    expect(add.env.DATABASE_PATH).toBe(DEV_DATABASE_PATH);
+    expect(DEV_DATABASE_PATH).toMatch(/^~\/\.local\/share\/adminforge\/.+\.db$/);
     expect(Buffer.from(add.env.TOKEN_CACHE_KEY!, 'base64')).toHaveLength(32);
     expect(add.env).toMatchObject({
       PUBLIC_BASE_URL: 'http://localhost:5173',
@@ -39,13 +32,7 @@ describe('init:local', () => {
     expect(add.DATA_MODE).toBe('live');
   });
 
-  it('keeps an existing DATABASE_URL and a superuser password wherever it already is', () => {
-    const existing = 'postgres://adminforge_dev:abc%2Fdef@127.0.0.1:55432/adminforge_dev';
-    expect(localKeys({ DATABASE_URL: existing }, { POSTGRES_PASSWORD: 'kept' })).toMatchObject({
-      env: expect.not.objectContaining({ DATABASE_URL: expect.anything() }),
-      owner: {},
-    });
-    // An older env file with POSTGRES_PASSWORD keeps it (pnpm db:harden moves it to the owner file).
-    expect(localKeys({ DATABASE_URL: existing, POSTGRES_PASSWORD: 'legacy' }).owner).toEqual({});
+  it('keeps an existing DATABASE_PATH', () => {
+    expect(localKeys({ DATABASE_PATH: '/srv/af/dev.db' }).env).not.toHaveProperty('DATABASE_PATH');
   });
 });

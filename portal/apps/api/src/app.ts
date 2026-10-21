@@ -13,7 +13,7 @@ import { requireRole } from './auth/guards';
 import { registerSessions } from './auth/session-plugin';
 import { webDistAvailable, type Config } from './config';
 import { createContext, type AppContext, type AppDeps } from './context';
-import { assertDatabaseRole } from './db/client';
+import { assertDatabaseFile } from './db/file-check';
 import { serializeError } from './logging';
 import { AppError, DenialAudit, registerErrorHandler, sendError, unauthenticated } from './errors';
 import { contentRoutes } from './routes/content';
@@ -155,20 +155,20 @@ export async function buildApp(
   app.addHook('onClose', async () => {
     await ctx.database?.close();
   });
-  // Never a superuser: production refuses to start, development warns (db/client.ts).
+  // The database file must be private and on local storage: production refuses to start, development warns.
   app.addHook('onReady', async () => {
     if (ctx.database)
-      await assertDatabaseRole(ctx.database, {
+      assertDatabaseFile(ctx.database.path, {
         production: config.NODE_ENV === 'production',
         warn: (msg) => app.log.warn(msg),
       });
   });
-  // Runs (playbook engine): RunService + queue; the worker also runs here with RUN_WORKER_IN_PROCESS=true or without a database.
+  // Runs (playbook engine): RunService + queue; this process is also the run worker (ADR-016).
   const runs = createRunsModule(ctx, { ...deps.runs, log: app.log });
   app.decorate('runs', runs);
   app.addHook('onReady', () => runs.start());
   app.addHook('preClose', () => runs.stop());
-  // Schedules & probes (R6): store, events, API service; the scheduler itself runs here with SCHEDULER_IN_PROCESS=true.
+  // Schedules & probes (R6): store, events, API service, and the scheduler itself (ADR-016).
   const schedules = createSchedulesModule(ctx, runs, { ...deps.schedules, log: app.log });
   app.decorate('schedules', schedules);
   app.addHook('onReady', () => schedules.start());

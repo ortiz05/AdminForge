@@ -503,8 +503,8 @@ export class DatasourceRunner {
   /**
    * Datasources this one references as `ds.<name>` in its request, `when` or `transform` (they run first).
    *
-   * The order comes from the references, not from the order of the keys in `datasources`: published definitions are
-   * stored in Postgres, which doesn't keep object key order, so "declared above" can't be trusted at run time. Authors
+   * The order comes from the references, not from the order of the keys in `datasources`: definitions published
+   * while the Postgres column was jsonb lost their key order, so "declared above" can't be trusted at run time. Authors
    * still declare dependencies first (`adminforge validate` checks that in the file); here a cycle — including a
    * datasource that references itself — is the only content error.
    */

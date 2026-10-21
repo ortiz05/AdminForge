@@ -1,6 +1,6 @@
 import type { ContentError, Definition, DefinitionOf, Kind } from '@adminforge/schemas';
 
-/** Where a definition came from: `fs` = portal/content on disk (dev), `git`/`portal` = published rows in Postgres. */
+/** Where a definition came from: `fs` = portal/content on disk (dev), `git`/`portal` = published rows in the database. */
 export type DefinitionOrigin = 'fs' | 'git' | 'portal';
 
 /** One version of one definition. */
@@ -38,7 +38,7 @@ export interface DefinitionResolver {
   ): Promise<ResolvedDefinition<DefinitionOf<K>>>;
 }
 
-/** Payload of `definitions_changed` (NOTIFY) and the SSE `definitions.changed` event. Keys are `kind:key`. */
+/** Payload of the `definitions_changed` signal and the SSE `definitions.changed` event. Keys are `kind:key`. */
 export interface DefinitionsChanged {
   keys?: string[];
   all?: boolean;

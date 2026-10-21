@@ -131,7 +131,7 @@ describe('TRUST_PROXY in production', () => {
       NODE_ENV: 'production',
       PUBLIC_BASE_URL: 'https://adminforge.example.com',
       AUTH_MODE: 'entra',
-      DATABASE_URL: 'postgres://u@127.0.0.1:5432/x',
+      DATABASE_PATH: '/var/lib/adminforge/adminforge.db',
       TRUST_PROXY,
     });
 

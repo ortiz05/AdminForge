@@ -25,5 +25,14 @@ export function workspaceRoot(): string {
   return path.resolve(apiPackageDir(), '../../..');
 }
 
-/** Drizzle migrations folder (portal/apps/api/drizzle). */
-export const migrationsDir = () => path.join(apiPackageDir(), 'drizzle');
+/**
+ * Drizzle migrations folder (portal/apps/api/drizzle). A bundle outside the API package (the CLI in the image) finds
+ * it through the repository layout instead.
+ */
+export function migrationsDir(): string {
+  try {
+    return path.join(apiPackageDir(), 'drizzle');
+  } catch {
+    return path.join(repoRoot, 'portal', 'apps', 'api', 'drizzle');
+  }
+}

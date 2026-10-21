@@ -285,7 +285,9 @@ export function SettingsPage() {
                   ],
                   [
                     'Content source',
-                    s.contentSource === 'fs' ? 'portal/content on disk' : 'Published versions in PostgreSQL',
+                    s.contentSource === 'fs'
+                      ? 'portal/content on disk'
+                      : 'Published versions in the database',
                   ],
                   ...(s.content.watch !== null
                     ? ([['Hot reload', s.content.watch ? 'On' : 'Off']] as Array<[string, ReactNode]>)

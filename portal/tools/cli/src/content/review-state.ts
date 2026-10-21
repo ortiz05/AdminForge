@@ -10,8 +10,14 @@
  *   - `merge-base --is-ancestor HEAD origin/main`.
  * Returns the state plus one problem per reason it isn't reviewed; publish prints them, refuses unless
  * --allow-unreviewed, and records the reasons in the audit event. `git` is injectable, so tests run without a repo.
+ *
+ * In a container image there is no checkout: portal/deploy/kubernetes/build-images.sh checked the same rule when it
+ * built the image and recorded the result in BUILD.json at the image's root. That record counts for the image's own
+ * content directory only (the image's file system is read-only), never for content somewhere else.
  */
 import { execFileSync } from 'node:child_process';
+import { existsSync, readFileSync } from 'node:fs';
+import path from 'node:path';
 
 /** The branch reviewed content is merged to (as last fetched: publish never fetches). */
 export const REVIEWED_REF = 'origin/main';
@@ -27,6 +33,32 @@ export interface ReviewState {
   onOriginMain: boolean | null;
   /** Why the content is not the reviewed state (empty = reviewed). */
   problems: Array<{ reason: UnreviewedReason; message: string }>;
+  /** Where the state came from: git, or the image's build record (BUILD.json). */
+  source?: 'git' | 'image';
+}
+
+/** BUILD.json, written into the image by build-images.sh. */
+export interface BuildInfo {
+  /** The commit the image was built from. */
+  commit: string;
+  /** Its content was committed and the commit was on origin/main when the image was built. */
+  reviewed: boolean;
+  /** The content directory, relative to the image's root (portal/content). */
+  contentDir: string;
+}
+
+/** The image's build record, when `repoRoot` has one and it is well-formed. */
+export function readBuildInfo(repoRoot: string): BuildInfo | null {
+  const file = path.join(repoRoot, 'BUILD.json');
+  if (!existsSync(file)) return null;
+  try {
+    const v = JSON.parse(readFileSync(file, 'utf8')) as Partial<BuildInfo>;
+    if (typeof v.commit !== 'string' || !/^[0-9a-f]{7,40}$/.test(v.commit)) return null;
+    if (typeof v.reviewed !== 'boolean' || typeof v.contentDir !== 'string') return null;
+    return { commit: v.commit, reviewed: v.reviewed, contentDir: v.contentDir };
+  } catch {
+    return null;
+  }
 }
 
 /** Runs git in `cwd`: stdout, or the exit status when git fails. */
@@ -53,9 +85,30 @@ const publishedFile = (file: string) =>
  * The review state of `contentDir` from git (local state only: origin/main as last fetched). Ignored files count as
  * uncommitted only when publish would read them.
  */
-export function reviewState(contentDir: string, git: Git = runGit): ReviewState {
-  const state: ReviewState = { commit: null, dirty: null, onOriginMain: null, problems: [] };
+export function reviewState(
+  contentDir: string,
+  git: Git = runGit,
+  opts: { repoRoot?: string; buildInfo?: BuildInfo | null } = {},
+): ReviewState {
+  const state: ReviewState = { commit: null, dirty: null, onOriginMain: null, problems: [], source: 'git' };
   if (!git(['rev-parse', '--show-toplevel'], contentDir).ok) {
+    const build = opts.buildInfo ?? (opts.repoRoot ? readBuildInfo(opts.repoRoot) : null);
+    if (
+      build &&
+      opts.repoRoot &&
+      path.resolve(contentDir) === path.resolve(opts.repoRoot, build.contentDir)
+    ) {
+      state.source = 'image';
+      state.commit = build.commit;
+      state.dirty = false;
+      state.onOriginMain = build.reviewed;
+      if (!build.reviewed)
+        state.problems.push({
+          reason: 'not-on-origin-main',
+          message: `This image was built from ${build.commit}, which was not committed and merged to ${REVIEWED_REF} when it was built.`,
+        });
+      return state;
+    }
     state.problems.push({
       reason: 'not-a-git-checkout',
       message: `${contentDir} is not in a git checkout, so it can't be matched to reviewed commits.`,

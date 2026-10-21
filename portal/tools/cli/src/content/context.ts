@@ -30,7 +30,7 @@ export interface ContentCliContext {
   automation?: Pick<AutomationTokenProvider, 'token'> | null;
   /** Tests: where publish records its audit event (default: the database's audit chain). */
   audit?: (input: AuditInput) => Promise<unknown>;
-  /** Tests: publish target instead of DATABASE_URL. */
+  /** Tests: publish target instead of the database at DATABASE_PATH. */
   openStore?: () => Promise<{ store: Pick<DbDefinitionStore, 'publish'>; close: () => Promise<void> }>;
   /** Tests: the engine module (runPlaybookTests). */
   engine?: EngineModule | null;

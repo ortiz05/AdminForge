@@ -14,13 +14,13 @@ import { automationGraph, CreatorAccess, type CreatorAccessChecker } from './cre
 import { ScheduleEvents } from './events';
 import {
   MemoryScheduleGrantStore,
-  PgScheduleGrantStore,
+  SqliteScheduleGrantStore,
   ScheduleIdentities,
   type ScheduleGrantStore,
 } from './grants';
 import { createJobRunner, type JobRunner } from './jobs';
-import { LeaderElector, pgAdvisoryLock, type LeaderLock, type Timers } from './leader';
-import { PgScheduleStore } from './pg-store';
+import { LeaderElector, leaseLock, type LeaderLock, type Timers } from './leader';
+import { SqliteScheduleStore } from './sqlite-store';
 import { Scheduler } from './scheduler';
 import { PortalSchedules } from './portal';
 import { ScheduleService } from './service';
@@ -42,9 +42,9 @@ type Log = {
 
 export interface SchedulesOptions {
   store?: ScheduleStore;
-  /** Run the scheduler in this process. API default: SCHEDULER_IN_PROCESS, or no database outside tests. */
+  /** Run the scheduler in this process. Default: yes outside tests (the API is the scheduler, ADR-016). */
   inProcess?: boolean;
-  /** Leader lock (default: Postgres advisory lock when a database is configured; none otherwise). */
+  /** Leader lock (default: the database's scheduler lease when there is a database; none otherwise). */
   lock?: LeaderLock | null;
   leaderIntervalMs?: number;
   jobs?: JobRunner;
@@ -61,7 +61,7 @@ export interface SchedulesOptions {
    * with Entra; none in mock mode). Tests inject a fake.
    */
   creatorAccess?: CreatorAccessChecker | null;
-  /** Creators' grants for schedules that run with their own access (default: Postgres, else memory). */
+  /** Creators' grants for schedules that run with their own access (default: the database, else memory). */
   grants?: ScheduleGrantStore;
 }
 
@@ -87,9 +87,9 @@ export interface SchedulesModule {
 }
 
 /**
- * Wires the scheduler feature (R6): store (Postgres or memory), cross-process events, artifacts, the job runner, the
- * API service, probe views and — in the scheduler service, or the API with SCHEDULER_IN_PROCESS=true — the scheduler
- * itself behind leader election.
+ * Wires the scheduler feature (R6): store (SQLite or memory), events, artifacts, the job runner, the API service,
+ * probe views and — in the API process (ADR-016; not in tests or one-shots) — the scheduler itself behind leader
+ * election.
  */
 export function createSchedulesModule(
   ctx: AppContext,
@@ -98,18 +98,18 @@ export function createSchedulesModule(
 ): SchedulesModule {
   const log = opts.log;
   const store =
-    opts.store ?? (ctx.database ? new PgScheduleStore(ctx.database.db) : new MemoryScheduleStore(ctx.now));
+    opts.store ??
+    (ctx.database ? new SqliteScheduleStore(ctx.database.db) : new MemoryScheduleStore(ctx.now));
   const events = new ScheduleEvents({
     bus: ctx.events,
-    database: ctx.database,
-    listenUrl: ctx.database ? ctx.config.DATABASE_URL : null,
+    signals: ctx.database?.signals ?? null,
     ...(log ? { log } : {}),
   });
   const artifacts = new ArtifactStore(ctx.config.ADMINFORGE_ARTIFACTS_DIR);
   const identities = new ScheduleIdentities({
     grants:
       opts.grants ??
-      (ctx.database ? new PgScheduleGrantStore(ctx.database.db) : new MemoryScheduleGrantStore()),
+      (ctx.database ? new SqliteScheduleGrantStore(ctx.database.db) : new MemoryScheduleGrantStore()),
     auth: ctx.auth,
     tokenCache: ctx.tokenCache,
     now: ctx.now,
@@ -127,7 +127,7 @@ export function createSchedulesModule(
     ...opts.probeDeps,
   };
   // Email/Teams delivery reads recipients and webhooks from configuration (never content, never expressions) — and
-  // only the delivery keys of it (recipient lists, webhooks, the sender), never the rest (DATABASE_URL, secrets).
+  // only the delivery keys of it (recipient lists, webhooks, the sender), never the rest (secrets, paths).
   const delivery: DeliveryDeps = {
     outbound: ctx.outbound,
     fetch: ctx.fetch,
@@ -215,16 +215,10 @@ export function createSchedulesModule(
   );
   const probes = new ProbeViews({ store, definitions: ctx.definitions, now: ctx.now });
 
-  const inProcess =
-    opts.inProcess ?? (ctx.config.SCHEDULER_IN_PROCESS || (!ctx.database && ctx.config.NODE_ENV !== 'test'));
+  const inProcess = opts.inProcess ?? ctx.config.NODE_ENV !== 'test';
   let scheduler: Scheduler | null = null;
   if (inProcess) {
-    const lock =
-      opts.lock !== undefined
-        ? opts.lock
-        : ctx.database && ctx.config.DATABASE_URL
-          ? pgAdvisoryLock(ctx.config.DATABASE_URL)
-          : null;
+    const lock = opts.lock !== undefined ? opts.lock : ctx.database ? leaseLock(ctx.database) : null;
     const leader = lock
       ? new LeaderElector(lock, {
           intervalMs: opts.leaderIntervalMs ?? 5_000,

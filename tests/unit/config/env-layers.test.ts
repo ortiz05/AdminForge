@@ -8,16 +8,13 @@ import {
   envFiles,
   loadEnv,
   overlayEnvFilePath,
-  OWNER_ENV_KEYS,
   parseEnv,
   updateEnvFile,
   writeEnvKeys,
 } from '@adminforge/config';
 
-// The provisioner-credential boundary: the services read the runtime file (and the host overlay), never
-// <env>.admin.env, and never the database owner's credentials; the CLI asks for admin keys, migrations for owner keys.
-const OWNER_URL = 'postgres://adminforge:example-owner-password@127.0.0.1:55432/adminforge';
-const APP_URL = 'postgres://adminforge_app:example-app-password@127.0.0.1:55432/adminforge';
+// The provisioner-credential boundary: the services read the runtime file (and an overlay), never <env>.admin.env; the
+// CLI asks for admin keys.
 
 function configDir() {
   const dir = mkdtempSync(path.join(tmpdir(), 'af-config-'));
@@ -122,29 +119,6 @@ describe('loadEnv layering', () => {
       const cli = loadEnv(c.env({ ADMINFORGE_ENV_OVERLAY: 'host' }), { admin: true });
       expect(cli.AF_PROVISIONER_CLIENT_SECRET).toBe('from-base');
       expect(cli.AF_TEST_USER_PASSWORD).toBe('from-overlay');
-    } finally {
-      c.cleanup();
-    }
-  });
-
-  it('keeps the database owner credentials out unless asked (migrations only)', () => {
-    const c = configDir();
-    try {
-      c.write(c.base, ['DATABASE_URL=' + OWNER_URL, 'POSTGRES_PASSWORD=example-owner-password']);
-      // What portal/deploy/db/create-app-role.sh writes for the services.
-      c.write(c.host, ['DATABASE_URL=' + APP_URL, 'DATABASE_MIGRATION_URL=' + OWNER_URL]);
-      const env = c.env({ ADMINFORGE_ENV_OVERLAY: 'host' });
-      for (const services of [loadEnv(env), loadEnv(env, { admin: true })]) {
-        expect(services.DATABASE_URL).toBe(APP_URL);
-        for (const k of OWNER_ENV_KEYS) expect(services).not.toHaveProperty(k);
-      }
-      expect(loadEnv(env, { owner: true })).toMatchObject({
-        DATABASE_URL: APP_URL,
-        DATABASE_MIGRATION_URL: OWNER_URL,
-        POSTGRES_PASSWORD: 'example-owner-password',
-      });
-      // A value the caller's own environment sets is the caller's choice and is kept.
-      expect(loadEnv({ ...env, DATABASE_MIGRATION_URL: OWNER_URL }).DATABASE_MIGRATION_URL).toBe(OWNER_URL);
     } finally {
       c.cleanup();
     }

@@ -39,7 +39,7 @@ export interface PreauthStore {
   purge(now: Date): Promise<number>;
 }
 
-export class PgPreauthStore implements PreauthStore {
+export class SqlitePreauthStore implements PreauthStore {
   constructor(private readonly db: Db) {}
 
   async put(record: PreauthRecord): Promise<void> {

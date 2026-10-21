@@ -1,63 +1,62 @@
+import { readdirSync, readFileSync } from 'node:fs';
+import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { loadEnv } from '@adminforge/config';
-import { migrate } from 'drizzle-orm/node-postgres/migrator';
-import { databaseTlsProblem } from '../config';
+import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 import { migrationsDir } from '../paths';
-import { createDatabase } from './client';
+import { createDatabase, type Database } from './client';
 
 /**
- * Applies pending Drizzle migrations (portal/apps/api/drizzle) to `url`. No statement or lock time limit: a migration
- * that validates a constraint over a large table may legitimately run for minutes.
+ * Applies pending Drizzle migrations (portal/apps/api/drizzle) in one transaction. The API runs this at startup — one
+ * pod, `strategy: Recreate`, so no older version is running against the file (ADR-017) — and `db:migrate` runs it by
+ * hand. Take a volume snapshot (or `adminforge db backup`) before an upgrade that changes the schema.
  */
-export async function runMigrations(url: string): Promise<void> {
-  const database = createDatabase(url, {
-    max: 1,
-    name: 'migrate',
-    statementTimeoutMs: 0,
-    lockTimeoutMs: 0,
-    idleInTransactionTimeoutMs: 0,
-  });
+export function migrateDatabase(database: Pick<Database, 'db'>): void {
+  migrate(database.db, { migrationsFolder: migrationsDir() });
+}
+
+/**
+ * The CREATE TRIGGER statement for `name`, from the migration that defines it — so `adminforge db import-postgres`,
+ * which lifts one trigger while it copies decided approvals in, puts back exactly what the migration created.
+ */
+export function triggerStatement(name: string): string {
+  const dir = migrationsDir();
+  const create = new RegExp(`^\\s*CREATE TRIGGER \`${name}\``, 'm');
+  for (const f of readdirSync(dir)
+    .filter((x) => x.endsWith('.sql'))
+    .sort()) {
+    for (const stmt of readFileSync(path.join(dir, f), 'utf8').split('--> statement-breakpoint')) {
+      const m = create.exec(stmt);
+      if (m) return stmt.slice(m.index).trim();
+    }
+  }
+  throw new Error(`No migration creates trigger ${name}.`);
+}
+
+/** Opens `file` (creating it 0600 if needed), migrates it and closes it. */
+export async function runMigrations(file: string): Promise<void> {
+  const database = createDatabase(file, { name: 'migrate', pollSignals: false });
   try {
-    await migrate(database.db, { migrationsFolder: migrationsDir() });
+    migrateDatabase(database);
   } finally {
     await database.close();
   }
 }
 
-/**
- * Where `db:migrate` connects: as the owner — DATABASE_MIGRATION_URL when set (the non-superuser owner role, kept in
- * <env>[.<overlay>].owner.env by portal/deploy/db/harden-postgres.ts; the host services' DATABASE_URL is a
- * least-privilege role without DDL — portal/deploy/db/create-app-role.sh), else DATABASE_URL (`pnpm dev`: the dev
- * database's own owner). Only migrations ask loadEnv for the owner's credentials (`owner: true`); the services never
- * get them.
- */
-export function migrationUrl(processEnv: NodeJS.ProcessEnv = process.env): string | undefined {
-  const env = loadEnv(processEnv, { owner: true });
-  return env.DATABASE_MIGRATION_URL || env.DATABASE_URL || undefined;
+/** Where `db:migrate` writes: DATABASE_PATH from the environment or the env file. */
+export function migrationPath(processEnv: NodeJS.ProcessEnv = process.env): string | undefined {
+  return loadEnv(processEnv).DATABASE_PATH || undefined;
 }
 
-/** Production migrations to a database on another host need verified TLS, like the services (config.ts). */
-export function migrationTlsProblem(
-  url: string,
-  processEnv: NodeJS.ProcessEnv = process.env,
-): string | undefined {
-  return loadEnv(processEnv).NODE_ENV === 'production' ? databaseTlsProblem(url) : undefined;
-}
-
-// CLI: `pnpm --filter @adminforge/api db:migrate` (ADMINFORGE_ENV_OVERLAY=host for the services' database).
+// CLI: `pnpm --filter @adminforge/api db:migrate`.
 const entry = process.argv[1];
 if (entry && /migrate\.[cm]?[jt]s$/.test(entry) && import.meta.url === pathToFileURL(entry).href) {
-  const url = migrationUrl();
-  if (!url) {
-    console.error('DATABASE_URL is not set. Run `pnpm --filter @adminforge/api init:local` first.');
+  const file = migrationPath();
+  if (!file) {
+    console.error('DATABASE_PATH is not set. Run `pnpm --filter @adminforge/api init:local` first.');
     process.exit(1);
   }
-  const tls = migrationTlsProblem(url);
-  if (tls) {
-    console.error(`DATABASE_MIGRATION_URL: ${tls}.`);
-    process.exit(1);
-  }
-  runMigrations(url)
+  runMigrations(file)
     .then(() => console.log('Migrations applied.'))
     .catch((err: unknown) => {
       console.error(`Migration failed: ${err instanceof Error ? err.message : String(err)}`);

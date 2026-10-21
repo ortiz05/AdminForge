@@ -1,11 +1,9 @@
-import { randomUUID } from 'node:crypto';
-import type { Database } from '../db/client';
-import { PgListener } from '../definitions/notify';
+import type { Signals } from '../db/signals';
 import type { EventBus } from '../events/bus';
 
 /**
- * Scheduler events across processes. The scheduler service and the API are separate processes (R6), so events go
- * through Postgres `NOTIFY schedule_events`:
+ * Scheduler events. The scheduler runs in the API process (ADR-016), but a scheduler one-shot (`--once`, `--probe`,
+ * `--schedule`) or the CLI is another process, so events also go out as the `schedule_events` signal:
  * - to browsers (SSE `GET /api/events`): `schedule.failed`, `schedule.updated`, `probe.updated`, `news.updated`
  *   (counts only: {new, updated});
  * - to the scheduler: `schedule.run_requested` and `schedules.changed` (wake up now instead of at the next tick).
@@ -37,15 +35,13 @@ const PUBLIC = new Set<ScheduleEventType>([
 type Log = { warn(obj: object, msg: string): void };
 
 export class ScheduleEvents {
-  private readonly origin = randomUUID();
   private readonly listeners = new Set<(e: ScheduleEvent) => void>();
-  private listener: PgListener | null = null;
+  private unsubscribe: (() => void) | null = null;
 
   constructor(
     private readonly opts: {
       bus?: EventBus | null;
-      database?: Database | null;
-      listenUrl?: string | null;
+      signals?: Pick<Signals, 'publish' | 'on'> | null;
       log?: Log;
     } = {},
   ) {}
@@ -69,46 +65,37 @@ export class ScheduleEvents {
 
   publish(e: ScheduleEvent): void {
     this.deliver(e);
-    const db = this.opts.database;
-    if (!db) return;
-    let payload = JSON.stringify({ ...e, origin: this.origin });
-    // NOTIFY payloads are limited to 8000 bytes.
+    const signals = this.opts.signals;
+    if (!signals) return;
+    let payload = JSON.stringify(e);
+    // Signals stay small: a large event goes out without its data.
     if (payload.length > 7900)
-      payload = JSON.stringify({
-        type: e.type,
-        data: { truncated: true, key: e.data.key ?? null },
-        origin: this.origin,
-      });
-    db.pool
-      .query('select pg_notify($1, $2)', [SCHEDULE_EVENTS_CHANNEL, payload])
-      .catch((err: unknown) =>
-        this.opts.log?.warn({ err: { message: (err as Error).message } }, 'schedule event NOTIFY failed'),
-      );
+      payload = JSON.stringify({ type: e.type, data: { truncated: true, key: e.data.key ?? null } });
+    try {
+      // In-process listeners already have it (deliver above): the signal is for other processes only.
+      signals.publish(SCHEDULE_EVENTS_CHANNEL, payload, { local: false });
+    } catch (err) {
+      this.opts.log?.warn({ err: { message: (err as Error).message } }, 'schedule event signal failed');
+    }
   }
 
-  /** LISTEN for other processes' events (needs a database URL). */
+  /** Receives other processes' events. */
   async start(): Promise<void> {
-    if (this.listener || !this.opts.listenUrl || !this.opts.database) return;
-    this.listener = new PgListener(
-      this.opts.listenUrl,
-      SCHEDULE_EVENTS_CHANNEL,
-      (payload) => {
-        try {
-          const e = JSON.parse(payload) as ScheduleEvent & { origin?: string };
-          if (e.origin === this.origin || typeof e.type !== 'string') return;
-          this.deliver({ type: e.type, data: e.data && typeof e.data === 'object' ? e.data : {} });
-        } catch {
-          // ignore malformed payloads
-        }
-      },
-      { log: this.opts.log },
-    );
-    await this.listener.start();
+    if (this.unsubscribe || !this.opts.signals) return;
+    this.unsubscribe = this.opts.signals.on(SCHEDULE_EVENTS_CHANNEL, (payload) => {
+      try {
+        const e = JSON.parse(payload) as ScheduleEvent;
+        if (typeof e.type !== 'string') return;
+        this.deliver({ type: e.type, data: e.data && typeof e.data === 'object' ? e.data : {} });
+      } catch {
+        // ignore malformed payloads
+      }
+    });
   }
 
   async stop(): Promise<void> {
-    await this.listener?.stop();
-    this.listener = null;
+    this.unsubscribe?.();
+    this.unsubscribe = null;
     this.listeners.clear();
   }
 }

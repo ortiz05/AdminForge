@@ -5,9 +5,9 @@ const failure = (props: Record<string, unknown>, message = 'failure') =>
   Object.assign(new Error(message), props);
 
 describe('describeFailure', () => {
-  it('names the host it could not reach and how to start Postgres', () => {
+  it('names the host it could not reach', () => {
     expect(describeFailure(failure({ code: 'ECONNREFUSED', address: '127.0.0.1', port: 55432 }))).toBe(
-      "Can't connect to 127.0.0.1:55432. If that's Postgres, start it with `pnpm db:up` (and check DATABASE_URL).",
+      "Can't connect to 127.0.0.1:55432. Check that it is running and the address is right.",
     );
     expect(describeFailure(failure({ code: 'ECONNREFUSED' }))).toMatch(
       /^Can't connect to the configured host\./,
@@ -15,21 +15,38 @@ describe('describeFailure', () => {
   });
 
   it('uses the root cause of wrapped driver errors', () => {
-    const pg = failure({ code: '28P01' }, 'password authentication failed');
-    const drizzle = failure({ cause: pg }, 'Failed query: select 1\nparams: ');
+    const sqlite = failure({ code: 'SQLITE_BUSY' }, 'database is locked');
+    const drizzle = failure({ cause: sqlite }, 'Failed query: select 1\nparams: ');
     expect(describeFailure(failure({ cause: drizzle }, 'outer'))).toBe(
-      'Postgres rejected the password in DATABASE_URL.',
+      'The database is busy (another process is writing). Try again in a moment.',
     );
   });
 
-  it('explains DNS failures and a missing database', () => {
+  it('explains the SQLite file problems people hit, naming DATABASE_PATH', () => {
+    expect(describeFailure(failure({ code: 'SQLITE_CANTOPEN' }))).toMatch(
+      /^Can't open the database file in DATABASE_PATH/,
+    );
+    expect(describeFailure(failure({ code: 'SQLITE_READONLY' }))).toMatch(/read-only for you/);
+    expect(describeFailure(failure({ code: 'SQLITE_NOTADB' }))).toMatch(/not a usable AdminForge database/);
+    expect(describeFailure(failure({ code: 'SQLITE_ERROR' }, 'no such table: definitions'))).toMatch(
+      /no AdminForge tables yet\. Run `pnpm --filter @adminforge\/api db:migrate`/,
+    );
+  });
+
+  it("names where the import's Postgres URL comes from when that database refuses it", () => {
+    expect(describeFailure(failure({ code: '28P01' }))).toBe(
+      'Postgres rejected the password in the URL of the database to import (DATABASE_URL, or --from-env).',
+    );
+    expect(describeFailure(failure({ code: '3D000' }))).toBe(
+      "The Postgres database to import (DATABASE_URL, or --from-env) doesn't exist.",
+    );
+  });
+
+  it('explains DNS failures', () => {
     expect(describeFailure(failure({ code: 'ENOTFOUND' }, 'getaddrinfo ENOTFOUND db.example.com'))).toBe(
       "Can't resolve a host name (getaddrinfo ENOTFOUND db.example.com). Check your network or proxy.",
     );
     expect(describeFailure(failure({ code: 'EAI_AGAIN' }))).toMatch(/^Can't resolve a host name/);
-    expect(describeFailure(failure({ code: '3D000' }))).toBe(
-      "The database in DATABASE_URL doesn't exist. Run `pnpm --filter @adminforge/api db:migrate`.",
-    );
   });
 
   it('keeps anything else to its first line, at most 300 characters, and points at ADMINFORGE_DEBUG', () => {

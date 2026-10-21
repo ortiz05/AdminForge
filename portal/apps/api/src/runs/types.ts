@@ -138,7 +138,7 @@ export interface RunRepository {
   saveStep(runId: string, record: StepRecord): Promise<void>;
   listSteps(runId: string): Promise<StepRecord[]>;
 
-  /** Inserts the event and NOTIFYs `run_events` (Postgres) in the same transaction. */
+  /** Inserts the event and notifies this process's listeners (the run event bus, the browsers' event stream). */
   appendEvent(runId: string, event: RunEventInput, notify: RunNotification): Promise<EventRow>;
   listEvents(runId: string, afterId: number, limit: number): Promise<EventRow[]>;
 
@@ -154,13 +154,16 @@ export interface RunRepository {
   ): Promise<TaskRow | null>;
   listTasks(filter: TaskFilter): Promise<TaskRow[]>;
 
-  /** Exclusive per-run execution lock (advisory lock in Postgres). Null when another worker holds it. */
-  tryLock(runId: string): Promise<{ release(): Promise<void> } | null>;
+  /**
+   * Exclusive right to drive a run, or null when another worker has it. `lost` aborts when the right lapsed (a holder
+   * stalled past its lease, and another process took the run over): the worker then stops at the next checkpoint.
+   */
+  tryLock(runId: string): Promise<{ release(): Promise<void>; lost?: AbortSignal } | null>;
 }
 
 /**
- * Payload of `NOTIFY run_events` (JSON, small). The platform's GET /api/events can relay it as `run.updated` (filter on
- * `initiatorOid` for the run dock); run SSE streams use it to wake up and read new rows from `run_step_events`.
+ * A run notification (small): the platform's GET /api/events relays it as `run.updated` (filter on `initiatorOid` for
+ * the run dock); run SSE streams use it to wake up and read new rows from `run_step_events`.
  */
 export interface RunNotification {
   v: 1;
@@ -172,8 +175,6 @@ export interface RunNotification {
   initiatorOid?: string | null;
   parentRunId?: string | null;
 }
-
-export const RUN_EVENTS_CHANNEL = 'run_events';
 
 /** `status=active` in GET /api/runs: every non-terminal state. */
 export const RUN_STATUS_ACTIVE: RunStatus[] = [

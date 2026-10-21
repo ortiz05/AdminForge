@@ -7,7 +7,8 @@
  *     contains such a value is refused.
  *
  * A value counts when it is at least 8 characters and not an obviously generic one (true/false, a number, a bare
- * loopback origin, a postgres URL on 127.0.0.1); values of *DOMAIN* keys also count lower-cased. Microsoft-published
+ * loopback origin); values of *DOMAIN* keys also count lower-cased. Local settings (LOCAL_SETTING_KEY: the database
+ * file's path) are never tenant data. Microsoft-published
  * licence SKU part numbers under AF_LICENCE_SKU_<n> and AF_TEST_LICENCE_SKU are exempt — they are the same in every
  * tenant and appear in committed content — but only when the value looks like a part number. So are option lists that
  * name only AdminForge's own options: AF_TEST_FIXTURES (TEST_FIXTURE_NAMES) and AF_QUERY_SOURCES (QUERY_SOURCE_NAMES);
@@ -15,6 +16,9 @@
  *
  * Dependency-free (no node: imports) so guards, hooks and the CLI can load it without pulling in anything else.
  */
+
+/** Configuration keys whose values are local settings — a file path on this machine or volume — not tenant data. */
+export const LOCAL_SETTING_KEY = /^(DATABASE_PATH|DATABASE_BUSY_TIMEOUT_MS)$/;
 
 /** Configuration keys whose values are public Microsoft catalogue names, not tenant data. */
 export const PUBLIC_CATALOGUE_KEY = /^(AF_LICENCE_SKU_\d+|AF_TEST_LICENCE_SKU)$/;
@@ -103,7 +107,7 @@ export function tenantValues(
 ): string[] {
   const values = new Set<string>();
   for (const [key, value] of Object.entries(entries)) {
-    if (!value) continue;
+    if (!value || LOCAL_SETTING_KEY.test(key)) continue;
     if (opts.configKeysOnly && !(/^[A-Z][A-Z0-9_]*$/.test(key) && TENANT_CONFIG_KEY.test(key))) continue;
     if (isPublicCatalogueValue(key, value)) continue;
     if (value.length >= MIN_LENGTH && !GENERIC_VALUE.test(value)) values.add(value);

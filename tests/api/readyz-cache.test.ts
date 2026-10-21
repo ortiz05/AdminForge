@@ -13,6 +13,18 @@ function fakeDb(fail: () => boolean) {
     },
     // componentStates() reads the heartbeats; an empty answer → both components `missing` (degraded, still 200).
     db: { select: () => ({ from: () => ({ where: async () => [] }) }) },
+    // What building the app reads without querying: the startup file check (`:memory:` has no file to check), the
+    // stores' connection handle, the run queue's lease holder (`origin`) and the schedule events' subscription.
+    path: ':memory:',
+    sqlite: {},
+    signals: {
+      origin: 'test',
+      on: () => () => undefined,
+      onResync: () => () => undefined,
+      publish: () => undefined,
+      prune: () => 0,
+      stop: () => undefined,
+    },
     close: async () => {},
   } as unknown as Database;
   return { db, pings: () => pings };

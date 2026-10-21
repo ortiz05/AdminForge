@@ -11,8 +11,9 @@ export const dataTable = tv({
     inner: 'w-full min-w-fit',
     head: 'sticky top-0 z-(--af-z-sticky) border-b border-line bg-panel',
     headRow: 'grid grid-cols-(--af-dt-cols)',
-    // A two-line header grows the header row (compact density) instead of touching its borders.
-    th: 'group/th flex min-h-(--af-table-row-h) min-w-0 items-center gap-0.5 px-2 py-1 text-xs font-semibold text-fg-3 first:pl-(--af-pad-panel) last:pr-(--af-pad-panel)',
+    // A two-line header (its text has a little padding) grows the header row in compact density instead of touching
+    // its borders; a one-line header keeps the row's height.
+    th: 'group/th flex min-h-(--af-table-row-h) min-w-0 items-center gap-0.5 px-2 text-xs font-semibold text-fg-3 first:pl-(--af-pad-panel) last:pr-(--af-pad-panel)',
     sortButton: [
       // A header may wrap to two lines (its text clamps); the button grows with it.
       '-mx-1 inline-flex min-h-7 min-w-0 items-center gap-1 rounded-sm px-1 text-left font-semibold',

@@ -1106,7 +1106,10 @@ export function DataTable<T extends RowData>({
                   <span className="sr-only">{c.header}</span>
                 ) : (
                   // Two lines before the ellipsis; cut off, the full text shows on hover (titleIfClipped).
-                  <span data-af-clip="" className="line-clamp-2 leading-tight break-words whitespace-normal">
+                  <span
+                    data-af-clip=""
+                    className="line-clamp-2 py-1 leading-tight break-words whitespace-normal"
+                  >
                     {c.header}
                   </span>
                 );

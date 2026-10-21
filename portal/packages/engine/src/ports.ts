@@ -80,6 +80,8 @@ export interface ServiceCall {
   pathParams?: Record<string, unknown>;
   /** Only set when published content declares the step `mode: write`. */
   declaredWrite?: boolean;
+  /** Set only by the notifier for the one-on-one chat it opens: the body binds chat members, possibly by UPN. */
+  chatMembers?: boolean;
   paging?: 'none' | 'all';
   maxItems?: number;
   /** arm: wait for long-running operations. */

@@ -84,6 +84,12 @@ export interface ServiceCall {
    * message about AdminForge, not a change to the tenant, so the emergency stop doesn't hold it back.
    */
   notification?: boolean;
+  /**
+   * Set only by the playbook engine's notifier for the one-on-one chat it opens (`POST /chats`): the body binds the
+   * chat's members, by UPN when that is what the step names — a conversation, not a change to anyone's account, so the
+   * protected-object guard doesn't require object ids there (./protected.ts).
+   */
+  chatMembers?: boolean;
   /** Paging: `none` (single response), `all` (collect up to maxItems), or a cursor page. */
   paging?: 'none' | 'all' | { cursor?: string; pageSize?: number };
   maxItems?: number;

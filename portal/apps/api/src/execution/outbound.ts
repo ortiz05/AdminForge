@@ -1156,7 +1156,10 @@ export class Outbound implements OutboundExecutor {
         : SAFE_METHODS.has(method)
           ? []
           : [{ service, method, path: sent, query: call.query, body }];
-      await this.protectedObjects.check(identity, targets, correlationId, { notification });
+      // The notifier's chat: only `POST /chats` as a person (S-15 leaves its member bindings alone).
+      const chatMembers =
+        call.chatMembers === true && identity.kind === 'delegated' && method === 'POST' && path === '/chats';
+      await this.protectedObjects.check(identity, targets, correlationId, { notification, chatMembers });
     }
 
     const template = call.pathTemplate ?? fn?.template ?? templatePath(path);

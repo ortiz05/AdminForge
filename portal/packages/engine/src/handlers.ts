@@ -489,8 +489,12 @@ export function createGraphNotifier(outbound: OutboundPort): Notifier {
           'notify_unsupported',
           'notify steps send as a signed-in engineer; scheduled runs use the schedule’s own notify targets.',
         );
-      const post = (path: string, body: unknown) =>
-        outbound.call(identity, { service: 'graph', method: 'POST', path, body, declaredWrite: true }, opts);
+      const post = (path: string, body: unknown, extra: { chatMembers?: boolean } = {}) =>
+        outbound.call(
+          identity,
+          { service: 'graph', method: 'POST', path, body, declaredWrite: true, ...extra },
+          opts,
+        );
       let requestId: string | undefined;
       if (msg.channel === 'email') {
         const res = await post('/me/sendMail', {
@@ -531,13 +535,17 @@ export function createGraphNotifier(outbound: OutboundPort): Notifier {
           const member = (who: string) => ({
             '@odata.type': '#microsoft.graph.aadUserConversationMember',
             roles: ['owner'],
-            // An OData string literal (`'` doubled, S-31): a UPN can't close it early and append to the reference.
-            'user@odata.bind': `https://graph.microsoft.com/v1.0/users(${odataLiteral(who)})`,
+            // Percent-encoded (a guest's `#EXT#` must not end the URL), then an OData string literal (`'` doubled,
+            // S-31), so a UPN can't close the literal early and append to the reference.
+            'user@odata.bind': `https://graph.microsoft.com/v1.0/users(${odataLiteral(encodeURIComponent(who))})`,
           });
-          const chat = await post('/chats', {
-            chatType: 'oneOnOne',
-            members: [member(identity.actor.oid), member(target)],
-          });
+          // `chatMembers`: the members are bound by UPN when the step names one, which the protected-object guard
+          // otherwise refuses in a write (S-15); a chat is a conversation, not a change to anyone's account.
+          const chat = await post(
+            '/chats',
+            { chatType: 'oneOnOne', members: [member(identity.actor.oid), member(target)] },
+            { chatMembers: true },
+          );
           chatId = String((chat.data as { id?: unknown } | null)?.id ?? '');
           if (!chatId) throw new StepError('notify_failed', `Could not open a chat with ${target}.`);
         }

@@ -152,7 +152,9 @@ function isGuidCall(node: AstNode | undefined): boolean {
  * GUID, or nothing — in which case `next` (what is concatenated after the text) must be `$guid(…)`. A bare
  * `/users` (the collection) names nobody.
  */
-function textNamesUser(text: string, next: AstNode | undefined): boolean {
+function textNamesUser(raw: string, next: AstNode | undefined): boolean {
+  // Runs of `/` collapsed (not the scheme's), as the API does: `/users//${ … }` names the same segment.
+  const text = raw.replace(/(^|[^:])\/{2,}/g, '$1/');
   for (const m of text.matchAll(USERS_AT)) {
     const rest = text.slice(m.index + m[0].length);
     const key = (m[1] === '/' ? /^[^/?#()]*/ : /^[^')]*/).exec(rest)![0];
@@ -221,7 +223,7 @@ function strings(
 }
 
 /**
- * Graph writes in `def` whose path or body names a user after `/users/` by anything but `$guid(…)` (optionally in
+ * Graph writes in `def` whose path, query or body names a user after `/users/` by anything but `$guid(…)` (optionally in
  * `$encode(…)`) or a literal GUID. Writes are `type: graph` steps with `mode: write`, the changing requests of a
  * `graphBatch` step with `mode: write`, and every `graph` / `graphBatch` compensation (always a write) — wherever they
  * sit (forEach steps, runbook sections). GET and HEAD requests and `mode: read` steps are lookups and may use a UPN.
@@ -229,11 +231,12 @@ function strings(
 export function usersWriteProblems(def: unknown): UsersWriteProblem[] {
   const out: UsersWriteProblem[] = [];
   const check = (request: unknown, at: Array<string | number>) => {
-    const r = request as { method?: unknown; path?: unknown; body?: unknown } | null;
+    const r = request as { method?: unknown; path?: unknown; query?: unknown; body?: unknown } | null;
     if (!r || typeof r !== 'object') return;
     if (SAFE_METHODS.has(String(r.method ?? 'GET').toUpperCase())) return;
     const found: Array<[Array<string | number>, string]> = [];
     strings(r.path, [...at, 'path'], found);
+    strings(r.query, [...at, 'query'], found);
     strings(r.body, [...at, 'body'], found);
     for (const [segments, str] of found)
       if (templateNamesUser(str))

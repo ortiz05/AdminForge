@@ -135,16 +135,58 @@ describe('declared Graph writes that name a user by sign-in name', () => {
       },
     ],
     ['mail sent as a mailbox named by address', { method: 'POST', path: `/users/${UPN}/sendMail`, body: {} }],
-  ])('refuses %s, before anything is sent', async (_name, call) => {
-    const t = setup();
-    const err = await outcome(t.out.execute(ARMED, write(call)));
-    expect(err).toBeInstanceOf(AppError);
-    expect(err).toMatchObject({ status: 403, code: 'user_not_by_id' });
-    // Never echoes the name it refused.
-    expect((err as AppError).message).not.toContain('breakglass');
-    expect((err as AppError).extras.hint).toMatch(/object ID/);
-    expect(t.writes()).toEqual([]);
-  });
+    // Found in review: an empty or parenthesised segment, other spellings of a reference, a reference in the query.
+    ['a doubled slash before the UPN', { method: 'PUT', path: `/users//${UPN}/manager/$ref`, body: {} }],
+    ['a parenthesised key after /users/', { method: 'PATCH', path: `/users/('${UPN}')`, body: {} }],
+    ...['@OData.Id', 'odata.id', '@id'].map((key) => [
+      `a ${key} reference`,
+      {
+        method: 'POST',
+        path: `/groups/${GROUP}/members/$ref`,
+        body: { [key]: `https://graph.microsoft.com/v1.0/users/${UPN}` },
+      },
+    ]),
+    [
+      'an OData 4.01 @bind reference',
+      {
+        method: 'POST',
+        path: '/groups',
+        body: { 'members@bind': [`https://graph.microsoft.com/v1.0/users/${UPN}`] },
+      },
+    ],
+    [
+      'a Graph URL naming the user under any other key',
+      { method: 'POST', path: `/groups/${GROUP}/members/$ref`, body: { ref: `/v1.0/users/${UPN}` } },
+    ],
+    [
+      'a $id reference in the query',
+      {
+        method: 'DELETE',
+        path: `/groups/${GROUP}/members/$ref`,
+        query: { $id: `https://graph.microsoft.com/v1.0/users/${UPN}` },
+      },
+    ],
+    [
+      'Teams chat members bound by UPN in content (only the notify step may)',
+      {
+        method: 'POST',
+        path: '/chats/19:abc@thread.v2/members',
+        body: { 'user@odata.bind': `https://graph.microsoft.com/v1.0/users('${UPN}')` },
+      },
+    ],
+  ] as Array<[string, Omit<ServiceCall, 'service' | 'declaredWrite'>]>)(
+    'refuses %s, before anything is sent',
+    async (_name, call) => {
+      const t = setup();
+      const err = await outcome(t.out.execute(ARMED, write(call)));
+      expect(err).toBeInstanceOf(AppError);
+      expect(err).toMatchObject({ status: 403, code: 'user_not_by_id' });
+      // Never echoes the name it refused.
+      expect((err as AppError).message).not.toContain('breakglass');
+      expect((err as AppError).extras.hint).toMatch(/object ID/);
+      expect(t.writes()).toEqual([]);
+    },
+  );
 
   it('refuses a changing $batch sub-request that names a user by UPN; reading by UPN in the batch is fine', async () => {
     const t = setup();
@@ -219,11 +261,23 @@ describe('declared Graph writes that name a user by sign-in name', () => {
     expect(await outcome(t.out.execute(AUTOMATION_WRITE, notify))).toBe('went ahead');
   });
 
-  it('lets a Teams chat name its members by UPN (a conversation, not a change to the account)', async () => {
+  it("leaves text that isn't a Graph reference alone", async () => {
+    const t = setup();
+    const call = write({
+      method: 'PATCH',
+      path: `/groups/${GROUP}`,
+      body: { description: 'Owners: see https://wiki.example.com/users/avery and /users/blake' },
+    });
+    expect(await outcome(t.out.execute(ARMED, call))).toBe('went ahead');
+  });
+
+  it("lets the notify step's Teams chat name its members by UPN (a conversation, not a change to the account)", async () => {
     const t = setup();
     const chat = write({
       method: 'POST',
       path: '/chats',
+      // Set only by the engine's notifier (createGraphNotifier), never from content.
+      chatMembers: true,
       body: {
         chatType: 'oneOnOne',
         members: [
@@ -233,6 +287,21 @@ describe('declared Graph writes that name a user by sign-in name', () => {
       },
     });
     expect(await outcome(t.out.execute(ARMED, chat))).toBe('went ahead');
+  });
+
+  it('the chat flag exempts nothing but chat members (not a path, not another write)', async () => {
+    const t = setup();
+    for (const call of [
+      { method: 'PATCH', path: `/users/${UPN}`, body: {}, chatMembers: true },
+      {
+        method: 'POST',
+        path: `/groups/${GROUP}/members/$ref`,
+        body: { '@odata.id': `https://graph.microsoft.com/v1.0/users/${UPN}` },
+        chatMembers: true,
+      },
+    ])
+      expect(await outcome(t.out.execute(ARMED, write(call)))).toMatchObject({ code: 'user_not_by_id' });
+    expect(t.writes()).toEqual([]);
   });
 
   it('leaves PowerShell runner targets to the runner (their inputs are names, not Graph references)', async () => {

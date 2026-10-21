@@ -121,16 +121,26 @@ export function referencedIds(t: WriteTarget): Set<string> {
   return out;
 }
 
-/** `/users/{key}` (group 1) or `users(…)` (group 2: `'{key}'`, `{key}`, `id='{key}'`, any other alternate key). */
-const USER_REF = /(?:^|\/)users(?:\/([^/?#()]*)|\(([^)]*)\)?)/gi;
-/** Body keys whose values reference directory objects by URL (`members/$ref`, `owners@odata.bind`, …). */
-const isReferenceKey = (k: string) => k === '@odata.id' || /@odata\.bind$/i.test(k);
-/** Teams chats name their members by UPN or id: a conversation, not a change to the account (the notify step). */
-const CHAT_PATH = /^\/chats(\/|$)/i;
+/**
+ * `/users/{key}` (group 1: everything up to the next `/`, so `/users/('…')` is a key too) or `users(…)` (group 2:
+ * `'{key}'`, `{key}`, `id='{key}'`, any other alternate key). Matched after runs of `/` are collapsed, so
+ * `/users//{upn}` can't hide the key behind an empty segment.
+ */
+const USER_REF = /(?:^|\/)users(?:\/([^/?#]*)|\(([^)]*)\)?)/gi;
+/**
+ * Keys whose values reference directory objects (`members/$ref` bodies, `owners@odata.bind`, the `$id` query of a
+ * `$ref` delete), in any case and in the OData 4.01 spellings (`@id`, `@bind`) as well as without the `@`.
+ */
+const isReferenceKey = (k: string) => /^[@$]?(odata\.)?id$/i.test(k) || /(^|@|\.)(odata\.)?bind$/i.test(k);
+/** A string that is a Graph resource reference wherever it sits: the Graph host, or a versioned path. */
+const GRAPH_REFERENCE = /^\s*(https:\/\/graph\.microsoft\.com\/|\/*(v1\.0|beta)\/)/i;
 
 /** Whether one reference names a user by anything but an object id (the collection itself names nobody). */
 function userKeyNotGuid(ref: string): boolean {
-  const text = decode(ref);
+  // The path only (scheme and host dropped), runs of `/` collapsed: Graph's front end may treat them as one.
+  const text = decode(ref)
+    .replace(/^\s*[a-z][a-z0-9+.-]*:\/\/[^/]*/i, '')
+    .replace(/\/{2,}/g, '/');
   for (const m of text.matchAll(USER_REF)) {
     const key = (
       m[1] ??
@@ -144,33 +154,40 @@ function userKeyNotGuid(ref: string): boolean {
   return false;
 }
 
-/** Every reference value (`@odata.id`, `…@odata.bind`) in a JSON body. */
-function bodyReferences(value: unknown, out: string[], depth = 0) {
-  if (depth > MAX_DEPTH || !value || typeof value !== 'object') return;
-  if (Array.isArray(value)) {
-    for (const v of value) bodyReferences(v, out, depth + 1);
+/**
+ * Every reference in a JSON value: the values under reference keys (`@odata.id`, `…@odata.bind`, any case or
+ * spelling), and any other string that is a Graph URL or versioned path. Other text (descriptions, display names)
+ * names nobody, even when it contains `/users/`.
+ */
+function references(value: unknown, out: string[], underKey = false, depth = 0) {
+  if (depth > MAX_DEPTH || value === null || value === undefined) return;
+  if (typeof value === 'string') {
+    if (underKey || GRAPH_REFERENCE.test(value)) out.push(value);
     return;
   }
-  for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
-    if (isReferenceKey(k))
-      for (const ref of Array.isArray(v) ? v : [v]) if (typeof ref === 'string') out.push(ref);
-    bodyReferences(v, out, depth + 1);
+  if (Array.isArray(value)) {
+    for (const v of value) references(v, out, underKey, depth + 1);
+    return;
   }
+  if (typeof value === 'object')
+    for (const [k, v] of Object.entries(value as Record<string, unknown>))
+      references(v, out, isReferenceKey(k), depth + 1);
 }
 
 /**
  * Whether a Graph write names a user by anything but an object id (S-15): the segment after `/users/` (or the key in
- * `users('…')`) in its path, or in an `@odata.id` / `@odata.bind` reference in its body. Graph accepts a sign-in name
- * there, but the protected-object guard matches ids only, so such a write could reach a protected account unnoticed.
- * Teams chat members (a conversation, not a change to anyone's account) are left alone.
+ * `users('…')`) in its path, or in a reference in its query (`$id=…`) or body (`@odata.id`, `…@odata.bind`, a Graph
+ * URL). Graph accepts a sign-in name there, but the protected-object guard matches ids only, so such a write could
+ * reach a protected account unnoticed. `chatMembers`: the body names Teams chat members (the notify step's one-on-one
+ * chat, set only by code) — a conversation, not a change to anyone's account — so only the path is checked.
  */
-export function namesUserByName(t: WriteTarget): boolean {
+export function namesUserByName(t: WriteTarget, opts: { chatMembers?: boolean } = {}): boolean {
   if (t.service !== 'graph') return false;
   const path = t.path.split('?')[0]!.replace(/^\/(v1\.0|beta)(?=\/)/, '');
   if (userKeyNotGuid(path)) return true;
-  if (CHAT_PATH.test(decode(path))) return false;
   const refs: string[] = [];
-  bodyReferences(t.body, refs);
+  references(t.query, refs);
+  if (!opts.chatMembers) references(t.body, refs);
   return refs.some(userKeyNotGuid);
 }
 
@@ -249,7 +266,8 @@ export class ProtectedObjects {
 
   /**
    * Throws `user_not_by_id` when a Graph write names a user by anything but an object id (S-15; not for AdminForge's
-   * own notification mail, whose sender is configured as an address), `protected_object` when a write names a
+   * own notification mail, whose sender is configured as an address, nor for the members of the notify step's Teams
+   * chat: `chatMembers`), `protected_object` when a write names a
    * protected object, `protected_objects_unavailable` when the set couldn't be read and the write is a sensitive one;
    * returns when the write may go ahead.
    */
@@ -257,10 +275,11 @@ export class ProtectedObjects {
     identity: ExecutionIdentity,
     targets: WriteTarget[],
     correlationId?: string,
-    opts: { notification?: boolean } = {},
+    opts: { notification?: boolean; chatMembers?: boolean } = {},
   ): Promise<void> {
     if (!targets.length) return;
-    if (!opts.notification && targets.some(namesUserByName)) throw userNotById();
+    if (!opts.notification && targets.some((t) => namesUserByName(t, { chatMembers: opts.chatMembers })))
+      throw userNotById();
     const named = new Set<string>();
     for (const t of targets) for (const id of referencedIds(t)) named.add(id);
     // Named in configuration: refused without asking Graph.

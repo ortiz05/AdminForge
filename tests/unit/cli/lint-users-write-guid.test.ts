@@ -42,6 +42,7 @@ describe('usersWriteProblems', () => {
       '/users/someone@example.com',
       "/users('${ $encode(inputs.upn) }')",
       "${ '/users/' & $encode(inputs.userId) }",
+      '/users//${ $encode(inputs.upn) }/manager/$ref',
     ])
       expect(paths({ steps: [step({ path: p })] }), p).toEqual(['steps[0].request.path']);
   });
@@ -72,6 +73,19 @@ describe('usersWriteProblems', () => {
       ],
     };
     expect(paths(def)).toEqual(['steps[0].request.body["@odata.id"]', 'steps[1].request.body']);
+  });
+
+  it('flags a $id reference in the query of a write', () => {
+    const def = {
+      steps: [
+        step({
+          method: 'DELETE',
+          path: '/groups/${ $encode($guid(inputs.groupId)) }/members/$ref',
+          query: { $id: 'https://graph.microsoft.com/v1.0/users/${ $encode(inputs.member) }' },
+        }),
+      ],
+    };
+    expect(paths(def)).toEqual(['steps[0].request.query.$id']);
   });
 
   it('checks compensations (always writes), nested forEach steps, runbook sections and changing batch requests', () => {

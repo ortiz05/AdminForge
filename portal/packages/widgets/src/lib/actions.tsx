@@ -144,7 +144,7 @@ export function PlaybookButton({
     >
       {lockHint ? <WriteLockGlyph /> : icon}
       {children}
-      {lock.armed && <ArmedDot />}
+      {lock.armed && !locked && <ArmedDot />}
       <HiddenDescription id={lock.hintId} text={lockHint} />
     </Button>
   );

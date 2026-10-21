@@ -167,4 +167,12 @@ describe('table bulk bar and write access', () => {
     await user.click(add);
     expect(openPlaybook).not.toHaveBeenCalled();
   });
+
+  it('too many rows while armed: inert, so no ember dot either', async () => {
+    const { user } = setup(true);
+    const bar = await select(user, 'Avery Example', 'Blake Example', 'Casey Example');
+    const add = await within(bar).findByRole('button', { name: 'Add to group' });
+    expect(add).toHaveAttribute('aria-disabled', 'true');
+    expect(add.querySelector('.af-armed-dot')).toBeNull();
+  });
 });

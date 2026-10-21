@@ -19,7 +19,9 @@ export const kpi = tv({
   variants: {
     variant: {
       tile: { root: 'rounded-(--af-panel-radius) border border-line bg-panel' },
-      cell: { root: 'bg-panel' },
+      // A phone's two-column strip leaves a cell ~95 px of text at the panel padding: narrower sides there, so a status
+      // ("Action needed") keeps its words.
+      cell: { root: 'bg-panel max-sm:px-3' },
     },
     tone: {
       ok: { status: 'text-ok' },

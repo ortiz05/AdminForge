@@ -1,5 +1,6 @@
 import { Component, createRef, Fragment, type ComponentType, type ErrorInfo, type ReactNode } from 'react';
 import {
+  ArrowClockwiseIcon,
   Badge,
   Button,
   EmptyState,
@@ -10,6 +11,7 @@ import {
   Panel,
   ProvenanceFooter,
   Skeleton,
+  Tooltip,
   cn,
 } from '@adminforge/ui';
 import type { WidgetData, WidgetProps, WidgetRuntime } from '../types';
@@ -136,11 +138,19 @@ export class WidgetBoundary extends Component<BoundaryProps, BoundaryState> {
     );
     if (!this.state.failed)
       return this.state.retried ? [<Fragment key="block">{children}</Fragment>, live] : children;
-    const retry = (
-      <Button ref={this.retryButton} size="sm" onClick={this.retry}>
-        Try again
-      </Button>
-    );
+    const retry =
+      layout === 'cell' ? (
+        // In a KPI cell Try again is an icon beside the reference, so the failed cell grows the strip as little as it can.
+        <Tooltip content="Try again" side="bottom">
+          <Button ref={this.retryButton} size="icon-sm" aria-label="Try again" onClick={this.retry}>
+            <ArrowClockwiseIcon size={14} weight="bold" aria-hidden />
+          </Button>
+        </Tooltip>
+      ) : (
+        <Button ref={this.retryButton} size="sm" onClick={this.retry}>
+          Try again
+        </Button>
+      );
     const view =
       layout === 'cell' ? (
         // Shaped like the strip's other cells: the label, then the reference and Try again, then "—" and the status at
@@ -153,9 +163,15 @@ export class WidgetBoundary extends Component<BoundaryProps, BoundaryState> {
           status={{ tone: 'crit', label: 'Couldn’t be shown' }}
           className="h-full"
           extra={
-            <div className="flex flex-wrap items-center gap-2">
+            // One row where the cell has room (Try again wraps under a whole chip where it hasn't).
+            <div className="flex min-w-0 flex-wrap items-center gap-1.5">
               {this.state.reference && (
-                <IdChip value={this.state.reference} label="Reference" showLabel={false} />
+                <span
+                  className="flex min-w-0"
+                  title="Reference: send it with this page’s address to a portal administrator"
+                >
+                  <IdChip value={this.state.reference} label="Reference" showLabel={false} />
+                </span>
               )}
               {retry}
             </div>
@@ -230,7 +246,8 @@ export function WidgetPanel({
   children,
 }: WidgetPanelProps) {
   const title = config.title;
-  const label = title ?? name;
+  // Messages name the block as the page does; an untitled one is "This part of the page" (never a widget's noun).
+  const label = title || UNNAMED_BLOCK;
   const signIn = data.status === 'error' ? signInErrorView(data.error, runtime) : null;
   let body: ReactNode;
   if (data.status === 'loading' || data.status === 'idle') {

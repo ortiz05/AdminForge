@@ -8,7 +8,7 @@ import {
   type StatusGridConfig,
 } from '@adminforge/widgets';
 import { axeViolations } from '../axe';
-import { ready } from './helpers';
+import { failed, ready } from './helpers';
 
 // Design review L10 (2026-10-21): a block that can't be shown — it crashed while rendering, or its definition doesn't
 // validate — says so in one wording, by the name the page gives it, and never by its widget type ("Key value
@@ -83,5 +83,16 @@ describe('one wording for a block that can’t be shown', () => {
     );
     expect(screen.getByRole('alert')).toHaveTextContent('This part of the page couldn’t be shown');
     expect(container).not.toHaveTextContent(/Key value|Details couldn/);
+  });
+
+  it('an untitled panel that fails to load says "This part of the page" too', () => {
+    const KeyValue = WIDGETS.keyValue!.component;
+    const config = WIDGETS.keyValue!.schema.parse({
+      widget: 'keyValue',
+      data: 'user',
+      fields: [{ field: 'name', label: 'Name' }],
+    }) as KeyValueConfig;
+    render(<KeyValue config={config} data={failed()} runtime={createWidgetRuntime()} instanceId="k0" />);
+    expect(screen.getByRole('alert')).toHaveTextContent('This part of the page didn’t load');
   });
 });

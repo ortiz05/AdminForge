@@ -39,6 +39,7 @@ import {
   type AdvancedGroup,
 } from './advanced';
 import { cacheKey, Inflight, TtlCache } from './cache';
+import { expressionFailure } from './expression-errors';
 import { defaultTimespan, InvalidParams, resolveParams } from './params';
 import { paramsUsed } from './used-params';
 
@@ -758,7 +759,7 @@ export class DatasourceRunner {
       const ok =
         typeof ds.when === 'boolean'
           ? ds.when
-          : await this.expr(() => renderString(ds.when as string, scope), 'when');
+          : await this.expr(() => renderString(ds.when as string, scope), 'when', input);
       if (ok !== true)
         return { data: null, provenance: null, skipped: true, ...(incomplete ? { errors: incomplete } : {}) };
     }
@@ -783,7 +784,7 @@ export class DatasourceRunner {
       out = { ...raw.value };
       this.rawCache.delete(key);
     } else if (ds.source === 'static') {
-      out = { data: await this.expr(() => renderTemplate(ds.data, scope), 'data'), provenance: null };
+      out = { data: await this.expr(() => renderTemplate(ds.data, scope), 'data', input), provenance: null };
     } else if (ds.source === 'runner') {
       out = await this.runScript(ds, input, scope);
     } else {
@@ -812,16 +813,20 @@ export class DatasourceRunner {
       const value = out.data;
       const render = () => renderString(ds.transform!, { ...scope, value });
       try {
-        out.data = await this.expr(async () => {
-          try {
-            return await render();
-          } catch (err) {
-            // The budget is wall-clock, so another request's big crawl (garbage collection, reading a large response)
-            // can take it from a transform that normally fits: once more on the same data before failing.
-            if (err instanceof ExpressionTimeoutError && !input.signal?.aborted) return render();
-            throw err;
-          }
-        }, 'transform');
+        out.data = await this.expr(
+          async () => {
+            try {
+              return await render();
+            } catch (err) {
+              // The budget is wall-clock, so another request's big crawl (garbage collection, reading a large response)
+              // can take it from a transform that normally fits: once more on the same data before failing.
+              if (err instanceof ExpressionTimeoutError && !input.signal?.aborted) return render();
+              throw err;
+            }
+          },
+          'transform',
+          input,
+        );
       } catch (err) {
         // Kept no longer than the datasource's own cache, and only once: a raw result that failed again goes.
         if (key && ttl && !incomplete && !raw)
@@ -920,7 +925,16 @@ export class DatasourceRunner {
     return [...names].sort();
   }
 
-  private async expr<T>(fn: () => Promise<T>, what: string): Promise<T> {
+  /**
+   * Runs one of a datasource's expressions (`what`: when, data, request, requests, parameters, transform). A failure is
+   * a `content_error` in plain words (D-19c, ./expression-errors.ts): the expression's path and JSONata code go in
+   * `detail` and the log line under the reference, never JSONata's own message (which can quote the data).
+   */
+  private async expr<T>(
+    fn: () => Promise<T>,
+    what: string,
+    input: Pick<RunInput, 'page' | 'datasource' | 'correlationId'>,
+  ): Promise<T> {
     try {
       return await fn();
     } catch (err) {
@@ -929,12 +943,20 @@ export class DatasourceRunner {
         throw new AppError(500, 'content_error', 'Preparing this data took longer than AdminForge allows.', {
           hint: 'Try again in a moment, or narrow the filters. If it keeps happening, tell a Portal Admin which page it was.',
         });
-      throw new AppError(
-        500,
-        'content_error',
-        `The datasource ${what} expression failed: ${(err as Error).message}`,
-        { hint: 'Fix the definition (adminforge validate) and publish it again.' },
+      const failure = expressionFailure(err, input.datasource, what);
+      this.deps.log?.warn(
+        {
+          page: `${input.page.kind}:${input.page.key}`,
+          datasource: input.datasource,
+          ...failure.log,
+          correlationId: input.correlationId,
+        },
+        'datasource expression failed',
       );
+      throw new AppError(500, 'content_error', failure.message, {
+        hint: failure.hint,
+        detail: failure.detail,
+      });
     }
   }
 
@@ -956,6 +978,7 @@ export class DatasourceRunner {
       (await this.expr(
         () => renderTemplate<Record<string, unknown>>(ds.parameters ?? {}, scope),
         'parameters',
+        input,
       )) ?? {};
     const started = performance.now();
     // The runner signs in with forwarded delegated tokens or as the automation identity; a schedule's grant and a
@@ -1033,7 +1056,7 @@ export class DatasourceRunner {
     scope: Scope,
     requires: Requires | undefined,
   ): Promise<ServiceCall> {
-    const render = <T>(v: unknown, what: string) => this.expr(() => renderTemplate<T>(v, scope), what);
+    const render = <T>(v: unknown, what: string) => this.expr(() => renderTemplate<T>(v, scope), what, input);
     const base = { requires };
     switch (ds.source) {
       case 'graph': {

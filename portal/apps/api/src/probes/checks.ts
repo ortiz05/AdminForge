@@ -2,6 +2,7 @@ import { Resolver } from 'node:dns/promises';
 import type { AuditWriter } from '../audit/writer';
 import { isIP } from 'node:net';
 import tls from 'node:tls';
+import type { Agent } from 'undici';
 import { ApiError, readBodyText } from '@adminforge/connectors';
 import { ExpressionError, renderString, renderTemplate, type Scope } from '@adminforge/expressions';
 import {
@@ -17,6 +18,7 @@ import { missingLicences, requiresBadge, type LicenceService } from '../capabili
 import { AppError } from '../errors';
 import { DEFENDER_NOT_PROVISIONED, OutboundError } from '../execution/outbound';
 import type { ExecutionIdentity, OutboundExecutor } from '../execution/types';
+import { newPinnedAgent, pinnedFetch, refusedAtConnect } from '../news/fetch-feed';
 import type { ProbeStatus } from '../schedules/types';
 import { defaultLookup, isNonPublicAddress, type HostLookup } from './addresses';
 import { aggregate, detailRows, runKql } from './kql';
@@ -92,8 +94,10 @@ export interface ProbeDeps {
   tls?: TlsInspector;
   /** The portal's audit chain (`auditChain` checks); absent → the check reports not configured. */
   audit?: Pick<AuditWriter, 'verify' | 'verifyIncremental'>;
-  /** Host → addresses for the HTTP probe SSRF guard (tests); default: the system resolver. */
+  /** Host → addresses for the HTTP probe SSRF guard (tests, DATA_MODE=fixtures); default: the system resolver. */
   lookup?: HostLookup;
+  /** Tests: the resolver an HTTP probe's pinned connection uses (default: the system resolver). Forces the pinning. */
+  connectLookup?: HostLookup;
   /** Waits between polls in synthetic transactions (tests); default a timer that stops on abort. */
   sleep?: (ms: number, signal: AbortSignal) => Promise<void>;
   /** The marker a synthetic transaction puts on its test item (tests); default a random id. */
@@ -225,9 +229,10 @@ const targetNotAllowed = (why: string) =>
 
 /**
  * SSRF guard for HTTP probes: the portal's own origin is always allowed; anything else must be http(s) on the default
- * port range and resolve only to public addresses (no loopback, LAN, link-local or cloud metadata).
+ * port range and resolve only to public addresses (no loopback, LAN, link-local or cloud metadata). True for the own
+ * origin.
  */
-async function assertProbeTarget(url: URL, x: CheckContext): Promise<void> {
+async function assertProbeTarget(url: URL, x: CheckContext): Promise<boolean> {
   const own = (() => {
     try {
       return new URL(String(x.deps.env().PUBLIC_BASE_URL ?? '')).origin;
@@ -235,7 +240,7 @@ async function assertProbeTarget(url: URL, x: CheckContext): Promise<void> {
       return undefined;
     }
   })();
-  if (own && url.origin === own) return;
+  if (own && url.origin === own) return true;
   if (url.username || url.password) throw targetNotAllowed('contains credentials');
   const host = url.hostname.replace(/^\[|\]$/g, '').replace(/\.+$/, '');
   if (!host || /^localhost$/i.test(host) || /\.localhost$/i.test(host))
@@ -249,6 +254,24 @@ async function assertProbeTarget(url: URL, x: CheckContext): Promise<void> {
   }
   if (!addresses.length || addresses.some(isNonPublicAddress))
     throw targetNotAllowed('resolves to a private, loopback or link-local address');
+  return false;
+}
+
+let probeAgent: Agent | undefined;
+
+/**
+ * The transport of an HTTP probe's request (DNS rebinding, SECURITY.md). On the real network — the platform fetch — the
+ * connection is pinned like a news feed's: the socket resolves the host again through a lookup that refuses non-public
+ * addresses, so the address the guard checked is the address connected to. The portal's own origin is called
+ * directly (it may live on a private address and is always allowed); an injected fetch (tests, DATA_MODE=fixtures) is
+ * used as is — it never opens a socket.
+ */
+function httpTransport(x: CheckContext, ownOrigin: boolean): typeof fetch {
+  if (ownOrigin) return x.deps.fetch;
+  if (x.deps.connectLookup) return pinnedFetch(newPinnedAgent(x.deps.connectLookup));
+  if (x.deps.fetch !== globalThis.fetch) return x.deps.fetch;
+  probeAgent ??= newPinnedAgent();
+  return pinnedFetch(probeAgent);
 }
 
 async function http(c: Extract<ProbeCheck, { kind: 'http' }>, x: CheckContext): Promise<CheckResult> {
@@ -278,18 +301,26 @@ async function http(c: Extract<ProbeCheck, { kind: 'http' }>, x: CheckContext): 
     throw new AppError(400, 'content_error', 'The probe sends POST without allowPost: true.', {
       hint: 'Use GET or HEAD, or set allowPost: true on the check if the endpoint is meant to be probed with POST.',
     });
-  await assertProbeTarget(url, x);
+  const transport = httpTransport(x, await assertProbeTarget(url, x));
   const headers = (await renderTemplate<Record<string, unknown>>(c.headers ?? {}, x.scope)) ?? {};
   const body = c.body === undefined ? undefined : await renderTemplate<unknown>(c.body, x.scope);
   const t0 = performance.now();
-  // Redirects are not followed: a public URL could otherwise bounce the probe to an internal address.
-  const res = await x.deps.fetch(url.toString(), {
-    method: c.method,
-    headers: Object.fromEntries(Object.entries(headers).map(([k, v]) => [k, String(v)])),
-    body: body === undefined ? undefined : typeof body === 'string' ? body : JSON.stringify(body),
-    signal: x.signal,
-    redirect: 'manual',
-  });
+  let res: Response;
+  try {
+    // Redirects are not followed: a public URL could otherwise bounce the probe to an internal address.
+    res = await transport(url.toString(), {
+      method: c.method,
+      headers: Object.fromEntries(Object.entries(headers).map(([k, v]) => [k, String(v)])),
+      body: body === undefined ? undefined : typeof body === 'string' ? body : JSON.stringify(body),
+      signal: x.signal,
+      redirect: 'manual',
+    });
+  } catch (err) {
+    // The name answered a non-public address at connect time (after a public one for the check): refused, not retried.
+    if (refusedAtConnect(err))
+      throw targetNotAllowed('resolves to a private, loopback or link-local address');
+    throw err;
+  }
   let content = '';
   if (c.expect?.bodyContains)
     content = (await readBodyText(res, HTTP_PROBE_MAX_BYTES, { onLimit: 'truncate' })).text;

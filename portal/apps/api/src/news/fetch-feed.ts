@@ -99,14 +99,15 @@ export function checkedConnectLookup(resolve: HostLookup = defaultLookup, timeou
 }
 
 let pinnedAgent: Agent | undefined;
-const newPinnedAgent = (resolve?: HostLookup) =>
+/** A dispatcher whose sockets resolve with checkedConnectLookup (HTTP probes reuse it, probes/checks.ts). */
+export const newPinnedAgent = (resolve?: HostLookup) =>
   new Agent({
     connect: { lookup: checkedConnectLookup(resolve) as never, timeout: 10_000 },
     keepAliveTimeout: 10_000,
   });
 
 /** undici's fetch through a dispatcher whose sockets resolve with checkedConnectLookup. */
-function pinnedFetch(agent: Agent): typeof fetch {
+export function pinnedFetch(agent: Agent): typeof fetch {
   return ((input: string, init: RequestInit) =>
     undiciFetch(input, { ...(init as object), dispatcher: agent } as never)) as unknown as typeof fetch;
 }
@@ -124,7 +125,7 @@ function feedTransport(deps: FeedFetchDeps): typeof fetch {
 }
 
 /** True when an error (or one of its causes) is the pinned lookup refusing a non-public address. */
-function refusedAtConnect(err: unknown): boolean {
+export function refusedAtConnect(err: unknown): boolean {
   for (let e: unknown = err, depth = 0; e && depth < 5; depth++) {
     if ((e as { code?: string }).code === NOT_PUBLIC) return true;
     e = (e as { cause?: unknown }).cause;

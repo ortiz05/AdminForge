@@ -1,4 +1,4 @@
-import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import path from 'node:path';
 
@@ -80,10 +80,39 @@ export function parseEnv(text: string): Record<string, string> {
   return out;
 }
 
+/** An env file other accounts on this machine could read or change (S-19). Names the file and the fix, never content. */
+export class EnvFileModeError extends Error {
+  constructor(
+    readonly file: string,
+    readonly mode: number,
+  ) {
+    super(
+      `${file} is open to other users of this machine (mode ${mode.toString(8).padStart(3, '0')}) and holds secrets. Make it private with chmod 600 ${file}, then run the command again.`,
+    );
+    this.name = 'EnvFileModeError';
+  }
+}
+
+/**
+ * Refuses an env file with any group or world permission: it holds the Read app's secret and the token-cache key (the
+ * admin file: the provisioner's credentials), and anyone who can read it holds the portal. Only regular files are
+ * checked — ADMINFORGE_ENV_FILE=/dev/null (mock mode, the container image) and pipes belong to no one; in Kubernetes the
+ * configuration arrives as environment variables (the Secret and the ConfigMap), never through an env file. Symlinks
+ * are followed: the file they name is the one that must be private.
+ */
+export function assertPrivateEnvFile(file: string): void {
+  if (process.platform === 'win32') return; // no POSIX modes (ACLs decide)
+  const stat = statSync(file, { throwIfNoEntry: false });
+  if (!stat?.isFile()) return;
+  const mode = stat.mode & 0o777;
+  if (mode & 0o077) throw new EnvFileModeError(file, mode);
+}
+
 /**
  * The layered files (see envFilePath) overlaid by process.env. Missing files → process.env only. Keys from the files
  * that the caller didn't ask for are dropped: admin keys without `admin` (also from a base file that still holds
- * them — older layout). Values set in process.env itself are kept as given.
+ * them — older layout). Values set in process.env itself are kept as given. A file others may read is refused
+ * (assertPrivateEnvFile) — only the files read: without `admin`, the admin file's mode is not looked at.
  */
 export function loadEnv(
   env: NodeJS.ProcessEnv = process.env,
@@ -91,7 +120,10 @@ export function loadEnv(
 ): Record<string, string | undefined> {
   const fromFiles: Record<string, string> = {};
   for (const file of envFiles(env, opts))
-    if (existsSync(file)) Object.assign(fromFiles, parseEnv(readFileSync(file, 'utf8')));
+    if (existsSync(file)) {
+      assertPrivateEnvFile(file);
+      Object.assign(fromFiles, parseEnv(readFileSync(file, 'utf8')));
+    }
   if (!opts.admin) for (const key of ADMIN_ENV_KEYS) delete fromFiles[key];
   return { ...fromFiles, ...env };
 }

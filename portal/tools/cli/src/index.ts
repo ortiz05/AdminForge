@@ -10,12 +10,13 @@
  * can run the same functions with fakes.
  *
  * Exit codes: 0 success; 1 when a command reports a problem (validation errors, failed tests, drift, a refused
- * publish) or throws. Thrown errors print as `✗ <message>`: ConfigError and TokenError as they are, ApiError with
- * its status, code and request id, anything else through `describeFailure`; the stack only with ADMINFORGE_DEBUG=1.
+ * publish) or throws. Thrown errors print as `✗ <message>`: ConfigError, TokenError and EnvFileModeError (an env file
+ * other users may read) as they are, ApiError with its status, code and request id, anything else through
+ * `describeFailure`; the stack only with ADMINFORGE_DEBUG=1.
  */
 import { createInterface } from 'node:readline/promises';
 import { Command } from 'commander';
-import { loadEnv, repoRoot, writeEnvKeys } from '@adminforge/config';
+import { EnvFileModeError, loadEnv, repoRoot, writeEnvKeys } from '@adminforge/config';
 import { ApiError } from '@adminforge/connectors';
 import { auditVerify } from './commands/audit';
 import { destroyAzureTestRun, provisionAzureTest } from './commands/azure-test';
@@ -330,7 +331,8 @@ fixtures
 try {
   await program.parseAsync(process.argv);
 } catch (err) {
-  if (err instanceof ConfigError || err instanceof TokenError) console.error(`✗ ${err.message}`);
+  if (err instanceof ConfigError || err instanceof TokenError || err instanceof EnvFileModeError)
+    console.error(`✗ ${err.message}`);
   else if (err instanceof ApiError)
     console.error(
       `✗ ${err.status} ${err.code}: ${err.message}${err.requestId ? ` (request-id ${err.requestId})` : ''}`,

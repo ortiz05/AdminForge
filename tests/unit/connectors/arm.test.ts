@@ -102,6 +102,9 @@ describe('arm client', () => {
   describe('long-running operations', () => {
     const site = `${SUB}/resourceGroups/rg-example/providers/Microsoft.Web/sites/func-example`;
     it('polls Azure-AsyncOperation then GETs the resource for PUT', async () => {
+      // The middle of the ±20 % Retry-After spread (D-03a): the wait is exactly what Microsoft named.
+      const random = vi.spyOn(Math, 'random').mockReturnValue(0.5);
+      onTestFinished(() => random.mockRestore());
       const op = `${ARM}${SUB}/providers/Microsoft.Web/operations/op1?api-version=2022-03-01`;
       const { arm, f, sleep } = client([
         {

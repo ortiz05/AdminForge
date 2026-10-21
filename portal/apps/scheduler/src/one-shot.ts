@@ -61,7 +61,12 @@ export interface OneShot {
 /** Wires a one-shot process from the configuration (see the module comment). */
 export function openOneShot(config: Config, opts: OneShotOptions): OneShot {
   const { log } = opts;
-  const ctx = createContext(config, opts.noStore ? { database: null } : {}, { warn: log.warn });
+  // `info` as well as `warn`: the outbound executor logs one `microsoft call` line per call at info (D-03a), so a
+  // one-shot's calls can be traced by Reference like the API's.
+  const ctx = createContext(config, opts.noStore ? { database: null } : {}, {
+    warn: (obj, msg) => log.warn(obj, msg),
+    info: (obj, msg) => log.info(obj, msg),
+  });
   const delivery: DeliveryDeps | undefined = opts.delivery && {
     outbound: ctx.outbound,
     fetch: ctx.fetch,

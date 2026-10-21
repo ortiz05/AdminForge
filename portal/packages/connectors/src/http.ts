@@ -213,15 +213,40 @@ function requestHeaders(
   return out;
 }
 
-/** Delay before the next attempt: Retry-After (seconds or HTTP date, capped at 120 s) or exponential backoff with jitter. */
-export function retryDelay(retryAfter: string | null, attempt: number): number {
-  if (retryAfter !== null && retryAfter.trim() !== '') {
-    const secs = Number(retryAfter);
-    if (Number.isFinite(secs) && secs >= 0) return Math.min(secs * 1000, 120_000);
-    const at = Date.parse(retryAfter);
-    if (Number.isFinite(at)) return Math.min(Math.max(at - Date.now(), 0), 120_000);
+/** Longest wait a Retry-After can ask for. */
+const MAX_RETRY_AFTER_MS = 120_000;
+/** How far a Retry-After wait is spread either side (D-03a). */
+const RETRY_AFTER_JITTER = 0.2;
+
+/**
+ * Delay before the next attempt: Retry-After (seconds or HTTP date) or exponential backoff with jitter.
+ *
+ * Retry-After is spread ±20 % (D-03a): when Microsoft throttles, every waiting call (and every ARM poll, which reads
+ * Retry-After here too) used to come back on exactly the second it named, and be throttled together again. The wait
+ * never goes past 120 s: near the cap the window is [80 % of the wait, 120 s] instead of piling up on the cap.
+ */
+export function retryDelay(
+  retryAfter: string | null,
+  attempt: number,
+  random: () => number = Math.random,
+): number {
+  const asked = retryAfterMs(retryAfter);
+  if (asked !== undefined) {
+    const base = Math.min(asked, MAX_RETRY_AFTER_MS);
+    const low = base * (1 - RETRY_AFTER_JITTER);
+    const high = Math.min(base * (1 + RETRY_AFTER_JITTER), MAX_RETRY_AFTER_MS);
+    return Math.round(low + random() * (high - low));
   }
-  return Math.min(1000 * 2 ** attempt, 30_000) + Math.floor(Math.random() * 250);
+  return Math.min(1000 * 2 ** attempt, 30_000) + Math.floor(random() * 250);
+}
+
+/** The wait a Retry-After header asks for, in ms (delta-seconds or an HTTP date); undefined when there is none. */
+function retryAfterMs(value: string | null): number | undefined {
+  if (value === null || value.trim() === '') return undefined;
+  const secs = Number(value);
+  if (Number.isFinite(secs)) return secs >= 0 ? secs * 1000 : undefined;
+  const at = Date.parse(value);
+  return Number.isFinite(at) ? Math.max(at - Date.now(), 0) : undefined;
 }
 
 function parseBody(text: string, contentType: string): unknown {

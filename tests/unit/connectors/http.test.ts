@@ -12,14 +12,16 @@ const client = (responses: Fake[], extra = {}) => {
 };
 
 describe('retryDelay', () => {
-  it('uses Retry-After seconds, capped at 120 s', () => {
-    expect(retryDelay('2', 0)).toBe(2000);
-    expect(retryDelay('600', 0)).toBe(120_000);
+  it('uses Retry-After seconds, spread ±20 % and capped at 120 s', () => {
+    expect(retryDelay('2', 0, () => 0.5)).toBe(2000);
+    expect(retryDelay('2', 0)).toBeGreaterThanOrEqual(1600);
+    expect(retryDelay('2', 0)).toBeLessThanOrEqual(2400);
+    expect(retryDelay('600', 0)).toBeLessThanOrEqual(120_000);
   });
   it('understands Retry-After as an HTTP date', () => {
     const at = new Date(Date.now() + 10_000).toUTCString();
-    expect(retryDelay(at, 0)).toBeGreaterThan(8000);
-    expect(retryDelay(at, 0)).toBeLessThanOrEqual(10_000);
+    expect(retryDelay(at, 0)).toBeGreaterThan(6000);
+    expect(retryDelay(at, 0)).toBeLessThanOrEqual(12_000);
   });
   it('falls back to exponential backoff with jitter', () => {
     expect(retryDelay(null, 0)).toBeGreaterThanOrEqual(1000);
@@ -58,6 +60,9 @@ describe('http client', () => {
     });
   });
   it('retries 503 with Retry-After even for writes (the request was not processed)', async () => {
+    // The middle of the ±20 % Retry-After spread (D-03a): the wait is exactly what Microsoft named.
+    const random = vi.spyOn(Math, 'random').mockReturnValue(0.5);
+    onTestFinished(() => random.mockRestore());
     const { http, sleep } = client([{ status: 503, headers: { 'retry-after': '1' } }, { status: 204 }]);
     await expect(http.send({ method: 'POST', url: 'https://x.example/a', body: {} })).resolves.toMatchObject({
       status: 204,

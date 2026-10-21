@@ -49,6 +49,9 @@ describe('http client: gated attempts', () => {
   });
 
   it('reports each retry (throttling is visible even when the call ends well)', async () => {
+    // The middle of the ±20 % Retry-After spread (D-03a): the wait is exactly what Microsoft named.
+    const random = vi.spyOn(Math, 'random').mockReturnValue(0.5);
+    onTestFinished(() => random.mockRestore());
     const onRetry = vi.fn();
     const f = fakeFetch([
       { status: 429, headers: { 'retry-after': '3' } },
@@ -163,6 +166,9 @@ describe('http client: aborts', () => {
 
 describe('graph $batch: throttled sub-requests', () => {
   it('reports the retry and honours the abort while waiting', async () => {
+    // The middle of the ±20 % Retry-After spread (D-03a): the wait is exactly what Microsoft named.
+    const random = vi.spyOn(Math, 'random').mockReturnValue(0.5);
+    onTestFinished(() => random.mockRestore());
     const onRetry = vi.fn();
     const f = fakeFetch([
       {

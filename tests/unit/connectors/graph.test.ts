@@ -53,6 +53,9 @@ describe('graph client', () => {
     expect(h['client-request-id']).toBe('corr-1');
   });
   it('honours Retry-After on 429', async () => {
+    // The middle of the ±20 % Retry-After spread (D-03a): the wait is exactly what Microsoft named.
+    const random = vi.spyOn(Math, 'random').mockReturnValue(0.5);
+    onTestFinished(() => random.mockRestore());
     const { g, sleep } = client([
       { status: 429, headers: { 'retry-after': '2' } },
       { status: 200, body: { ok: true } },
@@ -137,6 +140,9 @@ describe('graph client', () => {
 
   // Bug fix: the doc comment promised per-item 429 retries that were never implemented.
   it('retries throttled $batch items once after their Retry-After', async () => {
+    // The middle of the ±20 % Retry-After spread (D-03a): the wait is exactly what Microsoft named.
+    const random = vi.spyOn(Math, 'random').mockReturnValue(0.5);
+    onTestFinished(() => random.mockRestore());
     const { g, f, sleep } = client([
       {
         status: 200,

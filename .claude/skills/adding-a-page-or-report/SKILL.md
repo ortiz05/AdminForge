@@ -58,8 +58,9 @@ the expression helpers, JSONata habits, Microsoft quirks and fixture rules are i
      `defenderEndpoint` licences). That content is retired and `tests/content/retired-content.test.ts` refuses any
      active definition that reads it. Defender **for Cloud** through Resource Graph and Entra ID Protection stay.
 4. **Layout** — widgets and their keys exactly as in `docs/widgets.md`. Tables: `columns` (`kind`, `filter`, `hidden`,
-   `wrap: true` for messages), `rowActions`, `bulkActions` (playbook + `forEach.inputs`), `inspect` (an entity page in
-   the drawer), `export` (reports require it).
+   `wrap: true` for messages), `rowActions`, `bulkActions` (playbook + `forEach.inputs`; a playbook of risk `medium` or
+   higher offered there confirms by typing — `adding-a-playbook`, step 5), `inspect` (an entity page in the drawer),
+   `export` (reports require it).
    - `kind: status` is for a value that is fine or not (at least one value maps to `ok`, `warn` or `crit`); a plain
      category — a type, a source, a computed `'true'`/`'false'` flag with no good or bad — is `kind: enum`
      (`map: { "true": "On", "false": "Off" }`; `tests/content/status-tones.test.ts`).

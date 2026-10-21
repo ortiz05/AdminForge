@@ -177,6 +177,11 @@ The ones that change how AdminForge behaves for people and operators:
 - **Write actions stay clickable while unarmed** (D-18): a lock glyph and "Arm write access to run this" — the drawer's
   preview works without write access. The eight "Service checks" navigation items folded into a status mark on each
   section's row (D-14), and the content Probe dashboard is retired in favour of `/monitoring` (B-3).
+- **Bulk actions confirm by typing from medium risk up** (whole-branch content review S6): one click is easy to give
+  without reading and applies to every selected row, so a playbook offered as a bulk action of risk `medium` or higher
+  asks for a typed value — in bulk, the number of items; low-risk bulk actions may click
+  (`tests/content/high-risk-typed-confirm.test.ts`). Rejected: typing only from high risk (`endpoint.restart-device`
+  restarted up to 100 devices on one click).
 - **Content folders follow ids** (O-05): `validate` refuses a definition outside the folder its id prefix names, and
   `adminforge list` finds a section's content wherever it is filed; nothing moved.
 

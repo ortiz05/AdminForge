@@ -58,26 +58,26 @@ service plan `AAD_PREMIUM` (`docs/backlog.md`, API).
 
 ## Identity (Entra ID)
 
-| Feature                                                     | Needs                                                                                                       | Live                                     |
-| ----------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- | ---------------------------------------- |
-| Users, groups, roles, apps; assign or remove a role         | Entra ID Free; role writes: Write app `RoleManagement.ReadWrite.Directory` (approval for high and critical) | yes                                      |
-| Directory audit log (high-impact changes, role groups)      | Free (7-day window, 30 with P1); `AuditLog.Read.All`; `$filter` takes `or` and `startswith`, not `in`       | yes                                      |
-| Conditional Access policies, named locations, baseline      | `conditionalAccess`; `Policy.Read.All` (app-only: an empty list, no error, without P1)                      | yes                                      |
-| Sign-ins, sign-in page, sign-in health probes               | `signInLogs`; `AuditLog.Read.All`; Reports Reader or Global Reader                                          | yes                                      |
-| Inactive users and guests (`signInActivity`)                | `signInLogs`                                                                                                | yes                                      |
-| Authentication methods registration, users without MFA      | `signInLogs`; `AuditLog.Read.All` (`userRegistrationDetails`)                                               | requests yes; report not filled yet      |
-| PIM: eligible roles, activation, privileged role report     | `pim`; `RoleManagement.Read.Directory`, `RoleEligibilitySchedule.Read.Directory`                            | yes (activation too)                     |
-| Add or remove role eligibility                              | `pim`; `RoleEligibilitySchedule.ReadWrite.Directory`; Privileged Role Administrator; adding: approval       | preview only                             |
-| Risky users (list, report, schedule)                        | `identityProtection`; `IdentityRiskyUser.Read.All`; schedules `IdentityRiskEvent.Read.All` (app)            | yes (no user at risk)                    |
-| Confirm compromised, dismiss risk                           | `identityProtection`; `IdentityRiskyUser.ReadWrite.All`; Security Operator on the person                    | refused: tester has no Security Operator |
-| App access: assign or remove                                | Free; assigning a group to an app needs P1                                                                  | user assignment yes                      |
-| Revoke a consent grant (and any grant write)                | Free; the guard reads the grant: `DelegatedPermissionGrant.Read.All` or `Directory.Read.All`                | grant read not checked                   |
-| Groups: security, Microsoft 365, dynamic; edit a rule       | Dynamic membership: Entra ID P1 (`AAD_PREMIUM`); Microsoft 365 groups need Exchange Online                  | security groups yes; dynamic preview     |
-| Licence assignment errors, group lifecycle                  | Group-based licensing and group expiry: P1; `Group.Read.All`, `User.Read.All`, `Directory.Read.All`         | yes                                      |
-| SAML certificates, subscriptions, licence seats, attributes | Free; `Application.Read.All`, `Organization.Read.All`, `User.Read.All`                                      | yes                                      |
-| Unused applications, authentication method strength         | `signInLogs`; `AuditLog.Read.All` (`servicePrincipalSignInActivities` is Graph beta)                        | yes                                      |
-| Conditional Access report-only impact                       | `conditionalAccess` + `signInLogs`; Log Analytics path: `Data.Read`, Log Analytics Reader on the workspace  | Graph path yes; KQL path not             |
-| Application permissions (Exchange and SharePoint rows)      | The workloads' service principals, which exist once they are licensed                                       | Graph rows yes                           |
+| Feature                                                                                    | Needs                                                                                                       | Live                                     |
+| ------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------- | ---------------------------------------- |
+| Users, groups, roles, apps; assign or remove a role                                        | Entra ID Free; role writes: Write app `RoleManagement.ReadWrite.Directory` (approval for high and critical) | yes                                      |
+| Directory audit log (high-impact changes, role groups)                                     | Free (7-day window, 30 with P1); `AuditLog.Read.All`; `$filter` takes `or` and `startswith`, not `in`       | yes                                      |
+| Conditional Access policies, named locations, baseline                                     | `conditionalAccess`; `Policy.Read.All` (app-only: an empty list, no error, without P1)                      | yes                                      |
+| Sign-ins, sign-in page, sign-in health probes                                              | `signInLogs`; `AuditLog.Read.All`; Reports Reader or Global Reader                                          | yes                                      |
+| Users list, licence holders (`m365.licence`), inactive users and guests (`signInActivity`) | `signInLogs`                                                                                                | yes                                      |
+| Authentication methods registration, users without MFA                                     | `signInLogs`; `AuditLog.Read.All` (`userRegistrationDetails`)                                               | requests yes; report not filled yet      |
+| PIM: eligible roles, activation, privileged role report                                    | `pim`; `RoleManagement.Read.Directory`, `RoleEligibilitySchedule.Read.Directory`                            | yes (activation too)                     |
+| Add or remove role eligibility                                                             | `pim`; `RoleEligibilitySchedule.ReadWrite.Directory`; Privileged Role Administrator; adding: approval       | preview only                             |
+| Risky users (list, report, schedule)                                                       | `identityProtection`; `IdentityRiskyUser.Read.All`; schedules `IdentityRiskEvent.Read.All` (app)            | yes (no user at risk)                    |
+| Confirm compromised, dismiss risk                                                          | `identityProtection`; `IdentityRiskyUser.ReadWrite.All`; Security Operator on the person                    | refused: tester has no Security Operator |
+| App access: assign or remove                                                               | Free; assigning a group to an app needs P1                                                                  | user assignment yes                      |
+| Revoke a consent grant (and any grant write)                                               | Free; the guard reads the grant: `DelegatedPermissionGrant.Read.All` or `Directory.Read.All`                | grant read not checked                   |
+| Groups: security, Microsoft 365, dynamic; edit a rule                                      | Dynamic membership: Entra ID P1 (`AAD_PREMIUM`); Microsoft 365 groups need Exchange Online                  | security groups yes; dynamic preview     |
+| Licence assignment errors, group lifecycle                                                 | Group-based licensing and group expiry: P1; `Group.Read.All`, `User.Read.All`, `Directory.Read.All`         | yes                                      |
+| SAML certificates, subscriptions, licence seats, attributes                                | Free; `Application.Read.All`, `Organization.Read.All`, `User.Read.All`                                      | yes                                      |
+| Unused applications, authentication method strength                                        | `signInLogs`; `AuditLog.Read.All` (`servicePrincipalSignInActivities` is Graph beta)                        | yes                                      |
+| Conditional Access report-only impact                                                      | `conditionalAccess` + `signInLogs`; Log Analytics path: `Data.Read`, Log Analytics Reader on the workspace  | Graph path yes; KQL path not             |
+| Application permissions (Exchange and SharePoint rows)                                     | The workloads' service principals, which exist once they are licensed                                       | Graph rows yes                           |
 
 ## Exchange Online
 
@@ -139,15 +139,16 @@ privacy setting) the pages handle hashed names.
 
 ## Azure
 
-| Feature                                      | Needs                                                                                 | Live                    |
-| -------------------------------------------- | ------------------------------------------------------------------------------------- | ----------------------- |
-| Inventory, RBAC, Resource Graph, Monitor     | An Azure subscription; Reader                                                         | yes (earlier tenant)    |
-| Advisor recommendations                      | Free; Reader                                                                          | yes (earlier tenant)    |
-| Defender for Cloud plans and recommendations | Reader; Foundational CSPM is free, alerts need paid plans                             | yes (earlier tenant)    |
-| Azure Backup coverage                        | Reader on the vaults                                                                  | query accepted, no data |
-| Azure Service Health                         | Reader per subscription; advisory details: Service Health Security Reader             | yes (earlier tenant)    |
-| Scheduled Azure coverage                     | The automation identity's Reader: provisioning grants it on `AF_SUBSCRIPTION_ID` only | —                       |
-| Remove a role assignment (the role's name)   | Reader at the assignment's scope                                                      | not run                 |
+| Feature                                         | Needs                                                                                 | Live                         |
+| ----------------------------------------------- | ------------------------------------------------------------------------------------- | ---------------------------- |
+| Inventory, RBAC, Resource Graph, Monitor        | An Azure subscription; Reader                                                         | yes (earlier tenant)         |
+| Advisor recommendations                         | Free; Reader                                                                          | yes (earlier tenant)         |
+| Defender for Cloud plans and recommendations    | Reader; Foundational CSPM is free, alerts need paid plans                             | yes (earlier tenant)         |
+| Azure Backup coverage                           | Reader on the vaults                                                                  | query accepted, no data      |
+| Azure Service Health                            | Reader per subscription; advisory details: Service Health Security Reader             | yes (earlier tenant)         |
+| Scheduled Azure coverage                        | The automation identity's Reader: provisioning grants it on `AF_SUBSCRIPTION_ID` only | —                            |
+| Remove a role assignment (the role's name)      | Reader at the assignment's scope                                                      | not run                      |
+| Resource and role-assignment lookups (`$kql()`) | Reader                                                                                | not run (changed 2026-10-21) |
 
 The validation tenant had one pay-as-you-go subscription on 2026-10-15 and none since 2026-10-17, so everything Azure
 added after that date is fixture-only.

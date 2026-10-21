@@ -161,13 +161,17 @@ the reason.
   step before them must be armed.
 - Risky playbooks must be previewed first; the server checks that the confirmation matches the preview (same user,
   version, inputs, under 15 minutes old), and a preview confirms at most one run. Drafts can be previewed, never run.
-  High- and critical-risk playbooks confirm by typing a value the person recognises — in bulk, the number of items
-  (`tests/content/high-risk-typed-confirm.test.ts`); runbooks not yet (`identity.compromised-account` and
-  `identity.leaver` are high-risk and confirm with a click). The text to type and the message are rendered by the API
-  from the preview and shown only to the person who previewed; a value that can't be rendered, has nothing visible or
-  holds a masked value can't be confirmed. Typed confirmations are compared the same way in the browser and the API
-  (`confirmationMatches`: invisible characters removed, NFKC, whitespace collapsed, case ignored), and the dialog
-  marks and lists characters that can make a name pass for another (invisible characters, unusual spaces, styled
+  High- and critical-risk playbooks and runbooks, and every playbook offered as a bulk action from risk medium up,
+  confirm by typing a value the person recognises — in bulk, the number of items
+  (`tests/content/high-risk-typed-confirm.test.ts`). The text to type and the message are rendered by the API from the
+  preview and shown only to the person who previewed; a value that can't be rendered, has nothing visible or holds a
+  masked value can't be confirmed. So where the value is a name anyone can choose (an app's, a group's, a device's,
+  a role's), the playbook works out what to ask for in a `confirmAs` step: the name, or the object's id when the name
+  has nothing visible to type or holds a masked value, so such a name can't block the change
+  (`tests/content/typed-confirm-fallback.test.ts`: seven playbooks so far; the others that type a chosen name, and a
+  generic fallback in the API, are in `docs/backlog.md`). Typed confirmations are compared the same way in the browser
+  and the API (`confirmationMatches`: invisible characters removed, NFKC, whitespace collapsed, case ignored), and the
+  dialog marks and lists characters that can make a name pass for another (invisible characters, unusual spaces, styled
   letters, letters of a look-alike alphabet).
 - Interactive calls — runs, page data, exports — use only the **current** published version; older or retired
   versions answer 409 (`version_superseded`, `definition_retired`), so a later access rule or fix can't be sidestepped.
@@ -231,8 +235,8 @@ the reason.
   early checks.
 - Playbooks that act on a target whose id can be reused or change hands (Azure Virtual Desktop session numbers, a list
   that may be minutes old) carry what the person saw and assert it still holds before writing — so a stale screen
-  can't sign out or message the wrong person — and high-risk ones ask for a typed confirmation (in bulk, the number of
-  items).
+  can't sign out or message the wrong person — and high-risk ones (and every bulk action from medium risk up) ask for
+  a typed confirmation (in bulk, the number of items).
 - Group and app-owner playbooks refuse adding yourself; adding to a role-assignable group (which carries directory
   roles) and making someone an app owner need a second person's approval.
 - **Emergency stop** (Admin → Settings): a `Portal.Admin` or `Playbook.Approver` can pause all changes or all
@@ -651,9 +655,8 @@ Tracked in `docs/backlog.md`:
   (loopback); `/healthz` and cancel answers aren't signed.
 - A child playbook's own confirmation isn't asked when a parent starts it; `adminforge validate` refuses a parent (or
   a compensation) that starts a child asking for one unless the parent has a confirmation of its own. The parent's
-  risk and kind of confirmation aren't yet required to match the child's: `identity.create-user`,
-  `azure.new-subscription-onboarding`, `identity.compromised-account` and `identity.leaver` confirm with a click and
-  start high-risk children that ask for a typed one.
+  risk and kind of confirmation aren't yet required to match the child's: `identity.create-user` and
+  `azure.new-subscription-onboarding` confirm with a click and start children that ask for a typed one.
 - Certificate and DNS probes have no address guard: a certificate check connects to whatever host and port its
   (reviewed) content names, and a DNS check asks whatever resolver it names. Only the cluster's NetworkPolicy limits
   them (docs/backlog.md).

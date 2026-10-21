@@ -133,9 +133,10 @@ The schema refuses most mistakes; know the rules so you design for them (`adding
   `Portal.Operator`. Steps that `PUT`/`PATCH`/`DELETE` must be `mode: write`, and so must a `type: playbook` step whose
   child writes and any step with a `compensate`; a `POST` must say `mode: read` or `mode: write`; every write step has
   a `describe` shown in the dry-run plan.
-- `risk`: `high` needs a `confirm` block (`click` or `typed`); `critical` needs `confirm` **and**
-  `approval: { required: true }`. Approvals exclude the people a change grants access to (`approval.excludes`), and
-  nobody approves their own request.
+- `risk`: `high` and `critical` need a `confirm` block, `typed` (a test enforces it, for playbooks and runbooks; a name
+  anyone can choose falls back to the object id in a `confirmAs` step, `adding-a-playbook` step 5); `critical` also
+  needs `approval: { required: true }`. Approvals exclude the people a change grants access to (`approval.excludes`),
+  and nobody approves their own request.
 - Secrets a step produces (temporary access passes, passwords, app secrets) are listed in `secretOutputs` — shown once,
   never stored in run outputs or the audit log. Inputs that are sensitive are `redact: true`.
 - Make steps safe to re-run or undo: `assert` preconditions, `compensate` where a change can be reversed, and mark
@@ -143,16 +144,17 @@ The schema refuses most mistakes; know the rules so you design for them (`adding
   ten seconds after a stop is sent again unless it says `idempotent: false` (then the run ends `needs_review`), and
   such a step's request is sent at most once (it can't have `retry`). A `compensate` block runs only when a **later**
   step fails — it isn't an undo button, so don't promise one for a playbook whose last step is the write.
+  `adminforge validate` warns about one that can never run.
 - **Act on what the person saw.** When the target's id can be reused or change hands (AVD session ids are Windows
   session numbers; a list can be minutes old), pass what the row showed (`expectedUser`) and `assert` the looked-up
   target still matches before writing (`avd.log-off-user-session`).
 - **Guards are `assert` steps.** A run that paused (an approval, input, write access, a sign-in, a restart) runs its
   asserts and their reads again before its next write; a branch `if` or a forEach's `items` stays as decided before
   the pause. An approval can't have `onError: continue`.
-- Bulk actions are a page's `bulkActions` with `forEach.inputs`, `concurrency` and `maxItems` (the browser's limit;
-  the API takes at most 1,000 items). For `high` risk prefer `confirm: { type: typed, … }` — in bulk it asks for the
-  number of items. The bulk run's audit event records the inputs every item shares (a reason), redacted like a
-  single run's.
+- Bulk actions are a page's `bulkActions` with `forEach.inputs`, `concurrency` and `maxItems` (the browser's limit; the
+  API takes at most 1,000 items). A bulk action of risk `medium` or higher confirms by typing
+  (`confirm: { type: typed, … }`) — in bulk it asks for the number of items; low-risk bulk actions may click. The bulk
+  run's audit event records the inputs every item shares (a reason), redacted like a single run's.
 - Privileged Write scopes (role management, app credentials, consent) are only granted with an explicit installation
   opt-in (`AF_ALLOW_PRIVILEGED_WRITE_SCOPES`) — design so you don't need them.
 - Playbooks carry `tests:` (dry runs with mocked step outputs) run by `pnpm adminforge test`.

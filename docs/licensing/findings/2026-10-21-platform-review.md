@@ -39,3 +39,10 @@ to do are rows in `docs/backlog.md` (Security and Content).
   - Expected live: Entra arming sets a new `__Host-adminforge` cookie and the old one answers 401; other tabs' live
     updates reconnect with the new cookie; `tests/live/scripts/verify-api-live.ts` disarms after arming through its
     CSRF retry. Unchecked against the validation tenant.
+- **Quoted Resource Graph lookups** (whole-branch content review S3, `azure.resource` 1.4.1,
+  `azure.role-assignments` 1.1.1)
+  - Request: the resource id, scope and role name go into the queries as `$kql()` literals, double-quoted and
+    escaped (`| where tolower(id) == "<id>"`, `scope == "<scope>" or scope startswith "<scope>/"`,
+    `roleName contains "<name>"`), instead of single-quoted with every character outside `[A-Za-z0-9._()/-]` stripped.
+  - Needs: Reader on the subscription, as before.
+  - Live: not run; run both pages once, read-only — ideally on a resource group whose name has non-ASCII letters.

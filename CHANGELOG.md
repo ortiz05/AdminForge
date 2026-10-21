@@ -161,6 +161,11 @@ H1, H2, M3–M9 and L10–L18 design, S1–S6 and N1–N8 content.
   link, one row per open item, no dated sections — and `docs/licensing-review.md` is the current feature → licence
   map (licence features, a table per area, previews), with each dated finding in
   `docs/licensing/findings/<date>-<topic>.md`; `tests/unit/docs/registers.test.ts` keeps both that way.
+- **`adminforge validate` warns** about a `compensate` that can never run, because no step after it fails with
+  `onError: compensate` (N5; 35 playbooks, `docs/backlog.md`).
+- App Service security settings (`azure.app-service-security` 1.1.0) offers Restart, Start and Stop for web apps; their
+  only entry points had been the retired Function App pages (N8).
+- Retirements that name their replacement need no bring-back backlog row (N7, `docs/content-recipes.md`).
 
 #### Fixed
 
@@ -194,7 +199,10 @@ H1, H2, M3–M9 and L10–L18 design, S1–S6 and N1–N8 content.
 - Out-of-range relative dates or durations (`-999999999d`, `P300000Y`) are refused instead of causing a 500.
 - `identity.create-user` 1.1.1 passes the new user's id through `$guid()` in its manager step and compensation.
 - Wording: `billing.month-close` 1.0.1 says in words what to configure instead of naming configuration keys;
-  `probes.m365-workload-incidents` 1.2.1 says it is retired and what replaced it.
+  `probes.m365-workload-incidents` 1.2.1 says it is retired and what replaced it. Field descriptions, summaries and
+  one widget of ten more definitions, among them `identity.remove-group-owner` and `billing.chargeback-monthly`, say in
+  words what to configure instead of naming `AF_*` keys or `pnpm adminforge provision entra` (S4, N6;
+  `tests/content/inputs-no-setup-details.test.ts`). The token probes' remedies use straight apostrophes (1.0.5, N2).
 - **Runbooks with a `confirm` block** (`identity.leaver`, `identity.compromised-account`,
   `azure.new-subscription-onboarding`) start from the runbook page: preview (the reads run, checklists are skipped,
   writes are planned), then confirm, like playbooks. The page used to start them without a preview, which the API
@@ -203,11 +211,15 @@ H1, H2, M3–M9 and L10–L18 design, S1–S6 and N1–N8 content.
 - A run started before its session last armed write access says so on its page ("Paused: check this run is yours,
   then resume it", with when it started; the status reads "Waiting to be resumed") and asks its person to check it is
   theirs, then resume it — or cancel it if they don't recognise it.
+- `m365.licence` 2.1.1 declares the Entra ID P1 licence its holders list needs for the Last sign-in column: without P1
+  the list says which licence it needs instead of failing (S2).
+- `azure.resource` and `azure.role-assignments` quote ids, scopes and role names with `$kql()`; resource groups with
+  non-ASCII letters were found by nothing (S3).
 
 #### Removed
 
 - The content "Probe dashboard" (`automation.monitoring`) is retired (1.3.0): Synthetic monitoring (`/monitoring`)
-  shows every probe by service, with history and what to do.
+  shows every probe by service, with history and what to do. Its summary names the replacement (1.3.1, N1).
 - The "Coming soon" placeholder and its page catalogue (D-08): an address without a page shows "There's no page at
   this address".
 - Unused dependencies: `jose` from the runner, five workspace packages from the scheduler (S-39, D-21).
@@ -290,15 +302,25 @@ H1, H2, M3–M9 and L10–L18 design, S1–S6 and N1–N8 content.
   spelling, `$batch` included) reads the grant's client and is refused (`protected_object`) when it is one of
   AdminForge's own apps or one in `AF_PROTECTED_APP_IDS`. A grant key that isn't a plain id, a grant that can't be
   read, or a grant write while the protected set can't be read is refused (`protected_objects_unavailable`).
-- **Typed confirmations:** high- and critical-risk playbooks confirm by typing
-  (`tests/content/high-risk-typed-confirm.test.ts`; runbooks not yet): `identity.revoke-consent-grant` 1.2.0 asks for
-  the app's name (it was one click), `azure.remove-role-assignment` 1.1.0 for the role's name — its plan and summary
-  name the role and who loses it — and `identity.add-app-owner` 1.3.0 for the app's name; in bulk, for the number of
-  items. The API renders the message and the text to type from the preview (`run.confirm` on `GET /api/runs/:id`, only
+- **Typed confirmations:** high- and critical-risk playbooks and runbooks, and every playbook offered as a bulk action
+  from risk medium up, confirm by typing — in bulk, the number of items; low-risk bulk actions may click
+  (`tests/content/high-risk-typed-confirm.test.ts`). `identity.revoke-consent-grant` 1.2.0 asks for the app's name (it
+  was one click), `azure.remove-role-assignment` 1.1.0 for the role's name — its plan and summary name the role and
+  who loses it — and `identity.add-app-owner` 1.3.0 for the app's name; the runbooks `identity.leaver` and
+  `identity.compromised-account` for the user's sign-in name (S5); and eleven medium-risk bulk actions that confirmed
+  with a click (S6), among them `endpoint.restart-device`, which restarted up to 100 devices on one click. The API
+  renders the message and the text to type from the preview (`run.confirm` on `GET /api/runs/:id`, only
   for the person who previewed), so the dialog and the risk banner no longer show `${ … }`. The browser and the API
   compare the typed text one way (Unicode NFKC, invisible characters, spacing and case ignored), and the dialog marks
   and lists characters that can make a name pass for another (invisible characters, unusual spaces, styled letters,
   letters of a look-alike alphabet). `identity.remove-group-owner` 1.2.1 names an app owner in its confirmation.
+- **A name anyone can choose can't block its own change** (L4, S1): typed confirmations of names anyone can choose
+  (apps, groups, custom roles, devices) fall back to the object id when the name has nothing visible to type or holds
+  `[redacted]`, and the message shows what to type. Before, an app's publisher could make revoking its consent or
+  disabling it impossible to confirm. Affected: `identity.revoke-consent-grant`, `identity.add-app-owner`,
+  `identity.disable-enterprise-app`, `azure.remove-role-assignment` (the assignment's GUID, which its message didn't
+  show), `identity.remove-expired-app-credentials`, `identity.remove-group-members`, `endpoint.restart-device`
+  (`tests/content/typed-confirm-fallback.test.ts`); the playbooks that don't fall back yet are in `docs/backlog.md`.
 - **The injection lint follows user data through wrappers, functions and variables** (S-03, S-13).
   `adminforge validate` / `publish` and the content health check used to recognise `params.q` only on its own:
   `$lowercase(params.q)`, `$string`, `$join([…])`, a block variable, `$map`, `$trim(params.id)` in a path and anything

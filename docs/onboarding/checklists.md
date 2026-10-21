@@ -97,8 +97,8 @@ For changes on the [security-review list](04-security.md#what-needs-a-security-r
 - [ ] Anything that sends data out (email, Teams, files, webhooks, new hosts) uses configured destinations only and
       treats text as plain text
 - [ ] Anything that loosens a playbook (risk, confirmation, approval, scopes, connections, hosts) is called out
-- [ ] Writes on reusable ids assert the target still matches what the person saw; high-risk bulk uses a typed
-      confirmation
+- [ ] Writes on reusable ids assert the target still matches what the person saw; bulk actions from medium risk up
+      use a typed confirmation
 - [ ] Nothing in the browser needs `eval` or inline script; the CSP is unchanged
 - [ ] `SECURITY.md` updated (section, threats row or known gap)
 - [ ] A code owner approved (or, for a code owner's own change, another engineer — see [guide

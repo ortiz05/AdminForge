@@ -86,9 +86,9 @@ you apply every day and when to ask for a review. The full model is [`SECURITY.m
     libraries that need them ([web guide](07-web-guide.md#under-the-security-policy)). Don't loosen the policy to make
     a library work — pick another library.
 18. A playbook that acts on a target whose id can be reused or change hands (an AVD session number, a list minutes
-    old) passes what the person saw and `assert`s it still holds before writing. High-risk changes use a typed
-    confirmation (in bulk: the number of items), and a bulk run's audit event keeps the inputs the items share — the
-    reason — redacted like a single run's.
+    old) passes what the person saw and `assert`s it still holds before writing. High- and critical-risk changes, and
+    bulk actions from medium risk up, use a typed confirmation (in bulk: the number of items), and a bulk run's audit
+    event keeps the inputs the items share — the reason — redacted like a single run's.
 
 ## What needs a security review
 

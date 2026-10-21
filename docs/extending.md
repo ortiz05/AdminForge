@@ -88,12 +88,14 @@ and `adminforge validate` lists them; remove it once it works live. The full pro
   parameters another datasource is `ds.<name>` (a bare name is undefined there); Resource Graph queries must stay within
   the join limits Azure enforces (`CLAUDE.md`, non-negotiable 14); a probe's `link` is an in-app path whose `/p/<key>`
   exists, or an https URL (no `//host`); `pattern:`s that can backtrack without bound are refused. It also lists the
-  definitions flagged `preview: true`. The details: `docs/content-recipes.md` › Quoting user data.
+  definitions flagged `preview: true`, and warns about a `compensate` that can never run (no later step fails into it).
+  The details: `docs/content-recipes.md` › Quoting user data.
 - **In the content tests:** every active probe has a `remedy` (`tests/content/probe-remedies.test.ts`); nothing
   active points at retired content (`tests/content/retired-content.test.ts`); probe groups name a navigation section;
   every active page, dashboard and report renders from the fixtures and every KQL probe has its `af:` fixture variant
   (`tests/content/fixtures-complete.test.ts`); `status` columns carry a tone that says fine or not, categories are
-  `enum` (`tests/content/status-tones.test.ts`).
+  `enum` (`tests/content/status-tones.test.ts`); high- and critical-risk playbooks and runbooks, and bulk actions from
+  risk medium up, confirm by typing (`tests/content/high-risk-typed-confirm.test.ts`).
 - **In the browser:** every widget renders inside its own error boundary, so a block that can't be shown says so
   with a reference and the rest of the page keeps working; links templated from data open only safe addresses
   (`safeUrl`) and otherwise stay text.

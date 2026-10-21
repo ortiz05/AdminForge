@@ -43,7 +43,7 @@ removed or renamed. Examples use `https://adminforge.example.com`, `avery@exampl
 | Lifetime        | Absolute `SESSION_ABSOLUTE_HOURS` (default 12); idle `SESSION_IDLE_MINUTES` (default 60), slid by activity. Requests with **`X-AdminForge-Background: 1`** (the SPA's polling and background refreshes) authenticate and expire as usual but don't slide the idle timer; event streams never do. |
 | Binding         | `<session cookie>-pre` (HttpOnly, 24 h) ties each OAuth round trip to the browser that started it (login-CSRF protection).                                                                                                                                                                       |
 | Roles           | From the ID token's `roles` claim; re-read from Entra every 5 minutes. A session left with no AdminForge role ends (`session.access_revoked`); losing `Portal.Operator` drops write access at once. A session always has at least one AdminForge role.                                           |
-| Mode            | `read` or `armed` (write window until `armedUntil`). Expiry is checked on every request and audited as `session.arm_expired`.                                                                                                                                                                    |
+| Mode            | `read` or `armed` (write window until `armedUntil`). Expiry is checked on every request and audited as `session.arm_expired`. Arming moves the session to a **new id and CSRF token** (the old cookie stops working at once); extending and disarming keep the id.                               |
 | Unauthenticated | Every `/api/*` route needs a session → otherwise 401 `unauthenticated` with `login: "/auth/login?returnTo=%2F"`.                                                                                                                                                                                 |
 | Reader          | Every `/api/*` route also needs `Portal.Reader` → otherwise 403 `forbidden`, except `GET /api/me`, `PUT /api/me/prefs`, `GET /api/appearance.css`, `GET /api/emergency` and `GET /api/events`.                                                                                                   |
 
@@ -54,7 +54,8 @@ removed or renamed. Examples use `https://adminforge.example.com`, `avery@exampl
   and `/auth/logout` when a session exists.
 - One `GET` also needs it: `GET /api/runs/:id/secret/:stepPath` (reading it consumes the secret).
 - Missing or wrong → 403 `csrf` ("Reload the page, then try again. Nothing was changed."). The token is per session,
-  so signing in again in another tab invalidates the token in tabs that are already open.
+  so signing in again in another tab invalidates the token in tabs that are already open — and so does arming, which
+  gives the session a new id and token (re-read `GET /api/me`).
 
 ### Errors
 
@@ -112,6 +113,7 @@ Codes that can come from (almost) any endpoint:
 | 415    | `unsupported_media_type` | The body isn't JSON (`Content-Type`).                                                                    |
 | 500    | `internal`               | Unexpected failure; give an administrator the `correlationId`.                                           |
 | 503    | `content_unavailable`    | `CONTENT_SOURCE=db` without a database.                                                                  |
+| 500    | `definition_unavailable` | A published definition failed its load-time check (its kind's schema and its row); it isn't used.        |
 | 4xx    | `bad_url`, …             | Other Fastify 4xx: its status and code (no `FST_ERR_`), AdminForge's message and hint.                   |
 
 ### Browser navigations that fail → `/sign-in-problem`
@@ -162,13 +164,13 @@ Over the limit → 429 `rate_limited` ("Wait a minute, then try again"), with `@
 Portal roles are Entra app roles on the Read app, granted through `SG-AdminForge-<label>-<Role>` groups (see
 [access.md](access.md)). They are flat — none implies another.
 
-| Role                | API surface it unlocks                                                                                                                                                         |
-| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `Portal.Reader`     | Required for every `/api` route except your own profile and preferences, the appearance stylesheet, the emergency-stop state and the event stream.                             |
-| `Portal.Operator`   | Arm write access; run write playbooks; enable/disable, run and create report schedules (edit/delete own); see all runs; probe detail rows; scheduled report files (default).   |
-| `Playbook.Approver` | The approvals inbox; approve runs and schedule enablement (never their own, nor a change that grants them access); see all runs; pause changes or automation (emergency stop). |
-| `Playbook.Author`   | Nothing in the API today (content is authored in git).                                                                                                                         |
-| `Portal.Admin`      | Audit log, appearance, settings; pause/resume changes or automation; cancel/resume anyone's run; delete others' shared views or (as Operator) portal schedules; see all runs.  |
+| Role                | API surface it unlocks                                                                                                                                                                                                                          |
+| ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Portal.Reader`     | Required for every `/api` route except your own profile and preferences, the appearance stylesheet, the emergency-stop state and the event stream.                                                                                              |
+| `Portal.Operator`   | Arm write access; run write playbooks; enable/disable, run and create report schedules (edit/delete own); see all runs (someone else's delegated run as metadata); probe detail rows; scheduled report files (default).                         |
+| `Playbook.Approver` | The approvals inbox; approve runs and schedule enablement (never their own, nor a change that grants them access); see all runs (someone else's delegated run as metadata unless you approve it); pause changes or automation (emergency stop). |
+| `Playbook.Author`   | Nothing in the API today (content is authored in git).                                                                                                                                                                                          |
+| `Portal.Admin`      | Audit log, appearance, settings; pause/resume changes or automation; cancel/resume anyone's run; delete others' shared views or (as Operator) portal schedules; see all runs, in full.                                                          |
 
 Content adds its own gate, `requires.portalRoles`: the caller needs **every** listed role (pages, dashboards, reports,
 definitions, exports, playbooks/runbooks and scheduled data alike).
@@ -325,7 +327,8 @@ and bound to the browser. A reused, expired, foreign or wrong-kind `state` → 4
 - **Response (Entra):** 200 `{redirect}` — the **Write app** authorize URL; the SPA navigates to it. Step-up: with
   `WRITE_AUTH_CONTEXT` set, a claims request for that Conditional Access authentication context; without it,
   `prompt=login` + `max_age=0` (fresh interactive sign-in). `login_hint` is the session's UPN.
-- **Response (mock):** arms immediately and returns 200 `{redirect: returnTo}`.
+- **Response (mock):** arms immediately with a new session id, as the callback does (new cookie and CSRF token; re-read
+  `/api/me`), and returns 200 `{redirect: returnTo}`.
 - **Errors:** `unauthenticated` 401, `csrf` 403, `forbidden` 403, `invalid_request` 400, `write_app_not_configured`
   503 (no `AF_WRITE_CLIENT_ID`/`AF_WRITE_CLIENT_SECRET`).
 
@@ -333,11 +336,18 @@ and bound to the browser. A reused, expired, foreign or wrong-kind `state` → 4
 
 - **Who:** the same browser **and** session that called `POST /auth/arm` (Entra mode only). 10/min.
 - **Query:** `code`, `state`, or `error` + `error_description`.
-- **Response:** 302 to `returnTo` with the write window open: `armedUntil = now + minutes`, extension unused. Audited
-  `session.armed` (success and failure, with the reason).
+- **Response:** 302 to `returnTo` with the write window open: `armedUntil = now + minutes`, extension unused. **Sets a
+  new session cookie** (S-08: a new id and CSRF token). In one transaction the session's unfinished runs and the
+  approval decisions on them, its pending round trips and its Microsoft token partitions (sealed again) move to the
+  new id; the Write app's tokens are redeemed straight into it, and held show-once secrets follow. The old cookie stops
+  working at once (401 `unauthenticated`; for a minute without clearing the new cookie). Runs bound to the session
+  while it was read-only keep reading but park `awaiting_arm` before their next write until resumed. Audited
+  `session.armed` (success and failure, with the reason; success records `sessionRotated: true`).
 - **Errors** (a navigation → problem page with `during=arm`): `invalid_state` 400; `session_mismatch` 401 (no session,
-  or a different one — e.g. signed in again in another tab); the Entra mapping above; `invalid_request` 400 (no code);
-  `forbidden` 403 (no longer Operator); `arm_failed` 400 (redemption failed); `invalid_nonce` 400; `wrong_tenant` 400;
+  or a different one — e.g. signed in again in another tab); `unauthenticated` 401 (signed out while verifying); the
+  Entra mapping above; `invalid_request` 400 (no code); `forbidden` 403 (no longer Operator); `arm_failed` 400
+  (redemption failed) or 500 (the session couldn't move to its new id; it stays read-only); `invalid_nonce` 400;
+  `wrong_tenant` 400;
   `user_mismatch` 403 (verified with a different account); `step_up_required` 403 (the auth context was not
   satisfied); `step_up_unverified` 403 (no auth context configured and no `auth_time` claim); `step_up_stale` 403
   (`auth_time` older than 300 s — Entra reused an SSO session).
@@ -367,14 +377,14 @@ Lets a report schedule run with its creator's own access (ADR-014, `identity: { 
 - **Who:** Session + CSRF, currently armed. 10/min.
 - **Body:** `{minutes?: 5–480}` (default and cap `WRITE_SESSION_MAX_MINUTES`). New expiry = the later of the current
   expiry and `now + minutes`. Allowed **once** per armed window.
-- **Response:** `{armedUntil, armExtended: true}`. Audited `session.arm_extended`.
+- **Response:** `{armedUntil, armExtended: true}`. Audited `session.arm_extended`. Keeps the session id.
 - **Errors:** `not_armed` 409, `already_extended` 409, `invalid_request` 400.
 
 #### `POST /auth/disarm`
 
 - **Who:** Session + CSRF. 10/min. Idempotent.
-- **Response:** `{mode: "read", armedUntil: null}`. Drops the Write-app token partition; audited `session.disarmed`
-  when it was armed.
+- **Response:** `{mode: "read", armedUntil: null}`. Drops the Write-app token partition and keeps the session id;
+  audited `session.disarmed` when it was armed.
 
 #### `POST /auth/mock/state`
 
@@ -401,9 +411,11 @@ Lets a report schedule run with its creator's own access (ADR-014, `identity: { 
   `density` (`comfortable`, `compact`), `navCollapsed`, `navOpenSections` (keys of the navigation sections the person opened, ≤ 30 — sections start
   collapsed; the older `navSections` is still accepted but no longer read),
   `pinned` (≤ 50 strings), `recents` (≤ 50 strings), `newsSeenAt` (ISO date-time with offset: News and changes
-  "mark all as read"; more than 5 minutes in the future → 400). Unknown keys → 400 `invalid_request`.
+  "mark all as read"; more than 5 minutes in the future → 400), `kpiCollapsed` (page keys whose KPI strip is folded,
+  at most 100). Unknown keys → 400 `invalid_request`.
 - **Response:** `{prefs}` (the merged result). Audited `prefs.updated` (changed keys only) when a setting changed;
-  navigation state alone (`recents`, `navOpenSections`, `navSections`, `newsSeenAt`) is saved without an audit event.
+  navigation state alone (`recents`, `navOpenSections`, `navSections`, `newsSeenAt`, `kpiCollapsed`) is saved without
+  an audit event.
 
 #### `GET /api/me/capabilities`
 
@@ -482,8 +494,13 @@ Source: `src/routes/nav.ts`, `overview.ts`, `content.ts`, `definitions.ts`.
 - **Response:** the client-safe definition (editor-only `$schema`, connection `baseUrl`/`audience`/`scopes` and every
   `webhook` key removed; `${ env.X }` is never resolved here) plus `version` and `sha256` — pin these when starting a
   run or executing datasources.
-- **Errors:** `definition_not_found` 404 (also for an unknown kind), `forbidden` 403.
-- With `version`, the caller also needs every role the **current** version requires.
+- **Errors:** `definition_not_found` 404 (also for an unknown kind; the hint is worded for the person),
+  `forbidden` 403, `definition_retired` 409 (without `version`, when the key's latest version is retired: "<title> is
+  retired." with the first sentence of its `Retired — …` summary and where to go instead, after the role check, so only
+  people who may open it read it), `definition_unavailable` 500 (the published row failed its load-time check against
+  its kind's schema and its own row; it is never used — the API log has the detail).
+- With `version`, the caller also needs every role the **current** version requires; an exact older version still
+  loads (run history).
 
 ## Datasources
 
@@ -533,10 +550,21 @@ Source: `src/routes/runs.ts`, `approvals.ts`, `src/runs/service.ts`, `src/runs/s
 Run statuses: `queued`, `running`, `awaiting_approval`, `awaiting_input`, `awaiting_arm`, `awaiting_reauth`
 (the "active" set), and `succeeded`, `failed`, `cancelled`, `compensated`, `needs_review`. Runs are **delegated**: each
 step runs with the acting engineer's current session. A write step parks the run in `awaiting_arm` until that person
-is armed; an ended session parks it in `awaiting_reauth`; `POST …/resume` continues it.
+is armed (also a run bound to the session before it was armed: arming gives the session a new id, and the run asks to
+be resumed before its next write); an ended session parks it in `awaiting_reauth`; `POST …/resume` continues it. A
+restart doesn't end a run: it stops at a checkpoint and continues after the restart (a step that was in flight is
+retried, or the run ends `needs_review` if it is `idempotent: false`).
+
+A write step that AdminForge's guards refuse fails with the code in the step's and the run's `error`: `protected_object`
+403 (one of AdminForge's own apps, a portal-role group, a protected account, or a delegated permission grant of a
+protected app), `protected_objects_unavailable` 503 (the protected set, or the grant, couldn't be read),
+`user_not_by_id` 403 (a Graph write names a user by sign-in name or address instead of object id), `writes_paused` 503,
+`policy_denied` 403.
 
 Who may **see** a run: its initiator, or anyone with `Portal.Operator`, `Playbook.Approver` or `Portal.Admin`. Anyone
-else gets 404 `run_not_found` (not 403).
+else gets 404 `run_not_found` (not 403). And how much (`run.access`): `full` for the initiator (of the run or one above
+it), its approvers — asked (a pending, unexpired gate they may decide) or who decided it —, the person a manual step
+waits for, and `Portal.Admin`; `metadata` for everyone else (S-25). Automation runs are `full` for every viewer.
 
 #### `POST /api/runs`
 
@@ -553,7 +581,9 @@ else gets 404 `run_not_found` (not 403).
 - **Response:** 202 `{runId, status}`. Audited `run.created` (inputs redacted per `redact: true`).
 - **Errors:** `definition_not_found` 404, `version_superseded` 409 (reload), `definition_retired` 409,
   `limit_exceeded` 422, `forbidden` 403, `invalid_inputs` 400, `preview_required` 409, `preview_stale` 409,
-  `confirmation_mismatch` 422.
+  `confirmation_mismatch` 422, `too_many_runs` 429 (you already have `RUN_MAX_OPEN_PER_USER`, default 5, runs queued
+  or running; previews count, a bulk run counts once, runs parked on an approval, input, write access or a sign-in
+  don't).
 - Also: `definition_draft` 409 (drafts can be previewed, not run); a preview starts at most one run (a reused preview
   answers `preview_stale` 409); a child playbook that needs roles the acting person lacks fails its step with
   `forbidden`; a step that would send a masked value fails with `redacted_value`.
@@ -583,13 +613,14 @@ else gets 404 `run_not_found` (not 403).
 - **Visibility:** a run is visible to its initiator, or to Operator/Approver/Admin holding every role in the run's
   definition `requires.portalRoles`. Runs of the automation identity need the schedule's `requires.portalRoles`
   (default `Portal.Operator`) plus the definition's roles, for everyone. `scope=all` lists only runs the caller may
-  open.
+  open; how much of each they see is `run.access` (above).
 
 #### `GET /api/runs/:id`
 
 - **Who:** a run viewer (above).
 - **Response:** `{run, steps, plan, tasks, children}`:
-  - `run` — RunSummary plus `definitionSha256, correlationId, inputs, outputs, error, previewRunId, waiting, confirm`;
+  - `run` — RunSummary plus `access` (`full` or `metadata`, below) and
+    `definitionSha256, correlationId, inputs, outputs, error, previewRunId, waiting, confirm`;
     `inputs` are redacted per `redact: true`, `outputs` have secrets masked; `waiting` is `null` or
     `{kind, path, stepId, since, wakeAt?}` with `kind` one of `approval`, `manual`, `wait`, `child`, `arm`, `reauth`.
     `confirm` is `null` except on the caller's own succeeded single-run preview of a definition with a `confirm` block:
@@ -600,13 +631,26 @@ else gets 404 `run_not_found` (not 403).
   - `steps[]` —
     `seq, stepId, path, type, status, mode, attempt, actorOid, request, plan, output, error, msRequestId, startedAt, endedAt`.
   - `plan[]` — dry-run plan entries; `tasks[]` — approval/manual tasks with `canDecide`; `children[]` — RunSummary.
+  - With `access: "metadata"` (someone else's delegated run): `inputs` is `{}`, `outputs` `null`; `error` is
+    `{code, message (a fixed sentence), stepId?, path?, status?, requestId?}`; steps' `request`, `plan` and `output`
+    are `null`, their `error` reduced the same way, and a `playbook` step carries its `childRunId`; `plan` is `[]`;
+    tasks keep who asked, who decided, how and when — no message, instructions or checklist, and decisions are
+    `{oid, upn, decision, at}` without comments or values.
 - **Errors:** `run_not_found` 404.
 
 #### `GET /api/runs/:id/events`
 
-- **Who:** a run viewer. SSE (`text/event-stream`), `retry: 3000`, `: ping` every 15 s. Every 10 s the stream
-  re-checks the session (exists, not expired, not idle) and that you can still see the run; otherwise it sends
-  `event: session.ended` and closes. Show-once secrets are handed only to a stream whose session is still signed in.
+- **Who:** a run viewer. At most 5 open per session (a sixth gets 429 `too_many_streams`; `/api/events` has its own
+  5). SSE (`text/event-stream`), `retry: 3000`, `: ping` every 15 s. Every 10 s the stream re-checks the session
+  (exists, not expired, not idle) and that you can still see the run; otherwise it sends `event: session.ended` and
+  closes. Show-once secrets are handed only to a stream whose session is still signed in. A stream of a session whose id
+  was rotated (arming) ends without `session.ended`; `EventSource` reconnects with the new cookie.
+- **Metadata viewers** (`run.access: metadata`) get run, step and progress events with their listed fields only
+  (status, path, step id and type, attempt, counts), errors reduced as on `GET /api/runs/:id`, and no `log` events
+  (their stored ids are skipped, so the ids have gaps). What the viewer may see is decided again after each read of new
+  events. A metadata viewer who may now see more (asked to approve, made Portal.Admin) gets `event: session.ended`
+  and may reconnect: `Last-Event-ID` then replays what was held back. Only losing access to the run refuses the
+  reconnect.
 - **Resume:** `Last-Event-ID` header, or `?lastEventId=` (integer). Stored events after it are replayed, then new ones
   stream live.
 - **Messages:** `id: <n>` + `data: {id, type, ts, stepSeq, data}`, where `type` and `data` are:
@@ -618,7 +662,7 @@ else gets 404 `run_not_found` (not 403).
   `data: {type: "secret", runId, stepId, stepPath, values, hints, producedAt}`.
 - **End:** when the run is terminal, `event: end` / `data: {status}` and the stream closes — call `close()` on the
   `EventSource`, or it reconnects and receives the replay and `end` again.
-- **Errors (before the stream starts):** `run_not_found` 404.
+- **Errors (before the stream starts):** `run_not_found` 404, `too_many_streams` 429.
 
 #### `GET /api/runs/:id/secret/:stepPath`
 
@@ -645,7 +689,8 @@ else gets 404 `run_not_found` (not 403).
 - **Effect:** rebinds the caller's **current** session wherever they act in the tree (ADR-010) and re-queues the root
   run — the way out of `awaiting_arm` / `awaiting_reauth`. Audited `run.resumed`.
 - **Response:** 202 `{runId, status}` (of the root run).
-- **Errors:** `run_not_found` 404, `forbidden` 403, `run_finished` 409.
+- **Errors:** `run_not_found` 404, `forbidden` 403, `run_finished` 409, `too_many_runs` 429 (resuming a parked run you
+  started while you are at the open-run cap).
 
 #### `POST /api/runs/:id/approvals/:stepId`
 
@@ -683,6 +728,8 @@ else gets 404 `run_not_found` (not 403).
     `expiresAt, decidedAt, policy, decisions, canDecide`;
   - schedule enablement (two-person rule): same fields with `subjectType: "schedule"`, `subjectId` = `scheduleKey`,
     `stepId: null` — decide with `POST /api/approvals/:id`.
+  - A run gate decided by others, or on a run the caller can't open, is shown as metadata (as on
+    `GET /api/runs/:id`): who asked, who decided, how and when — not the message or the comments.
 - **Errors:** `forbidden` 403, `invalid_request` 400.
 
 #### `POST /api/approvals/:id`
@@ -706,7 +753,9 @@ Schedule), which live only in the database under the reserved `portal.` key name
 #### `GET /api/schedules`
 
 - **Who:** `Portal.Reader`.
-- **Response:** `{items}` (deleted portal schedules are left out), each `ScheduleItem`:
+- **Response:** `{items, scheduler?}` (deleted portal schedules are left out). `scheduler` is
+  `{state: "ok" | "stale" | "missing", at}` — the scheduler's heartbeat from its ticks (`stale` after two minutes
+  without progress) — present when the scheduler runs in this process. Each item is a `ScheduleItem`:
   `{key, title, summary, cron, cronText, timezone, enabled, identity, runsAs, job, nextRunAt, lastRunAt,`
   `lastStatus, writeCapable, approvedBy?, source, createdBy, canManage, delivery?, notify?, pendingApprovalId}` with
   `job` = `{kind, ref?, refs?, select?, params?}`.
@@ -862,11 +911,14 @@ for custom shapes), timezone (the zone used), next: ISO[5] (DST-aware, the sched
 #### `POST /api/schedules/:key/run`
 
 - **Who:** `Portal.Operator`. 30/min.
-- **Response:** 202 `{scheduleRunId}` — queued for the scheduler (`trigger: manual`); audited
-  `schedule.run_requested`.
+- **Response:** 202 `{scheduleRunId, fileOnly?: true, message?}` — queued for the scheduler (`trigger: manual`);
+  audited `schedule.run_requested`. On a disabled schedule the run only writes its file — no email, Teams post or
+  notification (`fileOnly: true`, and `message` says so); `schedule.run_requested` and `schedule.run` record
+  `fileOnly`.
 - **Errors:** `schedule_not_found` 404, `approval_required` 403 (write-capable and not enabled with approval),
   `forbidden` 403, `run_too_soon` 429 (portal schedules only: a run is queued or running, or the last manual run was
-  less than 15 minutes ago).
+  less than 15 minutes ago), `schedule_disabled` 409 (a disabled schedule that runs synthetic transactions),
+  `automation_paused` 409.
 
 #### `GET /api/schedules/:key/runs`
 
@@ -875,7 +927,9 @@ for custom shapes), timezone (the zone used), next: ISO[5] (DST-aware, the sched
 - **Response:** `{items, cursor?}`, each `{id, trigger, status, startedAt, endedAt, runId?, artifact?, error?, reason?}` —
   `artifact` is `{name, href, size}` with `href` = `/api/artifacts/<id>`, left out for someone who may not open it (a
   schedule that runs with its creator's access: anyone but the creator or a Portal Admin); `runId` links a playbook
-  job's run; `reason` says why a `skipped` run didn't happen (overlap, paused, deleted, needs sign-in).
+  job's run; `reason` says why a `skipped` run didn't happen (overlap, paused, deleted, needs sign-in), and that a
+  file-only run (Run now on a disabled schedule) sent nothing. A `skipped` run with `error.code` `schedule_missed` was
+  due while AdminForge wasn't running (more than an hour late); its message says when.
 - **Errors:** `schedule_not_found` 404, `invalid_request` 400.
 
 #### `GET /api/probes`
@@ -888,7 +942,8 @@ thresholds}` — `group` is the service the probe watches (a navigation section 
   `{status, metric, unit, ts, message}` or `null`; `series` is `[{ts, metric, status}]` for the last 24 h;
   `thresholds` is `{warn, crit, unit, worse}`. Groups: `[{key, label, icon}]` for the groups the probes use, in
   navigation order (labels from navigation.yaml; `platform` is "AdminForge"), for Synthetic monitoring's "by service"
-  view (`/monitoring?group=<key>` shows one).
+  view (`/monitoring?group=<key>` shows one). The navigation rail reads it too (Portal.Reader only, the same cache as
+  Synthetic monitoring) to show each section's check status.
 
 #### `GET /api/probes/:key/results`
 
@@ -1151,14 +1206,15 @@ auditChain, apps, tenant}` — `contentSource` is `fs` or `db`; `writeStepUp` is
 - **Who:** Session. 60/min (connections); at most 5 open per session (a sixth gets 429 `too_many_streams`).
 - **Stream:** `text/event-stream`, `retry: 5000`, `: ping` comment every 25 s. The session is re-read every 10 s (and
   exactly when the write window closes). Each message is `event: <type>` + `data: <json>`; there are no `id:` lines
-  (nothing is replayed — refetch on reconnect).
+  (nothing is replayed — refetch on reconnect). When arming rotates the session's id, its streams end without
+  `session.ended` and `EventSource` reconnects with the new cookie.
 
 | Event                 | Data                                                                              | Who receives it                                                  |
 | --------------------- | --------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
 | `ready`               | `{mode, armedUntil}`                                                              | the connection, on connect                                       |
 | `session.mode`        | `{mode: read or armed, armedUntil}` — armed, disarmed, extended, expired          | the connection                                                   |
 | `session.ended`       | `{}` — signed out or expired; the stream then closes                              | the connection                                                   |
-| `definitions.changed` | `{keys?: ["kind:key"], all?: true}` — content published or reloaded               | everyone                                                         |
+| `definitions.changed` | `{all: true}` — content published or reloaded; never the keys (refetch)           | everyone                                                         |
 | `run.updated`         | `{v: 1, runId, eventId, type: run or step, status?, initiatorOid?, parentRunId?}` | the run's initiator (or everyone when the payload names no user) |
 | `appearance.changed`  | `{version}`                                                                       | everyone                                                         |
 | `schedule.updated`    | `{key, scheduleRunId?, status?}`                                                  | everyone                                                         |
@@ -1184,7 +1240,9 @@ Both are unauthenticated, not rate limited, `Cache-Control: no-store`.
 #### `GET /readyz`
 
 - Readiness: the database file can be read, plus the heartbeats of the run worker and the scheduler — both run in the
-  API process (`heartbeat:worker`, `heartbeat:scheduler`, written every 30 s; `stale` after 2 minutes of silence).
+  API process (`heartbeat:worker`, `heartbeat:scheduler`, written when they make progress — the scheduler after each
+  tick that went through while it leads, the run worker after each poll of its queue that went through — at most every
+  30 s; `stale` after 2 minutes without progress).
 - 200 `{status: "ok", checks: {db: "ok", worker: "ok", scheduler: "ok"}}`.
 - 200 `{status: "degraded", checks: {db: "ok", worker: ok|stale|missing, scheduler: ok|stale|missing}}` — the API
   works, but runs or schedules are not being processed. If the heartbeats cannot be read, `degraded` with only

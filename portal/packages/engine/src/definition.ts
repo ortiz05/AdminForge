@@ -13,17 +13,25 @@ export function allSteps(def: AutomationDefinition): Step[] {
 
 export const countSteps = (def: AutomationDefinition): number => allSteps(def).length;
 
-const containsWrite = (step: Step): boolean => {
+/**
+ * Whether a step writes. In a write definition a step that starts a child playbook, or carries a compensation (always a
+ * write), counts as one whatever its own mode says: validate requires `mode: write` there, and the approval gate and the
+ * armed checks don't rely on it (M1). A read-only definition's children can only read.
+ */
+const writes = (def: AutomationDefinition, s: Step): boolean =>
+  stepMode(s) === 'write' || (def.mode === 'write' && (s.type === 'playbook' || !!s.compensate));
+
+const containsWrite = (def: AutomationDefinition, step: Step): boolean => {
   let found = false;
   walkSteps([step], (s) => {
-    if (stepMode(s) === 'write') found = true;
+    if (writes(def, s)) found = true;
   });
   return found;
 };
 
 /** True when any step (nested included) writes. */
 export const hasWriteSteps = (def: AutomationDefinition): boolean =>
-  allSteps(def).some((s) => stepMode(s) === 'write');
+  allSteps(def).some((s) => writes(def, s));
 
 /** Static checks done before a run is created or started. Returns a message, or undefined when the definition can run. */
 export function checkDefinition(
@@ -46,7 +54,7 @@ export function implicitApprovalIndex(def: AutomationDefinition): number {
   for (let i = 0; i < top.length; i++) {
     const s = top[i]!;
     if (s.type === 'approval') return -1;
-    if (containsWrite(s)) return i;
+    if (containsWrite(def, s)) return i;
   }
   return -1;
 }
@@ -68,7 +76,7 @@ export function writesAfter(def: AutomationDefinition, path: string): boolean {
   const order = allSteps(def);
   const at = order.findIndex((s) => s.id === id);
   if (at < 0) return hasWriteSteps(def);
-  if (order.slice(at + 1).some((s) => stepMode(s) === 'write')) return true;
+  if (order.slice(at + 1).some((s) => writes(def, s))) return true;
   // Enclosing forEach bodies repeat.
   let enclosingWrites = false;
   walkSteps(flattenSteps(def), (s) => {
@@ -77,7 +85,7 @@ export function writesAfter(def: AutomationDefinition, path: string): boolean {
     walkSteps(s.steps, (x) => {
       if (x.id === id) inside = true;
     });
-    if (inside && containsWrite(s)) enclosingWrites = true;
+    if (inside && containsWrite(def, s)) enclosingWrites = true;
   });
   return enclosingWrites;
 }

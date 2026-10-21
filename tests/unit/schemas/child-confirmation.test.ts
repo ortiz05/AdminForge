@@ -25,7 +25,8 @@ const pb = (id: string, extra: Record<string, unknown>) =>
 const parent = (extra: Record<string, unknown>) =>
   pb('test.parent', {
     ...extra,
-    steps: [{ id: 'child', type: 'playbook', ref: 'test.child' }],
+    // A step that starts a child which writes says mode: write (child-write-mode.test.ts).
+    steps: [{ id: 'child', type: 'playbook', ref: 'test.child', mode: 'write', describe: 'Run the child' }],
   });
 
 const check = (...defs: Definition[]) =>

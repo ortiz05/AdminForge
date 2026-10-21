@@ -191,6 +191,10 @@ export function validateReferences(entries: readonly DefinitionEntry[]): Content
           checkInputs(child, s.inputs, [...path, 'inputs']);
           if (child?.kind === 'playbook' && child.mode === 'write' && def.mode !== 'write')
             err([...path, 'ref'], `Child playbook "${s.ref}" writes; set the top-level mode: write.`);
+          // The engine finds writes by each step's own mode: where the implicit approval gate goes, whether whoever
+          // decides a gate or confirms a manual step before it must be armed (M1).
+          if (child?.kind === 'playbook' && child.mode === 'write' && mode !== 'write')
+            err([...path, 'mode'], `Child playbook "${s.ref}" writes; declare mode: write on this step.`);
           // The engineer previews and confirms only the playbook they start — a child's own confirmation is never
           // asked. A child that needs one may only be started by a playbook that asks for one too, so the whole tree
           // (child plans included) is previewed and confirmed before anything runs.
@@ -211,6 +215,12 @@ export function validateReferences(entries: readonly DefinitionEntry[]): Content
           (step, path) => {
             checkAction(step, path, stepMode(step));
             if (step.compensate) checkAction(step.compensate, [...path, 'compensate'], 'write');
+            // A compensation runs as a write once a later step fails: the step it undoes is one, before any gate.
+            if (step.compensate && stepMode(step) !== 'write')
+              err(
+                [...path, 'mode'],
+                'A compensation undoes this step’s change, and compensations always write: declare mode: write on this step.',
+              );
           },
           g.path,
         );

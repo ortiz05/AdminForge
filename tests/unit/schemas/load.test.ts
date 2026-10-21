@@ -152,6 +152,7 @@ describe('validateReferences', () => {
     expect(await load()).toEqual([
       'fh.probe.yaml:6 check.operation: Connection "integrations.hr-sync" has no health operation; set check.operation.',
       'parent.playbook.yaml:9 steps[0].ref: Child playbook "identity.disable-user" writes; set the top-level mode: write.',
+      'parent.playbook.yaml:9 steps[0].mode: Child playbook "identity.disable-user" writes; declare mode: write on this step.',
       's1.schedule.yaml:7 job.params.weeks: Report "identity.r" has no param "weeks".',
       's2.schedule.yaml:7 job.mode: Playbook "identity.disable-user" is mode: write; the job must say mode: write.',
       's3.schedule.yaml:7 job.ref: "identity.lookup" is a playbook, expected probe.',

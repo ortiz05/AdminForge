@@ -1,10 +1,11 @@
 import { createHash } from 'node:crypto';
 import type { Provenance } from '@adminforge/connectors';
-import { KqlSource } from '@adminforge/schemas';
+import { KqlSource, ResourceGraphSpec } from '@adminforge/schemas';
 import { z } from 'zod';
 import type { AuditInput, AuditWriter } from '../audit/writer';
 import { requireRole } from '../auth/guards';
 import type { SessionRecord } from '../auth/session-store';
+import { AppError } from '../errors';
 import { outboundAppError } from '../execution/outbound';
 import type { OutboundExecutor } from '../execution/types';
 import { runKql, type KqlColumn } from '../probes/kql';
@@ -70,6 +71,31 @@ export interface QueryCaller {
 
 export const queryHash = (q: string) => createHash('sha256').update(q, 'utf8').digest('hex');
 
+/**
+ * The Resource Graph join and union limits `adminforge validate` holds content to (the content schema's own query
+ * rules: `resourceGraphJoinProblem` and the leading-union rule): a query Azure would refuse becomes 400 `invalid_query`
+ * here too, so "Save as report" can't fail later for a query that seemed to work. The lint's text states the rule and
+ * ends with what to change; the rule is the message, the advice the hint. Null when the query keeps to the limits.
+ */
+export function resourceGraphQueryRefusal(query: string): AppError | null {
+  const checked = ResourceGraphSpec.query.safeParse(query);
+  if (checked.success) return null;
+  const text = checked.error.issues[0]?.message.trim() ?? '';
+  const sentences = text.split(/(?<=\.)\s+(?=[A-Z])/);
+  let message = sentences.slice(0, -1).join(' ');
+  let hint = sentences.length > 1 ? sentences.at(-1)! : '';
+  if (!hint) {
+    const colon = text.indexOf(': ');
+    message = colon > 0 ? `${text.slice(0, colon)}.` : text;
+    hint = colon > 0 ? text.slice(colon + 2) : '';
+  }
+  return new AppError(400, 'invalid_query', message || 'Azure Resource Graph would refuse this query.', {
+    hint: hint
+      ? hint.charAt(0).toUpperCase() + hint.slice(1)
+      : 'Keep to at most three join or union operations, with one join to another table, then run it again.',
+  });
+}
+
 export class QueryService {
   constructor(
     private readonly deps: {
@@ -96,6 +122,11 @@ export class QueryService {
     requireRole(c.session, 'Portal.Reader', 'Query Studio');
     // A source switched off for this installation is refused before anything is sent (or audited as a query).
     requireQuerySource(this.deps.sources, body.source);
+    // A query Azure would refuse is refused here, the way validate refuses it in content: before any call or audit.
+    if (body.source === 'resourceGraph') {
+      const refusal = resourceGraphQueryRefusal(body.query);
+      if (refusal) throw refusal;
+    }
     const started = performance.now();
     const workspace =
       body.source === 'logAnalytics'

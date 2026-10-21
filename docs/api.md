@@ -942,6 +942,11 @@ from [`GET /api/me`](#get-apime) (`querySources`) and offers only those.
 - **Errors:** `invalid_request` 400, `forbidden` 403, `source_off` 403 (the source is switched off for this
   installation), `upstream_*`, `throttled` 429, `licence_required` 403, `policy_denied` 403.
 - One query statement at a time (`let`/`set`/`declare` before it are fine); `render` must be the last operator. Otherwise 400 `invalid_query`.
+- Resource Graph queries keep to Azure's join and union limits, checked by the same lint `adminforge validate` runs on
+  content (`resourceGraphJoinProblem` in `@adminforge/schemas`): at most three `join`/`union` in one query, one join to
+  another table unless all are `resources` ↔ `resourcecontainers`, unions within one table or that pair, and no
+  leading `union`. Otherwise 400 `invalid_query` (`message`: the rule the query breaks; `hint`: what to change), before
+  anything is sent to Microsoft or audited.
 
 #### `POST /api/query/scaffold`
 

@@ -12,6 +12,7 @@ import {
   describePath,
   evaluate,
   hasControlChars,
+  isForbiddenHeader,
   LOG_ANALYTICS_BASE_URL,
   RESOURCE_GRAPH_API_VERSION,
   RESOURCE_GRAPH_PATH,
@@ -817,6 +818,17 @@ function normaliseBatch(
     const id = typeof r.id === 'string' && r.id ? r.id : String(i + 1);
     const method = typeof r.method === 'string' ? r.method.toUpperCase() : 'GET';
     const headers = r.headers as Record<string, string> | undefined;
+    // The headers AdminForge owns (S-02) can't be set on a sub-request either: a raw `$batch` body bypasses the
+    // datasource's and the engine's own checks.
+    if (headers && typeof headers === 'object' && Object.keys(headers).some(isForbiddenHeader))
+      throw new AppError(
+        400,
+        'invalid_request',
+        `$batch request ${describePath(id)} sets a request header AdminForge always sets itself.`,
+        {
+          hint: 'For the content author: remove the header from the request and publish the definition again.',
+        },
+      );
     const itemBeta = typeof r.beta === 'boolean' ? r.beta : beta;
     // Checked before parsing: the URL parser would silently drop control characters and resolve `..` segments.
     const target = typeof r.url === 'string' ? r.url : typeof r.path === 'string' ? r.path : undefined;

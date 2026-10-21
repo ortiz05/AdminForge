@@ -3,6 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DatasourceRunner, type LoadedPage, type RunInput } from '@adminforge/api/src/datasources/executor';
 import { AppError } from '@adminforge/api/src/errors';
+import { createOutboundExecutor } from '@adminforge/api/src/execution/outbound';
 import type { ExecutionIdentity, OutboundExecutor, ServiceCall } from '@adminforge/api/src/execution/types';
 import { FORBIDDEN_HEADERS } from '@adminforge/connectors';
 import { FORBIDDEN_HEADER_NAMES, GraphRequestSpec, parseDefinition } from '@adminforge/schemas';
@@ -115,5 +116,58 @@ describe('datasource headers AdminForge owns', () => {
 
   it('schemas and connectors name the same headers (schemas depends on nothing but zod and yaml)', () => {
     expect([...FORBIDDEN_HEADER_NAMES].sort()).toEqual([...FORBIDDEN_HEADERS].sort());
+  });
+});
+
+describe('a raw $batch body (a graph step or datasource posting to /$batch itself)', () => {
+  const executor = (sent: string[]) =>
+    createOutboundExecutor({
+      config: {
+        DATA_MODE: 'fixtures',
+        AF_SPO_TENANT_NAME: undefined,
+        OUTBOUND_CONCURRENCY: 4,
+        OUTBOUND_USER_CONCURRENCY: 2,
+        OUTBOUND_TIMEOUT_MS: 5000,
+        TOKEN_CACHE_KEY: undefined,
+      },
+      broker: null,
+      auth: null,
+      automation: null,
+      fetch: async (input) => {
+        sent.push(String(input));
+        return new Response(JSON.stringify({ responses: [{ id: '1', status: 200, body: {} }] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      },
+    });
+  const reader = { kind: 'automation', mode: 'read' } as const;
+  const batch = (headers: Record<string, string>) => ({
+    service: 'graph' as const,
+    method: 'POST',
+    path: '/$batch',
+    body: { requests: [{ id: '1', method: 'GET', url: '/users', headers }] },
+  });
+
+  it.each([['client-request-id'], ['Authorization'], ['COOKIE']])(
+    'refuses a sub-request setting %s, before anything is sent',
+    async (name) => {
+      const sent: string[] = [];
+      const err = await executor(sent)
+        .execute(reader, batch({ [name]: 'x' }))
+        .then(
+          () => null,
+          (e: unknown) => e,
+        );
+      expect(err).toMatchObject({ status: 400, code: 'invalid_request' });
+      expect((err as AppError).message).not.toMatch(/authorization|cookie|request-id/i);
+      expect(sent).toEqual([]);
+    },
+  );
+
+  it('lets a sub-request set the headers content may set', async () => {
+    const sent: string[] = [];
+    await executor(sent).execute(reader, batch({ ConsistencyLevel: 'eventual' }));
+    expect(sent).toHaveLength(1);
   });
 });

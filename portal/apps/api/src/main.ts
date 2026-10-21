@@ -48,8 +48,10 @@ async function housekeeping() {
           artifactDays: config.RETENTION_ARTIFACT_DAYS,
         },
       );
-      reclaimSpace(ctx.database.sqlite);
-      app.log.info({ purged }, 'retention applied');
+      const reclaimed = await reclaimSpace(ctx.database.sqlite);
+      // Stopped at its time budget: the rest goes at the next housekeeping pass, not in six hours.
+      if (purged.pending || reclaimed.pending) lastRetention = 0;
+      app.log.info({ purged, reclaimed }, 'retention applied');
     }
   } catch (err) {
     app.log.warn({ err }, 'housekeeping failed');

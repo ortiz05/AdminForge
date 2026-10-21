@@ -116,9 +116,44 @@ export function createDatabase(file: string, opts: DatabaseOptions = {}): Databa
   };
 }
 
-/** Hands free pages back to the file system (after retention; a no-op on files created before auto_vacuum was set). */
-export function reclaimSpace(sqlite: SqliteConnection): void {
-  sqlite.pragma('incremental_vacuum');
+/**
+ * Lets the event loop run (HTTP, runs, schedules) between batches of synchronous database work: better-sqlite3 runs
+ * a statement to completion, so `await` on a query yields only to microtasks.
+ */
+export const yieldToLoop = () => new Promise<void>((resolve) => setImmediate(resolve));
+
+/** Pages per `incremental_vacuum` step (4 MiB at SQLite's default 4 KiB page). */
+export const RECLAIM_PAGES_PER_STEP = 1_000;
+/** Longest one reclaim pass runs; the rest goes at the next one. */
+export const RECLAIM_BUDGET_MS = 2_000;
+
+/**
+ * Hands free pages back to the file system after retention, `pagesPerStep` at a time with the event loop let in
+ * between, until none are left or `budgetMs` is spent (`pending`: the next pass goes on). A no-op on a file created
+ * before `auto_vacuum` was set (its free pages are reused, never returned).
+ */
+export async function reclaimSpace(
+  sqlite: SqliteConnection,
+  opts: { pagesPerStep?: number; budgetMs?: number; clock?: () => number } = {},
+): Promise<{ pages: number; pending: boolean }> {
+  const step = Math.max(1, Math.trunc(opts.pagesPerStep ?? RECLAIM_PAGES_PER_STEP));
+  const budgetMs = opts.budgetMs ?? RECLAIM_BUDGET_MS;
+  const clock = opts.clock ?? (() => performance.now());
+  const startedAt = clock();
+  let pages = 0;
+  // 2 = INCREMENTAL; on NONE or FULL `incremental_vacuum` does nothing and the free list would never shrink.
+  if (sqlite.pragma('auto_vacuum', { simple: true }) !== 2) return { pages, pending: false };
+  const free = () => sqlite.pragma('freelist_count', { simple: true }) as number;
+  for (let before = free(); before > 0;) {
+    sqlite.pragma(`incremental_vacuum(${step})`);
+    const after = free();
+    pages += before - after;
+    if (after === 0 || after >= before) return { pages, pending: false };
+    if (clock() - startedAt >= budgetMs) return { pages, pending: true };
+    before = after;
+    await yieldToLoop();
+  }
+  return { pages, pending: false };
 }
 
 /** The database settings from the API configuration (DATABASE_BUSY_TIMEOUT_MS). */

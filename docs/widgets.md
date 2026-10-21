@@ -132,6 +132,9 @@ Table options:
 ```
 
 Rules: one y-axis; ≤ 6 series (more fold into "Other"); donut ≤ 6 slices; a "Table" toggle is always available.
+Whole-number data steps by whole numbers. Value labels that would overlap are dropped, and a value axis with less than
+about 160 px to run along shows none; the tooltip and the Table view give every value. Panel titles wrap to two lines
+and are whole on hover.
 
 ## list
 
@@ -206,6 +209,10 @@ Rules: one y-axis; ≤ 6 series (more fold into "Other"); donut ≤ 6 slices; a 
     - { href: https://entra.microsoft.com/, label: Open in Entra admin center, external: true }
 ```
 
+A write playbook's button shows a lock glyph and "Arm write access to run this" while the person is unarmed — still
+clickable: the drawer previews it — and the ember dot once armed. A link (`href`) opens only a safe address (see Links
+under Optional keys); anything else shows as text and never navigates.
+
 ## licenceGate
 
 Shown instead of content when a feature isn't licensed (from `/api/me/capabilities`):
@@ -244,8 +251,21 @@ act (the probe's `link`).
 - **statusGrid**: `detail` (second line), `href`, `sort: severity|none` (default severity).
 - **timeline**: `title` is the per-event title, so the panel heading is `heading`; `limit` (default 20).
 - **licenceGate**: `body` (what the page would show).
-- **markdown**: `text` may contain `${ … }` (page scope); inserted values are plain text, never HTML.
+- **markdown**: `text` may contain `${ … }` (page scope); inserted values are plain text, never HTML. A link label ends
+  at the next `[` or `]` and a target at whitespace, `(` or `)` (`[a [b](/x)` links `b`); percent-encode parentheses
+  in targets.
+- **Links**: a templated target (`href` on kpi, list, statusGrid, keyValue, actions and table row actions, a table
+  `link` column's URL value, Markdown links) becomes a link only for `https://`, `http://`, `mailto:`, an in-app `/…`
+  path (never `//host` or `/\host`) or `#anchor`; otherwise the row, tile or figure is plain text.
 - `percent` values are fractions (0.42 → 42%).
+
+## When a block can't be shown
+
+Every widget renders inside its own error boundary. A block that fails while it renders shows "<title> couldn't be
+shown" with a reference and **Try again**, only in that block; the rest of the page keeps working, and new data renders
+it again. The reference is made in the browser and logged to its console with the error (no server request carries
+one). A block whose configuration doesn't validate is left out the same way, with "For the content author" naming the
+problems.
 
 ## Partial data
 
@@ -266,8 +286,8 @@ everything pages through the server (`paging: cursor`) or counts at the source (
 - table state per table block id: `<id>.sort=-field,other`, `<id>.cols=a,b,c` (visible columns in order), `<id>.density=compact`, `<id>.q=text`, `<id>.f={"col":["A"]}`;
 - `view=<saved view id>`, `tab=<tab id>`;
 - the inspector: `inspect=page:<entity page key>&i.<param>=…` (its tab: `itab`). The inspector drawer is
-  `--af-layout-inspector-wide-factor` (3) × the standard drawer width, but never over the navigation rail
-  (`--af-layout-inspector-wide-w` and its `-nav-collapsed` twin). When that leaves less than 24rem of the list beside
+  `--af-layout-inspector-wide-factor` (2) × the standard drawer width (920 px), but never over the navigation rail
+  (`--af-layout-inspector-wide-w` and its `-nav-collapsed` twin). When that leaves less than 16rem of the list beside
   it, it covers the list — a light scrim that closes it, the page inert, Escape still closes; on wider screens it stays
   beside the list and rows switch what it shows. "Open full page" is in its header and opens the inspector's tab. The
   entity page's widgets (and KPI strips) keep their `span`s and columns once the drawer is at least 56rem wide

@@ -47,7 +47,8 @@ extension point — and the reviewer agents in `.claude/agents/`.
    declared by published content (`mode: write` steps, `describe`, `risk`, `confirm`/`approval`). Never add a generic
    write proxy or app-only permissions to interactive paths. Scheduled writes need two-person approval.
 7. **Untrusted input in queries:** `$odata()` / `$odataSearch()` for Graph, `$kql()` for KQL, `$encode()` for path
-   segments. Advanced filters are compiled server-side (`${ advanced }`) — never read raw filter params.
+   segments, however the value is wrapped; in a write, the segment after `/users/` is `$guid()`. Advanced filters are
+   compiled server-side (`${ advanced }`) — never read raw filter params.
 8. **Secrets** are never printed, logged, committed, or kept in run outputs (`secretOutputs` on playbook steps).
 9. **Licences are data, not blockers.** Declare `requires.licences`; the UI gates and explains. Record new findings in
    `docs/licensing-review.md`; record gaps you can't fix now in `docs/backlog.md`.

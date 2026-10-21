@@ -34,7 +34,9 @@ you apply every day and when to ask for a review. The full model is [`SECURITY.m
 7. Every Microsoft call goes through the outbound executor (`ctx.outbound.execute(identity, call, { correlationId })`),
    which applies the default-deny request policy, picks the right token, carries the correlation id to Microsoft
    (`client-request-id`) and maps errors. Never `fetch` Microsoft directly. Writes that don't go through `execute`
-   still call `ctx.outbound.assertWritable(...)` (emergency stop, protected objects).
+   still call `ctx.outbound.assertWritable(...)` (emergency stop, protected objects). Content never sets the headers
+   AdminForge owns (`Authorization`, `Cookie`, `Proxy-Authorization`, `Host`, the client-request-id headers):
+   `validate` and the executor refuse them, and the HTTP client drops them.
 8. Separation of duties: nobody approves their own request or a change that benefits them; AdminForge's own apps,
    the groups that grant portal roles and protected accounts are out of reach of writes; scheduled writes need two
    people. Don't add shortcuts around these, even for admins.
@@ -43,15 +45,21 @@ you apply every day and when to ask for a review. The full model is [`SECURITY.m
 
 9. Anything a person types, or that comes from Microsoft, is untrusted. In content use `$odata()` /
    `$odataSearch()` for Graph filters and searches, `$kql()` for KQL, `$encode()` for path segments, `$guid()` for
-   ids; advanced filters are compiled on the server (`${ advanced }`), never read raw. In code use the same helpers
-   (`odataLiteral`, `odataSearchEscape`, `kqlLiteral`, `encodePathSegment` in `@adminforge/expressions`) and
-   zod-parse every request body and query.
+   ids; advanced filters are compiled on the server (`${ advanced }`), never read raw. Wrapping doesn't hide a value:
+   `validate` follows user data through functions, variables and lambdas, and an encoder counts only in its own place
+   (`$odata()` and `$kql()` outside your own quotes, `$odataSearch()` inside them). In a write, the segment after
+   `/users/` is `$guid(…)` — a user named by sign-in name is refused (`user_not_by_id`), because protected accounts are
+   matched by id. In code use the same helpers (`odataLiteral`, `odataSearchEscape`, `kqlLiteral`,
+   `encodePathSegment` in `@adminforge/expressions`) and zod-parse every request body and query.
 10. Text that leaves AdminForge (email, Teams, files) or is shown in the UI is data, never markup or code: no
-    `dangerouslySetInnerHTML` with data, Markdown escaped, CSV formula characters neutralised, links only http(s),
-    `mailto:` or in-app paths.
+    `dangerouslySetInnerHTML` with data, Markdown escaped, CSV formula characters neutralised. A link templated from
+    data goes through `safeUrl` (`AppLink` and `useNavigateHref` in the web app; widgets check their own targets):
+    `https:`, `http:`, `mailto:`, an in-app `/…` path (never `//host`) or `#anchor` — anything else shows as text.
 11. Traffic that isn't to Microsoft's APIs has its own guarded path — reuse it, don't open a new one: Teams webhooks
     only on Microsoft webhook hosts, probe targets through `assertProbeTarget`, news feeds only from the
-    `NEWS_FEED_HOSTS` allow-list (ADR-013). A new outbound host is a reviewed code change.
+    `NEWS_FEED_HOSTS` allow-list (ADR-013). A new outbound host is a reviewed code change. In the cluster the pod
+    may reach only public addresses on 443 (`portal/deploy/kubernetes/base/networkpolicy.yaml`); a private address
+    an installation needs is an exception in its overlay's own policy, never in the base.
 
 **The API surface**
 
@@ -108,8 +116,13 @@ a code owner's own changes need another engineer's review by agreement (a known 
 - npm dependencies use `^` ranges; the committed `pnpm-lock.yaml` and `pnpm install --frozen-lockfile` (CI) make
   installs reproducible. Install scripts are opt-in (`allowBuilds` in `pnpm-workspace.yaml`), and security fixes for
   transitive packages go in its `overrides`. Exact pins are used for PowerShell modules
-  (`portal/apps/runner/modules.lock.json`), GitHub Actions (a commit SHA with the version in a comment) and the
-  runner's Docker base image.
+  (`portal/apps/runner/modules.lock.json`), GitHub Actions (a commit SHA with the version in a comment) and both
+  images' base images (by digest, `tests/guards/image-digests.test.ts`).
+- **New versions wait seven days.** pnpm resolves only versions published at least seven days ago and re-checks the
+  lockfile against that on every install (`minimumReleaseAge` in `pnpm-workspace.yaml`, strict); Dependabot waits the
+  same (`cooldown`). An urgent fix that can't wait — a Dependabot security update skips its cooldown but not pnpm's
+  floor — goes in `minimumReleaseAgeExclude` as one exact `name@x.y.z` with a comment saying why and when it comes
+  out, in the same pull request; remove it once the version has aged. Never a bare package name or a pattern.
 - CI fails on high or critical advisories (`pnpm audit --audit-level high`); Dependabot proposes updates weekly.
 - Test-only dependencies belong to `@adminforge/tests`, never to a runtime package.
 

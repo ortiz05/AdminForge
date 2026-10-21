@@ -1,19 +1,20 @@
 $schema: ../../packages/schemas/generated/probe.schema.json
 kind: probe
 id: probes.token-sharepoint-admin
-version: 1.0.3
+version: 1.0.4
 title: Token acquisition — SharePoint admin
 summary: >-
   Acquires an app-only token for SharePoint admin as the automation identity (certificate or secret from local
-  configuration). Needs AF_SPO_TENANT_NAME. SharePoint only accepts app-only tokens from a certificate credential
-  (AF_AUTOMATION_CERT_PATH), so a token from a client secret passes this probe but SharePoint calls still fail.
+  configuration). Needs the SharePoint tenant name in the configuration. SharePoint only accepts app-only tokens from a
+  certificate credential, so a token from a client secret passes this probe but SharePoint calls still fail.
 owner: portal-admins
 tags: [synthetic, identity, tokens, sweep-1h]
 group: platform
 remedy: >-
   The automation identity couldn't get a token for SharePoint administration, so every schedule and probe that uses
   SharePoint administration fails until it can. Usually its certificate expired or was replaced, or admin consent was
-  removed. The AdminForge administrator checks Provisioning status (docs/operations.md).
+  removed. An AdminForge administrator runs adminforge provision status, which checks every provisioned object and gets
+  a live token, then renews what it reports (docs/operations.md › Secret and key rotation).
 check:
   kind: tokenAcquisition
   service: sharepointAdmin

@@ -345,17 +345,21 @@ the reason.
   manual-step fields declared `redact: true` are masked in stored steps, run outputs and errors, run events and the
   audit log. After a pause, pure steps are recomputed from the real inputs, and a masked value is never sent anywhere
   (`redacted_value`). Credentials, cookies, auth codes and database query parameters are kept out of logs.
-- **Who sees a run:** a delegated run collected its data with one person's Entra rights. Its inputs, outputs, step
-  requests and outputs, plan, logs, error messages and hints, approval messages, manual-step instructions, and
-  decision comments and values are shown only to its initiator (of that run or one above it), its approvers — while a
-  gate they may decide is pending and not expired (with the default `approvers: [Playbook.Approver]`, every Approver
-  who may open the run and isn't excluded from the gate), or permanently once they approved or rejected — the person a
-  manual step waits for, and Portal.Admin. Anyone else who may open it sees metadata: playbook, who, when, status,
-  step names and states, and references (correlation id, Microsoft request-id, error code and HTTP status, child run
-  ids). The run stream sends the same, without logs, and re-decides after each read of new events. The approvals inbox
-  shows gates decided by others, and gates on runs the approver can't open, as metadata — unless the approver is asked
-  to decide the gate or did (then the gate's message and comments, not the run). Scheduled runs (automation identity)
-  are no one person's data: whoever may open them sees them whole.
+- **Who sees a run:** a delegated run collected its data with its people's Entra rights — the initiator's, and after
+  an approval the approver's: the steps after it run as the approver, and so do the reads a resumed run makes again
+  before a write (above), whose outputs are stored in the run like any other. The initiator therefore sees data read
+  with the approver's access (approving lets the run read as the approver; a known property, not a leak to others).
+  Its inputs, outputs, step requests and outputs, plan, logs, error messages and hints, approval messages, manual-step
+  instructions, and decision comments and values are shown only to its initiator (of that run or one above it), its
+  approvers — while a gate they may decide is pending and not expired (with the default
+  `approvers: [Playbook.Approver]`, every Approver who may open the run and isn't excluded from the gate), or
+  permanently once they approved or rejected — the person a manual step waits for, and Portal.Admin. Anyone else who
+  may open it sees metadata: playbook, who, when, status, step names and states, and references (correlation id,
+  Microsoft request-id, error code and HTTP status, child run ids). The run stream sends the same, without logs, and
+  re-decides after each read of new events. The approvals inbox shows gates decided by others, and gates on runs the
+  approver can't open, as metadata — unless the approver is asked to decide the gate or did (then the gate's message
+  and comments, not the run). Scheduled runs (automation identity) are no one person's data: whoever may open them
+  sees them whole.
 - **Injection:** OData/KQL values go through `$odata()` / `$kql()`; advanced filters are compiled server-side from
   structured data; request paths may not contain `?`, `#` or control characters (the policy also judges the path
   exactly as it will be sent), and validation runs a taint analysis over every expression that reaches a request path,

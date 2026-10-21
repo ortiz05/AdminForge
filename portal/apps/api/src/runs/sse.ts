@@ -64,6 +64,11 @@ export async function streamRunEvents(
     pollMs?: number;
     /** Called once when the stream closes, however it ends (the route's per-session stream count). */
     onClose?: () => void;
+    /**
+     * What this viewer receives of each stored event (null skips it), asked after each read of new events so a change
+     * in what they may see applies to the next event (S-25: metadata only for someone else's delegated run).
+     */
+    view?: () => Promise<(e: EventRow) => EventRow | null>;
   },
   runId: string,
   lastEventId: number,
@@ -128,9 +133,11 @@ export async function streamRunEvents(
         again = false;
         for (;;) {
           const events = await deps.repo.listEvents(runId, last, PAGE);
+          const view = deps.view && events.length ? await deps.view() : undefined;
           for (const e of events) {
             if (closed) return;
-            raw.write(`id: ${e.id}\ndata: ${JSON.stringify(sseData(e))}\n\n`);
+            const shown = view ? view(e) : e;
+            if (shown) raw.write(`id: ${e.id}\ndata: ${JSON.stringify(sseData(shown))}\n\n`);
             last = e.id;
           }
           if (events.length < PAGE) break;

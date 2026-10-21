@@ -7,7 +7,8 @@ import { AppError, parseBody } from '../errors';
 import type { RunsModule } from '../runs/module';
 import type { Caller } from '../runs/service';
 import { sessionLive, streamRunEvents } from '../runs/sse';
-import { RUN_STATUS_ACTIVE } from '../runs/types';
+import { RUN_STATUS_ACTIVE, type EventRow } from '../runs/types';
+import { metadataEvent } from '../runs/views';
 import { assertCsrf } from '../security/csrf';
 
 /**
@@ -20,8 +21,10 @@ import { assertCsrf } from '../security/csrf';
  *   `confirmationMatches` (422 confirmation_mismatch; the expected value is never in an error). The preview's own
  *   GET /api/runs/:id carries it, rendered for the person who previewed (`run.confirm`).
  * - GET  /api/runs?scope=mine|all&status=active|<s>,<s>&playbook=&from=&to=&parent=&limit=&cursor= → {items: RunSummary[], cursor?}
- * - GET  /api/runs/:id → {run, steps, plan, tasks, children}
+ * - GET  /api/runs/:id → {run, steps, plan, tasks, children}; `run.access` is `full`, or `metadata` for someone else's
+ *   delegated run (S-25: no inputs, outputs, requests, plan, messages or error details — see RunService.access)
  * - GET  /api/runs/:id/events (SSE, Last-Event-ID) → data {id, type:'run'|'step'|'log'|'progress', ts, stepSeq, data}; `event: end` when finished
+ *   Metadata-only viewers get run/step/progress events reduced to states and references, and no logs
  *   At most MAX_RUN_STREAMS_PER_SESSION open per session (429 too_many_streams)
  * - POST /api/runs/:id/cancel → {runId, status}
  * - POST /api/runs/:id/resume → 202 {runId, status}
@@ -185,11 +188,24 @@ export function runRoutes(
       const header = request.headers['last-event-id'];
       const raw = (Array.isArray(header) ? header[0] : header) ?? request.query.lastEventId ?? '0';
       const last = /^\d{1,15}$/.test(raw) ? Number(raw) : 0;
+      // S-25: someone else's delegated run streams its metadata only (status, steps, progress; no logs or data).
+      // Asked after each read of new events, so a gate decided by someone else applies before its log is sent.
+      let viewer = caller.session;
+      const startedFull = (await service.access(viewer, row)) === 'full';
+      const view = async () =>
+        startedFull && (await service.access(viewer, (await runs.repo.getRun(row.id)) ?? row)) === 'full'
+          ? (e: EventRow) => e
+          : metadataEvent;
       // APP-02: the stream re-reads the session (sign-out, expiry, idle) and the access to the run while it is open.
+      // A metadata-only viewer who may now see more (asked to approve, made Portal.Admin) is ended too: the browser
+      // reconnects from its last event and receives what was held back.
       const stillAllowed = async () => {
         const fresh = await ctx.sessions.get(caller.session.idHash);
         if (!fresh || !sessionLive(fresh, ctx.now(), ctx.config.SESSION_IDLE_MINUTES)) return false;
-        return service.canView(fresh, (await runs.repo.getRun(row.id)) ?? row);
+        viewer = fresh;
+        const current = (await runs.repo.getRun(row.id)) ?? row;
+        if (!(await service.canView(fresh, current))) return false;
+        return startedFull || (await service.access(fresh, current)) === 'metadata';
       };
       try {
         await streamRunEvents(
@@ -202,6 +218,7 @@ export function runRoutes(
             stillAllowed,
             pollMs: runs.streamPollMs,
             onClose: release,
+            view,
           },
           row.id,
           last,

@@ -38,6 +38,7 @@ import { automationFingerprint, writesInTree, type PlaybookRef } from './fingerp
 import {
   RUN_STATUS_ACTIVE as NON_TERMINAL,
   type NewRun,
+  type RunAccess,
   type RunDetail,
   type RunRepository,
   type RunRow,
@@ -365,7 +366,7 @@ export class RunService {
    * Who may see a run (§9): its initiator, or a Portal.Operator, Playbook.Approver or Portal.Admin who also holds the
    * roles its definition requires. Scheduled runs (automation identity) collected data with application
    * permissions: they need the schedule's `requires.portalRoles` (default Portal.Operator) plus the definition's roles,
-   * like the schedule's report files and probe rows.
+   * like the schedule's report files and probe rows. How much of it they see is `access` (S-25).
    */
   async canView(session: SessionRecord, row: RunRow, cache: ViewCache = new Map()): Promise<boolean> {
     const defRoles = () =>
@@ -380,6 +381,43 @@ export class RunService {
     }
     if (row.initiatorOid === session.userOid) return true;
     return hasAny(session, SEES_ALL) && hasEvery(session, await defRoles());
+  }
+
+  /** Whether `t` makes `session` one of the run's approvers: asked (a pending gate they may decide) or decided. */
+  private approverOf(session: SessionRecord, run: RunRow, t: TaskRow): boolean {
+    if (t.policy.kind !== 'approval') return t.requestedBy === session.userOid;
+    if (t.decisions.some((d) => d.oid === session.userOid)) return true;
+    return (
+      t.status === 'pending' &&
+      !isTerminal(run.status) &&
+      hasRole(session, 'Playbook.Approver') &&
+      hasAny(session, t.policy.approvers) &&
+      !grantsAccessTo(t, session.userOid)
+    );
+  }
+
+  /**
+   * S-25: how much of a run the caller sees, once `canView` allowed it. A delegated run collected its data with one
+   * person's Entra rights, so its inputs and results stay with that person (the initiator of the run or of a run above
+   * it), the run's approvers — asked (a pending gate they may decide) or decided, on this run or one above it — the
+   * person a manual step waits for, and Portal.Admin. Every other viewer gets the metadata: playbook, who, when,
+   * status, step names and states, references. Scheduled runs (automation identity) are no one person's data: whoever
+   * may open them (the schedule's and the definition's roles) sees them whole.
+   */
+  async access(session: SessionRecord, row: RunRow): Promise<RunAccess> {
+    if (row.identity === 'automation' || hasRole(session, 'Portal.Admin')) return 'full';
+    const chain: RunRow[] = [row];
+    for (let cur = row; cur.parentRunId && chain.length < 10;) {
+      const parent = await this.deps.repo.getRun(cur.parentRunId);
+      if (!parent) break;
+      chain.push((cur = parent));
+    }
+    if (chain.some((r) => r.initiatorOid === session.userOid)) return 'full';
+    const tasks = await this.deps.repo.listTasks({ runIds: chain.map((r) => r.id) });
+    const runOf = new Map(chain.map((r) => [r.id, r]));
+    return tasks.some((t) => this.approverOf(session, runOf.get(t.subjectId) ?? row, t))
+      ? 'full'
+      : 'metadata';
   }
 
   /** The run, if the caller may see it (or `also` allows them to act on it without seeing its data). */
@@ -968,15 +1006,17 @@ export class RunService {
       const step = def && t.stepId ? findStep(def, stepIdOf(t.stepId)) : undefined;
       return step?.type === 'manual' ? step.inputs : undefined;
     };
+    const access = await this.access(caller.session, row);
     return {
       run: {
-        ...runView(row, def, steps, params),
+        ...runView(row, def, steps, params, access),
         previewRunId,
+        // Only for the person who previewed (the initiator, whose access is always full).
         confirm: await this.previewConfirm(caller, row, def, steps),
       },
-      steps: steps.map(stepView),
-      plan: runPlan(steps),
-      tasks: tasks.map((t) => taskView(t, this.canDecide(caller.session, row, t), manualParams(t))),
+      steps: steps.map((s) => stepView(s, access)),
+      plan: access === 'full' ? runPlan(steps) : [],
+      tasks: tasks.map((t) => taskView(t, this.canDecide(caller.session, row, t), manualParams(t), access)),
       children: children.map((c) => runSummary(c, titles.get(c.id))),
     };
   }
@@ -1407,7 +1447,10 @@ export class RunService {
     return { status };
   }
 
-  /** Approver inbox: approval tasks the caller may act on (or has acted on). */
+  /**
+   * Approver inbox: approval tasks the caller may act on (or has acted on). A gate decided by others shows as metadata,
+   * like its run (S-25): who asked, who decided and when, not the message or comments.
+   */
   async listApprovals(caller: Caller, q: { status?: TaskRow['status'] }): Promise<{ items: TaskView[] }> {
     const s = caller.session;
     requireRole(s, 'Playbook.Approver', 'The approval inbox');
@@ -1425,7 +1468,8 @@ export class RunService {
         t.status = 'expired';
       }
       if (q.status === 'pending' && isTerminal(run.status)) continue;
-      items.push(taskView(t, this.canDecide(s, run, t)));
+      const access = this.approverOf(s, run, t) ? 'full' : await this.access(s, run);
+      items.push(taskView(t, this.canDecide(s, run, t), undefined, access));
     }
     return { items };
   }

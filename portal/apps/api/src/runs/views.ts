@@ -4,10 +4,11 @@ import {
   secretInputValues,
   type AutomationDefinition,
   type PlanEntry,
+  type RunError,
   type StepRecord,
 } from '@adminforge/engine';
 import type { Params } from '@adminforge/schemas';
-import type { RunRow, RunSummary, RunView, StepView, TaskRow, TaskView } from './types';
+import type { EventRow, RunAccess, RunRow, RunSummary, RunView, StepView, TaskRow, TaskView } from './types';
 
 const iso = (d: Date | null) => (d ? d.toISOString() : null);
 
@@ -91,21 +92,85 @@ function waitingOf(steps: StepRecord[]): RunView['waiting'] {
   };
 }
 
+// ── S-25: what someone sees of another person's delegated run ──
+
+/** Shown where a metadata-only viewer would read an error's message. */
+export const RESTRICTED_DETAIL =
+  'The details are shown only to the person who started this run, its approvers and Portal.Admin.';
+
+/**
+ * An error as a metadata-only viewer sees it: the code and the references (step, HTTP status, Microsoft request-id),
+ * never the message or hint — those can name what the run looked at.
+ */
+export function metadataError(e: RunError | null): RunError | null {
+  if (!e) return null;
+  return {
+    code: e.code,
+    message: RESTRICTED_DETAIL,
+    ...(e.stepId ? { stepId: e.stepId } : {}),
+    ...(e.path ? { path: e.path } : {}),
+    ...(typeof e.status === 'number' ? { status: e.status } : {}),
+    ...(e.requestId ? { requestId: e.requestId } : {}),
+  };
+}
+
+const pick = (data: Record<string, unknown>, keys: readonly string[]) =>
+  Object.fromEntries(keys.filter((k) => data[k] !== undefined).map((k) => [k, data[k]]));
+
+/** Fields of run, step and progress events a metadata-only viewer receives (an allowlist: anything new stays out). */
+const RUN_EVENT_KEYS = [
+  'scope',
+  'status',
+  'by',
+  'previewRunId',
+  'confirm',
+  'confirmationMatched',
+  'blockedOn',
+  'path',
+  'compensating',
+] as const;
+const STEP_EVENT_KEYS = ['scope', 'path', 'stepId', 'type', 'status', 'attempt'] as const;
+const PROGRESS_EVENT_KEYS = ['path', 'done', 'total', 'failed', 'percent'] as const;
+
+/**
+ * A stored run event as a metadata-only viewer's stream carries it (S-25): run and step status changes and progress
+ * counts, with errors reduced to their code and references. Logs and script output can hold anything the run saw, so
+ * they are not sent (null).
+ */
+export function metadataEvent(e: EventRow): EventRow | null {
+  const data = e.data ?? {};
+  if (e.type === 'status') {
+    const step = data.scope === 'step';
+    const kept = pick(data, step ? STEP_EVENT_KEYS : RUN_EVENT_KEYS);
+    const error = metadataError((data.error as RunError | undefined) ?? null);
+    return { ...e, data: { ...kept, ...(error ? { error } : {}) } };
+  }
+  if (e.type === 'progress') return { ...e, data: pick(data, PROGRESS_EVENT_KEYS) };
+  return null;
+}
+
 export function runView(
   row: RunRow,
   def: AutomationDefinition | null,
   steps: StepRecord[],
   params?: Params,
+  access: RunAccess = 'full',
 ): RunView {
   // Runs stored before outputs and errors were masked by the engine are masked here too.
   const secrets = runSecrets(row, params ?? def?.inputs);
+  const full = access === 'full';
   return {
     ...runSummary(row, def?.title),
+    access,
     definitionSha256: row.definitionSha256,
     correlationId: row.correlationId,
-    inputs: viewInputs(row, params ?? def?.inputs),
-    outputs: row.outputs ? (redact(row.outputs, secrets) as Record<string, unknown>) : null,
-    error: row.error && secrets.length ? (redact(row.error, secrets) as RunRow['error']) : row.error,
+    inputs: full ? viewInputs(row, params ?? def?.inputs) : {},
+    outputs: full && row.outputs ? (redact(row.outputs, secrets) as Record<string, unknown>) : null,
+    error: !full
+      ? metadataError(row.error)
+      : row.error && secrets.length
+        ? (redact(row.error, secrets) as RunRow['error'])
+        : row.error,
     previewRunId: null,
     waiting:
       row.status === 'succeeded' ||
@@ -117,7 +182,10 @@ export function runView(
   };
 }
 
-export function stepView(s: StepRecord): StepView {
+export function stepView(s: StepRecord, access: RunAccess = 'full'): StepView {
+  const full = access === 'full';
+  const childRunId =
+    !full && s.type === 'playbook' ? (s.output as { runId?: unknown } | null)?.runId : undefined;
   return {
     seq: s.seq,
     stepId: s.stepId,
@@ -127,21 +195,44 @@ export function stepView(s: StepRecord): StepView {
     mode: s.mode,
     attempt: s.attempt,
     actorOid: s.actorOid,
-    request: s.request,
-    plan: s.plan,
-    output: s.output,
-    error: s.error,
+    request: full ? s.request : null,
+    plan: full ? s.plan : null,
+    output: full ? s.output : null,
+    error: full ? s.error : metadataError(s.error),
     msRequestId: s.msRequestId,
     startedAt: iso(s.startedAt),
     endedAt: iso(s.endedAt),
+    ...(typeof childRunId === 'string' ? { childRunId } : {}),
   };
 }
 
-/** A human task as shown; `manualParams` (the manual step's fields) masks values typed into `redact: true` ones. */
-export function taskView(t: TaskRow, canDecide: boolean, manualParams?: Params): TaskView {
+/**
+ * A human task as shown; `manualParams` (the manual step's fields) masks values typed into `redact: true` ones.
+ * Metadata views (S-25) keep who asked, who decided, how and when — not the rendered message, instructions or
+ * checklist, nor what the deciders wrote or typed.
+ */
+export function taskView(
+  t: TaskRow,
+  canDecide: boolean,
+  manualParams?: Params,
+  access: RunAccess = 'full',
+): TaskView {
   // `excludes` (who the change grants access to) is enforced server-side; `canDecide` already reflects it.
   const { initiatorOid: _i, ...rest } = t.policy;
-  const { excludes: _e, ...policy } = rest as typeof rest & { excludes?: unknown };
+  const { excludes: _e, ...shown } = rest as typeof rest & { excludes?: unknown };
+  const policy: TaskView['policy'] =
+    access === 'full'
+      ? shown
+      : shown.kind === 'approval'
+        ? { ...shown, message: null }
+        : { ...shown, instructions: '', checklist: [] };
+  const decisions = t.decisions.map(({ sessionHash: _s, ...d }) =>
+    access !== 'full'
+      ? { oid: d.oid, upn: d.upn, decision: d.decision, at: d.at }
+      : d.values
+        ? { ...d, values: redactInputs(manualParams, d.values) }
+        : d,
+  );
   return {
     id: t.id,
     subjectType: t.subjectType,
@@ -156,9 +247,7 @@ export function taskView(t: TaskRow, canDecide: boolean, manualParams?: Params):
     expiresAt: iso(t.expiresAt),
     decidedAt: iso(t.decidedAt),
     policy,
-    decisions: t.decisions.map(({ sessionHash: _s, ...d }) =>
-      d.values ? { ...d, values: redactInputs(manualParams, d.values) } : d,
-    ),
+    decisions,
     canDecide,
   };
 }

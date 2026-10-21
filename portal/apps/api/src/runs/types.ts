@@ -230,7 +230,14 @@ export interface RunSummary {
   updatedAt: string;
 }
 
+/**
+ * S-25: how much of a run the caller sees. `full`: inputs, outputs, error details, step requests and outputs, plan,
+ * task messages, logs. `metadata`: the playbook, who, when, status, step names and states, and references only.
+ */
+export type RunAccess = 'full' | 'metadata';
+
 export interface RunView extends RunSummary {
+  access: RunAccess;
   definitionSha256: string;
   correlationId: string;
   inputs: Record<string, unknown>;
@@ -269,6 +276,8 @@ export interface StepView {
   msRequestId: string | null;
   startedAt: string | null;
   endedAt: string | null;
+  /** Metadata views: the child run a `playbook` step started (its output, which says so, isn't shown). */
+  childRunId?: string;
 }
 
 export interface TaskView {

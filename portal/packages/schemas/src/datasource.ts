@@ -44,7 +44,7 @@ export type ArmRequestSpec = z.infer<typeof ArmRequestSpec>;
 const IdList = exprOr(z.array(z.string().min(1)));
 
 /** Resource Graph has no leading `union a, b` (it fails with "Failed to resolve table expression"). */
-export const startsWithUnion = (kql: string) => /^\s*union\b/i.test(kql.replace(/^\s*\/\/.*$/gm, ''));
+export const startsWithUnion = (kql: string) => /^\s*union\b/i.test(kql.replace(/^[ \t]*\/\/.*$/gm, ''));
 export const RESOURCE_GRAPH_UNION_MESSAGE =
   "Resource Graph can't start a query with union: pipe one table into the other, e.g. resources | union (resourcecontainers | where …).";
 
@@ -57,7 +57,8 @@ export const RESOURCE_GRAPH_UNION_MESSAGE =
  * query's own table.
  */
 export function resourceGraphJoinProblem(kql: string): string | null {
-  let text = kql.replace(/'(?:[^'\\\n]|\\.)*'|"(?:[^"\\\n]|\\.)*"/g, "''");
+  // Linear: an unclosed string runs to the end of its line (a closing quote can't be backtracked into).
+  let text = kql.replace(/'(?:[^'\\\n]|\\.?)*(?:'|$)|"(?:[^"\\\n]|\\.?)*(?:"|$)/gm, "''");
   // ${ … } expressions, with nested braces.
   let out = '';
   for (let i = 0; i < text.length; i++) {

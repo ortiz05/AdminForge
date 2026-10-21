@@ -1,3 +1,4 @@
+import { automationFingerprint } from '@adminforge/api/src/runs/fingerprint';
 import { mockConfig } from './helpers';
 import { AVERY, BLAKE, FakeExecutor, runsApp, StaticDefinitions } from './runs-helpers';
 
@@ -138,6 +139,34 @@ describe('confirming a manual step with writes after it needs write access', () 
     await t.drain();
     expect((await avery.get(`/api/runs/${declined}`)).json().run.status).toBe('failed');
     expect((await avery.get(`/api/runs/${later}`)).json().run.status).toBe('succeeded');
+    await t.close();
+  });
+
+  it('a scheduled run’s step needs write access too, and doesn’t say its steps run as you', async () => {
+    const t = await setup();
+    const schedule = {
+      id: '00000000-0000-4000-8000-00000000f002',
+      key: 'maintenance.call-then-disable',
+      createdBy: AVERY.oid,
+    };
+    const approvedTarget = await automationFingerprint((r, v) => t.runs.service.resolve(r, v), {
+      ref: 'test.call-then-disable',
+    });
+    const row = await t.runs.service.createScheduledRun({
+      schedule: { ...schedule, approvedBy: [BLAKE.oid], approvedTarget },
+      playbook: 'test.call-then-disable',
+      inputs: { userId: USER },
+    });
+    await t.drain();
+    expect((await t.repository.getRun(row.id))!.status).toBe('awaiting_input');
+    const avery = await t.login(AVERY, OPERATOR);
+    const refused = await avery.post(`/api/runs/${row.id}/manual/check`, { confirmed: true });
+    expect(refused.statusCode).toBe(403);
+    expect(refused.json().error).toMatchObject({
+      code: 'not_armed',
+      message: 'The steps after this one change data.',
+      hint: 'Arm write access, then confirm.',
+    });
     await t.close();
   });
 });

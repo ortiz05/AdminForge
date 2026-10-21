@@ -115,7 +115,6 @@ describe('lint: whole-value paths', () => {
 
   it.each([
     [{ type: 'string' }],
-    [{ type: 'enum', values: ['/a', '/b'] }],
     [{ type: 'resource', multiple: true }],
     [{ type: 'string', format: 'upn' }],
   ])('flags a whole path from a %j param', (type) => {
@@ -129,6 +128,8 @@ describe('lint: whole-value paths', () => {
     [{ type: 'subscription' }],
     [{ type: 'guid' }],
     [{ type: 'string', format: 'guid' }],
+    // One of the declared values (the API refuses any other): a literal allowlist by declaration.
+    [{ type: 'enum', values: ['/a', '/b'] }],
   ])('accepts a whole path straight from a %j param', (type) => {
     expect(lintExpressions(page(type))).toEqual([]);
   });

@@ -330,11 +330,15 @@ describe('lint: a query string in a url', () => {
   });
   const URL = 'datasources.b.request.body.requests[0].url';
 
-  it('reads what follows $filter= as OData text', () => {
+  it('takes only $guid, numbers or literal allowlists after $filter= (percent escapes would undo $odata)', () => {
     const issues = lintExpressions(batch("/users?$filter=name eq '${ $encode(params.q) }'"));
     expect(issues.map((i) => i.path)).toEqual([URL]);
-    expect(issues[0]!.message).toMatch(/placed in \$filter of the url without \$odata\(\)/);
-    expect(lintExpressions(batch('/users?$filter=name eq ${ $odata(params.q) }'))).toEqual([]);
+    expect(issues[0]!.message).toMatch(
+      /placed in \$filter of the url: a url's query string takes only \$guid\(\)/,
+    );
+    expect(flagged(batch('/users?$filter=name eq ${ $odata(params.q) }'))).toEqual([URL]);
+    expect(flagged(batch('/users?$search="displayName:${ $odataSearch(params.q) }"'))).toEqual([URL]);
+    expect(lintExpressions(batch('/users?$filter=id eq ${ $guid(params.id) }'))).toEqual([]);
     expect(lintExpressions(batch('/users/${ $encode(params.id) }?$select=id'))).toEqual([]);
   });
 

@@ -2,19 +2,24 @@ import { compile, ExpressionError } from './evaluate';
 import {
   analyse,
   ANYWHERE,
+  get,
   CLEAN,
   ENC_KQL,
   ENC_ODATA,
   ENC_PATH,
   ENC_SEARCH,
-  insideQuotes,
   join,
   level,
   MAY_QUOTE,
+  MISPLACED,
   NEEDS_QUOTES,
   NOT_IN_PATH,
+  outsideQuotes,
   pathKey,
+  place,
+  QUOTED,
   RAW,
+  SEARCH_PLACED,
   type Dialect,
   type Level,
   type QuoteItem,
@@ -326,7 +331,18 @@ function scopeTaint(def: unknown): Shape {
   fields.set('ds', ds);
   fields.set('steps', steps);
   if (d.filters?.advanced?.dialect === 'rows') fields.set('advanced', RAW);
-  for (const name of [...USER_DATA_ROOTS, ...forEachNames(def)]) fields.set(name, RAW);
+  for (const name of USER_DATA_ROOTS) fields.set(name, RAW);
+  // An enum param or input is one of its declared values (the API and the engine refuse any other): a literal
+  // allowlist by declaration.
+  for (const root of ['params', 'inputs'] as const) {
+    const declared = (def as Record<string, unknown> | null)?.[root];
+    if (!declared || typeof declared !== 'object' || Array.isArray(declared)) continue;
+    const enums = Object.entries(declared).filter(
+      ([, p]) => (p as { type?: unknown } | null)?.type === 'enum',
+    );
+    if (enums.length) fields.set(root, { fields: new Map(enums.map(([n]) => [n, CLEAN])), rest: RAW });
+  }
+  for (const name of forEachNames(def)) fields.set(name, RAW);
   return scope;
 }
 
@@ -371,6 +387,11 @@ const ODATA_OPTIONS: Record<string, string> = {
   $expand: '$expand',
 };
 /** Their unprefixed spellings inside a request body (Intune report exports, `getXxxReport` actions, …). */
+const QUERY_MAP_OPTIONS: Record<string, string> = {
+  filter: '$filter',
+  orderby: '$orderby',
+  expand: '$expand',
+};
 const ODATA_BODY_OPTIONS: Record<string, string> = {
   filter: '$filter',
   search: '$search',
@@ -391,6 +412,10 @@ function odataOption(segments: readonly PathSegment[]): { key: string; option: s
   const lower = key.toLowerCase();
   if (Object.hasOwn(ODATA_BODY_OPTIONS, lower) && segments.slice(0, i).includes('body'))
     return { key, option: ODATA_BODY_OPTIONS[lower]! };
+  // Graph beta and some APIs read `filter`, `orderby`, `expand` without the `$` too (`search` is a keyword parameter of
+  // its own on some, e.g. sites).
+  if (Object.hasOwn(QUERY_MAP_OPTIONS, lower) && segments[i - 1] === 'query')
+    return { key, option: QUERY_MAP_OPTIONS[lower]! };
   return undefined;
 }
 
@@ -402,12 +427,60 @@ const ODATA_HELPER: Record<string, string> = {
 };
 
 /** What each kind of text can't take: user data as it came, and what another kind's encoder made of it. */
-const UNSAFE_IN: Record<'odata' | 'search' | 'kql' | 'path', Level> = {
-  odata: ANYWHERE | ENC_SEARCH | ENC_KQL | ENC_PATH,
+const UNSAFE_IN: Record<Kind, Level> = {
+  odata: ANYWHERE | ENC_SEARCH | SEARCH_PLACED | ENC_KQL | ENC_PATH,
   search: ANYWHERE | ENC_ODATA | ENC_KQL | ENC_PATH,
-  kql: ANYWHERE | ENC_ODATA | ENC_SEARCH | ENC_PATH,
-  path: ANYWHERE | NOT_IN_PATH | ENC_ODATA | ENC_SEARCH | ENC_KQL,
+  kql: ANYWHERE | ENC_ODATA | ENC_SEARCH | SEARCH_PLACED | ENC_PATH,
+  path: ANYWHERE | NOT_IN_PATH | ENC_ODATA | ENC_SEARCH | SEARCH_PLACED | ENC_KQL,
 };
+/** A value still waiting for the literal it needs (allowlisted text, a `$odataSearch` value). */
+const NEEDS_LITERAL = NEEDS_QUOTES | ENC_SEARCH;
+type Kind = 'odata' | 'search' | 'kql' | 'path';
+
+/**
+ * Whether a value with these flags, placed between `before` and `after`, is unsafe in text of these kinds. Inside a
+ * quoted literal of a path (an OData key or function parameter, `(period='${ … }')`) only letters, digits, `-`
+ * and `_` stay inside it: `$encode` leaves `'` alone.
+ */
+function unsafeFor(
+  kinds: readonly Kind[],
+  flags: Level,
+  before: readonly QuoteItem[],
+  after: readonly QuoteItem[],
+  dialect: Dialect,
+): { unsafe: boolean; unplaced: boolean } {
+  const placed = kinds.every((k) => k === 'path') ? flags : place(flags, before, after, dialect);
+  const unplaced = !!(placed & NEEDS_LITERAL) && kinds.some((k) => k !== 'path');
+  // The path's own text (other values read as quote-free: a quote in an encoded segment is the person's, not ours).
+  const quotedInPath =
+    kinds.includes('path') &&
+    !outsideQuotes(
+      before.map((b) => b ?? ''),
+      'odata',
+    ) &&
+    !!(flags & ~(NEEDS_QUOTES | QUOTED | MAY_QUOTE));
+  return { unsafe: kinds.some((k) => placed & UNSAFE_IN[k]) || unplaced || quotedInPath, unplaced };
+}
+
+/** Request-body fields Microsoft reads as KQL or OData text, for a body written as one `${ { … } }`. */
+const BODY_FIELDS: Array<{ name: string; kinds: Kind[]; label: string; helper: string }> = [
+  { name: 'Query', kinds: ['kql'], label: 'Query', helper: '$kql()' },
+  { name: 'query', kinds: ['kql'], label: 'query', helper: '$kql()' },
+  ...['filter', '$filter', 'orderBy', 'orderby', '$orderby', 'expand', '$expand'].map((name) => ({
+    name,
+    kinds: ['odata'] as Kind[],
+    label: name,
+    helper: '$odata()',
+  })),
+  ...['search', '$search'].map((name) => ({
+    name,
+    kinds: ['search'] as Kind[],
+    label: name,
+    helper: '$odataSearch()',
+  })),
+];
+/** Endpoints whose body is a query: an opaque body sent there is checked as if every field were one. */
+const QUERY_ENDPOINT = /runHuntingQuery|\/\$batch\b|exportJobs|\/get\w*Report|\/query\b/i;
 
 /** OData options named in a URL's query string (`/users?$filter=…` in a `$batch` request's `url`). */
 const URL_OPTION = /[?&](\$?(?:filter|search|orderby|expand))=/gi;
@@ -428,6 +501,59 @@ function compiledKqlParams(def: unknown): string[] {
   const adv = (def as { filters?: { advanced?: { dialect?: unknown; param?: unknown } } } | null)?.filters
     ?.advanced;
   return adv && adv.dialect === 'kql' && typeof adv.param === 'string' ? [`params.${adv.param}`] : [];
+}
+
+/**
+ * A request body written as one `${ { … } }`: the fields Microsoft reads as KQL or OData text (`Query`, `filter`,
+ * `search`, `orderBy`, `requests[].url` of a `$batch`) get the same rules as when the body is written out in YAML. A
+ * body the lint can't see into (`${ steps.x.output }` made from user data) is checked only when the endpoint takes a
+ * query (hunting, `$batch`, report exports, Cost Management).
+ */
+function bodyIssues(def: unknown, str: string, segments: PathSegment[], scope: Shape): ExpressionIssue[] {
+  let source: string | undefined;
+  try {
+    source = wholeExpression(splitTemplate(str));
+  } catch {
+    return [];
+  }
+  if (source === undefined) return [];
+  let ast: unknown;
+  try {
+    ast = compile(source).ast();
+  } catch {
+    return [];
+  }
+  const body = analyse(ast, scope).taint;
+  const request = segments
+    .slice(0, -1)
+    .reduce<unknown>((o, k) => (o as Record<string, unknown> | undefined)?.[k], def);
+  const target = (request as { path?: unknown } | undefined)?.path;
+  if (typeof body === 'number' && !(typeof target === 'string' && QUERY_ENDPOINT.test(target))) return [];
+  const at = { path: formatPath(segments), segments, expression: source };
+  if (typeof body === 'number')
+    return body & ANYWHERE
+      ? [
+          {
+            ...at,
+            message:
+              'User data makes up a body sent to an endpoint that reads it as a query: write the body as an object and encode each value ($kql(), $odata(), $guid()).',
+          },
+        ]
+      : [];
+  const out: ExpressionIssue[] = [];
+  for (const f of BODY_FIELDS) {
+    const field = level(get(body, f.name));
+    if (unsafeFor(f.kinds, field, [], [], f.kinds[0] === 'path' ? 'any' : (f.kinds[0] as Dialect)).unsafe)
+      out.push({ ...at, message: `User data reaches the body's ${f.label} without ${f.helper}.` });
+  }
+  const url = level(get(get(body, 'requests'), 'url'));
+  if (unsafeFor(['path', 'odata'], url, [], [], 'any').unsafe)
+    out.push({
+      ...at,
+      message:
+        "User data reaches a $batch request's url without $encode() (a url's query string takes only $guid(), numbers or a literal allowlist).",
+    });
+  return out;
 }
 
 /**
@@ -458,6 +584,11 @@ export function lintExpressions(def: unknown, opts: WalkOptions = {}): Expressio
     def,
     (str, segments) => {
       const key = segments[segments.length - 1];
+      if (key === 'body' && hasTemplate(str)) {
+        scope ??= scopeTaint(def);
+        issues.push(...bodyIssues(def, str, segments, scope));
+        return;
+      }
       const odata = odataOption(segments);
       const kql = isKqlQuery(segments);
       const pathLike = key === 'path' || key === 'url';
@@ -491,18 +622,18 @@ export function lintExpressions(def: unknown, opts: WalkOptions = {}): Expressio
           return null;
         }
         const option = odata?.option ?? queryOption(i);
-        // An OData option of its own, a URL query string, a URL that builds one inside the expression, KQL, a path.
-        const kinds: Array<'odata' | 'search' | 'kql' | 'path'> =
-          option === '$search'
-            ? ['search']
-            : option && option !== 'query'
-              ? ['odata']
-              : kql
-                ? ['kql']
-                : key === 'url' && literals(ast).some((t) => t.includes('?'))
-                  ? ['path', 'odata']
-                  : ['path'];
-        const dialect: Dialect = kinds.length > 1 ? 'any' : kinds[0] === 'path' ? 'any' : kinds[0]!;
+        // An OData option of its own; a url's query string (percent escapes would undo an encoder there: only
+        // `$guid`, numbers and literal allowlists); a url that builds one inside the expression; KQL; a path.
+        const kinds: Kind[] = odata
+          ? [odata.option === '$search' ? 'search' : 'odata']
+          : option && option !== 'query'
+            ? [option === '$search' ? 'search' : 'odata', 'path']
+            : kql
+              ? ['kql']
+              : key === 'url' && literals(ast).some((t) => t.includes('?'))
+                ? ['path', 'odata']
+                : ['path'];
+        const dialect: Dialect = kinds.length > 1 || kinds[0] === 'path' ? 'any' : kinds[0]!;
         const found = analyse(ast, sinkScope, { trusted: kql ? trustedKql : none, dialect });
         return { ast, option, kinds, dialect, found, carries: level(found.taint) };
       });
@@ -510,7 +641,7 @@ export function lintExpressions(def: unknown, opts: WalkOptions = {}): Expressio
         const a = analysed[i];
         if (seg.type !== 'expr' || !a) return;
         const { ast, option, kinds, dialect, found, carries } = a;
-        // A character allowlist interpolated inside a quoted literal of the text: `name eq '${ $replace(…) }'`.
+        // Where the value sits in the text: inside a quoted literal (`name eq '${ $replace(…) }'`) or outside one.
         const item = (j: number): QuoteItem => {
           const p = parts[j]!;
           if (p.type === 'text') return p.value;
@@ -518,26 +649,34 @@ export function lintExpressions(def: unknown, opts: WalkOptions = {}): Expressio
           return other && !(other.carries & MAY_QUOTE) ? '' : null;
         };
         const indexes = parts.map((_, j) => j);
-        const quoted = insideQuotes(indexes.slice(0, i).map(item), indexes.slice(i + 1).map(item), dialect);
-        const unquoted = !!(carries & NEEDS_QUOTES) && !quoted && !kinds.every((k) => k === 'path');
-        const unsafe = kinds.some((k) => carries & UNSAFE_IN[k]) || unquoted;
+        const { unsafe, unplaced } = unsafeFor(
+          kinds,
+          carries,
+          indexes.slice(0, i).map(item),
+          indexes.slice(i + 1).map(item),
+          dialect,
+        );
+        if (!unsafe) return;
         const allowlistHint =
-          unquoted && !kinds.some((k) => carries & UNSAFE_IN[k])
-            ? " A character allowlist ($replace(x, /[^…]/, '')) is safe only inside a quoted literal."
-            : '';
+          unplaced && !kinds.some((k) => carries & UNSAFE_IN[k])
+            ? ' A character allowlist ($replace(x, /[^…]/, \'\')) is safe only inside a quoted literal, and $odataSearch() only inside its "…".'
+            : (!(carries & ANYWHERE) && carries & (ENC_ODATA | ENC_KQL)) || carries & MISPLACED
+              ? ' $odata() and $kql() bring their own quotes: put them outside any quoted literal.'
+              : '';
         const at = { path: formatPath(segments), segments, expression: seg.source };
         if (odata || (option && option !== 'query')) {
           // Unlike a path or KQL text, an OData option is never user data as a whole either: that would be a raw
           // filter param (advanced filters are compiled server-side instead).
           const name = odata?.key ?? option!;
           const helper = ODATA_HELPER[odata?.option ?? option!] ?? ODATA_HELPER.$filter;
-          if (unsafe)
-            issues.push({
-              ...at,
-              message: `User data is ${found.concat & ANYWHERE ? 'concatenated into' : 'placed in'} ${name}${odata ? '' : ` of the ${key}`} without ${helper}.${allowlistHint}`,
-            });
+          issues.push({
+            ...at,
+            message: odata
+              ? `User data is ${found.concat & ANYWHERE ? 'concatenated into' : 'placed in'} ${name} without ${helper}.${allowlistHint}`
+              : `User data is placed in ${name} of the ${key}: a ${key}'s query string takes only $guid(), numbers or a literal allowlist (percent escapes would undo $odata()). Put the option in the request's query instead.`,
+          });
         } else if (kql) {
-          if (unsafe && !(whole && optedIn(seg.source) && userDataPath(ast)))
+          if (!(whole && optedIn(seg.source) && userDataPath(ast)))
             issues.push({
               ...at,
               message: `User data reaches the KQL query without $kql() (or another quoting helper such as $guid()).${allowlistHint}${
@@ -546,12 +685,16 @@ export function lintExpressions(def: unknown, opts: WalkOptions = {}): Expressio
                   : ''
               }`,
             });
-        } else if (unsafe && !(whole && idParam(def, ast)))
+        } else if (!(whole && idParam(def, ast)))
           issues.push({
             ...at,
             message: `User data is placed in the ${key} without $encode() (or another helper such as $guid()).${
               kinds.includes('odata')
                 ? ` Its query string takes only $guid(), numbers or a literal allowlist.`
+                : ''
+            }${
+              carries & ~(NEEDS_QUOTES | QUOTED | MAY_QUOTE) && !(carries & (ANYWHERE | NOT_IN_PATH))
+                ? ' Inside a quoted literal of the path only letters, digits, - and _ stay inside it (allowlist the value).'
                 : ''
             }${
               whole

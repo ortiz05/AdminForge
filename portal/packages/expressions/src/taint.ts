@@ -40,12 +40,16 @@ export const ENCODED = ENC_ODATA | ENC_SEARCH | ENC_KQL | ENC_PATH;
 export const QUOTED = 128;
 /** Flag: may hold quote characters that open or close a literal (so text around it can't tell what is quoted). */
 export const MAY_QUOTE = 256;
+/** Flag: a `$odataSearch` value placed inside a `"…"` clause (still for Graph search text only). */
+export const SEARCH_PLACED = 512;
+/** Flag (with ANYWHERE): an encoder that brings its own quotes placed inside a quoted literal — for the message. */
+export const MISPLACED = 1024;
 /** Letters, digits, `-` and `_`: a safe path segment that needs quotes in OData or KQL. */
 export const SEGMENT = NEEDS_QUOTES;
 /** Text without quotes, backslashes or line breaks: only inside a quoted OData or KQL literal. */
 export const TEXT = NEEDS_QUOTES | NOT_IN_PATH;
 /** User data as it came. */
-export const RAW = NEEDS_QUOTES | NOT_IN_PATH | ANYWHERE | ENCODED | QUOTED | MAY_QUOTE;
+export const RAW = NEEDS_QUOTES | NOT_IN_PATH | ANYWHERE | ENCODED | QUOTED | MAY_QUOTE | SEARCH_PLACED;
 /** A set of the flags above. */
 export type Level = number;
 
@@ -562,15 +566,9 @@ function binary(n: AstNode, ctx: Ctx, run: Run): Taint {
     o.type === 'string' ? String(o.value) : levels[i]! & MAY_QUOTE ? null : '',
   );
   let out: Level = CLEAN;
+  // Allowlisted text inside a literal of the chain (`"name eq '" & $replace(…) & "'"`), an encoded value outside one.
   levels.forEach((l, i) => {
-    // Inside a quoted literal (`"name eq '" & $replace(…) & "'"`) a character allowlist needs no more quotes.
-    if (
-      l & NEEDS_QUOTES &&
-      !(l & ANYWHERE) &&
-      insideQuotes(items.slice(0, i), items.slice(i + 1), ctx.dialect)
-    )
-      l = (l & ~NEEDS_QUOTES) | QUOTED;
-    out = max(out, l & ~MAY_QUOTE);
+    out = max(out, place(l, items.slice(0, i), items.slice(i + 1), ctx.dialect) & ~MAY_QUOTE);
   });
   if (!quoteNeutral(items, ctx.dialect)) out |= MAY_QUOTE;
   run.concat = max(run.concat, out);
@@ -630,11 +628,46 @@ export function insideQuotes(
   return false;
 }
 
+/** The text before a value leaves no literal open (in every dialect, for `any`). */
+export function outsideQuotes(before: readonly QuoteItem[], dialect: Dialect): boolean {
+  if (dialect === 'any') return DIALECTS.every((d) => outsideQuotes(before, d));
+  let state = '';
+  for (const item of before) {
+    if (item === null) return false;
+    state = scan(item, state, dialect);
+  }
+  return state === '';
+}
+
+/** Needs a place outside any literal: values that bring their own quotes (`$odata`, `$kql`, a quoted literal). */
+const OUTSIDE = ENC_ODATA | ENC_KQL | QUOTED | SEARCH_PLACED;
+/** Needs a place inside a literal: allowlisted text, a `$odataSearch` value (it escapes, it doesn't quote). */
+const INSIDE = NEEDS_QUOTES | ENC_SEARCH;
+
+/**
+ * A value placed between literal texts: one that needs to be inside a literal and is becomes QUOTED (or
+ * SEARCH_PLACED); one that must be outside and isn't — or can't be told, because it may hold quotes of its own —
+ * is unsafe anywhere. One that needs a literal and has none here keeps the need for the text around this one.
+ */
+export function place(
+  f: Level,
+  before: readonly QuoteItem[],
+  after: readonly QuoteItem[],
+  dialect: Dialect,
+): Level {
+  if (f & ANYWHERE || !(f & (OUTSIDE | INSIDE))) return f;
+  if (f & MAY_QUOTE || (f & OUTSIDE && f & INSIDE)) return f | ANYWHERE;
+  if (f & OUTSIDE) return outsideQuotes(before, dialect) ? f : f | ANYWHERE | MISPLACED;
+  if (!insideQuotes(before, after, dialect)) return f;
+  return (f & ~INSIDE) | (f & NEEDS_QUOTES ? QUOTED : 0) | (f & ENC_SEARCH ? SEARCH_PLACED : 0);
+}
+
 /** Texts that leave every quote state as they found it (so they can sit anywhere without moving a quote). */
 export function quoteNeutral(items: readonly QuoteItem[], dialect: Dialect): boolean {
   if (dialect === 'any') return DIALECTS.every((d) => quoteNeutral(items, d));
   if (items.includes(null)) return false;
-  const starts = ['', ...QUOTES[dialect], ...(dialect === 'kql' ? ["@'", '@"'] : [])];
+  // (Inside a KQL verbatim string, text that closes and reopens it leaves a normal string: the quotes still match.)
+  const starts = ['', ...QUOTES[dialect]];
   return starts.every(
     (start) => items.reduce<string>((st, item) => scan(item!, st, dialect), start) === start,
   );
